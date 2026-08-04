@@ -35,6 +35,20 @@ declare module '$app/environment' {
 	export const dev: boolean;
 }
 
+// Minimal ambient for the one Kit type the library imports (`Handle` in hooks.ts). The lib does
+// not depend on @sveltejs/kit; the CONSUMER's real Kit types back the shipped `dist/hooks.d.ts`
+// (`@sveltejs/kit` is externalised by tsdown). Not shipped (types.d.ts is excluded from tsdown).
+declare module '@sveltejs/kit' {
+	export interface RequestEvent {
+		url: URL;
+		[key: string]: unknown;
+	}
+	export type Handle = (input: {
+		event: RequestEvent;
+		resolve: (event: RequestEvent) => Response | Promise<Response>;
+	}) => Response | Promise<Response>;
+}
+
 interface Window {
 	// Test-only observability marker: set once per full document load, unchanged across SPA
 	// navigations (the module is not re-evaluated), so the browser suites can prove a swap was a

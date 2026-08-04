@@ -4,7 +4,7 @@
 	// Renders nothing of its own — the island component's DOM is unchanged, so hydration matches.
 	import { setNested } from './context.js';
 
-	/** @type {{ component: any, props: Record<string, any> }} */
+	/** @type {{ component: import('svelte').Component<Record<string, unknown>>, props: Record<string, unknown> }} */
 	let { component: Component, props } = $props();
 
 	setNested();

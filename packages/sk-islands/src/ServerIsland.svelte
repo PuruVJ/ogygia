@@ -17,9 +17,9 @@
 	/**
 	 * @typedef {Object} Props
 	 * @property {string} __entry island id (manifest key on the server)
-	 * @property {any} [__component] island component — imported by the host purely so its CSS
+	 * @property {import('svelte').Component<Record<string, unknown>>} [__component] island component — imported by the host purely so its CSS
 	 *   lands in the page import graph; NOT rendered here (the endpoint renders it).
-	 * @property {Record<string, any>} __props captured props (server-rendered with these)
+	 * @property {Record<string, unknown>} __props captured props (server-rendered with these)
 	 * @property {import('svelte').Snippet} [fallback] rendered into the page immediately
 	 */
 

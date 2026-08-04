@@ -5,7 +5,7 @@ import { startRouter } from './router.js';
 import { set_page } from '../shims/page-store.svelte.js';
 import NestedProvider from '../NestedProvider.svelte';
 
-/** @type {(entry: string) => Promise<any>} */
+/** @type {(entry: string) => Promise<{ default: import('svelte').Component<Record<string, unknown>> }>} */
 const load_island = manifest.dev
 	? (entry) => import(/* @vite-ignore */ entry)
 	: (entry) => manifest.islands[entry]();

@@ -12,8 +12,8 @@
 	 * @property {string} [media] hydrate when the media query matches
 	 * @property {boolean} [load] hydrate immediately (default)
 	 * @property {string} __entry island id
-	 * @property {any} __component the extracted island component
-	 * @property {Record<string, any>} __props captured props
+	 * @property {import('svelte').Component<Record<string, unknown>>} __component the extracted island component
+	 * @property {Record<string, unknown>} __props captured props
 	 */
 
 	/** @type {Props} */

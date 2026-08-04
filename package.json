@@ -10,7 +10,8 @@
     "check:lib": "pnpm --filter ogygia check",
     "check:playground": "pnpm --filter playground check",
     "check:verify": "tsc --noEmit -p verify/tsconfig.json",
-    "check": "pnpm run build:lib && pnpm run check:lib && pnpm run check:playground && pnpm run check:verify"
+    "check:no-any": "node scripts/no-any.mjs",
+    "check": "pnpm run check:no-any && pnpm run build:lib && pnpm run check:lib && pnpm run check:playground && pnpm run check:verify"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

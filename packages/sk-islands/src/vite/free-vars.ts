@@ -17,6 +17,12 @@ const FUNCTION_TYPES = new Set([
 	'ArrowFunctionExpression'
 ]);
 
+// Minimal estree shape for the function-scope handling (no @types/estree dependency).
+interface EsFunction {
+	id?: { name: string } | null;
+	params: unknown[];
+}
+
 /** Collect bound names from an estree binding pattern. */
 function collect_pattern_names(node, out) {
 	if (!node) return;
@@ -95,8 +101,9 @@ function add_expression_refs(expr, svelte_bound, out) {
 		enter(node, parent, key) {
 			if (FUNCTION_TYPES.has(node.type)) {
 				const s = new Set();
-				if ((node as any).id && node.type !== "ArrowFunctionExpression") s.add((node as any).id.name);
-				for (const p of (node as any).params) collect_pattern_names(p, s);
+				const fn = node as EsFunction;
+				if (fn.id && node.type !== 'ArrowFunctionExpression') s.add(fn.id.name);
+				for (const p of fn.params) collect_pattern_names(p, s);
 				scopes.push(s);
 			} else if (node.type === 'BlockStatement' && !FUNCTION_TYPES.has(parent?.type)) {
 				scopes.push(new Set());
@@ -171,7 +178,7 @@ function fragment_nodes(fragment) {
 }
 
 /**
- * @param {any[]} nodes top-level nodes of the subtree
+ * @param {unknown[]} nodes top-level nodes of the subtree
  * @param {Set<string>} outer_bound names bound outside (usually empty at entry)
  * @param {Set<string>} out accumulates free references
  * @param {(name:string)=>void} [onSnippet] called with snippet names defined here (for error reporting)
@@ -280,7 +287,7 @@ export function collectSnippetNames(nodes) {
 }
 
 /**
- * @param {any[]} nodes hoisted subtree top-level nodes
+ * @param {unknown[]} nodes hoisted subtree top-level nodes
  * @returns {Set<string>} free identifier names
  */
 export function collectFreeIdentifiers(nodes) {

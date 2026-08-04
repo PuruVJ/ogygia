@@ -50,7 +50,7 @@ try {
 	page.on('pageerror', (e) => errs.push(e.message));
 	await page.goto(base + '/forms', { waitUntil: 'domcontentloaded' });
 	// prove the runtime is present (SPA marker) and capture its per-load marker
-	const markerBefore = await page.evaluate(() => (window as any).__marker);
+	const markerBefore = await page.evaluate(() => window.__marker);
 
 	const unique = 'js-' + Date.now();
 	await page.fill('[data-input-name]', 'Ada2');
@@ -63,7 +63,7 @@ try {
 
 	check('JS: native form submit added the entry', await page.locator('[data-entries]').textContent().then((t) => (t || '').includes(unique)));
 	check('JS: landed on post-redirect-get success (ok message)', (await page.locator('[data-form-ok]').count()) >= 0 && /ok=1/.test(page.url()) === true, page.url());
-	const markerAfter = await page.evaluate(() => (window as any).__marker);
+	const markerAfter = await page.evaluate(() => window.__marker);
 	// A native form POST is a REAL document navigation (not an SPA swap) — the runtime module
 	// re-evaluates, so __marker changes. Proves the SPA router did NOT intercept the submit.
 	check('JS: form submit was a real navigation, not an SPA swap (router did not intercept)', markerBefore !== undefined && markerAfter !== undefined && markerBefore !== markerAfter, `${markerBefore} -> ${markerAfter}`);
@@ -83,13 +83,13 @@ try {
 		await page2.waitForSelector('[data-rf-name-issue]', { timeout: 4000 }).catch(() => {});
 		check('remote form: schema field issue shown', /required/.test((await page2.locator('[data-rf-name-issue]').first().textContent().catch(() => '')) || ''));
 		// valid submit -> result, NO reload (enhanced)
-		const m1 = await page2.evaluate(() => (window as any).__marker);
+		const m1 = await page2.evaluate(() => window.__marker);
 		const uniq = 'rf-' + Date.now();
 		await page2.fill('[data-rf-name]', 'Ada');
 		await page2.fill('[data-rf-message]', uniq);
 		await page2.click('[data-rf-submit]');
 		await page2.waitForSelector('[data-rf-result]', { timeout: 5000 }).catch(() => {});
-		check('remote form: enhanced submit shows result without reload', /Signed via remote form/.test((await page2.locator('[data-rf-result]').textContent().catch(() => '')) || '') && (await page2.evaluate(() => (window as any).__marker)) === m1);
+		check('remote form: enhanced submit shows result without reload', /Signed via remote form/.test((await page2.locator('[data-rf-result]').textContent().catch(() => '')) || '') && (await page2.evaluate(() => window.__marker)) === m1);
 		check('remote form: no page errors', e2.length === 0, e2.slice(0, 2).join('; '));
 		await page2.close();
 	}

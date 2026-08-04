@@ -62,7 +62,7 @@ function strategy_to_attr(strategy, options) {
 /**
  * @typedef {Object} TransformResult
  * @property {string} code rewritten host source
- * @property {any} map source map
+ * @property {unknown} map source map
  * @property {Array<{id:string, virtualPath:string, source:string, hostPath:string}>} islands
  */
 
@@ -202,7 +202,7 @@ export function transformHost(source, id, ctx) {
 	const host_snippet_names = collectSnippetNames(ast.fragment?.nodes ?? []);
 
 	// --- find island units in the template ---------------------------------
-	/** @type {Array<{node:any, strategy:string}>} marked-component usages */
+	// marked-component usages: { node (svelte template node), strategy, options }
 	const units = [];
 	const visit = (nodes) => {
 		for (const node of nodes ?? []) {
@@ -352,7 +352,8 @@ export function transformHost(source, id, ctx) {
 
 	// strip island-marked imports (their `with{}` clause & now-unused binding)
 	for (const node of imports_to_strip) {
-		s.remove((node as any).start, (node as any).end);
+		const pos = node as { start: number; end: number };
+		s.remove(pos.start, pos.end);
 	}
 
 	// inject island component imports into the instance <script>

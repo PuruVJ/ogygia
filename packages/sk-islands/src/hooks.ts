@@ -11,6 +11,8 @@
 // Composable with `sequence()` — it only intercepts the `/_islands` path and otherwise calls
 // `resolve(event)`.
 import { render } from 'svelte/server';
+import type { Component } from 'svelte';
+import type { Handle } from '@sveltejs/kit';
 import * as devalue from 'devalue';
 import { base } from '$app/paths';
 import { islands as island_modules } from 'virtual:ogygia/server-manifest';
@@ -25,10 +27,10 @@ const ENDPOINT = '/_islands';
  * @param {string} [options.endpoint='/_islands'] path (relative to base) the handle serves
  * @returns {import('@sveltejs/kit').Handle}
  */
-export function ogygiaHandle(options: { endpoint?: string } = {}) {
+export function ogygiaHandle(options: { endpoint?: string } = {}): Handle {
 	const endpoint = (base || '') + (options.endpoint || ENDPOINT);
 
-	return async ({ event, resolve }: { event: any; resolve: any }) => {
+	return async ({ event, resolve }) => {
 		if (event.url.pathname !== endpoint) return resolve(event);
 		return await render_island(event.url);
 	};
@@ -63,7 +65,7 @@ async function render_island(url) {
 	try {
 		const mod = await load();
 		// `render()` is thenable; awaiting settles any `await`/remote work in the component.
-		const out = await render(mod.default as any, { props });
+		const out = await render(mod.default as Component<Record<string, unknown>>, { props });
 		body = out.body;
 	} catch (err) {
 		return new Response('Island render failed', { status: 500 });

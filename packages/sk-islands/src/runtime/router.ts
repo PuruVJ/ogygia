@@ -9,14 +9,35 @@
 let started = false;
 
 // ---- navigation lifecycle hooks (for the $app/navigation shim) ----
-const before_hooks = new Set<any>();
-const after_hooks = new Set<any>();
+interface NavTarget {
+	url: URL;
+	params: Record<string, string>;
+	route: { id: string | null };
+}
+interface BeforeNavigation {
+	from: NavTarget;
+	to: NavTarget;
+	type: string;
+	cancel: () => void;
+	willUnload: boolean;
+}
+interface AfterNavigation {
+	from: NavTarget | null;
+	to: NavTarget;
+	type: string;
+	willUnload: boolean;
+}
+type BeforeNavigateCallback = (nav: BeforeNavigation) => void;
+type AfterNavigateCallback = (nav: AfterNavigation) => void;
 
-export function beforeNavigate(fn: any) {
+const before_hooks = new Set<BeforeNavigateCallback>();
+const after_hooks = new Set<AfterNavigateCallback>();
+
+export function beforeNavigate(fn: BeforeNavigateCallback) {
 	before_hooks.add(fn);
 	return () => before_hooks.delete(fn);
 }
-export function afterNavigate(fn: any) {
+export function afterNavigate(fn: AfterNavigateCallback) {
 	after_hooks.add(fn);
 	// $app/navigation's afterNavigate fires immediately on mount too
 	try {
@@ -27,7 +48,7 @@ export function afterNavigate(fn: any) {
 	return () => after_hooks.delete(fn);
 }
 
-function build_nav_target(url) {
+function build_nav_target(url: URL): NavTarget {
 	return { url, params: {}, route: { id: null } };
 }
 function run_before(from, to, type) {
@@ -69,14 +90,14 @@ function should_intercept(event, anchor) {
 }
 
 /** Merge <head>: keep nodes present in both, remove stale, add new. Keeps runtime scripts alive. */
-function merge_head(new_head: any) {
+function merge_head(new_head: HTMLHeadElement) {
 	const current = document.head;
-	const current_nodes = new Map<string, any>();
-	for (const node of Array.from(current.children) as any[]) {
+	const current_nodes = new Map<string, Element>();
+	for (const node of Array.from(current.children)) {
 		current_nodes.set(node.outerHTML, node);
 	}
 	const next_keys = new Set<string>();
-	for (const node of Array.from(new_head.children) as any[]) {
+	for (const node of Array.from(new_head.children)) {
 		next_keys.add(node.outerHTML);
 	}
 	// remove stale nodes (but never remove module scripts that boot the runtime)
@@ -87,7 +108,7 @@ function merge_head(new_head: any) {
 		}
 	}
 	// add new nodes
-	for (const node of Array.from(new_head.children) as any[]) {
+	for (const node of Array.from(new_head.children)) {
 		if (!current_nodes.has(node.outerHTML)) {
 			current.appendChild(node.cloneNode(true));
 		}
@@ -130,10 +151,10 @@ async function navigate(url, { push = true, pop_scroll = null, type = 'link', re
 	// Update history SYNCHRONOUSLY (before any await) so the URL is correct and
 	// races between overlapping navigations can't drop the pushState.
 	if (replace) {
-		history.replaceState({ ...((history.state as any) || {}), ogygia: true }, '', url.href);
+		history.replaceState({ ...(history.state || {}), ogygia: true }, '', url.href);
 	} else if (push) {
 		// save outgoing scroll into the current entry, then push the new URL
-		history.replaceState({ ...((history.state as any) || {}), scroll: { x: scrollX, y: scrollY } }, '');
+		history.replaceState({ ...(history.state || {}), scroll: { x: scrollX, y: scrollY } }, '');
 		history.pushState({ ogygia: true }, '', url.href);
 	}
 
@@ -186,7 +207,7 @@ async function navigate(url, { push = true, pop_scroll = null, type = 'link', re
 
 // ---------- $app/navigation shim surface ----------
 /** Programmatic navigation. Mirrors Kit's goto(). */
-export function goto(url: any, opts: any = {}) {
+export function goto(url: string | URL, opts: { replaceState?: boolean } = {}) {
 	const target = new URL(url, location.href);
 	return navigate(target, { push: !opts.replaceState, replace: false, type: 'goto' });
 }
@@ -249,10 +270,10 @@ export function startRouter() {
 	document.addEventListener('touchstart', maybe_prefetch, { passive: true });
 
 	window.addEventListener('popstate', () => {
-		const pop_scroll = (history.state as any)?.scroll || null;
+		const pop_scroll = history.state?.scroll || null;
 		navigate(new URL(location.href), { push: false, pop_scroll });
 	});
 
 	// seed initial history entry so scroll is restored on the first back
-	history.replaceState({ ...((history.state as any) || {}), ogygia: true }, '');
+	history.replaceState({ ...(history.state || {}), ogygia: true }, '');
 }
