@@ -218,8 +218,28 @@ navigation, put it in an **island**.
 
 `<ClientRouter />` (opt-in, render it in a layout) intercepts same-origin `<a>` clicks, swaps
 `<body>`, merges `<head>`, and uses View Transitions when available. Islands on the new page
-hydrate via custom-element connection; old ones unmount via disconnection. Our runtime module
-script lives in `<head>` and persists across swaps. (Page inline scripts are not re-run — see above.)
+hydrate via custom-element connection; old ones unmount via disconnection. Rendering `<ClientRouter />`
+loads the runtime module, so the router works even on a page with **no islands**; the runtime module
+persists across swaps. (Page inline scripts are not re-run — see above.)
+
+### Link prefetch (`data-sveltekit-preload-*`)
+
+The router honours SvelteKit's preload attributes to **warm its page-HTML cache** — a prefetched
+page swaps in on click with **no second request**. Both attributes and Kit's value grammar +
+nearest-ancestor inheritance are supported:
+
+| value | when it prefetches |
+| ----- | ------------------ |
+| `eager` | immediately (on load / after each nav) |
+| `viewport` | when the link scrolls into view |
+| `hover` | on hover (the default when the attribute has no value) |
+| `tap` | on press (mousedown / touchstart) |
+| `off` / `false` | never (a nearer ancestor can disable a broader `hover`) |
+
+Put `data-sveltekit-preload-data="hover"` on a container to opt a whole subtree in. Because this
+router delivers a page's "code" via the HTML body swap (island chunks then fetch on connect),
+`data-sveltekit-preload-code` maps to the **same** HTML prefetch — its extra `eager`/`viewport`
+triggers just warm earlier.
 
 ## Captured host state is a snapshot (don't mutate it)
 

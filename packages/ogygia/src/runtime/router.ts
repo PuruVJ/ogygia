@@ -203,6 +203,8 @@ async function navigate(url, { push = true, pop_scroll = null, type = 'link', re
 	}
 
 	run_after(from, url, type);
+	// new <body> -> re-evaluate eager/viewport preload links on the freshly-swapped page
+	scan_eager_viewport();
 }
 
 // ---------- $app/navigation shim surface ----------
@@ -241,6 +243,87 @@ export function replaceState() {
 	console.warn('[ogygia] replaceState() shallow routing is not supported; use goto().');
 }
 
+// ---------- link prefetch (SvelteKit `data-sveltekit-preload-*` parity) ----------
+// In this router a page's "code" is delivered by the HTML body swap (+ island chunks fetched on
+// connect), so BOTH `data-sveltekit-preload-data` and `-code` warm the SAME page-HTML cache. We
+// honour Kit's value grammar + nearest-ancestor inheritance: 'eager' | 'viewport' | 'hover' | 'tap'
+// | 'off'/'false'. An anchor's effective trigger is the MOST-EAGER of the two attributes; an empty
+// value means 'hover' (Kit's default). `-data` is normally hover/tap; `-code` adds eager/viewport.
+const PRELOAD_RANK: Record<string, number> = { eager: 0, viewport: 1, hover: 2, tap: 3, off: 4, false: 4 };
+
+/** Nearest-ancestor value of `name` (Kit inheritance); empty value -> 'hover'. null if unset. */
+function preload_attr(el: Element, name: string): string | null {
+	const holder = el.closest('[' + name + ']');
+	if (!holder) return null;
+	const v = holder.getAttribute(name);
+	return v === '' || v == null ? 'hover' : v;
+}
+
+/** Rank of the most-eager preload trigger that applies to `anchor` (5 = none). */
+function preload_rank(anchor: Element): number {
+	let rank = 5;
+	const d = preload_attr(anchor, 'data-sveltekit-preload-data');
+	const c = preload_attr(anchor, 'data-sveltekit-preload-code');
+	if (d != null) rank = Math.min(rank, PRELOAD_RANK[d] ?? 5);
+	if (c != null) rank = Math.min(rank, PRELOAD_RANK[c] ?? 5);
+	return rank;
+}
+
+/** Warm the page-HTML cache for an anchor if it's a same-origin SPA target. */
+function warm_anchor(anchor: Element) {
+	const url = should_intercept({ button: 0, defaultPrevented: false }, anchor as HTMLAnchorElement);
+	if (url && url.href !== location.href) fetch_page(url.href);
+}
+
+let viewport_io: IntersectionObserver | null = null;
+const viewport_seen = new WeakSet<Element>();
+
+function install_prefetch() {
+	// hover -> warm links whose trigger is hover-or-eager (rank <= 2)
+	document.addEventListener(
+		'mouseover',
+		(event) => {
+			const anchor = event.target instanceof Element ? event.target.closest('a') : null;
+			if (anchor && preload_rank(anchor) <= PRELOAD_RANK.hover) warm_anchor(anchor);
+		},
+		{ passive: true }
+	);
+	// tap -> warm on the press (mousedown + touchstart), for links whose trigger is tap-or-eager
+	const on_press = (event: Event) => {
+		const t = event.target;
+		const anchor = t instanceof Element ? t.closest('a') : null;
+		if (anchor && preload_rank(anchor) <= PRELOAD_RANK.tap) warm_anchor(anchor);
+	};
+	document.addEventListener('mousedown', on_press, { passive: true });
+	document.addEventListener('touchstart', on_press, { passive: true });
+
+	viewport_io = new IntersectionObserver(
+		(entries) => {
+			for (const e of entries) {
+				if (e.isIntersecting) {
+					viewport_io!.unobserve(e.target);
+					warm_anchor(e.target);
+				}
+			}
+		},
+		{ rootMargin: '0px' }
+	);
+	scan_eager_viewport();
+}
+
+/** After start + every navigation: eager links warm now; viewport links get observed. */
+function scan_eager_viewport() {
+	if (!viewport_io) return;
+	for (const anchor of Array.from(document.querySelectorAll('a[href]'))) {
+		const rank = preload_rank(anchor);
+		if (rank === PRELOAD_RANK.eager) warm_anchor(anchor);
+		else if (rank === PRELOAD_RANK.viewport && !viewport_seen.has(anchor)) {
+			viewport_seen.add(anchor);
+			viewport_io.observe(anchor);
+		}
+	}
+}
+
 export function startRouter() {
 	if (started || typeof document === 'undefined') return;
 	// OPT-IN: only activate when a <ClientRouter/> put its marker in the head.
@@ -257,17 +340,7 @@ export function startRouter() {
 		navigate(url, { push: true });
 	});
 
-	// prefetch on hover/tap when opted in via data-sveltekit-preload-data
-	const maybe_prefetch = (event) => {
-		const anchor = event.target instanceof Element ? event.target.closest('a') : null;
-		if (!anchor) return;
-		const mode = anchor.closest('[data-sveltekit-preload-data]')?.getAttribute('data-sveltekit-preload-data');
-		if (mode !== 'hover' && mode !== 'tap') return;
-		const url = should_intercept({ button: 0, defaultPrevented: false }, anchor);
-		if (url && url.pathname !== location.pathname) fetch_page(url.href);
-	};
-	document.addEventListener('mouseover', maybe_prefetch, { passive: true });
-	document.addEventListener('touchstart', maybe_prefetch, { passive: true });
+	install_prefetch();
 
 	window.addEventListener('popstate', () => {
 		const pop_scroll = history.state?.scroll || null;
