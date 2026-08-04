@@ -69,6 +69,30 @@ try {
 	check('JS: form submit was a real navigation, not an SPA swap (router did not intercept)', markerBefore !== undefined && markerAfter !== undefined && markerBefore !== markerAfter, `${markerBefore} -> ${markerAfter}`);
 	check('JS: no page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 	await page.close();
+
+	// ---- Remote form() inside an island (Kit's real form runtime, reused via ogygia) ----
+	{
+		const page2 = await browser.newPage();
+		const e2: string[] = [];
+		page2.on('pageerror', (e) => e2.push(e.message));
+		await page2.goto(base + '/forms', { waitUntil: 'domcontentloaded' });
+		await page2.waitForSelector('[data-remote-form]', { timeout: 5000 });
+		check('remote form: posts to the remote endpoint (no-JS action)', /\/remote=/.test((await page2.getAttribute('[data-remote-form]', 'action')) || ''));
+		// invalid submit -> field issue (enhanced, client-side validation)
+		await page2.click('[data-rf-submit]');
+		await page2.waitForSelector('[data-rf-name-issue]', { timeout: 4000 }).catch(() => {});
+		check('remote form: schema field issue shown', /required/.test((await page2.locator('[data-rf-name-issue]').first().textContent().catch(() => '')) || ''));
+		// valid submit -> result, NO reload (enhanced)
+		const m1 = await page2.evaluate(() => (window as any).__marker);
+		const uniq = 'rf-' + Date.now();
+		await page2.fill('[data-rf-name]', 'Ada');
+		await page2.fill('[data-rf-message]', uniq);
+		await page2.click('[data-rf-submit]');
+		await page2.waitForSelector('[data-rf-result]', { timeout: 5000 }).catch(() => {});
+		check('remote form: enhanced submit shows result without reload', /Signed via remote form/.test((await page2.locator('[data-rf-result]').textContent().catch(() => '')) || '') && (await page2.evaluate(() => (window as any).__marker)) === m1);
+		check('remote form: no page errors', e2.length === 0, e2.slice(0, 2).join('; '));
+		await page2.close();
+	}
 } finally {
 	await browser.close();
 }

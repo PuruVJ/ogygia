@@ -5,11 +5,15 @@
 	// A Counter island is present so the runtime (and SPA router) are active — proving the form
 	// still submits natively even with the router running.
 	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
+	import GuestbookForm from '$lib/GuestbookForm.svelte' with { hydrate: 'load' };
 	let { data, form } = $props();
 </script>
 
 <h1 data-static-shell>Guestbook — classic form actions</h1>
 <Counter start={0} label="island on the forms page (router active)" />
+
+<h2 data-static-shell>Remote form (inside an island)</h2>
+<GuestbookForm />
 <p data-static-shell>Plain <code>&lt;form method="POST"&gt;</code>. No JS needed; works with the SPA router active.</p>
 
 {#if data.ok}<p data-form-ok>Thanks — your entry was saved.</p>{/if}
