@@ -15,7 +15,13 @@ const APP_SHIMS = {
 	'$app/navigation': fileURLToPath(new URL('../shims/app-navigation.js', import.meta.url))
 };
 
-const REMOTE_CLIENT = fileURLToPath(new URL('../shims/remote-client.svelte.js', import.meta.url));
+// Reuse Kit's OWN client remote primitives (query/command/form/live). We point
+// `__sveltekit/remote` at Kit's real remote-functions and scope-alias the two router-coupled
+// modules those pull in (`client.js`, `state.svelte.js`) to tiny stubs, so the router graph
+// never loads. The old hand-rolled wire client is gone; these stubs are the only glue.
+const STUB_CLIENT = fileURLToPath(new URL('../shims/kit-remote/client-stub.js', import.meta.url));
+const STUB_STATE = fileURLToPath(new URL('../shims/kit-remote/state-stub.js', import.meta.url));
+const STUB_PATHS = fileURLToPath(new URL('../shims/kit-remote/paths-internal-stub.js', import.meta.url));
 
 const V_RUNTIME_URL = 'virtual:ogygia/runtime-url';
 const V_MANIFEST = 'virtual:ogygia/manifest';
@@ -76,6 +82,8 @@ export function ogygia(options = {}) {
 	let ranStandalone = false;
 	/** absolute path to Kit's internal wire-protocol module (deep import) */
 	let kitWirePath = null;
+	/** absolute path to Kit's client remote-functions entry (Plan A reuse) */
+	let kitRemoteIndex = null;
 	/** absolute path to the app's universal hooks (for `transport`), if present */
 	let universalHooks = null;
 	/** the content-hashed runtime URL, once known (standalone build only; same plugin instance) */
@@ -172,6 +180,8 @@ export function ogygia(options = {}) {
 				const kitRoot = path.dirname(require.resolve('@sveltejs/kit/package.json'));
 				const candidate = path.join(kitRoot, 'src', 'runtime', 'shared.js');
 				if (fs.existsSync(candidate)) kitWirePath = candidate;
+				const remoteIdx = path.join(kitRoot, 'src', 'runtime', 'client', 'remote-functions', 'index.js');
+				if (fs.existsSync(remoteIdx)) kitRemoteIndex = remoteIdx;
 			} catch {
 				kitWirePath = null; // fall back to the built-in devalue codec (no transport)
 			}
@@ -233,9 +243,26 @@ export function ogygia(options = {}) {
 
 			const isSsr = options?.ssr ?? isSSR;
 
-			// CLIENT build: swap Kit's client remote runtime for ours (Kit's needs `app`,
-			// which never boots under csr=false). enforce:'pre' wins over Kit's resolveId.
-			if (!isSsr && source === '__sveltekit/remote') return REMOTE_CLIENT;
+			// CLIENT build: Kit's client remote runtime needs `app` (never boots under csr=false).
+			// Plan A: reuse Kit's OWN remote primitives, redirecting `__sveltekit/remote` at Kit's
+			// real remote-functions entry; the router-coupled modules they import are stubbed just
+			// below. Fallback: our hand-rolled shim. enforce:'pre' wins over Kit's resolveId.
+			if (!isSsr && source === '__sveltekit/remote') {
+				if (!kitRemoteIndex) {
+					throw new Error(
+						'[ogygia] could not locate Kit\'s client remote-functions (src). Pin @sveltejs/kit with its `src/` published (2.70.x).'
+					);
+				}
+				return kitRemoteIndex;
+			}
+			// Scope-alias the two router-coupled modules Kit's remote-functions pull in, ONLY when
+			// imported from within Kit's remote-functions dir (so a csr=true page's real Kit client
+			// still gets the real client.js). Keeps the router graph out of island bundles.
+			if (!isSsr && importer && importer.includes('/remote-functions/')) {
+				if (/(^|\/)client\.js$/.test(source)) return STUB_CLIENT;
+				if (/state\.svelte\.js$/.test(source)) return STUB_STATE;
+			}
+			if (!isSsr && source === '$app/paths/internal/client') return STUB_PATHS;
 
 			// imports originating directly inside an island virtual module. `$app/*` is aliased
 			// to client shims at load-time (client build only).
