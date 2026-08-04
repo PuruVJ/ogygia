@@ -79,6 +79,7 @@ cross as devalue, functions never cross.
 
 ## Out of scope of the model (orthogonal features)
 
-- `<script bundle>` / inline scripts — imperative escape hatch, not a region.
+- Inline `<script>` in page HTML — runs on full loads only; the library does not process or
+  re-execute scripts (use an island for per-navigation code).
 - `<ClientRouter />` — swaps regions wholesale; the rule re-applies on connect.
 - Remote functions — data plane; regions are the rendering plane.

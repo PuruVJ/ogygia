@@ -126,7 +126,7 @@ export async function runStandaloneClientBuild({ root, base, clientDir, makePlug
 		pathToFileUrl(require.resolve('@sveltejs/vite-plugin-svelte', { paths: [root] }))
 	);
 
-	await build({
+	const result = await build({
 		root,
 		base: base || '/',
 		configFile: false,
@@ -152,13 +152,25 @@ export async function runStandaloneClientBuild({ root, base, clientDir, makePlug
 			rollupOptions: {
 				input: RUNTIME_ENTRY,
 				output: {
-					entryFileNames: '_app/immutable/ogygia-runtime.js',
+					// content-hashed like every other immutable chunk
+					entryFileNames: '_app/immutable/ogygia-runtime.[hash].js',
 					chunkFileNames: '_app/immutable/[name]-[hash].js',
 					assetFileNames: '_app/immutable/[name]-[hash][extname]'
 				}
 			}
 		}
 	});
+
+	// find the hashed runtime entry filename to hand back to the (still-running) SSR build
+	const outputs = Array.isArray(result) ? result : [result];
+	for (const out of outputs) {
+		for (const chunk of out.output ?? []) {
+			if (chunk.type === 'chunk' && chunk.isEntry && chunk.facadeModuleId === RUNTIME_ENTRY) {
+				return { runtimeFileName: chunk.fileName };
+			}
+		}
+	}
+	return { runtimeFileName: null };
 }
 
 function pathToFileUrl(p) {

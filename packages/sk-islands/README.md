@@ -40,11 +40,6 @@ import { ogygiaHandle } from 'ogygia/hooks';
 export const handle = ogygiaHandle();
 ```
 
-```ts
-// src/app.d.ts — teach svelte-check the `<script bundle>` attribute
-/// <reference types="ogygia/ambient" />
-```
-
 > **Kit skips its client build when _every_ route has `csr === false`.** Islands need that
 > client build (runtime + code-split chunks). Keep **at least one** route that doesn't set
 > `csr = false` (a normal Kit page). If every route is `csr = false`, ogygia runs its own
@@ -154,17 +149,20 @@ don't.)
   `ORIGIN` in production (Kit CSRF). Remote `form()` inside islands is **not yet implemented** —
   use form actions (see TODO.md).
 
-## Bundled `<script bundle>`
+## Scripts
 
-A nested `<script bundle>` is extracted into its own module chunk (its imports resolve & bundle;
-add `lang="ts"` for TypeScript). Plain nested `<script>` is SSR'd verbatim; add `data-rerun` to
-re-run it after an SPA swap. (This is an imperative escape hatch, not a region.)
+The library does **no** script processing — the only authoring vocabulary is `hydrate`/`defer`/
+`preset` on imports. A nested inline `<script>` in page HTML runs on a **full document load**, as
+usual. It does **not** run after a client-side (SPA) swap: newly inserted `<script>` tags don't
+execute (standard browser behaviour for parsed/adopted nodes). If you need code to run per
+navigation, put it in an **island**.
 
 ## SPA router
 
 `<ClientRouter />` (opt-in, render it in a layout) intercepts same-origin `<a>` clicks, swaps
 `<body>`, merges `<head>`, and uses View Transitions when available. Islands on the new page
-hydrate via custom-element connection; old ones unmount via disconnection.
+hydrate via custom-element connection; old ones unmount via disconnection. Our runtime module
+script lives in `<head>` and persists across swaps. (Page inline scripts are not re-run — see above.)
 
 ## Constraints
 
@@ -176,5 +174,5 @@ hydrate via custom-element connection; old ones unmount via disconnection.
 ## Build
 
 The library builds with **tsdown** to `./dist` (`.js` + `.d.ts`); the Svelte-pipeline files
-(`*.svelte`, the runes module, `ambient.d.ts`) ship as source and are compiled by the consumer.
+(`*.svelte`, the runes module) ship as source and are compiled by the consumer.
 `pnpm --filter ogygia build`. The playground consumes the built `dist`.

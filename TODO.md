@@ -1,5 +1,48 @@
 # ogygia — status & remaining work
 
+## Round 4 (this round) — landed & verified
+- **Scripts feature REMOVED entirely** (user decision). No `<script bundle>` extraction, no
+  chunk emission, no SPA-swap re-execution / `data-rerun` / module-URL dedupe, no ambient attr
+  type, no `scripts` suite. The library now touches ONLY region imports (`hydrate`/`defer`/`preset`)
+  and nothing else. Inline `<script>` runs on full loads only; after a client-side swap, inserted
+  scripts do not run (standard browser behaviour) — use an island. Our runtime `<head>` module
+  script persists across swaps (verified). README/DESIGN updated.
+- **Remote client reuses Kit's wire codec + transport** (see the section below).
+- **Runtime chunk hashing** — PARTIAL, blocked by Kit's build order:
+  - **Standalone mode (all-csr=false): DONE** — the runtime ships content-hashed
+    (`_app/immutable/ogygia-runtime.<hash>.js`, verified in SSR HTML). The standalone client build
+    was moved to `buildStart` of the SSR build (island discovery is prescan-based), so the hashed
+    name is known before the server bundle inlines it via the virtual runtime-url module.
+  - **Kit-driven mode (a csr=true route exists): NOT hashed — genuinely blocked.** Kit builds the
+    SERVER bundle FIRST, then the client (kit `exports/vite/index.js`: "first, build server nodes …"
+    then "create client build"). The server inlines the runtime `<script src>` at server-build time
+    and cannot learn a hash the *later* client build produces; a forward handoff is impossible. The
+    only fixes are (a) the client build (2nd) rewrites the already-emitted server chunk + prerendered
+    HTML to swap a placeholder → hashed name, or (b) a deterministic source-content hash both builds
+    compute identically. Both are follow-ups; today Kit-driven keeps the stable fixed name.
+  - `<script bundle>` chunk emission was deleted, so `sk-scripts/<hash>.js` is gone from the audit.
+
+## Verified suites (10): fetch-checks, browser, dashboard, remote, mixed, server-islands, nested,
+## presets, forms, prerender — all pass prod + dev; svelte-check 0/0.
+
+## Remaining / next (documented precisely)
+- **Full remote-primitive reuse + `form()`** — see "Remote client" section. Current reuse is the
+  wire codec only; the reactive cache + primitives remain ours because Kit's are coupled to
+  `client.js` (the router). Next: scoped alias of `client.js`/`state.svelte.js` → lightweight shims
+  (Plan A) or a minimal pinned Kit patch (Plan B) to seed `app`, then reuse query/command/form.
+- **Hydration flicker on hard reload** (reported) — two candidates to fix: (1) hunt hydration
+  mismatches (Date/locale text server-vs-client — pin demo formatting to ISO/fixed TZ); (2) async/
+  remote islands flashing pending because they refetch at hydration — seed each island's SSR-resolved
+  query results into the client cache so hydration adopts DOM with no refetch/flash. The proper fix
+  for (2) depends on reusing Kit's client query cache (i.e. the full-primitive reuse above).
+- **CSS-in-head audit for nested routes** (standalone mode) — verify island CSS links are in the
+  initial `<head>` on deep routes; quick sanity check flagged, not yet a dedicated suite.
+- **Lakes** (`hydrate: 'false'`) — approved as the next round (DESIGN.md). Currently a clean build
+  error. Placeholder-swap in the island client module, `<sk-lake>` DOM lift/restore, `restore` option.
+
+---
+
+
 ## Landed & verified this round (build + dev, real browser, adapter-node prod)
 
 - **Server islands** (`import X from '…' with { defer: 'true' }`). Fallback snippet SSRs into the

@@ -40,12 +40,6 @@ function isIslandPath(id) {
 	return id.includes('/' + ISLAND_DIR + '/') && id.endsWith('.svelte');
 }
 
-function isScriptPath(id) {
-	return id.includes('/' + ISLAND_DIR + '/') && /\.script\.(js|ts)$/.test(id);
-}
-
-const SCRIPT_FILENAME = (hash) => `_app/immutable/sk-scripts/${hash}.js`;
-
 /**
  * @param {Object} [options]
  * @param {boolean} [options.spa=true] enable the built-in SPA router
@@ -70,8 +64,6 @@ export function ogygia(options = {}) {
 	const registry = new Map();
 	/** @type {Map<string, string>} iid -> abs virtual path */
 	const byId = new Map();
-	/** @type {Map<string, {source:string, hostPath:string, hash:string}>} bundled <script island> chunks */
-	const scriptRegistry = new Map();
 
 	let root;
 	let base = '';
@@ -86,6 +78,8 @@ export function ogygia(options = {}) {
 	let kitWirePath = null;
 	/** absolute path to the app's universal hooks (for `transport`), if present */
 	let universalHooks = null;
+	/** the content-hashed runtime URL, once known (standalone build only; same plugin instance) */
+	let hashedRuntimeUrl = null;
 
 	const readFile = (abs) => {
 		try {
@@ -104,14 +98,6 @@ export function ogygia(options = {}) {
 		return prefix + '/' + rel;
 	};
 
-	const scriptPathFor = (hostId, hash, ext) =>
-		path.join(path.dirname(hostId), ISLAND_DIR, hash + '.script' + ext);
-
-	const scriptUrlFor = (scriptPath, hash) => {
-		const prefix = base && base !== '/' ? base.replace(/\/$/, '') : '';
-		return isDev ? devUrlFor(scriptPath) : prefix + '/' + SCRIPT_FILENAME(hash);
-	};
-
 	const runTransform = (source, id) => {
 		return transformHost(source, id, {
 			root,
@@ -121,8 +107,6 @@ export function ogygia(options = {}) {
 			dev: isDev,
 			virtualPathFor,
 			devUrlFor,
-			scriptPathFor,
-			scriptUrlFor,
 			visibleMargin,
 			presets
 		});
@@ -137,9 +121,6 @@ export function ogygia(options = {}) {
 				server: !!isl.server
 			});
 			byId.set(isl.id, isl.virtualPath);
-		}
-		for (const sc of result.scripts ?? []) {
-			scriptRegistry.set(sc.scriptPath, { source: sc.source, hostPath: sc.hostPath, hash: sc.hash });
 		}
 	};
 
@@ -204,40 +185,39 @@ export function ogygia(options = {}) {
 			}
 		},
 
-		buildStart() {
-			// client build only: emit the runtime + bundled scripts as deterministic chunks.
-			// In the standalone build the runtime is the rollup input (named via
-			// entryFileNames), so we don't emit it there.
+		async buildStart() {
+			// CLIENT build (Kit-driven): emit the runtime chunk. NOTE: Kit builds the SERVER
+			// bundle FIRST, then the client (kit vite index: "first, build server nodes …", then
+			// "create client build"). The server inlines the runtime `<script src>` at server-build
+			// time, so it cannot learn a hash the later client build would produce — hence a fixed,
+			// stable filename here. (Content-hashing is applied in the STANDALONE mode below, where
+			// a single build owns both sides.) See TODO.md.
 			if (isBuild && !isSSR) {
 				prescan();
 				if (!standalone) {
 					this.emitFile({ type: 'chunk', id: RUNTIME_ENTRY, fileName: RUNTIME_FILENAME });
 				}
-				for (const [scriptPath, meta] of scriptRegistry) {
-					this.emitFile({ type: 'chunk', id: scriptPath, fileName: SCRIPT_FILENAME(meta.hash) });
-				}
 			}
-		},
 
-		// After Kit's SSR build, if Kit will SKIP its client build (every route is
-		// csr=false), run our own client build so islands still get bundled. Our
-		// enforce:'pre' writeBundle runs before Kit's (which does the skip + prerender).
-		writeBundle: {
-			sequential: true,
-			async handler() {
-				if (standalone || ranStandalone) return;
-				if (!isBuild || !isSSR) return;
+			// SSR build with Kit SKIPPING its client build (every route csr=false): run our own
+			// standalone client build NOW — at the START of the server build, before any server
+			// chunk emits. Island discovery is prescan-based (needs no server output), so the
+			// CONTENT-HASHED runtime filename is known in time to be inlined into the SSR'd runtime
+			// `<script src>` (via the virtual runtime-url module — same plugin instance).
+			if (isBuild && isSSR && !standalone && !ranStandalone) {
 				const routesDir = path.join(root, 'src', 'routes');
-				if (!allRoutesCsrFalse(routesDir)) return; // Kit will build the client itself
-				ranStandalone = true;
-				const clientDir = path.join(root, '.svelte-kit', 'output', 'client');
-				await runStandaloneClientBuild({
-					root,
-					base,
-					clientDir,
-					sourcemap,
-					makePlugin: (opts) => ogygia({ ...options, ...opts })
-				});
+				if (allRoutesCsrFalse(routesDir)) {
+					ranStandalone = true;
+					const clientDir = path.join(root, '.svelte-kit', 'output', 'client');
+					const { runtimeFileName } = await runStandaloneClientBuild({
+						root,
+						base,
+						clientDir,
+						sourcemap,
+						makePlugin: (opts) => ogygia({ ...options, ...opts })
+					});
+					if (runtimeFileName) hashedRuntimeUrl = '/' + runtimeFileName;
+				}
 			}
 		},
 
@@ -257,28 +237,31 @@ export function ogygia(options = {}) {
 			// which never boots under csr=false). enforce:'pre' wins over Kit's resolveId.
 			if (!isSsr && source === '__sveltekit/remote') return REMOTE_CLIENT;
 
-			// imports originating directly inside an island virtual module or a bundled
-			// script. `$app/*` is aliased to client shims at load-time (client build only).
-			if (importer && (registry.has(importer) || scriptRegistry.has(importer))) {
-				const host = (registry.get(importer) || scriptRegistry.get(importer)).hostPath;
+			// imports originating directly inside an island virtual module. `$app/*` is aliased
+			// to client shims at load-time (client build only).
+			if (importer && registry.has(importer)) {
+				const host = registry.get(importer).hostPath;
 				return this.resolve(source, host, { skipSelf: true });
 			}
 
-			// island virtual .svelte modules / bundled script modules: real abs path
-			// (static import from host / emitFile id), dev root-relative URL, or /@fs/<abs>.
-			if (isIslandPath(source) || isScriptPath(source)) {
+			// island virtual .svelte modules: real abs path (static import from host / emitFile
+			// id), dev root-relative URL, or /@fs/<abs>.
+			if (isIslandPath(source)) {
 				let candidate = source.split('?')[0];
 				if (candidate.startsWith('/@fs/')) candidate = candidate.slice('/@fs'.length);
-				if (registry.has(candidate) || scriptRegistry.has(candidate)) return candidate;
+				if (registry.has(candidate)) return candidate;
 				const abs = path.join(root, candidate.replace(/^\//, ''));
-				if (registry.has(abs) || scriptRegistry.has(abs)) return abs;
+				if (registry.has(abs)) return abs;
 			}
 			return null;
 		},
 
 		load(id, options) {
 			if (id === RESOLVED(V_RUNTIME_URL)) {
-				const url = isDev ? '/@id/__x00__' + V_RUNTIME : RUNTIME_URL_BUILD;
+				// dev: the vite dev URL. build: the CONTENT-HASHED runtime URL — from this
+				// instance (standalone) or the handoff file the client build wrote (Kit-driven);
+				// fall back to the fixed name only if the handoff is somehow missing.
+				const url = isDev ? '/@id/__x00__' + V_RUNTIME : hashedRuntimeUrl || RUNTIME_URL_BUILD;
 				return `export default ${JSON.stringify(url)};`;
 			}
 			if (id === RESOLVED(V_RUNTIME)) {
@@ -327,7 +310,7 @@ export function ogygia(options = {}) {
 				}
 				return `export const dev = false;\nexport const spa = ${spa};\nexport const islands = {\n${entries.join(',\n')}\n};`;
 			}
-			const srcEntry = registry.get(id) || scriptRegistry.get(id);
+			const srcEntry = registry.get(id);
 			if (srcEntry) {
 				let src = srcEntry.source;
 				// CLIENT build: rewrite Kit `$app/*` imports to client shims. Kit resolves

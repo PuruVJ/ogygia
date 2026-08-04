@@ -11,8 +11,7 @@ const files = [
 	'src/ServerIsland.svelte',
 	'src/ClientRouter.svelte',
 	'src/NestedProvider.svelte',
-	'src/shims/remote-client.svelte.js',
-	'src/ambient.d.ts'
+	'src/shims/remote-client.svelte.js'
 ];
 
 for (const rel of files) {

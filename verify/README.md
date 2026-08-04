@@ -13,7 +13,6 @@ node verify/fetch-checks.ts    http://localhost:3051   # SSR: island HTML, no Ki
 node verify/browser.ts         http://localhost:3051   # hydration, strategies, devalue, SPA
 node verify/dashboard.ts       http://localhost:3051   # page shim, island goto, client table, chart
 node verify/remote.ts          http://localhost:3051   # client query+args+refresh, command, live
-node verify/scripts.ts         http://localhost:3051   # inline / data-rerun / bundled <script bundle>
 node verify/mixed.ts           http://localhost:3051   # csr=true coexistence + opt-in router
 node verify/server-islands.ts  http://localhost:3051   # defer:'true' fallback/endpoint/HMAC/cookie/CSS
 node verify/nested.ts          http://localhost:3051   # island-in-island single hydration + dev warn

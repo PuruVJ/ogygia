@@ -82,21 +82,6 @@ try {
 		await page.close();
 	}
 
-	// ---------- Inline script: runs on first load, does NOT re-run on SPA nav ----------
-	{
-		const page = await browser.newPage();
-		await page.goto(base + '/dashboard/settings', { waitUntil: 'networkidle' });
-		check('settings: inline script ran on first load', (await page.evaluate(() => window.__settingsInline)) === 1);
-		// SPA away and back — inline script must NOT re-run (no data-rerun)
-		await page.click('aside nav a[href="/dashboard/analytics"]');
-		await page.waitForSelector('.spacer', { timeout: 4000 });
-		await page.click('aside nav a[href="/dashboard/orders"]');
-		await page.waitForSelector('[data-filterbar]', { timeout: 4000 });
-		await page.goto(base + '/dashboard/settings', { waitUntil: 'networkidle' }); // full reload increments again
-		const val = await page.evaluate(() => window.__settingsInline);
-		check('settings: inline script re-ran on full reload (=1 fresh)', val === 1, `val=${val}`);
-		await page.close();
-	}
 } finally {
 	await browser.close();
 }

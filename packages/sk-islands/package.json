@@ -29,9 +29,6 @@
       "types": "./dist/internal.d.ts",
       "svelte": "./dist/internal.js",
       "default": "./dist/internal.js"
-    },
-    "./ambient": {
-      "types": "./dist/ambient.d.ts"
     }
   },
   "files": [

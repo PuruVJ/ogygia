@@ -118,33 +118,10 @@ function fetchPage(href) {
 	return pageCache.get(href);
 }
 
-// Scripts parsed via DOMParser + adopted into the DOM never execute. Recreate the
-// ones that should run, following Astro ClientRouter rules:
-//  - module scripts with src: run once per URL (tracked; browser module-map also dedupes)
-//  - classic src scripts: re-run on every swap
-//  - inline scripts: only re-run if they carry `data-rerun`
-//  - scripts identical to one already on the previous page never re-run
-const executedModuleSrcs = new Set();
-function reactivateScripts(root, oldScripts) {
-	for (const old of Array.from(root.querySelectorAll('script'))) {
-		if (oldScripts.has(old.outerHTML)) continue; // unchanged between pages -> don't re-run
-		const src = old.getAttribute('src');
-		const isModule = old.getAttribute('type') === 'module';
-		if (src) {
-			if (isModule) {
-				const abs = new URL(src, location.href).href;
-				if (executedModuleSrcs.has(abs)) continue;
-				executedModuleSrcs.add(abs);
-			}
-		} else if (!old.hasAttribute('data-rerun')) {
-			continue; // inline script without data-rerun -> do not re-run on swap
-		}
-		const fresh = document.createElement('script');
-		for (const attr of old.attributes) fresh.setAttribute(attr.name, attr.value);
-		fresh.textContent = old.textContent;
-		old.replaceWith(fresh);
-	}
-}
+// NOTE: the library does NO script processing. Scripts inserted via a client-side body swap do
+// not execute (standard browser behaviour for parsed/adopted <script> nodes) — if you need code
+// to run per navigation, use an island. Our own runtime module script lives in <head> and
+// persists across swaps (mergeHead keeps module scripts), so it keeps running.
 
 async function navigate(url, { push = true, popScroll = null, type = 'link', replace = false } = {}) {
 	const from = new URL(location.href);
@@ -179,13 +156,9 @@ async function navigate(url, { push = true, popScroll = null, type = 'link', rep
 	const useVT = marker.getAttribute('content') !== 'plain';
 
 	const swap = () => {
-		const oldScripts = new Set(
-			Array.from(document.querySelectorAll('script')).map((s) => s.outerHTML)
-		);
-		mergeHead(doc.head);
+		mergeHead(doc.head); // keeps our runtime module script alive across swaps
 		document.body.replaceWith(doc.body);
 		document.title = doc.title;
-		reactivateScripts(document.body, oldScripts);
 	};
 
 	if (useVT && document.startViewTransition) {

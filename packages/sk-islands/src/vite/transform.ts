@@ -77,8 +77,8 @@ function strategyToAttr(strategy, options) {
  * @returns {TransformResult|null}
  */
 export function transformHost(source, id, ctx) {
-	// cheap bailout (region imports use `hydrate`/`defer`/`preset`; bundled scripts use `bundle`)
-	if (!/hydrate|defer|bundle|preset/.test(source)) return null;
+	// cheap bailout — the library only touches region imports (`hydrate`/`defer`/`preset`)
+	if (!/hydrate|defer|preset/.test(source)) return null;
 
 	let ast;
 	try {
@@ -204,19 +204,11 @@ export function transformHost(source, id, ctx) {
 	// --- find island units in the template ---------------------------------
 	/** @type {Array<{node:any, strategy:string}>} marked-component usages */
 	const units = [];
-	/** @type {any[]} nested `<script island>` elements to bundle */
-	const scriptUnits = [];
-	const hasBundleAttr = (node) =>
-		(node.attributes ?? []).some((a) => a.type === 'Attribute' && a.name === 'bundle');
 	const visit = (nodes) => {
 		for (const node of nodes ?? []) {
 			if (node.type === 'Component' && markedComponents.has(node.name)) {
 				const mark = markedComponents.get(node.name);
 				units.push({ node, strategy: mark.strategy, options: mark.options });
-				continue; // do not descend
-			}
-			if (node.type === 'RegularElement' && node.name === 'script' && hasBundleAttr(node)) {
-				scriptUnits.push(node);
 				continue; // do not descend
 			}
 			// descend into child fragments
@@ -227,7 +219,7 @@ export function transformHost(source, id, ctx) {
 	};
 	visit(ast.fragment?.nodes ?? []);
 
-	if (units.length === 0 && scriptUnits.length === 0 && importsToStrip.size === 0) return null;
+	if (units.length === 0 && importsToStrip.size === 0) return null;
 
 	const s = new MagicString(source);
 	const islands = [];
@@ -358,26 +350,6 @@ export function transformHost(source, id, ctx) {
 		preambleImports.push(`\timport ${compVar} from ${JSON.stringify(virtualPath)};`);
 	});
 
-	// --- bundled `<script island>` -> its own module chunk -----------------
-	const scripts = [];
-	scriptUnits.forEach((node, i) => {
-		const hash = islandId(relHost, 1000 + i); // distinct id space from islands
-		const isTs = (node.attributes ?? []).some(
-			(a) => a.type === 'Attribute' && a.name === 'lang'
-		);
-		const ext = isTs ? '.ts' : '.js';
-		const scriptPath = ctx.scriptPathFor(id, hash, ext);
-		const kids = node.fragment?.nodes ?? [];
-		const inner = kids.length ? source.slice(kids[0].start, kids[kids.length - 1].end) : '';
-		const url = ctx.scriptUrlFor(scriptPath, hash);
-		scripts.push({ scriptPath, source: inner, hostPath: id, hash });
-		s.overwrite(
-			node.start,
-			node.end,
-			`<script type="module" src=${JSON.stringify(url)}></script>`
-		);
-	});
-
 	// strip island-marked imports (their `with{}` clause & now-unused binding)
 	for (const node of importsToStrip) {
 		s.remove(node.start, node.end);
@@ -395,5 +367,5 @@ export function transformHost(source, id, ctx) {
 		}
 	}
 
-	return { code: s.toString(), map: s.generateMap({ hires: true }), islands, scripts };
+	return { code: s.toString(), map: s.generateMap({ hires: true }), islands };
 }
