@@ -13,6 +13,9 @@ const RUNTIME_ENTRY = fileURLToPath(new URL('../runtime/index.js', import.meta.u
 const APP_ALIASES = {
 	'$app/paths/internal/client': fileURLToPath(new URL('../shims/kit-remote/paths-internal-stub.js', import.meta.url)),
 	'$app/paths': fileURLToPath(new URL('../shims/app-paths.js', import.meta.url)),
+	// Kit's reused client `prerender.svelte.js` imports `version` from the internal `$app/env` module
+	// (a Kit virtual absent in a standalone build) — point it at our environment shim.
+	'$app/env': fileURLToPath(new URL('../shims/app-environment.js', import.meta.url)),
 	'$app/environment': fileURLToPath(new URL('../shims/app-environment.js', import.meta.url)),
 	'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),
 	'$app/stores': fileURLToPath(new URL('../shims/app-stores.js', import.meta.url)),
@@ -28,8 +31,9 @@ export function kitHash(str) {
 }
 
 const TYPE_MAP = {
-	query: 'query',
+	'query.batch': 'query_batch',
 	'query.live': 'query_live',
+	query: 'query',
 	command: 'command',
 	form: 'form',
 	prerender: 'prerender'
@@ -50,7 +54,8 @@ export function remoteStubPlugin(root) {
 			const rel = path.relative(root, clean).split(path.sep).join('/');
 			const h = kitHash(rel);
 			const stubs = [];
-			const re = /export\s+const\s+(\w+)\s*=\s*(query\.live|query|command|form|prerender)\s*\(/g;
+			// order matters: match `query.batch`/`query.live` BEFORE the bare `query` alternative.
+			const re = /export\s+const\s+(\w+)\s*=\s*(query\.batch|query\.live|query|command|form|prerender)\s*\(/g;
 			let m;
 			while ((m = re.exec(code))) {
 				stubs.push(`export const ${m[1]} = __r.${TYPE_MAP[m[2]]}(${JSON.stringify(h + '/' + m[1])});`);

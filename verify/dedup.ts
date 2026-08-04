@@ -67,11 +67,15 @@ function chunksWith(dir: string, marker: string): string[] {
 			sourcemap: false,
 			makePlugin: (opts: Record<string, unknown>) => ogygia({ ...opts })
 		});
-		check('standalone: build produced a hashed runtime chunk', !!runtimeFileName, String(runtimeFileName));
+		// A successful build ALSO proves the standalone `.remote` stub + client resolution handle the
+		// fixture's query.batch + prerender functions (an unmatched stub would drop the export and the
+		// island's `import { getSquare, getManifesto }` would fail to resolve).
+		check('standalone: build succeeded (resolves query.batch + prerender remote)', !!runtimeFileName, String(runtimeFileName));
 		const immutable = path.join(outDir, '_app', 'immutable');
 		const hits = chunksWith(immutable, marker);
 		check('standalone: the dup component is emitted (marker found)', hits.length >= 1, `${hits.length} chunk(s)`);
 		check('standalone: dup component code in EXACTLY ONE chunk (not duplicated)', hits.length === 1, hits.join(', ') || '(none)');
+		check('standalone: remote-probe island present (batch/prerender island built)', chunksWith(immutable, 'standalone-remote-probe-marker').length >= 1, 'marker');
 	} catch (e) {
 		check('standalone: build succeeded', false, (e as Error).message.slice(0, 120));
 	} finally {

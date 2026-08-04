@@ -199,12 +199,22 @@ don't.)
 - **Form actions** work as usual on `csr = false` pages: a plain `<form method="POST">` submits
   natively (no JS), the SPA router does not intercept it (it only handles `<a>` clicks), and
   post-redirect-get lands correctly.
-- **Remote functions** (`.remote.ts` `query`/`command`/`query.live`) work inside islands on the
-  server (real Kit) and the client. The client replacement **reuses Kit's own wire codec**
-  (deep-imported, no patch) plus the app's universal **`transport`** hook, so custom transport
-  types and `File` args round-trip exactly against Kit's server. `command` (POST) needs a correct
-  `ORIGIN` in production (Kit CSRF). Remote `form()` inside islands is **not yet implemented** —
-  use form actions (see TODO.md).
+- **Remote functions** work inside islands on the server (real Kit) and the client. The client
+  replacement **reuses Kit's own remote primitives + wire codec** (deep-imported, no patch) plus the
+  app's universal **`transport`** hook, so custom transport types and `File` args round-trip exactly
+  against Kit's server. Every `.remote.ts` primitive is supported:
+
+  | primitive | inside an island | caveats |
+  | --------- | ---------------- | ------- |
+  | `query` | ✓ (SSR resolves in-process; hydration seeds from the SSR result — no re-fetch) | — |
+  | `query` (validated arg) | ✓ | Standard-Schema validation runs on the server |
+  | `query.live` | ✓ streaming (SSE) reactive `.current` | keeps a connection open |
+  | `query.batch` | ✓ N simultaneous calls collapse into **one** request | batched within a macrotask |
+  | `command` | ✓ mutate + `query.refresh()` | POST needs a correct `ORIGIN` in prod (Kit CSRF) |
+  | `form` | ✓ enhanced submit, field issues, no-JS fallback | see the guestbook demo |
+  | `prerender` | ✓ bakes at build; on a non-prerendered page use `{ dynamic: true }` to run at request time | a non-`dynamic` prerender needs a prerendered static response |
+
+  Both build modes (Kit-driven and standalone all-`csr=false`) support every primitive.
 
 ## Scripts
 

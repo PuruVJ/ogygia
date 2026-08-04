@@ -1,4 +1,4 @@
-import { query, command } from '$app/server';
+import { query, command, prerender } from '$app/server';
 import * as v from 'valibot';
 import { Temperature } from '../hooks';
 
@@ -19,6 +19,22 @@ export const bump = command(v.number(), async (by) => {
 	counter += by;
 	return counter;
 });
+
+// query.batch: N simultaneous calls in the SAME tick collapse into ONE network request. The batch
+// fn runs ONCE with all args and returns a per-arg resolver. `batchAt` is captured once per server
+// invocation, so identical `batchAt` across results proves a single batched request/run.
+export const getSquare = query.batch(v.number(), async (nums: number[]) => {
+	const batchAt = Date.now();
+	const size = nums.length;
+	return (n: number) => ({ n, square: n * n, batchAt, size });
+});
+
+// prerender: a remote function whose result can be baked at build time. `dynamic: true` lets it also
+// run at request time on a NON-prerendered page (else it would require a prerendered static file).
+export const getManifesto = prerender(
+	async () => ({ text: 'islands, not hydration', at: new Date().toISOString() }),
+	{ dynamic: true }
+);
 
 // Live query: streaming server clock (async generator).
 export const clock = query.live(async function* () {

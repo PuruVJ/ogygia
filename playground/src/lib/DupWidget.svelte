@@ -3,6 +3,7 @@
 	// land in exactly ONE client chunk — Rolldown should share it between the two island entry chunks,
 	// not duplicate it. The unique marker below lets verify/dedup.ts count the chunks it appears in.
 	let { start = 0 }: { start?: number } = $props();
+	// svelte-ignore state_referenced_locally
 	let n = $state(start);
 	const DUP_WIDGET_UNIQUE_MARKER = 'dup-widget-unique-marker-9c3f';
 </script>

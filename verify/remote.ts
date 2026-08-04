@@ -75,6 +75,34 @@ try {
 	check('custom transport type round-trips into the island (instanceof true)', (await page.locator('[data-transport-ok]').textContent().catch(() => '')) === 'true');
 	check('custom transport value correct (21.5°C)', /21\.5°C/.test((await page.locator('[data-transport-value]').textContent().catch(() => '')) || ''));
 
+	// ---------- query.batch + prerender (task 6), on /remote-batch ----------
+	const remoteReqs: string[] = [];
+	page.on('request', (r) => {
+		const u = r.url();
+		if (/\/_app\/remote\//.test(u)) remoteReqs.push(r.method() + ' ' + u.split('/_app/remote/')[1]);
+	});
+	await page.goto(base + '/remote-batch', { waitUntil: 'domcontentloaded' });
+	await page.waitForFunction(() => document.querySelector('[data-batch-onerun]')?.textContent?.length, { timeout: 6000 }).catch(() => {});
+	await sleep(400);
+
+	// query.batch: three simultaneous getSquare() calls collapse into exactly ONE request
+	const squareReqs = remoteReqs.filter((u) => /getSquare/.test(u));
+	check('query.batch: N simultaneous calls -> exactly ONE network request', squareReqs.length === 1, `${squareReqs.length}: ${squareReqs.join(' | ')}`);
+	check('query.batch: request is a POST (batched body)', squareReqs.every((u) => u.startsWith('POST')), squareReqs.join(' | '));
+	// per-key results correct + all from one server run (same batchAt) + batch size 3
+	const b2 = (await page.locator('[data-batch-2]').textContent()) || '';
+	const b5 = (await page.locator('[data-batch-5]').textContent()) || '';
+	const b9 = (await page.locator('[data-batch-9]').textContent()) || '';
+	check('query.batch: per-key results correct (2²=4, 5²=25, 9²=81)', /2² = 4\b/.test(b2) && /5² = 25\b/.test(b5) && /9² = 81\b/.test(b9), `${b2} / ${b5} / ${b9}`);
+	check('query.batch: batch size reported as 3', /size 3/.test(b2) && /size 3/.test(b9), b2);
+	check('query.batch: all results from ONE server run (identical batchAt)', (await page.locator('[data-batch-onerun]').textContent()) === 'one batched run');
+
+	// prerender() on a non-prerendered page: renders (SSR + hydration) via a single GET
+	await page.waitForFunction(() => document.querySelector('[data-prerender-text]')?.textContent === 'islands, not hydration', { timeout: 6000 }).catch(() => {});
+	check('prerender: renders on a non-prerendered page', (await page.locator('[data-prerender-text]').textContent()) === 'islands, not hydration');
+	const manifestoReqs = remoteReqs.filter((u) => /getManifesto/.test(u));
+	check('prerender: served via a single remote GET', manifestoReqs.length === 1 && manifestoReqs[0].startsWith('GET'), manifestoReqs.join(' | ') || '(none)');
+
 	check('no unexpected page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 	await page.close();
 } finally {
