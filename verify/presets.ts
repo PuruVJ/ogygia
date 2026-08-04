@@ -25,7 +25,7 @@ const baseCtx = {
 	presets: {
 		chart: { hydrate: 'visible', margin: '200px' },
 		lazy: { hydrate: 'load', margin: '999px' }, // margin inapplicable to load -> tolerated
-		srv: { defer: 'true' }
+		srv: { defer: 'load' }
 	}
 };
 const HOST = '/app/src/routes/+page.svelte';
@@ -70,7 +70,7 @@ function expectError(label: string, src: string, re: RegExp) {
 expectError('unknown preset lists available', wrap(`import C from './C.svelte' with { preset: 'nope' };`), /unknown preset 'nope'.*chart/s);
 expectError('inline option key rejected (margin)', wrap(`import C from './C.svelte' with { hydrate: 'visible', margin: '9px' };`), /not allowed inline/);
 expectError('preset + another inline key rejected', wrap(`import C from './C.svelte' with { preset: 'chart', hydrate: 'load' };`), /must be the only import attribute/);
-expectError('defer + hydrate is a roadmap error', wrap(`import C from './C.svelte' with { defer: 'true', hydrate: 'load' };`), /not yet supported \(roadmap/);
+expectError('defer + hydrate is a roadmap error', wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };`), /not yet supported \(roadmap/);
 // `hydrate: 'false'` is NOT a valid lake value — the string value is 'none'; error points there.
 expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from './C.svelte' with { hydrate: 'false' };`), /hydrate: 'false'.*use .*hydrate: 'none'/i);
 
