@@ -1,5 +1,18 @@
 # ogygia — status & remaining work
 
+## Toolchain note — TypeScript 7 (native/tsgo): PARTIAL, empirically verified 2026-08
+Adopted where the toolchain supports it; blocked in one leg (svelte-check), so we run a hybrid:
+- `tsc --noEmit` (lib `check` + verify `check`) → **works on typescript@7.0.2** (native). ✔
+- **tsdown** `.d.ts` emission → **works on typescript@7.0.2** (`Emit types with typescript@7.0.2`). ✔
+- **svelte-check@4.7.4 (svelte-language-tools) → INCOMPATIBLE with TS7.** Its `bin/ts-version-check.js`
+  throws at module load when the resolved `typescript` major is `>= 7`, demanding a dual setup
+  (`typescript@~6` **plus** `@typescript/native@npm:typescript@7`) and the `--tsgo` flag. It does NOT
+  accept a plain `typescript@7`. So the **playground pins `typescript@~6.0.3`** (svelte-check binds
+  TS6); the library + verify keep TS7. Revisit when svelte-language-tools ships first-class TS7
+  (drop the playground pin and unify on 7). Do not force it — forcing breaks template type-checking.
+
+
+
 ## Round 5 (this round) — landed & verified
 - **Remote reuse — Plan A, DONE (no patch).** `__sveltekit/remote` now points at Kit's REAL
   `remote-functions/index.js`; the two router-coupled modules it imports (`client.js`,

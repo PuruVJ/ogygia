@@ -4,8 +4,17 @@ Astro-style **SSR islands for SvelteKit**, with **no Kit patches**. Ship a page 
 **zero Kit JS** (`csr = false`) and hydrate only the interactive bits — each with its own
 strategy — plus **server islands** (personalized holes rendered on demand).
 
-Built for **Svelte 5.56+** and **SvelteKit 2.70+**. The library depends only on `devalue`,
-`magic-string`, and `estree-walker` (`svelte` is a peer).
+The library depends only on `devalue`, `magic-string`, and `estree-walker`. Everything else is a
+**peer** your app already provides:
+
+| peer | range | why |
+| ---- | ----- | --- |
+| `@sveltejs/kit` | `>=2.70.2 <3` | ogygia **deep-imports Kit internals** (the remote wire codec, the client remote-functions entry) by absolute path — no patches, but tightly coupled to Kit's internal layout. Treat the range as **tested**: it is exercised against the pinned minor, and a Kit minor bump can move an internal we import. |
+| `svelte` | `^5.40.0` | needs `createContext` (5.40+) for the nested-region flag, runes, and async SSR. |
+| `vite` | `^5 \|\| ^6 \|\| ^7 \|\| ^8` | only the stable plugin API is used; broad on purpose (developed against vite 8 / Rolldown). |
+
+> Because Kit coupling is to **internals**, minors are a tested range rather than a semver promise —
+> pin Kit and bump deliberately.
 
 > **Design:** ogygia implements the unified **region model** — see [`DESIGN.md`](../../DESIGN.md).
 > Every boundary sets two axes: **`render`** (`page` | `defer`) and **`hydrate`**
