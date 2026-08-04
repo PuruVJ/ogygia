@@ -1,5 +1,45 @@
 # ogygia — status & remaining work
 
+## Flicker fix (round 6) — DONE: CSS-in-head + Date/TZ; SPECCED: remote-query seeding
+- **Nested-route CSS-in-head — DONE.** Verified island `.island` CSS is inlined into the initial
+  `<head>` on a deep route (`/dashboard/orders/5`); locked by a `verify/fetch-checks.ts` assertion.
+- **Date/TZ hydration-mismatch hunt — DONE (no accidental mismatches).** ResolvedGreeting/OrderDetail
+  render dates with `toISOString()` (deterministic, UTC). `Clock.svelte` uses `toLocaleTimeString()`
+  and is an INTENTIONAL live/ticking demo (excluded from zero-flicker acceptance). No fix needed.
+- **Remote-query SSR→client cache seeding — SPECCED, not yet implemented (the real flicker).**
+  Symptom: a client island that `await`s a remote `query` at SSR (e.g. `/data` ResolvedGreeting)
+  renders resolved HTML, then RE-FETCHES on hydration → the `new Date()` in the query returns a new
+  value → visible change. Fix = seed the SSR-resolved results into the REUSED Kit client cache so
+  the first client read returns the SSR value with no fetch. Fully mapped (two Kit-internals passes):
+  - **Client contract (`query/instance.svelte.js` ctor):** if `Object.hasOwn(query_responses, key)`
+    it consumes the node (`delete`) and `set(node.v)` / `fail(node.e)` — NO fetch. `key =
+    create_remote_key(id, payload)` = `` `${id}/${payload}` ``, `payload = stringify_remote_arg(args,
+    app.hooks.transport)` (url-safe-b64 of sorted devalue; `''` for no-arg). Node = `{ v }` or
+    `{ e:[status,msg] }`. Seed ONLY resolved queries (never a bare `{}`). We already alias
+    `create_remote_key`/`stringify_remote_arg` via `virtual:ogygia/kit-wire`.
+  - **Server capture (csr=false):** Kit DOES populate `state.remote.implicit` during a csr=false
+    render, but only serializes it into the page when `csr===true` (render.js boot block) — so we
+    must collect+emit ourselves. `state.remote` is reachable ONLY via the INTERNAL
+    `get_request_store()` from `@sveltejs/kit/internal/server` (public `getRequestEvent()` does NOT
+    expose it) — consistent with our existing deep-import posture (scope-aliased, tight Kit peer).
+    Values sit behind promise thunks, so extraction must be ASYNC — do it in a Kit handle
+    `resolve(event, { transformPageChunk })` (or after `resolve`) where you can `await` a replica of
+    Kit's `collect_remote_data` (server/remote.js:327-424; skip still-pending queries), then inject a
+    `<script type="application/ogygia-remote">` (devalue payload, transport-aware) into the page —
+    ONCE per page (cleaner than per-island). Fold into `ogygiaHandle`.
+  - **Client seed:** export a `seed_query_responses(data)` from `shims/kit-remote/client-stub.ts`
+    (it owns `query_responses`, a shared singleton across island chunks + runtime in one client
+    build — like page-store). The runtime, BEFORE hydrating the first island, parses the emitted
+    script (devalue.parse with `app.decoders`) and calls it. Because the stub is the same instance
+    the reused Kit `QueryProxy` reads, the seeded key byte-matches.
+  - **Acceptance:** a new suite — network assert NO `query` fetch during initial hydration of an
+    SSR-resolved island + playwright zero-visible-change on hard reload of `/data` (excluding the
+    intentional PendingGreeting/LiveClock/Clock markers).
+
+## Kit-driven runtime hashing — DONE (round 6)
+Source-content hash of the runtime's dist inputs, computed at plugin load; server + client compute
+the same filename independently (no forward handoff). Both modes serve hashed URLs. Verified.
+
 ## Toolchain note — TypeScript 7 (native/tsgo): PARTIAL, empirically verified 2026-08
 Adopted where the toolchain supports it; blocked in one leg (svelte-check), so we run a hybrid:
 - `tsc --noEmit` (lib `check` + verify `check`) → **works on typescript@7.0.2** (native). ✔

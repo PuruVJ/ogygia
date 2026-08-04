@@ -64,6 +64,16 @@ const count = (s, re) => (s.match(re) || []).length;
 	check('/plain NO Kit bootstrap (csr=false island page)', !/__sveltekit/.test(html));
 }
 
+// --- Nested deep route: island CSS must reach the INITIAL <head> (no FOUC on hard reload) ---
+{
+	const { status, html } = await get('/dashboard/orders/5');
+	check('/dashboard/orders/5 returns 200', status === 200);
+	const head = html.slice(0, html.indexOf('</head>'));
+	// The island component's `.island` CSS is inlined into <head> at SSR (via the page import
+	// graph), so the shell paints styled — a nested-route CSS-in-head sanity check.
+	check('deep route: island CSS present in initial <head>', /\.island\s*\{/.test(head), head.includes('.island') ? 'in head' : 'MISSING');
+}
+
 // --- Kit page (csr=true coexistence demo): full Kit hydration + an island ---
 {
 	const { status, html } = await get('/kit');
