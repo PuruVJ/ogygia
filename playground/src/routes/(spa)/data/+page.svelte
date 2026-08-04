@@ -3,6 +3,7 @@
 	import PendingGreeting from '$lib/PendingGreeting.svelte' with { hydrate: 'load' };
 	import RemoteCounter from '$lib/RemoteCounter.svelte' with { hydrate: 'load' };
 	import LiveClock from '$lib/LiveClock.svelte' with { hydrate: 'load' };
+	import TransportProbe from '$lib/TransportProbe.svelte' with { hydrate: 'load' };
 </script>
 
 <h1 data-static-shell>Data — remote functions inside islands</h1>
@@ -22,3 +23,6 @@
 
 <!-- live streaming query -->
 <LiveClock />
+
+<!-- custom transport type round-trips into the island via Kit's reused wire codec -->
+<TransportProbe />

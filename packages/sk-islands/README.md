@@ -148,9 +148,11 @@ don't.)
   natively (no JS), the SPA router does not intercept it (it only handles `<a>` clicks), and
   post-redirect-get lands correctly.
 - **Remote functions** (`.remote.ts` `query`/`command`/`query.live`) work inside islands on the
-  server (real Kit) and the client (ogygia ships a small `__sveltekit/remote` replacement that
-  talks to the same Kit endpoints). `command` (POST) needs a correct `ORIGIN` in production (Kit
-  CSRF). Remote `form()` inside islands is **not yet implemented** — use form actions (see TODO.md).
+  server (real Kit) and the client. The client replacement **reuses Kit's own wire codec**
+  (deep-imported, no patch) plus the app's universal **`transport`** hook, so custom transport
+  types and `File` args round-trip exactly against Kit's server. `command` (POST) needs a correct
+  `ORIGIN` in production (Kit CSRF). Remote `form()` inside islands is **not yet implemented** —
+  use form actions (see TODO.md).
 
 ## Bundled `<script bundle>`
 

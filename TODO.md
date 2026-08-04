@@ -43,9 +43,38 @@
 Suites (11): fetch-checks, browser, dashboard, remote, scripts, mixed, server-islands, nested,
 presets, forms, prerender — all pass prod + dev. `svelte-check`: 0/0.
 
+## Remote client — wire-protocol reuse (DONE this round)
+
+The island `__sveltekit/remote` replacement (`src/shims/remote-client.svelte.js`) no longer
+reimplements the wire protocol. It now **deep-imports Kit's OWN codec** — `runtime/shared.js`
+(`stringify_remote_arg`, `stringify_command_arg`, `create_remote_key`) — via an absolute-path
+alias from the vite plugin (`virtual:ogygia/kit-wire`, bypassing Kit's exports map, **no patch**),
+and derives client `decoders` from the app's universal **`transport`** hook
+(`virtual:ogygia/transport`, importing `src/hooks.ts` directly). Result: custom `transport` types
+and `File` args now round-trip exactly against Kit's server parser (previously only built-in
+devalue types worked — caveat removed; proven by `Temperature` in `verify/remote.ts`). The hand-
+rolled `b64url`/`encodeArg` are deleted. What remains ours is the thin **reactive cache**
+(`QueryResource`/`LiveQueryResource`) — in Kit that lives in `client.js`, which is coupled to the
+full router (see below), so it is intentionally not reused.
+
+**Full primitive reuse (query/command/form imported from Kit) — assessed, deferred.** Kit's
+`remote-functions/*` import `{ app, goto, query_map, live_query_map, query_responses,
+prerender_responses, set_nearest_error_page, invalidateAll }` from `client.js` and
+`{ page, navigating }` from `state.svelte.js`. `app` is only set inside `start()` (full client
+boot) — there is no small setter. To reuse the primitives we'd alias `client.js` → a lightweight
+shim (providing `app` built from transport, the maps, and our router's `goto`/`invalidateAll`) and
+`state.svelte.js` → a page/navigating shim, SCOPED to remote-functions importers so Kit's real
+client on csr=true pages isn't broken. That pulls in `cache.svelte.js`/`proxy.js`/`instance.svelte.js`/
+`sse.js`/`form-utils.js` (and gives `form()` for free). It's feasible but a large, mixed-mode-risky
+change to a passing system; Plan B (a one-line exports-map/setter patch to Kit) is the fallback if
+the scoped alias proves unworkable. Next step.
+
 ## NOT done — next up (documented, with notes)
 
 ### Remote `form()` inside islands (REQUIRED, not started)
+Blocked on the "full primitive reuse" above (Kit's `form.svelte.js` + `form-utils.js` field-proxy/
+issue-flattening depend on `client.js`). Once the scoped `client.js`/`state` shim lands, `form()`
+comes with it. Until then it throws `unsupported('form')`; use classic form actions.
 The client `__sveltekit/remote` replacement (`src/shims/remote-client.svelte.js`) implements
 `query`/`command`/`query.live`; `form` is still `unsupported('form')`. Kit's client form lives in
 `node_modules/@sveltejs/kit/src/runtime/client/remote-functions/form.svelte.js` and leans on

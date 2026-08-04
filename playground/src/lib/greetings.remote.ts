@@ -1,5 +1,10 @@
 import { query, command } from '$app/server';
 import * as v from 'valibot';
+import { Temperature } from '../hooks';
+
+// Returns a CUSTOM transport type (see src/hooks.ts). Proves custom types survive the remote
+// boundary into an island on the client (Kit's transport decoders, reused via ogygia).
+export const getTemperature = query(async () => new Temperature(21.5));
 
 // Query with a validated argument (Standard Schema via valibot).
 export const getGreeting = query(v.string(), async (name) => {

@@ -59,6 +59,13 @@ try {
 	const tick2 = (await page.locator('[data-live-current]').textContent()).trim();
 	check('query.live: SSE stream updates reactive current', tick1 !== tick2 && /\d{4}-\d\d-\d\dT/.test(tick2), `${tick1} -> ${tick2}`);
 
+	// custom transport type revived on the client (Kit's transport decoders, reused via ogygia)
+	await page
+		.waitForFunction(() => document.querySelector('[data-transport-ok]')?.textContent === 'true', { timeout: 6000 })
+		.catch(() => {});
+	check('custom transport type round-trips into the island (instanceof true)', (await page.locator('[data-transport-ok]').textContent().catch(() => '')) === 'true');
+	check('custom transport value correct (21.5°C)', /21\.5°C/.test((await page.locator('[data-transport-value]').textContent().catch(() => '')) || ''));
+
 	check('no unexpected page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 	await page.close();
 } finally {

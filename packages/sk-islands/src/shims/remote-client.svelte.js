@@ -1,28 +1,30 @@
 // Client-side remote-function runtime for islands (replaces Kit's `__sveltekit/remote`
 // on the CLIENT build only). Kit's own client remote runtime needs `app` (transport /
-// encoders / decoders) which is set only by `start()` — never called under `csr = false`.
-//
-// This talks to the SAME server endpoints Kit serves (`<base>/<appDir>/remote/<id>`),
-// using the same wire format: base64url(devalue) payload in the query string (GET) or
-// JSON body (POST), and a `{ type:'result', data: devalue({ _: value, q: {...} }) }`
-// response. The elaborate Map/Set/object arg reducers Kit uses are only cache-key
-// optimizations; plain devalue round-trips all built-in types (Date/Map/Set/BigInt/…)
-// correctly against Kit's server parser. Custom `hooks.transport` types are NOT supported.
+// encoders / decoders) which is set only by `start()` — never called under `csr = false`,
+// and it is tightly coupled to Kit's full client `client.js` (the router). So we DON'T
+// reimplement the wire protocol: we reuse Kit's OWN codec (`runtime/shared.js`, deep-imported
+// by the vite plugin, bypassing the exports map) and feed it the app's universal `transport`
+// hook — so custom transport types round-trip exactly against Kit's server parser. Only the
+// thin reactive cache below (which in Kit lives in the router-coupled `client.js`) is ours.
 import * as devalue from 'devalue';
 import { base } from '$app/paths';
+import {
+	stringify_remote_arg,
+	stringify_command_arg,
+	create_remote_key
+} from 'virtual:ogygia/kit-wire';
+import { transport } from 'virtual:ogygia/transport';
 
 const APP_DIR = '_app'; // Kit default `kit.appDir`
 
-function b64url(str) {
-	const bytes = new TextEncoder().encode(str);
-	let bin = '';
-	for (const b of bytes) bin += String.fromCharCode(b);
-	return btoa(bin).replaceAll('=', '').replaceAll('+', '-').replaceAll('/', '_');
-}
+// Kit derives client decoders from `transport` exactly like this (write_client_manifest.js).
+const decoders = Object.fromEntries(
+	Object.entries(transport || {}).map(([k, v]) => [k, v.decode])
+);
 
+/** Encode a GET arg with Kit's own transport-aware codec (empty string when undefined). */
 function encodeArg(arg) {
-	if (arg === undefined) return '';
-	return b64url(devalue.stringify(arg));
+	return stringify_remote_arg(arg, transport);
 }
 
 function requestHeaders() {
@@ -39,10 +41,12 @@ async function callRemote(id, { method = 'GET', arg } = {}) {
 		const url = `${base}/${APP_DIR}/remote/${id}${payload ? `?payload=${payload}` : ''}`;
 		res = await fetch(url, { headers: requestHeaders() });
 	} else {
+		// `stringify_command_arg` is async (handles File) and transport-aware.
+		const payload = await stringify_command_arg(arg, transport);
 		res = await fetch(`${base}/${APP_DIR}/remote/${id}`, {
 			method: 'POST',
 			headers: { ...requestHeaders(), 'content-type': 'application/json' },
-			body: JSON.stringify({ payload: encodeArg(arg) })
+			body: JSON.stringify({ payload })
 		});
 	}
 	const json = await res.json();
@@ -51,7 +55,7 @@ async function callRemote(id, { method = 'GET', arg } = {}) {
 		err.status = json.status ?? res.status;
 		throw err;
 	}
-	const data = json.data ? devalue.parse(json.data) : {};
+	const data = json.data ? devalue.parse(json.data, decoders) : {};
 	applyRefreshes(data);
 	return data;
 }
@@ -66,7 +70,7 @@ class QueryResource {
 	constructor(id, arg) {
 		this.id = id;
 		this.arg = arg;
-		this.key = id + '/' + encodeArg(arg);
+		this.key = create_remote_key(id, encodeArg(arg));
 		this.#promise = this.#run(false);
 	}
 
@@ -125,7 +129,7 @@ function applyRefreshes(data) {
 
 export function query(id) {
 	const fn = (arg) => {
-		const key = id + '/' + encodeArg(arg);
+		const key = create_remote_key(id, encodeArg(arg));
 		let entry = cache.get(key);
 		if (!entry) {
 			entry = new QueryResource(id, arg);
@@ -174,7 +178,7 @@ class LiveQueryResource {
 					if (!line) continue;
 					const msg = JSON.parse(line);
 					if (msg.type === 'result') {
-						const v = devalue.parse(msg.result);
+						const v = devalue.parse(msg.result, decoders);
 						this.#s = { current: v, error: undefined, connected: true };
 						this.#resolveFirst?.(v);
 						this.#resolveFirst = null;

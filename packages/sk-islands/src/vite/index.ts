@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { transformHost, ISLAND_DIR } from './transform.js';
 import { allRoutesCsrFalse, runStandaloneClientBuild } from './standalone.js';
@@ -21,6 +22,11 @@ const V_MANIFEST = 'virtual:ogygia/manifest';
 const V_RUNTIME = 'virtual:ogygia-runtime';
 const V_SECRET = 'virtual:ogygia/secret';
 const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
+// Reuse Kit's OWN wire protocol (transport-aware devalue arg/response codec) instead of
+// reimplementing it. We deep-import Kit's internal `runtime/shared.js` by absolute path
+// (bypassing the exports map) and feed it the app's universal `transport` hook.
+const V_KIT_WIRE = 'virtual:ogygia/kit-wire';
+const V_TRANSPORT = 'virtual:ogygia/transport';
 const RESOLVED = (id) => '\0' + id;
 
 const RUNTIME_FILENAME = '_app/immutable/ogygia-runtime.js';
@@ -76,6 +82,10 @@ export function ogygia(options = {}) {
 	let scanned = false;
 	let sourcemap = false;
 	let ranStandalone = false;
+	/** absolute path to Kit's internal wire-protocol module (deep import) */
+	let kitWirePath = null;
+	/** absolute path to the app's universal hooks (for `transport`), if present */
+	let universalHooks = null;
 
 	const readFile = (abs) => {
 		try {
@@ -173,6 +183,25 @@ export function ogygia(options = {}) {
 			isBuild = config.command === 'build';
 			isSSR = !!config.build?.ssr;
 			sourcemap = !!config.build?.sourcemap;
+
+			// Locate Kit's internal wire-protocol module by resolving its package.json (that IS
+			// exported) and joining the src path — deep-importing the file bypasses the exports map.
+			try {
+				const require = createRequire(path.join(root, 'noop.js'));
+				const kitRoot = path.dirname(require.resolve('@sveltejs/kit/package.json'));
+				const candidate = path.join(kitRoot, 'src', 'runtime', 'shared.js');
+				if (fs.existsSync(candidate)) kitWirePath = candidate;
+			} catch {
+				kitWirePath = null; // fall back to the built-in devalue codec (no transport)
+			}
+			// the app's universal hooks (default src/hooks.{ts,js}) for `transport`
+			for (const f of ['hooks.ts', 'hooks.js']) {
+				const abs = path.join(root, 'src', f);
+				if (fs.existsSync(abs)) {
+					universalHooks = abs;
+					break;
+				}
+			}
 		},
 
 		buildStart() {
@@ -218,6 +247,9 @@ export function ogygia(options = {}) {
 			if (source === V_RUNTIME) return RESOLVED(V_RUNTIME);
 			if (source === V_SECRET) return RESOLVED(V_SECRET);
 			if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
+			// deep-import Kit's own wire helpers by absolute path (bypasses the exports map)
+			if (source === V_KIT_WIRE && kitWirePath) return kitWirePath;
+			if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 
 			const isSsr = options?.ssr ?? isSSR;
 
@@ -251,6 +283,15 @@ export function ogygia(options = {}) {
 			}
 			if (id === RESOLVED(V_RUNTIME)) {
 				return `import 'ogygia/runtime';`;
+			}
+			if (id === RESOLVED(V_TRANSPORT)) {
+				// re-export the app's universal `transport` hook (or an empty map) for the client
+				// remote wire codec. Universal hooks are isomorphic, so this is client-safe.
+				if (universalHooks) {
+					const spec = JSON.stringify(universalHooks);
+					return `import * as hooks from ${spec};\nexport const transport = hooks.transport || {};`;
+				}
+				return `export const transport = {};`;
 			}
 			if (id === RESOLVED(V_SECRET)) {
 				// SERVER only: the real key. CLIENT build: empty string, so the key can never
