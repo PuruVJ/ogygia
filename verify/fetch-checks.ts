@@ -19,7 +19,7 @@ const count = (s, re) => (s.match(re) || []).length;
 {
 	const { status, html } = await get('/');
 	check('/ returns 200', status === 200);
-	check('/ has 9 <o-region> elements', count(html, /<o-region/g) === 9, `${count(html, /<o-region/g)}`);
+	check('/ has 9 <ogygia-region> elements', count(html, /<ogygia-region/g) === 9, `${count(html, /<ogygia-region/g)}`);
 	check('/ counter island SSR content (count is 10)', /count is 10/.test(html));
 	check('/ per-use strategy: same module, visible (count is 99)', /count is 99/.test(html));
 	check('/ opt-in router marker present (ClientRouter)', /name="ogygia-router"/.test(html));
@@ -59,7 +59,7 @@ const count = (s, re) => (s.match(re) || []).length;
 {
 	const { status, html } = await get('/plain');
 	check('/plain returns 200', status === 200);
-	check('/plain has an island (still hydrates)', count(html, /<o-region/g) === 1);
+	check('/plain has an island (still hydrates)', count(html, /<ogygia-region/g) === 1);
 	check('/plain has NO router marker (opt-out)', !/name="ogygia-router"/.test(html));
 	check('/plain NO Kit bootstrap (csr=false island page)', !/__sveltekit/.test(html));
 }
@@ -69,7 +69,7 @@ const count = (s, re) => (s.match(re) || []).length;
 	const { status, html } = await get('/kit');
 	check('/kit returns 200', status === 200);
 	check('/kit IS a normal hydrated Kit page (has __sveltekit)', /__sveltekit/.test(html));
-	check('/kit still SSRs its island (<o-region>)', count(html, /<o-region/g) === 1);
+	check('/kit still SSRs its island (<ogygia-region>)', count(html, /<ogygia-region/g) === 1);
 	check('/kit island SSR content (count is 42)', /count is 42/.test(html));
 	check('/kit normal component SSR (real $app/state path)', /path: <strong>\/kit/.test(html));
 }

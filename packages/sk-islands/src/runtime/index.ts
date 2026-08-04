@@ -45,7 +45,7 @@ class SkIsland extends HTMLElement {
 		// inside them self-hydrates again. `parentElement.closest` excludes self. (Island-in-island
 		// normally degrades to an inline component, so this element never appears — this is the
 		// general rule + defense for regions inserted via server-hole fill / SPA swaps.)
-		const boundary = this.parentElement && this.parentElement.closest('o-region');
+		const boundary = this.parentElement && this.parentElement.closest('ogygia-region');
 		if (boundary && boundary.hasAttribute('hydrate')) {
 			this.setAttribute('data-nested', '');
 			if (manifest.dev) {
@@ -204,8 +204,8 @@ class SkIsland extends HTMLElement {
 	}
 }
 
-if (typeof customElements !== 'undefined' && !customElements.get('o-region')) {
-	customElements.define('o-region', SkIsland);
+if (typeof customElements !== 'undefined' && !customElements.get('ogygia-region')) {
+	customElements.define('ogygia-region', SkIsland);
 }
 
 // A stable marker set once per full page load; survives SPA navigations (module

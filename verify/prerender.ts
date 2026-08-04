@@ -49,7 +49,7 @@ try {
 	await page.goto(base + '/static', { waitUntil: 'domcontentloaded' });
 
 	// counter island hydrates + is interactive
-	await page.waitForSelector('o-region[data-hydrated]', { timeout: 6000 }).catch(() => {});
+	await page.waitForSelector('ogygia-region[data-hydrated]', { timeout: 6000 }).catch(() => {});
 	await page.click('[data-counter] button');
 	check('prerendered counter island hydrates + interactive', /count is 8/.test((await page.locator('[data-counter]').textContent()) || ''));
 

@@ -50,7 +50,7 @@ function expectError(label: string, src: string, re: RegExp) {
 	const r = run(wrap(`import C from './C.svelte' with { preset: 'lazy' };`));
 	check('preset lazy -> load strategy (inapplicable margin tolerated)', /<SkIsland__Wrapper load /.test(r.code));
 }
-// preset defer -> server island (no o-region wrapper import, uses ServerIsland)
+// preset defer -> server island (no ogygia-region wrapper import, uses ServerIsland)
 {
 	const r = run(wrap(`import C from './C.svelte' with { preset: 'srv' };`, '<C>{#snippet fallback()}x{/snippet}</C>'));
 	check('preset srv -> server island (ServerIsland wrapper)', /SkServerIsland__Wrapper/.test(r.code));

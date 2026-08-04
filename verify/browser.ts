@@ -29,7 +29,7 @@ try {
 
 		// visible strategy: below-fold island NOT hydrated until scrolled into view.
 		// (checked BEFORE interacting with islands lower on the page, which would scroll it in)
-		const visIsland = page.locator('o-region[hydrate="visible"]', {
+		const visIsland = page.locator('ogygia-region[hydrate="visible"]', {
 			has: page.locator('[data-visible-island]')
 		});
 		await sleep(400);
@@ -47,7 +47,7 @@ try {
 		const vis = page.locator('[data-visible-island]');
 		await vis.scrollIntoViewIfNeeded();
 		await page.waitForFunction(() => {
-			const el = [...document.querySelectorAll('o-region[hydrate="visible"]')].find((n) =>
+			const el = [...document.querySelectorAll('ogygia-region[hydrate="visible"]')].find((n) =>
 				n.querySelector('[data-visible-island]')
 			);
 			return el && el.hasAttribute('data-hydrated');
@@ -56,10 +56,10 @@ try {
 		check('home: visible island logged on hydrate', logs.some((l) => l.includes('visible island hydrated')));
 
 		// per-use strategy: the SAME Counter module imported with island:'visible'
-		const lazyIsland = page.locator('o-region', { hasText: 'Same module, visible strategy' });
+		const lazyIsland = page.locator('ogygia-region', { hasText: 'Same module, visible strategy' });
 		await lazyIsland.scrollIntoViewIfNeeded();
 		await page.waitForFunction(() => {
-			const el = [...document.querySelectorAll('o-region')].find((n) =>
+			const el = [...document.querySelectorAll('ogygia-region')].find((n) =>
 				/Same module, visible/.test(n.textContent)
 			);
 			return el && el.hasAttribute('data-hydrated');
@@ -75,15 +75,15 @@ try {
 	{
 		const page = await browser.newPage({ viewport: { width: 500, height: 700 } });
 		await page.goto(base + '/', { waitUntil: 'networkidle' });
-		await page.waitForSelector('o-region[hydrate*="max-width"][data-hydrated]', { timeout: 3000 }).catch(() => {});
-		const media = page.locator('o-region[hydrate*="max-width"]');
+		await page.waitForSelector('ogygia-region[hydrate*="max-width"][data-hydrated]', { timeout: 3000 }).catch(() => {});
+		const media = page.locator('ogygia-region[hydrate*="max-width"]');
 		check('home(narrow): media island hydrated when query matches', (await media.getAttribute('data-hydrated')) !== null);
 		await page.close();
 
 		const wide = await browser.newPage({ viewport: { width: 1200, height: 700 } });
 		await wide.goto(base + '/', { waitUntil: 'networkidle' });
 		await sleep(500);
-		const media2 = wide.locator('o-region[hydrate*="max-width"]');
+		const media2 = wide.locator('ogygia-region[hydrate*="max-width"]');
 		check('home(wide): media island NOT hydrated when query does not match', (await media2.getAttribute('data-hydrated')) === null);
 		await wide.close();
 	}
@@ -131,7 +131,7 @@ try {
 		check('data: mode (a) resolved greeting present (SSR)', (await page.locator('[data-resolved-greeting]').textContent()).includes('Hello, world!'));
 		// The /data islands DO hydrate (their custom elements connect).
 		await sleep(400);
-		const anyHydrated = await page.locator('o-region[data-hydrated]').count();
+		const anyHydrated = await page.locator('ogygia-region[data-hydrated]').count();
 		check('data: islands hydrate (custom elements connect)', anyHydrated >= 1, `hydrated=${anyHydrated}`);
 		await page.close();
 	}

@@ -70,8 +70,8 @@
 		LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
 </script>
 
-{#if nested}<Component {...__props} />{:else}<o-region
+{#if nested}<Component {...__props} />{:else}<ogygia-region
 		entry={__entry}
 		hydrate={hydrateAttr}
 		margin={rootMargin || undefined}
-	><Component {...__props} /></o-region>{@html propsScript}{@html pageScript}{@html runtimeScript}{/if}
+	><Component {...__props} /></ogygia-region>{@html propsScript}{@html pageScript}{@html runtimeScript}{/if}

@@ -19,8 +19,8 @@ try {
 		await page.goto(base + '/kit', { waitUntil: 'networkidle' });
 		await sleep(500);
 		check('mixed: exactly one counter in DOM (no duplicate)', (await page.locator('[data-counter]').count()) === 1);
-		check('mixed: o-region did NOT self-hydrate (single hydration)', (await page.locator('o-region[data-hydrated]').count()) === 0);
-		check('mixed: o-region marked kit-hydrated (skip)', (await page.locator('o-region[data-kit-hydrated]').count()) === 1);
+		check('mixed: ogygia-region did NOT self-hydrate (single hydration)', (await page.locator('ogygia-region[data-hydrated]').count()) === 0);
+		check('mixed: ogygia-region marked kit-hydrated (skip)', (await page.locator('ogygia-region[data-kit-hydrated]').count()) === 1);
 		const btn = page.locator('[data-counter] button');
 		await btn.click();
 		await btn.click();
@@ -55,7 +55,7 @@ try {
 		const m2 = await page.evaluate(() => window.__marker);
 		check('router: full load reset the runtime marker', m2 !== m1);
 		// island on /plain still hydrates (MPA page)
-		await page.waitForSelector('o-region[data-hydrated]', { timeout: 3000 });
+		await page.waitForSelector('ogygia-region[data-hydrated]', { timeout: 3000 });
 		const pbtn = page.locator('[data-counter] button');
 		await pbtn.click();
 		check('router: island on no-router page still hydrates & works', (await pbtn.textContent()).includes('count is 6'));

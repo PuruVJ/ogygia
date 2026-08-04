@@ -17,7 +17,7 @@ try {
 		const errs = [];
 		page.on('pageerror', (e) => errs.push(e.message));
 		await page.goto(base + '/dashboard/orders/5', { waitUntil: 'networkidle' });
-		await page.waitForSelector('o-region[data-hydrated]', { timeout: 4000 }).catch(() => {});
+		await page.waitForSelector('ogygia-region[data-hydrated]', { timeout: 4000 }).catch(() => {});
 		const od = page.locator('[data-orderdetail]');
 		check('orderdetail: page.params.id via shim', (await od.locator('h2').textContent()).includes('Order #5'));
 		check('orderdetail: page.data Date survived to client', (await od.locator('[data-created]').textContent()).includes('2024-01-01T14:34:15'));
@@ -72,11 +72,11 @@ try {
 		await page.click('aside nav a[href="/dashboard/analytics"]');
 		await page.waitForSelector('.spacer', { timeout: 4000 });
 		check('sidebar: SPA nav to analytics (marker kept)', (await page.evaluate(() => window.__marker)) === m1);
-		const chart = page.locator('o-region[hydrate="visible"]');
+		const chart = page.locator('ogygia-region[hydrate="visible"]');
 		await sleep(300);
 		check('analytics: chart island NOT hydrated before scroll', (await chart.getAttribute('data-hydrated')) === null);
 		await page.locator('[data-barchart]').scrollIntoViewIfNeeded();
-		await page.waitForSelector('o-region[hydrate="visible"][data-hydrated]', { timeout: 3000 }).catch(() => {});
+		await page.waitForSelector('ogygia-region[hydrate="visible"][data-hydrated]', { timeout: 3000 }).catch(() => {});
 		check('analytics: chart island hydrated after scroll', (await chart.getAttribute('data-hydrated')) !== null);
 		check('analytics: SVG bars rendered', (await page.locator('[data-barchart] rect').count()) >= 3);
 		await page.close();

@@ -66,8 +66,8 @@
 	const runtimeScript = LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
 </script>
 
-{#if nested}<Component {...__props} />{:else}<o-region
+{#if nested}<Component {...__props} />{:else}<ogygia-region
 		entry={__entry}
 		defer
 		endpoint={endpoint}
-	>{#if fallback}{@render fallback()}{/if}</o-region>{@html preloadLink}{@html runtimeScript}{/if}
+	>{#if fallback}{@render fallback()}{/if}</ogygia-region>{@html preloadLink}{@html runtimeScript}{/if}
