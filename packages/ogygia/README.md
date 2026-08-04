@@ -202,9 +202,24 @@ navigation, put it in an **island**.
 hydrate via custom-element connection; old ones unmount via disconnection. Our runtime module
 script lives in `<head>` and persists across swaps. (Page inline scripts are not re-run — see above.)
 
+## Captured host state is a snapshot (don't mutate it)
+
+Free variables an island references from host scope are **captured** and serialized with devalue —
+each island receives its own **snapshot**. Writing to a captured value inside the island updates
+nothing (there is no shared reactive link back to the host).
+
+- **Build error** if island *markup* writes to a captured var — assignment, `++`, compound assign,
+  destructuring-assignment, or `bind:`. The error names the variable + file and points you at the
+  fix: move mutable state into the island component (`$state`), or pass an initial value and keep the
+  mutable copy local.
+- **Dev warning** (once per path) if the island *component* mutates a captured object/Map/Set at
+  runtime — a deep Proxy around the parsed props flags it. Production ships the plain object (no
+  Proxy, no warnings, zero overhead).
+
 ## Constraints
 
-- Props must be **devalue-serializable**; functions can't cross a boundary.
+- Props must be **devalue-serializable**; functions can't cross a boundary. A non-serializable
+  capture fails the SSR render with a friendly error naming the island and the offending prop path.
 - Snippets can't cross a boundary (a snippet defined outside an island but used inside is a build
   error) — except the reserved server-island `fallback` snippet.
 - Each island is an independent Svelte app; islands don't share reactive state.

@@ -21,7 +21,13 @@ node verify/forms.ts           http://localhost:3051   # classic form actions (n
 node verify/prerender.ts       http://localhost:3051   # prerendered page + server-island hole
 node verify/flicker.ts         http://localhost:3051   # SSR-resolved query seeding: zero-flash hydration
 node verify/lakes.ts           http://localhost:3051   # lakes: frozen region, no client JS, island-in-lake, restore
+node verify/mutation-guards.ts http://localhost:3051   # captured-var mutation: build errors + DEV proxy warns / prod-silence
 ```
+
+`mutation-guards.ts` runs its build-time checks (transform errors for writing to a captured var)
+with no server; pass a base URL to ALSO check the runtime DEV proxy. It is mode-aware: against a
+PROD build it asserts prod-silence (no warnings); against `vite dev` it asserts the once-per-path
+warnings for an object property, a Map mutator, and a Set mutator.
 
 `flicker.ts` is mode-aware: against a PROD build it asserts the full zero-visible-change contract
 (no re-fetch for SSR-resolved queries, live still connects, `.refresh()` still re-fetches); against

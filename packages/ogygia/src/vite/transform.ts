@@ -1,7 +1,7 @@
 import { parse } from 'svelte/compiler';
 import MagicString from 'magic-string';
 import { createHash } from 'node:crypto';
-import { collectFreeIdentifiers, collectSnippetNames } from './free-vars.js';
+import { collectCaptureInfo, collectSnippetNames } from './free-vars.js';
 
 export const ISLAND_DIR = '.ogygia';
 
@@ -335,8 +335,8 @@ export function transformHost(source, id, ctx) {
 			}
 		}
 
-		// free-variable analysis
-		const free = collectFreeIdentifiers(subtree_nodes);
+		// free-variable analysis (+ mutation targets)
+		const { free, mutated } = collectCaptureInfo(subtree_nodes);
 		const used_import_nodes = new Set();
 		const captured = [];
 		for (const name of free) {
@@ -351,6 +351,22 @@ export function transformHost(source, id, ctx) {
 				);
 			} else {
 				captured.push(name);
+			}
+		}
+
+		// CAPTURED-STATE MUTATION GUARD. A captured host variable crosses the island boundary as a
+		// serialized devalue SNAPSHOT — writing to it inside the island (assignment, `++`, compound
+		// assign, destructuring-assignment, or `bind:`) updates nothing on the host and nothing that
+		// survives a re-render. Fail the build, naming the variable + file, and point the author at
+		// the fix: move mutable state INTO the island component.
+		for (const name of mutated) {
+			if (captured.includes(name)) {
+				throw new Error(
+					`[ogygia] ${rel_host}: island mutates captured host variable \`${name}\` — ` +
+						`captured host state is a serialized snapshot, so writing to it inside the island updates nothing. ` +
+						`Move mutable state inside the island component (declare \`${name}\` with \`$state\` in the island, ` +
+						`or pass it as an initial value and keep the mutable copy local).`
+				);
 			}
 		}
 

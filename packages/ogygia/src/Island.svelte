@@ -39,8 +39,25 @@
 	const LT = String.fromCharCode(60); // <
 	const GT = String.fromCharCode(62); // >
 
+	// Serialize captured props with devalue. On failure (a function, a class instance, a Promise,
+	// … crossed the boundary) devalue throws with the offending PATH — rethrow a friendly error that
+	// names the island + the non-serializable path and states the contract (functions can't cross;
+	// only devalue-serializable values do). The path (e.g. `.onClick`) is the captured identifier.
+	function stringify_props(value) {
+		try {
+			return stringify(value);
+		} catch (e) {
+			const detail = e && e.message ? e.message : String(e);
+			throw new Error(
+				`[ogygia] island "${__entry}": a captured prop is not serializable — ${detail}. ` +
+					`Captured host values cross the boundary via devalue; functions/class instances/Promises cannot. ` +
+					`Pass a serializable value, or move that logic inside the island component.`
+			);
+		}
+	}
+
 	// devalue payload, escaped so a nested closing script tag in string data can't break out.
-	const payload = nested ? '' : stringify(__props).split(LT).join('\\u003C');
+	const payload = nested ? '' : stringify_props(__props).split(LT).join('\\u003C');
 	const props_script =
 		LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + payload + LT + '/script' + GT;
 

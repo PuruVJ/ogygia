@@ -6,9 +6,15 @@ import { walk } from 'estree-walker';
  * Given an array of top-level template nodes (a hoisted island subtree), returns
  * the set of identifier names that are referenced inside the subtree but bound
  * OUTSIDE it (host `<script>` vars, outer `{#each}` locals, component imports,
- * globals...). Identifiers bound *within* the subtree (snippet params, each
- * locals, `{@const}`, `{#await}` value/error, `let:` directives, and JS-level
- * function params) are excluded.
+ * globals...), PLUS the set of those free names that are the TARGET of a mutation
+ * (assignment / update / compound-assign / destructuring-assignment / `bind:`).
+ * Identifiers bound *within* the subtree (snippet params, each locals, `{@const}`,
+ * `{#await}` value/error, `let:` directives, and JS-level function params) are
+ * excluded from both sets.
+ *
+ * The mutation set powers a build-time guard: captured host state crosses the
+ * boundary as a serialized SNAPSHOT, so writing to it inside an island updates
+ * nothing. The transform turns a mutated capture into a precise error.
  */
 
 const FUNCTION_TYPES = new Set([
@@ -21,6 +27,14 @@ const FUNCTION_TYPES = new Set([
 interface EsFunction {
 	id?: { name: string } | null;
 	params: unknown[];
+}
+
+/** Accumulators threaded through the whole analysis. */
+interface Sink {
+	/** free references (reads) */
+	refs: Set<string>;
+	/** free names written to (assignment / update / bind target root) */
+	mutated: Set<string>;
 }
 
 /** Collect bound names from an estree binding pattern. */
@@ -44,6 +58,47 @@ function collect_pattern_names(node, out) {
 			break;
 		case 'RestElement':
 			collect_pattern_names(node.argument, out);
+			break;
+	}
+}
+
+/** The leftmost identifier name of a member chain (`a.b.c` -> `a`), or null. */
+function member_root(node) {
+	let cur = node;
+	while (cur && cur.type === 'MemberExpression') cur = cur.object;
+	return cur && cur.type === 'Identifier' ? cur.name : null;
+}
+
+/**
+ * Collect the ROOT identifier names written by an assignment/update target — an
+ * Identifier (`x = …`), a MemberExpression (`x.a = …` -> `x`), or a destructuring
+ * pattern (`[x] = …`, `({ x } = …)`, defaults, rests, nested member targets).
+ */
+function collect_write_roots(target, roots) {
+	if (!target) return;
+	switch (target.type) {
+		case 'Identifier':
+			roots.add(target.name);
+			break;
+		case 'MemberExpression': {
+			const r = member_root(target);
+			if (r) roots.add(r);
+			break;
+		}
+		case 'ObjectPattern':
+			for (const prop of target.properties) {
+				if (prop.type === 'RestElement') collect_write_roots(prop.argument, roots);
+				else collect_write_roots(prop.value, roots);
+			}
+			break;
+		case 'ArrayPattern':
+			for (const el of target.elements) if (el) collect_write_roots(el, roots);
+			break;
+		case 'AssignmentPattern':
+			collect_write_roots(target.left, roots);
+			break;
+		case 'RestElement':
+			collect_write_roots(target.argument, roots);
 			break;
 	}
 }
@@ -87,15 +142,21 @@ function is_reference(node, parent, key) {
 
 /**
  * Walk one estree expression, adding any free references (not bound by inner
- * JS function scopes and not in `svelte_bound`) into `out`.
+ * JS function scopes and not in `svelte_bound`) into `sink.refs`, and any free
+ * assignment/update targets into `sink.mutated`.
  */
-function add_expression_refs(expr, svelte_bound, out) {
+function add_expression_refs(expr, svelte_bound, sink: Sink) {
 	if (!expr) return;
 	const scopes = [new Set()];
 	const has = (name) => {
 		if (svelte_bound.has(name)) return true;
 		for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].has(name)) return true;
 		return false;
+	};
+	const record_writes = (target) => {
+		const roots = new Set<string>();
+		collect_write_roots(target, roots);
+		for (const r of roots) if (!has(r)) sink.mutated.add(r);
 	};
 	walk(expr, {
 		enter(node, parent, key) {
@@ -111,8 +172,12 @@ function add_expression_refs(expr, svelte_bound, out) {
 				collect_pattern_names(node.id, scopes[scopes.length - 1]);
 			} else if (node.type === 'CatchClause' && node.param) {
 				collect_pattern_names(node.param, scopes[scopes.length - 1]);
+			} else if (node.type === 'AssignmentExpression') {
+				record_writes(node.left);
+			} else if (node.type === 'UpdateExpression') {
+				record_writes(node.argument);
 			} else if (node.type === 'Identifier' && is_reference(node, parent, key)) {
-				if (!has(node.name)) out.add(node.name);
+				if (!has(node.name)) sink.refs.add(node.name);
 			}
 		},
 		leave(node, parent) {
@@ -135,28 +200,40 @@ function let_directive_names(node) {
 }
 
 /** Walk attribute expressions of an element/component (not `let:`, which binds). */
-function add_attribute_refs(node, bound, out) {
+function add_attribute_refs(node, bound, sink: Sink) {
 	for (const attr of node.attributes ?? []) {
 		switch (attr.type) {
 			case 'Attribute':
 				if (attr.value === true) break; // boolean attribute
 				if (Array.isArray(attr.value)) {
 					for (const part of attr.value) {
-						if (part.type === 'ExpressionTag') add_expression_refs(part.expression, bound, out);
+						if (part.type === 'ExpressionTag') add_expression_refs(part.expression, bound, sink);
 					}
 				} else if (attr.value?.type === 'ExpressionTag') {
 					// single-expression attribute: `a={x}` or shorthand `{x}`
-					add_expression_refs(attr.value.expression, bound, out);
+					add_expression_refs(attr.value.expression, bound, sink);
 				}
 				break;
 			case 'SpreadAttribute':
-				add_expression_refs(attr.expression, bound, out);
+				add_expression_refs(attr.expression, bound, sink);
 				break;
 			case 'LetDirective':
 				break;
+			case 'BindDirective':
+				// `bind:value={target}` READS and WRITES `target`. Record the write-root so a
+				// `bind:` into a captured host snapshot is caught (it would update nothing).
+				if (attr.expression) {
+					add_expression_refs(attr.expression, bound, sink);
+					const root =
+						attr.expression.type === 'Identifier'
+							? attr.expression.name
+							: member_root(attr.expression);
+					if (root && !bound.has(root)) sink.mutated.add(root);
+				}
+				break;
 			default:
-				// Bind/On/Class/Style/Transition/Animate/Use/In/Out directives
-				if (attr.expression) add_expression_refs(attr.expression, bound, out);
+				// On/Class/Style/Transition/Animate/Use/In/Out directives
+				if (attr.expression) add_expression_refs(attr.expression, bound, sink);
 		}
 	}
 }
@@ -180,10 +257,9 @@ function fragment_nodes(fragment) {
 /**
  * @param {unknown[]} nodes top-level nodes of the subtree
  * @param {Set<string>} outer_bound names bound outside (usually empty at entry)
- * @param {Set<string>} out accumulates free references
- * @param {(name:string)=>void} [onSnippet] called with snippet names defined here (for error reporting)
+ * @param {Sink} sink accumulates free references + mutations
  */
-function walk_template(nodes, outer_bound, out) {
+function walk_template(nodes, outer_bound, sink: Sink) {
 	const bound = new Set(outer_bound);
 	for (const name of sibling_bindings(nodes)) bound.add(name);
 
@@ -195,60 +271,60 @@ function walk_template(nodes, outer_bound, out) {
 			case 'ExpressionTag':
 			case 'HtmlTag':
 			case 'RenderTag':
-				add_expression_refs(node.expression, bound, out);
+				add_expression_refs(node.expression, bound, sink);
 				break;
 			case 'ConstTag':
-				for (const d of node.declaration.declarations) add_expression_refs(d.init, bound, out);
+				for (const d of node.declaration.declarations) add_expression_refs(d.init, bound, sink);
 				break;
 			case 'IfBlock':
-				add_expression_refs(node.test, bound, out);
-				walk_template(fragment_nodes(node.consequent), bound, out);
-				if (node.alternate) walk_template(fragment_nodes(node.alternate), bound, out);
+				add_expression_refs(node.test, bound, sink);
+				walk_template(fragment_nodes(node.consequent), bound, sink);
+				if (node.alternate) walk_template(fragment_nodes(node.alternate), bound, sink);
 				break;
 			case 'EachBlock': {
-				add_expression_refs(node.expression, bound, out);
+				add_expression_refs(node.expression, bound, sink);
 				const each_bound = new Set(bound);
 				collect_pattern_names(node.context, each_bound);
 				if (node.index) each_bound.add(node.index);
-				if (node.key) add_expression_refs(node.key, each_bound, out);
-				walk_template(fragment_nodes(node.body), each_bound, out);
-				if (node.fallback) walk_template(fragment_nodes(node.fallback), bound, out);
+				if (node.key) add_expression_refs(node.key, each_bound, sink);
+				walk_template(fragment_nodes(node.body), each_bound, sink);
+				if (node.fallback) walk_template(fragment_nodes(node.fallback), bound, sink);
 				break;
 			}
 			case 'AwaitBlock': {
-				add_expression_refs(node.expression, bound, out);
-				if (node.pending) walk_template(fragment_nodes(node.pending), bound, out);
+				add_expression_refs(node.expression, bound, sink);
+				if (node.pending) walk_template(fragment_nodes(node.pending), bound, sink);
 				if (node.then) {
 					const then_bound = new Set(bound);
 					if (node.value) collect_pattern_names(node.value, then_bound);
-					walk_template(fragment_nodes(node.then), then_bound, out);
+					walk_template(fragment_nodes(node.then), then_bound, sink);
 				}
 				if (node.catch) {
 					const catch_bound = new Set(bound);
 					if (node.error) collect_pattern_names(node.error, catch_bound);
-					walk_template(fragment_nodes(node.catch), catch_bound, out);
+					walk_template(fragment_nodes(node.catch), catch_bound, sink);
 				}
 				break;
 			}
 			case 'KeyBlock':
-				add_expression_refs(node.expression, bound, out);
-				walk_template(fragment_nodes(node.fragment), bound, out);
+				add_expression_refs(node.expression, bound, sink);
+				walk_template(fragment_nodes(node.fragment), bound, sink);
 				break;
 			case 'SnippetBlock': {
 				const snip_bound = new Set(bound);
 				for (const p of node.parameters ?? []) collect_pattern_names(p, snip_bound);
-				walk_template(fragment_nodes(node.body), snip_bound, out);
+				walk_template(fragment_nodes(node.body), snip_bound, sink);
 				break;
 			}
 			case 'Component':
 			case 'SvelteComponent': {
 				// the component name (`Foo` or `Foo.Bar`) references an import/host binding
 				const root = String(node.name || '').split('.')[0];
-				if (root && !bound.has(root)) out.add(root);
-				add_attribute_refs(node, bound, out);
+				if (root && !bound.has(root)) sink.refs.add(root);
+				add_attribute_refs(node, bound, sink);
 				const el_bound1 = new Set(bound);
 				for (const name of let_directive_names(node)) el_bound1.add(name);
-				if (node.fragment) walk_template(fragment_nodes(node.fragment), el_bound1, out);
+				if (node.fragment) walk_template(fragment_nodes(node.fragment), el_bound1, sink);
 				break;
 			}
 			case 'RegularElement':
@@ -258,15 +334,15 @@ function walk_template(nodes, outer_bound, out) {
 			case 'SvelteBoundary':
 			case 'SlotElement':
 			case 'TitleElement': {
-				if (node.tag) add_expression_refs(node.tag, bound, out); // <svelte:element this={tag}>
-				add_attribute_refs(node, bound, out);
+				if (node.tag) add_expression_refs(node.tag, bound, sink); // <svelte:element this={tag}>
+				add_attribute_refs(node, bound, sink);
 				const el_bound = new Set(bound);
 				for (const name of let_directive_names(node)) el_bound.add(name);
-				if (node.fragment) walk_template(fragment_nodes(node.fragment), el_bound, out);
+				if (node.fragment) walk_template(fragment_nodes(node.fragment), el_bound, sink);
 				break;
 			}
 			default:
-				if (node.fragment) walk_template(fragment_nodes(node.fragment), bound, out);
+				if (node.fragment) walk_template(fragment_nodes(node.fragment), bound, sink);
 		}
 	}
 }
@@ -288,10 +364,18 @@ export function collectSnippetNames(nodes) {
 
 /**
  * @param {unknown[]} nodes hoisted subtree top-level nodes
+ * @returns {{ free: Set<string>, mutated: Set<string> }} free identifier names + free mutation targets
+ */
+export function collectCaptureInfo(nodes) {
+	const sink: Sink = { refs: new Set(), mutated: new Set() };
+	walk_template(nodes, new Set(), sink);
+	return { free: sink.refs, mutated: sink.mutated };
+}
+
+/**
+ * @param {unknown[]} nodes hoisted subtree top-level nodes
  * @returns {Set<string>} free identifier names
  */
 export function collectFreeIdentifiers(nodes) {
-	const out = new Set();
-	walk_template(nodes, new Set(), out);
-	return out;
+	return collectCaptureInfo(nodes).free;
 }
