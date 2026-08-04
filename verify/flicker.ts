@@ -102,17 +102,30 @@ try {
 	const liveConnected = remoteReqs.some((u) => /\/clock(\?|$| )/.test(u));
 	check('query.live still connects', liveConnected);
 
-	// 6) .refresh() still re-fetches: bump (command) -> count.refresh() -> a fresh getCount GET
+	// 6) .refresh() still re-fetches: bump (command) -> count.refresh() -> a fresh getCount GET.
+	// ORDER-INDEPENDENT: the server `getCount` counter is module state shared across requests, so a
+	// prior suite (remote.ts bumps it) can leave it at any value — we must NOT assert a specific value
+	// (an old `/reactive current: [1-9]/` wait failed once the counter passed 9). Instead we (a) wait
+	// for the actual getCount GET *response* triggered by refresh, and (b) assert the reactive current
+	// simply CHANGED, whatever its magnitude.
 	const countBefore = remoteReqs.filter((u) => u.startsWith('GET') && /\/getCount/.test(u)).length;
+	const currentBefore = (await page.locator('[data-remote-counter] [data-current]').textContent().catch(() => '')) || '';
+	const refetch = page
+		.waitForResponse((r) => r.request().method() === 'GET' && /\/getCount/.test(r.url()), { timeout: 6000 })
+		.catch(() => null);
 	await page.locator('[data-bump]').click();
+	await refetch;
 	await page
 		.waitForFunction(
-			() => /reactive current: [1-9]/.test(document.querySelector('[data-remote-counter] [data-current]')?.textContent || ''),
+			(prev) => (document.querySelector('[data-remote-counter] [data-current]')?.textContent || '') !== prev,
+			currentBefore,
 			{ timeout: 6000 }
 		)
 		.catch(() => {});
 	const countAfter = remoteReqs.filter((u) => u.startsWith('GET') && /\/getCount/.test(u)).length;
+	const currentAfter = (await page.locator('[data-remote-counter] [data-current]').textContent().catch(() => '')) || '';
 	check('.refresh() still re-fetches after a command', countAfter > countBefore, `${countBefore} -> ${countAfter}`);
+	check('.refresh() updates the reactive current (value changed, magnitude-independent)', currentAfter !== currentBefore && /reactive current: \d+/.test(currentAfter), `${currentBefore.trim()} -> ${currentAfter.trim()}`);
 
 	check('no unexpected page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 	await page.close();
