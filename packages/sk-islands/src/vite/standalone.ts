@@ -56,7 +56,7 @@ export function remoteStubPlugin(root) {
 }
 
 /** Read `export const csr = true|false` from a route option file. */
-function readCsr(file) {
+function read_csr(file) {
 	try {
 		const src = fs.readFileSync(file, 'utf-8');
 		const m = /export\s+const\s+csr\s*=\s*(true|false)/.exec(src);
@@ -87,9 +87,9 @@ export function allRoutesCsrFalse(routesDir) {
 	walk(routesDir);
 	if (leaves.length === 0) return false;
 
-	const effectiveCsr = (pageFile) => {
+	const effective_csr = (page_file) => {
 		let csr; // undefined => Kit default (true)
-		const dir = path.dirname(pageFile);
+		const dir = path.dirname(page_file);
 		// layout chain from routes root down to this dir
 		const rel = path.relative(routesDir, dir);
 		const parts = rel ? rel.split(path.sep) : [];
@@ -101,18 +101,18 @@ export function allRoutesCsrFalse(routesDir) {
 		}
 		for (const d of chain) {
 			for (const f of OPTION_FILES_LAYOUT) {
-				const v = readCsr(path.join(d, f));
+				const v = read_csr(path.join(d, f));
 				if (v !== undefined) csr = v;
 			}
 		}
 		for (const f of OPTION_FILES_PAGE) {
-			const v = readCsr(path.join(dir, f));
+			const v = read_csr(path.join(dir, f));
 			if (v !== undefined) csr = v;
 		}
 		return csr === false;
 	};
 
-	return leaves.every(effectiveCsr);
+	return leaves.every(effective_csr);
 }
 
 /**
@@ -121,9 +121,9 @@ export function allRoutesCsrFalse(routesDir) {
  */
 export async function runStandaloneClientBuild({ root, base, clientDir, makePlugin, sourcemap }) {
 	const require = createRequire(path.join(root, 'noop.js'));
-	const { build } = await import(pathToFileUrl(require.resolve('vite', { paths: [root] })));
+	const { build } = await import(path_to_file_url(require.resolve('vite', { paths: [root] })));
 	const vps = await import(
-		pathToFileUrl(require.resolve('@sveltejs/vite-plugin-svelte', { paths: [root] }))
+		path_to_file_url(require.resolve('@sveltejs/vite-plugin-svelte', { paths: [root] }))
 	);
 
 	const result = await build({
@@ -173,6 +173,6 @@ export async function runStandaloneClientBuild({ root, base, clientDir, makePlug
 	return { runtimeFileName: null };
 }
 
-function pathToFileUrl(p: string) {
+function path_to_file_url(p: string) {
 	return new URL(`file://${p.replace(/\\/g, '/')}`).href;
 }

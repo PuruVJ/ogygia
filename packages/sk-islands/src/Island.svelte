@@ -7,7 +7,7 @@
 
 	/**
 	 * @typedef {Object} Props
-	 * @property {boolean|string} [visible] hydrate when scrolled into view (string = IntersectionObserver rootMargin)
+	 * @property {boolean|string} [visible] hydrate when scrolled into view (string = IntersectionObserver root_margin)
 	 * @property {boolean} [idle] hydrate on requestIdleCallback
 	 * @property {string} [media] hydrate when the media query matches
 	 * @property {boolean} [load] hydrate immediately (default)
@@ -31,8 +31,8 @@
 	}
 
 	// The `hydrate` attribute value IS the strategy: 'load' | 'idle' | 'visible' | a media query.
-	const hydrateAttr = media ? media : idle ? 'idle' : visible ? 'visible' : 'load';
-	const rootMargin = typeof visible === 'string' ? visible : undefined;
+	const hydrate_attr = media ? media : idle ? 'idle' : visible ? 'visible' : 'load';
+	const root_margin = typeof visible === 'string' ? visible : undefined;
 
 	// Build tag strings without any literal angle brackets so Svelte's raw-text
 	// <script> lexer never mistakes them for real tags.
@@ -41,12 +41,12 @@
 
 	// devalue payload, escaped so a nested closing script tag in string data can't break out.
 	const payload = nested ? '' : stringify(__props).split(LT).join('\\u003C');
-	const propsScript =
+	const props_script =
 		LT + 'script type="application/sk-island-props" data-sk-props' + GT + payload + LT + '/script' + GT;
 
 	// Per-island snapshot of `page` so the client `$app/state` shim can seed it.
 	// `page.data` must be devalue-serializable; if not, we fall back to no data.
-	function pageSnapshot() {
+	function page_snapshot() {
 		const b = {
 			url: page.url?.href,
 			params: page.params,
@@ -60,18 +60,18 @@
 			return stringify(b).split(LT).join('\\u003C');
 		}
 	}
-	const pageScript = nested
+	const page_script = nested
 		? ''
-		: LT + 'script type="application/sk-island-page" data-sk-page' + GT + pageSnapshot() + LT + '/script' + GT;
+		: LT + 'script type="application/sk-island-page" data-sk-page' + GT + page_snapshot() + LT + '/script' + GT;
 
 	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
 	const src = (assets || base || '') + runtimeUrl;
-	const runtimeScript =
+	const runtime_script =
 		LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
 </script>
 
 {#if nested}<Component {...__props} />{:else}<ogygia-region
 		entry={__entry}
-		hydrate={hydrateAttr}
-		margin={rootMargin || undefined}
-	><Component {...__props} /></ogygia-region>{@html propsScript}{@html pageScript}{@html runtimeScript}{/if}
+		hydrate={hydrate_attr}
+		margin={root_margin || undefined}
+	><Component {...__props} /></ogygia-region>{@html props_script}{@html page_script}{@html runtime_script}{/if}

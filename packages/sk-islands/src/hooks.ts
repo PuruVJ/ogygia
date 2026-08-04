@@ -13,7 +13,7 @@
 import { render } from 'svelte/server';
 import * as devalue from 'devalue';
 import { base } from '$app/paths';
-import { islands as islandModules } from 'virtual:ogygia/server-manifest';
+import { islands as island_modules } from 'virtual:ogygia/server-manifest';
 import { secret } from 'virtual:ogygia/secret';
 import { verify } from './server/hmac.js';
 import { b64urlDecode } from './server/payload.js';
@@ -30,7 +30,7 @@ export function ogygiaHandle(options: { endpoint?: string } = {}) {
 
 	return async ({ event, resolve }: { event: any; resolve: any }) => {
 		if (event.url.pathname !== endpoint) return resolve(event);
-		return await renderIsland(event.url);
+		return await render_island(event.url);
 	};
 }
 
@@ -38,12 +38,12 @@ export function ogygiaHandle(options: { endpoint?: string } = {}) {
  * @param {URL} url
  * @returns {Promise<Response>}
  */
-async function renderIsland(url) {
+async function render_island(url) {
 	const id = url.searchParams.get('id');
 	const payload = url.searchParams.get('props') ?? '';
 	const sig = url.searchParams.get('sig') ?? '';
 
-	const load = id ? islandModules[id] : undefined;
+	const load = id ? island_modules[id] : undefined;
 	if (!load) {
 		return new Response('Unknown island', { status: 404 });
 	}

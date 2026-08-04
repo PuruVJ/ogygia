@@ -9,31 +9,31 @@
 let started = false;
 
 // ---- navigation lifecycle hooks (for the $app/navigation shim) ----
-const beforeHooks = new Set<any>();
-const afterHooks = new Set<any>();
+const before_hooks = new Set<any>();
+const after_hooks = new Set<any>();
 
 export function beforeNavigate(fn: any) {
-	beforeHooks.add(fn);
-	return () => beforeHooks.delete(fn);
+	before_hooks.add(fn);
+	return () => before_hooks.delete(fn);
 }
 export function afterNavigate(fn: any) {
-	afterHooks.add(fn);
+	after_hooks.add(fn);
 	// $app/navigation's afterNavigate fires immediately on mount too
 	try {
-		fn({ from: null, to: buildNavTarget(new URL(location.href)), type: 'enter', willUnload: false });
+		fn({ from: null, to: build_nav_target(new URL(location.href)), type: 'enter', willUnload: false });
 	} catch {
 		/* noop */
 	}
-	return () => afterHooks.delete(fn);
+	return () => after_hooks.delete(fn);
 }
 
-function buildNavTarget(url) {
+function build_nav_target(url) {
 	return { url, params: {}, route: { id: null } };
 }
-function runBefore(from, to, type) {
+function run_before(from, to, type) {
 	let cancelled = false;
-	const nav = { from: buildNavTarget(from), to: buildNavTarget(to), type, cancel: () => (cancelled = true), willUnload: false };
-	for (const fn of beforeHooks) {
+	const nav = { from: build_nav_target(from), to: build_nav_target(to), type, cancel: () => (cancelled = true), willUnload: false };
+	for (const fn of before_hooks) {
 		try {
 			fn(nav);
 		} catch {
@@ -42,17 +42,17 @@ function runBefore(from, to, type) {
 	}
 	return !cancelled;
 }
-function runAfter(from, to, type) {
-	for (const fn of afterHooks) {
+function run_after(from, to, type) {
+	for (const fn of after_hooks) {
 		try {
-			fn({ from: buildNavTarget(from), to: buildNavTarget(to), type, willUnload: false });
+			fn({ from: build_nav_target(from), to: build_nav_target(to), type, willUnload: false });
 		} catch {
 			/* noop */
 		}
 	}
 }
 
-function shouldIntercept(event, anchor) {
+function should_intercept(event, anchor) {
 	if (event.defaultPrevented) return false;
 	if (event.button !== 0) return false;
 	if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
@@ -69,36 +69,36 @@ function shouldIntercept(event, anchor) {
 }
 
 /** Merge <head>: keep nodes present in both, remove stale, add new. Keeps runtime scripts alive. */
-function mergeHead(newHead: any) {
+function merge_head(new_head: any) {
 	const current = document.head;
-	const currentNodes = new Map<string, any>();
+	const current_nodes = new Map<string, any>();
 	for (const node of Array.from(current.children) as any[]) {
-		currentNodes.set(node.outerHTML, node);
+		current_nodes.set(node.outerHTML, node);
 	}
-	const nextKeys = new Set<string>();
-	for (const node of Array.from(newHead.children) as any[]) {
-		nextKeys.add(node.outerHTML);
+	const next_keys = new Set<string>();
+	for (const node of Array.from(new_head.children) as any[]) {
+		next_keys.add(node.outerHTML);
 	}
 	// remove stale nodes (but never remove module scripts that boot the runtime)
-	for (const [key, node] of currentNodes) {
-		if (!nextKeys.has(key)) {
+	for (const [key, node] of current_nodes) {
+		if (!next_keys.has(key)) {
 			if (node.tagName === 'SCRIPT' && node.getAttribute('type') === 'module') continue;
 			node.remove();
 		}
 	}
 	// add new nodes
-	for (const node of Array.from(newHead.children) as any[]) {
-		if (!currentNodes.has(node.outerHTML)) {
+	for (const node of Array.from(new_head.children) as any[]) {
+		if (!current_nodes.has(node.outerHTML)) {
 			current.appendChild(node.cloneNode(true));
 		}
 	}
 }
 
-const pageCache = new Map(); // href -> Promise<string html> (prefetch cache)
+const page_cache = new Map(); // href -> Promise<string html> (prefetch cache)
 
-function fetchPage(href) {
-	if (!pageCache.has(href)) {
-		pageCache.set(
+function fetch_page(href) {
+	if (!page_cache.has(href)) {
+		page_cache.set(
 			href,
 			fetch(href, { headers: { 'x-ogygia-spa': '1' } })
 				.then(async (res) => {
@@ -111,21 +111,21 @@ function fetchPage(href) {
 				.catch(() => null)
 		);
 		// don't cache failures forever
-		pageCache.get(href).then((html) => {
-			if (html == null) pageCache.delete(href);
+		page_cache.get(href).then((html) => {
+			if (html == null) page_cache.delete(href);
 		});
 	}
-	return pageCache.get(href);
+	return page_cache.get(href);
 }
 
 // NOTE: the library does NO script processing. Scripts inserted via a client-side body swap do
 // not execute (standard browser behaviour for parsed/adopted <script> nodes) — if you need code
 // to run per navigation, use an island. Our own runtime module script lives in <head> and
-// persists across swaps (mergeHead keeps module scripts), so it keeps running.
+// persists across swaps (merge_head keeps module scripts), so it keeps running.
 
-async function navigate(url, { push = true, popScroll = null, type = 'link', replace = false } = {}) {
+async function navigate(url, { push = true, pop_scroll = null, type = 'link', replace = false } = {}) {
 	const from = new URL(location.href);
-	if (!runBefore(from, url, type)) return; // a beforeNavigate hook cancelled
+	if (!run_before(from, url, type)) return; // a beforeNavigate hook cancelled
 
 	// Update history SYNCHRONOUSLY (before any await) so the URL is correct and
 	// races between overlapping navigations can't drop the pushState.
@@ -137,12 +137,12 @@ async function navigate(url, { push = true, popScroll = null, type = 'link', rep
 		history.pushState({ ogygia: true }, '', url.href);
 	}
 
-	const html = await fetchPage(url.href);
+	const html = await fetch_page(url.href);
 	if (html == null) {
 		location.href = url.href;
 		return;
 	}
-	pageCache.delete(url.href); // one-shot; always fresh on real navigation
+	page_cache.delete(url.href); // one-shot; always fresh on real navigation
 
 	const doc = new DOMParser().parseFromString(html, 'text/html');
 
@@ -153,15 +153,15 @@ async function navigate(url, { push = true, popScroll = null, type = 'link', rep
 		location.href = url.href;
 		return;
 	}
-	const useVT = marker.getAttribute('content') !== 'plain';
+	const use_vt = marker.getAttribute('content') !== 'plain';
 
 	const swap = () => {
-		mergeHead(doc.head); // keeps our runtime module script alive across swaps
+		merge_head(doc.head); // keeps our runtime module script alive across swaps
 		document.body.replaceWith(doc.body);
 		document.title = doc.title;
 	};
 
-	if (useVT && document.startViewTransition) {
+	if (use_vt && document.startViewTransition) {
 		const t = document.startViewTransition(swap);
 		await t.updateCallbackDone.catch(() => {});
 	} else {
@@ -171,8 +171,8 @@ async function navigate(url, { push = true, popScroll = null, type = 'link', rep
 	// scroll handling
 	if (replace) {
 		// invalidate/refresh — keep current scroll
-	} else if (popScroll) {
-		window.scrollTo(popScroll.x, popScroll.y);
+	} else if (pop_scroll) {
+		window.scrollTo(pop_scroll.x, pop_scroll.y);
 	} else if (url.hash) {
 		const el = document.getElementById(decodeURIComponent(url.hash.slice(1)));
 		if (el) el.scrollIntoView();
@@ -181,7 +181,7 @@ async function navigate(url, { push = true, popScroll = null, type = 'link', rep
 		window.scrollTo(0, 0);
 	}
 
-	runAfter(from, url, type);
+	run_after(from, url, type);
 }
 
 // ---------- $app/navigation shim surface ----------
@@ -200,7 +200,7 @@ export function invalidate() {
 }
 /** Warm the HTML cache for a URL. Note: this fetches the PAGE, not Kit load data. */
 export function preloadData(url) {
-	fetchPage(new URL(url, location.href).href);
+	fetch_page(new URL(url, location.href).href);
 	return Promise.resolve({ type: 'loaded', status: 200, data: {} });
 }
 export function preloadCode() {
@@ -228,7 +228,7 @@ export function startRouter() {
 
 	document.addEventListener('click', (event) => {
 		const anchor = event.target instanceof Element ? event.target.closest('a') : null;
-		const url = shouldIntercept(event, anchor);
+		const url = should_intercept(event, anchor);
 		if (!url) return;
 		// same page + hash only -> let the browser handle
 		if (url.pathname === location.pathname && url.search === location.search && url.hash) return;
@@ -237,20 +237,20 @@ export function startRouter() {
 	});
 
 	// prefetch on hover/tap when opted in via data-sveltekit-preload-data
-	const maybePrefetch = (event) => {
+	const maybe_prefetch = (event) => {
 		const anchor = event.target instanceof Element ? event.target.closest('a') : null;
 		if (!anchor) return;
 		const mode = anchor.closest('[data-sveltekit-preload-data]')?.getAttribute('data-sveltekit-preload-data');
 		if (mode !== 'hover' && mode !== 'tap') return;
-		const url = shouldIntercept({ button: 0, defaultPrevented: false }, anchor);
-		if (url && url.pathname !== location.pathname) fetchPage(url.href);
+		const url = should_intercept({ button: 0, defaultPrevented: false }, anchor);
+		if (url && url.pathname !== location.pathname) fetch_page(url.href);
 	};
-	document.addEventListener('mouseover', maybePrefetch, { passive: true });
-	document.addEventListener('touchstart', maybePrefetch, { passive: true });
+	document.addEventListener('mouseover', maybe_prefetch, { passive: true });
+	document.addEventListener('touchstart', maybe_prefetch, { passive: true });
 
 	window.addEventListener('popstate', () => {
-		const popScroll = (history.state as any)?.scroll || null;
-		navigate(new URL(location.href), { push: false, popScroll });
+		const pop_scroll = (history.state as any)?.scroll || null;
+		navigate(new URL(location.href), { push: false, pop_scroll });
 	});
 
 	// seed initial history entry so scroll is restored on the first back

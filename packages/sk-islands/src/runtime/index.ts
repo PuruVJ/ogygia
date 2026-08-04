@@ -5,11 +5,11 @@ import { startRouter } from './router.js';
 import NestedProvider from '../NestedProvider.svelte';
 
 /** @type {(entry: string) => Promise<any>} */
-const loadIsland = manifest.dev
+const load_island = manifest.dev
 	? (entry) => import(/* @vite-ignore */ entry)
 	: (entry) => manifest.islands[entry]();
 
-function domReady() {
+function dom_ready() {
 	if (typeof document === 'undefined' || document.readyState !== 'loading') return Promise.resolve();
 	return new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
 }
@@ -17,16 +17,16 @@ function domReady() {
 // Mixed mode: on a csr=true page, Kit boots and hydrates the whole tree (including our
 // island components). Kit's bootstrap is an inline script near </body>, so we detect it
 // only once the document is fully parsed. Cached.
-let _kitPage;
-function kitHydratesPage() {
-	if (_kitPage === undefined) {
-		_kitPage =
+let _kit_page;
+function kit_hydrates_page() {
+	if (_kit_page === undefined) {
+		_kit_page =
 			typeof document !== 'undefined' &&
 			Array.from(document.querySelectorAll('script:not([src])')).some((s) =>
 				/__sveltekit_/.test(s.textContent || '')
 			);
 	}
-	return _kitPage;
+	return _kit_page;
 }
 
 class SkIsland extends HTMLElement {
@@ -58,10 +58,10 @@ class SkIsland extends HTMLElement {
 		this.#scheduled = true;
 		if (this.hasAttribute('defer')) return this.#server();
 		const hydrate = this.getAttribute('hydrate') || 'load';
-		if (hydrate === 'idle') this.#onIdle();
-		else if (hydrate === 'visible') this.#onVisible();
+		if (hydrate === 'idle') this.#on_idle();
+		else if (hydrate === 'visible') this.#on_visible();
 		else if (hydrate === 'load') this.#hydrate();
-		else this.#onMedia(hydrate); // a media query string
+		else this.#on_media(hydrate); // a media query string
 	}
 
 	// SERVER island: fetch the rendered HTML from the `/_islands` endpoint (same-origin,
@@ -88,13 +88,13 @@ class SkIsland extends HTMLElement {
 		}
 	}
 
-	#onIdle() {
+	#on_idle() {
 		const cb = () => this.#hydrate();
 		if ('requestIdleCallback' in window) requestIdleCallback(cb, { timeout: 2000 });
 		else setTimeout(cb, 200);
 	}
 
-	#onVisible() {
+	#on_visible() {
 		const rootMargin = this.getAttribute('margin') || '0px';
 		const io = new IntersectionObserver(
 			(entries) => {
@@ -112,7 +112,7 @@ class SkIsland extends HTMLElement {
 		this.#io = io;
 	}
 
-	#onMedia(q: string) {
+	#on_media(q: string) {
 		if (!q) return this.#hydrate();
 		const mql = matchMedia(q);
 		if (mql.matches) return this.#hydrate();
@@ -132,34 +132,34 @@ class SkIsland extends HTMLElement {
 		this.#hydrating = true;
 		try {
 			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page
-			await domReady();
+			await dom_ready();
 			const entry = this.getAttribute('entry');
-			const mod = await loadIsland(entry);
+			const mod = await load_island(entry);
 			const Component = mod.default;
 
 			let props = {};
-			let pageSnap = null;
+			let page_snap = null;
 			let sib = this.nextElementSibling;
 			while (sib && sib.tagName === 'SCRIPT') {
 				if (sib.matches('script[data-sk-props]')) props = parse(sib.textContent);
-				else if (sib.matches('script[data-sk-page]')) pageSnap = parse(sib.textContent);
+				else if (sib.matches('script[data-sk-page]')) page_snap = parse(sib.textContent);
 				else break;
 				sib = sib.nextElementSibling;
 			}
 
 			// seed the $app/state / $app/stores shims from this page's snapshot (also
 			// needed on csr=true pages, where the island component is aliased to the shims)
-			if (pageSnap) {
+			if (page_snap) {
 				try {
-					if (typeof pageSnap.url === 'string') pageSnap.url = new URL(pageSnap.url);
+					if (typeof page_snap.url === 'string') page_snap.url = new URL(page_snap.url);
 				} catch {
 					/* keep string url */
 				}
-				window.__ogygiaPage = pageSnap;
+				window.__ogygiaPage = page_snap;
 			}
 
 			// Mixed mode: on a csr=true page Kit already hydrates this component — skip.
-			if (kitHydratesPage()) {
+			if (kit_hydrates_page()) {
 				this.setAttribute('data-kit-hydrated', '');
 				if (manifest.dev) {
 					console.warn(

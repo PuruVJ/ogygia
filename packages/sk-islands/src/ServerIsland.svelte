@@ -56,18 +56,18 @@
 	// Skipped when prerendering: a static page has no request context, and emitting the hint
 	// would make Kit's prerender crawler fetch the (dynamic) endpoint. `data-endpoint` still
 	// drives the runtime fetch at request time — a prerendered server island just loses the hint.
-	const hrefAttr = endpoint.split('&').join('&amp;');
-	const preloadLink =
-		nested || building ? '' : LT + 'link rel="preload" as="fetch" href="' + hrefAttr + '"' + GT;
+	const href_attr = endpoint.split('&').join('&amp;');
+	const preload_link =
+		nested || building ? '' : LT + 'link rel="preload" as="fetch" href="' + href_attr + '"' + GT;
 
 	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
 	// Match Island.svelte's URL exactly (assets||base) so the module de-dupes across mixed pages.
 	const src = (assets || base || '') + runtimeUrl;
-	const runtimeScript = LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
+	const runtime_script = LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
 </script>
 
 {#if nested}<Component {...__props} />{:else}<ogygia-region
 		entry={__entry}
 		defer
 		endpoint={endpoint}
-	>{#if fallback}{@render fallback()}{/if}</ogygia-region>{@html preloadLink}{@html runtimeScript}{/if}
+	>{#if fallback}{@render fallback()}{/if}</ogygia-region>{@html preload_link}{@html runtime_script}{/if}

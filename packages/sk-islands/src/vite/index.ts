@@ -38,11 +38,11 @@ const RESOLVED = (id) => '\0' + id;
 const RUNTIME_FILENAME = '_app/immutable/ogygia-runtime.js';
 const RUNTIME_URL_BUILD = '/' + RUNTIME_FILENAME;
 
-function toPosix(p) {
+function to_posix(p) {
 	return p.split(path.sep).join('/');
 }
 
-function isIslandPath(id) {
+function is_island_path(id) {
 	return id.includes('/' + ISLAND_DIR + '/') && id.endsWith('.svelte');
 }
 
@@ -71,30 +71,30 @@ export function ogygia(
 	// HMAC key for signing server-island props. Runtime env var wins (so it can be rotated
 	// / shared across instances in production); otherwise a per-build random key baked into
 	// the SERVER bundle only (never a client chunk — see the `virtual:ogygia/secret` load).
-	const buildSecret = crypto.randomBytes(32).toString('hex');
+	const build_secret = crypto.randomBytes(32).toString('hex');
 
 	/** @type {Map<string, {source:string, hostPath:string, id:string}>} keyed by abs virtual path */
 	const registry = new Map();
 	/** @type {Map<string, string>} iid -> abs virtual path */
-	const byId = new Map();
+	const by_id = new Map();
 
 	let root;
 	let base = '';
 	let libDir;
-	let isDev = false;
-	let isBuild = false;
-	let isSSR = false;
+	let is_dev = false;
+	let is_build = false;
+	let is_ssr = false;
 	let scanned = false;
 	let sourcemap = false;
-	let ranStandalone = false;
+	let ran_standalone = false;
 	/** absolute path to Kit's internal wire-protocol module (deep import) */
-	let kitWirePath = null;
+	let kit_wire_path = null;
 	/** absolute path to Kit's client remote-functions entry (Plan A reuse) */
-	let kitRemoteIndex = null;
+	let kit_remote_index = null;
 	/** absolute path to the app's universal hooks (for `transport`), if present */
-	let universalHooks = null;
+	let universal_hooks = null;
 	/** the content-hashed runtime URL, once known (standalone build only; same plugin instance) */
-	let hashedRuntimeUrl = null;
+	let hashed_runtime_url = null;
 
 	const readFile = (abs) => {
 		try {
@@ -108,18 +108,18 @@ export function ogygia(
 		path.join(path.dirname(hostId), ISLAND_DIR, iid + '.svelte');
 
 	const devUrlFor = (virtualPath) => {
-		const rel = toPosix(path.relative(root, virtualPath));
+		const rel = to_posix(path.relative(root, virtualPath));
 		const prefix = base && base !== '/' ? base.replace(/\/$/, '') : '';
 		return prefix + '/' + rel;
 	};
 
-	const runTransform = (source, id) => {
+	const run_transform = (source, id) => {
 		return transformHost(source, id, {
 			root,
 			libDir,
 			readFile,
 			pathModule: path,
-			dev: isDev,
+			dev: is_dev,
 			virtualPathFor,
 			devUrlFor,
 			visibleMargin,
@@ -135,7 +135,7 @@ export function ogygia(
 				id: isl.id,
 				server: !!isl.server
 			});
-			byId.set(isl.id, isl.virtualPath);
+			by_id.set(isl.id, isl.virtualPath);
 		}
 	};
 
@@ -143,7 +143,7 @@ export function ogygia(
 	const prescan = () => {
 		if (scanned) return;
 		scanned = true;
-		const srcDir = path.join(root, 'src');
+		const src_dir = path.join(root, 'src');
 		const walk = (dir) => {
 			let entries;
 			try {
@@ -159,12 +159,12 @@ export function ogygia(
 				} else if (entry.name.endsWith('.svelte')) {
 					const src = readFile(full);
 					if (src == null) continue;
-					const result = runTransform(src, full);
+					const result = run_transform(src, full);
 					if (result) register(result);
 				}
 			}
 		};
-		walk(srcDir);
+		walk(src_dir);
 	};
 
 	return {
@@ -175,9 +175,9 @@ export function ogygia(
 			root = config.root;
 			base = config.base || '';
 			libDir = path.join(root, 'src', 'lib');
-			isDev = config.command === 'serve';
-			isBuild = config.command === 'build';
-			isSSR = !!config.build?.ssr;
+			is_dev = config.command === 'serve';
+			is_build = config.command === 'build';
+			is_ssr = !!config.build?.ssr;
 			sourcemap = !!config.build?.sourcemap;
 
 			// Locate Kit's internal wire-protocol module by resolving its package.json (that IS
@@ -186,17 +186,17 @@ export function ogygia(
 				const require = createRequire(path.join(root, 'noop.js'));
 				const kitRoot = path.dirname(require.resolve('@sveltejs/kit/package.json'));
 				const candidate = path.join(kitRoot, 'src', 'runtime', 'shared.js');
-				if (fs.existsSync(candidate)) kitWirePath = candidate;
+				if (fs.existsSync(candidate)) kit_wire_path = candidate;
 				const remoteIdx = path.join(kitRoot, 'src', 'runtime', 'client', 'remote-functions', 'index.js');
-				if (fs.existsSync(remoteIdx)) kitRemoteIndex = remoteIdx;
+				if (fs.existsSync(remoteIdx)) kit_remote_index = remoteIdx;
 			} catch {
-				kitWirePath = null; // fall back to the built-in devalue codec (no transport)
+				kit_wire_path = null; // fall back to the built-in devalue codec (no transport)
 			}
 			// the app's universal hooks (default src/hooks.{ts,js}) for `transport`
 			for (const f of ['hooks.ts', 'hooks.js']) {
 				const abs = path.join(root, 'src', f);
 				if (fs.existsSync(abs)) {
-					universalHooks = abs;
+					universal_hooks = abs;
 					break;
 				}
 			}
@@ -209,7 +209,7 @@ export function ogygia(
 			// time, so it cannot learn a hash the later client build would produce — hence a fixed,
 			// stable filename here. (Content-hashing is applied in the STANDALONE mode below, where
 			// a single build owns both sides.) See TODO.md.
-			if (isBuild && !isSSR) {
+			if (is_build && !is_ssr) {
 				prescan();
 				if (!standalone) {
 					this.emitFile({ type: 'chunk', id: RUNTIME_ENTRY, fileName: RUNTIME_FILENAME });
@@ -221,10 +221,10 @@ export function ogygia(
 			// chunk emits. Island discovery is prescan-based (needs no server output), so the
 			// CONTENT-HASHED runtime filename is known in time to be inlined into the SSR'd runtime
 			// `<script src>` (via the virtual runtime-url module — same plugin instance).
-			if (isBuild && isSSR && !standalone && !ranStandalone) {
-				const routesDir = path.join(root, 'src', 'routes');
-				if (allRoutesCsrFalse(routesDir)) {
-					ranStandalone = true;
+			if (is_build && is_ssr && !standalone && !ran_standalone) {
+				const routes_dir = path.join(root, 'src', 'routes');
+				if (allRoutesCsrFalse(routes_dir)) {
+					ran_standalone = true;
 					const clientDir = path.join(root, '.svelte-kit', 'output', 'client');
 					const { runtimeFileName } = await runStandaloneClientBuild({
 						root,
@@ -233,7 +233,7 @@ export function ogygia(
 						sourcemap,
 						makePlugin: (opts) => ogygia({ ...options, ...opts })
 					});
-					if (runtimeFileName) hashedRuntimeUrl = '/' + runtimeFileName;
+					if (runtimeFileName) hashed_runtime_url = '/' + runtimeFileName;
 				}
 			}
 		},
@@ -245,31 +245,31 @@ export function ogygia(
 			if (source === V_SECRET) return RESOLVED(V_SECRET);
 			if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
 			// deep-import Kit's own wire helpers by absolute path (bypasses the exports map)
-			if (source === V_KIT_WIRE && kitWirePath) return kitWirePath;
+			if (source === V_KIT_WIRE && kit_wire_path) return kit_wire_path;
 			if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 
-			const isSsr = options?.ssr ?? isSSR;
+			const ssr = options?.ssr ?? is_ssr;
 
 			// CLIENT build: Kit's client remote runtime needs `app` (never boots under csr=false).
 			// Plan A: reuse Kit's OWN remote primitives, redirecting `__sveltekit/remote` at Kit's
 			// real remote-functions entry; the router-coupled modules they import are stubbed just
 			// below. Fallback: our hand-rolled shim. enforce:'pre' wins over Kit's resolveId.
-			if (!isSsr && source === '__sveltekit/remote') {
-				if (!kitRemoteIndex) {
+			if (!ssr && source === '__sveltekit/remote') {
+				if (!kit_remote_index) {
 					throw new Error(
 						'[ogygia] could not locate Kit\'s client remote-functions (src). Pin @sveltejs/kit with its `src/` published (2.70.x).'
 					);
 				}
-				return kitRemoteIndex;
+				return kit_remote_index;
 			}
 			// Scope-alias the two router-coupled modules Kit's remote-functions pull in, ONLY when
 			// imported from within Kit's remote-functions dir (so a csr=true page's real Kit client
 			// still gets the real client.js). Keeps the router graph out of island bundles.
-			if (!isSsr && importer && importer.includes('/remote-functions/')) {
+			if (!ssr && importer && importer.includes('/remote-functions/')) {
 				if (/(^|\/)client\.js$/.test(source)) return STUB_CLIENT;
 				if (/state\.svelte\.js$/.test(source)) return STUB_STATE;
 			}
-			if (!isSsr && source === '$app/paths/internal/client') return STUB_PATHS;
+			if (!ssr && source === '$app/paths/internal/client') return STUB_PATHS;
 
 			// imports originating directly inside an island virtual module. `$app/*` is aliased
 			// to client shims at load-time (client build only).
@@ -280,7 +280,7 @@ export function ogygia(
 
 			// island virtual .svelte modules: real abs path (static import from host / emitFile
 			// id), dev root-relative URL, or /@fs/<abs>.
-			if (isIslandPath(source)) {
+			if (is_island_path(source)) {
 				let candidate = source.split('?')[0];
 				if (candidate.startsWith('/@fs/')) candidate = candidate.slice('/@fs'.length);
 				if (registry.has(candidate)) return candidate;
@@ -295,7 +295,7 @@ export function ogygia(
 				// dev: the vite dev URL. build: the CONTENT-HASHED runtime URL — from this
 				// instance (standalone) or the handoff file the client build wrote (Kit-driven);
 				// fall back to the fixed name only if the handoff is somehow missing.
-				const url = isDev ? '/@id/__x00__' + V_RUNTIME : hashedRuntimeUrl || RUNTIME_URL_BUILD;
+				const url = is_dev ? '/@id/__x00__' + V_RUNTIME : hashed_runtime_url || RUNTIME_URL_BUILD;
 				return `export default ${JSON.stringify(url)};`;
 			}
 			if (id === RESOLVED(V_RUNTIME)) {
@@ -304,8 +304,8 @@ export function ogygia(
 			if (id === RESOLVED(V_TRANSPORT)) {
 				// re-export the app's universal `transport` hook (or an empty map) for the client
 				// remote wire codec. Universal hooks are isomorphic, so this is client-safe.
-				if (universalHooks) {
-					const spec = JSON.stringify(universalHooks);
+				if (universal_hooks) {
+					const spec = JSON.stringify(universal_hooks);
 					return `import * as hooks from ${spec};\nexport const transport = hooks.transport || {};`;
 				}
 				return `export const transport = {};`;
@@ -313,31 +313,31 @@ export function ogygia(
 			if (id === RESOLVED(V_SECRET)) {
 				// SERVER only: the real key. CLIENT build: empty string, so the key can never
 				// leak into a client chunk (server islands are a csr=false feature anyway).
-				const ssr = options?.ssr ?? isSSR;
+				const ssr = options?.ssr ?? is_ssr;
 				if (!ssr) return `export const secret = '';`;
-				return `export const secret = process.env.OGYGIA_SECRET || ${JSON.stringify(buildSecret)};`;
+				return `export const secret = process.env.OGYGIA_SECRET || ${JSON.stringify(build_secret)};`;
 			}
 			if (id === RESOLVED(V_SERVER_MANIFEST)) {
 				// Map of SERVER-island id -> dynamic import, used by the `ogygiaHandle()` handle to
 				// render an island server-side. Populated in BOTH dev and build (unlike the
 				// client manifest, which dev fills from URLs). Client build gets an empty map.
-				const ssr = options?.ssr ?? isSSR;
+				const ssr = options?.ssr ?? is_ssr;
 				if (!ssr) return `export const islands = {};`;
 				prescan();
 				const entries = [];
-				for (const [iid, virtualPath] of byId) {
+				for (const [iid, virtualPath] of by_id) {
 					if (!registry.get(virtualPath)?.server) continue;
 					entries.push(`  ${JSON.stringify(iid)}: () => import(${JSON.stringify(virtualPath)})`);
 				}
 				return `export const islands = {\n${entries.join(',\n')}\n};`;
 			}
 			if (id === RESOLVED(V_MANIFEST)) {
-				if (isDev) {
+				if (is_dev) {
 					return `export const dev = true;\nexport const spa = ${spa};\nexport const islands = {};`;
 				}
 				prescan();
 				const entries = [];
-				for (const [iid, virtualPath] of byId) {
+				for (const [iid, virtualPath] of by_id) {
 					// server islands never ship to the client — keep them out of the client manifest
 					if (registry.get(virtualPath)?.server) continue;
 					entries.push(`  ${JSON.stringify(iid)}: () => import(${JSON.stringify(virtualPath)})`);
@@ -351,7 +351,7 @@ export function ogygia(
 				// `$app/*` via a vite alias (before our resolveId), so we can't intercept
 				// them in resolveId — but we generate this source, so we rewrite it here.
 				// SSR keeps the real Kit modules (correct server-rendered page.data).
-				const ssr = options?.ssr ?? isSSR;
+				const ssr = options?.ssr ?? is_ssr;
 				if (!ssr) {
 					src = src.replace(
 						/(['"])\$app\/(state|stores|navigation)\1/g,
@@ -366,8 +366,8 @@ export function ogygia(
 		transform(code, id) {
 			if (!id.endsWith('.svelte')) return null;
 			if (id.includes('/node_modules/')) return null;
-			if (isIslandPath(id)) return null; // don't re-hoist inside island modules
-			const result = runTransform(code, id);
+			if (is_island_path(id)) return null; // don't re-hoist inside island modules
+			const result = run_transform(code, id);
 			if (!result) return null;
 			register(result);
 			return { code: result.code, map: result.map };

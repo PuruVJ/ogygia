@@ -12,14 +12,14 @@ const K = /** @type {number[]} */ ([]);
 	const primes = [];
 	let n = 2;
 	while (primes.length < 64) {
-		let isPrime = true;
+		let is_prime = true;
 		for (let d = 2; d * d <= n; d++) {
 			if (n % d === 0) {
-				isPrime = false;
+				is_prime = false;
 				break;
 			}
 		}
-		if (isPrime) primes.push(n);
+		if (is_prime) primes.push(n);
 		n++;
 	}
 	for (let i = 0; i < 64; i++) {
@@ -38,19 +38,19 @@ function sha256(bytes) {
 		0x5be0cd19
 	];
 
-	const bitLen = bytes.length * 8;
+	const bit_len = bytes.length * 8;
 	// pad: append 0x80, then zeros, then 64-bit big-endian length
-	const withLen = (((bytes.length + 8) >> 6) + 1) << 6;
-	const padded = new Uint8Array(withLen);
+	const with_len = (((bytes.length + 8) >> 6) + 1) << 6;
+	const padded = new Uint8Array(with_len);
 	padded.set(bytes);
 	padded[bytes.length] = 0x80;
 	// 64-bit length; JS bit ops are 32-bit so only fill the low 32 bits (fine for our inputs)
 	const dv = new DataView(padded.buffer);
-	dv.setUint32(withLen - 4, bitLen >>> 0, false);
-	dv.setUint32(withLen - 8, Math.floor(bitLen / 2 ** 32), false);
+	dv.setUint32(with_len - 4, bit_len >>> 0, false);
+	dv.setUint32(with_len - 8, Math.floor(bit_len / 2 ** 32), false);
 
 	const w = new Int32Array(64);
-	for (let off = 0; off < withLen; off += 64) {
+	for (let off = 0; off < with_len; off += 64) {
 		for (let i = 0; i < 16; i++) w[i] = dv.getInt32(off + i * 4, false);
 		for (let i = 16; i < 64; i++) {
 			const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
@@ -94,7 +94,7 @@ function utf8(str) {
 	return new TextEncoder().encode(str);
 }
 
-function toHex(bytes) {
+function to_hex(bytes) {
 	let s = '';
 	for (const b of bytes) s += b.toString(16).padStart(2, '0');
 	return s;
@@ -107,26 +107,26 @@ function toHex(bytes) {
  * @returns {string}
  */
 export function hmacSha256(key, message) {
-	const blockSize = 64;
-	let keyBytes = utf8(key);
-	if (keyBytes.length > blockSize) keyBytes = sha256(keyBytes);
-	const padded = new Uint8Array(blockSize);
-	padded.set(keyBytes);
-	const ipad = new Uint8Array(blockSize);
-	const opad = new Uint8Array(blockSize);
-	for (let i = 0; i < blockSize; i++) {
+	const block_size = 64;
+	let key_bytes = utf8(key);
+	if (key_bytes.length > block_size) key_bytes = sha256(key_bytes);
+	const padded = new Uint8Array(block_size);
+	padded.set(key_bytes);
+	const ipad = new Uint8Array(block_size);
+	const opad = new Uint8Array(block_size);
+	for (let i = 0; i < block_size; i++) {
 		ipad[i] = padded[i] ^ 0x36;
 		opad[i] = padded[i] ^ 0x5c;
 	}
 	const msg = utf8(message);
-	const inner = new Uint8Array(blockSize + msg.length);
+	const inner = new Uint8Array(block_size + msg.length);
 	inner.set(ipad);
-	inner.set(msg, blockSize);
-	const innerHash = sha256(inner);
-	const outer = new Uint8Array(blockSize + innerHash.length);
+	inner.set(msg, block_size);
+	const inner_hash = sha256(inner);
+	const outer = new Uint8Array(block_size + inner_hash.length);
 	outer.set(opad);
-	outer.set(innerHash, blockSize);
-	return toHex(sha256(outer));
+	outer.set(inner_hash, block_size);
+	return to_hex(sha256(outer));
 }
 
 /**
