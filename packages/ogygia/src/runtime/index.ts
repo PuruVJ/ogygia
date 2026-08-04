@@ -223,6 +223,15 @@ class OgygiaRegion extends HTMLElement {
 			// re-creation when policy is 'cache'. The originals are re-inserted after hydration.
 			const lifted = this.#lift_lakes();
 
+			// Hydration envelope: `hydrate()` anchors on a top-level `<!--[-->` comment and then
+			// expects the component's OWN fragment envelope — but embedded SSR (the island content
+			// rendered inside this element by Island.svelte) emits only the inner dynamic-component
+			// layer. `render()` output has BOTH layers; embedded output has one (verified against
+			// svelte 5.56 in isolation: one layer ⇒ hydration_mismatch + client re-render, two
+			// layers ⇒ clean adoption). Supply the missing outer pair before hydrating.
+			this.insertBefore(document.createComment('['), this.firstChild);
+			this.appendChild(document.createComment(']'));
+
 			// Hydrate through NestedProvider so descendants see the "inside a hydrated island"
 			// context — any nested island wrapper then degrades to a plain inline component
 			// (single hydration with this parent). The provider adds no DOM, so this matches SSR.
