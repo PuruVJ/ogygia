@@ -24,11 +24,18 @@ try {
 		check('orderdetail: page.data Map survived to client', /Line items \(Map\): 6/.test(await od.locator('[data-lineitems]').textContent()));
 		check('orderdetail: no page errors from $app/state shim', errs.length === 0, errs.slice(0, 2).join('; '));
 
+		// $derived over the $state-backed $app/state shim: reflects the current order at mount
+		const probe = page.locator('[data-pagedata-probe]');
+		check('pagedata-probe: $derived over page.* present at #5', (await probe.textContent()).includes('#5'));
+
 		// prev/next SPA nav updates the page-shim island content
 		const m1 = await page.evaluate(() => window.__marker);
 		await page.click('[data-order-nav] a[href="/dashboard/orders/6"]');
 		await page.waitForFunction(() => document.querySelector('[data-orderdetail] h2')?.textContent.includes('#6'), { timeout: 4000 });
 		check('orderdetail: SPA nav to #6 updates page-shim island', (await od.locator('h2').textContent()).includes('Order #6'));
+		// remount after SPA nav -> the island's $derived recomputes fresh from the $state shim
+		await page.waitForFunction(() => document.querySelector('[data-pagedata-probe]')?.textContent.includes('#6'), { timeout: 4000 }).catch(() => {});
+		check('pagedata-probe: $derived over page.data updates after SPA nav to #6 (remount -> fresh)', (await probe.textContent()).includes('#6'));
 		check('orderdetail: SPA nav kept marker (no reload)', (await page.evaluate(() => window.__marker)) === m1);
 		await page.close();
 	}

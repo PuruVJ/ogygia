@@ -6,11 +6,14 @@ import { defineConfig } from 'tsdown';
 //     `../shims/*.js` (fileURLToPath) — those targets must exist at the same relative paths;
 //   - the `.svelte` wrappers import `./server/*.js` relatively.
 //
-// The Svelte-pipeline files are NOT compiled here (the CONSUMER's vite-plugin-svelte compiles
-// them): the three `.svelte` components and the runes module `shims/remote-client.svelte.js`
-// ship as raw source (copied by the `copy:svelte` build step) and are kept external here.
+// The `.svelte` COMPONENTS (with templates) are NOT compiled here — they ship as raw source
+// (copied by `copy:svelte`) and the CONSUMER's vite-plugin-svelte compiles them. The `.svelte.ts`
+// runes MODULES (page-store, app-state) are template-free TypeScript: tsdown strips their types
+// and leaves the `$state` runes intact, so the consumer's svelte pipeline compiles the emitted
+// `.svelte.js`. They are emitted as entries here (the `$app/state` vite alias imports the built
+// `.svelte.js` by absolute path, so it must exist in dist even though nothing else imports it).
 export default defineConfig({
-	entry: ['src/**/*.ts', '!src/**/*.svelte.ts', '!src/**/*.d.ts'],
+	entry: ['src/**/*.ts', '!src/**/*.d.ts'],
 	format: 'esm',
 	platform: 'neutral', // library runs in node (vite plugin/hooks) AND the browser (runtime)
 	unbundle: true,

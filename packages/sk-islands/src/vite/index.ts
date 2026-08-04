@@ -10,7 +10,7 @@ const RUNTIME_ENTRY = fileURLToPath(new URL('../runtime/index.js', import.meta.u
 
 // Client-side shims aliased for island modules (Kit's client runtime is absent under csr=false).
 const APP_SHIMS = {
-	'$app/state': fileURLToPath(new URL('../shims/app-state.js', import.meta.url)),
+	'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),
 	'$app/stores': fileURLToPath(new URL('../shims/app-stores.js', import.meta.url)),
 	'$app/navigation': fileURLToPath(new URL('../shims/app-navigation.js', import.meta.url))
 };

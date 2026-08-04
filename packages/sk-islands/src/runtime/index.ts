@@ -2,6 +2,7 @@ import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
 import * as manifest from 'virtual:ogygia/manifest';
 import { startRouter } from './router.js';
+import { set_page } from '../shims/page-store.svelte.js';
 import NestedProvider from '../NestedProvider.svelte';
 
 /** @type {(entry: string) => Promise<any>} */
@@ -147,15 +148,17 @@ class SkIsland extends HTMLElement {
 				sib = sib.nextElementSibling;
 			}
 
-			// seed the $app/state / $app/stores shims from this page's snapshot (also
-			// needed on csr=true pages, where the island component is aliased to the shims)
+			// Seed the shared $state-backed page store so this island's `$app/state` /
+			// `$app/stores` shims (and any `$derived`/`$effect`/`$page` subscribers) reflect the
+			// current page — on the initial load and after every SPA nav (islands remount with
+			// fresh data). Same module singleton as the shims: no global bridge needed.
 			if (page_snap) {
 				try {
 					if (typeof page_snap.url === 'string') page_snap.url = new URL(page_snap.url);
 				} catch {
 					/* keep string url */
 				}
-				window.__ogygiaPage = page_snap;
+				set_page(page_snap);
 			}
 
 			// Mixed mode: on a csr=true page Kit already hydrates this component — skip.

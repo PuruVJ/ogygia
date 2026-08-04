@@ -36,6 +36,14 @@ declare module '$app/environment' {
 }
 
 interface Window {
+	// Test-only observability marker: set once per full document load, unchanged across SPA
+	// navigations (the module is not re-evaluated), so the browser suites can prove a swap was a
+	// client-side nav vs a real reload. Read by Playwright `page.evaluate` (a separate script
+	// boundary), so it must be a string-keyed global. NOT used by any library logic.
 	__marker?: number;
-	__ogygiaPage?: unknown;
 }
+
+// Rune globals used by the `.svelte.ts` shims. Those files are compiled by the CONSUMER's
+// svelte pipeline (which understands runes); this ambient declaration only satisfies the
+// library's own plain `tsc` type-check. Not shipped (types.d.ts is excluded from tsdown).
+declare function $state<T>(initial: T): T;
