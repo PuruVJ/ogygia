@@ -4,7 +4,16 @@
 declare module 'virtual:ogygia/manifest' {
 	export const dev: boolean;
 	export const spa: boolean;
-	export const islands: Record<string, () => Promise<{ default: unknown }>>;
+	export const lake_restore: 'cache' | 'empty';
+	/**
+	 * One record for ALL region kinds, keyed by region id. Only `kind: 'hydrate'` carries a `load`
+	 * thunk (a client module); `defer` (server island) and `lake` entries are metadata-only, so
+	 * their component JS never enters the client graph.
+	 */
+	export const regions: Record<
+		string,
+		{ kind: 'hydrate' | 'defer' | 'lake'; load?: () => Promise<{ default: unknown }> }
+	>;
 }
 declare module 'virtual:ogygia/server-manifest' {
 	export const islands: Record<string, () => Promise<{ default: unknown }>>;

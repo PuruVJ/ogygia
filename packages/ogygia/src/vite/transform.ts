@@ -174,10 +174,19 @@ export function transformHost(source, id, ctx) {
 
 		if (attrs.has('hydrate')) {
 			const val = attrs.get('hydrate');
+			if (val === 'none') {
+				// hydrate: 'none' is a LAKE (render: page, hydrate: none). A lake INSIDE a hydrated
+				// island freezes its subtree: SSR renders it inline, its JS ships in NO client chunk
+				// (the island's client module swaps the import for a placeholder), and the runtime
+				// lifts/restores its DOM around the parent hydrate. A lake in the dead shell is a
+				// no-op plain component (dev-warned below). See DESIGN.md.
+				for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy: 'lake', options: {} });
+				continue;
+			}
 			if (val === 'false') {
-				// hydrate: 'false' is a LAKE. Lakes are a future round (DESIGN.md); a lake in the
-				// shell is a no-op plain component, a lake in an island is the real feature.
-				throw err(names, "`hydrate: 'false'` (lakes) is not yet supported (roadmap — see DESIGN.md).");
+				// Import-attribute values are strings; the "no hydration" value is the WORD 'none'
+				// (not the boolean-looking 'false'). No silent alias — point the author at 'none'.
+				throw err(names, "`hydrate: 'false'` is not valid — use `hydrate: 'none'` for a lake (a frozen region inside a hydrated island). See DESIGN.md.");
 			}
 			let strategy;
 			if (KNOWN_STRATEGIES.has(val)) strategy = val;
@@ -204,25 +213,47 @@ export function transformHost(source, id, ctx) {
 	// --- find island units in the template ---------------------------------
 	// marked-component usages: { node (svelte template node), strategy, options }
 	const units = [];
+	const CHILD_KEYS = ['consequent', 'alternate', 'body', 'fallback', 'pending', 'then', 'catch', 'fragment'];
+	// LAKE local names used in the DEAD SHELL (top level, not inside any island): a no-op. We clean
+	// their import (drop the `with{}`) and leave them as plain components (dev-warned at build).
+	const shell_lake_locals = new Set();
 	const visit = (nodes) => {
 		for (const node of nodes ?? []) {
 			if (node.type === 'Component' && marked_components.has(node.name)) {
 				const mark = marked_components.get(node.name);
+				if (mark.strategy === 'lake') {
+					// top-level lake = no-op; descend through it so a shell-lake's inner islands still
+					// hydrate (the lake never became a hydration boundary here).
+					shell_lake_locals.add(node.name);
+					for (const k of CHILD_KEYS) if (node[k]?.nodes) visit(node[k].nodes);
+					continue;
+				}
 				units.push({ node, strategy: mark.strategy, options: mark.options });
-				continue; // do not descend
+				continue; // island/server: do not descend
 			}
 			// descend into child fragments
-			for (const k of ['consequent', 'alternate', 'body', 'fallback', 'pending', 'then', 'catch', 'fragment']) {
-				if (node[k]?.nodes) visit(node[k].nodes);
-			}
+			for (const k of CHILD_KEYS) if (node[k]?.nodes) visit(node[k].nodes);
 		}
 	};
 	visit(ast.fragment?.nodes ?? []);
 
-	if (units.length === 0 && imports_to_strip.size === 0) return null;
+	if (ctx.dev && shell_lake_locals.size) {
+		for (const name of shell_lake_locals) {
+			console.warn(
+				`[ogygia] ${rel_host}: <${name}> has \`hydrate: 'false'\` (lake) in the page shell — that is a no-op (the shell is already dead). A lake only has meaning INSIDE a hydrated island. Rendering it as a plain component.`
+			);
+		}
+	}
+
+	if (units.length === 0 && imports_to_strip.size === 0 && shell_lake_locals.size === 0) return null;
 
 	const s = new MagicString(source);
 	const islands = [];
+	// LAKE local names hoisted into some island (their host import is now unused -> stripped).
+	const island_lake_locals = new Set();
+	// LAKE region ids (metadata-only entries for the client `regions` manifest — kind:'lake', no
+	// load thunk, so the lake component's JS is never pulled into the client graph).
+	const lake_region_ids = [];
 	const preamble_imports = [];
 	// The transform emits a private wrapper component (not a public API). Component
 	// tags must start uppercase or Svelte parses them as plain HTML elements.
@@ -271,6 +302,39 @@ export function transformHost(source, id, ctx) {
 			subtree_nodes = [unit.node];
 		}
 
+		// LAKES: a `hydrate: 'false'` component used inside THIS (client) island. Wrap each in a
+		// non-boundary `<ogygia-region data-lake>` so the runtime can lift/restore its SSR DOM
+		// around hydration; record the local so the client build swaps its import for a placeholder
+		// (the lake's JS ships in no client chunk). SSR keeps the real component (rendered inline).
+		const island_lakes = [];
+		if (!is_server) {
+			const lake_nodes = [];
+			const scan_lakes = (nodes) => {
+				for (const n of nodes ?? []) {
+					if (n.type === 'Component' && marked_components.get(n.name)?.strategy === 'lake') {
+						lake_nodes.push(n);
+					}
+					for (const k of CHILD_KEYS) if (n[k]?.nodes) scan_lakes(n[k].nodes);
+				}
+			};
+			scan_lakes(unit.node.fragment?.nodes ?? []);
+			if (lake_nodes.length) {
+				const lake_ms = new MagicString(source);
+				lake_nodes.forEach((ln, li) => {
+					const lake_id = islandId(rel_host, `lake:${index}:${li}`);
+					// Wrap in `<OgygiaLakeBoundary>` so the lake's subtree resets the nested-island
+					// context (an island authored inside the lake self-hydrates). The non-boundary
+					// `<ogygia-region data-lake>` lets the runtime lift/restore the frozen DOM.
+					lake_ms.appendLeft(ln.start, `<ogygia-region data-lake entry=${JSON.stringify(lake_id)}><OgygiaLakeBoundary>`);
+					lake_ms.appendRight(ln.end, `</OgygiaLakeBoundary></ogygia-region>`);
+					island_lakes.push(ln.name);
+					island_lake_locals.add(ln.name);
+					lake_region_ids.push(lake_id);
+				});
+				hoisted_source = lake_ms.slice(unit.node.start, unit.node.end);
+			}
+		}
+
 		// free-variable analysis
 		const free = collectFreeIdentifiers(subtree_nodes);
 		const used_import_nodes = new Set();
@@ -292,6 +356,10 @@ export function transformHost(source, id, ctx) {
 
 		// build virtual island module source: gather cleaned text per used import node
 		const copied_imports = [];
+		if (island_lakes.length) {
+			// the lake wrapper component (resets nested-island context around frozen subtrees)
+			copied_imports.push(`import { LakeBoundary as OgygiaLakeBoundary } from 'ogygia/internal';`);
+		}
 		for (const [, info] of imports) {
 			if (used_import_nodes.has(info.node) && !copied_imports.includes(info.cleaned)) {
 				copied_imports.push(info.cleaned);
@@ -304,7 +372,15 @@ export function transformHost(source, id, ctx) {
 			.join('\n');
 		const virtual_source = `<script${lang}>\n${script_body}\n</script>\n${hoisted_source}\n`;
 
-		islands.push({ id: iid, virtualPath, source: virtual_source, hostPath: id, server: is_server });
+		islands.push({
+			id: iid,
+			virtualPath,
+			source: virtual_source,
+			hostPath: id,
+			server: is_server,
+			kind: is_server ? 'defer' : 'hydrate',
+			lakes: island_lakes
+		});
 
 		const props_obj = captured.length ? `{ ${captured.join(', ')} }` : '{}';
 
@@ -349,6 +425,27 @@ export function transformHost(source, id, ctx) {
 
 		preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);
 	});
+
+	// Register lake regions as metadata-only client-manifest entries (kind:'lake', no module) so
+	// the runtime can consult ONE uniform `regions` record — a lake never gets a load thunk.
+	for (const lake_id of lake_region_ids) {
+		islands.push({ id: lake_id, kind: 'lake' });
+	}
+
+	// LAKE host imports: a lake hoisted into an island leaves its host import unused -> strip it
+	// (with the `with{}` clause). A shell-only lake (no-op) keeps a CLEANED import (drop `with{}`)
+	// so it renders as a plain component. Both must lose the `with{}` clause (an invalid runtime
+	// import attribute). Decide per lake local before the strip loop runs.
+	for (const [local, mark] of marked_components) {
+		if (mark.strategy !== 'lake') continue;
+		const info = imports.get(local);
+		if (!info || imports_to_strip.has(info.node)) continue;
+		if (island_lake_locals.has(local) && !shell_lake_locals.has(local)) {
+			imports_to_strip.add(info.node); // hoisted only -> remove entirely
+		} else {
+			s.overwrite(info.node.start, info.node.end, info.cleaned); // shell use -> keep, drop with{}
+		}
+	}
 
 	// strip island-marked imports (their `with{}` clause & now-unused binding)
 	for (const node of imports_to_strip) {

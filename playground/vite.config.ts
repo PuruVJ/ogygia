@@ -11,7 +11,9 @@ export default defineConfig({
 			// named presets referenced from imports via `with { preset: 'chart' }`
 			presets: {
 				chart: { hydrate: 'visible', margin: '200px' }
-			}
+			},
+			// lakes ({#if}-toggle re-creation): 'cache' re-inserts the frozen DOM (default), 'empty' clears
+			lake_restore: 'cache'
 		}),
 		sveltekit()
 	]

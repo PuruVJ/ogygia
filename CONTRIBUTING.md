@@ -7,8 +7,8 @@ added, encode them as `@typescript-eslint/naming-convention`).
 
 | kind | case | examples |
 | ---- | ---- | -------- |
-| **Public API** — package exports, option keys, hook names | `camelCase` | `ogygia`, `ogygiaHandle`, `ClientRouter`, option keys `spa` / `visible` / `presets` / `margin` / `hydrate` / `defer` / `endpoint` / `viewTransitions` / `lakes` / `restore` |
-| **Classes & Svelte components** | `PascalCase` | `Island`, `ServerIsland`, `NestedProvider`, `ClientRouter`, the runtime custom-element class |
+| **Public API** — package exports, option keys, hook names | `camelCase` | `ogygia`, `ogygiaHandle`, `ClientRouter`, option keys `spa` / `visible` / `presets` / `margin` / `hydrate` / `defer` / `endpoint` / `viewTransitions` |
+| **Classes & Svelte components** | `PascalCase` | `Island`, `ServerIsland`, `NestedProvider`, `LakePlaceholder`, `LakeBoundary`, `ClientRouter`, the runtime custom-element class |
 | **Internals** — locals, module-private functions, non-exported helpers, `#` private fields | `snake_case` | `run_transform`, `merge_head`, `#on_visible`, `hashed_runtime_url`, `collect_pattern_names` |
 | **Module-level constants** | `SCREAMING_SNAKE_CASE` | `ISLAND_DIR`, `RUNTIME_ENTRY`, `APP_SHIMS` |
 
@@ -26,6 +26,8 @@ added, encode them as `@typescript-eslint/naming-convention`).
   build options (`clientDir`, `makePlugin`, `runtimeFileName`).
 - **DOM / Web API option keys** passed as object literals keep their platform spelling
   (`rootMargin` for `IntersectionObserver`).
+- **`lake_restore`** (the `ogygia({ lake_restore })` plugin option) is deliberately flat
+  `snake_case` by explicit user decision — a documented exception to the option-key `camelCase` rule.
 - **Generated output identifiers** (the wrapper component names the transform injects, e.g.
   `SkIsland__Wrapper`) are `PascalCase` because Svelte requires component tags to be uppercase.
 

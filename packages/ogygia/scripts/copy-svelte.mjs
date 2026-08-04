@@ -13,7 +13,9 @@ const files = [
 	'src/Island.svelte',
 	'src/ServerIsland.svelte',
 	'src/ClientRouter.svelte',
-	'src/NestedProvider.svelte'
+	'src/NestedProvider.svelte',
+	'src/LakePlaceholder.svelte',
+	'src/LakeBoundary.svelte'
 ];
 
 for (const rel of files) {

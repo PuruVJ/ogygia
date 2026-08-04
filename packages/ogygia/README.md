@@ -18,7 +18,7 @@ The library depends only on `devalue`, `magic-string`, and `estree-walker`. Ever
 
 > **Design:** ogygia implements the unified **region model** — see [`DESIGN.md`](../../DESIGN.md).
 > Every boundary sets two axes: **`render`** (`page` | `defer`) and **`hydrate`**
-> (`false` | `load` | `idle` | `visible` | media). The nearest boundary above you wins.
+> (`none` | `load` | `idle` | `visible` | media). The nearest boundary above you wins.
 
 ```
 packages/ogygia       # the library (built with tsdown to ./dist)
@@ -87,15 +87,16 @@ ogygia({
 	presets: {
 		chart: { hydrate: 'visible', margin: '200px' },
 		modal: { hydrate: 'idle' }
-	}
+	},
+	lake_restore: 'cache'                       // 'cache' (default) | 'empty' — {#if}-toggle re-creation
 });
 ```
 
 - `with { preset: 'chart' }` resolves the preset; presets are **tolerant** (a known-but-inapplicable
   key like `margin` on a `load` preset is ignored). Unknown preset names / unknown keys are build errors.
 - Build errors are precise (they name the file + import): unknown preset, an option key inline,
-  `preset` mixed with another key, `defer` + `hydrate` together (roadmap), `hydrate: 'false'`
-  (lakes, roadmap).
+  `preset` mixed with another key, `defer` + `hydrate` together (roadmap). `hydrate: 'false'` errors
+  with a hint to use `hydrate: 'none'` (the lake value — see below).
 
 ## Server islands (`defer: 'true'`)
 
@@ -143,6 +144,29 @@ rule, a region self-hydrates iff the nearest region boundary above it is not hyd
 **inner island degrades to a plain component and hydrates once, with its parent** (one hydration,
 ever). A dev-only warning names the inner region. A nested **server** island degrades to a plain
 inline component too (its `defer` is ignored until lakes land — see DESIGN.md).
+
+## Lakes (`hydrate: 'none'` inside an island)
+
+A **lake** is a component imported with `with { hydrate: 'none' }` and used inside a hydrated
+island. The lake **freezes** its subtree: it SSRs inline, but its component code ships in **no
+client chunk** (the island's client module swaps the import for a placeholder), and the runtime
+lifts the lake's SSR DOM out before the parent hydrates and restores it after — so no hydration
+work touches it. Its contents are static by contract (props changes and events inside are inert).
+
+```svelte
+<script>
+	import Board  from '$lib/Board.svelte'  with { hydrate: 'load' };  // island
+	import Report from '$lib/Report.svelte' with { hydrate: 'none' };  // lake (frozen)
+</script>
+<Board><Report /></Board>
+```
+
+- An **island authored inside a lake self-hydrates** again — the lake reset its subtree to "dead",
+  so the nearest-boundary rule wakes the inner island (alternation: shell → island → lake → island).
+- `ogygia({ lake_restore })` controls `{#if}`-toggle re-creation of a lake: **`'cache'`** (default)
+  re-inserts the frozen DOM, **`'empty'`** leaves it blank.
+- A `hydrate: 'none'` in the dead page shell is a **no-op** (dev-warned) — a plain component.
+- `hydrate: 'false'` is not valid; the string value for "no hydration" is `'none'`.
 
 ## Prerendering
 

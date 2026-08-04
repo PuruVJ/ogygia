@@ -15,6 +15,11 @@ const APP_SHIMS = {
 	'$app/navigation': fileURLToPath(new URL('../shims/app-navigation.js', import.meta.url))
 };
 
+// A lake's component code must ship in NO client chunk. In the CLIENT build of an island's virtual
+// module we swap every lake import for this render-nothing placeholder (the runtime lifts/restores
+// the lake's SSR DOM around hydration). SSR keeps the real component.
+const LAKE_PLACEHOLDER = fileURLToPath(new URL('../LakePlaceholder.svelte', import.meta.url));
+
 // Reuse Kit's OWN client remote primitives (query/command/form/live). We point
 // `__sveltekit/remote` at Kit's real remote-functions and scope-alias the two router-coupled
 // modules those pull in (`client.js`, `state.svelte.js`) to tiny stubs, so the router graph
@@ -85,12 +90,18 @@ export function ogygia(
 		standalone?: boolean;
 		visible?: { margin?: string };
 		presets?: Record<string, { hydrate?: string; defer?: string; margin?: string }>;
+		lake_restore?: 'cache' | 'empty';
 	} = {}
 ) {
 	const spa = options.spa !== false;
 	const standalone = options.standalone === true;
 	const visibleMargin = options.visible?.margin;
 	const presets = options.presets || {};
+	// Lake DOM restore policy for `{#if}`-toggle re-creation: 'cache' re-inserts the frozen SSR DOM
+	// when the region is re-created; 'empty' leaves it empty. Default 'cache'. NOTE: the option key
+	// is deliberately flat snake_case (`lake_restore`) by explicit user decision — a documented
+	// exception to the public-API-camelCase convention (see CONTRIBUTING.md).
+	const lake_restore = options.lake_restore === 'empty' ? 'empty' : 'cache';
 
 	// HMAC key for signing server-island props. Runtime env var wins (so it can be rotated
 	// / shared across instances in production); otherwise a per-build random key baked into
@@ -99,8 +110,10 @@ export function ogygia(
 
 	/** @type {Map<string, {source:string, hostPath:string, id:string}>} keyed by abs virtual path */
 	const registry = new Map();
-	/** @type {Map<string, string>} iid -> abs virtual path */
+	/** @type {Map<string, string>} iid -> abs virtual path (hydrate + defer islands only) */
 	const by_id = new Map();
+	/** @type {Map<string, 'hydrate'|'defer'|'lake'>} every region id -> kind (drives the client `regions` manifest) */
+	const region_kinds = new Map();
 
 	let root;
 	let base = '';
@@ -153,11 +166,15 @@ export function ogygia(
 
 	const register = (result) => {
 		for (const isl of result.islands ?? []) {
+			region_kinds.set(isl.id, isl.kind ?? (isl.server ? 'defer' : 'hydrate'));
+			// Lake entries are metadata-only (no virtual module) — they never get a client module.
+			if (!isl.virtualPath) continue;
 			registry.set(isl.virtualPath, {
 				source: isl.source,
 				hostPath: isl.hostPath,
 				id: isl.id,
-				server: !!isl.server
+				server: !!isl.server,
+				lakes: isl.lakes ?? []
 			});
 			by_id.set(isl.id, isl.virtualPath);
 		}
@@ -358,16 +375,24 @@ export function ogygia(
 			}
 			if (id === RESOLVED(V_MANIFEST)) {
 				if (is_dev) {
-					return `export const dev = true;\nexport const spa = ${spa};\nexport const islands = {};`;
+					return `export const dev = true;\nexport const spa = ${spa};\nexport const lake_restore = ${JSON.stringify(lake_restore)};\nexport const regions = {};`;
 				}
 				prescan();
+				// One `regions` record for ALL region kinds. ONLY kind:'hydrate' carries a `load`
+				// thunk — lake + defer entries are metadata-only, so a lake's (or server island's)
+				// component JS is never pulled into the client graph (the lakes suite guards this).
 				const entries = [];
-				for (const [iid, virtualPath] of by_id) {
-					// server islands never ship to the client — keep them out of the client manifest
-					if (registry.get(virtualPath)?.server) continue;
-					entries.push(`  ${JSON.stringify(iid)}: () => import(${JSON.stringify(virtualPath)})`);
+				for (const [rid, kind] of region_kinds) {
+					if (kind === 'hydrate') {
+						const virtualPath = by_id.get(rid);
+						entries.push(
+							`  ${JSON.stringify(rid)}: { kind: 'hydrate', load: () => import(${JSON.stringify(virtualPath)}) }`
+						);
+					} else {
+						entries.push(`  ${JSON.stringify(rid)}: { kind: ${JSON.stringify(kind)} }`);
+					}
 				}
-				return `export const dev = false;\nexport const spa = ${spa};\nexport const islands = {\n${entries.join(',\n')}\n};`;
+				return `export const dev = false;\nexport const spa = ${spa};\nexport const lake_restore = ${JSON.stringify(lake_restore)};\nexport const regions = {\n${entries.join(',\n')}\n};`;
 			}
 			const srcEntry = registry.get(id);
 			if (srcEntry) {
@@ -382,6 +407,16 @@ export function ogygia(
 						/(['"])\$app\/(state|stores|navigation)\1/g,
 						(_m, _q, name) => JSON.stringify(APP_SHIMS['$app/' + name])
 					);
+					// LAKES: swap each lake import for the render-nothing placeholder so the lake
+					// component's JS is excluded from this island's client chunk. Match `import <Local>`
+					// (default import — a component) and repoint its specifier at the placeholder.
+					for (const local of srcEntry.lakes ?? []) {
+						const re = new RegExp(
+							`(import\\s+${local}\\s+from\\s+)(['"])[^'"]+\\2`,
+							'g'
+						);
+						src = src.replace(re, (_m, head) => head + JSON.stringify(LAKE_PLACEHOLDER));
+					}
 				}
 				return src;
 			}

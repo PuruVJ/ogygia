@@ -71,7 +71,24 @@ expectError('unknown preset lists available', wrap(`import C from './C.svelte' w
 expectError('inline option key rejected (margin)', wrap(`import C from './C.svelte' with { hydrate: 'visible', margin: '9px' };`), /not allowed inline/);
 expectError('preset + another inline key rejected', wrap(`import C from './C.svelte' with { preset: 'chart', hydrate: 'load' };`), /must be the only import attribute/);
 expectError('defer + hydrate is a roadmap error', wrap(`import C from './C.svelte' with { defer: 'true', hydrate: 'load' };`), /not yet supported \(roadmap/);
-expectError('hydrate false (lakes) is a roadmap error', wrap(`import C from './C.svelte' with { hydrate: 'false' };`), /lakes.*not yet supported/i);
+// `hydrate: 'false'` is NOT a valid lake value — the string value is 'none'; error points there.
+expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from './C.svelte' with { hydrate: 'false' };`), /hydrate: 'false'.*use .*hydrate: 'none'/i);
+
+// --- lakes (hydrate: 'none') ---
+// A lake INSIDE a hydrated island: the island's generated module wraps the lake usage in a
+// non-boundary <ogygia-region data-lake> + the context-reset boundary; the lake import is copied.
+{
+	const src = wrap(
+		`import Host from './Host.svelte' with { hydrate: 'load' };\nimport Lake from './Lake.svelte' with { hydrate: 'none' };`,
+		'<Host><Lake /></Host>'
+	);
+	const r = run(src);
+	const island = r?.islands?.find((i) => i.source);
+	check('lake in island -> generated module wraps lake in <ogygia-region data-lake>', !!island && /<ogygia-region data-lake entry="[^"]+"><OgygiaLakeBoundary>/.test(island.source));
+	check('lake in island -> lake list records the lake local', !!island && Array.isArray(island.lakes) && island.lakes.includes('Lake'));
+	check('lake in island -> a metadata-only lake region is registered (kind lake)', !!r?.islands?.some((i) => i.kind === 'lake'));
+	check('lake in island -> host Lake import stripped (hoisted only)', !/import Lake from/.test(r.code));
+}
 expectError('unknown key alongside a region key rejected', wrap(`import C from './C.svelte' with { hydrate: 'load', wat: 'x' };`), /not allowed inline/);
 // an import with ONLY a non-region attribute (e.g. an import assertion) is left alone, not a region
 {

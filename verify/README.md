@@ -20,6 +20,7 @@ node verify/presets.ts                                 # transform-level: region
 node verify/forms.ts           http://localhost:3051   # classic form actions (no-JS + JS)
 node verify/prerender.ts       http://localhost:3051   # prerendered page + server-island hole
 node verify/flicker.ts         http://localhost:3051   # SSR-resolved query seeding: zero-flash hydration
+node verify/lakes.ts           http://localhost:3051   # lakes: frozen region, no client JS, island-in-lake, restore
 ```
 
 `flicker.ts` is mode-aware: against a PROD build it asserts the full zero-visible-change contract

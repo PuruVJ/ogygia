@@ -9,7 +9,22 @@ import NestedProvider from '../NestedProvider.svelte';
 /** @type {(entry: string) => Promise<{ default: import('svelte').Component<Record<string, unknown>> }>} */
 const load_island = manifest.dev
 	? (entry) => import(/* @vite-ignore */ entry)
-	: (entry) => manifest.islands[entry]();
+	: (entry) => manifest.regions[entry].load();
+
+// LAKE DOM cache for `{#if}`-toggle re-creation (policy `lake_restore: 'cache'`), keyed by the
+// lake region's `entry` id. Populated during the first lift; a clone is re-inserted whenever a
+// lake region is re-created by its parent island's reactive template.
+const lake_cache = new Map<string, Node>();
+// Lake regions whose frozen DOM has been restored ("settled"). An island region that connects
+// inside a not-yet-settled lake defers — the lake's restore re-inserts (reconnects) it, and THEN
+// it self-hydrates. This is what lets an island-in-lake wake up exactly once, after its lake.
+const settled_lakes = new WeakSet<Element>();
+// Lake ids the parent island has already lift/restored once. Until then, a lake region connecting
+// (incl. one Svelte re-creates while recovering a hydration mismatch) must NOT self-restore — the
+// parent's `#restore_lakes` owns the first fill. Afterwards, an {#if}-toggle re-creation restores
+// from cache via `#lake_connected`. Gating on this prevents a double-restore (the mismatch-recovery
+// re-create + the parent restore both firing).
+const initialized_lakes = new Set<string>();
 
 function dom_ready() {
 	if (typeof document === 'undefined' || document.readyState !== 'loading') return Promise.resolve();
@@ -53,6 +68,13 @@ class OgygiaRegion extends HTMLElement {
 	#mql: { mql: MediaQueryList; on: (e: MediaQueryListEvent) => void } | null = null;
 
 	connectedCallback() {
+		// LAKE region: a frozen, non-boundary subtree. It never hydrates; its parent island lifts
+		// and restores its SSR DOM. On {#if} re-creation Svelte makes a fresh empty region — restore
+		// the cached frozen DOM (policy 'cache'). Handled before the island logic below.
+		// LAKE region: a frozen, non-boundary subtree. It never hydrates; its parent island lifts
+		// and restores its SSR DOM. On {#if} re-creation Svelte makes a fresh empty region — restore
+		// the cached frozen DOM (policy 'cache'). Handled before the island logic below.
+		if (this.hasAttribute('data-lake')) return this.#lake_connected();
 		if (this.#scheduled) return;
 		// The region rule (DESIGN.md): a region self-hydrates iff the NEAREST region boundary
 		// above it is not hydrated. A boundary is "hydrated" iff it carries a `hydrate` attribute
@@ -70,6 +92,11 @@ class OgygiaRegion extends HTMLElement {
 			}
 			return;
 		}
+		// Island INSIDE a not-yet-settled lake (island-in-lake): defer. The parent island lifts the
+		// lake's DOM (detaching us) then restores it (reconnecting us) with the lake marked settled —
+		// that reconnection re-runs connectedCallback and we self-hydrate then, exactly once. Waking
+		// now would race the parent's lift (double hydration / mismatch).
+		if (boundary && boundary.hasAttribute('data-lake') && !settled_lakes.has(boundary)) return;
 		this.#scheduled = true;
 		if (this.hasAttribute('defer')) return this.#server();
 		const hydrate = this.getAttribute('hydrate') || 'load';
@@ -189,6 +216,13 @@ class OgygiaRegion extends HTMLElement {
 				return;
 			}
 
+			// LAKES: lift the frozen SSR DOM out of every lake region inside this island BEFORE
+			// hydrating. The client build swapped each lake import for a render-nothing placeholder,
+			// so the client render of a lake region is empty; emptying the region first makes the
+			// hydration walk match (no `hydration_mismatch`). Cache a clone for {#if}-toggle
+			// re-creation when policy is 'cache'. The originals are re-inserted after hydration.
+			const lifted = this.#lift_lakes();
+
 			// Hydrate through NestedProvider so descendants see the "inside a hydrated island"
 			// context — any nested island wrapper then degrades to a plain inline component
 			// (single hydration with this parent). The provider adds no DOM, so this matches SSR.
@@ -196,12 +230,70 @@ class OgygiaRegion extends HTMLElement {
 				target: this,
 				props: { component: Component, props }
 			});
+
+			// Restore each lake's frozen DOM. A lake inside it may itself contain an island whose
+			// `<ogygia-region hydrate>` now (re)connects and self-hydrates — the lake reset its
+			// subtree to "dead", so the nearest-boundary rule makes that inner island wake up.
+			this.#restore_lakes(lifted);
+
 			this.setAttribute('data-hydrated', '');
 			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		} catch (err) {
 			console.error('[ogygia] hydration failed for', this.getAttribute('entry'), err);
 		} finally {
 			this.#hydrating = false;
+		}
+	}
+
+	// Detach the frozen SSR DOM from every lake region that belongs DIRECTLY to this island (its
+	// nearest region ancestor is `this` — lakes inside a nested island region are that island's to
+	// lift). Emptying the region makes the swapped-in placeholder's empty client render match, so
+	// Svelte reports no `hydration_mismatch`. Cache a clone for {#if}-toggle re-creation ('cache').
+	#lift_lakes() {
+		const lifted: Array<{ id: string; frag: DocumentFragment }> = [];
+		for (const lake of this.querySelectorAll('ogygia-region[data-lake]')) {
+			if (lake.parentElement?.closest('ogygia-region') !== this) continue;
+			const id = lake.getAttribute('entry') || '';
+			const frag = document.createDocumentFragment();
+			while (lake.firstChild) frag.appendChild(lake.firstChild);
+			if (manifest.lake_restore === 'cache' && id) lake_cache.set(id, frag.cloneNode(true));
+			lifted.push({ id, frag });
+		}
+		return lifted;
+	}
+
+	// Re-insert each lake's frozen DOM AFTER the island hydrated. We re-QUERY the region by id
+	// rather than reuse the lifted reference: Svelte's hydration may replace the region element
+	// while adopting the (emptied) SSR DOM, so the current live element is the correct restore
+	// target. Mark it settled first so an island-in-lake reconnecting inside it self-hydrates.
+	#restore_lakes(lifted: Array<{ id: string; frag: DocumentFragment }>) {
+		for (const { id, frag } of lifted) {
+			const lake = this.querySelector(`ogygia-region[data-lake][entry="${id}"]`);
+			if (!lake) continue;
+			settled_lakes.add(lake);
+			initialized_lakes.add(id);
+			lake.appendChild(frag);
+		}
+	}
+
+	// A lake region connected. Initial SSR connect: content present -> leave it for the parent
+	// island's lift/restore. {#if} RE-creation: Svelte made a fresh EMPTY region -> restore the
+	// cached frozen DOM (policy 'cache'); 'empty' leaves it blank. Mark settled either way so an
+	// inner island reconnecting inside it wakes.
+	#lake_connected() {
+		const id = this.getAttribute('entry') || '';
+		// Only a genuine {#if}-toggle RE-creation restores here — i.e. after the parent island has
+		// done its one-time lift/restore (`initialized_lakes`). Before that, the parent owns the fill;
+		// self-restoring now (e.g. on a region Svelte re-creates mid-mismatch-recovery) would double
+		// the content.
+		if (!initialized_lakes.has(id)) return;
+		// Initial SSR content (an ELEMENT subtree) present -> leave it. Empty (placeholder anchor
+		// only) -> restore the cached frozen DOM (policy 'cache'; 'empty' stays blank).
+		if (this.querySelector('*')) return;
+		settled_lakes.add(this);
+		if (manifest.lake_restore === 'cache') {
+			const cached = lake_cache.get(id);
+			if (cached) this.appendChild(cached.cloneNode(true));
 		}
 	}
 

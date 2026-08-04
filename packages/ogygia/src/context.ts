@@ -5,9 +5,13 @@ import { createContext } from 'svelte';
 // an island-within-an-island hydrates exactly once, together with its parent.
 const [get_nested_context, set_nested_context] = createContext<boolean>();
 
-/** Mark the current subtree as living inside an island (called by a top-level wrapper/provider). */
-export function setNested(): void {
-	set_nested_context(true);
+/**
+ * Mark the current subtree's hydration state. `true` = inside a hydrated island (nested islands
+ * degrade). `false` = a LAKE resets its subtree to "dead", so an island inside the lake self-
+ * hydrates again (the nearest-boundary rule — DESIGN.md).
+ */
+export function setNested(value = true): void {
+	set_nested_context(value);
 }
 
 /**

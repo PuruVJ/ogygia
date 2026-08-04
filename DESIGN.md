@@ -13,9 +13,9 @@ Every region boundary answers two independent questions:
 | axis      | values                                            | question                     |
 | --------- | ------------------------------------------------- | ---------------------------- |
 | `render`  | `page` (default) \| `defer`                       | When does this HTML arrive?  |
-| `hydrate` | `false` (default) \| `load` \| `idle` \| `visible` \| `'(media query)'` | Does this subtree's JS wake, and when? |
+| `hydrate` | `none` (default) \| `load` \| `idle` \| `visible` \| `'(media query)'` | Does this subtree's JS wake, and when? |
 
-The page shell is simply the root region: `render: page`, `hydrate: false`.
+The page shell is simply the root region: `render: page`, `hydrate: none`.
 Everything else is an override at some boundary.
 
 ## The one rule (nearest boundary wins)
@@ -26,7 +26,7 @@ its subtree. Therefore:
 - An island in the static shell hydrates itself (nearest state above it: dead).
 - An island inside a hydrated island does **not** self-hydrate — its parent's
   hydration already runs it as a plain component. One hydration, ever.
-- A **lake** (`hydrate: false`) inside an island turns its subtree dead again:
+- A **lake** (`hydrate: none`) inside an island turns its subtree dead again:
   the SSR DOM is preserved untouched, and the lake component's JS never ships.
 - An island **inside a lake** self-hydrates again — the lake made its subtree
   dead, so the runtime treats the inner island exactly like one in the shell.
@@ -45,10 +45,10 @@ Custom elements make this navigation-proof: any swap that inserts regions
 
 | render | hydrate            | you'd call it              | status      |
 | ------ | ------------------ | -------------------------- | ----------- |
-| `page` | `false`            | plain component / the shell | shipped     |
+| `page` | `none`             | plain component / the shell | shipped     |
 | `page` | `load`/`idle`/`visible`/media | **client island**          | shipped     |
-| `page` | `false` *inside a hydrated region* | **lake**   | planned     |
-| `defer`| `false`            | **server island**          | shipped     |
+| `page` | `none` *inside a hydrated region* | **lake**   | shipped     |
+| `defer`| `none`             | **server island**          | shipped     |
 | `defer`| any strategy       | deferred client island     | roadmap     |
 
 "Island" and "lake" survive as vocabulary, not as separate mechanisms.
