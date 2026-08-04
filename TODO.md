@@ -1,5 +1,50 @@
 # ogygia — status & remaining work
 
+## Round 5 (this round) — landed & verified
+- **Remote reuse — Plan A, DONE (no patch).** `__sveltekit/remote` now points at Kit's REAL
+  `remote-functions/index.js`; the two router-coupled modules it imports (`client.js`,
+  `state.svelte.js`) + `$app/paths/internal/client` are scope-aliased (only for importers under
+  `/remote-functions/`, so a csr=true page's real Kit client is untouched) to **34 lines of stubs**
+  (`app` from the universal `transport`; `goto`/`invalidateAll` → our SPA router; `page.url`;
+  `base`/`app_dir`). Kit's own query/command/query.live/cache/proxy/sse/**form** run in islands with
+  NO router graph. The 222-line hand-rolled wire client is **deleted** (222 → 34). `verify/remote.ts`
+  (incl. custom `transport` `Temperature`) passes.
+- **Remote `form()` inside islands — DONE.** `guestbook.remote.ts` (form + valibot) + `GuestbookForm`
+  island: enhanced submit (no reload), schema field issues, pending, result, and no-JS post to the
+  remote endpoint. Checks added to `verify/forms.ts`.
+- **Type coverage — DONE (tsc-clean).** `@types/node`; ambient decls for virtual modules + `$app/*`;
+  `SkIsland` fields declared; typed plugin options. `verify/tsconfig.json` + `global.d.ts`. Scripts:
+  library `check` (tsc --noEmit), root `check` (lib tsc + playground svelte-check + verify tsc) — all
+  **0 errors / 0 warnings** (playground svelte-check 369 files).
+
+## Remaining / next (documented precisely; ordered)
+1. **ZERO-`any` mandate — NOT done.** Reaching tsc-clean used ~23 `any`/`as any` in library src +
+   4 in verify, all in inherently-dynamic code. Replace each with precise types:
+   - `vite/free-vars.ts` (4): estree node casts → import `estree` `Node`/`Function` types.
+   - `runtime/router.ts` (~7): `mergeHead(newHead)` → `HTMLHeadElement`; loop nodes → `Element`;
+     `history.state` is already `any` in lib.dom (leave) ; `fn:any` hooks → a `Navigation` cb type;
+     `goto(url,opts)` → `string|URL` + `{replaceState?:boolean}`.
+   - `vite/transform.ts` (2): svelte AST node → `{ start:number; end:number }` interface.
+   - `hooks.ts` (2): `render(mod.default)` → a `Component` type; `{event,resolve}` → `Handle`.
+   - `shims/app-state.ts` (1): `snap()` → a `PageSnapshot` interface.
+   - `runtime/index.ts`/`NestedProvider.svelte`: component/props → Svelte `Component`/`Snippet`.
+   - Add an enforcement step (eslint `no-explicit-any` if eslint is added, else a grep gate in root
+     `check`). NOTE: the grep gate will fail until the above are done.
+2. **DOM element rename → single `<o-region>`** (supersedes o-hydratable/o-deferable): one custom
+   element, axes as attributes (`entry`, `hydrate="…"` absent=not hydrated, `defer` + `endpoint`).
+   Touch: SSR emission (Island.svelte/ServerIsland.svelte), runtime class + nearest-boundary rule
+   (any o-region is a boundary; "hydrated" = has `hydrate` attr), ALL suite selectors, README/DESIGN.
+3. **Directory rename** `packages/sk-islands` → `packages/ogygia` (git mv) + all path refs
+   (workspace globs, playground dep, tsconfigs, verify require-shims, docs, import.meta.url logic).
+4. **Flicker fix** (hydration mismatch hunt + seed SSR-resolved query results into Kit's now-reused
+   client query cache so hard reloads show zero visible change). Also the nested-route CSS-in-head
+   sanity check.
+5. **Kit-driven runtime hashing** (standalone already hashed): rewrite server output's baked URL after
+   the client build, or a pre-build source-content hash both bundles compute.
+6. **/plain full-nav links** (tiny). **Lakes** (`hydrate:'false'`) per DESIGN.md.
+
+
+
 ## Round 4 (this round) — landed & verified
 - **Scripts feature REMOVED entirely** (user decision). No `<script bundle>` extraction, no
   chunk emission, no SPA-swap re-execution / `data-rerun` / module-URL dedupe, no ambient attr
