@@ -19,8 +19,17 @@ try {
 	// NOTE: don't use networkidle — the live-query SSE stream keeps the connection open.
 	await page.goto(base + '/data', { waitUntil: 'domcontentloaded' });
 
-	// SSR mode (a): resolved-at-SSR greeting is already in the HTML.
+	// SSR mode (a): resolved-at-SSR greeting is in the HTML. In a PROD build the flicker seed makes
+	// it resolve synchronously on hydration (no flash); in `vite dev` (no seed) the top-level await
+	// re-suspends briefly on hydration, so the text can blank for a frame before the re-fetch lands.
+	// Wait for stable presence rather than sampling a single (possibly transient) frame.
 	await page.waitForSelector('[data-resolved-greeting]', { timeout: 5000 });
+	await page
+		.waitForFunction(
+			() => document.querySelector('[data-resolved-greeting]')?.textContent?.includes('Hello, world!'),
+			{ timeout: 6000 }
+		)
+		.catch(() => {});
 	check('mode (a): resolved greeting present', (await page.locator('[data-resolved-greeting]').textContent()).includes('Hello, world!'));
 
 	// SSR mode (b): pending boundary -> resolves AFTER hydration with fetched data (client query).

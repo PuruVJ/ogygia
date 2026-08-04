@@ -25,7 +25,7 @@ export default defineConfig({
 		'svelte',
 		'svelte/compiler',
 		'svelte/server',
-		'@sveltejs/kit',
+		/^@sveltejs\/kit(\/|$)/,
 		'devalue',
 		'magic-string',
 		'estree-walker',

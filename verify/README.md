@@ -19,10 +19,27 @@ node verify/nested.ts          http://localhost:3051   # island-in-island single
 node verify/presets.ts                                 # transform-level: region syntax + presets + errors
 node verify/forms.ts           http://localhost:3051   # classic form actions (no-JS + JS)
 node verify/prerender.ts       http://localhost:3051   # prerendered page + server-island hole
+node verify/flicker.ts         http://localhost:3051   # SSR-resolved query seeding: zero-flash hydration
 ```
+
+`flicker.ts` is mode-aware: against a PROD build it asserts the full zero-visible-change contract
+(no re-fetch for SSR-resolved queries, live still connects, `.refresh()` still re-fetches); against
+`vite dev` it asserts the graceful fallback (no seed → islands re-fetch, content stays correct).
+See the dev caveat below.
 
 All server-backed suites also pass against the dev server (`pnpm --filter playground dev`), e.g.
 `node verify/server-islands.ts http://localhost:5173`. Dev needs no `ORIGIN` (Kit skips CSRF in dev).
 `presets.ts` runs the built transform directly (no server needed).
+
+### Dev caveat — remote-query seeding is production-only
+
+The flicker fix reads Kit's INTERNAL per-request store (`@sveltejs/kit/internal/server`) to capture
+SSR-resolved query responses. That store is a module singleton. In a production bundle everything is
+one module graph, so our `ogygiaHandle` sees the live store and seeds the client (zero flash). Under
+`vite dev`, Kit's server runtime resolves that module to a DIFFERENT instance than the externalized
+library does (Vite SSR + pnpm boundary) — reachable only via `$app/server`, which does not expose the
+store — so `try_get_request_store()` reads an empty store. We degrade gracefully: no seed is emitted,
+islands re-fetch on hydration exactly as before (correct content, a brief re-render). No Kit patch can
+be applied here, so dev keeps the pre-fix behavior. `verify/flicker.ts` asserts each mode accordingly.
 
 Playwright chromium is required for the browser suites (`pnpm exec playwright install chromium`).

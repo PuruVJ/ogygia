@@ -47,10 +47,41 @@ declare module '@sveltejs/kit' {
 		url: URL;
 		[key: string]: unknown;
 	}
+	export interface ResolveOptions {
+		transformPageChunk?: (input: {
+			html: string;
+			done: boolean;
+		}) => string | undefined | Promise<string | undefined>;
+	}
 	export type Handle = (input: {
 		event: RequestEvent;
-		resolve: (event: RequestEvent) => Response | Promise<Response>;
+		resolve: (event: RequestEvent, opts?: ResolveOptions) => Response | Promise<Response>;
 	}) => Response | Promise<Response>;
+}
+
+// Kit's INTERNAL server request store (deep import, same posture as the vite deep-imports).
+// `get_request_store()` returns the live per-request state; `state.remote` is the map Kit
+// populates during a csr=false render but only serializes when csr===true (see hooks.ts). Only
+// the fields the flicker-seeding path reads are declared. Not shipped (types.d.ts excluded).
+declare module '@sveltejs/kit/internal/server' {
+	export interface RemoteInternals {
+		id: string;
+		type: string;
+	}
+	export interface RequestRemoteState {
+		implicit: Map<RemoteInternals, Record<string, () => Promise<unknown>>> | null;
+		data: Map<RemoteInternals, Record<string, Promise<unknown>>> | null;
+	}
+	export interface RequestState {
+		transport?: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;
+		remote: RequestRemoteState;
+	}
+	export interface RequestStore {
+		event: unknown;
+		state: RequestState;
+	}
+	export function get_request_store(): RequestStore;
+	export function try_get_request_store(): RequestStore | null;
 }
 
 interface Window {

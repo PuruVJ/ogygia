@@ -3,6 +3,7 @@ import { parse } from 'devalue';
 import * as manifest from 'virtual:ogygia/manifest';
 import { startRouter } from './router.js';
 import { set_page } from '../shims/page-store.svelte.js';
+import { seed_query_responses } from '../shims/kit-remote/client-stub.js';
 import NestedProvider from '../NestedProvider.svelte';
 
 /** @type {(entry: string) => Promise<{ default: import('svelte').Component<Record<string, unknown>> }>} */
@@ -13,6 +14,19 @@ const load_island = manifest.dev
 function dom_ready() {
 	if (typeof document === 'undefined' || document.readyState !== 'loading') return Promise.resolve();
 	return new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
+}
+
+// Flicker fix: seed the reused Kit client query cache from the server's side-channel script
+// (emitted by `ogygiaHandle` on csr=false pages) exactly ONCE, before any island's reused `Query`
+// constructor reads `query_responses`. Idempotent + guarded so the first island to hydrate seeds
+// the shared singleton for all of them. No script (csr=true, or no SSR-resolved queries) = no-op.
+let _remote_seeded = false;
+function seed_remote_once() {
+	if (_remote_seeded) return;
+	_remote_seeded = true;
+	if (typeof document === 'undefined') return;
+	const el = document.querySelector('script[type="application/ogygia-remote"]');
+	if (el && el.textContent) seed_query_responses(el.textContent);
 }
 
 // Mixed mode: on a csr=true page, Kit boots and hydrates the whole tree (including our
@@ -134,6 +148,9 @@ class OgygiaRegion extends HTMLElement {
 		try {
 			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page
 			await dom_ready();
+			// Seed SSR-resolved remote queries before this island's reused `Query` ctor reads the
+			// shared cache — must run before `hydrate()` below (idempotent across all islands).
+			seed_remote_once();
 			const entry = this.getAttribute('entry');
 			const mod = await load_island(entry);
 			const Component = mod.default;

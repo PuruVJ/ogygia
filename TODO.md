@@ -1,5 +1,33 @@
 # ogygia — status & remaining work
 
+## Flicker fix (round 7) — DONE: remote-query SSR→client seeding (prod), graceful dev fallback
+- **Server capture** — `ogygiaHandle` now wraps `resolve(event, { transformPageChunk })`. On a
+  csr=false page it reads Kit's INTERNAL request store (`try_get_request_store` from
+  `@sveltejs/kit/internal/server`), walks `state.remote.implicit`, and for each RESOLVED regular
+  query (`type: 'query'`, skips still-pending + `query.live`) reuses the SSR promise
+  (`state.remote.data`), keying by `create_remote_key(id, payload)`. It devalue-`stringify`s
+  `{ q: { key: { v } } }` transport-aware (from `state.transport`), escapes `<`, and injects ONE
+  `<script type="application/ogygia-remote">` before `</body>`. Skips pages Kit already booted
+  (csr=true carry Kit's own serialization).
+- **Client seed** — `shims/kit-remote/client-stub.ts` exports `seed_query_responses(text)`
+  (devalue-`parse` with `app.decoders`, then copies nodes into the shared `query_responses`
+  singleton). The runtime calls `seed_remote_once()` after `dom_ready()` and BEFORE the first
+  island hydrates, so every reused Kit `Query` ctor finds its SSR value and never re-fetches.
+- **Verified (prod build):** playwright hard-reload of `/data` shows ZERO visible change on the
+  SSR-resolved island; network assertion confirms no `getGreeting("world")`/`getCount` fetch during
+  hydration; `query.live` still connects; `.refresh()` still re-fetches; a pending-boundary island
+  still fetches (not over-seeded). New suite `verify/flicker.ts` (mode-aware). All 11 suites pass
+  prod + dev; `pnpm run check` 0/0 + no-any OK.
+- **DEV caveat (documented, not fixable without a Kit patch):** under `vite dev` Kit's request-store
+  module resolves to a different instance than the externalized library sees (Vite SSR + pnpm), so
+  the store reads empty and NO seed is emitted — islands re-fetch on hydration as before (graceful,
+  no regression). Reachable only via `$app/server`, which does not expose the store. See
+  verify/README.md "Dev caveat". Prod (single bundle) shares the store and seeds correctly.
+- **Pre-existing "DEV /data ResolvedGreeting SSRs empty" gap:** no longer reproducible — it renders
+  reliably in dev now (verified 5/5); resolved by earlier rounds. The remaining dev artifact is only
+  the transient async re-suspend blank on re-hydration (seeding removes it in prod); `verify/remote.ts`
+  mode-(a) now waits for stable presence instead of sampling one frame.
+
 ## Flicker fix (round 6) — DONE: CSS-in-head + Date/TZ; SPECCED: remote-query seeding
 - **Nested-route CSS-in-head — DONE.** Verified island `.island` CSS is inlined into the initial
   `<head>` on a deep route (`/dashboard/orders/5`); locked by a `verify/fetch-checks.ts` assertion.
