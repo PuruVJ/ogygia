@@ -6,7 +6,12 @@ import { createRequire } from 'node:module';
 const RUNTIME_ENTRY = fileURLToPath(new URL('../runtime/index.js', import.meta.url));
 
 // Client shims for Kit `$app/*` used when we build islands WITHOUT sveltekit().
+// NOTE: `$app/paths/internal/client` (imported by Kit's reused remote client) MUST come before the
+// `$app/paths` entry — a vite string alias also matches the `$app/paths/…` prefix, so without the
+// more-specific entry first, `$app/paths/internal/client` would rewrite to `app-paths.js/internal/
+// client` and fail to load (only bites a standalone build that includes a remote island).
 const APP_ALIASES = {
+	'$app/paths/internal/client': fileURLToPath(new URL('../shims/kit-remote/paths-internal-stub.js', import.meta.url)),
 	'$app/paths': fileURLToPath(new URL('../shims/app-paths.js', import.meta.url)),
 	'$app/environment': fileURLToPath(new URL('../shims/app-environment.js', import.meta.url)),
 	'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),

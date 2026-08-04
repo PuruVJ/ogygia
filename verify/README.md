@@ -24,7 +24,12 @@ node verify/lakes.ts           http://localhost:3051   # lakes: frozen region, n
 node verify/mutation-guards.ts http://localhost:3051   # captured-var mutation: build errors + DEV proxy warns / prod-silence
 node verify/defer-timing.ts    http://localhost:3051   # server-island fetch timing: load/idle/visible/media + preload-only-for-load
 node verify/prefetch.ts        http://localhost:3051   # router data-sveltekit-preload-* : hover fetch + click-from-cache, eager/viewport/tap/off
+node verify/dedup.ts                                   # same-component-two-strategies -> ONE client chunk (kit-driven + standalone)
 ```
+
+`dedup.ts` is a build-output inspector (no server): it checks the already-built playground client
+output (Kit-driven) and runs a minimal standalone build of `playground/dedup-fixture` to prove both
+modes emit a duplicated-import component's code in exactly one chunk.
 
 `mutation-guards.ts` runs its build-time checks (transform errors for writing to a captured var)
 with no server; pass a base URL to ALSO check the runtime DEV proxy. It is mode-aware: against a
