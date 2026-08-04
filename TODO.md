@@ -17,7 +17,26 @@
   library `check` (tsc --noEmit), root `check` (lib tsc + playground svelte-check + verify tsc) — all
   **0 errors / 0 warnings** (playground svelte-check 369 files).
 
-## Remaining / next (documented precisely; ordered)
+## Round 5b (this round) — landed & verified
+- **Unified `<o-region>` custom element** (replaces `<sk-island>`): axes as attributes — `entry`,
+  `hydrate="load|idle|visible|<media>"` (presence = a hydrated boundary), `defer` + `endpoint`.
+  Dropped `data-strategy`/`data-media`/`data-root-margin`. Runtime reads `getAttribute`; the
+  nearest-boundary rule is uniform (a boundary is hydrated iff it has a `hydrate` attr — `defer`
+  holes and future lakes don't). SkIsland class uses native `#` private fields/methods. All suite
+  selectors updated. lib tsc 0, playground svelte-check 369/0/0, verify tsc 0; 10 suites pass
+  prod + dev.
+
+## Remaining / next (documented precisely; ordered per coordinator's reorder + later mandates)
+0. **snake_case codebase-wide pass (dedicated commit).** All internal/private identifiers (locals,
+   module-private fns, non-exported helpers, `#` fields) → snake_case in library src + verify;
+   PUBLIC API stays camelCase (`skIslands`/`ogygia`, `ogygiaHandle`, option keys, dist .d.ts);
+   classes/components PascalCase. Encode as `@typescript-eslint/naming-convention` in the check
+   gate if eslint is added, else a CONTRIBUTING note. Type-check + suites after.
+0b. **`$app/state` runes shim.** Rename `shims/app-state.ts` → `app-state.svelte.ts`; back `page`
+   with `$state` (deep proxy over the snapshot) so `$derived`/`$effect` over `page.url/params/data`
+   behave like Kit; `$app/stores` derives from the same source. Verify the built **dist** `.svelte.ts`
+   compiles via the consumer svelte pipeline (not just src). Add a suite: island with `$derived`
+   over `page.data` updates after an SPA nav to a different id (remount → fresh values).
 1. **ZERO-`any` mandate — NOT done.** Reaching tsc-clean used ~23 `any`/`as any` in library src +
    4 in verify, all in inherently-dynamic code. Replace each with precise types:
    - `vite/free-vars.ts` (4): estree node casts → import `estree` `Node`/`Function` types.
