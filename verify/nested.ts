@@ -18,11 +18,11 @@ let isDev = false;
 	const html = await res.text();
 	isDev = /@vite\/client/.test(html) || /\/@fs\//.test(html) || /\/@id\//.test(html);
 	check('/nested returns 200', res.status === 200);
-	check('/nested emits exactly ONE sk-island (outer only; inner degraded)', count(html, /<sk-island/g) === 1, `${count(html, /<sk-island/g)}`);
+	check('/nested emits exactly ONE o-region (outer only; inner degraded)', count(html, /<o-region/g) === 1, `${count(html, /<o-region/g)}`);
 	check('/nested outer island SSR content', /data-outer/.test(html));
-	check('/nested inner rendered INLINE in SSR (no inner sk-island)', /inner child/.test(html));
+	check('/nested inner rendered INLINE in SSR (no inner o-region)', /inner child/.test(html));
 	// a SERVER island nested inside a client island degrades to an inline normal component
-	check('/nested nested SERVER island degraded to inline (no server sk-island)', count(html, /data-strategy="server"/g) === 0);
+	check('/nested nested SERVER island degraded to inline (no server o-region)', count(html, /<o-region\b[^>]*\bdefer\b/g) === 0);
 	check('/nested nested server greeting rendered inline (Hey, ...)', /Hey, \w+!/.test(html));
 	check('/nested ships NO Kit bootstrap (csr=false)', !/__sveltekit/.test(html));
 }
@@ -39,11 +39,11 @@ try {
 	await page.goto(base + '/nested', { waitUntil: 'domcontentloaded' });
 	await page.waitForSelector('[data-outer]', { timeout: 5000 });
 
-	// exactly one sk-island in the live DOM, hydrated once; inner never becomes its own island
-	check('live DOM has exactly one sk-island', (await page.locator('sk-island').count()) === 1);
-	await page.waitForSelector('sk-island[data-hydrated]', { timeout: 5000 }).catch(() => {});
-	check('the outer island hydrated', (await page.locator('sk-island[data-hydrated]').count()) === 1);
-	check('no stray nested sk-island element', (await page.locator('sk-island[data-nested]').count()) === 0);
+	// exactly one o-region in the live DOM, hydrated once; inner never becomes its own island
+	check('live DOM has exactly one o-region', (await page.locator('o-region').count()) === 1);
+	await page.waitForSelector('o-region[data-hydrated]', { timeout: 5000 }).catch(() => {});
+	check('the outer island hydrated', (await page.locator('o-region[data-hydrated]').count()) === 1);
+	check('no stray nested o-region element', (await page.locator('o-region[data-nested]').count()) === 0);
 
 	// outer interactive
 	await page.click('[data-outer-btn]');

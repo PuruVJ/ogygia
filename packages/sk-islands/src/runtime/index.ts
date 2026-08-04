@@ -30,50 +30,48 @@ function kitHydratesPage() {
 }
 
 class SkIsland extends HTMLElement {
-	_scheduled?: boolean;
-	_done?: boolean;
-	_hydrating?: boolean;
-	_app?: unknown;
-	_io?: IntersectionObserver | null;
-	_mql?: { mql: MediaQueryList; on: (e: MediaQueryListEvent) => void } | null;
+	#scheduled = false;
+	#done = false;
+	#hydrating = false;
+	#app: unknown = null;
+	#io: IntersectionObserver | null = null;
+	#mql: { mql: MediaQueryList; on: (e: MediaQueryListEvent) => void } | null = null;
 
 	connectedCallback() {
-		if (this._scheduled) return;
+		if (this.#scheduled) return;
 		// The region rule (DESIGN.md): a region self-hydrates iff the NEAREST region boundary
-		// above it is not hydrated. We implement exactly that — not a blanket "any ancestor
-		// sk-island". The nearest ancestor boundary is hydrated when it is a client island
-		// (a hydrating strategy); a `defer` hole (data-strategy="server") and lakes (future)
-		// are NOT hydrated, so a region inside them self-hydrates again.
-		// `parentElement.closest` excludes self. (For island-in-island the wrapper usually
-		// degrades to an inline component, so this element never appears — this is the general
-		// rule + defense for regions inserted via server-hole fill / SPA swaps.)
-		const boundary = this.parentElement && this.parentElement.closest('sk-island');
-		if (boundary && boundary.getAttribute('data-strategy') !== 'server') {
+		// above it is not hydrated. A boundary is "hydrated" iff it carries a `hydrate` attribute
+		// (a client island); a `defer` hole and lakes (future) have no `hydrate` attr, so a region
+		// inside them self-hydrates again. `parentElement.closest` excludes self. (Island-in-island
+		// normally degrades to an inline component, so this element never appears — this is the
+		// general rule + defense for regions inserted via server-hole fill / SPA swaps.)
+		const boundary = this.parentElement && this.parentElement.closest('o-region');
+		if (boundary && boundary.hasAttribute('hydrate')) {
 			this.setAttribute('data-nested', '');
 			if (manifest.dev) {
 				console.warn(
-					`[ogygia] nested island "${this.dataset.entry}" skipped self-hydration; the nearest region above it hydrates, so it rides that hydration (inner strategy "${this.dataset.strategy || 'load'}" ignored).`
+					`[ogygia] nested island "${this.getAttribute('entry')}" skipped self-hydration; the nearest region above it hydrates, so it rides that hydration (inner strategy "${this.getAttribute('hydrate') || 'load'}" ignored).`
 				);
 			}
 			return;
 		}
-		this._scheduled = true;
-		const strategy = this.dataset.strategy || 'load';
-		if (strategy === 'server') this._server();
-		else if (strategy === 'idle') this._onIdle();
-		else if (strategy === 'visible') this._onVisible();
-		else if (strategy === 'media') this._onMedia();
-		else this._hydrate();
+		this.#scheduled = true;
+		if (this.hasAttribute('defer')) return this.#server();
+		const hydrate = this.getAttribute('hydrate') || 'load';
+		if (hydrate === 'idle') this.#onIdle();
+		else if (hydrate === 'visible') this.#onVisible();
+		else if (hydrate === 'load') this.#hydrate();
+		else this.#onMedia(hydrate); // a media query string
 	}
 
 	// SERVER island: fetch the rendered HTML from the `/_islands` endpoint (same-origin,
 	// cookies flow) and swap it in. No client hydration in v1 (server+client is future work).
 	// The fallback stays visible on failure. A <link rel="preload"> emitted next to us has
 	// usually already started this exact request, so the browser serves it from cache.
-	async _server() {
-		if (this._done) return;
-		this._done = true;
-		const endpoint = this.dataset.endpoint;
+	async #server() {
+		if (this.#done) return;
+		this.#done = true;
+		const endpoint = this.getAttribute('endpoint');
 		if (!endpoint) return;
 		try {
 			const res = await fetch(endpoint, { credentials: 'same-origin' });
@@ -90,53 +88,52 @@ class SkIsland extends HTMLElement {
 		}
 	}
 
-	_onIdle() {
-		const cb = () => this._hydrate();
+	#onIdle() {
+		const cb = () => this.#hydrate();
 		if ('requestIdleCallback' in window) requestIdleCallback(cb, { timeout: 2000 });
 		else setTimeout(cb, 200);
 	}
 
-	_onVisible() {
-		const rootMargin = this.dataset.rootMargin || '0px';
+	#onVisible() {
+		const rootMargin = this.getAttribute('margin') || '0px';
 		const io = new IntersectionObserver(
 			(entries) => {
 				for (const e of entries) {
 					if (e.isIntersecting) {
 						io.disconnect();
-						this._io = null;
-						this._hydrate();
+						this.#io = null;
+						this.#hydrate();
 					}
 				}
 			},
 			{ rootMargin }
 		);
 		io.observe(this);
-		this._io = io;
+		this.#io = io;
 	}
 
-	_onMedia() {
-		const q = this.dataset.media;
-		if (!q) return this._hydrate();
+	#onMedia(q: string) {
+		if (!q) return this.#hydrate();
 		const mql = matchMedia(q);
-		if (mql.matches) return this._hydrate();
+		if (mql.matches) return this.#hydrate();
 		const on = (e) => {
 			if (e.matches) {
 				mql.removeEventListener('change', on);
-				this._mql = null;
-				this._hydrate();
+				this.#mql = null;
+				this.#hydrate();
 			}
 		};
 		mql.addEventListener('change', on);
-		this._mql = { mql, on };
+		this.#mql = { mql, on };
 	}
 
-	async _hydrate() {
-		if (this._app || this._hydrating) return;
-		this._hydrating = true;
+	async #hydrate() {
+		if (this.#app || this.#hydrating) return;
+		this.#hydrating = true;
 		try {
 			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page
 			await domReady();
-			const entry = this.dataset.entry;
+			const entry = this.getAttribute('entry');
 			const mod = await loadIsland(entry);
 			const Component = mod.default;
 
@@ -175,40 +172,40 @@ class SkIsland extends HTMLElement {
 			// Hydrate through NestedProvider so descendants see the "inside a hydrated island"
 			// context — any nested island wrapper then degrades to a plain inline component
 			// (single hydration with this parent). The provider adds no DOM, so this matches SSR.
-			this._app = hydrate(NestedProvider, {
+			this.#app = hydrate(NestedProvider, {
 				target: this,
 				props: { component: Component, props }
 			});
 			this.setAttribute('data-hydrated', '');
 			this.dispatchEvent(new CustomEvent('sk:hydrated', { bubbles: true }));
 		} catch (err) {
-			console.error('[ogygia] hydration failed for', this.dataset.entry, err);
+			console.error('[ogygia] hydration failed for', this.getAttribute('entry'), err);
 		} finally {
-			this._hydrating = false;
+			this.#hydrating = false;
 		}
 	}
 
 	disconnectedCallback() {
-		this._io?.disconnect();
-		this._io = null;
-		if (this._mql) {
-			this._mql.mql.removeEventListener('change', this._mql.on);
-			this._mql = null;
+		this.#io?.disconnect();
+		this.#io = null;
+		if (this.#mql) {
+			this.#mql.mql.removeEventListener('change', this.#mql.on);
+			this.#mql = null;
 		}
-		if (this._app) {
+		if (this.#app) {
 			try {
-				unmount(this._app);
+				unmount(this.#app);
 			} catch {
 				/* noop */
 			}
-			this._app = null;
+			this.#app = null;
 		}
-		this._scheduled = false;
+		this.#scheduled = false;
 	}
 }
 
-if (typeof customElements !== 'undefined' && !customElements.get('sk-island')) {
-	customElements.define('sk-island', SkIsland);
+if (typeof customElements !== 'undefined' && !customElements.get('o-region')) {
+	customElements.define('o-region', SkIsland);
 }
 
 // A stable marker set once per full page load; survives SPA navigations (module

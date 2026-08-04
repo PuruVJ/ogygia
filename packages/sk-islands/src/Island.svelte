@@ -30,7 +30,8 @@
 		);
 	}
 
-	const strategy = media ? 'media' : idle ? 'idle' : visible ? 'visible' : 'load';
+	// The `hydrate` attribute value IS the strategy: 'load' | 'idle' | 'visible' | a media query.
+	const hydrateAttr = media ? media : idle ? 'idle' : visible ? 'visible' : 'load';
 	const rootMargin = typeof visible === 'string' ? visible : undefined;
 
 	// Build tag strings without any literal angle brackets so Svelte's raw-text
@@ -69,9 +70,8 @@
 		LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
 </script>
 
-{#if nested}<Component {...__props} />{:else}<sk-island
-		data-entry={__entry}
-		data-strategy={strategy}
-		data-media={media || undefined}
-		data-root-margin={rootMargin || undefined}
-	><Component {...__props} /></sk-island>{@html propsScript}{@html pageScript}{@html runtimeScript}{/if}
+{#if nested}<Component {...__props} />{:else}<o-region
+		entry={__entry}
+		hydrate={hydrateAttr}
+		margin={rootMargin || undefined}
+	><Component {...__props} /></o-region>{@html propsScript}{@html pageScript}{@html runtimeScript}{/if}

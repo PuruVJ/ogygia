@@ -18,7 +18,7 @@ let endpoint;
 	const res = await fetch(base + '/server');
 	const html = await res.text();
 	check('/server returns 200', res.status === 200);
-	check('/server has exactly one server island', count(html, /data-strategy="server"/g) === 1);
+	check('/server has exactly one server island', count(html, /<o-region\b[^>]*\bdefer\b/g) === 1);
 	check('/server fallback rendered in initial HTML', /loading greeting/.test(html));
 	check(
 		'/server does NOT render the component at page-SSR (no "Hello," yet)',
@@ -41,8 +41,8 @@ let endpoint;
 		out.push('SKIP  /server "no component JS" check (dev build injects module URLs)');
 	}
 
-	const m = html.match(/data-endpoint="([^"]*)"/);
-	check('/server island carries a data-endpoint', !!m);
+	const m = html.match(/endpoint="([^"]*)"/);
+	check('/server island carries a endpoint', !!m);
 	endpoint = m ? m[1].replace(/&amp;/g, '&') : '';
 }
 

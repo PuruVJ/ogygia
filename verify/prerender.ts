@@ -23,7 +23,7 @@ let isDev = false;
 	check('/static returns 200', res.status === 200);
 	check('/static counter island SSR (count is 7)', /count is 7/.test(html));
 	check('/static server-island fallback present', /loading personalized greeting/.test(html));
-	check('/static server-island endpoint reference present', /data-endpoint="[^"]*\/_islands/.test(html));
+	check('/static server-island endpoint reference present', /endpoint="[^"]*\/_islands/.test(html));
 	check('/static ships NO Kit bootstrap', !/__sveltekit/.test(html));
 
 	if (!isDev) {
@@ -49,7 +49,7 @@ try {
 	await page.goto(base + '/static', { waitUntil: 'domcontentloaded' });
 
 	// counter island hydrates + is interactive
-	await page.waitForSelector('sk-island[data-hydrated]', { timeout: 6000 }).catch(() => {});
+	await page.waitForSelector('o-region[data-hydrated]', { timeout: 6000 }).catch(() => {});
 	await page.click('[data-counter] button');
 	check('prerendered counter island hydrates + interactive', /count is 8/.test((await page.locator('[data-counter]').textContent()) || ''));
 
