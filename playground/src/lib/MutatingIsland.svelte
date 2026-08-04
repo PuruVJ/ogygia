@@ -21,5 +21,9 @@
 
 <div class="island" data-mutation-island>
 	<p data-mutation-count>count={config.count}</p>
+	<!-- READ a Map accessor (.size) + iterate a Set: these hit prototype accessors/iterators, which
+	     the DEV guard Proxy must forward to the real Map/Set (not the proxy) or they throw. -->
+	<p data-mutation-meta>meta size={config.meta.size}</p>
+	<p data-mutation-roles>roles={[...config.roles].join(',')}</p>
 	<p data-mutation-done>{done ? 'mutated' : 'pending'}</p>
 </div>
