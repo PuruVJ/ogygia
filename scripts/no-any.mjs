@@ -1,6 +1,10 @@
-// Zero-`any` enforcement gate (no eslint in the toolchain). Scans the library source for
-// TYPE-position `any` — annotations, casts, generics, arrays — and fails the build if any
-// are found. Deliberately NOT matching the English word "any" in prose/comments.
+// Zero-`any` enforcement gate. Scans the library source for TYPE-position `any` — annotations,
+// casts, generics, arrays — and fails the build if any are found. Deliberately NOT matching the
+// English word "any" in prose/comments.
+//
+// NOTE: oxlint (`typescript/no-explicit-any`, wired into the lib `check`) now enforces this for
+// `.ts`; this script remains the gate for `.svelte` files, which oxlint does not parse (and it
+// keeps a fast, dependency-free redundant check over `.ts` too).
 //
 // The `types.d.ts` ambient file is exempt (it declares external/DOM contracts).
 import { readdirSync, readFileSync, statSync } from 'node:fs';

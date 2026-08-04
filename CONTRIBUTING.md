@@ -2,8 +2,12 @@
 
 ## Naming conventions (the naming gate)
 
-These rules are enforced by review (there is no eslint in the toolchain yet; when one is
-added, encode them as `@typescript-eslint/naming-convention`).
+These rules are enforced by **review**. The linter (**oxlint**, wired into `check`) does not yet
+ship a `naming-convention` rule (verified against oxlint 1.77 — the rule does not exist in its
+`typescript` plugin), so naming can't be automated there; the table below is the contract. The
+`no-explicit-any` half of the old "zero-any" gate **is** now an oxlint rule (`typescript/
+no-explicit-any`, error) for `.ts`; the `scripts/no-any.mjs` script still covers `.svelte`
+(oxlint doesn't parse Svelte).
 
 | kind | case | examples |
 | ---- | ---- | -------- |
@@ -34,10 +38,20 @@ added, encode them as `@typescript-eslint/naming-convention`).
 ## Verifying a change
 
 ```bash
-pnpm run check          # build the lib + tsc (lib) + svelte-check (playground) + tsc (verify) — must be 0/0
+pnpm run check          # no-any (svelte) + build lib + [tsc + vitest + oxlint] (lib) + svelte-check (playground) + tsc (verify) — must be 0/0
 pnpm --filter playground build
 ORIGIN=http://localhost:3060 PORT=3060 node playground/build/index.js &   # prod
 # then run every suite in verify/*.ts against the running server (and against `pnpm --filter playground dev`)
 ```
+
+The library's `check` runs `tsc --noEmit && vitest run && oxlint` (the transform unit suite + the
+`no-explicit-any` lint gate). `svelte-check` remains the template/markup guard for the playground.
+
+> **Formatter note (empirical, oxfmt 0.62):** oxfmt was evaluated as the repo formatter and **not
+> adopted** — the released version does not format `.svelte` (a `.svelte` file passes through
+> unchanged), its default `.ts` style diverges from the repo's single-quote/tab style (there is no
+> prior Prettier config to preserve), and its default mode writes in place. A `.ts`-only reformat
+> would be a large, `.svelte`-inconsistent churn for no functional gain. Revisit once oxfmt gains
+> first-class Svelte support.
 
 See `verify/README.md` for the full suite list.
