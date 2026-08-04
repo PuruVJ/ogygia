@@ -45,12 +45,12 @@ try {
 		check('router: SPA nav inside (spa) group (marker kept)', (await page.evaluate(() => window.__marker)) === m1);
 
 		// nav to /plain (no <ClientRouter/>) -> MPA handoff (real document load)
-		let loaded = false;
+		let loaded: boolean = false;
 		page.on('load', () => (loaded = true));
 		await page.click('nav a[href="/plain"]');
 		await page.waitForSelector('[data-static-shell]', { timeout: 4000 });
 		await sleep(200);
-		check('router: nav to no-router page did a REAL document load', loaded === true);
+		check('router: nav to no-router page did a REAL document load', loaded);
 		check('router: at /plain', page.url().endsWith('/plain'));
 		const m2 = await page.evaluate(() => window.__marker);
 		check('router: full load reset the runtime marker', m2 !== m1);

@@ -25,10 +25,10 @@ const ENDPOINT = '/_islands';
  * @param {string} [options.endpoint='/_islands'] path (relative to base) the handle serves
  * @returns {import('@sveltejs/kit').Handle}
  */
-export function ogygiaHandle(options = {}) {
+export function ogygiaHandle(options: { endpoint?: string } = {}) {
 	const endpoint = (base || '') + (options.endpoint || ENDPOINT);
 
-	return async ({ event, resolve }) => {
+	return async ({ event, resolve }: { event: any; resolve: any }) => {
 		if (event.url.pathname !== endpoint) return resolve(event);
 		return await renderIsland(event.url);
 	};
@@ -63,7 +63,7 @@ async function renderIsland(url) {
 	try {
 		const mod = await load();
 		// `render()` is thenable; awaiting settles any `await`/remote work in the component.
-		const out = await render(mod.default, { props });
+		const out = await render(mod.default as any, { props });
 		body = out.body;
 	} catch (err) {
 		return new Response('Island render failed', { status: 500 });

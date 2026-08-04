@@ -7,9 +7,14 @@
     "build": "pnpm run build:lib && pnpm --filter playground build",
     "dev": "pnpm run build:lib && pnpm --filter playground dev",
     "preview": "pnpm --filter playground preview",
-    "check": "pnpm run build:lib && pnpm --filter playground check"
+    "check:lib": "pnpm --filter ogygia check",
+    "check:playground": "pnpm --filter playground check",
+    "check:verify": "tsc --noEmit -p verify/tsconfig.json",
+    "check": "pnpm run build:lib && pnpm run check:lib && pnpm run check:playground && pnpm run check:verify"
   },
   "devDependencies": {
-    "playwright": "^1.48.0"
+    "@types/node": "^26.1.2",
+    "playwright": "^1.48.0",
+    "typescript": "^7.0.2"
   }
 }

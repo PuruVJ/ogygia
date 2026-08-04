@@ -23,7 +23,7 @@ const FALLBACK = {
 	state: {}
 };
 
-function snap() {
+function snap(): any {
 	return (typeof window !== 'undefined' && window.__ogygiaPage) || FALLBACK;
 }
 

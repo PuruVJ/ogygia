@@ -186,8 +186,8 @@ export function transformHost(source, id, ctx) {
 
 			// `margin` applies only to `visible` (tolerantly ignored otherwise). Falls back to the
 			// plugin-level default ogygia({ visible: { margin } }).
-			const options = {};
-			if (strategy === 'visible') {
+			const options: { margin?: string } = {};
+			if (strategy === "visible") {
 				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
 			}
 
@@ -352,7 +352,7 @@ export function transformHost(source, id, ctx) {
 
 	// strip island-marked imports (their `with{}` clause & now-unused binding)
 	for (const node of importsToStrip) {
-		s.remove(node.start, node.end);
+		s.remove((node as any).start, (node as any).end);
 	}
 
 	// inject island component imports into the instance <script>

@@ -55,7 +55,14 @@ function isIslandPath(id) {
  * @param {boolean} [options.standalone] internal: this instance runs inside the standalone build
  * @returns {import('vite').Plugin}
  */
-export function ogygia(options = {}) {
+export function ogygia(
+	options: {
+		spa?: boolean;
+		standalone?: boolean;
+		visible?: { margin?: string };
+		presets?: Record<string, { hydrate?: string; defer?: string; margin?: string }>;
+	} = {}
+) {
 	const spa = options.spa !== false;
 	const standalone = options.standalone === true;
 	const visibleMargin = options.visible?.margin;

@@ -9,14 +9,14 @@
 let started = false;
 
 // ---- navigation lifecycle hooks (for the $app/navigation shim) ----
-const beforeHooks = new Set();
-const afterHooks = new Set();
+const beforeHooks = new Set<any>();
+const afterHooks = new Set<any>();
 
-export function beforeNavigate(fn) {
+export function beforeNavigate(fn: any) {
 	beforeHooks.add(fn);
 	return () => beforeHooks.delete(fn);
 }
-export function afterNavigate(fn) {
+export function afterNavigate(fn: any) {
 	afterHooks.add(fn);
 	// $app/navigation's afterNavigate fires immediately on mount too
 	try {
@@ -69,14 +69,14 @@ function shouldIntercept(event, anchor) {
 }
 
 /** Merge <head>: keep nodes present in both, remove stale, add new. Keeps runtime scripts alive. */
-function mergeHead(newHead) {
+function mergeHead(newHead: any) {
 	const current = document.head;
-	const currentNodes = new Map();
-	for (const node of Array.from(current.children)) {
+	const currentNodes = new Map<string, any>();
+	for (const node of Array.from(current.children) as any[]) {
 		currentNodes.set(node.outerHTML, node);
 	}
-	const nextKeys = new Set();
-	for (const node of Array.from(newHead.children)) {
+	const nextKeys = new Set<string>();
+	for (const node of Array.from(newHead.children) as any[]) {
 		nextKeys.add(node.outerHTML);
 	}
 	// remove stale nodes (but never remove module scripts that boot the runtime)
@@ -87,7 +87,7 @@ function mergeHead(newHead) {
 		}
 	}
 	// add new nodes
-	for (const node of Array.from(newHead.children)) {
+	for (const node of Array.from(newHead.children) as any[]) {
 		if (!currentNodes.has(node.outerHTML)) {
 			current.appendChild(node.cloneNode(true));
 		}
@@ -130,10 +130,10 @@ async function navigate(url, { push = true, popScroll = null, type = 'link', rep
 	// Update history SYNCHRONOUSLY (before any await) so the URL is correct and
 	// races between overlapping navigations can't drop the pushState.
 	if (replace) {
-		history.replaceState({ ...(history.state || {}), ogygia: true }, '', url.href);
+		history.replaceState({ ...((history.state as any) || {}), ogygia: true }, '', url.href);
 	} else if (push) {
 		// save outgoing scroll into the current entry, then push the new URL
-		history.replaceState({ ...(history.state || {}), scroll: { x: scrollX, y: scrollY } }, '');
+		history.replaceState({ ...((history.state as any) || {}), scroll: { x: scrollX, y: scrollY } }, '');
 		history.pushState({ ogygia: true }, '', url.href);
 	}
 
@@ -186,7 +186,7 @@ async function navigate(url, { push = true, popScroll = null, type = 'link', rep
 
 // ---------- $app/navigation shim surface ----------
 /** Programmatic navigation. Mirrors Kit's goto(). */
-export function goto(url, opts = {}) {
+export function goto(url: any, opts: any = {}) {
 	const target = new URL(url, location.href);
 	return navigate(target, { push: !opts.replaceState, replace: false, type: 'goto' });
 }
@@ -249,10 +249,10 @@ export function startRouter() {
 	document.addEventListener('touchstart', maybePrefetch, { passive: true });
 
 	window.addEventListener('popstate', () => {
-		const popScroll = history.state?.scroll || null;
+		const popScroll = (history.state as any)?.scroll || null;
 		navigate(new URL(location.href), { push: false, popScroll });
 	});
 
 	// seed initial history entry so scroll is restored on the first back
-	history.replaceState({ ...(history.state || {}), ogygia: true }, '');
+	history.replaceState({ ...((history.state as any) || {}), ogygia: true }, '');
 }

@@ -95,8 +95,8 @@ function addExpressionRefs(expr, svelteBound, out) {
 		enter(node, parent, key) {
 			if (FUNCTION_TYPES.has(node.type)) {
 				const s = new Set();
-				if (node.id && node.type !== 'ArrowFunctionExpression') s.add(node.id.name);
-				for (const p of node.params) collectPatternNames(p, s);
+				if ((node as any).id && node.type !== "ArrowFunctionExpression") s.add((node as any).id.name);
+				for (const p of (node as any).params) collectPatternNames(p, s);
 				scopes.push(s);
 			} else if (node.type === 'BlockStatement' && !FUNCTION_TYPES.has(parent?.type)) {
 				scopes.push(new Set());

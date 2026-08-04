@@ -76,3 +76,5 @@ const count = (s, re) => (s.match(re) || []).length;
 
 console.log(`\n${failures === 0 ? 'ALL SSR CHECKS PASSED' : failures + ' CHECK(S) FAILED'}`);
 process.exit(failures === 0 ? 0 : 1);
+
+export {};

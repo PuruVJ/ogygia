@@ -34,7 +34,7 @@ try {
 	const warns: string[] = [];
 	page.on('pageerror', (e) => errs.push(e.message));
 	page.on('console', (m) => {
-		if (m.type() === 'warning' || m.type() === 'warn') warns.push(m.text());
+		if (m.type() === 'warning') warns.push(m.text());
 	});
 	await page.goto(base + '/nested', { waitUntil: 'domcontentloaded' });
 	await page.waitForSelector('[data-outer]', { timeout: 5000 });

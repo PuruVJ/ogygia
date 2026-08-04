@@ -173,6 +173,6 @@ export async function runStandaloneClientBuild({ root, base, clientDir, makePlug
 	return { runtimeFileName: null };
 }
 
-function pathToFileUrl(p) {
-	return new URL(`file://${p.replace(/\\/g, '/')}`);
+function pathToFileUrl(p: string) {
+	return new URL(`file://${p.replace(/\\/g, '/')}`).href;
 }

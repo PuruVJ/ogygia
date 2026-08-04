@@ -30,6 +30,13 @@ function kitHydratesPage() {
 }
 
 class SkIsland extends HTMLElement {
+	_scheduled?: boolean;
+	_done?: boolean;
+	_hydrating?: boolean;
+	_app?: unknown;
+	_io?: IntersectionObserver | null;
+	_mql?: { mql: MediaQueryList; on: (e: MediaQueryListEvent) => void } | null;
+
 	connectedCallback() {
 		if (this._scheduled) return;
 		// The region rule (DESIGN.md): a region self-hydrates iff the NEAREST region boundary
