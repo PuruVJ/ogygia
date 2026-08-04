@@ -21,7 +21,7 @@ The library depends only on `devalue`, `magic-string`, and `estree-walker`. Ever
 > (`false` | `load` | `idle` | `visible` | media). The nearest boundary above you wins.
 
 ```
-packages/sk-islands   # the library (built with tsdown to ./dist)
+packages/ogygia       # the library (built with tsdown to ./dist)
 playground            # a SvelteKit app proving it (repo root)
 ```
 

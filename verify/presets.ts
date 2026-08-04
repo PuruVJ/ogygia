@@ -1,6 +1,6 @@
 // Transform-level checks for the region-model import syntax + presets + validation.
 // Runs the built transform directly (no server needed). Usage: node verify/presets.ts
-import { transformHost } from '../packages/sk-islands/dist/vite/transform.js';
+import { transformHost } from '../packages/ogygia/dist/vite/transform.js';
 import path from 'node:path';
 
 let failures = 0;

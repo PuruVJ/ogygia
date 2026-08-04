@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const SRC_GLOBS = ['packages/sk-islands/src', 'packages/ogygia/src']; // second one post-rename
+const SRC_GLOBS = ['packages/ogygia/src'];
 const EXTS = ['.ts', '.svelte'];
 const EXEMPT = /types\.d\.ts$/;
 
