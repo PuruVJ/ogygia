@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	// Receives page params/data captured on the island usage, where the host's
 	// `import { page } from '$app/state'` is copied into the island virtual module
 	// and reliably aliased to the client shim.

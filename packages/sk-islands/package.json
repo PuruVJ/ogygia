@@ -5,29 +5,42 @@
   "description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
   "exports": {
     ".": {
-      "svelte": "./src/index.js",
-      "default": "./src/index.js"
+      "types": "./dist/index.d.ts",
+      "svelte": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./vite": {
-      "default": "./src/vite/index.js"
+      "types": "./dist/vite/index.d.ts",
+      "default": "./dist/vite/index.js"
     },
     "./runtime": {
-      "default": "./src/runtime/index.js"
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
     },
     "./hooks": {
-      "default": "./src/hooks.js"
+      "types": "./dist/hooks.d.ts",
+      "default": "./dist/hooks.js"
     },
     "./app": {
-      "default": "./src/app.js"
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
     },
     "./internal": {
-      "svelte": "./src/internal.js",
-      "default": "./src/internal.js"
+      "types": "./dist/internal.d.ts",
+      "svelte": "./dist/internal.js",
+      "default": "./dist/internal.js"
+    },
+    "./ambient": {
+      "types": "./dist/ambient.d.ts"
     }
   },
   "files": [
-    "src"
+    "dist"
   ],
+  "scripts": {
+    "build": "tsdown && node scripts/copy-svelte.mjs",
+    "prepublishOnly": "pnpm run build"
+  },
   "dependencies": {
     "devalue": "^5.1.1",
     "estree-walker": "^3.0.3",

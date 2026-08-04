@@ -2,7 +2,7 @@
 	// Server island: rendered on the server on demand, streamed in after the page.
 	// The reserved `fallback` snippet shows immediately; the component itself is NOT
 	// rendered at page-SSR time.
-	import Greeting from '$lib/Greeting.svelte' with { island: 'server' };
+	import Greeting from '$lib/Greeting.svelte' with { defer: 'true' };
 </script>
 
 <h1 data-static-shell>Server islands</h1>

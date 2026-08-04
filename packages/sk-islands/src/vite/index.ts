@@ -43,12 +43,17 @@ const SCRIPT_FILENAME = (hash) => `_app/immutable/sk-scripts/${hash}.js`;
 /**
  * @param {Object} [options]
  * @param {boolean} [options.spa=true] enable the built-in SPA router
+ * @param {{margin?:string}} [options.visible] global defaults for `hydrate: 'visible'` islands
+ * @param {Record<string, {hydrate?:string, defer?:string, margin?:string}>} [options.presets]
+ *   named strategy presets referenced from imports via `with { preset: 'name' }`
  * @param {boolean} [options.standalone] internal: this instance runs inside the standalone build
  * @returns {import('vite').Plugin}
  */
 export function skIslands(options = {}) {
 	const spa = options.spa !== false;
 	const standalone = options.standalone === true;
+	const visibleMargin = options.visible?.margin;
+	const presets = options.presets || {};
 
 	// HMAC key for signing server-island props. Runtime env var wins (so it can be rotated
 	// / shared across instances in production); otherwise a per-build random key baked into
@@ -107,7 +112,9 @@ export function skIslands(options = {}) {
 			virtualPathFor,
 			devUrlFor,
 			scriptPathFor,
-			scriptUrlFor
+			scriptUrlFor,
+			visibleMargin,
+			presets
 		});
 	};
 

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	import { getGreeting } from '$lib/greetings.remote';
 	let { name } = $props();
 </script>

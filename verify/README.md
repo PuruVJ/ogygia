@@ -1,23 +1,29 @@
 # Verification
 
 ```bash
-# 1. Build the playground (adapter-node)
+# 1. Build the library, then the playground (adapter-node)
+pnpm --filter sk-islands build
 pnpm --filter playground build
 
-# 2. Start the production server. ORIGIN is required for remote `command` (POST) CSRF.
+# 2. Start the production server. ORIGIN is required for remote `command` (POST) + form CSRF.
 ORIGIN=http://localhost:3051 PORT=3051 node playground/build/index.js &
 
-# 3. Run the checks (from repo root)
-node verify/fetch-checks.mjs http://localhost:3051   # SSR: island HTML, no Kit bootstrap        (26)
-node verify/browser.mjs      http://localhost:3051   # hydration, strategies, devalue, SPA         (22)
-node verify/dashboard.mjs    http://localhost:3051   # page shim, island goto, client table, chart (17)
-node verify/remote.mjs       http://localhost:3051   # client query+args+refresh, command, live     (7)
-node verify/scripts.mjs      http://localhost:3051   # inline / data-rerun / bundled <script island>(11)
+# 3. Run the checks (from repo root; Node 26 runs .ts directly)
+node verify/fetch-checks.ts    http://localhost:3051   # SSR: island HTML, no Kit bootstrap
+node verify/browser.ts         http://localhost:3051   # hydration, strategies, devalue, SPA
+node verify/dashboard.ts       http://localhost:3051   # page shim, island goto, client table, chart
+node verify/remote.ts          http://localhost:3051   # client query+args+refresh, command, live
+node verify/scripts.ts         http://localhost:3051   # inline / data-rerun / bundled <script bundle>
+node verify/mixed.ts           http://localhost:3051   # csr=true coexistence + opt-in router
+node verify/server-islands.ts  http://localhost:3051   # defer:'true' fallback/endpoint/HMAC/cookie/CSS
+node verify/nested.ts          http://localhost:3051   # island-in-island single hydration + dev warn
+node verify/presets.ts                                 # transform-level: region syntax + presets + errors
+node verify/forms.ts           http://localhost:3051   # classic form actions (no-JS + JS)
+node verify/prerender.ts       http://localhost:3051   # prerendered page + server-island hole
 ```
 
-All five suites also pass against the dev server (`pnpm --filter playground dev`), e.g.
-`node verify/remote.mjs http://localhost:5173`. Dev needs no `ORIGIN` (Kit skips the CSRF
-check in dev).
+All server-backed suites also pass against the dev server (`pnpm --filter playground dev`), e.g.
+`node verify/server-islands.ts http://localhost:5173`. Dev needs no `ORIGIN` (Kit skips CSRF in dev).
+`presets.ts` runs the built transform directly (no server needed).
 
 Playwright chromium is required for the browser suites (`pnpm exec playwright install chromium`).
-Total: 83 checks.

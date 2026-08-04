@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	// Chart island (no chart lib — plain SVG). Hydrates on `visible`. Prop is a Map.
 	let { counts } = $props();
 	const entries = $derived([...counts.entries()]);

@@ -1,8 +1,8 @@
-<script>
-	import ResolvedGreeting from '$lib/ResolvedGreeting.svelte' with { island: 'load' };
-	import PendingGreeting from '$lib/PendingGreeting.svelte' with { island: 'load' };
-	import RemoteCounter from '$lib/RemoteCounter.svelte' with { island: 'load' };
-	import LiveClock from '$lib/LiveClock.svelte' with { island: 'load' };
+<script lang="ts">
+	import ResolvedGreeting from '$lib/ResolvedGreeting.svelte' with { hydrate: 'load' };
+	import PendingGreeting from '$lib/PendingGreeting.svelte' with { hydrate: 'load' };
+	import RemoteCounter from '$lib/RemoteCounter.svelte' with { hydrate: 'load' };
+	import LiveClock from '$lib/LiveClock.svelte' with { hydrate: 'load' };
 </script>
 
 <h1 data-static-shell>Data — remote functions inside islands</h1>

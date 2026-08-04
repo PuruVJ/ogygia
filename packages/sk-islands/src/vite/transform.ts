@@ -47,12 +47,15 @@ function scriptLangAttr(scriptNode) {
 	return '';
 }
 
-/** Map a strategy string to the Island wrapper attribute markup. */
-function strategyToAttr(strategy) {
+/** Map a hydrate strategy (+ options) to the Island wrapper attribute markup. */
+function strategyToAttr(strategy, options) {
 	if (!strategy || strategy === 'load') return 'load';
-	if (strategy === 'visible') return 'visible';
 	if (strategy === 'idle') return 'idle';
-	// treat anything else (contains a paren/colon) as a media query
+	if (strategy === 'visible') {
+		// `margin` (IntersectionObserver rootMargin) rides as the string form of `visible`.
+		return options && options.margin != null ? `visible=${JSON.stringify(options.margin)}` : 'visible';
+	}
+	// media query (the strategy IS the query string)
 	return `media=${JSON.stringify(strategy)}`;
 }
 
@@ -74,8 +77,8 @@ function strategyToAttr(strategy) {
  * @returns {TransformResult|null}
  */
 export function transformHost(source, id, ctx) {
-	// cheap bailout
-	if (!/island/i.test(source)) return null;
+	// cheap bailout (region imports use `hydrate`/`defer`/`preset`; bundled scripts use `bundle`)
+	if (!/hydrate|defer|bundle|preset/.test(source)) return null;
 
 	let ast;
 	try {
@@ -87,35 +90,112 @@ export function transformHost(source, id, ctx) {
 	const instanceBody = ast.instance?.content?.body ?? [];
 	const lang = scriptLangAttr(ast.instance) || scriptLangAttr(ast.module);
 
-	// --- collect host imports & island marks -------------------------------
-	// The ONLY authoring syntax is the import attribute:
-	//   import Comp from './Comp.svelte' with { island: 'visible' };
+	const path = ctx.pathModule;
+	const relHost = path.relative(ctx.root, id);
+
+	// --- collect host imports & region marks (the two-key region model) --------
+	// The authoring syntax is the import attribute, one concern per key:
+	//   import Comp from './Comp.svelte' with { hydrate: 'visible', margin: '200px' };
+	//   import Comp from './Comp.svelte' with { hydrate: '(min-width: 768px)' };
+	//   import Comp from './Comp.svelte' with { defer: 'true' };   // server island
+	// Values MUST be string literals (ES import-attribute spec). See DESIGN.md.
 	/** localName -> { node, cleaned } */
 	const imports = new Map();
-	/** localName -> strategy */
+	/** localName -> { strategy, options } */
 	const markedComponents = new Map();
 	const importsToStrip = new Set(); // ImportDeclaration nodes to remove from host
 
-	const path = ctx.pathModule;
+	const KNOWN_STRATEGIES = new Set(['load', 'idle', 'visible']);
+	const err = (specifiers, msg) =>
+		new Error(`[sk-islands] ${relHost}: import { ${specifiers} } — ${msg}`);
 
 	for (const node of instanceBody) {
 		if (node.type !== 'ImportDeclaration') continue;
 		const cleaned = cleanImportText(source, node);
+		for (const spec of node.specifiers) imports.set(spec.local.name, { node, cleaned });
 
-		const islandAttr = (node.attributes ?? []).find(
-			(a) => a.type === 'ImportAttribute' && a.key.name === 'island'
-		);
-		if (islandAttr) {
-			const markStrategy = String(islandAttr.value.value);
-			for (const spec of node.specifiers) {
-				markedComponents.set(spec.local.name, markStrategy);
+		const attrList = (node.attributes ?? []).filter((a) => a.type === 'ImportAttribute');
+		if (attrList.length === 0) continue;
+
+		/** @type {Map<string,string>} raw inline attributes */
+		const inline = new Map();
+		for (const a of attrList) inline.set(a.key.name ?? a.key.value, String(a.value.value));
+		const names = node.specifiers.map((sp) => sp.local.name).join(', ');
+
+		// The import block carries EXACTLY ONE of `hydrate` | `defer` | `preset`. No option keys
+		// inline — all tuning (margin, …) lives in plugin config (skIslands({ visible, presets })).
+		/** @type {Map<string,string>} effective attributes (from a preset, or the single inline key) */
+		let attrs;
+		let fromPreset = null;
+		if (inline.has('preset')) {
+			if (inline.size > 1) {
+				throw err(names, '`preset` must be the only import attribute — put its options (margin, …) in the preset definition (skIslands({ presets })).');
 			}
-			importsToStrip.add(node);
+			fromPreset = inline.get('preset');
+			const preset = ctx.presets && ctx.presets[fromPreset];
+			if (!preset) {
+				const avail = Object.keys(ctx.presets || {});
+				throw err(names, `unknown preset '${fromPreset}'. Available: ${avail.length ? avail.join(', ') : '(none)'}.`);
+			}
+			attrs = new Map();
+			for (const [k, v] of Object.entries(preset)) if (v != null) attrs.set(k, String(v));
+		} else {
+			// inline may carry only `hydrate` or `defer` (the hydrate+defer pair is a roadmap error below)
+			for (const k of inline.keys()) {
+				if (k !== 'hydrate' && k !== 'defer') {
+					throw err(
+						names,
+						`\`${k}\` is not allowed inline. Use \`hydrate\`, \`defer\`, or a named \`preset\` — options like \`margin\` belong in plugin config (skIslands({ visible, presets })).`
+					);
+				}
+			}
+			attrs = inline;
 		}
 
-		for (const spec of node.specifiers) {
-			imports.set(spec.local.name, { node, cleaned });
+		// Only UNKNOWN keys are errors. Presets are TOLERANT: a known-but-inapplicable key
+		// (e.g. `margin` with `hydrate: 'load'`) is silently ignored — it applies wherever it's
+		// relevant. `margin` never reaches here inline (rejected above), so this only bites typos.
+		const SCHEMA = new Set(['hydrate', 'defer', 'margin']);
+		for (const k of attrs.keys()) {
+			if (!SCHEMA.has(k)) {
+				throw err(names, fromPreset ? `unknown key \`${k}\` in preset '${fromPreset}'.` : `unknown import attribute \`${k}\`.`);
+			}
 		}
+		if (attrs.get('defer') === 'true' && attrs.has('hydrate')) {
+			throw err(names, "`defer` + `hydrate` together is not yet supported (roadmap: deferred client island — see DESIGN.md).");
+		}
+
+		// `defer: 'true'` -> server island (render: defer, hydrate: false). `margin` ignored.
+		if (attrs.get('defer') === 'true') {
+			for (const spec of node.specifiers) markedComponents.set(spec.local.name, { strategy: 'server', options: {} });
+			importsToStrip.add(node);
+			continue;
+		}
+
+		if (attrs.has('hydrate')) {
+			const val = attrs.get('hydrate');
+			if (val === 'false') {
+				// hydrate: 'false' is a LAKE. Lakes are a future round (DESIGN.md); a lake in the
+				// shell is a no-op plain component, a lake in an island is the real feature.
+				throw err(names, "`hydrate: 'false'` (lakes) is not yet supported (roadmap — see DESIGN.md).");
+			}
+			let strategy;
+			if (KNOWN_STRATEGIES.has(val)) strategy = val;
+			else if (val.includes('(')) strategy = val; // media query is the value itself
+			else throw err(names, `unknown hydrate strategy '${val}'. Use 'load' | 'idle' | 'visible' | a media query.`);
+
+			// `margin` applies only to `visible` (tolerantly ignored otherwise). Falls back to the
+			// plugin-level default skIslands({ visible: { margin } }).
+			const options = {};
+			if (strategy === 'visible') {
+				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
+			}
+
+			for (const spec of node.specifiers) markedComponents.set(spec.local.name, { strategy, options });
+			importsToStrip.add(node);
+			continue;
+		}
+		// otherwise: a normal import that happens to carry other import attributes — leave it.
 	}
 
 	// host top-level snippet names (for cross-boundary error detection)
@@ -126,15 +206,16 @@ export function transformHost(source, id, ctx) {
 	const units = [];
 	/** @type {any[]} nested `<script island>` elements to bundle */
 	const scriptUnits = [];
-	const hasIslandAttr = (node) =>
-		(node.attributes ?? []).some((a) => a.type === 'Attribute' && a.name === 'island');
+	const hasBundleAttr = (node) =>
+		(node.attributes ?? []).some((a) => a.type === 'Attribute' && a.name === 'bundle');
 	const visit = (nodes) => {
 		for (const node of nodes ?? []) {
 			if (node.type === 'Component' && markedComponents.has(node.name)) {
-				units.push({ node, strategy: markedComponents.get(node.name) });
+				const mark = markedComponents.get(node.name);
+				units.push({ node, strategy: mark.strategy, options: mark.options });
 				continue; // do not descend
 			}
-			if (node.type === 'RegularElement' && node.name === 'script' && hasIslandAttr(node)) {
+			if (node.type === 'RegularElement' && node.name === 'script' && hasBundleAttr(node)) {
 				scriptUnits.push(node);
 				continue; // do not descend
 			}
@@ -150,7 +231,6 @@ export function transformHost(source, id, ctx) {
 
 	const s = new MagicString(source);
 	const islands = [];
-	const relHost = path.relative(ctx.root, id);
 	const preambleImports = [];
 	// The transform emits a private wrapper component (not a public API). Component
 	// tags must start uppercase or Svelte parses them as plain HTML elements.
@@ -267,7 +347,7 @@ export function transformHost(source, id, ctx) {
 		}
 
 		// rewrite host: replace the unit with an <Island> wrapper element
-		const strategyAttrsText = strategyToAttr(unit.strategy);
+		const strategyAttrsText = strategyToAttr(unit.strategy, unit.options);
 		// dev: __entry is the vite dev URL of the island module; build: the manifest key (iid)
 		const entryValue = ctx.dev ? ctx.devUrlFor(virtualPath) : iid;
 		const replacement =

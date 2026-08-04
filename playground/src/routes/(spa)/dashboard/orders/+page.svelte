@@ -1,6 +1,6 @@
-<script>
-	import FilterBar from '$lib/FilterBar.svelte' with { island: 'load' };
-	import DataTable from '$lib/DataTable.svelte' with { island: 'load' };
+<script lang="ts">
+	import FilterBar from '$lib/FilterBar.svelte' with { hydrate: 'load' };
+	import DataTable from '$lib/DataTable.svelte' with { hydrate: 'load' };
 	let { data } = $props();
 </script>
 

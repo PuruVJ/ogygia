@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	let { item, index } = $props();
 	let n = $state(0);
 </script>

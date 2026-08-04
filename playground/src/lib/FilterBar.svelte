@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	// Island navigating via goto() from `sk-islands/app` (reliable from any island
 	// component). Reads the current status from location (client-only handler).
 	import { goto } from 'sk-islands/app';
@@ -10,7 +10,7 @@
 			: 'all'
 	);
 
-	function setStatus(s) {
+	function setStatus(s: string) {
 		const u = new URL(location.href);
 		if (s === 'all') u.searchParams.delete('status');
 		else u.searchParams.set('status', s);

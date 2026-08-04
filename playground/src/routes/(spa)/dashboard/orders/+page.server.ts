@@ -1,6 +1,7 @@
 import { listOrders } from '$lib/server/db.js';
+import type { PageServerLoad } from './$types';
 
-export function load({ url }) {
+export const load: PageServerLoad = ({ url }) => {
 	const status = url.searchParams.get('status') || 'all';
 	const sort = url.searchParams.get('sort') || 'id';
 	const dir = url.searchParams.get('dir') === 'desc' ? 'desc' : 'asc';

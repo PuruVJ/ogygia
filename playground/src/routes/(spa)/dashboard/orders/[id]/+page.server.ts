@@ -1,7 +1,8 @@
 import { getOrder } from '$lib/server/db.js';
 import { error } from '@sveltejs/kit';
+import type { PageServerLoad } from './$types';
 
-export function load({ params }) {
+export const load: PageServerLoad = ({ params }) => {
 	const id = Number(params.id);
 	const order = getOrder(id);
 	if (!order) error(404, `Order ${params.id} not found`);

@@ -1,5 +1,5 @@
-<script>
-	import Counter from '$lib/Counter.svelte' with { island: 'load' };
+<script lang="ts">
+	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
 </script>
 
 <h1 data-static-shell>Settings</h1>
@@ -19,10 +19,10 @@
 	</script>
 </div>
 
-<!-- bundled <script island>: extracted into its own module chunk, imports resolve/bundle,
+<!-- bundled <script bundle>: extracted into its own module chunk, imports resolve/bundle,
      module URL de-duped across SPA navs (runs once) -->
 <div>
-	<script island>
+	<script bundle>
 		import { mark } from '$lib/bundled-helper.js';
 		window.__bundledRan = (window.__bundledRan || 0) + 1;
 		mark();

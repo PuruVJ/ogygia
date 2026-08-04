@@ -9,8 +9,10 @@
 	import runtimeUrl from 'virtual:sk-islands/runtime-url';
 	import { secret } from 'virtual:sk-islands/secret';
 	import { base, assets } from '$app/paths';
+	import { building } from '$app/environment';
 	import { sign } from './server/hmac.js';
 	import { b64urlEncode } from './server/payload.js';
+	import { isNested, setNested } from './context.js';
 
 	/**
 	 * @typedef {Object} Props
@@ -22,15 +24,27 @@
 	 */
 
 	/** @type {Props} */
-	// eslint-disable-next-line no-unused-vars
-	let { __entry, __component, __props, fallback } = $props();
+	let { __entry, __component: Component, __props, fallback } = $props();
+
+	// Nested server island (inside another island): a server island can't render its fallback-
+	// then-fetch dance inside a parent island's hydration. Degrade to a plain inline component
+	// (render it directly, like a normal component) — 'server' strategy is ignored.
+	const nested = isNested();
+	if (!nested) setNested();
+	if (nested && import.meta.env && import.meta.env.DEV) {
+		console.warn(
+			`[sk-islands] nested server island "${__entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
+		);
+	}
 
 	// HMAC-signed devalue payload. Base64url so it rides in the query string untouched.
-	const payload = b64urlEncode(stringify(__props));
-	const sig = sign(secret, payload);
+	const payload = nested ? '' : b64urlEncode(stringify(__props));
+	const sig = nested ? '' : sign(secret, payload);
 
 	const prefix = base || '';
-	const endpoint = `${prefix}/_islands?id=${encodeURIComponent(__entry)}&props=${payload}&sig=${sig}`;
+	const endpoint = nested
+		? ''
+		: `${prefix}/_islands?id=${encodeURIComponent(__entry)}&props=${payload}&sig=${sig}`;
 
 	// Build tag strings without literal angle brackets so Svelte's raw-text <script>/<link>
 	// lexer never mistakes them for real tags.
@@ -39,8 +53,12 @@
 
 	// <link rel="preload" as="fetch"> so the browser starts the endpoint fetch during HTML
 	// parse, before the runtime module even loads. The runtime fetch reuses this response.
+	// Skipped when prerendering: a static page has no request context, and emitting the hint
+	// would make Kit's prerender crawler fetch the (dynamic) endpoint. `data-endpoint` still
+	// drives the runtime fetch at request time — a prerendered server island just loses the hint.
 	const hrefAttr = endpoint.split('&').join('&amp;');
-	const preloadLink = LT + 'link rel="preload" as="fetch" href="' + hrefAttr + '"' + GT;
+	const preloadLink =
+		nested || building ? '' : LT + 'link rel="preload" as="fetch" href="' + hrefAttr + '"' + GT;
 
 	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
 	// Match Island.svelte's URL exactly (assets||base) so the module de-dupes across mixed pages.
@@ -48,8 +66,8 @@
 	const runtimeScript = LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
 </script>
 
-<sk-island
-	data-strategy="server"
-	data-entry={__entry}
-	data-endpoint={endpoint}
->{#if fallback}{@render fallback()}{/if}</sk-island>{@html preloadLink}{@html runtimeScript}
+{#if nested}<Component {...__props} />{:else}<sk-island
+		data-strategy="server"
+		data-entry={__entry}
+		data-endpoint={endpoint}
+	>{#if fallback}{@render fallback()}{/if}</sk-island>{@html preloadLink}{@html runtimeScript}{/if}

@@ -1,6 +1,6 @@
-<script>
+<script lang="ts">
 	import { page } from '$app/state';
-	import OrderDetail from '$lib/OrderDetail.svelte' with { island: 'load' };
+	import OrderDetail from '$lib/OrderDetail.svelte' with { hydrate: 'load' };
 	let { data } = $props();
 </script>
 

@@ -1,7 +1,11 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import { personalGreeting } from '$lib/server-greeting.remote';
 
-	let { salutation = 'Hi' }: { salutation?: string } = $props();
+	// A server island may be authored with a reserved `fallback` snippet (shown while the
+	// endpoint renders). The transform strips it before this component is rendered, but it
+	// must be declared so svelte-check accepts `{#snippet fallback()}` at the call site.
+	let { salutation = 'Hi' }: { salutation?: string; fallback?: Snippet } = $props();
 
 	// await OUTSIDE any pending boundary -> fully resolved during the (deferred) server
 	// render. This runs on the `/_islands` endpoint, not during the initial page SSR.

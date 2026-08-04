@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	let { query = '' } = $props();
 	let taps = $state(0);
 </script>

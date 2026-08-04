@@ -1,21 +1,25 @@
 # sk-islands
 
-Astro-style **SSR islands for SvelteKit**, with **no Kit patches**. Ship a page shell
-with **zero Kit JS** (`csr = false`) and hydrate only the interactive bits ("islands"),
-each with its own strategy (`load` / `visible` / `media` / `idle`).
+Astro-style **SSR islands for SvelteKit**, with **no Kit patches**. Ship a page shell with
+**zero Kit JS** (`csr = false`) and hydrate only the interactive bits — each with its own
+strategy — plus **server islands** (personalized holes rendered on demand).
 
-Built for **Svelte 5.56+** and **SvelteKit 2.70+**. The library depends only on
-`devalue`, `magic-string`, and `estree-walker` (`svelte` is a peer).
+Built for **Svelte 5.56+** and **SvelteKit 2.70+**. The library depends only on `devalue`,
+`magic-string`, and `estree-walker` (`svelte` is a peer).
+
+> **Design:** sk-islands implements the unified **region model** — see [`DESIGN.md`](../../DESIGN.md).
+> Every boundary sets two axes: **`render`** (`page` | `defer`) and **`hydrate`**
+> (`false` | `load` | `idle` | `visible` | media). The nearest boundary above you wins.
 
 ```
-packages/sk-islands   # the library
-playground            # a SvelteKit app proving it (see the repo root)
+packages/sk-islands   # the library (built with tsdown to ./dist)
+playground            # a SvelteKit app proving it (repo root)
 ```
 
 ## Install & wire up
 
-```js
-// vite.config.js — sk-islands MUST come before sveltekit()
+```ts
+// vite.config.ts — sk-islands MUST come before sveltekit()
 import { sveltekit } from '@sveltejs/kit/vite';
 import { skIslands } from 'sk-islands/vite';
 import { defineConfig } from 'vite';
@@ -25,178 +29,150 @@ export default defineConfig({
 });
 ```
 
-```js
-// src/routes/+layout.js — ship zero Kit JS
+```ts
+// src/routes/+layout.ts — ship zero Kit JS
 export const csr = false;
 ```
 
-> **Important — Kit skips the client build when _every_ route has `csr === false`**
-> (`kit/src/exports/vite/index.js`: `skip_client_build = nodes.every(n => n.page_options?.csr === false)`).
-> Islands need that client build (their runtime + code-split chunks live there). Keep **at
-> least one route** that does not set `csr = false` (a normal Kit-hydrated page is fine; the
-> playground uses `/kit`). Island pages themselves stay `csr = false` and ship no Kit bootstrap.
+```ts
+// src/hooks.server.ts — serve server islands (composes with sequence())
+import { islands } from 'sk-islands/hooks';
+export const handle = islands();
+```
 
-## Three ways to declare an island
+```ts
+// src/app.d.ts — teach svelte-check the `<script bundle>` attribute
+/// <reference types="sk-islands/ambient" />
+```
 
-All three flow through **one hoisting pipeline** (extract subtree → free-variable
-analysis → generate a virtual `.svelte` island module → SSR it + emit a hydration
-custom element). Props are serialized with **devalue**, so `Date`, `Map`, `Set`,
-`BigInt`, and nested objects survive to the client.
+> **Kit skips its client build when _every_ route has `csr === false`.** Islands need that
+> client build (runtime + code-split chunks). Keep **at least one** route that doesn't set
+> `csr = false` (a normal Kit page). If every route is `csr = false`, sk-islands runs its own
+> standalone client build automatically. Both paths are verified.
 
-### 1. Import attribute (per-file, editor-clean)
+## Authoring — the region model (one import attribute)
+
+A component becomes a **region** via a single import attribute. The block carries **exactly one**
+of `hydrate`, `defer`, or `preset`. Import-attribute values must be **string literals** (ES spec).
 
 ```svelte
 <script>
-	import Counter from '$lib/Counter.svelte' with { island: 'load' };
+	import Counter  from '$lib/Counter.svelte'  with { hydrate: 'load' };
+	import Chart    from '$lib/Chart.svelte'    with { hydrate: 'visible' };
+	import Small    from '$lib/Small.svelte'    with { hydrate: '(max-width: 600px)' };
+	import Greeting from '$lib/Greeting.svelte' with { defer: 'true' };   // server island
+	import Panel    from '$lib/Panel.svelte'    with { preset: 'chart' }; // named preset
 </script>
-<Counter start={10} />   <!-- every usage becomes an island -->
+
+<Counter start={10} />          <!-- every usage of a marked import is a region -->
 ```
 
-`island` value: `'load'` | `'visible'` | `'idle'` | a **media query** string
-(`'(max-width: 600px)'` → `media`). The `with { … }` clause is stripped from the emitted
-host script. TypeScript 5.3+ accepts arbitrary import-attribute keys with `module: esnext`.
-_Tradeoff:_ the marked import must be used only in markup (the whole import is removed from
-the host).
+- **`hydrate`**: `'load'` (ASAP) · `'idle'` (`requestIdleCallback`) · `'visible'`
+  (`IntersectionObserver`) · a **media query** string (`'(max-width: 600px)'` → `matchMedia`).
+- **`defer: 'true'`**: a **server island** (see below).
+- **`preset: 'name'`**: a named preset from plugin config.
+- Props flow as usual and are serialized with **devalue** (`Date`, `Map`, `Set`, `BigInt`,
+  nested objects survive). Snippets/children work too; free outer-scope variables are captured
+  automatically. Functions can't cross the boundary.
 
-### 2. `<Island>` wrapper (most flexible — arbitrary mixed content)
+**No option keys inline** — all tuning lives in plugin config:
+
+```ts
+skIslands({
+	visible: { margin: '200px' },              // default IntersectionObserver rootMargin
+	presets: {
+		chart: { hydrate: 'visible', margin: '200px' },
+		modal: { hydrate: 'idle' }
+	}
+});
+```
+
+- `with { preset: 'chart' }` resolves the preset; presets are **tolerant** (a known-but-inapplicable
+  key like `margin` on a `load` preset is ignored). Unknown preset names / unknown keys are build errors.
+- Build errors are precise (they name the file + import): unknown preset, an option key inline,
+  `preset` mixed with another key, `defer` + `hydrate` together (roadmap), `hydrate: 'false'`
+  (lakes, roadmap).
+
+## Server islands (`defer: 'true'`)
+
+A server island renders its `fallback` snippet into the page immediately; the component itself is
+**not** rendered at page-SSR time. At runtime the browser fetches the rendered component from the
+`/_islands` endpoint (same-origin, cookies flow) and swaps it in. Props are **HMAC-signed**
+(devalue payload) so the endpoint rejects tampering.
 
 ```svelte
 <script>
-	import { Island } from 'sk-islands';
+	import Greeting from '$lib/Greeting.svelte' with { defer: 'true' };
 </script>
 
-<Island visible>              <!-- visible | idle | media="(…)" | load (default) -->
-	<Comp a={x} b={new Date()}>
-		{#snippet header()}<h2>{title}</h2>{/snippet}
-		<p>children {y}</p>
-	</Comp>
-</Island>
+<Greeting name="world">
+	{#snippet fallback()}<p>loading…</p>{/snippet}
+</Greeting>
 ```
 
-Props "as usual", snippets "as usual". Outer-scope variables referenced inside the island
-(script vars, `{#each}` locals, …) are captured and serialized as props automatically.
-
-### 3. Filename convention (global, zero editor noise)
-
-Any component imported from a `*.island.svelte` file is an island at **every** use site.
-
-```svelte
-<!-- Clock.island.svelte -->
-<script module>
-	export const island = 'load'; // optional override; default is 'load'
-</script>
+```ts
+// src/hooks.server.ts
+import { sequence } from '@sveltejs/kit/hooks';
+import { islands } from 'sk-islands/hooks';
+export const handle = sequence(islands(), myOtherHandle);
 ```
 
-_Tradeoff:_ strategy is per-component (via `export const island`), **not** per-use-site.
+- The component runs **server-side during a deferred render** — remote functions, `await`, and
+  cookies all work with the request context of the island fetch.
+- A `<link rel="preload" as="fetch">` hint starts the fetch during HTML parse (the runtime fetch
+  reuses it — one server render). Skipped when prerendering.
+- Signing key: `process.env.SK_ISLANDS_SECRET` if set, else a per-build key baked into the
+  **server** bundle only (never a client chunk).
+- The island component's **CSS** is collected via the page's import graph (linked in `<head>`),
+  while **zero component JS** ships to the browser on a `csr = false` page.
+- v1 does not hydrate after the swap (`defer` + a hydrate strategy is a roadmap combo).
 
-**Rejected on purpose** (they parse, but hurt DX): `<Comp client:visible>` /
-`<Comp island="visible">` (svelte-check flags unknown props) and `?island` query imports
-(needs ambient type shims).
+## Nested regions (island in island)
 
-## Hydration strategies
+An island whose own source imports another component as an island is **allowed**. Per the region
+rule, a region self-hydrates iff the nearest region boundary above it is not hydrated — so the
+**inner island degrades to a plain component and hydrates once, with its parent** (one hydration,
+ever). A dev-only warning names the inner region. A nested **server** island degrades to a plain
+inline component too (its `defer` is ignored until lakes land — see DESIGN.md).
 
-- `load` — hydrate ASAP (default)
-- `visible` — `IntersectionObserver`; pass a string for a `rootMargin` (wrapper: `<Island visible="200px">`)
-- `media` — `matchMedia`, e.g. `media="(max-width: 600px)"`
-- `idle` — `requestIdleCallback` (falls back to `setTimeout`)
+## Prerendering
 
-## SPA router (Astro ClientRouter-style)
+A `prerender = true` page ships as static HTML: normal islands hydrate from the static file, and a
+**server island stays a runtime hole** — the classic "static page, personalized hole". (Remote
+functions / server islands still call the server at runtime; a fully static site needs islands that
+don't.)
 
-Enabled by default (`skIslands({ spa: false })` to disable). Intercepts same-origin `<a>`
-clicks, fetches the page, swaps `<body>`, merges `<head>`, and updates history — with
-**View Transitions** when available. Islands on the new page hydrate via custom-element
-connection; old ones `unmount` via disconnection.
+## Classic forms & remote functions
 
-- Skips: modified clicks, `target`, `download`, `rel="external"`, `data-no-spa`, `data-sveltekit-reload`.
-- Prefetch on hover/tap under `data-sveltekit-preload-data="hover|tap"`.
-- Scroll position is saved in `history.state` and restored on back/forward.
-- **Scripts across swaps** (DOM-inserted scripts don't auto-run): module `src` scripts run
-  once per URL; classic `src` scripts re-run each swap; **inline** scripts re-run only with
-  `data-rerun`; scripts identical to the previous page never re-run.
+- **Form actions** work as usual on `csr = false` pages: a plain `<form method="POST">` submits
+  natively (no JS), the SPA router does not intercept it (it only handles `<a>` clicks), and
+  post-redirect-get lands correctly.
+- **Remote functions** (`.remote.ts` `query`/`command`/`query.live`) work inside islands on the
+  server (real Kit) and the client (sk-islands ships a small `__sveltekit/remote` replacement that
+  talks to the same Kit endpoints). `command` (POST) needs a correct `ORIGIN` in production (Kit
+  CSRF). Remote `form()` inside islands is **not yet implemented** — use form actions (see TODO.md).
 
-Authored **plain scripts** (must be nested inside an element — a markup-level second
-`<script>` is treated by Svelte as a component script):
+## Bundled `<script bundle>`
 
-- **Inline** `<script>…</script>` — SSR'd verbatim, runs on first load. On SPA arrival it
-  does NOT re-run unless it has **`data-rerun`**.
-- **Bundled** `<script island>…</script>` — extracted into its own module chunk (its
-  imports resolve & bundle), replaced with `<script type="module" src="…">`. The module URL
-  is de-duped across SPA navigations (runs once), like Astro's default `<script>`. Add
-  `lang="ts"` for TypeScript.
+A nested `<script bundle>` is extracted into its own module chunk (its imports resolve & bundle;
+add `lang="ts"` for TypeScript). Plain nested `<script>` is SSR'd verbatim; add `data-rerun` to
+re-run it after an SPA swap. (This is an imperative escape hatch, not a region.)
 
-## Async + SvelteKit remote functions in islands
+## SPA router
 
-Islands can use **async Svelte** (`await` in `<script>`/markup, `<svelte:boundary>`) and
-**remote functions** (`.remote.ts` with `query`/`command`/`query.live` from `$app/server`),
-**on the server AND the client**.
-
-- `await` **outside** a pending boundary → resolved data is in the SSR HTML.
-- `await` **inside** a `<svelte:boundary>` with a `pending` snippet → SSR renders `pending`,
-  then the client fetch resolves it after hydration.
-- `query(arg)` returns a reactive resource: `await it`, read `.current`/`.loading`/`.error`,
-  and call `.refresh()`.
-- `command(arg)` POSTs to the server; combine with `query.refresh()` to show mutations.
-- `query.live(...)` streams over SSE; read `.current` for live updates.
-
-**How it works (client, under `csr = false`):** Kit's own client remote runtime needs `app`
-(transport/encoders/decoders), which is set only by `start()` — never called when the shell
-ships no Kit JS. So on the CLIENT build sk-islands replaces Kit's `__sveltekit/remote` with
-its own client that talks to the **same** Kit server endpoints
-(`<base>/<appDir>/remote/<id>`) using the same wire format (base64url(devalue) payload,
-`{ type:'result', data: devalue({ _: value }) }` response). SSR still uses real Kit.
-
-Caveats:
-- **`command` (POST) needs a correct origin in production.** Kit rejects cross-origin remote
-  POSTs (CSRF). With `adapter-node`, set `ORIGIN` (e.g. `ORIGIN=https://example.com`). GET
-  queries and `query.live` are unaffected; dev skips the check entirely.
-- **Custom `hooks.transport` types are not supported** by the island remote client (built-in
-  devalue types — Date/Map/Set/BigInt/… — round-trip fine). `form` is not implemented.
-- `kit.appDir` is assumed to be the default `_app`.
-
-## Compat shims for messy real-world patterns
-
-Because Kit's client runtime is absent under `csr = false`, these are aliased for island code:
-
-| Import | Behaviour in islands |
-| --- | --- |
-| `$app/state` `page` | Reactive-ish `page` seeded from a per-island SSR snapshot (`window.__skIslandsPage`), re-seeded on every SPA swap. `page.data` must be **devalue-serializable**. |
-| `$app/stores` `$page` | Readable store over the same snapshot. |
-| `$app/navigation` | `goto`→SPA nav; `invalidate`/`invalidateAll`→re-fetch+re-render current URL; `beforeNavigate`/`afterNavigate`→router events; `preloadData`/`preloadCode`→warm the HTML cache; `disableScrollHandling`→no-op (dev warns); `pushState`/`replaceState` shallow routing→unsupported (warns). |
-| `sk-islands/app` | The same navigation API, importable from **any** island component (always reliable — see below). |
-
-**How the `$app/*` alias is applied (and its limit).** Kit resolves `$app/*` via a vite
-alias that runs before plugin `resolveId`, so we rewrite `$app/*` import specifiers **in the
-generated island virtual module source** at load time (client build only; SSR keeps real
-Kit). That reliably covers imports that land in the island module — i.e. **host imports
-referenced at the `<Island>` boundary**:
-
-```svelte
-<script>
-	import { page } from '$app/state';
-	import OrderDetail from '$lib/OrderDetail.svelte';
-</script>
-<Island load>
-	<OrderDetail id={page.params.id} order={page.data.order} />
-</Island>
-```
-
-A `$app/*` import **deep inside** a regular component that an island uses is _not_ reliably
-aliased (that module can also be reached from a normal CSR page, so it can't be rewritten
-per-consumer). For navigation from such components, import from **`sk-islands/app`**
-instead of `$app/navigation` (used by the playground's `FilterBar`). For page data, prefer
-passing it as props from the boundary (works everywhere, always devalue-safe).
+`<ClientRouter />` (opt-in, render it in a layout) intercepts same-origin `<a>` clicks, swaps
+`<body>`, merges `<head>`, and uses View Transitions when available. Islands on the new page
+hydrate via custom-element connection; old ones unmount via disconnection.
 
 ## Constraints
 
-- **Props must be devalue-serializable.** Functions can't cross the island boundary.
-- **Snippets can't cross the boundary.** A snippet defined outside an island but referenced
-  inside is a build-time error; define it inside the island.
-- **No cross-island reactivity.** Each island is an independent Svelte app; they don't share
-  state. Two islands with the same component are two independent instances.
-- `page.data` used via the shim must be devalue-serializable (it's snapshotted per island).
+- Props must be **devalue-serializable**; functions can't cross a boundary.
+- Snippets can't cross a boundary (a snippet defined outside an island but used inside is a build
+  error) — except the reserved server-island `fallback` snippet.
+- Each island is an independent Svelte app; islands don't share reactive state.
 
-## Options
+## Build
 
-```js
-skIslands({ spa: true }); // spa: false disables the built-in router
-```
+The library builds with **tsdown** to `./dist` (`.js` + `.d.ts`); the Svelte-pipeline files
+(`*.svelte`, the runes module, `ambient.d.ts`) ship as source and are compiled by the consumer.
+`pnpm --filter sk-islands build`. The playground consumes the built `dist`.

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	let { title, header, children } = $props();
 	let bumped = $state(0);
 </script>

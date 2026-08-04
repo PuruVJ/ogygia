@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	let time = $state(new Date().toLocaleTimeString());
 	$effect(() => {
 		const id = setInterval(() => {

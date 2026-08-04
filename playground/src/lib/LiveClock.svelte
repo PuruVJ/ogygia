@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	import { clock } from '$lib/greetings.remote';
 	const c = clock();
 </script>

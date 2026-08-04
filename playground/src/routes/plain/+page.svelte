@@ -1,7 +1,7 @@
-<script>
+<script lang="ts">
 	// This route is NOT under <ClientRouter/>, so navigation here is a real document
 	// load (MPA). Islands still hydrate — only client-side routing is opt-in.
-	import Counter from '$lib/Counter.svelte' with { island: 'load' };
+	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
 </script>
 
 <nav>

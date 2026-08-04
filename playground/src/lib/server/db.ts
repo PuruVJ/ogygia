@@ -2,8 +2,25 @@
 const STATUSES = ['pending', 'shipped', 'delivered', 'cancelled'];
 const CUSTOMERS = ['Ada Lovelace', 'Alan Turing', 'Grace Hopper', 'Linus T.', 'Margaret H.', 'Ken T.'];
 
-function seed() {
-	const orders = [];
+export interface Order {
+	id: number;
+	customer: string;
+	status: string;
+	total: number;
+	items: number;
+	createdAt: Date;
+}
+
+interface ListOptions {
+	status?: string;
+	sort?: string;
+	dir?: 'asc' | 'desc';
+	page?: number;
+	perPage?: number;
+}
+
+function seed(): Order[] {
+	const orders: Order[] = [];
 	let t = Date.UTC(2024, 0, 1, 9, 0, 0);
 	for (let i = 1; i <= 240; i++) {
 		t += 3_600_000 + (i % 7) * 137_000;
@@ -21,12 +38,13 @@ function seed() {
 
 const ORDERS = seed();
 
-export function listOrders({ status, sort = 'id', dir = 'asc', page = 1, perPage = 20 } = {}) {
+export function listOrders({ status, sort = 'id', dir = 'asc', page = 1, perPage = 20 }: ListOptions = {}) {
 	let rows = ORDERS.slice();
 	if (status && status !== 'all') rows = rows.filter((o) => o.status === status);
+	const key = sort as keyof Order;
 	rows.sort((a, b) => {
-		const av = a[sort];
-		const bv = b[sort];
+		const av = a[key];
+		const bv = b[key];
 		const cmp = av < bv ? -1 : av > bv ? 1 : 0;
 		return dir === 'desc' ? -cmp : cmp;
 	});
@@ -35,23 +53,29 @@ export function listOrders({ status, sort = 'id', dir = 'asc', page = 1, perPage
 	return { rows: rows.slice(start, start + perPage), total, pages: Math.ceil(total / perPage) };
 }
 
-export function getOrder(id) {
+export function getOrder(id: number) {
 	const order = ORDERS.find((o) => o.id === id);
 	if (!order) return null;
 	// enrich with a nested object + a Map of line items
 	return {
 		...order,
 		lineItems: new Map(
-			Array.from({ length: order.items }, (_, k) => [`SKU-${order.id}-${k + 1}`, { qty: k + 1, price: 9.99 + k }])
+			Array.from(
+				{ length: order.items },
+				(_, k): [string, { qty: number; price: number }] => [
+					`SKU-${order.id}-${k + 1}`,
+					{ qty: k + 1, price: 9.99 + k }
+				]
+			)
 		),
 		shipping: { address: { city: 'Cambridge', country: 'UK' }, updatedAt: new Date(order.createdAt.getTime() + 86_400_000) }
 	};
 }
 
 export function statusCounts() {
-	const counts = new Map();
+	const counts = new Map<string, number>();
 	for (const s of STATUSES) counts.set(s, 0);
-	for (const o of ORDERS) counts.set(o.status, counts.get(o.status) + 1);
+	for (const o of ORDERS) counts.set(o.status, (counts.get(o.status) ?? 0) + 1);
 	return counts;
 }
 

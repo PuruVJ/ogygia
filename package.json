@@ -3,9 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter playground build",
-    "dev": "pnpm --filter playground dev",
-    "preview": "pnpm --filter playground preview"
+    "build:lib": "pnpm --filter sk-islands build",
+    "build": "pnpm run build:lib && pnpm --filter playground build",
+    "dev": "pnpm run build:lib && pnpm --filter playground dev",
+    "preview": "pnpm --filter playground preview",
+    "check": "pnpm run build:lib && pnpm --filter playground check"
   },
   "devDependencies": {
     "playwright": "^1.48.0"

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	let { date, map, set, big, nested } = $props();
 	let ok = $state(false);
 </script>

@@ -2,6 +2,7 @@ import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
 import * as manifest from 'virtual:sk-islands/manifest';
 import { startRouter } from './router.js';
+import NestedProvider from '../NestedProvider.svelte';
 
 /** @type {(entry: string) => Promise<any>} */
 const loadIsland = manifest.dev
@@ -31,6 +32,24 @@ function kitHydratesPage() {
 class SkIsland extends HTMLElement {
 	connectedCallback() {
 		if (this._scheduled) return;
+		// The region rule (DESIGN.md): a region self-hydrates iff the NEAREST region boundary
+		// above it is not hydrated. We implement exactly that — not a blanket "any ancestor
+		// sk-island". The nearest ancestor boundary is hydrated when it is a client island
+		// (a hydrating strategy); a `defer` hole (data-strategy="server") and lakes (future)
+		// are NOT hydrated, so a region inside them self-hydrates again.
+		// `parentElement.closest` excludes self. (For island-in-island the wrapper usually
+		// degrades to an inline component, so this element never appears — this is the general
+		// rule + defense for regions inserted via server-hole fill / SPA swaps.)
+		const boundary = this.parentElement && this.parentElement.closest('sk-island');
+		if (boundary && boundary.getAttribute('data-strategy') !== 'server') {
+			this.setAttribute('data-nested', '');
+			if (manifest.dev) {
+				console.warn(
+					`[sk-islands] nested island "${this.dataset.entry}" skipped self-hydration; the nearest region above it hydrates, so it rides that hydration (inner strategy "${this.dataset.strategy || 'load'}" ignored).`
+				);
+			}
+			return;
+		}
 		this._scheduled = true;
 		const strategy = this.dataset.strategy || 'load';
 		if (strategy === 'server') this._server();
@@ -146,7 +165,13 @@ class SkIsland extends HTMLElement {
 				return;
 			}
 
-			this._app = hydrate(Component, { target: this, props });
+			// Hydrate through NestedProvider so descendants see the "inside a hydrated island"
+			// context — any nested island wrapper then degrades to a plain inline component
+			// (single hydration with this parent). The provider adds no DOM, so this matches SSR.
+			this._app = hydrate(NestedProvider, {
+				target: this,
+				props: { component: Component, props }
+			});
 			this.setAttribute('data-hydrated', '');
 			this.dispatchEvent(new CustomEvent('sk:hydrated', { bubbles: true }));
 		} catch (err) {

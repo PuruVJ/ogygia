@@ -1,14 +1,14 @@
 <script lang="ts">
 	// Single authoring syntax: the import attribute. Every usage of a marked import
 	// becomes an island with the given strategy.
-	import Counter from '$lib/Counter.svelte' with { island: 'load' };
+	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
 	// per-use strategy: import the SAME module again with a different strategy
-	import CounterLazy from '$lib/Counter.svelte' with { island: 'visible' };
-	import Visible from '$lib/Visible.svelte' with { island: 'visible' };
-	import MediaBox from '$lib/MediaBox.svelte' with { island: '(max-width: 600px)' };
-	import DevalueProps from '$lib/DevalueProps.svelte' with { island: 'load' };
-	import SnippetChildren from '$lib/SnippetChildren.svelte' with { island: 'load' };
-	import EachItem from '$lib/EachItem.svelte' with { island: 'load' };
+	import CounterLazy from '$lib/Counter.svelte' with { hydrate: 'visible' };
+	import Visible from '$lib/Visible.svelte' with { hydrate: 'visible' };
+	import MediaBox from '$lib/MediaBox.svelte' with { hydrate: '(max-width: 600px)' };
+	import DevalueProps from '$lib/DevalueProps.svelte' with { hydrate: 'load' };
+	import SnippetChildren from '$lib/SnippetChildren.svelte' with { hydrate: 'load' };
+	import EachItem from '$lib/EachItem.svelte' with { hydrate: 'load' };
 
 	// Static (server-only) data — captured into islands as devalue-serialized props.
 	const title = 'Snippet island';

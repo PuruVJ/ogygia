@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	let marker = $state('(pending)');
 	$effect(() => {
 		marker = String(window.__marker);
