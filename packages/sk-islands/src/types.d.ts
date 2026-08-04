@@ -26,8 +26,12 @@ declare module 'virtual:ogygia/kit-wire' {
 }
 
 declare module '$app/paths' {
+	/** @deprecated use resolve() */
 	export const base: string;
+	/** @deprecated use asset() */
 	export const assets: string;
+	export function resolve(id: string, params?: Record<string, string>): string;
+	export function asset(file: string): string;
 }
 declare module '$app/environment' {
 	export const building: boolean;

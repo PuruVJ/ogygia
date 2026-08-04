@@ -30,7 +30,7 @@ function kit_hydrates_page() {
 	return _kit_page;
 }
 
-class SkIsland extends HTMLElement {
+class OgygiaRegion extends HTMLElement {
 	#scheduled = false;
 	#done = false;
 	#hydrating = false;
@@ -65,7 +65,7 @@ class SkIsland extends HTMLElement {
 		else this.#on_media(hydrate); // a media query string
 	}
 
-	// SERVER island: fetch the rendered HTML from the `/_islands` endpoint (same-origin,
+	// SERVER island: fetch the rendered HTML from the `/🏝️ogygia🏝️` endpoint (same-origin,
 	// cookies flow) and swap it in. No client hydration in v1 (server+client is future work).
 	// The fallback stays visible on failure. A <link rel="preload"> emitted next to us has
 	// usually already started this exact request, so the browser serves it from cache.
@@ -80,7 +80,7 @@ class SkIsland extends HTMLElement {
 			const html = await res.text();
 			this.innerHTML = html;
 			this.setAttribute('data-hydrated', '');
-			this.dispatchEvent(new CustomEvent('sk:server', { bubbles: true }));
+			this.dispatchEvent(new CustomEvent('ogygia:server', { bubbles: true }));
 		} catch (err) {
 			// keep the fallback; surface the reason in dev
 			if (manifest.dev) {
@@ -142,8 +142,8 @@ class SkIsland extends HTMLElement {
 			let page_snap = null;
 			let sib = this.nextElementSibling;
 			while (sib && sib.tagName === 'SCRIPT') {
-				if (sib.matches('script[data-sk-props]')) props = parse(sib.textContent);
-				else if (sib.matches('script[data-sk-page]')) page_snap = parse(sib.textContent);
+				if (sib.matches('script[data-ogygia-props]')) props = parse(sib.textContent);
+				else if (sib.matches('script[data-ogygia-page]')) page_snap = parse(sib.textContent);
 				else break;
 				sib = sib.nextElementSibling;
 			}
@@ -180,7 +180,7 @@ class SkIsland extends HTMLElement {
 				props: { component: Component, props }
 			});
 			this.setAttribute('data-hydrated', '');
-			this.dispatchEvent(new CustomEvent('sk:hydrated', { bubbles: true }));
+			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		} catch (err) {
 			console.error('[ogygia] hydration failed for', this.getAttribute('entry'), err);
 		} finally {
@@ -208,7 +208,7 @@ class SkIsland extends HTMLElement {
 }
 
 if (typeof customElements !== 'undefined' && !customElements.get('ogygia-region')) {
-	customElements.define('ogygia-region', SkIsland);
+	customElements.define('ogygia-region', OgygiaRegion);
 }
 
 // A stable marker set once per full page load; survives SPA navigations (module

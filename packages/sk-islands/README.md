@@ -101,8 +101,13 @@ ogygia({
 
 A server island renders its `fallback` snippet into the page immediately; the component itself is
 **not** rendered at page-SSR time. At runtime the browser fetches the rendered component from the
-`/_islands` endpoint (same-origin, cookies flow) and swaps it in. Props are **HMAC-signed**
+island endpoint (same-origin, cookies flow) and swaps it in. Props are **HMAC-signed**
 (devalue payload) so the endpoint rejects tampering.
+
+The default endpoint path is **`/🏝️ogygia🏝️`** — the island-emoji brackets make it clash-safe
+against real routes. It's a handle route (not a filesystem path), so adapter-node serves it fine;
+on the wire it rides as percent-encoded UTF-8 (the browser encodes it, the handle matches the
+decoded pathname). Override it with `ogygiaHandle({ endpoint: '/my-islands' })`.
 
 ```svelte
 <script>

@@ -226,8 +226,8 @@ export function transformHost(source, id, ctx) {
 	const preamble_imports = [];
 	// The transform emits a private wrapper component (not a public API). Component
 	// tags must start uppercase or Svelte parses them as plain HTML elements.
-	const wrapper_name = 'SkIsland__Wrapper';
-	const server_wrapper_name = 'SkServerIsland__Wrapper';
+	const wrapper_name = 'OgygiaIsland__Wrapper';
+	const server_wrapper_name = 'OgygiaServerIsland__Wrapper';
 	let wrapper_imported = false;
 	let server_wrapper_imported = false;
 
@@ -242,12 +242,12 @@ export function transformHost(source, id, ctx) {
 	units.forEach((unit, index) => {
 		const iid = islandId(rel_host, index);
 		const virtualPath = ctx.virtualPathFor(id, iid);
-		const comp_var = `__SkIsland_${index}`;
+		const comp_var = `__OgygiaIsland_${index}`;
 		const is_server = unit.strategy === 'server';
 
 		// SERVER island: the reserved `fallback` snippet renders into the page immediately
 		// (kept in host scope, so it can reference host vars directly). The island component
-		// itself is hoisted WITHOUT the fallback and rendered only by the `/_islands` endpoint.
+		// itself is hoisted WITHOUT the fallback and rendered only by the `/🏝️ogygia🏝️` endpoint.
 		const fallback_node = is_server ? find_fallback_snippet(unit.node) : null;
 
 		// The subtree we hoist + analyse for free vars. For server islands, strip the fallback.
@@ -317,7 +317,7 @@ export function transformHost(source, id, ctx) {
 			}
 			// Keep a host import of the island component so its CSS is collected via the
 			// PAGE's (SSR) import graph and linked into the page <head>. The wrapper never
-			// renders it (the /_islands endpoint resolves it by id) — passing it as an
+			// renders it (the /🏝️ogygia🏝️ endpoint resolves it by id) — passing it as an
 			// ignored `__component` prop just keeps the import from being tree-shaken.
 			// On a csr=false page (the supported config) this ships zero client JS.
 			preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);

@@ -23,7 +23,7 @@ let isDev = false;
 	check('/static returns 200', res.status === 200);
 	check('/static counter island SSR (count is 7)', /count is 7/.test(html));
 	check('/static server-island fallback present', /loading personalized greeting/.test(html));
-	check('/static server-island endpoint reference present', /endpoint="[^"]*\/_islands/.test(html));
+	check('/static server-island endpoint reference present', /endpoint="[^"]*🏝️ogygia🏝️/.test(html));
 	check('/static ships NO Kit bootstrap', !/__sveltekit/.test(html));
 
 	if (!isDev) {

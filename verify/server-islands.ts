@@ -25,7 +25,7 @@ let endpoint;
 		!/Hello, (Ada|stranger)/.test(html)
 	);
 	check('/server preload hint present (rel=preload as=fetch)', /rel="preload" as="fetch"/.test(html));
-	check('/server preload points at /_islands', /href="[^"]*\/_islands/.test(html));
+	check('/server preload points at the island endpoint (raw-emoji path)', /href="[^"]*🏝️ogygia🏝️/.test(html));
 	check('/server ships NO Kit bootstrap (csr=false)', !/__sveltekit/.test(html));
 	// The "zero component JS" guarantee is a production-build property. In dev, Vite injects
 	// module URLs for HMR/tooling, so only assert this against a real build.
@@ -43,35 +43,37 @@ let endpoint;
 
 	const m = html.match(/endpoint="([^"]*)"/);
 	check('/server island carries a endpoint', !!m);
-	endpoint = m ? m[1].replace(/&amp;/g, '&') : '';
+	// ServerIsland emits a RELATIVE path (Kit's server resolve()); resolve it against the page
+	// URL exactly as the browser does, giving an absolute URL for the fetch checks below.
+	endpoint = m ? new URL(m[1].replace(/&amp;/g, '&'), base + '/server').href : '';
 }
 
 // --------------------------------------------------------------- endpoint ----
 {
 	// valid signed request (from the page) + cookie -> personalized rendered HTML
-	const res = await fetch(base + endpoint, { headers: { cookie: 'sk_name=Ada' } });
+	const res = await fetch(endpoint, { headers: { cookie: 'sk_name=Ada' } });
 	const html = await res.text();
 	check('endpoint returns 200 for a valid signed request', res.status === 200);
 	check('endpoint returns rendered island HTML', /data-server-greeting/.test(html));
 	check('endpoint personalizes from cookie (Hello, Ada!)', /Hello, Ada!/.test(html), html.slice(0, 80));
 
 	// no cookie -> default greeting (proves the remote query read the request context)
-	const res2 = await fetch(base + endpoint);
+	const res2 = await fetch(endpoint);
 	const html2 = await res2.text();
 	check('endpoint default greeting without cookie (Hello, stranger!)', /Hello, stranger!/.test(html2));
 
 	// tampered signature -> rejected
 	const tampered = endpoint.replace(/sig=[0-9a-f]+/, 'sig=' + '0'.repeat(64));
-	const resT = await fetch(base + tampered);
+	const resT = await fetch(tampered);
 	check('tampered signature rejected (403)', resT.status === 403, `got ${resT.status}`);
 
 	// tampered props (valid-looking but unsigned) -> rejected
 	const tamperedProps = endpoint.replace(/props=[^&]+/, 'props=W3sibiI6OTk5fV0');
-	const resP = await fetch(base + tamperedProps);
+	const resP = await fetch(tamperedProps);
 	check('tampered props rejected (403)', resP.status === 403, `got ${resP.status}`);
 
 	// unknown island id -> 404
-	const resU = await fetch(base + '/_islands?id=deadbeefdead&props=W3t9XQ&sig=' + '0'.repeat(64));
+	const resU = await fetch(base + '/🏝️ogygia🏝️?id=deadbeefdead&props=W3t9XQ&sig=' + '0'.repeat(64));
 	check('unknown island id rejected (404)', resU.status === 404, `got ${resU.status}`);
 }
 
@@ -86,7 +88,7 @@ try {
 		const page = await ctx.newPage();
 		const renderStamps = new Set();
 		page.on('response', async (r) => {
-			if (!r.url().includes('/_islands')) return;
+			if (!r.url().includes('%F0%9F%8F%9D')) return; // percent-encoded island emoji
 			try {
 				const t = await r.text();
 				const at = (t.match(/at (\S+Z)/) || [])[1];
@@ -150,7 +152,7 @@ try {
 		await page.waitForTimeout(200);
 		const renderStamps = new Set();
 		page.on('response', async (r) => {
-			if (!r.url().includes('/_islands')) return;
+			if (!r.url().includes('%F0%9F%8F%9D')) return; // percent-encoded island emoji
 			try {
 				const t = await r.text();
 				const at = (t.match(/at (\S+Z)/) || [])[1];

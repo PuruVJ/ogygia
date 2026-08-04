@@ -1,7 +1,7 @@
 <script>
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
-	import { base, assets } from '$app/paths';
+	import { asset } from '$app/paths';
 	import { page } from '$app/state';
 	import { isNested, setNested } from './context.js';
 
@@ -42,7 +42,7 @@
 	// devalue payload, escaped so a nested closing script tag in string data can't break out.
 	const payload = nested ? '' : stringify(__props).split(LT).join('\\u003C');
 	const props_script =
-		LT + 'script type="application/sk-island-props" data-sk-props' + GT + payload + LT + '/script' + GT;
+		LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + payload + LT + '/script' + GT;
 
 	// Per-island snapshot of `page` so the client `$app/state` shim can seed it.
 	// `page.data` must be devalue-serializable; if not, we fall back to no data.
@@ -62,10 +62,10 @@
 	}
 	const page_script = nested
 		? ''
-		: LT + 'script type="application/sk-island-page" data-sk-page' + GT + page_snapshot() + LT + '/script' + GT;
+		: LT + 'script type="application/ogygia-page" data-ogygia-page' + GT + page_snapshot() + LT + '/script' + GT;
 
 	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
-	const src = (assets || base || '') + runtimeUrl;
+	const src = asset(runtimeUrl);
 	const runtime_script =
 		LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
 </script>

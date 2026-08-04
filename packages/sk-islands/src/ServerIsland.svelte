@@ -3,15 +3,16 @@
 	//   (import ... with { island: 'server' }).
 	// Renders the `fallback` snippet into the page immediately; the island component
 	// itself is NOT rendered here. Instead it emits a signed reference to the
-	// `<base>/_islands` endpoint (served by the `ogygiaHandle()` handle) which the runtime
+	// `<base>/🏝️ogygia🏝️` endpoint (served by the `ogygiaHandle()` handle) which the runtime
 	// fetches and swaps in. NOT part of the public API.
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import { secret } from 'virtual:ogygia/secret';
-	import { base, assets } from '$app/paths';
+	import { resolve, asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { sign } from './server/hmac.js';
 	import { b64urlEncode } from './server/payload.js';
+	import { DEFAULT_ISLANDS_ENDPOINT } from './server/endpoint.js';
 	import { isNested, setNested } from './context.js';
 
 	/**
@@ -41,10 +42,11 @@
 	const payload = nested ? '' : b64urlEncode(stringify(__props));
 	const sig = nested ? '' : sign(secret, payload);
 
-	const prefix = base || '';
+	// base-prefixed endpoint PATH in DECODED (raw-emoji) form. The browser encodes it to
+	// percent-encoded UTF-8 when the runtime fetches / preloads it — we never hand-roll that.
 	const endpoint = nested
 		? ''
-		: `${prefix}/_islands?id=${encodeURIComponent(__entry)}&props=${payload}&sig=${sig}`;
+		: `${resolve(DEFAULT_ISLANDS_ENDPOINT)}?id=${encodeURIComponent(__entry)}&props=${payload}&sig=${sig}`;
 
 	// Build tag strings without literal angle brackets so Svelte's raw-text <script>/<link>
 	// lexer never mistakes them for real tags.
@@ -61,8 +63,8 @@
 		nested || building ? '' : LT + 'link rel="preload" as="fetch" href="' + href_attr + '"' + GT;
 
 	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
-	// Match Island.svelte's URL exactly (assets||base) so the module de-dupes across mixed pages.
-	const src = (assets || base || '') + runtimeUrl;
+	// Match Island.svelte's URL exactly (asset()) so the module de-dupes across mixed pages.
+	const src = asset(runtimeUrl);
 	const runtime_script = LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
 </script>
 

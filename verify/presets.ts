@@ -43,17 +43,17 @@ function expectError(label: string, src: string, re: RegExp) {
 // preset applies (visible + margin 200px)
 {
 	const r = run(wrap(`import C from './C.svelte' with { preset: 'chart' };`));
-	check('preset chart -> visible with margin 200px', /visible=\{?"200px"\}?/.test(r.code), r.code.match(/<SkIsland__Wrapper[^>]*/)?.[0]?.slice(0, 60));
+	check('preset chart -> visible with margin 200px', /visible=\{?"200px"\}?/.test(r.code), r.code.match(/<OgygiaIsland__Wrapper[^>]*/)?.[0]?.slice(0, 60));
 }
 // preset tolerant: margin on a load preset is ignored, not an error
 {
 	const r = run(wrap(`import C from './C.svelte' with { preset: 'lazy' };`));
-	check('preset lazy -> load strategy (inapplicable margin tolerated)', /<SkIsland__Wrapper load /.test(r.code));
+	check('preset lazy -> load strategy (inapplicable margin tolerated)', /<OgygiaIsland__Wrapper load /.test(r.code));
 }
 // preset defer -> server island (no ogygia-region wrapper import, uses ServerIsland)
 {
 	const r = run(wrap(`import C from './C.svelte' with { preset: 'srv' };`, '<C>{#snippet fallback()}x{/snippet}</C>'));
-	check('preset srv -> server island (ServerIsland wrapper)', /SkServerIsland__Wrapper/.test(r.code));
+	check('preset srv -> server island (ServerIsland wrapper)', /OgygiaServerIsland__Wrapper/.test(r.code));
 }
 // inline hydrate visible uses the global default margin (0px)
 {
