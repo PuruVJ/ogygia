@@ -39,7 +39,7 @@ importers:
       devalue:
         specifier: ^5.1.1
         version: 5.9.0
-      sk-islands:
+      ogygia:
         specifier: workspace:*
         version: link:../packages/sk-islands
       valibot:

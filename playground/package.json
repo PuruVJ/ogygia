@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "devalue": "^5.1.1",
-    "sk-islands": "workspace:*",
+    "ogygia": "workspace:*",
     "valibot": "^1.4.2"
   }
 }

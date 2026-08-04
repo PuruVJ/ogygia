@@ -1,5 +1,5 @@
 // Client-side shim for `$app/stores` ($page/$navigating) inside islands.
-// Reads the same `window.__skIslandsPage` snapshot as the `$app/state` shim.
+// Reads the same `window.__ogygiaPage` snapshot as the `$app/state` shim.
 import { page as pageState } from './app-state.js';
 
 function snapshot() {

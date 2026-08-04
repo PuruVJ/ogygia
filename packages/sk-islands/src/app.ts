@@ -1,6 +1,6 @@
 // Public navigation API for island components (an always-reliable alternative to
 // `$app/navigation`, which is only aliased for imports that land directly in an
-// island virtual module). Backed by the sk-islands SPA router.
+// island virtual module). Backed by the ogygia SPA router.
 export {
 	goto,
 	invalidate,

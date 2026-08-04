@@ -1,4 +1,4 @@
-# sk-islands
+# ogygia
 
 Astro-style **SSR islands for SvelteKit**, with **no Kit patches**. Ship a page shell with
 **zero Kit JS** (`csr = false`) and hydrate only the interactive bits — each with its own
@@ -7,7 +7,7 @@ strategy — plus **server islands** (personalized holes rendered on demand).
 Built for **Svelte 5.56+** and **SvelteKit 2.70+**. The library depends only on `devalue`,
 `magic-string`, and `estree-walker` (`svelte` is a peer).
 
-> **Design:** sk-islands implements the unified **region model** — see [`DESIGN.md`](../../DESIGN.md).
+> **Design:** ogygia implements the unified **region model** — see [`DESIGN.md`](../../DESIGN.md).
 > Every boundary sets two axes: **`render`** (`page` | `defer`) and **`hydrate`**
 > (`false` | `load` | `idle` | `visible` | media). The nearest boundary above you wins.
 
@@ -19,13 +19,13 @@ playground            # a SvelteKit app proving it (repo root)
 ## Install & wire up
 
 ```ts
-// vite.config.ts — sk-islands MUST come before sveltekit()
+// vite.config.ts — ogygia MUST come before sveltekit()
 import { sveltekit } from '@sveltejs/kit/vite';
-import { skIslands } from 'sk-islands/vite';
+import { ogygia } from 'ogygia/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-	plugins: [skIslands(), sveltekit()]
+	plugins: [ogygia(), sveltekit()]
 });
 ```
 
@@ -36,18 +36,18 @@ export const csr = false;
 
 ```ts
 // src/hooks.server.ts — serve server islands (composes with sequence())
-import { islands } from 'sk-islands/hooks';
-export const handle = islands();
+import { ogygiaHandle } from 'ogygia/hooks';
+export const handle = ogygiaHandle();
 ```
 
 ```ts
 // src/app.d.ts — teach svelte-check the `<script bundle>` attribute
-/// <reference types="sk-islands/ambient" />
+/// <reference types="ogygia/ambient" />
 ```
 
 > **Kit skips its client build when _every_ route has `csr === false`.** Islands need that
 > client build (runtime + code-split chunks). Keep **at least one** route that doesn't set
-> `csr = false` (a normal Kit page). If every route is `csr = false`, sk-islands runs its own
+> `csr = false` (a normal Kit page). If every route is `csr = false`, ogygia runs its own
 > standalone client build automatically. Both paths are verified.
 
 ## Authoring — the region model (one import attribute)
@@ -78,7 +78,7 @@ of `hydrate`, `defer`, or `preset`. Import-attribute values must be **string lit
 **No option keys inline** — all tuning lives in plugin config:
 
 ```ts
-skIslands({
+ogygia({
 	visible: { margin: '200px' },              // default IntersectionObserver rootMargin
 	presets: {
 		chart: { hydrate: 'visible', margin: '200px' },
@@ -113,15 +113,15 @@ A server island renders its `fallback` snippet into the page immediately; the co
 ```ts
 // src/hooks.server.ts
 import { sequence } from '@sveltejs/kit/hooks';
-import { islands } from 'sk-islands/hooks';
-export const handle = sequence(islands(), myOtherHandle);
+import { ogygiaHandle } from 'ogygia/hooks';
+export const handle = sequence(ogygiaHandle(), myOtherHandle);
 ```
 
 - The component runs **server-side during a deferred render** — remote functions, `await`, and
   cookies all work with the request context of the island fetch.
 - A `<link rel="preload" as="fetch">` hint starts the fetch during HTML parse (the runtime fetch
   reuses it — one server render). Skipped when prerendering.
-- Signing key: `process.env.SK_ISLANDS_SECRET` if set, else a per-build key baked into the
+- Signing key: `process.env.OGYGIA_SECRET` if set, else a per-build key baked into the
   **server** bundle only (never a client chunk).
 - The island component's **CSS** is collected via the page's import graph (linked in `<head>`),
   while **zero component JS** ships to the browser on a `csr = false` page.
@@ -148,7 +148,7 @@ don't.)
   natively (no JS), the SPA router does not intercept it (it only handles `<a>` clicks), and
   post-redirect-get lands correctly.
 - **Remote functions** (`.remote.ts` `query`/`command`/`query.live`) work inside islands on the
-  server (real Kit) and the client (sk-islands ships a small `__sveltekit/remote` replacement that
+  server (real Kit) and the client (ogygia ships a small `__sveltekit/remote` replacement that
   talks to the same Kit endpoints). `command` (POST) needs a correct `ORIGIN` in production (Kit
   CSRF). Remote `form()` inside islands is **not yet implemented** — use form actions (see TODO.md).
 
@@ -175,4 +175,4 @@ hydrate via custom-element connection; old ones unmount via disconnection.
 
 The library builds with **tsdown** to `./dist` (`.js` + `.d.ts`); the Svelte-pipeline files
 (`*.svelte`, the runes module, `ambient.d.ts`) ship as source and are compiled by the consumer.
-`pnpm --filter sk-islands build`. The playground consumes the built `dist`.
+`pnpm --filter ogygia build`. The playground consumes the built `dist`.

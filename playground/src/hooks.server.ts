@@ -1,10 +1,10 @@
 import { sequence } from '@sveltejs/kit/hooks';
 import type { Handle } from '@sveltejs/kit';
-import { islands } from 'sk-islands/hooks';
+import { ogygiaHandle } from 'ogygia/hooks';
 
-// A trivial second handle to prove `islands()` composes with `sequence()`.
+// A trivial second handle to prove `ogygiaHandle()` composes with `sequence()`.
 const passthrough: Handle = async ({ event, resolve }) => resolve(event);
 
-// `islands()` serves GET <base>/_islands (server-island rendering); everything else falls
+// `ogygiaHandle()` serves GET <base>/_islands (server-island rendering); everything else falls
 // through to the next handle.
-export const handle = sequence(islands(), passthrough);
+export const handle = sequence(ogygiaHandle(), passthrough);

@@ -1,5 +1,5 @@
 /**
- * Minimal SPA router for sk-islands (Astro ClientRouter equivalent).
+ * Minimal SPA router for ogygia (Astro ClientRouter equivalent).
  *
  * Intercepts same-origin <a> clicks, fetches the target page, swaps <body>,
  * merges <head>, and updates history. Islands on the new page auto-initialise
@@ -100,7 +100,7 @@ function fetchPage(href) {
 	if (!pageCache.has(href)) {
 		pageCache.set(
 			href,
-			fetch(href, { headers: { 'x-sk-islands-spa': '1' } })
+			fetch(href, { headers: { 'x-ogygia-spa': '1' } })
 				.then(async (res) => {
 					const ct = res.headers.get('content-type') || '';
 					if (!ct.includes('text/html')) return null;
@@ -153,11 +153,11 @@ async function navigate(url, { push = true, popScroll = null, type = 'link', rep
 	// Update history SYNCHRONOUSLY (before any await) so the URL is correct and
 	// races between overlapping navigations can't drop the pushState.
 	if (replace) {
-		history.replaceState({ ...(history.state || {}), skIslands: true }, '', url.href);
+		history.replaceState({ ...(history.state || {}), ogygia: true }, '', url.href);
 	} else if (push) {
 		// save outgoing scroll into the current entry, then push the new URL
 		history.replaceState({ ...(history.state || {}), scroll: { x: scrollX, y: scrollY } }, '');
-		history.pushState({ skIslands: true }, '', url.href);
+		history.pushState({ ogygia: true }, '', url.href);
 	}
 
 	const html = await fetchPage(url.href);
@@ -171,7 +171,7 @@ async function navigate(url, { push = true, popScroll = null, type = 'link', rep
 
 	// Mixed sites: if the target page has no <ClientRouter/> marker, hand over to a
 	// real document navigation (and stop SPA behaviour from here on).
-	const marker = doc.querySelector('meta[name="sk-islands-router"]');
+	const marker = doc.querySelector('meta[name="ogygia-router"]');
 	if (!marker) {
 		location.href = url.href;
 		return;
@@ -236,21 +236,21 @@ export function preloadCode() {
 }
 export function disableScrollHandling() {
 	if (typeof console !== 'undefined') {
-		console.warn('[sk-islands] disableScrollHandling() is a no-op in the islands SPA router.');
+		console.warn('[ogygia] disableScrollHandling() is a no-op in the islands SPA router.');
 	}
 }
 /** Shallow routing is not supported without Kit's client runtime. */
 export function pushState() {
-	console.warn('[sk-islands] pushState() shallow routing is not supported; use goto().');
+	console.warn('[ogygia] pushState() shallow routing is not supported; use goto().');
 }
 export function replaceState() {
-	console.warn('[sk-islands] replaceState() shallow routing is not supported; use goto().');
+	console.warn('[ogygia] replaceState() shallow routing is not supported; use goto().');
 }
 
 export function startRouter() {
 	if (started || typeof document === 'undefined') return;
 	// OPT-IN: only activate when a <ClientRouter/> put its marker in the head.
-	if (!document.querySelector('meta[name="sk-islands-router"]')) return;
+	if (!document.querySelector('meta[name="ogygia-router"]')) return;
 	started = true;
 
 	document.addEventListener('click', (event) => {
@@ -281,5 +281,5 @@ export function startRouter() {
 	});
 
 	// seed initial history entry so scroll is restored on the first back
-	history.replaceState({ ...(history.state || {}), skIslands: true }, '');
+	history.replaceState({ ...(history.state || {}), ogygia: true }, '');
 }

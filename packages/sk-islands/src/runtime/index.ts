@@ -1,6 +1,6 @@
 import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
-import * as manifest from 'virtual:sk-islands/manifest';
+import * as manifest from 'virtual:ogygia/manifest';
 import { startRouter } from './router.js';
 import NestedProvider from '../NestedProvider.svelte';
 
@@ -45,7 +45,7 @@ class SkIsland extends HTMLElement {
 			this.setAttribute('data-nested', '');
 			if (manifest.dev) {
 				console.warn(
-					`[sk-islands] nested island "${this.dataset.entry}" skipped self-hydration; the nearest region above it hydrates, so it rides that hydration (inner strategy "${this.dataset.strategy || 'load'}" ignored).`
+					`[ogygia] nested island "${this.dataset.entry}" skipped self-hydration; the nearest region above it hydrates, so it rides that hydration (inner strategy "${this.dataset.strategy || 'load'}" ignored).`
 				);
 			}
 			return;
@@ -78,7 +78,7 @@ class SkIsland extends HTMLElement {
 		} catch (err) {
 			// keep the fallback; surface the reason in dev
 			if (manifest.dev) {
-				console.warn('[sk-islands] server island fetch failed for', endpoint, err);
+				console.warn('[ogygia] server island fetch failed for', endpoint, err);
 			}
 		}
 	}
@@ -151,7 +151,7 @@ class SkIsland extends HTMLElement {
 				} catch {
 					/* keep string url */
 				}
-				window.__skIslandsPage = pageSnap;
+				window.__ogygiaPage = pageSnap;
 			}
 
 			// Mixed mode: on a csr=true page Kit already hydrates this component — skip.
@@ -159,7 +159,7 @@ class SkIsland extends HTMLElement {
 				this.setAttribute('data-kit-hydrated', '');
 				if (manifest.dev) {
 					console.warn(
-						`[sk-islands] island "${entry}" is on a csr=true page; Kit hydrates it, so the island directive is redundant here (it behaves as a normal component).`
+						`[ogygia] island "${entry}" is on a csr=true page; Kit hydrates it, so the island directive is redundant here (it behaves as a normal component).`
 					);
 				}
 				return;
@@ -175,7 +175,7 @@ class SkIsland extends HTMLElement {
 			this.setAttribute('data-hydrated', '');
 			this.dispatchEvent(new CustomEvent('sk:hydrated', { bubbles: true }));
 		} catch (err) {
-			console.error('[sk-islands] hydration failed for', this.dataset.entry, err);
+			console.error('[ogygia] hydration failed for', this.dataset.entry, err);
 		} finally {
 			this._hydrating = false;
 		}

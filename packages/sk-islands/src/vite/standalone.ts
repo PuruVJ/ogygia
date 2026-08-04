@@ -37,7 +37,7 @@ const TYPE_MAP = {
  */
 export function remoteStubPlugin(root) {
 	return {
-		name: 'sk-islands-remote-stub',
+		name: 'ogygia-remote-stub',
 		enforce: 'pre',
 		transform(code, id) {
 			const clean = id.split('?')[0];
@@ -152,7 +152,7 @@ export async function runStandaloneClientBuild({ root, base, clientDir, makePlug
 			rollupOptions: {
 				input: RUNTIME_ENTRY,
 				output: {
-					entryFileNames: '_app/immutable/sk-islands-runtime.js',
+					entryFileNames: '_app/immutable/ogygia-runtime.js',
 					chunkFileNames: '_app/immutable/[name]-[hash].js',
 					assetFileNames: '_app/immutable/[name]-[hash][extname]'
 				}

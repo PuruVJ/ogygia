@@ -3,7 +3,7 @@
 // Deliberately NOT node:crypto: this module is imported by ServerIsland.svelte (which the
 // Svelte/vite pipeline may also type-check or bundle for a client build on a csr=true page)
 // and by the hooks endpoint. A pure-JS implementation stays portable and side-effect-free,
-// so the ONLY thing that must be kept server-side is the secret (see virtual:sk-islands/secret).
+// so the ONLY thing that must be kept server-side is the secret (see virtual:ogygia/secret).
 
 const K = /** @type {number[]} */ ([]);
 (() => {

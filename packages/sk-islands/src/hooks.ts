@@ -4,17 +4,17 @@
 // island HTML for the runtime to swap in.
 //
 //   // src/hooks.server.js
-//   import { islands } from 'sk-islands/hooks';
+//   import { ogygiaHandle } from 'ogygia/hooks';
 //   import { sequence } from '@sveltejs/kit/hooks';
-//   export const handle = sequence(islands(), myOtherHandle);
+//   export const handle = sequence(ogygiaHandle(), myOtherHandle);
 //
 // Composable with `sequence()` — it only intercepts the `/_islands` path and otherwise calls
 // `resolve(event)`.
 import { render } from 'svelte/server';
 import * as devalue from 'devalue';
 import { base } from '$app/paths';
-import { islands as islandModules } from 'virtual:sk-islands/server-manifest';
-import { secret } from 'virtual:sk-islands/secret';
+import { islands as islandModules } from 'virtual:ogygia/server-manifest';
+import { secret } from 'virtual:ogygia/secret';
 import { verify } from './server/hmac.js';
 import { b64urlDecode } from './server/payload.js';
 
@@ -25,7 +25,7 @@ const ENDPOINT = '/_islands';
  * @param {string} [options.endpoint='/_islands'] path (relative to base) the handle serves
  * @returns {import('@sveltejs/kit').Handle}
  */
-export function islands(options = {}) {
+export function ogygiaHandle(options = {}) {
 	const endpoint = (base || '') + (options.endpoint || ENDPOINT);
 
 	return async ({ event, resolve }) => {
@@ -80,5 +80,3 @@ async function renderIsland(url) {
 		}
 	});
 }
-
-export default islands;

@@ -17,9 +17,9 @@ const baseCtx = {
 	readFile: () => null,
 	pathModule: path,
 	dev: false,
-	virtualPathFor: (hostId: string, iid: string) => path.join(path.dirname(hostId), '.sk-islands', iid + '.svelte'),
+	virtualPathFor: (hostId: string, iid: string) => path.join(path.dirname(hostId), '.ogygia', iid + '.svelte'),
 	devUrlFor: (p: string) => '/' + path.relative(root, p),
-	scriptPathFor: (hostId: string, hash: string, ext: string) => path.join(path.dirname(hostId), '.sk-islands', hash + '.script' + ext),
+	scriptPathFor: (hostId: string, hash: string, ext: string) => path.join(path.dirname(hostId), '.ogygia', hash + '.script' + ext),
 	scriptUrlFor: (_p: string, hash: string) => '/' + hash,
 	visibleMargin: '0px',
 	presets: {

@@ -1,4 +1,4 @@
-# sk-islands — status & remaining work
+# ogygia — status & remaining work
 
 ## Landed & verified this round (build + dev, real browser, adapter-node prod)
 
@@ -6,8 +6,8 @@
   page; component is NOT rendered at page-SSR. `<sk-island data-strategy="server" data-endpoint>`
   + a `<link rel="preload" as="fetch">` hint. Runtime fetches `<base>/_islands` (same-origin,
   cookies) and swaps innerHTML; fallback stays on failure (dev-logged). HMAC-signed devalue props
-  (key from `SK_ISLANDS_SECRET` or a per-build key baked into the SERVER bundle only). Endpoint =
-  `islands()` from `sk-islands/hooks` (composes with `sequence()`), resolving island modules via a
+  (key from `OGYGIA_SECRET` or a per-build key baked into the SERVER bundle only). Endpoint =
+  `ogygiaHandle()` from `ogygia/hooks` (composes with `sequence()`), resolving island modules via a
   server manifest (dev: ssrLoadModule of the fake `.svelte` path; build: generated import map).
   Remote functions + `await` run during the deferred render; island CSS reaches the page via the
   import graph; zero component JS ships on csr=false. Verified tamper→403, unknown id→404, cookie
@@ -19,10 +19,10 @@
   the playground consumes the built `dist`. Scripts: `build`, `prepublishOnly`; root `build:lib`.
 - **TypeScript everywhere**: all library + playground `.js` → `.ts`, configs → `.ts`, verify
   `*.mjs` → `*.ts` (Node 26 type-stripping). `svelte.config.js` stays `.js`. `svelte-check` script
-  added; **0 errors / 0 warnings**. Ambient `sk-islands/ambient` types the `<script bundle>` attr.
+  added; **0 errors / 0 warnings**. Ambient `ogygia/ambient` types the `<script bundle>` attr.
 - **Region-model syntax** (DESIGN.md): single import attribute, exactly one of `hydrate` /
   `defer` / `preset`. Media query is the `hydrate` value. No option keys inline — tuning lives in
-  plugin config `skIslands({ visible: { margin }, presets })`. Presets are tolerant (unknown keys
+  plugin config `ogygia({ visible: { margin }, presets })`. Presets are tolerant (unknown keys
   error; inapplicable-known keys ignored). Precise build errors (unknown preset, inline option,
   preset+key, `defer`+`hydrate` roadmap, `hydrate:'false'` lakes roadmap). Suite: `verify/presets.ts`.
 - **`<script island>` → `<script bundle>`** rename (behavior identical). Ambient type + playground + docs.
@@ -63,12 +63,12 @@ devalue field values.
 Per DESIGN.md + coordinator: swap the lake import for a placeholder in the island's CLIENT module
 (no lake JS in any client chunk — add a build-output assertion), SSR renders it inline, wrap it in
 `<sk-lake>`, lift/re-insert its DOM around parent hydration, `restore: 'cache' | 'empty'`
-(`skIslands({ lakes })`). Island-inside-a-lake self-hydrates (already falls out of the nearest-
+(`ogygia({ lakes })`). Island-inside-a-lake self-hydrates (already falls out of the nearest-
 boundary rule). Currently `hydrate: 'false'` is a clean build error ("roadmap — see DESIGN.md").
 
 ## Standing caveats (unchanged)
 - Remote `command` (POST) needs a correct `ORIGIN` in production (Kit CSRF; dev skips it).
 - `$app/*` shims reach island-boundary imports; deep imports in shared components: use props or
-  `sk-islands/app`. `page.data` is snapshotted per island.
+  `ogygia/app`. `page.data` is snapshotted per island.
 - Standalone (all-csr=false) build assumes `kit.appDir === '_app'` and uses `vitePreprocess()`.
 - Server islands are a `csr = false` feature (documented); nested server islands degrade to inline.

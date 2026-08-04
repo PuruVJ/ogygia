@@ -1,7 +1,7 @@
 <script lang="ts">
-	// Island navigating via goto() from `sk-islands/app` (reliable from any island
+	// Island navigating via goto() from `ogygia/app` (reliable from any island
 	// component). Reads the current status from location (client-only handler).
-	import { goto } from 'sk-islands/app';
+	import { goto } from 'ogygia/app';
 
 	const statuses = ['all', 'pending', 'shipped', 'delivered', 'cancelled'];
 	let current = $state(
@@ -16,7 +16,7 @@
 		else u.searchParams.set('status', s);
 		u.searchParams.delete('page');
 		current = s;
-		goto(u.pathname + u.search); // -> sk-islands SPA router
+		goto(u.pathname + u.search); // -> ogygia SPA router
 	}
 </script>
 

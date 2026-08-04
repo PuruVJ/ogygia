@@ -1,4 +1,4 @@
-# sk-islands — SSR Islands for SvelteKit (no Kit patches)
+# ogygia — SSR Islands for SvelteKit (no Kit patches)
 
 ## Goal
 
@@ -42,7 +42,7 @@ Playground config: `compilerOptions.experimental.async = true` in svelte.config.
 
 ### 1. Compile-time transform (vite plugin, `enforce: 'pre'`, placed BEFORE `sveltekit()` in plugins array)
 
-For every `.svelte` file under the app root that references `Island` imported from `sk-islands`:
+For every `.svelte` file under the app root that references `Island` imported from `ogygia`:
 
 1. Parse with `svelte.parse(source, { modern: true })` (import from `svelte/compiler` — handles TS expressions when `lang="ts"`).
 2. Find `<Island ...>` component nodes. For each, take the **exact source text** of its children (magic-string slice — preserves everything: components, snippets, each blocks, text).
@@ -83,9 +83,9 @@ Renders:
 - Strategy props: `load` (default), `visible` (true or a rootMargin string), `idle`, `media="(query)"`.
 - `devalue.stringify` the props; escape `<` as `<` (script-injection safety; mirror what Kit does).
 - The `<script type="module">` tag is emitted **per island** — browsers dedupe module loads by URL, so duplicates are harmless. Prefix URL with Kit's `assets`/`base` from `$app/paths`.
-- `runtimeUrl`: dev → the vite dev URL of the runtime module (`/@id/...` form — verify the exact encoding empirically). Build → **deterministic filename**: in the client build, `buildStart` calls `this.emitFile({ type: 'chunk', id: '<runtime module>', fileName: '_app/immutable/sk-islands-runtime.js' })` (client build only — skip when `config.build.ssr`). Deterministic name = no manifest handoff between Kit's client and server builds. Pass the URL to Island.svelte via a virtual module (`virtual:sk-islands/runtime-url`) resolved differently per dev/build.
+- `runtimeUrl`: dev → the vite dev URL of the runtime module (`/@id/...` form — verify the exact encoding empirically). Build → **deterministic filename**: in the client build, `buildStart` calls `this.emitFile({ type: 'chunk', id: '<runtime module>', fileName: '_app/immutable/ogygia-runtime.js' })` (client build only — skip when `config.build.ssr`). Deterministic name = no manifest handoff between Kit's client and server builds. Pass the URL to Island.svelte via a virtual module (`virtual:ogygia/runtime-url`) resolved differently per dev/build.
 
-### 3. Client runtime (`sk-islands/runtime`, small, tree-shaken)
+### 3. Client runtime (`ogygia/runtime`, small, tree-shaken)
 
 - `customElements.define('sk-island', ...)`. `connectedCallback` → schedule per strategy (load / rIC idle / IntersectionObserver / matchMedia). When triggered:
   1. dynamic-import the island module: build → via a virtual manifest module `{ '<island-id>': () => import('<virtual island id>') }` (rollup code-splits and rewrites URLs automatically); dev → construct the dev URL from the id directly.

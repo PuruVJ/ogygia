@@ -1,6 +1,6 @@
 <script lang="ts">
 	// This layout opts into the SPA router (+ view transitions) via <ClientRouter/>.
-	import { ClientRouter } from 'sk-islands';
+	import { ClientRouter } from 'ogygia';
 	let { children } = $props();
 </script>
 

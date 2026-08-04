@@ -22,7 +22,7 @@ const count = (s, re) => (s.match(re) || []).length;
 	check('/ has 9 <sk-island> elements', count(html, /<sk-island/g) === 9, `${count(html, /<sk-island/g)}`);
 	check('/ counter island SSR content (count is 10)', /count is 10/.test(html));
 	check('/ per-use strategy: same module, visible (count is 99)', /count is 99/.test(html));
-	check('/ opt-in router marker present (ClientRouter)', /name="sk-islands-router"/.test(html));
+	check('/ opt-in router marker present (ClientRouter)', /name="ogygia-router"/.test(html));
 	check('/ each-block islands SSR (Alpha/Bravo/Charlie)', /Alpha/.test(html) && /Bravo/.test(html) && /Charlie/.test(html));
 	check('/ devalue props payload present', /application\/sk-island-props/.test(html));
 	check('/ 9 devalue payloads', count(html, /application\/sk-island-props/g) === 9);
@@ -31,7 +31,7 @@ const count = (s, re) => (s.match(re) || []).length;
 	check('/ devalue Set survives SSR', /set instanceof Set: true/.test(html));
 	check('/ nested object survives SSR', /nested-ok/.test(html));
 	check('/ snippet island sees outer var (y = 42)', /y = 42/.test(html));
-	check('/ runtime module script tag present', /src="[^"]*sk-islands-runtime[^"]*"/.test(html));
+	check('/ runtime module script tag present', /src="[^"]*ogygia-runtime[^"]*"/.test(html));
 	check('/ NO Kit __sveltekit bootstrap', !/__sveltekit/.test(html));
 	check('/ NO Kit entry/start script', !/entry\/start/.test(html));
 }
@@ -60,7 +60,7 @@ const count = (s, re) => (s.match(re) || []).length;
 	const { status, html } = await get('/plain');
 	check('/plain returns 200', status === 200);
 	check('/plain has an island (still hydrates)', count(html, /<sk-island/g) === 1);
-	check('/plain has NO router marker (opt-out)', !/name="sk-islands-router"/.test(html));
+	check('/plain has NO router marker (opt-out)', !/name="ogygia-router"/.test(html));
 	check('/plain NO Kit bootstrap (csr=false island page)', !/__sveltekit/.test(html));
 }
 

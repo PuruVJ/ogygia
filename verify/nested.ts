@@ -59,8 +59,8 @@ try {
 
 	// dev-only warning naming the nested island
 	if (isDev) {
-		const warned = warns.some((w) => /nested island/i.test(w) && /sk-islands/.test(w));
-		check('dev warning fired for the nested island', warned, warns.filter((w) => /sk-islands/.test(w)).slice(0, 1).join(''));
+		const warned = warns.some((w) => /nested island/i.test(w) && /ogygia/.test(w));
+		check('dev warning fired for the nested island', warned, warns.filter((w) => /ogygia/.test(w)).slice(0, 1).join(''));
 	} else {
 		check('no nested-island warning in production build', !warns.some((w) => /nested island/i.test(w)));
 		out.push('SKIP  dev-warning presence check (prod build)');

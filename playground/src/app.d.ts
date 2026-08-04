@@ -1,4 +1,4 @@
-/// <reference types="sk-islands/ambient" />
+/// <reference types="ogygia/ambient" />
 
 // See https://svelte.dev/docs/kit/types#app.d.ts
 declare global {
@@ -11,12 +11,12 @@ declare global {
 	}
 
 	interface Window {
-		/** Set once per full page load by the sk-islands runtime; survives SPA navigations. */
+		/** Set once per full page load by the ogygia runtime; survives SPA navigations. */
 		__marker?: number;
 		/** Bumped by the bundled `<script island>` helper (scripts demo). */
 		__bundledHelperMarked?: number;
-		/** Per-page `$app/state` snapshot the sk-islands shims seed from. */
-		__skIslandsPage?: unknown;
+		/** Per-page `$app/state` snapshot the ogygia shims seed from. */
+		__ogygiaPage?: unknown;
 	}
 }
 

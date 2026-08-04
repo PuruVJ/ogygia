@@ -1,5 +1,5 @@
 {
-  "name": "sk-islands",
+  "name": "ogygia",
   "version": "0.0.1",
   "type": "module",
   "description": "Astro-style SSR islands for SvelteKit (no Kit patches)",

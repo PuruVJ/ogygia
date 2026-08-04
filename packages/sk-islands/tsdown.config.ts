@@ -30,7 +30,7 @@ export default defineConfig({
 		/^virtual:/,
 		/^\$app\//,
 		/\.svelte$/, // the 3 wrapper components (shipped as source)
-		'sk-islands/runtime',
-		'sk-islands/internal'
+		'ogygia/runtime',
+		'ogygia/internal'
 	]
 });

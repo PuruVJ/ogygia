@@ -28,7 +28,7 @@
 	];
 </script>
 
-<h1 data-static-shell>sk-islands playground</h1>
+<h1 data-static-shell>ogygia playground</h1>
 <p data-static-shell>
 	This shell text is server-rendered and never hydrated. The page ships zero Kit JS (<code
 		>csr = false</code

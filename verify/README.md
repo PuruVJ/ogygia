@@ -2,7 +2,7 @@
 
 ```bash
 # 1. Build the library, then the playground (adapter-node)
-pnpm --filter sk-islands build
+pnpm --filter ogygia build
 pnpm --filter playground build
 
 # 2. Start the production server. ORIGIN is required for remote `command` (POST) + form CSRF.

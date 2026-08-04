@@ -2,4 +2,4 @@
 export const browser = true;
 export const building = false;
 export const dev = false;
-export const version = 'sk-islands';
+export const version = 'ogygia';

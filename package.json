@@ -1,9 +1,9 @@
 {
-  "name": "sk-islands-monorepo",
+  "name": "ogygia-monorepo",
   "private": true,
   "type": "module",
   "scripts": {
-    "build:lib": "pnpm --filter sk-islands build",
+    "build:lib": "pnpm --filter ogygia build",
     "build": "pnpm run build:lib && pnpm --filter playground build",
     "dev": "pnpm run build:lib && pnpm --filter playground dev",
     "preview": "pnpm --filter playground preview",

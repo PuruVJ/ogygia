@@ -1,5 +1,5 @@
 // Client-side shim for `$app/navigation` inside islands.
-// Delegates to the sk-islands SPA router. Aliased only in the client build.
+// Delegates to the ogygia SPA router. Aliased only in the client build.
 export {
 	goto,
 	invalidate,

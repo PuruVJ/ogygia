@@ -3,7 +3,7 @@ import MagicString from 'magic-string';
 import { createHash } from 'node:crypto';
 import { collectFreeIdentifiers, collectSnippetNames } from './free-vars.js';
 
-export const ISLAND_DIR = '.sk-islands';
+export const ISLAND_DIR = '.ogygia';
 
 /** Deterministic short id for an island (stable across dev + build). */
 export function islandId(relHostPath, index) {
@@ -107,7 +107,7 @@ export function transformHost(source, id, ctx) {
 
 	const KNOWN_STRATEGIES = new Set(['load', 'idle', 'visible']);
 	const err = (specifiers, msg) =>
-		new Error(`[sk-islands] ${relHost}: import { ${specifiers} } — ${msg}`);
+		new Error(`[ogygia] ${relHost}: import { ${specifiers} } — ${msg}`);
 
 	for (const node of instanceBody) {
 		if (node.type !== 'ImportDeclaration') continue;
@@ -123,13 +123,13 @@ export function transformHost(source, id, ctx) {
 		const names = node.specifiers.map((sp) => sp.local.name).join(', ');
 
 		// The import block carries EXACTLY ONE of `hydrate` | `defer` | `preset`. No option keys
-		// inline — all tuning (margin, …) lives in plugin config (skIslands({ visible, presets })).
+		// inline — all tuning (margin, …) lives in plugin config (ogygia({ visible, presets })).
 		/** @type {Map<string,string>} effective attributes (from a preset, or the single inline key) */
 		let attrs;
 		let fromPreset = null;
 		if (inline.has('preset')) {
 			if (inline.size > 1) {
-				throw err(names, '`preset` must be the only import attribute — put its options (margin, …) in the preset definition (skIslands({ presets })).');
+				throw err(names, '`preset` must be the only import attribute — put its options (margin, …) in the preset definition (ogygia({ presets })).');
 			}
 			fromPreset = inline.get('preset');
 			const preset = ctx.presets && ctx.presets[fromPreset];
@@ -145,7 +145,7 @@ export function transformHost(source, id, ctx) {
 				if (k !== 'hydrate' && k !== 'defer') {
 					throw err(
 						names,
-						`\`${k}\` is not allowed inline. Use \`hydrate\`, \`defer\`, or a named \`preset\` — options like \`margin\` belong in plugin config (skIslands({ visible, presets })).`
+						`\`${k}\` is not allowed inline. Use \`hydrate\`, \`defer\`, or a named \`preset\` — options like \`margin\` belong in plugin config (ogygia({ visible, presets })).`
 					);
 				}
 			}
@@ -185,7 +185,7 @@ export function transformHost(source, id, ctx) {
 			else throw err(names, `unknown hydrate strategy '${val}'. Use 'load' | 'idle' | 'visible' | a media query.`);
 
 			// `margin` applies only to `visible` (tolerantly ignored otherwise). Falls back to the
-			// plugin-level default skIslands({ visible: { margin } }).
+			// plugin-level default ogygia({ visible: { margin } }).
 			const options = {};
 			if (strategy === 'visible') {
 				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
@@ -290,7 +290,7 @@ export function transformHost(source, id, ctx) {
 				// leave alone
 			} else if (hostSnippetNames.has(name)) {
 				throw new Error(
-					`[sk-islands] ${relHost}: island references snippet \`${name}\` defined outside the island. ` +
+					`[ogygia] ${relHost}: island references snippet \`${name}\` defined outside the island. ` +
 						`Snippets cannot cross the island boundary. Define the snippet inside the island instead.`
 				);
 			} else {
@@ -320,7 +320,7 @@ export function transformHost(source, id, ctx) {
 			if (!serverWrapperImported) {
 				serverWrapperImported = true;
 				preambleImports.push(
-					`\timport { ServerIsland as ${serverWrapperName} } from 'sk-islands/internal';`
+					`\timport { ServerIsland as ${serverWrapperName} } from 'ogygia/internal';`
 				);
 			}
 			// Keep a host import of the island component so its CSS is collected via the
@@ -343,7 +343,7 @@ export function transformHost(source, id, ctx) {
 
 		if (!wrapperImported) {
 			wrapperImported = true;
-			preambleImports.push(`\timport { Island as ${wrapperName} } from 'sk-islands/internal';`);
+			preambleImports.push(`\timport { Island as ${wrapperName} } from 'ogygia/internal';`);
 		}
 
 		// rewrite host: replace the unit with an <Island> wrapper element

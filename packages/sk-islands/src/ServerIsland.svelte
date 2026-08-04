@@ -3,11 +3,11 @@
 	//   (import ... with { island: 'server' }).
 	// Renders the `fallback` snippet into the page immediately; the island component
 	// itself is NOT rendered here. Instead it emits a signed reference to the
-	// `<base>/_islands` endpoint (served by the `islands()` handle) which the runtime
+	// `<base>/_islands` endpoint (served by the `ogygiaHandle()` handle) which the runtime
 	// fetches and swaps in. NOT part of the public API.
 	import { stringify } from 'devalue';
-	import runtimeUrl from 'virtual:sk-islands/runtime-url';
-	import { secret } from 'virtual:sk-islands/secret';
+	import runtimeUrl from 'virtual:ogygia/runtime-url';
+	import { secret } from 'virtual:ogygia/secret';
 	import { base, assets } from '$app/paths';
 	import { building } from '$app/environment';
 	import { sign } from './server/hmac.js';
@@ -33,7 +33,7 @@
 	if (!nested) setNested();
 	if (nested && import.meta.env && import.meta.env.DEV) {
 		console.warn(
-			`[sk-islands] nested server island "${__entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
+			`[ogygia] nested server island "${__entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
 		);
 	}
 

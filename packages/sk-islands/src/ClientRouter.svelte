@@ -11,5 +11,5 @@
 </script>
 
 <svelte:head>
-	<meta name="sk-islands-router" content={viewTransitions ? 'vt' : 'plain'} />
+	<meta name="ogygia-router" content={viewTransitions ? 'vt' : 'plain'} />
 </svelte:head>

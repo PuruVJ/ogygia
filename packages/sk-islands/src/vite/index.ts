@@ -16,14 +16,14 @@ const APP_SHIMS = {
 
 const REMOTE_CLIENT = fileURLToPath(new URL('../shims/remote-client.svelte.js', import.meta.url));
 
-const V_RUNTIME_URL = 'virtual:sk-islands/runtime-url';
-const V_MANIFEST = 'virtual:sk-islands/manifest';
-const V_RUNTIME = 'virtual:sk-islands-runtime';
-const V_SECRET = 'virtual:sk-islands/secret';
-const V_SERVER_MANIFEST = 'virtual:sk-islands/server-manifest';
+const V_RUNTIME_URL = 'virtual:ogygia/runtime-url';
+const V_MANIFEST = 'virtual:ogygia/manifest';
+const V_RUNTIME = 'virtual:ogygia-runtime';
+const V_SECRET = 'virtual:ogygia/secret';
+const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
 const RESOLVED = (id) => '\0' + id;
 
-const RUNTIME_FILENAME = '_app/immutable/sk-islands-runtime.js';
+const RUNTIME_FILENAME = '_app/immutable/ogygia-runtime.js';
 const RUNTIME_URL_BUILD = '/' + RUNTIME_FILENAME;
 
 function toPosix(p) {
@@ -49,7 +49,7 @@ const SCRIPT_FILENAME = (hash) => `_app/immutable/sk-scripts/${hash}.js`;
  * @param {boolean} [options.standalone] internal: this instance runs inside the standalone build
  * @returns {import('vite').Plugin}
  */
-export function skIslands(options = {}) {
+export function ogygia(options = {}) {
 	const spa = options.spa !== false;
 	const standalone = options.standalone === true;
 	const visibleMargin = options.visible?.margin;
@@ -57,7 +57,7 @@ export function skIslands(options = {}) {
 
 	// HMAC key for signing server-island props. Runtime env var wins (so it can be rotated
 	// / shared across instances in production); otherwise a per-build random key baked into
-	// the SERVER bundle only (never a client chunk — see the `virtual:sk-islands/secret` load).
+	// the SERVER bundle only (never a client chunk — see the `virtual:ogygia/secret` load).
 	const buildSecret = crypto.randomBytes(32).toString('hex');
 
 	/** @type {Map<string, {source:string, hostPath:string, id:string}>} keyed by abs virtual path */
@@ -162,7 +162,7 @@ export function skIslands(options = {}) {
 	};
 
 	return {
-		name: 'sk-islands',
+		name: 'ogygia',
 		enforce: 'pre',
 
 		configResolved(config) {
@@ -207,7 +207,7 @@ export function skIslands(options = {}) {
 					base,
 					clientDir,
 					sourcemap,
-					makePlugin: (opts) => skIslands({ ...options, ...opts })
+					makePlugin: (opts) => ogygia({ ...options, ...opts })
 				});
 			}
 		},
@@ -250,17 +250,17 @@ export function skIslands(options = {}) {
 				return `export default ${JSON.stringify(url)};`;
 			}
 			if (id === RESOLVED(V_RUNTIME)) {
-				return `import 'sk-islands/runtime';`;
+				return `import 'ogygia/runtime';`;
 			}
 			if (id === RESOLVED(V_SECRET)) {
 				// SERVER only: the real key. CLIENT build: empty string, so the key can never
 				// leak into a client chunk (server islands are a csr=false feature anyway).
 				const ssr = options?.ssr ?? isSSR;
 				if (!ssr) return `export const secret = '';`;
-				return `export const secret = process.env.SK_ISLANDS_SECRET || ${JSON.stringify(buildSecret)};`;
+				return `export const secret = process.env.OGYGIA_SECRET || ${JSON.stringify(buildSecret)};`;
 			}
 			if (id === RESOLVED(V_SERVER_MANIFEST)) {
-				// Map of SERVER-island id -> dynamic import, used by the `islands()` handle to
+				// Map of SERVER-island id -> dynamic import, used by the `ogygiaHandle()` handle to
 				// render an island server-side. Populated in BOTH dev and build (unlike the
 				// client manifest, which dev fills from URLs). Client build gets an empty map.
 				const ssr = options?.ssr ?? isSSR;
@@ -316,5 +316,3 @@ export function skIslands(options = {}) {
 		}
 	};
 }
-
-export default skIslands;

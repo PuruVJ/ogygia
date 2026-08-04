@@ -210,7 +210,7 @@ export function query_live(id) {
 // Not implemented for islands (documented). Named so Kit's generated stubs resolve.
 function unsupported(kind) {
 	return () => () => {
-		throw new Error(`[sk-islands] remote \`${kind}\` is not supported inside islands.`);
+		throw new Error(`[ogygia] remote \`${kind}\` is not supported inside islands.`);
 	};
 }
 export const form = unsupported('form');

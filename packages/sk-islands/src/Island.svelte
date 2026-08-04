@@ -1,6 +1,6 @@
 <script>
 	import { stringify } from 'devalue';
-	import runtimeUrl from 'virtual:sk-islands/runtime-url';
+	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import { base, assets } from '$app/paths';
 	import { page } from '$app/state';
 	import { isNested, setNested } from './context.js';
@@ -26,7 +26,7 @@
 	if (!nested) setNested();
 	if (nested && import.meta.env && import.meta.env.DEV) {
 		console.warn(
-			`[sk-islands] nested island "${__entry}" is inside another island; it hydrates with its parent (strategy ignored).`
+			`[ogygia] nested island "${__entry}" is inside another island; it hydrates with its parent (strategy ignored).`
 		);
 	}
 

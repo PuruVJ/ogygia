@@ -2,7 +2,7 @@
 //
 // Under `csr = false`, Kit's client runtime never boots, so the real
 // `$app/state` `page` would be uninitialised on the client. The runtime seeds a
-// per-page snapshot on `window.__skIslandsPage` (reconstructed from each island's
+// per-page snapshot on `window.__ogygiaPage` (reconstructed from each island's
 // SSR snapshot) BEFORE hydrating. These getters read that global.
 //
 // Backing this with a global (rather than a module singleton) makes it robust to
@@ -24,7 +24,7 @@ const FALLBACK = {
 };
 
 function snap() {
-	return (typeof window !== 'undefined' && window.__skIslandsPage) || FALLBACK;
+	return (typeof window !== 'undefined' && window.__ogygiaPage) || FALLBACK;
 }
 
 export const page = {
