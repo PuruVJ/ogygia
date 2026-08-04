@@ -35,7 +35,30 @@ const V_KIT_WIRE = 'virtual:ogygia/kit-wire';
 const V_TRANSPORT = 'virtual:ogygia/transport';
 const RESOLVED = (id) => '\0' + id;
 
-const RUNTIME_FILENAME = '_app/immutable/ogygia-runtime.js';
+// Content-hash the runtime's real inputs (the prebuilt dist files the runtime chunk bundles).
+// Kit builds the SERVER bundle BEFORE the client, so a forward handoff of the client chunk's hash
+// is impossible — but a SOURCE-content hash is deterministic, so both builds compute the SAME
+// filename independently and agree. (Standalone mode still overrides this with the real output
+// chunk hash; this is its fallback + the Kit-driven answer.)
+function runtime_content_hash() {
+	const inputs = [
+		RUNTIME_ENTRY,
+		fileURLToPath(new URL('../runtime/router.js', import.meta.url)),
+		fileURLToPath(new URL('../shims/page-store.svelte.js', import.meta.url)),
+		fileURLToPath(new URL('../NestedProvider.svelte', import.meta.url))
+	];
+	const h = crypto.createHash('sha256');
+	for (const f of inputs) {
+		try {
+			h.update(fs.readFileSync(f));
+		} catch {
+			/* a missing input just doesn't contribute — still deterministic across both builds */
+		}
+	}
+	return h.digest('hex').slice(0, 12);
+}
+const RUNTIME_HASH = runtime_content_hash();
+const RUNTIME_FILENAME = `_app/immutable/ogygia-runtime.${RUNTIME_HASH}.js`;
 const RUNTIME_URL_BUILD = '/' + RUNTIME_FILENAME;
 
 function to_posix(p) {
@@ -203,12 +226,13 @@ export function ogygia(
 		},
 
 		async buildStart() {
-			// CLIENT build (Kit-driven): emit the runtime chunk. NOTE: Kit builds the SERVER
-			// bundle FIRST, then the client (kit vite index: "first, build server nodes …", then
-			// "create client build"). The server inlines the runtime `<script src>` at server-build
-			// time, so it cannot learn a hash the later client build would produce — hence a fixed,
-			// stable filename here. (Content-hashing is applied in the STANDALONE mode below, where
-			// a single build owns both sides.) See TODO.md.
+			// CLIENT build (Kit-driven): emit the runtime chunk. Kit builds the SERVER bundle FIRST,
+			// then the client, so the server can't learn a hash the LATER client build produces — a
+			// forward handoff is impossible. Instead the filename is a deterministic SOURCE-content
+			// hash (RUNTIME_FILENAME, computed at module load from the prebuilt dist inputs), so the
+			// server (baking the `<script src>`) and the client (emitting this chunk) compute the
+			// SAME name independently and agree. (Standalone mode further overrides with the real
+			// output-chunk hash below.)
 			if (is_build && !is_ssr) {
 				prescan();
 				if (!standalone) {
