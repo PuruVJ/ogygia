@@ -77,7 +77,11 @@ of `hydrate`, `defer`, or `preset`. Import-attribute values must be **string lit
 - **`preset: 'name'`**: a named preset from plugin config.
 - Props flow as usual and are serialized with **devalue** (`Date`, `Map`, `Set`, `BigInt`,
   nested objects survive). Snippets/children work too; free outer-scope variables are captured
-  automatically. Functions can't cross the boundary.
+  automatically (a host binding that shadows a JS global — `const Date = …` — is captured, not
+  treated as the global). Functions can't cross the boundary.
+- Only `hydrate` / `defer` / `preset` are ogygia's keys. A **standard import attribute on an
+  unrelated import** (`import data from './d.json' with { type: 'json' }`) is left untouched, even
+  in a file that also declares islands.
 
 **No option keys inline** — all tuning lives in plugin config:
 

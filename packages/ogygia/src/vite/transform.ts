@@ -122,6 +122,13 @@ export function transformHost(source, id, ctx) {
 		for (const a of attr_list) inline.set(a.key.name ?? a.key.value, String(a.value.value));
 		const names = node.specifiers.map((sp) => sp.local.name).join(', ');
 
+		// Only imports carrying a REGION key (`hydrate` | `defer` | `preset`) are ours. A standard
+		// import attribute on an UNRELATED import — `import data from './d.json' with { type: 'json' }`,
+		// an `with { type: 'macro' }`, etc. — is left completely untouched (its `with{}` preserved), even
+		// in a file that also declares islands. We only validate + strip the imports we actually claim.
+		const REGION_KEYS = ['hydrate', 'defer', 'preset'];
+		if (!REGION_KEYS.some((k) => inline.has(k))) continue;
+
 		// The import block carries EXACTLY ONE of `hydrate` | `defer` | `preset`. No option keys
 		// inline — all tuning (margin, …) lives in plugin config (ogygia({ visible, presets })).
 		/** @type {Map<string,string>} effective attributes (from a preset, or the single inline key) */
@@ -209,6 +216,45 @@ export function transformHost(source, id, ctx) {
 
 	// host top-level snippet names (for cross-boundary error detection)
 	const host_snippet_names = collectSnippetNames(ast.fragment?.nodes ?? []);
+
+	// Names DECLARED at the top level of the host scripts (instance + module) — `let`/`const`/`var`,
+	// functions, classes. These are captured even when they shadow a JS global (e.g. `const Date =
+	// …`): a host-declared binding always wins over the globals allowlist, matching JS scope rules.
+	const host_local_names = new Set();
+	const add_decl_names = (pat) => {
+		if (!pat) return;
+		switch (pat.type) {
+			case 'Identifier':
+				host_local_names.add(pat.name);
+				break;
+			case 'ObjectPattern':
+				for (const prop of pat.properties) {
+					if (prop.type === 'RestElement') add_decl_names(prop.argument);
+					else add_decl_names(prop.value);
+				}
+				break;
+			case 'ArrayPattern':
+				for (const el of pat.elements) add_decl_names(el);
+				break;
+			case 'AssignmentPattern':
+				add_decl_names(pat.left);
+				break;
+			case 'RestElement':
+				add_decl_names(pat.argument);
+				break;
+		}
+	};
+	const scan_host_decls = (body) => {
+		for (const node of body ?? []) {
+			if (node.type === 'VariableDeclaration') {
+				for (const d of node.declarations) add_decl_names(d.id);
+			} else if ((node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') && node.id) {
+				host_local_names.add(node.id.name);
+			}
+		}
+	};
+	scan_host_decls(instance_body);
+	scan_host_decls(ast.module?.content?.body ?? []);
 
 	// --- find island units in the template ---------------------------------
 	// marked-component usages: { node (svelte template node), strategy, options }
@@ -342,13 +388,16 @@ export function transformHost(source, id, ctx) {
 		for (const name of free) {
 			if (imports.has(name)) {
 				used_import_nodes.add(imports.get(name).node);
-			} else if (is_global(name)) {
-				// leave alone
 			} else if (host_snippet_names.has(name)) {
 				throw new Error(
 					`[ogygia] ${rel_host}: island references snippet \`${name}\` defined outside the island. ` +
 						`Snippets cannot cross the island boundary. Define the snippet inside the island instead.`
 				);
+			} else if (host_local_names.has(name)) {
+				// a host-declared binding — captured even if it shadows a global (JS scope wins)
+				captured.push(name);
+			} else if (is_global(name)) {
+				// a true global (not shadowed by a host binding) — leave alone, never a prop
 			} else {
 				captured.push(name);
 			}
