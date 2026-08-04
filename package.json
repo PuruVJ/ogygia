@@ -1,0 +1,13 @@
+{
+  "name": "sk-islands-monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter playground build",
+    "dev": "pnpm --filter playground dev",
+    "preview": "pnpm --filter playground preview"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}

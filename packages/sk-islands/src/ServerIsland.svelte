@@ -1,0 +1,55 @@
+<script>
+	// Private wrapper the compile-time transform emits for a SERVER island
+	//   (import ... with { island: 'server' }).
+	// Renders the `fallback` snippet into the page immediately; the island component
+	// itself is NOT rendered here. Instead it emits a signed reference to the
+	// `<base>/_islands` endpoint (served by the `islands()` handle) which the runtime
+	// fetches and swaps in. NOT part of the public API.
+	import { stringify } from 'devalue';
+	import runtimeUrl from 'virtual:sk-islands/runtime-url';
+	import { secret } from 'virtual:sk-islands/secret';
+	import { base, assets } from '$app/paths';
+	import { sign } from './server/hmac.js';
+	import { b64urlEncode } from './server/payload.js';
+
+	/**
+	 * @typedef {Object} Props
+	 * @property {string} __entry island id (manifest key on the server)
+	 * @property {any} [__component] island component — imported by the host purely so its CSS
+	 *   lands in the page import graph; NOT rendered here (the endpoint renders it).
+	 * @property {Record<string, any>} __props captured props (server-rendered with these)
+	 * @property {import('svelte').Snippet} [fallback] rendered into the page immediately
+	 */
+
+	/** @type {Props} */
+	// eslint-disable-next-line no-unused-vars
+	let { __entry, __component, __props, fallback } = $props();
+
+	// HMAC-signed devalue payload. Base64url so it rides in the query string untouched.
+	const payload = b64urlEncode(stringify(__props));
+	const sig = sign(secret, payload);
+
+	const prefix = base || '';
+	const endpoint = `${prefix}/_islands?id=${encodeURIComponent(__entry)}&props=${payload}&sig=${sig}`;
+
+	// Build tag strings without literal angle brackets so Svelte's raw-text <script>/<link>
+	// lexer never mistakes them for real tags.
+	const LT = String.fromCharCode(60);
+	const GT = String.fromCharCode(62);
+
+	// <link rel="preload" as="fetch"> so the browser starts the endpoint fetch during HTML
+	// parse, before the runtime module even loads. The runtime fetch reuses this response.
+	const hrefAttr = endpoint.split('&').join('&amp;');
+	const preloadLink = LT + 'link rel="preload" as="fetch" href="' + hrefAttr + '"' + GT;
+
+	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
+	// Match Island.svelte's URL exactly (assets||base) so the module de-dupes across mixed pages.
+	const src = (assets || base || '') + runtimeUrl;
+	const runtimeScript = LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
+</script>
+
+<sk-island
+	data-strategy="server"
+	data-entry={__entry}
+	data-endpoint={endpoint}
+>{#if fallback}{@render fallback()}{/if}</sk-island>{@html preloadLink}{@html runtimeScript}

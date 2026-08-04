@@ -1,0 +1,13 @@
+# upstream reference clones — not part of this repo
+/kit/
+/svelte/
+
+node_modules/
+.svelte-kit/
+/playground/build/
+dist/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
