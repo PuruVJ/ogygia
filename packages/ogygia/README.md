@@ -64,7 +64,7 @@ of `hydrate`, `defer`, or `preset`. Import-attribute values must be **string lit
 	import Counter  from '$lib/Counter.svelte'  with { hydrate: 'load' };
 	import Chart    from '$lib/Chart.svelte'    with { hydrate: 'visible' };
 	import Small    from '$lib/Small.svelte'    with { hydrate: '(max-width: 600px)' };
-	import Greeting from '$lib/Greeting.svelte' with { defer: 'true' };   // server island
+	import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };   // server island (fetch timing)
 	import Panel    from '$lib/Panel.svelte'    with { preset: 'chart' }; // named preset
 </script>
 
@@ -73,7 +73,9 @@ of `hydrate`, `defer`, or `preset`. Import-attribute values must be **string lit
 
 - **`hydrate`**: `'load'` (ASAP) · `'idle'` (`requestIdleCallback`) · `'visible'`
   (`IntersectionObserver`) · a **media query** string (`'(max-width: 600px)'` → `matchMedia`).
-- **`defer: 'true'`**: a **server island** (see below).
+- **`defer`**: a **server island** (see below). Its value is the **fetch timing** for the hole,
+  symmetric with `hydrate`: `'load'` (immediate, preload-hinted) · `'idle'` · `'visible'` · a media
+  query. (The old boolean `defer: 'true'` is retired — use `defer: 'load'`.)
 - **`preset: 'name'`**: a named preset from plugin config.
 - Props flow as usual and are serialized with **devalue** (`Date`, `Map`, `Set`, `BigInt`,
   nested objects survive). Snippets/children work too; free outer-scope variables are captured
@@ -102,12 +104,25 @@ ogygia({
   `preset` mixed with another key, `defer` + `hydrate` together (roadmap). `hydrate: 'false'` errors
   with a hint to use `hydrate: 'none'` (the lake value — see below).
 
-## Server islands (`defer: 'true'`)
+## Server islands (`defer`)
 
 A server island renders its `fallback` snippet into the page immediately; the component itself is
 **not** rendered at page-SSR time. At runtime the browser fetches the rendered component from the
 island endpoint (same-origin, cookies flow) and swaps it in. Props are **HMAC-signed**
 (devalue payload) so the endpoint rejects tampering.
+
+The `defer` **value** is the **fetch timing** for the hole — the same scheduler as `hydrate`, so the
+two axes are symmetric:
+
+| `defer` | when the hole fetches | preload hint? |
+| ------- | --------------------- | ------------- |
+| `'load'` | immediately on connect | **yes** (`<link rel="preload" as="fetch">`) |
+| `'idle'` | on `requestIdleCallback` | no |
+| `'visible'` | when scrolled into view (`IntersectionObserver`) | no |
+| `'(media query)'` | when the query matches | no |
+
+Only `'load'` preloads — the others deliberately hold the fetch until their schedule fires. The old
+boolean spelling `defer: 'true'` is retired (build error suggesting `defer: 'load'`).
 
 The default endpoint path is **`/🏝️ogygia🏝️`** — the island-emoji brackets make it clash-safe
 against real routes. It's a handle route (not a filesystem path), so adapter-node serves it fine;
@@ -116,7 +131,7 @@ decoded pathname). Override it with `ogygiaHandle({ endpoint: '/my-islands' })`.
 
 ```svelte
 <script>
-	import Greeting from '$lib/Greeting.svelte' with { defer: 'true' };
+	import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };   // or 'idle' | 'visible' | a media query
 </script>
 
 <Greeting name="world">

@@ -21,11 +21,13 @@
 	 * @property {import('svelte').Component<Record<string, unknown>>} [__component] island component — imported by the host purely so its CSS
 	 *   lands in the page import graph; NOT rendered here (the endpoint renders it).
 	 * @property {Record<string, unknown>} __props captured props (server-rendered with these)
+	 * @property {string} [__defer] fetch-timing of the hole: 'load' | 'idle' | 'visible' | media query
+	 * @property {string} [__margin] IntersectionObserver rootMargin for `__defer: 'visible'`
 	 * @property {import('svelte').Snippet} [fallback] rendered into the page immediately
 	 */
 
 	/** @type {Props} */
-	let { __entry, __component: Component, __props, fallback } = $props();
+	let { __entry, __component: Component, __props, __defer = 'load', __margin, fallback } = $props();
 
 	// Nested server island (inside another island): a server island can't render its fallback-
 	// then-fetch dance inside a parent island's hydration. Degrade to a plain inline component
@@ -55,12 +57,16 @@
 
 	// <link rel="preload" as="fetch"> so the browser starts the endpoint fetch during HTML
 	// parse, before the runtime module even loads. The runtime fetch reuses this response.
-	// Skipped when prerendering: a static page has no request context, and emitting the hint
-	// would make Kit's prerender crawler fetch the (dynamic) endpoint. `data-endpoint` still
-	// drives the runtime fetch at request time — a prerendered server island just loses the hint.
+	// Emitted ONLY for `__defer: 'load'` (immediate fetch): 'idle'/'visible'/media defer the fetch,
+	// so preloading would defeat the deferral (the whole point is NOT to fetch until the schedule
+	// fires). Skipped when prerendering: a static page has no request context, and emitting the hint
+	// would make Kit's prerender crawler fetch the (dynamic) endpoint. `endpoint` still drives the
+	// runtime fetch at request time — a prerendered / deferred server island just loses the hint.
 	const href_attr = endpoint.split('&').join('&amp;');
 	const preload_link =
-		nested || building ? '' : LT + 'link rel="preload" as="fetch" href="' + href_attr + '"' + GT;
+		nested || building || __defer !== 'load'
+			? ''
+			: LT + 'link rel="preload" as="fetch" href="' + href_attr + '"' + GT;
 
 	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
 	// Match Island.svelte's URL exactly (asset()) so the module de-dupes across mixed pages.
@@ -68,8 +74,16 @@
 	const runtime_script = LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
 </script>
 
+<!--
+	`defer` (bare) is the server-region MARKER; the runtime reads `defer-when` for the fetch timing.
+	It must be a SEPARATE attribute because `defer` is an HTML boolean attribute — Svelte would render
+	`defer="visible"` as a valueless `defer=""` and drop the timing. `defer-when` is not boolean, so it
+	keeps its string value.
+-->
 {#if nested}<Component {...__props} />{:else}<ogygia-region
 		entry={__entry}
 		defer
+		defer-when={__defer}
+		margin={__margin || undefined}
 		endpoint={endpoint}
 	>{#if fallback}{@render fallback()}{/if}</ogygia-region>{@html preload_link}{@html runtime_script}{/if}

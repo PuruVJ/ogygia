@@ -4,7 +4,7 @@
 	import Inner from '$lib/Inner.svelte' with { hydrate: 'visible' };
 	// A SERVER island nested inside a client island degrades too: it renders inline as a
 	// normal component ('server' strategy ignored), so its data still appears.
-	import Greeting from '$lib/Greeting.svelte' with { defer: 'true' };
+	import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
 
 	let { title = 'outer' }: { title?: string } = $props();
 	let m = $state(0);

@@ -159,32 +159,59 @@ describe('hydrate strategy values', () => {
 	});
 });
 
-describe('defer / server island', () => {
-	test("defer: 'true' -> server island (ServerIsland wrapper, kind defer, server true)", () => {
-		const r = run(wrap(`import G from './G.svelte' with { defer: 'true' };`, '<G name="w" />'));
+describe('defer / server island (fetch-timing symmetry)', () => {
+	test("defer: 'load' -> server island (ServerIsland wrapper, kind defer, server true, __defer load)", () => {
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G name="w" />'));
 		expect(r!.code).toMatch(/<OgygiaServerIsland__Wrapper __entry=/);
+		expect(r!.code).toMatch(/__defer=\{"load"\}/);
 		expect(r!.code).not.toMatch(/OgygiaIsland__Wrapper /);
 		expect(r!.islands[0].kind).toBe('defer');
 		expect(r!.islands[0].server).toBe(true);
 	});
 
+	const timings: Array<[string, string, RegExp]> = [
+		['idle', 'idle', /__defer=\{"idle"\}/],
+		['visible', 'visible', /__defer=\{"visible"\} __margin=\{"0px"\}/],
+		['media query', '(min-width: 700px)', /__defer=\{"\(min-width: 700px\)"\}/]
+	];
+	for (const [label, value, re] of timings) {
+		test(`defer: '${label}' -> server island carrying the __defer timing`, () => {
+			const r = run(wrap(`import G from './G.svelte' with { defer: '${value}' };`, '<G />'));
+			expect(r!.code).toMatch(/OgygiaServerIsland__Wrapper/);
+			expect(r!.code).toMatch(re);
+			expect(r!.islands[0].server).toBe(true);
+		});
+	}
+
+	test("defer: 'visible' with a custom global margin threads the margin", () => {
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'visible' };`, '<G />'), makeCtx({ visibleMargin: '300px' }));
+		expect(r!.code).toMatch(/__defer=\{"visible"\} __margin=\{"300px"\}/);
+	});
+
+	test("defer: 'true' is retired — errors suggesting a timing value ('load')", () => {
+		const msg = expectThrows(
+			() => run(wrap(`import G from './G.svelte' with { defer: 'true' };`, '<G />')),
+			/`defer: 'true'` is no longer valid/
+		);
+		expect(msg).toMatch(/defer: 'load'/);
+	});
+
+	test('defer: unknown timing errors, listing the valid values', () => {
+		expectThrows(
+			() => run(wrap(`import G from './G.svelte' with { defer: 'whenever' };`, '<G />')),
+			/unknown defer timing 'whenever'.*'load'.*'idle'.*'visible'.*media query/s
+		);
+	});
+
 	test('server island keeps `fallback` inline in the host + strips it from the island module', () => {
-		const r = run(wrap(`import G from './G.svelte' with { defer: 'true' };`, '<G name="w">{#snippet fallback()}<p>loading…</p>{/snippet}</G>'));
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G name="w">{#snippet fallback()}<p>loading…</p>{/snippet}</G>'));
 		expect(r!.code).toMatch(/<OgygiaServerIsland__Wrapper[^>]*>\{#snippet fallback\(\)\}<p>loading…<\/p>\{\/snippet\}<\/OgygiaServerIsland__Wrapper>/);
 		expect(islandSource(r)).not.toMatch(/fallback/);
 	});
 
-	test("defer: 'load' (not a timing variant today) emits no wrapper", () => {
-		// `defer` currently only accepts 'true' (server island); other values are not a region
-		// strategy (deferred client-island timing is a roadmap combo — see DESIGN.md).
-		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G />'));
-		expect(r?.code ?? '').not.toMatch(/OgygiaServerIsland__Wrapper/);
-		expect(r?.code ?? '').not.toMatch(/OgygiaIsland__Wrapper /);
-	});
-
 	test('defer + hydrate together is a roadmap error', () => {
 		expectThrows(
-			() => run(wrap(`import C from './C.svelte' with { defer: 'true', hydrate: 'load' };`, '<C />')),
+			() => run(wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };`, '<C />')),
 			/`defer` \+ `hydrate` together is not yet supported \(roadmap/
 		);
 	});
@@ -196,7 +223,7 @@ describe('preset semantics', () => {
 			chart: { hydrate: 'visible', margin: '200px' },
 			lazy: { hydrate: 'load', margin: '999px' }, // margin inapplicable to load -> tolerated
 			modal: { hydrate: 'idle' },
-			srv: { defer: 'true' }
+			srv: { defer: 'load' }
 		}
 	});
 
@@ -714,9 +741,9 @@ describe('exact wrapper output per strategy', () => {
 	}
 
 	test('server island -> exact <OgygiaServerIsland__Wrapper …> with fallback body', () => {
-		const r = run(wrap(`import G from './G.svelte' with { defer: 'true' };`, '<G a={1}>{#snippet fallback()}x{/snippet}</G>'));
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G a={1}>{#snippet fallback()}x{/snippet}</G>'));
 		const expected =
-			`<OgygiaServerIsland__Wrapper __entry={"${idFor(0)}"} __component={__OgygiaIsland_0} __props={{}}>` +
+			`<OgygiaServerIsland__Wrapper __entry={"${idFor(0)}"} __component={__OgygiaIsland_0} __props={{}} __defer={"load"}>` +
 			`{#snippet fallback()}x{/snippet}</OgygiaServerIsland__Wrapper>`;
 		expect(r!.code).toContain(expected);
 	});
@@ -817,18 +844,18 @@ describe('import forms', () => {
 
 describe('server island extras', () => {
 	test('a server island with no fallback still hoists + wraps', () => {
-		const r = run(wrap(`import G from './G.svelte' with { defer: 'true' };`, '<G />'));
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G />'));
 		expect(r!.code).toMatch(/OgygiaServerIsland__Wrapper/);
 		expect(r!.islands[0].server).toBe(true);
 	});
 
 	test('a server island captures host props (rendered by the endpoint)', () => {
-		const r = run(wrap(`import G from './G.svelte' with { defer: 'true' };\nlet u = 1;`, '<G user={u}>{#snippet fallback()}x{/snippet}</G>'));
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };\nlet u = 1;`, '<G user={u}>{#snippet fallback()}x{/snippet}</G>'));
 		expect(propsObject(r!.code)).toBe('__props={{ u }}');
 	});
 
 	test('a server island via preset behaves identically to defer:true', () => {
-		const ctx = makeCtx({ presets: { srv: { defer: 'true' } } });
+		const ctx = makeCtx({ presets: { srv: { defer: 'load' } } });
 		const r = run(wrap(`import G from './G.svelte' with { preset: 'srv' };`, '<G />'), ctx);
 		expect(r!.islands[0].server).toBe(true);
 		expect(r!.islands[0].kind).toBe('defer');
@@ -873,7 +900,7 @@ describe('more media queries', () => {
 
 describe('more preset tolerance', () => {
 	test('a defer preset ignores an inapplicable margin key (tolerant)', () => {
-		const ctx = makeCtx({ presets: { srvm: { defer: 'true', margin: '10px' } } });
+		const ctx = makeCtx({ presets: { srvm: { defer: 'load', margin: '10px' } } });
 		const r = run(wrap(`import G from './G.svelte' with { preset: 'srvm' };`, '<G />'), ctx);
 		expect(r!.islands[0].server).toBe(true);
 	});
@@ -961,7 +988,7 @@ describe('member reads + exact server-island module', () => {
 	});
 
 	test('exact generated island module for a server island (no fallback, one capture)', () => {
-		const r = run(wrap(`import G from './G.svelte' with { defer: 'true' };\nlet user = 1;`, '<G {user} />'));
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };\nlet user = 1;`, '<G {user} />'));
 		const expected = `<script>\n\timport G from './G.svelte';\n\tlet { user } = $props();\n</script>\n<G {user} />\n`;
 		expect(r!.islands[0].source).toBe(expected);
 	});

@@ -22,6 +22,7 @@ node verify/prerender.ts       http://localhost:3051   # prerendered page + serv
 node verify/flicker.ts         http://localhost:3051   # SSR-resolved query seeding: zero-flash hydration
 node verify/lakes.ts           http://localhost:3051   # lakes: frozen region, no client JS, island-in-lake, restore
 node verify/mutation-guards.ts http://localhost:3051   # captured-var mutation: build errors + DEV proxy warns / prod-silence
+node verify/defer-timing.ts    http://localhost:3051   # server-island fetch timing: load/idle/visible/media + preload-only-for-load
 ```
 
 `mutation-guards.ts` runs its build-time checks (transform errors for writing to a captured var)

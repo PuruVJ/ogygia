@@ -12,11 +12,18 @@ Every region boundary answers two independent questions:
 
 | axis      | values                                            | question                     |
 | --------- | ------------------------------------------------- | ---------------------------- |
-| `render`  | `page` (default) \| `defer`                       | When does this HTML arrive?  |
+| `render`  | `page` (default) \| `defer` `load`/`idle`/`visible`/`'(media)'` | When does this HTML arrive, and on what schedule? |
 | `hydrate` | `none` (default) \| `load` \| `idle` \| `visible` \| `'(media query)'` | Does this subtree's JS wake, and when? |
 
 The page shell is simply the root region: `render: page`, `hydrate: none`.
 Everything else is an override at some boundary.
+
+**Timing symmetry.** Both axes take the *same* schedule vocabulary — `load` | `idle` | `visible`
+| a media query — driven by one runtime scheduler. On the `hydrate` axis the schedule says *when a
+region's JS wakes*; on the `render: defer` axis (a server island) the identical schedule says *when
+the hole fetches its HTML*. A `defer: 'visible'` hole does not hit the network until it scrolls into
+view; only `defer: 'load'` emits a `<link rel="preload">`. Authoring: `with { defer: 'load' }` (the
+retired boolean `defer: 'true'` is a build error pointing here).
 
 ## The one rule (nearest boundary wins)
 

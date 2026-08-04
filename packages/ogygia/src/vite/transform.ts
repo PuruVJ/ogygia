@@ -168,13 +168,32 @@ export function transformHost(source, id, ctx) {
 				throw err(names, from_preset ? `unknown key \`${k}\` in preset '${from_preset}'.` : `unknown import attribute \`${k}\`.`);
 			}
 		}
-		if (attrs.get('defer') === 'true' && attrs.has('hydrate')) {
+		if (attrs.has('defer') && attrs.has('hydrate')) {
 			throw err(names, "`defer` + `hydrate` together is not yet supported (roadmap: deferred client island — see DESIGN.md).");
 		}
 
-		// `defer: 'true'` -> server island (render: defer, hydrate: false). `margin` ignored.
-		if (attrs.get('defer') === 'true') {
-			for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy: 'server', options: {} });
+		// `defer` -> SERVER island (render: defer, hydrate: none). Its VALUE is the fetch-timing for
+		// the hole, symmetric with `hydrate`'s value being the hydrate-timing: 'load' (immediate,
+		// preload-hinted) | 'idle' (requestIdleCallback) | 'visible' (IntersectionObserver) | a media
+		// query. The old boolean spelling `defer: 'true'` is retired — point authors at `defer: 'load'`.
+		if (attrs.has('defer')) {
+			const dval = attrs.get('defer');
+			if (dval === 'true') {
+				throw err(
+					names,
+					"`defer: 'true'` is no longer valid — a server island now takes a fetch-timing value. Use `defer: 'load'` (immediate + preload) | 'idle' | 'visible' | a media query. See DESIGN.md."
+				);
+			}
+			let when;
+			if (KNOWN_STRATEGIES.has(dval)) when = dval; // load | idle | visible
+			else if (dval.includes('(')) when = dval; // media query is the value itself
+			else throw err(names, `unknown defer timing '${dval}'. Use 'load' | 'idle' | 'visible' | a media query.`);
+
+			// `margin` applies only to `visible` (tolerantly ignored otherwise), same as hydrate.
+			const options: { when: string; margin?: string } = { when };
+			if (when === 'visible') options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
+
+			for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy: 'server', options });
 			imports_to_strip.add(node);
 			continue;
 		}
@@ -465,9 +484,14 @@ export function transformHost(source, id, ctx) {
 			const fallback_text = fallback_node
 				? source.slice(fallback_node.start, fallback_node.end)
 				: '';
+			// Fetch-timing of the hole (symmetric with hydrate). ServerIsland.svelte puts it on the
+			// region as `defer="<when>"` and emits the preload <link> ONLY for 'load'.
+			const defer_when = unit.options?.when || 'load';
+			let server_attrs = ` __defer={${JSON.stringify(defer_when)}}`;
+			if (unit.options?.margin != null) server_attrs += ` __margin={${JSON.stringify(unit.options.margin)}}`;
 			const replacement =
 				`<${server_wrapper_name} __entry={${JSON.stringify(iid)}} ` +
-				`__component={${comp_var}} __props={${props_obj}}>` +
+				`__component={${comp_var}} __props={${props_obj}}${server_attrs}>` +
 				fallback_text +
 				`</${server_wrapper_name}>`;
 			s.overwrite(unit.node.start, unit.node.end, replacement);
