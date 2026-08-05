@@ -142,8 +142,16 @@
 		<h3 class="doc-subhead">svelte.config.js</h3>
 		<div class="prose">
 			<p>
-				Async SSR and remote functions are required. Without them, deferred server islands and
-				nested region context will not compile or run correctly.
+				ogygia's region model does <strong>not</strong> require Kit experimental flags. Nested
+				region context uses Svelte's stable <code>createContext</code> (5.40+). Deferred server
+				islands work with ordinary sync components.
+			</p>
+			<p>
+				Turn flags on only for what <em>your</em> app uses:
+				<code>compilerOptions.experimental.async</code> if components use top-level
+				<code>await</code>, and <code>kit.experimental.remoteFunctions</code> if islands import
+				<code>.remote.ts</code> modules. Without them, those features simply aren't available —
+				hydrate, lakes, defer, and the router still run.
 			</p>
 		</div>
 		<CodeBlock html={data.svelteConfigHtml} />
@@ -648,13 +656,14 @@
 				<code>estree-walker</code>.
 			</p>
 			<p>
-				Kit's experimental flags for remote functions and async SSR must be on, and both features
-				are upstream-experimental — the coupling section of the README carries the current
-				status. Prerendering, adapter-node, and Vercel-style adapters are exercised; anything
-				serverless works for client islands, but server islands and remote functions need a
-				running server. Kit skips its client build when every route is <code>csr = false</code>;
-				ogygia detects that and runs its own standalone island build, so an all-islands app needs
-				no token csr page.
+				Kit's experimental flags for remote functions and async SSR are
+				<strong>optional</strong> — enable them only if your app uses <code>.remote.ts</code> or
+				top-level <code>await</code> in components. Both are still upstream-experimental; the
+				coupling section of the README carries the current status. Prerendering, adapter-node,
+				and Vercel-style adapters are exercised; anything serverless works for client islands, but
+				server islands need a running origin (and remotes need a server too). Kit skips its client
+				build when every route is <code>csr = false</code>; ogygia detects that and runs its own
+				standalone island build, so an all-islands app needs no token csr page.
 			</p>
 		</div>
 	</section>

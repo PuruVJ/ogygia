@@ -10,7 +10,7 @@ The library depends only on `devalue`, `magic-string`, and `estree-walker`. Ever
 | peer | range | why |
 | ---- | ----- | --- |
 | `@sveltejs/kit` | `>=2.70.2 <3` | ogygia **deep-imports Kit internals** (the remote wire codec, the client remote-functions entry) by absolute path — no patches, but tightly coupled to Kit's internal layout. Treat the range as **tested**: it is exercised against the pinned minor, and a Kit minor bump can move an internal we import. |
-| `svelte` | `^5.40.0` | needs `createContext` (5.40+) for the nested-region flag, runes, and async SSR. |
+| `svelte` | `^5.40.0` | needs `createContext` (5.40+) for the nested-region flag, plus runes. Optional: `experimental.async` only if *your* components use top-level `await`. |
 | `vite` | `^5 \|\| ^6 \|\| ^7 \|\| ^8` | only the stable plugin API is used; broad on purpose (developed against vite 8 / Rolldown). |
 
 > Because Kit coupling is to **internals**, minors are a tested range rather than a semver promise —
@@ -53,6 +53,14 @@ export const handle = ogygiaHandle();
 > client build (runtime + code-split chunks). Keep **at least one** route that doesn't set
 > `csr = false` (a normal Kit page). If every route is `csr = false`, ogygia runs its own
 > standalone client build automatically. Both paths are verified.
+
+**Optional Kit/Svelte experimental flags** — not required for hydrate, lakes, defer, or the
+router. Enable only what you use:
+
+- `compilerOptions.experimental.async` — top-level `await` / `await` in `$derived` or markup
+- `kit.experimental.remoteFunctions` — `.remote.ts` primitives inside islands
+
+Without them, those features are unavailable; the region model still runs.
 
 ## Authoring — the region model (one import attribute)
 

@@ -18,10 +18,11 @@ export default defineConfig({
 });`;
 
 export const svelteConfig = `export default {
-  compilerOptions: { experimental: { async: true } },
+  // Optional — only if YOU use these features:
+  // compilerOptions: { experimental: { async: true } },   // top-level await in components
+  // kit.experimental.remoteFunctions: true,               // .remote.ts in islands
   kit: {
-    adapter: adapter(),
-    experimental: { remoteFunctions: true }
+    adapter: adapter()
   }
 };`;
 
