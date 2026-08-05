@@ -25,6 +25,30 @@ declare module 'virtual:ogygia/runtime-url' {
 declare module 'virtual:ogygia/secret' {
 	export const secret: string;
 }
+declare module 'virtual:ogygia/sign' {
+	export function sign(secret: string, message: string): string;
+	export function verify(secret: string, message: string, sig: string): boolean;
+	export function region_mac_message(
+		id: string,
+		exp: number | string,
+		props: string,
+		session?: string
+	): string;
+}
+declare module 'virtual:ogygia/request-event' {
+	export function getRequestEvent(): {
+		cookies: { get: (name: string) => string | undefined };
+		[key: string]: unknown;
+	};
+}
+declare module 'virtual:ogygia/rate-limit' {
+	/** `max: 0` disables. Baked from `ogygia({ rateLimit })`. */
+	export const rateLimit: { max: number; windowMs: number };
+}
+declare module 'virtual:ogygia/session-cookie' {
+	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ bindSession })`. */
+	export const sessionCookie: string;
+}
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;
 }
@@ -35,9 +59,7 @@ declare module 'virtual:ogygia/kit-wire' {
 }
 
 declare module '$app/paths' {
-	/** @deprecated use resolve() */
 	export const base: string;
-	/** @deprecated use asset() */
 	export const assets: string;
 	export function resolve(id: string, params?: Record<string, string>): string;
 	export function asset(file: string): string;
@@ -46,6 +68,12 @@ declare module '$app/environment' {
 	export const building: boolean;
 	export const browser: boolean;
 	export const dev: boolean;
+}
+declare module '$app/server' {
+	export function getRequestEvent(): {
+		cookies: { get: (name: string) => string | undefined };
+		[key: string]: unknown;
+	};
 }
 
 // Minimal ambient for the one Kit type the library imports (`Handle` in hooks.ts). The lib does

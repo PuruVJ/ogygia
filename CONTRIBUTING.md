@@ -11,8 +11,8 @@ no-explicit-any`, error) for `.ts`; the `scripts/no-any.mjs` script still covers
 
 | kind | case | examples |
 | ---- | ---- | -------- |
-| **Public API** — package exports, option keys, hook names | `camelCase` | `ogygia`, `ogygiaHandle`, `ClientRouter`, option keys `spa` / `visible` / `presets` / `margin` / `hydrate` / `defer` / `endpoint` / `viewTransitions` |
-| **Classes & Svelte components** | `PascalCase` | `Island`, `ServerIsland`, `NestedProvider`, `LakePlaceholder`, `LakeBoundary`, `ClientRouter`, the runtime custom-element class |
+| **Public API** — package exports, option keys, hook names | `camelCase` | `ogygia`, `ogygiaHandle`, `OgygiaRouter`, option keys `spa` / `visible` / `presets` / `margin` / `hydrate` / `defer` / `endpoint` / `viewTransitions` |
+| **Classes & Svelte components** | `PascalCase` | `Island`, `ServerIsland`, `NestedProvider`, `LakePlaceholder`, `LakeBoundary`, `OgygiaRouter`, the runtime custom-element class |
 | **Internals** — locals, module-private functions, non-exported helpers, `#` private fields | `snake_case` | `run_transform`, `merge_head`, `#on_visible`, `hashed_runtime_url`, `collect_pattern_names` |
 | **Module-level constants** | `SCREAMING_SNAKE_CASE` | `ISLAND_DIR`, `RUNTIME_ENTRY`, `APP_SHIMS` |
 

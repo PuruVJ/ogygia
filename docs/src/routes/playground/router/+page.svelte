@@ -5,15 +5,17 @@
 <h2 style="view-transition-name: pg-router-title;">SPA router</h2>
 <div class="prose" style="margin-bottom: 2rem;">
 	<p>
-		<code>&lt;ClientRouter /&gt;</code> is rendered in this site's root layout, so navigation between
+		<code>&lt;OgygiaRouter /&gt;</code> is rendered in this site's root layout, so navigation between
 		these pages is a client-side swap: the body is replaced, the head is merged, and a View
 		Transition plays where supported. The heading morphs across pages because it carries a shared
 		<code>view-transition-name</code>.
 	</p>
 	<p>
-		The probe island below reads the current path from <code>$app/state</code> and stamps a fresh
-		mount id. Navigate to Page A and back: the path updates and the mount id changes, because
-		islands remount on every navigation — there is no cross-navigation island state.
+		The <strong>persist probe</strong> above the page content sits in
+		<code>data-ogygia-persist="router-demo-chrome"</code> in this section's layout. Click +1, then
+		go to Page A and back — mount id and click count stay put. The <strong>route probe</strong>
+		below remounts on every navigation (fresh mount id); that is the default for islands outside
+		persist chrome.
 	</p>
 </div>
 

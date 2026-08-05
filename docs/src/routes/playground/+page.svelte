@@ -28,9 +28,9 @@
 		},
 		{
 			href: '/playground/router',
-			eyebrow: 'ClientRouter',
+			eyebrow: 'OgygiaRouter',
 			title: 'Router',
-			body: 'SPA swaps with view transitions and prefetch attributes across a small sub-section, plus an MPA handoff to a full document load.'
+			body: 'SPA swaps with view transitions, data-ogygia-persist chrome that keeps islands mounted, prefetch attributes, plus an MPA handoff.'
 		},
 		{
 			href: '/playground/mutation-guard',

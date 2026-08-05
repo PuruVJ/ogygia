@@ -9,5 +9,7 @@ export {
 	preloadCode,
 	beforeNavigate,
 	afterNavigate,
-	disableScrollHandling
+	disableScrollHandling,
+	bust_page_cache,
+	spa_html_cacheable
 } from './runtime/router.js';

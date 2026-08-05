@@ -44,7 +44,7 @@ try {
 		await page.waitForSelector('[data-clock-island]', { timeout: 3000 });
 		check('router: SPA nav inside (spa) group (marker kept)', (await page.evaluate(() => window.__marker)) === m1);
 
-		// nav to /plain (no <ClientRouter/>) -> MPA handoff (real document load)
+		// nav to /plain (no <OgygiaRouter/>) -> MPA handoff (real document load)
 		let loaded: boolean = false;
 		page.on('load', () => (loaded = true));
 		await page.click('nav a[href="/plain"]');

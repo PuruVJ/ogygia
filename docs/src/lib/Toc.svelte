@@ -27,6 +27,7 @@
 		{ id: 'lakes', label: 'Lakes', sub: false },
 		{ id: 'data', label: 'Data & remotes', sub: false },
 		{ id: 'router', label: 'SPA router', sub: false },
+		{ id: 'persist', label: 'data-ogygia-persist', sub: true },
 		{ id: 'patterns', label: 'Pesky patterns', sub: false },
 		{ id: 'constraints', label: 'Constraints', sub: false }
 	] as const;

@@ -1,10 +1,10 @@
 <script lang="ts">
-	// This layout opts into the SPA router (+ view transitions) via <ClientRouter/>.
-	import { ClientRouter } from 'ogygia';
+	// This layout opts into the SPA router (+ view transitions) via <OgygiaRouter/>.
+	import { OgygiaRouter } from 'ogygia';
 	let { children } = $props();
 </script>
 
-<ClientRouter />
+<OgygiaRouter />
 
 <nav>
 	<a href="/">Home</a>

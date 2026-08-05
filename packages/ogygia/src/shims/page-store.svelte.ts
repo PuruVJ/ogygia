@@ -26,7 +26,7 @@ const FALLBACK: PageSnapshot = {
 	state: {}
 };
 
-class PageState {
+export class PageState {
 	url = $state.raw(FALLBACK.url);
 	params = $state.raw<Record<string, string>>(FALLBACK.params);
 	route = $state.raw<{ id: string | null }>(FALLBACK.route);
@@ -35,33 +35,59 @@ class PageState {
 	form = $state.raw<unknown>(FALLBACK.form);
 	error = $state.raw<{ message: string } | null>(FALLBACK.error);
 	state = $state.raw<Record<string, unknown>>(FALLBACK.state);
+
+	#subscribers = new Set<() => void>();
+
+	set(snap: Partial<PageSnapshot> | undefined | null): void {
+		const s = snap || FALLBACK;
+		this.url = s.url instanceof URL ? s.url : FALLBACK.url;
+		this.params = s.params ?? {};
+		this.route = s.route ?? { id: null };
+		this.status = s.status ?? 200;
+		this.data = s.data ?? {};
+		this.form = s.form ?? null;
+		this.error = s.error ?? null;
+		this.state = s.state ?? {};
+		for (const fn of this.#subscribers) {
+			try {
+				fn();
+			} catch {
+				/* ignore */
+			}
+		}
+	}
+
+	reset(): void {
+		this.set({
+			url: typeof location !== 'undefined' ? new URL(location.href) : FALLBACK.url,
+			params: {},
+			route: { id: null },
+			status: 200,
+			data: {},
+			form: null,
+			error: null,
+			state: {}
+		});
+	}
+
+	subscribe(fn: () => void): () => void {
+		this.#subscribers.add(fn);
+		return () => this.#subscribers.delete(fn);
+	}
 }
 
 export const page_state = new PageState();
 
-const subscribers = new Set<() => void>();
-
 /** Seed from an island's SSR snapshot (pre-hydration / SPA remount). */
 export function set_page(snap: Partial<PageSnapshot> | undefined | null): void {
-	const s = snap || FALLBACK;
-	page_state.url = s.url instanceof URL ? s.url : FALLBACK.url;
-	page_state.params = s.params ?? {};
-	page_state.route = s.route ?? { id: null };
-	page_state.status = s.status ?? 200;
-	page_state.data = s.data ?? {};
-	page_state.form = s.form ?? null;
-	page_state.error = s.error ?? null;
-	page_state.state = s.state ?? {};
-	for (const fn of subscribers) {
-		try {
-			fn();
-		} catch {
-			/* ignore */
-		}
-	}
+	page_state.set(snap);
+}
+
+/** Reset to location-based fallback between SPA body swaps (clears stale route data). */
+export function reset_page(): void {
+	page_state.reset();
 }
 
 export function subscribe_page(fn: () => void): () => void {
-	subscribers.add(fn);
-	return () => subscribers.delete(fn);
+	return page_state.subscribe(fn);
 }

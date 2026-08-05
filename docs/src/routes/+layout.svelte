@@ -1,9 +1,9 @@
 <script lang="ts">
 	import '../app.css';
-	import { ClientRouter } from 'ogygia';
+	import { OgygiaRouter } from 'ogygia';
 
 	let { children } = $props();
 </script>
 
-<ClientRouter />
+<OgygiaRouter />
 {@render children()}

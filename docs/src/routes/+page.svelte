@@ -8,6 +8,11 @@
 	import VisibleDemo from '$lib/demos/VisibleDemo.svelte' with { hydrate: 'visible' };
 	import MediaDemo from '$lib/demos/MediaDemo.svelte' with { hydrate: '(max-width: 600px)' };
 	import ServerDemo from '$lib/demos/ServerDemo.svelte';
+	import ServerGreeting from '$lib/demos/ServerGreeting.svelte' with { defer: 'load' };
+	// Presentational only — Shiki HTML comes from +page.server.ts (never ships to the browser).
+	import CodeBlock from '$lib/CodeBlock.svelte';
+
+	let { data }: { data: import('./$types').PageData } = $props();
 </script>
 
 <div id="top"></div>
@@ -65,7 +70,7 @@
 			</div>
 		</div>
 		<div class="hero-demo">
-			<HeroDemo />
+			<HeroDemo codeHtml={data.heroCode} />
 		</div>
 	</div>
 </header>
@@ -145,24 +150,7 @@
 				<code>presets</code> you reference from imports.
 			</p>
 		</div>
-		<div class="code-only">
-			<pre><code><span class="tok-keyword">import</span> &#123; sveltekit &#125; <span class="tok-keyword">from</span> <span class="tok-string">'@sveltejs/kit/vite'</span>;
-<span class="tok-keyword">import</span> &#123; ogygia &#125; <span class="tok-keyword">from</span> <span class="tok-string">'ogygia/vite'</span>;
-<span class="tok-keyword">import</span> &#123; defineConfig &#125; <span class="tok-keyword">from</span> <span class="tok-string">'vite'</span>;
-
-<span class="tok-keyword">export default</span> defineConfig(&#123;
-  plugins: [
-    ogygia(&#123;
-      visible: &#123; margin: <span class="tok-string">'200px'</span> &#125;,
-      presets: &#123;
-        chart: &#123; hydrate: <span class="tok-string">'visible'</span>, margin: <span class="tok-string">'200px'</span> &#125;,
-        modal: &#123; hydrate: <span class="tok-string">'idle'</span> &#125;
-      &#125;
-    &#125;),
-    sveltekit()
-  ]
-&#125;);</code></pre>
-		</div>
+		<CodeBlock html={data.viteConfigHtml} />
 
 		<h3 class="doc-subhead">svelte.config.js</h3>
 		<div class="prose">
@@ -171,15 +159,7 @@
 				nested region context will not compile or run correctly.
 			</p>
 		</div>
-		<div class="code-only">
-			<pre><code><span class="tok-keyword">export default</span> &#123;
-  compilerOptions: &#123; experimental: &#123; async: <span class="tok-keyword">true</span> &#125; &#125;,
-  kit: &#123;
-    adapter: adapter(),
-    experimental: &#123; remoteFunctions: <span class="tok-keyword">true</span> &#125;
-  &#125;
-&#125;;</code></pre>
-		</div>
+		<CodeBlock html={data.svelteConfigHtml} />
 
 		<h3 class="doc-subhead">Layout + hooks</h3>
 		<div class="prose">
@@ -196,16 +176,7 @@
 				if you do not want the default clash-safe emoji route.
 			</p>
 		</div>
-		<div class="code-only">
-			<pre><code><span class="tok-comment">// src/routes/+layout.ts</span>
-<span class="tok-keyword">export const</span> csr = <span class="tok-keyword">false</span>;
-
-<span class="tok-comment">// src/hooks.server.ts</span>
-<span class="tok-keyword">import</span> &#123; sequence &#125; <span class="tok-keyword">from</span> <span class="tok-string">'@sveltejs/kit/hooks'</span>;
-<span class="tok-keyword">import</span> &#123; ogygiaHandle &#125; <span class="tok-keyword">from</span> <span class="tok-string">'ogygia/hooks'</span>;
-
-<span class="tok-keyword">export const</span> handle = sequence(ogygiaHandle(), myOtherHandle);</code></pre>
-		</div>
+		<CodeBlock html={data.layoutAndHooksHtml} />
 	</section>
 
 	<section id="authoring">
@@ -217,16 +188,7 @@
 				must be string literals (ES spec). Every usage of that marked binding is a region.
 			</p>
 		</div>
-		<div class="code-only">
-			<pre><code><span class="tok-keyword">import</span> Counter  <span class="tok-keyword">from</span> <span class="tok-string">'$lib/Counter.svelte'</span>  <span class="tok-keyword">with</span> &#123; hydrate: <span class="tok-string">'load'</span> &#125;;
-<span class="tok-keyword">import</span> Chart    <span class="tok-keyword">from</span> <span class="tok-string">'$lib/Chart.svelte'</span>    <span class="tok-keyword">with</span> &#123; hydrate: <span class="tok-string">'visible'</span> &#125;;
-<span class="tok-keyword">import</span> Drawer   <span class="tok-keyword">from</span> <span class="tok-string">'$lib/Drawer.svelte'</span>   <span class="tok-keyword">with</span> &#123; hydrate: <span class="tok-string">'(max-width: 600px)'</span> &#125;;
-<span class="tok-keyword">import</span> Greeting <span class="tok-keyword">from</span> <span class="tok-string">'$lib/Greeting.svelte'</span> <span class="tok-keyword">with</span> &#123; defer: <span class="tok-string">'load'</span> &#125;;
-<span class="tok-keyword">import</span> Report   <span class="tok-keyword">from</span> <span class="tok-string">'$lib/Report.svelte'</span>   <span class="tok-keyword">with</span> &#123; hydrate: <span class="tok-string">'none'</span> &#125;;
-<span class="tok-keyword">import</span> Panel    <span class="tok-keyword">from</span> <span class="tok-string">'$lib/Panel.svelte'</span>    <span class="tok-keyword">with</span> &#123; preset: <span class="tok-string">'chart'</span> &#125;;
-
-<span class="tok-punct">&lt;</span><span class="tok-tag">Counter</span> <span class="tok-attr">start</span>=&#123;<span class="tok-number">10</span>&#125; <span class="tok-punct">/&gt;</span></code></pre>
-		</div>
+		<CodeBlock html={data.authoringImportsHtml} />
 		<div class="prose">
 			<p>
 				Props cross the boundary through <strong>devalue</strong>. <code>Date</code>,
@@ -304,7 +266,7 @@
 						island competes with LCP and hydration work on the main thread.
 					</p>
 				</div>
-				<LoadDemo />
+				<LoadDemo codeHtml={data.loadCode} />
 			</div>
 
 			<div class="strategy" id="client-idle">
@@ -322,7 +284,7 @@
 						timeout still brings the island up so it cannot stall forever.
 					</p>
 				</div>
-				<IdleDemo />
+				<IdleDemo codeHtml={data.idleCode} />
 			</div>
 
 			<div class="strategy" id="client-visible">
@@ -343,7 +305,7 @@
 				<div class="scroll-hint">
 					Scroll until the visible island below intersects the viewport.
 				</div>
-				<VisibleDemo />
+				<VisibleDemo codeHtml={data.visibleCode} />
 			</div>
 
 			<div class="strategy" id="client-media">
@@ -362,7 +324,7 @@
 						not a broken preview.
 					</p>
 				</div>
-				<MediaDemo />
+				<MediaDemo codeHtml={data.mediaCode} />
 			</div>
 		</div>
 	</section>
@@ -414,7 +376,18 @@
 				route offends your logs.
 			</p>
 		</div>
-		<ServerDemo />
+		<ServerDemo codeHtml={data.serverCode}>
+			{#snippet live()}
+				<ServerGreeting salutation="Aloha">
+					{#snippet fallback()}
+						<div class="widget widget--greeting">
+							<strong>Fetching island…</strong>
+							<p class="widget-meta">Fallback while the server renders</p>
+						</div>
+					{/snippet}
+				</ServerGreeting>
+			{/snippet}
+		</ServerDemo>
 	</section>
 
 	<section id="lakes">
@@ -512,7 +485,7 @@
 		</div>
 		<div class="prose">
 			<p>
-				Render <code>&lt;ClientRouter /&gt;</code> from <code>ogygia</code> in a layout to
+				Render <code>&lt;OgygiaRouter /&gt;</code> from <code>ogygia</code> in a layout to
 				intercept same-origin link clicks, swap the body, and merge the head. Islands on the
 				incoming page connect through the custom element lifecycle; islands on the outgoing page
 				disconnect and unmount.
@@ -535,15 +508,26 @@
 				working.
 			</p>
 		</div>
-		<div class="code-only">
-			<pre><code><span class="tok-keyword">import</span> &#123; ClientRouter &#125; <span class="tok-keyword">from</span> <span class="tok-string">'ogygia'</span>;
+		<CodeBlock html={data.ogygiaRouterHtml} />
 
-<span class="tok-comment">// View Transitions on (default)</span>
-<span class="tok-punct">&lt;</span><span class="tok-tag">ClientRouter</span> <span class="tok-punct">/&gt;</span>
-
-<span class="tok-comment">// plain swap</span>
-<span class="tok-punct">&lt;</span><span class="tok-tag">ClientRouter</span> viewTransitions=&#123;<span class="tok-keyword">false</span>&#125; <span class="tok-punct">/&gt;</span></code></pre>
+		<h3 class="doc-subhead" id="persist">Persist layout chrome</h3>
+		<div class="prose">
+			<p>
+				By default every island remounts on SPA navigation. Mark durable chrome — usually in a
+				layout — with <code>data-ogygia-persist="key"</code>. When the same key exists on the
+				outgoing and incoming body, the live node is kept (the new page's SSR for that key is
+				discarded). Islands inside the persisted subtree stay mounted, so client state survives
+				the swap.
+			</p>
+			<p>
+				Keys must be unique per document (first wins). Persist nodes nested inside another
+				persist ancestor are ignored — the outer key wins. If the key is missing on either side,
+				that subtree replaces normally. See the
+				<a href="/playground/router">router playground</a> for a side-by-side persist probe vs
+				remounting route probe.
+			</p>
 		</div>
+		<CodeBlock html={data.persistNavHtml} />
 
 		<h3 class="doc-subhead">Link prefetch</h3>
 		<div class="prose">
@@ -604,8 +588,9 @@
 				never fire. Client behaviour belongs in islands, where the <code>$app/navigation</code>,
 				<code>$app/state</code>, and <code>$app/stores</code> imports all work (backed by the
 				router and a per-page reactive snapshot). Note the snapshot semantics: islands remount on
-				every navigation with fresh values — there is no cross-navigation island state, and no
-				<code>transition:persist</code> equivalent yet.
+				every navigation with fresh values — unless you opt into
+				<code>data-ogygia-persist="key"</code> on layout chrome (same key on both pages keeps the
+				live node and any islands inside it mounted).
 			</p>
 
 			<h3 class="doc-subhead">Inline scripts run once per document</h3>

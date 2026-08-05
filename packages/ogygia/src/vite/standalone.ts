@@ -30,6 +30,13 @@ export function kitHash(str) {
 	return (hash >>> 0).toString(36);
 }
 
+const REMOTE_FILE = /\.remote\.(js|ts|mjs)$/;
+// Match `query.batch` / `query.live` before bare `query`.
+const REMOTE_EXPORT =
+	/export\s+const\s+(\w+)\s*=\s*(query\.batch|query\.live|query|command|form|prerender)\s*\(/g;
+const CSR_EXPORT = /export\s+const\s+csr\s*=\s*(true|false)/;
+const BACKSLASH = /\\/g;
+
 const TYPE_MAP = {
 	'query.batch': 'query_batch',
 	'query.live': 'query_live',
@@ -50,14 +57,13 @@ export function remoteStubPlugin(root) {
 		enforce: 'pre',
 		transform(code, id) {
 			const clean = id.split('?')[0];
-			if (!/\.remote\.(js|ts|mjs)$/.test(clean)) return null;
+			if (!REMOTE_FILE.test(clean)) return null;
 			const rel = path.relative(root, clean).split(path.sep).join('/');
 			const h = kitHash(rel);
 			const stubs = [];
-			// order matters: match `query.batch`/`query.live` BEFORE the bare `query` alternative.
-			const re = /export\s+const\s+(\w+)\s*=\s*(query\.batch|query\.live|query|command|form|prerender)\s*\(/g;
+			REMOTE_EXPORT.lastIndex = 0;
 			let m;
-			while ((m = re.exec(code))) {
+			while ((m = REMOTE_EXPORT.exec(code))) {
 				stubs.push(`export const ${m[1]} = __r.${TYPE_MAP[m[2]]}(${JSON.stringify(h + '/' + m[1])});`);
 			}
 			return { code: `import * as __r from '__sveltekit/remote';\n${stubs.join('\n')}\n`, map: null };
@@ -69,7 +75,7 @@ export function remoteStubPlugin(root) {
 function read_csr(file) {
 	try {
 		const src = fs.readFileSync(file, 'utf-8');
-		const m = /export\s+const\s+csr\s*=\s*(true|false)/.exec(src);
+		const m = CSR_EXPORT.exec(src);
 		return m ? m[1] === 'true' : undefined;
 	} catch {
 		return undefined;
@@ -184,5 +190,5 @@ export async function runStandaloneClientBuild({ root, base, clientDir, makePlug
 }
 
 function path_to_file_url(p: string) {
-	return new URL(`file://${p.replace(/\\/g, '/')}`).href;
+	return new URL(`file://${p.replace(BACKSLASH, '/')}`).href;
 }

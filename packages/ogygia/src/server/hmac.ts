@@ -1,155 +1,47 @@
-// Dependency-free, synchronous HMAC-SHA256 over UTF-8 strings, returning a hex digest.
-//
-// Deliberately NOT node:crypto: this module is imported by ServerIsland.svelte (which the
-// Svelte/vite pipeline may also type-check or bundle for a client build on a csr=true page)
-// and by the hooks endpoint. A pure-JS implementation stays portable and side-effect-free,
-// so the ONLY thing that must be kept server-side is the secret (see virtual:ogygia/secret).
-
-const K = /** @type {number[]} */ ([]);
-(() => {
-	// SHA-256 round constants: first 32 bits of the fractional parts of the cube roots of
-	// the first 64 primes.
-	const primes = [];
-	let n = 2;
-	while (primes.length < 64) {
-		let is_prime = true;
-		for (let d = 2; d * d <= n; d++) {
-			if (n % d === 0) {
-				is_prime = false;
-				break;
-			}
-		}
-		if (is_prime) primes.push(n);
-		n++;
-	}
-	for (let i = 0; i < 64; i++) {
-		K[i] = Math.floor((Math.cbrt(primes[i]) % 1) * 2 ** 32) | 0;
-	}
-})();
-
-function rotr(x, n) {
-	return (x >>> n) | (x << (32 - n));
-}
-
-/** SHA-256 over a byte array -> 32-byte Uint8Array. */
-function sha256(bytes) {
-	const H = [
-		0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
-		0x5be0cd19
-	];
-
-	const bit_len = bytes.length * 8;
-	// pad: append 0x80, then zeros, then 64-bit big-endian length
-	const with_len = (((bytes.length + 8) >> 6) + 1) << 6;
-	const padded = new Uint8Array(with_len);
-	padded.set(bytes);
-	padded[bytes.length] = 0x80;
-	// 64-bit length; JS bit ops are 32-bit so only fill the low 32 bits (fine for our inputs)
-	const dv = new DataView(padded.buffer);
-	dv.setUint32(with_len - 4, bit_len >>> 0, false);
-	dv.setUint32(with_len - 8, Math.floor(bit_len / 2 ** 32), false);
-
-	const w = new Int32Array(64);
-	for (let off = 0; off < with_len; off += 64) {
-		for (let i = 0; i < 16; i++) w[i] = dv.getInt32(off + i * 4, false);
-		for (let i = 16; i < 64; i++) {
-			const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
-			const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
-			w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
-		}
-		let [a, b, c, d, e, f, g, h] = H;
-		for (let i = 0; i < 64; i++) {
-			const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
-			const ch = (e & f) ^ (~e & g);
-			const t1 = (h + S1 + ch + K[i] + w[i]) | 0;
-			const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
-			const maj = (a & b) ^ (a & c) ^ (b & c);
-			const t2 = (S0 + maj) | 0;
-			h = g;
-			g = f;
-			f = e;
-			e = (d + t1) | 0;
-			d = c;
-			c = b;
-			b = a;
-			a = (t1 + t2) | 0;
-		}
-		H[0] = (H[0] + a) | 0;
-		H[1] = (H[1] + b) | 0;
-		H[2] = (H[2] + c) | 0;
-		H[3] = (H[3] + d) | 0;
-		H[4] = (H[4] + e) | 0;
-		H[5] = (H[5] + f) | 0;
-		H[6] = (H[6] + g) | 0;
-		H[7] = (H[7] + h) | 0;
-	}
-
-	const out = new Uint8Array(32);
-	const odv = new DataView(out.buffer);
-	for (let i = 0; i < 8; i++) odv.setUint32(i * 4, H[i] >>> 0, false);
-	return out;
-}
-
-function utf8(str) {
-	return new TextEncoder().encode(str);
-}
-
-function to_hex(bytes) {
-	let s = '';
-	for (const b of bytes) s += b.toString(16).padStart(2, '0');
-	return s;
-}
-
 /**
- * HMAC-SHA256(key, message) -> hex string.
- * @param {string} key
- * @param {string} message
- * @returns {string}
+ * HMAC-SHA256 for region capability URLs — Node `createHmac` (sync).
+ *
+ * Used by `ogygiaHandle` and by SSR `virtual:ogygia/sign`. The client never imports this
+ * module: ServerIsland goes through `virtual:ogygia/sign`, which is a no-op on the client
+ * (secret is already empty there). Web Crypto is not used — browsers must not mint with a
+ * real secret.
  */
-export function hmacSha256(key, message) {
-	const block_size = 64;
-	let key_bytes = utf8(key);
-	if (key_bytes.length > block_size) key_bytes = sha256(key_bytes);
-	const padded = new Uint8Array(block_size);
-	padded.set(key_bytes);
-	const ipad = new Uint8Array(block_size);
-	const opad = new Uint8Array(block_size);
-	for (let i = 0; i < block_size; i++) {
-		ipad[i] = padded[i] ^ 0x36;
-		opad[i] = padded[i] ^ 0x5c;
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export class Hmac {
+	static sha256(key: string, message: string): string {
+		return createHmac('sha256', key).update(message, 'utf8').digest('hex');
 	}
-	const msg = utf8(message);
-	const inner = new Uint8Array(block_size + msg.length);
-	inner.set(ipad);
-	inner.set(msg, block_size);
-	const inner_hash = sha256(inner);
-	const outer = new Uint8Array(block_size + inner_hash.length);
-	outer.set(opad);
-	outer.set(inner_hash, block_size);
-	return to_hex(sha256(outer));
+
+	static sign(secret: string, message: string): string {
+		return Hmac.sha256(secret, message);
+	}
+
+	static verify(secret: string, message: string, sig: string): boolean {
+		if (typeof sig !== 'string' || sig.length !== 64) return false;
+		const expected = Hmac.sha256(secret, message);
+		try {
+			return timingSafeEqual(Buffer.from(expected, 'utf8'), Buffer.from(sig, 'utf8'));
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * MAC message for a signed region capability. Empty `session` keeps the 3-field form
+	 * (prerender / unbound); a non-empty session appends a fourth field.
+	 */
+	static region_message(
+		id: string,
+		exp: number | string,
+		props: string,
+		session = ''
+	): string {
+		return session ? `${id}\0${exp}\0${props}\0${session}` : `${id}\0${exp}\0${props}`;
+	}
 }
 
-/**
- * @param {string} secret
- * @param {string} payload
- * @returns {string} hex signature
- */
-export function sign(secret, payload) {
-	return hmacSha256(secret, payload);
-}
-
-/**
- * Constant-time-ish comparison + recompute. Rejects tampered payloads.
- * @param {string} secret
- * @param {string} payload
- * @param {string} sig
- * @returns {boolean}
- */
-export function verify(secret, payload, sig) {
-	if (typeof sig !== 'string' || sig.length !== 64) return false;
-	const expected = hmacSha256(secret, payload);
-	if (expected.length !== sig.length) return false;
-	let diff = 0;
-	for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
-	return diff === 0;
-}
+export const hmacSha256 = Hmac.sha256.bind(Hmac);
+export const sign = Hmac.sign.bind(Hmac);
+export const verify = Hmac.verify.bind(Hmac);
+export const region_mac_message = Hmac.region_message.bind(Hmac);

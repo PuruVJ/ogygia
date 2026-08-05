@@ -28,12 +28,18 @@ const LAKE_PLACEHOLDER = fileURLToPath(new URL('../LakePlaceholder.svelte', impo
 const STUB_CLIENT = fileURLToPath(new URL('../shims/kit-remote/client-stub.js', import.meta.url));
 const STUB_STATE = fileURLToPath(new URL('../shims/kit-remote/state-stub.js', import.meta.url));
 const STUB_PATHS = fileURLToPath(new URL('../shims/kit-remote/paths-internal-stub.js', import.meta.url));
+/** Absolute path to real HMAC (SSR-only via `virtual:ogygia/sign`). */
+const HMAC_MODULE = fileURLToPath(new URL('../server/hmac.js', import.meta.url));
 
 const V_RUNTIME_URL = 'virtual:ogygia/runtime-url';
 const V_MANIFEST = 'virtual:ogygia/manifest';
 const V_RUNTIME = 'virtual:ogygia-runtime';
 const V_SECRET = 'virtual:ogygia/secret';
+const V_SIGN = 'virtual:ogygia/sign';
+const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
+const V_SESSION_COOKIE = 'virtual:ogygia/session-cookie';
 const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
+const V_REQUEST_EVENT = 'virtual:ogygia/request-event';
 // Reuse Kit's OWN wire protocol (transport-aware devalue arg/response codec) instead of
 // reimplementing it. We deep-import Kit's internal `runtime/shared.js` by absolute path
 // (bypassing the exports map) and feed it the app's universal `transport` hook.
@@ -68,8 +74,60 @@ const RUNTIME_HASH = runtime_content_hash();
 const RUNTIME_FILENAME = `_app/immutable/ogygia-runtime.${RUNTIME_HASH}.js`;
 const RUNTIME_URL_BUILD = '/' + RUNTIME_FILENAME;
 
+const TRAILING_SLASH = /\/$/;
+const KIT_REMOTE_CLIENT = /(^|\/)client\.js$/;
+const KIT_REMOTE_STATE = /state\.svelte\.js$/;
+const LEADING_SLASH = /^\//;
+/** Rewrite `$app/{state,stores,navigation}` string literals to absolute shim paths. */
+const APP_SHIM_IMPORT = /(['"])\$app\/(state|stores|navigation)\1/g;
+
 function to_posix(p) {
 	return p.split(path.sep).join('/');
+}
+
+/**
+ * Rewrite a lake binding's import to the render-nothing placeholder (client island modules only).
+ * Default imports are repointed; named imports drop that specifier (and keep siblings) then add a
+ * default import of the placeholder under the same local name.
+ */
+export function rewrite_lake_import_to_placeholder(src: string, local: string, placeholder: string) {
+	const esc = local.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const ph = JSON.stringify(placeholder);
+	// default: import Lake from '…'
+	src = src.replace(
+		new RegExp(`import\\s+${esc}\\s+from\\s+(['"])[^'"]+\\1`, 'g'),
+		`import ${local} from ${ph}`
+	);
+	// named: import { Lake } / { Lake as X } / { Foo as Lake } from '…'
+	src = src.replace(
+		new RegExp(`import\\s*\\{([^}]*)\\}\\s*from\\s*(['"])([^'"]+)\\2`, 'g'),
+		(full, specs, _q, from) => {
+			const parts = String(specs)
+				.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean);
+			const kept = [];
+			let hit = false;
+			for (const p of parts) {
+				const m = p.match(/^(.+?)(?:\s+as\s+(\w+))?$/);
+				if (!m) {
+					kept.push(p);
+					continue;
+				}
+				const imported = m[1].trim();
+				const alias = (m[2] || imported).trim();
+				if (alias === local) {
+					hit = true;
+					continue;
+				}
+				kept.push(p);
+			}
+			if (!hit) return full;
+			const named = kept.length ? `import { ${kept.join(', ')} } from ${JSON.stringify(from)};` : '';
+			return `import ${local} from ${ph};${named ? '\n\t' + named : ''}`;
+		}
+	);
+	return src;
 }
 
 function is_island_path(id) {
@@ -82,6 +140,10 @@ function is_island_path(id) {
  * @param {{margin?:string}} [options.visible] global defaults for `hydrate: 'visible'` islands
  * @param {Record<string, {hydrate?:string, defer?:string, margin?:string}>} [options.presets]
  *   named strategy presets referenced from imports via `with { preset: 'name' }`
+ * @param {false|{max?:number,windowMs?:number}} [options.rateLimit] per-IP budget for the
+ *   deferred-region endpoint (default `{ max: 60, windowMs: 60_000 }`; `false` disables)
+ * @param {false|string} [options.bindSession] cookie name to seal into the region MAC (opt-in;
+ *   empty/prerender stays unbound). Harvested URLs then fail without that cookie.
  * @param {boolean} [options.standalone] internal: this instance runs inside the standalone build
  * @returns {import('vite').Plugin}
  */
@@ -92,6 +154,8 @@ export function ogygia(
 		visible?: { margin?: string };
 		presets?: Record<string, { hydrate?: string; defer?: string; margin?: string }>;
 		lake_restore?: 'cache' | 'empty';
+		rateLimit?: false | { max?: number; windowMs?: number };
+		bindSession?: false | string;
 	} = {}
 ): Plugin {
 	const spa = options.spa !== false;
@@ -104,10 +168,28 @@ export function ogygia(
 	// exception to the public-API-camelCase convention (see CONTRIBUTING.md).
 	const lake_restore = options.lake_restore === 'empty' ? 'empty' : 'cache';
 
-	// HMAC key for signing server-island props. Runtime env var wins (so it can be rotated
-	// / shared across instances in production); otherwise a per-build random key baked into
-	// the SERVER bundle only (never a client chunk — see the `virtual:ogygia/secret` load).
+	// Region-endpoint rate limit (baked into SSR only via virtual:ogygia/rate-limit).
+	const rate_limit =
+		options.rateLimit === false
+			? { max: 0, windowMs: 60_000 }
+			: {
+					max: Math.max(0, options.rateLimit?.max ?? 60),
+					windowMs: Math.max(1, options.rateLimit?.windowMs ?? 60_000)
+				};
+
+	/** Cookie name sealed into the region MAC, or '' when unbound (default). */
+	const session_cookie =
+		typeof options.bindSession === 'string' && options.bindSession.length > 0
+			? options.bindSession
+			: '';
+
+	// HMAC key for signing region capability URLs (defer/server holes). Runtime env var wins
+	// (rotate / share across instances); otherwise a per-build random key baked into the
+	// SERVER bundle only (never a client chunk — see the `virtual:ogygia/secret` load).
 	const build_secret = crypto.randomBytes(32).toString('hex');
+	/** Salt for region ids — only the stable env secret (never per-instance build_secret, or
+	 *  SSR/client builds would disagree). Empty in local dev without OGYGIA_SECRET. */
+	const id_salt = process.env.OGYGIA_SECRET || '';
 
 	/** @type {Map<string, {source:string, hostPath:string, id:string}>} keyed by abs virtual path */
 	const registry = new Map();
@@ -151,12 +233,16 @@ export function ogygia(
 
 	const devUrlFor = (virtualPath) => {
 		const rel = to_posix(path.relative(root, virtualPath));
-		const prefix = base && base !== '/' ? base.replace(/\/$/, '') : '';
+		const prefix = base && base !== '/' ? base.replace(TRAILING_SLASH, '') : '';
 		return prefix + '/' + rel;
 	};
 
+	const transform_cache = new Map<string, { code: string; result: ReturnType<typeof transformHost> }>();
+
 	const run_transform = (source, id) => {
-		return transformHost(source, id, {
+		const hit = transform_cache.get(id);
+		if (hit && hit.code === source) return hit.result;
+		const result = transformHost(source, id, {
 			root,
 			libDir,
 			readFile,
@@ -165,8 +251,11 @@ export function ogygia(
 			virtualPathFor,
 			devUrlFor,
 			visibleMargin,
-			presets
+			presets,
+			idSalt: id_salt
 		});
+		transform_cache.set(id, { code: source, result });
+		return result;
 	};
 
 	const register = (result) => {
@@ -265,6 +354,18 @@ export function ogygia(
 				}
 			}
 
+			// Stable secret required when baking signed region holes into SSR/prerender output.
+			if (is_build && is_ssr && !process.env.OGYGIA_SECRET) {
+				prescan();
+				for (const kind of region_kinds.values()) {
+					if (kind === 'defer') {
+						throw new Error(
+							'[ogygia] OGYGIA_SECRET is required for production builds that use deferred regions (prerender + multi-instance). Set a stable secret in the environment.'
+						);
+					}
+				}
+			}
+
 			// SSR build with Kit SKIPPING its client build (every route csr=false): run our own
 			// standalone client build NOW — at the START of the server build, before any server
 			// chunk emits. Island discovery is prescan-based (needs no server output), so the
@@ -292,12 +393,16 @@ export function ogygia(
 			if (source === V_MANIFEST) return RESOLVED(V_MANIFEST);
 			if (source === V_RUNTIME) return RESOLVED(V_RUNTIME);
 			if (source === V_SECRET) return RESOLVED(V_SECRET);
+			if (source === V_SIGN) return RESOLVED(V_SIGN);
+			if (source === V_RATE_LIMIT) return RESOLVED(V_RATE_LIMIT);
+			if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);
 			if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
+			if (source === V_REQUEST_EVENT) return RESOLVED(V_REQUEST_EVENT);
 			// deep-import Kit's own wire helpers by absolute path (bypasses the exports map)
 			if (source === V_KIT_WIRE && kit_wire_path) return kit_wire_path;
 			if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 
-			const ssr = options?.ssr ?? is_ssr;
+			const ssr = options?.ssr === true;
 
 			// CLIENT build: Kit's client remote runtime needs `app` (never boots under csr=false).
 			// Plan A: reuse Kit's OWN remote primitives, redirecting `__sveltekit/remote` at Kit's
@@ -315,8 +420,8 @@ export function ogygia(
 			// imported from within Kit's remote-functions dir (so a csr=true page's real Kit client
 			// still gets the real client.js). Keeps the router graph out of island bundles.
 			if (!ssr && importer && importer.includes('/remote-functions/')) {
-				if (/(^|\/)client\.js$/.test(source)) return STUB_CLIENT;
-				if (/state\.svelte\.js$/.test(source)) return STUB_STATE;
+				if (KIT_REMOTE_CLIENT.test(source)) return STUB_CLIENT;
+				if (KIT_REMOTE_STATE.test(source)) return STUB_STATE;
 			}
 			if (!ssr && source === '$app/paths/internal/client') return STUB_PATHS;
 
@@ -357,7 +462,7 @@ export function ogygia(
 					island_graph.add(candidate);
 					return candidate;
 				}
-				const abs = path.join(root, candidate.replace(/^\//, ''));
+				const abs = path.join(root, candidate.replace(LEADING_SLASH, ''));
 				if (registry.has(abs)) {
 					island_graph.add(abs);
 					return abs;
@@ -367,6 +472,10 @@ export function ogygia(
 		},
 
 		load(id, options) {
+			// Per-request only. `config.build.ssr` stays set for Kit apps and must NOT decide
+			// client vs server virtuals — that leaked `$app/server` into the browser guard.
+			const ssr = options?.ssr === true;
+
 			if (id === RESOLVED(V_RUNTIME_URL)) {
 				// dev: the vite dev URL. build: the CONTENT-HASHED runtime URL — from this
 				// instance (standalone) or the handoff file the client build wrote (Kit-driven);
@@ -389,15 +498,44 @@ export function ogygia(
 			if (id === RESOLVED(V_SECRET)) {
 				// SERVER only: the real key. CLIENT build: empty string, so the key can never
 				// leak into a client chunk (server islands are a csr=false feature anyway).
-				const ssr = options?.ssr ?? is_ssr;
 				if (!ssr) return `export const secret = '';`;
 				return `export const secret = process.env.OGYGIA_SECRET || ${JSON.stringify(build_secret)};`;
+			}
+			if (id === RESOLVED(V_SIGN)) {
+				// Same split as secret: SSR mints with node:crypto; client never mints (secret is '').
+				if (!ssr) {
+					return (
+						`export function sign(_secret, _message) { return ''; }\n` +
+						`export function verify(_secret, _message, _sig) { return false; }\n` +
+						`export function region_mac_message(id, exp, props, session = '') {\n` +
+						`  return session ? id + '\\0' + exp + '\\0' + props + '\\0' + session : id + '\\0' + exp + '\\0' + props;\n` +
+						`}\n`
+					);
+				}
+				return `export { sign, verify, region_mac_message } from ${JSON.stringify(HMAC_MODULE)};`;
+			}
+			if (id === RESOLVED(V_REQUEST_EVENT)) {
+				// ServerIsland may appear in a transformed page module that Kit's client guard scans.
+				// Real getRequestEvent only on SSR; client stub never runs (holes fetch HTML).
+				if (!ssr) {
+					return `export function getRequestEvent() { throw new Error('ogygia: getRequestEvent is server-only'); }`;
+				}
+				return `export { getRequestEvent } from '$app/server';`;
+			}
+			if (id === RESOLVED(V_RATE_LIMIT)) {
+				// SERVER only — the region handle is the only consumer.
+				if (!ssr) return `export const rateLimit = { max: 0, windowMs: 60000 };`;
+				return `export const rateLimit = ${JSON.stringify(rate_limit)};`;
+			}
+			if (id === RESOLVED(V_SESSION_COOKIE)) {
+				// SERVER only — sealed into the region MAC when non-empty.
+				if (!ssr) return `export const sessionCookie = '';`;
+				return `export const sessionCookie = ${JSON.stringify(session_cookie)};`;
 			}
 			if (id === RESOLVED(V_SERVER_MANIFEST)) {
 				// Map of SERVER-island id -> dynamic import, used by the `ogygiaHandle()` handle to
 				// render an island server-side. Populated in BOTH dev and build (unlike the
 				// client manifest, which dev fills from URLs). Client build gets an empty map.
-				const ssr = options?.ssr ?? is_ssr;
 				if (!ssr) return `export const islands = {};`;
 				prescan();
 				const entries = [];
@@ -434,21 +572,17 @@ export function ogygia(
 				// CLIENT build: rewrite `$app/*` in the GENERATED virtual source to absolute
 				// shim paths (defense in depth alongside resolveId island-graph shimming).
 				// SSR keeps the real Kit modules (correct server-rendered page.data).
-				const ssr = options?.ssr ?? is_ssr;
+				const ssr = options?.ssr === true;
 				if (!ssr) {
 					src = src.replace(
-						/(['"])\$app\/(state|stores|navigation)\1/g,
+						APP_SHIM_IMPORT,
 						(_m, _q, name) => JSON.stringify(APP_SHIMS['$app/' + name])
 					);
 					// LAKES: swap each lake import for the render-nothing placeholder so the lake
-					// component's JS is excluded from this island's client chunk. Match `import <Local>`
-					// (default import — a component) and repoint its specifier at the placeholder.
+					// component's JS is excluded from this island's client chunk. Handles default
+					// (`import Lake from '…'`) and named (`import { Lake } from '…'`) forms.
 					for (const local of srcEntry.lakes ?? []) {
-						const re = new RegExp(
-							`(import\\s+${local}\\s+from\\s+)(['"])[^'"]+\\2`,
-							'g'
-						);
-						src = src.replace(re, (_m, head) => head + JSON.stringify(LAKE_PLACEHOLDER));
+						src = rewrite_lake_import_to_placeholder(src, local, LAKE_PLACEHOLDER);
 					}
 				}
 				return src;
@@ -457,7 +591,7 @@ export function ogygia(
 		},
 
 		transform(code, id, options) {
-			const ssr = options?.ssr ?? is_ssr;
+			const ssr = options?.ssr === true;
 			// Discover islands before any module is transformed so island_graph is populated
 			// even when an island entry component is processed before its host page.
 			if (!scanned) prescan();
@@ -487,7 +621,7 @@ export function ogygia(
 			// csr=false page nodes that import island components directly as `__component`.
 			if (!ssr && island_graph.has(id_n) && id_n.endsWith('.svelte')) {
 				const rewritten = out.replace(
-					/(['"])\$app\/(state|stores|navigation)\1/g,
+					APP_SHIM_IMPORT,
 					(_m, _q, name) => JSON.stringify(APP_SHIMS['$app/' + name])
 				);
 				if (rewritten !== out) {

@@ -5,9 +5,22 @@ import { collectCaptureInfo, collectSnippetNames } from './free-vars.js';
 
 export const ISLAND_DIR = '.ogygia';
 
-/** Deterministic short id for an island (stable across dev + build). */
-export function islandId(relHostPath, index) {
-	return createHash('md5').update(`${relHostPath}::${index}`).digest('hex').slice(0, 12);
+/** Cheap source scan: only hosts that mention region import attributes need AST work. */
+const REGION_IMPORT_HINT = /hydrate|defer|preset/;
+
+/** Deterministic short id for a region (stable across dev + build).
+ * When `salt` is set (production `OGYGIA_SECRET`), ids are not offline-computable (P1-ID).
+ * Paths are always posix so SSR/client builds agree across OS path separators. */
+export function islandId(relHostPath: string, index: string | number, salt = '') {
+	const rel = String(relHostPath).split(/[/\\]/).join('/');
+	const msg = salt ? `${salt}\0${rel}::${index}` : `${rel}::${index}`;
+	return createHash('md5').update(msg).digest('hex').slice(0, 12);
+}
+
+/** True if `val` looks like a CSS media query (must contain a balanced-ish `(…)`). */
+function is_media_query(val: string) {
+	const open = val.indexOf('(');
+	return open !== -1 && val.indexOf(')', open) !== -1;
 }
 
 /** A curated allowlist of JS globals that must never be treated as captured props. */
@@ -78,7 +91,7 @@ function strategy_to_attr(strategy, options) {
  */
 export function transformHost(source, id, ctx) {
 	// cheap bailout — the library only touches region imports (`hydrate`/`defer`/`preset`)
-	if (!/hydrate|defer|preset/.test(source)) return null;
+	if (!REGION_IMPORT_HINT.test(source)) return null;
 
 	let ast;
 	try {
@@ -91,7 +104,8 @@ export function transformHost(source, id, ctx) {
 	const lang = script_lang_attr(ast.instance) || script_lang_attr(ast.module);
 
 	const path = ctx.pathModule;
-	const rel_host = path.relative(ctx.root, id);
+	// Posix-relative host path — island ids must not drift across Windows/POSIX build legs.
+	const rel_host = path.relative(ctx.root, id).split(/[/\\]/).join('/');
 
 	// --- collect host imports & region marks (the two-key region model) --------
 	// The authoring syntax is the import attribute, one concern per key:
@@ -146,6 +160,12 @@ export function transformHost(source, id, ctx) {
 			}
 			attrs = new Map();
 			for (const [k, v] of Object.entries(preset)) if (v != null) attrs.set(k, String(v));
+			if (!attrs.has('hydrate') && !attrs.has('defer')) {
+				throw err(
+					names,
+					`preset '${from_preset}' must set \`hydrate\` or \`defer\` — a margin-only (or empty) preset is a no-op.`
+				);
+			}
 		} else {
 			// inline may carry only `hydrate` or `defer` (the hydrate+defer pair is a roadmap error below)
 			for (const k of inline.keys()) {
@@ -186,7 +206,7 @@ export function transformHost(source, id, ctx) {
 			}
 			let when;
 			if (KNOWN_STRATEGIES.has(dval)) when = dval; // load | idle | visible
-			else if (dval.includes('(')) when = dval; // media query is the value itself
+			else if (is_media_query(dval)) when = dval; // media query is the value itself
 			else throw err(names, `unknown defer timing '${dval}'. Use 'load' | 'idle' | 'visible' | a media query.`);
 
 			// `margin` applies only to `visible` (tolerantly ignored otherwise), same as hydrate.
@@ -206,6 +226,8 @@ export function transformHost(source, id, ctx) {
 				// (the island's client module swaps the import for a placeholder), and the runtime
 				// lifts/restores its DOM around the parent hydrate. A lake in the dead shell is a
 				// no-op plain component (dev-warned below). See DESIGN.md.
+				// Always strip the `with{}` later (shell keeps cleaned import; unused/island lakes
+				// drop the host binding). Never leave `with { hydrate: 'none' }` in emitted source.
 				for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy: 'lake', options: {} });
 				continue;
 			}
@@ -216,7 +238,7 @@ export function transformHost(source, id, ctx) {
 			}
 			let strategy;
 			if (KNOWN_STRATEGIES.has(val)) strategy = val;
-			else if (val.includes('(')) strategy = val; // media query is the value itself
+			else if (is_media_query(val)) strategy = val; // media query is the value itself
 			else throw err(names, `unknown hydrate strategy '${val}'. Use 'load' | 'idle' | 'visible' | a media query.`);
 
 			// `margin` applies only to `visible` (tolerantly ignored otherwise). Falls back to the
@@ -305,12 +327,65 @@ export function transformHost(source, id, ctx) {
 	if (ctx.dev && shell_lake_locals.size) {
 		for (const name of shell_lake_locals) {
 			console.warn(
-				`[ogygia] ${rel_host}: <${name}> has \`hydrate: 'false'\` (lake) in the page shell — that is a no-op (the shell is already dead). A lake only has meaning INSIDE a hydrated island. Rendering it as a plain component.`
+				`[ogygia] ${rel_host}: <${name}> has \`hydrate: 'none'\` (lake) in the page shell — that is a no-op (the shell is already dead). A lake only has meaning INSIDE a hydrated island. Rendering it as a plain component.`
 			);
 		}
 	}
 
-	if (units.length === 0 && imports_to_strip.size === 0 && shell_lake_locals.size === 0) return null;
+	// Marked hydrate/defer imports must appear as a static <Component> tag when referenced.
+	// Completely unused marked imports are stripped (dead code). Dynamic `<svelte:component>`,
+	// dotted `<Menu.Item>`, or other non-tag refs still strip the import — refuse with a build error.
+	// Walk script + markup ASTs (not raw source) so text like "no usage of C" is not a false positive.
+	const used_as_unit = new Set(units.map((u) => u.node.name));
+	const ast_refs_local = (root, local) => {
+		let found = false;
+		const walk = (node) => {
+			if (found || !node || typeof node !== 'object') return;
+			if (node.type === 'Identifier' && node.name === local) {
+				found = true;
+				return;
+			}
+			// Dotted component tags (`Menu.Item`) are a single Component.name string, not Identifiers.
+			if (node.type === 'Component') {
+				const n = node.name || '';
+				if (n === local || n.startsWith(local + '.')) {
+					found = true;
+					return;
+				}
+			}
+			for (const k of Object.keys(node)) {
+				if (k === 'start' || k === 'end' || k === 'loc') continue;
+				const v = node[k];
+				if (Array.isArray(v)) for (const c of v) walk(c);
+				else if (v && typeof v === 'object' && typeof v.type === 'string') walk(v);
+			}
+		};
+		if (Array.isArray(root)) for (const n of root) walk(n);
+		else walk(root);
+		return found;
+	};
+	const marked_import_referenced = (local) => {
+		for (const n of instance_body) {
+			if (n.type === 'ImportDeclaration') continue;
+			if (ast_refs_local(n, local)) return true;
+		}
+		return ast_refs_local(ast.fragment?.nodes ?? [], local);
+	};
+	for (const [local, mark] of marked_components) {
+		if (mark.strategy === 'lake') continue;
+		if (used_as_unit.has(local)) continue;
+		if (marked_import_referenced(local)) {
+			throw err(
+				local,
+				`region import '${local}' is never used as a static component tag \`<${local} …>\`. ` +
+					`Dynamic \`<svelte:component>\`, dotted tags like \`<Menu.Item>\`, and non-tag references are not supported — the import would be stripped and break the build.`
+			);
+		}
+		// else: unused — strip via imports_to_strip (already registered)
+	}
+
+	const has_lake_mark = [...marked_components.values()].some((m) => m.strategy === 'lake');
+	if (units.length === 0 && imports_to_strip.size === 0 && !has_lake_mark) return null;
 
 	const s = new MagicString(source);
 	const islands = [];
@@ -336,7 +411,7 @@ export function transformHost(source, id, ctx) {
 	};
 
 	units.forEach((unit, index) => {
-		const iid = islandId(rel_host, index);
+		const iid = islandId(rel_host, index, ctx.idSalt || '');
 		const virtualPath = ctx.virtualPathFor(id, iid);
 		const comp_var = `__OgygiaIsland_${index}`;
 		const is_server = unit.strategy === 'server';
@@ -367,12 +442,12 @@ export function transformHost(source, id, ctx) {
 			subtree_nodes = [unit.node];
 		}
 
-		// LAKES: a `hydrate: 'false'` component used inside THIS (client) island. Wrap each in a
-		// non-boundary `<ogygia-region data-lake>` so the runtime can lift/restore its SSR DOM
-		// around hydration; record the local so the client build swaps its import for a placeholder
-		// (the lake's JS ships in no client chunk). SSR keeps the real component (rendered inline).
+		// LAKES: a `hydrate: 'none'` component used inside THIS island (hydrate OR defer). Wrap
+		// each in a non-boundary `<ogygia-region data-lake>` so the runtime can lift/restore (or,
+		// for defer hole fills, settle) its SSR DOM; record the local so the client build swaps
+		// its import for a placeholder. SSR keeps the real component (rendered inline).
 		const island_lakes = [];
-		if (!is_server) {
+		{
 			const lake_nodes = [];
 			const scan_lakes = (nodes) => {
 				for (const n of nodes ?? []) {
@@ -386,7 +461,7 @@ export function transformHost(source, id, ctx) {
 			if (lake_nodes.length) {
 				const lake_ms = new MagicString(source);
 				lake_nodes.forEach((ln, li) => {
-					const lake_id = islandId(rel_host, `lake:${index}:${li}`);
+					const lake_id = islandId(rel_host, `lake:${index}:${li}`, ctx.idSalt || '');
 					// Wrap in `<OgygiaLakeBoundary>` so the lake's subtree resets the nested-island
 					// context (an island authored inside the lake self-hydrates). The non-boundary
 					// `<ogygia-region data-lake>` lets the runtime lift/restore the frozen DOM.
@@ -488,7 +563,7 @@ export function transformHost(source, id, ctx) {
 			if (!server_wrapper_imported) {
 				server_wrapper_imported = true;
 				preamble_imports.push(
-					`\timport { ServerIsland as ${server_wrapper_name} } from 'ogygia/internal';`
+					`\timport { ServerIsland as ${server_wrapper_name} } from 'ogygia/internal/server';`
 				);
 			}
 			// Keep a host import of the island component so its CSS is collected via the
@@ -537,18 +612,16 @@ export function transformHost(source, id, ctx) {
 		islands.push({ id: lake_id, kind: 'lake' });
 	}
 
-	// LAKE host imports: a lake hoisted into an island leaves its host import unused -> strip it
-	// (with the `with{}` clause). A shell-only lake (no-op) keeps a CLEANED import (drop `with{}`)
-	// so it renders as a plain component. Both must lose the `with{}` clause (an invalid runtime
-	// import attribute). Decide per lake local before the strip loop runs.
+	// LAKE host imports: always drop `with{}`. Hoisted-into-island or unused → strip the binding.
+	// Shell-only lake (no-op) → keep a CLEANED import so it renders as a plain component.
 	for (const [local, mark] of marked_components) {
 		if (mark.strategy !== 'lake') continue;
 		const info = imports.get(local);
 		if (!info || imports_to_strip.has(info.node)) continue;
-		if (island_lake_locals.has(local) && !shell_lake_locals.has(local)) {
-			imports_to_strip.add(info.node); // hoisted only -> remove entirely
-		} else {
+		if (shell_lake_locals.has(local) && !island_lake_locals.has(local)) {
 			s.overwrite(info.node.start, info.node.end, info.cleaned); // shell use -> keep, drop with{}
+		} else {
+			imports_to_strip.add(info.node); // island-hoisted or unused -> remove entirely
 		}
 	}
 

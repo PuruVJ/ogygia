@@ -18,7 +18,7 @@
 
 	<div class="demo-body" class:demo-body--stack={stack}>
 		<div class="demo-code">
-			<pre><code>{@html codeHtml}</code></pre>
+			{@html codeHtml}
 		</div>
 		<div class="demo-preview" data-state={jsOn ? 'hydrated' : 'static'}>
 			<span class="preview-marker">

@@ -1,4 +1,6 @@
 :root {
+	color-scheme: dark;
+
 	--bg: #0a0f0d;
 	--bg-raised: #101713;
 	--bg-sunken: #060907;
@@ -19,6 +21,7 @@
 	--warn: #e0b56f;
 
 	--shadow-panel: 0 1px 0 rgba(111, 227, 176, 0.04), 0 12px 32px -16px rgba(0, 0, 0, 0.6);
+	--nav-bg: color-mix(in srgb, var(--bg) 92%, transparent);
 
 	--r-sm: 6px;
 	--r-md: 10px;
@@ -33,6 +36,34 @@
 	--gutter: clamp(1.25rem, 3vw, 2.5rem);
 	--section-gap: clamp(5rem, 10vw, 8.5rem);
 	--nav-h: 64px;
+}
+
+@media (prefers-color-scheme: light) {
+	:root {
+		color-scheme: light;
+
+		--bg: #f2f6f4;
+		--bg-raised: #ffffff;
+		--bg-sunken: #e6ece9;
+
+		--text: #121a16;
+		--text-dim: #4a5c52;
+		--text-faint: #7a8c82;
+		--text-on-invert: #f2f6f4;
+
+		--accent: #0f7a4f;
+		--accent-strong: #0a5c3b;
+		--accent-deep: #d5efe3;
+		--accent-line: #b0d4c2;
+
+		--line: #d5e0da;
+		--line-strong: #b8c9bf;
+
+		--warn: #9a6b1c;
+
+		--shadow-panel: 0 1px 0 rgba(15, 122, 79, 0.06), 0 12px 32px -16px rgba(18, 26, 22, 0.18);
+		--nav-bg: color-mix(in srgb, var(--bg) 88%, transparent);
+	}
 }
 
 *,
@@ -168,7 +199,7 @@ a:hover {
 	z-index: 50;
 	display: flex;
 	align-items: center;
-	background: rgba(10, 15, 13, 0.92);
+	background: var(--nav-bg);
 	backdrop-filter: blur(8px);
 	-webkit-backdrop-filter: blur(8px);
 	border-bottom: 1px solid var(--line);
@@ -458,16 +489,28 @@ a:hover {
 
 .toc-item {
 	font: 400 0.75rem/2 var(--font-mono);
-	color: var(--text-faint);
+	color: var(--text-dim);
 	transition: color 120ms ease;
 }
 
 .toc-item:hover {
-	color: var(--text-dim);
+	color: var(--text);
 }
 
 .toc-item.is-active {
 	color: var(--text);
+	font-weight: 500;
+}
+
+@media (prefers-color-scheme: dark) {
+	.toc-item {
+		color: var(--text);
+	}
+
+	.toc-item:hover,
+	.toc-item.is-active {
+		color: #fff;
+	}
 }
 
 .toc-item--sub {
@@ -762,46 +805,6 @@ a:hover {
 	border-bottom: 1px solid var(--line);
 }
 
-.demo-code pre {
-	margin: 0;
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-	tab-size: 2;
-	font-size: 0.8125rem;
-	line-height: 1.65;
-	color: var(--text-dim);
-}
-
-.tok-comment {
-	color: var(--text-faint);
-	font-style: italic;
-}
-
-.tok-string {
-	color: var(--accent);
-}
-
-.tok-keyword {
-	color: var(--text);
-	font-weight: 500;
-}
-
-.tok-tag {
-	color: var(--accent-strong);
-}
-
-.tok-attr {
-	color: var(--text-dim);
-}
-
-.tok-number {
-	color: var(--warn);
-}
-
-.tok-punct {
-	color: var(--text-faint);
-}
-
 .demo-preview {
 	position: relative;
 	padding: 1.75rem 1.5rem;
@@ -997,7 +1000,7 @@ a:hover {
 	font-size: 0.8125rem;
 }
 
-/* ---- router ---- */
+/* ---- code blocks (Shiki SSR) ---- */
 .code-only {
 	border: 1px solid var(--line);
 	border-radius: var(--r-md);
@@ -1006,13 +1009,24 @@ a:hover {
 	overflow-x: auto;
 }
 
-.code-only pre {
+.code-only .shiki,
+.demo-code .shiki {
 	margin: 0;
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
+	background: transparent !important;
+	font-family: var(--font-mono);
+	font-weight: 400;
 	font-size: 0.8125rem;
 	line-height: 1.65;
-	color: var(--text-dim);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	tab-size: 2;
+}
+
+.code-only .shiki code,
+.demo-code .shiki code {
+	font-family: inherit;
+	font-size: inherit;
+	line-height: inherit;
 }
 
 /* ---- demos header ---- */

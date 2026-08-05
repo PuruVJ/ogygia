@@ -94,15 +94,21 @@ ogygia({
 		chart: { hydrate: 'visible', margin: '200px' },
 		modal: { hydrate: 'idle' }
 	},
-	lake_restore: 'cache'                       // 'cache' (default) | 'empty' — {#if}-toggle re-creation
+	lake_restore: 'cache',                      // 'cache' (default) | 'empty' — {#if}-toggle re-creation
+	rateLimit: { max: 60, windowMs: 60_000 },  // deferred-region endpoint; `false` to disable
+	bindSession: 'sid'                          // opt-in: seal this cookie into the region MAC
 });
 ```
 
 - `with { preset: 'chart' }` resolves the preset; presets are **tolerant** (a known-but-inapplicable
   key like `margin` on a `load` preset is ignored). Unknown preset names / unknown keys are build errors.
+  A preset that sets neither `hydrate` nor `defer` is a build error.
 - Build errors are precise (they name the file + import): unknown preset, an option key inline,
   `preset` mixed with another key, `defer` + `hydrate` together (roadmap). `hydrate: 'false'` errors
   with a hint to use `hydrate: 'none'` (the lake value — see below).
+  Marked `hydrate`/`defer` imports that are referenced but **not** as a static `<Component>` tag
+  (`<svelte:component this={…}>`, dotted `<Menu.Item>`, etc.) also error — they would otherwise be
+  stripped and break the build. Completely unused marked imports are stripped silently.
 
 ## Server islands (`defer`)
 
@@ -150,8 +156,23 @@ export const handle = sequence(ogygiaHandle(), myOtherHandle);
   cookies all work with the request context of the island fetch.
 - A `<link rel="preload" as="fetch">` hint starts the fetch during HTML parse (the runtime fetch
   reuses it — one server render). Skipped when prerendering.
-- Signing key: `process.env.OGYGIA_SECRET` if set, else a per-build key baked into the
-  **server** bundle only (never a client chunk).
+- Signing key: **`OGYGIA_SECRET` is required for production builds that use deferred regions.**
+  Without it the build fails (prerendered holes and multi-instance deploys must share one key).
+  Local `vite dev` may omit it (per-process key; region ids stay unsalted). With the env set,
+  region ids are salted so they are not offline-computable. The MAC binds **region id + expiry +
+  props**. Treat anything you pass into a deferred/hydrated region as public to anyone who can
+  read the page HTML (HMAC is integrity, not confidentiality). The region endpoint sends
+  `X-Frame-Options: DENY` / `frame-ancestors 'none'` and is rate-limited per client IP
+  (configure via `ogygia({ rateLimit: { max, windowMs } })`, or `rateLimit: false` to disable).
+  Rate budget for *renders* is charged **only after a valid MAC**. A separate cheaper
+  probe budget runs **before** HMAC so forged floods cannot burn CPU unboundedly.
+  Optional **`bindSession: 'cookieName'`** seals that cookie into the MAC so a
+  harvested capability URL fails without the matching session (empty/prerender stays unbound) —
+  strongly recommended for personalized holes. Capability URLs are **24h bearer tokens** embedded
+  in HTML (HMAC is integrity, not confidentiality). Prefer `idle`/`visible` defer for below-fold
+  holes; many `defer: 'load'` islands fan out parallel origin renders (capped client-side).
+  Region HTML is inserted as trusted same-origin markup — do not put unsanitized `{@html}` from
+  user input inside deferred components.
 - The island component's **CSS** is collected via the page's import graph (linked in `<head>`),
   while **zero component JS** ships to the browser on a `csr = false` page.
 - v1 does not hydrate after the swap (`defer` + a hydrate strategy is a roadmap combo).
@@ -226,11 +247,24 @@ navigation, put it in an **island**.
 
 ## SPA router
 
-`<ClientRouter />` (opt-in, render it in a layout) intercepts same-origin `<a>` clicks, swaps
+`<OgygiaRouter />` (opt-in, render it in a layout) intercepts same-origin `<a>` clicks, swaps
 `<body>`, merges `<head>`, and uses View Transitions when available. Islands on the new page
-hydrate via custom-element connection; old ones unmount via disconnection. Rendering `<ClientRouter />`
+hydrate via custom-element connection; old ones unmount via disconnection. Rendering `<OgygiaRouter />`
 loads the runtime module, so the router works even on a page with **no islands**; the runtime module
 persists across swaps. (Page inline scripts are not re-run — see above.)
+
+### Persist layout chrome (`data-ogygia-persist`)
+
+Mark durable chrome (usually in a layout) with a stable key. On SPA navigation, if the same key
+exists on the outgoing and incoming body, the **live** node is kept (SSR markup for that key is
+discarded). Islands inside the persisted subtree stay mounted.
+
+```html
+<nav data-ogygia-persist="main-nav">…</nav>
+```
+
+Rules: keys must be unique per document (first wins); nested persist inside another persist
+ancestor is ignored (outer wins); missing on either side → normal replace for that subtree.
 
 ### Link prefetch (`data-sveltekit-preload-*`)
 
@@ -250,6 +284,10 @@ Put `data-sveltekit-preload-data="hover"` on a container to opt a whole subtree 
 router delivers a page's "code" via the HTML body swap (island chunks then fetch on connect),
 `data-sveltekit-preload-code` maps to the **same** HTML prefetch — its extra `eager`/`viewport`
 triggers just warm earlier.
+
+Responses with `Cache-Control: private|no-store|no-cache` or `Set-Cookie` are **never** cached.
+`invalidateAll()` (and successful Kit remote command/form POSTs) **bust** the cache so mutations
+cannot serve stale prefetched HTML. You can also call `bust_page_cache()` from `ogygia/app`.
 
 ## Captured host state is a snapshot (don't mutate it)
 

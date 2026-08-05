@@ -2,7 +2,6 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import { asset } from '$app/paths';
-	import { page } from '$app/state';
 	import { isNested, setNested } from './context.js';
 
 	/**
@@ -61,25 +60,7 @@
 	const props_script =
 		LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + payload + LT + '/script' + GT;
 
-	// Per-island snapshot of `page` so the client `$app/state` shim can seed it.
-	// `page.data` must be devalue-serializable; if not, we fall back to no data.
-	function page_snapshot() {
-		const b = {
-			url: page.url?.href,
-			params: page.params,
-			route: page.route,
-			status: page.status
-		};
-		try {
-			const full = { ...b, data: page.data, form: page.form ?? null, error: page.error ?? null };
-			return stringify(full).split(LT).join('\\u003C');
-		} catch {
-			return stringify(b).split(LT).join('\\u003C');
-		}
-	}
-	const page_script = nested
-		? ''
-		: LT + 'script type="application/ogygia-page" data-ogygia-page' + GT + page_snapshot() + LT + '/script' + GT;
+	// Page snapshot is document-level (`application/ogygia-page` from ogygiaHandle) — not per island.
 
 	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
 	const src = asset(runtimeUrl);
@@ -91,4 +72,4 @@
 		entry={__entry}
 		hydrate={hydrate_attr}
 		margin={root_margin || undefined}
-	><Component {...__props} /></ogygia-region>{@html props_script}{@html page_script}{@html runtime_script}{/if}
+	><Component {...__props} /></ogygia-region>{@html props_script}{@html runtime_script}{/if}

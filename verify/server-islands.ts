@@ -56,6 +56,31 @@ let endpoint;
 	check('endpoint returns 200 for a valid signed request', res.status === 200);
 	check('endpoint returns rendered island HTML', /data-server-greeting/.test(html));
 	check('endpoint personalizes from cookie (Hello, Ada!)', /Hello, Ada!/.test(html), html.slice(0, 80));
+	check(
+		'region response denies framing (XFO)',
+		/DENY/i.test(res.headers.get('x-frame-options') || ''),
+		res.headers.get('x-frame-options') || ''
+	);
+	check(
+		'region response denies framing (CSP frame-ancestors)',
+		/frame-ancestors\s+'none'/.test(res.headers.get('content-security-policy') || ''),
+		res.headers.get('content-security-policy') || ''
+	);
+
+	// P1-ID: with OGYGIA_SECRET, live ids must differ from the unsalted md5(host::index)
+	{
+		const { createHash } = await import('node:crypto');
+		const unsalted = createHash('md5')
+			.update('src/routes/(spa)/server/+page.svelte::0')
+			.digest('hex')
+			.slice(0, 12);
+		const liveId = new URL(endpoint).searchParams.get('id');
+		check(
+			'region id salted (not offline-computable without secret)',
+			!!liveId && liveId !== unsalted,
+			`live=${liveId} unsalted=${unsalted}`
+		);
+	}
 
 	// no cookie -> default greeting (proves the remote query read the request context)
 	const res2 = await fetch(endpoint);
@@ -72,9 +97,34 @@ let endpoint;
 	const resP = await fetch(tamperedProps);
 	check('tampered props rejected (403)', resP.status === 403, `got ${resP.status}`);
 
-	// unknown island id -> 404
-	const resU = await fetch(base + '/🏝️ogygia🏝️?id=deadbeefdead&props=W3t9XQ&sig=' + '0'.repeat(64));
-	check('unknown island id rejected (404)', resU.status === 404, `got ${resU.status}`);
+	// unknown region id with forged sig -> 403 (no existence oracle)
+	const resU = await fetch(base + '/🏝️ogygia🏝️?id=deadbeefdead&props=W3t9XQ&exp=9999999999&sig=' + '0'.repeat(64));
+	check('unknown region id rejected (403, no oracle)', resU.status === 403, `got ${resU.status}`);
+
+	// cross-region replay: valid sig for this endpoint's props, but swapped id
+	{
+		const u = new URL(endpoint);
+		const realId = u.searchParams.get('id');
+		u.searchParams.set('id', 'deadbeefdead');
+		const resX = await fetch(u.href);
+		check('cross-region id swap rejected (403)', resX.status === 403, `got ${resX.status} (was ${realId})`);
+	}
+
+	// expired capability
+	{
+		const u = new URL(endpoint);
+		u.searchParams.set('exp', '1');
+		const resE = await fetch(u.href);
+		check('expired region capability rejected (403)', resE.status === 403, `got ${resE.status}`);
+	}
+
+	// malformed percent-encoding on the islands path must not crash the process (SEC-05)
+	{
+		const resBad = await fetch(base + '/100%');
+		check('malformed % path returns 4xx (no process crash)', resBad.status >= 400 && resBad.status < 500, `got ${resBad.status}`);
+		const stillUp = await fetch(base + '/server');
+		check('server still up after malformed %', stillUp.status === 200);
+	}
 }
 
 // --------------------------------------------------------------- browser -----

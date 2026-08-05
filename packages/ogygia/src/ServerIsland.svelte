@@ -8,10 +8,12 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import { secret } from 'virtual:ogygia/secret';
+	import { sessionCookie } from 'virtual:ogygia/session-cookie';
+	import { sign, region_mac_message } from 'virtual:ogygia/sign';
 	import { resolve, asset } from '$app/paths';
 	import { building } from '$app/environment';
-	import { sign } from './server/hmac.js';
-	import { b64urlEncode } from './server/payload.js';
+	import { getRequestEvent } from 'virtual:ogygia/request-event';
+	import { B64Url } from './server/payload.js';
 	import { DEFAULT_ISLANDS_ENDPOINT } from './server/endpoint.js';
 	import { isNested, setNested } from './context.js';
 
@@ -40,15 +42,28 @@
 		);
 	}
 
-	// HMAC-signed devalue payload. Base64url so it rides in the query string untouched.
-	const payload = nested ? '' : b64urlEncode(stringify(__props));
-	const sig = nested ? '' : sign(secret, payload);
+	/** Session sealed into the MAC when `ogygia({ bindSession })` is set; empty at prerender. */
+	function region_session() {
+		if (!sessionCookie || nested) return '';
+		try {
+			return getRequestEvent().cookies.get(sessionCookie) ?? '';
+		} catch {
+			return '';
+		}
+	}
+
+	// HMAC-signed region capability: region id + expiry + props (+ optional session).
+	// Expiry is always 24h — prerendered holes use the same window (no decade-long bearer URLs).
+	const payload = nested ? '' : B64Url.encode(stringify(__props));
+	const session = region_session();
+	const exp = nested ? 0 : Math.floor(Date.now() / 1000) + 86400;
+	const sig = nested ? '' : sign(secret, region_mac_message(__entry, exp, payload, session));
 
 	// base-prefixed endpoint PATH in DECODED (raw-emoji) form. The browser encodes it to
 	// percent-encoded UTF-8 when the runtime fetches / preloads it — we never hand-roll that.
 	const endpoint = nested
 		? ''
-		: `${resolve(DEFAULT_ISLANDS_ENDPOINT)}?id=${encodeURIComponent(__entry)}&props=${payload}&sig=${sig}`;
+		: `${resolve(DEFAULT_ISLANDS_ENDPOINT)}?id=${encodeURIComponent(__entry)}&props=${payload}&exp=${exp}&sig=${sig}`;
 
 	// Build tag strings without literal angle brackets so Svelte's raw-text <script>/<link>
 	// lexer never mistakes them for real tags.

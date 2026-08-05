@@ -22,7 +22,7 @@ const count = (s, re) => (s.match(re) || []).length;
 	check('/ has 9 <ogygia-region> elements', count(html, /<ogygia-region/g) === 9, `${count(html, /<ogygia-region/g)}`);
 	check('/ counter island SSR content (count is 10)', /count is 10/.test(html));
 	check('/ per-use strategy: same module, visible (count is 99)', /count is 99/.test(html));
-	check('/ opt-in router marker present (ClientRouter)', /name="ogygia-router"/.test(html));
+	check('/ opt-in router marker present (OgygiaRouter)', /name="ogygia-router"/.test(html));
 	check('/ each-block islands SSR (Alpha/Bravo/Charlie)', /Alpha/.test(html) && /Bravo/.test(html) && /Charlie/.test(html));
 	check('/ devalue props payload present', /application\/ogygia-props/.test(html));
 	check('/ 9 devalue payloads', count(html, /application\/ogygia-props/g) === 9);

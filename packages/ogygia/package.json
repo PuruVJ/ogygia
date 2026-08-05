@@ -29,6 +29,11 @@
       "types": "./dist/internal.d.ts",
       "svelte": "./dist/internal.js",
       "default": "./dist/internal.js"
+    },
+    "./internal/server": {
+      "types": "./dist/internal-server.d.ts",
+      "svelte": "./dist/internal-server.js",
+      "default": "./dist/internal-server.js"
     }
   },
   "files": [

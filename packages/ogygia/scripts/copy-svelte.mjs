@@ -12,7 +12,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const files = [
 	'src/Island.svelte',
 	'src/ServerIsland.svelte',
-	'src/ClientRouter.svelte',
+	'src/OgygiaRouter.svelte',
 	'src/NestedProvider.svelte',
 	'src/LakePlaceholder.svelte',
 	'src/LakeBoundary.svelte'

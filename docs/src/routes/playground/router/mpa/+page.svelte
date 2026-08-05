@@ -9,11 +9,12 @@
 		deliberately stepped aside and let the browser do a full document load. No body swap, no view
 		transition — a real navigation. This is how you opt out of the SPA on a per-link basis; the same
 		happens automatically for cross-origin links, downloads, and pages with no
-		<code>&lt;ClientRouter /&gt;</code>.
+		<code>&lt;OgygiaRouter /&gt;</code>.
 	</p>
 	<p>
 		The island still hydrates on this freshly loaded document — client-side <em>routing</em> is what
-		is opt-in, not islands. From here, the sub-nav links resume client-side swaps.
+		is opt-in, not islands. A full load also remounts <code>data-ogygia-persist</code> chrome (persist
+		only applies across SPA swaps). From here, the sub-nav links resume client-side swaps.
 	</p>
 </div>
 

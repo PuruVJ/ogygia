@@ -2,11 +2,15 @@
 	// Each demo wrapper is imported AS an island with the strategy it demonstrates. The live/frozen
 	// pair and the JS toggle live inside DemoBlock — flip the toggle to compare the hydrated UI with
 	// the static HTML the server actually shipped.
+	// Code is Shiki-highlighted in +page.server.ts and passed as string props — island chunks never
+	// import Shiki.
 	import LoadDemo from '$lib/demos/LoadDemo.svelte' with { hydrate: 'load' };
 	import IdleDemo from '$lib/demos/IdleDemo.svelte' with { hydrate: 'idle' };
 	import VisibleDemo from '$lib/demos/VisibleDemo.svelte' with { hydrate: 'visible' };
 	import MediaDemo from '$lib/demos/MediaDemo.svelte' with { hydrate: '(max-width: 600px)' };
 	import PresetDemo from '$lib/playground/PresetDemo.svelte' with { preset: 'demo' };
+
+	let { data }: { data: import('./$types').PageData } = $props();
 </script>
 
 <main class="shell docs-main">
@@ -31,7 +35,7 @@
 						present, styled, but inert.
 					</p>
 				</div>
-				<LoadDemo />
+				<LoadDemo codeHtml={data.loadCode} />
 			</div>
 
 			<div class="strategy">
@@ -42,7 +46,7 @@
 						already there; only the listeners and reactive runtime wait for a quiet moment.
 					</p>
 				</div>
-				<IdleDemo />
+				<IdleDemo codeHtml={data.idleCode} />
 			</div>
 
 			<div class="strategy">
@@ -54,7 +58,7 @@
 					</p>
 				</div>
 				<div class="scroll-hint">Scroll until the visible block intersects the viewport.</div>
-				<VisibleDemo />
+				<VisibleDemo codeHtml={data.visibleCode} />
 			</div>
 
 			<div class="strategy">
@@ -66,7 +70,7 @@
 						preview. Mobile-only JS never loads on desktop.
 					</p>
 				</div>
-				<MediaDemo />
+				<MediaDemo codeHtml={data.mediaCode} />
 			</div>
 
 			<div class="strategy">
@@ -78,7 +82,7 @@
 						(<code>hydrate: 'visible'</code> with a <code>200px</code> margin).
 					</p>
 				</div>
-				<PresetDemo />
+				<PresetDemo codeHtml={data.presetCode} />
 			</div>
 		</div>
 	</section>
