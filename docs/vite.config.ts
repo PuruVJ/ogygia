@@ -7,7 +7,8 @@ export default defineConfig({
 		ogygia({
 			visible: { margin: '120px' },
 			presets: {
-				demo: { hydrate: 'visible', margin: '200px' }
+				demo: { hydrate: 'visible', margin: '200px' },
+				frozenSwr: { hydrate: 'none', remount: { strategy: 'swr', when: 'load' } }
 			}
 		}),
 		sveltekit()

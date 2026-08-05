@@ -18,13 +18,18 @@ let endpoint;
 	const res = await fetch(base + '/server');
 	const html = await res.text();
 	check('/server returns 200', res.status === 200);
-	check('/server has exactly one server island', count(html, /<ogygia-region\b[^>]*\bdefer\b/g) === 1);
+	check('/server has exactly one deferred region', count(html, /<ogygia-region\b[^>]*\brender="defer"/g) === 1);
+	check('/server deferred region has a when schedule', /<ogygia-region\b[^>]*\bwhen="/.test(html));
 	check('/server fallback rendered in initial HTML', /loading greeting/.test(html));
 	check(
 		'/server does NOT render the component at page-SSR (no "Hello," yet)',
 		!/Hello, (Ada|stranger)/.test(html)
 	);
 	check('/server preload hint present (rel=preload as=fetch)', /rel="preload" as="fetch"/.test(html));
+	check(
+		'/server preload uses crossorigin=use-credentials (matches fetch credentials)',
+		/rel="preload" as="fetch" crossorigin="use-credentials"/.test(html)
+	);
 	check('/server preload points at the island endpoint (raw-emoji path)', /href="[^"]*🏝️ogygia🏝️/.test(html));
 	check('/server ships NO Kit bootstrap (csr=false)', !/__sveltekit/.test(html));
 	// The "zero component JS" guarantee is a production-build property. In dev, Vite injects

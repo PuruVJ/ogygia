@@ -1,6 +1,7 @@
 <script lang="ts">
-	import Logo from '$lib/Logo.svelte';
 	import Contours from '$lib/Contours.svelte';
+	import Logo from '$lib/Logo.svelte';
+	import SiteNav from '$lib/SiteNav.svelte' with { hydrate: '(max-width: 767px)' };
 	import Toc from '$lib/Toc.svelte' with { hydrate: 'load' };
 	import HeroDemo from '$lib/demos/HeroDemo.svelte' with { hydrate: 'load' };
 	import LoadDemo from '$lib/demos/LoadDemo.svelte' with { hydrate: 'load' };
@@ -11,43 +12,29 @@
 	import ServerGreeting from '$lib/demos/ServerGreeting.svelte' with { defer: 'load' };
 	// Presentational only — Shiki HTML comes from +page.server.ts (never ships to the browser).
 	import CodeBlock from '$lib/CodeBlock.svelte';
+	import PageHead from '$lib/PageHead.svelte';
 
 	let { data }: { data: import('./$types').PageData } = $props();
+
+	const docsLinks = [
+		{ href: '#install', label: 'Install' },
+		{ href: '#authoring', label: 'Authoring' },
+		{ href: '#strategies', label: 'Strategies' },
+		{ href: '#server-islands', label: 'Server' },
+		{ href: '#lakes', label: 'Lakes' },
+		{ href: '#router', label: 'Router' },
+		{ href: '#patterns', label: 'Patterns' },
+		{ href: '/playground', label: 'Playground', outbound: true }
+	];
 </script>
+
+<PageHead
+	description="SSR islands for SvelteKit. Ship a zero-JS page shell, mark components with import attributes, hydrate only what needs JavaScript."
+/>
 
 <div id="top"></div>
 
-<nav class="nav">
-	<div class="shell nav-inner">
-		<a class="nav-brand" href="#top">
-			<Logo size={20} />
-			<span class="nav-wordmark">ogygia</span>
-		</a>
-		<div class="nav-links">
-			<a class="nav-link" href="#install">Install</a>
-			<a class="nav-link" href="#authoring">Authoring</a>
-			<a class="nav-link" href="#strategies">Strategies</a>
-			<a class="nav-link" href="#server-islands">Server</a>
-			<a class="nav-link" href="#lakes">Lakes</a>
-			<a class="nav-link" href="#router">Router</a>
-			<a class="nav-link" href="#patterns">Patterns</a>
-			<a class="nav-link" href="/playground">Playground</a>
-		</div>
-		<a
-			class="nav-github"
-			href="https://github.com/PuruVJ/ogygia"
-			aria-label="GitHub repository"
-			target="_blank"
-			rel="noreferrer"
-		>
-			<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-				<path
-					d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.23c-3.34.73-4.03-1.42-4.03-1.42-.55-1.39-1.33-1.76-1.33-1.76-1.09-.74.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.66-.3-5.46-1.33-5.46-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.82.58A12.01 12.01 0 0 0 24 12c0-6.63-5.37-12-12-12Z"
-				/>
-			</svg>
-		</a>
-	</div>
-</nav>
+<SiteNav brandHref="#top" links={docsLinks} github />
 
 <header class="hero">
 	<Contours class="hero-contours" />
@@ -239,6 +226,18 @@
 				<code>module: "esnext"</code>, and svelte-check 4.7+ parses it cleanly.
 			</p>
 		</div>
+
+		<h3 class="doc-subhead" id="boundary">Annotation boundary</h3>
+		<div class="prose">
+			<p>
+				<code>&lt;OgygiaBoundary&gt;</code> is an optional public wrapper that renders its
+				children and nothing else — no extra DOM, no nested-island context, no
+				<code>hydrate</code> / <code>render</code> effect. Use it only when you want to mark a
+				region usage in source for humans (or for a future hook). It is not
+				<code>&lt;svelte:boundary&gt;</code>, and it is not the internal lake context reset.
+			</p>
+		</div>
+		<CodeBlock html={data.ogygiaBoundaryHtml} />
 	</section>
 
 	<section id="strategies">
@@ -353,8 +352,9 @@
 				is shipped for the deferred island.
 			</p>
 			<p>
-				Signing uses <code>process.env.OGYGIA_SECRET</code> when set; otherwise a per-build key is
-				baked into the server bundle only. The default endpoint path is
+				Signing bakes a per-build HMAC key into the server bundle by default (no setup). Set
+				optional <code>OGYGIA_SECRET</code> (shell, CI, or <code>.env</code>) when rolling deploys
+				or cached HTML must keep verifying across builds. The default endpoint path is
 				<code>/🏝️ogygia🏝️</code> (emoji brackets keep it from colliding with app routes).
 			</p>
 			<p>
@@ -410,10 +410,15 @@
 			<p>
 				The contract is the same honesty islands demand elsewhere: lake content is furniture.
 				Props changes after the page render do nothing; event handlers inside are inert. If the
-				parent island destroys and re-creates the lake's spot (an <code>&#123;#if&#125;</code>
-				toggle), <code>ogygia(&#123; lake_restore &#125;)</code> decides what happens:
-				<code>'cache'</code> (default) restores the frozen DOM from a cache,
-				<code>'empty'</code> leaves the re-created spot blank.
+				parent island destroys and re-creates the frozen spot (an <code>&#123;#if&#125;</code>
+				toggle), <code>remount</code> on a <code>hydrate: 'none'</code> preset decides what happens:
+				<code>'cache'</code> (default) restores the SSR DOM,
+				<code>'empty'</code> leaves the spot blank,
+				<code>'swr'</code> paints the cache then fetches fresh HTML
+				(<code>remount: &#123; strategy: 'swr', when: 'idle' &#125;</code> in
+				<code>ogygia(&#123; presets &#125;)</code> — not inline). Islands inside wait for the
+				revalidate swap before hydrating. The signed endpoint is SSR-minted only (no client remint;
+				same 24h capability window as deferred islands).
 			</p>
 			<p>
 				Where it pays: a heavy rendered markdown blob inside an interactive editor shell, a big

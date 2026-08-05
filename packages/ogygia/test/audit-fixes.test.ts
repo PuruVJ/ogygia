@@ -93,8 +93,8 @@ describe('audit fixes — transform contract', () => {
 		expect(r!.islands.some((i) => i.server)).toBe(true);
 		const virt = r!.islands.find((i) => i.source)!;
 		expect(virt.lakes).toEqual(['Lake']);
-		expect(virt.source).toMatch(/data-lake/);
-		expect(virt.source).toMatch(/OgygiaLakeBoundary/);
+		expect(virt.source).toMatch(/OgygiaLakeRegion__Wrapper/);
+		expect(virt.source).toMatch(/__remount=\{"cache"\}/);
 	});
 
 	it('strips unused hydrate:none import (no with{} left)', () => {

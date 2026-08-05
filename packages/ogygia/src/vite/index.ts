@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { loadEnv, type Plugin } from 'vite';
 import { transformHost, ISLAND_DIR } from './transform.js';
 import { allRoutesCsrFalse, runStandaloneClientBuild } from './standalone.js';
-import { Plugin } from 'vite';
 
 const RUNTIME_ENTRY = fileURLToPath(new URL('../runtime/index.js', import.meta.url));
 
@@ -40,12 +40,16 @@ const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
 const V_SESSION_COOKIE = 'virtual:ogygia/session-cookie';
 const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
 const V_REQUEST_EVENT = 'virtual:ogygia/request-event';
+const V_REGION_ENDPOINT = 'virtual:ogygia/region-endpoint';
 // Reuse Kit's OWN wire protocol (transport-aware devalue arg/response codec) instead of
 // reimplementing it. We deep-import Kit's internal `runtime/shared.js` by absolute path
 // (bypassing the exports map) and feed it the app's universal `transport` hook.
 const V_KIT_WIRE = 'virtual:ogygia/kit-wire';
 const V_TRANSPORT = 'virtual:ogygia/transport';
 const RESOLVED = (id) => '\0' + id;
+
+/** Absolute path to SSR region-endpoint helper (signed capability URLs). */
+const REGION_ENDPOINT_MODULE = fileURLToPath(new URL('../server/region-endpoint.js', import.meta.url));
 
 // Content-hash the runtime's real inputs (the prebuilt dist files the runtime chunk bundles).
 // Kit builds the SERVER bundle BEFORE the client, so a forward handoff of the client chunk's hash
@@ -138,7 +142,12 @@ function is_island_path(id) {
  * @param {Object} [options]
  * @param {boolean} [options.spa=true] enable the built-in SPA router
  * @param {{margin?:string}} [options.visible] global defaults for `hydrate: 'visible'` islands
- * @param {Record<string, {hydrate?:string, defer?:string, margin?:string}>} [options.presets]
+ * @param {Record<string, {
+ *   hydrate?: string;
+ *   defer?: string;
+ *   margin?: string;
+ *   remount?: 'cache'|'empty'|'swr'|{ strategy: 'cache'|'empty'|'swr'; when?: string }
+ * }>} [options.presets]
  *   named strategy presets referenced from imports via `with { preset: 'name' }`
  * @param {false|{max?:number,windowMs?:number}} [options.rateLimit] per-IP budget for the
  *   deferred-region endpoint (default `{ max: 60, windowMs: 60_000 }`; `false` disables)
@@ -152,8 +161,19 @@ export function ogygia(
 		spa?: boolean;
 		standalone?: boolean;
 		visible?: { margin?: string };
-		presets?: Record<string, { hydrate?: string; defer?: string; margin?: string }>;
-		lake_restore?: 'cache' | 'empty';
+		presets?: Record<
+			string,
+			{
+				hydrate?: string;
+				defer?: string;
+				margin?: string;
+				remount?:
+					| 'cache'
+					| 'empty'
+					| 'swr'
+					| { strategy: 'cache' | 'empty' | 'swr'; when?: string };
+			}
+		>;
 		rateLimit?: false | { max?: number; windowMs?: number };
 		bindSession?: false | string;
 	} = {}
@@ -162,11 +182,6 @@ export function ogygia(
 	const standalone = options.standalone === true;
 	const visibleMargin = options.visible?.margin;
 	const presets = options.presets || {};
-	// Lake DOM restore policy for `{#if}`-toggle re-creation: 'cache' re-inserts the frozen SSR DOM
-	// when the region is re-created; 'empty' leaves it empty. Default 'cache'. NOTE: the option key
-	// is deliberately flat snake_case (`lake_restore`) by explicit user decision — a documented
-	// exception to the public-API-camelCase convention (see CONTRIBUTING.md).
-	const lake_restore = options.lake_restore === 'empty' ? 'empty' : 'cache';
 
 	// Region-endpoint rate limit (baked into SSR only via virtual:ogygia/rate-limit).
 	const rate_limit =
@@ -183,13 +198,13 @@ export function ogygia(
 			? options.bindSession
 			: '';
 
-	// HMAC key for signing region capability URLs (defer/server holes). Runtime env var wins
-	// (rotate / share across instances); otherwise a per-build random key baked into the
-	// SERVER bundle only (never a client chunk — see the `virtual:ogygia/secret` load).
+	// HMAC key for signing region capability URLs (defer / remount:swr). Default: a fresh
+	// per-build random baked into the SERVER bundle only (never a client chunk). Optional
+	// `OGYGIA_SECRET` overrides that so rolling deploys / long-lived cached HTML keep verifying.
 	const build_secret = crypto.randomBytes(32).toString('hex');
-	/** Salt for region ids — only the stable env secret (never per-instance build_secret, or
-	 *  SSR/client builds would disagree). Empty in local dev without OGYGIA_SECRET. */
-	const id_salt = process.env.OGYGIA_SECRET || '';
+	/** Salt for region ids — only a stable env override (never per-build random, or SSR/client
+	 *  builds would disagree). Empty when unset (dev + default per-build signing). */
+	let id_salt = process.env.OGYGIA_SECRET || '';
 
 	/** @type {Map<string, {source:string, hostPath:string, id:string}>} keyed by abs virtual path */
 	const registry = new Map();
@@ -317,6 +332,22 @@ export function ogygia(
 			is_ssr = !!config.build?.ssr;
 			sourcemap = !!config.build?.sourcemap;
 
+			// Optional stable override. Vite only puts `VITE_*` from `.env` onto import.meta.env —
+			// load plain `OGYGIA_SECRET` ourselves so `.env` / `.env.local` work without a shell export.
+			if (!process.env.OGYGIA_SECRET?.trim()) {
+				const env_dir =
+					config.envDir === false
+						? false
+						: config.envDir
+							? path.resolve(root, config.envDir)
+							: root;
+				if (env_dir !== false) {
+					const from_file = loadEnv(config.mode, env_dir, '').OGYGIA_SECRET?.trim();
+					if (from_file) process.env.OGYGIA_SECRET = from_file;
+				}
+			}
+			id_salt = process.env.OGYGIA_SECRET || '';
+
 			// Locate Kit's internal wire-protocol module by resolving its package.json (that IS
 			// exported) and joining the src path — deep-importing the file bypasses the exports map.
 			try {
@@ -354,18 +385,6 @@ export function ogygia(
 				}
 			}
 
-			// Stable secret required when baking signed region holes into SSR/prerender output.
-			if (is_build && is_ssr && !process.env.OGYGIA_SECRET) {
-				prescan();
-				for (const kind of region_kinds.values()) {
-					if (kind === 'defer') {
-						throw new Error(
-							'[ogygia] OGYGIA_SECRET is required for production builds that use deferred regions (prerender + multi-instance). Set a stable secret in the environment.'
-						);
-					}
-				}
-			}
-
 			// SSR build with Kit SKIPPING its client build (every route csr=false): run our own
 			// standalone client build NOW — at the START of the server build, before any server
 			// chunk emits. Island discovery is prescan-based (needs no server output), so the
@@ -398,6 +417,7 @@ export function ogygia(
 			if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);
 			if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
 			if (source === V_REQUEST_EVENT) return RESOLVED(V_REQUEST_EVENT);
+			if (source === V_REGION_ENDPOINT) return RESOLVED(V_REGION_ENDPOINT);
 			// deep-import Kit's own wire helpers by absolute path (bypasses the exports map)
 			if (source === V_KIT_WIRE && kit_wire_path) return kit_wire_path;
 			if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
@@ -496,8 +516,9 @@ export function ogygia(
 				return `export const transport = {};`;
 			}
 			if (id === RESOLVED(V_SECRET)) {
-				// SERVER only: the real key. CLIENT build: empty string, so the key can never
-				// leak into a client chunk (server islands are a csr=false feature anyway).
+				// SERVER only: signing key. CLIENT build: empty string (never mint in the browser).
+				// Runtime prefers `OGYGIA_SECRET` when the host sets it; otherwise the per-build
+				// key baked below (same artifact → all instances of this deploy agree).
 				if (!ssr) return `export const secret = '';`;
 				return `export const secret = process.env.OGYGIA_SECRET || ${JSON.stringify(build_secret)};`;
 			}
@@ -521,6 +542,14 @@ export function ogygia(
 					return `export function getRequestEvent() { throw new Error('ogygia: getRequestEvent is server-only'); }`;
 				}
 				return `export { getRequestEvent } from '$app/server';`;
+			}
+			if (id === RESOLVED(V_REGION_ENDPOINT)) {
+				// LakeRegion (inside island modules) imports this. SSR mints signed URLs; client
+				// returns '' — remount:swr reuses the endpoint cached from the first SSR restore.
+				if (!ssr) {
+					return `export function makeRegionEndpoint(_entry, _props) { return ''; }`;
+				}
+				return `export { makeRegionEndpoint } from ${JSON.stringify(REGION_ENDPOINT_MODULE)};`;
 			}
 			if (id === RESOLVED(V_RATE_LIMIT)) {
 				// SERVER only — the region handle is the only consumer.
@@ -547,7 +576,7 @@ export function ogygia(
 			}
 			if (id === RESOLVED(V_MANIFEST)) {
 				if (is_dev) {
-					return `export const dev = true;\nexport const spa = ${spa};\nexport const lake_restore = ${JSON.stringify(lake_restore)};\nexport const regions = {};`;
+					return `export const dev = true;\nexport const spa = ${spa};\nexport const regions = {};`;
 				}
 				prescan();
 				// One `regions` record for ALL region kinds. ONLY kind:'hydrate' carries a `load`
@@ -564,7 +593,7 @@ export function ogygia(
 						entries.push(`  ${JSON.stringify(rid)}: { kind: ${JSON.stringify(kind)} }`);
 					}
 				}
-				return `export const dev = false;\nexport const spa = ${spa};\nexport const lake_restore = ${JSON.stringify(lake_restore)};\nexport const regions = {\n${entries.join(',\n')}\n};`;
+				return `export const dev = false;\nexport const spa = ${spa};\nexport const regions = {\n${entries.join(',\n')}\n};`;
 			}
 			const srcEntry = registry.get(id);
 			if (srcEntry) {

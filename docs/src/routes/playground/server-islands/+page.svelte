@@ -11,7 +11,13 @@
 	// tiny client island to set that cookie.
 	import CookieGreeting from '$lib/playground/CookieGreeting.svelte' with { defer: 'load' };
 	import CookieSetter from '$lib/playground/CookieSetter.svelte' with { hydrate: 'load' };
+	import PageHead from '$lib/PageHead.svelte';
 </script>
+
+<PageHead
+	title="Server islands · Playground"
+	description="Deferred server islands: signed same-origin HTML holes that fetch on load, idle, visible, or media — with cookie personalization."
+/>
 
 <main class="shell docs-main">
 	<section id="server-islands">

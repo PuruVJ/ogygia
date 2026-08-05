@@ -3,9 +3,19 @@
  * Cleared on SPA body swap via `reset()` so connecting regions never see the previous page.
  */
 import { ConcurrencyGate } from './concurrency.js';
+import { FROZEN_SELECTOR } from './region-attrs.js';
+
+/** Cached SSR DOM (+ optional SWR endpoint) for `{#if}` remount of hydrate:none regions.
+ * Keyed by lake entry id — size is O(unique lakes on the page), not O(toggles).
+ * Cleared on SPA body swap via `reset()`. SWR refresh replaces the entry (does not grow). */
+export type LakeCacheEntry = {
+	frag: Node;
+	endpoint: string;
+	when: string;
+};
 
 export class RuntimeSession {
-	readonly lake_cache = new Map<string, Node>();
+	readonly lake_cache = new Map<string, LakeCacheEntry>();
 	readonly settled_lakes = new WeakSet<Element>();
 	readonly initialized_lakes = new Set<string>();
 	readonly server_gate = new ConcurrencyGate(3);
@@ -36,10 +46,10 @@ export class RuntimeSession {
 	}
 
 	settle_lakes_in(root: ParentNode) {
-		if (root instanceof Element && root.matches?.('ogygia-region[data-lake]')) {
+		if (root instanceof Element && root.matches?.(FROZEN_SELECTOR)) {
 			this.settled_lakes.add(root);
 		}
-		for (const lake of root.querySelectorAll('ogygia-region[data-lake]')) {
+		for (const lake of root.querySelectorAll(FROZEN_SELECTOR)) {
 			this.settled_lakes.add(lake);
 		}
 	}

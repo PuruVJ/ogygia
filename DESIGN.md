@@ -60,6 +60,20 @@ Custom elements make this navigation-proof: any swap that inserts regions
 
 "Island" and "lake" survive as vocabulary, not as separate mechanisms.
 
+## DOM surface (`<ogygia-region>`)
+
+The custom element mirrors the two axes — no `data-lake`, no bare `defer` /
+`defer-when` (HTML's boolean `defer` would drop string values):
+
+```html
+<ogygia-region entry="…" hydrate="load|idle|visible|(media)">
+<ogygia-region entry="…" hydrate="none">
+<ogygia-region entry="…" render="defer" when="load|idle|visible|(media)" endpoint="…">
+```
+
+A region is **awake** iff `hydrate` is set and not `none`. Self-run iff the
+nearest ancestor region is not awake. Helpers: `runtime/region-attrs.ts`.
+
 ## Composition semantics (all derived from the rule, none ad-hoc)
 
 - **Island in shell**: hydrates per its strategy.
@@ -74,9 +88,9 @@ Custom elements make this navigation-proof: any swap that inserts regions
 - **Lake in shell / lake in lake**: no-op (already dead). Allowed, pointless.
 - **Server island (defer) in shell**: fallback SSRs; hole fetches its HTML and
   swaps on connect (preload-hinted).
-- **Server island in island / in lake**: the hole is inert DOM to its parent;
-  it fills itself on connect. (Roadmap once lakes land; until then: degrades to
-  a plain component with a dev warning.)
+- **Server island in island / in lake**: degrades to a plain inline component with
+  a dev warning (`defer` ignored; it renders with the parent). Filling a nested
+  hole on connect is roadmap.
 
 ## Boundaries are declared at the import
 
@@ -89,4 +103,9 @@ cross as devalue, functions never cross.
 - Inline `<script>` in page HTML — runs on full loads only; the library does not process or
   re-execute scripts (use an island for per-navigation code).
 - `<OgygiaRouter />` — swaps regions wholesale; the rule re-applies on connect.
+- `<OgygiaBoundary>` — public children-only passthrough for source annotation; zero effect on
+  hydrate/render/context (not `<svelte:boundary>`, not internal `LakeBoundary`).
 - Remote functions — data plane; regions are the rendering plane.
+- **`remount` on `hydrate: 'none'`** — preset-only policy for `{#if}` re-creation of a no-JS
+  region (`cache` | `empty` | `swr`). Not a third axis; only meaningful on frozen furniture.
+  Authoring: `with { preset: '…' }` where the preset sets `remount` (import attributes cannot nest).

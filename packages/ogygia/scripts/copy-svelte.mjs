@@ -15,7 +15,9 @@ const files = [
 	'src/OgygiaRouter.svelte',
 	'src/NestedProvider.svelte',
 	'src/LakePlaceholder.svelte',
-	'src/LakeBoundary.svelte'
+	'src/LakeBoundary.svelte',
+	'src/LakeRegion.svelte',
+	'src/OgygiaBoundary.svelte'
 ];
 
 for (const rel of files) {

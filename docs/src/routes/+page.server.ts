@@ -14,6 +14,7 @@ export async function load() {
 		layoutAndHooksHtml,
 		authoringImportsHtml,
 		ogygiaRouterHtml,
+		ogygiaBoundaryHtml,
 		persistNavHtml
 	] = await Promise.all([
 		highlight(snip.hydrateLoadCounter, 'svelte'),
@@ -27,6 +28,7 @@ export async function load() {
 		highlight(snip.layoutAndHooks, 'typescript'),
 		highlight(snip.authoringImports, 'svelte'),
 		highlight(snip.ogygiaRouter, 'svelte'),
+		highlight(snip.ogygiaBoundary, 'svelte'),
 		highlight(snip.persistNav, 'html')
 	]);
 
@@ -42,6 +44,7 @@ export async function load() {
 		layoutAndHooksHtml,
 		authoringImportsHtml,
 		ogygiaRouterHtml,
+		ogygiaBoundaryHtml,
 		persistNavHtml
 	};
 }

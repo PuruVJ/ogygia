@@ -1,6 +1,12 @@
 <script lang="ts">
 	import Counter from '$lib/demos/Counter.svelte' with { hydrate: 'load' };
+	import PageHead from '$lib/PageHead.svelte';
 </script>
+
+<PageHead
+	title="csr = true"
+	description="A Kit-hydrated route that keeps the client build available — islands still work as normal components."
+/>
 
 <main class="shell" style="padding-top: 6rem; padding-bottom: 4rem;">
 	<p class="eyebrow">Kit coexistence</p>

@@ -1,0 +1,60 @@
+/**
+ * DOM attribute vocabulary for `<ogygia-region>` (DESIGN.md two axes).
+ *
+ * - `hydrate` — when JS wakes: `none` | `load` | `idle` | `visible` | media query
+ * - `render`  — when HTML arrives: omit/`page` | `defer`
+ * - `when`    — schedule for `render="defer"` OR `remount="swr"` revalidate
+ * - `remount` — `{#if}` re-creation of `hydrate="none"`: `cache` | `empty` | `swr`
+ *
+ * No "island" / "lake" attribute names — those are nicknames, not the mechanism.
+ */
+
+/** CSS selector for frozen regions (`hydrate: 'none'`). */
+export const FROZEN_SELECTOR = 'ogygia-region[hydrate="none"]';
+
+/** True if this region is a wake boundary (JS will / did run for its subtree). */
+export function is_awake(el: Element): boolean {
+	const h = el.getAttribute('hydrate');
+	return h != null && h !== 'none';
+}
+
+/** True if this region freezes its subtree (SSR DOM preserved; no client module). */
+export function is_frozen(el: Element): boolean {
+	return el.getAttribute('hydrate') === 'none';
+}
+
+/** True if this region fetches HTML later (`render="defer"`). */
+export function is_deferred(el: Element): boolean {
+	return el.getAttribute('render') === 'defer';
+}
+
+/** `{#if}` remount policy for `hydrate="none"` regions. Default `cache`. */
+export function region_remount(el: Element): 'cache' | 'empty' | 'swr' {
+	const r = el.getAttribute('remount');
+	if (r === 'empty' || r === 'swr') return r;
+	return 'cache';
+}
+
+/**
+ * True when a frozen region has only Svelte placeholder anchors (comments / whitespace).
+ * Used by remount: a text-only lake is still "filled" — `querySelector('*')` would miss it and
+ * double-append the cache on reconnect (REMOUNT-VACANT).
+ */
+export function region_is_vacant(el: ParentNode): boolean {
+	for (const n of el.childNodes) {
+		if (n.nodeType === 1) return false; // Element
+		if (n.nodeType === 3 && (n.textContent?.trim() ?? '') !== '') return false; // Text
+	}
+	return true;
+}
+
+/**
+ * Schedule string for the shared scheduler.
+ * Deferred regions use `when`; waking regions use `hydrate`; default `load`.
+ */
+export function region_schedule(el: Element): string {
+	if (is_deferred(el)) return el.getAttribute('when') || 'load';
+	const h = el.getAttribute('hydrate');
+	if (h && h !== 'none') return h;
+	return 'load';
+}

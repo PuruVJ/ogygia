@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Logo from '$lib/Logo.svelte';
+	import SiteNav from '$lib/SiteNav.svelte' with { hydrate: '(max-width: 767px)' };
 
 	let { children } = $props();
 
@@ -9,24 +10,12 @@
 		{ href: '/playground/lakes', label: 'Lakes' },
 		{ href: '/playground/data', label: 'Data' },
 		{ href: '/playground/router', label: 'Router' },
-		{ href: '/playground/mutation-guard', label: 'Guard' }
+		{ href: '/playground/mutation-guard', label: 'Guard' },
+		{ href: '/', label: 'Docs', outbound: true }
 	];
 </script>
 
-<nav class="nav">
-	<div class="shell nav-inner">
-		<a class="nav-brand" href="/playground">
-			<Logo size={20} />
-			<span class="nav-wordmark">ogygia / playground</span>
-		</a>
-		<div class="nav-links">
-			{#each links as link}
-				<a class="nav-link" href={link.href}>{link.label}</a>
-			{/each}
-			<a class="nav-link" href="/" data-back-to-docs>Docs</a>
-		</div>
-	</div>
-</nav>
+<SiteNav brandHref="/playground" brandLabel="ogygia / playground" {links} />
 
 <div class="pg-body">
 	{@render children()}
@@ -50,5 +39,12 @@
 		padding-top: calc(var(--nav-h) + 2.5rem);
 		padding-bottom: 3rem;
 		min-height: 60vh;
+	}
+
+	@media (max-width: 767px) {
+		.pg-body {
+			padding-top: 2.5rem;
+			padding-bottom: calc(var(--nav-h) + 3rem);
+		}
 	}
 </style>

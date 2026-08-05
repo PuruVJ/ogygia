@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Contours from '$lib/Contours.svelte';
+	import PageHead from '$lib/PageHead.svelte';
 
 	const cards = [
 		{
@@ -40,6 +41,11 @@
 		}
 	];
 </script>
+
+<PageHead
+	title="Playground"
+	description="Live demos of ogygia’s region model — hydrate strategies, server islands, lakes, remotes, and the SPA router."
+/>
 
 <header class="shell pg-hero">
 	<Contours class="pg-hero-contours" />

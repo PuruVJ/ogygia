@@ -1,6 +1,12 @@
 <script lang="ts">
 	import RouteProbe from '$lib/playground/RouteProbe.svelte' with { hydrate: 'load' };
+	import PageHead from '$lib/PageHead.svelte';
 </script>
+
+<PageHead
+	title="Page B · Router · Playground"
+	description="Another SPA navigation target for comparing remount vs persist chrome."
+/>
 
 <h2 style="view-transition-name: pg-router-title;">Page B</h2>
 <div class="prose" style="margin-bottom: 2rem;">

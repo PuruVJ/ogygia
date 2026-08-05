@@ -5,7 +5,13 @@
 	// the lake (InnerBadge) self-hydrates, because the lake reset its subtree to "dead".
 	import LakeShell from '$lib/playground/LakeShell.svelte' with { hydrate: 'load' };
 	import FrozenReport from '$lib/playground/FrozenReport.svelte' with { hydrate: 'none' };
+	import PageHead from '$lib/PageHead.svelte';
 </script>
+
+<PageHead
+	title="Lakes · Playground"
+	description="Frozen regions inside hydrated islands — hydrate:none lakes that ship HTML with no client JS, plus islands that wake inside them."
+/>
 
 <main class="shell docs-main">
 	<section id="lakes">
@@ -27,9 +33,9 @@
 				self-hydrates: frozen water can contain live land.
 			</p>
 			<p>
-				Use the toggle to remove and re-add the lake. This site's vite config leaves
-				<code>lake_restore</code> at its default (<code>'cache'</code>), so the frozen DOM is
-				re-inserted from cache.
+				Use the toggle to remove and re-add the lake. Default <code>remount</code> is
+				<code>'cache'</code> (preset-only overrides: <code>'empty'</code> or
+				<code>'swr'</code>), so the frozen DOM is re-inserted from cache.
 			</p>
 		</div>
 

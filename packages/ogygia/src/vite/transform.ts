@@ -72,6 +72,233 @@ function strategy_to_attr(strategy, options) {
 	return `media=${JSON.stringify(strategy)}`;
 }
 
+const REMOUNT_STRATEGIES = new Set(['cache', 'empty', 'swr']);
+/** Schedule keywords shared by `hydrate`, `defer` and `remount.when`. */
+const SCHEDULE_KEYWORDS = new Set(['load', 'idle', 'visible']);
+
+/**
+ * Normalize preset `remount` (string or `{ strategy, when? }`) for hydrate:none.
+ * @returns {{ strategy: string, when?: string } | undefined}
+ */
+function parse_remount(raw, err, names) {
+	if (raw == null) return undefined;
+	if (typeof raw === 'string') {
+		if (!REMOUNT_STRATEGIES.has(raw)) {
+			throw err(names, `unknown remount '${raw}'. Use 'cache' | 'empty' | 'swr'.`);
+		}
+		return { strategy: raw };
+	}
+	if (typeof raw === 'object' && raw !== null && typeof raw.strategy === 'string') {
+		if (!REMOUNT_STRATEGIES.has(raw.strategy)) {
+			throw err(names, `unknown remount.strategy '${raw.strategy}'. Use 'cache' | 'empty' | 'swr'.`);
+		}
+		/** @type {{ strategy: string, when?: string }} */
+		const out = { strategy: raw.strategy };
+		if (raw.when != null) {
+			if (raw.strategy !== 'swr') {
+				throw err(names, `\`remount.when\` is only valid with remount strategy 'swr'.`);
+			}
+			const when = String(raw.when);
+			// An unvalidated typo would reach the runtime as a media query that never matches —
+			// i.e. silently no revalidation. Same vocabulary as `hydrate` / `defer`.
+			if (!SCHEDULE_KEYWORDS.has(when) && !is_media_query(when)) {
+				throw err(
+					names,
+					`unknown remount.when '${when}'. Use 'load' | 'idle' | 'visible' | a media query.`
+				);
+			}
+			out.when = when;
+		}
+		return out;
+	}
+	throw err(names, `\`remount\` must be 'cache' | 'empty' | 'swr' or \`{ strategy, when? }\`.`);
+}
+
+/** Escape a static text chunk for use inside a template literal. */
+function escape_template_text(text) {
+	return String(text).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+}
+
+/**
+ * Build a `__props={…}` literal from a lake `<Component>` tag's attributes.
+ * Only used for `remount: 'swr'` — the endpoint re-renders the component with these props, so the
+ * literal must reproduce the authored values EXACTLY (SSR itself keeps the original tag verbatim).
+ */
+function lake_props_literal(source, node) {
+	const parts = [];
+	for (const attr of node.attributes ?? []) {
+		if (attr.type === 'SpreadAttribute' && attr.expression) {
+			parts.push(`...${source.slice(attr.expression.start, attr.expression.end)}`);
+			continue;
+		}
+		if (attr.type !== 'Attribute') continue;
+		const name = attr.name;
+		if (typeof name !== 'string' || name.startsWith('__')) continue;
+		const val = attr.value;
+		if (val === true || val == null || val === undefined) {
+			parts.push(`${JSON.stringify(name)}: true`);
+			continue;
+		}
+		// Svelte's AST does NOT wrap a lone expression value in an array (`n={x}` → ExpressionTag,
+		// `n="x"` → [Text]). Treating both as arrays silently dropped every mustache-valued prop.
+		const chunk_list = Array.isArray(val) ? val : [val];
+		if (chunk_list.length === 0) continue;
+		if (chunk_list.length === 1) {
+			const only = chunk_list[0];
+			if (only.type === 'Text') {
+				parts.push(`${JSON.stringify(name)}: ${JSON.stringify(only.data)}`);
+				continue;
+			}
+			// Mustache / expression tag — shorthand when the Identifier matches the attr name.
+			if (only.expression?.type === 'Identifier' && only.expression.name === name) {
+				parts.push(name);
+			} else if (only.expression) {
+				parts.push(`${JSON.stringify(name)}: ${source.slice(only.expression.start, only.expression.end)}`);
+			}
+			continue;
+		}
+		// Concatenation (`label="Hi {name}"`) — a template literal keeps every chunk. Taking only
+		// the expression would silently drop the static text around it.
+		const chunks = chunk_list.map((chunk) =>
+			chunk.type === 'Text'
+				? escape_template_text(chunk.data)
+				: chunk.expression
+					? '${' + source.slice(chunk.expression.start, chunk.expression.end) + '}'
+					: ''
+		);
+		parts.push(`${JSON.stringify(name)}: \`${chunks.join('')}\``);
+	}
+	return parts.length ? `{ ${parts.join(', ')} }` : '{}';
+}
+
+/**
+ * Svelte 5 event attributes (`onclick`, …) that cannot cross devalue for remount:swr.
+ * Deliberately NOT `/^on[a-z]+$/` — that falsely rejects data props like `online={x}`.
+ */
+const SWR_EVENT_ATTR = new Set([
+	'onclick',
+	'ondblclick',
+	'oncontextmenu',
+	'onauxclick',
+	'onpointerdown',
+	'onpointerup',
+	'onpointermove',
+	'onpointerenter',
+	'onpointerleave',
+	'onpointercancel',
+	'onpointerover',
+	'onpointerout',
+	'onmousedown',
+	'onmouseup',
+	'onmousemove',
+	'onmouseenter',
+	'onmouseleave',
+	'onmouseover',
+	'onmouseout',
+	'onkeydown',
+	'onkeyup',
+	'onkeypress',
+	'onfocus',
+	'onblur',
+	'onfocusin',
+	'onfocusout',
+	'oninput',
+	'onbeforeinput',
+	'onchange',
+	'onsubmit',
+	'onreset',
+	'onscroll',
+	'onwheel',
+	'ontouchstart',
+	'ontouchend',
+	'ontouchmove',
+	'ontouchcancel',
+	'ondrag',
+	'ondragstart',
+	'ondragend',
+	'ondragenter',
+	'ondragleave',
+	'ondragover',
+	'ondrop',
+	'oncopy',
+	'oncut',
+	'onpaste',
+	'onanimationstart',
+	'onanimationend',
+	'onanimationiteration',
+	'ontransitionend',
+	'ontransitionrun',
+	'ontransitionstart',
+	'ontransitioncancel',
+	'onload',
+	'onerror',
+	'ontoggle',
+	'onselect',
+	'oninvalid',
+	'onformdata'
+]);
+
+/**
+ * Everything a `remount: 'swr'` region needs must survive the wire: the endpoint re-renders the
+ * component from devalue'd PROPS alone. Children (snippets) and `bind:` targets cannot cross, and
+ * silently losing them on revalidate would be worse than refusing the build.
+ */
+function assert_swr_lake_crossable(node, err) {
+	const kids = (node.fragment?.nodes ?? []).filter(
+		(n) => !(n.type === 'Text' && !String(n.data ?? '').trim())
+	);
+	if (kids.length) {
+		throw err(
+			node.name,
+			`\`remount: 'swr'\` region <${node.name}> cannot have children — the revalidate endpoint re-renders it from serialized props only, so snippets cannot cross. Move the content inside the component, or use remount 'cache' / 'empty'.`
+		);
+	}
+	for (const attr of node.attributes ?? []) {
+		if (attr.type === 'SpreadAttribute') continue;
+		if (attr.type !== 'Attribute') {
+			throw err(
+				node.name,
+				`\`remount: 'swr'\` region <${node.name}> cannot use \`${attr.type === 'BindDirective' ? 'bind:' + attr.name : attr.name || attr.type}\` — only plain attributes and spreads can be serialized for the revalidate endpoint.`
+			);
+		}
+		const name = attr.name;
+		// Svelte 5 event attributes are lowercase `onclick` / `onpointerdown` / … (distinct from
+		// `on:click` OnDirective, already rejected above). Callback props with that shape cannot
+		// cross devalue — rejecting at build avoids a silent remount:'cache' degrade at mint.
+		// Match known DOM events only — `/^on[a-z]+$/` falsely rejects data props like `online={x}`.
+		if (typeof name === 'string' && SWR_EVENT_ATTR.has(name)) {
+			throw err(
+				node.name,
+				`\`remount: 'swr'\` region <${node.name}> cannot use \`${name}\` — event/callback attributes cannot be serialized for the revalidate endpoint. Pass serializable data props instead.`
+			);
+		}
+		// Inline function values on any attr (`render={() => …}`) likewise cannot cross.
+		const val = attr.value;
+		const chunk_list = Array.isArray(val) ? val : val != null && val !== true ? [val] : [];
+		for (const chunk of chunk_list) {
+			const t = chunk?.expression?.type;
+			if (t === 'ArrowFunctionExpression' || t === 'FunctionExpression') {
+				throw err(
+					node.name,
+					`\`remount: 'swr'\` region <${node.name}> cannot use a function value for \`${name}\` — functions cannot be serialized for the revalidate endpoint.`
+				);
+			}
+		}
+	}
+}
+
+/** Resolve an import specifier to an absolute .svelte path (for SWR server entries). */
+function resolve_component_path(spec, host_id, ctx) {
+	if (typeof spec !== 'string') return null;
+	if (spec === '$lib' || spec.startsWith('$lib/')) {
+		return ctx.pathModule.join(ctx.libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
+	}
+	if (spec.startsWith('.')) {
+		return ctx.pathModule.resolve(ctx.pathModule.dirname(host_id), spec);
+	}
+	return null;
+}
+
 /**
  * @typedef {Object} TransformResult
  * @property {string} code rewritten host source
@@ -111,7 +338,7 @@ export function transformHost(source, id, ctx) {
 	// The authoring syntax is the import attribute, one concern per key:
 	//   import Comp from './Comp.svelte' with { hydrate: 'visible', margin: '200px' };
 	//   import Comp from './Comp.svelte' with { hydrate: '(min-width: 768px)' };
-	//   import Comp from './Comp.svelte' with { defer: 'true' };   // server island
+	//   import Comp from './Comp.svelte' with { defer: 'load' };   // deferred HTML hole
 	// Values MUST be string literals (ES import-attribute spec). See DESIGN.md.
 	/** localName -> { node, cleaned } */
 	const imports = new Map();
@@ -144,13 +371,15 @@ export function transformHost(source, id, ctx) {
 		if (!REGION_KEYS.some((k) => inline.has(k))) continue;
 
 		// The import block carries EXACTLY ONE of `hydrate` | `defer` | `preset`. No option keys
-		// inline — all tuning (margin, …) lives in plugin config (ogygia({ visible, presets })).
+		// inline — all tuning (margin, remount, …) lives in plugin config (ogygia({ presets })).
 		/** @type {Map<string,string>} effective attributes (from a preset, or the single inline key) */
 		let attrs;
+		/** @type {{ strategy: string, when?: string } | undefined} */
+		let remount_opt;
 		let from_preset = null;
 		if (inline.has('preset')) {
 			if (inline.size > 1) {
-				throw err(names, '`preset` must be the only import attribute — put its options (margin, …) in the preset definition (ogygia({ presets })).');
+				throw err(names, '`preset` must be the only import attribute — put its options (margin, remount, …) in the preset definition (ogygia({ presets })).');
 			}
 			from_preset = inline.get('preset');
 			const preset = ctx.presets && ctx.presets[from_preset];
@@ -159,7 +388,14 @@ export function transformHost(source, id, ctx) {
 				throw err(names, `unknown preset '${from_preset}'. Available: ${avail.length ? avail.join(', ') : '(none)'}.`);
 			}
 			attrs = new Map();
-			for (const [k, v] of Object.entries(preset)) if (v != null) attrs.set(k, String(v));
+			for (const [k, v] of Object.entries(preset)) {
+				if (v == null) continue;
+				if (k === 'remount') {
+					remount_opt = parse_remount(v, err, names);
+					continue;
+				}
+				attrs.set(k, String(v));
+			}
 			if (!attrs.has('hydrate') && !attrs.has('defer')) {
 				throw err(
 					names,
@@ -172,7 +408,7 @@ export function transformHost(source, id, ctx) {
 				if (k !== 'hydrate' && k !== 'defer') {
 					throw err(
 						names,
-						`\`${k}\` is not allowed inline. Use \`hydrate\`, \`defer\`, or a named \`preset\` — options like \`margin\` belong in plugin config (ogygia({ visible, presets })).`
+						`\`${k}\` is not allowed inline. Use \`hydrate\`, \`defer\`, or a named \`preset\` — options like \`margin\` / \`remount\` belong in plugin config (ogygia({ presets })).`
 					);
 				}
 			}
@@ -181,12 +417,15 @@ export function transformHost(source, id, ctx) {
 
 		// Only UNKNOWN keys are errors. Presets are TOLERANT: a known-but-inapplicable key
 		// (e.g. `margin` with `hydrate: 'load'`) is silently ignored — it applies wherever it's
-		// relevant. `margin` never reaches here inline (rejected above), so this only bites typos.
+		// relevant. `margin` / `remount` never reach here inline (rejected above).
 		const SCHEMA = new Set(['hydrate', 'defer', 'margin']);
 		for (const k of attrs.keys()) {
 			if (!SCHEMA.has(k)) {
 				throw err(names, from_preset ? `unknown key \`${k}\` in preset '${from_preset}'.` : `unknown import attribute \`${k}\`.`);
 			}
+		}
+		if (remount_opt && attrs.get('hydrate') !== 'none') {
+			throw err(names, `\`remount\` is only valid with \`hydrate: 'none'\`.`);
 		}
 		if (attrs.has('defer') && attrs.has('hydrate')) {
 			throw err(names, "`defer` + `hydrate` together is not yet supported (roadmap: deferred client island — see DESIGN.md).");
@@ -228,7 +467,20 @@ export function transformHost(source, id, ctx) {
 				// no-op plain component (dev-warned below). See DESIGN.md.
 				// Always strip the `with{}` later (shell keeps cleaned import; unused/island lakes
 				// drop the host binding). Never leave `with { hydrate: 'none' }` in emitted source.
-				for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy: 'lake', options: {} });
+				/** @type {{ remount?: string, when?: string, margin?: string }} */
+				const lake_opts = {};
+				if (remount_opt) {
+					lake_opts.remount = remount_opt.strategy;
+					if (remount_opt.when) lake_opts.when = remount_opt.when;
+					// `margin` rides along for a `remount: { strategy: 'swr', when: 'visible' }`
+					// revalidate, same tolerance as `hydrate: 'visible'`.
+					if (remount_opt.strategy === 'swr' && remount_opt.when === 'visible') {
+						lake_opts.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
+					}
+				}
+				for (const spec of node.specifiers) {
+					marked_components.set(spec.local.name, { strategy: 'lake', options: lake_opts });
+				}
 				continue;
 			}
 			if (val === 'false') {
@@ -391,14 +643,16 @@ export function transformHost(source, id, ctx) {
 	const islands = [];
 	// LAKE local names hoisted into some island (their host import is now unused -> stripped).
 	const island_lake_locals = new Set();
-	// LAKE region ids (metadata-only entries for the client `regions` manifest — kind:'lake', no
-	// load thunk, so the lake component's JS is never pulled into the client graph).
+	// LAKE region ids (metadata-only client entries, unless remount:swr adds a server module).
 	const lake_region_ids = [];
+	/** @type {Array<{ id: string, local: string, remount: string, when?: string, componentPath: string | null }>} */
+	const swr_lakes = [];
 	const preamble_imports = [];
 	// The transform emits a private wrapper component (not a public API). Component
 	// tags must start uppercase or Svelte parses them as plain HTML elements.
 	const wrapper_name = 'OgygiaIsland__Wrapper';
 	const server_wrapper_name = 'OgygiaServerIsland__Wrapper';
+	const lake_region_name = 'OgygiaLakeRegion__Wrapper';
 	let wrapper_imported = false;
 	let server_wrapper_imported = false;
 
@@ -443,9 +697,8 @@ export function transformHost(source, id, ctx) {
 		}
 
 		// LAKES: a `hydrate: 'none'` component used inside THIS island (hydrate OR defer). Wrap
-		// each in a non-boundary `<ogygia-region data-lake>` so the runtime can lift/restore (or,
-		// for defer hole fills, settle) its SSR DOM; record the local so the client build swaps
-		// its import for a placeholder. SSR keeps the real component (rendered inline).
+		// each in `<OgygiaLakeRegion>` (hydrate=none + remount policy); record the local so the
+		// client build swaps its import for a placeholder. SSR keeps the real component.
 		const island_lakes = [];
 		{
 			const lake_nodes = [];
@@ -462,14 +715,42 @@ export function transformHost(source, id, ctx) {
 				const lake_ms = new MagicString(source);
 				lake_nodes.forEach((ln, li) => {
 					const lake_id = islandId(rel_host, `lake:${index}:${li}`, ctx.idSalt || '');
-					// Wrap in `<OgygiaLakeBoundary>` so the lake's subtree resets the nested-island
-					// context (an island authored inside the lake self-hydrates). The non-boundary
-					// `<ogygia-region data-lake>` lets the runtime lift/restore the frozen DOM.
-					lake_ms.appendLeft(ln.start, `<ogygia-region data-lake entry=${JSON.stringify(lake_id)}><OgygiaLakeBoundary>`);
-					lake_ms.appendRight(ln.end, `</OgygiaLakeBoundary></ogygia-region>`);
+					const mark = marked_components.get(ln.name);
+					const remount = mark?.options?.remount || 'cache';
+					const when = mark?.options?.when || (remount === 'swr' ? 'load' : undefined);
+					let lake_attrs =
+						`__entry={${JSON.stringify(lake_id)}} __remount={${JSON.stringify(remount)}}`;
+					if (remount === 'swr') {
+						assert_swr_lake_crossable(ln, err);
+						// Props are serialized into the signed endpoint ONLY for swr (the SSR pass keeps
+						// the ORIGINAL tag, so nothing else depends on reproducing them as a literal).
+						lake_attrs +=
+							` __when={${JSON.stringify(when || 'load')}}` +
+							` __props={${lake_props_literal(source, ln)}}`;
+						if (mark?.options?.margin != null) {
+							lake_attrs += ` __margin={${JSON.stringify(mark.options.margin)}}`;
+						}
+					}
+					// WRAP the authored tag (never overwrite it): the lake keeps its own attributes,
+					// bindings and CHILDREN, and stays a STATIC component reference so the client
+					// build's placeholder swap still applies. A dynamic `<Component />` inside the
+					// wrapper would add a `<!--[-->…<!--]-->` envelope inside the frozen region that
+					// `#lift_lakes` carries away, and hydration then runs out of nodes (LAKE-ENVELOPE).
+					lake_ms.appendLeft(ln.start, `<${lake_region_name} ${lake_attrs}>`);
+					lake_ms.appendRight(ln.end, `</${lake_region_name}>`);
 					island_lakes.push(ln.name);
 					island_lake_locals.add(ln.name);
 					lake_region_ids.push(lake_id);
+					if (remount === 'swr') {
+						const entry_spec = imports.get(ln.name)?.node?.source?.value;
+						swr_lakes.push({
+							id: lake_id,
+							local: ln.name,
+							remount,
+							when: when || 'load',
+							componentPath: resolve_component_path(entry_spec, id, ctx)
+						});
+					}
 				});
 				hoisted_source = lake_ms.slice(unit.node.start, unit.node.end);
 			}
@@ -516,8 +797,7 @@ export function transformHost(source, id, ctx) {
 		// build virtual island module source: gather cleaned text per used import node
 		const copied_imports = [];
 		if (island_lakes.length) {
-			// the lake wrapper component (resets nested-island context around frozen subtrees)
-			copied_imports.push(`import { LakeBoundary as OgygiaLakeBoundary } from 'ogygia/internal';`);
+			copied_imports.push(`import { LakeRegion as ${lake_region_name} } from 'ogygia/internal';`);
 		}
 		for (const [, info] of imports) {
 			if (used_import_nodes.has(info.node) && !copied_imports.includes(info.cleaned)) {
@@ -575,10 +855,10 @@ export function transformHost(source, id, ctx) {
 			const fallback_text = fallback_node
 				? source.slice(fallback_node.start, fallback_node.end)
 				: '';
-			// Fetch-timing of the hole (symmetric with hydrate). ServerIsland.svelte puts it on the
-			// region as `defer="<when>"` and emits the preload <link> ONLY for 'load'.
-			const defer_when = unit.options?.when || 'load';
-			let server_attrs = ` __defer={${JSON.stringify(defer_when)}}`;
+			// Fetch timing of the hole (symmetric with hydrate). ServerIsland emits
+			// `render="defer" when="<schedule>"` and a preload <link> ONLY for 'load'.
+			const fetch_when = unit.options?.when || 'load';
+			let server_attrs = ` __defer={${JSON.stringify(fetch_when)}}`;
 			if (unit.options?.margin != null) server_attrs += ` __margin={${JSON.stringify(unit.options.margin)}}`;
 			const replacement =
 				`<${server_wrapper_name} __entry={${JSON.stringify(iid)}} ` +
@@ -606,9 +886,34 @@ export function transformHost(source, id, ctx) {
 		preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);
 	});
 
-	// Register lake regions as metadata-only client-manifest entries (kind:'lake', no module) so
-	// the runtime can consult ONE uniform `regions` record — a lake never gets a load thunk.
+	// Register lake regions: metadata-only on the client; remount:swr also gets a server-renderable
+	// virtual module (signed endpoint re-renders the lake component with captured props).
+	const swr_ids = new Set(swr_lakes.map((l) => l.id));
+	for (const lake of swr_lakes) {
+		if (!lake.componentPath) {
+			throw new Error(
+				`[ogygia] ${rel_host}: remount:'swr' lake '${lake.local}' needs a resolvable module path ($lib/… or relative).`
+			);
+		}
+		const lake_virtual = ctx.virtualPathFor(id, lake.id);
+		const lake_source =
+			`<script${lang}>\n` +
+			`\timport Comp from ${JSON.stringify(lake.componentPath)};\n` +
+			`\tlet props = $props();\n` +
+			`</script>\n` +
+			`<Comp {...props} />\n`;
+		islands.push({
+			id: lake.id,
+			virtualPath: lake_virtual,
+			source: lake_source,
+			hostPath: id,
+			componentPath: lake.componentPath,
+			server: true,
+			kind: 'lake'
+		});
+	}
 	for (const lake_id of lake_region_ids) {
+		if (swr_ids.has(lake_id)) continue;
 		islands.push({ id: lake_id, kind: 'lake' });
 	}
 

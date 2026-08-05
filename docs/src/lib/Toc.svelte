@@ -18,6 +18,7 @@
 		{ id: 'what', label: 'What it does', sub: false },
 		{ id: 'install', label: 'Install', sub: false },
 		{ id: 'authoring', label: 'Authoring', sub: false },
+		{ id: 'boundary', label: 'OgygiaBoundary', sub: true },
 		{ id: 'strategies', label: 'Strategies', sub: false },
 		{ id: 'client-load', label: "hydrate: 'load'", sub: true },
 		{ id: 'client-idle', label: "hydrate: 'idle'", sub: true },

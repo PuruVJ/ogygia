@@ -76,7 +76,7 @@ expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from '.
 
 // --- lakes (hydrate: 'none') ---
 // A lake INSIDE a hydrated island: the island's generated module wraps the lake usage in a
-// non-boundary <ogygia-region data-lake> + the context-reset boundary; the lake import is copied.
+// non-boundary <ogygia-region hydrate="none"> + the context-reset boundary; the lake import is copied.
 {
 	const src = wrap(
 		`import Host from './Host.svelte' with { hydrate: 'load' };\nimport Lake from './Lake.svelte' with { hydrate: 'none' };`,
@@ -84,7 +84,10 @@ expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from '.
 	);
 	const r = run(src);
 	const island = r?.islands?.find((i) => i.source);
-	check('lake in island -> generated module wraps lake in <ogygia-region data-lake>', !!island && /<ogygia-region data-lake entry="[^"]+"><OgygiaLakeBoundary>/.test(island.source));
+	check(
+		'lake in island -> generated module wraps lake in LakeRegion',
+		!!island && /OgygiaLakeRegion__Wrapper/.test(island.source) && /__remount=\{"cache"\}/.test(island.source)
+	);
 	check('lake in island -> lake list records the lake local', !!island && Array.isArray(island.lakes) && island.lakes.includes('Lake'));
 	check('lake in island -> a metadata-only lake region is registered (kind lake)', !!r?.islands?.some((i) => i.kind === 'lake'));
 	check('lake in island -> host Lake import stripped (hoisted only)', !/import Lake from/.test(r.code));

@@ -9,6 +9,15 @@ import { relocate_trailing_empty_comments } from './lake-anchors.js';
 import { document_has_kit_bootstrap } from './kit-boot.js';
 import { runtime_session } from './session.js';
 import { is_persist_preserving } from './persist.js';
+import {
+	FROZEN_SELECTOR,
+	is_awake,
+	is_deferred,
+	is_frozen,
+	region_is_vacant,
+	region_remount,
+	region_schedule
+} from './region-attrs.js';
 
 /** @type {(entry: string) => Promise<{ default: import('svelte').Component<Record<string, unknown>> }>} */
 const load_island = manifest.dev
@@ -181,89 +190,149 @@ export function prepare_spa_document() {
 	reset_page();
 }
 
-class OgygiaRegion extends HTMLElement {
+/** A frozen region's SSR DOM detached before hydrate, plus the SSR-only attrs read at lift time. */
+type LiftedLake = {
+	id: string;
+	frag: DocumentFragment;
+	/** signed revalidate URL minted at SSR (remount:'swr'); '' otherwise */
+	endpoint: string;
+	when: string;
+};
+
+	class OgygiaRegion extends HTMLElement {
 	#scheduled = false;
+	/** True after a successful HTML swap — failures leave this false so a later schedule can retry. */
 	#done = false;
+	/** In-flight fetch guard (separate from `#done` so a failed fetch does not one-shot the region). */
+	#fetching = false;
+	/** Bounded automatic retries after a failed defer/SWR fetch. */
+	#fetch_attempts = 0;
 	#hydrating = false;
 	#app: unknown = null;
 	#io: IntersectionObserver | null = null;
 	#mql: { mql: MediaQueryList; on: (e: MediaQueryListEvent) => void } | null = null;
 
 	connectedCallback() {
-		// LAKE region: a frozen, non-boundary subtree. It never hydrates; its parent island lifts
-		// and restores its SSR DOM. On {#if} re-creation Svelte makes a fresh empty region — restore
-		// the cached frozen DOM (policy 'cache'). Handled before the island logic below.
-		if (this.hasAttribute('data-lake')) return this.#lake_connected();
+		// Frozen region (`hydrate="none"`): SSR DOM preserved; parent lifts/restores. On {#if}
+		// re-creation Svelte makes a fresh empty region — restore from cache (policy 'cache').
+		if (is_frozen(this)) return this.#lake_connected();
 		if (this.#scheduled) return;
-		// The region rule (DESIGN.md): a region self-hydrates iff the NEAREST region boundary
-		// above it is not hydrated. A boundary is "hydrated" iff it carries a `hydrate` attribute
-		// (a client island); a `defer` hole and lakes (future) have no `hydrate` attr, so a region
-		// inside them self-hydrates again. `parentElement.closest` excludes self. (Island-in-island
-		// normally degrades to an inline component, so this element never appears — this is the
-		// general rule + defense for regions inserted via server-hole fill / SPA swaps.)
+		// Region rule (DESIGN.md): self-run iff the nearest ancestor region is not awake.
 		const boundary = this.parentElement && this.parentElement.closest('ogygia-region');
-		if (boundary && boundary.hasAttribute('hydrate')) {
+		if (boundary && is_awake(boundary)) {
 			this.setAttribute('data-nested', '');
 			if (manifest.dev) {
 				console.warn(
-					`[ogygia] nested island "${this.getAttribute('entry')}" skipped self-hydration; the nearest region above it hydrates, so it rides that hydration (inner strategy "${this.getAttribute('hydrate') || 'load'}" ignored).`
+					`[ogygia] nested region "${this.getAttribute('entry')}" skipped self-run; the nearest region above it is awake, so it rides that hydration (inner hydrate "${this.getAttribute('hydrate') || 'load'}" ignored).`
 				);
 			}
 			return;
 		}
-		// Island INSIDE a not-yet-settled lake (island-in-lake): defer. The parent island lifts the
-		// lake's DOM (detaching us) then restores it (reconnecting us) with the lake marked settled —
-		// that reconnection re-runs connectedCallback and we self-hydrate then, exactly once. Waking
-		// now would race the parent's lift (double hydration / mismatch).
-		if (
-			boundary &&
-			boundary.hasAttribute('data-lake') &&
-			!runtime_session.settled_lakes.has(boundary)
-		)
-			return;
+		// Region inside a not-yet-settled frozen ancestor: wait for parent lift/restore.
+		if (boundary && is_frozen(boundary) && !runtime_session.settled_lakes.has(boundary)) return;
 		this.#scheduled = true;
-		// One scheduler drives BOTH axes: a hydrate island wakes its component, a defer (server)
-		// island fetches its hole. The attribute VALUE is the timing in each case — 'load' | 'idle'
-		// | 'visible' | media query — so the machinery is shared (the hydrate/defer symmetry).
-		const is_defer = this.hasAttribute('defer');
-		// server region: timing rides on `defer-when` (not `defer` — that's an HTML boolean attribute,
-		// so its string value would be dropped); hydrate region: timing is the `hydrate` value.
-		const when = (is_defer ? this.getAttribute('defer-when') : this.getAttribute('hydrate')) || 'load';
-		const fire = is_defer ? () => this.#server() : () => this.#hydrate();
+		// One scheduler, two axes: `hydrate` wakes JS; `render="defer"` + `when` fetches HTML.
+		const deferred = is_deferred(this);
+		const when = region_schedule(this);
+		const fire = deferred ? () => this.#server() : () => this.#hydrate();
 		if (when === 'idle') this.#on_idle(fire);
 		else if (when === 'visible') this.#on_visible(fire);
 		else if (when === 'load') fire();
 		else this.#on_media(when, fire); // a media query string
 	}
 
-	// SERVER island: fetch the rendered HTML from the `/🏝️ogygia🏝️` endpoint (same-origin,
-	// cookies flow) and swap it in. No client hydration in v1 (server+client is future work).
-	// The fallback stays visible on failure. A <link rel="preload"> emitted next to us has
-	// usually already started this exact request, so the browser serves it from cache.
+	// SERVER island / remount:swr revalidate: fetch rendered HTML and swap it in.
+	// No client hydration in v1. A <link rel="preload"> (defer:load only) may already be in flight.
 	async #server() {
-		if (this.#done) return;
-		this.#done = true;
+		await this.#fetch_html();
+	}
+
+	/**
+	 * Fetch `endpoint` HTML and swap it in.
+	 * Success sets `#done` (at most one successful swap per element). Failure leaves `#done` false
+	 * so a reconnect, remount, or deferred retry can try again — previously `#done` was set up front
+	 * and a transient network error permanently killed the hole.
+	 * A deferred hole reuses the browser's `<link rel="preload">` response; an swr REVALIDATE must
+	 * not (the endpoint answers `cache-control: private, max-age=30`, and stale is the whole point).
+	 */
+	async #fetch_html(opts: { revalidate?: boolean } = {}) {
+		if (this.#done || this.#fetching) return;
 		const endpoint = this.getAttribute('endpoint');
+		// Don't start a fetch without an endpoint (would block a later remount retry on the same
+		// element if one were ever scheduled).
 		if (!endpoint) return;
+		this.#fetching = true;
 		try {
 			await runtime_session.server_gate.run(async () => {
-				const res = await fetch(endpoint, { credentials: 'same-origin' });
+				const res = await fetch(endpoint, {
+					credentials: 'same-origin',
+					cache: opts.revalidate ? 'no-store' : 'default'
+				});
 				if (!res.ok) throw new Error('status ' + res.status);
 				const html = await res.text();
+				// The region may have been {#if}-toggled away while the fetch was in flight.
+				if (!this.isConnected) return;
 				// Parse offline so we can settle lakes BEFORE custom elements connect — otherwise an
 				// island-in-lake inside the hole waits forever on an unsettled lake boundary.
 				// createContextualFragment — signed same-origin HTML trust boundary (HOLE-TRUST).
 				const frag = document.createRange().createContextualFragment(html);
 				runtime_session.settle_lakes_in(frag);
+				// SWR remount paints cache without settling so islands wait for this swap (one hydrate).
+				if (is_frozen(this)) runtime_session.settled_lakes.add(this);
 				this.replaceChildren(frag);
-				this.setAttribute('data-hydrated', '');
+				this.#done = true;
+				// A frozen region never "hydrates" — mark an swr revalidate distinctly so the
+				// `[data-hydrated]` vocabulary keeps meaning "JS woke here".
+				this.setAttribute(opts.revalidate ? 'data-revalidated' : 'data-hydrated', '');
+				// SWR: refresh the remount cache so the next {#if} paints this response as stale
+				// (not the forever-first SSR snapshot). Map.set replaces — size stays O(unique entries).
+				if (opts.revalidate && is_frozen(this)) {
+					const id = this.getAttribute('entry') || '';
+					if (id) {
+						const cached = document.createDocumentFragment();
+						for (const child of Array.from(this.childNodes)) {
+							cached.appendChild(child.cloneNode(true));
+						}
+						const prev = runtime_session.lake_cache.get(id);
+						runtime_session.lake_cache.set(id, {
+							frag: cached,
+							endpoint: this.getAttribute('endpoint') || prev?.endpoint || '',
+							when: this.getAttribute('when') || prev?.when || 'load'
+						});
+					}
+				}
 				this.dispatchEvent(new CustomEvent('ogygia:server', { bubbles: true }));
 			});
 		} catch (err) {
-			// keep the fallback; surface the reason in dev
 			if (manifest.dev) {
-				console.warn('[ogygia] server island fetch failed for', endpoint, err);
+				console.warn('[ogygia] region fetch failed for', endpoint, err);
 			}
+			this.#fetch_attempts++;
+			// Allow connectedCallback / a delayed retry to schedule again.
+			this.#scheduled = false;
+			if (this.isConnected && this.#fetch_attempts < 3) {
+				const delay = 500 * this.#fetch_attempts;
+				setTimeout(() => {
+					if (!this.isConnected || this.#done || this.#fetching) return;
+					if (opts.revalidate) void this.#fetch_html({ revalidate: true });
+					else this.connectedCallback();
+				}, delay);
+				return;
+			}
+			// Retries exhausted: SWR settles the painted cache so islands-in-lake wake (stale > never).
+			if (opts.revalidate && is_frozen(this) && this.isConnected) {
+				runtime_session.settled_lakes.add(this);
+				this.#wake_waiting_regions();
+			}
+		} finally {
+			this.#fetching = false;
+		}
+	}
+
+	/** Re-enter connectedCallback for descendants that early-returned on an unsettled lake. */
+	#wake_waiting_regions() {
+		for (const el of this.querySelectorAll('ogygia-region')) {
+			if (el instanceof OgygiaRegion) el.connectedCallback();
 		}
 	}
 
@@ -308,15 +377,19 @@ class OgygiaRegion extends HTMLElement {
 	async #hydrate() {
 		if (this.#app || this.#hydrating) return;
 		this.#hydrating = true;
-		let lifted: Array<{ id: string; frag: DocumentFragment }> | null = null;
+		let lifted: Array<LiftedLake> | null = null;
 		try {
 			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page
 			await dom_ready();
+			// SWR remount (and SPA swaps) can disconnect an island-in-lake while its module load is
+			// in flight — abort rather than hydrate into a detached tree (SWR-ORPHAN-HYDRATE).
+			if (!this.isConnected) return;
 			// Seed SSR-resolved remote queries + document page snapshot once before hydrate.
 			seed_remote_once();
 			seed_page_once();
 			const entry = this.getAttribute('entry');
 			const mod = await load_island(entry);
+			if (!this.isConnected) return;
 			const Component = mod.default;
 
 			let props: Record<string, unknown> = {};
@@ -341,6 +414,7 @@ class OgygiaRegion extends HTMLElement {
 			// LAKES: lift frozen SSR DOM before hydrate; leave trailing empty-comment delimiters
 			// in the region so Boundary+Placeholder still matches (avoids hydration_mismatch).
 			lifted = this.#lift_lakes();
+			if (!this.isConnected) return;
 
 			// Hydration envelope: `hydrate()` anchors on a top-level `<!--[-->` comment and then
 			// expects the component's OWN fragment envelope — but embedded SSR (the island content
@@ -359,11 +433,23 @@ class OgygiaRegion extends HTMLElement {
 				props: { component: Component, props: prop_guard.wrap(props, entry || '') }
 			});
 
-			// Restore each lake's frozen DOM. A lake inside it may itself contain an island whose
-			// `<ogygia-region hydrate>` now (re)connects and self-hydrates — the lake reset its
-			// subtree to "dead", so the nearest-boundary rule makes that inner island wake up.
+			// Restore each frozen region's SSR DOM AFTER hydrate. An inner waking region whose
+			// `<ogygia-region hydrate="…">` (re)connects then self-runs — the freeze made its
+			// subtree dead again, so the nearest-boundary rule wakes that inner region.
 			this.#restore_lakes(lifted);
 			lifted = null; // ownership transferred
+
+			// Region was torn out during hydrate (SWR replaceChildren on an ancestor lake) — drop
+			// the orphan app; disconnectedCallback may have run before `#app` was assigned.
+			if (!this.isConnected) {
+				try {
+					unmount(this.#app);
+				} catch {
+					/* noop */
+				}
+				this.#app = null;
+				return;
+			}
 
 			this.setAttribute('data-hydrated', '');
 			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
@@ -378,16 +464,25 @@ class OgygiaRegion extends HTMLElement {
 
 	// Detach frozen SSR DOM from each direct lake region. Trailing empty comments are Svelte
 	// delimiters — put them back so hydrate matches Boundary+Placeholder. Cache for {#if} restore.
+	//
+	// The SSR-minted `endpoint` (remount:'swr') is captured HERE, before hydrate: the client build's
+	// `makeRegionEndpoint` stub returns '' (no secret in the browser), so Svelte REMOVES that
+	// attribute while adopting the region and it would be gone by restore time (SWR-ENDPOINT).
 	#lift_lakes() {
-		const lifted: Array<{ id: string; frag: DocumentFragment }> = [];
-		for (const lake of this.querySelectorAll('ogygia-region[data-lake]')) {
+		const lifted: Array<LiftedLake> = [];
+		for (const lake of this.querySelectorAll(FROZEN_SELECTOR)) {
 			if (lake.parentElement?.closest('ogygia-region') !== this) continue;
 			const id = lake.getAttribute('entry') || '';
 			const frag = document.createDocumentFragment();
 			while (lake.firstChild) frag.appendChild(lake.firstChild);
 			relocate_trailing_empty_comments(frag, lake);
 			// No clone at lift — cache is filled once after restore (LAKE-CLONE).
-			lifted.push({ id, frag });
+			lifted.push({
+				id,
+				frag,
+				endpoint: lake.getAttribute('endpoint') || '',
+				when: lake.getAttribute('when') || 'load'
+			});
 		}
 		return lifted;
 	}
@@ -396,29 +491,31 @@ class OgygiaRegion extends HTMLElement {
 	// rather than reuse the lifted reference: Svelte's hydration may replace the region element
 	// while adopting the (emptied) SSR DOM, so the current live element is the correct restore
 	// target. Mark it settled first so an island-in-lake reconnecting inside it self-hydrates.
-	#restore_lakes(lifted: Array<{ id: string; frag: DocumentFragment }>) {
-		for (const { id, frag } of lifted) {
-			const lake = this.querySelector(`ogygia-region[data-lake][entry="${CSS.escape(id)}"]`);
+	#restore_lakes(lifted: Array<LiftedLake>) {
+		for (const { id, frag, endpoint, when } of lifted) {
+			const lake = this.querySelector(`${FROZEN_SELECTOR}[entry="${CSS.escape(id)}"]`);
 			if (!lake) continue;
 			runtime_session.settle_lakes_in(lake);
 			runtime_session.settle_lakes_in(frag);
 			runtime_session.initialized_lakes.add(id);
 			lake.appendChild(frag);
-			// One clone for {#if} re-create — after the hot-path restore, not before.
-			if (manifest.lake_restore === 'cache' && id && !runtime_session.lake_cache.has(id)) {
+			// Put the SSR capability URL back (hydration dropped it) so the live DOM still describes
+			// the region — the cache below is what a later remount actually reads.
+			if (endpoint && !lake.getAttribute('endpoint')) lake.setAttribute('endpoint', endpoint);
+			// Cache for `{#if}` remount when policy is cache or swr (swr paints stale first).
+			const policy = region_remount(lake);
+			if ((policy === 'cache' || policy === 'swr') && id && !runtime_session.lake_cache.has(id)) {
 				const cached = document.createDocumentFragment();
 				for (const child of Array.from(lake.childNodes)) {
 					cached.appendChild(child.cloneNode(true));
 				}
-				runtime_session.lake_cache.set(id, cached);
+				runtime_session.lake_cache.set(id, { frag: cached, endpoint, when });
 			}
 		}
 	}
 
 	// A lake region connected. Initial SSR connect: content present -> leave it for the parent
-	// island's lift/restore. {#if} RE-creation: Svelte made a fresh EMPTY region -> restore the
-	// cached frozen DOM (policy 'cache'); 'empty' leaves it blank. Mark settled either way so an
-	// inner island reconnecting inside it wakes.
+	// island's lift/restore. {#if} RE-creation: Svelte made a fresh EMPTY region -> remount policy.
 	#lake_connected() {
 		const id = this.getAttribute('entry') || '';
 		// Only a genuine {#if}-toggle RE-creation restores here — i.e. after the parent island has
@@ -426,13 +523,54 @@ class OgygiaRegion extends HTMLElement {
 		// self-restoring now (e.g. on a region Svelte re-creates mid-mismatch-recovery) would double
 		// the content.
 		if (!runtime_session.initialized_lakes.has(id)) return;
-		// Initial SSR content (an ELEMENT subtree) present -> leave it. Empty (placeholder anchor
-		// only) -> restore the cached frozen DOM (policy 'cache'; 'empty' stays blank).
-		if (this.querySelector('*')) return;
-		runtime_session.settled_lakes.add(this);
-		if (manifest.lake_restore === 'cache') {
-			const cached = runtime_session.lake_cache.get(id);
-			if (cached) this.appendChild(cached.cloneNode(true));
+		// Content present (elements OR non-whitespace text) -> leave it. Vacant (comments /
+		// whitespace anchors only) -> apply remount policy (REMOUNT-VACANT).
+		if (!region_is_vacant(this)) return;
+		const policy = region_remount(this);
+		switch (policy) {
+			case 'empty':
+				runtime_session.settled_lakes.add(this);
+				return;
+			case 'cache':
+			case 'swr': {
+				const cached = runtime_session.lake_cache.get(id);
+				if (!cached) {
+					runtime_session.settled_lakes.add(this);
+					return;
+				}
+				if (policy === 'cache') {
+					// Settle before append so islands-in-lake connecting during insert self-hydrate.
+					runtime_session.settled_lakes.add(this);
+					this.appendChild(cached.frag.cloneNode(true));
+					return;
+				}
+				// Stale-while-revalidate: paint cache WITHOUT settling. Islands-in-lake early-return
+				// until the fresh HTML swap settles this lake — one hydrate, not cache+fresh (SWR-DOUBLE).
+				// The endpoint can only come from the cache — the browser has no secret to mint one.
+				this.appendChild(cached.frag.cloneNode(true));
+				if (!cached.endpoint) {
+					runtime_session.settled_lakes.add(this);
+					this.#wake_waiting_regions();
+					if (manifest.dev) {
+						console.warn(
+							`[ogygia] region "${id}" is remount:'swr' but no signed endpoint was captured at SSR — painting the cache only.`
+						);
+					}
+					return;
+				}
+				this.setAttribute('endpoint', cached.endpoint);
+				const when = this.getAttribute('when') || cached.when || 'load';
+				const fire = () => void this.#fetch_html({ revalidate: true });
+				if (when === 'idle') this.#on_idle(fire);
+				else if (when === 'visible') this.#on_visible(fire);
+				else if (when === 'load') fire();
+				else this.#on_media(when, fire);
+				return;
+			}
+			default: {
+				const _exhaustive: never = policy;
+				return _exhaustive;
+			}
 		}
 	}
 

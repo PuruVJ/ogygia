@@ -10,10 +10,12 @@ export default defineConfig({
 			visible: { margin: '0px' },
 			// named presets referenced from imports via `with { preset: 'chart' }`
 			presets: {
-				chart: { hydrate: 'visible', margin: '200px' }
-			},
-			// lakes ({#if}-toggle re-creation): 'cache' re-inserts the frozen DOM (default), 'empty' clears
-			lake_restore: 'cache'
+				chart: { hydrate: 'visible', margin: '200px' },
+				// hydrate:none remount policy (default cache if omitted)
+				frozen: { hydrate: 'none' },
+				frozenSwr: { hydrate: 'none', remount: { strategy: 'swr', when: 'load' } },
+				frozenEmpty: { hydrate: 'none', remount: 'empty' }
+			}
 		}),
 		sveltekit()
 	]

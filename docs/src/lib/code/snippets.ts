@@ -34,22 +34,38 @@ import { ogygiaHandle } from 'ogygia/hooks';
 
 export const handle = sequence(ogygiaHandle(), myOtherHandle);`;
 
-export const authoringImports = `import Counter  from '$lib/Counter.svelte'  with { hydrate: 'load' };
-import Chart    from '$lib/Chart.svelte'    with { hydrate: 'visible' };
-import Drawer   from '$lib/Drawer.svelte'   with { hydrate: '(max-width: 600px)' };
-import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
-import Report   from '$lib/Report.svelte'   with { hydrate: 'none' };
-import Panel    from '$lib/Panel.svelte'    with { preset: 'chart' };
+export const authoringImports = `<script>
+  import Counter  from '$lib/Counter.svelte'  with { hydrate: 'load' };
+  import Chart    from '$lib/Chart.svelte'    with { hydrate: 'visible' };
+  import Drawer   from '$lib/Drawer.svelte'   with { hydrate: '(max-width: 600px)' };
+  import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
+  import Report   from '$lib/Report.svelte'   with { hydrate: 'none' };
+  import Panel    from '$lib/Panel.svelte'    with { preset: 'chart' };
+</script>
 
 <Counter start={10} />`;
 
-export const ogygiaRouter = `import { OgygiaRouter } from 'ogygia';
+export const ogygiaRouter = `<script>
+  import { OgygiaRouter } from 'ogygia';
+</script>
 
-// View Transitions on (default)
+<!-- View Transitions on (default) -->
 <OgygiaRouter />
 
-// plain swap
+<!-- plain swap -->
 <OgygiaRouter viewTransitions={false} />`;
+
+export const ogygiaBoundary = `<script>
+  import { OgygiaBoundary } from 'ogygia';
+  import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
+  import Report from '$lib/Report.svelte' with { hydrate: 'none' };
+</script>
+
+<!-- Transparent passthrough — marks region usages in source; zero runtime effect -->
+<OgygiaBoundary>
+  <Counter />
+  <Report />
+</OgygiaBoundary>`;
 
 export const persistNav = `<!-- in a layout shared by SPA routes -->
 <nav data-ogygia-persist="main-nav">
@@ -57,51 +73,67 @@ export const persistNav = `<!-- in a layout shared by SPA routes -->
   <!-- islands here keep their client state across nav -->
 </nav>`;
 
-export const hydrateLoad = `import Panel from '$lib/Panel.svelte' with {
-  hydrate: 'load'
-};
+export const hydrateLoad = `<script>
+  import Panel from '$lib/Panel.svelte' with {
+    hydrate: 'load'
+  };
+</script>
 
 <Panel />`;
 
-export const hydrateIdle = `import Widget from '$lib/Widget.svelte' with {
-  hydrate: 'idle'
-};
+export const hydrateIdle = `<script>
+  import Widget from '$lib/Widget.svelte' with {
+    hydrate: 'idle'
+  };
+</script>
 
 <Widget />`;
 
-export const hydrateVisible = `import Chart from '$lib/Chart.svelte' with {
-  hydrate: 'visible'
-};
+export const hydrateVisible = `<script>
+  import Chart from '$lib/Chart.svelte' with {
+    hydrate: 'visible'
+  };
+</script>
 
 <Chart />`;
 
-export const hydrateMedia = `import Drawer from '$lib/Drawer.svelte' with {
-  hydrate: '(max-width: 600px)'
-};
+export const hydrateMedia = `<script>
+  import Drawer from '$lib/Drawer.svelte' with {
+    hydrate: '(max-width: 600px)'
+  };
+</script>
 
 <Drawer />`;
 
-export const hydrateLoadCounter = `import Counter from '$lib/Counter.svelte' with {
-  hydrate: 'load'
-};
+export const hydrateLoadCounter = `<script>
+  import Counter from '$lib/Counter.svelte' with {
+    hydrate: 'load'
+  };
+</script>
 
 <Counter />`;
 
-export const hydrateLoadPoke = `import Counter from '$lib/Counter.svelte' with {
-  hydrate: 'load'
-};
+export const hydrateLoadPoke = `<script>
+  import Counter from '$lib/Counter.svelte' with {
+    hydrate: 'load'
+  };
+</script>
 
 <Counter start={7} />`;
 
-export const hydrateVisiblePoke = `import Widget from '$lib/Widget.svelte' with {
-  hydrate: 'visible'
-};
+export const hydrateVisiblePoke = `<script>
+  import Widget from '$lib/Widget.svelte' with {
+    hydrate: 'visible'
+  };
+</script>
 
 <Widget />`;
 
-export const deferLoadGreeting = `import Greeting from '$lib/Greeting.svelte' with {
-  defer: 'load'
-};
+export const deferLoadGreeting = `<script>
+  import Greeting from '$lib/Greeting.svelte' with {
+    defer: 'load'
+  };
+</script>
 
 <Greeting salutation="Aloha">
   {#snippet fallback()}
@@ -117,6 +149,8 @@ ogygia({
 });
 
 // component
-import Panel from '$lib/Panel.svelte' with {
-  preset: 'demo'
-};`;
+<script>
+  import Panel from '$lib/Panel.svelte' with {
+    preset: 'demo'
+  };
+</script>`;

@@ -27,13 +27,11 @@ import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
 import { verify, region_mac_message } from './server/hmac.js';
 import { B64Url } from './server/payload.js';
-import { DEFAULT_ISLANDS_ENDPOINT } from './server/endpoint.js';
+import { DEFAULT_ISLANDS_ENDPOINT, MAX_REGION_PROPS_LEN } from './server/endpoint.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
 
-/** Max b64url props blob accepted before MAC work (DoS / amplification bound). */
-const MAX_PROPS_LEN = 8192;
 /** Hard cap on rendered region HTML (bytes). */
 const MAX_REGION_BODY = 2_000_000;
 /** Abort slow region SSR. */
@@ -203,8 +201,8 @@ class OgygiaHandle {
 		const exp_raw = url.searchParams.get('exp') ?? '';
 		const sig = url.searchParams.get('sig') ?? '';
 
-		// Length-gate BEFORE HMAC (P5-HMAC-CPU).
-		if (!id || payload.length > MAX_PROPS_LEN) {
+		// Length-gate BEFORE HMAC (P5-HMAC-CPU). Same bound as makeRegionEndpoint mint.
+		if (!id || payload.length > MAX_REGION_PROPS_LEN) {
 			return region_response('Forbidden', { status: 403 });
 		}
 

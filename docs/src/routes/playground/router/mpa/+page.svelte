@@ -1,6 +1,12 @@
 <script lang="ts">
 	import RouteProbe from '$lib/playground/RouteProbe.svelte' with { hydrate: 'load' };
+	import PageHead from '$lib/PageHead.svelte';
 </script>
+
+<PageHead
+	title="MPA handoff · Router · Playground"
+	description="Full document load via data-sveltekit-reload — opt out of the SPA on a per-link basis."
+/>
 
 <h2 style="view-transition-name: pg-router-title;">MPA handoff</h2>
 <div class="prose" style="margin-bottom: 2rem;">

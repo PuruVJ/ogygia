@@ -6,7 +6,13 @@
 	import LiveClock from '$lib/playground/LiveClock.svelte' with { hydrate: 'load' };
 	import BatchProbe from '$lib/playground/BatchProbe.svelte' with { hydrate: 'load' };
 	import GuestbookForm from '$lib/playground/GuestbookForm.svelte' with { hydrate: 'load' };
+	import PageHead from '$lib/PageHead.svelte';
 </script>
+
+<PageHead
+	title="Data & remotes · Playground"
+	description="SvelteKit remote functions inside ogygia islands — query, command, live SSE, batch, and remote form()."
+/>
 
 <main class="shell docs-main">
 	<section id="data">

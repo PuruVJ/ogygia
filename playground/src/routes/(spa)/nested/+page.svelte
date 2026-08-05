@@ -1,7 +1,7 @@
 <script lang="ts">
-	// Nested islands: Outer is an island; its source imports Inner `with { island }`. The inner
-	// island degrades to a normal component and hydrates once, with Outer. Only ONE <sk-island>
-	// element is emitted (the outer); the inner renders inline.
+	// Nested regions: Outer is a waking region; its source imports Inner `with { hydrate }`. The
+	// inner region degrades to a normal component and hydrates once, with Outer. Only ONE
+	// <ogygia-region> element is emitted (the outer); the inner renders inline.
 	import Outer from '$lib/Outer.svelte' with { hydrate: 'load' };
 </script>
 

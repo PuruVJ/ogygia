@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A hydrated island (hydrate: 'load') that contains a lake in its children. The counter proves
-	// it is interactive. The {#if} toggle exercises `lake_restore` — re-creating the frozen DOM.
+	// it is interactive. The {#if} toggle exercises remount (default cache).
 	let { children } = $props();
 	let count = $state(0);
 	let show = $state(true);

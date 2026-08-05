@@ -3,6 +3,7 @@
 	// mutates it in its own script. The host markup below only READS config — writing to a captured
 	// var from host markup is a build error, so the mutation can only be shown from inside the island.
 	import SnapshotMutator from '$lib/playground/SnapshotMutator.svelte' with { hydrate: 'load' };
+	import PageHead from '$lib/PageHead.svelte';
 
 	const config = {
 		count: 1,
@@ -10,6 +11,11 @@
 		roles: new Set<string>(['guest'])
 	};
 </script>
+
+<PageHead
+	title="Mutation guard · Playground"
+	description="Captured host state is a one-way snapshot — mutating it inside an island is a no-op the dev runtime warns about."
+/>
 
 <main class="shell docs-main">
 	<section id="mutation-guard">

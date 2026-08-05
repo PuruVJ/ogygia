@@ -9,9 +9,15 @@
 	import VisibleDemo from '$lib/demos/VisibleDemo.svelte' with { hydrate: 'visible' };
 	import MediaDemo from '$lib/demos/MediaDemo.svelte' with { hydrate: '(max-width: 600px)' };
 	import PresetDemo from '$lib/playground/PresetDemo.svelte' with { preset: 'demo' };
+	import PageHead from '$lib/PageHead.svelte';
 
 	let { data }: { data: import('./$types').PageData } = $props();
 </script>
+
+<PageHead
+	title="Strategies · Playground"
+	description="Live hydrate strategies: load, idle, visible, media, and named presets — with JS-off toggles to see the shipped HTML."
+/>
 
 <main class="shell docs-main">
 	<section id="strategies">

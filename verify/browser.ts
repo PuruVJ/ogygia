@@ -55,7 +55,7 @@ try {
 		check('home: visible island hydrated AFTER scroll', (await visIsland.getAttribute('data-hydrated')) !== null);
 		check('home: visible island logged on hydrate', logs.some((l) => l.includes('visible island hydrated')));
 
-		// per-use strategy: the SAME Counter module imported with island:'visible'
+		// per-use strategy: the SAME Counter module imported with hydrate:'visible'
 		const lazyIsland = page.locator('ogygia-region', { hasText: 'Same module, visible strategy' });
 		await lazyIsland.scrollIntoViewIfNeeded();
 		await page.waitForFunction(() => {

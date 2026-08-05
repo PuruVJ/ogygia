@@ -92,14 +92,21 @@ ogygia({
 	visible: { margin: '200px' },              // default IntersectionObserver rootMargin
 	presets: {
 		chart: { hydrate: 'visible', margin: '200px' },
-		modal: { hydrate: 'idle' }
+		modal: { hydrate: 'idle' },
+		report: { hydrate: 'none' },             // remount defaults to 'cache'
+		liveReport: {
+			hydrate: 'none',
+			remount: { strategy: 'swr', when: 'idle' } // paint cache, then re-fetch SSR HTML
+		}
 	},
-	lake_restore: 'cache',                      // 'cache' (default) | 'empty' — {#if}-toggle re-creation
 	rateLimit: { max: 60, windowMs: 60_000 },  // deferred-region endpoint; `false` to disable
 	bindSession: 'sid'                          // opt-in: seal this cookie into the region MAC
 });
 ```
 
+- Inline imports only carry `hydrate` | `defer` | `preset`. Options (`margin`, `remount`, …) live in
+  `presets` (or `visible.margin`). Import attributes cannot nest objects — that is why SWR timing is
+  a preset object.
 - `with { preset: 'chart' }` resolves the preset; presets are **tolerant** (a known-but-inapplicable
   key like `margin` on a `load` preset is ignored). Unknown preset names / unknown keys are build errors.
   A preset that sets neither `hydrate` nor `defer` is a build error.
@@ -156,10 +163,10 @@ export const handle = sequence(ogygiaHandle(), myOtherHandle);
   cookies all work with the request context of the island fetch.
 - A `<link rel="preload" as="fetch">` hint starts the fetch during HTML parse (the runtime fetch
   reuses it — one server render). Skipped when prerendering.
-- Signing key: **`OGYGIA_SECRET` is required for production builds that use deferred regions.**
-  Without it the build fails (prerendered holes and multi-instance deploys must share one key).
-  Local `vite dev` may omit it (per-process key; region ids stay unsalted). With the env set,
-  region ids are salted so they are not offline-computable. The MAC binds **region id + expiry +
+- Signing key: each production build bakes a **random HMAC key into the server bundle** (no setup).
+  Set optional **`OGYGIA_SECRET`** (shell, CI, or `.env` / `.env.local`) when you need the same key
+  across deploys — rolling updates, CDN-cached HTML, or multi-app setups. With the env set, region
+  ids are also salted so they are not offline-computable. The MAC binds **region id + expiry +
   props**. Treat anything you pass into a deferred/hydrated region as public to anyone who can
   read the page HTML (HMAC is integrity, not confidentiality). The region endpoint sends
   `X-Frame-Options: DENY` / `frame-ancestors 'none'` and is rate-limited per client IP
@@ -182,8 +189,8 @@ export const handle = sequence(ogygiaHandle(), myOtherHandle);
 An island whose own source imports another component as an island is **allowed**. Per the region
 rule, a region self-hydrates iff the nearest region boundary above it is not hydrated — so the
 **inner island degrades to a plain component and hydrates once, with its parent** (one hydration,
-ever). A dev-only warning names the inner region. A nested **server** island degrades to a plain
-inline component too (its `defer` is ignored until lakes land — see DESIGN.md).
+ever). A dev-only warning names the inner region. A nested **deferred** region degrades to a plain
+inline component too (its `defer` is ignored; it renders with the parent — see DESIGN.md).
 
 ## Lakes (`hydrate: 'none'` inside an island)
 
@@ -203,8 +210,14 @@ work touches it. Its contents are static by contract (props changes and events i
 
 - An **island authored inside a lake self-hydrates** again — the lake reset its subtree to "dead",
   so the nearest-boundary rule wakes the inner island (alternation: shell → island → lake → island).
-- `ogygia({ lake_restore })` controls `{#if}`-toggle re-creation of a lake: **`'cache'`** (default)
-  re-inserts the frozen DOM, **`'empty'`** leaves it blank.
+- **`remount`** (preset-only, with `hydrate: 'none'`) controls `{#if}` re-creation of that region:
+  **`'cache'`** (default) re-inserts the SSR DOM, **`'empty'`** leaves it blank, **`'swr'`** paints
+  the cache then fetches a fresh SSR from the region endpoint (`remount: { strategy: 'swr', when }`).
+  Islands inside an SWR lake wait for the revalidate swap before hydrating (one wake, not cache-then-fresh).
+  The browser **cannot remint** the signed endpoint after prop changes — the capability URL is whatever
+  SSR minted (same 24h bearer window as deferred islands). After expiry, remount paints cache only
+  until a full navigation remints. The remount DOM cache is keyed by lake entry id (bounded by unique
+  lakes on the page) and cleared on SPA body swap.
 - A `hydrate: 'none'` in the dead page shell is a **no-op** (dev-warned) — a plain component.
 - `hydrate: 'false'` is not valid; the string value for "no hydration" is `'none'`.
 
@@ -252,6 +265,25 @@ navigation, put it in an **island**.
 hydrate via custom-element connection; old ones unmount via disconnection. Rendering `<OgygiaRouter />`
 loads the runtime module, so the router works even on a page with **no islands**; the runtime module
 persists across swaps. (Page inline scripts are not re-run — see above.)
+
+### Annotation boundary (`OgygiaBoundary`)
+
+`<OgygiaBoundary>` is an optional **transparent passthrough** exported from `ogygia`. It renders
+its children and nothing else — no DOM wrapper, no nested-island context, no hydrate/render effect.
+Use it only to mark a region usage in source for humans (or as a future hook point):
+
+```svelte
+import { OgygiaBoundary } from 'ogygia';
+import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
+
+<OgygiaBoundary>
+	<Counter />
+</OgygiaBoundary>
+```
+
+It is **not** `<svelte:boundary>` (error/pending), and it is **not** the internal lake context
+reset (`LakeBoundary` in `ogygia/internal`). Wrapping an island or lake does not change how that
+region transforms or hydrates.
 
 ### Persist layout chrome (`data-ogygia-persist`)
 

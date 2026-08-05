@@ -1,6 +1,12 @@
 <script lang="ts">
 	import RouteProbe from '$lib/playground/RouteProbe.svelte' with { hydrate: 'load' };
+	import PageHead from '$lib/PageHead.svelte';
 </script>
+
+<PageHead
+	title="SPA router · Playground"
+	description="OgygiaRouter client-side swaps with view transitions, persist chrome, link prefetch, and MPA handoff."
+/>
 
 <h2 style="view-transition-name: pg-router-title;">SPA router</h2>
 <div class="prose" style="margin-bottom: 2rem;">

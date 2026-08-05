@@ -42,7 +42,7 @@ interface Ctx {
 	virtualPathFor: (hostId: string, iid: string) => string;
 	devUrlFor: (p: string) => string;
 	visibleMargin?: string;
-	presets: Record<string, Record<string, string>>;
+	presets: Record<string, Record<string, unknown>>;
 }
 
 function makeCtx(overrides: Partial<Ctx> = {}): Ctx {
@@ -679,8 +679,9 @@ describe('lakes (hydrate: none inside a hydrated island)', () => {
 	test('wraps the lake usage, records the lake local + a metadata-only region', () => {
 		const r = run(LAKE_SRC);
 		const island = r!.islands.find((i) => i.source)!;
-		expect(island.source).toMatch(/<ogygia-region data-lake entry="[0-9a-f]+"><OgygiaLakeBoundary>/);
-		expect(island.source).toMatch(/import \{ LakeBoundary as OgygiaLakeBoundary \} from 'ogygia\/internal';/);
+		expect(island.source).toMatch(/OgygiaLakeRegion__Wrapper/);
+		expect(island.source).toMatch(/import \{ LakeRegion as OgygiaLakeRegion__Wrapper \} from 'ogygia\/internal';/);
+		expect(island.source).toMatch(/__remount=\{"cache"\}/);
 		expect(island.lakes).toEqual(['Lake']);
 		expect(r!.islands.some((i) => i.kind === 'lake')).toBe(true);
 	});
@@ -689,12 +690,29 @@ describe('lakes (hydrate: none inside a hydrated island)', () => {
 		const r = run(LAKE_SRC);
 		const lakeRegion = r!.islands.find((i) => i.kind === 'lake')!;
 		expect(lakeRegion.id).toBe(lakeIdFor(0, 0));
-		expect(r!.islands.find((i) => i.source)!.source).toMatch(new RegExp(`entry="${lakeIdFor(0, 0)}"`));
+		expect(r!.islands.find((i) => i.source)!.source).toMatch(
+			new RegExp(`__entry=\\{${JSON.stringify(lakeIdFor(0, 0))}\\}`)
+		);
 	});
 
 	test('the host Lake import is stripped (hoisted only)', () => {
 		const r = run(LAKE_SRC);
 		expect(r!.code).not.toMatch(/import Lake from/);
+	});
+});
+
+describe('OgygiaBoundary (consumer annotation passthrough)', () => {
+	test('island inside OgygiaBoundary still transforms to Island wrapper', () => {
+		const r = run(
+			wrap(
+				`import { OgygiaBoundary } from 'ogygia';\nimport C from './C.svelte' with { hydrate: 'load' };`,
+				'<OgygiaBoundary><C /></OgygiaBoundary>'
+			)
+		);
+		expect(r).toBeTruthy();
+		expect(r!.code).toMatch(/OgygiaIsland__Wrapper/);
+		expect(r!.code).toMatch(/<OgygiaBoundary>/);
+		expect(r!.islands.some((i) => i.kind === 'hydrate' || i.source)).toBe(true);
 	});
 });
 
@@ -1004,8 +1022,8 @@ describe('multiple lakes in one island', () => {
 		const r = run(SRC);
 		const island = r!.islands.find((i) => i.source)!;
 		expect(island.lakes).toEqual(['L1', 'L2']);
-		expect(island.source).toMatch(new RegExp(`entry="${lakeIdFor(0, 0)}"`));
-		expect(island.source).toMatch(new RegExp(`entry="${lakeIdFor(0, 1)}"`));
+		expect(island.source).toMatch(new RegExp(`__entry=\\{${JSON.stringify(lakeIdFor(0, 0))}\\}`));
+		expect(island.source).toMatch(new RegExp(`__entry=\\{${JSON.stringify(lakeIdFor(0, 1))}\\}`));
 	});
 
 	test('two metadata-only lake regions are registered', () => {
@@ -1017,6 +1035,229 @@ describe('multiple lakes in one island', () => {
 		const r = run(SRC);
 		expect(r!.code).not.toMatch(/import L1 from/);
 		expect(r!.code).not.toMatch(/import L2 from/);
+	});
+});
+
+describe('remount preset (hydrate: none)', () => {
+	test('remount swr object emits __when and registers a server lake module', () => {
+		const ctx = makeCtx({
+			presets: { live: { hydrate: 'none', remount: { strategy: 'swr', when: 'idle' } } }
+		});
+		const r = run(
+			wrap(
+				`import Host from './Host.svelte' with { hydrate: 'load' };\nimport Lake from './Lake.svelte' with { preset: 'live' };`,
+				'<Host><Lake /></Host>'
+			),
+			ctx
+		);
+		const island = r!.islands.find((i) => i.lakes?.length)!;
+		expect(island.source).toMatch(/__remount=\{"swr"\}/);
+		expect(island.source).toMatch(/__when=\{"idle"\}/);
+		const swr = r!.islands.find((i) => i.kind === 'lake' && i.server && i.virtualPath);
+		expect(swr).toBeTruthy();
+		expect(swr!.source).toMatch(/import Comp from/);
+	});
+
+	test('inline remount is rejected', () => {
+		expectThrows(
+			() =>
+				run(
+					wrap(
+						`import Lake from './Lake.svelte' with { hydrate: 'none', remount: 'cache' };`,
+						'<div/>'
+					)
+				),
+			/`remount` is not allowed inline/
+		);
+	});
+
+	test('remount without hydrate none errors', () => {
+		const ctx = makeCtx({ presets: { bad: { hydrate: 'load', remount: 'cache' } } });
+		expectThrows(
+			() => run(wrap(`import C from './C.svelte' with { preset: 'bad' };`, '<C />'), ctx),
+			/`remount` is only valid with `hydrate: 'none'`/
+		);
+	});
+
+	/** Host with one hydrate island wrapping one lake that uses `preset: 'p'`. */
+	function lakeWith(preset: Record<string, unknown>, tag = '<Lake />') {
+		const ctx = makeCtx({ presets: { p: preset } });
+		return run(
+			wrap(
+				`import Host from './Host.svelte' with { hydrate: 'load' };\nimport Lake from './Lake.svelte' with { preset: 'p' };`,
+				`<Host>${tag}</Host>`
+			),
+			ctx
+		);
+	}
+
+	test("remount 'empty' rides on the region as remount=empty, with no endpoint plumbing", () => {
+		const r = lakeWith({ hydrate: 'none', remount: 'empty' });
+		const island = r!.islands.find((i) => i.lakes?.length)!;
+		expect(island.source).toMatch(/__remount=\{"empty"\}/);
+		expect(island.source).not.toMatch(/__when=/);
+		expect(island.source).not.toMatch(/__props=\{\{/);
+		// no server-renderable lake module: 'empty' never fetches
+		expect(r!.islands.some((i) => i.kind === 'lake' && i.server)).toBe(false);
+	});
+
+	test("remount 'cache' (default) carries no props/when — nothing crosses the wire", () => {
+		const r = lakeWith({ hydrate: 'none' });
+		const island = r!.islands.find((i) => i.lakes?.length)!;
+		expect(island.source).toMatch(/__remount=\{"cache"\}/);
+		expect(island.source).not.toMatch(/__when=/);
+		expect(r!.islands.some((i) => i.kind === 'lake' && i.server)).toBe(false);
+	});
+
+	test('unknown remount strategy errors', () => {
+		expectThrows(
+			() => lakeWith({ hydrate: 'none', remount: 'stale' }),
+			/unknown remount 'stale'\. Use 'cache' \| 'empty' \| 'swr'\./
+		);
+	});
+
+	test('remount.when on a non-swr strategy errors', () => {
+		expectThrows(
+			() => lakeWith({ hydrate: 'none', remount: { strategy: 'cache', when: 'load' } }),
+			/`remount\.when` is only valid with remount strategy 'swr'/
+		);
+	});
+
+	test('an unknown remount.when is a build error (a typo would never revalidate)', () => {
+		expectThrows(
+			() => lakeWith({ hydrate: 'none', remount: { strategy: 'swr', when: 'soon' } }),
+			/unknown remount\.when 'soon'\. Use 'load' \| 'idle' \| 'visible' \| a media query\./
+		);
+	});
+
+	test('a media-query remount.when is accepted verbatim', () => {
+		const r = lakeWith({ hydrate: 'none', remount: { strategy: 'swr', when: '(min-width: 900px)' } });
+		expect(r!.islands.find((i) => i.lakes?.length)!.source).toMatch(
+			/__when=\{"\(min-width: 900px\)"\}/
+		);
+	});
+
+	test("swr + when:'visible' forwards margin (preset, else the global default)", () => {
+		const withMargin = lakeWith({
+			hydrate: 'none',
+			margin: '250px',
+			remount: { strategy: 'swr', when: 'visible' }
+		});
+		expect(withMargin!.islands.find((i) => i.lakes?.length)!.source).toMatch(
+			/__margin=\{"250px"\}/
+		);
+		const fallback = lakeWith({ hydrate: 'none', remount: { strategy: 'swr', when: 'visible' } });
+		expect(fallback!.islands.find((i) => i.lakes?.length)!.source).toMatch(/__margin=\{"0px"\}/);
+	});
+
+	test('swr lake props: text, shorthand, expression, spread and CONCATENATION', () => {
+		const r = lakeWith(
+			{ hydrate: 'none', remount: 'swr' },
+			'<Lake kind="bar" {title} n={1 + 2} label="Hi {name}!" {...rest} flag />'
+		);
+		const src = r!.islands.find((i) => i.lakes?.length)!.source;
+		const props = src.match(/__props=\{\{([\s\S]*?)\}\}/)![1];
+		expect(props).toMatch(/"kind": "bar"/);
+		expect(props).toMatch(/(^|[\s,])title([\s,]|$)/);
+		expect(props).toMatch(/"n": 1 \+ 2/);
+		// a text+expression value must keep BOTH halves (not just the expression)
+		expect(props).toMatch(/"label": `Hi \$\{name\}!`/);
+		expect(props).toMatch(/\.\.\.rest/);
+		expect(props).toMatch(/"flag": true/);
+	});
+
+	test('a swr lake with children is a build error (snippets cannot cross the endpoint)', () => {
+		expectThrows(
+			() => lakeWith({ hydrate: 'none', remount: 'swr' }, '<Lake>hello</Lake>'),
+			/cannot have children/
+		);
+	});
+
+	test('a swr lake with a bind: directive is a build error', () => {
+		expectThrows(
+			() => lakeWith({ hydrate: 'none', remount: 'swr' }, '<Lake bind:value={v} />'),
+			/cannot use `bind:value`/
+		);
+	});
+
+	test('a swr lake with Svelte 5 onclick={…} is a build error (silent cache degrade otherwise)', () => {
+		expectThrows(
+			() => lakeWith({ hydrate: 'none', remount: 'swr' }, '<Lake onclick={() => {}} />'),
+			/cannot use `onclick`/
+		);
+		expectThrows(
+			() =>
+				run(
+					wrap(
+						`import Host from './Host.svelte' with { hydrate: 'load' };\nimport Lake from './Lake.svelte' with { preset: 'p' };\nlet handler = () => {};`,
+						'<Host><Lake onclick={handler} /></Host>'
+					),
+					makeCtx({ presets: { p: { hydrate: 'none', remount: 'swr' } } })
+				),
+			/cannot use `onclick`/
+		);
+	});
+
+	test('a swr lake may use data props that look like on* (online) — not event attrs', () => {
+		const r = lakeWith({ hydrate: 'none', remount: 'swr' }, '<Lake online={true} />');
+		expect(r).toBeTruthy();
+		expect(r!.islands.some((i) => i.kind === 'lake' && i.server)).toBe(true);
+	});
+
+	test('a swr lake with an inline function prop value is a build error', () => {
+		expectThrows(
+			() => lakeWith({ hydrate: 'none', remount: 'swr' }, '<Lake render={() => 1} />'),
+			/cannot use a function value for `render`/
+		);
+	});
+
+	test('a swr lake needs a resolvable module path (bare specifier errors)', () => {
+		const ctx = makeCtx({ presets: { p: { hydrate: 'none', remount: 'swr' } } });
+		expectThrows(
+			() =>
+				run(
+					wrap(
+						`import Host from './Host.svelte' with { hydrate: 'load' };\nimport Lake from 'some-pkg/Lake.svelte' with { preset: 'p' };`,
+						'<Host><Lake /></Host>'
+					),
+					ctx
+				),
+			/needs a resolvable module path/
+		);
+	});
+
+	test('swr lake is kind:lake + server with a virtual module; non-swr lake is metadata-only', () => {
+		const swr = lakeWith({ hydrate: 'none', remount: 'swr' });
+		const swr_entry = swr!.islands.find((i) => i.kind === 'lake' && i.server);
+		expect(swr_entry?.virtualPath).toBeTruthy();
+		expect(swr_entry?.source).toMatch(/<Comp \{\.\.\.props\}/);
+
+		const cached = lakeWith({ hydrate: 'none', remount: 'cache' });
+		const meta = cached!.islands.filter((i) => i.kind === 'lake');
+		expect(meta.length).toBeGreaterThanOrEqual(1);
+		expect(meta.every((i) => !i.server && !i.virtualPath)).toBe(true);
+	});
+});
+
+describe('lake DOM shape (hydration-critical)', () => {
+	const SRC = (tag: string) =>
+		wrap(
+			`import Host from './Host.svelte' with { hydrate: 'load' };\nimport Lake from './Lake.svelte' with { hydrate: 'none' };`,
+			`<Host>${tag}</Host>`
+		);
+
+	test('the lake tag is WRAPPED, never re-created: attributes and children survive', () => {
+		const src = islandSource(run(SRC('<Lake a="1" {b}>inner text<span>kid</span></Lake>')));
+		expect(src).toMatch(
+			/<OgygiaLakeRegion__Wrapper [^>]*><Lake a="1" \{b\}>inner text<span>kid<\/span><\/Lake><\/OgygiaLakeRegion__Wrapper>/
+		);
+	});
+
+	test('the lake stays a STATIC component reference (the client placeholder swap needs it)', () => {
+		const src = islandSource(run(SRC('<Lake />')));
+		// a dynamic `<Component />` would add a hydration envelope inside the frozen region
+		expect(src).not.toMatch(/__component=/);
+		expect(src).toMatch(/<Lake \/>/);
 	});
 });
 

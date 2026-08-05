@@ -1,8 +1,8 @@
 // LAKES: a `hydrate: 'none'` component INSIDE a hydrated island is a frozen region. This suite
 // proves the full alternation shell -> island -> lake -> island-in-lake, plus the two guarantees
 // that make a lake a lake: its component code ships in NO client chunk, and its DOM is frozen
-// (events inert) yet an island authored inside it self-hydrates. Also exercises `lake_restore`
-// re-creation on an {#if} toggle.
+// (events inert) yet an island authored inside it self-hydrates. Also exercises remount:'cache'
+// and remount:'swr' on {#if} toggle.
 //
 //   node verify/lakes.ts http://localhost:3051   # a PRODUCTION build (preview/adapter output)
 //
@@ -67,43 +67,83 @@ try {
 	await page.waitForSelector('ogygia-region[data-hydrated]', { timeout: 6000 }).catch(() => {});
 	await sleep(1500);
 
-	// SSR structure: exactly one lake region (no hydrate attr) + one inner island region (hydrate).
-	check('lake emitted as <ogygia-region data-lake> WITHOUT a hydrate attr (non-boundary)', (await page.locator('ogygia-region[data-lake]').count()) === 1);
-	check('lake region has NO hydrate attribute', (await page.locator('ogygia-region[data-lake][hydrate]').count()) === 0);
+	// SSR structure: frozen region (`hydrate="none"`) + remount attr (default cache).
+	check(
+		'frozen region emitted as <ogygia-region hydrate="none">',
+		(await page.locator('ogygia-region[hydrate="none"]').count()) >= 1
+	);
+	check(
+		'default remount is cache on hydrate=none',
+		(await page.locator('ogygia-region[hydrate="none"][remount="cache"]').count()) >= 1
+	);
 
 	// Frozen content is present (SSR rendered inline, restored around parent hydration).
-	check('lake SSR content present after hydration (lifted + restored)', (await page.locator('[data-frozen-box]').count()) === 1);
+	check('lake SSR content present after hydration (lifted + restored)', (await page.locator('[data-frozen-box]').count()) >= 1);
 
-	// Outer island hydrated + interactive.
-	const c0 = (await page.locator('[data-count-btn]').textContent()).trim();
-	await page.locator('[data-count-btn]').click();
-	const c1 = (await page.locator('[data-count-btn]').textContent()).trim();
+	// Outer island hydrated + interactive (first LakeCounter).
+	const c0 = (await page.locator('[data-count-btn]').first().textContent()).trim();
+	await page.locator('[data-count-btn]').first().click();
+	const c1 = (await page.locator('[data-count-btn]').first().textContent()).trim();
 	check('outer island hydrates & is interactive', c0 !== c1 && /island count: 1/.test(c1), `${c0} -> ${c1}`);
 
 	// Island-in-lake self-hydrates (the lake reset its subtree to dead — nearest-boundary rule).
-	const i0 = (await page.locator('[data-inner-btn]').textContent().catch(() => '')).trim();
-	await page.locator('[data-inner-btn]').click();
-	const i1 = (await page.locator('[data-inner-btn]').textContent().catch(() => '')).trim();
+	const i0 = (await page.locator('[data-inner-btn]').first().textContent().catch(() => '')).trim();
+	await page.locator('[data-inner-btn]').first().click();
+	const i1 = (await page.locator('[data-inner-btn]').first().textContent().catch(() => '')).trim();
 	check('island INSIDE the lake self-hydrates & works (alternation)', i0 !== i1 && /: 1/.test(i1), `${i0} -> ${i1}`);
 
 	// The lake itself is FROZEN: its own button is inert (no JS shipped).
-	const f0 = (await page.locator('[data-frozen-btn]').textContent()).trim();
-	await page.locator('[data-frozen-btn]').click();
+	const f0 = (await page.locator('[data-frozen-btn]').first().textContent()).trim();
+	await page.locator('[data-frozen-btn]').first().click();
 	await sleep(150);
-	const f1 = (await page.locator('[data-frozen-btn]').textContent()).trim();
+	const f1 = (await page.locator('[data-frozen-btn]').first().textContent()).trim();
 	check('lake is frozen: its button is inert (no client JS, events do nothing)', f0 === f1 && /frozen button: 0/.test(f1), `${f0} -> ${f1}`);
 
-	// lake_restore: 'cache' (the playground default) — an {#if} toggle re-creates the region and the
-	// frozen DOM is re-inserted; the inner island re-hydrates.
-	await page.locator('[data-toggle-btn]').click();
+	// remount: 'cache' — {#if} toggle re-creates the region and the frozen DOM is re-inserted.
+	const boxesBefore = await page.locator('[data-frozen-box]').count();
+	await page.locator('[data-toggle-btn]').first().click();
 	await sleep(250);
-	const gone = (await page.locator('[data-frozen-box]').count()) === 0;
-	await page.locator('[data-toggle-btn]').click();
+	const boxesHidden = await page.locator('[data-frozen-box]').count();
+	await page.locator('[data-toggle-btn]').first().click();
 	await sleep(400);
-	const back = (await page.locator('[data-frozen-box]').count()) === 1;
-	const innerBack = (await page.locator('[data-inner-btn]').count()) === 1;
-	check("lake_restore 'cache': {#if}-toggle off removes the lake", gone);
-	check("lake_restore 'cache': {#if}-toggle on re-inserts the frozen DOM + re-hydrates inner island", back && innerBack);
+	const boxesRestored = await page.locator('[data-frozen-box]').count();
+	check("remount 'cache': {#if}-toggle off removes a lake", boxesHidden < boxesBefore);
+	check("remount 'cache': {#if}-toggle on re-inserts the frozen DOM", boxesRestored === boxesBefore);
+	check("remount 'cache': inner island present after restore", (await page.locator('[data-inner-btn]').count()) >= 1);
+
+	// remount: swr — second demo; toggle triggers a region endpoint fetch after paint.
+	const swrRoot = page.locator('[data-swr-demo]');
+	if ((await swrRoot.count()) === 1) {
+		const fetches = [];
+		page.on('request', (req) => {
+			const u = req.url();
+			if (u.includes('ogygia') || decodeURIComponent(u).includes('🏝️')) fetches.push(u);
+		});
+		const stampBefore = await swrRoot.locator('[data-frozen-stamp]').first().getAttribute('data-frozen-stamp').catch(() => null);
+		await swrRoot.locator('[data-toggle-btn]').click();
+		await sleep(200);
+		await swrRoot.locator('[data-toggle-btn]').click();
+		await sleep(800);
+		check("remount 'swr': {#if}-toggle triggers region endpoint fetch", fetches.length >= 1, `${fetches.length} fetch(es)`);
+		const revalidated = await swrRoot.locator('ogygia-region[hydrate="none"][data-revalidated]').count();
+		check("remount 'swr': region marked data-revalidated after fetch", revalidated >= 1, `${revalidated}`);
+		if (stampBefore != null) {
+			const stampAfter = await swrRoot.locator('[data-frozen-stamp]').first().getAttribute('data-frozen-stamp');
+			check(
+				"remount 'swr': paints fresh SSR (stamp advances)",
+				stampAfter != null && stampAfter !== stampBefore,
+				`${stampBefore} -> ${stampAfter}`
+			);
+		} else {
+			out.push('SKIP  remount swr stamp freshness (no data-frozen-stamp in build)');
+		}
+		check(
+			"remount 'swr': inner island present after revalidate",
+			(await swrRoot.locator('[data-inner-btn]').count()) >= 1
+		);
+	} else {
+		out.push('SKIP  remount swr demo (no [data-swr-demo] on page)');
+	}
 
 	await page.close();
 } finally {

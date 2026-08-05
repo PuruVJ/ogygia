@@ -1,5 +1,5 @@
-// Nested-island checks (fetch + Playwright). Usage: node verify/nested.ts [baseUrl]
-// An island whose own source imports another component `with { island }`: the inner island
+// Nested-region checks (fetch + Playwright). Usage: node verify/nested.ts [baseUrl]
+// A region whose own source imports another component `with { hydrate }`: the inner region
 // degrades to a normal component and hydrates ONCE, with its parent.
 import { chromium } from 'playwright';
 
@@ -21,8 +21,11 @@ let isDev = false;
 	check('/nested emits exactly ONE ogygia-region (outer only; inner degraded)', count(html, /<ogygia-region/g) === 1, `${count(html, /<ogygia-region/g)}`);
 	check('/nested outer island SSR content', /data-outer/.test(html));
 	check('/nested inner rendered INLINE in SSR (no inner ogygia-region)', /inner child/.test(html));
-	// a SERVER island nested inside a client island degrades to an inline normal component
-	check('/nested nested SERVER island degraded to inline (no server ogygia-region)', count(html, /<ogygia-region\b[^>]*\bdefer\b/g) === 0);
+	// a deferred region nested inside a waking region degrades to an inline normal component
+	check(
+		'/nested nested deferred region degraded to inline (no render="defer" region)',
+		count(html, /<ogygia-region\b[^>]*\brender="defer"/g) === 0
+	);
 	check('/nested nested server greeting rendered inline (Hey, ...)', /Hey, \w+!/.test(html));
 	check('/nested ships NO Kit bootstrap (csr=false)', !/__sveltekit/.test(html));
 }
