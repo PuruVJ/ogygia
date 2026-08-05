@@ -3,8 +3,10 @@
 /svelte/
 
 node_modules/
+.pnpm-store/
 .svelte-kit/
 /playground/build/
+/docs/build/
 dist/
 *.log
 .DS_Store
