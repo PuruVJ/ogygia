@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { transformHost, ISLAND_DIR } from './transform.js';
 import { allRoutesCsrFalse, runStandaloneClientBuild } from './standalone.js';
+import { Plugin } from 'vite';
 
 const RUNTIME_ENTRY = fileURLToPath(new URL('../runtime/index.js', import.meta.url));
 
@@ -92,7 +93,7 @@ export function ogygia(
 		presets?: Record<string, { hydrate?: string; defer?: string; margin?: string }>;
 		lake_restore?: 'cache' | 'empty';
 	} = {}
-) {
+): Plugin {
 	const spa = options.spa !== false;
 	const standalone = options.standalone === true;
 	const visibleMargin = options.visible?.margin;
@@ -110,6 +111,10 @@ export function ogygia(
 
 	/** @type {Map<string, {source:string, hostPath:string, id:string}>} keyed by abs virtual path */
 	const registry = new Map();
+	/** Absolute module ids in an island's CLIENT dependency graph. `$app/*` resolves to shims
+	 *  for these importers (virtual island module AND its transitive component imports). */
+	const island_graph = new Set();
+	const strip_id = (id) => (id ? id.split('?')[0] : id);
 	/** @type {Map<string, string>} iid -> abs virtual path (hydrate + defer islands only) */
 	const by_id = new Map();
 	/** @type {Map<string, 'hydrate'|'defer'|'lake'>} every region id -> kind (drives the client `regions` manifest) */
@@ -177,6 +182,8 @@ export function ogygia(
 				lakes: isl.lakes ?? []
 			});
 			by_id.set(isl.id, isl.virtualPath);
+			island_graph.add(isl.virtualPath);
+			if (isl.componentPath) island_graph.add(isl.componentPath);
 		}
 	};
 
@@ -313,11 +320,32 @@ export function ogygia(
 			}
 			if (!ssr && source === '$app/paths/internal/client') return STUB_PATHS;
 
-			// imports originating directly inside an island virtual module. `$app/*` is aliased
-			// to client shims at load-time (client build only).
-			if (importer && registry.has(importer)) {
-				const host = registry.get(importer).hostPath;
-				return this.resolve(source, host, { skipSelf: true });
+			// Island CLIENT graph: shim `$app/*` for the virtual module AND every module it
+			// pulls in (e.g. `$lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias
+			// would otherwise give islands the uninitialized Kit page (`new URL('a:')` → empty
+			// pathname). enforce:'pre' wins over Kit's resolveId. SSR keeps real Kit modules.
+			const importer_id = strip_id(importer);
+			const from_island =
+				importer_id && (registry.has(importer_id) || island_graph.has(importer_id));
+			if (!ssr && from_island && APP_SHIMS[source]) {
+				return APP_SHIMS[source];
+			}
+			// Virtual island module: resolve relative to the host file, and mark the resolved
+			// id so its own `$app/*` imports hit the shim branch above.
+			if (importer_id && registry.has(importer_id)) {
+				const host = registry.get(importer_id).hostPath;
+				const resolved = await this.resolve(source, host, { skipSelf: true });
+				if (resolved?.id) island_graph.add(strip_id(resolved.id));
+				return resolved;
+			}
+			// Transitive island-graph module (not a virtual entry): mark deps so nested
+			// `$app/*` imports stay shimmed. Do NOT resolve island virtual paths via skipSelf
+			// (that would bypass the is_island_path handling below) — only mark+forward
+			// ordinary imports.
+			if (!ssr && importer_id && island_graph.has(importer_id) && !is_island_path(source)) {
+				const resolved = await this.resolve(source, importer, { skipSelf: true });
+				if (resolved?.id) island_graph.add(strip_id(resolved.id));
+				return resolved;
 			}
 
 			// island virtual .svelte modules: real abs path (static import from host / emitFile
@@ -325,9 +353,15 @@ export function ogygia(
 			if (is_island_path(source)) {
 				let candidate = source.split('?')[0];
 				if (candidate.startsWith('/@fs/')) candidate = candidate.slice('/@fs'.length);
-				if (registry.has(candidate)) return candidate;
+				if (registry.has(candidate)) {
+					island_graph.add(candidate);
+					return candidate;
+				}
 				const abs = path.join(root, candidate.replace(/^\//, ''));
-				if (registry.has(abs)) return abs;
+				if (registry.has(abs)) {
+					island_graph.add(abs);
+					return abs;
+				}
 			}
 			return null;
 		},
@@ -397,9 +431,8 @@ export function ogygia(
 			const srcEntry = registry.get(id);
 			if (srcEntry) {
 				let src = srcEntry.source;
-				// CLIENT build: rewrite Kit `$app/*` imports to client shims. Kit resolves
-				// `$app/*` via a vite alias (before our resolveId), so we can't intercept
-				// them in resolveId — but we generate this source, so we rewrite it here.
+				// CLIENT build: rewrite `$app/*` in the GENERATED virtual source to absolute
+				// shim paths (defense in depth alongside resolveId island-graph shimming).
 				// SSR keeps the real Kit modules (correct server-rendered page.data).
 				const ssr = options?.ssr ?? is_ssr;
 				if (!ssr) {
@@ -423,14 +456,48 @@ export function ogygia(
 			return null;
 		},
 
-		transform(code, id) {
-			if (!id.endsWith('.svelte')) return null;
-			if (id.includes('/node_modules/')) return null;
-			if (is_island_path(id)) return null; // don't re-hoist inside island modules
-			const result = run_transform(code, id);
-			if (!result) return null;
-			register(result);
-			return { code: result.code, map: result.map };
+		transform(code, id, options) {
+			const ssr = options?.ssr ?? is_ssr;
+			// Discover islands before any module is transformed so island_graph is populated
+			// even when an island entry component is processed before its host page.
+			if (!scanned) prescan();
+
+			const id_n = strip_id(id);
+			let out = code;
+			let map = null;
+			let touched = false;
+
+			if (
+				id_n.endsWith('.svelte') &&
+				!id_n.includes('/node_modules/') &&
+				!is_island_path(id_n)
+			) {
+				const result = run_transform(code, id_n);
+				if (result) {
+					register(result);
+					out = result.code;
+					map = result.map;
+					touched = true;
+				}
+			}
+
+			// CLIENT: rewrite `$app/(state|stores|navigation)` inside island entry components
+			// (and any other island_graph .svelte) to absolute shim paths. Absolute paths bypass
+			// Kit's `$app/*` alias entirely — needed because Kit's client build still emits
+			// csr=false page nodes that import island components directly as `__component`.
+			if (!ssr && island_graph.has(id_n) && id_n.endsWith('.svelte')) {
+				const rewritten = out.replace(
+					/(['"])\$app\/(state|stores|navigation)\1/g,
+					(_m, _q, name) => JSON.stringify(APP_SHIMS['$app/' + name])
+				);
+				if (rewritten !== out) {
+					out = rewritten;
+					map = null; // import path rewrite invalidates a prior sourcemap
+					touched = true;
+				}
+			}
+
+			return touched ? { code: out, map } : null;
 		}
 	};
 }

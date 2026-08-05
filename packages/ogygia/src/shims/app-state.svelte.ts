@@ -1,13 +1,5 @@
-// Client-side `$app/state` shim used INSIDE islands.
-//
-// Under `csr = false`, Kit's client runtime never boots, so the real `$app/state` `page`
-// would be uninitialised on the client. This shim reads the shared `$state`-backed page store
-// (see `page-store.svelte.ts`), so `$derived` / `$effect` over `page.url` / `page.params` /
-// `page.data` behave like Kit's real reactive page instead of reading a frozen snapshot.
-//
-// No global is involved: the runtime and this shim share the same module singleton (they land
-// in one consumer client build). Aliased only in the CLIENT build; SSR keeps the real
-// `$app/state`.
+// Client `$app/state` shim for islands (`csr=false` → Kit page is uninitialized).
+// Reads the shared `$state.raw` page store (see `page-store.svelte.ts`).
 
 import { page_state } from './page-store.svelte.js';
 

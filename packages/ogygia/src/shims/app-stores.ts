@@ -1,5 +1,5 @@
 // Client-side shim for `$app/stores` ($page/$navigating) inside islands.
-// Derives from the same shared $state-backed page store as `$app/state`, and re-runs each
+// Derives from the same shared $state.raw page store as `$app/state`, and re-runs each
 // subscriber via the store's module-scoped subscriber set so `$page` updates after SPA navs.
 import { page_state, subscribe_page } from './page-store.svelte.js';
 

@@ -12,6 +12,8 @@ ORIGIN=http://localhost:3051 PORT=3051 node playground/build/index.js &
 node verify/fetch-checks.ts    http://localhost:3051   # SSR: island HTML, no Kit bootstrap
 node verify/browser.ts         http://localhost:3051   # hydration, strategies, devalue, SPA
 node verify/dashboard.ts       http://localhost:3051   # page shim, island goto, client table, chart
+node verify/page-state.ts      http://localhost:3051   # page.url.* + params/route/status/data/form/error/state inside islands
+node verify/console.ts         http://localhost:3051   # zero hydration_mismatch (includes /lakes)
 node verify/remote.ts          http://localhost:3051   # client query+args+refresh, command, live
 node verify/mixed.ts           http://localhost:3051   # csr=true coexistence + opt-in router
 node verify/server-islands.ts  http://localhost:3051   # defer:'true' fallback/endpoint/HMAC/cookie/CSS

@@ -42,9 +42,9 @@
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
-    "devalue": "^5.1.1",
+    "devalue": "^5.9.0",
     "estree-walker": "^3.0.3",
-    "magic-string": "^0.30.11"
+    "magic-string": "^1.1.0"
   },
   "peerDependencies": {
     "@sveltejs/kit": ">=2.70.2 <3",

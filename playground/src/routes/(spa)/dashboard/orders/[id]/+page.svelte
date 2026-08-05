@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import OrderDetail from '$lib/OrderDetail.svelte' with { hydrate: 'load' };
 	import PageDataProbe from '$lib/PageDataProbe.svelte' with { hydrate: 'load' };
+	import PageUrlProbe from '$lib/PageUrlProbe.svelte' with { hydrate: 'load' };
 	let { data } = $props();
 </script>
 
@@ -11,6 +12,9 @@
 
 <!-- $derived over values sourced from the reactive $app/state shim; recomputes on remount. -->
 <PageDataProbe id={page.params.id} customer={page.data.order.customer} />
+
+<!-- Reads page.url.* / params / route / status INSIDE the island (shim), not via props. -->
+<PageUrlProbe />
 
 <nav data-order-nav>
 	{#if data.prevId}<a href="/dashboard/orders/{data.prevId}">← order #{data.prevId}</a>{/if}

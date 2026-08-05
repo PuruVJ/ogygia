@@ -456,11 +456,27 @@ export function transformHost(source, id, ctx) {
 			.join('\n');
 		const virtual_source = `<script${lang}>\n${script_body}\n</script>\n${hoisted_source}\n`;
 
+		// Absolute path of the island entry component (the `import X from '…' with { hydrate }`).
+		// Marked into the vite plugin's island_graph so `$app/*` inside THAT file (and its
+		// transitive imports) resolve to client shims — not only imports written into the virtual
+		// module. Kit's client build still emits csr=false page nodes that import the component
+		// directly via `<Island __component={…} />`.
+		const entry_spec = imports.get(unit.node.name)?.node?.source?.value;
+		let componentPath = null;
+		if (typeof entry_spec === 'string') {
+			if (entry_spec === '$lib' || entry_spec.startsWith('$lib/')) {
+				componentPath = ctx.pathModule.join(ctx.libDir, entry_spec === '$lib' ? '' : entry_spec.slice('$lib/'.length));
+			} else if (entry_spec.startsWith('.')) {
+				componentPath = ctx.pathModule.resolve(ctx.pathModule.dirname(id), entry_spec);
+			}
+		}
+
 		islands.push({
 			id: iid,
 			virtualPath,
 			source: virtual_source,
 			hostPath: id,
+			componentPath,
 			server: is_server,
 			kind: is_server ? 'defer' : 'hydrate',
 			lakes: island_lakes
