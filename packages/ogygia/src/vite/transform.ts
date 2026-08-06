@@ -1094,8 +1094,8 @@ export function transformHost(source, id, ctx) {
 		// Absolute path of the island entry component (the `import X from '…' with { hydrate }`).
 		// Marked into the vite plugin's island_graph so `$app/*` inside THAT file (and its
 		// transitive imports) resolve to client shims — not only imports written into the virtual
-		// module. Kit's client build still emits csr=false page nodes that import the component
-		// directly via `<Island __component={…} />`.
+		// module. csr=true hosts still import the virtual as `__component`; csr=false client hosts
+		// omit that link so emitFile owns the module.
 		const entry_spec = imports.get(unit.node.name)?.node?.source?.value;
 		let componentPath = null;
 		if (typeof entry_spec === 'string') {
@@ -1166,6 +1166,11 @@ export function transformHost(source, id, ctx) {
 		//
 		// Separate entry import keeps the real `.svelte` in the PAGE SSR graph for Kit's FOUC
 		// style bag — virtual modules alone don't reliably contribute CSS there (same as defer).
+		//
+		// Client csr=false hosts omit the virtual import (`linkVirtualIsland: false`): Kit still
+		// emits those page nodes, and sharing the virtual with emitFile forces Rolldown entry
+		// facades. Hydration loads `import(__entry)` only. csr=true client keeps the link so Kit
+		// can hydrate the island as a normal component.
 		if (typeof entry_spec !== 'string') {
 			throw new Error(
 				`[ogygia] ${rel_host}: hydrate island needs a static import path ($lib/… or relative).`
@@ -1173,15 +1178,19 @@ export function transformHost(source, id, ctx) {
 		}
 		const css_var = `${comp_var}_css`;
 		preamble_imports.push(`\timport ${css_var} from ${JSON.stringify(entry_spec)};`);
-		preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);
+		const link_virtual = ctx.linkVirtualIsland !== false;
+		if (link_virtual) {
+			preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);
+		}
 
 		// rewrite host: replace the unit with an <Island> wrapper element
 		const strategy_attrs_text = strategy_to_attr(unit.strategy, unit.options);
 		// __entry is always an importable URL: Vite dev URL in dev, deterministic chunk URL in build
 		const entry_value = ctx.dev ? ctx.devUrlFor(virtualPath) : islandPublicUrl(iid);
+		const comp_attr = link_virtual ? ` __component={${comp_var}}` : '';
 		const replacement =
 			`<${wrapper_name} ${strategy_attrs_text} ` +
-			`__entry={${JSON.stringify(entry_value)}} __component={${comp_var}} __css={${css_var}} __props={${props_obj}} />`;
+			`__entry={${JSON.stringify(entry_value)}}${comp_attr} __css={${css_var}} __props={${props_obj}} />`;
 		s.overwrite(unit.node.start, unit.node.end, replacement);
 	});
 

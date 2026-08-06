@@ -20,7 +20,7 @@ export {
 	islandId
 } from './transform.js';
 export type { ImportKeys } from './transform.js';
-import { allRoutesCsrFalse, runStandaloneClientBuild } from './standalone.js';
+import { allRoutesCsrFalse, routeCsrIsFalse, runStandaloneClientBuild } from './standalone.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import {
 	derive_id_salt,
@@ -511,7 +511,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const clear_transform_cache_for = (hostPath) => {
 		const key = host_key(hostPath);
 		for (const k of [...transform_cache.keys()]) {
-			if (host_key(k) === key) transform_cache.delete(k);
+			const host = k.includes('\0') ? k.slice(0, k.indexOf('\0')) : k;
+			if (host_key(host) === key) transform_cache.delete(k);
 		}
 	};
 
@@ -533,8 +534,17 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		clear_transform_cache_for(hostPath);
 	};
 
-	const run_transform = (source, id) => {
-		const hit = transform_cache.get(id);
+	const run_transform = (source, id, opts = {}) => {
+		const ssr = opts.ssr !== false;
+		// csr=false client hosts must not statically import virtual islands: that share with
+		// emitFile entries forces Rolldown thin `ogygia-island.*` facades. SSR still links them
+		// for HTML; csr=true client keeps the link so Kit can hydrate islands as components.
+		const link_virtual =
+			opts.linkVirtual !== undefined
+				? opts.linkVirtual
+				: ssr || !routeCsrIsFalse(id, path.join(root, 'src', 'routes'));
+		const cache_key = `${id}\0${link_virtual ? '1' : '0'}`;
+		const hit = transform_cache.get(cache_key);
 		if (hit && hit.code === source) return hit.result;
 		const result = transformHost(source, id, {
 			root,
@@ -547,9 +557,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			visibleMargin,
 			presets,
 			importKeys: import_keys,
-			idSalt: id_salt
+			idSalt: id_salt,
+			linkVirtualIsland: link_virtual
 		});
-		transform_cache.set(id, { code: source, result });
+		transform_cache.set(cache_key, { code: source, result });
 		return result;
 	};
 
@@ -1086,7 +1097,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				!id_n.includes('/node_modules/') &&
 				!is_island_path(id_n)
 			) {
-				const result = run_transform(code, id_n);
+				const result = run_transform(code, id_n, { ssr });
 				if (result) {
 					register(result, id_n);
 					out = result.code;
@@ -1097,8 +1108,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 			// CLIENT: rewrite `$app/(state|stores|navigation)` inside island entry components
 			// (and any other island_graph .svelte) to absolute shim paths. Absolute paths bypass
-			// Kit's `$app/*` alias entirely — needed because Kit's client build still emits
-			// csr=false page nodes that import island components directly as `__component`.
+			// Kit's `$app/*` alias entirely — needed when an island's own component graph imports
+			// `$app/*` (csr=true hosts still pass virtual islands as `__component`).
 			if (!ssr && island_graph.has(id_n) && id_n.endsWith('.svelte')) {
 				const rewritten = out.replace(
 					APP_SHIM_IMPORT,

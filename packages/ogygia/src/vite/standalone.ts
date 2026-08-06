@@ -72,7 +72,7 @@ export function remoteStubPlugin(root) {
 }
 
 /** Read `export const csr = true|false` from a route option file. */
-function read_csr(file) {
+export function read_csr(file) {
 	try {
 		const src = fs.readFileSync(file, 'utf-8');
 		const m = CSR_EXPORT.exec(src);
@@ -84,6 +84,42 @@ function read_csr(file) {
 
 const OPTION_FILES_PAGE = ['+page.js', '+page.ts', '+page.server.js', '+page.server.ts'];
 const OPTION_FILES_LAYOUT = ['+layout.js', '+layout.ts', '+layout.server.js', '+layout.server.ts'];
+
+/**
+ * Kit-effective `csr === false` for a `+page.svelte` / `+layout.svelte` host (layout chain +
+ * page options). `undefined` in sources means Kit's default (`true`).
+ * @param {string} hostFile abs path to a route `.svelte`
+ * @param {string} routesDir abs `src/routes`
+ */
+export function routeCsrIsFalse(hostFile, routesDir) {
+	if (!hostFile.startsWith(routesDir)) return false;
+	const base = path.basename(hostFile);
+	if (base !== '+page.svelte' && base !== '+layout.svelte') return false;
+
+	let csr; // undefined => Kit default (true)
+	const dir = path.dirname(hostFile);
+	const rel = path.relative(routesDir, dir);
+	const parts = rel ? rel.split(path.sep) : [];
+	let cur = routesDir;
+	const chain = [cur];
+	for (const p of parts) {
+		cur = path.join(cur, p);
+		chain.push(cur);
+	}
+	for (const d of chain) {
+		for (const f of OPTION_FILES_LAYOUT) {
+			const v = read_csr(path.join(d, f));
+			if (v !== undefined) csr = v;
+		}
+	}
+	if (base === '+page.svelte') {
+		for (const f of OPTION_FILES_PAGE) {
+			const v = read_csr(path.join(dir, f));
+			if (v !== undefined) csr = v;
+		}
+	}
+	return csr === false;
+}
 
 /**
  * Replicates Kit's `nodes.every(n => n.page_options?.csr === false)` client-build skip
@@ -103,32 +139,7 @@ export function allRoutesCsrFalse(routesDir) {
 	walk(routesDir);
 	if (leaves.length === 0) return false;
 
-	const effective_csr = (page_file) => {
-		let csr; // undefined => Kit default (true)
-		const dir = path.dirname(page_file);
-		// layout chain from routes root down to this dir
-		const rel = path.relative(routesDir, dir);
-		const parts = rel ? rel.split(path.sep) : [];
-		let cur = routesDir;
-		const chain = [cur];
-		for (const p of parts) {
-			cur = path.join(cur, p);
-			chain.push(cur);
-		}
-		for (const d of chain) {
-			for (const f of OPTION_FILES_LAYOUT) {
-				const v = read_csr(path.join(d, f));
-				if (v !== undefined) csr = v;
-			}
-		}
-		for (const f of OPTION_FILES_PAGE) {
-			const v = read_csr(path.join(dir, f));
-			if (v !== undefined) csr = v;
-		}
-		return csr === false;
-	};
-
-	return leaves.every(effective_csr);
+	return leaves.every((page_file) => routeCsrIsFalse(page_file, routesDir));
 }
 
 /**

@@ -19,7 +19,9 @@
 	 * @property {string} [media] Hydrate when this CSS media query matches.
 	 * @property {boolean} [load] Hydrate immediately (default when no other strategy prop is set).
 	 * @property {string} __entry Importable island module URL (dev Vite URL or `/_app/immutable/ogygia-island.<id>.js`).
-	 * @property {import('svelte').Component<Record<string, unknown>>} __component Virtual island module — same tree the client hydrates.
+	 * @property {import('svelte').Component<Record<string, unknown>>} [__component] Virtual island
+	 *   module for SSR (and csr=true Kit hydration). Omitted on csr=false client hosts — runtime
+	 *   loads via `import(__entry)`.
 	 * @property {unknown} [__css] Entry `.svelte` imported only so its CSS joins Kit's FOUC bag (not rendered).
 	 * @property {Record<string, unknown>} __props Captured host props (devalue-serialized into the page).
 	 */
@@ -119,8 +121,8 @@
 		: '';
 </script>
 
-{#if nested}<Component {...__props} />{:else}<ogygia-region
+{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region
 		entry={module_url}
 		hydrate={hydrate_attr}
 		margin={root_margin || undefined}
-	><Component {...__props} /></ogygia-region>{@html props_script}{@html preload_link}{@html runtime_script}{@html hmr_script}{/if}
+	>{#if Component}<Component {...__props} />{/if}</ogygia-region>{@html props_script}{@html preload_link}{@html runtime_script}{@html hmr_script}{/if}

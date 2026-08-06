@@ -47,6 +47,7 @@ interface Ctx {
 	devUrlFor: (p: string) => string;
 	visibleMargin?: string;
 	presets: Record<string, Record<string, unknown>>;
+	linkVirtualIsland?: boolean;
 }
 
 function makeCtx(overrides: Partial<Ctx> = {}): Ctx {
@@ -1071,6 +1072,15 @@ describe('dev-mode context (shell-lake warning path)', () => {
 		expect(r!.code).toMatch(
 			/__entry=\{"\/_app\/immutable\/ogygia-island\.[0-9a-f]{12}\.js"\}/
 		);
+	});
+
+	test('client csr=false host omits virtual island import (Rolldown facade avoidance)', () => {
+		const r = run(wrap(LOAD, '<C />'), makeCtx({ linkVirtualIsland: false }));
+		expect(r!.code).not.toMatch(/import __OgygiaIsland_0 from ["']virtual:ogygia\/island\//);
+		expect(r!.code).toMatch(/import __OgygiaIsland_0_css from/);
+		expect(r!.code).toContain(`__entry={"${entryFor(0)}"}`);
+		expect(r!.code).not.toMatch(/__component=/);
+		expect(r!.islands.some((i) => i.kind === 'hydrate' && i.source)).toBe(true);
 	});
 });
 
