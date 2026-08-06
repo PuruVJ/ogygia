@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { FEATURES } from '$lib/features';
+	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 </script>
 
-<section id="features" class="features" aria-labelledby="features-heading">
+<section class="features" aria-labelledby="features">
 	<div class="shell">
-		<h2 id="features-heading">Features</h2>
+		<PermalinkHeading id="features">Features</PermalinkHeading>
 		<p class="features-lede">We’ve got them.</p>
 		<ul class="features-list">
 			{#each FEATURES as feature (feature)}
@@ -22,7 +23,7 @@
 		background: var(--bg-sunken);
 	}
 
-	.features h2 {
+	.features :global(h2) {
 		margin: 0;
 	}
 

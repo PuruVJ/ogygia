@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 	// page → island (LakeShell) → lake (FrozenReport) → island-in-lake (InnerBadge)
 	// Two lake imports: default remount cache vs preset frozenSwr (paint cache, then revalidate).
 	import LakeShell from '$lib/playground/LakeShell.svelte' with { hydrate: 'load' };
@@ -13,10 +14,10 @@
 />
 
 <main class="shell docs-main">
-	<section id="lakes">
+	<section>
 		<span class="eyebrow">hydrate: 'none'</span>
 		<div class="section-header">
-			<h2>Lakes</h2>
+			<PermalinkHeading id="lakes">Lakes</PermalinkHeading>
 			<p class="section-lede">
 				A lake keeps a subtree static inside an island. HTML stays. That subtree’s JS never ships.
 			</p>
@@ -39,7 +40,7 @@
 
 		<div class="section-stack demo-section">
 			<div class="strategy">
-				<h3><code>remount: 'cache'</code> (default)</h3>
+				<PermalinkHeading id="cache" level={3}><code>remount: 'cache'</code> (default)</PermalinkHeading>
 				<div class="prose">
 					<p>Toggle restores the cached lake DOM. The SSR stamp should not change.</p>
 				</div>
@@ -49,7 +50,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>preset: 'frozenSwr'</code> — remount SWR</h3>
+				<PermalinkHeading id="swr" level={3}><code>preset: 'frozenSwr'</code> — remount SWR</PermalinkHeading>
 				<div class="prose">
 					<p>
 						Same lake component, vite preset

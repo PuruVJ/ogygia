@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 	// Server islands: the `defer` value is the FETCH TIMING for the hole, symmetric with `hydrate`.
 	// The same module is imported four times, once per schedule. Only `load` emits a preload hint;
 	// `visible` does not hit the network until the hole scrolls into view.
@@ -20,10 +21,10 @@
 />
 
 <main class="shell docs-main">
-	<section id="server-islands">
+	<section>
 		<span class="eyebrow">defer</span>
 		<div class="section-header">
-			<h2>Server islands</h2>
+			<PermalinkHeading id="server-islands">Server islands</PermalinkHeading>
 			<p class="section-lede">
 				A deferred island renders its <code>ogygiaFallback</code> into the page immediately, then the
 				browser fetches the real HTML from a signed, same-origin endpoint. Zero component JS ships.
@@ -33,7 +34,7 @@
 
 		<div class="section-stack demo-section">
 			<div class="strategy">
-				<h3><code>defer: 'load'</code></h3>
+				<PermalinkHeading id="defer-load" level={3}><code>defer: 'load'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Fetches immediately on connect and is the only timing that emits a
@@ -49,7 +50,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>defer: 'idle'</code></h3>
+				<PermalinkHeading id="defer-idle" level={3}><code>defer: 'idle'</code></PermalinkHeading>
 				<div class="prose">
 					<p>Waits for <code>requestIdleCallback</code> before fetching. No preload hint.</p>
 				</div>
@@ -61,7 +62,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>defer: '(min-width: 300px)'</code></h3>
+				<PermalinkHeading id="defer-media" level={3}><code>defer: '(min-width: 300px)'</code></PermalinkHeading>
 				<div class="prose">
 					<p>Fetches when the media query matches. On any normal window this matches at once.</p>
 				</div>
@@ -73,7 +74,7 @@
 			</div>
 
 			<div class="strategy" id="cookie">
-				<h3>Cookie personalization</h3>
+				<PermalinkHeading id="cookie" level={3}>Cookie personalization</PermalinkHeading>
 				<div class="prose">
 					<p>
 						The greeting below is a deferred server island. During its render on the endpoint it
@@ -99,7 +100,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>defer: 'visible'</code> — below the fold</h3>
+				<PermalinkHeading id="defer-visible" level={3}><code>defer: 'visible'</code> — below the fold</PermalinkHeading>
 				<div class="prose">
 					<p>
 						This hole does not fetch until it scrolls into view. The server does no work for

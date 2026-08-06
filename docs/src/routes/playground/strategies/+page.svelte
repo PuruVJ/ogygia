@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 	// Each demo wrapper is imported AS an island with the strategy it demonstrates. The live/frozen
 	// pair and the JS toggle live inside DemoBlock — flip the toggle to compare the hydrated UI with
 	// the static HTML the server actually shipped.
@@ -20,10 +21,10 @@
 />
 
 <main class="shell docs-main">
-	<section id="strategies">
+	<section>
 		<span class="eyebrow">hydrate</span>
 		<div class="section-header">
-			<h2>Hydration strategies</h2>
+			<PermalinkHeading id="strategies">Hydration strategies</PermalinkHeading>
 			<p class="section-lede">
 				When the JavaScript arrives is the whole point of an island. These are real regions on
 				this page. Each block ships static HTML first; the JS toggle shows exactly what the
@@ -33,7 +34,7 @@
 
 		<div class="section-stack demo-section">
 			<div class="strategy">
-				<h3><code>hydrate: 'load'</code></h3>
+				<PermalinkHeading id="load" level={3}><code>hydrate: 'load'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Hydrates as soon as the region's custom element connects, after DOM ready. Use it for
@@ -45,7 +46,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>hydrate: 'idle'</code></h3>
+				<PermalinkHeading id="idle" level={3}><code>hydrate: 'idle'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Waits for <code>requestIdleCallback</code> (with a timeout fallback). The HTML is
@@ -56,7 +57,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>hydrate: 'visible'</code></h3>
+				<PermalinkHeading id="visible" level={3}><code>hydrate: 'visible'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Gated on <code>IntersectionObserver</code>. Below-the-fold content stays SSR HTML until
@@ -68,7 +69,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>hydrate: '(max-width: 600px)'</code></h3>
+				<PermalinkHeading id="media" level={3}><code>hydrate: '(max-width: 600px)'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Any media query is a strategy, resolved with <code>matchMedia</code>. On a wide window
@@ -80,7 +81,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>preset: 'demo'</code></h3>
+				<PermalinkHeading id="preset" level={3}><code>preset: 'demo'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Option tuning cannot go on the import. It lives in plugin config, optionally behind a

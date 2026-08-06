@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 	// Every island here calls a SvelteKit remote function on the client. ogygia reuses Kit's own
 	// remote primitives and wire codec inside islands — this is real Kit remote code, not an imitation.
 	import ResolvedGreeting from '$lib/playground/ResolvedGreeting.svelte' with { hydrate: 'load' };
@@ -15,10 +16,10 @@
 />
 
 <main class="shell docs-main">
-	<section id="data">
+	<section>
 		<span class="eyebrow">.remote.ts</span>
 		<div class="section-header">
-			<h2>Data &amp; remote functions</h2>
+			<PermalinkHeading id="data">Data &amp; remote functions</PermalinkHeading>
 			<p class="section-lede">
 				Server data reaches the shell as props; interactivity talks back through Kit's remote
 				functions. Each primitive below runs inside its own island.
@@ -27,7 +28,7 @@
 
 		<div class="pg-cols">
 			<div class="strategy">
-				<h3><code>query</code> — seeded from SSR</h3>
+				<PermalinkHeading id="query" level={3}><code>query</code> — seeded from SSR</PermalinkHeading>
 				<div class="prose">
 					<p>
 						Awaited outside a pending boundary, so it resolves during SSR. In a production build
@@ -40,7 +41,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>command</code> + <code>query.refresh()</code></h3>
+				<PermalinkHeading id="command" level={3}><code>command</code> + <code>query.refresh()</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						The counter reads a server value with <code>query</code>. Bump runs a
@@ -52,7 +53,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>query.live</code> — SSE stream</h3>
+				<PermalinkHeading id="live" level={3}><code>query.live</code> — SSE stream</PermalinkHeading>
 				<div class="prose">
 					<p>
 						A streaming server clock over Server-Sent Events. The reactive
@@ -64,7 +65,7 @@
 			</div>
 
 			<div class="strategy">
-				<h3><code>query.batch</code></h3>
+				<PermalinkHeading id="batch" level={3}><code>query.batch</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Three <code>getSquare()</code> calls fired in the same tick collapse into one request.
@@ -75,7 +76,7 @@
 			</div>
 
 			<div class="strategy pg-col-wide">
-				<h3><code>form()</code> — remote guestbook</h3>
+				<PermalinkHeading id="form" level={3}><code>form()</code> — remote guestbook</PermalinkHeading>
 				<div class="prose">
 					<p>
 						A remote <code>form()</code> inside an island: enhanced submit with no reload, per-field

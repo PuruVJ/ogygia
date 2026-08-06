@@ -80,7 +80,8 @@
 
 .section-header {
 	margin-bottom: 2.5rem;
-	max-width: 46rem;
+	/* Same measure as demos / shell — no nested inset that makes prose look narrower than code. */
+	max-width: none;
 }
 
 .section-header h2 {
@@ -89,7 +90,7 @@
 
 .section-lede {
 	margin: 0 0 1.25rem;
-	max-width: 62ch;
+	max-width: none;
 	color: var(--text-dim);
 }
 
@@ -104,7 +105,8 @@
 }
 
 .prose {
-	max-width: 68ch;
+	/* Fill the shell so copy aligns with demo-block / code-only edges. */
+	max-width: none;
 }
 
 .prose p {
@@ -159,7 +161,7 @@
 
 .strategy > p {
 	margin: 0;
-	max-width: 70ch;
+	max-width: none;
 }
 
 .scroll-hint {

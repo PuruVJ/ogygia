@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 	import OnDemandHost from '$lib/playground/OnDemandHost.svelte' with { hydrate: 'load' };
 	import CodeBlock from '$lib/CodeBlock.svelte';
 	import PageHead from '$lib/PageHead.svelte';
@@ -12,10 +13,10 @@
 />
 
 <main class="shell docs-main">
-	<section id="on-demand">
+	<section>
 		<span class="eyebrow">pattern</span>
 		<div class="section-header">
-			<h2>Client-only lazy mount</h2>
+			<PermalinkHeading id="on-demand">Client-only lazy mount</PermalinkHeading>
 			<p class="section-lede">
 				Need a chunk that only downloads after a click? Keep a small host island, then
 				<code>await import('./Comp.svelte')</code> with <strong>no</strong> region attributes.
@@ -41,7 +42,7 @@
 			<OnDemandHost />
 		</div>
 
-		<h3 class="doc-subhead">Authoring</h3>
+		<PermalinkHeading id="authoring" level={3} class="doc-subhead">Authoring</PermalinkHeading>
 		<CodeBlock html={data.lazyClientMountHtml} />
 	</section>
 </main>
@@ -49,7 +50,6 @@
 <style>
 	.od-prose {
 		margin-bottom: 1.75rem;
-		max-width: 58ch;
 	}
 	.od-demo {
 		margin-bottom: 1.5rem;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 	import RouteProbe from '$lib/playground/RouteProbe.svelte' with { hydrate: 'load' };
 	import PageHead from '$lib/PageHead.svelte';
 </script>
@@ -29,7 +30,7 @@
 
 <RouteProbe />
 
-<h3 class="doc-subhead">Link prefetch</h3>
+<PermalinkHeading id="link-prefetch" level={3} class="doc-subhead">Link prefetch</PermalinkHeading>
 <div class="prose">
 	<p>
 		This site sets <code>data-sveltekit-preload-data="off"</code> on <code>&lt;body&gt;</code>

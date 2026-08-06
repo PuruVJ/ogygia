@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 	// The island receives `config` (a snapshot with a Map + Set) captured from this host scope, and
 	// mutates it in its own script. The host markup below only READS config — writing to a captured
 	// var from host markup is a build error, so the mutation can only be shown from inside the island.
@@ -18,10 +19,10 @@
 />
 
 <main class="shell docs-main">
-	<section id="mutation-guard">
+	<section>
 		<span class="eyebrow">dev warning</span>
 		<div class="section-header">
-			<h2>Mutation guard</h2>
+			<PermalinkHeading id="mutation-guard">Mutation guard</PermalinkHeading>
 			<p class="section-lede">
 				Captured host state crosses the boundary as a one-way devalue snapshot. Writing to it
 				inside an island updates nothing. The runtime helps you notice.

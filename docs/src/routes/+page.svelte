@@ -14,6 +14,7 @@
 	import CodeBlock from '$lib/CodeBlock.svelte';
 	import PageHead from '$lib/PageHead.svelte';
 	import Features from '$lib/Features.svelte';
+	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 	import SiteFooter from '$lib/SiteFooter.svelte';
 	import '$lib/styles/widget.css';
 
@@ -60,8 +61,8 @@
 <Features />
 
 <main class="shell docs-main">
-	<section id="what">
-		<h2>What it does</h2>
+	<section>
+		<PermalinkHeading id="what">What it does</PermalinkHeading>
 		<div class="what-grid">
 			<div class="prose">
 				<p>
@@ -95,8 +96,8 @@
 		</div>
 	</section>
 
-	<section id="map">
-		<h2>The words</h2>
+	<section>
+		<PermalinkHeading id="map">The words</PermalinkHeading>
 		<div class="map-scroll">
 			<table class="map-table">
 				<thead>
@@ -136,8 +137,8 @@
 		</p>
 	</section>
 
-	<section id="install">
-		<h2>Install</h2>
+	<section>
+		<PermalinkHeading id="install">Install</PermalinkHeading>
 		<div class="prose">
 			<p>
 				Install the package, register the Vite plugin <em>before</em>
@@ -156,7 +157,7 @@
 			</div>
 		</div>
 
-		<h3 class="doc-subhead">vite.config.ts</h3>
+		<PermalinkHeading id="install-vite" level={3} class="doc-subhead">vite.config.ts</PermalinkHeading>
 		<div class="prose">
 			<p>
 				<code>ogygia()</code> must run before <code>sveltekit()</code> (it also sets
@@ -167,7 +168,7 @@
 		</div>
 		<CodeBlock html={data.viteConfigHtml} />
 
-		<h3 class="doc-subhead">hooks.server.ts</h3>
+		<PermalinkHeading id="install-hooks" level={3} class="doc-subhead">hooks.server.ts</PermalinkHeading>
 		<div class="prose">
 			<p>
 				<code>ogygiaHandle()</code> serves the signed island endpoint used by
@@ -180,9 +181,9 @@
 		<CodeBlock html={data.layoutAndHooksHtml} />
 	</section>
 
-	<section id="adoption">
+	<section>
 		<div class="section-header">
-			<h2>Adoption</h2>
+			<PermalinkHeading id="adoption">Adoption</PermalinkHeading>
 			<p class="section-lede">
 				Convert one route at a time. Existing Kit pages keep working — including with
 				<code>&lt;OgygiaRouter /&gt;</code> in the root layout.
@@ -196,7 +197,7 @@
 			</p>
 		</div>
 
-		<h3 id="adoption-one-route" class="doc-subhead">One route at a time</h3>
+		<PermalinkHeading id="adoption-one-route" level={3} class="doc-subhead">One route at a time</PermalinkHeading>
 		<div class="prose">
 			<p>
 				On a route (or layout group) you want as an islands shell, set
@@ -212,7 +213,7 @@
 		</div>
 		<CodeBlock html={data.adoptionMigrateHtml} />
 
-		<h3 id="adoption-router" class="doc-subhead">Root router without breaking Kit pages</h3>
+		<PermalinkHeading id="adoption-router" level={3} class="doc-subhead">Root router without breaking Kit pages</PermalinkHeading>
 		<div class="prose">
 			<p>
 				You can render <code>&lt;OgygiaRouter /&gt;</code> in the outermost layout even while most
@@ -242,7 +243,7 @@
 			</p>
 		</div>
 
-		<h3 id="adoption-mixed" class="doc-subhead">Islands on a Kit page</h3>
+		<PermalinkHeading id="adoption-mixed" level={3} class="doc-subhead">Islands on a Kit page</PermalinkHeading>
 		<div class="prose">
 			<p>
 				An import marked <code>with &#123; hydrate &#125;</code> on a <code>csr = true</code> page
@@ -253,7 +254,7 @@
 			</p>
 		</div>
 
-		<h3 id="adoption-end" class="doc-subhead">All-islands apps</h3>
+		<PermalinkHeading id="adoption-end" level={3} class="doc-subhead">All-islands apps</PermalinkHeading>
 		<div class="prose">
 			<p>
 				When <em>every</em> route is <code>csr = false</code>, Kit skips its client build. ogygia
@@ -269,9 +270,9 @@
 		</div>
 	</section>
 
-	<section id="plugin">
+	<section>
 		<div class="section-header">
-			<h2>Plugin config</h2>
+			<PermalinkHeading id="plugin">Plugin config</PermalinkHeading>
 			<p class="section-lede">
 				Everything <code>ogygia()</code> accepts in <code>vite.config.ts</code> — defaults,
 				presets, rate limits, and signing.
@@ -332,7 +333,7 @@
 			</table>
 		</div>
 
-		<h3 id="plugin-visible" class="doc-subhead">visible</h3>
+		<PermalinkHeading id="plugin-visible" level={3} class="doc-subhead">visible</PermalinkHeading>
 		<div class="prose">
 			<p>
 				<code>visible: &#123; margin?: string &#125;</code> sets the default
@@ -347,7 +348,7 @@
 			</p>
 		</div>
 
-		<h3 id="plugin-presets" class="doc-subhead">presets</h3>
+		<PermalinkHeading id="plugin-presets" level={3} class="doc-subhead">presets</PermalinkHeading>
 		<div class="prose">
 			<p>
 				<code>presets</code> is a map of names to strategy objects. Reference one from an import:
@@ -380,7 +381,7 @@
 			</p>
 		</div>
 
-		<h3 id="plugin-importKeys" class="doc-subhead">importKeys</h3>
+		<PermalinkHeading id="plugin-importKeys" level={3} class="doc-subhead">importKeys</PermalinkHeading>
 		<div class="prose">
 			<p>
 				Proud defaults: import attributes use <code>hydrate</code>, <code>defer</code>, and
@@ -404,7 +405,7 @@
 			</p>
 		</div>
 
-		<h3 id="plugin-rate" class="doc-subhead">rateLimit</h3>
+		<PermalinkHeading id="plugin-rate" level={3} class="doc-subhead">rateLimit</PermalinkHeading>
 		<div class="prose">
 			<p>
 				Protects the signed deferred-region / lake-remount endpoint served by
@@ -417,7 +418,7 @@
 			</p>
 		</div>
 
-		<h3 id="plugin-session" class="doc-subhead">sessionCookie</h3>
+		<PermalinkHeading id="plugin-session" level={3} class="doc-subhead">sessionCookie</PermalinkHeading>
 		<div class="prose">
 			<p>
 				Opt-in. Pass a cookie name (string) to seal that cookie’s value into the region
@@ -435,7 +436,7 @@
 			</p>
 		</div>
 
-		<h3 id="plugin-ttl" class="doc-subhead">regionTtl</h3>
+		<PermalinkHeading id="plugin-ttl" level={3} class="doc-subhead">regionTtl</PermalinkHeading>
 		<div class="prose">
 			<p>
 				Lifetime of signed region capability URLs in <strong>seconds</strong> (default
@@ -452,7 +453,7 @@
 			</p>
 		</div>
 
-		<h3 id="plugin-secret" class="doc-subhead">OGYGIA_SECRET</h3>
+		<PermalinkHeading id="plugin-secret" level={3} class="doc-subhead">OGYGIA_SECRET</PermalinkHeading>
 		<div class="prose">
 			<p>
 				Not a plugin argument — an environment variable the plugin reads at config time
@@ -481,8 +482,8 @@
 		</div>
 	</section>
 
-	<section id="authoring">
-		<h2>Authoring</h2>
+	<section>
+		<PermalinkHeading id="authoring">Authoring</PermalinkHeading>
 		<div class="prose">
 			<p>
 				Mark an import with exactly one of <code>hydrate</code>, <code>defer</code>, or
@@ -518,7 +519,7 @@
 			</p>
 		</div>
 
-		<h3 class="doc-subhead">Nesting</h3>
+		<PermalinkHeading id="nesting" level={3} class="doc-subhead">Nesting</PermalinkHeading>
 		<div class="prose">
 			<p>
 				An island may import another island. The inner one sits inside an already-interactive
@@ -539,7 +540,7 @@
 			</p>
 		</div>
 
-		<h3 class="doc-subhead" id="boundary">Annotation boundary</h3>
+		<PermalinkHeading id="boundary" level={3} class="doc-subhead">Annotation boundary</PermalinkHeading>
 		<div class="prose">
 			<p>
 				<code>&lt;OgygiaBoundary&gt;</code> is an optional public wrapper that renders its
@@ -552,10 +553,10 @@
 		<CodeBlock html={data.ogygiaBoundaryHtml} />
 	</section>
 
-	<section id="strategies">
+	<section>
 		<span class="eyebrow">Hydration</span>
 		<div class="section-header">
-			<h2>Strategies</h2>
+			<PermalinkHeading id="strategies">Strategies</PermalinkHeading>
 			<p class="section-lede">
 				Pick when JavaScript arrives. Same schedule words —
 				<code>load</code> / <code>idle</code> / <code>visible</code> / a media query — control
@@ -565,8 +566,8 @@
 		</div>
 
 		<div class="section-stack demo-section">
-			<div class="strategy" id="client-load">
-				<h3><code>hydrate: 'load'</code></h3>
+			<div class="strategy">
+				<PermalinkHeading id="client-load" level={3}><code>hydrate: 'load'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Default for critical UI. The island gets JS as soon as the
@@ -582,8 +583,8 @@
 				<LoadDemo codeHtml={data.loadCode} />
 			</div>
 
-			<div class="strategy" id="client-idle">
-				<h3><code>hydrate: 'idle'</code></h3>
+			<div class="strategy">
+				<PermalinkHeading id="client-idle" level={3}><code>hydrate: 'idle'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Defers JS until the browser is idle via
@@ -600,8 +601,8 @@
 				<IdleDemo codeHtml={data.idleCode} />
 			</div>
 
-			<div class="strategy" id="client-visible">
-				<h3><code>hydrate: 'visible'</code></h3>
+			<div class="strategy">
+				<PermalinkHeading id="client-visible" level={3}><code>hydrate: 'visible'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						JS is gated on <code>IntersectionObserver</code>. Until the island enters
@@ -621,8 +622,8 @@
 				<VisibleDemo codeHtml={data.visibleCode} />
 			</div>
 
-			<div class="strategy" id="client-media">
-				<h3><code>hydrate: '(max-width: 600px)'</code></h3>
+			<div class="strategy">
+				<PermalinkHeading id="client-media" level={3}><code>hydrate: '(max-width: 600px)'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Any media-query string is a valid strategy. The runtime calls
@@ -642,10 +643,10 @@
 		</div>
 	</section>
 
-	<section id="server-islands">
+	<section>
 		<span class="eyebrow">defer</span>
 		<div class="section-header">
-			<h2>Server islands</h2>
+			<PermalinkHeading id="server-islands">Server islands</PermalinkHeading>
 			<p class="section-lede">
 				<code>defer</code> moves rendering off the page SSR and onto a signed fetch. Same
 				schedules as <a href="#strategies">hydrate</a> — but for when HTML arrives, not when JS
@@ -674,8 +675,8 @@
 		</div>
 
 		<div class="section-stack demo-section">
-			<div class="strategy" id="server-load">
-				<h3><code>defer: 'load'</code></h3>
+			<div class="strategy">
+				<PermalinkHeading id="server-load" level={3}><code>defer: 'load'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Fetches as soon as the region connects. Only this schedule emits a
@@ -701,8 +702,8 @@
 				</ServerDemo>
 			</div>
 
-			<div class="strategy" id="server-idle">
-				<h3><code>defer: 'idle'</code></h3>
+			<div class="strategy">
+				<PermalinkHeading id="server-idle" level={3}><code>defer: 'idle'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Waits for <code>requestIdleCallback</code> (same ~2s timeout / short
@@ -728,8 +729,8 @@
 				</ServerDemo>
 			</div>
 
-			<div class="strategy" id="server-visible">
-				<h3><code>defer: 'visible'</code></h3>
+			<div class="strategy">
+				<PermalinkHeading id="server-visible" level={3}><code>defer: 'visible'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Holds the fetch until the placeholder intersects the viewport
@@ -761,8 +762,8 @@
 				</ServerDemo>
 			</div>
 
-			<div class="strategy" id="server-media">
-				<h3><code>defer: '(max-width: 600px)'</code></h3>
+			<div class="strategy">
+				<PermalinkHeading id="server-media" level={3}><code>defer: '(max-width: 600px)'</code></PermalinkHeading>
 				<div class="prose">
 					<p>
 						Any media-query string is a valid schedule. The runtime uses
@@ -794,9 +795,9 @@
 		</div>
 	</section>
 
-	<section id="lakes">
+	<section>
 		<div class="section-header">
-			<h2>Lakes</h2>
+			<PermalinkHeading id="lakes">Lakes</PermalinkHeading>
 			<p class="section-lede">
 				A lake freezes HTML inside an island. No JS ships for that subtree.
 			</p>
@@ -828,7 +829,7 @@
 			</p>
 		</div>
 
-		<h3 id="remount" class="doc-subhead">Remount</h3>
+		<PermalinkHeading id="remount" level={3} class="doc-subhead">Remount</PermalinkHeading>
 		<div class="prose">
 			<p>
 				<code>remount</code> controls what happens when a lake’s custom element is re-created
@@ -906,9 +907,9 @@
 		<CodeBlock html={data.remountConfigHtml} />
 	</section>
 
-	<section id="data">
+	<section>
 		<div class="section-header">
-			<h2>Data, forms, remote functions</h2>
+			<PermalinkHeading id="data">Data, forms, remote functions</PermalinkHeading>
 			<p class="section-lede">
 				Server data flows in as props. Interactivity talks back through Kit's own remote
 				functions — real Kit code, not an imitation.
@@ -961,9 +962,9 @@
 		</div>
 	</section>
 
-	<section id="router">
+	<section>
 		<div class="section-header">
-			<h2>SPA router</h2>
+			<PermalinkHeading id="router">SPA router</PermalinkHeading>
 			<p class="section-lede">
 				Opt-in. Without it, every navigation is a full document load, which is a valid way to run
 				an islands app.
@@ -1000,7 +1001,7 @@
 		</div>
 		<CodeBlock html={data.ogygiaRouterHtml} />
 
-		<h3 class="doc-subhead" id="persist">Persist layout chrome</h3>
+		<PermalinkHeading id="persist" level={3} class="doc-subhead">Persist layout chrome</PermalinkHeading>
 		<div class="prose">
 			<p>
 				By default every island remounts on SPA navigation. Mark durable chrome — usually in a
@@ -1019,7 +1020,7 @@
 		</div>
 		<CodeBlock html={data.persistNavHtml} />
 
-		<h3 class="doc-subhead">Link prefetch</h3>
+		<PermalinkHeading id="router-prefetch" level={3} class="doc-subhead">Link prefetch</PermalinkHeading>
 		<div class="prose">
 			<p>
 				The router honours SvelteKit's <code>data-sveltekit-preload-data</code> and
@@ -1038,9 +1039,9 @@
 		</div>
 	</section>
 
-	<section id="hmr">
+	<section>
 		<div class="section-header">
-			<h2>Dev HMR</h2>
+			<PermalinkHeading id="hmr">Dev HMR</PermalinkHeading>
 			<p class="section-lede">
 				Under <code>csr = false</code>, Kit never boots a client module graph — so stock Vite HMR
 				has nothing to talk to. <code>ogygia()</code> bridges that for you. No extra config.
@@ -1115,16 +1116,16 @@
 		</div>
 	</section>
 
-	<section id="patterns">
+	<section>
 		<div class="section-header">
-			<h2>Pesky patterns</h2>
+			<PermalinkHeading id="patterns">Pesky patterns</PermalinkHeading>
 			<p class="section-lede">
 				The sharp edges, stated plainly. Every one of these is enforced by a build error, a dev
 				warning, or a documented contract — nothing here fails silently.
 			</p>
 		</div>
 		<div class="prose">
-			<h3 class="doc-subhead">Captured host state is a snapshot. Do not mutate it.</h3>
+			<PermalinkHeading id="patterns-snapshot" level={3} class="doc-subhead">Captured host state is a snapshot. Do not mutate it.</PermalinkHeading>
 			<p>
 				Free variables an island references from host scope are serialized per-instance with
 				devalue. That copy is one-way: writing to it inside the island updates nothing anywhere.
@@ -1139,7 +1140,7 @@
 				are actually one island.
 			</p>
 
-			<h3 class="doc-subhead">Functions and snippets do not cross the boundary</h3>
+			<PermalinkHeading id="patterns-functions" level={3} class="doc-subhead">Functions and snippets do not cross the boundary</PermalinkHeading>
 			<p>
 				A host function referenced inside an island fails the render with the identifier named —
 				devalue cannot serialize behaviour. A snippet defined outside an island and used inside
@@ -1149,7 +1150,7 @@
 				crosses as code, values cross as devalue, functions never cross.
 			</p>
 
-			<h3 class="doc-subhead">Page-level lifecycle is dead code</h3>
+			<PermalinkHeading id="patterns-lifecycle" level={3} class="doc-subhead">Page-level lifecycle is dead code</PermalinkHeading>
 			<p>
 				On a <code>csr = false</code> page, <code>+page.svelte</code> runs only on the server.
 				<code>onMount</code>, <code>$effect</code>, and <code>afterNavigate</code> written there
@@ -1160,7 +1161,7 @@
 				(same key on both pages keeps the live node and any islands inside it mounted).
 			</p>
 
-			<h3 class="doc-subhead">Inline scripts run once per document</h3>
+			<PermalinkHeading id="patterns-inline-scripts" level={3} class="doc-subhead">Inline scripts run once per document</PermalinkHeading>
 			<p>
 				ogygia does zero script processing. A nested inline <code>&lt;script&gt;</code> in your
 				page HTML runs on a full document load and does <em>not</em> re-run after an SPA swap
@@ -1168,7 +1169,7 @@
 				island — that is not a workaround, it is the model.
 			</p>
 
-			<h3 class="doc-subhead">Choose the boundary honestly</h3>
+			<PermalinkHeading id="patterns-boundary" level={3} class="doc-subhead">Choose the boundary honestly</PermalinkHeading>
 			<p>
 				If the whole page needs JS anyway, stop fighting: give that route
 				<code>csr = true</code> and let real Kit run it — islands coexist with fully-interactive
@@ -1180,9 +1181,9 @@
 				<code>csr = true</code>).
 			</p>
 
-			<h3 class="doc-subhead" id="patterns-dynamic-import">
+			<PermalinkHeading id="patterns-dynamic-import" level={3} class="doc-subhead">
 				No <code>import()</code> + <code>with &#123; hydrate &#125;</code>
-			</h3>
+			</PermalinkHeading>
 			<p>
 				Dynamic <code>import()</code> can take import attributes as
 				<code>import(mod, &#123; with: &#123; type: 'json' &#125;&#125;)</code> — that is the language
@@ -1211,7 +1212,7 @@
 			</p>
 			<CodeBlock html={data.delayedIslandIfHtml} />
 
-			<h3 class="doc-subhead">Dev is not prod, in two places</h3>
+			<PermalinkHeading id="patterns-dev-prod" level={3} class="doc-subhead">Dev is not prod, in two places</PermalinkHeading>
 			<p>
 				The SSR query seed (the no-refetch trick) works in production builds; under
 				<code>vite dev</code>, module isolation keeps the seed from reaching Kit's cache, so dev
@@ -1224,9 +1225,9 @@
 		</div>
 	</section>
 
-	<section id="constraints">
+	<section>
 		<div class="section-header">
-			<h2>Constraints &amp; coupling</h2>
+			<PermalinkHeading id="constraints">Constraints &amp; coupling</PermalinkHeading>
 			<p class="section-lede">
 				What the library leans on, and how hard.
 			</p>
@@ -1460,7 +1461,7 @@
 		background: var(--bg-sunken);
 		border: 1px solid var(--line);
 		border-radius: var(--r-sm);
-		max-width: 68ch;
+		max-width: none;
 	}
 
 	.install-strip {

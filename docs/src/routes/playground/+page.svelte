@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 	import Contours from '$lib/Contours.svelte';
 	import PageHead from '$lib/PageHead.svelte';
 

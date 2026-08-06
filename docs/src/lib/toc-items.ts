@@ -38,7 +38,6 @@ export const docsTocItems: TocItem[] = [
 	{ id: 'persist', label: 'Persistence', sub: true },
 	{ id: 'hmr', label: 'Dev HMR', sub: false },
 	{ id: 'patterns', label: 'Pesky patterns', sub: false },
-	{ id: 'patterns-dynamic-import', label: 'No import()+with · lazy mount', sub: true },
 	{ id: 'constraints', label: 'Constraints', sub: false }
 ];
 
