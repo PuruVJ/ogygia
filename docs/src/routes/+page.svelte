@@ -1465,6 +1465,7 @@
 	}
 
 	.install-strip {
+		margin-top: 1.5rem;
 		background: var(--bg-raised);
 		border: 1px solid var(--line-strong);
 		padding: 1.5rem clamp(1.25rem, 3vw, 2rem);
