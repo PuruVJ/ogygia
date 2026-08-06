@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Contours from '$lib/Contours.svelte';
-	import Logo from '$lib/Logo.svelte';
 	import HeroDemo from '$lib/demos/HeroDemo.svelte' with { hydrate: 'load' };
 	import LoadDemo from '$lib/demos/LoadDemo.svelte' with { hydrate: 'load' };
 	import IdleDemo from '$lib/demos/IdleDemo.svelte' with { hydrate: 'idle' };
@@ -15,6 +14,8 @@
 	import CodeBlock from '$lib/CodeBlock.svelte';
 	import PageHead from '$lib/PageHead.svelte';
 	import Features from '$lib/Features.svelte';
+	import SiteFooter from '$lib/SiteFooter.svelte';
+	import '$lib/styles/widget.css';
 
 	let { data }: { data: import('./$types').PageData } = $props();
 </script>
@@ -1179,6 +1180,37 @@
 				<code>csr = true</code>).
 			</p>
 
+			<h3 class="doc-subhead" id="patterns-dynamic-import">
+				No <code>import()</code> + <code>with &#123; hydrate &#125;</code>
+			</h3>
+			<p>
+				Dynamic <code>import()</code> can take import attributes as
+				<code>import(mod, &#123; with: &#123; type: 'json' &#125;&#125;)</code> — that is the language
+				shape, and Vite can surface those options to plugins. It is <em>not</em> how you author an
+				island. Region keys (<code>hydrate</code> / <code>defer</code> / <code>preset</code>) only
+				apply on a <strong>static</strong>
+				<code>import X from '…' with &#123; … &#125;</code> paired with a static
+				<code>&lt;X /&gt;</code> tag so SSR can emit the shell. Vite strips attributes from emitted
+				dynamic imports for browser compatibility; runtimes reject unknown keys like
+				<code>hydrate</code> if they remain. ogygia therefore <strong>fails the build</strong> if it
+				sees <code>import(…, &#123; with: &#123; hydrate|defer|preset &#125;&#125;)</code> — no silent
+				no-op.
+			</p>
+			<p>
+				Want a chunk only after a click? That is client-only lazy mount: a host island does plain
+				<code>await import('./Comp.svelte')</code> (no region attributes) and renders
+				<code>&lt;Comp /&gt;</code>. What you get is a <strong>regular</strong> Svelte component in
+				that island’s tree — Vite splits the chunk; no second island, no SSR shell for the lazy
+				piece. Live demo:
+				<a href="/playground/on-demand">Playground → Client-only lazy mount</a>.
+			</p>
+			<CodeBlock html={data.lazyClientMountHtml} />
+			<p>
+				To delay an actual <em>island</em> boundary until click, keep the static region import and
+				gate the tag with <code>&#123;#if&#125;</code> instead:
+			</p>
+			<CodeBlock html={data.delayedIslandIfHtml} />
+
 			<h3 class="doc-subhead">Dev is not prod, in two places</h3>
 			<p>
 				The SSR query seed (the no-refetch trick) works in production builds; under
@@ -1230,15 +1262,268 @@
 	</section>
 </main>
 
-<footer class="site-footer">
-	<div class="shell footer-inner">
-		<div class="footer-brand">
-			<Logo size={28} stroke={2} decorative />
-			<span class="footer-meta">ogygia · MIT · named for Calypso's island</span>
-		</div>
-		<div class="footer-links">
-			<a href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer">GitHub</a>
-			<a href="https://www.npmjs.com/package/ogygia" target="_blank" rel="noreferrer">npm</a>
-		</div>
-	</div>
-</footer>
+<SiteFooter meta="ogygia · MIT · named for Calypso's island">
+	{#snippet links()}
+		<a href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer">GitHub</a>
+		<a href="https://www.npmjs.com/package/ogygia" target="_blank" rel="noreferrer">npm</a>
+	{/snippet}
+</SiteFooter>
+
+<style>
+	.hero {
+		position: relative;
+		overflow: clip;
+		min-height: 100dvh;
+		display: grid;
+		align-items: center;
+		padding-top: 2.5rem;
+		padding-bottom: 4rem;
+	}
+
+	.hero-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(260px, 0.9fr);
+		gap: clamp(1.5rem, 3vw, 2.75rem);
+		align-items: center;
+	}
+
+	.hero-copy {
+		min-width: 0;
+	}
+
+	.hero-copy p {
+		font-size: 1.0625rem;
+		max-width: 48ch;
+	}
+
+	.hero-tagline {
+		margin: 0.35rem 0 1.25rem;
+		font: 500 1.125rem/1.35 var(--font-body);
+		color: var(--accent);
+		letter-spacing: -0.01em;
+		max-width: none;
+	}
+
+	.hero-say {
+		display: inline-block;
+		margin-left: 0.65rem;
+		padding-left: 0.65rem;
+		border-left: 1px solid var(--line-strong);
+		font: 400 0.8125rem/1.35 var(--font-mono);
+		letter-spacing: 0.02em;
+		color: var(--text-faint);
+		vertical-align: 0.05em;
+	}
+
+	:global(.hero-contours) {
+		position: absolute;
+		top: 50%;
+		right: -120px;
+		width: min(520px, 55vw);
+		transform: translateY(-50%);
+		opacity: 0.35;
+		pointer-events: none;
+		color: var(--line-strong);
+	}
+
+	.hero-demo {
+		transform: none;
+		position: relative;
+		z-index: 1;
+		min-width: 0;
+	}
+
+	@keyframes rise {
+		from {
+			opacity: 0;
+			transform: translateY(14px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	.hero-grid > :global(*) {
+		animation: rise 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+	}
+
+	.hero-grid > :global(*:nth-child(2)) {
+		animation-delay: 80ms;
+	}
+
+	.what-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+		gap: clamp(2rem, 4vw, 4rem);
+		align-items: start;
+	}
+
+	.archipelago {
+		border: 1px solid var(--line);
+		border-radius: var(--r-md);
+		padding: 1.25rem;
+		background: var(--bg-raised);
+		min-height: 220px;
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.archipelago-shell {
+		border: 1px dashed var(--line-strong);
+		border-radius: var(--r-sm);
+		padding: 1rem;
+		min-height: 160px;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.75rem;
+		align-content: start;
+	}
+
+	.archipelago-island {
+		border: 1px solid var(--accent-line);
+		border-radius: var(--r-sm);
+		padding: 0.75rem;
+		font: 500 0.75rem/1.4 var(--font-mono);
+		color: var(--accent);
+		background: var(--accent-deep);
+	}
+
+	.archipelago-label {
+		font: 400 0.6875rem/1.4 var(--font-mono);
+		color: var(--text-faint);
+		letter-spacing: 0.04em;
+	}
+
+	.map-scroll {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+		border: 1px solid var(--line);
+		border-radius: var(--r-md);
+		background: var(--bg-raised);
+		box-shadow: var(--shadow-panel);
+	}
+
+	.map-table {
+		width: 100%;
+		min-width: 40rem;
+		border-collapse: collapse;
+		font-size: 0.875rem;
+		line-height: 1.45;
+	}
+
+	.map-table :global(th),
+	.map-table :global(td) {
+		padding: 0.75rem 1rem;
+		text-align: left;
+		vertical-align: top;
+		border-bottom: 1px solid var(--line);
+	}
+
+	.map-table :global(th) {
+		font: 500 0.6875rem/1.4 var(--font-mono);
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-faint);
+		background: var(--bg-sunken);
+		border-bottom-color: var(--line-strong);
+	}
+
+	.map-table :global(tbody tr:last-child td) {
+		border-bottom: none;
+	}
+
+	.map-table :global(td:first-child) {
+		white-space: nowrap;
+		color: var(--text);
+	}
+
+	.map-table :global(td) {
+		color: var(--text-dim);
+	}
+
+	.map-table :global(code) {
+		font-size: 0.8125rem;
+		color: var(--accent);
+	}
+
+	.map-table :global(em) {
+		font-style: italic;
+		color: var(--text-faint);
+	}
+
+	.map-nest {
+		margin: 1.25rem 0 0;
+		padding: 1rem 1.25rem;
+		font: 500 0.875rem/1.55 var(--font-body);
+		color: var(--text-dim);
+		background: var(--bg-sunken);
+		border: 1px solid var(--line);
+		border-radius: var(--r-sm);
+		max-width: 68ch;
+	}
+
+	.install-strip {
+		background: var(--bg-raised);
+		border: 1px solid var(--line-strong);
+		padding: 1.5rem clamp(1.25rem, 3vw, 2rem);
+		border-radius: var(--r-md);
+		box-shadow: var(--shadow-panel);
+	}
+
+	.install-inner {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 2rem;
+		flex-wrap: wrap;
+	}
+
+	.install-cmd {
+		font: 500 1rem/1 var(--font-mono);
+		background: var(--bg-sunken);
+		color: var(--accent);
+		padding: 0.875rem 1.25rem;
+		border-radius: var(--r-sm);
+		border: 1px solid var(--line);
+		margin: 0;
+	}
+
+	.install-aside {
+		max-width: 36ch;
+	}
+
+	.install-aside :global(pre) {
+		margin: 0 0 0.5rem;
+		font-size: 0.8125rem;
+		color: var(--text-dim);
+		background: transparent;
+	}
+
+	.install-aside :global(.caption) {
+		color: var(--text-faint);
+	}
+
+	@media (max-width: 1023px) {
+		.hero-grid,
+		.what-grid {
+			grid-template-columns: 1fr !important;
+		}
+
+		.hero-demo {
+			transform: none !important;
+		}
+
+		:global(.hero-contours) {
+			opacity: 0.2;
+			right: -320px;
+		}
+	}
+
+	@media (max-width: 1099px) {
+		.hero {
+			padding-top: 2rem;
+			min-height: 100dvh;
+		}
+	}
+</style>

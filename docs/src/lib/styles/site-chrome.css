@@ -1,0 +1,199 @@
+/* Shared docs/playground chrome — imported by the root layout. */
+
+.shell {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: var(--maxw);
+	margin-inline: auto;
+	padding-inline: var(--gutter);
+}
+
+.eyebrow {
+	display: block;
+	margin-bottom: 1rem;
+	font: 500 0.6875rem/1 var(--font-mono);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+
+.caption {
+	font: 400 0.75rem/1.5 var(--font-mono);
+	color: var(--text-faint);
+}
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	height: 40px;
+	padding-inline: 1.125rem;
+	border-radius: var(--r-sm);
+	font: 500 0.875rem/1 var(--font-body);
+	transition:
+		background-color 120ms ease,
+		border-color 120ms ease,
+		color 120ms ease;
+	white-space: nowrap;
+}
+
+.btn--primary {
+	background: var(--accent);
+	color: var(--text-on-invert);
+	border: 1px solid var(--accent);
+}
+
+.btn--primary:hover {
+	background: var(--accent-strong);
+	border-color: var(--accent-strong);
+	color: var(--text-on-invert);
+}
+
+.btn--ghost {
+	background: transparent;
+	color: var(--text);
+	border: 1px solid var(--line-strong);
+}
+
+.btn--ghost:hover {
+	border-color: var(--accent-line);
+	color: var(--accent);
+}
+
+.btn-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	margin-top: 1.75rem;
+}
+
+.docs-main {
+	padding-block: 2rem 4rem;
+}
+
+.docs-main section {
+	padding-block: calc(var(--section-gap) / 2);
+}
+
+.docs-main section + section {
+	border-top: 1px solid var(--line);
+}
+
+.section-header {
+	margin-bottom: 2.5rem;
+	max-width: 46rem;
+}
+
+.section-header h2 {
+	margin-bottom: 0.75rem;
+}
+
+.section-lede {
+	margin: 0 0 1.25rem;
+	max-width: 62ch;
+	color: var(--text-dim);
+}
+
+.section-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 3.5rem;
+}
+
+.demo-section .demo-block:nth-child(even) {
+	transform: none;
+}
+
+.prose {
+	max-width: 68ch;
+}
+
+.prose p {
+	margin: 0 0 1rem;
+	color: var(--text-dim);
+	max-width: none;
+}
+
+.prose p:last-child {
+	margin-bottom: 0;
+}
+
+.prose strong {
+	color: var(--text);
+	font-weight: 600;
+}
+
+.prose ul {
+	margin: 0 0 1rem;
+	padding-left: 1.25rem;
+	color: var(--text-dim);
+}
+
+.prose ul:last-child {
+	margin-bottom: 0;
+}
+
+.prose li {
+	margin: 0.35rem 0;
+}
+
+.prose li code {
+	color: var(--accent);
+}
+
+.doc-subhead {
+	margin: 2rem 0 0.75rem;
+	font: 600 1.125rem/1.35 var(--font-body);
+	letter-spacing: -0.01em;
+	color: var(--text);
+}
+
+.strategy {
+	display: flex;
+	flex-direction: column;
+	gap: 1.25rem;
+}
+
+.strategy > .prose {
+	margin-bottom: 0.15rem;
+}
+
+.strategy > p {
+	margin: 0;
+	max-width: 70ch;
+}
+
+.scroll-hint {
+	height: 55vh;
+	display: grid;
+	place-items: center;
+	border: 1px dashed var(--line);
+	border-radius: var(--r-md);
+	margin-bottom: 1.5rem;
+	color: var(--text-faint);
+	font: 400 0.8125rem/1.5 var(--font-mono);
+	text-align: center;
+	padding: 2rem;
+}
+
+@media (max-width: 1099px) {
+	.docs-main {
+		padding-top: 0.75rem;
+		padding-bottom: 2.5rem;
+	}
+
+	.docs-main > section:first-child {
+		padding-top: 0.75rem;
+	}
+}
+
+@media (max-width: 1200px) {
+	.demo-section .demo-block:nth-child(even) {
+		transform: none;
+	}
+}
+
+@media (max-width: 1023px) {
+	.demo-section .demo-block:nth-child(even) {
+		transform: none;
+	}
+}

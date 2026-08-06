@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	// Lives inside `data-ogygia-persist` chrome in the router playground layout.
 	// Mount id + click count survive SPA navigations; contrast with RouteProbe on each page.
 	const mountId = Math.random().toString(36).slice(2, 7);

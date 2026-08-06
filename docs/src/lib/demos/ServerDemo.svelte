@@ -1,3 +1,19 @@
+<script lang="ts">
+	import type { Snippet } from 'svelte';
+	import '$lib/styles/demo-block.css';
+	import '$lib/styles/widget.css';
+
+	let {
+		title = "defer: 'load' · ServerGreeting.svelte",
+		codeHtml,
+		live
+	}: {
+		title?: string;
+		codeHtml: string;
+		live: Snippet;
+	} = $props();
+</script>
+
 <figure class="demo-block">
 	<figcaption class="demo-header">
 		<span class="demo-title">{title}</span>
@@ -15,17 +31,3 @@
 		</div>
 	</div>
 </figure>
-
-<script lang="ts">
-	import type { Snippet } from 'svelte';
-
-	let {
-		title = "defer: 'load' · ServerGreeting.svelte",
-		codeHtml,
-		live
-	}: {
-		title?: string;
-		codeHtml: string;
-		live: Snippet;
-	} = $props();
-</script>

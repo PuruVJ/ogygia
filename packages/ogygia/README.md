@@ -81,7 +81,16 @@ That’s an **island** (JS on load), a below-the-fold island, and a **server isl
 
 **[ogygia.puruvj.dev](https://ogygia.puruvj.dev)**
 
+### Dynamic `import()` + region attributes
+
+Not supported — ogygia **fails the build** if it sees
+`import('./X.svelte', { with: { hydrate: 'load' } })` (same for `defer` / `preset`). Vite strips those attributes; runtimes reject unknown keys; islands need a static `import … with { … }` so SSR can emit a shell.
+
+For a chunk that downloads only after a click, use a host island and plain
+`await import('./Widget.svelte')` (no region attributes) — that mounts a **regular** component, not a second island. Docs: [pesky patterns](https://ogygia.puruvj.dev/#patterns-dynamic-import) · [playground demo](https://ogygia.puruvj.dev/playground/on-demand).
+
 Trust boundaries and design constraints: [`INVARIANTS.md`](../../INVARIANTS.md) in the monorepo root.
+
 ## License
 
 MIT

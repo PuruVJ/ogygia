@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	// A tiny client island that writes the `pg_name` cookie and reloads. The reload is a full
 	// document load, so the deferred server island re-fetches and re-renders with the new cookie.
 	let name = $state('');

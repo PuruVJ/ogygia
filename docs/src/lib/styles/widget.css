@@ -1,0 +1,79 @@
+.widget {
+	width: 100%;
+	max-width: 280px;
+	padding: 1.25rem 1.35rem;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r-md);
+	background: var(--bg-sunken);
+	box-shadow: var(--shadow-panel);
+}
+
+.widget-label {
+	display: block;
+	margin-bottom: 0.9rem;
+	font: 500 0.75rem/1 var(--font-mono);
+	color: var(--text-dim);
+	letter-spacing: 0.04em;
+}
+
+.widget-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.875rem;
+}
+
+.widget-value {
+	font: 500 1.5rem/1 var(--font-display);
+	font-style: italic;
+	color: var(--text);
+	font-variation-settings: 'opsz' 36;
+}
+
+.widget button {
+	height: 34px;
+	padding-inline: 0.95rem;
+	border-radius: var(--r-sm);
+	border: 1px solid var(--accent-line);
+	background: var(--accent-deep);
+	color: var(--accent);
+	font: 500 0.8125rem/1 var(--font-body);
+	cursor: pointer;
+	transition:
+		background-color 120ms ease,
+		border-color 120ms ease;
+}
+
+.widget button:hover {
+	background: var(--accent);
+	color: var(--text-on-invert);
+	border-color: var(--accent);
+}
+
+.widget button:active {
+	transform: scale(0.98);
+}
+
+.widget button:disabled {
+	opacity: 0.55;
+	cursor: default;
+	transform: none;
+}
+
+.widget-meta {
+	margin: 0.85rem 0 0;
+	font: 400 0.6875rem/1.45 var(--font-mono);
+	color: var(--text-faint);
+}
+
+.widget--greeting {
+	max-width: 340px;
+}
+
+.widget--greeting strong {
+	display: block;
+	font: 500 1.2rem/1.35 var(--font-display);
+	font-style: italic;
+	color: var(--text);
+	margin-bottom: 0.45rem;
+}

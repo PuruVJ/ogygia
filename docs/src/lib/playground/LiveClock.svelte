@@ -1,4 +1,7 @@
 <script lang="ts">
+	import '$lib/styles/feel.css';
+	import '$lib/styles/widget.css';
+
 	// query.live: a streaming server clock over SSE. `.current` updates every tick after hydration.
 	import { clock } from '$lib/playground/data.remote';
 	const c = clock();

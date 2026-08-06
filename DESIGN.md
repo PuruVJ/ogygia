@@ -43,6 +43,18 @@ Walk up the tree. The closest marked parent decides.
 page → island → lake → island → …
 ```
 
+## Client-only lazy mount (not an island)
+
+Need JS that downloads only after a click? That is ordinary Svelte inside a host island:
+
+```js
+const Comp = (await import('./Widget.svelte')).default;
+```
+
+No `with { hydrate }` on the dynamic import — Vite strips region attributes there, and runtimes reject unknown keys. ogygia **build-errors** `import(…, { with: { hydrate|defer|preset } })` so it cannot silently no-op.
+
+What you get is a **regular** component in the island’s tree (Vite code-splits it). It is not a second island and has no SSR shell of its own. To delay a real island boundary, keep a static region import and gate `<X />` with `{#if}`.
+
 ## DOM
 
 ```html

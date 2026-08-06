@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
 	import type { Snippet } from 'svelte';
 	import { whoAmI } from '$lib/playground/whoami.remote';
 

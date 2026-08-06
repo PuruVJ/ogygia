@@ -10,6 +10,8 @@
 </div>
 
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	let {
 		start = 0,
 		note = ''

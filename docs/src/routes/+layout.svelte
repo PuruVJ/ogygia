@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../fonts.css';
 	import '../app.css';
+	import '$lib/styles/site-chrome.css';
 	import { OgygiaRouter } from 'ogygia';
 	import SideNav from '$lib/SideNav.svelte' with { hydrate: 'load' };
 

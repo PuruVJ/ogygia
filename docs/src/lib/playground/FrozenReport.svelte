@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	// A LAKE (imported `with { hydrate: 'none' }` inside a hydrated island). Its code ships in NO
 	// client chunk — the island's client module swaps this import for a placeholder. It SSRs inline;
 	// the runtime lifts and restores its DOM around the parent hydrate. Its own button is INERT

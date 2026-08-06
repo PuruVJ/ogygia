@@ -1,3 +1,30 @@
+<script lang="ts">
+	import type { Snippet } from 'svelte';
+	import '$lib/styles/demo-block.css';
+	import '$lib/styles/widget.css';
+	import '$lib/styles/feel.css';
+
+	let {
+		title,
+		codeHtml,
+		live,
+		frozen,
+		stack = false,
+		onLabel = 'hydrated',
+		offLabel = 'static · 0 KB JS'
+	}: {
+		title: string;
+		codeHtml: string;
+		live: Snippet;
+		frozen: Snippet;
+		stack?: boolean;
+		onLabel?: string;
+		offLabel?: string;
+	} = $props();
+
+	let jsOn = $state(true);
+</script>
+
 <figure class="demo-block">
 	<figcaption class="demo-header">
 		<span class="demo-title">{title}</span>
@@ -36,27 +63,3 @@
 		</div>
 	</div>
 </figure>
-
-<script lang="ts">
-	import type { Snippet } from 'svelte';
-
-	let {
-		title,
-		codeHtml,
-		live,
-		frozen,
-		stack = false,
-		onLabel = 'hydrated',
-		offLabel = 'static · 0 KB JS'
-	}: {
-		title: string;
-		codeHtml: string;
-		live: Snippet;
-		frozen: Snippet;
-		stack?: boolean;
-		onLabel?: string;
-		offLabel?: string;
-	} = $props();
-
-	let jsOn = $state(true);
-</script>

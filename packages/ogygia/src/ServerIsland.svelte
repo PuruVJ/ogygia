@@ -80,9 +80,10 @@
 		return `${resolve(DEFAULT_ISLANDS_ENDPOINT)}?id=${encodeURIComponent(__entry)}&props=${payload}&exp=${exp}&sig=${sig}`;
 	});
 
-	// <link rel="preload" as="fetch" crossorigin="use-credentials"> so the browser starts the
-	// endpoint fetch during HTML parse. `use-credentials` matches the runtime's
-	// `fetch(..., { credentials: 'same-origin' })` — without it Chrome discards the preload.
+	// <link rel="preload" as="fetch" crossorigin="anonymous"> so the browser starts the
+	// endpoint fetch during HTML parse. `anonymous` maps to credentials mode `same-origin`,
+	// matching the runtime's `fetch(..., { credentials: 'same-origin' })`. (`use-credentials`
+	// maps to `include` — Chrome then refuses to reuse the preload and warns.)
 	// Emitted ONLY for `__defer: 'load'` (immediate fetch): 'idle'/'visible'/media defer the fetch,
 	// so preloading would defeat the deferral (the whole point is NOT to fetch until the schedule
 	// fires). Skipped when prerendering: a static page has no request context, and emitting the hint
@@ -93,7 +94,7 @@
 		const href_attr = endpoint.split('&').join('&amp;');
 		return (
 			LT +
-			'link rel="preload" as="fetch" crossorigin="use-credentials" href="' +
+			'link rel="preload" as="fetch" crossorigin="anonymous" href="' +
 			href_attr +
 			'"' +
 			GT

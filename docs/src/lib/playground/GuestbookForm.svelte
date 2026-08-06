@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	// Remote form() INSIDE an island — Kit's own client form runtime, reused by ogygia. Enhanced
 	// submit (no reload), per-field issues, and pending state all work; with JS off the form posts
 	// natively to the remote endpoint and post-redirect-gets back. On submit we single-flight the

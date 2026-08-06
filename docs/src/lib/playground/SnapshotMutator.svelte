@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	// The captured-snapshot mutation guard, demonstrated. `config` is captured from host scope and
 	// crosses the boundary as a devalue snapshot (the Map and Set survive). This island mutates it in
 	// its own script — a no-op, because the prop is a deserialized copy with no link back to the host.

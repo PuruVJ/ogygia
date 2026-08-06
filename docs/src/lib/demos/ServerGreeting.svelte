@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
 	import type { Snippet } from 'svelte';
 
 	let { salutation = 'Aloha', ogygiaFallback }: { salutation?: string; ogygiaFallback?: Snippet } = $props();

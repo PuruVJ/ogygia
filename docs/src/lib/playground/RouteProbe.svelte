@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	// Proves SPA remount + `$app/state` shim: mount id changes on nav, and `page.url.pathname`
 	// is read from the island shim (real URL via `$state.raw`, not a deep-proxied URL / Kit
 	// placeholder with empty pathname).

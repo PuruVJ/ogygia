@@ -1,3 +1,7 @@
+<script lang="ts">
+	import '$lib/styles/widget.css';
+</script>
+
 <div class="widget">
 	<span class="widget-label">Visible island</span>
 	<div class="widget-row">

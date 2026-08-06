@@ -27,8 +27,8 @@ let endpoint;
 	);
 	check('/server preload hint present (rel=preload as=fetch)', /rel="preload" as="fetch"/.test(html));
 	check(
-		'/server preload uses crossorigin=use-credentials (matches fetch credentials)',
-		/rel="preload" as="fetch" crossorigin="use-credentials"/.test(html)
+		'/server preload uses crossorigin=anonymous (matches fetch credentials: same-origin)',
+		/rel="preload" as="fetch" crossorigin="anonymous"/.test(html)
 	);
 	check('/server preload points at the island endpoint (raw-emoji path)', /href="[^"]*🏝️ogygia🏝️/.test(html));
 	check('/server ships NO Kit bootstrap (csr=false)', !/__sveltekit/.test(html));

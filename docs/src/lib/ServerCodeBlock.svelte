@@ -9,6 +9,7 @@
 	 * Shiki is loaded lazily inside `highlight()` — not at module evaluate time.
 	 */
 	import { highlight } from '$lib/code/highlight.server.js';
+	import '$lib/styles/code-block.css';
 
 	let {
 		code,

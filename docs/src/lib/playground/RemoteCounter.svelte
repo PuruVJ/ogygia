@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	// query (server state) + command (mutation) + query.refresh(), all from inside the island.
 	import { getCount, bump } from '$lib/playground/data.remote';
 

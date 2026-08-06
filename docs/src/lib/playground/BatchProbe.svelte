@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	// query.batch: three getSquare() calls fired in the same tick collapse into ONE request. All
 	// three results share the same `batchAt` (one server run) and report the batch size (3).
 	import { getSquare } from '$lib/playground/data.remote';

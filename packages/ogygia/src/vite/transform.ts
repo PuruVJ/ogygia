@@ -113,6 +113,75 @@ function clean_import_text(source, node) {
 	return source.slice(node.start, node.source.end) + ';';
 }
 
+/**
+ * Region keys (`hydrate` / `defer` / `preset` under configured names) on a dynamic
+ * `import(spec, { with: { … } })` / `{ assert: { … } }` options object.
+ * Returns `[]` when the call has no options or no claimed region keys.
+ *
+ * @param {import('estree').ImportExpression} node
+ * @param {ImportKeys} import_keys
+ * @returns {string[]}
+ */
+function region_keys_on_dynamic_import(node, import_keys) {
+	const opts = node.options;
+	if (!opts || opts.type !== 'ObjectExpression') return [];
+	const claimed = new Set([import_keys.hydrate, import_keys.defer, import_keys.preset]);
+	/** @type {string[]} */
+	const found = [];
+	for (const prop of opts.properties) {
+		if (prop.type !== 'Property' || prop.computed) continue;
+		const bag_key =
+			prop.key.type === 'Identifier'
+				? prop.key.name
+				: prop.key.type === 'Literal'
+					? String(prop.key.value)
+					: null;
+		// Spec uses `with`; older tooling may still emit `assert`.
+		if (bag_key !== 'with' && bag_key !== 'assert') continue;
+		if (prop.value.type !== 'ObjectExpression') continue;
+		for (const atr of prop.value.properties) {
+			if (atr.type !== 'Property' || atr.computed) continue;
+			const ak =
+				atr.key.type === 'Identifier'
+					? atr.key.name
+					: atr.key.type === 'Literal'
+						? String(atr.key.value)
+						: null;
+			if (ak && claimed.has(ak) && !found.includes(ak)) found.push(ak);
+		}
+	}
+	return found;
+}
+
+/**
+ * Walk a script Program body for `ImportExpression` nodes carrying ogygia region keys.
+ * Dynamic `import()` cannot author islands — SSR shells need a static import + `<Tag />`.
+ *
+ * @param {unknown[]} body
+ * @param {ImportKeys} import_keys
+ * @param {(keys: string[]) => never} fail
+ */
+function reject_dynamic_region_imports(body, import_keys, fail) {
+	const walk = (node) => {
+		if (!node || typeof node !== 'object') return;
+		if (/** @type {{ type?: string }} */ (node).type === 'ImportExpression') {
+			const keys = region_keys_on_dynamic_import(
+				/** @type {import('estree').ImportExpression} */ (node),
+				import_keys
+			);
+			if (keys.length) fail(keys);
+		}
+		for (const k of Object.keys(node)) {
+			if (k === 'start' || k === 'end' || k === 'loc') continue;
+			const v = /** @type {Record<string, unknown>} */ (node)[k];
+			if (Array.isArray(v)) for (const c of v) walk(c);
+			else if (v && typeof v === 'object' && typeof /** @type {{ type?: string }} */ (v).type === 'string')
+				walk(v);
+		}
+	};
+	for (const n of body ?? []) walk(n);
+}
+
 function script_lang_attr(scriptNode) {
 	if (!scriptNode) return '';
 	for (const attr of scriptNode.attributes ?? []) {
@@ -468,11 +537,39 @@ export function transformHost(source, id, ctx) {
 	}
 
 	const instance_body = ast.instance?.content?.body ?? [];
+	const module_body = ast.module?.content?.body ?? [];
 	const lang = script_lang_attr(ast.instance) || script_lang_attr(ast.module);
 
 	const path = ctx.pathModule;
 	// Posix-relative host path — island ids must not drift across Windows/POSIX build legs.
 	const rel_host = path.relative(ctx.root, id).split(/[/\\]/).join('/');
+
+	// Dynamic `import(mod, { with: { hydrate|defer|preset } })` is NOT an authoring path.
+	// JS/Vite accept the options shape for std attributes (e.g. `type: 'json'`), but:
+	//   - Vite strips import attributes from emitted dynamic imports (browser compat),
+	//   - runtimes reject unknown keys like `hydrate` if left in place,
+	//   - ogygia islands need a static import + a static `<Tag />` so SSR can emit the shell.
+	// Fail at transform time with the working alternatives rather than silently no-op.
+	reject_dynamic_region_imports(instance_body, import_keys, (keys) => {
+		throw new Error(
+			`[ogygia] ${rel_host}: dynamic import() with { with: { ${keys.join(', ')} } } is not supported. ` +
+				`Mark islands with a static \`import X from '…' with { ${import_keys.hydrate}: '…' }\` ` +
+				`(or \`${import_keys.defer}\` / \`${import_keys.preset}\`) and a static \`<X />\` tag. ` +
+				`For a click-loaded chunk that is not an island, use plain \`await import('./Comp.svelte')\` ` +
+				`(no region attributes) inside a host island. ` +
+				`To delay a real island until click, gate a static region import with \`{#if}\`.`
+		);
+	});
+	reject_dynamic_region_imports(module_body, import_keys, (keys) => {
+		throw new Error(
+			`[ogygia] ${rel_host}: dynamic import() with { with: { ${keys.join(', ')} } } is not supported. ` +
+				`Mark islands with a static \`import X from '…' with { ${import_keys.hydrate}: '…' }\` ` +
+				`(or \`${import_keys.defer}\` / \`${import_keys.preset}\`) and a static \`<X />\` tag. ` +
+				`For a click-loaded chunk that is not an island, use plain \`await import('./Comp.svelte')\` ` +
+				`(no region attributes) inside a host island. ` +
+				`To delay a real island until click, gate a static region import with \`{#if}\`.`
+		);
+	});
 
 	// --- collect host imports & region marks (the two-key region model) --------
 	// The authoring syntax is the import attribute, one concern per key:
@@ -1015,12 +1112,17 @@ export function transformHost(source, id, ctx) {
 					`\timport { ServerIsland as ${server_wrapper_name} } from 'ogygia/internal/server';`
 				);
 			}
-			// Keep a host import of the island component so its CSS is collected via the
-			// PAGE's (SSR) import graph and linked into the page <head>. The wrapper never
-			// renders it (the /🏝️ogygia🏝️ endpoint resolves it by id) — passing it as an
-			// ignored `__component` prop just keeps the import from being tree-shaken.
-			// On a csr=false page (the supported config) this ships zero client JS.
-			preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);
+			// Import the *entry* module (not the virtual wrapper) so its CSS is collected via the
+			// PAGE's SSR import graph into Kit's FOUC bag under csr=false. Virtual modules don't
+			// reliably contribute CSS to that bag — styles on the island entry would never ship.
+			// The wrapper never renders `__component` (the /🏝️ogygia🏝️ endpoint resolves by id);
+			// the binding only keeps the import alive. csr=false → zero client JS from this import.
+			if (typeof entry_spec !== 'string') {
+				throw new Error(
+					`[ogygia] ${rel_host}: server island needs a static import path ($lib/… or relative).`
+				);
+			}
+			preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(entry_spec)};`);
 			const fallback_text = fallback_node
 				? source.slice(fallback_node.start, fallback_node.end)
 				: '';
@@ -1043,6 +1145,15 @@ export function transformHost(source, id, ctx) {
 			preamble_imports.push(`\timport { Island as ${wrapper_name} } from 'ogygia/internal';`);
 		}
 
+		// Import the entry component for SSR + FOUC CSS (see server-island note above).
+		// Client hydrate still loads the virtual module via `__entry` (string URL / manifest id).
+		if (typeof entry_spec !== 'string') {
+			throw new Error(
+				`[ogygia] ${rel_host}: hydrate island needs a static import path ($lib/… or relative).`
+			);
+		}
+		preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(entry_spec)};`);
+
 		// rewrite host: replace the unit with an <Island> wrapper element
 		const strategy_attrs_text = strategy_to_attr(unit.strategy, unit.options);
 		// dev: __entry is the vite dev URL of the island module; build: the manifest key (iid)
@@ -1051,8 +1162,6 @@ export function transformHost(source, id, ctx) {
 			`<${wrapper_name} ${strategy_attrs_text} ` +
 			`__entry={${JSON.stringify(entry_value)}} __component={${comp_var}} __props={${props_obj}} />`;
 		s.overwrite(unit.node.start, unit.node.end, replacement);
-
-		preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);
 	});
 
 	// Register lake regions: metadata-only on the client; remount:swr also gets a server-renderable

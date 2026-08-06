@@ -33,7 +33,9 @@ export const docsPageSnippets = prerender(
 			ogygiaRouterHtml,
 			ogygiaBoundaryHtml,
 			persistNavHtml,
-			remountConfigHtml
+			remountConfigHtml,
+			lazyClientMountHtml,
+			delayedIslandIfHtml
 		] = await Promise.all([
 			highlight(snip.hydrateLoadCounter, 'svelte'),
 			highlight(snip.hydrateLoad, 'svelte'),
@@ -52,7 +54,9 @@ export const docsPageSnippets = prerender(
 			highlight(snip.ogygiaRouter, 'svelte'),
 			highlight(snip.ogygiaBoundary, 'svelte'),
 			highlight(snip.persistNav, 'html'),
-			highlight(snip.remountConfig, 'typescript')
+			highlight(snip.remountConfig, 'typescript'),
+			highlight(snip.lazyClientMount, 'svelte'),
+			highlight(snip.delayedIslandIf, 'svelte')
 		]);
 
 		return {
@@ -73,8 +77,19 @@ export const docsPageSnippets = prerender(
 			ogygiaRouterHtml,
 			ogygiaBoundaryHtml,
 			persistNavHtml,
-			remountConfigHtml
+			remountConfigHtml,
+			lazyClientMountHtml,
+			delayedIslandIfHtml
 		};
+	},
+	{ dynamic: true }
+);
+
+export const onDemandPageSnippets = prerender(
+	async () => {
+		const { highlight } = await import('$lib/code/highlight.server.js');
+		const lazyClientMountHtml = await highlight(snip.lazyClientMount, 'svelte');
+		return { lazyClientMountHtml };
 	},
 	{ dynamic: true }
 );

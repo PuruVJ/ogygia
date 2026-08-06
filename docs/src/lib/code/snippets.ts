@@ -255,3 +255,38 @@ ogygia({
 {#if show}
   <Report title="Q4" />
 {/if}`;
+
+/** Client-only lazy mount — plain dynamic import inside a host island. */
+export const lazyClientMount = `<!-- +page.svelte — host is the island -->
+<script>
+  import Host from '$lib/Host.svelte' with { hydrate: 'load' };
+</script>
+<Host />
+
+<!-- Host.svelte — inside the island -->
+<script>
+  import type { Component } from 'svelte';
+  let Lazy = $state();
+
+  async function load() {
+    // plain component — NOT an island (no with { hydrate })
+    Lazy = (await import('./Widget.svelte')).default;
+  }
+</script>
+
+<button type="button" onclick={load}>Load</button>
+{#if Lazy}
+  {@const Comp = Lazy}
+  <Comp />
+{/if}`;
+
+/** Delayed island boundary — static region import + {#if}, not import()+with. */
+export const delayedIslandIf = `<script>
+  import Widget from '$lib/Widget.svelte' with { hydrate: 'load' };
+  let show = $state(false);
+</script>
+
+<button type="button" onclick={() => (show = true)}>Mount island</button>
+{#if show}
+  <Widget />
+{/if}`;

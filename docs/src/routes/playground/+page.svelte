@@ -34,6 +34,12 @@
 			body: 'SPA swaps with view transitions, data-ogygia-persist chrome that keeps islands mounted, prefetch attributes, plus an MPA handoff.'
 		},
 		{
+			href: '/playground/on-demand',
+			eyebrow: 'await import()',
+			title: 'Client-only lazy mount',
+			body: 'Host island dynamically imports a plain Svelte component on click — regular child, not a second island. import() + with { hydrate } stays a build error.'
+		},
+		{
 			href: '/playground/mutation-guard',
 			eyebrow: 'dev warning',
 			title: 'Mutation guard',
@@ -134,5 +140,23 @@
 		margin-top: 0.5rem;
 		font: 500 0.8125rem/1 var(--font-mono);
 		color: var(--accent);
+	}
+
+	:global(.pg-hero-contours) {
+		position: absolute;
+		top: 50%;
+		right: -140px;
+		width: min(460px, 50vw);
+		transform: translateY(-50%);
+		opacity: 0.3;
+		pointer-events: none;
+		color: var(--line-strong);
+	}
+
+	@media (max-width: 1023px) {
+		:global(.pg-hero-contours) {
+			opacity: 0.18;
+			right: -280px;
+		}
 	}
 </style>

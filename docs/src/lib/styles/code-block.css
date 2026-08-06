@@ -1,0 +1,26 @@
+.code-only {
+	border: 1px solid var(--line);
+	border-radius: var(--r-md);
+	background: var(--bg-sunken);
+	padding: 1.25rem 1.5rem;
+	margin: 1.5rem 0;
+	overflow-x: auto;
+}
+
+.code-only .shiki {
+	margin: 0;
+	background: transparent !important;
+	font-family: var(--font-mono);
+	font-weight: 400;
+	font-size: 0.8125rem;
+	line-height: 1.65;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	tab-size: 2;
+}
+
+.code-only .shiki code {
+	font-family: inherit;
+	font-size: inherit;
+	line-height: inherit;
+}

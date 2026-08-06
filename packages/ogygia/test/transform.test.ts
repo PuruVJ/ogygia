@@ -217,6 +217,68 @@ describe('defer / server island (fetch-timing symmetry)', () => {
 	});
 });
 
+describe('dynamic import() + region attributes', () => {
+	test('import(mod, { with: { hydrate } }) is a build error', () => {
+		expectThrows(
+			() =>
+				run(
+					wrap(
+						`async function load() {\n\tconst m = await import('./C.svelte', { with: { hydrate: 'load' } });\n\treturn m.default;\n}`,
+						'<p>x</p>'
+					)
+				),
+			/dynamic import\(\) with \{ with: \{ hydrate \} \} is not supported/
+		);
+	});
+
+	test('import(mod, { with: { defer } }) is a build error', () => {
+		expectThrows(
+			() =>
+				run(
+					wrap(
+						`const m = await import('./G.svelte', { with: { defer: 'load' } });`,
+						'<p>x</p>'
+					)
+				),
+			/dynamic import\(\) with \{ with: \{ defer \} \} is not supported/
+		);
+	});
+
+	test('import(mod, { with: { preset } }) is a build error', () => {
+		expectThrows(
+			() =>
+				run(
+					wrap(
+						`const m = await import('./C.svelte', { with: { preset: 'chart' } });`,
+						'<p>x</p>'
+					),
+					makeCtx({ presets: { chart: { hydrate: 'load' } } })
+				),
+			/dynamic import\(\) with \{ with: \{ preset \} \} is not supported/
+		);
+	});
+
+	test('import(mod, { with: { type: json } }) is left alone (no region keys)', () => {
+		const r = run(
+			wrap(`const data = await import('./d.json', { with: { type: 'json' } });`, '<p>x</p>')
+		);
+		// No region imports → transform returns null (hint may still match if source had hydrate elsewhere;
+		// here `type` alone does not match the region-key hint, so null).
+		expect(r).toBeNull();
+	});
+
+	test('plain import(mod) without options is left alone even beside a static island', () => {
+		const r = run(
+			wrap(
+				`import C from './C.svelte' with { hydrate: 'load' };\nasync function lazy() { return (await import('./Other.svelte')).default; }`,
+				'<C />'
+			)
+		);
+		expect(r!.code).toMatch(/<OgygiaIsland__Wrapper load __entry=/);
+		expect(r!.code).toMatch(/await import\('\.\/Other\.svelte'\)/);
+	});
+});
+
 describe('preset semantics', () => {
 	const PRESET_CTX = makeCtx({
 		presets: {
@@ -334,8 +396,8 @@ describe('deterministic ids + multi-island ordering + offset correctness', () =>
 		const expected =
 			`<script>\n` +
 			`\timport { Island as OgygiaIsland__Wrapper } from 'ogygia/internal';\n` +
-			`\timport __OgygiaIsland_0 from "virtual:ogygia/island/${idFor(0)}.svelte";\n` +
-			`\timport __OgygiaIsland_1 from "virtual:ogygia/island/${idFor(1)}.svelte";\n` +
+			`\timport __OgygiaIsland_0 from "./A.svelte";\n` +
+			`\timport __OgygiaIsland_1 from "./B.svelte";\n` +
 			`\n\n</script>\n` +
 			`<h1>title</h1>\n` +
 			`<OgygiaIsland__Wrapper load __entry={"${idFor(0)}"} __component={__OgygiaIsland_0} __props={{}} />\n` +

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Logo from '$lib/Logo.svelte';
+	import SiteFooter from '$lib/SiteFooter.svelte';
 
 	let { children } = $props();
 </script>
@@ -8,18 +8,12 @@
 	{@render children()}
 </div>
 
-<footer class="site-footer">
-	<div class="shell footer-inner">
-		<div class="footer-brand">
-			<Logo size={28} stroke={2} decorative />
-			<span class="footer-meta">ogygia playground · live demos of the region model</span>
-		</div>
-		<div class="footer-links">
-			<a href="/" data-back-to-docs>Back to docs</a>
-			<a href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer">GitHub</a>
-		</div>
-	</div>
-</footer>
+<SiteFooter meta="ogygia playground · live demos of the region model">
+	{#snippet links()}
+		<a href="/" data-back-to-docs>Back to docs</a>
+		<a href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer">GitHub</a>
+	{/snippet}
+</SiteFooter>
 
 <style>
 	.pg-body {
@@ -31,7 +25,7 @@
 	@media (max-width: 1099px) {
 		.pg-body {
 			padding-top: 0.75rem;
-			padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+			padding-bottom: 2.5rem;
 		}
 	}
 </style>

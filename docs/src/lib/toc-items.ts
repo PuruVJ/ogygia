@@ -38,6 +38,7 @@ export const docsTocItems: TocItem[] = [
 	{ id: 'persist', label: 'Persistence', sub: true },
 	{ id: 'hmr', label: 'Dev HMR', sub: false },
 	{ id: 'patterns', label: 'Pesky patterns', sub: false },
+	{ id: 'patterns-dynamic-import', label: 'No import()+with · lazy mount', sub: true },
 	{ id: 'constraints', label: 'Constraints', sub: false }
 ];
 
@@ -48,5 +49,6 @@ export const playgroundLinks = [
 	{ href: '/playground/lakes', label: 'Lakes' },
 	{ href: '/playground/data', label: 'Data & remotes' },
 	{ href: '/playground/router', label: 'Router' },
+	{ href: '/playground/on-demand', label: 'Client-only lazy mount' },
 	{ href: '/playground/mutation-guard', label: 'Mutation guard' }
 ] as const;

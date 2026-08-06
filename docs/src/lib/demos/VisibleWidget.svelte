@@ -8,5 +8,7 @@
 </div>
 
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	let clicks = $state(0);
 </script>

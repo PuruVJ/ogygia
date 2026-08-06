@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
+
 	// A hydrated island (hydrate: 'load') that contains a lake in its children. The counter proves
 	// it is interactive. The {#if} toggle exercises remount (default cache).
 	let { children } = $props();

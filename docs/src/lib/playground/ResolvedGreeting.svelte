@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '$lib/styles/widget.css';
 	import { getGreeting } from '$lib/playground/data.remote';
 
 	let { name = 'world' }: { name?: string } = $props();

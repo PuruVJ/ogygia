@@ -1,3 +1,7 @@
+<script lang="ts">
+	import '$lib/styles/widget.css';
+</script>
+
 <div class="widget">
 	<span class="widget-label">Idle clock</span>
 	<div class="widget-row">

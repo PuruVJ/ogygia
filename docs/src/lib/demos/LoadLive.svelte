@@ -4,6 +4,8 @@
 </div>
 
 <script lang="ts">
+	import '$lib/styles/feel.css';
+
 	let n = $state(0);
 	let readyAt = $state('—');
 
