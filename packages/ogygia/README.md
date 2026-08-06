@@ -15,7 +15,7 @@
   <code>SvelteKit native</code>
   · <code>No Kit patches</code>
   · <code>SSR islands</code>
-  · <code>~4.5 KB runtime</code>
+  · <code>~7.6 KB runtime</code>
   · <code>load / idle / visible</code>
   · <code>Media queries</code>
   · <code>Server islands</code>
@@ -35,7 +35,7 @@
   · <code>csr=false HMR</code>
 </p>
 
-No Kit client bootstrap — the shared runtime is a custom element plus an optional router (~4.5&nbsp;KB min+brotli). Mark components with an import attribute; only those get their own JS. Not a new framework — it sits on SvelteKit.
+No Kit client bootstrap — the shared runtime is a custom element plus an optional router (~7.6&nbsp;KB min+brotli). Mark components with an import attribute; only those get their own JS. Not a new framework — it sits on SvelteKit.
 
 ## Install
 

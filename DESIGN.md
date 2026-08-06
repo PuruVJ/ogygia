@@ -6,7 +6,7 @@ Trust boundaries and “why it must stay this way” notes live in [`INVARIANTS.
 
 | Word | Meaning | Code |
 | ---- | ------- | ---- |
-| **Page** | SSR HTML. No Kit client — ogygia runtime is a WC + router (~4.5 KB min+br). | `csr = false` |
+| **Page** | SSR HTML. No Kit client — ogygia runtime is a WC + router (~7.6 KB min+br). | `csr = false` |
 | **Island** | A component that becomes interactive (gets JS). | `with { hydrate: 'load' }` (or `idle` / `visible` / a media query) |
 | **Lake** | Static HTML *inside* an island — no JS for that bit. | `with { hydrate: 'none' }` used inside an island |
 | **Server island** | HTML loaded from the server later. Placeholder first. | `with { defer: 'load' }` (or `idle` / `visible` / media) |

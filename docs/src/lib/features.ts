@@ -3,7 +3,7 @@ export const FEATURES = [
 	'SvelteKit native',
 	'No Kit patches',
 	'SSR islands',
-	'~4.5 KB runtime',
+	'~7.6 KB runtime',
 	'load · idle · visible',
 	'Media queries',
 	'Server islands',

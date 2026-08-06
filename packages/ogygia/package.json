@@ -1,6 +1,6 @@
 {
   "name": "ogygia",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
   "homepage": "https://ogygia.puruvj.dev",

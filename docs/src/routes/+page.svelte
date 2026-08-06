@@ -22,7 +22,7 @@
 </script>
 
 <PageHead
-	description="SSR islands for SvelteKit. No Kit client bootstrap — a ~4.5 KB runtime (custom element + router), and JS only for the components you mark."
+	description="SSR islands for SvelteKit. No Kit client bootstrap — a ~7.6 KB runtime (custom element + router), and JS only for the components you mark."
 />
 
 <div id="top"></div>
@@ -38,7 +38,7 @@
 			</p>
 			<p>
 				No Kit client bootstrap. The shared runtime is a custom element plus an optional router —
-				about <strong>4.5&nbsp;KB</strong> min+brotli. Mark components with an import attribute and
+				about <strong>7.6&nbsp;KB</strong> min+brotli. Mark components with an import attribute and
 				they become interactive on a schedule; everything else stays server HTML.
 			</p>
 			<div class="btn-row">
@@ -73,7 +73,7 @@
 				<p>
 					Set <code>csr = false</code> so there is no Kit client bootstrap. What still loads is
 					ogygia’s own runtime: a custom element that wakes islands, plus an optional SPA router —
-					about <strong>4.5&nbsp;KB</strong> min+brotli together. Mark a component import with
+					about <strong>7.6&nbsp;KB</strong> min+brotli together. Mark a component import with
 					<code>hydrate</code>, <code>defer</code>, or a preset and it becomes an
 					<strong>island</strong>: serialized props, its own client chunk, and a schedule for when
 					JS arrives. Everything else stays server HTML.
@@ -87,7 +87,7 @@
 				</p>
 			</div>
 			<div class="archipelago" aria-hidden="true">
-				<span class="archipelago-label">route.html · SSR + ~4.5 KB runtime</span>
+				<span class="archipelago-label">route.html · SSR + ~7.6 KB runtime</span>
 				<div class="archipelago-shell">
 					<div class="archipelago-island">Counter.svelte</div>
 					<div class="archipelago-island">Search.svelte</div>
@@ -110,7 +110,7 @@
 				<tbody>
 					<tr>
 						<td>Page</td>
-						<td>SSR HTML. No Kit client — tiny ogygia runtime (~4.5&nbsp;KB).</td>
+						<td>SSR HTML. No Kit client — tiny ogygia runtime (~7.6&nbsp;KB).</td>
 						<td><code>csr = false</code></td>
 					</tr>
 					<tr>
