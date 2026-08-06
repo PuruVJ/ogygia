@@ -1,6 +1,6 @@
 {
   "name": "ogygia",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
   "homepage": "https://ogygia.puruvj.dev",
@@ -48,7 +48,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsdown && node scripts/copy-svelte.mjs",
@@ -57,11 +58,11 @@
     "check": "tsc --noEmit && vitest run && pnpm run lint",
     "prepublishOnly": "pnpm run build"
   },
-	"dependencies": {
-		"devalue": "^5.9.0",
-		"estree-walker": "^3.0.3",
-		"magic-string": "^1.1.0"
-	},
+  "dependencies": {
+    "devalue": "^5.9.0",
+    "estree-walker": "^3.0.3",
+    "magic-string": "^1.1.0"
+  },
   "peerDependencies": {
     "@sveltejs/kit": ">=2.70.2 <3",
     "svelte": "^5.40.0",
