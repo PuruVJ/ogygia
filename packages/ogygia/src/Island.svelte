@@ -18,13 +18,17 @@
 	 * @property {boolean} [idle] Hydrate on `requestIdleCallback`.
 	 * @property {string} [media] Hydrate when this CSS media query matches.
 	 * @property {boolean} [load] Hydrate immediately (default when no other strategy prop is set).
-	 * @property {string} __entry Island / region id.
-	 * @property {import('svelte').Component<Record<string, unknown>>} __component Extracted island component.
+	 * @property {string} __entry Importable island module URL (dev Vite URL or `/_app/immutable/ogygia-island.<id>.js`).
+	 * @property {import('svelte').Component<Record<string, unknown>>} __component Virtual island module — same tree the client hydrates.
+	 * @property {unknown} [__css] Entry `.svelte` imported only so its CSS joins Kit's FOUC bag (not rendered).
 	 * @property {Record<string, unknown>} __props Captured host props (devalue-serialized into the page).
 	 */
 
 	/** @type {Props} */
-	let { visible, idle, media, load, __entry, __component: Component, __props } = $props();
+	let { visible, idle, media, load, __entry, __component: Component, __css, __props } = $props();
+
+	// Keep the entry import alive for FOUC without rendering it (virtual already owns the tree).
+	void __css;
 
 	// Nested island: this wrapper is already rendering inside another island's tree (SSR sets
 	// the context; the runtime sets it on hydrate). Degrade to a plain inline component so the
@@ -75,6 +79,21 @@
 
 	// Page snapshot is document-level (`application/ogygia-page` from ogygiaHandle) — not per island.
 
+	// Module URL on the custom element (Astro-style).
+	// `asset()` is for Kit immutable paths (`/_app/…`) and `paths.base` — it rewrites `/@id/…`
+	// to `./@id/…`, which `import()` then resolves against the *runtime module* URL and 404s.
+	// Vite virtual URLs must stay root-absolute.
+	const module_url = $derived(
+		nested ? '' : __entry.startsWith('/@') ? __entry : asset(__entry)
+	);
+
+	// `hydrate: 'load'` — modulepreload so the island fetch isn't a pure waterfall without Vite mapDeps.
+	const preload_link = $derived(
+		!nested && hydrate_attr === 'load'
+			? LT + 'link rel="modulepreload" href="' + module_url + '"' + GT
+			: ''
+	);
+
 	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
 	const src = asset(runtimeUrl);
 	const runtime_script =
@@ -101,7 +120,7 @@
 </script>
 
 {#if nested}<Component {...__props} />{:else}<ogygia-region
-		entry={__entry}
+		entry={module_url}
 		hydrate={hydrate_attr}
 		margin={root_margin || undefined}
-	><Component {...__props} /></ogygia-region>{@html props_script}{@html runtime_script}{@html hmr_script}{/if}
+	><Component {...__props} /></ogygia-region>{@html props_script}{@html preload_link}{@html runtime_script}{@html hmr_script}{/if}

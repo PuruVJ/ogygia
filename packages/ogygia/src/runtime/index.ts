@@ -1,6 +1,5 @@
 import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
-import * as manifest from 'virtual:ogygia/manifest';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import { seed_query_responses } from '../shims/kit-remote/client-stub.js';
 import {
@@ -28,10 +27,18 @@ import {
 	region_schedule
 } from './region-attrs.js';
 
-/** @type {(entry: string) => Promise<{ default: import('svelte').Component<Record<string, unknown>> }>} */
-const load_island = manifest.dev
-	? (entry) => import(/* @vite-ignore */ entry)
-	: (entry) => manifest.regions[entry].load();
+/**
+ * Load a hydrate island module from the URL on `<ogygia-region entry>` (dev + prod).
+ * Root-absolute paths (`/@id/…`, `/_app/…`) import as-is. If something relativized them
+ * (`./@id/…`), normalize to site-root absolute — `import()` resolves relative specs against
+ * this runtime module URL, not the page.
+ */
+const load_island = (entry: string) => {
+	const url = entry.startsWith('./') ? entry.slice(1) : entry;
+	return import(/* @vite-ignore */ url) as Promise<{
+		default: import('svelte').Component<Record<string, unknown>>;
+	}>;
+};
 
 /**
  * DEV-ONLY captured-snapshot mutation guard. Captured host props cross the boundary as a
@@ -247,7 +254,7 @@ type LiftedLake = {
 		const boundary = this.parentElement && this.parentElement.closest('ogygia-region');
 		if (boundary && is_awake(boundary)) {
 			this.setAttribute('data-nested', '');
-			if (manifest.dev) {
+			if (import.meta.env.DEV) {
 				console.warn(
 					`[ogygia] nested region "${this.getAttribute('entry')}" skipped self-run; the nearest region above it is awake, so it rides that hydration (inner hydrate "${this.getAttribute('hydrate') || 'load'}" ignored).`
 				);
@@ -289,7 +296,7 @@ type LiftedLake = {
 		if (!endpoint) return;
 		// HOLE-TRUST defense-in-depth: mint emits path-only; reject absolute/cross-origin attrs.
 		if (!is_allowed_region_endpoint(endpoint)) {
-			if (manifest.dev) {
+			if (import.meta.env.DEV) {
 				console.warn('[ogygia] refused non-same-origin region endpoint', endpoint);
 			}
 			return;
@@ -347,7 +354,7 @@ type LiftedLake = {
 			});
 		} catch (err) {
 			if ((err as { name?: string })?.name === 'AbortError' || signal.aborted) return;
-			if (manifest.dev) {
+			if (import.meta.env.DEV) {
 				console.warn('[ogygia] region fetch failed for', endpoint, err);
 			}
 			this.#fetch_attempts++;
@@ -449,16 +456,24 @@ type LiftedLake = {
 
 			let props: Record<string, unknown> = {};
 			let sib = this.nextElementSibling;
-			while (sib && sib.tagName === 'SCRIPT') {
-				if (sib.matches('script[data-ogygia-props]')) props = parse(sib.textContent);
-				else break;
-				sib = sib.nextElementSibling;
+			// Props script is normally the next sibling; skip `<link rel=modulepreload>` (and similar)
+			// that may sit between the region and the payload.
+			while (sib) {
+				if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]')) {
+					props = parse(sib.textContent);
+					break;
+				}
+				if (sib.tagName === 'LINK') {
+					sib = sib.nextElementSibling;
+					continue;
+				}
+				break;
 			}
 
 			// Mixed mode: on a csr=true page Kit already hydrates this component — skip.
 			if (kit_hydrates_page()) {
 				this.setAttribute('data-kit-hydrated', '');
-				if (manifest.dev) {
+				if (import.meta.env.DEV) {
 					console.warn(
 						`[ogygia] island "${entry}" is on a csr=true page; Kit hydrates it, so the island directive is redundant here (it behaves as a normal component).`
 					);
@@ -638,7 +653,7 @@ type LiftedLake = {
 				if (!cached.endpoint) {
 					runtime_session.settled_lakes.add(this);
 					this.#wake_waiting_regions();
-					if (manifest.dev) {
+					if (import.meta.env.DEV) {
 						console.warn(
 							`[ogygia] region "${id}" is remount:'swr' but no signed endpoint was captured at SSR — painting the cache only.`
 						);

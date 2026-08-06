@@ -4,9 +4,8 @@
 declare module 'virtual:ogygia/manifest' {
 	export const dev: boolean;
 	/**
-	 * One record for ALL region kinds, keyed by region id. Only `kind: 'hydrate'` carries a `load`
-	 * thunk (a client module); `defer` (server island) and `lake` entries are metadata-only, so
-	 * their component JS never enters the client graph.
+	 * Legacy empty stub. Hydrate islands load via `<ogygia-region entry>` module URLs;
+	 * this map is no longer populated.
 	 */
 	export const regions: Record<
 		string,

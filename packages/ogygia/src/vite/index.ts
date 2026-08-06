@@ -4,8 +4,21 @@ import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { loadEnv, type Plugin } from 'vite';
-import { transformHost, ISLAND_DIR, normalize_import_keys } from './transform.js';
-export { normalize_import_keys, DEFAULT_IMPORT_KEYS, import_keys_hint } from './transform.js';
+import {
+	transformHost,
+	ISLAND_DIR,
+	normalize_import_keys,
+	islandChunkFileName,
+	type ImportKeys
+} from './transform.js';
+export {
+	normalize_import_keys,
+	DEFAULT_IMPORT_KEYS,
+	import_keys_hint,
+	islandChunkFileName,
+	islandPublicUrl,
+	islandId
+} from './transform.js';
 export type { ImportKeys } from './transform.js';
 import { allRoutesCsrFalse, runStandaloneClientBuild } from './standalone.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
@@ -450,7 +463,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const strip_id = (id) => (id ? id.split('?')[0] : id);
 	/** @type {Map<string, string>} iid -> abs virtual path (hydrate + defer islands only) */
 	const by_id = new Map();
-	/** @type {Map<string, 'hydrate'|'defer'|'lake'>} every region id -> kind (drives the client `regions` manifest) */
+	/** @type {Map<string, 'hydrate'|'defer'|'lake'>} every region id -> kind (server manifest / emit) */
 	const region_kinds = new Map();
 	/** host abs path → region ids + virtual paths discovered on last transform of that host */
 	const host_index = new Map();
@@ -758,6 +771,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!standalone) {
 					this.emitFile({ type: 'chunk', id: RUNTIME_ENTRY, fileName: RUNTIME_FILENAME });
 				}
+				// Hydrate islands: deterministic filenames so SSR can bake `entry` URLs without a
+				// client→server hash handoff (same pattern as RUNTIME_FILENAME). Pulls them into the
+				// client graph without an app-wide regions map.
+				for (const [rid, kind] of region_kinds) {
+					if (kind !== 'hydrate') continue;
+					const virtualPath = by_id.get(rid);
+					if (!virtualPath) continue;
+					this.emitFile({
+						type: 'chunk',
+						id: virtualPath,
+						fileName: islandChunkFileName(rid)
+					});
+				}
 			}
 
 			// SSR build with Kit SKIPPING its client build (every route csr=false): run our own
@@ -1017,25 +1043,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				return `export const islands = {\n${entries.join(',\n')}\n};`;
 			}
 			if (id === RESOLVED(V_MANIFEST)) {
-				if (is_dev) {
-					return `export const dev = true;\nexport const regions = {};`;
-				}
-				prescan();
-				// One `regions` record for ALL region kinds. ONLY kind:'hydrate' carries a `load`
-				// thunk — lake + defer entries are metadata-only, so a lake's (or server island's)
-				// component JS is never pulled into the client graph (the lakes suite guards this).
-				const entries = [];
-				for (const [rid, kind] of region_kinds) {
-					if (kind === 'hydrate') {
-						const virtualPath = by_id.get(rid);
-						entries.push(
-							`  ${JSON.stringify(rid)}: { kind: 'hydrate', load: () => import(${JSON.stringify(virtualPath)}) }`
-						);
-					} else {
-						entries.push(`  ${JSON.stringify(rid)}: { kind: ${JSON.stringify(kind)} }`);
-					}
-				}
-				return `export const dev = false;\nexport const regions = {\n${entries.join(',\n')}\n};`;
+				// Legacy stub — hydrate modules are loaded via `<ogygia-region entry>` URLs, not this map.
+				return `export const dev = ${is_dev ? 'true' : 'false'};\nexport const regions = {};`;
 			}
 			const srcEntry = registry.get(id);
 			if (srcEntry) {

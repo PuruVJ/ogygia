@@ -15,7 +15,7 @@
 import { describe, test, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { transformHost, normalize_import_keys } from '../dist/vite/transform.js';
+import { transformHost, normalize_import_keys, islandPublicUrl } from '../dist/vite/transform.js';
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -28,6 +28,10 @@ const REL_HOST = 'src/routes/+page.svelte';
 /** The transform's own island-id function, reproduced to assert determinism + stability. */
 function idFor(index: number | string): string {
 	return createHash('md5').update(`${REL_HOST}::${index}`).digest('hex').slice(0, 12);
+}
+/** Build-time hydrate `__entry` is the deterministic public island module URL. */
+function entryFor(index: number | string): string {
+	return islandPublicUrl(idFor(index));
 }
 function lakeIdFor(islandIndex: number, lakeIndex: number): string {
 	return idFor(`lake:${islandIndex}:${lakeIndex}`);
@@ -396,13 +400,15 @@ describe('deterministic ids + multi-island ordering + offset correctness', () =>
 		const expected =
 			`<script>\n` +
 			`\timport { Island as OgygiaIsland__Wrapper } from 'ogygia/internal';\n` +
-			`\timport __OgygiaIsland_0 from "./A.svelte";\n` +
-			`\timport __OgygiaIsland_1 from "./B.svelte";\n` +
+			`\timport __OgygiaIsland_0_css from "./A.svelte";\n` +
+			`\timport __OgygiaIsland_0 from "virtual:ogygia/island/${idFor(0)}.svelte";\n` +
+			`\timport __OgygiaIsland_1_css from "./B.svelte";\n` +
+			`\timport __OgygiaIsland_1 from "virtual:ogygia/island/${idFor(1)}.svelte";\n` +
 			`\n\n</script>\n` +
 			`<h1>title</h1>\n` +
-			`<OgygiaIsland__Wrapper load __entry={"${idFor(0)}"} __component={__OgygiaIsland_0} __props={{}} />\n` +
+			`<OgygiaIsland__Wrapper load __entry={"${entryFor(0)}"} __component={__OgygiaIsland_0} __css={__OgygiaIsland_0_css} __props={{}} />\n` +
 			`<p>between</p>\n` +
-			`<OgygiaIsland__Wrapper idle __entry={"${idFor(1)}"} __component={__OgygiaIsland_1} __props={{}} />\n` +
+			`<OgygiaIsland__Wrapper idle __entry={"${entryFor(1)}"} __component={__OgygiaIsland_1} __css={__OgygiaIsland_1_css} __props={{}} />\n` +
 			`<footer>end</footer>`;
 		expect(r!.code).toBe(expected);
 	});
@@ -815,8 +821,12 @@ describe('exact wrapper output per strategy', () => {
 	for (const [label, imp, attr] of cases) {
 		test(`${label} -> exact <OgygiaIsland__Wrapper ${attr} …>`, () => {
 			const r = run(wrap(imp, '<C />'));
-			const expected = `<OgygiaIsland__Wrapper ${attr} __entry={"${idFor(0)}"} __component={__OgygiaIsland_0} __props={{}} />`;
+			const expected = `<OgygiaIsland__Wrapper ${attr} __entry={"${entryFor(0)}"} __component={__OgygiaIsland_0} __css={__OgygiaIsland_0_css} __props={{}} />`;
 			expect(r!.code).toContain(expected);
+			expect(r!.code).toContain(`import __OgygiaIsland_0_css from "./C.svelte";`);
+			expect(r!.code).toContain(
+				`import __OgygiaIsland_0 from "virtual:ogygia/island/${idFor(0)}.svelte";`
+			);
 		});
 	}
 
@@ -1053,6 +1063,14 @@ describe('dev-mode context (shell-lake warning path)', () => {
 		const r = run(wrap(LOAD, '<C />'), makeCtx({ dev: true }));
 		// dev __entry is the devUrlFor(virtualPath), not the raw id
 		expect(r!.code).toMatch(/__entry=\{"\/@id\/virtual:ogygia\/island\/[0-9a-f]{12}\.svelte"\}/);
+	});
+
+	test('build __entry is the deterministic ogygia-island chunk URL', () => {
+		const r = run(wrap(LOAD, '<C />'));
+		expect(r!.code).toContain(`__entry={"${entryFor(0)}"}`);
+		expect(r!.code).toMatch(
+			/__entry=\{"\/_app\/immutable\/ogygia-island\.[0-9a-f]{12}\.js"\}/
+		);
 	});
 });
 

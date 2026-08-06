@@ -80,6 +80,20 @@ export function islandId(relHostPath: string, index: string | number, salt = '')
 	return createHash('md5').update(msg).digest('hex').slice(0, 12);
 }
 
+/**
+ * Deterministic client chunk path for a hydrate island (mirrors `ogygia-runtime.<hash>.js`).
+ * SSR bakes this into `<ogygia-region entry>` so the sticky runtime can `import(entry)` with no
+ * app-wide regions map — Kit builds server before client, so content-hashed Vite names can't hand off.
+ */
+export function islandChunkFileName(iid: string) {
+	return `_app/immutable/ogygia-island.${iid}.js`;
+}
+
+/** Public URL for {@link islandChunkFileName} (leading slash, same shape as runtime-url). */
+export function islandPublicUrl(iid: string) {
+	return '/' + islandChunkFileName(iid);
+}
+
 /** True if `val` looks like a CSS media query (must contain a balanced-ish `(…)`). */
 function is_media_query(val: string) {
 	const open = val.indexOf('(');
@@ -1145,22 +1159,29 @@ export function transformHost(source, id, ctx) {
 			preamble_imports.push(`\timport { Island as ${wrapper_name} } from 'ogygia/internal';`);
 		}
 
-		// Import the entry component for SSR + FOUC CSS (see server-island note above).
-		// Client hydrate still loads the virtual module via `__entry` (string URL / manifest id).
+		// SSR must render the *virtual* island (same module the client hydrates) so attribute
+		// expressions like `codeHtml={data.heroCode}` match. Spreading captures onto the entry
+		// component (`{ data }` → HeroDemo) leaves `codeHtml` undefined on the server and causes
+		// `{@html}` hydration_html_changed once the client has real props.
+		//
+		// Separate entry import keeps the real `.svelte` in the PAGE SSR graph for Kit's FOUC
+		// style bag — virtual modules alone don't reliably contribute CSS there (same as defer).
 		if (typeof entry_spec !== 'string') {
 			throw new Error(
 				`[ogygia] ${rel_host}: hydrate island needs a static import path ($lib/… or relative).`
 			);
 		}
-		preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(entry_spec)};`);
+		const css_var = `${comp_var}_css`;
+		preamble_imports.push(`\timport ${css_var} from ${JSON.stringify(entry_spec)};`);
+		preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);
 
 		// rewrite host: replace the unit with an <Island> wrapper element
 		const strategy_attrs_text = strategy_to_attr(unit.strategy, unit.options);
-		// dev: __entry is the vite dev URL of the island module; build: the manifest key (iid)
-		const entry_value = ctx.dev ? ctx.devUrlFor(virtualPath) : iid;
+		// __entry is always an importable URL: Vite dev URL in dev, deterministic chunk URL in build
+		const entry_value = ctx.dev ? ctx.devUrlFor(virtualPath) : islandPublicUrl(iid);
 		const replacement =
 			`<${wrapper_name} ${strategy_attrs_text} ` +
-			`__entry={${JSON.stringify(entry_value)}} __component={${comp_var}} __props={${props_obj}} />`;
+			`__entry={${JSON.stringify(entry_value)}} __component={${comp_var}} __css={${css_var}} __props={${props_obj}} />`;
 		s.overwrite(unit.node.start, unit.node.end, replacement);
 	});
 

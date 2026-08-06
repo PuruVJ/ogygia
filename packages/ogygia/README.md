@@ -35,7 +35,7 @@
   · <code>csr=false HMR</code>
 </p>
 
-No Kit client bootstrap — the shared runtime is a custom element plus an optional router (~7.6&nbsp;KB min+brotli). Mark components with an import attribute; only those get their own JS. Not a new framework — it sits on SvelteKit.
+No Kit client bootstrap — the shared runtime is a custom element plus an optional router (~7.6&nbsp;KB min+brotli). Mark components with an import attribute; only those get their own JS. Each hydrate island’s module URL is written onto `<ogygia-region entry>` (Astro-style), so the sticky runtime does not grow with app-wide island count. Not a new framework — it sits on SvelteKit.
 
 ## Install
 
