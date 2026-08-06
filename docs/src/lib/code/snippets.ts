@@ -31,7 +31,7 @@ export default defineConfig({
       rateLimit: { max: 60, windowMs: 60_000 },
       regionTtl: 3600 // seconds; default 1h
       // sessionCookie: 'sessionid' // bind personalized defer/SWR holes
-      // importKeys: { hydrate: 'ogygiaHydrate' } // only if another tool claims `hydrate`
+      // importKeys: { hydrate: 'ogygiaHydrate' } // only if another tool claims \`hydrate\`
     }),
     sveltekit()
   ]

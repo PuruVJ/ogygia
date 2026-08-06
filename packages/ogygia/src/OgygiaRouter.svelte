@@ -9,14 +9,8 @@
 	 *
 	 * @component
 	 * @example
-	 * ```svelte
-	 * <!-- src/routes/+layout.svelte -->
-	 * <script>
-	 *   import { OgygiaRouter } from 'ogygia';
-	 * </script>
-	 * <OgygiaRouter />
-	 * {@render children()}
-	 * ```
+	 * In `src/routes/+layout.svelte`: import `{ OgygiaRouter }` from `ogygia`, render
+	 * `<OgygiaRouter />` once, then `{@render children()}`.
 	 *
 	 * @typedef {Object} Props
 	 * @property {boolean} [viewTransitions=true] Use the View Transitions API when swapping documents.

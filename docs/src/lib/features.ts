@@ -20,5 +20,6 @@ export const FEATURES = [
 	'Named presets',
 	'Nesting',
 	'Prerender',
-	'Snippets'
+	'Snippets',
+	'csr=false HMR'
 ] as const;

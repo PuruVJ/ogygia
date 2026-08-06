@@ -1029,6 +1029,81 @@
 		</div>
 	</section>
 
+	<section id="hmr">
+		<div class="section-header">
+			<h2>Dev HMR</h2>
+			<p class="section-lede">
+				Under <code>csr = false</code>, Kit never boots a client module graph — so stock Vite HMR
+				has nothing to talk to. <code>ogygia()</code> bridges that for you. No extra config.
+			</p>
+		</div>
+		<div class="prose">
+			<p>
+				In <code>vite dev</code>, the plugin injects a small bridge
+				(<code>virtual:ogygia/dev-hmr</code>) that pulls in <code>@vite/client</code>, eager-imports
+				app CSS under <code>/src</code>, and strips Kit’s FOUC
+				<code>&lt;style data-sveltekit&gt;</code> tags so they don’t fight soft CSS updates. If Vite
+				reports <code>vite:error</code>, the bridge falls back to a full document reload.
+			</p>
+			<p>What happens on save depends on what you edited:</p>
+		</div>
+		<div class="map-scroll">
+			<table class="map-table">
+				<thead>
+					<tr>
+						<th scope="col">You change</th>
+						<th scope="col">Behavior</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>CSS / SCSS / etc. under <code>src/</code></td>
+						<td>Soft HMR — styles update without a reload</td>
+					</tr>
+					<tr>
+						<td>Shared modules (e.g. <code>.ts</code>) imported by islands</td>
+						<td>Soft HMR through the island graph</td>
+					</tr>
+					<tr>
+						<td
+							>Island <em>entry</em> <code>.svelte</code> (the file you import with
+							<code>hydrate</code> / <code>defer</code> / <code>preset</code>)</td
+						>
+						<td>Full reload — soft HMR through the virtual island wrapper is unreliable</td>
+					</tr>
+					<tr>
+						<td
+							>Route shells (<code>+page</code>, <code>+layout</code>, <code>+error</code>,
+							<code>+server</code>, <code>+hooks</code>, …)</td
+						>
+						<td
+							>Full reload — those files never join the browser graph under
+							<code>csr = false</code></td
+						>
+					</tr>
+					<tr>
+						<td>Host rewrite (add/remove/reorder island imports in a page or layout)</td>
+						<td
+							>Full reload; virtual islands for that host are invalidated so renamed
+							components (e.g. SiteNav → SideNav) don’t keep a stale module id</td
+						>
+					</tr>
+					<tr>
+						<td>Delete an island entry component</td>
+						<td>Full reload; dangling virtual islands are dropped</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<div class="prose">
+			<p>
+				Production builds do not ship the bridge. Judge final paint in
+				<code>vite preview</code> / a real deploy — see also
+				<a href="#patterns">Pesky patterns → Dev is not prod</a>.
+			</p>
+		</div>
+	</section>
+
 	<section id="patterns">
 		<div class="section-header">
 			<h2>Pesky patterns</h2>
@@ -1100,7 +1175,9 @@
 				<code>vite dev</code>, module isolation keeps the seed from reaching Kit's cache, so dev
 				islands re-fetch when they get JS — cosmetic, dev-only, documented. And Vite's dev server
 				compiles lazily, so first paints in dev can flash unstyled in ways prod never does.
-				Judge visual behaviour in <code>vite preview</code>.
+				Judge visual behaviour in <code>vite preview</code>. HMR under
+				<code>csr = false</code> is real (soft CSS / shared modules, full reload for route shells
+				and island entries) — see <a href="#hmr">Dev HMR</a>.
 			</p>
 		</div>
 	</section>

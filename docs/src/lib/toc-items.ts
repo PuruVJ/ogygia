@@ -36,6 +36,7 @@ export const docsTocItems: TocItem[] = [
 	{ id: 'data', label: 'Data & remotes', sub: false },
 	{ id: 'router', label: 'SPA router', sub: false },
 	{ id: 'persist', label: 'Persistence', sub: true },
+	{ id: 'hmr', label: 'Dev HMR', sub: false },
 	{ id: 'patterns', label: 'Pesky patterns', sub: false },
 	{ id: 'constraints', label: 'Constraints', sub: false }
 ];

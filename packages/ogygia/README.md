@@ -32,6 +32,7 @@
   · <code>Named presets</code>
   · <code>Nesting</code>
   · <code>Prerender</code>
+  · <code>csr=false HMR</code>
 </p>
 
 No Kit client bootstrap — the shared runtime is a custom element plus an optional router (~4.5&nbsp;KB min+brotli). Mark components with an import attribute; only those get their own JS. Not a new framework — it sits on SvelteKit.
@@ -57,6 +58,8 @@ export default defineConfig({
 // src/routes/+layout.ts
 export const csr = false;
 ```
+
+Dev HMR still works with `csr = false` — soft updates for CSS and shared modules, full reload for route shells and island entry components. No extra setup; see the [docs](https://ogygia.puruvj.dev/#hmr).
 
 ## Example
 
