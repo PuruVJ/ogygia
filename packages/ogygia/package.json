@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
+  "homepage": "https://ogygia.puruvj.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PuruVJ/ogygia.git",
+    "directory": "packages/ogygia"
+  },
+  "bugs": {
+    "url": "https://github.com/PuruVJ/ogygia/issues"
+  },
+  "license": "MIT",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

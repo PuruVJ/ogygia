@@ -140,7 +140,6 @@ function is_island_path(id) {
 
 /**
  * @param {Object} [options]
- * @param {boolean} [options.spa=true] enable the built-in SPA router
  * @param {{margin?:string}} [options.visible] global defaults for `hydrate: 'visible'` islands
  * @param {Record<string, {
  *   hydrate?: string;
@@ -151,14 +150,13 @@ function is_island_path(id) {
  *   named strategy presets referenced from imports via `with { preset: 'name' }`
  * @param {false|{max?:number,windowMs?:number}} [options.rateLimit] per-IP budget for the
  *   deferred-region endpoint (default `{ max: 60, windowMs: 60_000 }`; `false` disables)
- * @param {false|string} [options.bindSession] cookie name to seal into the region MAC (opt-in;
+ * @param {false|string} [options.sessionCookie] cookie name to seal into the region MAC (opt-in;
  *   empty/prerender stays unbound). Harvested URLs then fail without that cookie.
  * @param {boolean} [options.standalone] internal: this instance runs inside the standalone build
  * @returns {import('vite').Plugin}
  */
 export function ogygia(
 	options: {
-		spa?: boolean;
 		standalone?: boolean;
 		visible?: { margin?: string };
 		presets?: Record<
@@ -175,10 +173,9 @@ export function ogygia(
 			}
 		>;
 		rateLimit?: false | { max?: number; windowMs?: number };
-		bindSession?: false | string;
+		sessionCookie?: false | string;
 	} = {}
 ): Plugin {
-	const spa = options.spa !== false;
 	const standalone = options.standalone === true;
 	const visibleMargin = options.visible?.margin;
 	const presets = options.presets || {};
@@ -194,8 +191,8 @@ export function ogygia(
 
 	/** Cookie name sealed into the region MAC, or '' when unbound (default). */
 	const session_cookie =
-		typeof options.bindSession === 'string' && options.bindSession.length > 0
-			? options.bindSession
+		typeof options.sessionCookie === 'string' && options.sessionCookie.length > 0
+			? options.sessionCookie
 			: '';
 
 	// HMAC key for signing region capability URLs (defer / remount:swr). Default: a fresh
@@ -576,7 +573,7 @@ export function ogygia(
 			}
 			if (id === RESOLVED(V_MANIFEST)) {
 				if (is_dev) {
-					return `export const dev = true;\nexport const spa = ${spa};\nexport const regions = {};`;
+					return `export const dev = true;\nexport const regions = {};`;
 				}
 				prescan();
 				// One `regions` record for ALL region kinds. ONLY kind:'hydrate' carries a `load`
@@ -593,7 +590,7 @@ export function ogygia(
 						entries.push(`  ${JSON.stringify(rid)}: { kind: ${JSON.stringify(kind)} }`);
 					}
 				}
-				return `export const dev = false;\nexport const spa = ${spa};\nexport const regions = {\n${entries.join(',\n')}\n};`;
+				return `export const dev = false;\nexport const regions = {\n${entries.join(',\n')}\n};`;
 			}
 			const srcEntry = registry.get(id);
 			if (srcEntry) {

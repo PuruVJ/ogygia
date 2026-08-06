@@ -656,10 +656,10 @@ export function transformHost(source, id, ctx) {
 	let wrapper_imported = false;
 	let server_wrapper_imported = false;
 
-	/** Find a reserved `{#snippet fallback()}` block among a component's children. */
+	/** Find a reserved `{#snippet ogygiaFallback()}` block among a component's children. */
 	const find_fallback_snippet = (node) => {
 		for (const child of node.fragment?.nodes ?? []) {
-			if (child.type === 'SnippetBlock' && child.expression?.name === 'fallback') return child;
+			if (child.type === 'SnippetBlock' && child.expression?.name === 'ogygiaFallback') return child;
 		}
 		return null;
 	};
@@ -670,7 +670,7 @@ export function transformHost(source, id, ctx) {
 		const comp_var = `__OgygiaIsland_${index}`;
 		const is_server = unit.strategy === 'server';
 
-		// SERVER island: the reserved `fallback` snippet renders into the page immediately
+		// SERVER island: the reserved `ogygiaFallback` snippet renders into the page immediately
 		// (kept in host scope, so it can reference host vars directly). The island component
 		// itself is hoisted WITHOUT the fallback and rendered only by the `/🏝️ogygia🏝️` endpoint.
 		const fallback_node = is_server ? find_fallback_snippet(unit.node) : null;

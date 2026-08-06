@@ -1,16 +1,26 @@
 /**
  * Shiki highlighter — server-only (`.server.ts`). Never import from client islands.
- * On csr=false pages, CodeBlock SSRs to HTML; as a server island (`defer`) it renders
- * in the region endpoint. Either way the browser only receives highlighted markup.
+ *
+ * Lazy: `shiki` loads on first `highlight()` call only. Docs snippets are baked via
+ * `prerender()` + `dynamic: true`, so the happy path never enters this module at request time.
  */
-import { createHighlighter, type BundledLanguage } from 'shiki';
+import type { BundledLanguage } from 'shiki';
 
-const highlighter = await createHighlighter({
-	themes: ['github-light', 'github-dark'],
-	langs: ['svelte', 'typescript', 'javascript', 'html', 'css', 'bash', 'json']
-});
+type Highlighter = Awaited<ReturnType<(typeof import('shiki'))['createHighlighter']>>;
+
+let highlighter_p: Promise<Highlighter> | null = null;
+
+function get_highlighter() {
+	return (highlighter_p ??= import('shiki').then(({ createHighlighter }) =>
+		createHighlighter({
+			themes: ['github-light', 'github-dark'],
+			langs: ['svelte', 'typescript', 'javascript', 'html', 'css', 'bash', 'json']
+		})
+	));
+}
 
 export async function highlight(code: string, lang: BundledLanguage | string = 'typescript') {
+	const highlighter = await get_highlighter();
 	return highlighter.codeToHtml(code.replace(/^\n/, '').replace(/\n$/, ''), {
 		lang,
 		themes: {

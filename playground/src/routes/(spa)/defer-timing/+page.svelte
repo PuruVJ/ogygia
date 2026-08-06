@@ -19,17 +19,17 @@
 
 <section data-defer="load">
 	<h2 data-static-shell>load</h2>
-	<GLoad salutation="Load">{#snippet fallback()}<p class="fb" data-fallback-load>loading (load)…</p>{/snippet}</GLoad>
+	<GLoad salutation="Load">{#snippet ogygiaFallback()}<p class="fb" data-fallback-load>loading (load)…</p>{/snippet}</GLoad>
 </section>
 
 <section data-defer="idle">
 	<h2 data-static-shell>idle</h2>
-	<GIdle salutation="Idle">{#snippet fallback()}<p class="fb" data-fallback-idle>loading (idle)…</p>{/snippet}</GIdle>
+	<GIdle salutation="Idle">{#snippet ogygiaFallback()}<p class="fb" data-fallback-idle>loading (idle)…</p>{/snippet}</GIdle>
 </section>
 
 <section data-defer="media">
 	<h2 data-static-shell>media</h2>
-	<GMedia salutation="Media">{#snippet fallback()}<p class="fb" data-fallback-media>loading (media)…</p>{/snippet}</GMedia>
+	<GMedia salutation="Media">{#snippet ogygiaFallback()}<p class="fb" data-fallback-media>loading (media)…</p>{/snippet}</GMedia>
 </section>
 
 <!-- big spacer so the visible hole starts well below the fold -->
@@ -37,7 +37,7 @@
 
 <section data-defer="visible">
 	<h2 data-static-shell>visible (below the fold)</h2>
-	<GVisible salutation="Visible">{#snippet fallback()}<p class="fb" data-fallback-visible>loading (visible)…</p>{/snippet}</GVisible>
+	<GVisible salutation="Visible">{#snippet ogygiaFallback()}<p class="fb" data-fallback-visible>loading (visible)…</p>{/snippet}</GVisible>
 </section>
 
 <style>

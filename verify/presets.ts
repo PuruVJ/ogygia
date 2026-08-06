@@ -52,7 +52,7 @@ function expectError(label: string, src: string, re: RegExp) {
 }
 // preset defer -> server island (no ogygia-region wrapper import, uses ServerIsland)
 {
-	const r = run(wrap(`import C from './C.svelte' with { preset: 'srv' };`, '<C>{#snippet fallback()}x{/snippet}</C>'));
+	const r = run(wrap(`import C from './C.svelte' with { preset: 'srv' };`, '<C>{#snippet ogygiaFallback()}x{/snippet}</C>'));
 	check('preset srv -> server island (ServerIsland wrapper)', /OgygiaServerIsland__Wrapper/.test(r.code));
 }
 // inline hydrate visible uses the global default margin (0px)

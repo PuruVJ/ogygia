@@ -26,12 +26,12 @@
 	--r-sm: 6px;
 	--r-md: 10px;
 
-	--font-display: 'Newsreader', Georgia, serif;
-	--font-body: 'Instrument Sans', system-ui, -apple-system, sans-serif;
-	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+	--font-display: 'Newsreader Variable', Georgia, serif;
+	--font-body: 'Instrument Sans Variable', system-ui, -apple-system, sans-serif;
+	--font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace;
 
 	--maxw: 1000px;
-	--toc-w: 9rem;
+	--toc-w: 12rem;
 	--toc-inset: 1.5rem;
 	--gutter: clamp(1.25rem, 3vw, 2.5rem);
 	--section-gap: clamp(5rem, 10vw, 8.5rem);
@@ -73,6 +73,7 @@
 }
 
 html {
+	/* In-page #hash clicks only — SPA post-nav scroll forces behavior:instant in the router. */
 	scroll-behavior: smooth;
 	scroll-padding-top: calc(var(--nav-h) + 1.5rem);
 }
@@ -525,7 +526,7 @@ a:hover {
 	display: none;
 }
 
-@media (min-width: 1360px) {
+@media (min-width: 1440px) {
 	.toc-fixed {
 		display: block;
 		position: fixed;
@@ -601,6 +602,17 @@ a:hover {
 	color: var(--accent);
 	letter-spacing: -0.01em;
 	max-width: none;
+}
+
+.hero-say {
+	display: inline-block;
+	margin-left: 0.65rem;
+	padding-left: 0.65rem;
+	border-left: 1px solid var(--line-strong);
+	font: 400 0.8125rem/1.35 var(--font-mono);
+	letter-spacing: 0.02em;
+	color: var(--text-faint);
+	vertical-align: 0.05em;
 }
 
 .hero-contours {
@@ -681,6 +693,7 @@ a:hover {
 .toc-item {
 	font: 400 0.75rem/2 var(--font-mono);
 	color: var(--text-dim);
+	white-space: nowrap;
 	transition: color 120ms ease;
 }
 
@@ -812,6 +825,43 @@ a:hover {
 	cursor: default;
 }
 
+/* ---- features ---- */
+.features {
+	padding: clamp(2.5rem, 5vw, 4rem) 0;
+	border-top: 1px solid var(--line);
+	border-bottom: 1px solid var(--line);
+	background: var(--bg-sunken);
+}
+
+.features h2 {
+	margin: 0;
+}
+
+.features-lede {
+	margin: 0.35rem 0 1.5rem;
+	font: italic 500 1.125rem/1.3 var(--font-display);
+	color: var(--text-dim);
+}
+
+.features-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.65rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.features-list li {
+	padding: 0.55rem 0.9rem;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r-sm);
+	background: var(--bg-raised);
+	font: 500 0.8125rem/1.2 var(--font-mono);
+	letter-spacing: 0.01em;
+	color: var(--text-dim);
+}
+
 /* ---- what ---- */
 .what-grid {
 	display: grid;
@@ -854,6 +904,93 @@ a:hover {
 	font: 400 0.6875rem/1.4 var(--font-mono);
 	color: var(--text-faint);
 	letter-spacing: 0.04em;
+}
+
+/* ---- concept map ---- */
+.map-scroll {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	border: 1px solid var(--line);
+	border-radius: var(--r-md);
+	background: var(--bg-raised);
+	box-shadow: var(--shadow-panel);
+}
+
+.map-table {
+	width: 100%;
+	min-width: 40rem;
+	border-collapse: collapse;
+	font-size: 0.875rem;
+	line-height: 1.45;
+}
+
+.map-table th,
+.map-table td {
+	padding: 0.75rem 1rem;
+	text-align: left;
+	vertical-align: top;
+	border-bottom: 1px solid var(--line);
+}
+
+.map-table th {
+	font: 500 0.6875rem/1.4 var(--font-mono);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	background: var(--bg-sunken);
+	border-bottom-color: var(--line-strong);
+}
+
+.map-table tbody tr:last-child td {
+	border-bottom: none;
+}
+
+.map-table td:first-child {
+	white-space: nowrap;
+	color: var(--text);
+}
+
+.map-table td {
+	color: var(--text-dim);
+}
+
+.map-table code {
+	font-size: 0.8125rem;
+	color: var(--accent);
+}
+
+.map-table em {
+	font-style: italic;
+	color: var(--text-faint);
+}
+
+.map-nest {
+	margin: 1.25rem 0 0;
+	padding: 1rem 1.25rem;
+	font: 500 0.875rem/1.55 var(--font-body);
+	color: var(--text-dim);
+	background: var(--bg-sunken);
+	border: 1px solid var(--line);
+	border-radius: var(--r-sm);
+	max-width: 68ch;
+}
+
+.prose ul {
+	margin: 0 0 1rem;
+	padding-left: 1.25rem;
+	color: var(--text-dim);
+}
+
+.prose ul:last-child {
+	margin-bottom: 0;
+}
+
+.prose li {
+	margin: 0.35rem 0;
+}
+
+.prose li code {
+	color: var(--accent);
 }
 
 /* ---- install ---- */

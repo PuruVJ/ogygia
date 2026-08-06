@@ -203,10 +203,10 @@ describe('defer / server island (fetch-timing symmetry)', () => {
 		);
 	});
 
-	test('server island keeps `fallback` inline in the host + strips it from the island module', () => {
-		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G name="w">{#snippet fallback()}<p>loading…</p>{/snippet}</G>'));
-		expect(r!.code).toMatch(/<OgygiaServerIsland__Wrapper[^>]*>\{#snippet fallback\(\)\}<p>loading…<\/p>\{\/snippet\}<\/OgygiaServerIsland__Wrapper>/);
-		expect(islandSource(r)).not.toMatch(/fallback/);
+	test('server island keeps `ogygiaFallback` inline in the host + strips it from the island module', () => {
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G name="w">{#snippet ogygiaFallback()}<p>loading…</p>{/snippet}</G>'));
+		expect(r!.code).toMatch(/<OgygiaServerIsland__Wrapper[^>]*>\{#snippet ogygiaFallback\(\)\}<p>loading…<\/p>\{\/snippet\}<\/OgygiaServerIsland__Wrapper>/);
+		expect(islandSource(r)).not.toMatch(/ogygiaFallback/);
 	});
 
 	test('defer + hydrate together is a roadmap error', () => {
@@ -759,10 +759,10 @@ describe('exact wrapper output per strategy', () => {
 	}
 
 	test('server island -> exact <OgygiaServerIsland__Wrapper …> with fallback body', () => {
-		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G a={1}>{#snippet fallback()}x{/snippet}</G>'));
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G a={1}>{#snippet ogygiaFallback()}x{/snippet}</G>'));
 		const expected =
 			`<OgygiaServerIsland__Wrapper __entry={"${idFor(0)}"} __component={__OgygiaIsland_0} __props={{}} __defer={"load"}>` +
-			`{#snippet fallback()}x{/snippet}</OgygiaServerIsland__Wrapper>`;
+			`{#snippet ogygiaFallback()}x{/snippet}</OgygiaServerIsland__Wrapper>`;
 		expect(r!.code).toContain(expected);
 	});
 });
@@ -868,7 +868,7 @@ describe('server island extras', () => {
 	});
 
 	test('a server island captures host props (rendered by the endpoint)', () => {
-		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };\nlet u = 1;`, '<G user={u}>{#snippet fallback()}x{/snippet}</G>'));
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };\nlet u = 1;`, '<G user={u}>{#snippet ogygiaFallback()}x{/snippet}</G>'));
 		expect(propsObject(r!.code)).toBe('__props={{ u }}');
 	});
 

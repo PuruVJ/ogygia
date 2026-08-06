@@ -2,8 +2,8 @@
 	// Each demo wrapper is imported AS an island with the strategy it demonstrates. The live/frozen
 	// pair and the JS toggle live inside DemoBlock — flip the toggle to compare the hydrated UI with
 	// the static HTML the server actually shipped.
-	// Code is Shiki-highlighted in +page.server.ts and passed as string props — island chunks never
-	// import Shiki.
+	// Code is Shiki-highlighted at build (`strategiesPageSnippets` prerender RF) and passed as
+	// string props — island chunks never import Shiki.
 	import LoadDemo from '$lib/demos/LoadDemo.svelte' with { hydrate: 'load' };
 	import IdleDemo from '$lib/demos/IdleDemo.svelte' with { hydrate: 'idle' };
 	import VisibleDemo from '$lib/demos/VisibleDemo.svelte' with { hydrate: 'visible' };

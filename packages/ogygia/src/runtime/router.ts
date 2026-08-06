@@ -93,6 +93,35 @@ export function spa_html_cacheable(cacheControl: string, setCookie: boolean): bo
 	return !CC_UNCACHEABLE.test(cacheControl || '') && !setCookie;
 }
 
+/** Same document = pathname + search. Hash is not part of document identity. */
+function same_document(a: URL, b: URL) {
+	return a.pathname === b.pathname && a.search === b.search;
+}
+
+function document_key(url: URL) {
+	return url.pathname + url.search;
+}
+
+/** Instant scroll to a hash target (or top). Ignores CSS `scroll-behavior: smooth`. */
+function jump_to_hash(hash: string) {
+	const html_el = document.documentElement;
+	const prev = html_el.style.scrollBehavior;
+	html_el.style.scrollBehavior = 'auto';
+	try {
+		if (hash) {
+			const id = decodeURIComponent(hash.startsWith('#') ? hash.slice(1) : hash);
+			const el = document.getElementById(id);
+			if (el) {
+				el.scrollIntoView();
+				return;
+			}
+		}
+		window.scrollTo(0, 0);
+	} finally {
+		html_el.style.scrollBehavior = prev;
+	}
+}
+
 class SpaRouter {
 	#after_body_swap: (() => void) | undefined;
 	#started = false;
@@ -109,6 +138,8 @@ class SpaRouter {
 	#nav_abort: AbortController | null = null;
 	#viewport_io: IntersectionObserver | null = null;
 	#viewport_seen = new WeakSet<Element>();
+	/** pathname+search of the document currently in the DOM (hash ignored). */
+	#doc_key = '';
 
 	set_after_body_swap(fn: () => void) {
 		this.#after_body_swap = fn;
@@ -227,6 +258,21 @@ class SpaRouter {
 		} = {}
 	) {
 		const from = new URL(location.href);
+
+		// Same document, hash-only (or identical URL): never fetch / swap / view-transition.
+		// `replace` (invalidateAll) is the exception — that must re-fetch.
+		if (same_document(url, from) && !replace) {
+			if (!this.#run_before(from, url, type)) return;
+			if (push && url.href !== location.href) {
+				history.pushState({ ...(history.state || {}), ogygia: true }, '', url.href);
+			} else if (url.href !== location.href) {
+				history.replaceState({ ...(history.state || {}), ogygia: true }, '', url.href);
+			}
+			jump_to_hash(url.hash);
+			this.#run_after(from, url, type);
+			return;
+		}
+
 		if (!this.#run_before(from, url, type)) return; // a beforeNavigate hook cancelled
 
 		// Cancel any in-flight navigation; only the latest gen may apply a body swap (P2).
@@ -276,7 +322,11 @@ class SpaRouter {
 			location.href = url.href;
 			return;
 		}
-		const use_vt = marker.getAttribute('content') !== 'plain';
+		// Hash targets and reduced-motion: skip View Transitions so they don't fight scroll.
+		const prefer_reduced_motion =
+			typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+		const use_vt =
+			marker.getAttribute('content') !== 'plain' && !url.hash && !prefer_reduced_motion;
 
 		let persist_pairs: PersistPair[] = [];
 		const swap = () => {
@@ -305,17 +355,22 @@ class SpaRouter {
 		}
 		if (gen !== this.#nav_gen) return;
 
-		// scroll handling
+		this.#doc_key = document_key(url);
+
+		// Instant after a body swap — CSS smooth must not animate programmatic post-nav scroll.
 		if (replace) {
 			// invalidate/refresh — keep current scroll
 		} else if (pop_scroll) {
-			window.scrollTo(pop_scroll.x, pop_scroll.y);
-		} else if (url.hash) {
-			const el = document.getElementById(decodeURIComponent(url.hash.slice(1)));
-			if (el) el.scrollIntoView();
-			else window.scrollTo(0, 0);
+			const html_el = document.documentElement;
+			const prev = html_el.style.scrollBehavior;
+			html_el.style.scrollBehavior = 'auto';
+			try {
+				window.scrollTo(pop_scroll.x, pop_scroll.y);
+			} finally {
+				html_el.style.scrollBehavior = prev;
+			}
 		} else {
-			window.scrollTo(0, 0);
+			jump_to_hash(url.hash);
 		}
 
 		this.#run_after(from, url, type);
@@ -369,14 +424,15 @@ class SpaRouter {
 		// OPT-IN: only activate when a <OgygiaRouter/> put its marker in the head.
 		if (!document.querySelector('meta[name="ogygia-router"]')) return;
 		this.#started = true;
+		this.#doc_key = document_key(new URL(location.href));
 		this.install_remote_mutation_cache_bust();
 
 		document.addEventListener('click', (event) => {
 			const anchor = event.target instanceof Element ? event.target.closest('a') : null;
 			const url = this.#should_intercept(event, anchor);
 			if (!url) return;
-			// same page + hash only -> let the browser handle
-			if (url.pathname === location.pathname && url.search === location.search && url.hash) return;
+			// Same document (incl. #hash-only): let the browser handle — never SPA-swap.
+			if (same_document(url, new URL(location.href))) return;
 			event.preventDefault();
 			this.navigate(url, { push: true });
 		});
@@ -384,8 +440,15 @@ class SpaRouter {
 		this.#install_prefetch();
 
 		window.addEventListener('popstate', () => {
+			const url = new URL(location.href);
+			// Hash-only back/forward on the same document — browser already updated the URL;
+			// do not fetch or swap. Scroll to the fragment if present.
+			if (document_key(url) === this.#doc_key) {
+				jump_to_hash(url.hash);
+				return;
+			}
 			const pop_scroll = history.state?.scroll || null;
-			this.navigate(new URL(location.href), { push: false, pop_scroll });
+			this.navigate(url, { push: false, pop_scroll });
 		});
 
 		// seed initial history entry so scroll is restored on the first back
@@ -512,8 +575,14 @@ class SpaRouter {
 
 	/** Warm the page-HTML cache for an anchor if it's a same-origin SPA target. */
 	#warm_anchor(anchor: Element) {
-		const url = this.#should_intercept({ button: 0, defaultPrevented: false } as MouseEvent, anchor as HTMLAnchorElement);
-		if (url && url.href !== location.href) this.fetch_page(url.href);
+		const url = this.#should_intercept(
+			{ button: 0, defaultPrevented: false } as MouseEvent,
+			anchor as HTMLAnchorElement
+		);
+		if (!url) return;
+		// Same document — nothing to prefetch (hash links / self links).
+		if (same_document(url, new URL(location.href))) return;
+		if (url.href !== location.href) this.fetch_page(url.href);
 	}
 
 	/** Rank of the most-eager preload trigger that applies to `anchor` (5 = none). */

@@ -94,7 +94,7 @@ Renders:
 - `disconnectedCallback` → `unmount(app)` (this is what makes SPA swaps clean up automatically).
 - **Manifest completeness**: rollup may load the runtime/manifest before all host files transform. Pre-scan in `buildStart` (glob `src/**/*.svelte` in the app, parse, extract island ids) so the manifest is complete. Dev needs no manifest.
 
-### 4. SPA router (`<IslandRouter />` component or `spa: true` plugin option; Astro ClientRouter equivalent)
+### 4. SPA router (`<OgygiaRouter />`; Astro ClientRouter equivalent)
 
 Small client module (can live in the same runtime chunk):
 - Intercept same-origin `<a>` clicks (skip modified clicks, `target`, `download`, `rel=external`, `data-no-spa`).

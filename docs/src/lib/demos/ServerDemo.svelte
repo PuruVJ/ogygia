@@ -1,6 +1,6 @@
 <figure class="demo-block">
 	<figcaption class="demo-header">
-		<span class="demo-title">defer: 'load' · ServerGreeting.svelte</span>
+		<span class="demo-title">{title}</span>
 		<span class="caption">0 KB component JS</span>
 	</figcaption>
 	<div class="demo-body demo-body--stack">
@@ -19,5 +19,13 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
-	let { codeHtml, live }: { codeHtml: string; live: Snippet } = $props();
+	let {
+		title = "defer: 'load' · ServerGreeting.svelte",
+		codeHtml,
+		live
+	}: {
+		title?: string;
+		codeHtml: string;
+		live: Snippet;
+	} = $props();
 </script>

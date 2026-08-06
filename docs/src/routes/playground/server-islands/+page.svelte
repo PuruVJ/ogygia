@@ -25,7 +25,7 @@
 		<div class="section-header">
 			<h2>Server islands</h2>
 			<p class="section-lede">
-				A deferred island renders its <code>fallback</code> into the page immediately, then the
+				A deferred island renders its <code>ogygiaFallback</code> into the page immediately, then the
 				browser fetches the real HTML from a signed, same-origin endpoint. Zero component JS ships.
 				Each hole below fetches on a different schedule.
 			</p>
@@ -43,7 +43,7 @@
 				</div>
 				<div class="pg-hole" data-defer="load">
 					<GLoad salutation="Loaded">
-						{#snippet fallback()}<p class="pg-fallback" data-fallback-load>fetching…</p>{/snippet}
+						{#snippet ogygiaFallback()}<p class="pg-fallback" data-fallback-load>fetching…</p>{/snippet}
 					</GLoad>
 				</div>
 			</div>
@@ -55,7 +55,7 @@
 				</div>
 				<div class="pg-hole" data-defer="idle">
 					<GIdle salutation="Idle">
-						{#snippet fallback()}<p class="pg-fallback" data-fallback-idle>fetching…</p>{/snippet}
+						{#snippet ogygiaFallback()}<p class="pg-fallback" data-fallback-idle>fetching…</p>{/snippet}
 					</GIdle>
 				</div>
 			</div>
@@ -67,7 +67,7 @@
 				</div>
 				<div class="pg-hole" data-defer="media">
 					<GMedia salutation="Matched">
-						{#snippet fallback()}<p class="pg-fallback" data-fallback-media>fetching…</p>{/snippet}
+						{#snippet ogygiaFallback()}<p class="pg-fallback" data-fallback-media>fetching…</p>{/snippet}
 					</GMedia>
 				</div>
 			</div>
@@ -85,7 +85,7 @@
 				<div class="pg-cookie">
 					<div class="pg-hole" data-cookie-hole>
 						<CookieGreeting>
-							{#snippet fallback()}<p class="pg-fallback" data-fallback-cookie>reading cookie…</p>{/snippet}
+							{#snippet ogygiaFallback()}<p class="pg-fallback" data-fallback-cookie>reading cookie…</p>{/snippet}
 						</CookieGreeting>
 					</div>
 					<CookieSetter />
@@ -103,7 +103,7 @@
 				<div class="pg-spacer" aria-hidden="true">keep scrolling…</div>
 				<div class="pg-hole" data-defer="visible">
 					<GVisible salutation="Visible">
-						{#snippet fallback()}<p class="pg-fallback" data-fallback-visible>fetching…</p>{/snippet}
+						{#snippet ogygiaFallback()}<p class="pg-fallback" data-fallback-visible>fetching…</p>{/snippet}
 					</GVisible>
 				</div>
 			</div>

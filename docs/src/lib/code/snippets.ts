@@ -1,6 +1,18 @@
-/** Raw snippets for docs / playground — highlighted via `highlight.server.ts` in SSR shells. */
+/** Raw snippets for docs / playground — highlighted at build by `snippets.remote.ts`. */
 
 export const viteConfig = `import { sveltekit } from '@sveltejs/kit/vite';
+import { ogygia } from 'ogygia/vite';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  plugins: [
+    ogygia(), // before sveltekit()
+    sveltekit()
+  ]
+});`;
+
+/** Full `ogygia()` options — docs Plugin config section. */
+export const pluginConfig = `import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
 import { defineConfig } from 'vite';
 
@@ -10,21 +22,18 @@ export default defineConfig({
       visible: { margin: '200px' },
       presets: {
         chart: { hydrate: 'visible', margin: '200px' },
-        modal: { hydrate: 'idle' }
-      }
+        modal: { hydrate: 'idle' },
+        frozen: {
+          hydrate: 'none',
+          remount: { strategy: 'swr', when: 'idle' }
+        }
+      },
+      rateLimit: { max: 60, windowMs: 60_000 }
+      // sessionCookie: 'sessionid'
     }),
     sveltekit()
   ]
 });`;
-
-export const svelteConfig = `export default {
-  // Optional — only if YOU use these features:
-  // compilerOptions: { experimental: { async: true } },   // top-level await in components
-  // kit.experimental.remoteFunctions: true,               // .remote.ts in islands
-  kit: {
-    adapter: adapter()
-  }
-};`;
 
 export const layoutAndHooks = `// src/routes/+layout.ts
 export const csr = false;
@@ -36,11 +45,11 @@ import { ogygiaHandle } from 'ogygia/hooks';
 export const handle = sequence(ogygiaHandle(), myOtherHandle);`;
 
 export const authoringImports = `<script>
-  import Counter  from '$lib/Counter.svelte'  with { hydrate: 'load' };
-  import Chart    from '$lib/Chart.svelte'    with { hydrate: 'visible' };
+  import Counter  from '$lib/Counter.svelte'  with { hydrate: 'load' };     // island
+  import Chart    from '$lib/Chart.svelte'    with { hydrate: 'visible' }; // island, later
   import Drawer   from '$lib/Drawer.svelte'   with { hydrate: '(max-width: 600px)' };
-  import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
-  import Report   from '$lib/Report.svelte'   with { hydrate: 'none' };
+  import Report   from '$lib/Report.svelte'   with { hydrate: 'none' };    // lake (inside an island)
+  import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };      // server island
   import Panel    from '$lib/Panel.svelte'    with { preset: 'chart' };
 </script>
 
@@ -137,8 +146,44 @@ export const deferLoadGreeting = `<script>
 </script>
 
 <Greeting salutation="Aloha">
-  {#snippet fallback()}
+  {#snippet ogygiaFallback()}
     <p>loading…</p>
+  {/snippet}
+</Greeting>`;
+
+export const deferIdleGreeting = `<script>
+  import Greeting from '$lib/Greeting.svelte' with {
+    defer: 'idle'
+  };
+</script>
+
+<Greeting salutation="Idle">
+  {#snippet ogygiaFallback()}
+    <p>waiting for idle…</p>
+  {/snippet}
+</Greeting>`;
+
+export const deferVisibleGreeting = `<script>
+  import Greeting from '$lib/Greeting.svelte' with {
+    defer: 'visible'
+  };
+</script>
+
+<Greeting salutation="Visible">
+  {#snippet ogygiaFallback()}
+    <p>scroll to fetch…</p>
+  {/snippet}
+</Greeting>`;
+
+export const deferMediaGreeting = `<script>
+  import Greeting from '$lib/Greeting.svelte' with {
+    defer: '(max-width: 600px)'
+  };
+</script>
+
+<Greeting salutation="Matched">
+  {#snippet ogygiaFallback()}
+    <p>waiting for media…</p>
   {/snippet}
 </Greeting>`;
 
@@ -155,3 +200,26 @@ ogygia({
     preset: 'demo'
   };
 </script>`;
+
+/** Lake remount presets — docs Remount section. */
+export const remountConfig = `// vite.config.ts
+ogygia({
+  presets: {
+    frozen: { hydrate: 'none' }, // remount: 'cache' (default)
+    blank: { hydrate: 'none', remount: 'empty' },
+    live: {
+      hydrate: 'none',
+      remount: { strategy: 'swr', when: 'idle' }
+    }
+  }
+});
+
+// inside an island
+<script>
+  import Report from '$lib/Report.svelte' with { preset: 'live' };
+  let show = $state(true);
+</script>
+
+{#if show}
+  <Report title="Q4" />
+{/if}`;

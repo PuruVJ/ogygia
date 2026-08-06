@@ -3,7 +3,6 @@
 
 declare module 'virtual:ogygia/manifest' {
 	export const dev: boolean;
-	export const spa: boolean;
 	/**
 	 * One record for ALL region kinds, keyed by region id. Only `kind: 'hydrate'` carries a `load`
 	 * thunk (a client module); `defer` (server island) and `lake` entries are metadata-only, so
@@ -48,7 +47,7 @@ declare module 'virtual:ogygia/rate-limit' {
 	export const rateLimit: { max: number; windowMs: number };
 }
 declare module 'virtual:ogygia/session-cookie' {
-	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ bindSession })`. */
+	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ sessionCookie })`. */
 	export const sessionCookie: string;
 }
 declare module 'virtual:ogygia/transport' {

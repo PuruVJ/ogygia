@@ -5,6 +5,8 @@
 	 *
 	 * For static docs pages, prefer highlighting in `+page.server.ts` and `<CodeBlock html={…} />`
 	 * to avoid a hole fetch per block.
+	 *
+	 * Shiki is loaded lazily inside `highlight()` — not at module evaluate time.
 	 */
 	import { highlight } from '$lib/code/highlight.server.js';
 

@@ -1,8 +1,8 @@
 <script>
 	// Private wrapper the compile-time transform emits for a deferred region
 	//   (import ... with { defer: 'load' | 'idle' | 'visible' | media }).
-	// Renders the `fallback` snippet into the page immediately; the region component
-	// itself is NOT rendered here. Instead it emits a signed reference to the
+	// Renders the reserved `ogygiaFallback` snippet into the page immediately; the region
+	// component itself is NOT rendered here. Instead it emits a signed reference to the
 	// `<base>/🏝️ogygia🏝️` endpoint (served by the `ogygiaHandle()` handle) which the runtime
 	// fetches and swaps in. NOT part of the public API.
 	import { untrack } from 'svelte';
@@ -26,11 +26,11 @@
 	 * @property {Record<string, unknown>} __props captured props (server-rendered with these)
 	 * @property {string} [__defer] fetch-timing of the hole: 'load' | 'idle' | 'visible' | media query
 	 * @property {string} [__margin] IntersectionObserver rootMargin for `__defer: 'visible'`
-	 * @property {import('svelte').Snippet} [fallback] rendered into the page immediately
+	 * @property {import('svelte').Snippet} [ogygiaFallback] reserved placeholder snippet — rendered into the page immediately
 	 */
 
 	/** @type {Props} */
-	let { __entry, __component: Component, __props, __defer = 'load', __margin, fallback } = $props();
+	let { __entry, __component: Component, __props, __defer = 'load', __margin, ogygiaFallback } = $props();
 
 	// Nested server island (inside another island): a server island can't render its fallback-
 	// then-fetch dance inside a parent island's hydration. Degrade to a plain inline component
@@ -44,7 +44,7 @@
 		);
 	}
 
-	/** Session sealed into the MAC when `ogygia({ bindSession })` is set; empty at prerender. */
+	/** Session sealed into the MAC when `ogygia({ sessionCookie })` is set; empty at prerender. */
 	function region_session() {
 		if (!sessionCookie || nested) return '';
 		try {
@@ -115,4 +115,4 @@
 		when={__defer}
 		margin={__margin || undefined}
 		endpoint={endpoint}
-	>{#if fallback}{@render fallback()}{/if}</ogygia-region>{@html preload_link}{@html runtime_script}{/if}
+	>{#if ogygiaFallback}{@render ogygiaFallback()}{/if}</ogygia-region>{@html preload_link}{@html runtime_script}{/if}

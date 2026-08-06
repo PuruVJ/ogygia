@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Flagship: a fully PRERENDERED static page with a personalized SERVER-ISLAND hole.
 	// - The counter is a normal island: SSR'd into the static file, hydrates from it.
-	// - The greeting is a server island: the static file carries only its fallback + a signed
+	// - The greeting is a server island: the static file carries only its ogygiaFallback + a signed
 	//   endpoint reference; at runtime the browser fetches the personalized HTML and swaps it in.
 	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
 	import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
@@ -18,6 +18,6 @@
 
 <div data-static-hole>
 	<Greeting salutation="Welcome">
-		{#snippet fallback()}<p data-fallback>loading personalized greeting…</p>{/snippet}
+		{#snippet ogygiaFallback()}<p data-fallback>loading personalized greeting…</p>{/snippet}
 	</Greeting>
 </div>

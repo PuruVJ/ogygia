@@ -1,111 +1,50 @@
-# The Region Model — unified design for islands, lakes, and holes
+# How ogygia names things
 
-## One sentence
+Four words. That’s it.
 
-A page is a tree of **regions**; every boundary may set exactly two properties —
-**when its HTML arrives** (`render`) and **whether its JS wakes up** (`hydrate`) —
-and each property is decided by the **nearest boundary above you**.
+| Word | Meaning | Code |
+| ---- | ------- | ---- |
+| **Page** | SSR HTML. No Kit client — ogygia runtime is a WC + router (~4.5 KB min+br). | `csr = false` |
+| **Island** | A component that becomes interactive (gets JS). | `with { hydrate: 'load' }` (or `idle` / `visible` / a media query) |
+| **Lake** | Static HTML *inside* an island — no JS for that bit. | `with { hydrate: 'none' }` used inside an island |
+| **Server island** | HTML loaded from the server later. Placeholder first. | `with { defer: 'load' }` (or `idle` / `visible` / media) |
 
-## The two axes
+`hydrate` and `defer` are the import attributes. Everything else is English.
 
-Every region boundary answers two independent questions:
+## When JS runs / when HTML arrives
 
-| axis      | values                                            | question                     |
-| --------- | ------------------------------------------------- | ---------------------------- |
-| `render`  | `page` (default) \| `defer` `load`/`idle`/`visible`/`'(media)'` | When does this HTML arrive, and on what schedule? |
-| `hydrate` | `none` (default) \| `load` \| `idle` \| `visible` \| `'(media query)'` | Does this subtree's JS wake, and when? |
+Same timing words for both:
 
-The page shell is simply the root region: `render: page`, `hydrate: none`.
-Everything else is an override at some boundary.
+| Value | Meaning |
+| ----- | ------- |
+| `load` | Right away |
+| `idle` | When the browser is idle |
+| `visible` | When scrolled into view |
+| `'(media query)'` | When the query matches |
 
-**Timing symmetry.** Both axes take the *same* schedule vocabulary — `load` | `idle` | `visible`
-| a media query — driven by one runtime scheduler. On the `hydrate` axis the schedule says *when a
-region's JS wakes*; on the `render: defer` axis (a server island) the identical schedule says *when
-the hole fetches its HTML*. A `defer: 'visible'` hole does not hit the network until it scrolls into
-view; only `defer: 'load'` emits a `<link rel="preload">`. Authoring: `with { defer: 'load' }` (the
-retired boolean `defer: 'true'` is a build error pointing here).
+- On an **island**, that means when JS starts.
+- On a **server island**, that means when the placeholder is replaced with real HTML.
 
-## The one rule (nearest boundary wins)
+## Nesting (one rule)
 
-Hydration state is **inherited down the DOM tree**. A boundary overrides it for
-its subtree. Therefore:
+Walk up the tree. The closest marked parent decides.
 
-- An island in the static shell hydrates itself (nearest state above it: dead).
-- An island inside a hydrated island does **not** self-hydrate — its parent's
-  hydration already runs it as a plain component. One hydration, ever.
-- A **lake** (`hydrate: none`) inside an island turns its subtree dead again:
-  the SSR DOM is preserved untouched, and the lake component's JS never ships.
-- An island **inside a lake** self-hydrates again — the lake made its subtree
-  dead, so the runtime treats the inner island exactly like one in the shell.
+| Nesting | What happens |
+| ------- | ------------ |
+| Island on the page | Gets its own JS |
+| Island inside an island | Shares the parent’s JS (one interactive tree, not two) |
+| Lake inside an island | Stays static HTML; lake JS never ships |
+| Island inside a lake | Gets its own JS again |
+| Server island inside an island | Renders inline with the parent (`defer` ignored) |
 
-So interactivity can alternate all the way down —
-`shell → island → lake → island → …` — with no special cases. This is the same
-alternation React Server Components allow between server and client components,
-expressed as plain HTML regions.
-
-The runtime implements the rule mechanically: a region element self-hydrates iff
-the nearest region boundary above it is **not hydrated** (none, or a lake).
-Custom elements make this navigation-proof: any swap that inserts regions
-(SPA router, server-island fill) re-evaluates the same rule on connect.
-
-## What the old names mean now
-
-| render | hydrate            | you'd call it              | status      |
-| ------ | ------------------ | -------------------------- | ----------- |
-| `page` | `none`             | plain component / the shell | shipped     |
-| `page` | `load`/`idle`/`visible`/media | **client island**          | shipped     |
-| `page` | `none` *inside a hydrated region* | **lake**   | shipped     |
-| `defer`| `none`             | **server island**          | shipped     |
-| `defer`| any strategy       | deferred client island     | roadmap     |
-
-"Island" and "lake" survive as vocabulary, not as separate mechanisms.
-
-## DOM surface (`<ogygia-region>`)
-
-The custom element mirrors the two axes — no `data-lake`, no bare `defer` /
-`defer-when` (HTML's boolean `defer` would drop string values):
-
-```html
-<ogygia-region entry="…" hydrate="load|idle|visible|(media)">
-<ogygia-region entry="…" hydrate="none">
-<ogygia-region entry="…" render="defer" when="load|idle|visible|(media)" endpoint="…">
+```
+page → island → lake → island → …
 ```
 
-A region is **awake** iff `hydrate` is set and not `none`. Self-run iff the
-nearest ancestor region is not awake. Helpers: `runtime/region-attrs.ts`.
+## DOM
 
-## Composition semantics (all derived from the rule, none ad-hoc)
-
-- **Island in shell**: hydrates per its strategy.
-- **Island in island**: plain component; dev warning that the inner strategy is
-  ignored (it rides the parent's hydration).
-- **Lake in island**: subtree stays SSR DOM; its component code is excluded from
-  the island's client module (import swapped for a placeholder; the runtime
-  lifts the DOM out before hydration and restores it after). Frozen content:
-  props changes and events inside are inert by contract.
-- **Island in lake**: self-hydrates. Its own module was already code-split and
-  its props were serialized during page SSR, so it is fully self-describing.
-- **Lake in shell / lake in lake**: no-op (already dead). Allowed, pointless.
-- **Server island (defer) in shell**: fallback SSRs; hole fetches its HTML and
-  swaps on connect (preload-hinted).
-- **Server island in island / in lake**: degrades to a plain inline component with
-  a dev warning (`defer` ignored; it renders with the parent). Filling a nested
-  hole on connect is roadmap.
-
-## Boundaries are declared at the import
-
-One declaration site (the import attribute), one vocabulary across all of it.
-Serialization contract is unchanged everywhere: markup crosses as code, values
-cross as devalue, functions never cross.
-
-## Out of scope of the model (orthogonal features)
-
-- Inline `<script>` in page HTML — runs on full loads only; the library does not process or
-  re-execute scripts (use an island for per-navigation code).
-- `<OgygiaRouter />` — swaps regions wholesale; the rule re-applies on connect.
-- `<OgygiaBoundary>` — public children-only passthrough for source annotation; zero effect on
-  hydrate/render/context (not `<svelte:boundary>`, not internal `LakeBoundary`).
-- Remote functions — data plane; regions are the rendering plane.
-- **`remount` on `hydrate: 'none'`** — preset-only policy for `{#if}` re-creation of a no-JS
-  region (`cache` | `empty` | `swr`). Not a third axis; only meaningful on frozen furniture.
-  Authoring: `with { preset: '…' }` where the preset sets `remount` (import attributes cannot nest).
+```html
+<ogygia-region hydrate="load|idle|visible|(media)">   <!-- island -->
+<ogygia-region hydrate="none">                        <!-- lake -->
+<ogygia-region render="defer" when="…" endpoint="…">  <!-- server island -->
+```
