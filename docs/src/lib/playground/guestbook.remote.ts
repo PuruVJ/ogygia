@@ -8,8 +8,13 @@ import { invalid } from '@sveltejs/kit';
 
 type Entry = { name: string; message: string };
 
+const MAX_NAME = 64;
+const MAX_MESSAGE = 280;
+const MAX_ENTRIES = 48;
+
 // In-memory guestbook. Resets when the server restarts and is not shared across instances — fine
 // for a demo, not a database. Kept module-private: a .remote.ts file may only export remote functions.
+// Ring-capped so a public docs deploy cannot grow forever (audit DOC-GB).
 const entries: Entry[] = [{ name: 'Calypso', message: 'first to sign the book' }];
 
 export const getEntries = query(async () => entries.slice(-8).reverse());
@@ -23,7 +28,10 @@ export const signGuestbook = form('unchecked', async (data: Record<string, unkno
 	}
 	if (!name) invalid(issue.name('name is required'));
 	if (!message) invalid(issue.message('message is required'));
+	if (name.length > MAX_NAME) invalid(issue.name(`name must be ≤${MAX_NAME} characters`));
+	if (message.length > MAX_MESSAGE) invalid(issue.message(`message must be ≤${MAX_MESSAGE} characters`));
 
 	entries.push({ name, message });
+	while (entries.length > MAX_ENTRIES) entries.shift();
 	return { ok: true, total: entries.length };
 });

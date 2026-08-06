@@ -1,21 +1,8 @@
 <script lang="ts">
 	import Logo from '$lib/Logo.svelte';
-	import SiteNav from '$lib/SiteNav.svelte' with { hydrate: '(max-width: 767px)' };
 
 	let { children } = $props();
-
-	const links = [
-		{ href: '/playground/strategies', label: 'Strategies' },
-		{ href: '/playground/server-islands', label: 'Server' },
-		{ href: '/playground/lakes', label: 'Lakes' },
-		{ href: '/playground/data', label: 'Data' },
-		{ href: '/playground/router', label: 'Router' },
-		{ href: '/playground/mutation-guard', label: 'Guard' },
-		{ href: '/', label: 'Docs', outbound: true }
-	];
 </script>
-
-<SiteNav brandHref="/playground" brandLabel="ogygia / playground" {links} />
 
 <div class="pg-body">
 	{@render children()}
@@ -36,15 +23,14 @@
 
 <style>
 	.pg-body {
-		padding-top: calc(var(--nav-h) + 2.5rem);
+		padding-top: 2.5rem;
 		padding-bottom: 3rem;
 		min-height: 60vh;
 	}
 
-	@media (max-width: 767px) {
+	@media (max-width: 1099px) {
 		.pg-body {
-			padding-top: 2.5rem;
-			padding-bottom: calc(var(--nav-h) + 3rem);
+			padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
 		}
 	}
 </style>

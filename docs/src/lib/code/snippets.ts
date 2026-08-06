@@ -25,24 +25,50 @@ export default defineConfig({
         modal: { hydrate: 'idle' },
         frozen: {
           hydrate: 'none',
-          remount: { strategy: 'swr', when: 'idle' }
+          remount: { revalidate: 'idle', maxAge: '10m' }
         }
       },
-      rateLimit: { max: 60, windowMs: 60_000 }
-      // sessionCookie: 'sessionid'
+      rateLimit: { max: 60, windowMs: 60_000 },
+      regionTtl: 3600 // seconds; default 1h
+      // sessionCookie: 'sessionid' // bind personalized defer/SWR holes
+      // importKeys: { hydrate: 'ogygiaHydrate' } // only if another tool claims `hydrate`
     }),
     sveltekit()
   ]
 });`;
 
-export const layoutAndHooks = `// src/routes/+layout.ts
-export const csr = false;
-
-// src/hooks.server.ts
+export const layoutAndHooks = `// src/hooks.server.ts
 import { sequence } from '@sveltejs/kit/hooks';
 import { ogygiaHandle } from 'ogygia/hooks';
 
-export const handle = sequence(ogygiaHandle(), myOtherHandle);`;
+export const handle = sequence(ogygiaHandle(), myOtherHandle);
+
+// On each route (or layout) you convert to islands:
+// src/routes/marketing/+page.ts
+export const csr = false;`;
+
+/** Gradual migration — root router + per-route csr=false. */
+export const adoptionMigrate = `// src/routes/+layout.svelte — safe on mixed apps
+<script>
+  import { OgygiaRouter } from 'ogygia';
+</script>
+
+<OgygiaRouter />
+{@render children()}
+
+// src/routes/blog/+page.ts — convert one route at a time
+export const csr = false;
+
+// src/routes/blog/+page.svelte
+<script>
+  import Comments from '$lib/Comments.svelte' with { hydrate: 'visible' };
+</script>
+
+<article>…SSR content…</article>
+<Comments />
+
+// src/routes/dashboard/+page.ts — leave alone (Kit default)
+// no \`csr = false\` → full Kit client, router stays idle`;
 
 export const authoringImports = `<script>
   import Counter  from '$lib/Counter.svelte'  with { hydrate: 'load' };     // island
@@ -205,11 +231,17 @@ ogygia({
 export const remountConfig = `// vite.config.ts
 ogygia({
   presets: {
-    frozen: { hydrate: 'none' }, // remount: 'cache' (default)
+    frozen: { hydrate: 'none' }, // remount: 'cache'
     blank: { hydrate: 'none', remount: 'empty' },
+    // cache until TTL, then blank
+    brief: {
+      hydrate: 'none',
+      remount: { revalidate: false, maxAge: '5m' }
+    },
+    // SWR: paint stale, refetch on idle; past 10m skip stale and fetch
     live: {
       hydrate: 'none',
-      remount: { strategy: 'swr', when: 'idle' }
+      remount: { revalidate: 'idle', maxAge: '10m', onExpire: 'fetch' }
     }
   }
 });

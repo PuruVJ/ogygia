@@ -81,6 +81,12 @@
 						because the fetch is same-origin. Set a name and reload: the island re-renders with it.
 						No component JS ships for the greeting.
 					</p>
+					<p>
+						This is ordinary SSR request context, <strong>not</strong>
+						<code>ogygia(&#123; sessionCookie &#125;)</code>. That plugin option seals a cookie into
+						the capability MAC so a harvested URL cannot be replayed without it — see the
+						<a href="/#plugin-session">docs</a>. This demo never enables that binding.
+					</p>
 				</div>
 				<div class="pg-cookie">
 					<div class="pg-hole" data-cookie-hole>

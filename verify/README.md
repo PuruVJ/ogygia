@@ -1,12 +1,15 @@
 # Verification
 
 ```bash
-# 1. Build the library, then the playground (adapter-node)
+# 1. Build the library, then the playground
 pnpm --filter ogygia build
 pnpm --filter playground build
 
-# 2. Start the production server. ORIGIN is required for remote `command` (POST) + form CSRF.
-ORIGIN=http://localhost:3051 PORT=3051 node playground/build/index.js &
+# 2. Serve the production build.
+# Playground uses @sveltejs/adapter-vercel. For local checks either:
+#   - `ORIGIN=http://localhost:3051 pnpm --filter playground preview -- --port 3051`
+#   - or temporarily switch to adapter-node and `ORIGIN=… PORT=3051 node playground/build/index.js`
+# ORIGIN is required for remote `command` (POST) + form CSRF.
 
 # 3. Run the checks (from repo root; Node 26 runs .ts directly)
 node verify/fetch-checks.ts    http://localhost:3051   # SSR: island HTML, no Kit bootstrap
@@ -30,6 +33,8 @@ node verify/region-rate.ts     http://localhost:3051   # forged MAC flood: all 4
 node verify/router-race.ts     http://localhost:3051   # overlapping SPA navigations / stale swap guards
 node verify/dedup.ts                                   # same-component-two-strategies -> ONE client chunk (kit-driven + standalone)
 ```
+
+Trust-boundary notes for region HMAC / SPA / seeds live in [`INVARIANTS.md`](../INVARIANTS.md).
 
 `dedup.ts` is a build-output inspector (no server): it checks the already-built playground client
 output (Kit-driven) and runs a minimal standalone build of `playground/dedup-fixture` to prove both
@@ -61,3 +66,14 @@ islands re-fetch on hydration exactly as before (correct content, a brief re-ren
 be applied here, so dev keeps the pre-fix behavior. `verify/flicker.ts` asserts each mode accordingly.
 
 Playwright chromium is required for the browser suites (`pnpm exec playwright install chromium`).
+
+### Dev HMR under `csr=false` (docs)
+
+With the docs app running (`pnpm --filter docs dev --port 5174`), probe route-shell full-reload,
+island-entry reload, shared-module soft HMR, and CSS soft HMR:
+
+```bash
+node verify/dev-hmr-venues.ts http://127.0.0.1:5174
+```
+
+The script mutates markers and restores the files; it needs a writable docs tree.

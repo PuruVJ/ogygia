@@ -1,6 +1,13 @@
-// Public navigation API for island components (an always-reliable alternative to
-// `$app/navigation`, which is only aliased for imports that land directly in an
-// island virtual module). Backed by the ogygia SPA router.
+/**
+ * Navigation helpers for island components under `csr=false`.
+ *
+ * Prefer these over `$app/navigation` when calling from island code: Kit's modules
+ * are only reliably aliased for imports that land in a virtual island module, while
+ * `ogygia/app` is always backed by the ogygia SPA router (requires `<OgygiaRouter />`
+ * in a layout for client-side navigation to run).
+ *
+ * @packageDocumentation
+ */
 export {
 	goto,
 	invalidate,
@@ -12,4 +19,12 @@ export {
 	disableScrollHandling,
 	bust_page_cache,
 	spa_html_cacheable
+} from './runtime/router.js';
+
+export type {
+	NavTarget,
+	BeforeNavigation,
+	AfterNavigation,
+	BeforeNavigateCallback,
+	AfterNavigateCallback
 } from './runtime/router.js';

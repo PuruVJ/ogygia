@@ -81,7 +81,7 @@
 						A remote <code>form()</code> inside an island: enhanced submit with no reload, per-field
 						validation issues, and pending state — all from Kit's own form runtime. With JavaScript
 						off it posts natively to the remote endpoint and post-redirect-gets back. The store is
-						in-memory, so it resets when the server restarts.
+						in-memory (resets on restart), ring-capped at 48 entries; the UI shows the latest 8.
 					</p>
 				</div>
 				<GuestbookForm />

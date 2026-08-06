@@ -23,6 +23,13 @@ declare module 'virtual:ogygia/runtime-url' {
 	const url: string;
 	export default url;
 }
+declare module 'virtual:ogygia/dev-hmr' {
+	/* side-effect only — CSS HMR bridge under csr=false */
+}
+declare module 'virtual:ogygia/dev-hmr-url' {
+	const url: string;
+	export default url;
+}
 declare module 'virtual:ogygia/secret' {
 	export const secret: string;
 }
@@ -49,6 +56,10 @@ declare module 'virtual:ogygia/rate-limit' {
 declare module 'virtual:ogygia/session-cookie' {
 	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ sessionCookie })`. */
 	export const sessionCookie: string;
+}
+declare module 'virtual:ogygia/region-ttl' {
+	/** Capability URL TTL in seconds. From `ogygia({ regionTtl })` (default 3600). */
+	export const regionTtl: number;
 }
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;

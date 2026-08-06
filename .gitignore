@@ -14,3 +14,7 @@ dist/
 .env.*
 !.env.example
 .vercel
+*.tmp.mjs
+*.tmp.*
+# leftover on-disk island dirs from older ogygia versions (now virtual: modules)
+**/.ogygia/

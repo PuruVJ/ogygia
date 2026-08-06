@@ -3,9 +3,12 @@
 	// client chunk — the island's client module swaps this import for a placeholder. It SSRs inline;
 	// the runtime lifts and restores its DOM around the parent hydrate. Its own button is INERT
 	// (frozen, no JS). It nests an island (InnerBadge) that DOES self-hydrate.
+	// `ssrAt` is baked at render time — remount:'cache' restores the same stamp; remount SWR
+	// revalidates and gets a fresh one.
 	import InnerBadge from '$lib/playground/InnerBadge.svelte' with { hydrate: 'load' };
 
 	let frozen = $state(0);
+	const ssrAt = new Date().toISOString();
 </script>
 
 <div
@@ -16,6 +19,9 @@
 	<span class="widget-label">frozen lake · 0 KB JS</span>
 	<p class="widget-meta" data-frozen-static style="margin-top: 0;">
 		This markup is server-rendered and left untouched. Its button never increments.
+	</p>
+	<p class="widget-meta" data-ssr-at style="margin-top: 0.25rem; font-variant-numeric: tabular-nums;">
+		SSR at {ssrAt}
 	</p>
 	<button type="button" data-frozen-btn onclick={() => (frozen += 1)}>
 		inert button · {frozen}

@@ -1,15 +1,23 @@
-// SvelteKit server `handle` for signed region holes (defer/server). Serves
-// GET `<base>/🏝️ogygia🏝️?id=…&props=…&exp=…&sig=…` by verifying the region MAC, rendering the
-// region component server-side (cookies, remote functions, `await` all work), and returning HTML
-// for the runtime to swap in.
-//
-//   // src/hooks.server.js
-//   import { ogygiaHandle } from 'ogygia/hooks';
-//   import { sequence } from '@sveltejs/kit/hooks';
-//   export const handle = sequence(ogygiaHandle(), myOtherHandle);
-//
-// Composable with `sequence()` — it only intercepts the `/🏝️ogygia🏝️` path and otherwise calls
-// `resolve(event)`.
+/**
+ * SvelteKit server `handle` for signed region holes (`defer` / remount:`swr`).
+ *
+ * Serves `GET <base>/🏝️ogygia🏝️?id=…&props=…&exp=…&sig=…` by verifying the region MAC,
+ * rendering the region component server-side (cookies, remote functions, and `await` work),
+ * and returning HTML for the client runtime to swap in.
+ *
+ * Composable with `sequence()` — intercepts only the region endpoint path; otherwise
+ * calls `resolve(event)`. Also injects the document-level page seed used by islands.
+ *
+ * @example
+ * ```ts
+ * // src/hooks.server.ts
+ * import { ogygiaHandle } from 'ogygia/hooks';
+ * import { sequence } from '@sveltejs/kit/hooks';
+ * export const handle = sequence(ogygiaHandle(), myOtherHandle);
+ * ```
+ *
+ * @packageDocumentation
+ */
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
 import type { Handle, RequestEvent } from '@sveltejs/kit';
@@ -27,20 +35,29 @@ import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
 import { verify, region_mac_message } from './server/hmac.js';
 import { B64Url } from './server/payload.js';
-import { DEFAULT_ISLANDS_ENDPOINT, MAX_REGION_PROPS_LEN } from './server/endpoint.js';
+import { DEFAULT_ISLANDS_ENDPOINT, MAX_REGION_PROPS_LEN, REGION_ID_RE } from './server/endpoint.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
+import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrency.js';
 
 /** Hard cap on rendered region HTML (bytes). */
 const MAX_REGION_BODY = 2_000_000;
-/** Abort slow region SSR. */
+/** Abort waiting on slow region SSR (work may continue — see INVARIANTS · RENDER-TIMEOUT). */
 const RENDER_TIMEOUT_MS = 10_000;
 
-/** Anti-framing on every region response (P1-COOKIE harvested-URL embedding). */
+/** Process-local cap on concurrent region SSR (M1 CPU amp under valid MAC). */
+const render_gate = new ConcurrencyGate(REGION_RENDER_CONCURRENCY);
+
+/**
+ * Anti-framing + MIME + Referrer on every region response.
+ * Referrer-Policy strips capability query strings from third-party asset requests (H6).
+ */
 const REGION_FRAME_HEADERS = {
 	'X-Frame-Options': 'DENY',
-	'Content-Security-Policy': "frame-ancestors 'none'"
+	'Content-Security-Policy': "frame-ancestors 'none'",
+	'X-Content-Type-Options': 'nosniff',
+	'Referrer-Policy': 'no-referrer'
 } as const;
 
 function region_response(body: BodyInit | null, init: { status: number; headers?: Record<string, string> }) {
@@ -62,19 +79,14 @@ function decode_pathname(pathname: string): string | null {
 	}
 }
 
-/** Resolve a rate-limit key; fail closed (null) when the adapter cannot identify the client. */
+/** Resolve a rate-limit key; fail closed (null) when the adapter cannot identify the client.
+ * Never trust X-Forwarded-For / spoofable proxy headers — adapters must provide getClientAddress(). */
 function client_ip(event: RequestEvent): string | null {
 	try {
 		return event.getClientAddress();
 	} catch {
-		/* some adapters omit client address */
+		return null;
 	}
-	const h = event.request.headers;
-	const forwarded =
-		h.get('cf-connecting-ip') ||
-		h.get('x-real-ip') ||
-		h.get('x-forwarded-for')?.split(',')[0]?.trim();
-	return forwarded || null;
 }
 
 class OgygiaHandle {
@@ -82,7 +94,7 @@ class OgygiaHandle {
 	readonly render_rate: RateLimiter;
 	readonly probe_rate: RateLimiter;
 
-	constructor(options: { endpoint?: string } = {}) {
+	constructor(options: OgygiaHandleOptions = {}) {
 		this.#endpoint = (base || '') + (options.endpoint || DEFAULT_ISLANDS_ENDPOINT);
 		this.render_rate = new RateLimiter({
 			max: rate_limit_cfg.max,
@@ -189,6 +201,21 @@ class OgygiaHandle {
 	 * Probe stops forged CPU amplification; render budget is only charged after a valid MAC.
 	 */
 	async render_region(event: RequestEvent) {
+		const method = event.request.method.toUpperCase();
+		if (method !== 'GET' && method !== 'HEAD') {
+			return region_response('Method Not Allowed', {
+				status: 405,
+				headers: { allow: 'GET, HEAD' }
+			});
+		}
+
+		// Harvested capability URLs embedded cross-site (img/script/navigation) — reject when the
+		// browser reports cross-site. Missing Sec-Fetch-Site (old clients) is allowed.
+		const fetch_site = event.request.headers.get('sec-fetch-site');
+		if (fetch_site === 'cross-site') {
+			return region_response('Forbidden', { status: 403 });
+		}
+
 		const url = event.url;
 		const ip = client_ip(event);
 		if (!ip) {
@@ -201,8 +228,8 @@ class OgygiaHandle {
 		const exp_raw = url.searchParams.get('exp') ?? '';
 		const sig = url.searchParams.get('sig') ?? '';
 
-		// Length-gate BEFORE HMAC (P5-HMAC-CPU). Same bound as makeRegionEndpoint mint.
-		if (!id || payload.length > MAX_REGION_PROPS_LEN) {
+		// Length/charset gate BEFORE HMAC (P5-HMAC-CPU). Ids are always 12-hex from the transform.
+		if (!REGION_ID_RE.test(id) || payload.length > MAX_REGION_PROPS_LEN) {
 			return region_response('Forbidden', { status: 403 });
 		}
 
@@ -229,36 +256,56 @@ class OgygiaHandle {
 			return region_response('Too Many Requests', { status: 429 });
 		}
 
+		if (!Object.hasOwn(island_modules, id)) {
+			return region_response('Forbidden', { status: 403 });
+		}
 		const load = island_modules[id];
-		if (!load) {
+		if (typeof load !== 'function') {
 			return region_response('Forbidden', { status: 403 });
 		}
 
-		let props;
+		let props: unknown;
 		try {
 			props = devalue.parse(B64Url.decode(payload));
 		} catch {
 			// Same status as bad MAC — no decode oracle (STATUS-ORACLE).
 			return region_response('Forbidden', { status: 403 });
 		}
+		if (props === null || typeof props !== 'object' || Array.isArray(props)) {
+			return region_response('Forbidden', { status: 403 });
+		}
 
 		let body: string;
 		try {
-			const mod = await load();
-			const rendered = render(mod.default as Component<Record<string, unknown>>, { props });
-			const timed = await Promise.race([
-				Promise.resolve(rendered).then((out) => out.body as string),
-				new Promise<never>((_, rej) =>
-					setTimeout(() => rej(new Error('region render timeout')), RENDER_TIMEOUT_MS)
-				)
-			]);
-			body = timed;
+			body = await render_gate.run(async () => {
+				const mod = await load();
+				const rendered = render(mod.default as Component<Record<string, unknown>>, {
+					props: props as Record<string, unknown>
+				});
+				return await Promise.race([
+					Promise.resolve(rendered).then((out) => out.body as string),
+					new Promise<never>((_, rej) =>
+						setTimeout(() => rej(new Error('region render timeout')), RENDER_TIMEOUT_MS)
+					)
+				]);
+			});
 		} catch {
 			return region_response('Region render failed', { status: 500 });
 		}
 
 		if (body.length > MAX_REGION_BODY) {
 			return region_response('Forbidden', { status: 403 });
+		}
+
+		if (method === 'HEAD') {
+			return region_response(null, {
+				status: 200,
+				headers: {
+					'content-type': 'text/html; charset=utf-8',
+					'content-length': String(new TextEncoder().encode(body).byteLength),
+					'cache-control': 'private, max-age=30'
+				}
+			});
 		}
 
 		return region_response(body, {
@@ -275,12 +322,24 @@ class OgygiaHandle {
 }
 
 /**
- * @param {Object} [options]
- * @param {string} [options.endpoint] path (relative to base) the handle serves; default is the
- *   clash-safe island-emoji route. Must start with `/`.
- * @returns {import('@sveltejs/kit').Handle}
+ * Options for {@link ogygiaHandle}.
  */
-export function ogygiaHandle(options: { endpoint?: string } = {}): Handle {
+export interface OgygiaHandleOptions {
+	/**
+	 * Path (relative to Kit `base`) the handle serves.
+	 * Default is the clash-safe island-emoji route (`/🏝️ogygia🏝️`). Must start with `/`.
+	 */
+	endpoint?: string;
+}
+
+/**
+ * Build a Kit `handle` that serves signed deferred-region / lake-remount HTML and
+ * injects page seeds for island hydration.
+ *
+ * @param options - Optional endpoint path override. See {@link OgygiaHandleOptions}.
+ * @returns A SvelteKit {@link Handle} suitable for `sequence(ogygiaHandle(), …)`.
+ */
+export function ogygiaHandle(options: OgygiaHandleOptions = {}): Handle {
 	const instance = new OgygiaHandle(options);
 	return (args) => instance.handle(args);
 }

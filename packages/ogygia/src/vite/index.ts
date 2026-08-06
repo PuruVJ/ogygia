@@ -4,8 +4,16 @@ import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { loadEnv, type Plugin } from 'vite';
-import { transformHost, ISLAND_DIR } from './transform.js';
+import { transformHost, ISLAND_DIR, normalize_import_keys } from './transform.js';
+export { normalize_import_keys, DEFAULT_IMPORT_KEYS, import_keys_hint } from './transform.js';
+export type { ImportKeys } from './transform.js';
 import { allRoutesCsrFalse, runStandaloneClientBuild } from './standalone.js';
+import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
+import {
+	derive_id_salt,
+	secret_has_min_entropy,
+	MIN_SECRET_BYTES
+} from '../server/hmac.js';
 
 const RUNTIME_ENTRY = fileURLToPath(new URL('../runtime/index.js', import.meta.url));
 
@@ -34,10 +42,13 @@ const HMAC_MODULE = fileURLToPath(new URL('../server/hmac.js', import.meta.url))
 const V_RUNTIME_URL = 'virtual:ogygia/runtime-url';
 const V_MANIFEST = 'virtual:ogygia/manifest';
 const V_RUNTIME = 'virtual:ogygia-runtime';
+const V_DEV_HMR = 'virtual:ogygia/dev-hmr';
+const V_DEV_HMR_URL = 'virtual:ogygia/dev-hmr-url';
 const V_SECRET = 'virtual:ogygia/secret';
 const V_SIGN = 'virtual:ogygia/sign';
 const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
 const V_SESSION_COOKIE = 'virtual:ogygia/session-cookie';
+const V_REGION_TTL = 'virtual:ogygia/region-ttl';
 const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
 const V_REQUEST_EVENT = 'virtual:ogygia/request-event';
 const V_REGION_ENDPOINT = 'virtual:ogygia/region-endpoint';
@@ -85,14 +96,12 @@ const LEADING_SLASH = /^\//;
 /** Rewrite `$app/{state,stores,navigation}` string literals to absolute shim paths. */
 const APP_SHIM_IMPORT = /(['"])\$app\/(state|stores|navigation)\1/g;
 
-function to_posix(p) {
-	return p.split(path.sep).join('/');
-}
-
 /**
  * Rewrite a lake binding's import to the render-nothing placeholder (client island modules only).
  * Default imports are repointed; named imports drop that specifier (and keep siblings) then add a
  * default import of the placeholder under the same local name.
+ *
+ * @internal Used by the plugin client transform and unit tests.
  */
 export function rewrite_lake_import_to_placeholder(src: string, local: string, placeholder: string) {
 	const esc = local.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -134,51 +143,246 @@ export function rewrite_lake_import_to_placeholder(src: string, local: string, p
 	return src;
 }
 
-function is_island_path(id) {
-	return id.includes('/' + ISLAND_DIR + '/') && id.endsWith('.svelte');
+/**
+ * Host route shells (`+page` / `+layout` / …) never join the browser module graph under
+ * `csr=false`, so Vite's fine-grained HMR for them has no client importer. Force a full reload.
+ * Standalone CSS is handled by `virtual:ogygia/dev-hmr` (best-effort CSS HMR) — do not reload for it.
+ * If that soft path fails, the client bridge listens for `vite:error` and reloads the document.
+ *
+ * @internal HMR policy helper (also covered by unit tests).
+ */
+export function needs_csr_false_full_reload(file: string) {
+	const norm = file.replace(/\\/g, '/');
+	if (/\.(css|scss|sass|less|styl)(?:$|\?)/i.test(norm)) return false;
+	return /(?:^|\/)\+(?:page|layout|error|server|hooks)(?:\.|$)/.test(norm);
 }
 
 /**
- * @param {Object} [options]
- * @param {{margin?:string}} [options.visible] global defaults for `hydrate: 'visible'` islands
- * @param {Record<string, {
- *   hydrate?: string;
- *   defer?: string;
- *   margin?: string;
- *   remount?: 'cache'|'empty'|'swr'|{ strategy: 'cache'|'empty'|'swr'; when?: string }
- * }>} [options.presets]
- *   named strategy presets referenced from imports via `with { preset: 'name' }`
- * @param {false|{max?:number,windowMs?:number}} [options.rateLimit] per-IP budget for the
- *   deferred-region endpoint (default `{ max: 60, windowMs: 60_000 }`; `false` disables)
- * @param {false|string} [options.sessionCookie] cookie name to seal into the region MAC (opt-in;
- *   empty/prerender stays unbound). Harvested URLs then fail without that cookie.
- * @param {boolean} [options.standalone] internal: this instance runs inside the standalone build
- * @returns {import('vite').Plugin}
+ * Island entry `.svelte` files (the `import X from '…' with { hydrate }`) sit behind a virtual
+ * wrapper; Svelte soft HMR through that edge is unreliable. Shared `.ts` deps still soft-update.
+ *
+ * @internal HMR policy helper (also covered by unit tests).
  */
-export function ogygia(
-	options: {
-		standalone?: boolean;
-		visible?: { margin?: string };
-		presets?: Record<
-			string,
-			{
-				hydrate?: string;
-				defer?: string;
-				margin?: string;
-				remount?:
-					| 'cache'
-					| 'empty'
-					| 'swr'
-					| { strategy: 'cache' | 'empty' | 'swr'; when?: string };
-			}
-		>;
-		rateLimit?: false | { max?: number; windowMs?: number };
-		sessionCookie?: false | string;
-	} = {}
-): Plugin {
+export function needs_island_entry_full_reload(
+	file: string,
+	entries: Iterable<{ componentPath?: string | null }>
+) {
+	const bare = file.split('?')[0];
+	if (!bare.endsWith('.svelte')) return false;
+	if (/\.(css|scss|sass|less|styl)(?:$|\?)/i.test(bare.replace(/\\/g, '/'))) return false;
+	for (const entry of entries) {
+		if (same_module_path(entry.componentPath, file)) return true;
+	}
+	return false;
+}
+
+/**
+ * Absolute path equality with querystrings stripped (host vs component vs Vite watch paths).
+ * @internal
+ */
+export function same_module_path(a: string | null | undefined, b: string | null | undefined) {
+	if (!a || !b) return false;
+	return path.resolve(a.split('?')[0]) === path.resolve(b.split('?')[0]);
+}
+
+/**
+ * Virtual island ids whose generated source must be dropped when `file` changes or is deleted.
+ * Island ids are `hash(host::index)` — renaming SiteNav→SideNav keeps the same virtual id, so
+ * Vite's moduleGraph must be invalidated or it keeps serving the old import.
+ *
+ * @internal HMR invalidation helper (also covered by unit tests).
+ */
+export function island_vpaths_affected_by_file(
+	file: string,
+	entries: Iterable<[string, { hostPath?: string | null; componentPath?: string | null }]>
+) {
+	const out: string[] = [];
+	for (const [vpath, entry] of entries) {
+		if (same_module_path(entry.hostPath, file) || same_module_path(entry.componentPath, file)) {
+			out.push(vpath);
+		}
+	}
+	return out;
+}
+
+/**
+ * Client bridge source for `virtual:ogygia/dev-hmr` (vite serve only): joins app CSS under
+ * `/src` into the browser graph via `import.meta.glob`, strips Kit FOUC
+ * `<style data-sveltekit>`, and full-reloads on `vite:error`.
+ *
+ * @internal Emitted by the plugin; exported for unit tests.
+ */
+export function dev_hmr_client_source() {
+	return (
+		`import "/@vite/client";\n` +
+		`import.meta.glob("/src/**/*.{css,scss,sass,less,styl}", { eager: true });\n` +
+		`function strip_kit_fouc() {\n` +
+		`  for (const el of document.querySelectorAll("style[data-sveltekit]")) el.remove();\n` +
+		`}\n` +
+		`strip_kit_fouc();\n` +
+		`new MutationObserver(strip_kit_fouc).observe(document.documentElement, {\n` +
+		`  childList: true,\n` +
+		`  subtree: true\n` +
+		`});\n` +
+		`// Soft path: CSS + island modules via Vite HMR. Hard path: anything Vite can't apply.\n` +
+		`function ogygia_full_reload() {\n` +
+		`  location.reload();\n` +
+		`}\n` +
+		`if (import.meta.hot) {\n` +
+		`  import.meta.hot.accept();\n` +
+		`  import.meta.hot.on("vite:error", ogygia_full_reload);\n` +
+		`}\n`
+	);
+}
+
+/** Virtual island module id — `virtual:` so Vite skips injectSourcesContent disk reads. */
+export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.svelte`;
+
+function is_island_path(id: string) {
+	const bare = id.split('?')[0];
+	return (
+		(bare.startsWith('virtual:ogygia/island/') && bare.endsWith('.svelte')) ||
+		// legacy on-disk path shape (pre-virtual ids); still recognize for resolve/HMR edge cases
+		(bare.includes('/' + ISLAND_DIR + '/') && bare.endsWith('.svelte'))
+	);
+}
+
+/**
+ * Lake remount policy for `hydrate: 'none'` presets.
+ *
+ * - `'cache'` — restore the SSR DOM snapshot on remount (default)
+ * - `'empty'` — remount vacant; optional `onExpire: 'fetch'` can refill
+ * - `'swr'` — show cache while revalidating via the signed region endpoint
+ */
+export type OgygiaRemount =
+	| 'cache'
+	| 'empty'
+	| 'swr'
+	| {
+			/** Schedule for SWR revalidation (`false` disables). Same words as hydrate/defer. */
+			revalidate?: false | string;
+			/** Max age before expiry (ms number or duration string like `'10m'`). */
+			maxAge?: number | string;
+			/** What happens when the cached lake expires: clear or refetch. */
+			onExpire?: 'empty' | 'fetch';
+	  };
+
+/**
+ * Named strategy bundle referenced from source via `with { preset: 'name' }`
+ * (or the renamed `importKeys.preset` key).
+ *
+ * Field names here are always canonical (`hydrate` / `defer` / …) even when
+ * {@link OgygiaOptions.importKeys} renames the **import-attribute** spellings.
+ */
+export interface OgygiaPreset {
+	/**
+	 * Client hydrate schedule: `'load'` | `'idle'` | `'visible'` | a CSS media query |
+	 * `'none'` (lake). Mutually exclusive with {@link defer} on the same preset.
+	 */
+	hydrate?: string;
+	/**
+	 * Server-island fetch schedule: `'load'` | `'idle'` | `'visible'` | a CSS media query.
+	 * Mutually exclusive with {@link hydrate} on the same preset.
+	 */
+	defer?: string;
+	/** `IntersectionObserver` `rootMargin` when the schedule is `'visible'`. */
+	margin?: string;
+	/** Lake-only (`hydrate: 'none'`). See {@link OgygiaRemount}. */
+	remount?: OgygiaRemount;
+}
+
+/** Per-IP budget for the signed deferred-region / lake-remount endpoint. */
+export interface OgygiaRateLimit {
+	/** Max requests per window (default `60`). `0` disables allowing any. */
+	max?: number;
+	/** Sliding window length in milliseconds (default `60_000`). */
+	windowMs?: number;
+}
+
+/**
+ * Options for the {@link ogygia} Vite plugin.
+ *
+ * @example
+ * ```ts
+ * import { ogygia } from 'ogygia/vite';
+ * export default defineConfig({
+ *   plugins: [
+ *     ogygia({
+ *       visible: { margin: '200px' },
+ *       presets: { chart: { hydrate: 'visible', margin: '200px' } },
+ *       regionTtl: 3600
+ *     }),
+ *     sveltekit()
+ *   ]
+ * });
+ * ```
+ */
+export interface OgygiaOptions {
+	/**
+	 * Global defaults for islands that use `hydrate: 'visible'` / `defer: 'visible'`
+	 * without their own `margin` (via a preset).
+	 */
+	visible?: {
+		/** Default `IntersectionObserver` `rootMargin` (e.g. `'200px'`). */
+		margin?: string;
+	};
+
+	/**
+	 * Rename the import-attribute keys claimed by the transform.
+	 * Defaults stay `hydrate` / `defer` / `preset`. Escape hatch if another tool already
+	 * uses those names on the same imports.
+	 *
+	 * Preset **definitions** ({@link presets}) still use canonical `hydrate` / `defer` /
+	 * `margin` / `remount` — only the `with { … }` spellings in source change.
+	 */
+	importKeys?: Partial<ImportKeys>;
+
+	/**
+	 * Named strategy bundles. Reference one from an import:
+	 * `import Chart from '$lib/Chart.svelte' with { preset: 'chart' };`
+	 */
+	presets?: Record<string, OgygiaPreset>;
+
+	/**
+	 * Per-IP budget for the signed island endpoint served by `ogygiaHandle()`.
+	 * Default `{ max: 60, windowMs: 60_000 }`. Pass `false` to disable.
+	 */
+	rateLimit?: false | OgygiaRateLimit;
+
+	/**
+	 * Cookie name to seal into the region MAC (opt-in). Empty/prerender stays unbound.
+	 * Harvested capability URLs then fail verification without that cookie.
+	 * Default `false` (unbound).
+	 */
+	sessionCookie?: false | string;
+
+	/**
+	 * Capability URL lifetime in seconds (default `3600`). Clamped to `[60, 86400]`.
+	 * Keep short for harvested-URL risk; raise only if long-lived tabs must keep deferred holes valid.
+	 */
+	regionTtl?: number;
+
+	/**
+	 * @internal Recreate this plugin instance inside the standalone client build.
+	 * App authors should not set this.
+	 */
+	standalone?: boolean;
+}
+
+/**
+ * Vite plugin: transforms `with { hydrate | defer | preset }` imports into islands,
+ * serves virtual island modules, and wires signed region endpoints for deferred HTML.
+ *
+ * Place **before** `sveltekit()` in `vite.config`.
+ *
+ * @param options - Plugin configuration. See {@link OgygiaOptions}.
+ * @returns A Vite plugin (`enforce: 'pre'`).
+ */
+export function ogygia(options: OgygiaOptions = {}): Plugin {
 	const standalone = options.standalone === true;
 	const visibleMargin = options.visible?.margin;
 	const presets = options.presets || {};
+	const import_keys = normalize_import_keys(options.importKeys);
 
 	// Region-endpoint rate limit (baked into SSR only via virtual:ogygia/rate-limit).
 	const rate_limit =
@@ -195,15 +399,22 @@ export function ogygia(
 			? options.sessionCookie
 			: '';
 
+	/** Capability URL TTL (seconds). Clamped to [60, 86400]. */
+	const region_ttl = Math.min(
+		86400,
+		Math.max(60, Math.floor(options.regionTtl ?? DEFAULT_REGION_TTL_SEC))
+	);
+
 	// HMAC key for signing region capability URLs (defer / remount:swr). Default: a fresh
 	// per-build random baked into the SERVER bundle only (never a client chunk). Optional
 	// `OGYGIA_SECRET` overrides that so rolling deploys / long-lived cached HTML keep verifying.
+	// Sign/verify HKDF-derive a MAC key from this material (`ogygia-mac-v1`).
 	const build_secret = crypto.randomBytes(32).toString('hex');
-	/** Salt for region ids — only a stable env override (never per-build random, or SSR/client
+	/** Salt for region ids — HKDF from stable env only (never per-build random, or SSR/client
 	 *  builds would disagree). Empty when unset (dev + default per-build signing). */
-	let id_salt = process.env.OGYGIA_SECRET || '';
+	let id_salt = '';
 
-	/** @type {Map<string, {source:string, hostPath:string, id:string}>} keyed by abs virtual path */
+	/** @type {Map<string, {source:string, hostPath:string, id:string, componentPath?: string | null, server?: boolean, lakes?: string[]}>} keyed by abs virtual path */
 	const registry = new Map();
 	/** Absolute module ids in an island's CLIENT dependency graph. `$app/*` resolves to shims
 	 *  for these importers (virtual island module AND its transitive component imports). */
@@ -213,6 +424,8 @@ export function ogygia(
 	const by_id = new Map();
 	/** @type {Map<string, 'hydrate'|'defer'|'lake'>} every region id -> kind (drives the client `regions` manifest) */
 	const region_kinds = new Map();
+	/** host abs path → region ids + virtual paths discovered on last transform of that host */
+	const host_index = new Map();
 
 	let root;
 	let base = '';
@@ -223,6 +436,8 @@ export function ogygia(
 	let scanned = false;
 	let sourcemap = false;
 	let ran_standalone = false;
+	/** @type {import('vite').ViteDevServer | null} */
+	let vite_server = null;
 	/** absolute path to Kit's internal wire-protocol module (deep import) */
 	let kit_wire_path = null;
 	/** absolute path to Kit's client remote-functions entry (Plan A reuse) */
@@ -240,16 +455,42 @@ export function ogygia(
 		}
 	};
 
-	const virtualPathFor = (hostId, iid) =>
-		path.join(path.dirname(hostId), ISLAND_DIR, iid + '.svelte');
+	const virtualPathFor = (_hostId, iid) => islandVirtualId(iid);
 
+	/** Dev URL for dynamic `import(entry)` of a virtual island module. */
 	const devUrlFor = (virtualPath) => {
-		const rel = to_posix(path.relative(root, virtualPath));
 		const prefix = base && base !== '/' ? base.replace(TRAILING_SLASH, '') : '';
-		return prefix + '/' + rel;
+		return prefix + '/@id/' + virtualPath;
 	};
 
-	const transform_cache = new Map<string, { code: string; result: ReturnType<typeof transformHost> }>();
+	const transform_cache = new Map();
+
+	const host_key = (hostPath) => path.resolve(strip_id(hostPath));
+
+	const clear_transform_cache_for = (hostPath) => {
+		const key = host_key(hostPath);
+		for (const k of [...transform_cache.keys()]) {
+			if (host_key(k) === key) transform_cache.delete(k);
+		}
+	};
+
+	/** Drop every region previously registered from this host (ids are stable across renames). */
+	const unregister_host = (hostPath) => {
+		const key = host_key(hostPath);
+		const prev = host_index.get(key);
+		if (prev) {
+			for (const id of prev.ids) {
+				region_kinds.delete(id);
+				by_id.delete(id);
+			}
+			for (const vpath of prev.vpaths) {
+				registry.delete(vpath);
+				island_graph.delete(vpath);
+			}
+			host_index.delete(key);
+		}
+		clear_transform_cache_for(hostPath);
+	};
 
 	const run_transform = (source, id) => {
 		const hit = transform_cache.get(id);
@@ -264,15 +505,40 @@ export function ogygia(
 			devUrlFor,
 			visibleMargin,
 			presets,
+			importKeys: import_keys,
 			idSalt: id_salt
 		});
 		transform_cache.set(id, { code: source, result });
 		return result;
 	};
 
-	const register = (result) => {
+	/** Remove leftover on-disk `.ogygia` trees from an earlier materialization approach. */
+	const clean_stale_ogygia_dirs = (dir) => {
+		let entries;
+		try {
+			entries = fs.readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const entry of entries) {
+			if (!entry.isDirectory()) continue;
+			const full = path.join(dir, entry.name);
+			if (entry.name === 'node_modules') continue;
+			if (entry.name === ISLAND_DIR) {
+				fs.rmSync(full, { recursive: true, force: true });
+				continue;
+			}
+			clean_stale_ogygia_dirs(full);
+		}
+	};
+
+	/** Replace (not merge) this host's islands so removed hydrate imports don't linger. */
+	const register = (result, hostId) => {
+		unregister_host(hostId);
+		const idx = { ids: new Set(), vpaths: new Set() };
 		for (const isl of result.islands ?? []) {
 			region_kinds.set(isl.id, isl.kind ?? (isl.server ? 'defer' : 'hydrate'));
+			idx.ids.add(isl.id);
 			// Lake entries are metadata-only (no virtual module) — they never get a client module.
 			if (!isl.virtualPath) continue;
 			registry.set(isl.virtualPath, {
@@ -280,12 +546,67 @@ export function ogygia(
 				hostPath: isl.hostPath,
 				id: isl.id,
 				server: !!isl.server,
-				lakes: isl.lakes ?? []
+				lakes: isl.lakes ?? [],
+				componentPath: isl.componentPath ?? null
 			});
 			by_id.set(isl.id, isl.virtualPath);
+			idx.vpaths.add(isl.virtualPath);
 			island_graph.add(isl.virtualPath);
 			if (isl.componentPath) island_graph.add(isl.componentPath);
 		}
+		host_index.set(host_key(hostId), idx);
+	};
+
+	const invalidate_module_id = (server, id) => {
+		const mod = server.moduleGraph.getModuleById(id);
+		if (mod) server.moduleGraph.invalidateModule(mod);
+	};
+
+	const is_registered_host = (file) =>
+		host_index.has(host_key(file)) ||
+		[...registry.values()].some((e) => same_module_path(e.hostPath, file));
+
+	/**
+	 * Drop Vite's cached virtual island modules + our registry rows for `file`.
+	 * Call when a *host* changes (import target rename keeps the same island id) or an
+	 * *entry component* is deleted — not on ordinary entry-component content edits (soft HMR).
+	 */
+	const invalidate_islands_for_file = (file, { deleted = false, server = vite_server } = {}) => {
+		if (!server) return false;
+		const affected = new Set();
+
+		if (is_registered_host(file)) {
+			for (const vpath of island_vpaths_affected_by_file(file, registry.entries())) {
+				affected.add(vpath);
+			}
+			const prev = host_index.get(host_key(file));
+			if (prev) for (const vpath of prev.vpaths) affected.add(vpath);
+			// Host re-registers on next transform; clear so load() can't serve orphans.
+			unregister_host(file);
+		}
+
+		if (deleted) {
+			for (const [vpath, entry] of [...registry.entries()]) {
+				if (!same_module_path(entry.componentPath, file)) continue;
+				affected.add(vpath);
+				registry.delete(vpath);
+				island_graph.delete(vpath);
+				by_id.delete(entry.id);
+				region_kinds.delete(entry.id);
+				const idx = host_index.get(host_key(entry.hostPath));
+				if (idx) {
+					idx.vpaths.delete(vpath);
+					idx.ids.delete(entry.id);
+				}
+			}
+		}
+
+		if (affected.size === 0) return false;
+
+		for (const vpath of affected) invalidate_module_id(server, vpath);
+		invalidate_module_id(server, RESOLVED(V_SERVER_MANIFEST));
+		invalidate_module_id(server, RESOLVED(V_MANIFEST));
+		return true;
 	};
 
 	/** Pre-scan every app .svelte so the build manifest is complete before it loads. */
@@ -293,6 +614,7 @@ export function ogygia(
 		if (scanned) return;
 		scanned = true;
 		const src_dir = path.join(root, 'src');
+		clean_stale_ogygia_dirs(src_dir);
 		const walk = (dir) => {
 			let entries;
 			try {
@@ -309,7 +631,7 @@ export function ogygia(
 					const src = readFile(full);
 					if (src == null) continue;
 					const result = run_transform(src, full);
-					if (result) register(result);
+					if (result) register(result, full);
 				}
 			}
 		};
@@ -319,6 +641,15 @@ export function ogygia(
 	return {
 		name: 'ogygia',
 		enforce: 'pre',
+
+		config() {
+			// Match Kit: SSR-inline `esm-env` so its development/production export conditions
+			// resolve per mode (used if anything in our server graph imports it). Do NOT
+			// optimizeDeps.exclude it — that breaks Svelte client prebundles that import DEV.
+			return {
+				ssr: { noExternal: ['esm-env'] }
+			};
+		},
 
 		configResolved(config) {
 			root = config.root;
@@ -343,7 +674,18 @@ export function ogygia(
 					if (from_file) process.env.OGYGIA_SECRET = from_file;
 				}
 			}
-			id_salt = process.env.OGYGIA_SECRET || '';
+			const env_secret = process.env.OGYGIA_SECRET?.trim() || '';
+			if (env_secret) {
+				// Production builds: reject weak user secrets (L-HMAC). Dev may use short keys.
+				if (is_build && !secret_has_min_entropy(env_secret)) {
+					throw new Error(
+						`[ogygia] OGYGIA_SECRET is too short for production builds (need ≥${MIN_SECRET_BYTES} UTF-8 bytes).`
+					);
+				}
+				id_salt = derive_id_salt(env_secret);
+			} else {
+				id_salt = '';
+			}
 
 			// Locate Kit's internal wire-protocol module by resolving its package.json (that IS
 			// exported) and joining the src path — deep-importing the file bypasses the exports map.
@@ -404,14 +746,56 @@ export function ogygia(
 			}
 		},
 
+		configureServer(server) {
+			vite_server = server;
+		},
+
+		watchChange(id, change) {
+			// Unlink often skips handleHotUpdate; drop islands that still import the deleted file.
+			if (!is_dev || change.event !== 'delete' || !vite_server) return;
+			if (!invalidate_islands_for_file(id, { deleted: true, server: vite_server })) return;
+			vite_server.ws.send({ type: 'full-reload', path: '*' });
+		},
+
+		handleHotUpdate({ file, server }) {
+			if (!is_dev) return;
+			vite_server = server;
+
+			// Island ids are hash(host::index) — renaming SiteNav→SideNav keeps the same virtual
+			// id, so Vite's moduleGraph must be cleared or it keeps serving the old import.
+			const deleted = !fs.existsSync(strip_id(file));
+			const host_changed = !deleted && is_registered_host(file);
+			const entry_changed =
+				!deleted && needs_island_entry_full_reload(file, registry.values());
+			if (host_changed || deleted) {
+				invalidate_islands_for_file(file, { deleted, server });
+			}
+
+			// Soft CSS HMR via virtual:ogygia/dev-hmr. Route shells + island host rewrites +
+			// island entry component edits + deleted entry components need a document reload.
+			if (
+				!needs_csr_false_full_reload(file) &&
+				!deleted &&
+				!host_changed &&
+				!entry_changed
+			) {
+				return;
+			}
+			server.ws.send({ type: 'full-reload', path: '*' });
+			return [];
+		},
+
 		async resolveId(source, importer, options) {
 			if (source === V_RUNTIME_URL) return RESOLVED(V_RUNTIME_URL);
 			if (source === V_MANIFEST) return RESOLVED(V_MANIFEST);
 			if (source === V_RUNTIME) return RESOLVED(V_RUNTIME);
+			if (source === V_DEV_HMR) return RESOLVED(V_DEV_HMR);
+			if (source === V_DEV_HMR_URL) return RESOLVED(V_DEV_HMR_URL);
 			if (source === V_SECRET) return RESOLVED(V_SECRET);
 			if (source === V_SIGN) return RESOLVED(V_SIGN);
 			if (source === V_RATE_LIMIT) return RESOLVED(V_RATE_LIMIT);
 			if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);
+			if (source === V_REGION_TTL) return RESOLVED(V_REGION_TTL);
 			if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
 			if (source === V_REQUEST_EVENT) return RESOLVED(V_REQUEST_EVENT);
 			if (source === V_REGION_ENDPOINT) return RESOLVED(V_REGION_ENDPOINT);
@@ -470,16 +854,20 @@ export function ogygia(
 				return resolved;
 			}
 
-			// island virtual .svelte modules: real abs path (static import from host / emitFile
-			// id), dev root-relative URL, or /@fs/<abs>.
+			// Island virtual modules: `virtual:ogygia/island/<id>.svelte` (no `\0` — vite-plugin-svelte
+			// excludes null-byte ids; `virtual:` still skips Vite's missing-source sourcemap reads).
 			if (is_island_path(source)) {
 				let candidate = source.split('?')[0];
+				if (candidate.startsWith('/@id/')) candidate = candidate.slice('/@id/'.length);
 				if (candidate.startsWith('/@fs/')) candidate = candidate.slice('/@fs'.length);
 				if (registry.has(candidate)) {
 					island_graph.add(candidate);
 					return candidate;
 				}
-				const abs = path.join(root, candidate.replace(LEADING_SLASH, ''));
+				// Legacy abs-path / root-relative ids from older transforms
+				const abs = path.isAbsolute(candidate)
+					? candidate
+					: path.join(root, candidate.replace(LEADING_SLASH, ''));
 				if (registry.has(abs)) {
 					island_graph.add(abs);
 					return abs;
@@ -502,6 +890,19 @@ export function ogygia(
 			}
 			if (id === RESOLVED(V_RUNTIME)) {
 				return `import 'ogygia/runtime';`;
+			}
+			if (id === RESOLVED(V_DEV_HMR)) {
+				// Dev-only soft HMR bridge under csr=false (no Kit client entry):
+				// join /src/**/*.css into the browser graph + strip Kit's FOUC bag.
+				// Failures fall through to a full document reload (see vite:error handler).
+				if (!is_dev) return `export {}`;
+				return dev_hmr_client_source();
+			}
+			if (id === RESOLVED(V_DEV_HMR_URL)) {
+				// Empty in build/preview; vite-dev URL during `vite dev`. Consumed by wrappers
+				// compiled by the app's Vite (not pre-frozen like a package-level import.meta.env).
+				if (!is_dev) return `export default '';`;
+				return `export default ${JSON.stringify('/@id/__x00__' + V_DEV_HMR)};`;
 			}
 			if (id === RESOLVED(V_TRANSPORT)) {
 				// re-export the app's universal `transport` hook (or an empty map) for the client
@@ -526,7 +927,9 @@ export function ogygia(
 						`export function sign(_secret, _message) { return ''; }\n` +
 						`export function verify(_secret, _message, _sig) { return false; }\n` +
 						`export function region_mac_message(id, exp, props, session = '') {\n` +
-						`  return session ? id + '\\0' + exp + '\\0' + props + '\\0' + session : id + '\\0' + exp + '\\0' + props;\n` +
+						`  const enc = new TextEncoder();\n` +
+						`  const lp = (s) => enc.encode(String(s)).byteLength + ':' + String(s);\n` +
+						`  return 'v1|' + lp(id) + '|' + lp(exp) + '|' + lp(props) + '|' + lp(session);\n` +
 						`}\n`
 					);
 				}
@@ -557,6 +960,11 @@ export function ogygia(
 				// SERVER only — sealed into the region MAC when non-empty.
 				if (!ssr) return `export const sessionCookie = '';`;
 				return `export const sessionCookie = ${JSON.stringify(session_cookie)};`;
+			}
+			if (id === RESOLVED(V_REGION_TTL)) {
+				// SERVER only — capability expiry window for mint.
+				if (!ssr) return `export const regionTtl = 3600;`;
+				return `export const regionTtl = ${region_ttl};`;
 			}
 			if (id === RESOLVED(V_SERVER_MANIFEST)) {
 				// Map of SERVER-island id -> dynamic import, used by the `ogygiaHandle()` handle to
@@ -634,7 +1042,7 @@ export function ogygia(
 			) {
 				const result = run_transform(code, id_n);
 				if (result) {
-					register(result);
+					register(result, id_n);
 					out = result.code;
 					map = result.map;
 					touched = true;

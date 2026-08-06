@@ -4,6 +4,8 @@ import {
 	is_deferred,
 	is_frozen,
 	region_is_vacant,
+	region_max_age_ms,
+	region_on_expire,
 	region_remount,
 	region_schedule
 } from '../src/runtime/region-attrs.js';
@@ -41,6 +43,14 @@ describe('region-attrs (two-axis DOM)', () => {
 		expect(region_remount(new FakeEl({ remount: 'cache' }))).toBe('cache');
 		expect(region_remount(new FakeEl({ remount: 'empty' }))).toBe('empty');
 		expect(region_remount(new FakeEl({ remount: 'swr' }))).toBe('swr');
+	});
+
+	it('region_max_age_ms / region_on_expire', () => {
+		expect(region_max_age_ms(new FakeEl({}))).toBe(0);
+		expect(region_max_age_ms(new FakeEl({ 'max-age': '5000' }))).toBe(5000);
+		expect(region_on_expire(new FakeEl({ remount: 'cache' }))).toBe('empty');
+		expect(region_on_expire(new FakeEl({ remount: 'swr' }))).toBe('fetch');
+		expect(region_on_expire(new FakeEl({ remount: 'swr', 'on-expire': 'empty' }))).toBe('empty');
 	});
 
 	it('region_is_vacant treats comments/whitespace as empty but text/elements as filled', () => {

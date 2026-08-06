@@ -56,11 +56,11 @@
     "check": "tsc --noEmit && vitest run && pnpm run lint",
     "prepublishOnly": "pnpm run build"
   },
-  "dependencies": {
-    "devalue": "^5.9.0",
-    "estree-walker": "^3.0.3",
-    "magic-string": "^1.1.0"
-  },
+	"dependencies": {
+		"devalue": "^5.9.0",
+		"estree-walker": "^3.0.3",
+		"magic-string": "^1.1.0"
+	},
   "peerDependencies": {
     "@sveltejs/kit": ">=2.70.2 <3",
     "svelte": "^5.40.0",

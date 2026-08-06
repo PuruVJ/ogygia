@@ -7,8 +7,13 @@ import { addEntry, listEntries } from './server/guestbook';
 // state all work; no-JS submits post to the remote endpoint and post-redirect-get back.
 export const signGuestbook = form(
 	v.object({
-		name: v.pipe(v.string(), v.trim(), v.minLength(1, 'name is required')),
-		message: v.pipe(v.string(), v.trim(), v.minLength(1, 'message is required'))
+		name: v.pipe(v.string(), v.trim(), v.minLength(1, 'name is required'), v.maxLength(64)),
+		message: v.pipe(
+			v.string(),
+			v.trim(),
+			v.minLength(1, 'message is required'),
+			v.maxLength(280)
+		)
 	}),
 	async ({ name, message }) => {
 		addEntry(name, message);

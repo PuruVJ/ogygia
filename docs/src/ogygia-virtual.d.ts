@@ -11,3 +11,28 @@ declare module 'virtual:ogygia/secret' {
 declare module 'virtual:ogygia/rate-limit' {
 	export const rateLimit: { max: number; windowMs: number };
 }
+declare module 'virtual:ogygia/session-cookie' {
+	export const sessionCookie: string;
+}
+declare module 'virtual:ogygia/region-ttl' {
+	export const regionTtl: number;
+}
+declare module 'virtual:ogygia/sign' {
+	export function sign(secret: string, message: string): string;
+	export function verify(secret: string, message: string, sig: string): boolean;
+	export function region_mac_message(
+		id: string,
+		exp: number | string,
+		props: string,
+		session?: string
+	): string;
+}
+declare module 'virtual:ogygia/request-event' {
+	export function getRequestEvent(): {
+		cookies: { get: (name: string) => string | undefined };
+		[key: string]: unknown;
+	};
+}
+declare module 'virtual:ogygia/region-endpoint' {
+	export function makeRegionEndpoint(entry: string, props?: Record<string, unknown>): string;
+}

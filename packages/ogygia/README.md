@@ -78,6 +78,7 @@ That’s an **island** (JS on load), a below-the-fold island, and a **server isl
 
 **[ogygia.puruvj.dev](https://ogygia.puruvj.dev)**
 
+Trust boundaries and design constraints: [`INVARIANTS.md`](../../INVARIANTS.md) in the monorepo root.
 ## License
 
 MIT

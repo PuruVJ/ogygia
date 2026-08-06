@@ -1,6 +1,6 @@
 /**
  * Shared rate-limit bucket for the region endpoint.
- * - Hard-caps map size with amortized random eviction.
+ * - Hard-caps map size with LRU eviction (Map insertion order).
  * - Render limiter: charge AFTER a valid MAC (RATE-BURN).
  * - Probe limiter: charge BEFORE HMAC (HMAC-CPU-DOS).
  */
@@ -21,14 +21,17 @@ export class RateLimiter {
 		this.#cap = Math.max(1, opts.cap ?? DEFAULT_CAP);
 	}
 
-	#drop_one() {
-		const idx = (Math.random() * this.#buckets.size) | 0;
-		let i = 0;
-		for (const k of this.#buckets.keys()) {
-			if (i++ === idx) {
-				this.#buckets.delete(k);
-				return;
-			}
+	/** Mark `ip` as most-recently used (Map: delete + set → end of iteration order). */
+	#touch(ip: string, b: RateBucket) {
+		this.#buckets.delete(ip);
+		this.#buckets.set(ip, b);
+	}
+
+	#evict_lru() {
+		while (this.#buckets.size > this.#cap) {
+			const oldest = this.#buckets.keys().next().value;
+			if (oldest === undefined) return;
+			this.#buckets.delete(oldest);
 		}
 	}
 
@@ -40,7 +43,7 @@ export class RateLimiter {
 				if (now - v.t >= this.#windowMs) this.#buckets.delete(k);
 			}
 		}
-		while (this.#buckets.size > this.#cap) this.#drop_one();
+		this.#evict_lru();
 	}
 
 	/** @returns true if this IP is over budget (request should 429). */
@@ -53,8 +56,12 @@ export class RateLimiter {
 			this.#maybe_prune(now);
 			return false;
 		}
-		if (b.n >= this.#max) return true;
+		if (b.n >= this.#max) {
+			this.#touch(ip, b);
+			return true;
+		}
 		b.n++;
+		this.#touch(ip, b);
 		return false;
 	}
 

@@ -6,7 +6,7 @@
  * Islands on the new page auto-initialise via custom-element connection; old ones
  * auto-unmount via disconnection (except inside persisted subtrees).
  */
-import { html_has_kit_bootstrap } from './kit-boot.js';
+import { html_has_kit_bootstrap, document_has_kit_bootstrap } from './kit-boot.js';
 import { PageCache } from './page-cache.js';
 import {
 	collect_persist_pairs,
@@ -18,27 +18,36 @@ import { runtime_session } from './session.js';
 
 const WS = /\s+/;
 
-// ---- navigation lifecycle hooks (for the $app/navigation shim) ----
-interface NavTarget {
+// ---- navigation lifecycle hooks (for the $app/navigation shim + `ogygia/app`) ----
+
+/** Resolved navigation target (URL + Kit-shaped stubs for params/route). */
+export interface NavTarget {
 	url: URL;
 	params: Record<string, string>;
 	route: { id: string | null };
 }
-interface BeforeNavigation {
+
+/** Payload for {@link beforeNavigate} callbacks. */
+export interface BeforeNavigation {
 	from: NavTarget;
 	to: NavTarget;
 	type: string;
 	cancel: () => void;
 	willUnload: boolean;
 }
-interface AfterNavigation {
+
+/** Payload for {@link afterNavigate} callbacks. */
+export interface AfterNavigation {
 	from: NavTarget | null;
 	to: NavTarget;
 	type: string;
 	willUnload: boolean;
 }
-type BeforeNavigateCallback = (nav: BeforeNavigation) => void;
-type AfterNavigateCallback = (nav: AfterNavigation) => void;
+
+/** Callback registered with {@link beforeNavigate}. */
+export type BeforeNavigateCallback = (nav: BeforeNavigation) => void;
+/** Callback registered with {@link afterNavigate}. */
+export type AfterNavigateCallback = (nav: AfterNavigation) => void;
 
 const PREFETCH_TTL_MS = 8_000;
 const PAGE_CACHE_MAX_ENTRIES = 32;
@@ -88,7 +97,12 @@ export function head_node_key(node: Element): string {
 	}
 }
 
-/** Whether a fetch response may warm the SPA page-HTML cache. */
+/**
+ * Whether a fetch response may warm the SPA page-HTML cache.
+ * @param cacheControl - Response `Cache-Control` header value.
+ * @param setCookie - True if the response included `Set-Cookie`.
+ * @returns False when the response is private / no-store / no-cache or set a cookie.
+ */
 export function spa_html_cacheable(cacheControl: string, setCookie: boolean): boolean {
 	return !CC_UNCACHEABLE.test(cacheControl || '') && !setCookie;
 }
@@ -109,7 +123,12 @@ function jump_to_hash(hash: string) {
 	html_el.style.scrollBehavior = 'auto';
 	try {
 		if (hash) {
-			const id = decodeURIComponent(hash.startsWith('#') ? hash.slice(1) : hash);
+			let id: string;
+			try {
+				id = decodeURIComponent(hash.startsWith('#') ? hash.slice(1) : hash);
+			} catch {
+				id = hash.startsWith('#') ? hash.slice(1) : hash;
+			}
 			const el = document.getElementById(id);
 			if (el) {
 				el.scrollIntoView();
@@ -120,6 +139,23 @@ function jump_to_hash(hash: string) {
 	} finally {
 		html_el.style.scrollBehavior = prev;
 	}
+}
+
+/** Head nodes that must never be adopted from SPA HTML (rewrite relative fetches / CSP). */
+function is_dangerous_head_node(node: Element): boolean {
+	const tag = node.tagName;
+	if (tag === 'BASE') return true;
+	if (tag === 'META') {
+		const http_equiv = (node.getAttribute('http-equiv') || '').toLowerCase();
+		if (
+			http_equiv === 'refresh' ||
+			http_equiv === 'content-security-policy' ||
+			http_equiv === 'content-security-policy-report-only'
+		) {
+			return true;
+		}
+	}
+	return false;
 }
 
 class SpaRouter {
@@ -246,8 +282,8 @@ class SpaRouter {
 
 	// NOTE: the library does NO script processing. Scripts inserted via a client-side body swap do
 	// not execute (standard browser behaviour for parsed/adopted <script> nodes) — if you need code
-	// to run per navigation, use an island. Our own runtime module script lives in <head> and
-	// persists across swaps (merge_head keeps module scripts), so it keeps running.
+	// to run per navigation, use an island. Our own runtime module script is marked
+	// `data-ogygia-runtime` and is the only module script merge_head retains across swaps.
 	async navigate(
 		url: URL,
 		{ push = true, pop_scroll = null, type = 'link', replace = false }: {
@@ -378,10 +414,17 @@ class SpaRouter {
 		this.#scan_eager_viewport();
 	}
 
-	goto(url: string | URL, opts: { replaceState?: boolean } = {}) {
+	goto(url: string | URL, opts: { replaceState?: boolean; external?: boolean } = {}) {
 		const target = new URL(url, location.href);
 		if (target.protocol !== 'http:' && target.protocol !== 'https:') {
 			throw new Error('ogygia: goto() only supports http(s) URLs');
+		}
+		if (target.origin !== location.origin) {
+			if (opts.external) {
+				location.assign(target.href);
+				return Promise.resolve();
+			}
+			throw new Error('ogygia: goto() only supports same-origin URLs (pass { external: true } to leave)');
 		}
 		return this.navigate(target, { push: !opts.replaceState, replace: false, type: 'goto' });
 	}
@@ -396,7 +439,9 @@ class SpaRouter {
 	}
 
 	preloadData(url: string | URL) {
-		this.fetch_page(new URL(url, location.href).href);
+		const target = new URL(url, location.href);
+		if (target.origin !== location.origin) return Promise.resolve({ type: 'loaded', status: 200, data: {} });
+		this.fetch_page(target.href);
 		return Promise.resolve({ type: 'loaded', status: 200, data: {} });
 	}
 
@@ -423,6 +468,9 @@ class SpaRouter {
 		if (this.#started || typeof document === 'undefined') return;
 		// OPT-IN: only activate when a <OgygiaRouter/> put its marker in the head.
 		if (!document.querySelector('meta[name="ogygia-router"]')) return;
+		// Gradual migration: <OgygiaRouter/> may sit in the root layout while some routes stay
+		// csr=true. On those pages Kit owns navigation — do not intercept clicks alongside it.
+		if (document_has_kit_bootstrap()) return;
 		this.#started = true;
 		this.#doc_key = document_key(new URL(location.href));
 		this.install_remote_mutation_cache_bust();
@@ -464,17 +512,25 @@ class SpaRouter {
 		}
 		const next_keys = new Set<string>();
 		for (const node of Array.from(new_head.children)) {
+			if (is_dangerous_head_node(node)) continue;
 			next_keys.add(head_node_key(node));
 		}
-		// remove stale nodes (but never remove module scripts that boot the runtime)
+		// remove stale nodes — keep ogygia runtime + dev-hmr module scripts across swaps
 		for (const [key, node] of current_nodes) {
 			if (!next_keys.has(key)) {
-				if (node.tagName === 'SCRIPT' && node.getAttribute('type') === 'module') continue;
+				if (
+					node.tagName === 'SCRIPT' &&
+					node.getAttribute('type') === 'module' &&
+					(node.hasAttribute('data-ogygia-runtime') || node.hasAttribute('data-ogygia-dev-hmr'))
+				) {
+					continue;
+				}
 				node.remove();
 			}
 		}
-		// add new nodes
+		// add new nodes (skip dangerous head policy tags)
 		for (const node of Array.from(new_head.children)) {
+			if (is_dangerous_head_node(node)) continue;
 			const key = head_node_key(node);
 			if (!current_nodes.has(key)) {
 				current.appendChild(node.cloneNode(true));
@@ -546,6 +602,13 @@ class SpaRouter {
 		document.addEventListener('mousedown', on_press, { passive: true });
 		document.addEventListener('touchstart', on_press, { passive: true });
 
+		this.#scan_eager_viewport();
+	}
+
+	/** After start + every navigation: drop detached IO targets, then re-observe the live body. */
+	#reset_viewport_io() {
+		this.#viewport_io?.disconnect();
+		this.#viewport_seen = new WeakSet();
 		this.#viewport_io = new IntersectionObserver(
 			(entries) => {
 				for (const e of entries) {
@@ -557,11 +620,12 @@ class SpaRouter {
 			},
 			{ rootMargin: '0px' }
 		);
-		this.#scan_eager_viewport();
 	}
 
 	/** After start + every navigation: eager links warm now; viewport links get observed. */
 	#scan_eager_viewport() {
+		// P-IO: recreate observer so detached anchors from the previous body are not retained.
+		this.#reset_viewport_io();
 		if (!this.#viewport_io) return;
 		for (const anchor of Array.from(document.querySelectorAll('a[href]'))) {
 			const rank = this.#preload_rank(anchor);
@@ -615,10 +679,18 @@ export function set_after_body_swap(fn: () => void) {
 	spa.set_after_body_swap(fn);
 }
 
+/**
+ * Register a callback before a client-side navigation.
+ * Call `nav.cancel()` to abort. Returns an unsubscribe function.
+ */
 export function beforeNavigate(fn: BeforeNavigateCallback) {
 	return spa.beforeNavigate(fn);
 }
 
+/**
+ * Register a callback after a successful client-side navigation.
+ * Returns an unsubscribe function.
+ */
 export function afterNavigate(fn: AfterNavigateCallback) {
 	return spa.afterNavigate(fn);
 }
@@ -642,43 +714,73 @@ export function install_remote_mutation_cache_bust() {
 	spa.install_remote_mutation_cache_bust();
 }
 
-/** Programmatic navigation. Mirrors Kit's goto(). http(s) only. */
+/**
+ * Programmatic same-origin navigation. Mirrors Kit's `goto()` subset.
+ * @param url - Absolute or relative URL (http(s) only).
+ * @param opts.replaceState - Replace the current history entry instead of pushing.
+ */
 export function goto(url: string | URL, opts: { replaceState?: boolean } = {}) {
 	return spa.goto(url, opts);
 }
 
-/** Re-fetch + re-render the current URL (server re-runs loads). Coarser than Kit's. */
+/**
+ * Re-fetch and re-render the current URL (server re-runs loads).
+ * Coarser than Kit's dependency-scoped invalidate — busts the SPA HTML cache.
+ */
 export function invalidateAll() {
 	return spa.invalidateAll();
 }
 
-/** We can't invalidate a single dependency without Kit's client; refresh everything. */
+/**
+ * Refresh navigation data. Without Kit's client we cannot invalidate a single
+ * dependency, so this refreshes everything (same as {@link invalidateAll}).
+ */
 export function invalidate() {
 	return spa.invalidate();
 }
 
-/** Warm the HTML cache for a URL. Note: this fetches the PAGE, not Kit load data. */
+/**
+ * Warm the SPA HTML cache for a URL.
+ * Note: this fetches the **page**, not Kit `load` data in isolation.
+ */
 export function preloadData(url: string | URL) {
 	return spa.preloadData(url);
 }
 
+/**
+ * No-op under ogygia — page “code” arrives with the HTML body swap (+ island chunks on connect).
+ * Kept for Kit `$app/navigation` API parity.
+ */
 export function preloadCode() {
 	return spa.preloadCode();
 }
 
+/** Skip scroll restoration / scroll-to-top on the next client-side navigation. */
 export function disableScrollHandling() {
 	spa.disableScrollHandling();
 }
 
-/** Shallow routing is not supported without Kit's client runtime. */
+/**
+ * Shallow routing is not supported without Kit's client runtime.
+ * @throws Always — use full navigations instead.
+ */
 export function pushState() {
 	spa.pushState();
 }
 
+/**
+ * Shallow routing is not supported without Kit's client runtime.
+ * @throws Always — use full navigations instead.
+ */
 export function replaceState() {
 	spa.replaceState();
 }
 
+/**
+ * Install click/popstate listeners and start SPA navigation.
+ * Invoked by the runtime when `<OgygiaRouter />` (or an island) loads the runtime module.
+ * @internal
+ */
 export function startRouter() {
 	spa.start();
 }

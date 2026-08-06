@@ -1,8 +1,6 @@
 <script lang="ts">
 	import Contours from '$lib/Contours.svelte';
 	import Logo from '$lib/Logo.svelte';
-	import SiteNav from '$lib/SiteNav.svelte' with { hydrate: '(max-width: 767px)' };
-	import Toc from '$lib/Toc.svelte' with { hydrate: 'load' };
 	import HeroDemo from '$lib/demos/HeroDemo.svelte' with { hydrate: 'load' };
 	import LoadDemo from '$lib/demos/LoadDemo.svelte' with { hydrate: 'load' };
 	import IdleDemo from '$lib/demos/IdleDemo.svelte' with { hydrate: 'idle' };
@@ -19,10 +17,6 @@
 	import Features from '$lib/Features.svelte';
 
 	let { data }: { data: import('./$types').PageData } = $props();
-
-	const docsLinks = [
-		{ href: '/playground', label: 'Playground', outbound: true }
-	];
 </script>
 
 <PageHead
@@ -30,8 +24,6 @@
 />
 
 <div id="top"></div>
-
-<SiteNav brandHref="#top" links={docsLinks} github />
 
 <header class="hero">
 	<Contours class="hero-contours" />
@@ -48,7 +40,8 @@
 				they become interactive on a schedule; everything else stays server HTML.
 			</p>
 			<div class="btn-row">
-				<a class="btn btn--primary" href="#install">Get started</a>
+				<a class="btn btn--primary" href="#adoption">Adoption</a>
+				<a class="btn btn--ghost" href="#install">Install</a>
 				<a
 					class="btn btn--ghost"
 					href="https://github.com/PuruVJ/ogygia"
@@ -64,10 +57,6 @@
 </header>
 
 <Features />
-
-<div class="toc-fixed" aria-hidden="true">
-	<Toc />
-</div>
 
 <main class="shell docs-main">
 	<section id="what">
@@ -151,8 +140,9 @@
 		<div class="prose">
 			<p>
 				Install the package, register the Vite plugin <em>before</em>
-				<code>sveltekit()</code>, add the server handle, and set <code>csr = false</code> on
-				routes that should skip the Kit client bootstrap.
+				<code>sveltekit()</code>, and add the server handle. Then convert routes with
+				<code>csr = false</code> — see <a href="#adoption">Adoption</a> for rolling that out
+				without breaking existing Kit pages.
 			</p>
 		</div>
 		<div class="install-strip">
@@ -175,22 +165,106 @@
 		</div>
 		<CodeBlock html={data.viteConfigHtml} />
 
-		<h3 class="doc-subhead">Layout + hooks</h3>
+		<h3 class="doc-subhead">hooks.server.ts</h3>
 		<div class="prose">
 			<p>
-				<code>csr = false</code> is what removes Kit's client runtime from the page. Kit skips
-				its client build entirely when <em>every</em> route is <code>csr = false</code>. Islands
-				still need a client build (runtime + code-split chunks), so keep at least one normal Kit
-				route, or let ogygia run its standalone client build (both paths are supported).
-			</p>
-			<p>
 				<code>ogygiaHandle()</code> serves the signed island endpoint used by
-				<code>defer</code>. Compose it with <code>sequence()</code> if you already have handles.
-				Override the path with <code>ogygiaHandle(&#123; endpoint: '/my-islands' &#125;)</code>
-				if you do not want the default clash-safe emoji route.
+				<code>defer</code> and lake <code>remount: 'swr'</code>. Compose it with
+				<code>sequence()</code> if you already have handles. Override the path with
+				<code>ogygiaHandle(&#123; endpoint: '/my-islands' &#125;)</code> if you do not want the
+				default clash-safe emoji route.
 			</p>
 		</div>
 		<CodeBlock html={data.layoutAndHooksHtml} />
+	</section>
+
+	<section id="adoption">
+		<div class="section-header">
+			<h2>Adoption</h2>
+			<p class="section-lede">
+				Convert one route at a time. Existing Kit pages keep working — including with
+				<code>&lt;OgygiaRouter /&gt;</code> in the root layout.
+			</p>
+		</div>
+		<div class="prose">
+			<p>
+				ogygia is not an all-or-nothing flip. Wire the plugin and handle once, then opt routes into
+				islands when you are ready. Everything else stays ordinary SvelteKit
+				(<code>csr = true</code> by default).
+			</p>
+		</div>
+
+		<h3 id="adoption-one-route" class="doc-subhead">One route at a time</h3>
+		<div class="prose">
+			<p>
+				On a route (or layout group) you want as an islands shell, set
+				<code>export const csr = false</code> and mark the interactive imports with
+				<code>hydrate</code> / <code>defer</code> / <code>preset</code>. Sibling routes with no
+				such export keep Kit’s client bootstrap and hydrate as they do today.
+			</p>
+			<p>
+				A layout-level <code>csr = false</code> applies to every child until a deeper layout or
+				page sets <code>csr = true</code> again — useful when a whole section is ready (docs,
+				marketing) while <code>/app</code> stays Kit.
+			</p>
+		</div>
+		<CodeBlock html={data.adoptionMigrateHtml} />
+
+		<h3 id="adoption-router" class="doc-subhead">Root router without breaking Kit pages</h3>
+		<div class="prose">
+			<p>
+				You can render <code>&lt;OgygiaRouter /&gt;</code> in the outermost layout even while most
+				routes are still Kit pages. The router only intercepts clicks when the document is an
+				islands shell (no Kit bootstrap). On a <code>csr = true</code> page it stays idle — Kit
+				owns navigation.
+			</p>
+			<ul>
+				<li>
+					<strong>Islands → Kit page:</strong> full document load. Kit’s inline bootstrap cannot
+					run after an SPA body swap, so the router hands off on purpose.
+				</li>
+				<li>
+					<strong>Islands → islands:</strong> SPA body swap (and View Transitions if enabled).
+				</li>
+				<li>
+					<strong>Kit → anywhere:</strong> Kit’s client router (or a full load), unchanged.
+				</li>
+				<li>
+					<strong>Page without the router marker:</strong> full load from an islands SPA (opt out
+					of SPA for a subtree by omitting <code>&lt;OgygiaRouter /&gt;</code> there).
+				</li>
+			</ul>
+			<p>
+				Live check: this docs site keeps the router in the root layout and ships a
+				<a href="/kit"><code>csr = true</code></a> coexistence route.
+			</p>
+		</div>
+
+		<h3 id="adoption-mixed" class="doc-subhead">Islands on a Kit page</h3>
+		<div class="prose">
+			<p>
+				An import marked <code>with &#123; hydrate &#125;</code> on a <code>csr = true</code> page
+				still works — Kit hydrates the whole tree, so the island becomes a normal component (ogygia
+				skips self-hydration and logs a dev note). Useful while you are mid-migration or sharing a
+				component between shells. The directive earns its keep once that route is
+				<code>csr = false</code>.
+			</p>
+		</div>
+
+		<h3 id="adoption-end" class="doc-subhead">All-islands apps</h3>
+		<div class="prose">
+			<p>
+				When <em>every</em> route is <code>csr = false</code>, Kit skips its client build. ogygia
+				detects that and runs a standalone client build so island chunks and the runtime still
+				ship — you do not need a token <code>csr = true</code> page. Until then, any remaining Kit
+				route keeps Kit’s client build available for the whole app.
+			</p>
+			<p>
+				Suggested order: plugin + handle → convert a low-risk content route → add the root router
+				when you want SPA between islands pages → grow layout groups → eventually drop the last
+				Kit route if you want a pure islands shell.
+			</p>
+		</div>
 	</section>
 
 	<section id="plugin">
@@ -205,8 +279,9 @@
 			<p>
 				Import from <code>ogygia/vite</code>. Put the plugin before <code>sveltekit()</code>.
 				Inline import attributes only accept <code>hydrate</code>, <code>defer</code>, or
-				<code>preset</code> — put <code>margin</code>, <code>remount</code>, and shared strategy
-				bundles in the plugin options below.
+				<code>preset</code> by default (rename via <code>importKeys</code> if needed) — put
+				<code>margin</code>, <code>remount</code>, and shared strategy bundles in the plugin
+				options below.
 			</p>
 		</div>
 		<CodeBlock html={data.pluginConfigHtml} />
@@ -232,6 +307,11 @@
 						<td>Named strategy bundles referenced with <code>preset: 'name'</code></td>
 					</tr>
 					<tr>
+						<td><code>importKeys</code></td>
+						<td><code>hydrate</code> / <code>defer</code> / <code>preset</code></td>
+						<td>Rename those import-attribute keys if another tool already claims them</td>
+					</tr>
+					<tr>
 						<td><code>rateLimit</code></td>
 						<td><code>&#123; max: 60, windowMs: 60_000 &#125;</code></td>
 						<td>Per-IP budget for the signed island endpoint; <code>false</code> disables</td>
@@ -240,6 +320,11 @@
 						<td><code>sessionCookie</code></td>
 						<td><code>false</code></td>
 						<td>Cookie name sealed into the region MAC (opt-in)</td>
+					</tr>
+					<tr>
+						<td><code>regionTtl</code></td>
+						<td><code>3600</code></td>
+						<td>Capability URL lifetime in seconds (clamp 60–86400)</td>
 					</tr>
 				</tbody>
 			</table>
@@ -293,6 +378,30 @@
 			</p>
 		</div>
 
+		<h3 id="plugin-importKeys" class="doc-subhead">importKeys</h3>
+		<div class="prose">
+			<p>
+				Proud defaults: import attributes use <code>hydrate</code>, <code>defer</code>, and
+				<code>preset</code>. If another tool already claims one of those names on the same
+				imports, rename only what you need:
+			</p>
+			<pre><code>ogygia(&#123;
+  importKeys: &#123;
+    hydrate: 'ogygiaHydrate',
+    defer: 'ogygiaDefer',
+    preset: 'ogygiaPreset'
+  &#125;
+&#125;)</code></pre>
+			<p>
+				Then write
+				<code>with &#123; ogygiaHydrate: 'load' &#125;</code> (etc.) in source. Preset
+				<em>definitions</em> in plugin config still use the canonical field names
+				<code>hydrate</code> / <code>defer</code> / <code>margin</code> / <code>remount</code> —
+				only the import-attribute spellings change. Partial overrides are fine; omitted roles keep
+				the defaults. The three names must be distinct JS identifiers.
+			</p>
+		</div>
+
 		<h3 id="plugin-rate" class="doc-subhead">rateLimit</h3>
 		<div class="prose">
 			<p>
@@ -300,7 +409,9 @@
 				<code>ogygiaHandle()</code>. Default is
 				<code>&#123; max: 60, windowMs: 60_000 &#125;</code> — sixty requests per IP per minute.
 				Pass <code>rateLimit: false</code> to disable (or <code>max: 0</code>). Values are baked
-				into the server bundle at build time.
+				into the server bundle at build time. The handle also rejects non-GET/HEAD, cross-site
+				<code>Sec-Fetch-Site</code> when the browser sends it, and non-hex region ids — defense in
+				depth around the capability URL.
 			</p>
 		</div>
 
@@ -311,7 +422,31 @@
 				capability MAC. Harvested defer/remount URLs then fail verification without the same
 				cookie. Empty or missing cookies stay unbound (same as the default
 				<code>false</code>). Useful when personalized HTML must not be replayable from a stolen
-				URL alone.
+				URL alone. Left off by default so prerendered defer holes remain fetchable without a
+				request cookie — see
+				<a
+					href="https://github.com/PuruVJ/ogygia/blob/main/INVARIANTS.md#capability-url--bearer-token-in-the-query-string"
+					target="_blank"
+					rel="noreferrer">INVARIANTS · CAPABILITY-URL</a
+				>. Reading cookies during deferred SSR (same-origin fetch) is unrelated — that is ordinary
+				request context, not MAC binding.
+			</p>
+		</div>
+
+		<h3 id="plugin-ttl" class="doc-subhead">regionTtl</h3>
+		<div class="prose">
+			<p>
+				Lifetime of signed region capability URLs in <strong>seconds</strong> (default
+				<code>3600</code> — one hour). Clamped to <code>[60, 86400]</code>. Shorter TTLs limit
+				replay of harvested URLs; longer TTLs keep deferred holes valid on long-lived tabs.
+				Prerendered pages share the same window.
+			</p>
+			<p>
+				<strong>Props in the URL are not secret.</strong> The MAC protects integrity, not
+				confidentiality. Do not pass tokens or PII as deferred-region props — they appear in
+				query strings (logs, history, Referer). Region responses send
+				<code>Referrer-Policy: no-referrer</code> so third-party assets inside the hole do not
+				leak the capability URL.
 			</p>
 		</div>
 
@@ -327,8 +462,9 @@
 					<strong>Signing key</strong> for region capability URLs (defer + lake
 					<code>remount: 'swr'</code>). When unset, each build gets a fresh random secret baked
 					into the <em>server</em> bundle only. Set a stable
-					<code>OGYGIA_SECRET</code> so rolling deploys and long-lived cached HTML keep
-					verifying.
+					<code>OGYGIA_SECRET</code> (≥16 UTF-8 bytes in production builds) so rolling deploys
+					and long-lived cached HTML keep verifying. The plugin HKDF-derives separate MAC and
+					id-salt keys from that material.
 				</li>
 				<li>
 					<strong>Region id salt</strong> — when set, island ids are not offline-computable from
@@ -518,15 +654,17 @@
 			<p>
 				At page render time, only the reserved <code>ogygiaFallback</code> snippet is written into
 				the document as a placeholder. The component itself is not executed yet. Props are
-				serialized with devalue and HMAC-signed so the endpoint can reject tampering. The fetch
-				hits <code>ogygiaHandle()</code> on the same origin, so cookies flow and the deferred
-				render sees a real request context. Remote functions and <code>await</code> work there.
-				CSS is still collected through the page import graph.
+				serialized with devalue into a signed capability URL (integrity via HMAC — not
+				confidentiality; see <a href="#plugin-ttl">regionTtl</a>). The fetch hits
+				<code>ogygiaHandle()</code> on the same origin, so cookies flow and the deferred render
+				sees a real request context. Remote functions and <code>await</code> work there. CSS is
+				still collected through the page import graph.
 			</p>
 			<p>
-				Signing bakes a per-build HMAC key into the server bundle by default. Set
-				<code>OGYGIA_SECRET</code> when rolling deploys or cached HTML must keep verifying. Default
-				endpoint: <code>/🏝️ogygia🏝️</code>. Override with
+				Signing uses a per-build random key baked into the <em>server</em> bundle by default, or a
+				stable <code>OGYGIA_SECRET</code> when set (HKDF-derived MAC key; ≥16 UTF-8 bytes in
+				production builds — <a href="#plugin-secret">OGYGIA_SECRET</a>). Default endpoint:
+				<code>/🏝️ogygia🏝️</code>. Override with
 				<code>ogygiaHandle(&#123; endpoint &#125;)</code>. The old boolean
 				<code>defer: 'true'</code> is a build error pointing at <code>'load'</code>. v1 does not
 				load JS after the HTML swap — pairing <code>defer</code> with hydrate is roadmap.
@@ -702,57 +840,65 @@
 			<table class="map-table">
 				<thead>
 					<tr>
-						<th scope="col">Value</th>
+						<th scope="col">Shorthand</th>
 						<th scope="col">On remount</th>
 					</tr>
 				</thead>
 				<tbody>
 					<tr>
 						<td><code>'cache'</code></td>
-						<td>Default. Restore the SSR DOM the runtime cached on first paint.</td>
+						<td>Default. Restore the SSR DOM. No network. ≡ <code>&#123; revalidate: false &#125;</code></td>
 					</tr>
 					<tr>
 						<td><code>'empty'</code></td>
-						<td>Leave the spot blank (no restored HTML).</td>
+						<td>Leave the spot blank (no restored HTML, no fetch).</td>
 					</tr>
 					<tr>
 						<td><code>'swr'</code></td>
 						<td>
-							Paint the cache immediately, then revalidate from a signed endpoint (stale-while-revalidate).
+							Paint cache, then revalidate. ≡ <code>&#123; revalidate: 'load' &#125;</code>
 						</td>
 					</tr>
 				</tbody>
 			</table>
 		</div>
 		<div class="prose">
+			<p>Object form (shared by cache + SWR):</p>
 			<p>
-				String form: <code>remount: 'cache' | 'empty' | 'swr'</code>. Object form (needed for
-				scheduling <code>swr</code>):
+				<code
+					>remount: &#123; revalidate?: false | schedule, maxAge?: number | '30s' | '5m' | '1h',
+					onExpire?: 'empty' | 'fetch' &#125;</code
+				>
 			</p>
+			<ul>
+				<li>
+					<code>revalidate</code> — <code>false</code> (or omit with only <code>maxAge</code>) =
+					pure cache; a schedule (<code>'load'</code> | <code>'idle'</code> |
+					<code>'visible'</code> | media) = SWR after painting stale.
+				</li>
+				<li>
+					<code>maxAge</code> — how long the client lake cache may be shown. Number = ms, or a
+					duration string.
+				</li>
+				<li>
+					<code>onExpire</code> — past <code>maxAge</code>: <code>'empty'</code> (default for
+					cache) leaves the spot blank; <code>'fetch'</code> (default for SWR) skips stale and
+					hits the endpoint. <code>'fetch'</code> requires a <code>revalidate</code> schedule.
+				</li>
+			</ul>
 			<p>
-				<code>remount: &#123; strategy: 'cache' | 'empty' | 'swr', when?: string &#125;</code>
-			</p>
-			<p>
-				<code>when</code> is only valid with <code>strategy: 'swr'</code>. Same schedules as
-				hydrate / defer: <code>'load'</code> (default for swr), <code>'idle'</code>,
-				<code>'visible'</code>, or a media-query string. For
-				<code>when: 'visible'</code>, a preset <code>margin</code> (or the plugin
-				<code>visible.margin</code>) is the IntersectionObserver rootMargin.
-			</p>
-			<p>
-				<code>swr</code> reuses the same signed region endpoint as server islands
+				<code>swr</code> / <code>revalidate: schedule</code> reuse the signed region endpoint
 				(<code>ogygiaHandle()</code>, <code>rateLimit</code>, <code>sessionCookie</code>,
-				<code>OGYGIA_SECRET</code>). The capability URL is minted at SSR only (no client remint;
-				same ~24h window). Islands nested inside the lake wait for the revalidate swap before
-				they get JS, so they hydrate once against the fresh HTML.
+				<code>OGYGIA_SECRET</code>). Capability URLs are SSR-minted only (default TTL 1h via
+				<code>regionTtl</code>). Islands inside
+				the lake wait for the revalidate swap before they get JS.
 			</p>
 			<p>
-				<code>swr</code> constraints (build errors otherwise): the lake usage must be a leaf —
-				no children / snippets — and only plain serializable attributes or spreads (no
+				Fetch-path constraints (build errors otherwise): the lake usage must be a leaf — no
+				children / snippets — and only plain serializable attributes or spreads (no
 				<code>bind:</code>, no event/callback props). The component path must resolve
-				(<code>$lib/…</code> or relative) so the endpoint can re-render it. If props cannot cross
-				the wire at mint time, the endpoint is omitted and remount behaves like
-				<code>'cache'</code>.
+				(<code>$lib/…</code> or relative). If props cannot cross the wire at mint time, the
+				endpoint is omitted and remount behaves like <code>'cache'</code>.
 			</p>
 		</div>
 		<CodeBlock html={data.remountConfigHtml} />
@@ -800,6 +946,13 @@
 				flagship combination), but anything that calls the server still needs a server at runtime;
 				a fully static deployment needs islands that don't.
 			</p>
+			<p>
+				<strong>Page seed.</strong> On <code>csr = false</code> shells, ogygia injects a document
+				snapshot (<code>application/ogygia-page</code>) so islands reading
+				<code>$app/state</code> / <code>page.data</code> see the same client-visible contract as Kit
+				<code>csr = true</code>. That is intentional — enabling ogygia is not “server-only load
+				data” the way a stock <code>csr = false</code> page without islands would be.
+			</p>
 		</div>
 	</section>
 
@@ -816,7 +969,8 @@
 				Render <code>&lt;OgygiaRouter /&gt;</code> from <code>ogygia</code> in a layout to
 				intercept same-origin link clicks, swap the body, and merge the head. Islands on the
 				incoming page connect through the custom element lifecycle; islands on the outgoing page
-				disconnect and unmount.
+				disconnect and unmount. For putting the router in the root layout while some routes stay
+				Kit, see <a href="#adoption-router">Adoption · Root router</a>.
 			</p>
 			<p>
 				View Transitions are on by default (<code>viewTransitions</code>). Pass
@@ -978,6 +1132,12 @@
 				server islands need a running origin (and remotes need a server too). Kit skips its client
 				build when every route is <code>csr = false</code>; ogygia detects that and runs its own
 				standalone island build, so an all-islands app needs no token csr page.
+			</p>
+			<p>
+				Generated island wrappers are Vite virtual modules
+				(<code>virtual:ogygia/island/&lt;id&gt;.svelte</code>) — they are not written under
+				<code>src/</code>. Sourcemaps and tooling should treat them as virtual, not as missing
+				on-disk <code>.ogygia/</code> files.
 			</p>
 		</div>
 	</section>

@@ -5,6 +5,8 @@
  * - `render`  — when HTML arrives: omit/`page` | `defer`
  * - `when`    — schedule for `render="defer"` OR `remount="swr"` revalidate
  * - `remount` — `{#if}` re-creation of `hydrate="none"`: `cache` | `empty` | `swr`
+ * - `max-age` — client lake-cache TTL in ms (optional)
+ * - `on-expire` — past max-age: `empty` | `fetch` (swr default `fetch`, cache default `empty`)
  *
  * No "island" / "lake" attribute names — those are nicknames, not the mechanism.
  */
@@ -33,6 +35,24 @@ export function region_remount(el: Element): 'cache' | 'empty' | 'swr' {
 	const r = el.getAttribute('remount');
 	if (r === 'empty' || r === 'swr') return r;
 	return 'cache';
+}
+
+/** Client lake-cache TTL in ms from `max-age`. `0` = no expiry. */
+export function region_max_age_ms(el: Element): number {
+	const raw = el.getAttribute('max-age');
+	if (raw == null || raw === '') return 0;
+	const n = Number(raw);
+	return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * Past-maxAge behavior. Defaults: `cache` → `empty`, `swr` → `fetch`.
+ * `fetch` is only meaningful with `remount="swr"` (endpoint present).
+ */
+export function region_on_expire(el: Element): 'empty' | 'fetch' {
+	const raw = el.getAttribute('on-expire');
+	if (raw === 'empty' || raw === 'fetch') return raw;
+	return region_remount(el) === 'swr' ? 'fetch' : 'empty';
 }
 
 /**

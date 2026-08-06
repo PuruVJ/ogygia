@@ -10,6 +10,7 @@
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import { secret } from 'virtual:ogygia/secret';
 	import { sessionCookie } from 'virtual:ogygia/session-cookie';
+	import { regionTtl } from 'virtual:ogygia/region-ttl';
 	import { sign, region_mac_message } from 'virtual:ogygia/sign';
 	import { resolve, asset } from '$app/paths';
 	import { building } from '$app/environment';
@@ -60,7 +61,7 @@
 	const GT = String.fromCharCode(62);
 
 	// HMAC-signed region capability: region id + expiry + props (+ optional session).
-	// Expiry is always 24h — prerendered holes use the same window (no decade-long bearer URLs).
+	// TTL from `ogygia({ regionTtl })` (default 1h) — prerendered holes use the same window.
 	// Mint once per render via $derived so prop reads stay reactive-correct under Svelte 5.
 	const endpoint = $derived.by(() => {
 		if (nested) return '';
@@ -72,7 +73,7 @@
 			);
 		}
 		const session = region_session();
-		const exp = Math.floor(Date.now() / 1000) + 86400;
+		const exp = Math.floor(Date.now() / 1000) + regionTtl;
 		const sig = sign(secret, region_mac_message(__entry, exp, payload, session));
 		// base-prefixed endpoint PATH in DECODED (raw-emoji) form. The browser encodes it to
 		// percent-encoded UTF-8 when the runtime fetches / preloads it — we never hand-roll that.
@@ -102,7 +103,15 @@
 	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
 	// Match Island.svelte's URL exactly (asset()) so the module de-dupes across mixed pages.
 	const src = asset(runtimeUrl);
-	const runtime_script = LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
+	const runtime_script =
+		LT +
+		'script type="module" data-ogygia-runtime src="' +
+		src +
+		'"' +
+		GT +
+		LT +
+		'/script' +
+		GT;
 </script>
 
 <!--

@@ -2,18 +2,25 @@
 	import { untrack } from 'svelte';
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
+	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { asset } from '$app/paths';
 	import { isNested, setNested } from './context.js';
 
 	/**
+	 * Private wrapper the compile-time transform emits for a client island
+	 * (`import … with { hydrate: … }`). Emits `<ogygia-region>` + props payload + runtime script.
+	 *
+	 * **Not part of the public API** — do not import from app code.
+	 *
+	 * @component
 	 * @typedef {Object} Props
-	 * @property {boolean|string} [visible] hydrate when scrolled into view (string = IntersectionObserver root_margin)
-	 * @property {boolean} [idle] hydrate on requestIdleCallback
-	 * @property {string} [media] hydrate when the media query matches
-	 * @property {boolean} [load] hydrate immediately (default)
-	 * @property {string} __entry island id
-	 * @property {import('svelte').Component<Record<string, unknown>>} __component the extracted island component
-	 * @property {Record<string, unknown>} __props captured props
+	 * @property {boolean|string} [visible] Hydrate when scrolled into view (string = IntersectionObserver rootMargin).
+	 * @property {boolean} [idle] Hydrate on `requestIdleCallback`.
+	 * @property {string} [media] Hydrate when this CSS media query matches.
+	 * @property {boolean} [load] Hydrate immediately (default when no other strategy prop is set).
+	 * @property {string} __entry Island / region id.
+	 * @property {import('svelte').Component<Record<string, unknown>>} __component Extracted island component.
+	 * @property {Record<string, unknown>} __props Captured host props (devalue-serialized into the page).
 	 */
 
 	/** @type {Props} */
@@ -71,11 +78,30 @@
 	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
 	const src = asset(runtimeUrl);
 	const runtime_script =
-		LT + 'script type="module" src="' + src + '"' + GT + LT + '/script' + GT;
+		LT +
+		'script type="module" data-ogygia-runtime src="' +
+		src +
+		'"' +
+		GT +
+		LT +
+		'/script' +
+		GT;
+
+	// Dev CSS HMR bridge (same URL as OgygiaRouter — browsers dedupe). '' outside vite dev.
+	const hmr_script = hmrUrl
+		? LT +
+			'script type="module" data-ogygia-dev-hmr src="' +
+			asset(hmrUrl) +
+			'"' +
+			GT +
+			LT +
+			'/script' +
+			GT
+		: '';
 </script>
 
 {#if nested}<Component {...__props} />{:else}<ogygia-region
 		entry={__entry}
 		hydrate={hydrate_attr}
 		margin={root_margin || undefined}
-	><Component {...__props} /></ogygia-region>{@html props_script}{@html runtime_script}{/if}
+	><Component {...__props} /></ogygia-region>{@html props_script}{@html runtime_script}{@html hmr_script}{/if}

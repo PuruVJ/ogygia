@@ -15,9 +15,9 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
 		readFile: () => null,
 		pathModule: path,
 		dev: false,
-		virtualPathFor: (hostId: string, iid: string) =>
-			path.join(path.dirname(hostId), '.ogygia', iid + '.svelte'),
-		devUrlFor: (p: string) => '/' + path.relative(ROOT, p),
+		virtualPathFor: (_hostId: string, iid: string) =>
+			`virtual:ogygia/island/${iid}.svelte`,
+		devUrlFor: (p: string) => '/@id/' + p,
 		visibleMargin: '0px',
 		presets: {},
 		idSalt: '',
@@ -161,6 +161,20 @@ describe('audit fixes — rate limiter', () => {
 		expect(lim.size).toBeLessThanOrEqual(10);
 	});
 
+	it('evicts least-recently-used keys when over cap', () => {
+		const lim = new RateLimiter({ max: 100, windowMs: 60_000, cap: 3 });
+		lim.limited('old');
+		lim.limited('mid');
+		lim.limited('new');
+		// Touch "old" so it becomes most-recent; "mid" is LRU and should drop first.
+		lim.limited('old');
+		lim.limited('fresh');
+		expect(lim.size).toBe(3);
+		// mid was never touched after the initial insert wave → evicted
+		expect(lim.limited('mid')).toBe(false); // new bucket (was gone)
+		expect(lim.size).toBeLessThanOrEqual(3);
+	});
+
 	it('documents render-rate contract: junk must not call render limited()', () => {
 		const render_lim = new RateLimiter({ max: 2, windowMs: 60_000, cap: 16 });
 		const junk_mac_ok = false;
@@ -286,15 +300,67 @@ describe('audit fixes — remote clear', () => {
 });
 
 describe('audit fixes — session-bound MAC', () => {
-	it('binds session when provided; empty session keeps 3-field form', () => {
-		const secret = 's';
+	it('always uses v1 length-prefixed fields; empty session is still a field', () => {
+		const secret = 'test-secret-key-16b';
 		const unbound = region_mac_message('id', '1', 'props');
-		expect(unbound).toBe('id\0' + '1' + '\0props');
+		expect(unbound).toMatch(/^v1\|/);
+		expect(unbound).toContain('|0:'); // empty session field
 		const bound = region_mac_message('id', '1', 'props', 'sess');
-		expect(bound).toBe('id\0' + '1' + '\0props\0sess');
+		expect(bound).toContain('|4:sess');
+		expect(unbound).not.toBe(bound);
 		const sig = sign(secret, bound);
 		expect(verify(secret, bound, sig)).toBe(true);
 		expect(verify(secret, region_mac_message('id', '1', 'props', 'other'), sig)).toBe(false);
 		expect(verify(secret, unbound, sig)).toBe(false);
+	});
+});
+
+describe('audit fixes — region endpoint allowlist', () => {
+	it('allows same-origin relative and absolute; rejects cross-origin', async () => {
+		const { is_allowed_region_endpoint, is_same_origin_response } = await import(
+			'../dist/runtime/region-endpoint-url.js'
+		);
+		const origin = 'https://app.example';
+		expect(is_allowed_region_endpoint('/🏝️ogygia🏝️?id=abc', origin)).toBe(true);
+		expect(is_allowed_region_endpoint('https://app.example/🏝️ogygia🏝️?id=1', origin)).toBe(true);
+		expect(is_allowed_region_endpoint('https://evil.example/x', origin)).toBe(false);
+		expect(is_allowed_region_endpoint('//evil.example/x', origin)).toBe(false);
+		expect(is_allowed_region_endpoint('javascript:alert(1)', origin)).toBe(false);
+		expect(
+			is_same_origin_response({ url: 'https://app.example/ok' } as Response, origin)
+		).toBe(true);
+		expect(
+			is_same_origin_response({ url: 'https://evil.example/ok' } as Response, origin)
+		).toBe(false);
+	});
+});
+
+describe('audit fixes — region id charset + default TTL constant', () => {
+	it('exports DEFAULT_REGION_TTL_SEC and REGION_ID_RE', async () => {
+		const { DEFAULT_REGION_TTL_SEC, REGION_ID_RE } = await import('../dist/server/endpoint.js');
+		expect(DEFAULT_REGION_TTL_SEC).toBe(3600);
+		expect(REGION_ID_RE.test('abcdef012345')).toBe(true);
+		expect(REGION_ID_RE.test('__proto__')).toBe(false);
+		expect(REGION_ID_RE.test('short')).toBe(false);
+	});
+});
+
+describe('audit fixes — lake cache soft cap', () => {
+	it('evicts oldest entries past LAKE_CACHE_MAX', async () => {
+		const { RuntimeSession } = await import('../dist/runtime/session.js');
+		const s = new RuntimeSession();
+		for (let i = 0; i < 70; i++) {
+			s.set_lake_cache(String(i), {
+				frag: {} as Node,
+				endpoint: '',
+				when: 'load',
+				cachedAt: i,
+				maxAgeMs: 0
+			});
+		}
+		expect(s.lake_cache.size).toBe(64);
+		expect(s.lake_cache.has('0')).toBe(false);
+		expect(s.lake_cache.has('6')).toBe(true);
+		expect(s.lake_cache.has('69')).toBe(true);
 	});
 });

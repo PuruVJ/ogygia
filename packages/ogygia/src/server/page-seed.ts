@@ -14,7 +14,7 @@ type PageLike = {
 export class PageSeed {
 	/**
 	 * Public page slice for islands. `data`/`form`/`error` are included when devalue-serializable —
-	 * treat load data as client-visible (same contract as csr=true Kit pages).
+	 * treat load data as client-visible (same contract as csr=true Kit pages). See INVARIANTS.md · PAGE-SEED.
 	 */
 	static serialize(page_ref: PageLike, stringify_fn: typeof stringify = stringify): string | null {
 		try {

@@ -7,3 +7,12 @@ export const DEFAULT_ISLANDS_ENDPOINT = '/🏝️ogygia🏝️';
 
 /** Max b64url props blob accepted by the region handle (and refused at mint time). */
 export const MAX_REGION_PROPS_LEN = 8192;
+
+/**
+ * Default capability TTL (seconds). Shorter than a day so harvested URLs age out; override via
+ * `ogygia({ regionTtl })`. Prerendered holes share this window (see INVARIANTS.md).
+ */
+export const DEFAULT_REGION_TTL_SEC = 3600;
+
+/** Region ids are always 12 lowercase hex chars from the transform. */
+export const REGION_ID_RE = /^[0-9a-f]{12}$/;

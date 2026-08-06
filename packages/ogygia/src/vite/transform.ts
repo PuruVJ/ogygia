@@ -5,8 +5,71 @@ import { collectCaptureInfo, collectSnippetNames } from './free-vars.js';
 
 export const ISLAND_DIR = '.ogygia';
 
-/** Cheap source scan: only hosts that mention region import attributes need AST work. */
-const REGION_IMPORT_HINT = /hydrate|defer|preset/;
+/** Default import-attribute keys. Override via `ogygia({ importKeys })`. */
+export const DEFAULT_IMPORT_KEYS = {
+	hydrate: 'hydrate',
+	defer: 'defer',
+	preset: 'preset'
+} as const;
+
+/**
+ * Import-attribute key names claimed by the transform (`with { hydrate | defer | preset }`).
+ * Override via `ogygia({ importKeys })` when another tool already uses the default names.
+ */
+export type ImportKeys = {
+	/** Client-island / lake attribute (default `'hydrate'`). */
+	hydrate: string;
+	/** Server-island attribute (default `'defer'`). */
+	defer: string;
+	/** Named preset attribute (default `'preset'`). */
+	preset: string;
+};
+
+const JS_IDENT = /^[A-Za-z_$][\w$]*$/;
+
+/**
+ * Merge partial `importKeys` with {@link DEFAULT_IMPORT_KEYS}.
+ * Rejects empty strings, non-identifiers, and colliding role names.
+ *
+ * @param partial - Optional overrides for one or more roles.
+ * @returns Fully resolved key map used by the transform.
+ * @throws If a value is not a JS identifier or two roles share the same name.
+ */
+export function normalize_import_keys(partial?: Partial<ImportKeys> | null): ImportKeys {
+	const hydrate = (partial?.hydrate ?? DEFAULT_IMPORT_KEYS.hydrate).trim();
+	const defer = (partial?.defer ?? DEFAULT_IMPORT_KEYS.defer).trim();
+	const preset = (partial?.preset ?? DEFAULT_IMPORT_KEYS.preset).trim();
+	for (const [role, name] of [
+		['hydrate', hydrate],
+		['defer', defer],
+		['preset', preset]
+	] as const) {
+		if (!name || !JS_IDENT.test(name)) {
+			throw new Error(
+				`[ogygia] importKeys.${role} must be a non-empty JS identifier (got ${JSON.stringify(partial?.[role])}).`
+			);
+		}
+	}
+	if (hydrate === defer || hydrate === preset || defer === preset) {
+		throw new Error(
+			'[ogygia] importKeys.hydrate, importKeys.defer, and importKeys.preset must be distinct.'
+		);
+	}
+	return { hydrate, defer, preset };
+}
+
+/**
+ * Cheap source-scan regex matching any of the configured import-attribute key names.
+ * Used to skip AST work on hosts that cannot contain region imports.
+ *
+ * @param import_keys - Resolved key map from {@link normalize_import_keys}.
+ */
+export function import_keys_hint(import_keys: ImportKeys) {
+	const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	return new RegExp(
+		`${esc(import_keys.hydrate)}|${esc(import_keys.defer)}|${esc(import_keys.preset)}`
+	);
+}
 
 /** Deterministic short id for a region (stable across dev + build).
  * When `salt` is set (production `OGYGIA_SECRET`), ids are not offline-computable (P1-ID).
@@ -72,47 +135,122 @@ function strategy_to_attr(strategy, options) {
 	return `media=${JSON.stringify(strategy)}`;
 }
 
-const REMOUNT_STRATEGIES = new Set(['cache', 'empty', 'swr']);
-/** Schedule keywords shared by `hydrate`, `defer` and `remount.when`. */
+const REMOUNT_SHORTHANDS = new Set(['cache', 'empty', 'swr']);
+const REMOUNT_ON_EXPIRE = new Set(['empty', 'fetch']);
+/** Schedule keywords shared by `hydrate`, `defer` and `remount.revalidate`. */
 const SCHEDULE_KEYWORDS = new Set(['load', 'idle', 'visible']);
 
 /**
- * Normalize preset `remount` (string or `{ strategy, when? }`) for hydrate:none.
- * @returns {{ strategy: string, when?: string } | undefined}
+ * Parse `remount.maxAge` — number (ms) or duration string (`30s` / `5m` / `1h` / `500ms`).
+ * @returns {number | undefined} milliseconds
+ */
+function parse_max_age(raw, err, names) {
+	if (raw == null) return undefined;
+	if (typeof raw === 'number') {
+		if (!Number.isFinite(raw) || raw < 0) {
+			throw err(names, `\`remount.maxAge\` must be a non-negative number (ms), got ${raw}.`);
+		}
+		return Math.floor(raw);
+	}
+	if (typeof raw === 'string') {
+		const m = raw.trim().match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i);
+		if (!m) {
+			throw err(
+				names,
+				`unknown remount.maxAge '${raw}'. Use a number (ms) or a duration like '30s' | '5m' | '1h'.`
+			);
+		}
+		const n = Number(m[1]);
+		const unit = (m[2] || 'ms').toLowerCase();
+		const mult = unit === 'ms' ? 1 : unit === 's' ? 1000 : unit === 'm' ? 60_000 : 3_600_000;
+		return Math.floor(n * mult);
+	}
+	throw err(names, `\`remount.maxAge\` must be a number (ms) or duration string.`);
+}
+
+/**
+ * Normalize preset `remount`.
+ *
+ * Shorthands: `'cache'` | `'empty'` | `'swr'` (`swr` ≡ `{ revalidate: 'load' }`).
+ * Object: `{ revalidate?: false | schedule, maxAge?, onExpire?: 'empty' | 'fetch' }`.
+ *
+ * @returns {{ policy: 'cache'|'empty'|'swr', when?: string, maxAgeMs?: number, onExpire?: string } | undefined}
  */
 function parse_remount(raw, err, names) {
 	if (raw == null) return undefined;
 	if (typeof raw === 'string') {
-		if (!REMOUNT_STRATEGIES.has(raw)) {
+		if (!REMOUNT_SHORTHANDS.has(raw)) {
 			throw err(names, `unknown remount '${raw}'. Use 'cache' | 'empty' | 'swr'.`);
 		}
-		return { strategy: raw };
+		if (raw === 'swr') return { policy: 'swr', when: 'load' };
+		return { policy: raw };
 	}
-	if (typeof raw === 'object' && raw !== null && typeof raw.strategy === 'string') {
-		if (!REMOUNT_STRATEGIES.has(raw.strategy)) {
-			throw err(names, `unknown remount.strategy '${raw.strategy}'. Use 'cache' | 'empty' | 'swr'.`);
-		}
-		/** @type {{ strategy: string, when?: string }} */
-		const out = { strategy: raw.strategy };
-		if (raw.when != null) {
-			if (raw.strategy !== 'swr') {
-				throw err(names, `\`remount.when\` is only valid with remount strategy 'swr'.`);
-			}
-			const when = String(raw.when);
-			// An unvalidated typo would reach the runtime as a media query that never matches —
-			// i.e. silently no revalidation. Same vocabulary as `hydrate` / `defer`.
-			if (!SCHEDULE_KEYWORDS.has(when) && !is_media_query(when)) {
-				throw err(
-					names,
-					`unknown remount.when '${when}'. Use 'load' | 'idle' | 'visible' | a media query.`
-				);
-			}
-			out.when = when;
-		}
-		return out;
+	if (typeof raw !== 'object' || raw === null) {
+		throw err(
+			names,
+			`\`remount\` must be 'cache' | 'empty' | 'swr' or \`{ revalidate?, maxAge?, onExpire? }\`.`
+		);
 	}
-	throw err(names, `\`remount\` must be 'cache' | 'empty' | 'swr' or \`{ strategy, when? }\`.`);
+	if ('strategy' in raw || 'when' in raw) {
+		throw err(
+			names,
+			`\`remount\` object uses \`revalidate\` (false | 'load' | 'idle' | 'visible' | media), not \`strategy\`/\`when\`. ` +
+				`Examples: { revalidate: false, maxAge: '5m' } or { revalidate: 'idle' }. Shorthands: 'cache' | 'empty' | 'swr'.`
+		);
+	}
+	for (const k of Object.keys(raw)) {
+		if (k !== 'revalidate' && k !== 'maxAge' && k !== 'onExpire') {
+			throw err(names, `unknown remount key '${k}'. Use revalidate, maxAge, onExpire.`);
+		}
+	}
+	if (raw.revalidate == null && raw.maxAge == null && raw.onExpire == null) {
+		throw err(
+			names,
+			`\`remount\` object needs revalidate, maxAge, and/or onExpire — or use the 'cache' | 'empty' | 'swr' shorthand.`
+		);
+	}
+
+	/** @type {{ policy: string, when?: string, maxAgeMs?: number, onExpire?: string }} */
+	const out = { policy: 'cache' };
+
+	if (raw.revalidate === false || raw.revalidate == null) {
+		out.policy = 'cache';
+	} else if (raw.revalidate === true) {
+		throw err(names, `\`remount.revalidate: true\` is invalid — use 'load' (or 'idle' | 'visible' | a media query).`);
+	} else {
+		const rev = String(raw.revalidate);
+		if (!SCHEDULE_KEYWORDS.has(rev) && !is_media_query(rev)) {
+			throw err(
+				names,
+				`unknown remount.revalidate '${rev}'. Use false | 'load' | 'idle' | 'visible' | a media query.`
+			);
+		}
+		out.policy = 'swr';
+		out.when = rev;
+	}
+
+	if (raw.onExpire != null) {
+		const oe = String(raw.onExpire);
+		if (!REMOUNT_ON_EXPIRE.has(oe)) {
+			throw err(names, `unknown remount.onExpire '${oe}'. Use 'empty' | 'fetch'.`);
+		}
+		if (out.policy === 'cache' && oe === 'fetch') {
+			throw err(
+				names,
+				`\`onExpire: 'fetch'\` requires \`revalidate\` (a schedule). Pure cache expires to empty — ` +
+					`use { revalidate: 'load', maxAge, onExpire: 'fetch' } for SWR past maxAge.`
+			);
+		}
+		out.onExpire = oe;
+	}
+
+	if (raw.maxAge != null) {
+		out.maxAgeMs = parse_max_age(raw.maxAge, err, names);
+	}
+
+	return out;
 }
+
 
 /** Escape a static text chunk for use inside a template literal. */
 function escape_template_text(text) {
@@ -121,7 +259,8 @@ function escape_template_text(text) {
 
 /**
  * Build a `__props={…}` literal from a lake `<Component>` tag's attributes.
- * Only used for `remount: 'swr'` — the endpoint re-renders the component with these props, so the
+ * Only used when remount revalidates (`swr` / `revalidate: schedule`) — the endpoint re-renders
+ * the component with these props, so the
  * literal must reproduce the authored values EXACTLY (SSR itself keeps the original tag verbatim).
  */
 function lake_props_literal(source, node) {
@@ -313,12 +452,13 @@ function resolve_component_path(spec, host_id, ctx) {
  * @param {string} ctx.root project root (abs)
  * @param {string} ctx.libDir abs path for `$lib`
  * @param {(abs:string)=>string|null} ctx.readFile sync file reader for filename-strategy lookup
- * @param {(hostPath:string, index:number)=>string} ctx.virtualPathFor build a fake .svelte path
+ * @param {(hostPath:string, index:number)=>string} ctx.virtualPathFor virtual module id for an island
  * @returns {TransformResult|null}
  */
 export function transformHost(source, id, ctx) {
-	// cheap bailout — the library only touches region imports (`hydrate`/`defer`/`preset`)
-	if (!REGION_IMPORT_HINT.test(source)) return null;
+	const import_keys = normalize_import_keys(ctx.importKeys);
+	// cheap bailout — the library only touches region imports (configured key names)
+	if (!import_keys_hint(import_keys).test(source)) return null;
 
 	let ast;
 	try {
@@ -363,29 +503,35 @@ export function transformHost(source, id, ctx) {
 		for (const a of attr_list) inline.set(a.key.name ?? a.key.value, String(a.value.value));
 		const names = node.specifiers.map((sp) => sp.local.name).join(', ');
 
-		// Only imports carrying a REGION key (`hydrate` | `defer` | `preset`) are ours. A standard
-		// import attribute on an UNRELATED import — `import data from './d.json' with { type: 'json' }`,
-		// an `with { type: 'macro' }`, etc. — is left completely untouched (its `with{}` preserved), even
-		// in a file that also declares islands. We only validate + strip the imports we actually claim.
-		const REGION_KEYS = ['hydrate', 'defer', 'preset'];
-		if (!REGION_KEYS.some((k) => inline.has(k))) continue;
+		// Only imports carrying a REGION key are ours. A standard import attribute on an
+		// UNRELATED import — `import data from './d.json' with { type: 'json' }`, an
+		// `with { type: 'macro' }`, etc. — is left completely untouched (its `with{}` preserved),
+		// even in a file that also declares islands. We only validate + strip the imports we claim.
+		const IMPORT_KEYS = [import_keys.hydrate, import_keys.defer, import_keys.preset];
+		if (!IMPORT_KEYS.some((k) => inline.has(k))) continue;
 
-		// The import block carries EXACTLY ONE of `hydrate` | `defer` | `preset`. No option keys
-		// inline — all tuning (margin, remount, …) lives in plugin config (ogygia({ presets })).
-		/** @type {Map<string,string>} effective attributes (from a preset, or the single inline key) */
+		// The import block carries EXACTLY ONE of hydrate | defer | preset (under configured
+		// names). No option keys inline — all tuning lives in plugin config (ogygia({ presets })).
+		/** @type {Map<string,string>} effective attributes (canonical hydrate/defer + margin) */
 		let attrs;
 		/** @type {{ strategy: string, when?: string } | undefined} */
 		let remount_opt;
 		let from_preset = null;
-		if (inline.has('preset')) {
+		if (inline.has(import_keys.preset)) {
 			if (inline.size > 1) {
-				throw err(names, '`preset` must be the only import attribute — put its options (margin, remount, …) in the preset definition (ogygia({ presets })).');
+				throw err(
+					names,
+					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, remount, …) in the preset definition (ogygia({ presets })).`
+				);
 			}
-			from_preset = inline.get('preset');
+			from_preset = inline.get(import_keys.preset);
 			const preset = ctx.presets && ctx.presets[from_preset];
 			if (!preset) {
 				const avail = Object.keys(ctx.presets || {});
-				throw err(names, `unknown preset '${from_preset}'. Available: ${avail.length ? avail.join(', ') : '(none)'}.`);
+				throw err(
+					names,
+					`unknown ${import_keys.preset} '${from_preset}'. Available: ${avail.length ? avail.join(', ') : '(none)'}.`
+				);
 			}
 			attrs = new Map();
 			for (const [k, v] of Object.entries(preset)) {
@@ -394,25 +540,29 @@ export function transformHost(source, id, ctx) {
 					remount_opt = parse_remount(v, err, names);
 					continue;
 				}
+				// Preset object keys stay canonical (`hydrate` / `defer` / `margin`).
 				attrs.set(k, String(v));
 			}
 			if (!attrs.has('hydrate') && !attrs.has('defer')) {
 				throw err(
 					names,
-					`preset '${from_preset}' must set \`hydrate\` or \`defer\` — a margin-only (or empty) preset is a no-op.`
+					`${import_keys.preset} '${from_preset}' must set \`hydrate\` or \`defer\` — a margin-only (or empty) preset is a no-op.`
 				);
 			}
 		} else {
-			// inline may carry only `hydrate` or `defer` (the hydrate+defer pair is a roadmap error below)
+			// inline may carry only the configured hydrate or defer key
 			for (const k of inline.keys()) {
-				if (k !== 'hydrate' && k !== 'defer') {
+				if (k !== import_keys.hydrate && k !== import_keys.defer) {
 					throw err(
 						names,
-						`\`${k}\` is not allowed inline. Use \`hydrate\`, \`defer\`, or a named \`preset\` — options like \`margin\` / \`remount\` belong in plugin config (ogygia({ presets })).`
+						`\`${k}\` is not allowed inline. Use \`${import_keys.hydrate}\`, \`${import_keys.defer}\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`remount\` belong in plugin config (ogygia({ presets })).`
 					);
 				}
 			}
-			attrs = inline;
+			// Normalize to canonical names for the rest of the pipeline.
+			attrs = new Map();
+			if (inline.has(import_keys.hydrate)) attrs.set('hydrate', inline.get(import_keys.hydrate));
+			if (inline.has(import_keys.defer)) attrs.set('defer', inline.get(import_keys.defer));
 		}
 
 		// Only UNKNOWN keys are errors. Presets are TOLERANT: a known-but-inapplicable key
@@ -425,10 +575,13 @@ export function transformHost(source, id, ctx) {
 			}
 		}
 		if (remount_opt && attrs.get('hydrate') !== 'none') {
-			throw err(names, `\`remount\` is only valid with \`hydrate: 'none'\`.`);
+			throw err(names, `\`remount\` is only valid with \`${import_keys.hydrate}: 'none'\`.`);
 		}
 		if (attrs.has('defer') && attrs.has('hydrate')) {
-			throw err(names, "`defer` + `hydrate` together is not yet supported (roadmap: deferred client island — see DESIGN.md).");
+			throw err(
+				names,
+				`\`${import_keys.defer}\` + \`${import_keys.hydrate}\` together is not yet supported (roadmap: deferred client island — see DESIGN.md).`
+			);
 		}
 
 		// `defer` -> SERVER island (render: defer, hydrate: none). Its VALUE is the fetch-timing for
@@ -440,13 +593,17 @@ export function transformHost(source, id, ctx) {
 			if (dval === 'true') {
 				throw err(
 					names,
-					"`defer: 'true'` is no longer valid — a server island now takes a fetch-timing value. Use `defer: 'load'` (immediate + preload) | 'idle' | 'visible' | a media query. See DESIGN.md."
+					`\`${import_keys.defer}: 'true'\` is no longer valid — a server island now takes a fetch-timing value. Use \`${import_keys.defer}: 'load'\` (immediate + preload) | 'idle' | 'visible' | a media query. See DESIGN.md.`
 				);
 			}
 			let when;
 			if (KNOWN_STRATEGIES.has(dval)) when = dval; // load | idle | visible
 			else if (is_media_query(dval)) when = dval; // media query is the value itself
-			else throw err(names, `unknown defer timing '${dval}'. Use 'load' | 'idle' | 'visible' | a media query.`);
+			else
+				throw err(
+					names,
+					`unknown ${import_keys.defer} timing '${dval}'. Use 'load' | 'idle' | 'visible' | a media query.`
+				);
 
 			// `margin` applies only to `visible` (tolerantly ignored otherwise), same as hydrate.
 			const options: { when: string; margin?: string } = { when };
@@ -467,14 +624,14 @@ export function transformHost(source, id, ctx) {
 				// no-op plain component (dev-warned below). See DESIGN.md.
 				// Always strip the `with{}` later (shell keeps cleaned import; unused/island lakes
 				// drop the host binding). Never leave `with { hydrate: 'none' }` in emitted source.
-				/** @type {{ remount?: string, when?: string, margin?: string }} */
+				/** @type {{ remount?: string, when?: string, margin?: string, maxAgeMs?: number, onExpire?: string }} */
 				const lake_opts = {};
 				if (remount_opt) {
-					lake_opts.remount = remount_opt.strategy;
+					lake_opts.remount = remount_opt.policy;
 					if (remount_opt.when) lake_opts.when = remount_opt.when;
-					// `margin` rides along for a `remount: { strategy: 'swr', when: 'visible' }`
-					// revalidate, same tolerance as `hydrate: 'visible'`.
-					if (remount_opt.strategy === 'swr' && remount_opt.when === 'visible') {
+					if (remount_opt.maxAgeMs != null) lake_opts.maxAgeMs = remount_opt.maxAgeMs;
+					if (remount_opt.onExpire) lake_opts.onExpire = remount_opt.onExpire;
+					if (remount_opt.policy === 'swr' && remount_opt.when === 'visible') {
 						lake_opts.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
 					}
 				}
@@ -486,12 +643,19 @@ export function transformHost(source, id, ctx) {
 			if (val === 'false') {
 				// Import-attribute values are strings; the "no hydration" value is the WORD 'none'
 				// (not the boolean-looking 'false'). No silent alias — point the author at 'none'.
-				throw err(names, "`hydrate: 'false'` is not valid — use `hydrate: 'none'` for a lake (a frozen region inside a hydrated island). See DESIGN.md.");
+				throw err(
+					names,
+					`\`${import_keys.hydrate}: 'false'\` is not valid — use \`${import_keys.hydrate}: 'none'\` for a lake (a frozen region inside a hydrated island). See DESIGN.md.`
+				);
 			}
 			let strategy;
 			if (KNOWN_STRATEGIES.has(val)) strategy = val;
 			else if (is_media_query(val)) strategy = val; // media query is the value itself
-			else throw err(names, `unknown hydrate strategy '${val}'. Use 'load' | 'idle' | 'visible' | a media query.`);
+			else
+				throw err(
+					names,
+					`unknown ${import_keys.hydrate} strategy '${val}'. Use 'load' | 'idle' | 'visible' | a media query.`
+				);
 
 			// `margin` applies only to `visible` (tolerantly ignored otherwise). Falls back to the
 			// plugin-level default ogygia({ visible: { margin } }).
@@ -579,7 +743,7 @@ export function transformHost(source, id, ctx) {
 	if (ctx.dev && shell_lake_locals.size) {
 		for (const name of shell_lake_locals) {
 			console.warn(
-				`[ogygia] ${rel_host}: <${name}> has \`hydrate: 'none'\` (lake) in the page shell — that is a no-op (the shell is already dead). A lake only has meaning INSIDE a hydrated island. Rendering it as a plain component.`
+				`[ogygia] ${rel_host}: <${name}> has \`${import_keys.hydrate}: 'none'\` (lake) in the page shell — that is a no-op (the shell is already dead). A lake only has meaning INSIDE a hydrated island. Rendering it as a plain component.`
 			);
 		}
 	}
@@ -717,13 +881,18 @@ export function transformHost(source, id, ctx) {
 					const lake_id = islandId(rel_host, `lake:${index}:${li}`, ctx.idSalt || '');
 					const mark = marked_components.get(ln.name);
 					const remount = mark?.options?.remount || 'cache';
-					const when = mark?.options?.when || (remount === 'swr' ? 'load' : undefined);
+					const needs_endpoint = remount === 'swr';
+					const when = mark?.options?.when || (needs_endpoint ? 'load' : undefined);
 					let lake_attrs =
 						`__entry={${JSON.stringify(lake_id)}} __remount={${JSON.stringify(remount)}}`;
-					if (remount === 'swr') {
+					if (mark?.options?.maxAgeMs != null) {
+						lake_attrs += ` __maxAge={${JSON.stringify(mark.options.maxAgeMs)}}`;
+					}
+					if (mark?.options?.onExpire) {
+						lake_attrs += ` __onExpire={${JSON.stringify(mark.options.onExpire)}}`;
+					}
+					if (needs_endpoint) {
 						assert_swr_lake_crossable(ln, err);
-						// Props are serialized into the signed endpoint ONLY for swr (the SSR pass keeps
-						// the ORIGINAL tag, so nothing else depends on reproducing them as a literal).
 						lake_attrs +=
 							` __when={${JSON.stringify(when || 'load')}}` +
 							` __props={${lake_props_literal(source, ln)}}`;
@@ -741,7 +910,7 @@ export function transformHost(source, id, ctx) {
 					island_lakes.push(ln.name);
 					island_lake_locals.add(ln.name);
 					lake_region_ids.push(lake_id);
-					if (remount === 'swr') {
+					if (needs_endpoint) {
 						const entry_spec = imports.get(ln.name)?.node?.source?.value;
 						swr_lakes.push({
 							id: lake_id,
@@ -914,7 +1083,8 @@ export function transformHost(source, id, ctx) {
 	}
 	for (const lake_id of lake_region_ids) {
 		if (swr_ids.has(lake_id)) continue;
-		islands.push({ id: lake_id, kind: 'lake' });
+		// hostPath so the vite plugin can drop stale lake metadata on host HMR re-transform.
+		islands.push({ id: lake_id, kind: 'lake', hostPath: id });
 	}
 
 	// LAKE host imports: always drop `with{}`. Hoisted-into-island or unused → strip the binding.
@@ -948,5 +1118,9 @@ export function transformHost(source, id, ctx) {
 		}
 	}
 
-	return { code: s.toString(), map: s.generateMap({ hires: true }), islands };
+	return {
+		code: s.toString(),
+		map: s.generateMap({ hires: true, source: id, includeContent: true }),
+		islands
+	};
 }

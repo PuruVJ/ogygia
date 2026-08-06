@@ -15,7 +15,7 @@
 import { describe, test, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { transformHost } from '../dist/vite/transform.js';
+import { transformHost, normalize_import_keys } from '../dist/vite/transform.js';
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -52,8 +52,8 @@ function makeCtx(overrides: Partial<Ctx> = {}): Ctx {
 		readFile: () => null,
 		pathModule: path,
 		dev: false,
-		virtualPathFor: (hostId: string, iid: string) => path.join(path.dirname(hostId), '.ogygia', iid + '.svelte'),
-		devUrlFor: (p: string) => '/' + path.relative(ROOT, p),
+		virtualPathFor: (_hostId: string, iid: string) => `virtual:ogygia/island/${iid}.svelte`,
+		devUrlFor: (p: string) => '/@id/' + p,
 		visibleMargin: '0px',
 		presets: {},
 		...overrides
@@ -334,8 +334,8 @@ describe('deterministic ids + multi-island ordering + offset correctness', () =>
 		const expected =
 			`<script>\n` +
 			`\timport { Island as OgygiaIsland__Wrapper } from 'ogygia/internal';\n` +
-			`\timport __OgygiaIsland_0 from "/app/src/routes/.ogygia/${idFor(0)}.svelte";\n` +
-			`\timport __OgygiaIsland_1 from "/app/src/routes/.ogygia/${idFor(1)}.svelte";\n` +
+			`\timport __OgygiaIsland_0 from "virtual:ogygia/island/${idFor(0)}.svelte";\n` +
+			`\timport __OgygiaIsland_1 from "virtual:ogygia/island/${idFor(1)}.svelte";\n` +
 			`\n\n</script>\n` +
 			`<h1>title</h1>\n` +
 			`<OgygiaIsland__Wrapper load __entry={"${idFor(0)}"} __component={__OgygiaIsland_0} __props={{}} />\n` +
@@ -728,7 +728,7 @@ describe('result-shape invariants', () => {
 		const r = run(wrap(LOAD, '<C />'));
 		const isl = r!.islands[0];
 		expect(typeof isl.id).toBe('string');
-		expect(isl.virtualPath).toMatch(/\.ogygia\/[0-9a-f]{12}\.svelte$/);
+		expect(isl.virtualPath).toMatch(/^virtual:ogygia\/island\/[0-9a-f]{12}\.svelte$/);
 		expect(isl.hostPath).toBe(HOST);
 		expect(typeof isl.source).toBe('string');
 	});
@@ -990,7 +990,7 @@ describe('dev-mode context (shell-lake warning path)', () => {
 	test('dev url is used for a hydrate island __entry when dev:true', () => {
 		const r = run(wrap(LOAD, '<C />'), makeCtx({ dev: true }));
 		// dev __entry is the devUrlFor(virtualPath), not the raw id
-		expect(r!.code).toMatch(/__entry=\{"\/src\/routes\/\.ogygia\/[0-9a-f]{12}\.svelte"\}/);
+		expect(r!.code).toMatch(/__entry=\{"\/@id\/virtual:ogygia\/island\/[0-9a-f]{12}\.svelte"\}/);
 	});
 });
 
@@ -1041,7 +1041,7 @@ describe('multiple lakes in one island', () => {
 describe('remount preset (hydrate: none)', () => {
 	test('remount swr object emits __when and registers a server lake module', () => {
 		const ctx = makeCtx({
-			presets: { live: { hydrate: 'none', remount: { strategy: 'swr', when: 'idle' } } }
+			presets: { live: { hydrate: 'none', remount: { revalidate: 'idle' } } }
 		});
 		const r = run(
 			wrap(
@@ -1109,44 +1109,79 @@ describe('remount preset (hydrate: none)', () => {
 		expect(r!.islands.some((i) => i.kind === 'lake' && i.server)).toBe(false);
 	});
 
-	test('unknown remount strategy errors', () => {
+	test('unknown remount shorthand errors', () => {
 		expectThrows(
 			() => lakeWith({ hydrate: 'none', remount: 'stale' }),
 			/unknown remount 'stale'\. Use 'cache' \| 'empty' \| 'swr'\./
 		);
 	});
 
-	test('remount.when on a non-swr strategy errors', () => {
+	test('legacy strategy/when object errors with migration hint', () => {
 		expectThrows(
-			() => lakeWith({ hydrate: 'none', remount: { strategy: 'cache', when: 'load' } }),
-			/`remount\.when` is only valid with remount strategy 'swr'/
+			() => lakeWith({ hydrate: 'none', remount: { strategy: 'swr', when: 'load' } }),
+			/uses `revalidate`/
 		);
 	});
 
-	test('an unknown remount.when is a build error (a typo would never revalidate)', () => {
+	test('cache + onExpire fetch is rejected (use revalidate)', () => {
 		expectThrows(
-			() => lakeWith({ hydrate: 'none', remount: { strategy: 'swr', when: 'soon' } }),
-			/unknown remount\.when 'soon'\. Use 'load' \| 'idle' \| 'visible' \| a media query\./
+			() =>
+				lakeWith({
+					hydrate: 'none',
+					remount: { revalidate: false, maxAge: '5m', onExpire: 'fetch' }
+				}),
+			/onExpire: 'fetch'.*requires `revalidate`/
 		);
 	});
 
-	test('a media-query remount.when is accepted verbatim', () => {
-		const r = lakeWith({ hydrate: 'none', remount: { strategy: 'swr', when: '(min-width: 900px)' } });
+	test('an unknown remount.revalidate is a build error', () => {
+		expectThrows(
+			() => lakeWith({ hydrate: 'none', remount: { revalidate: 'soon' } }),
+			/unknown remount\.revalidate 'soon'/
+		);
+	});
+
+	test('a media-query remount.revalidate is accepted verbatim', () => {
+		const r = lakeWith({
+			hydrate: 'none',
+			remount: { revalidate: '(min-width: 900px)' }
+		});
 		expect(r!.islands.find((i) => i.lakes?.length)!.source).toMatch(
 			/__when=\{"\(min-width: 900px\)"\}/
 		);
 	});
 
-	test("swr + when:'visible' forwards margin (preset, else the global default)", () => {
+	test('maxAge duration string emits __maxAge in ms', () => {
+		const r = lakeWith({
+			hydrate: 'none',
+			remount: { revalidate: false, maxAge: '5m' }
+		});
+		expect(r!.islands.find((i) => i.lakes?.length)!.source).toMatch(/__maxAge=\{300000\}/);
+		expect(r!.islands.find((i) => i.lakes?.length)!.source).toMatch(/__remount=\{"cache"\}/);
+	});
+
+	test('swr + maxAge + onExpire emit attrs', () => {
+		const r = lakeWith({
+			hydrate: 'none',
+			remount: { revalidate: 'idle', maxAge: '30s', onExpire: 'empty' }
+		});
+		const src = r!.islands.find((i) => i.lakes?.length)!.source;
+		expect(src).toMatch(/__remount=\{"swr"\}/);
+		expect(src).toMatch(/__when=\{"idle"\}/);
+		expect(src).toMatch(/__maxAge=\{30000\}/);
+		expect(src).toMatch(/__onExpire=\{"empty"\}/);
+	});
+
+	test("swr + revalidate:'visible' forwards margin (preset, else the global default)", () => {
 		const withMargin = lakeWith({
 			hydrate: 'none',
 			margin: '250px',
-			remount: { strategy: 'swr', when: 'visible' }
+			remount: { revalidate: 'visible' }
 		});
 		expect(withMargin!.islands.find((i) => i.lakes?.length)!.source).toMatch(
 			/__margin=\{"250px"\}/
 		);
-		const fallback = lakeWith({ hydrate: 'none', remount: { strategy: 'swr', when: 'visible' } });
+		const fallback = lakeWith({ hydrate: 'none', remount: { revalidate: 'visible' } });
 		expect(fallback!.islands.find((i) => i.lakes?.length)!.source).toMatch(/__margin=\{"0px"\}/);
 	});
 
@@ -1272,5 +1307,69 @@ describe('preset visible margin resolution', () => {
 		const ctx = makeCtx({ visibleMargin: '10px', presets: { v: { hydrate: 'visible', margin: '400px' } } });
 		const r = run(wrap(`import C from './C.svelte' with { preset: 'v' };`, '<C />'), ctx);
 		expect(r!.code).toMatch(/<OgygiaIsland__Wrapper visible="400px" __entry=/);
+	});
+});
+
+describe('custom import-attribute keys (ogygia({ importKeys }))', () => {
+	const ALIAS = {
+		hydrate: 'ogygiaHydrate',
+		defer: 'ogygiaDefer',
+		preset: 'ogygiaPreset'
+	};
+
+	test('normalize_import_keys defaults and rejects collisions', () => {
+		expect(normalize_import_keys()).toEqual({
+			hydrate: 'hydrate',
+			defer: 'defer',
+			preset: 'preset'
+		});
+		expect(normalize_import_keys({ hydrate: 'ogygiaHydrate' }).hydrate).toBe('ogygiaHydrate');
+		expect(() => normalize_import_keys({ hydrate: 'defer' })).toThrow(/distinct/);
+		expect(() => normalize_import_keys({ hydrate: '1bad' })).toThrow(/identifier/);
+	});
+
+	test('custom hydrate key claims the import; default hydrate is ignored', () => {
+		const ctx = makeCtx({ importKeys: ALIAS });
+		const ignored = run(wrap(`import C from './C.svelte' with { hydrate: 'load' };`, '<C />'), ctx);
+		expect(ignored).toBeNull();
+
+		const r = run(
+			wrap(`import C from './C.svelte' with { ogygiaHydrate: 'idle' };`, '<C />'),
+			ctx
+		);
+		expect(r!.islands[0].kind).toBe('hydrate');
+		expect(r!.code).toMatch(/idle/);
+	});
+
+	test('custom defer key', () => {
+		const r = run(
+			wrap(`import G from './G.svelte' with { ogygiaDefer: 'load' };`, '<G />'),
+			makeCtx({ importKeys: ALIAS })
+		);
+		expect(r!.islands[0].kind).toBe('defer');
+		expect(r!.islands[0].server).toBe(true);
+	});
+
+	test('custom preset key still resolves canonical hydrate/defer in the preset object', () => {
+		const ctx = makeCtx({
+			importKeys: ALIAS,
+			presets: { chart: { hydrate: 'visible', margin: '50px' } }
+		});
+		const r = run(
+			wrap(`import C from './C.svelte' with { ogygiaPreset: 'chart' };`, '<C />'),
+			ctx
+		);
+		expect(r!.code).toMatch(/visible="50px"/);
+	});
+
+	test('error messages name the configured keys', () => {
+		expectThrows(
+			() =>
+				run(
+					wrap(`import C from './C.svelte' with { ogygiaHydrate: 'false' };`, '<C />'),
+					makeCtx({ importKeys: ALIAS })
+				),
+			/ogygiaHydrate: 'false'/
+		);
 	});
 });

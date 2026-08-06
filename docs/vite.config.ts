@@ -8,7 +8,7 @@ export default defineConfig({
 			visible: { margin: '120px' },
 			presets: {
 				demo: { hydrate: 'visible', margin: '200px' },
-				frozenSwr: { hydrate: 'none', remount: { strategy: 'swr', when: 'load' } }
+				frozenSwr: { hydrate: 'none', remount: { revalidate: 'load' } }
 			}
 		}),
 		sveltekit()

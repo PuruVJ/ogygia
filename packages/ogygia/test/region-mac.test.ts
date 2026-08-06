@@ -8,7 +8,7 @@ import { RuntimeSession } from '../src/runtime/session.js';
 import { islandId } from '../src/vite/transform.js';
 
 describe('region_mac_message', () => {
-	const secret = 'test-secret-key';
+	const secret = 'test-secret-key-16b';
 
 	it('binds region id into the MAC', () => {
 		const props = 'W3t9XQ';
@@ -25,6 +25,20 @@ describe('region_mac_message', () => {
 		const sig = sign(secret, msg);
 		expect(verify(secret, region_mac_message('rid', '1700000001', 'propsblob'), sig)).toBe(false);
 		expect(verify(secret, region_mac_message('rid', '1700000000', 'other'), sig)).toBe(false);
+	});
+
+	it('length-prefixes so embedded nulls cannot shift field boundaries', () => {
+		const a = region_mac_message('id', '1', 'a\0b', '');
+		const b = region_mac_message('id', '1', 'a', 'b');
+		expect(a).not.toBe(b);
+		expect(sign(secret, a)).not.toBe(sign(secret, b));
+	});
+
+	it('rejects non-hex signatures before compare', () => {
+		const msg = region_mac_message('rid', '1', 'p');
+		expect(verify(secret, msg, 'not-hex')).toBe(false);
+		expect(verify(secret, msg, 'g'.repeat(64))).toBe(false);
+		expect(verify(secret, msg, sign(secret, msg).toUpperCase())).toBe(false);
 	});
 });
 
@@ -50,7 +64,13 @@ describe('encode_region_props (SWR / defer mint bound)', () => {
 describe('RuntimeSession lake_cache (SPA reset)', () => {
 	it('reset clears lake_cache and initialized_lakes', () => {
 		const s = new RuntimeSession();
-		s.lake_cache.set('a', { frag: {} as Node, endpoint: '/x', when: 'load' });
+		s.lake_cache.set('a', {
+			frag: {} as Node,
+			endpoint: '/x',
+			when: 'load',
+			cachedAt: Date.now(),
+			maxAgeMs: 0
+		});
 		s.initialized_lakes.add('a');
 		s.reset();
 		expect(s.lake_cache.size).toBe(0);
@@ -61,8 +81,15 @@ describe('RuntimeSession lake_cache (SPA reset)', () => {
 		const s = new RuntimeSession();
 		const frag1 = {} as Node;
 		const frag2 = {} as Node;
-		s.lake_cache.set('lake-a', { frag: frag1, endpoint: '/e1', when: 'load' });
-		s.lake_cache.set('lake-a', { frag: frag2, endpoint: '/e1', when: 'load' });
+		const entry = (frag: Node) => ({
+			frag,
+			endpoint: '/e1',
+			when: 'load',
+			cachedAt: Date.now(),
+			maxAgeMs: 0
+		});
+		s.lake_cache.set('lake-a', entry(frag1));
+		s.lake_cache.set('lake-a', entry(frag2));
 		expect(s.lake_cache.size).toBe(1);
 		expect(s.lake_cache.get('lake-a')!.frag).toBe(frag2);
 	});

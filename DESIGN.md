@@ -2,6 +2,8 @@
 
 Four words. That’s it.
 
+Trust boundaries and “why it must stay this way” notes live in [`INVARIANTS.md`](./INVARIANTS.md).
+
 | Word | Meaning | Code |
 | ---- | ------- | ---- |
 | **Page** | SSR HTML. No Kit client — ogygia runtime is a WC + router (~4.5 KB min+br). | `csr = false` |

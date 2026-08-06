@@ -21,7 +21,6 @@
 	--warn: #e0b56f;
 
 	--shadow-panel: 0 1px 0 rgba(111, 227, 176, 0.04), 0 12px 32px -16px rgba(0, 0, 0, 0.6);
-	--nav-bg: color-mix(in srgb, var(--bg) 92%, transparent);
 
 	--r-sm: 6px;
 	--r-md: 10px;
@@ -31,11 +30,10 @@
 	--font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace;
 
 	--maxw: 1000px;
-	--toc-w: 12rem;
-	--toc-inset: 1.5rem;
+	--side-w: 15.5rem;
+	--side-gap: 0.75rem;
 	--gutter: clamp(1.25rem, 3vw, 2.5rem);
 	--section-gap: clamp(5rem, 10vw, 8.5rem);
-	--nav-h: 64px;
 }
 
 @media (prefers-color-scheme: light) {
@@ -62,7 +60,6 @@
 		--warn: #9a6b1c;
 
 		--shadow-panel: 0 1px 0 rgba(15, 122, 79, 0.06), 0 12px 32px -16px rgba(18, 26, 22, 0.18);
-		--nav-bg: color-mix(in srgb, var(--bg) 88%, transparent);
 	}
 }
 
@@ -75,7 +72,7 @@
 html {
 	/* In-page #hash clicks only — SPA post-nav scroll forces behavior:instant in the router. */
 	scroll-behavior: smooth;
-	scroll-padding-top: calc(var(--nav-h) + 1.5rem);
+	scroll-padding-top: 1.5rem;
 }
 
 body {
@@ -192,173 +189,212 @@ a:hover {
 	color: var(--text-faint);
 }
 
-/* ---- nav ---- */
-.nav {
+/* ---- side nav ---- */
+.side-backdrop {
+	display: none;
+}
+
+.side {
 	position: fixed;
-	inset: 0 0 auto 0;
-	height: var(--nav-h);
-	z-index: 60;
+	z-index: 50;
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	width: var(--side-w);
+	/* Full-height floating panel */
+	top: var(--side-gap);
+	bottom: var(--side-gap);
+	left: var(--side-gap);
+	padding: 0.75rem 0.5rem 0.75rem 0.65rem;
+	border: 1px solid var(--line);
+	border-radius: var(--r-md);
+	background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+	box-shadow: var(--shadow-panel);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+}
+
+.side-brand {
 	display: flex;
 	align-items: center;
-	background: var(--nav-bg);
-	backdrop-filter: blur(8px);
-	-webkit-backdrop-filter: blur(8px);
+	gap: 0.35rem;
+	padding: 0.15rem 0.35rem 0.35rem;
 	border-bottom: 1px solid var(--line);
-}
-
-.nav-inner {
-	display: flex;
-	align-items: center;
-	gap: 2rem;
-	/* do not set width here — .shell owns the measure so nav matches hero/docs */
-}
-
-.nav-brand {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.625rem;
-	color: var(--accent);
-}
-
-.nav-wordmark {
-	font: 500 0.875rem/1 var(--font-mono);
-	color: var(--text);
-	letter-spacing: 0.02em;
-}
-
-.nav-links {
-	display: flex;
-	gap: 1.5rem;
-	margin-left: auto;
-}
-
-.nav-link {
-	font: 500 0.8125rem/1 var(--font-body);
-	color: var(--text-dim);
-	letter-spacing: 0.01em;
-	display: inline-flex;
-	align-items: center;
-	gap: 0.3rem;
-}
-
-.nav-link:hover {
-	color: var(--text);
-}
-
-.nav-link--out .nav-out {
-	opacity: 0.55;
-	translate: 0 0.5px;
-}
-
-.nav-link--out:hover .nav-out {
-	opacity: 1;
-}
-
-.nav-out {
 	flex-shrink: 0;
 }
 
-.nav-github {
-	color: var(--text-dim);
+.side-logo {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-width: 0;
+	color: var(--accent);
+	font: 500 0.875rem/1 var(--font-mono);
+	letter-spacing: 0.02em;
+}
+
+.side-logo span {
+	color: var(--text);
+}
+
+.side-github {
+	margin-left: auto;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 40px;
-	height: 40px;
+	width: 32px;
+	height: 32px;
+	color: var(--text-dim);
+	border-radius: 4px;
+	flex-shrink: 0;
 }
 
-.nav-github:hover {
+.side-github:hover {
 	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 45%, transparent);
 }
 
-.nav-burger {
-	display: none;
-	position: relative;
-	width: 40px;
-	height: 40px;
-	margin-left: auto;
-	margin-right: -0.5rem;
-	border: 0;
-	background: transparent;
-	color: var(--text);
-	cursor: pointer;
-	align-items: center;
-	justify-content: center;
-	padding: 0;
-}
-
-.nav-burger-bars {
+.side-scroll {
 	display: flex;
 	flex-direction: column;
+	gap: 1rem;
+	min-height: 0;
+	flex: 1;
+	overflow-x: hidden;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--line-strong) transparent;
+	padding-right: 0.15rem;
+}
+
+.side-cat-toggle {
+	display: flex;
+	align-items: center;
 	justify-content: space-between;
-	width: 18px;
-	height: 12px;
-}
-
-.nav-burger-bars span {
-	display: block;
-	height: 1px;
+	gap: 0.5rem;
 	width: 100%;
-	background: currentColor;
-	transform-origin: center;
-	transition:
-		transform 200ms cubic-bezier(0.23, 1, 0.32, 1),
-		opacity 120ms ease;
+	padding: 0.3rem 0.35rem;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--text);
+	font: 600 0.6875rem/1.2 var(--font-mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	cursor: pointer;
+	text-align: left;
 }
 
-.nav-backdrop,
-.nav-sheet {
+.side-cat-toggle:hover {
+	background: color-mix(in srgb, var(--accent-deep) 40%, transparent);
+}
+
+.side-cat.is-current .side-cat-toggle {
+	color: var(--accent-strong);
+}
+
+.side-chevron {
+	opacity: 0.55;
+	transition: transform 180ms ease;
+	transform: rotate(-90deg);
+}
+
+.side-chevron.is-open {
+	transform: rotate(0deg);
+}
+
+.side-links {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	margin-top: 0.2rem;
+}
+
+.side-link {
+	display: block;
+	padding: 0.28rem 0.4rem;
+	border-radius: 4px;
+	font: 500 0.875rem/1.3 var(--font-body);
+	letter-spacing: -0.015em;
+	color: var(--text-dim);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.side-link--sub {
+	padding: 0.18rem 0.4rem 0.18rem 0.85rem;
+	font: 400 0.75rem/1.3 var(--font-mono);
+	letter-spacing: 0;
+	opacity: 0.9;
+}
+
+.side-link--sub + .side-link:not(.side-link--sub) {
+	margin-top: 0.3rem;
+}
+
+.side-link:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 50%, transparent);
+}
+
+.side-link.is-active {
+	color: var(--text);
+	font-weight: 600;
+	background: color-mix(in srgb, var(--accent-deep) 75%, transparent);
+}
+
+.side-link--sub.is-active {
+	color: var(--accent-strong);
+	font-weight: 500;
+	background: transparent;
+}
+
+.side-fab {
 	display: none;
 }
 
-@media (max-width: 767px) {
-	.nav {
-		inset: auto 0 0 0;
+@media (min-width: 1100px) {
+	body {
+		/* Make room for the floating sidebar so content doesn't sit under it */
+		padding-left: calc(var(--side-w) + var(--side-gap) * 2);
+	}
+
+	.side-fab {
+		display: none !important;
+	}
+
+	.side-backdrop {
+		display: none !important;
+	}
+}
+
+@media (max-width: 1099px) {
+	.side {
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: min(20rem, calc(100vw - 3rem));
+		max-width: 20rem;
+		border-radius: 0;
+		border-left: 0;
+		border-top: 0;
 		border-bottom: 0;
-		border-top: 1px solid var(--line);
-		/* Solid bar — no backdrop-filter (that traps fixed overlays inside the bar) */
-		background: var(--bg-raised);
-		backdrop-filter: none;
-		-webkit-backdrop-filter: none;
-		z-index: 60;
+		transform: translate3d(-105%, 0, 0);
+		pointer-events: none;
+		visibility: hidden;
+		transition:
+			transform 300ms cubic-bezier(0.23, 1, 0.32, 1),
+			visibility 300ms;
 	}
 
-	.nav-inner {
-		gap: 0.5rem;
+	.side.is-open {
+		transform: translate3d(0, 0, 0);
+		pointer-events: auto;
+		visibility: visible;
 	}
 
-	.nav-links {
-		display: none;
-	}
-
-	.nav-github {
-		margin-left: auto;
-	}
-
-	.nav-burger {
-		display: inline-flex;
-		margin-left: auto;
-		margin-right: -0.5rem;
-	}
-
-	.nav-github + .nav-burger {
-		margin-left: 0;
-	}
-
-	.nav--open .nav-burger-bars span:nth-child(1) {
-		transform: translateY(5.5px) rotate(45deg);
-	}
-
-	.nav--open .nav-burger-bars span:nth-child(2) {
-		opacity: 0;
-	}
-
-	.nav--open .nav-burger-bars span:nth-child(3) {
-		transform: translateY(-5.5px) rotate(-45deg);
-	}
-
-	/* Full-viewport dim over the page body; sits under sheet + bar */
-	.nav-backdrop {
+	.side-backdrop {
 		display: block;
 		position: fixed;
 		inset: 0;
@@ -369,70 +405,59 @@ a:hover {
 		transition: opacity 280ms cubic-bezier(0.23, 1, 0.32, 1);
 	}
 
-	.nav-backdrop.is-open {
+	.side-backdrop.is-open {
 		opacity: 1;
 		pointer-events: auto;
 	}
 
-	.nav-sheet {
+	.side-fab {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		position: fixed;
+		right: 1rem;
+		bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+		z-index: 60;
+		width: 48px;
+		height: 48px;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		background: var(--bg-raised);
+		color: var(--text);
+		box-shadow: var(--shadow-panel);
+		cursor: pointer;
+		padding: 0;
+	}
+
+	.side-root--open .side-fab-bars span:nth-child(1) {
+		transform: translateY(5.5px) rotate(45deg);
+	}
+
+	.side-root--open .side-fab-bars span:nth-child(2) {
+		opacity: 0;
+	}
+
+	.side-root--open .side-fab-bars span:nth-child(3) {
+		transform: translateY(-5.5px) rotate(-45deg);
+	}
+
+	.side-fab-bars {
 		display: flex;
 		flex-direction: column;
-		gap: 0.125rem;
-		position: fixed;
-		left: 0;
-		right: 0;
-		bottom: var(--nav-h);
-		z-index: 50;
-		max-height: min(70vh, calc(100dvh - var(--nav-h) - 1rem));
-		padding: 1rem var(--gutter) 1.25rem;
-		overflow: auto;
-		background: var(--bg-raised);
-		border: 1px solid var(--line);
-		border-bottom: 0;
-		border-radius: 1rem 1rem 0 0;
-		box-shadow: var(--shadow-panel);
-		transform: translate3d(0, 110%, 0);
-		pointer-events: none;
-		visibility: hidden;
-		transition:
-			transform 320ms cubic-bezier(0.23, 1, 0.32, 1),
-			visibility 320ms;
-	}
-
-	.nav-sheet.is-open {
-		transform: translate3d(0, 0, 0);
-		pointer-events: auto;
-		visibility: visible;
-	}
-
-	.nav-drawer-link {
-		display: flex;
-		align-items: center;
 		justify-content: space-between;
-		gap: 0.75rem;
-		padding: 0.875rem 0.25rem;
-		font: 500 1rem/1.2 var(--font-body);
-		color: var(--text);
-		border-bottom: 1px solid var(--line);
+		width: 18px;
+		height: 12px;
 	}
 
-	.nav-drawer-link:last-child {
-		border-bottom: 0;
-	}
-
-	.nav-drawer-link:hover {
-		color: var(--accent-strong);
-	}
-
-	.nav-drawer-link--out .nav-out,
-	.nav-drawer-link .nav-out {
-		opacity: 0.55;
-		color: var(--text-dim);
-	}
-
-	html {
-		scroll-padding-top: 1.5rem;
-		scroll-padding-bottom: calc(var(--nav-h) + 1.5rem);
+	.side-fab-bars span {
+		display: block;
+		height: 1.5px;
+		width: 100%;
+		background: currentColor;
+		transform-origin: center;
+		transition:
+			transform 200ms cubic-bezier(0.23, 1, 0.32, 1),
+			opacity 120ms ease;
 	}
 }
 
@@ -520,39 +545,6 @@ a:hover {
 	transform: none;
 }
 
-/* TOC sits in the left margin of the centered shell.
-   Only shown when that margin is wide enough for TOC + gap. */
-.toc-fixed {
-	display: none;
-}
-
-@media (min-width: 1440px) {
-	.toc-fixed {
-		display: block;
-		position: fixed;
-		top: calc(var(--nav-h) + 2rem);
-		left: var(--toc-inset);
-		width: var(--toc-w);
-		z-index: 40;
-		opacity: 0;
-		pointer-events: none;
-		transform: translateY(8px);
-		transition:
-			opacity 220ms ease,
-			transform 220ms ease;
-	}
-
-	.toc-fixed.is-on {
-		opacity: 1;
-		pointer-events: auto;
-		transform: translateY(0);
-	}
-
-	.toc-fixed ogygia-region {
-		display: block;
-	}
-}
-
 @media (max-width: 1023px) {
 	.hero-grid,
 	.demo-body,
@@ -576,7 +568,7 @@ a:hover {
 	min-height: 100dvh;
 	display: grid;
 	align-items: center;
-	padding-top: var(--nav-h);
+	padding-top: 2.5rem;
 	padding-bottom: 4rem;
 }
 
@@ -659,66 +651,16 @@ a:hover {
 	}
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1099px) {
 	.hero {
 		padding-top: 2rem;
-		min-height: calc(100dvh - var(--nav-h));
+		min-height: 100dvh;
 	}
 
 	.docs-main {
 		padding-top: 2.5rem;
-		padding-bottom: calc(var(--nav-h) + 3rem);
+		padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
 	}
-}
-
-/* ---- toc ---- */
-.toc {
-	position: relative;
-	display: flex;
-	flex-direction: column;
-	gap: 0.125rem;
-	padding-left: 1rem;
-}
-
-.toc-marker {
-	position: absolute;
-	left: 0;
-	top: 0;
-	width: 12px;
-	height: 1px;
-	background: var(--accent);
-	transition: transform 250ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-.toc-item {
-	font: 400 0.75rem/2 var(--font-mono);
-	color: var(--text-dim);
-	white-space: nowrap;
-	transition: color 120ms ease;
-}
-
-.toc-item:hover {
-	color: var(--text);
-}
-
-.toc-item.is-active {
-	color: var(--text);
-	font-weight: 500;
-}
-
-@media (prefers-color-scheme: dark) {
-	.toc-item {
-		color: var(--text);
-	}
-
-	.toc-item:hover,
-	.toc-item.is-active {
-		color: #fff;
-	}
-}
-
-.toc-item--sub {
-	padding-left: 1rem;
 }
 
 /* ---- prose / docs copy ---- */

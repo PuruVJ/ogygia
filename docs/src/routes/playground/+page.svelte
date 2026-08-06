@@ -19,7 +19,7 @@
 			href: '/playground/lakes',
 			eyebrow: "hydrate: 'none'",
 			title: 'Lakes',
-			body: 'A frozen region inside an interactive island, and the alternation that lets an island wake up again inside a lake.'
+			body: 'A frozen region inside an interactive island, remount cache vs SWR revalidate, and an island that wakes up again inside a lake.'
 		},
 		{
 			href: '/playground/data',

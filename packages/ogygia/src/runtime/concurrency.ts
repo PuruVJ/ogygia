@@ -1,5 +1,6 @@
 /**
- * Client concurrency gate for server-island endpoint fetches (SI-STORM).
+ * Shared concurrency gate — client region fetches (SI-STORM) and server region SSR (M1).
+ * Caps in-flight work; waiters queue FIFO. Does not cancel running work (see INVARIANTS.md).
  */
 export class ConcurrencyGate {
 	#limit: number;
@@ -27,3 +28,6 @@ export class ConcurrencyGate {
 		return this.#active;
 	}
 }
+
+/** Max concurrent region SSR renders per process (CPU amp under valid MAC). */
+export const REGION_RENDER_CONCURRENCY = 4;

@@ -10,11 +10,17 @@ import { document_has_kit_bootstrap } from './kit-boot.js';
 import { runtime_session } from './session.js';
 import { is_persist_preserving } from './persist.js';
 import {
+	is_allowed_region_endpoint,
+	is_same_origin_response
+} from './region-endpoint-url.js';
+import {
 	FROZEN_SELECTOR,
 	is_awake,
 	is_deferred,
 	is_frozen,
 	region_is_vacant,
+	region_max_age_ms,
+	region_on_expire,
 	region_remount,
 	region_schedule
 } from './region-attrs.js';
@@ -197,6 +203,7 @@ type LiftedLake = {
 	/** signed revalidate URL minted at SSR (remount:'swr'); '' otherwise */
 	endpoint: string;
 	when: string;
+	maxAgeMs: number;
 };
 
 	class OgygiaRegion extends HTMLElement {
@@ -211,6 +218,10 @@ type LiftedLake = {
 	#app: unknown = null;
 	#io: IntersectionObserver | null = null;
 	#mql: { mql: MediaQueryList; on: (e: MediaQueryListEvent) => void } | null = null;
+	/** Abort in-flight region HTML fetch on disconnect (P-ABORT). */
+	#fetch_abort: AbortController | null = null;
+	/** Cancel idle schedule when disconnected. */
+	#idle_handle: number | null = null;
 
 	connectedCallback() {
 		// Frozen region (`hydrate="none"`): SSR DOM preserved; parent lifts/restores. On {#if}
@@ -261,17 +272,31 @@ type LiftedLake = {
 		// Don't start a fetch without an endpoint (would block a later remount retry on the same
 		// element if one were ever scheduled).
 		if (!endpoint) return;
+		// HOLE-TRUST defense-in-depth: mint emits path-only; reject absolute/cross-origin attrs.
+		if (!is_allowed_region_endpoint(endpoint)) {
+			if (manifest.dev) {
+				console.warn('[ogygia] refused non-same-origin region endpoint', endpoint);
+			}
+			return;
+		}
 		this.#fetching = true;
+		this.#fetch_abort?.abort();
+		this.#fetch_abort = new AbortController();
+		const { signal } = this.#fetch_abort;
 		try {
 			await runtime_session.server_gate.run(async () => {
 				const res = await fetch(endpoint, {
 					credentials: 'same-origin',
-					cache: opts.revalidate ? 'no-store' : 'default'
+					cache: opts.revalidate ? 'no-store' : 'default',
+					signal
 				});
+				if (!is_same_origin_response(res)) {
+					throw new Error('cross-origin redirect');
+				}
 				if (!res.ok) throw new Error('status ' + res.status);
 				const html = await res.text();
 				// The region may have been {#if}-toggled away while the fetch was in flight.
-				if (!this.isConnected) return;
+				if (!this.isConnected || signal.aborted) return;
 				// Parse offline so we can settle lakes BEFORE custom elements connect — otherwise an
 				// island-in-lake inside the hole waits forever on an unsettled lake boundary.
 				// createContextualFragment — signed same-origin HTML trust boundary (HOLE-TRUST).
@@ -294,16 +319,19 @@ type LiftedLake = {
 							cached.appendChild(child.cloneNode(true));
 						}
 						const prev = runtime_session.lake_cache.get(id);
-						runtime_session.lake_cache.set(id, {
+						runtime_session.set_lake_cache(id, {
 							frag: cached,
 							endpoint: this.getAttribute('endpoint') || prev?.endpoint || '',
-							when: this.getAttribute('when') || prev?.when || 'load'
+							when: this.getAttribute('when') || prev?.when || 'load',
+							cachedAt: Date.now(),
+							maxAgeMs: region_max_age_ms(this) || prev?.maxAgeMs || 0
 						});
 					}
 				}
 				this.dispatchEvent(new CustomEvent('ogygia:server', { bubbles: true }));
 			});
 		} catch (err) {
+			if ((err as { name?: string })?.name === 'AbortError' || signal.aborted) return;
 			if (manifest.dev) {
 				console.warn('[ogygia] region fetch failed for', endpoint, err);
 			}
@@ -337,8 +365,20 @@ type LiftedLake = {
 	}
 
 	#on_idle(fire: () => void) {
-		if ('requestIdleCallback' in window) requestIdleCallback(fire, { timeout: 2000 });
-		else setTimeout(fire, 200);
+		if ('requestIdleCallback' in window) {
+			this.#idle_handle = requestIdleCallback(
+				() => {
+					this.#idle_handle = null;
+					fire();
+				},
+				{ timeout: 2000 }
+			) as unknown as number;
+		} else {
+			this.#idle_handle = setTimeout(() => {
+				this.#idle_handle = null;
+				fire();
+			}, 200) as unknown as number;
+		}
 	}
 
 	#on_visible(fire: () => void) {
@@ -481,7 +521,8 @@ type LiftedLake = {
 				id,
 				frag,
 				endpoint: lake.getAttribute('endpoint') || '',
-				when: lake.getAttribute('when') || 'load'
+				when: lake.getAttribute('when') || 'load',
+				maxAgeMs: region_max_age_ms(lake)
 			});
 		}
 		return lifted;
@@ -492,7 +533,7 @@ type LiftedLake = {
 	// while adopting the (emptied) SSR DOM, so the current live element is the correct restore
 	// target. Mark it settled first so an island-in-lake reconnecting inside it self-hydrates.
 	#restore_lakes(lifted: Array<LiftedLake>) {
-		for (const { id, frag, endpoint, when } of lifted) {
+		for (const { id, frag, endpoint, when, maxAgeMs } of lifted) {
 			const lake = this.querySelector(`${FROZEN_SELECTOR}[entry="${CSS.escape(id)}"]`);
 			if (!lake) continue;
 			runtime_session.settle_lakes_in(lake);
@@ -509,7 +550,13 @@ type LiftedLake = {
 				for (const child of Array.from(lake.childNodes)) {
 					cached.appendChild(child.cloneNode(true));
 				}
-				runtime_session.lake_cache.set(id, { frag: cached, endpoint, when });
+				runtime_session.set_lake_cache(id, {
+					frag: cached,
+					endpoint,
+					when,
+					cachedAt: Date.now(),
+					maxAgeMs: maxAgeMs || region_max_age_ms(lake)
+				});
 			}
 		}
 	}
@@ -538,6 +585,31 @@ type LiftedLake = {
 					runtime_session.settled_lakes.add(this);
 					return;
 				}
+				const max_age = region_max_age_ms(this) || cached.maxAgeMs || 0;
+				const expired = max_age > 0 && Date.now() - cached.cachedAt > max_age;
+				const on_expire = region_on_expire(this);
+
+				if (expired && on_expire === 'empty') {
+					runtime_session.settled_lakes.add(this);
+					return;
+				}
+
+				if (expired && on_expire === 'fetch') {
+					// Past TTL: do not paint stale — fetch fresh (swr only; needs endpoint).
+					if (!cached.endpoint) {
+						runtime_session.settled_lakes.add(this);
+						return;
+					}
+					this.setAttribute('endpoint', cached.endpoint);
+					const when = this.getAttribute('when') || cached.when || 'load';
+					const fire = () => void this.#fetch_html({ revalidate: true });
+					if (when === 'idle') this.#on_idle(fire);
+					else if (when === 'visible') this.#on_visible(fire);
+					else if (when === 'load') fire();
+					else this.#on_media(when, fire);
+					return;
+				}
+
 				if (policy === 'cache') {
 					// Settle before append so islands-in-lake connecting during insert self-hydrate.
 					runtime_session.settled_lakes.add(this);
@@ -577,6 +649,16 @@ type LiftedLake = {
 	disconnectedCallback() {
 		// Persist move: node is relocated into the next document body — keep the island mounted.
 		if (is_persist_preserving(this)) return;
+		this.#fetch_abort?.abort();
+		this.#fetch_abort = null;
+		if (this.#idle_handle != null) {
+			if ('cancelIdleCallback' in window) {
+				cancelIdleCallback(this.#idle_handle);
+			} else {
+				clearTimeout(this.#idle_handle);
+			}
+			this.#idle_handle = null;
+		}
 		this.#io?.disconnect();
 		this.#io = null;
 		if (this.#mql) {
@@ -610,6 +692,8 @@ if (typeof window !== 'undefined' && window.__marker === undefined) {
 async function boot_router_if_needed() {
 	if (typeof document === 'undefined') return;
 	if (!document.querySelector('meta[name="ogygia-router"]')) return;
+	// Same gate as SpaRouter.start — skip on Kit-booted (csr=true) documents.
+	if (document_has_kit_bootstrap()) return;
 	const { startRouter, set_after_body_swap } = await import('./router.js');
 	set_after_body_swap(prepare_spa_document);
 	startRouter();

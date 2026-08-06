@@ -13,7 +13,7 @@ export default defineConfig({
 				chart: { hydrate: 'visible', margin: '200px' },
 				// hydrate:none remount policy (default cache if omitted)
 				frozen: { hydrate: 'none' },
-				frozenSwr: { hydrate: 'none', remount: { strategy: 'swr', when: 'load' } },
+				frozenSwr: { hydrate: 'none', remount: { revalidate: 'load' } },
 				frozenEmpty: { hydrate: 'none', remount: 'empty' }
 			}
 		}),

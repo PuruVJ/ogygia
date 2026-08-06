@@ -17,6 +17,9 @@ export const actions: Actions = {
 			// re-render the page (200) with the validation error + entered values
 			return fail(400, { error: 'name and message are required', name, message });
 		}
+		if (name.length > 64 || message.length > 280) {
+			return fail(400, { error: 'name or message too long', name, message });
+		}
 		addEntry(name, message);
 		// post-redirect-get: 303 -> GET /forms?ok=1
 		redirect(303, '/forms?ok=1');

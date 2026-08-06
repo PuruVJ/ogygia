@@ -5,6 +5,9 @@
 import { ConcurrencyGate } from './concurrency.js';
 import { FROZEN_SELECTOR } from './region-attrs.js';
 
+/** Soft cap on lake cache entries (unique lake ids). Evict oldest insertion on overflow. */
+const LAKE_CACHE_MAX = 64;
+
 /** Cached SSR DOM (+ optional SWR endpoint) for `{#if}` remount of hydrate:none regions.
  * Keyed by lake entry id — size is O(unique lakes on the page), not O(toggles).
  * Cleared on SPA body swap via `reset()`. SWR refresh replaces the entry (does not grow). */
@@ -12,6 +15,10 @@ export type LakeCacheEntry = {
 	frag: Node;
 	endpoint: string;
 	when: string;
+	/** `Date.now()` when this entry was first cached or last successfully revalidated. */
+	cachedAt: number;
+	/** Client TTL in ms; `0` = no expiry. */
+	maxAgeMs: number;
 };
 
 export class RuntimeSession {
@@ -43,6 +50,17 @@ export class RuntimeSession {
 	}
 	set kit_page(v: boolean | undefined) {
 		this.#kit_page = v;
+	}
+
+	/** Insert/replace a lake cache entry; evict oldest if over LAKE_CACHE_MAX. */
+	set_lake_cache(id: string, entry: LakeCacheEntry) {
+		if (this.lake_cache.has(id)) this.lake_cache.delete(id);
+		this.lake_cache.set(id, entry);
+		while (this.lake_cache.size > LAKE_CACHE_MAX) {
+			const oldest = this.lake_cache.keys().next().value;
+			if (oldest == null) break;
+			this.lake_cache.delete(oldest);
+		}
 	}
 
 	settle_lakes_in(root: ParentNode) {

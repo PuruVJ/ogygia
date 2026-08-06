@@ -14,7 +14,9 @@
 	 * @typedef {Object} Props
 	 * @property {string} __entry lake region id
 	 * @property {'cache'|'empty'|'swr'} [__remount]
-	 * @property {string} [__when] SWR revalidate schedule (only when __remount === 'swr')
+	 * @property {string} [__when] revalidate schedule (only when __remount === 'swr')
+	 * @property {number} [__maxAge] client lake-cache TTL in ms
+	 * @property {'empty'|'fetch'} [__onExpire] past maxAge: blank or skip-stale fetch (swr)
 	 * @property {string} [__margin] IntersectionObserver rootMargin for `__when: 'visible'`
 	 * @property {Record<string, unknown>} [__props] captured props, re-rendered by the endpoint
 	 * @property {import('svelte').Snippet} [children] the authored lake tag
@@ -25,6 +27,8 @@
 		__entry,
 		__remount = 'cache',
 		__when = 'load',
+		__maxAge,
+		__onExpire,
 		__margin,
 		__props = {},
 		children
@@ -41,6 +45,8 @@
 	hydrate="none"
 	remount={__remount}
 	when={swr ? __when : undefined}
+	max-age={__maxAge != null ? String(__maxAge) : undefined}
+	on-expire={__onExpire || undefined}
 	margin={swr && __margin ? __margin : undefined}
 	endpoint={endpoint || undefined}
 >

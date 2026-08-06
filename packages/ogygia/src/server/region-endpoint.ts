@@ -4,6 +4,7 @@
  */
 import { secret } from 'virtual:ogygia/secret';
 import { sessionCookie } from 'virtual:ogygia/session-cookie';
+import { regionTtl } from 'virtual:ogygia/region-ttl';
 import { sign, region_mac_message } from 'virtual:ogygia/sign';
 import { resolve } from '$app/paths';
 import { getRequestEvent } from 'virtual:ogygia/request-event';
@@ -31,7 +32,7 @@ export function makeRegionEndpoint(entry: string, props: Record<string, unknown>
 		return '';
 	}
 	const session = region_session();
-	const exp = Math.floor(Date.now() / 1000) + 86400;
+	const exp = Math.floor(Date.now() / 1000) + regionTtl;
 	const sig = sign(secret, region_mac_message(entry, exp, payload, session));
 	return `${resolve(DEFAULT_ISLANDS_ENDPOINT)}?id=${encodeURIComponent(entry)}&props=${payload}&exp=${exp}&sig=${sig}`;
 }
