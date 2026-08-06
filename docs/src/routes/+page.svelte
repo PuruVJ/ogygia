@@ -159,8 +159,9 @@
 		<div class="prose">
 			<p>
 				<code>ogygia()</code> must run before <code>sveltekit()</code> (it also sets
-				<code>enforce: 'pre'</code>). For every option, see
-				<a href="#plugin">Plugin config</a>.
+				<code>enforce: 'pre'</code>). In monorepos it adds its package root to Vite's
+				<code>server.fs.allow</code> so absolute shim/runtime resolves are not blocked outside
+				the app directory. For every option, see <a href="#plugin">Plugin config</a>.
 			</p>
 		</div>
 		<CodeBlock html={data.viteConfigHtml} />
@@ -935,7 +936,10 @@
 				pending state, and a no-JS fallback post. <code>prerender()</code> bakes data at build
 				time — on a page that is not itself prerendered, declare it
 				<code>&#123; dynamic: true &#125;</code> or the runtime request has no static response to
-				hit.
+				hit. On SPA navigation, SSR remote seeds clear before the body swap and Kit's
+				query/live instance maps clear after it — so <code>query.live</code> opens a fresh SSE
+				on the next page instead of reusing a spent connection. Those maps live on a
+				<code>globalThis</code> singleton so Vite duplicate-module loads still share one cache.
 			</p>
 			<p>
 				Two operational notes. <code>command</code> and <code>form</code> POSTs pass through
@@ -975,7 +979,10 @@
 			<p>
 				View Transitions are on by default (<code>viewTransitions</code>). Pass
 				<code>viewTransitions=&#123;false&#125;</code> for a plain swap when you do not want the
-				API — or when a browser lacks support, the router falls back automatically.
+				API — or when a browser lacks support, the router falls back automatically. Same-route
+				hash jumps (<code>/docs#install</code> → <code>/docs#router</code>) skip the transition
+				and only scroll. Cross-route navigations still use View Transitions when the target has a
+				hash (<code>/a</code> → <code>/b#section</code>); the hash scrolls after the swap.
 			</p>
 			<p>
 				Island code keeps the Kit imports you already know —
@@ -1022,9 +1029,10 @@
 				<code>off</code>/<code>false</code> disables a broader ancestor opt-in. A prefetched page
 				swaps in on click with no second request. Since this router delivers a page's "code" via
 				the HTML swap itself (island chunks fetch on connect), <code>preload-code</code> maps to
-				the same HTML prefetch — its extra triggers just warm the cache earlier. Put
-				<code>data-sveltekit-preload-data="hover"</code> on a nav container and the whole subtree
-				opts in.
+				the same HTML prefetch — its extra triggers just warm the cache earlier. This site sets
+				<code>off</code> on <code>&lt;body&gt;</code> and opts the sidenav back in with
+				<code>data-sveltekit-preload-data="hover"</code> so nav links warm on hover without
+				prefetching every in-page link.
 			</p>
 		</div>
 	</section>
@@ -1040,10 +1048,12 @@
 		<div class="prose">
 			<p>
 				In <code>vite dev</code>, the plugin injects a small bridge
-				(<code>virtual:ogygia/dev-hmr</code>) that pulls in <code>@vite/client</code>, eager-imports
-				app CSS under <code>/src</code>, and strips Kit’s FOUC
-				<code>&lt;style data-sveltekit&gt;</code> tags so they don’t fight soft CSS updates. If Vite
-				reports <code>vite:error</code>, the bridge falls back to a full document reload.
+				(<code>virtual:ogygia/dev-hmr</code>) that pulls in <code>@vite/client</code> and
+				eager-imports app CSS under <code>/src</code> so Vite can soft-update those files. Kit’s
+				FOUC bag (<code>&lt;style data-sveltekit&gt;</code>) stays in place — under
+				<code>csr = false</code> that bag is how page and component CSS is delivered, and removing
+				it blanks the document (including after SPA navigations). If Vite reports
+				<code>vite:error</code>, the bridge falls back to a full document reload.
 			</p>
 			<p>What happens on save depends on what you edited:</p>
 		</div>

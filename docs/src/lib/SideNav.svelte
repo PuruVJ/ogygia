@@ -3,16 +3,28 @@
 	import { docsTocItems, playgroundLinks } from '$lib/toc-items';
 
 	let open = $state(false);
-	let docsOpen = $state(true);
-	let playgroundOpen = $state(true);
-	let path = $state('/');
+	let path = $state(typeof location !== 'undefined' ? location.pathname : '/');
+	let docsOpen = $state(path === '/' || !path.startsWith('/playground'));
+	let playgroundOpen = $state(path.startsWith('/playground'));
 	let activeToc = $state('features');
 	let mobile = $state(false);
 	let root_el: HTMLElement | undefined = $state();
+	/** Skip panel height transition when open state follows a route change. */
+	let panelInstant = $state(false);
 
 	const onDocs = $derived(path === '/');
 	const onPlayground = $derived(path.startsWith('/playground'));
 	const sheetInert = $derived(mobile && !open);
+
+	function applySectionDefaults(pathname: string) {
+		const pg = pathname.startsWith('/playground');
+		panelInstant = true;
+		docsOpen = !pg;
+		playgroundOpen = pg;
+		queueMicrotask(() => {
+			panelInstant = false;
+		});
+	}
 
 	function close() {
 		open = false;
@@ -32,7 +44,11 @@
 	}
 
 	function syncLocation() {
-		path = location.pathname;
+		const next = location.pathname;
+		if (path.startsWith('/playground') !== next.startsWith('/playground')) {
+			applySectionDefaults(next);
+		}
+		path = next;
 	}
 
 	function pickToc() {
@@ -139,8 +155,8 @@
 	>
 		<div class="side-brand">
 			<a class="side-logo" href="/" onclick={close}>
-				<Logo size={20} />
-				<span>ogygia</span>
+				<span class="side-logo-mark" aria-hidden="true"><Logo size={22} /></span>
+				<span class="side-logo-word">ogygia</span>
 			</a>
 			<a
 				class="side-github"
@@ -149,7 +165,7 @@
 				target="_blank"
 				rel="noreferrer"
 			>
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 					<path
 						d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.23c-3.34.73-4.03-1.42-4.03-1.42-.55-1.39-1.33-1.76-1.33-1.76-1.09-.74.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.66-.3-5.46-1.33-5.46-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.82.58A12.01 12.01 0 0 0 24 12c0-6.63-5.37-12-12-12Z"
 					/>
@@ -165,12 +181,12 @@
 					aria-expanded={docsOpen}
 					onclick={() => (docsOpen = !docsOpen)}
 				>
-					<span>Docs</span>
+					<span class="side-cat-label">Docs</span>
 					<svg
 						class="side-chevron"
 						class:is-open={docsOpen}
-						width="12"
-						height="12"
+						width="14"
+						height="14"
 						viewBox="0 0 12 12"
 						aria-hidden="true"
 					>
@@ -178,26 +194,39 @@
 							d="M3 4.5 6 7.5 9 4.5"
 							fill="none"
 							stroke="currentColor"
-							stroke-width="1.5"
-							stroke-linecap="square"
+							stroke-width="1.75"
+							stroke-linecap="round"
+							stroke-linejoin="round"
 						/>
 					</svg>
 				</button>
-				{#if docsOpen}
-					<nav class="side-links" aria-label="Docs">
-						{#each docsTocItems as item (item.id)}
-							<a
-								class="side-link"
-								class:side-link--sub={item.sub}
-								class:is-active={onDocs && activeToc === item.id}
-								href={docsHref(item.id)}
-								onclick={() => onDocsLinkClick(item.id)}
-							>
-								{item.label}
-							</a>
-						{/each}
-					</nav>
-				{/if}
+				<div
+					class="side-cat-panel"
+					class:is-open={docsOpen}
+					class:is-instant={panelInstant}
+					inert={!docsOpen}
+				>
+					<div class="side-cat-panel-inner">
+						<nav class="side-links" aria-label="Docs">
+							<ul class="side-list">
+								{#each docsTocItems as item (item.id)}
+									<li>
+										<a
+											class="side-link"
+											class:side-link--sub={item.sub}
+											class:is-active={onDocs && activeToc === item.id}
+											href={docsHref(item.id)}
+											onclick={() => onDocsLinkClick(item.id)}
+										>
+											{#if item.sub}<span class="side-link-tick" aria-hidden="true"></span>{/if}
+											<span class="side-link-text">{item.label}</span>
+										</a>
+									</li>
+								{/each}
+							</ul>
+						</nav>
+					</div>
+				</div>
 			</section>
 
 			<section class="side-cat" class:is-current={onPlayground}>
@@ -207,12 +236,12 @@
 					aria-expanded={playgroundOpen}
 					onclick={() => (playgroundOpen = !playgroundOpen)}
 				>
-					<span>Playground</span>
+					<span class="side-cat-label">Playground</span>
 					<svg
 						class="side-chevron"
 						class:is-open={playgroundOpen}
-						width="12"
-						height="12"
+						width="14"
+						height="14"
 						viewBox="0 0 12 12"
 						aria-hidden="true"
 					>
@@ -220,25 +249,37 @@
 							d="M3 4.5 6 7.5 9 4.5"
 							fill="none"
 							stroke="currentColor"
-							stroke-width="1.5"
-							stroke-linecap="square"
+							stroke-width="1.75"
+							stroke-linecap="round"
+							stroke-linejoin="round"
 						/>
 					</svg>
 				</button>
-				{#if playgroundOpen}
-					<nav class="side-links" aria-label="Playground">
-						{#each playgroundLinks as link}
-							<a
-								class="side-link"
-								class:is-active={playgroundActive(link.href)}
-								href={link.href}
-								onclick={close}
-							>
-								{link.label}
-							</a>
-						{/each}
-					</nav>
-				{/if}
+				<div
+					class="side-cat-panel"
+					class:is-open={playgroundOpen}
+					class:is-instant={panelInstant}
+					inert={!playgroundOpen}
+				>
+					<div class="side-cat-panel-inner">
+						<nav class="side-links" aria-label="Playground">
+							<ul class="side-list">
+								{#each playgroundLinks as link}
+									<li>
+										<a
+											class="side-link"
+											class:is-active={playgroundActive(link.href)}
+											href={link.href}
+											onclick={close}
+										>
+											<span class="side-link-text">{link.label}</span>
+										</a>
+									</li>
+								{/each}
+							</ul>
+						</nav>
+					</div>
+				</div>
 			</section>
 		</div>
 	</aside>

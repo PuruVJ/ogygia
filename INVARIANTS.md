@@ -135,11 +135,19 @@ Security and performance audits should read this before changing trust boundarie
 
 ## QUERY-LIVE — Kit owns SSE
 
-**What:** `query.live` is Kit’s remote SSE. Ogygia reuses Kit’s client remote primitives.
+**What:** `query.live` is Kit’s remote SSE. Ogygia reuses Kit’s client remote primitives. On SPA
+body swap: clear SSR seeds *before* `replaceWith` (old islands still mounted); clear
+`query_map` / `live_query_map` *after* (old disconnected, new hydrates still awaiting).
+The remote cache singleton lives on `globalThis` so Vite duplicate-module loads still share maps.
 
-**Why:** Abort on `request.signal` is Kit’s job. Infinite `while (true)` generators are normal; disconnect cancels.
+**Why:** Abort on `request.signal` is Kit’s job. Infinite `while (true)` generators are normal;
+disconnect cancels. Kit’s `LiveQuery.#start` is `once()` — reusing a spent instance after nav
+never opens SSE again (stuck on pending / “connecting…”). Clearing too early throws
+“No cached query found” mid-unmount. A per-module `new RemoteCache()` breaks SPA clear when
+the runtime chunk and island graph resolve the shim to different module ids.
 
-**Do not:** Treat public demo `query.live` as an ogygia ServerIsland vulnerability.
+**Do not:** Treat public demo `query.live` as an ogygia ServerIsland vulnerability. Do not clear
+instance maps in `prepare_spa_document` (pre-swap).
 
 ---
 

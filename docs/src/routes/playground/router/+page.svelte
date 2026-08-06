@@ -14,7 +14,9 @@
 		<code>&lt;OgygiaRouter /&gt;</code> is rendered in this site's root layout, so navigation between
 		these pages is a client-side swap: the body is replaced, the head is merged, and a View
 		Transition plays where supported. The heading morphs across pages because it carries a shared
-		<code>view-transition-name</code>.
+		<code>view-transition-name</code>. Same-route hash changes skip the transition; going to
+		another route with a hash (for example <code>/playground/router/a#top</code>) still
+		transitions, then scrolls.
 	</p>
 	<p>
 		The <strong>persist probe</strong> above the page content sits in
@@ -30,10 +32,10 @@
 <h3 class="doc-subhead">Link prefetch</h3>
 <div class="prose">
 	<p>
-		This site sets <code>data-sveltekit-preload-data="off"</code> on <code>&lt;body&gt;</code>, so
-		nothing prefetches by default. The links below opt specific triggers back in. The router warms
-		its page-HTML cache on the declared trigger; a prefetched page swaps in on click with no second
-		request.
+		This site sets <code>data-sveltekit-preload-data="off"</code> on <code>&lt;body&gt;</code>
+		(the sidenav opts <code>hover</code> back in). The links below opt specific triggers back in for
+		the demo. The router warms its page-HTML cache on the declared trigger; a prefetched page swaps
+		in on click with no second request.
 	</p>
 </div>
 

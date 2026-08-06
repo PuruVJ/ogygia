@@ -3,7 +3,10 @@ import { parse } from 'devalue';
 import * as manifest from 'virtual:ogygia/manifest';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import { seed_query_responses } from '../shims/kit-remote/client-stub.js';
-import { clear_remote_responses } from '../shims/kit-remote/remote-cache.js';
+import {
+	clear_remote_seeds,
+	clear_remote_instances
+} from '../shims/kit-remote/remote-cache.js';
 import NestedProvider from '../NestedProvider.svelte';
 import { relocate_trailing_empty_comments } from './lake-anchors.js';
 import { document_has_kit_bootstrap } from './kit-boot.js';
@@ -186,14 +189,26 @@ function kit_hydrates_page() {
 }
 
 /**
- * Reset every per-document runtime session before a new body connects.
- * Cleared BEFORE `body.replaceWith` so connecting regions never see the previous page's
- * kit/seed/lake/query/page state (fixes cross-page remote leak + stale lake restore races).
+ * Reset per-document session + SSR remote seeds before a new body connects.
+ *
+ * Do **not** clear `query_map` / `live_query_map` here — old islands are still
+ * mounted, and Kit's LiveQueryProxy throws if its cache entry vanishes mid-render.
+ * Instance sweep happens in {@link finish_spa_document} after `replaceWith`.
  */
 export function prepare_spa_document() {
 	runtime_session.reset();
-	clear_remote_responses();
+	clear_remote_seeds();
 	reset_page();
+}
+
+/**
+ * After `body.replaceWith`: old islands have disconnected; new ones have only
+ * scheduled `#hydrate` (first `await` yields). Sweep Kit query/live instance
+ * maps so the next page cannot reuse a LiveQuery whose `#start` is already
+ * spent (`once`) — that reuse never opens SSE again and leaves "connecting…".
+ */
+export function finish_spa_document() {
+	clear_remote_instances();
 }
 
 /** A frozen region's SSR DOM detached before hydrate, plus the SSR-only attrs read at lift time. */
@@ -694,8 +709,11 @@ async function boot_router_if_needed() {
 	if (!document.querySelector('meta[name="ogygia-router"]')) return;
 	// Same gate as SpaRouter.start — skip on Kit-booted (csr=true) documents.
 	if (document_has_kit_bootstrap()) return;
-	const { startRouter, set_after_body_swap } = await import('./router.js');
+	const { startRouter, set_after_body_swap, set_after_body_connected } = await import(
+		'./router.js'
+	);
 	set_after_body_swap(prepare_spa_document);
+	set_after_body_connected(finish_spa_document);
 	startRouter();
 }
 

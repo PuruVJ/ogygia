@@ -224,15 +224,40 @@ describe('audit fixes — head_node_key', () => {
 		const link = {
 			tagName: 'LINK',
 			getAttribute: attr({ rel: 'stylesheet', href: '/a.css', as: '' }),
+			hasAttribute: (n: string) => n in { rel: 1, href: 1, as: 1 },
 			outerHTML: '<link rel="stylesheet" href="/a.css">'
 		} as unknown as Element;
 		expect(head_node_key(link)).toBe('LINK:stylesheet:/a.css:');
 		const title = {
 			tagName: 'TITLE',
 			getAttribute: () => null,
+			hasAttribute: () => false,
 			outerHTML: '<title>t</title>'
 		} as unknown as Element;
 		expect(head_node_key(title)).toBe('TITLE');
+	});
+
+	it('keys Kit FOUC and Vite HMR styles by role, not content length', async () => {
+		const { head_node_key, keep_head_node_across_spa } = await import('../dist/runtime/router.js');
+		const fouc = {
+			tagName: 'STYLE',
+			getAttribute: (n: string) => (n === 'data-sveltekit' ? '' : null),
+			hasAttribute: (n: string) => n === 'data-sveltekit',
+			textContent: '/* a */ body{}',
+			outerHTML: '<style data-sveltekit></style>'
+		} as unknown as Element;
+		expect(head_node_key(fouc)).toBe('STYLE:data-sveltekit');
+		expect(keep_head_node_across_spa(fouc)).toBe(false);
+
+		const vite = {
+			tagName: 'STYLE',
+			getAttribute: (n: string) => (n === 'data-vite-dev-id' ? '/src/app.css' : null),
+			hasAttribute: (n: string) => n === 'data-vite-dev-id',
+			textContent: 'body{}',
+			outerHTML: '<style data-vite-dev-id="/src/app.css"></style>'
+		} as unknown as Element;
+		expect(head_node_key(vite)).toBe('STYLE:vite:/src/app.css');
+		expect(keep_head_node_across_spa(vite)).toBe(true);
 	});
 });
 
@@ -279,11 +304,12 @@ describe('audit fixes — page seed serialize', () => {
 });
 
 describe('audit fixes — remote clear', () => {
-	it('clear_remote_responses drops query + prerender maps and kit maps', async () => {
+	it('clear_remote_seeds + clear_remote_instances together drop seeds and kit maps', async () => {
 		const {
 			query_responses,
 			prerender_responses,
-			clear_remote_responses,
+			clear_remote_seeds,
+			clear_remote_instances,
 			query_map,
 			live_query_map
 		} = await import('../dist/shims/kit-remote/remote-cache.js');
@@ -291,11 +317,88 @@ describe('audit fixes — remote clear', () => {
 		prerender_responses['b'] = { v: 2 };
 		query_map.set('q', new Map());
 		live_query_map.set('l', new Map());
-		clear_remote_responses();
+		clear_remote_seeds();
+		clear_remote_instances();
 		expect(Object.keys(query_responses)).toEqual([]);
 		expect(Object.keys(prerender_responses)).toEqual([]);
 		expect(query_map.size).toBe(0);
 		expect(live_query_map.size).toBe(0);
+	});
+
+	it('clear_remote_seeds leaves live/query instance maps intact', async () => {
+		const {
+			query_responses,
+			prerender_responses,
+			clear_remote_seeds,
+			query_map,
+			live_query_map
+		} = await import('../dist/shims/kit-remote/remote-cache.js');
+		query_responses['a'] = { v: 1 };
+		prerender_responses['b'] = { v: 2 };
+		query_map.set('q', new Map());
+		live_query_map.set('l', new Map());
+		clear_remote_seeds();
+		expect(Object.keys(query_responses)).toEqual([]);
+		expect(Object.keys(prerender_responses)).toEqual([]);
+		expect(query_map.size).toBe(1);
+		expect(live_query_map.size).toBe(1);
+	});
+
+	it('clear_remote_instances destroys leftover query/live maps only', async () => {
+		const {
+			query_responses,
+			clear_remote_instances,
+			query_map,
+			live_query_map
+		} = await import('../dist/shims/kit-remote/remote-cache.js');
+		query_responses['keep'] = { v: 1 };
+		const destroyed: string[] = [];
+		live_query_map.set(
+			'clock',
+			new Map([
+				[
+					'',
+					{
+						resource: {
+							destroy() {
+								destroyed.push('clock');
+							}
+						}
+					}
+				]
+			])
+		);
+		query_map.set(
+			'count',
+			new Map([
+				[
+					'',
+					{
+						resource: {
+							destroy() {
+								destroyed.push('count');
+							}
+						}
+					}
+				]
+			])
+		);
+		clear_remote_instances();
+		expect(destroyed.sort()).toEqual(['clock', 'count']);
+		expect(live_query_map.size).toBe(0);
+		expect(query_map.size).toBe(0);
+		expect(query_responses.keep).toEqual({ v: 1 });
+	});
+
+	it('remote_cache is shared via globalThis across re-imports', async () => {
+		const a = await import('../dist/shims/kit-remote/remote-cache.js');
+		a.live_query_map.set('shared', new Map());
+		const b = await import('../dist/shims/kit-remote/remote-cache.js?t=' + Date.now());
+		// Same module URL may cache; assert the global singleton identity directly.
+		expect(a.remote_cache).toBe(b.remote_cache);
+		expect(a.live_query_map).toBe(b.live_query_map);
+		expect(a.live_query_map.has('shared')).toBe(true);
+		a.live_query_map.delete('shared');
 	});
 });
 

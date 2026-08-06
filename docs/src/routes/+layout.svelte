@@ -8,5 +8,8 @@
 </script>
 
 <OgygiaRouter />
-<SideNav />
+<!-- body is preload=off; sidenav opts hover back in so playground/docs links warm on hover -->
+<div data-ogygia-persist="site-sidenav" data-sveltekit-preload-data="hover">
+	<SideNav />
+</div>
 {@render children()}

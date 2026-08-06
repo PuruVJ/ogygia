@@ -89,12 +89,57 @@ export function head_node_key(node: Element): string {
 			return `SCRIPT:inline:${type}:${text.length}:${text.slice(0, 48)}`;
 		}
 		case 'STYLE': {
+			// Kit's FOUC bag is one per document — key by role so SPA swaps replace it
+			// instead of stacking length-prefixed duplicates or keeping a stale bag.
+			if (node.hasAttribute('data-sveltekit')) return 'STYLE:data-sveltekit';
+			const vite_id = node.getAttribute('data-vite-dev-id');
+			if (vite_id) return `STYLE:vite:${vite_id}`;
 			const text = node.textContent || '';
 			return `STYLE:${text.length}:${text.slice(0, 48)}`;
 		}
 		default:
 			return `${tag}:${node.outerHTML}`;
 	}
+}
+
+/**
+ * Head nodes that must survive SPA swaps even when absent from the next SSR head.
+ * @internal
+ */
+export function keep_head_node_across_spa(node: Element): boolean {
+	if (
+		node.tagName === 'SCRIPT' &&
+		node.getAttribute('type') === 'module' &&
+		(node.hasAttribute('data-ogygia-runtime') || node.hasAttribute('data-ogygia-dev-hmr'))
+	) {
+		return true;
+	}
+	// Vite soft-HMR CSS injections — not present in SSR HTML; dropping them blanks
+	// styles that only lived in the client graph after the FOUC bag was replaced.
+	if (node.tagName === 'STYLE' && node.hasAttribute('data-vite-dev-id')) return true;
+	if (
+		node.tagName === 'LINK' &&
+		node.getAttribute('rel') === 'stylesheet' &&
+		node.hasAttribute('data-vite-dev-id')
+	) {
+		return true;
+	}
+	return false;
+}
+
+/**
+ * Install a `<style>` into the live document. `cloneNode` from a `DOMParser` tree
+ * often fails to register the sheet; recreate with textContent instead.
+ * @internal
+ */
+export function install_head_style(source: Element, head: HTMLHeadElement = document.head) {
+	const el = document.createElement('style');
+	for (const attr of Array.from(source.attributes)) {
+		el.setAttribute(attr.name, attr.value);
+	}
+	el.textContent = source.textContent || '';
+	head.appendChild(el);
+	return el;
 }
 
 /**
@@ -160,6 +205,7 @@ function is_dangerous_head_node(node: Element): boolean {
 
 class SpaRouter {
 	#after_body_swap: (() => void) | undefined;
+	#after_body_connected: (() => void) | undefined;
 	#started = false;
 	#before_hooks = new Set<BeforeNavigateCallback>();
 	#after_hooks = new Set<AfterNavigateCallback>();
@@ -179,6 +225,10 @@ class SpaRouter {
 
 	set_after_body_swap(fn: () => void) {
 		this.#after_body_swap = fn;
+	}
+
+	set_after_body_connected(fn: () => void) {
+		this.#after_body_connected = fn;
 	}
 
 	beforeNavigate(fn: BeforeNavigateCallback) {
@@ -358,11 +408,12 @@ class SpaRouter {
 			location.href = url.href;
 			return;
 		}
-		// Hash targets and reduced-motion: skip View Transitions so they don't fight scroll.
+		// Same-document hash jumps already returned above (no VT). Cross-route swaps keep VT
+		// even when the target has a hash (A → B#C); scroll snaps after the transition.
 		const prefer_reduced_motion =
 			typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 		const use_vt =
-			marker.getAttribute('content') !== 'plain' && !url.hash && !prefer_reduced_motion;
+			marker.getAttribute('content') !== 'plain' && !prefer_reduced_motion;
 
 		let persist_pairs: PersistPair[] = [];
 		const swap = () => {
@@ -381,6 +432,8 @@ class SpaRouter {
 			// Lakes inside persisted chrome survived reset — re-mark settled so island-in-lake can wake.
 			for (const { live } of persist_pairs) runtime_session.settle_lakes_in(live);
 			end_persist_preserve(persist_pairs);
+			// Old islands disconnected; new hydrates are awaiting — sweep stale Kit remotes now.
+			this.#after_body_connected?.();
 		};
 
 		if (use_vt && document.startViewTransition) {
@@ -515,24 +568,27 @@ class SpaRouter {
 			if (is_dangerous_head_node(node)) continue;
 			next_keys.add(head_node_key(node));
 		}
-		// remove stale nodes — keep ogygia runtime + dev-hmr module scripts across swaps
+		// remove stale nodes — keep runtime / vite-dev CSS across swaps
 		for (const [key, node] of current_nodes) {
-			if (!next_keys.has(key)) {
-				if (
-					node.tagName === 'SCRIPT' &&
-					node.getAttribute('type') === 'module' &&
-					(node.hasAttribute('data-ogygia-runtime') || node.hasAttribute('data-ogygia-dev-hmr'))
-				) {
-					continue;
-				}
-				node.remove();
-			}
+			if (next_keys.has(key)) continue;
+			if (keep_head_node_across_spa(node)) continue;
+			node.remove();
 		}
-		// add new nodes (skip dangerous head policy tags)
+		// add / replace nodes (skip dangerous head policy tags)
 		for (const node of Array.from(new_head.children)) {
 			if (is_dangerous_head_node(node)) continue;
 			const key = head_node_key(node);
-			if (!current_nodes.has(key)) {
+			const existing = current_nodes.get(key);
+			// Kit FOUC bag: always refresh content (same key every page, different CSS).
+			if (key === 'STYLE:data-sveltekit') {
+				existing?.remove();
+				install_head_style(node);
+				continue;
+			}
+			if (existing) continue;
+			if (node.tagName === 'STYLE') {
+				install_head_style(node);
+			} else {
 				current.appendChild(node.cloneNode(true));
 			}
 		}
@@ -677,6 +733,14 @@ const spa = new SpaRouter();
 /** Called after a successful body swap so the runtime can reset per-document session state. */
 export function set_after_body_swap(fn: () => void) {
 	spa.set_after_body_swap(fn);
+}
+
+/**
+ * Called after `body.replaceWith` (old islands disconnected; new hydrates still pending).
+ * Used to sweep Kit query/live instance caches before the next page mounts remotes.
+ */
+export function set_after_body_connected(fn: () => void) {
+	spa.set_after_body_connected(fn);
 }
 
 /**

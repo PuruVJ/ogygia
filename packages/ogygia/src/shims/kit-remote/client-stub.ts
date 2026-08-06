@@ -6,7 +6,6 @@ import { goto as spaGoto, invalidateAll as spaInvalidateAll } from '../../runtim
 import {
 	query_responses,
 	prerender_responses,
-	clear_remote_responses,
 	query_map,
 	live_query_map
 } from './remote-cache.js';
@@ -14,7 +13,6 @@ import {
 export {
 	query_responses,
 	prerender_responses,
-	clear_remote_responses,
 	query_map,
 	live_query_map
 };

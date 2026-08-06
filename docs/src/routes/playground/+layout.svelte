@@ -30,6 +30,7 @@
 
 	@media (max-width: 1099px) {
 		.pg-body {
+			padding-top: 0.75rem;
 			padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
 		}
 	}

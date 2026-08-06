@@ -93,16 +93,6 @@
 		font-size: 1.0625rem;
 		max-width: 54ch;
 	}
-	:global(.pg-hero-contours) {
-		position: absolute;
-		top: 50%;
-		right: -140px;
-		width: min(460px, 50vw);
-		transform: translateY(-50%);
-		opacity: 0.3;
-		pointer-events: none;
-		color: var(--line-strong);
-	}
 	.pg-grid-wrap {
 		padding-bottom: 2rem;
 	}

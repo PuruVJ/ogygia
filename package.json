@@ -8,6 +8,7 @@
     "build:docs": "pnpm run build:lib && pnpm --filter docs build",
     "dev": "pnpm run build:lib && pnpm --filter playground dev",
     "dev:docs": "pnpm run build:lib && pnpm --filter docs dev",
+    "docs:dev": "pnpm run build:lib && pnpm --filter docs dev",
     "preview": "pnpm --filter playground preview",
     "preview:docs": "pnpm --filter docs preview",
     "check:lib": "pnpm --filter ogygia check",

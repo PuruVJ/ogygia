@@ -16,6 +16,8 @@ import {
 } from '../server/hmac.js';
 
 const RUNTIME_ENTRY = fileURLToPath(new URL('../runtime/index.js', import.meta.url));
+/** `packages/ogygia` — Vite must serve absolute shim/runtime resolves from outside the app root. */
+const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 // Client-side shims aliased for island modules (Kit's client runtime is absent under csr=false).
 const APP_SHIMS = {
@@ -146,7 +148,7 @@ export function rewrite_lake_import_to_placeholder(src: string, local: string, p
 /**
  * Host route shells (`+page` / `+layout` / …) never join the browser module graph under
  * `csr=false`, so Vite's fine-grained HMR for them has no client importer. Force a full reload.
- * Standalone CSS is handled by `virtual:ogygia/dev-hmr` (best-effort CSS HMR) — do not reload for it.
+ * Standalone CSS is soft-updated via `virtual:ogygia/dev-hmr` (Vite inject after Kit FOUC).
  * If that soft path fails, the client bridge listens for `vite:error` and reloads the document.
  *
  * @internal HMR policy helper (also covered by unit tests).
@@ -207,8 +209,12 @@ export function island_vpaths_affected_by_file(
 
 /**
  * Client bridge source for `virtual:ogygia/dev-hmr` (vite serve only): joins app CSS under
- * `/src` into the browser graph via `import.meta.glob`, strips Kit FOUC
- * `<style data-sveltekit>`, and full-reloads on `vite:error`.
+ * `/src` into the browser graph via `import.meta.glob`, and full-reloads on `vite:error`.
+ *
+ * Do **not** strip Kit’s `<style data-sveltekit>` FOUC bag. Under `csr = false` that bag is
+ * how page + component CSS is delivered (no client module graph for route shells). Removing
+ * it blanks the page; a MutationObserver would also delete FOUC styles the SPA router merges
+ * in on navigation.
  *
  * @internal Emitted by the plugin; exported for unit tests.
  */
@@ -216,15 +222,8 @@ export function dev_hmr_client_source() {
 	return (
 		`import "/@vite/client";\n` +
 		`import.meta.glob("/src/**/*.{css,scss,sass,less,styl}", { eager: true });\n` +
-		`function strip_kit_fouc() {\n` +
-		`  for (const el of document.querySelectorAll("style[data-sveltekit]")) el.remove();\n` +
-		`}\n` +
-		`strip_kit_fouc();\n` +
-		`new MutationObserver(strip_kit_fouc).observe(document.documentElement, {\n` +
-		`  childList: true,\n` +
-		`  subtree: true\n` +
-		`});\n` +
-		`// Soft path: CSS + island modules via Vite HMR. Hard path: anything Vite can't apply.\n` +
+		`// Soft path: CSS modules via Vite HMR (injected after FOUC; later rules win).\n` +
+		`// Hard path: anything Vite can't apply.\n` +
 		`function ogygia_full_reload() {\n` +
 		`  location.reload();\n` +
 		`}\n` +
@@ -370,15 +369,44 @@ export interface OgygiaOptions {
 }
 
 /**
+ * Rewrite vite-plugin-svelte island sourcemap `sources` so Vite treats them as virtual.
+ *
+ * Svelte emits the basename of `virtual:ogygia/island/<id>.svelte` (just `<id>.svelte`).
+ * That string does not match Vite's `virtualSourceRE`, so `injectSourcesContent` tries a
+ * disk read and warns "points to missing source files". Pointing sources back at the
+ * full virtual module id silences the warning (and keeps maps coherent).
+ *
+ * @internal Also covered by unit tests.
+ */
+export function rewrite_island_sourcemap_sources(
+	moduleId: string,
+	sources: (string | null)[] | undefined
+) {
+	if (!sources?.length) return null;
+	let changed = false;
+	const next = sources.map((s) => {
+		if (typeof s !== 'string') return s;
+		if (s === moduleId || s.startsWith('virtual:') || s.includes('\0')) return s;
+		// Basename-only (or other relative) .svelte source for this virtual module.
+		if (s.endsWith('.svelte') && !s.includes('/') && !path.isAbsolute(s)) {
+			changed = true;
+			return moduleId;
+		}
+		return s;
+	});
+	return changed ? next : null;
+}
+
+/**
  * Vite plugin: transforms `with { hydrate | defer | preset }` imports into islands,
  * serves virtual island modules, and wires signed region endpoints for deferred HTML.
  *
  * Place **before** `sveltekit()` in `vite.config`.
  *
  * @param options - Plugin configuration. See {@link OgygiaOptions}.
- * @returns A Vite plugin (`enforce: 'pre'`).
+ * @returns Vite plugins (`ogygia` pre + island sourcemap fix post). Vite flattens the array.
  */
-export function ogygia(options: OgygiaOptions = {}): Plugin {
+export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const standalone = options.standalone === true;
 	const visibleMargin = options.visible?.margin;
 	const presets = options.presets || {};
@@ -638,16 +666,24 @@ export function ogygia(options: OgygiaOptions = {}): Plugin {
 		walk(src_dir);
 	};
 
-	return {
-		name: 'ogygia',
-		enforce: 'pre',
+	return [
+		{
+			name: 'ogygia',
+			enforce: 'pre',
 
-		config() {
+			config() {
 			// Match Kit: SSR-inline `esm-env` so its development/production export conditions
 			// resolve per mode (used if anything in our server graph imports it). Do NOT
 			// optimizeDeps.exclude it — that breaks Svelte client prebundles that import DEV.
+			// `server.fs.allow`: kit-remote stubs / runtime resolve to absolute paths under this
+			// package; without it Vite 403s them when the app root is docs/ or playground/.
 			return {
-				ssr: { noExternal: ['esm-env'] }
+				ssr: { noExternal: ['esm-env'] },
+				server: {
+					fs: {
+						allow: [PKG_ROOT]
+					}
+				}
 			};
 		},
 
@@ -855,7 +891,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin {
 			}
 
 			// Island virtual modules: `virtual:ogygia/island/<id>.svelte` (no `\0` — vite-plugin-svelte
-			// excludes null-byte ids; `virtual:` still skips Vite's missing-source sourcemap reads).
+			// excludes null-byte ids). Basename-only sourcemap sources are rewritten by
+			// `ogygia:island-sourcemaps` so Vite's injectSourcesContent does not warn.
 			if (is_island_path(source)) {
 				let candidate = source.split('?')[0];
 				if (candidate.startsWith('/@id/')) candidate = candidate.slice('/@id/'.length);
@@ -1066,6 +1103,38 @@ export function ogygia(options: OgygiaOptions = {}): Plugin {
 			}
 
 			return touched ? { code: out, map } : null;
+			}
+		},
+		{
+			name: 'ogygia:island-sourcemaps',
+			enforce: 'post',
+			transform(code, id) {
+				const bare = strip_id(id);
+				if (!is_island_path(bare)) return null;
+				// After vite-plugin-svelte: maps often list sources as bare `<hash>.svelte`.
+				let map: { mappings?: string; sources?: (string | null)[]; [k: string]: unknown };
+				try {
+					map = this.getCombinedSourcemap();
+				} catch {
+					return null;
+				}
+				if (!map?.mappings || !map.sources?.length) return null;
+				const sources = rewrite_island_sourcemap_sources(bare, map.sources);
+				if (!sources) return null;
+				const entry = registry.get(bare);
+				const sourcesContent = sources.map((s, i) => {
+					const prev = Array.isArray(map.sourcesContent)
+						? (map.sourcesContent as (string | null)[])[i]
+						: null;
+					if (prev != null) return prev;
+					if (entry && s === bare) return entry.source;
+					return null;
+				});
+				return {
+					code,
+					map: { ...map, sources, sourcesContent }
+				};
+			}
 		}
-	};
+	];
 }

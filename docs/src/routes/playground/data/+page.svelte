@@ -93,10 +93,14 @@
 <style>
 	.pg-cols {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-		gap: 2.5rem 2rem;
+		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+		gap: 3rem 2.25rem;
+		margin-top: 0.5rem;
 	}
 	.pg-col-wide {
 		grid-column: 1 / -1;
+	}
+	.strategy :global(.widget) {
+		margin-top: 0.25rem;
 	}
 </style>

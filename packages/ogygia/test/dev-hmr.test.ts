@@ -4,7 +4,8 @@ import {
 	needs_island_entry_full_reload,
 	dev_hmr_client_source,
 	same_module_path,
-	island_vpaths_affected_by_file
+	island_vpaths_affected_by_file,
+	rewrite_island_sourcemap_sources
 } from '../dist/vite/index.js';
 
 describe('needs_csr_false_full_reload', () => {
@@ -84,8 +85,19 @@ describe('dev_hmr_client_source', () => {
 		const src = dev_hmr_client_source();
 		expect(src).toContain('import "/@vite/client"');
 		expect(src).toContain('import.meta.glob("/src/**/*.{css,scss,sass,less,styl}"');
-		expect(src).toContain('style[data-sveltekit]');
 		expect(src).toContain('vite:error');
 		expect(src).toContain('location.reload()');
+		// Must NOT strip Kit FOUC — under csr=false that bag is the page CSS.
+		expect(src).not.toContain('data-sveltekit');
+		expect(src).not.toContain('MutationObserver');
+	});
+});
+
+describe('rewrite_island_sourcemap_sources', () => {
+	it('rewrites basename-only svelte sources to the virtual module id', () => {
+		const id = 'virtual:ogygia/island/abc123.svelte';
+		expect(rewrite_island_sourcemap_sources(id, ['abc123.svelte'])).toEqual([id]);
+		expect(rewrite_island_sourcemap_sources(id, [id])).toBeNull();
+		expect(rewrite_island_sourcemap_sources(id, ['/abs/real.svelte'])).toBeNull();
 	});
 });
