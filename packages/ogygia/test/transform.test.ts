@@ -214,11 +214,47 @@ describe('defer / server island (fetch-timing symmetry)', () => {
 		expect(islandSource(r)).not.toMatch(/ogygiaFallback/);
 	});
 
-	test('defer + hydrate together is a roadmap error', () => {
-		expectThrows(
-			() => run(wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };`, '<C />')),
-			/`defer` \+ `hydrate` together is not yet supported \(roadmap/
+	test('defer + hydrate emits deferred client island (ServerIsland + module + kind hydrate)', () => {
+		const r = run(wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };`, '<C />'));
+		expect(r!.code).toMatch(/OgygiaServerIsland__Wrapper/);
+		expect(r!.code).toMatch(/__defer=\{"load"\}/);
+		expect(r!.code).toMatch(/__hydrate=\{"load"\}/);
+		expect(r!.code).toMatch(/__module=\{/);
+		expect(r!.code).not.toMatch(/OgygiaIsland__Wrapper /);
+		expect(r!.islands[0].server).toBe(true);
+		expect(r!.islands[0].kind).toBe('hydrate');
+	});
+
+	test('defer + hydrate:visible keeps defer schedule and hydrate schedule separate', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'visible' };`, '<C />'),
+			makeCtx({ visibleMargin: '120px' })
 		);
+		expect(r!.code).toMatch(/__defer=\{"load"\}/);
+		expect(r!.code).toMatch(/__hydrate=\{"visible"\}/);
+		expect(r!.code).toMatch(/__hydrateMargin=\{"120px"\}/);
+		expect(r!.code).not.toMatch(/__margin=/);
+	});
+
+	test('defer + hydrate:none warns in dev and treats as defer-only', () => {
+		const warns: string[] = [];
+		const orig = console.warn;
+		console.warn = (...args: unknown[]) => {
+			warns.push(args.map(String).join(' '));
+		};
+		try {
+			const r = run(
+				wrap(`import C from './C.svelte' with { defer: 'idle', hydrate: 'none' };`, '<C />'),
+				makeCtx({ dev: true })
+			);
+			expect(r!.code).toMatch(/__defer=\{"idle"\}/);
+			expect(r!.code).not.toMatch(/__hydrate=/);
+			expect(r!.islands[0].kind).toBe('defer');
+			expect(r!.islands[0].server).toBe(true);
+			expect(warns.some((w) => /hydrate: 'none'.*defer.*nonsense/i.test(w))).toBe(true);
+		} finally {
+			console.warn = orig;
+		}
 	});
 });
 

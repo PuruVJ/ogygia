@@ -363,8 +363,8 @@
 					<code>'visible'</code> | a media-query string | <code>'none'</code> (lake)
 				</li>
 				<li>
-					<code>defer</code> — same schedule values as hydrate (server island; mutually exclusive
-					with <code>hydrate</code> on that import)
+					<code>defer</code> — same schedule values as hydrate (server island). May pair with
+					<code>hydrate</code> for a deferred client island (HTML later, then JS).
 				</li>
 				<li>
 					<code>margin</code> — rootMargin for this preset when the strategy is
@@ -486,9 +486,9 @@
 		<PermalinkHeading id="authoring">Authoring</PermalinkHeading>
 		<div class="prose">
 			<p>
-				Mark an import with exactly one of <code>hydrate</code>, <code>defer</code>, or
-				<code>preset</code>. Import-attribute values must be string literals (ES spec). Every
-				usage of that marked binding is an island.
+				Mark an import with <code>hydrate</code>, <code>defer</code>, both (deferred client
+				island), or a <code>preset</code>. Import-attribute values must be string literals (ES
+				spec). Every usage of that marked binding is an island.
 			</p>
 		</div>
 		<CodeBlock html={data.authoringImportsHtml} />
@@ -503,9 +503,12 @@
 			</p>
 			<p>
 				You cannot put option keys on the import itself. Margins and similar tuning belong in
-				plugin config or a preset. Unknown presets, unknown keys, mixing
-				<code>preset</code> with another key, and <code>defer</code> + <code>hydrate</code>
-				together are build errors (the last one is roadmap).
+				plugin config or a preset. Unknown presets, unknown keys, and mixing
+				<code>preset</code> with another key are build errors.
+				<code>defer</code> + <code>hydrate</code> together is a deferred client island
+				(supported — see <a href="#server-islands">Server islands</a>).
+				<code>hydrate: 'none'</code> with <code>defer</code> is nonsense: dev warns and treats
+				it as defer-only.
 			</p>
 			<p>
 				Each island is an independent Svelte app. Islands do not share reactive state. If two
@@ -529,8 +532,7 @@
 			</p>
 			<p>
 				You can alternate all the way down: page → island → lake → island. A server island nested
-				inside an island renders inline with its parent (its <code>defer</code> is ignored there;
-				DESIGN.md records the roadmap semantics).
+				inside an island renders inline with its parent (its <code>defer</code> is ignored there).
 			</p>
 			<p>
 				Editor note: the <code>with &#123; … &#125;</code> syntax needs your
@@ -650,7 +652,8 @@
 			<p class="section-lede">
 				<code>defer</code> moves rendering off the page SSR and onto a signed fetch. Same
 				schedules as <a href="#strategies">hydrate</a> — but for when HTML arrives, not when JS
-				loads. The component’s JS never ships.
+				loads. Alone, the component’s JS never ships. Pair with <code>hydrate</code> for a
+				deferred client island (HTML later, then JS on that DOM).
 			</p>
 		</div>
 		<div class="prose">
@@ -669,8 +672,20 @@
 				production builds — <a href="#plugin-secret">OGYGIA_SECRET</a>). Default endpoint:
 				<code>/🏝️ogygia🏝️</code>. Override with
 				<code>ogygiaHandle(&#123; endpoint &#125;)</code>. The old boolean
-				<code>defer: 'true'</code> is a build error pointing at <code>'load'</code>. v1 does not
-				load JS after the HTML swap — pairing <code>defer</code> with hydrate is roadmap.
+				<code>defer: 'true'</code> is a build error pointing at <code>'load'</code>.
+			</p>
+			<p>
+				<strong>Deferred client islands</strong> —
+				<code>with &#123; defer: '…', hydrate: '…' &#125;</code> — run two phases: fetch+swap on the
+				defer schedule, then <code>import(entry)</code> + hydrate on the hydrate schedule.
+				Matching schedules (<code>load</code>/<code>load</code>, <code>idle</code>/<code>idle</code>,
+				<code>visible</code>/<code>visible</code>, same media string) coalesce: after the HTML swap,
+				hydrate runs immediately (no second idle / IntersectionObserver / media listener).
+				<code>hydrate: 'load'</code> after any defer also means ASAP after swap. Prefer this over
+				<code>&#123;#await&#125;</code> when you need a real island boundary (signed endpoint, props,
+				lakes); <code>&#123;#await&#125;</code> remains fine for ordinary async UI inside an already-hydrated
+				tree. <code>hydrate: 'none'</code> with <code>defer</code> is nonsense — use
+				<code>defer</code> alone (dev warns and ignores hydrate).
 			</p>
 		</div>
 

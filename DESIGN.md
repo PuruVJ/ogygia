@@ -9,7 +9,8 @@ Trust boundaries and “why it must stay this way” notes live in [`INVARIANTS.
 | **Page** | SSR HTML. No Kit client — ogygia runtime is a WC + router (~7.6 KB min+br). Hydrate islands put their **module URL** on `<ogygia-region entry>` (Astro-style); the sticky runtime does not embed an app-wide regions map. | `csr = false` |
 | **Island** | A component that becomes interactive (gets JS). | `with { hydrate: 'load' }` (or `idle` / `visible` / a media query) |
 | **Lake** | Static HTML *inside* an island — no JS for that bit. | `with { hydrate: 'none' }` used inside an island |
-| **Server island** | HTML loaded from the server later. Placeholder first. | `with { defer: 'load' }` (or `idle` / `visible` / media) |
+| **Server island** | HTML loaded from the server later. Placeholder first. No JS. | `with { defer: 'load' }` (or `idle` / `visible` / media) |
+| **Deferred client island** | HTML later, then JS on that DOM. | `with { defer: '…', hydrate: '…' }` |
 
 `hydrate` and `defer` are the import attributes. Everything else is English.
 
@@ -26,6 +27,11 @@ Same timing words for both:
 
 - On an **island**, that means when JS starts.
 - On a **server island**, that means when the placeholder is replaced with real HTML.
+- On a **deferred client island**, `defer` is phase 1 (fetch + swap); `hydrate` is phase 2 (import + hydrate). Matching schedules coalesce: after the swap, hydrate runs immediately (no second idle / IO / MQ). `hydrate: 'load'` always means ASAP after swap. Stricter/later hydrate arms only its own schedule.
+
+Prefer this over `{#await}` when the hole must be a real island boundary (signed endpoint, props, lakes). `{#await}` stays fine for ordinary async UI inside an already-hydrated tree.
+
+`hydrate: 'none'` with any `defer` is nonsense (HTML later and no JS) — use `defer` alone. Dev warns and treats it as defer-only.
 
 ## Nesting (one rule)
 
@@ -61,4 +67,5 @@ What you get is a **regular** component in the island’s tree (Vite code-splits
 <ogygia-region hydrate="load|idle|visible|(media)">   <!-- island -->
 <ogygia-region hydrate="none">                        <!-- lake -->
 <ogygia-region render="defer" when="…" endpoint="…">  <!-- server island -->
+<ogygia-region render="defer" when="…" hydrate="…" entry="…module…" endpoint="…">  <!-- deferred client island -->
 ```

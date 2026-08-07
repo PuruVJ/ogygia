@@ -70,7 +70,12 @@ function expectError(label: string, src: string, re: RegExp) {
 expectError('unknown preset lists available', wrap(`import C from './C.svelte' with { preset: 'nope' };`), /unknown preset 'nope'.*chart/s);
 expectError('inline option key rejected (margin)', wrap(`import C from './C.svelte' with { hydrate: 'visible', margin: '9px' };`), /not allowed inline/);
 expectError('preset + another inline key rejected', wrap(`import C from './C.svelte' with { preset: 'chart', hydrate: 'load' };`), /must be the only import attribute/);
-expectError('defer + hydrate is a roadmap error', wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };`), /not yet supported \(roadmap/);
+// defer + hydrate is supported (deferred client island)
+{
+	const r = run(wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };`));
+	check('defer + hydrate -> ServerIsland with __hydrate + __module', /__hydrate=\{"load"\}/.test(r.code) && /__module=\{/.test(r.code));
+	check('defer + hydrate -> kind hydrate + server true', r.islands?.[0]?.kind === 'hydrate' && r.islands?.[0]?.server === true);
+}
 // `hydrate: 'false'` is NOT a valid lake value — the string value is 'none'; error points there.
 expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from './C.svelte' with { hydrate: 'false' };`), /hydrate: 'false'.*use .*hydrate: 'none'/i);
 

@@ -5,6 +5,17 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] — 2026-08-07
+
+### Added
+
+- **Deferred client islands** — `with { defer: '…', hydrate: '…' }`. Phase 1 fetches signed HTML on the defer schedule; phase 2 `import(entry)` + hydrates that DOM. Matching schedules coalesce to immediate hydrate after swap (no second idle / IO / MQ). `hydrate: 'load'` after any defer is ASAP after swap.
+- Emit both the signed defer endpoint (opaque region id) and an importable client module URL on `<ogygia-region entry>` for the combo. Props sibling + `modulepreload` when phase-2 is load (authored or coalesced).
+
+### Changed
+
+- `defer` + `hydrate` is no longer a roadmap build error. `hydrate: 'none'` + `defer` is a **dev warning** (nonsense — use `defer` alone) and is treated as defer-only.
+
 ## [0.3.3] — 2026-08-07
 
 ### Changed

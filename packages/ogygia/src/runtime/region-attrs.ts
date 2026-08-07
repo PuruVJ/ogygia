@@ -4,6 +4,7 @@
  * - `hydrate` — when JS wakes: `none` | `load` | `idle` | `visible` | media query
  * - `render`  — when HTML arrives: omit/`page` | `defer`
  * - `when`    — schedule for `render="defer"` OR `remount="swr"` revalidate
+ * - `hydrate-margin` — IntersectionObserver rootMargin for phase-2 `hydrate="visible"`
  * - `remount` — `{#if}` re-creation of `hydrate="none"`: `cache` | `empty` | `swr`
  * - `max-age` — client lake-cache TTL in ms (optional)
  * - `on-expire` — past max-age: `empty` | `fetch` (swr default `fetch`, cache default `empty`)
@@ -77,4 +78,27 @@ export function region_schedule(el: Element): string {
 	const h = el.getAttribute('hydrate');
 	if (h && h !== 'none') return h;
 	return 'load';
+}
+
+/**
+ * Wake schedule from `hydrate`, or `null` when this region does not run JS
+ * (`hydrate` absent / `'none'`). Used after a deferred HTML swap for phase 2.
+ */
+export function region_hydrate_schedule(el: Element): string | null {
+	const h = el.getAttribute('hydrate');
+	if (h == null || h === 'none') return null;
+	return h;
+}
+
+/**
+ * Phase-2 (post-swap) hydrate schedule for a deferred client island.
+ *
+ * - Matching schedules (`load`/`load`, `idle`/`idle`, `visible`/`visible`, same media) → `'load'`
+ *   (hydrate immediately; do not re-arm the same idle / IO / MQ).
+ * - `hydrate: 'load'` after any defer → `'load'` (ASAP after swap).
+ * - Otherwise arm hydrate’s own schedule only.
+ */
+export function phase2_hydrate_schedule(defer_when: string, hydrate: string): string {
+	if (hydrate === 'load' || hydrate === defer_when) return 'load';
+	return hydrate;
 }

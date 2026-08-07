@@ -3,6 +3,8 @@ import {
 	is_awake,
 	is_deferred,
 	is_frozen,
+	phase2_hydrate_schedule,
+	region_hydrate_schedule,
 	region_is_vacant,
 	region_max_age_ms,
 	region_on_expire,
@@ -76,5 +78,26 @@ describe('region-attrs (two-axis DOM)', () => {
 		expect(region_schedule(new FakeEl({ hydrate: 'idle' }))).toBe('idle');
 		// frozen regions don't schedule a wake; default load is unused for them
 		expect(region_schedule(new FakeEl({ hydrate: 'none' }))).toBe('load');
+	});
+
+	it('region_hydrate_schedule / phase2 coalesce', () => {
+		expect(region_hydrate_schedule(new FakeEl({ render: 'defer', when: 'load' }))).toBe(null);
+		expect(
+			region_hydrate_schedule(new FakeEl({ render: 'defer', when: 'visible', hydrate: 'idle' }))
+		).toBe('idle');
+		expect(region_hydrate_schedule(new FakeEl({ hydrate: 'none' }))).toBe(null);
+
+		// Matching schedules → immediate phase-2 load (no re-arm)
+		expect(phase2_hydrate_schedule('load', 'load')).toBe('load');
+		expect(phase2_hydrate_schedule('idle', 'idle')).toBe('load');
+		expect(phase2_hydrate_schedule('visible', 'visible')).toBe('load');
+		expect(phase2_hydrate_schedule('(min-width: 700px)', '(min-width: 700px)')).toBe('load');
+		// hydrate:load after any defer → ASAP
+		expect(phase2_hydrate_schedule('visible', 'load')).toBe('load');
+		expect(phase2_hydrate_schedule('idle', 'load')).toBe('load');
+		// Stricter/later hydrate keeps its schedule
+		expect(phase2_hydrate_schedule('load', 'visible')).toBe('visible');
+		expect(phase2_hydrate_schedule('visible', 'idle')).toBe('idle');
+		expect(phase2_hydrate_schedule('load', '(max-width: 600px)')).toBe('(max-width: 600px)');
 	});
 });

@@ -21,6 +21,8 @@ import {
 	is_awake,
 	is_deferred,
 	is_frozen,
+	phase2_hydrate_schedule,
+	region_hydrate_schedule,
 	region_is_vacant,
 	region_max_age_ms,
 	region_on_expire,
@@ -260,20 +262,37 @@ type LiftedLake = {
 		// Region inside a not-yet-settled frozen ancestor: wait for parent lift/restore.
 		if (boundary && is_frozen(boundary) && !runtime_session.settled_lakes.has(boundary)) return;
 		this.#scheduled = true;
-		// One scheduler, two axes: `hydrate` wakes JS; `render="defer"` + `when` fetches HTML.
+		// Two axes: `render="defer"` + `when` fetches HTML; `hydrate` wakes JS (possibly after swap).
 		const deferred = is_deferred(this);
 		const when = region_schedule(this);
 		const fire = deferred ? () => this.#server() : () => this.#hydrate();
+		this.#arm(when, fire);
+	}
+
+	/** Arm idle / visible / load / media for a schedule callback. */
+	#arm(when: string, fire: () => void, visible_margin?: string) {
 		if (when === 'idle') this.#on_idle(fire);
-		else if (when === 'visible') this.#on_visible(fire);
+		else if (when === 'visible') this.#on_visible(fire, visible_margin);
 		else if (when === 'load') fire();
 		else this.#on_media(when, fire); // a media query string
 	}
 
-	// SERVER island / remount:swr revalidate: fetch rendered HTML and swap it in.
-	// No client hydration in v1. A <link rel="preload"> (defer:load only) may already be in flight.
+	/**
+	 * Deferred hole: fetch HTML and swap it in. When `hydrate` is also set (deferred client
+	 * island), schedule phase-2 hydrate — coalescing matching schedules to immediate load.
+	 */
 	async #server() {
 		await this.#fetch_html();
+		if (!this.#done || !this.isConnected) return;
+		const hydrate = region_hydrate_schedule(this);
+		if (!hydrate) return;
+		const defer_when = this.getAttribute('when') || 'load';
+		const phase2 = phase2_hydrate_schedule(defer_when, hydrate);
+		const margin =
+			phase2 === 'visible'
+				? this.getAttribute('hydrate-margin') || this.getAttribute('margin') || undefined
+				: undefined;
+		this.#arm(phase2, () => void this.#hydrate(), margin);
 	}
 
 	/**
@@ -324,9 +343,11 @@ type LiftedLake = {
 				if (is_frozen(this)) runtime_session.settled_lakes.add(this);
 				this.replaceChildren(frag);
 				this.#done = true;
-				// A frozen region never "hydrates" — mark an swr revalidate distinctly so the
-				// `[data-hydrated]` vocabulary keeps meaning "JS woke here".
-				this.setAttribute(opts.revalidate ? 'data-revalidated' : 'data-hydrated', '');
+				// `data-hydrated` means "JS woke here". Defer-only holes use it for HTML arrival;
+				// deferred client islands (awake + defer) wait until `#hydrate`. SWR revalidate is
+				// marked separately so the vocabulary stays distinct.
+				if (opts.revalidate) this.setAttribute('data-revalidated', '');
+				else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
 				// SWR: refresh the remount cache so the next {#if} paints this response as stale
 				// (not the forever-first SSR snapshot). Map.set replaces — size stays O(unique entries).
 				if (opts.revalidate && is_frozen(this)) {
@@ -399,8 +420,8 @@ type LiftedLake = {
 		}
 	}
 
-	#on_visible(fire: () => void) {
-		const rootMargin = this.getAttribute('margin') || '0px';
+	#on_visible(fire: () => void, root_margin?: string) {
+		const rootMargin = root_margin || this.getAttribute('margin') || '0px';
 		const io = new IntersectionObserver(
 			(entries) => {
 				for (const e of entries) {
@@ -483,13 +504,13 @@ type LiftedLake = {
 			if (!this.isConnected) return;
 
 			// Hydration envelope: `hydrate()` anchors on a top-level `<!--[-->` comment and then
-			// expects the component's OWN fragment envelope — but embedded SSR (the island content
-			// rendered inside this element by Island.svelte) emits only the inner dynamic-component
-			// layer. `render()` output has BOTH layers; embedded output has one (verified against
-			// svelte 5.56 in isolation: one layer ⇒ hydration_mismatch + client re-render, two
-			// layers ⇒ clean adoption). Supply the missing outer pair before hydrating.
-			this.insertBefore(document.createComment('['), this.firstChild);
-			this.appendChild(document.createComment(']'));
+			// expects the component's OWN fragment envelope — but embedded SSR (Island.svelte)
+			// emits only the inner layer. `render()` (region endpoint / deferred swap) has BOTH
+			// layers — do not wrap again or hydration mismatches. (Verified against svelte 5.56.)
+			if (!is_deferred(this)) {
+				this.insertBefore(document.createComment('['), this.firstChild);
+				this.appendChild(document.createComment(']'));
+			}
 
 			// Hydrate through NestedProvider so descendants see the "inside a hydrated island"
 			// context — any nested island wrapper then degrades to a plain inline component

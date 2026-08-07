@@ -621,8 +621,8 @@ export function transformHost(source, id, ctx) {
 		const IMPORT_KEYS = [import_keys.hydrate, import_keys.defer, import_keys.preset];
 		if (!IMPORT_KEYS.some((k) => inline.has(k))) continue;
 
-		// The import block carries EXACTLY ONE of hydrate | defer | preset (under configured
-		// names). No option keys inline — all tuning lives in plugin config (ogygia({ presets })).
+		// The import block carries hydrate and/or defer, or a preset (under configured names).
+		// No option keys inline — all tuning lives in plugin config (ogygia({ presets })).
 		/** @type {Map<string,string>} effective attributes (canonical hydrate/defer + margin) */
 		let attrs;
 		/** @type {{ strategy: string, when?: string } | undefined} */
@@ -661,7 +661,7 @@ export function transformHost(source, id, ctx) {
 				);
 			}
 		} else {
-			// inline may carry only the configured hydrate or defer key
+			// inline may carry the configured hydrate and/or defer keys (combo = deferred client island)
 			for (const k of inline.keys()) {
 				if (k !== import_keys.hydrate && k !== import_keys.defer) {
 					throw err(
@@ -688,17 +688,22 @@ export function transformHost(source, id, ctx) {
 		if (remount_opt && attrs.get('hydrate') !== 'none') {
 			throw err(names, `\`remount\` is only valid with \`${import_keys.hydrate}: 'none'\`.`);
 		}
-		if (attrs.has('defer') && attrs.has('hydrate')) {
-			throw err(
-				names,
-				`\`${import_keys.defer}\` + \`${import_keys.hydrate}\` together is not yet supported (roadmap: deferred client island — see DESIGN.md).`
-			);
+
+		// `hydrate: 'none'` + `defer` is nonsense (HTML later AND no JS) — warn and treat as defer-only.
+		if (attrs.has('defer') && attrs.get('hydrate') === 'none') {
+			if (ctx.dev) {
+				console.warn(
+					`[ogygia] ${rel_host}: \`${import_keys.hydrate}: 'none'\` together with \`${import_keys.defer}\` is nonsense — ` +
+						`use \`${import_keys.defer}\` alone (HTML later, no JS). Ignoring hydrate; treating as a server island.`
+				);
+			}
+			attrs.delete('hydrate');
 		}
 
-		// `defer` -> SERVER island (render: defer, hydrate: none). Its VALUE is the fetch-timing for
-		// the hole, symmetric with `hydrate`'s value being the hydrate-timing: 'load' (immediate,
-		// preload-hinted) | 'idle' (requestIdleCallback) | 'visible' (IntersectionObserver) | a media
-		// query. The old boolean spelling `defer: 'true'` is retired — point authors at `defer: 'load'`.
+		// `defer` -> SERVER island (render: defer). Optional `hydrate` → deferred client island
+		// (fetch HTML on defer schedule, then import(entry) + hydrate). Defer VALUE is the
+		// fetch-timing: 'load' (immediate, preload-hinted) | 'idle' | 'visible' | a media query.
+		// The old boolean spelling `defer: 'true'` is retired — point authors at `defer: 'load'`.
 		if (attrs.has('defer')) {
 			const dval = attrs.get('defer');
 			if (dval === 'true') {
@@ -716,9 +721,36 @@ export function transformHost(source, id, ctx) {
 					`unknown ${import_keys.defer} timing '${dval}'. Use 'load' | 'idle' | 'visible' | a media query.`
 				);
 
-			// `margin` applies only to `visible` (tolerantly ignored otherwise), same as hydrate.
-			const options: { when: string; margin?: string } = { when };
+			// `margin` applies to whichever axis is `visible` (tolerantly ignored otherwise).
+			const options: {
+				when: string;
+				margin?: string;
+				hydrate?: string;
+				hydrateMargin?: string;
+			} = { when };
 			if (when === 'visible') options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
+
+			if (attrs.has('hydrate')) {
+				const hval = attrs.get('hydrate');
+				if (hval === 'false') {
+					throw err(
+						names,
+						`\`${import_keys.hydrate}: 'false'\` is not valid — use \`${import_keys.hydrate}: 'none'\` for a lake (a frozen region inside a hydrated island). See DESIGN.md.`
+					);
+				}
+				let hydrate_strategy;
+				if (KNOWN_STRATEGIES.has(hval)) hydrate_strategy = hval;
+				else if (is_media_query(hval)) hydrate_strategy = hval;
+				else
+					throw err(
+						names,
+						`unknown ${import_keys.hydrate} strategy '${hval}'. Use 'load' | 'idle' | 'visible' | a media query.`
+					);
+				options.hydrate = hydrate_strategy;
+				if (hydrate_strategy === 'visible') {
+					options.hydrateMargin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
+				}
+			}
 
 			for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy: 'server', options });
 			imports_to_strip.add(node);
@@ -944,6 +976,7 @@ export function transformHost(source, id, ctx) {
 		const virtualPath = ctx.virtualPathFor(id, iid);
 		const comp_var = `__OgygiaIsland_${index}`;
 		const is_server = unit.strategy === 'server';
+		const deferred_hydrate = is_server && !!unit.options?.hydrate;
 
 		// SERVER island: the reserved `ogygiaFallback` snippet renders into the page immediately
 		// (kept in host scope, so it can reference host vars directly). The island component
@@ -1113,7 +1146,9 @@ export function transformHost(source, id, ctx) {
 			hostPath: id,
 			componentPath,
 			server: is_server,
-			kind: is_server ? 'defer' : 'hydrate',
+			// Deferred client islands need a client chunk (`kind: 'hydrate'`) AND the server
+			// manifest (`server: true`). Defer-only stays `kind: 'defer'` (no client JS).
+			kind: is_server ? (deferred_hydrate ? 'hydrate' : 'defer') : 'hydrate',
 			lakes: island_lakes
 		});
 
@@ -1130,7 +1165,8 @@ export function transformHost(source, id, ctx) {
 			// PAGE's SSR import graph into Kit's FOUC bag under csr=false. Virtual modules don't
 			// reliably contribute CSS to that bag — styles on the island entry would never ship.
 			// The wrapper never renders `__component` (the /🏝️ogygia🏝️ endpoint resolves by id);
-			// the binding only keeps the import alive. csr=false → zero client JS from this import.
+			// the binding only keeps the import alive. csr=false → zero client JS from this import
+			// unless `__hydrate` + `__module` emit a client chunk via emitFile.
 			if (typeof entry_spec !== 'string') {
 				throw new Error(
 					`[ogygia] ${rel_host}: server island needs a static import path ($lib/… or relative).`
@@ -1145,6 +1181,15 @@ export function transformHost(source, id, ctx) {
 			const fetch_when = unit.options?.when || 'load';
 			let server_attrs = ` __defer={${JSON.stringify(fetch_when)}}`;
 			if (unit.options?.margin != null) server_attrs += ` __margin={${JSON.stringify(unit.options.margin)}}`;
+			if (deferred_hydrate) {
+				// Importable module URL for post-swap hydrate (opaque `__entry` stays the HMAC id).
+				const module_url = ctx.dev ? ctx.devUrlFor(virtualPath) : islandPublicUrl(iid);
+				server_attrs += ` __hydrate={${JSON.stringify(unit.options.hydrate)}}`;
+				server_attrs += ` __module={${JSON.stringify(module_url)}}`;
+				if (unit.options.hydrateMargin != null) {
+					server_attrs += ` __hydrateMargin={${JSON.stringify(unit.options.hydrateMargin)}}`;
+				}
+			}
 			const replacement =
 				`<${server_wrapper_name} __entry={${JSON.stringify(iid)}} ` +
 				`__component={${comp_var}} __props={${props_obj}}${server_attrs}>` +
