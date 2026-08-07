@@ -21,3 +21,8 @@ dist/
 
 # local experiments — not part of the published library
 /experiment/
+
+# Slidev talk nested installs / builds
+/talks/*/node_modules/
+/talks/*/dist/
+/talks/*/.slidev/
