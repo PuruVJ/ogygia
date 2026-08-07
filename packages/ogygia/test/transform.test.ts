@@ -182,10 +182,24 @@ describe('portable binding rewrite', () => {
 		expect(r.code.match(new RegExp(CLIENT_BINDING_STUB.replace(/\./g, '\\.'), 'g'))?.length).toBe(
 			20
 		);
+		// FOUC: one deduped entry `__css`-style import so Kit still links island CSS.
+		expect(r.code.match(/import __OgygiaFouc_C0 from ["']\.\/A\.svelte["'];/g)?.length).toBe(1);
+		expect(r.code).toContain('void __OgygiaFouc_C0;');
 		expect(r.islands[0].wrapperPath).toBe(
 			wrapperVirtualId(idFor('src/routes/A.svelte', loadMark))
 		);
 		expect(r.islands[0].virtualPath).toMatch(/^virtual:ogygia\/island\//);
+	});
+
+	test('csr=false client omit: keeps host __css-style entry import for FOUC CSS', () => {
+		const r = run(
+			wrap(`import Nav from '$lib/SideNav.svelte' with { hydrate: 'load' };`, '<Nav />'),
+			makeCtx({ linkVirtualIsland: false })
+		)!;
+		expect(r.code).toContain(CLIENT_BINDING_STUB);
+		expect(r.code).toContain(`import __OgygiaFouc_Nav from "$lib/SideNav.svelte";`);
+		expect(r.code).toContain('void __OgygiaFouc_Nav;');
+		expect(r.code).not.toMatch(/virtual:ogygia\/wrapper\//);
 	});
 
 	test('linkVirtualIsland true (default) still rewrites to wrapper', () => {

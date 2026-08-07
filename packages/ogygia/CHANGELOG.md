@@ -5,6 +5,12 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] — 2026-08-07
+
+### Fixed
+
+- **csr=false client stubs keep a side-effect entry import for island CSS.** Portable bindings (0.4.0) rewrote marked imports to `virtual:ogygia/client-binding-stub` and dropped the pre-0.4 host `__css` import of the authored `.svelte`. Kit only links stylesheets from the *client* page graph, so layout/page islands painted with scoped class hashes but **no rules** (unstyled sidenav, overflow lock / full-height TOC blocking scroll). Stub bindings still omit wrappers/entries; one deduped `import '…entry.svelte'` restores FOUC CSS.
+
 ## [0.4.0] — 2026-08-07
 
 ### Changed

@@ -103,6 +103,11 @@ export function wrapperVirtualId(iid: string) {
  * imports here (instead of wrappers) keeps N island wrappers/entries out of the page graph so
  * `emitFile` owns hydrate modules and Rolldown does not thin-facade them. Hydration uses
  * `import(entry)` only — this stub is never loaded for island JS.
+ *
+ * The transform still emits a **side-effect** `import '…entry.svelte'` beside the stub so the
+ * authored component stays in the client page graph for Kit stylesheets (FOUC). Omitting that
+ * orphans island CSS: SSR HTML keeps scoped class hashes, but no `<link rel="stylesheet">`
+ * ships the rules (layout islands like a sidenav paint as raw lists and can block scroll).
  */
 export const CLIENT_BINDING_STUB = 'virtual:ogygia/client-binding-stub';
 
@@ -988,6 +993,26 @@ export function transformHost(source, id, ctx) {
 
 	// Rewrite each marked import binding → wrapper or stub (islands still deduped by identity).
 	const rewritten_import_nodes = new Set();
+	/** Entry module specs already emitted as side-effect CSS imports on this host. */
+	const fouc_css_specs = new Set();
+
+	/**
+	 * csr=false CLIENT: stub replaces the portable wrapper binding, but Kit only links CSS from
+	 * the *client* page graph. Restore the pre-0.4 host `__css` import of the authored entry
+	 * (`import X_css from '…'; void X_css`) so scoped styles join stylesheets — without
+	 * re-linking wrappers / virtual island entries (those stay emitFile-owned).
+	 */
+	const binding_rewrite = (local, bindingPath, entry_spec) => {
+		let text = `import ${local} from ${JSON.stringify(bindingPath)};`;
+		if (!link_virtual && typeof entry_spec === 'string' && !fouc_css_specs.has(entry_spec)) {
+			fouc_css_specs.add(entry_spec);
+			const css_local = `__OgygiaFouc_${local}`;
+			text +=
+				`\nimport ${css_local} from ${JSON.stringify(entry_spec)};\n` + `void ${css_local};`;
+		}
+		return text;
+	};
+
 	for (const [local, mark] of marked_components) {
 		const info = imports.get(local);
 		if (!info) continue;
@@ -1037,7 +1062,7 @@ export function transformHost(source, id, ctx) {
 				s.overwrite(
 					info.node.start,
 					info.node.end,
-					`import ${local} from ${JSON.stringify(bindingPath)};`
+					binding_rewrite(local, bindingPath, entry_spec)
 				);
 				rewritten_import_nodes.add(info.node);
 			}
@@ -1078,7 +1103,7 @@ export function transformHost(source, id, ctx) {
 			s.overwrite(
 				info.node.start,
 				info.node.end,
-				`import ${local} from ${JSON.stringify(bindingPath)};`
+				binding_rewrite(local, bindingPath, entry_spec)
 			);
 			rewritten_import_nodes.add(info.node);
 		}
