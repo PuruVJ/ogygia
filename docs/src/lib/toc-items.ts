@@ -49,5 +49,6 @@ export const playgroundLinks = [
 	{ href: '/playground/data', label: 'Data & remotes' },
 	{ href: '/playground/router', label: 'Router' },
 	{ href: '/playground/on-demand', label: 'Client-only lazy mount' },
+	{ href: '/playground/portable', label: 'Portable bindings' },
 	{ href: '/playground/mutation-guard', label: 'Mutation guard' }
 ] as const;

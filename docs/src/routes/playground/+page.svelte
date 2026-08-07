@@ -41,6 +41,12 @@
 			body: 'Host island dynamically imports a plain Svelte component on click — regular child, not a second island. import() + with { hydrate } stays a build error.'
 		},
 		{
+			href: '/playground/portable',
+			eyebrow: 'ogygia 0.4',
+			title: 'Portable bindings',
+			body: 'Marked imports are values — stash them in a dictionary or barrel, pick one with ?widget=, render with <Active />. Controls stay a separate island with serializable props only.'
+		},
+		{
 			href: '/playground/mutation-guard',
 			eyebrow: 'dev warning',
 			title: 'Mutation guard',

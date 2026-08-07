@@ -109,3 +109,12 @@ export const strategiesPageSnippets = prerender(
 	},
 	{ dynamic: true }
 );
+
+export const portablePageSnippets = prerender(
+	async () => {
+		const { highlight } = await import('$lib/code/highlight.server.js');
+		const portableBindingsHtml = await highlight(snip.portableBindings, 'svelte');
+		return { portableBindingsHtml };
+	},
+	{ dynamic: true }
+);

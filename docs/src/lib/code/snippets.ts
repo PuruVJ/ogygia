@@ -290,3 +290,27 @@ export const delayedIslandIf = `<script>
 {#if show}
   <Widget />
 {/if}`;
+
+/** Portable island bindings — dictionary + barrel + capitalized binding tag (ogygia 0.4). */
+export const portableBindings = `<script>
+  import Pulse from '$lib/Pulse.svelte' with { hydrate: 'load' };
+  import Ticker from '$lib/Ticker.svelte' with { hydrate: 'load' };
+  import Notch from '$lib/Notch.svelte' with { hydrate: 'load' };
+  // Controls island: serializable props only — never pass constructors across.
+  import Controls from '$lib/Controls.svelte' with { hydrate: 'load' };
+
+  const registry = { pulse: Pulse, ticker: Ticker, notch: Notch };
+  const barrel = [
+    { key: 'pulse', label: 'Pulse', Comp: Pulse },
+    { key: 'ticker', label: 'Ticker', Comp: Ticker },
+    { key: 'notch', label: 'Notch', Comp: Notch }
+  ];
+
+  // active comes from load via ?widget= (default first key)
+  let { active } = $props();
+  const Active = $derived(registry[active]);
+  const items = barrel.map(({ key, label }) => ({ key, label }));
+</script>
+
+<Controls {active} {items} />
+<Active />`;
