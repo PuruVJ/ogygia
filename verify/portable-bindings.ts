@@ -197,6 +197,89 @@ try {
 			String(counterFacades.length)
 		);
 
+		// Classic thin Rolldown entry: `import{t as e}from"./chunks/…";export{e as default}`.
+		// Triggered when authored component JS is also in another client graph (0.4.1 FOUC, or
+		// csr=true __component). csr=false FOUC is CSS-only — islands unique to csr=false stay fat.
+		// Counter is also on /kit (csr=true) so its entries may still be thin; assert a csr=false-only
+		// marker stays fat instead.
+		const classicThin = (code: string) =>
+			/^import\{[^}]+\}from"\.\/chunks\/[^"]+";(var [^=]+=[^;]+;)?export\{[^}]+as default\};?$/.test(
+				code.trim()
+			);
+		const reachesMarker = (rel: string, marker: string, seen = new Set<string>()): boolean => {
+			const key = rel.split(path.sep).join('/');
+			if (seen.has(key)) return false;
+			seen.add(key);
+			const abs = path.join(clientDir, key);
+			if (!fs.existsSync(abs)) return false;
+			const code = fs.readFileSync(abs, 'utf-8');
+			if (code.includes(marker)) return true;
+			for (const m of code.matchAll(/from\s*["']([^"']+)["']/g)) {
+				if (reachesMarker(resolveImp(key, m[1]), marker, seen)) return true;
+			}
+			return false;
+		};
+		const clockFacades = facades.filter((f) => reachesMarker(f, 'data-clock-island'));
+		const thinClocks = clockFacades.filter((f) =>
+			classicThin(fs.readFileSync(path.join(clientDir, f), 'utf-8'))
+		);
+		check(
+			'build: csr=false-only clock island is not a classic thin re-export facade',
+			clockFacades.length >= 1 && thinClocks.length === 0,
+			`clock=${clockFacades.length} thin=${thinClocks.join(', ') || '0'}`
+		);
+
+		// Docs (when built): SideNav must own its entry + CSS must land in layout stylesheet.
+		const docsClient = path.join(
+			repo,
+			'docs',
+			'.svelte-kit',
+			'output',
+			'client',
+			'_app',
+			'immutable'
+		);
+		if (fs.existsSync(docsClient)) {
+			const docsFacades = fs
+				.readdirSync(docsClient)
+				.filter((f) => f.startsWith('ogygia-island.') && f.endsWith('.js'));
+			const sideNav = docsFacades.find((f) => {
+				const code = fs.readFileSync(path.join(docsClient, f), 'utf-8');
+				if (code.includes('side-backdrop') || code.includes('1il4ztj')) return true;
+				for (const m of code.matchAll(/from\s*["']\.\/chunks\/([^"']+)["']/g)) {
+					const ch = path.join(docsClient, 'chunks', m[1]);
+					if (
+						fs.existsSync(ch) &&
+						/side-backdrop|1il4ztj/.test(fs.readFileSync(ch, 'utf-8'))
+					) {
+						return true;
+					}
+				}
+				return false;
+			});
+			const sideNavCode = sideNav
+				? fs.readFileSync(path.join(docsClient, sideNav), 'utf-8')
+				: '';
+			check(
+				'build: docs SideNav island is not a classic thin re-export facade',
+				!!sideNav && !classicThin(sideNavCode.trim()),
+				sideNav || 'missing'
+			);
+			const layoutCss = fs.existsSync(path.join(docsClient, 'assets'))
+				? fs
+						.readdirSync(path.join(docsClient, 'assets'))
+						.find((f) => /^0\..*\.css$/.test(f))
+				: null;
+			const layoutCssCode = layoutCss
+				? fs.readFileSync(path.join(docsClient, 'assets', layoutCss), 'utf-8')
+				: '';
+			check(
+				'build: docs layout CSS includes SideNav scoped rules (FOUC)',
+				!!layoutCss && /side-backdrop|1il4ztj|--side-w/.test(layoutCssCode),
+				layoutCss || 'missing'
+			);
+		}
+
 		const chunksWithMarker: string[] = [];
 		const walk = (d: string) => {
 			for (const e of fs.readdirSync(d, { withFileTypes: true })) {

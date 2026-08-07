@@ -12,7 +12,8 @@ import {
 	regionId,
 	strategyKey,
 	wrapperVirtualId,
-	CLIENT_BINDING_STUB
+	CLIENT_BINDING_STUB,
+	foucCssVirtualId
 } from '../dist/vite/transform.js';
 
 const ROOT = '/app';
@@ -104,6 +105,18 @@ describe('strategyKey / regionIdentity dedupe', () => {
 	});
 });
 
+describe('foucCssVirtualId', () => {
+	test('builds .js virtual FOUC CSS ids (encoded path)', () => {
+		expect(foucCssVirtualId('src/lib/SideNav.svelte')).toBe(
+			'virtual:ogygia/fouc-css/' + encodeURIComponent('src/lib/SideNav.svelte') + '.js'
+		);
+		expect(foucCssVirtualId('src\\routes\\A.svelte')).toBe(
+			'virtual:ogygia/fouc-css/' + encodeURIComponent('src/routes/A.svelte') + '.js'
+		);
+		expect(foucCssVirtualId('src/lib/SideNav.svelte').endsWith('.js')).toBe(true);
+	});
+});
+
 describe('portable binding rewrite', () => {
 	test('marked import becomes wrapper virtual; template keeps <C />', () => {
 		const r = run(wrap(LOAD, '<C />'))!;
@@ -182,23 +195,33 @@ describe('portable binding rewrite', () => {
 		expect(r.code.match(new RegExp(CLIENT_BINDING_STUB.replace(/\./g, '\\.'), 'g'))?.length).toBe(
 			20
 		);
-		// FOUC: one deduped entry `__css`-style import so Kit still links island CSS.
-		expect(r.code.match(/import __OgygiaFouc_C0 from ["']\.\/A\.svelte["'];/g)?.length).toBe(1);
-		expect(r.code).toContain('void __OgygiaFouc_C0;');
+		// FOUC: one deduped CSS-only virtual (not the component JS default export).
+		expect(
+			r.code.match(
+				new RegExp(
+					`import ["']virtual:ogygia/fouc-css/${encodeURIComponent('src/routes/A.svelte')}\\.js["'];`,
+					'g'
+				)
+			)?.length
+		).toBe(1);
+		expect(r.code).not.toMatch(/import __OgygiaFouc_/);
+		expect(r.code).not.toMatch(/from ["']\.\/A\.svelte["']/);
 		expect(r.islands[0].wrapperPath).toBe(
 			wrapperVirtualId(idFor('src/routes/A.svelte', loadMark))
 		);
 		expect(r.islands[0].virtualPath).toMatch(/^virtual:ogygia\/island\//);
 	});
 
-	test('csr=false client omit: keeps host __css-style entry import for FOUC CSS', () => {
+	test('csr=false client omit: CSS-only fouc-css virtual for FOUC (not component JS)', () => {
 		const r = run(
 			wrap(`import Nav from '$lib/SideNav.svelte' with { hydrate: 'load' };`, '<Nav />'),
 			makeCtx({ linkVirtualIsland: false })
 		)!;
 		expect(r.code).toContain(CLIENT_BINDING_STUB);
-		expect(r.code).toContain(`import __OgygiaFouc_Nav from "$lib/SideNav.svelte";`);
-		expect(r.code).toContain('void __OgygiaFouc_Nav;');
+		expect(r.code).toContain(
+			`import "virtual:ogygia/fouc-css/${encodeURIComponent('src/lib/SideNav.svelte')}.js";`
+		);
+		expect(r.code).not.toMatch(/from ["']\$lib\/SideNav\.svelte["']/);
 		expect(r.code).not.toMatch(/virtual:ogygia\/wrapper\//);
 	});
 

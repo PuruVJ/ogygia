@@ -1,6 +1,9 @@
 import { parse } from 'svelte/compiler';
 import MagicString from 'magic-string';
 import { createHash } from 'node:crypto';
+import { foucCssVirtualId } from './fouc-css.js';
+
+export { foucCssVirtualId } from './fouc-css.js';
 
 export const ISLAND_DIR = '.ogygia';
 
@@ -104,10 +107,10 @@ export function wrapperVirtualId(iid: string) {
  * `emitFile` owns hydrate modules and Rolldown does not thin-facade them. Hydration uses
  * `import(entry)` only — this stub is never loaded for island JS.
  *
- * The transform still emits a **side-effect** `import '…entry.svelte'` beside the stub so the
- * authored component stays in the client page graph for Kit stylesheets (FOUC). Omitting that
- * orphans island CSS: SSR HTML keeps scoped class hashes, but no `<link rel="stylesheet">`
- * ships the rules (layout islands like a sidenav paint as raw lists and can block scroll).
+ * Beside the stub the transform emits `import 'virtual:ogygia/fouc-css/<entry>'` so Kit still
+ * links stylesheets (FOUC) via CSS-only side effects. Importing the full `.svelte` JS module
+ * dual-owns it with the emitFile island entry and Rolldown thin-facades `ogygia-island.*`.
+ * Omitting CSS entirely orphans rules (scoped class hashes, no stylesheet).
  */
 export const CLIENT_BINDING_STUB = 'virtual:ogygia/client-binding-stub';
 
@@ -998,21 +1001,24 @@ export function transformHost(source, id, ctx) {
 
 	/**
 	 * csr=false CLIENT: stub replaces the portable wrapper binding, but Kit only links CSS from
-	 * the *client* page graph. Restore the pre-0.4 host `__css` import of the authored entry
-	 * (`import X_css from '…'; void X_css`) so scoped styles join stylesheets — without
-	 * re-linking wrappers / virtual island entries (those stay emitFile-owned).
+	 * the *client* page graph. Side-effect-import `virtual:ogygia/fouc-css/<entry>` (CSS graph
+	 * only — not the component JS) so stylesheets still ship without dual-owning the module
+	 * that emitFile registers as `ogygia-island.*`.
 	 */
-	const binding_rewrite = (local, bindingPath, entry_spec) => {
+	const binding_rewrite = (local, bindingPath, componentPathAbs) => {
 		let text = `import ${local} from ${JSON.stringify(bindingPath)};`;
-		if (!link_virtual && typeof entry_spec === 'string' && !fouc_css_specs.has(entry_spec)) {
-			fouc_css_specs.add(entry_spec);
-			const css_local = `__OgygiaFouc_${local}`;
-			text +=
-				`\nimport ${css_local} from ${JSON.stringify(entry_spec)};\n` + `void ${css_local};`;
+		if (
+			!link_virtual &&
+			typeof componentPathAbs === 'string' &&
+			componentPathAbs &&
+			!fouc_css_specs.has(componentPathAbs)
+		) {
+			fouc_css_specs.add(componentPathAbs);
+			const rel = posix_rel(componentPathAbs);
+			text += `\nimport ${JSON.stringify(foucCssVirtualId(rel))};`;
 		}
 		return text;
 	};
-
 	for (const [local, mark] of marked_components) {
 		const info = imports.get(local);
 		if (!info) continue;
@@ -1062,7 +1068,7 @@ export function transformHost(source, id, ctx) {
 				s.overwrite(
 					info.node.start,
 					info.node.end,
-					binding_rewrite(local, bindingPath, entry_spec)
+					binding_rewrite(local, bindingPath, componentPath)
 				);
 				rewritten_import_nodes.add(info.node);
 			}
@@ -1103,7 +1109,7 @@ export function transformHost(source, id, ctx) {
 			s.overwrite(
 				info.node.start,
 				info.node.end,
-				binding_rewrite(local, bindingPath, entry_spec)
+				binding_rewrite(local, bindingPath, componentPath)
 			);
 			rewritten_import_nodes.add(info.node);
 		}

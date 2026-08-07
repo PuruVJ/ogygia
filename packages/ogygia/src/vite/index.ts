@@ -34,6 +34,15 @@ import {
 	secret_has_min_entropy,
 	MIN_SECRET_BYTES
 } from '../server/hmac.js';
+import {
+	FOUC_CSS_PREFIX,
+	FOUC_SCOPED_PREFIX,
+	buildFoucCssModuleSource,
+	compileFoucScopedCss,
+	foucRelFromId,
+	isFoucCssId,
+	isFoucScopedId
+} from './fouc-css.js';
 
 const RUNTIME_ENTRY = fileURLToPath(new URL('../runtime/index.js', import.meta.url));
 /** `packages/ogygia` — Vite must serve absolute shim/runtime resolves from outside the app root. */
@@ -1006,6 +1015,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (source === V_REGION_ENDPOINT) return RESOLVED(V_REGION_ENDPOINT);
 			// csr=false client hosts rewrite marked bindings here — not a hydrate entry.
 			if (source === V_CLIENT_BINDING_STUB) return CLIENT_BINDING_STUB_FILE;
+			// CSS-only FOUC graph (no component JS) for csr=false client stubs.
+			if (source.startsWith(FOUC_CSS_PREFIX) || source.startsWith(FOUC_SCOPED_PREFIX)) {
+				return RESOLVED(source);
+			}
 			// deep-import Kit's own wire helpers by absolute path (bypasses the exports map)
 			if (source === V_KIT_WIRE && kit_wire_path) return kit_wire_path;
 			if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
@@ -1087,6 +1100,40 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// Per-request only. `config.build.ssr` stays set for Kit apps and must NOT decide
 			// client vs server virtuals — that leaked `$app/server` into the browser guard.
 			const ssr = options?.ssr === true;
+
+			const fouc_bare = id.startsWith('\0') ? id.slice(1) : id;
+			if (isFoucCssId(fouc_bare)) {
+				const rel = foucRelFromId(fouc_bare);
+				if (!rel) {
+					return { code: 'export {}', moduleSideEffects: false };
+				}
+				const abs = path.join(root, rel);
+				const code = buildFoucCssModuleSource(abs, {
+					root,
+					libDir,
+					readFile: (p) => {
+						try {
+							return fs.readFileSync(p, 'utf8');
+						} catch {
+							return null;
+						}
+					}
+				});
+				// Must not tree-shake: the only purpose of this module is CSS side effects.
+				return { code, moduleSideEffects: true };
+			}
+			if (isFoucScopedId(fouc_bare)) {
+				const rel = foucRelFromId(fouc_bare);
+				if (!rel) return { code: '', moduleType: 'css' };
+				const abs = path.join(root, rel);
+				let source = '';
+				try {
+					source = fs.readFileSync(abs, 'utf8');
+				} catch {
+					return { code: '', moduleType: 'css' };
+				}
+				return { code: compileFoucScopedCss(abs, source), moduleType: 'css' };
+			}
 
 			if (id === RESOLVED(V_RUNTIME_URL)) {
 				// dev: the vite dev URL. build: the CONTENT-HASHED runtime URL — from this

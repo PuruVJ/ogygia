@@ -5,6 +5,17 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] — 2026-08-07
+
+### Fixed
+
+- **csr=false FOUC CSS no longer dual-owns island component JS.** 0.4.1 restored styles by importing the authored `.svelte` beside the client binding stub; that put the same default-export module in the page graph *and* the `emitFile` island entry, so Rolldown thin-facaded every `ogygia-island.*` (`import…from"./chunks/…"; export{t as default}`). Stub hosts now import `virtual:ogygia/fouc-css/<entry>.js` — a CSS-only graph (scoped `.css` virtuals + transitive plain stylesheets) with no component JS — so Kit still links stylesheets while named island entries own the hydrate module.
+
+### Tests
+
+- Transform asserts `virtual:ogygia/fouc-css/…` FOUC imports (not full `.svelte` JS).
+- `verify/portable-bindings.ts` rejects classic thin re-export island entries for Counter.
+
 ## [0.4.1] — 2026-08-07
 
 ### Fixed
