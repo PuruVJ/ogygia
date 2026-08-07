@@ -6,7 +6,7 @@
 import type { ThemeRegistrationResolved } from 'shiki';
 
 /** Bump when palette changes so the highlighter singleton reloads in vite HMR. */
-export const THEME_REV = 3;
+export const THEME_REV = 4;
 type Palette = {
 	bg: string;
 	fg: string;
@@ -33,7 +33,7 @@ type Palette = {
 const DARK: Palette = {
 	bg: '#060907',
 	fg: '#e6eee9',
-	faint: '#6b7a72',
+	faint: '#708278', // AA on #060907 (was #6b7a72 @ 4.43:1)
 	dim: '#9aaba1',
 	keyword: '#6fe3b0',
 	string: '#9fc9b0',
