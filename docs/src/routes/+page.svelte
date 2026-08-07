@@ -1335,25 +1335,6 @@
 		min-width: 0;
 	}
 
-	@keyframes rise {
-		from {
-			opacity: 0;
-			transform: translateY(14px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	.hero-grid > :global(*) {
-		animation: rise 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-	}
-
-	.hero-grid > :global(*:nth-child(2)) {
-		animation-delay: 80ms;
-	}
-
 	.what-grid {
 		display: grid;
 		grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
