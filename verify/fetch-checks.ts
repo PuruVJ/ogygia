@@ -32,6 +32,19 @@ const count = (s, re) => (s.match(re) || []).length;
 	check('/ nested object survives SSR', /nested-ok/.test(html));
 	check('/ snippet island sees outer var (y = 42)', /y = 42/.test(html));
 	check('/ runtime module script tag present', /src="[^"]*ogygia-runtime[^"]*"/.test(html));
+	check(
+		'/ single data-ogygia-runtime bootstrap (not per-island)',
+		count(html, /data-ogygia-runtime/g) === 1,
+		`${count(html, /data-ogygia-runtime/g)}`
+	);
+	{
+		const head = html.slice(0, html.indexOf('</head>'));
+		check(
+			'/ hydrate=load modulepreload(s) in <head>',
+			/rel="modulepreload"/i.test(head),
+			/rel="modulepreload"/i.test(head) ? 'in head' : 'missing from head'
+		);
+	}
 	check('/ NO Kit __sveltekit bootstrap', !/__sveltekit/.test(html));
 	check('/ NO Kit entry/start script', !/entry\/start/.test(html));
 }

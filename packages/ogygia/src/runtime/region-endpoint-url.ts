@@ -28,3 +28,18 @@ export function is_same_origin_response(res: Response, page_origin = location.or
 		return false;
 	}
 }
+
+/**
+ * Normalize a hydrate `entry` for `import()`.
+ *
+ * Root-absolute paths (`/@id/…`, `/_app/…`) and absolute URLs import as-is. Relative specs
+ * (`./_app/…`, `../_app/…`) must resolve against the **document** URL — `import()` would
+ * otherwise resolve them against the runtime module (`/_app/immutable/ogygia-runtime.*`)
+ * and produce `/_app/_app/…` 404s on nested routes.
+ */
+export function island_module_url(entry: string, base?: string): string {
+	if (!entry) return entry;
+	if (entry.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(entry)) return entry;
+	const resolved = new URL(entry, base ?? location.href);
+	return resolved.pathname + resolved.search + resolved.hash;
+}

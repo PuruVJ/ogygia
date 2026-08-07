@@ -436,6 +436,21 @@ describe('audit fixes — region endpoint allowlist', () => {
 			is_same_origin_response({ url: 'https://evil.example/ok' } as Response, origin)
 		).toBe(false);
 	});
+
+	it('resolves relative island entries against the document (not runtime module)', async () => {
+		const { island_module_url } = await import('../dist/runtime/region-endpoint-url.js');
+		const nested = 'https://example.com/playground/strategies';
+		expect(island_module_url('/_app/immutable/ogygia-island.abc.js')).toBe(
+			'/_app/immutable/ogygia-island.abc.js'
+		);
+		expect(island_module_url('./_app/immutable/ogygia-island.abc.js', 'https://example.com/')).toBe(
+			'/_app/immutable/ogygia-island.abc.js'
+		);
+		// Regression: ../_app used to become /_app/_app/... via import() vs runtime URL
+		expect(island_module_url('../_app/immutable/ogygia-island.abc.js', nested)).toBe(
+			'/_app/immutable/ogygia-island.abc.js'
+		);
+	});
 });
 
 describe('audit fixes — region id charset + default TTL constant', () => {

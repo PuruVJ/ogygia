@@ -1,4 +1,5 @@
 import { createContext } from 'svelte';
+import { getRequestEvent } from 'virtual:ogygia/request-event';
 
 // Type-safe context (Svelte 5.40+ `createContext`) marking "this subtree is already inside a
 // hydrated island". Nested island wrappers read it and degrade to a plain inline component so
@@ -21,6 +22,25 @@ export function setNested(value = true): void {
 export function isNested(): boolean {
 	try {
 		return get_nested_context() === true;
+	} catch {
+		return false;
+	}
+}
+
+/** Per-request: only one `data-ogygia-runtime` script should be emitted (router, else first island). */
+const runtime_claimed = new WeakMap<object, true>();
+
+/**
+ * Claim the single runtime-script slot for this SSR request.
+ * OgygiaRouter claims first when present; islands/server-islands only emit if this returns true
+ * (pages with no router). Client / no-request → false (SSR already emitted).
+ */
+export function claimRuntimeEmit(): boolean {
+	try {
+		const event = getRequestEvent() as object;
+		if (runtime_claimed.has(event)) return false;
+		runtime_claimed.set(event, true);
+		return true;
 	} catch {
 		return false;
 	}

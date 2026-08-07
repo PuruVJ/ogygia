@@ -13,7 +13,8 @@ import { runtime_session } from './session.js';
 import { is_persist_preserving } from './persist.js';
 import {
 	is_allowed_region_endpoint,
-	is_same_origin_response
+	is_same_origin_response,
+	island_module_url
 } from './region-endpoint-url.js';
 import {
 	FROZEN_SELECTOR,
@@ -27,14 +28,9 @@ import {
 	region_schedule
 } from './region-attrs.js';
 
-/**
- * Load a hydrate island module from the URL on `<ogygia-region entry>` (dev + prod).
- * Root-absolute paths (`/@id/…`, `/_app/…`) import as-is. If something relativized them
- * (`./@id/…`), normalize to site-root absolute — `import()` resolves relative specs against
- * this runtime module URL, not the page.
- */
+/** Load a hydrate island module from `<ogygia-region entry>` (dev + prod). */
 const load_island = (entry: string) => {
-	const url = entry.startsWith('./') ? entry.slice(1) : entry;
+	const url = island_module_url(entry);
 	return import(/* @vite-ignore */ url) as Promise<{
 		default: import('svelte').Component<Record<string, unknown>>;
 	}>;

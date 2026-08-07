@@ -4,11 +4,12 @@
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { asset } from '$app/paths';
-	import { isNested, setNested } from './context.js';
+	import { isNested, setNested, claimRuntimeEmit } from './context.js';
 
 	/**
 	 * Private wrapper the compile-time transform emits for a client island
-	 * (`import … with { hydrate: … }`). Emits `<ogygia-region>` + props payload + runtime script.
+	 * (`import … with { hydrate: … }`). Emits `<ogygia-region>` + props payload.
+	 * Runtime script is emitted once per page (OgygiaRouter, or this island if no router).
 	 *
 	 * **Not part of the public API** — do not import from app code.
 	 *
@@ -89,40 +90,41 @@
 		nested ? '' : __entry.startsWith('/@') ? __entry : asset(__entry)
 	);
 
-	// `hydrate: 'load'` — modulepreload so the island fetch isn't a pure waterfall without Vite mapDeps.
+	// `hydrate: 'load'` — modulepreload in <head> (not beside the region) so discovery is early
+	// and props stay the immediate sibling of the region. Idle/visible/media skip this.
 	const preload_link = $derived(
 		!nested && hydrate_attr === 'load'
 			? LT + 'link rel="modulepreload" href="' + module_url + '"' + GT
 			: ''
 	);
 
-	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
-	const src = asset(runtimeUrl);
+	// Fallback only when <OgygiaRouter/> did not claim the slot (MPA page with islands alone).
+	// Same `asset(runtimeUrl)` as the router so URLs dedupe if both paths ever race.
 	const runtime_script =
-		LT +
-		'script type="module" data-ogygia-runtime src="' +
-		src +
-		'"' +
-		GT +
-		LT +
-		'/script' +
-		GT;
-
-	// Dev CSS HMR bridge (same URL as OgygiaRouter — browsers dedupe). '' outside vite dev.
-	const hmr_script = hmrUrl
-		? LT +
-			'script type="module" data-ogygia-dev-hmr src="' +
-			asset(hmrUrl) +
-			'"' +
-			GT +
-			LT +
-			'/script' +
-			GT
-		: '';
+		!nested && claimRuntimeEmit()
+			? LT +
+				'script type="module" data-ogygia-runtime src="' +
+				asset(runtimeUrl) +
+				'"' +
+				GT +
+				LT +
+				'/script' +
+				GT +
+				(hmrUrl
+					? LT +
+						'script type="module" data-ogygia-dev-hmr src="' +
+						asset(hmrUrl) +
+						'"' +
+						GT +
+						LT +
+						'/script' +
+						GT
+					: '')
+			: '';
 </script>
 
-{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region
+{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<svelte:head>{@html runtime_script}{@html preload_link}</svelte:head><ogygia-region
 		entry={module_url}
 		hydrate={hydrate_attr}
 		margin={root_margin || undefined}
-	>{#if Component}<Component {...__props} />{/if}</ogygia-region>{@html props_script}{@html preload_link}{@html runtime_script}{@html hmr_script}{/if}
+	>{#if Component}<Component {...__props} />{/if}</ogygia-region>{@html props_script}{/if}

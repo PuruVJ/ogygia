@@ -17,7 +17,7 @@
 	import { getRequestEvent } from 'virtual:ogygia/request-event';
 	import { B64Url } from './server/payload.js';
 	import { DEFAULT_ISLANDS_ENDPOINT, MAX_REGION_PROPS_LEN } from './server/endpoint.js';
-	import { isNested, setNested } from './context.js';
+	import { isNested, setNested, claimRuntimeEmit } from './context.js';
 
 	/**
 	 * @typedef {Object} Props
@@ -85,10 +85,8 @@
 	// matching the runtime's `fetch(..., { credentials: 'same-origin' })`. (`use-credentials`
 	// maps to `include` — Chrome then refuses to reuse the preload and warns.)
 	// Emitted ONLY for `__defer: 'load'` (immediate fetch): 'idle'/'visible'/media defer the fetch,
-	// so preloading would defeat the deferral (the whole point is NOT to fetch until the schedule
-	// fires). Skipped when prerendering: a static page has no request context, and emitting the hint
-	// would make Kit's prerender crawler fetch the (dynamic) endpoint. `endpoint` still drives the
-	// runtime fetch at request time — a prerendered / deferred server island just loses the hint.
+	// so preloading would defeat the deferral. Skipped when prerendering (crawler would hit the
+	// dynamic endpoint). Hoisted to <head> for earlier discovery — not after the region.
 	const preload_link = $derived.by(() => {
 		if (nested || building || __defer !== 'load' || !endpoint) return '';
 		const href_attr = endpoint.split('&').join('&amp;');
@@ -101,28 +99,28 @@
 		);
 	});
 
-	// runtime module: browsers dedupe identical module URLs, so one tag per island is fine.
-	// Match Island.svelte's URL exactly (asset()) so the module de-dupes across mixed pages.
-	const src = asset(runtimeUrl);
+	// Fallback when no <OgygiaRouter/> claimed the slot (server-island-only MPA page).
 	const runtime_script =
-		LT +
-		'script type="module" data-ogygia-runtime src="' +
-		src +
-		'"' +
-		GT +
-		LT +
-		'/script' +
-		GT;
+		!nested && claimRuntimeEmit()
+			? LT +
+				'script type="module" data-ogygia-runtime src="' +
+				asset(runtimeUrl) +
+				'"' +
+				GT +
+				LT +
+				'/script' +
+				GT
+			: '';
 </script>
 
 <!--
 	Two-axis DOM (DESIGN.md): `hydrate` = when JS wakes; `render`/`when` = when HTML arrives.
 	`render="defer"` avoids HTML's boolean `defer` attribute (which would drop string values).
 -->
-{#if nested}<Component {...__props} />{:else}<ogygia-region
+{#if nested}<Component {...__props} />{:else}<svelte:head>{@html runtime_script}{@html preload_link}</svelte:head><ogygia-region
 		entry={__entry}
 		render="defer"
 		when={__defer}
 		margin={__margin || undefined}
 		endpoint={endpoint}
-	>{#if ogygiaFallback}{@render ogygiaFallback()}{/if}</ogygia-region>{@html preload_link}{@html runtime_script}{/if}
+	>{#if ogygiaFallback}{@render ogygiaFallback()}{/if}</ogygia-region>{/if}

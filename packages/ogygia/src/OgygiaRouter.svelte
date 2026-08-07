@@ -18,43 +18,40 @@
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { asset } from '$app/paths';
+	import { claimRuntimeEmit } from './context.js';
 
 	/** @type {Props} */
 	let { viewTransitions = true } = $props();
 
-	// Load the runtime module so the router (and its `data-sveltekit-preload-*` prefetch) runs even on
-	// a page with NO islands — a hard load of an island-less page would otherwise ship no runtime and
-	// have no SPA behaviour. Islands emit the SAME `asset(runtimeUrl)` URL, so browsers dedupe it to a
-	// single module evaluation. Built without literal angle brackets so Svelte's raw-text <script>
-	// lexer never mistakes them for real tags.
+	// Single runtime bootstrap for the page (islands no longer each emit a copy). Claim so a
+	// rare island-before-router layout still dedupes. `asset(runtimeUrl)` matches any island
+	// fallback URL. In <head> for early discovery + sticky SPA merge_head retention.
 	const LT = String.fromCharCode(60);
 	const GT = String.fromCharCode(62);
 	const src = asset(runtimeUrl);
-	const runtime_script =
-		LT +
-		'script type="module" data-ogygia-runtime src="' +
-		src +
-		'"' +
-		GT +
-		LT +
-		'/script' +
-		GT;
-
-	// Dev CSS HMR bridge. `hmrUrl` is '' outside `vite dev` (virtual module is mode-aware).
-	const hmr_script = hmrUrl
+	const runtime_script = claimRuntimeEmit()
 		? LT +
-			'script type="module" data-ogygia-dev-hmr src="' +
-			asset(hmrUrl) +
+			'script type="module" data-ogygia-runtime src="' +
+			src +
 			'"' +
 			GT +
 			LT +
 			'/script' +
-			GT
+			GT +
+			(hmrUrl
+				? LT +
+					'script type="module" data-ogygia-dev-hmr src="' +
+					asset(hmrUrl) +
+					'"' +
+					GT +
+					LT +
+					'/script' +
+					GT
+				: '')
 		: '';
 </script>
 
 <svelte:head>
 	<meta name="ogygia-router" content={viewTransitions ? 'vt' : 'plain'} />
+	{@html runtime_script}
 </svelte:head>
-
-{@html runtime_script}{@html hmr_script}
