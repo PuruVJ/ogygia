@@ -6,7 +6,9 @@
 	import VisibleDemo from '$lib/demos/VisibleDemo.svelte' with { hydrate: 'visible' };
 	import MediaDemo from '$lib/demos/MediaDemo.svelte' with { hydrate: '(max-width: 600px)' };
 	import ServerDemo from '$lib/demos/ServerDemo.svelte';
-	import GreetingLoad from '$lib/demos/ServerGreeting.svelte' with { defer: 'load' };
+	// No `defer: 'load'` live island on `/` — that schedule preloads + fetches
+	// `/🏝️ogygia🏝️` on connect and lands on the LCP critical path. Real load demo:
+	// /playground/server-islands. Homepage live demos use idle/visible/media only.
 	import GreetingIdle from '$lib/demos/ServerGreeting.svelte' with { defer: 'idle' };
 	import GreetingVisible from '$lib/demos/ServerGreeting.svelte' with { defer: 'visible' };
 	import GreetingMedia from '$lib/demos/ServerGreeting.svelte' with { defer: '(max-width: 600px)' };
@@ -685,19 +687,22 @@
 					</p>
 					<p>
 						Use it for personalized chrome that should fill in immediately: greetings, account
-						chips, anything the first viewport expects once the shell is up.
+						chips, anything the first viewport expects once the shell is up. This long docs page
+						does <strong>not</strong> mount a live <code>defer: 'load'</code> island — that would
+						put the signed endpoint on the critical path for every homepage visit. See the
+						<a href="/playground/server-islands">server-islands playground</a> for a real load
+						fetch; the panel below is a static stand-in of the filled result.
 					</p>
 				</div>
 				<ServerDemo title="defer: 'load' · ServerGreeting.svelte" codeHtml={data.serverCode}>
 					{#snippet live()}
-						<GreetingLoad salutation="Aloha">
-							{#snippet ogygiaFallback()}
-								<div class="widget widget--greeting">
-									<strong>Fetching island…</strong>
-									<p class="widget-meta">Fallback while the server renders</p>
-								</div>
-							{/snippet}
-						</GreetingLoad>
+						<div class="widget widget--greeting">
+							<strong>Aloha, voyager</strong>
+							<p class="widget-meta">
+								Static stand-in · live <code>defer: 'load'</code> on
+								<a href="/playground/server-islands">playground</a>
+							</p>
+						</div>
 					{/snippet}
 				</ServerDemo>
 			</div>
