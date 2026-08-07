@@ -6,12 +6,10 @@
 	import VisibleDemo from '$lib/demos/VisibleDemo.svelte' with { hydrate: 'visible' };
 	import MediaDemo from '$lib/demos/MediaDemo.svelte' with { hydrate: '(max-width: 600px)' };
 	import ServerDemo from '$lib/demos/ServerDemo.svelte';
-	// No `defer: 'load'` live island on `/` — that schedule preloads + fetches
-	// `/🏝️ogygia🏝️` on connect and lands on the LCP critical path. Real load demo:
-	// /playground/server-islands. Homepage live demos use idle/visible/media only.
-	import GreetingIdle from '$lib/demos/ServerGreeting.svelte' with { defer: 'idle' };
-	import GreetingVisible from '$lib/demos/ServerGreeting.svelte' with { defer: 'visible' };
-	import GreetingMedia from '$lib/demos/ServerGreeting.svelte' with { defer: '(max-width: 600px)' };
+	// No live `defer` islands on `/`. Even idle/visible/media still mint signed
+	// `/🏝️ogygia🏝️` capability URLs; on mobile PSI, media matches immediately and
+	// idle fires soon after — both land on the critical path. Live demos:
+	// /playground/server-islands.
 	// Presentational only — Shiki HTML is baked at build via snippets.remote.ts (never ships Shiki).
 	import CodeBlock from '$lib/CodeBlock.svelte';
 	import PageHead from '$lib/PageHead.svelte';
@@ -717,19 +715,20 @@
 					</p>
 					<p>
 						Use it for secondary personalized fragments that should not compete with LCP or
-						critical load islands.
+						critical load islands. This docs homepage uses a static stand-in; see the
+						<a href="/playground/server-islands">server-islands playground</a> for a live idle
+						fetch.
 					</p>
 				</div>
 				<ServerDemo title="defer: 'idle' · ServerGreeting.svelte" codeHtml={data.serverIdleCode}>
 					{#snippet live()}
-						<GreetingIdle salutation="Idle">
-							{#snippet ogygiaFallback()}
-								<div class="widget widget--greeting">
-									<strong>Waiting for idle…</strong>
-									<p class="widget-meta">Fallback until requestIdleCallback</p>
-								</div>
-							{/snippet}
-						</GreetingIdle>
+						<div class="widget widget--greeting">
+							<strong>Aloha, Idle</strong>
+							<p class="widget-meta">
+								Static stand-in · live <code>defer: 'idle'</code> on
+								<a href="/playground/server-islands">playground</a>
+							</p>
+						</div>
 					{/snippet}
 				</ServerDemo>
 			</div>
@@ -744,25 +743,22 @@
 					</p>
 					<p>
 						Use it for below-the-fold personalized blocks, related content, or heavy server
-						fragments on long pages.
+						fragments on long pages. Static stand-in here — live visible defer is on the
+						<a href="/playground/server-islands">playground</a>.
 					</p>
-				</div>
-				<div class="scroll-hint">
-					Scroll until the deferred hole below intersects the viewport.
 				</div>
 				<ServerDemo
 					title="defer: 'visible' · ServerGreeting.svelte"
 					codeHtml={data.serverVisibleCode}
 				>
 					{#snippet live()}
-						<GreetingVisible salutation="Visible">
-							{#snippet ogygiaFallback()}
-								<div class="widget widget--greeting">
-									<strong>Scroll to fetch…</strong>
-									<p class="widget-meta">Fallback until visible</p>
-								</div>
-							{/snippet}
-						</GreetingVisible>
+						<div class="widget widget--greeting">
+							<strong>Aloha, Visible</strong>
+							<p class="widget-meta">
+								Static stand-in · live <code>defer: 'visible'</code> on
+								<a href="/playground/server-islands">playground</a>
+							</p>
+						</div>
 					{/snippet}
 				</ServerDemo>
 			</div>
@@ -776,9 +772,10 @@
 						a change. No preload hint.
 					</p>
 					<p>
-						The demo below uses <code>(max-width: 600px)</code>. On a wide laptop it may stay on
-						the fallback until you narrow the window — same idea as hydrate media, for HTML
-						instead of JS.
+						The demo below is a static stand-in of a filled media result. Live media defer is
+						on the <a href="/playground/server-islands">playground</a> (PSI’s mobile viewport
+						matches <code>(max-width: 600px)</code> immediately, so a live hole on this page
+						would fetch on the critical path).
 					</p>
 				</div>
 				<ServerDemo
@@ -786,14 +783,13 @@
 					codeHtml={data.serverMediaCode}
 				>
 					{#snippet live()}
-						<GreetingMedia salutation="Matched">
-							{#snippet ogygiaFallback()}
-								<div class="widget widget--greeting">
-									<strong>Waiting for media…</strong>
-									<p class="widget-meta">Fallback until the query matches</p>
-								</div>
-							{/snippet}
-						</GreetingMedia>
+						<div class="widget widget--greeting">
+							<strong>Aloha, Matched</strong>
+							<p class="widget-meta">
+								Static stand-in · live <code>defer</code> media on
+								<a href="/playground/server-islands">playground</a>
+							</p>
+						</div>
 					{/snippet}
 				</ServerDemo>
 			</div>
