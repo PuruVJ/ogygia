@@ -17,7 +17,8 @@ const files = [
 	'src/LakePlaceholder.svelte',
 	'src/LakeBoundary.svelte',
 	'src/LakeRegion.svelte',
-	'src/OgygiaBoundary.svelte'
+	'src/OgygiaBoundary.svelte',
+	'src/ClientBindingStub.svelte'
 ];
 
 for (const rel of files) {

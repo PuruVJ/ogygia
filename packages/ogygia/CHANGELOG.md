@@ -5,6 +5,29 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-08-07
+
+### Changed
+
+- **Portable island bindings (breaking).** A marked `import A from '…' with { hydrate|defer|preset }` rewrites **`A` itself** to a virtual Island/ServerIsland/Lake wrapper. The template keeps `<A />`; `svelte:component this={A}` and `{#each}` lists of `{ comp: A, props }` work.
+- **Dedupe is identity-based:** same component path + strategy/options → one wrapper + one client `emitFile` entry across import sites and hosts (not `host::tagIndex`). Multiple instances share the entry URL; each still gets its own region/props at SSR. Scale: 1000× same binding → **1** module, not 1000.
+- **csr=false client hosts omit wrapper links** (same spirit as 0.3.1): marked imports bind to `virtual:ogygia/client-binding-stub` so Kit page nodes do not pull N wrappers/entries into the client graph. SSR / csr=true keep real wrappers; hydrate still loads via `import(entry)`. Wrappers are not an extra client network hop.
+- **Vite 8 / Rolldown:** plugin `build.rolldownOptions` (not deprecated `rollupOptions`) for `preserveEntrySignatures`.
+- **Props** are real Svelte props into the wrapper (devalue for the region/endpoint). Free-var tag-site capture and tag `s.overwrite` replacement are removed.
+- **`ogygiaFallback`** is a normal snippet prop on the ServerIsland wrapper (no host peel/re-attach).
+- **Host children** on hydrate/defer call sites are a build error (except `ogygiaFallback` on defer). Put UI and lakes inside the island component.
+- Lakes are portable wrappers too (`isNested()` → LakeRegion; shell → plain component).
+
+### Removed
+
+- Static-tag-only requirement and “never used as a static component tag” errors.
+- Tag-hoist virtual modules that baked call-site markup/children into the island entry.
+
+### Tests
+
+- Transform/audit coverage for portable bindings, dedupe, `svelte:component`, list/each, defer+fallback, defer+hydrate, lakes, presets.
+- Permanent e2e: `verify/portable-bindings.ts` + playground `/portable`.
+
 ## [0.3.5] — 2026-08-07
 
 ### Fixed

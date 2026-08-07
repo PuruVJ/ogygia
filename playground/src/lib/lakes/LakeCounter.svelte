@@ -1,9 +1,10 @@
 <script lang="ts">
-	// A hydrated island (hydrate: 'load') that CONTAINS a lake in its children. Interactive (the
-	// counter proves it hydrated). The {#if} lets us toggle the lake to exercise remount policy
+	// Hydrated island that contains lakes in its own tree (portable bindings: host children
+	// cannot cross the island boundary — lakes are imported here, not passed from the page).
+	import FrozenBox from './FrozenBox.svelte' with { hydrate: 'none' };
+	import FrozenSwr from './FrozenBox.svelte' with { preset: 'frozenSwr' };
 
-	// (re-creation): 'cache' re-inserts the frozen DOM, 'empty' leaves it blank.
-	let { children } = $props();
+	let { swr = false }: { swr?: boolean } = $props();
 	let count = $state(0);
 	let show = $state(true);
 </script>
@@ -12,6 +13,10 @@
 	<button data-count-btn onclick={() => (count += 1)}>island count: {count}</button>
 	<button data-toggle-btn onclick={() => (show = !show)}>toggle lake</button>
 	{#if show}
-		{@render children?.()}
+		{#if swr}
+			<FrozenSwr />
+		{:else}
+			<FrozenBox />
+		{/if}
 	{/if}
 </div>

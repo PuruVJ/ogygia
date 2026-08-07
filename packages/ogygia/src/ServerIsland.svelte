@@ -28,7 +28,7 @@
 	 * @property {import('svelte').Component<Record<string, unknown>>} [__component] virtual island
 	 *   module (authored attrs baked in). Used when nested inside another island — degrade to
 	 *   inline render. Top-level never renders it (endpoint resolves by id). Omitted on csr=false
-	 *   client hosts (`linkVirtualIsland: false`).
+	 *   hydrate target via `import(entry)`).
 	 * @property {unknown} [__css] entry `.svelte` import so CSS joins Kit's FOUC bag (not rendered)
 	 * @property {Record<string, unknown>} __props captured props (server-rendered with these)
 	 * @property {string} [__defer] fetch-timing of the hole: 'load' | 'idle' | 'visible' | media query

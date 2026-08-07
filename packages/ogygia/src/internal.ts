@@ -12,3 +12,4 @@
 export { default as Island } from './Island.svelte';
 export { default as LakeBoundary } from './LakeBoundary.svelte';
 export { default as LakeRegion } from './LakeRegion.svelte';
+export { isNested, setNested } from './context.js';

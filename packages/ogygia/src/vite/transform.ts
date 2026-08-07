@@ -1,7 +1,6 @@
 import { parse } from 'svelte/compiler';
 import MagicString from 'magic-string';
 import { createHash } from 'node:crypto';
-import { collectCaptureInfo, collectSnippetNames } from './free-vars.js';
 
 export const ISLAND_DIR = '.ogygia';
 
@@ -94,31 +93,68 @@ export function islandPublicUrl(iid: string) {
 	return '/' + islandChunkFileName(iid);
 }
 
+/** Portable wrapper module id — SSR / csr=true host binding (Island/ServerIsland/Lake shell). */
+export function wrapperVirtualId(iid: string) {
+	return `virtual:ogygia/wrapper/${iid}.svelte`;
+}
+
+/**
+ * csr=false CLIENT host binding target. Kit still emits those page nodes; pointing marked
+ * imports here (instead of wrappers) keeps N island wrappers/entries out of the page graph so
+ * `emitFile` owns hydrate modules and Rolldown does not thin-facade them. Hydration uses
+ * `import(entry)` only — this stub is never loaded for island JS.
+ */
+export const CLIENT_BINDING_STUB = 'virtual:ogygia/client-binding-stub';
+
+/**
+ * Fingerprint of a region mark for dedupe. Same component path + same key → one wrapper/entry.
+ * @param {{ strategy: string, options?: Record<string, unknown> }} mark
+ */
+export function strategyKey(mark: { strategy: string; options?: Record<string, unknown> | null }) {
+	const o = mark.options || {};
+	if (mark.strategy === 'server') {
+		let k = `defer:${o.when ?? 'load'}`;
+		if (o.margin != null) k += `:margin:${o.margin}`;
+		if (o.hydrate) {
+			k += `+hydrate:${o.hydrate}`;
+			if (o.hydrateMargin != null) k += `:hmargin:${o.hydrateMargin}`;
+		}
+		return k;
+	}
+	if (mark.strategy === 'lake') {
+		let k = `lake:${o.remount || 'cache'}`;
+		if (o.when) k += `:when:${o.when}`;
+		if (o.maxAgeMs != null) k += `:maxAge:${o.maxAgeMs}`;
+		if (o.onExpire) k += `:onExpire:${o.onExpire}`;
+		if (o.margin != null) k += `:margin:${o.margin}`;
+		return k;
+	}
+	let k = `hydrate:${mark.strategy}`;
+	if (o.margin != null) k += `:margin:${o.margin}`;
+	return k;
+}
+
+/**
+ * Cross-host stable identity: posix component path + {@link strategyKey}.
+ * Drives region ids so multiple hosts / import sites / `<A />` usages share one module.
+ */
+export function regionIdentity(
+	componentRelPath: string,
+	mark: { strategy: string; options?: Record<string, unknown> | null }
+) {
+	return `${String(componentRelPath).split(/[/\\]/).join('/')}\0${strategyKey(mark)}`;
+}
+
+/** Hash an identity string (optional production salt) → 12-char region id. */
+export function regionId(identityKey: string, salt = '') {
+	const msg = salt ? `${salt}\0${identityKey}` : identityKey;
+	return createHash('md5').update(msg).digest('hex').slice(0, 12);
+}
+
 /** True if `val` looks like a CSS media query (must contain a balanced-ish `(…)`). */
 function is_media_query(val: string) {
 	const open = val.indexOf('(');
 	return open !== -1 && val.indexOf(')', open) !== -1;
-}
-
-/** A curated allowlist of JS globals that must never be treated as captured props. */
-const GLOBAL_ALLOW = new Set([
-	'globalThis', 'window', 'document', 'console', 'Math', 'JSON', 'Date', 'Array',
-	'Object', 'String', 'Number', 'Boolean', 'Symbol', 'BigInt', 'RegExp', 'Map', 'Set',
-	'WeakMap', 'WeakSet', 'Promise', 'Error', 'TypeError', 'RangeError', 'Function',
-	'undefined', 'null', 'NaN', 'Infinity', 'parseInt', 'parseFloat', 'isNaN', 'isFinite',
-	'encodeURIComponent', 'decodeURIComponent', 'encodeURI', 'decodeURI', 'fetch',
-	'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame',
-	'structuredClone', 'URL', 'URLSearchParams', 'Intl', 'crypto', 'navigator', 'location',
-	'localStorage', 'sessionStorage', 'history', 'customElements', 'CustomEvent', 'Event'
-]);
-
-function is_global(name) {
-	if (GLOBAL_ALLOW.has(name)) return true;
-	try {
-		return name in globalThis;
-	} catch {
-		return false;
-	}
 }
 
 /** Reconstruct an import declaration without its `with { ... }` attributes clause. */
@@ -169,7 +205,7 @@ function region_keys_on_dynamic_import(node, import_keys) {
 
 /**
  * Walk a script Program body for `ImportExpression` nodes carrying ogygia region keys.
- * Dynamic `import()` cannot author islands — SSR shells need a static import + `<Tag />`.
+ * Dynamic `import()` cannot author islands — SSR shells need a static marked import binding.
  *
  * @param {unknown[]} body
  * @param {ImportKeys} import_keys
@@ -334,64 +370,6 @@ function parse_remount(raw, err, names) {
 	return out;
 }
 
-
-/** Escape a static text chunk for use inside a template literal. */
-function escape_template_text(text) {
-	return String(text).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
-}
-
-/**
- * Build a `__props={…}` literal from a lake `<Component>` tag's attributes.
- * Only used when remount revalidates (`swr` / `revalidate: schedule`) — the endpoint re-renders
- * the component with these props, so the
- * literal must reproduce the authored values EXACTLY (SSR itself keeps the original tag verbatim).
- */
-function lake_props_literal(source, node) {
-	const parts = [];
-	for (const attr of node.attributes ?? []) {
-		if (attr.type === 'SpreadAttribute' && attr.expression) {
-			parts.push(`...${source.slice(attr.expression.start, attr.expression.end)}`);
-			continue;
-		}
-		if (attr.type !== 'Attribute') continue;
-		const name = attr.name;
-		if (typeof name !== 'string' || name.startsWith('__')) continue;
-		const val = attr.value;
-		if (val === true || val == null || val === undefined) {
-			parts.push(`${JSON.stringify(name)}: true`);
-			continue;
-		}
-		// Svelte's AST does NOT wrap a lone expression value in an array (`n={x}` → ExpressionTag,
-		// `n="x"` → [Text]). Treating both as arrays silently dropped every mustache-valued prop.
-		const chunk_list = Array.isArray(val) ? val : [val];
-		if (chunk_list.length === 0) continue;
-		if (chunk_list.length === 1) {
-			const only = chunk_list[0];
-			if (only.type === 'Text') {
-				parts.push(`${JSON.stringify(name)}: ${JSON.stringify(only.data)}`);
-				continue;
-			}
-			// Mustache / expression tag — shorthand when the Identifier matches the attr name.
-			if (only.expression?.type === 'Identifier' && only.expression.name === name) {
-				parts.push(name);
-			} else if (only.expression) {
-				parts.push(`${JSON.stringify(name)}: ${source.slice(only.expression.start, only.expression.end)}`);
-			}
-			continue;
-		}
-		// Concatenation (`label="Hi {name}"`) — a template literal keeps every chunk. Taking only
-		// the expression would silently drop the static text around it.
-		const chunks = chunk_list.map((chunk) =>
-			chunk.type === 'Text'
-				? escape_template_text(chunk.data)
-				: chunk.expression
-					? '${' + source.slice(chunk.expression.start, chunk.expression.end) + '}'
-					: ''
-		);
-		parts.push(`${JSON.stringify(name)}: \`${chunks.join('')}\``);
-	}
-	return parts.length ? `{ ${parts.join(', ')} }` : '{}';
-}
 
 /**
  * Svelte 5 event attributes (`onclick`, …) that cannot cross devalue for remount:swr.
@@ -568,7 +546,7 @@ export function transformHost(source, id, ctx) {
 		throw new Error(
 			`[ogygia] ${rel_host}: dynamic import() with { with: { ${keys.join(', ')} } } is not supported. ` +
 				`Mark islands with a static \`import X from '…' with { ${import_keys.hydrate}: '…' }\` ` +
-				`(or \`${import_keys.defer}\` / \`${import_keys.preset}\`) and a static \`<X />\` tag. ` +
+				`(or \`${import_keys.defer}\` / \`${import_keys.preset}\`) — the binding becomes a portable island component. ` +
 				`For a click-loaded chunk that is not an island, use plain \`await import('./Comp.svelte')\` ` +
 				`(no region attributes) inside a host island. ` +
 				`To delay a real island until click, gate a static region import with \`{#if}\`.`
@@ -578,7 +556,7 @@ export function transformHost(source, id, ctx) {
 		throw new Error(
 			`[ogygia] ${rel_host}: dynamic import() with { with: { ${keys.join(', ')} } } is not supported. ` +
 				`Mark islands with a static \`import X from '…' with { ${import_keys.hydrate}: '…' }\` ` +
-				`(or \`${import_keys.defer}\` / \`${import_keys.preset}\`) and a static \`<X />\` tag. ` +
+				`(or \`${import_keys.defer}\` / \`${import_keys.preset}\`) — the binding becomes a portable island component. ` +
 				`For a click-loaded chunk that is not an island, use plain \`await import('./Comp.svelte')\` ` +
 				`(no region attributes) inside a host island. ` +
 				`To delay a real island until click, gate a static region import with \`{#if}\`.`
@@ -753,7 +731,6 @@ export function transformHost(source, id, ctx) {
 			}
 
 			for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy: 'server', options });
-			imports_to_strip.add(node);
 			continue;
 		}
 
@@ -808,94 +785,25 @@ export function transformHost(source, id, ctx) {
 			}
 
 			for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy, options });
-			imports_to_strip.add(node);
 			continue;
 		}
 		// otherwise: a normal import that happens to carry other import attributes — leave it.
 	}
 
-	// host top-level snippet names (for cross-boundary error detection)
-	const host_snippet_names = collectSnippetNames(ast.fragment?.nodes ?? []);
+	if (marked_components.size === 0) return null;
 
-	// Names DECLARED at the top level of the host scripts (instance + module) — `let`/`const`/`var`,
-	// functions, classes. These are captured even when they shadow a JS global (e.g. `const Date =
-	// …`): a host-declared binding always wins over the globals allowlist, matching JS scope rules.
-	const host_local_names = new Set();
-	const add_decl_names = (pat) => {
-		if (!pat) return;
-		switch (pat.type) {
-			case 'Identifier':
-				host_local_names.add(pat.name);
-				break;
-			case 'ObjectPattern':
-				for (const prop of pat.properties) {
-					if (prop.type === 'RestElement') add_decl_names(prop.argument);
-					else add_decl_names(prop.value);
-				}
-				break;
-			case 'ArrayPattern':
-				for (const el of pat.elements) add_decl_names(el);
-				break;
-			case 'AssignmentPattern':
-				add_decl_names(pat.left);
-				break;
-			case 'RestElement':
-				add_decl_names(pat.argument);
-				break;
-		}
-	};
-	const scan_host_decls = (body) => {
-		for (const node of body ?? []) {
-			if (node.type === 'VariableDeclaration') {
-				for (const d of node.declarations) add_decl_names(d.id);
-			} else if ((node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') && node.id) {
-				host_local_names.add(node.id.name);
-			}
-		}
-	};
-	scan_host_decls(instance_body);
-	scan_host_decls(ast.module?.content?.body ?? []);
+	const CHILD_KEYS = [
+		'consequent',
+		'alternate',
+		'body',
+		'fallback',
+		'pending',
+		'then',
+		'catch',
+		'fragment'
+	];
 
-	// --- find island units in the template ---------------------------------
-	// marked-component usages: { node (svelte template node), strategy, options }
-	const units = [];
-	const CHILD_KEYS = ['consequent', 'alternate', 'body', 'fallback', 'pending', 'then', 'catch', 'fragment'];
-	// LAKE local names used in the DEAD SHELL (top level, not inside any island): a no-op. We clean
-	// their import (drop the `with{}`) and leave them as plain components (dev-warned at build).
-	const shell_lake_locals = new Set();
-	const visit = (nodes) => {
-		for (const node of nodes ?? []) {
-			if (node.type === 'Component' && marked_components.has(node.name)) {
-				const mark = marked_components.get(node.name);
-				if (mark.strategy === 'lake') {
-					// top-level lake = no-op; descend through it so a shell-lake's inner islands still
-					// hydrate (the lake never became a hydration boundary here).
-					shell_lake_locals.add(node.name);
-					for (const k of CHILD_KEYS) if (node[k]?.nodes) visit(node[k].nodes);
-					continue;
-				}
-				units.push({ node, strategy: mark.strategy, options: mark.options });
-				continue; // island/server: do not descend
-			}
-			// descend into child fragments
-			for (const k of CHILD_KEYS) if (node[k]?.nodes) visit(node[k].nodes);
-		}
-	};
-	visit(ast.fragment?.nodes ?? []);
-
-	if (ctx.dev && shell_lake_locals.size) {
-		for (const name of shell_lake_locals) {
-			console.warn(
-				`[ogygia] ${rel_host}: <${name}> has \`${import_keys.hydrate}: 'none'\` (lake) in the page shell — that is a no-op (the shell is already dead). A lake only has meaning INSIDE a hydrated island. Rendering it as a plain component.`
-			);
-		}
-	}
-
-	// Marked hydrate/defer imports must appear as a static <Component> tag when referenced.
-	// Completely unused marked imports are stripped (dead code). Dynamic `<svelte:component>`,
-	// dotted `<Menu.Item>`, or other non-tag refs still strip the import — refuse with a build error.
-	// Walk script + markup ASTs (not raw source) so text like "no usage of C" is not a false positive.
-	const used_as_unit = new Set(units.map((u) => u.node.name));
+	/** Walk AST for Identifier / Component references to `local`. */
 	const ast_refs_local = (root, local) => {
 		let found = false;
 		const walk = (node) => {
@@ -904,7 +812,6 @@ export function transformHost(source, id, ctx) {
 				found = true;
 				return;
 			}
-			// Dotted component tags (`Menu.Item`) are a single Component.name string, not Identifiers.
 			if (node.type === 'Component') {
 				const n = node.name || '';
 				if (n === local || n.startsWith(local + '.')) {
@@ -928,388 +835,263 @@ export function transformHost(source, id, ctx) {
 			if (n.type === 'ImportDeclaration') continue;
 			if (ast_refs_local(n, local)) return true;
 		}
+		for (const n of module_body) {
+			if (n.type === 'ImportDeclaration') continue;
+			if (ast_refs_local(n, local)) return true;
+		}
 		return ast_refs_local(ast.fragment?.nodes ?? [], local);
 	};
-	for (const [local, mark] of marked_components) {
-		if (mark.strategy === 'lake') continue;
-		if (used_as_unit.has(local)) continue;
-		if (marked_import_referenced(local)) {
-			throw err(
-				local,
-				`region import '${local}' is never used as a static component tag \`<${local} …>\`. ` +
-					`Dynamic \`<svelte:component>\`, dotted tags like \`<Menu.Item>\`, and non-tag references are not supported — the import would be stripped and break the build.`
-			);
-		}
-		// else: unused — strip via imports_to_strip (already registered)
-	}
 
-	const has_lake_mark = [...marked_components.values()].some((m) => m.strategy === 'lake');
-	if (units.length === 0 && imports_to_strip.size === 0 && !has_lake_mark) return null;
-
-	const s = new MagicString(source);
-	const islands = [];
-	// LAKE local names hoisted into some island (their host import is now unused -> stripped).
-	const island_lake_locals = new Set();
-	// LAKE region ids (metadata-only client entries, unless remount:swr adds a server module).
-	const lake_region_ids = [];
-	/** @type {Array<{ id: string, local: string, remount: string, when?: string, componentPath: string | null }>} */
-	const swr_lakes = [];
-	const preamble_imports = [];
-	// The transform emits a private wrapper component (not a public API). Component
-	// tags must start uppercase or Svelte parses them as plain HTML elements.
-	const wrapper_name = 'OgygiaIsland__Wrapper';
-	const server_wrapper_name = 'OgygiaServerIsland__Wrapper';
-	const lake_region_name = 'OgygiaLakeRegion__Wrapper';
-	let wrapper_imported = false;
-	let server_wrapper_imported = false;
-
-	/** Find a reserved `{#snippet ogygiaFallback()}` block among a component's children. */
-	const find_fallback_snippet = (node) => {
-		for (const child of node.fragment?.nodes ?? []) {
-			if (child.type === 'SnippetBlock' && child.expression?.name === 'ogygiaFallback') return child;
-		}
-		return null;
+	/** Non-fallback children on a hydrate/defer call site cannot cross devalue — reject. */
+	const assert_portable_children = (node, local, is_server) => {
+		const kids = (node.fragment?.nodes ?? []).filter(
+			(n) => !(n.type === 'Text' && !String(n.data ?? '').trim())
+		);
+		if (kids.length === 0) return;
+		const only_fallback =
+			is_server &&
+			kids.length === 1 &&
+			kids[0].type === 'SnippetBlock' &&
+			kids[0].expression?.name === 'ogygiaFallback';
+		if (only_fallback) return;
+		throw new Error(
+			`[ogygia] ${rel_host}: <${local}> has host children/snippets that cannot cross the island boundary. ` +
+				`Under portable bindings, pass serializable props and put UI inside the island component` +
+				(is_server
+					? ` (only the reserved \`{#snippet ogygiaFallback()}\` may appear at the call site).`
+					: `.`)
+		);
 	};
 
-	units.forEach((unit, index) => {
-		const iid = islandId(rel_host, index, ctx.idSalt || '');
-		const virtualPath = ctx.virtualPathFor(id, iid);
-		const comp_var = `__OgygiaIsland_${index}`;
-		const is_server = unit.strategy === 'server';
-		const deferred_hydrate = is_server && !!unit.options?.hydrate;
-
-		// SERVER island: the reserved `ogygiaFallback` snippet renders into the page immediately
-		// (kept in host scope, so it can reference host vars directly). The island component
-		// itself is hoisted WITHOUT the fallback and rendered only by the `/🏝️ogygia🏝️` endpoint.
-		const fallback_node = is_server ? find_fallback_snippet(unit.node) : null;
-
-		// The subtree we hoist + analyse for free vars. For server islands, strip the fallback.
-		let hoisted_source;
-		let subtree_nodes;
-		if (fallback_node) {
-			hoisted_source =
-				source.slice(unit.node.start, fallback_node.start) +
-				source.slice(fallback_node.end, unit.node.end);
-			// shallow-clone the component node with the fallback snippet removed for analysis
-			const filtered = {
-				...unit.node,
-				fragment: {
-					...unit.node.fragment,
-					nodes: unit.node.fragment.nodes.filter((n) => n !== fallback_node)
-				}
-			};
-			subtree_nodes = [filtered];
-		} else {
-			hoisted_source = source.slice(unit.node.start, unit.node.end);
-			subtree_nodes = [unit.node];
-		}
-
-		// LAKES: a `hydrate: 'none'` component used inside THIS island (hydrate OR defer). Wrap
-		// each in `<OgygiaLakeRegion>` (hydrate=none + remount policy); record the local so the
-		// client build swaps its import for a placeholder. SSR keeps the real component.
-		const island_lakes = [];
-		{
-			const lake_nodes = [];
-			const scan_lakes = (nodes) => {
-				for (const n of nodes ?? []) {
-					if (n.type === 'Component' && marked_components.get(n.name)?.strategy === 'lake') {
-						lake_nodes.push(n);
+	const visit_usages = (nodes) => {
+		for (const node of nodes ?? []) {
+			if (node.type === 'Component') {
+				const name = node.name || '';
+				if (name.includes('.')) {
+					const root = name.split('.')[0];
+					if (marked_components.has(root) && marked_components.get(root).strategy !== 'lake') {
+						throw new Error(
+							`[ogygia] ${rel_host}: dotted tag \`<${name}>\` is not supported for region import '${root}'. ` +
+								`Import the leaf component with \`with { hydrate|defer }\` instead.`
+						);
 					}
-					for (const k of CHILD_KEYS) if (n[k]?.nodes) scan_lakes(n[k].nodes);
-				}
-			};
-			scan_lakes(unit.node.fragment?.nodes ?? []);
-			if (lake_nodes.length) {
-				const lake_ms = new MagicString(source);
-				lake_nodes.forEach((ln, li) => {
-					const lake_id = islandId(rel_host, `lake:${index}:${li}`, ctx.idSalt || '');
-					const mark = marked_components.get(ln.name);
-					const remount = mark?.options?.remount || 'cache';
-					const needs_endpoint = remount === 'swr';
-					const when = mark?.options?.when || (needs_endpoint ? 'load' : undefined);
-					let lake_attrs =
-						`__entry={${JSON.stringify(lake_id)}} __remount={${JSON.stringify(remount)}}`;
-					if (mark?.options?.maxAgeMs != null) {
-						lake_attrs += ` __maxAge={${JSON.stringify(mark.options.maxAgeMs)}}`;
+				} else if (marked_components.has(name)) {
+					const mark = marked_components.get(name);
+					if (mark.strategy === 'lake') {
+						if (mark.options?.remount === 'swr') assert_swr_lake_crossable(node, err);
+					} else {
+						assert_portable_children(node, name, mark.strategy === 'server');
 					}
-					if (mark?.options?.onExpire) {
-						lake_attrs += ` __onExpire={${JSON.stringify(mark.options.onExpire)}}`;
-					}
-					if (needs_endpoint) {
-						assert_swr_lake_crossable(ln, err);
-						lake_attrs +=
-							` __when={${JSON.stringify(when || 'load')}}` +
-							` __props={${lake_props_literal(source, ln)}}`;
-						if (mark?.options?.margin != null) {
-							lake_attrs += ` __margin={${JSON.stringify(mark.options.margin)}}`;
-						}
-					}
-					// WRAP the authored tag (never overwrite it): the lake keeps its own attributes,
-					// bindings and CHILDREN, and stays a STATIC component reference so the client
-					// build's placeholder swap still applies. A dynamic `<Component />` inside the
-					// wrapper would add a `<!--[-->…<!--]-->` envelope inside the frozen region that
-					// `#lift_lakes` carries away, and hydration then runs out of nodes (LAKE-ENVELOPE).
-					lake_ms.appendLeft(ln.start, `<${lake_region_name} ${lake_attrs}>`);
-					lake_ms.appendRight(ln.end, `</${lake_region_name}>`);
-					island_lakes.push(ln.name);
-					island_lake_locals.add(ln.name);
-					lake_region_ids.push(lake_id);
-					if (needs_endpoint) {
-						const entry_spec = imports.get(ln.name)?.node?.source?.value;
-						swr_lakes.push({
-							id: lake_id,
-							local: ln.name,
-							remount,
-							when: when || 'load',
-							componentPath: resolve_component_path(entry_spec, id, ctx)
-						});
-					}
-				});
-				hoisted_source = lake_ms.slice(unit.node.start, unit.node.end);
-			}
-		}
-
-		// free-variable analysis (+ mutation targets)
-		const { free, mutated } = collectCaptureInfo(subtree_nodes);
-		const used_import_nodes = new Set();
-		const captured = [];
-		for (const name of free) {
-			if (imports.has(name)) {
-				used_import_nodes.add(imports.get(name).node);
-			} else if (host_snippet_names.has(name)) {
-				throw new Error(
-					`[ogygia] ${rel_host}: island references snippet \`${name}\` defined outside the island. ` +
-						`Snippets cannot cross the island boundary. Define the snippet inside the island instead.`
-				);
-			} else if (host_local_names.has(name)) {
-				// a host-declared binding — captured even if it shadows a global (JS scope wins)
-				captured.push(name);
-			} else if (is_global(name)) {
-				// a true global (not shadowed by a host binding) — leave alone, never a prop
-			} else {
-				captured.push(name);
-			}
-		}
-
-		// CAPTURED-STATE MUTATION GUARD. A captured host variable crosses the island boundary as a
-		// serialized devalue SNAPSHOT — writing to it inside the island (assignment, `++`, compound
-		// assign, destructuring-assignment, or `bind:`) updates nothing on the host and nothing that
-		// survives a re-render. Fail the build, naming the variable + file, and point the author at
-		// the fix: move mutable state INTO the island component.
-		for (const name of mutated) {
-			if (captured.includes(name)) {
-				throw new Error(
-					`[ogygia] ${rel_host}: island mutates captured host variable \`${name}\` — ` +
-						`captured host state is a serialized snapshot, so writing to it inside the island updates nothing. ` +
-						`Move mutable state inside the island component (declare \`${name}\` with \`$state\` in the island, ` +
-						`or pass it as an initial value and keep the mutable copy local).`
-				);
-			}
-		}
-
-		// build virtual island module source: gather cleaned text per used import node
-		const copied_imports = [];
-		if (island_lakes.length) {
-			copied_imports.push(`import { LakeRegion as ${lake_region_name} } from 'ogygia/internal';`);
-		}
-		for (const [, info] of imports) {
-			if (used_import_nodes.has(info.node) && !copied_imports.includes(info.cleaned)) {
-				copied_imports.push(info.cleaned);
-			}
-		}
-
-		const props_line = captured.length ? `\tlet { ${captured.join(', ')} } = $props();` : '';
-		const script_body = [...copied_imports.map((l) => '\t' + l), props_line]
-			.filter(Boolean)
-			.join('\n');
-		const virtual_source = `<script${lang}>\n${script_body}\n</script>\n${hoisted_source}\n`;
-
-		// Absolute path of the island entry component (the `import X from '…' with { hydrate }`).
-		// Marked into the vite plugin's island_graph so `$app/*` inside THAT file (and its
-		// transitive imports) resolve to client shims — not only imports written into the virtual
-		// module. csr=true hosts still import the virtual as `__component`; csr=false client hosts
-		// omit that link so emitFile owns the module.
-		const entry_spec = imports.get(unit.node.name)?.node?.source?.value;
-		let componentPath = null;
-		if (typeof entry_spec === 'string') {
-			if (entry_spec === '$lib' || entry_spec.startsWith('$lib/')) {
-				componentPath = ctx.pathModule.join(ctx.libDir, entry_spec === '$lib' ? '' : entry_spec.slice('$lib/'.length));
-			} else if (entry_spec.startsWith('.')) {
-				componentPath = ctx.pathModule.resolve(ctx.pathModule.dirname(id), entry_spec);
-			}
-		}
-
-		islands.push({
-			id: iid,
-			virtualPath,
-			source: virtual_source,
-			hostPath: id,
-			componentPath,
-			server: is_server,
-			// Deferred client islands need a client chunk (`kind: 'hydrate'`) AND the server
-			// manifest (`server: true`). Defer-only stays `kind: 'defer'` (no client JS).
-			kind: is_server ? (deferred_hydrate ? 'hydrate' : 'defer') : 'hydrate',
-			lakes: island_lakes
-		});
-
-		const props_obj = captured.length ? `{ ${captured.join(', ')} }` : '{}';
-
-		if (is_server) {
-			if (!server_wrapper_imported) {
-				server_wrapper_imported = true;
-				preamble_imports.push(
-					`\timport { ServerIsland as ${server_wrapper_name} } from 'ogygia/internal/server';`
-				);
-			}
-			// Entry import → Kit FOUC CSS bag (`__css`). Virtual → `__component` for *nested*
-			// inline render (authored attrs live in the virtual module — same as Island.svelte).
-			// Top-level never renders `__component` (endpoint resolves by opaque id). csr=false
-			// client hosts omit the virtual (`linkVirtualIsland: false`) so defer-only stays
-			// zero component JS; nested islands live inside other modules that keep the link.
-			if (typeof entry_spec !== 'string') {
-				throw new Error(
-					`[ogygia] ${rel_host}: server island needs a static import path ($lib/… or relative).`
-				);
-			}
-			const css_var = `${comp_var}_css`;
-			preamble_imports.push(`\timport ${css_var} from ${JSON.stringify(entry_spec)};`);
-			const link_virtual = ctx.linkVirtualIsland !== false;
-			if (link_virtual) {
-				preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);
-			}
-			const fallback_text = fallback_node
-				? source.slice(fallback_node.start, fallback_node.end)
-				: '';
-			// Fetch timing of the hole (symmetric with hydrate). ServerIsland emits
-			// `render="defer" when="<schedule>"` and a preload <link> ONLY for 'load'.
-			const fetch_when = unit.options?.when || 'load';
-			let server_attrs = ` __defer={${JSON.stringify(fetch_when)}}`;
-			if (unit.options?.margin != null) server_attrs += ` __margin={${JSON.stringify(unit.options.margin)}}`;
-			if (deferred_hydrate) {
-				// Importable module URL for post-swap hydrate (opaque `__entry` stays the HMAC id).
-				const module_url = ctx.dev ? ctx.devUrlFor(virtualPath) : islandPublicUrl(iid);
-				server_attrs += ` __hydrate={${JSON.stringify(unit.options.hydrate)}}`;
-				server_attrs += ` __module={${JSON.stringify(module_url)}}`;
-				if (unit.options.hydrateMargin != null) {
-					server_attrs += ` __hydrateMargin={${JSON.stringify(unit.options.hydrateMargin)}}`;
 				}
 			}
-			const comp_attr = link_virtual ? ` __component={${comp_var}}` : '';
-			const replacement =
-				`<${server_wrapper_name} __entry={${JSON.stringify(iid)}}` +
-				`${comp_attr} __css={${css_var}} __props={${props_obj}}${server_attrs}>` +
-				fallback_text +
-				`</${server_wrapper_name}>`;
-			s.overwrite(unit.node.start, unit.node.end, replacement);
-			return;
+			for (const k of CHILD_KEYS) if (node[k]?.nodes) visit_usages(node[k].nodes);
+			if (node.type === 'Component' && node.fragment?.nodes) visit_usages(node.fragment.nodes);
 		}
+	};
+	visit_usages(ast.fragment?.nodes ?? []);
 
-		if (!wrapper_imported) {
-			wrapper_imported = true;
-			preamble_imports.push(`\timport { Island as ${wrapper_name} } from 'ogygia/internal';`);
-		}
+	const s = new MagicString(source);
+	/** @type {Map<string, object>} dedupe by region id within this host */
+	const islands_by_id = new Map();
+	const salt = ctx.idSalt || '';
+	const wrapperPathFor =
+		typeof ctx.wrapperPathFor === 'function'
+			? ctx.wrapperPathFor
+			: (_host, iid) => wrapperVirtualId(iid);
 
-		// SSR must render the *virtual* island (same module the client hydrates) so attribute
-		// expressions like `codeHtml={data.heroCode}` match. Spreading captures onto the entry
-		// component (`{ data }` → HeroDemo) leaves `codeHtml` undefined on the server and causes
-		// `{@html}` hydration_html_changed once the client has real props.
-		//
-		// Separate entry import keeps the real `.svelte` in the PAGE SSR graph for Kit's FOUC
-		// style bag — virtual modules alone don't reliably contribute CSS there (same as defer).
-		//
-		// Client csr=false hosts omit the virtual import (`linkVirtualIsland: false`): Kit still
-		// emits those page nodes, and sharing the virtual with emitFile forces Rolldown entry
-		// facades. Hydration loads `import(__entry)` only. csr=true client keeps the link so Kit
-		// can hydrate the island as a normal component.
-		if (typeof entry_spec !== 'string') {
-			throw new Error(
-				`[ogygia] ${rel_host}: hydrate island needs a static import path ($lib/… or relative).`
-			);
-		}
-		const css_var = `${comp_var}_css`;
-		preamble_imports.push(`\timport ${css_var} from ${JSON.stringify(entry_spec)};`);
-		const link_virtual = ctx.linkVirtualIsland !== false;
-		if (link_virtual) {
-			preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);
-		}
+	const posix_rel = (abs) => path.relative(ctx.root, abs).split(/[/\\]/).join('/');
 
-		// rewrite host: replace the unit with an <Island> wrapper element
-		const strategy_attrs_text = strategy_to_attr(unit.strategy, unit.options);
-		// __entry is always an importable URL: Vite dev URL in dev, deterministic chunk URL in build
-		const entry_value = ctx.dev ? ctx.devUrlFor(virtualPath) : islandPublicUrl(iid);
-		const comp_attr = link_virtual ? ` __component={${comp_var}}` : '';
-		const replacement =
-			`<${wrapper_name} ${strategy_attrs_text} ` +
-			`__entry={${JSON.stringify(entry_value)}}${comp_attr} __css={${css_var}} __props={${props_obj}} />`;
-		s.overwrite(unit.node.start, unit.node.end, replacement);
-	});
+	// Hydrate `emitFile` / `import(entry)` target — JS re-export of the real component.
+	// Unique per region id so two strategies sharing one Comp keep distinct entry modules
+	// (Rolldown must not content-dedupe them into a facade that drops `export default`).
+	// Scale: same path+strategy → one id → one emitFile; N instances share this URL.
+	// Wrappers are NOT this entry — they are SSR/csr=true host bindings only.
+	const entry_source_for = (componentPath, iid) =>
+		`import __OgygiaComp_${iid} from ${JSON.stringify(componentPath)};\n` +
+		`export default __OgygiaComp_${iid};\n`;
 
-	// Register lake regions: metadata-only on the client; remount:swr also gets a server-renderable
-	// virtual module (signed endpoint re-renders the lake component with captured props).
-	const swr_ids = new Set(swr_lakes.map((l) => l.id));
-	for (const lake of swr_lakes) {
-		if (!lake.componentPath) {
-			throw new Error(
-				`[ogygia] ${rel_host}: remount:'swr' lake '${lake.local}' needs a resolvable module path ($lib/… or relative).`
-			);
-		}
-		const lake_virtual = ctx.virtualPathFor(id, lake.id);
-		const lake_source =
+	const hydrate_wrapper_source = (iid, componentPath, entryPath, strategy, options) => {
+		const strategy_attrs = strategy_to_attr(strategy, options);
+		const entry_url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid);
+		return (
 			`<script${lang}>\n` +
-			`\timport Comp from ${JSON.stringify(lake.componentPath)};\n` +
-			`\tlet props = $props();\n` +
+			`\timport { Island as OgygiaIsland__Wrapper } from 'ogygia/internal';\n` +
+			`\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
+			`\timport __OgygiaCss from ${JSON.stringify(componentPath)};\n` +
+			`\tlet { children, ...__props } = $props();\n` +
 			`</script>\n` +
-			`<Comp {...props} />\n`;
-		islands.push({
-			id: lake.id,
-			virtualPath: lake_virtual,
-			source: lake_source,
-			hostPath: id,
-			componentPath: lake.componentPath,
-			server: true,
-			kind: 'lake'
-		});
-	}
-	for (const lake_id of lake_region_ids) {
-		if (swr_ids.has(lake_id)) continue;
-		// hostPath so the vite plugin can drop stale lake metadata on host HMR re-transform.
-		islands.push({ id: lake_id, kind: 'lake', hostPath: id });
-	}
+			`<OgygiaIsland__Wrapper ${strategy_attrs} __entry={${JSON.stringify(entry_url)}} ` +
+			`__component={__OgygiaEntry} __css={__OgygiaCss} {__props}>` +
+			`{@render children?.()}</OgygiaIsland__Wrapper>\n`
+		);
+	};
 
-	// LAKE host imports: always drop `with{}`. Hoisted-into-island or unused → strip the binding.
-	// Shell-only lake (no-op) → keep a CLEANED import so it renders as a plain component.
+	const server_wrapper_source = (iid, componentPath, entryPath, options) => {
+		const deferred_hydrate = !!options?.hydrate;
+		const fetch_when = options?.when || 'load';
+		let server_attrs = `__defer={${JSON.stringify(fetch_when)}}`;
+		if (options?.margin != null) server_attrs += ` __margin={${JSON.stringify(options.margin)}}`;
+		if (deferred_hydrate) {
+			const module_url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid);
+			server_attrs += ` __hydrate={${JSON.stringify(options.hydrate)}}`;
+			server_attrs += ` __module={${JSON.stringify(module_url)}}`;
+			if (options.hydrateMargin != null) {
+				server_attrs += ` __hydrateMargin={${JSON.stringify(options.hydrateMargin)}}`;
+			}
+		}
+		return (
+			`<script${lang}>\n` +
+			`\timport { ServerIsland as OgygiaServerIsland__Wrapper } from 'ogygia/internal/server';\n` +
+			`\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
+			`\timport __OgygiaCss from ${JSON.stringify(componentPath)};\n` +
+			`\tlet { ogygiaFallback, ...__props } = $props();\n` +
+			`</script>\n` +
+			`<OgygiaServerIsland__Wrapper __entry={${JSON.stringify(iid)}} __component={__OgygiaEntry} ` +
+			`__css={__OgygiaCss} {__props} ${server_attrs} {ogygiaFallback} />\n`
+		);
+	};
+
+	const lake_wrapper_source = (iid, componentPath, options) => {
+		const remount = options?.remount || 'cache';
+		const needs_endpoint = remount === 'swr';
+		const when = options?.when || (needs_endpoint ? 'load' : undefined);
+		let attrs =
+			`__entry={${JSON.stringify(iid)}} __remount={${JSON.stringify(remount)}}`;
+		if (options?.maxAgeMs != null) attrs += ` __maxAge={${JSON.stringify(options.maxAgeMs)}}`;
+		if (options?.onExpire) attrs += ` __onExpire={${JSON.stringify(options.onExpire)}}`;
+		if (needs_endpoint) {
+			attrs += ` __when={${JSON.stringify(when || 'load')}} __props={__props}`;
+			if (options?.margin != null) attrs += ` __margin={${JSON.stringify(options.margin)}}`;
+		}
+		// Static `<OgygiaLakeInner>` (not dynamic) preserves LAKE-ENVELOPE. Client build swaps
+		// that import for LakePlaceholder. LakeRegion itself degrades in the shell (!isNested).
+		return (
+			`<script${lang}>\n` +
+			`\timport { LakeRegion as OgygiaLakeRegion__Wrapper } from 'ogygia/internal';\n` +
+			`\timport OgygiaLakeInner from ${JSON.stringify(componentPath)};\n` +
+			`\tlet __props = $props();\n` +
+			`</script>\n` +
+			`<OgygiaLakeRegion__Wrapper ${attrs}>` +
+			`<OgygiaLakeInner {...__props} /></OgygiaLakeRegion__Wrapper>\n`
+		);
+	};
+
+	// Portable binding target for this compile:
+	//   - SSR / csr=true client → real wrapper (Island shell + __component link)
+	//   - csr=false client → stub (page node must not pull N wrappers into the client graph;
+	//     emitFile owns hydrate entries; runtime loads via import(entry))
+	const link_virtual = ctx.linkVirtualIsland !== false;
+	const binding_stub =
+		typeof ctx.clientBindingStub === 'string' && ctx.clientBindingStub
+			? ctx.clientBindingStub
+			: CLIENT_BINDING_STUB;
+
+	// Rewrite each marked import binding → wrapper or stub (islands still deduped by identity).
+	const rewritten_import_nodes = new Set();
 	for (const [local, mark] of marked_components) {
-		if (mark.strategy !== 'lake') continue;
 		const info = imports.get(local);
-		if (!info || imports_to_strip.has(info.node)) continue;
-		if (shell_lake_locals.has(local) && !island_lake_locals.has(local)) {
-			s.overwrite(info.node.start, info.node.end, info.cleaned); // shell use -> keep, drop with{}
-		} else {
-			imports_to_strip.add(info.node); // island-hoisted or unused -> remove entirely
+		if (!info) continue;
+
+		if (!marked_import_referenced(local)) {
+			// Unused marked import — strip entirely (dead code).
+			if (!rewritten_import_nodes.has(info.node)) {
+				imports_to_strip.add(info.node);
+			}
+			continue;
+		}
+
+		const entry_spec = info.node.source?.value;
+		const componentPath = resolve_component_path(entry_spec, id, ctx);
+		if (!componentPath) {
+			throw new Error(
+				`[ogygia] ${rel_host}: region import '${local}' needs a resolvable module path ($lib/… or relative).`
+			);
+		}
+		const comp_rel = posix_rel(componentPath);
+		const identity = regionIdentity(comp_rel, mark);
+		const iid = regionId(identity, salt);
+		const entryPath = ctx.virtualPathFor(id, iid);
+		const wrapPath = wrapperPathFor(id, iid);
+		const bindingPath = link_virtual ? wrapPath : binding_stub;
+
+		if (mark.strategy === 'lake') {
+			if (!islands_by_id.has(iid)) {
+				const remount = mark.options?.remount || 'cache';
+				const swr = remount === 'swr';
+				islands_by_id.set(iid, {
+					id: iid,
+					// SWR lakes need a server-renderable entry; cache/empty are wrapper-only.
+					virtualPath: swr ? entryPath : undefined,
+					source: swr ? entry_source_for(componentPath, iid) : undefined,
+					wrapperPath: wrapPath,
+					wrapperSource: lake_wrapper_source(iid, componentPath, mark.options),
+					hostPath: id,
+					componentPath,
+					server: swr,
+					kind: 'lake',
+					lakes: ['OgygiaLakeInner'],
+					identity
+				});
+			}
+			if (!rewritten_import_nodes.has(info.node)) {
+				s.overwrite(
+					info.node.start,
+					info.node.end,
+					`import ${local} from ${JSON.stringify(bindingPath)};`
+				);
+				rewritten_import_nodes.add(info.node);
+			}
+			continue;
+		}
+
+		const is_server = mark.strategy === 'server';
+		const deferred_hydrate = is_server && !!mark.options?.hydrate;
+		if (!islands_by_id.has(iid)) {
+			const entry_src = entry_source_for(componentPath, iid);
+			const wrapper_src = is_server
+				? server_wrapper_source(iid, componentPath, entryPath, mark.options)
+				: hydrate_wrapper_source(iid, componentPath, entryPath, mark.strategy, mark.options);
+			islands_by_id.set(iid, {
+				id: iid,
+				virtualPath: entryPath,
+				wrapperPath: wrapPath,
+				wrapperSource: wrapper_src,
+				source: entry_src,
+				hostPath: id,
+				componentPath,
+				server: is_server,
+				kind: is_server ? (deferred_hydrate ? 'hydrate' : 'defer') : 'hydrate',
+				lakes: [],
+				identity
+			});
+		}
+
+		if (!rewritten_import_nodes.has(info.node)) {
+			// One ImportDeclaration may have multiple specifiers — only default-import style is supported.
+			const specs = info.node.specifiers ?? [];
+			if (specs.length !== 1 || specs[0].type !== 'ImportDefaultSpecifier') {
+				throw err(
+					local,
+					`region imports must be a default import (\`import X from '…' with { … }\`).`
+				);
+			}
+			s.overwrite(
+				info.node.start,
+				info.node.end,
+				`import ${local} from ${JSON.stringify(bindingPath)};`
+			);
+			rewritten_import_nodes.add(info.node);
 		}
 	}
 
-	// strip island-marked imports (their `with{}` clause & now-unused binding)
 	for (const node of imports_to_strip) {
-		const pos = node as { start: number; end: number };
-		s.remove(pos.start, pos.end);
-	}
-
-	// inject island component imports into the instance <script>
-	if (preamble_imports.length) {
-		if (ast.instance) {
-			// insert right after the opening <script ...> tag
-			const openTagEnd = source.indexOf('>', ast.instance.start) + 1;
-			s.appendLeft(openTagEnd, '\n' + preamble_imports.join('\n'));
-		} else {
-			// no instance script; create one
-			s.prepend(`<script${lang}>\n${preamble_imports.join('\n')}\n</script>\n`);
-		}
+		if (rewritten_import_nodes.has(node)) continue;
+		s.remove(node.start, node.end);
 	}
 
 	return {
 		code: s.toString(),
 		map: s.generateMap({ hires: true, source: id, includeContent: true }),
-		islands
+		islands: [...islands_by_id.values()]
 	};
 }

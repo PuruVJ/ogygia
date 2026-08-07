@@ -7,12 +7,28 @@ Trust boundaries and “why it must stay this way” notes live in [`INVARIANTS.
 | Word | Meaning | Code |
 | ---- | ------- | ---- |
 | **Page** | SSR HTML. No Kit client — ogygia runtime is a WC + router (~7.6 KB min+br). Hydrate islands put their **module URL** on `<ogygia-region entry>` (Astro-style); the sticky runtime does not embed an app-wide regions map. | `csr = false` |
-| **Island** | A component that becomes interactive (gets JS). | `with { hydrate: 'load' }` (or `idle` / `visible` / a media query) |
-| **Lake** | Static HTML *inside* an island — no JS for that bit. | `with { hydrate: 'none' }` used inside an island |
+| **Island** | A component that becomes interactive (gets JS). The marked import binding **is** the island (portable wrapper). | `with { hydrate: 'load' }` (or `idle` / `visible` / a media query) |
+| **Lake** | Static HTML *inside* an island — no JS for that bit. Lake imports are portable wrappers too. | `with { hydrate: 'none' }` used inside an island |
 | **Server island** | HTML loaded from the server later. Placeholder first. No JS. | `with { defer: 'load' }` (or `idle` / `visible` / media) |
 | **Deferred client island** | HTML later, then JS on that DOM. | `with { defer: '…', hydrate: '…' }` |
 
 `hydrate` and `defer` are the import attributes. Everything else is English.
+
+## Portable bindings (0.4+)
+
+```js
+import A from './A.svelte' with { hydrate: 'load' };
+```
+
+`A` is a **portable island component** (virtual wrapper). Use it like any Svelte component:
+
+- `<A start={n} />`
+- `<svelte:component this={A} {...props} />`
+- `list = [{ comp: A, props }];` + `{#each}` 
+
+**Dedupe:** same component path + same strategy/options → one wrapper module and one client `emitFile` entry (identity is not per tag site or per host index). Multiple instances on a page share that entry URL; each instance still gets its own region + props payload at SSR (defer signing stays per-instance via props in the capability URL).
+
+**Props** are real Svelte props into the wrapper (serialized with devalue for the region/endpoint). Put UI and lakes **inside** the island `.svelte` file — host children/snippets (except reserved `ogygiaFallback` on defer) cannot cross the boundary.
 
 ## When JS runs / when HTML arrives
 
@@ -59,7 +75,7 @@ const Comp = (await import('./Widget.svelte')).default;
 
 No `with { hydrate }` on the dynamic import — Vite strips region attributes there, and runtimes reject unknown keys. ogygia **build-errors** `import(…, { with: { hydrate|defer|preset } })` so it cannot silently no-op.
 
-What you get is a **regular** component in the island’s tree (Vite code-splits it). It is not a second island and has no SSR shell of its own. To delay a real island boundary, keep a static region import and gate `<X />` with `{#if}`.
+What you get is a **regular** component in the island’s tree (Vite code-splits it). It is not a second island and has no SSR shell of its own. To delay a real island until click, keep a static region import and gate `<X />` with `{#if}`.
 
 ## DOM
 

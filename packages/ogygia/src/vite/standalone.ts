@@ -176,8 +176,11 @@ export async function runStandaloneClientBuild({ root, base, clientDir, makePlug
 			assetsDir: '_app/immutable',
 			sourcemap: sourcemap ?? false,
 			minify: true,
-			rollupOptions: {
+			rolldownOptions: {
 				input: RUNTIME_ENTRY,
+				// Island emitFile entries often re-export a shared component (two strategies →
+				// one Comp). Keep entry `export default` on the facade (Vite 8 / Rolldown).
+				preserveEntrySignatures: 'exports-only' as const,
 				output: {
 					// content-hashed like every other immutable chunk
 					entryFileNames: '_app/immutable/ogygia-runtime.[hash].js',

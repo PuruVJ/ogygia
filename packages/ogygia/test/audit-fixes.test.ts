@@ -16,7 +16,7 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
 		pathModule: path,
 		dev: false,
 		virtualPathFor: (_hostId: string, iid: string) =>
-			`virtual:ogygia/island/${iid}.svelte`,
+			`virtual:ogygia/island/${iid}.js`,
 		devUrlFor: (p: string) => '/@id/' + p,
 		visibleMargin: '0px',
 		presets: {},
@@ -45,27 +45,24 @@ function expectThrows(fn: () => unknown, re: RegExp) {
 }
 
 describe('audit fixes — transform contract', () => {
-	it('errors when marked import is only used via svelte:component', () => {
-		expectThrows(
-			() =>
-				run(
-					wrap(
-						`import C from './C.svelte' with { hydrate: 'load' };\n\tlet comp = C;`,
-						'<svelte:component this={comp} />'
-					)
-				),
-			/never used as a static component tag/
+	it('allows marked import via svelte:component (portable binding)', () => {
+		const r = run(
+			wrap(
+				`import C from './C.svelte' with { hydrate: 'load' };\n\tlet comp = C;`,
+				'<svelte:component this={comp} />'
+			)
 		);
+		expect(r).toBeTruthy();
+		expect(r!.islands.length).toBe(1);
+		expect(r!.code).toMatch(/virtual:ogygia\/wrapper\//);
 	});
 
-	it('errors when marked import is this={C} on svelte:component (no let alias)', () => {
-		expectThrows(
-			() =>
-				run(
-					wrap(`import C from './C.svelte' with { hydrate: 'load' };`, '<svelte:component this={C} />')
-				),
-			/never used as a static component tag/
+	it('allows this={C} on svelte:component', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { hydrate: 'load' };`, '<svelte:component this={C} />')
 		);
+		expect(r).toBeTruthy();
+		expect(r!.islands.length).toBe(1);
 	});
 
 	it('unused marked import is stripped even when markup text mentions the local name', () => {
@@ -78,23 +75,31 @@ describe('audit fixes — transform contract', () => {
 	it('errors when marked import is used as dotted Menu.Item', () => {
 		expectThrows(
 			() => run(wrap(`import Menu from './Menu.svelte' with { hydrate: 'load' };`, '<Menu.Item x={1} />')),
-			/never used as a static component tag/
+			/dotted tag/
 		);
 	});
 
-	it('wraps lakes inside defer/server islands', () => {
+	it('rejects host children on defer (lakes belong inside the island component)', () => {
+		expectThrows(
+			() =>
+				run(
+					wrap(
+						`import G from './G.svelte' with { defer: 'load' };\n\timport Lake from './Lake.svelte' with { hydrate: 'none' };`,
+						'<G><Lake /></G>'
+					)
+				),
+			/host children/
+		);
+	});
+
+	it('lake binding rewrite produces a portable lake wrapper', () => {
 		const r = run(
-			wrap(
-				`import G from './G.svelte' with { defer: 'load' };\n\timport Lake from './Lake.svelte' with { hydrate: 'none' };`,
-				'<G><Lake /></G>'
-			)
+			wrap(`import Lake from './Lake.svelte' with { hydrate: 'none' };`, '<Lake />')
 		);
 		expect(r).toBeTruthy();
-		expect(r!.islands.some((i) => i.server)).toBe(true);
-		const virt = r!.islands.find((i) => i.source)!;
-		expect(virt.lakes).toEqual(['Lake']);
-		expect(virt.source).toMatch(/OgygiaLakeRegion__Wrapper/);
-		expect(virt.source).toMatch(/__remount=\{"cache"\}/);
+		const lake = r!.islands.find((i) => i.kind === 'lake')!;
+		expect(lake.wrapperSource).toMatch(/OgygiaLakeRegion__Wrapper/);
+		expect(lake.lakes).toEqual(['OgygiaLakeInner']);
 	});
 
 	it('strips unused hydrate:none import (no with{} left)', () => {

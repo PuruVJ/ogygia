@@ -41,13 +41,8 @@
 <!-- devalue-serialized complex props -->
 <DevalueProps {date} {map} {set} {big} {nested} />
 
-<!-- snippet children + regular children using outer-scope vars -->
-<SnippetChildren {title}>
-	{#snippet header()}
-		<em>header snippet sees outer var y = {y}</em>
-	{/snippet}
-	<span>children content, y doubled = {y * 2}</span>
-</SnippetChildren>
+<!-- props into a portable island (children/snippets live inside the component) -->
+<SnippetChildren {title} {y} />
 
 <!-- island inside {#each} — each-local captured as a prop -->
 {#each items as item, index}

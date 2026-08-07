@@ -33,7 +33,9 @@ node verify/prefetch.ts        http://localhost:3051   # router data-sveltekit-p
 node verify/region-rate.ts     http://localhost:3051   # forged MAC flood: all 403, budget intact for valid request
 node verify/router-race.ts     http://localhost:3051   # overlapping SPA navigations / stale swap guards
 node verify/dedup.ts                                   # same-component-two-strategies -> ONE client chunk (kit-driven + standalone)
+node verify/portable-bindings.ts http://localhost:3051 # portable bindings: static/dynamic/list + shared entry dedupe
 ```
+
 
 Trust-boundary notes for region HMAC / SPA / seeds live in [`INVARIANTS.md`](../INVARIANTS.md).
 

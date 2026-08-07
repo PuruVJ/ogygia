@@ -9,6 +9,8 @@ import {
 	ISLAND_DIR,
 	normalize_import_keys,
 	islandChunkFileName,
+	wrapperVirtualId,
+	CLIENT_BINDING_STUB,
 	type ImportKeys
 } from './transform.js';
 export {
@@ -17,7 +19,12 @@ export {
 	import_keys_hint,
 	islandChunkFileName,
 	islandPublicUrl,
-	islandId
+	islandId,
+	wrapperVirtualId,
+	CLIENT_BINDING_STUB,
+	regionId,
+	regionIdentity,
+	strategyKey
 } from './transform.js';
 export type { ImportKeys } from './transform.js';
 import { allRoutesCsrFalse, routeCsrIsFalse, runStandaloneClientBuild } from './standalone.js';
@@ -43,6 +50,10 @@ const APP_SHIMS = {
 // module we swap every lake import for this render-nothing placeholder (the runtime lifts/restores
 // the lake's SSR DOM around hydration). SSR keeps the real component.
 const LAKE_PLACEHOLDER = fileURLToPath(new URL('../LakePlaceholder.svelte', import.meta.url));
+/** On-disk stub for `virtual:ogygia/client-binding-stub` (csr=false client hosts). */
+const CLIENT_BINDING_STUB_FILE = fileURLToPath(
+	new URL('../ClientBindingStub.svelte', import.meta.url)
+);
 
 // Reuse Kit's OWN client remote primitives (query/command/form/live). We point
 // `__sveltekit/remote` at Kit's real remote-functions and scope-alias the two router-coupled
@@ -68,6 +79,7 @@ const V_REGION_TTL = 'virtual:ogygia/region-ttl';
 const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
 const V_REQUEST_EVENT = 'virtual:ogygia/request-event';
 const V_REGION_ENDPOINT = 'virtual:ogygia/region-endpoint';
+const V_CLIENT_BINDING_STUB = CLIENT_BINDING_STUB;
 // Reuse Kit's OWN wire protocol (transport-aware devalue arg/response codec) instead of
 // reimplementing it. We deep-import Kit's internal `runtime/shared.js` by absolute path
 // (bypassing the exports map) and feed it the app's universal `transport` hook.
@@ -203,7 +215,7 @@ export function same_module_path(a: string | null | undefined, b: string | null 
 
 /**
  * Virtual island ids whose generated source must be dropped when `file` changes or is deleted.
- * Island ids are `hash(host::index)` — renaming SiteNav→SideNav keeps the same virtual id, so
+ * Island ids are `hash(componentPath\\0strategyKey)` — renaming a host route keeps the same id, so
  * Vite's moduleGraph must be invalidated or it keeps serving the old import.
  *
  * @internal HMR invalidation helper (also covered by unit tests).
@@ -248,8 +260,11 @@ export function dev_hmr_client_source() {
 	);
 }
 
-/** Virtual island module id — `virtual:` so Vite skips injectSourcesContent disk reads. */
-export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.svelte`;
+/** Virtual island ENTRY module id — JS re-export of the real component (not a thin .svelte). */
+export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.js`;
+
+/** Re-export portable wrapper id helper (marked import binding target). */
+export { wrapperVirtualId };
 
 /** Deterministic island facade filename (content-hashed Vite deps are separate). */
 const ISLAND_FACADE_RE = /(?:^|\/)ogygia-island\.[0-9a-f]+\.js$/;
@@ -310,7 +325,9 @@ export function islandDepsHandoffPath(root: string) {
 function is_island_path(id: string) {
 	const bare = id.split('?')[0];
 	return (
-		(bare.startsWith('virtual:ogygia/island/') && bare.endsWith('.svelte')) ||
+		(bare.startsWith('virtual:ogygia/island/') &&
+			(bare.endsWith('.js') || bare.endsWith('.svelte'))) ||
+		(bare.startsWith('virtual:ogygia/wrapper/') && bare.endsWith('.svelte')) ||
 		// legacy on-disk path shape (pre-virtual ids); still recognize for resolve/HMR edge cases
 		(bare.includes('/' + ISLAND_DIR + '/') && bare.endsWith('.svelte'))
 	);
@@ -512,18 +529,20 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	 *  builds would disagree). Empty when unset (dev + default per-build signing). */
 	let id_salt = '';
 
-	/** @type {Map<string, {source:string, hostPath:string, id:string, componentPath?: string | null, server?: boolean, lakes?: string[]}>} keyed by abs virtual path */
+	/** @type {Map<string, {source:string, hostPath:string, id:string, componentPath?: string | null, server?: boolean, lakes?: string[], role?: 'entry'|'wrapper'}>} keyed by virtual path */
 	const registry = new Map();
 	/** Absolute module ids in an island's CLIENT dependency graph. `$app/*` resolves to shims
 	 *  for these importers (virtual island module AND its transitive component imports). */
 	const island_graph = new Set();
 	const strip_id = (id) => (id ? id.split('?')[0] : id);
-	/** @type {Map<string, string>} iid -> abs virtual path (hydrate + defer islands only) */
+	/** @type {Map<string, string>} iid -> entry virtual path (hydrate / defer / swr-lake) */
 	const by_id = new Map();
 	/** @type {Map<string, 'hydrate'|'defer'|'lake'>} every region id -> kind (server manifest / emit) */
 	const region_kinds = new Map();
 	/** host abs path → region ids + virtual paths discovered on last transform of that host */
 	const host_index = new Map();
+	/** region id → hosts still claiming it (cross-host dedupe: don't drop shared wrappers) */
+	const id_hosts = new Map();
 
 	let root;
 	let base = '';
@@ -573,18 +592,37 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		}
 	};
 
-	/** Drop every region previously registered from this host (ids are stable across renames). */
+	/** Drop this host's claims; shared region ids (cross-host dedupe) stay until unused. */
 	const unregister_host = (hostPath) => {
 		const key = host_key(hostPath);
 		const prev = host_index.get(key);
 		if (prev) {
 			for (const id of prev.ids) {
-				region_kinds.delete(id);
-				by_id.delete(id);
+				const holders = id_hosts.get(id);
+				if (holders) {
+					holders.delete(key);
+					if (holders.size === 0) {
+						id_hosts.delete(id);
+						region_kinds.delete(id);
+						by_id.delete(id);
+					}
+				} else {
+					region_kinds.delete(id);
+					by_id.delete(id);
+				}
 			}
 			for (const vpath of prev.vpaths) {
-				registry.delete(vpath);
-				island_graph.delete(vpath);
+				const entry = registry.get(vpath);
+				if (entry) {
+					const holders = id_hosts.get(entry.id);
+					if (!holders || holders.size === 0) {
+						registry.delete(vpath);
+						island_graph.delete(vpath);
+					}
+				} else {
+					registry.delete(vpath);
+					island_graph.delete(vpath);
+				}
 			}
 			host_index.delete(key);
 		}
@@ -593,9 +631,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 	const run_transform = (source, id, opts = {}) => {
 		const ssr = opts.ssr !== false;
-		// csr=false client hosts must not statically import virtual islands: that share with
-		// emitFile entries forces Rolldown thin `ogygia-island.*` facades. SSR still links them
-		// for HTML; csr=true client keeps the link so Kit can hydrate islands as components.
+		// Scale: csr=false CLIENT hosts must not statically import portable wrappers (or the
+		// hydrate entries those wrappers pull in). Kit still emits those page nodes; sharing
+		// the emitFile module with the page graph forces Rolldown thin `ogygia-island.*`
+		// facades. SSR keeps real wrappers for HTML; csr=true client keeps them so Kit can
+		// hydrate islands as normal components. Hydration always uses `import(entry)`.
 		const link_virtual =
 			opts.linkVirtual !== undefined
 				? opts.linkVirtual
@@ -610,12 +650,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			pathModule: path,
 			dev: is_dev,
 			virtualPathFor,
+			wrapperPathFor: (_hostId, iid) => wrapperVirtualId(iid),
 			devUrlFor,
 			visibleMargin,
 			presets,
 			importKeys: import_keys,
 			idSalt: id_salt,
-			linkVirtualIsland: link_virtual
+			linkVirtualIsland: link_virtual,
+			clientBindingStub: V_CLIENT_BINDING_STUB
 		});
 		transform_cache.set(cache_key, { code: source, result });
 		return result;
@@ -641,29 +683,53 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		}
 	};
 
-	/** Replace (not merge) this host's islands so removed hydrate imports don't linger. */
+	/** Replace this host's claims; shared ids keep one registry entry (path+strategy dedupe). */
 	const register = (result, hostId) => {
 		unregister_host(hostId);
+		const key = host_key(hostId);
 		const idx = { ids: new Set(), vpaths: new Set() };
 		for (const isl of result.islands ?? []) {
 			region_kinds.set(isl.id, isl.kind ?? (isl.server ? 'defer' : 'hydrate'));
 			idx.ids.add(isl.id);
-			// Lake entries are metadata-only (no virtual module) — they never get a client module.
-			if (!isl.virtualPath) continue;
-			registry.set(isl.virtualPath, {
-				source: isl.source,
-				hostPath: isl.hostPath,
-				id: isl.id,
-				server: !!isl.server,
-				lakes: isl.lakes ?? [],
-				componentPath: isl.componentPath ?? null
-			});
-			by_id.set(isl.id, isl.virtualPath);
-			idx.vpaths.add(isl.virtualPath);
-			island_graph.add(isl.virtualPath);
+			let holders = id_hosts.get(isl.id);
+			if (!holders) {
+				holders = new Set();
+				id_hosts.set(isl.id, holders);
+			}
+			holders.add(key);
+
+			if (isl.wrapperPath && isl.wrapperSource) {
+				registry.set(isl.wrapperPath, {
+					source: isl.wrapperSource,
+					hostPath: isl.hostPath,
+					id: isl.id,
+					server: false,
+					lakes: isl.lakes ?? [],
+					componentPath: isl.componentPath ?? null,
+					role: 'wrapper'
+				});
+				idx.vpaths.add(isl.wrapperPath);
+				island_graph.add(isl.wrapperPath);
+			}
+			if (isl.virtualPath && isl.source) {
+				registry.set(isl.virtualPath, {
+					source: isl.source,
+					hostPath: isl.hostPath,
+					id: isl.id,
+					server: !!isl.server,
+					lakes: [],
+					componentPath: isl.componentPath ?? null,
+					role: 'entry'
+				});
+				by_id.set(isl.id, isl.virtualPath);
+				idx.vpaths.add(isl.virtualPath);
+				island_graph.add(isl.virtualPath);
+			} else if (isl.virtualPath) {
+				by_id.set(isl.id, isl.virtualPath);
+			}
 			if (isl.componentPath) island_graph.add(isl.componentPath);
 		}
-		host_index.set(host_key(hostId), idx);
+		host_index.set(key, idx);
 	};
 
 	const invalidate_module_id = (server, id) => {
@@ -764,6 +830,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					fs: {
 						allow: [PKG_ROOT]
 					}
+				},
+				// Island emitFile entries re-export shared components; keep facade exports
+				// under Vite 8 / Rolldown (build.rolldownOptions — not deprecated rollupOptions).
+				build: {
+					rolldownOptions: {
+						preserveEntrySignatures: 'exports-only'
+					}
 				}
 			};
 		},
@@ -839,9 +912,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!standalone) {
 					this.emitFile({ type: 'chunk', id: RUNTIME_ENTRY, fileName: RUNTIME_FILENAME });
 				}
-				// Hydrate islands: deterministic filenames so SSR can bake `entry` URLs without a
-				// client→server hash handoff (same pattern as RUNTIME_FILENAME). Pulls them into the
-				// client graph without an app-wide regions map.
+				// Hydrate islands: one emitFile per deduped region id (path+strategy), deterministic
+				// filename so SSR can bake `entry` without a client→server hash handoff. csr=false
+				// hosts omit wrapper imports so this emit owns the module (avoids Rolldown thin
+				// facades from page-graph sharing). N instances → still one entry URL.
 				for (const [rid, kind] of region_kinds) {
 					if (kind !== 'hydrate') continue;
 					const virtualPath = by_id.get(rid);
@@ -891,7 +965,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (!is_dev) return;
 			vite_server = server;
 
-			// Island ids are hash(host::index) — renaming SiteNav→SideNav keeps the same virtual
+			// Island ids are hash(componentPath+strategy) — renaming a host keeps the same virtual
 			// id, so Vite's moduleGraph must be cleared or it keeps serving the old import.
 			const deleted = !fs.existsSync(strip_id(file));
 			const host_changed = !deleted && is_registered_host(file);
@@ -930,6 +1004,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
 			if (source === V_REQUEST_EVENT) return RESOLVED(V_REQUEST_EVENT);
 			if (source === V_REGION_ENDPOINT) return RESOLVED(V_REGION_ENDPOINT);
+			// csr=false client hosts rewrite marked bindings here — not a hydrate entry.
+			if (source === V_CLIENT_BINDING_STUB) return CLIENT_BINDING_STUB_FILE;
 			// deep-import Kit's own wire helpers by absolute path (bypasses the exports map)
 			if (source === V_KIT_WIRE && kit_wire_path) return kit_wire_path;
 			if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
@@ -967,27 +1043,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (!ssr && from_island && APP_SHIMS[source]) {
 				return APP_SHIMS[source];
 			}
-			// Virtual island module: resolve relative to the host file, and mark the resolved
-			// id so its own `$app/*` imports hit the shim branch above.
-			if (importer_id && registry.has(importer_id)) {
-				const host = registry.get(importer_id).hostPath;
-				const resolved = await this.resolve(source, host, { skipSelf: true });
-				if (resolved?.id) island_graph.add(strip_id(resolved.id));
-				return resolved;
-			}
-			// Transitive island-graph module (not a virtual entry): mark deps so nested
-			// `$app/*` imports stay shimmed. Do NOT resolve island virtual paths via skipSelf
-			// (that would bypass the is_island_path handling below) — only mark+forward
-			// ordinary imports.
-			if (!ssr && importer_id && island_graph.has(importer_id) && !is_island_path(source)) {
-				const resolved = await this.resolve(source, importer, { skipSelf: true });
-				if (resolved?.id) island_graph.add(strip_id(resolved.id));
-				return resolved;
-			}
 
-			// Island virtual modules: `virtual:ogygia/island/<id>.svelte` (no `\0` — vite-plugin-svelte
-			// excludes null-byte ids). Basename-only sourcemap sources are rewritten by
-			// `ogygia:island-sourcemaps` so Vite's injectSourcesContent does not warn.
+			// Portable wrappers import `virtual:ogygia/island/<id>` (and hosts import wrappers).
+			// Resolve those BEFORE the "relative to hostPath" branch — that branch uses skipSelf
+			// and would bypass this handler, failing to resolve virtual entry ids.
 			if (is_island_path(source)) {
 				let candidate = source.split('?')[0];
 				if (candidate.startsWith('/@id/')) candidate = candidate.slice('/@id/'.length);
@@ -996,7 +1055,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					island_graph.add(candidate);
 					return candidate;
 				}
-				// Legacy abs-path / root-relative ids from older transforms
 				const abs = path.isAbsolute(candidate)
 					? candidate
 					: path.join(root, candidate.replace(LEADING_SLASH, ''));
@@ -1004,6 +1062,23 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					island_graph.add(abs);
 					return abs;
 				}
+			}
+
+			// Virtual island/wrapper module: resolve relative imports to the host file, and mark
+			// the resolved id so its own `$app/*` imports hit the shim branch above.
+			// Skip ogygia virtual ids (handled above).
+			if (importer_id && registry.has(importer_id) && !is_island_path(source)) {
+				const host = registry.get(importer_id).hostPath;
+				const resolved = await this.resolve(source, host, { skipSelf: true });
+				if (resolved?.id) island_graph.add(strip_id(resolved.id));
+				return resolved;
+			}
+			// Transitive island-graph module (not a virtual entry): mark deps so nested
+			// `$app/*` imports stay shimmed. Do NOT resolve island virtual paths via skipSelf.
+			if (!ssr && importer_id && island_graph.has(importer_id) && !is_island_path(source)) {
+				const resolved = await this.resolve(source, importer, { skipSelf: true });
+				if (resolved?.id) island_graph.add(strip_id(resolved.id));
+				return resolved;
 			}
 			return null;
 		},
@@ -1200,6 +1275,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				!id_n.includes('/node_modules/') &&
 				!is_island_path(id_n)
 			) {
+				// Pass Vite's ssr flag through — client csr=false hosts omit wrapper links.
 				const result = run_transform(code, id_n, { ssr });
 				if (result) {
 					register(result, id_n);

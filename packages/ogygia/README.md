@@ -68,16 +68,20 @@ Dev HMR still works with `csr = false` — soft updates for CSS and shared modul
 	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
 	import Chart from '$lib/Chart.svelte' with { hydrate: 'visible' };
 	import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
+
+	// Counter is a portable island binding — lists / svelte:component work too
+	const dyn = Counter;
 </script>
 
 <Counter start={10} />
+<svelte:component this={dyn} start={1} />
 <Chart />
 <Greeting name="world">
 	{#snippet ogygiaFallback()}<p>loading…</p>{/snippet}
 </Greeting>
 ```
 
-That’s an **island** (JS on load), a below-the-fold island, and a **server island** (HTML fetched later). Lakes, presets, the SPA router, remotes, and the rest live in the docs:
+That’s an **island** (JS on load), the same island used dynamically, a below-the-fold island, and a **server island** (HTML fetched later). Lakes, presets, the SPA router, remotes, and the rest live in the docs:
 
 **[ogygia.puruvj.dev](https://ogygia.puruvj.dev)**
 

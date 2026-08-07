@@ -25,11 +25,22 @@
 	 *   module for SSR (and csr=true Kit hydration). Omitted on csr=false client hosts — runtime
 	 *   loads via `import(__entry)`.
 	 * @property {unknown} [__css] Entry `.svelte` imported only so its CSS joins Kit's FOUC bag (not rendered).
-	 * @property {Record<string, unknown>} __props Captured host props (devalue-serialized into the page).
+	 * @property {Record<string, unknown>} __props Serializable props (devalue into the page). Snippets/children are separate.
+	 * @property {import('svelte').Snippet} [children] Forwarded into the entry on SSR; not serialized for hydrate.
 	 */
 
 	/** @type {Props} */
-	let { visible, idle, media, load, __entry, __component: Component, __css, __props } = $props();
+	let {
+		visible,
+		idle,
+		media,
+		load,
+		__entry,
+		__component: Component,
+		__css,
+		__props,
+		children
+	} = $props();
 
 	// Keep the entry import alive for FOUC without rendering it (virtual already owns the tree).
 	void __css;
@@ -135,8 +146,8 @@
 
 <!-- svelte:head must be top-level (not inside {#if}); nested leaves these strings empty. -->
 <svelte:head>{@html runtime_script}{@html preload_link}</svelte:head>
-{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region
+{#if nested}{#if Component}<Component {...__props}>{@render children?.()}</Component>{/if}{:else}<ogygia-region
 		entry={module_url}
 		hydrate={hydrate_attr}
 		margin={root_margin || undefined}
-	>{#if Component}<Component {...__props} />{/if}</ogygia-region>{@html props_script}{/if}
+	>{#if Component}<Component {...__props}>{@render children?.()}</Component>{/if}</ogygia-region>{@html props_script}{/if}

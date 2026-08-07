@@ -1,6 +1,6 @@
 // Transform-level checks for the region-model import syntax + presets + validation.
 // Runs the built transform directly (no server needed). Usage: node verify/presets.ts
-import { transformHost } from '../packages/ogygia/dist/vite/transform.js';
+import { transformHost, wrapperVirtualId } from '../packages/ogygia/dist/vite/transform.js';
 import path from 'node:path';
 
 let failures = 0;
@@ -17,10 +17,9 @@ const baseCtx = {
 	readFile: () => null,
 	pathModule: path,
 	dev: false,
-	virtualPathFor: (hostId: string, iid: string) => path.join(path.dirname(hostId), '.ogygia', iid + '.svelte'),
-	devUrlFor: (p: string) => '/' + path.relative(root, p),
-	scriptPathFor: (hostId: string, hash: string, ext: string) => path.join(path.dirname(hostId), '.ogygia', hash + '.script' + ext),
-	scriptUrlFor: (_p: string, hash: string) => '/' + hash,
+	virtualPathFor: (_hostId: string, iid: string) => `virtual:ogygia/island/${iid}.js`,
+	wrapperPathFor: (_hostId: string, iid: string) => wrapperVirtualId(iid),
+	devUrlFor: (p: string) => '/@id/' + p,
 	visibleMargin: '0px',
 	presets: {
 		chart: { hydrate: 'visible', margin: '200px' },
@@ -31,6 +30,7 @@ const baseCtx = {
 const HOST = '/app/src/routes/+page.svelte';
 const run = (src: string, ctx = baseCtx) => transformHost(src, HOST, ctx);
 const wrap = (imp: string, usage = '<C />') => `<script>\n${imp}\n</script>\n${usage}`;
+const wrapSrc = (r: ReturnType<typeof run>) => r?.islands?.[0]?.wrapperSource ?? '';
 function expectError(label: string, src: string, re: RegExp) {
 	try {
 		run(src);
@@ -43,27 +43,37 @@ function expectError(label: string, src: string, re: RegExp) {
 // preset applies (visible + margin 200px)
 {
 	const r = run(wrap(`import C from './C.svelte' with { preset: 'chart' };`));
-	check('preset chart -> visible with margin 200px', /visible=\{?"200px"\}?/.test(r.code), r.code.match(/<OgygiaIsland__Wrapper[^>]*/)?.[0]?.slice(0, 60));
+	check(
+		'preset chart -> visible with margin 200px',
+		/visible=\{?"200px"\}?/.test(wrapSrc(r)),
+		wrapSrc(r).match(/<OgygiaIsland__Wrapper[^>]*/)?.[0]?.slice(0, 60)
+	);
+	check('preset chart -> host keeps <C />', /<C\s*\/>/.test(r!.code));
 }
 // preset tolerant: margin on a load preset is ignored, not an error
 {
 	const r = run(wrap(`import C from './C.svelte' with { preset: 'lazy' };`));
-	check('preset lazy -> load strategy (inapplicable margin tolerated)', /<OgygiaIsland__Wrapper load /.test(r.code));
+	check(
+		'preset lazy -> load strategy (inapplicable margin tolerated)',
+		/<OgygiaIsland__Wrapper load /.test(wrapSrc(r))
+	);
 }
-// preset defer -> server island (no ogygia-region wrapper import, uses ServerIsland)
+// preset defer -> server island
 {
-	const r = run(wrap(`import C from './C.svelte' with { preset: 'srv' };`, '<C>{#snippet ogygiaFallback()}x{/snippet}</C>'));
-	check('preset srv -> server island (ServerIsland wrapper)', /OgygiaServerIsland__Wrapper/.test(r.code));
+	const r = run(
+		wrap(`import C from './C.svelte' with { preset: 'srv' };`, '<C>{#snippet ogygiaFallback()}x{/snippet}</C>')
+	);
+	check('preset srv -> server island (ServerIsland wrapper)', /OgygiaServerIsland__Wrapper/.test(wrapSrc(r)));
 }
 // inline hydrate visible uses the global default margin (0px)
 {
 	const r = run(wrap(`import C from './C.svelte' with { hydrate: 'visible' };`));
-	check('inline hydrate visible -> global default margin 0px', /visible=\{?"0px"\}?/.test(r.code));
+	check('inline hydrate visible -> global default margin 0px', /visible=\{?"0px"\}?/.test(wrapSrc(r)));
 }
 // inline media query
 {
 	const r = run(wrap(`import C from './C.svelte' with { hydrate: '(min-width: 768px)' };`));
-	check('inline media query strategy', /media=\{?"\(min-width: 768px\)"\}?/.test(r.code));
+	check('inline media query strategy', /media=\{?"\(min-width: 768px\)"\}?/.test(wrapSrc(r)));
 }
 
 // --- build errors ---
@@ -73,8 +83,14 @@ expectError('preset + another inline key rejected', wrap(`import C from './C.sve
 // defer + hydrate is supported (deferred client island)
 {
 	const r = run(wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };`));
-	check('defer + hydrate -> ServerIsland with __hydrate + __module', /__hydrate=\{"load"\}/.test(r.code) && /__module=\{/.test(r.code));
-	check('defer + hydrate -> kind hydrate + server true', r.islands?.[0]?.kind === 'hydrate' && r.islands?.[0]?.server === true);
+	check(
+		'defer + hydrate -> ServerIsland with __hydrate + __module',
+		/__hydrate=\{"load"\}/.test(wrapSrc(r)) && /__module=\{/.test(wrapSrc(r))
+	);
+	check(
+		'defer + hydrate -> kind hydrate + server true',
+		r!.islands?.[0]?.kind === 'hydrate' && r!.islands?.[0]?.server === true
+	);
 }
 // preset with defer+hydrate+margin
 {
@@ -88,7 +104,7 @@ expectError('preset + another inline key rejected', wrap(`import C from './C.sve
 	const r = run(wrap(`import C from './C.svelte' with { preset: 'lazyClient' };`), ctx);
 	check(
 		'preset defer+hydrate+margin -> hydrateMargin threaded',
-		/__hydrate=\{"visible"\}/.test(r.code) && /__hydrateMargin=\{"150px"\}/.test(r.code)
+		/__hydrate=\{"visible"\}/.test(wrapSrc(r)) && /__hydrateMargin=\{"150px"\}/.test(wrapSrc(r))
 	);
 }
 // matching schedules still emit both attrs (runtime coalesce)
@@ -96,32 +112,32 @@ expectError('preset + another inline key rejected', wrap(`import C from './C.sve
 	const r = run(wrap(`import C from './C.svelte' with { defer: 'idle', hydrate: 'idle' };`));
 	check(
 		'matching defer+hydrate still emits both schedules at transform',
-		/__defer=\{"idle"\}/.test(r.code) && /__hydrate=\{"idle"\}/.test(r.code)
+		/__defer=\{"idle"\}/.test(wrapSrc(r)) && /__hydrate=\{"idle"\}/.test(wrapSrc(r))
 	);
 }
-// `hydrate: 'false'` is NOT a valid lake value — the string value is 'none'; error points there.
 expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from './C.svelte' with { hydrate: 'false' };`), /hydrate: 'false'.*use .*hydrate: 'none'/i);
 
-// --- lakes (hydrate: 'none') ---
-// A lake INSIDE a hydrated island: the island's generated module wraps the lake usage in a
-// non-boundary <ogygia-region hydrate="none"> + the context-reset boundary; the lake import is copied.
+// --- lakes (hydrate: 'none') — portable lake wrapper ---
 {
-	const src = wrap(
+	const r = run(wrap(`import Lake from './Lake.svelte' with { hydrate: 'none' };`, '<Lake />'));
+	const lake = r?.islands?.find((i) => i.kind === 'lake');
+	check(
+		'lake binding -> LakeRegion wrapper source',
+		!!lake?.wrapperSource && /OgygiaLakeRegion__Wrapper/.test(lake.wrapperSource)
+	);
+	check('lake binding -> placeholder local recorded', !!lake && lake.lakes?.includes('OgygiaLakeInner'));
+	check('lake binding -> host import rewritten to wrapper', /virtual:ogygia\/wrapper\//.test(r!.code));
+}
+// host children on hydrate island rejected (lakes must live inside the island component)
+expectError(
+	'host children on hydrate island rejected',
+	wrap(
 		`import Host from './Host.svelte' with { hydrate: 'load' };\nimport Lake from './Lake.svelte' with { hydrate: 'none' };`,
 		'<Host><Lake /></Host>'
-	);
-	const r = run(src);
-	const island = r?.islands?.find((i) => i.source);
-	check(
-		'lake in island -> generated module wraps lake in LakeRegion',
-		!!island && /OgygiaLakeRegion__Wrapper/.test(island.source) && /__remount=\{"cache"\}/.test(island.source)
-	);
-	check('lake in island -> lake list records the lake local', !!island && Array.isArray(island.lakes) && island.lakes.includes('Lake'));
-	check('lake in island -> a metadata-only lake region is registered (kind lake)', !!r?.islands?.some((i) => i.kind === 'lake'));
-	check('lake in island -> host Lake import stripped (hoisted only)', !/import Lake from/.test(r.code));
-}
+	),
+	/host children/
+);
 expectError('unknown key alongside a region key rejected', wrap(`import C from './C.svelte' with { hydrate: 'load', wat: 'x' };`), /not allowed inline/);
-// an import with ONLY a non-region attribute (e.g. an import assertion) is left alone, not a region
 {
 	const r = run(wrap(`import data from './d.json' with { type: 'json' };`, '<p>{data}</p>'));
 	check('non-region import attribute left alone (no transform)', r === null);
