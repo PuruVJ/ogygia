@@ -3,9 +3,12 @@
 
 	// Remote form() INSIDE an island — Kit's own client form runtime, reused by ogygia. Enhanced
 	// submit (no reload), per-field issues, and pending state all work; with JS off the form posts
-	// natively to the remote endpoint and post-redirect-gets back. Use `submit().updates(entries)`
-	// so Kit refreshes the list in the same round-trip and skips invalidateAll. Await the query
-	// outside a pending boundary so SSR HTML + remote seed agree.
+	// natively to the remote endpoint and post-redirect-gets back.
+	//
+	// Single-flight list refresh (Kit RF): `submit().updates(entries)` sends refresh keys and skips
+	// invalidateAll; the server form must `requested(getEntries, 1).refreshAll()` so the POST
+	// response includes `q` and this island's live Query `.current` updates. Soft-invalidate alone
+	// refreshes seeds, not mounted queries. Await outside a pending boundary so SSR + seed agree.
 	import { signGuestbook, getEntries } from '$lib/playground/guestbook.remote';
 
 	const entries = getEntries();

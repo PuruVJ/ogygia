@@ -81,9 +81,11 @@
 					<p>
 						A remote <code>form()</code> inside an island: enhanced submit with no reload, per-field
 						validation issues, and pending state — all from Kit's own form runtime.
-						<code>submit().updates(entries)</code> refreshes the list in the same round-trip (and
-						skips a full invalidate). With JavaScript off it posts natively to the remote endpoint
-						and post-redirect-gets back. The store is in-memory per isolate (resets on restart),
+						<code>submit().updates(entries)</code> plus server
+						<code>requested(getEntries).refreshAll()</code> single-flight the list (and skip
+						invalidateAll). Soft-invalidate alone does not push live Query
+						<code>.current</code>. With JavaScript off it posts natively to the remote endpoint and
+						post-redirect-gets back. The store is in-memory per isolate (resets on restart),
 						ring-capped at 48 entries; the UI shows the latest 8.
 					</p>
 				</div>

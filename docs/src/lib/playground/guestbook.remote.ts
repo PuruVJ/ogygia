@@ -1,10 +1,15 @@
-import { query, form } from '$app/server';
+import { query, form, requested } from '$app/server';
 import { invalid } from '@sveltejs/kit';
 
 // A remote `form()` used inside an island, plus a `query` that reads the guestbook back. Validation
 // is done by hand (no schema library): the `'unchecked'` overload hands us the raw input plus an
 // `issue` helper we use to mark fields invalid. Enhanced submit, per-field issues, pending state,
 // and the no-JS fallback all come from Kit's own form runtime (reused by ogygia inside islands).
+//
+// Single-flight list refresh: the island calls `submit().updates(entries)`, which sends refresh
+// keys and skips invalidateAll. That alone does **not** push new Query `.current` — the form must
+// honor those keys with `requested(getEntries, …).refreshAll()` so the POST response includes `q`
+// and Kit's client applies it to the live cache entry.
 
 type Entry = { name: string; message: string };
 
@@ -40,5 +45,9 @@ export const signGuestbook = form('unchecked', async (data: Record<string, unkno
 
 	store.entries.push({ name, message });
 	while (store.entries.length > MAX_ENTRIES) store.entries.shift();
+
+	// Honor client `submit().updates(entries)` — puts fresh getEntries into the single-flight `q`.
+	await requested(getEntries, 1).refreshAll();
+
 	return { ok: true, total: store.entries.length };
 });

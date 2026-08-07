@@ -500,7 +500,8 @@ class SpaRouter {
 	 * full SPA navigate+VT here was wiping live island state. We bust the HTML cache,
 	 * re-fetch, merge head, and refresh document seeds only — no VT, no body swap, no
 	 * island remount, no live query-map clear, no auto-refresh of live queries. Islands
-	 * that need query updates use `.refresh()` / `submit().updates(...)`.
+	 * that need query updates use `.refresh()`, or `submit().updates(q)` with server
+	 * `requested(q).refreshAll()` (updates alone does not populate response `q`).
 	 *
 	 * Uses a separate abort/generation from hard `navigate()` so soft fetches never cancel
 	 * an in-flight click navigation (and vice versa).

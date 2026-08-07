@@ -196,7 +196,8 @@ function sync_side_channel_script(
  * document without replacing `<body>`, remounting islands, or clearing live query/live
  * instance maps. Used by `invalidateAll` so Kit remote `form()` success does not
  * view-transition wipe live island state. Does **not** auto-refresh live queries —
- * callers that need that use `.refresh()` / `submit().updates(...)`.
+ * callers that need that use `.refresh()`, or `submit().updates(q)` with server
+ * `requested(q).refreshAll()` (updates alone does not populate response `q`).
  */
 export function apply_soft_invalidate_doc(doc: Document) {
 	if (typeof document === 'undefined') return;

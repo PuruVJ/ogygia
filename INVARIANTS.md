@@ -148,8 +148,10 @@ Kit’s own invalidate re-runs loads without destroying the tree — soft invali
 
 **Do not:** Route form success through `navigate(location.href, { replace: true })`. Fire nav
 hooks as `type: 'goto'` from soft invalidate. Auto-refresh every live query on soft invalidate.
-Islands that need fresh remote data should `.refresh()` or `submit().updates(...)`. Hard
-remount + VT only on real route change.
+Islands that need fresh remote data should `.refresh()`, or Kit single-flight
+`submit().updates(query)` **paired with** server `requested(query, n).refreshAll()` (updates alone
+only sends keys + skips invalidate — without `requested`, the POST has no `q` and live
+`.current` stays stale). Hard remount + VT only on real route change.
 
 ---
 
