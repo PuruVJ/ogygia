@@ -123,7 +123,9 @@
 			: '';
 </script>
 
-{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<svelte:head>{@html runtime_script}{@html preload_link}</svelte:head><ogygia-region
+<!-- svelte:head must be top-level (not inside {#if}); nested leaves these strings empty. -->
+<svelte:head>{@html runtime_script}{@html preload_link}</svelte:head>
+{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region
 		entry={module_url}
 		hydrate={hydrate_attr}
 		margin={root_margin || undefined}

@@ -117,7 +117,9 @@
 	Two-axis DOM (DESIGN.md): `hydrate` = when JS wakes; `render`/`when` = when HTML arrives.
 	`render="defer"` avoids HTML's boolean `defer` attribute (which would drop string values).
 -->
-{#if nested}<Component {...__props} />{:else}<svelte:head>{@html runtime_script}{@html preload_link}</svelte:head><ogygia-region
+<!-- svelte:head must be top-level (not inside {#if}); nested leaves these strings empty. -->
+<svelte:head>{@html runtime_script}{@html preload_link}</svelte:head>
+{#if nested}<Component {...__props} />{:else}<ogygia-region
 		entry={__entry}
 		render="defer"
 		when={__defer}
