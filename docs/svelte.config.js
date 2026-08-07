@@ -9,8 +9,6 @@ const config = {
 	},
 	kit: {
 		adapter: adapter({ runtime: 'nodejs22.x' }),
-		// Inline page CSS (<20 KiB each) to cut render-blocking stylesheet round-trips on `/`.
-		inlineStyleThreshold: 20_000,
 		experimental: { remoteFunctions: true }
 	}
 };
