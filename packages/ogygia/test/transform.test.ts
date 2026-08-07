@@ -258,6 +258,190 @@ describe('defer / server island (fetch-timing symmetry)', () => {
 	});
 });
 
+describe('deferred client islands (defer + hydrate combo)', () => {
+	test('combo is allowed — no hard error for defer+hydrate', () => {
+		expect(() =>
+			run(wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'idle' };`, '<C />'))
+		).not.toThrow();
+	});
+
+	test('opaque __entry is the region id; __module is the public island chunk URL', () => {
+		const r = run(wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };`, '<C />'));
+		const iid = idFor(0);
+		const mod = entryFor(0);
+		expect(r!.code).toContain(`__entry={${JSON.stringify(iid)}}`);
+		expect(r!.code).toContain(`__module={${JSON.stringify(mod)}}`);
+		expect(mod).toMatch(/^\/_app\/immutable\/ogygia-island\.[0-9a-f]{12}\.js$/);
+		expect(mod).not.toBe(iid);
+		// kind hydrate → vite emitFile client chunk; server true → server manifest
+		expect(r!.islands[0]).toMatchObject({
+			id: iid,
+			server: true,
+			kind: 'hydrate',
+			hostPath: HOST
+		});
+		expect(r!.islands[0].virtualPath).toBeTruthy();
+		expect(r!.islands[0].source).toMatch(/import C from '\.\/C\.svelte'/);
+		expect(r!.islands[0].componentPath).toBeTruthy();
+	});
+
+	test('dev __module uses the virtual island URL (not the opaque id)', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { defer: 'idle', hydrate: 'load' };`, '<C />'),
+			makeCtx({ dev: true })
+		);
+		expect(r!.code).toContain(`__entry={${JSON.stringify(idFor(0))}}`);
+		expect(r!.code).toMatch(/__module=\{"\/@id\/virtual:ogygia\/island\/[0-9a-f]{12}\.svelte"\}/);
+	});
+
+	test('matching schedules still emit both attrs (coalesce is runtime phase-2, not transform)', () => {
+		// Transform keeps both axes; phase2_hydrate_schedule('idle','idle') → 'load' at runtime.
+		for (const when of ['load', 'idle', 'visible'] as const) {
+			const r = run(
+				wrap(`import C from './C.svelte' with { defer: '${when}', hydrate: '${when}' };`, '<C />'),
+				makeCtx({ visibleMargin: '50px' })
+			);
+			expect(r!.code).toMatch(new RegExp(`__defer=\\{"${when}"\\}`));
+			expect(r!.code).toMatch(new RegExp(`__hydrate=\\{"${when}"\\}`));
+			expect(r!.code).toMatch(/__module=\{/);
+			expect(r!.islands[0].kind).toBe('hydrate');
+		}
+	});
+
+	test('matching media queries still emit both (runtime coalesce)', () => {
+		const q = '(min-width: 900px)';
+		const r = run(wrap(`import C from './C.svelte' with { defer: '${q}', hydrate: '${q}' };`, '<C />'));
+		expect(r!.code).toContain(`__defer={${JSON.stringify(q)}}`);
+		expect(r!.code).toContain(`__hydrate={${JSON.stringify(q)}}`);
+	});
+
+	test('mismatched media queries are allowed (not contradictory — phase-2 arms hydrate MQ)', () => {
+		const r = run(
+			wrap(
+				`import C from './C.svelte' with { defer: '(min-width: 400px)', hydrate: '(min-width: 800px)' };`,
+				'<C />'
+			)
+		);
+		expect(r!.code).toContain(`__defer={"(min-width: 400px)"}`);
+		expect(r!.code).toContain(`__hydrate={"(min-width: 800px)"}`);
+		expect(r!.islands[0].kind).toBe('hydrate');
+	});
+
+	test('defer:visible + hydrate:load puts margin only on the defer axis', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { defer: 'visible', hydrate: 'load' };`, '<C />'),
+			makeCtx({ visibleMargin: '80px' })
+		);
+		expect(r!.code).toMatch(/__defer=\{"visible"\} __margin=\{"80px"\}/);
+		expect(r!.code).toMatch(/__hydrate=\{"load"\}/);
+		expect(r!.code).not.toMatch(/__hydrateMargin=/);
+	});
+
+	test('defer:visible + hydrate:visible threads margin on both axes', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { defer: 'visible', hydrate: 'visible' };`, '<C />'),
+			makeCtx({ visibleMargin: '90px' })
+		);
+		expect(r!.code).toMatch(/__defer=\{"visible"\} __margin=\{"90px"\}/);
+		expect(r!.code).toMatch(/__hydrate=\{"visible"\}/);
+		expect(r!.code).toMatch(/__hydrateMargin=\{"90px"\}/);
+	});
+
+	test('preset with defer+hydrate+margin applies both schedules', () => {
+		const ctx = makeCtx({
+			presets: {
+				lazyChart: { defer: 'load', hydrate: 'visible', margin: '200px' },
+				idlePair: { defer: 'idle', hydrate: 'idle' }
+			}
+		});
+		const chart = run(wrap(`import C from './C.svelte' with { preset: 'lazyChart' };`, '<C />'), ctx);
+		expect(chart!.code).toMatch(/OgygiaServerIsland__Wrapper/);
+		expect(chart!.code).toMatch(/__defer=\{"load"\}/);
+		expect(chart!.code).toMatch(/__hydrate=\{"visible"\}/);
+		expect(chart!.code).toMatch(/__hydrateMargin=\{"200px"\}/);
+		expect(chart!.code).toMatch(/__module=\{/);
+		expect(chart!.islands[0].kind).toBe('hydrate');
+		expect(chart!.islands[0].server).toBe(true);
+
+		const idle = run(wrap(`import C from './C.svelte' with { preset: 'idlePair' };`, '<C />'), ctx);
+		expect(idle!.code).toMatch(/__defer=\{"idle"\}/);
+		expect(idle!.code).toMatch(/__hydrate=\{"idle"\}/);
+		expect(idle!.islands[0].kind).toBe('hydrate');
+	});
+
+	test('hydrate:none + defer in prod (dev:false) is silent and defer-only', () => {
+		const warns: string[] = [];
+		const orig = console.warn;
+		console.warn = (...args: unknown[]) => {
+			warns.push(args.map(String).join(' '));
+		};
+		try {
+			const r = run(
+				wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'none' };`, '<C />'),
+				makeCtx({ dev: false })
+			);
+			expect(r!.code).not.toMatch(/__hydrate=/);
+			expect(r!.code).not.toMatch(/__module=/);
+			expect(r!.islands[0].kind).toBe('defer');
+			expect(warns.length).toBe(0);
+		} finally {
+			console.warn = orig;
+		}
+	});
+
+	test('unknown hydrate strategy with defer still errors', () => {
+		expectThrows(
+			() =>
+				run(wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'sometimes' };`, '<C />')),
+			/unknown hydrate strategy 'sometimes'/
+		);
+	});
+
+	test('fallback snippet stays on the host wrapper for deferred client islands', () => {
+		const r = run(
+			wrap(
+				`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };`,
+				'<C>{#snippet ogygiaFallback()}<p>wait</p>{/snippet}</C>'
+			)
+		);
+		expect(r!.code).toMatch(
+			/<OgygiaServerIsland__Wrapper[^>]*>\{#snippet ogygiaFallback\(\)\}<p>wait<\/p>\{\/snippet\}<\/OgygiaServerIsland__Wrapper>/
+		);
+		expect(islandSource(r)).not.toMatch(/ogygiaFallback/);
+		expect(r!.code).toMatch(/__hydrate=\{"load"\}/);
+	});
+
+	test('captures still flow to ServerIsland __props for deferred client islands', () => {
+		const r = run(
+			wrap(
+				`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };\nlet start = 3;`,
+				'<C {start} />'
+			)
+		);
+		expect(propsObject(r!.code)).toBe('__props={{ start }}');
+	});
+
+	test('server island virtual is __component (nested attrs); entry is __css', () => {
+		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G salutation="Hey" />'));
+		expect(r!.code).toMatch(/__component=\{__OgygiaIsland_0\}/);
+		expect(r!.code).toMatch(/__css=\{__OgygiaIsland_0_css\}/);
+		expect(islandSource(r)).toMatch(/<G salutation="Hey"/);
+	});
+
+	test('csr=false client host omits server-island virtual (keeps entry __css)', () => {
+		const r = run(
+			wrap(`import G from './G.svelte' with { defer: 'load', hydrate: 'load' };`, '<G />'),
+			makeCtx({ linkVirtualIsland: false })
+		);
+		expect(r!.code).not.toMatch(/import __OgygiaIsland_0 from ["']virtual:ogygia\/island\//);
+		expect(r!.code).toMatch(/import __OgygiaIsland_0_css from/);
+		expect(r!.code).not.toMatch(/__component=/);
+		expect(r!.code).toMatch(/__css=\{__OgygiaIsland_0_css\}/);
+		expect(r!.code).toMatch(/__hydrate=\{"load"\}/);
+		expect(r!.islands[0].kind).toBe('hydrate');
+	});
+});
+
 describe('dynamic import() + region attributes', () => {
 	test('import(mod, { with: { hydrate } }) is a build error', () => {
 		expectThrows(
@@ -870,9 +1054,13 @@ describe('exact wrapper output per strategy', () => {
 	test('server island -> exact <OgygiaServerIsland__Wrapper …> with fallback body', () => {
 		const r = run(wrap(`import G from './G.svelte' with { defer: 'load' };`, '<G a={1}>{#snippet ogygiaFallback()}x{/snippet}</G>'));
 		const expected =
-			`<OgygiaServerIsland__Wrapper __entry={"${idFor(0)}"} __component={__OgygiaIsland_0} __props={{}} __defer={"load"}>` +
+			`<OgygiaServerIsland__Wrapper __entry={"${idFor(0)}"} __component={__OgygiaIsland_0} __css={__OgygiaIsland_0_css} __props={{}} __defer={"load"}>` +
 			`{#snippet ogygiaFallback()}x{/snippet}</OgygiaServerIsland__Wrapper>`;
 		expect(r!.code).toContain(expected);
+		expect(r!.code).toContain(`import __OgygiaIsland_0_css from "./G.svelte";`);
+		expect(r!.code).toContain(
+			`import __OgygiaIsland_0 from "virtual:ogygia/island/${idFor(0)}.svelte";`
+		);
 	});
 });
 

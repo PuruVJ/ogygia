@@ -25,8 +25,11 @@
 	/**
 	 * @typedef {Object} Props
 	 * @property {string} __entry opaque region id (HMAC + server manifest key)
-	 * @property {import('svelte').Component<Record<string, unknown>>} [__component] island component — imported by the host purely so its CSS
-	 *   lands in the page import graph; NOT rendered here (the endpoint renders it).
+	 * @property {import('svelte').Component<Record<string, unknown>>} [__component] virtual island
+	 *   module (authored attrs baked in). Used when nested inside another island — degrade to
+	 *   inline render. Top-level never renders it (endpoint resolves by id). Omitted on csr=false
+	 *   client hosts (`linkVirtualIsland: false`).
+	 * @property {unknown} [__css] entry `.svelte` import so CSS joins Kit's FOUC bag (not rendered)
 	 * @property {Record<string, unknown>} __props captured props (server-rendered with these)
 	 * @property {string} [__defer] fetch-timing of the hole: 'load' | 'idle' | 'visible' | media query
 	 * @property {string} [__margin] IntersectionObserver rootMargin for `__defer: 'visible'`
@@ -40,6 +43,7 @@
 	let {
 		__entry,
 		__component: Component,
+		__css,
 		__props,
 		__defer = 'load',
 		__margin,
@@ -48,6 +52,9 @@
 		__module,
 		ogygiaFallback
 	} = $props();
+
+	// Keep the entry import alive for FOUC without rendering it (virtual owns nested markup).
+	void __css;
 
 	// Nested server island (inside another island): a server island can't render its fallback-
 	// then-fetch dance inside a parent island's hydration. Degrade to a plain inline component
@@ -188,7 +195,7 @@
 -->
 <!-- svelte:head must be top-level (not inside {#if}); nested leaves these strings empty. -->
 <svelte:head>{@html runtime_script}{@html preload_link}</svelte:head>
-{#if nested}<Component {...__props} />{:else}<ogygia-region
+{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region
 		entry={region_entry}
 		render="defer"
 		when={__defer}

@@ -100,4 +100,43 @@ describe('region-attrs (two-axis DOM)', () => {
 		expect(phase2_hydrate_schedule('visible', 'idle')).toBe('idle');
 		expect(phase2_hydrate_schedule('load', '(max-width: 600px)')).toBe('(max-width: 600px)');
 	});
+
+	it('deferred client island: awake + deferred axes together', () => {
+		const combo = new FakeEl({
+			render: 'defer',
+			when: 'load',
+			hydrate: 'visible',
+			'hydrate-margin': '100px'
+		});
+		expect(is_deferred(combo)).toBe(true);
+		expect(is_awake(combo)).toBe(true);
+		expect(region_schedule(combo)).toBe('load'); // phase-1 uses when
+		expect(region_hydrate_schedule(combo)).toBe('visible');
+		expect(phase2_hydrate_schedule(region_schedule(combo), region_hydrate_schedule(combo)!)).toBe(
+			'visible'
+		);
+	});
+
+	it('phase2: defer:load + hydrate:idle|visible arms second schedule (no coalesce)', () => {
+		expect(phase2_hydrate_schedule('load', 'idle')).toBe('idle');
+		expect(phase2_hydrate_schedule('load', 'visible')).toBe('visible');
+		expect(phase2_hydrate_schedule('idle', 'visible')).toBe('visible');
+		expect(phase2_hydrate_schedule('visible', '(min-width: 500px)')).toBe('(min-width: 500px)');
+	});
+
+	it('phase2: modulepreload eligibility mirrors coalesce (hydrate load OR match)', () => {
+		// ServerIsland wants_modulepreload ≡ hydrate==='load' || hydrate===defer
+		const wants = (defer: string, hydrate: string) =>
+			hydrate === 'load' || hydrate === defer;
+		expect(wants('load', 'load')).toBe(true);
+		expect(wants('idle', 'idle')).toBe(true);
+		expect(wants('visible', 'visible')).toBe(true);
+		expect(wants('idle', 'load')).toBe(true);
+		expect(wants('load', 'visible')).toBe(false);
+		expect(wants('load', 'idle')).toBe(false);
+		// And those cases map to phase2 'load' (immediate after swap)
+		expect(phase2_hydrate_schedule('idle', 'idle')).toBe('load');
+		expect(phase2_hydrate_schedule('idle', 'load')).toBe('load');
+		expect(phase2_hydrate_schedule('load', 'visible')).toBe('visible');
+	});
 });

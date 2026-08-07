@@ -28,6 +28,7 @@ node verify/flicker.ts         http://localhost:3051   # SSR-resolved query seed
 node verify/lakes.ts           http://localhost:3051   # lakes: frozen region, no client JS, island-in-lake, restore
 node verify/mutation-guards.ts http://localhost:3051   # captured-var mutation: build errors + DEV proxy warns / prod-silence
 node verify/defer-timing.ts    http://localhost:3051   # server-island fetch timing: load/idle/visible/media + preload-only-for-load
+node verify/defer-hydrate.ts   http://localhost:3051   # defer+hydrate: coalesce, mismatch visible, counter click, props/modulepreload
 node verify/prefetch.ts        http://localhost:3051   # router data-sveltekit-preload-* : hover fetch + click-from-cache, eager/viewport/tap/off
 node verify/region-rate.ts     http://localhost:3051   # forged MAC flood: all 403, budget intact for valid request
 node verify/router-race.ts     http://localhost:3051   # overlapping SPA navigations / stale swap guards

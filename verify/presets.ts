@@ -76,6 +76,29 @@ expectError('preset + another inline key rejected', wrap(`import C from './C.sve
 	check('defer + hydrate -> ServerIsland with __hydrate + __module', /__hydrate=\{"load"\}/.test(r.code) && /__module=\{/.test(r.code));
 	check('defer + hydrate -> kind hydrate + server true', r.islands?.[0]?.kind === 'hydrate' && r.islands?.[0]?.server === true);
 }
+// preset with defer+hydrate+margin
+{
+	const ctx = {
+		...baseCtx,
+		presets: {
+			...baseCtx.presets,
+			lazyClient: { defer: 'load', hydrate: 'visible', margin: '150px' }
+		}
+	};
+	const r = run(wrap(`import C from './C.svelte' with { preset: 'lazyClient' };`), ctx);
+	check(
+		'preset defer+hydrate+margin -> hydrateMargin threaded',
+		/__hydrate=\{"visible"\}/.test(r.code) && /__hydrateMargin=\{"150px"\}/.test(r.code)
+	);
+}
+// matching schedules still emit both attrs (runtime coalesce)
+{
+	const r = run(wrap(`import C from './C.svelte' with { defer: 'idle', hydrate: 'idle' };`));
+	check(
+		'matching defer+hydrate still emits both schedules at transform',
+		/__defer=\{"idle"\}/.test(r.code) && /__hydrate=\{"idle"\}/.test(r.code)
+	);
+}
 // `hydrate: 'false'` is NOT a valid lake value — the string value is 'none'; error points there.
 expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from './C.svelte' with { hydrate: 'false' };`), /hydrate: 'false'.*use .*hydrate: 'none'/i);
 

@@ -1161,18 +1161,22 @@ export function transformHost(source, id, ctx) {
 					`\timport { ServerIsland as ${server_wrapper_name} } from 'ogygia/internal/server';`
 				);
 			}
-			// Import the *entry* module (not the virtual wrapper) so its CSS is collected via the
-			// PAGE's SSR import graph into Kit's FOUC bag under csr=false. Virtual modules don't
-			// reliably contribute CSS to that bag — styles on the island entry would never ship.
-			// The wrapper never renders `__component` (the /🏝️ogygia🏝️ endpoint resolves by id);
-			// the binding only keeps the import alive. csr=false → zero client JS from this import
-			// unless `__hydrate` + `__module` emit a client chunk via emitFile.
+			// Entry import → Kit FOUC CSS bag (`__css`). Virtual → `__component` for *nested*
+			// inline render (authored attrs live in the virtual module — same as Island.svelte).
+			// Top-level never renders `__component` (endpoint resolves by opaque id). csr=false
+			// client hosts omit the virtual (`linkVirtualIsland: false`) so defer-only stays
+			// zero component JS; nested islands live inside other modules that keep the link.
 			if (typeof entry_spec !== 'string') {
 				throw new Error(
 					`[ogygia] ${rel_host}: server island needs a static import path ($lib/… or relative).`
 				);
 			}
-			preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(entry_spec)};`);
+			const css_var = `${comp_var}_css`;
+			preamble_imports.push(`\timport ${css_var} from ${JSON.stringify(entry_spec)};`);
+			const link_virtual = ctx.linkVirtualIsland !== false;
+			if (link_virtual) {
+				preamble_imports.push(`\timport ${comp_var} from ${JSON.stringify(virtualPath)};`);
+			}
 			const fallback_text = fallback_node
 				? source.slice(fallback_node.start, fallback_node.end)
 				: '';
@@ -1190,9 +1194,10 @@ export function transformHost(source, id, ctx) {
 					server_attrs += ` __hydrateMargin={${JSON.stringify(unit.options.hydrateMargin)}}`;
 				}
 			}
+			const comp_attr = link_virtual ? ` __component={${comp_var}}` : '';
 			const replacement =
-				`<${server_wrapper_name} __entry={${JSON.stringify(iid)}} ` +
-				`__component={${comp_var}} __props={${props_obj}}${server_attrs}>` +
+				`<${server_wrapper_name} __entry={${JSON.stringify(iid)}}` +
+				`${comp_attr} __css={${css_var}} __props={${props_obj}}${server_attrs}>` +
 				fallback_text +
 				`</${server_wrapper_name}>`;
 			s.overwrite(unit.node.start, unit.node.end, replacement);

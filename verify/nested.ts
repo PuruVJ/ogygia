@@ -58,6 +58,20 @@ try {
 	await page.click('[data-inner]');
 	check('inner (degraded) island is interactive', (await page.locator('[data-inner-n]').textContent()) === '1');
 
+	// nested defer+hydrate degrades the same way: inline in SSR, rides parent hydrate
+	check(
+		'nested defer+hydrate counter present inline (no own region)',
+		(await page.locator('[data-nested-defer-hydrate] [data-counter]').count()) === 1
+	);
+	const dhBtn = page.locator('[data-nested-defer-hydrate] [data-counter] button');
+	await dhBtn.click();
+	await dhBtn.click();
+	check(
+		'nested defer+hydrate counter interactive via parent hydrate',
+		(await dhBtn.textContent()) === 'count is 2',
+		(await dhBtn.textContent()) || ''
+	);
+
 	check('no page errors (single hydration, no mismatch)', errs.length === 0, errs.slice(0, 2).join('; '));
 
 	// dev-only warning naming the nested island

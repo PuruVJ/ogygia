@@ -11,6 +11,7 @@
 	<a href="/about">About</a>
 	<a href="/data">Data</a>
 	<a href="/server">Server</a>
+	<a href="/defer-hydrate">Defer+hydrate</a>
 	<a href="/nested">Nested</a>
 	<a href="/static">Prerendered</a>
 	<a href="/forms">Forms</a>
