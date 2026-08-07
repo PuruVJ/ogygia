@@ -80,9 +80,11 @@
 				<div class="prose">
 					<p>
 						A remote <code>form()</code> inside an island: enhanced submit with no reload, per-field
-						validation issues, and pending state — all from Kit's own form runtime. With JavaScript
-						off it posts natively to the remote endpoint and post-redirect-gets back. The store is
-						in-memory (resets on restart), ring-capped at 48 entries; the UI shows the latest 8.
+						validation issues, and pending state — all from Kit's own form runtime.
+						<code>submit().updates(entries)</code> refreshes the list in the same round-trip (and
+						skips a full invalidate). With JavaScript off it posts natively to the remote endpoint
+						and post-redirect-gets back. The store is in-memory per isolate (resets on restart),
+						ring-capped at 48 entries; the UI shows the latest 8.
 					</p>
 				</div>
 				<GuestbookForm />

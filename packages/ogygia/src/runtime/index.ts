@@ -138,26 +138,16 @@ function dom_ready() {
 	return new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
 }
 
-// Flicker fix: seed the reused Kit client query cache from the server's side-channel script
-// (emitted by `ogygiaHandle` on csr=false pages) exactly ONCE per document, before any island's
-// reused `Query` constructor reads `query_responses`. Cleared on SPA body swap.
-function seed_remote_once() {
-	if (runtime_session.remote_seeded) return;
-	runtime_session.mark_remote_seeded();
-	if (typeof document === 'undefined') return;
-	const el = document.querySelector('script[type="application/ogygia-remote"]');
-	if (el && el.textContent) seed_query_responses(el.textContent);
+/** Apply `application/ogygia-remote` text into the reused Kit query seed bag. */
+function apply_remote_seed_text(text: string | null | undefined) {
+	if (text) seed_query_responses(text);
 }
 
-/** Document-level page seed (one script from ogygiaHandle) — once per document. */
-function seed_page_once() {
-	if (runtime_session.page_seeded) return;
-	runtime_session.mark_page_seeded();
-	if (typeof document === 'undefined') return;
-	const el = document.querySelector('script[type="application/ogygia-page"]');
-	if (!el?.textContent) return;
+/** Apply `application/ogygia-page` text into the `$app/state` page snapshot. */
+function apply_page_seed_text(text: string | null | undefined) {
+	if (!text) return;
 	try {
-		const raw = parse(el.textContent) as Partial<{
+		const raw = parse(text) as Partial<{
 			url: string | URL;
 			params: Record<string, string>;
 			route: { id: string | null };
@@ -180,6 +170,65 @@ function seed_page_once() {
 	} catch {
 		/* ignore malformed seed */
 	}
+}
+
+/** Keep the live document's side-channel `<script>` in sync with a freshly fetched doc. */
+function sync_side_channel_script(
+	live_doc: Document,
+	type: 'application/ogygia-remote' | 'application/ogygia-page',
+	from: Element | null
+) {
+	const existing = live_doc.querySelector(`script[type="${type}"]`);
+	if (from?.textContent != null) {
+		if (existing) {
+			existing.textContent = from.textContent;
+		} else {
+			const clone = live_doc.importNode(from, true);
+			(live_doc.body || live_doc.documentElement).appendChild(clone);
+		}
+	} else {
+		existing?.remove();
+	}
+}
+
+/**
+ * Soft invalidate: refresh document-level page + remote **seeds** from a fetched HTML
+ * document without replacing `<body>`, remounting islands, or clearing live query/live
+ * instance maps. Used by `invalidateAll` so Kit remote `form()` success does not
+ * view-transition wipe live island state. Does **not** auto-refresh live queries —
+ * callers that need that use `.refresh()` / `submit().updates(...)`.
+ */
+export function apply_soft_invalidate_doc(doc: Document) {
+	if (typeof document === 'undefined') return;
+	// Seed bag only — never clear_remote_instances() here (live Query/LiveQuery stay mounted).
+	clear_remote_seeds();
+	const remote = doc.querySelector('script[type="application/ogygia-remote"]');
+	apply_remote_seed_text(remote?.textContent);
+	sync_side_channel_script(document, 'application/ogygia-remote', remote);
+
+	const page_el = doc.querySelector('script[type="application/ogygia-page"]');
+	apply_page_seed_text(page_el?.textContent);
+	sync_side_channel_script(document, 'application/ogygia-page', page_el);
+}
+
+// Flicker fix: seed the reused Kit client query cache from the server's side-channel script
+// (emitted by `ogygiaHandle` on csr=false pages) exactly ONCE per document, before any island's
+// reused `Query` constructor reads `query_responses`. Cleared on SPA body swap.
+function seed_remote_once() {
+	if (runtime_session.remote_seeded) return;
+	runtime_session.mark_remote_seeded();
+	if (typeof document === 'undefined') return;
+	const el = document.querySelector('script[type="application/ogygia-remote"]');
+	apply_remote_seed_text(el?.textContent);
+}
+
+/** Document-level page seed (one script from ogygiaHandle) — once per document. */
+function seed_page_once() {
+	if (runtime_session.page_seeded) return;
+	runtime_session.mark_page_seeded();
+	if (typeof document === 'undefined') return;
+	const el = document.querySelector('script[type="application/ogygia-page"]');
+	apply_page_seed_text(el?.textContent);
 }
 
 // Mixed mode: on a csr=true page, Kit boots and hydrates the whole tree (including our
@@ -741,11 +790,15 @@ async function boot_router_if_needed() {
 	if (!document.querySelector('meta[name="ogygia-router"]')) return;
 	// Same gate as SpaRouter.start — skip on Kit-booted (csr=true) documents.
 	if (document_has_kit_bootstrap()) return;
-	const { startRouter, set_after_body_swap, set_after_body_connected } = await import(
-		'./router.js'
-	);
+	const {
+		startRouter,
+		set_after_body_swap,
+		set_after_body_connected,
+		set_apply_soft_invalidate
+	} = await import('./router.js');
 	set_after_body_swap(prepare_spa_document);
 	set_after_body_connected(finish_spa_document);
+	set_apply_soft_invalidate(apply_soft_invalidate_doc);
 	startRouter();
 }
 

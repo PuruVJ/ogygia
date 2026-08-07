@@ -3,11 +3,14 @@
 
 	// Remote form() INSIDE an island — Kit's own client form runtime, reused by ogygia. Enhanced
 	// submit (no reload), per-field issues, and pending state all work; with JS off the form posts
-	// natively to the remote endpoint and post-redirect-gets back. On submit we single-flight the
-	// `getEntries` query so the list below refreshes in the same round-trip.
+	// natively to the remote endpoint and post-redirect-gets back. Use `submit().updates(entries)`
+	// so Kit refreshes the list in the same round-trip and skips invalidateAll. Await the query
+	// outside a pending boundary so SSR HTML + remote seed agree.
 	import { signGuestbook, getEntries } from '$lib/playground/guestbook.remote';
 
 	const entries = getEntries();
+	// svelte-ignore state_referenced_locally
+	const initial = await entries;
 </script>
 
 <div class="widget" data-guestbook style="max-width: 340px;">
@@ -15,21 +18,20 @@
 
 	<form
 		{...signGuestbook.enhance(async ({ submit }) => {
-			await submit();
-			await entries.refresh(); // re-read the query so the list below reflects the new entry
+			await submit().updates(entries);
 		})}
 		data-remote-form
 		class="gb-form"
 	>
 		<label class="gb-field">
 			<input {...signGuestbook.fields.name.as('text')} placeholder="name" data-rf-name />
-			{#each signGuestbook.fields.name.issues() ?? [] as issue}
+			{#each signGuestbook.fields.name.issues() ?? [] as issue, i (i)}
 				<span class="gb-issue" data-rf-name-issue>{issue.message}</span>
 			{/each}
 		</label>
 		<label class="gb-field">
 			<input {...signGuestbook.fields.message.as('text')} placeholder="message" data-rf-message />
-			{#each signGuestbook.fields.message.issues() ?? [] as issue}
+			{#each signGuestbook.fields.message.issues() ?? [] as issue, i (i)}
 				<span class="gb-issue" data-rf-message-issue>{issue.message}</span>
 			{/each}
 		</label>
@@ -42,14 +44,11 @@
 		<p class="widget-meta" data-rf-result>Signed! total {signGuestbook.result.total}</p>
 	{/if}
 
-	<svelte:boundary>
-		<ul class="gb-entries" data-gb-entries>
-			{#each await entries as e}
-				<li><strong>{e.name}</strong> — {e.message}</li>
-			{/each}
-		</ul>
-		{#snippet pending()}<p class="widget-meta">loading entries…</p>{/snippet}
-	</svelte:boundary>
+	<ul class="gb-entries" data-gb-entries>
+		{#each entries.current ?? initial as e, i (`${e.name}\0${e.message}\0${i}`)}
+			<li><strong>{e.name}</strong> — {e.message}</li>
+		{/each}
+	</ul>
 </div>
 
 <style>

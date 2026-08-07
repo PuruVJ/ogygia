@@ -12,12 +12,19 @@ const MAX_NAME = 64;
 const MAX_MESSAGE = 280;
 const MAX_ENTRIES = 48;
 
-// In-memory guestbook. Resets when the server restarts and is not shared across instances — fine
-// for a demo, not a database. Kept module-private: a .remote.ts file may only export remote functions.
-// Ring-capped so a public docs deploy cannot grow forever (audit DOC-GB).
-const entries: Entry[] = [{ name: 'Calypso', message: 'first to sign the book' }];
+// In-memory guestbook on `globalThis` so Vite duplicate-module loads (SSR page graph vs remote
+// endpoint) still share one store within a process. Resets when the isolate restarts — not a
+// database, and not shared across serverless instances.
+type GuestbookStore = { entries: Entry[] };
+const g = globalThis as typeof globalThis & { __ogygia_docs_guestbook__?: GuestbookStore };
+if (!g.__ogygia_docs_guestbook__) {
+	g.__ogygia_docs_guestbook__ = {
+		entries: [{ name: 'Calypso', message: 'first to sign the book' }]
+	};
+}
+const store = g.__ogygia_docs_guestbook__;
 
-export const getEntries = query(async () => entries.slice(-8).reverse());
+export const getEntries = query(async () => store.entries.slice(-8).reverse());
 
 export const signGuestbook = form('unchecked', async (data: Record<string, unknown>, issue) => {
 	const name = typeof data.name === 'string' ? data.name.trim() : '';
@@ -31,7 +38,7 @@ export const signGuestbook = form('unchecked', async (data: Record<string, unkno
 	if (name.length > MAX_NAME) invalid(issue.name(`name must be ≤${MAX_NAME} characters`));
 	if (message.length > MAX_MESSAGE) invalid(issue.message(`message must be ≤${MAX_MESSAGE} characters`));
 
-	entries.push({ name, message });
-	while (entries.length > MAX_ENTRIES) entries.shift();
-	return { ok: true, total: entries.length };
+	store.entries.push({ name, message });
+	while (store.entries.length > MAX_ENTRIES) store.entries.shift();
+	return { ok: true, total: store.entries.length };
 });

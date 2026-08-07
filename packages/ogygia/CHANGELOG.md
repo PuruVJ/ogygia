@@ -5,6 +5,12 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] — 2026-08-07
+
+### Fixed
+
+- **`invalidateAll` is a soft seed refresh, not a body swap + view transition.** Kit remote `form()` always calls `invalidateAll` on success; ogygia previously re-fetched the current URL via full SPA navigate (VT + `body.replaceWith`), which remounted islands and could re-paint stale SSR HTML (in-memory remotes / multi-isolate). It now busts the page-HTML cache, re-fetches, merges `<head>`, and refreshes `application/ogygia-page` + `application/ogygia-remote` seeds in place — no VT, no body swap, no island remount, no live query-map clear, no auto-refresh of live queries, and no `beforeNavigate`/`afterNavigate` (Kit soft invalidate is not a navigation). Soft fetch abort/generation is isolated from hard `navigate()` so invalidate cannot cancel an in-flight click nav. Islands that need query updates still use `.refresh()` / `submit().updates(...)`.
+
 ## [0.4.2] — 2026-08-07
 
 ### Fixed

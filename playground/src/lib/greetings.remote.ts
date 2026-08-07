@@ -12,12 +12,14 @@ export const getGreeting = query(v.string(), async (name) => {
 	return { greeting: `Hello, ${name}!`, at: new Date() };
 });
 
-// In-memory server state mutated by a command, read by a query (+ .refresh()).
-let counter = 0;
-export const getCount = query(async () => counter);
+// In-memory server state on `globalThis` so Vite duplicate-module loads (SSR vs remote
+// endpoint) still share one counter within a process. Resets per isolate.
+const g = globalThis as typeof globalThis & { __ogygia_playground_counter__?: number };
+if (g.__ogygia_playground_counter__ == null) g.__ogygia_playground_counter__ = 0;
+export const getCount = query(async () => g.__ogygia_playground_counter__!);
 export const bump = command(v.number(), async (by) => {
-	counter += by;
-	return counter;
+	g.__ogygia_playground_counter__! += by;
+	return g.__ogygia_playground_counter__!;
 });
 
 // query.batch: N simultaneous calls in the SAME tick collapse into ONE network request. The batch

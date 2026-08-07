@@ -206,6 +206,8 @@ function is_dangerous_head_node(node: Element): boolean {
 class SpaRouter {
 	#after_body_swap: (() => void) | undefined;
 	#after_body_connected: (() => void) | undefined;
+	/** Apply page/remote seeds from fetched HTML without a body swap (`invalidateAll`). */
+	#apply_soft_invalidate: ((doc: Document) => void) | undefined;
 	#started = false;
 	#before_hooks = new Set<BeforeNavigateCallback>();
 	#after_hooks = new Set<AfterNavigateCallback>();
@@ -216,8 +218,12 @@ class SpaRouter {
 	});
 	#inflight = new Map<string, Promise<string | null>>();
 	#remote_bust_installed = false;
+	/** Hard SPA navigations only — never shared with soft invalidate. */
 	#nav_gen = 0;
 	#nav_abort: AbortController | null = null;
+	/** Soft invalidate fetches only — aborting these must not cancel a real click nav. */
+	#soft_gen = 0;
+	#soft_abort: AbortController | null = null;
 	#viewport_io: IntersectionObserver | null = null;
 	#viewport_seen = new WeakSet<Element>();
 	/** pathname+search of the document currently in the DOM (hash ignored). */
@@ -229,6 +235,10 @@ class SpaRouter {
 
 	set_after_body_connected(fn: () => void) {
 		this.#after_body_connected = fn;
+	}
+
+	set_apply_soft_invalidate(fn: (doc: Document) => void) {
+		this.#apply_soft_invalidate = fn;
 	}
 
 	beforeNavigate(fn: BeforeNavigateCallback) {
@@ -346,7 +356,7 @@ class SpaRouter {
 		const from = new URL(location.href);
 
 		// Same document, hash-only (or identical URL): never fetch / swap / view-transition.
-		// `replace` (invalidateAll) is the exception — that must re-fetch.
+		// (`invalidateAll` is a soft seed refresh — it does not call navigate.)
 		if (same_document(url, from) && !replace) {
 			if (!this.#run_before(from, url, type)) return;
 			if (push && url.href !== location.href) {
@@ -448,7 +458,7 @@ class SpaRouter {
 
 		// Instant after a body swap — CSS smooth must not animate programmatic post-nav scroll.
 		if (replace) {
-			// invalidate/refresh — keep current scroll
+			// same-URL replace navigate — keep current scroll
 		} else if (pop_scroll) {
 			const html_el = document.documentElement;
 			const prev = html_el.style.scrollBehavior;
@@ -482,9 +492,43 @@ class SpaRouter {
 		return this.navigate(target, { push: !opts.replaceState, replace: false, type: 'goto' });
 	}
 
-	invalidateAll() {
+	/**
+	 * Soft invalidate: refresh page/remote seeds for the current URL without navigation.
+	 *
+	 * Kit's `invalidateAll` re-runs loads in place — it is **not** a navigation (no
+	 * `beforeNavigate` / `afterNavigate`). Remote `form()` always calls this on success; a
+	 * full SPA navigate+VT here was wiping live island state. We bust the HTML cache,
+	 * re-fetch, merge head, and refresh document seeds only — no VT, no body swap, no
+	 * island remount, no live query-map clear, no auto-refresh of live queries. Islands
+	 * that need query updates use `.refresh()` / `submit().updates(...)`.
+	 *
+	 * Uses a separate abort/generation from hard `navigate()` so soft fetches never cancel
+	 * an in-flight click navigation (and vice versa).
+	 */
+	async invalidateAll() {
 		this.bust_page_cache();
-		return this.navigate(new URL(location.href), { replace: true, type: 'goto' });
+		const url = new URL(location.href);
+
+		this.#soft_abort?.abort();
+		this.#soft_abort = new AbortController();
+		const { signal } = this.#soft_abort;
+		const gen = ++this.#soft_gen;
+
+		let html: string | null;
+		try {
+			html = await this.fetch_page(url.href, signal);
+		} catch (err) {
+			if ((err as { name?: string })?.name === 'AbortError' || gen !== this.#soft_gen) return;
+			return;
+		}
+		if (gen !== this.#soft_gen || html == null) return;
+		if (html_has_kit_bootstrap(html)) return;
+
+		const doc = new DOMParser().parseFromString(html, 'text/html');
+		if (!doc.querySelector('meta[name="ogygia-router"]')) return;
+
+		this.#merge_head(doc.head);
+		this.#apply_soft_invalidate?.(doc);
 	}
 
 	invalidate() {
@@ -771,8 +815,8 @@ export function _page_cache_size() {
 
 /**
  * Bust the SPA HTML cache after any successful Kit remote mutation (command/form POST).
- * Forms already call `invalidateAll` (which busts); commands only refresh queries — without this,
- * prefetched pages stay stale. Installed once from `startRouter`.
+ * Forms also call `invalidateAll` (soft seed refresh + bust); commands only refresh queries —
+ * without this fetch hook, prefetched pages stay stale. Installed once from `startRouter`.
  */
 export function install_remote_mutation_cache_bust() {
 	spa.install_remote_mutation_cache_bust();
@@ -788,8 +832,9 @@ export function goto(url: string | URL, opts: { replaceState?: boolean } = {}) {
 }
 
 /**
- * Re-fetch and re-render the current URL (server re-runs loads).
- * Coarser than Kit's dependency-scoped invalidate — busts the SPA HTML cache.
+ * Soft-refresh the current URL's document seeds + head (not a navigation).
+ * Busts the SPA HTML cache so the next real route change is fresh. Coarser than
+ * Kit's dependency-scoped invalidate — see {@link SpaRouter.invalidateAll}.
  */
 export function invalidateAll() {
 	return spa.invalidateAll();
@@ -801,6 +846,11 @@ export function invalidateAll() {
  */
 export function invalidate() {
 	return spa.invalidate();
+}
+
+/** Wire soft-invalidate seed application (called from the runtime bootstrap). */
+export function set_apply_soft_invalidate(fn: (doc: Document) => void) {
+	spa.set_apply_soft_invalidate(fn);
 }
 
 /**

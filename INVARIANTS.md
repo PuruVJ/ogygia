@@ -133,6 +133,26 @@ Security and performance audits should read this before changing trust boundarie
 
 ---
 
+## SOFT-INVALIDATE — `invalidateAll` does not body-swap
+
+**What:** `invalidateAll()` / `invalidate()` bust the SPA HTML cache, re-fetch the current URL,
+merge `<head>`, and refresh `application/ogygia-page` + `application/ogygia-remote` seeds **in
+place**. No `body.replaceWith`, no view transition, no island remount, no live query-map clear,
+no auto-refresh of live queries. Does **not** fire `beforeNavigate` / `afterNavigate` (Kit soft
+invalidate is not a navigation). Soft fetch abort/generation is separate from hard `navigate()`
+so an invalidate cannot cancel an in-flight click nav.
+
+**Why:** Kit remote `form()` always calls `invalidateAll` on success. A full SPA navigate+VT was
+tearing down live islands and could re-paint stale SSR HTML (in-memory remotes / multi-isolate).
+Kit’s own invalidate re-runs loads without destroying the tree — soft invalidate matches that.
+
+**Do not:** Route form success through `navigate(location.href, { replace: true })`. Fire nav
+hooks as `type: 'goto'` from soft invalidate. Auto-refresh every live query on soft invalidate.
+Islands that need fresh remote data should `.refresh()` or `submit().updates(...)`. Hard
+remount + VT only on real route change.
+
+---
+
 ## QUERY-LIVE — Kit owns SSE
 
 **What:** `query.live` is Kit’s remote SSE. Ogygia reuses Kit’s client remote primitives. On SPA

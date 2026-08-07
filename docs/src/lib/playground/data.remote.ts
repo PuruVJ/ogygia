@@ -13,13 +13,15 @@ export const getGreeting = query('unchecked', async (name: string) => {
 });
 
 // --- command + query + refresh ----------------------------------------------------------------
-// In-memory server counter, read by a query and mutated by a command. After a command the island
-// calls `.refresh()` to re-read.
-let counter = 0;
-export const getCount = query(async () => counter);
+// In-memory counter on `globalThis` so Vite duplicate-module loads still share one value within a
+// process (SSR seed vs `/_app/remote` command). Resets per isolate — fine for a demo.
+const g = globalThis as typeof globalThis & { __ogygia_docs_counter__?: number };
+if (g.__ogygia_docs_counter__ == null) g.__ogygia_docs_counter__ = 0;
+
+export const getCount = query(async () => g.__ogygia_docs_counter__!);
 export const bump = command('unchecked', async (by: number) => {
-	counter += by;
-	return counter;
+	g.__ogygia_docs_counter__! += by;
+	return g.__ogygia_docs_counter__!;
 });
 
 // --- query.batch ------------------------------------------------------------------------------
