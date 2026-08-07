@@ -5,6 +5,16 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] — 2026-08-07
+
+### Changed
+
+- **`hydrate: 'load'` also `modulepreload`s dependency chunks.** Client `generateBundle` walks each `ogygia-island.*` facade’s static `imports` graph and writes `.svelte-kit/ogygia-island-deps.json`; SSR reads that handoff when emitting head links (Kit builds SSR before client, so hashes can’t be baked at SSR compile time). Idle / visible / media still preload nothing.
+
+### Notes
+
+- Same handoff shape as the deterministic island/runtime filenames: client writes, SSR consumes — except dep chunk names stay Vite content-hashed, so the map is the bridge.
+
 ## [0.3.2] — 2026-08-07
 
 ### Changed

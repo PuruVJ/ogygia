@@ -59,6 +59,7 @@ const V_MANIFEST = 'virtual:ogygia/manifest';
 const V_RUNTIME = 'virtual:ogygia-runtime';
 const V_DEV_HMR = 'virtual:ogygia/dev-hmr';
 const V_DEV_HMR_URL = 'virtual:ogygia/dev-hmr-url';
+const V_ISLAND_DEPS = 'virtual:ogygia/island-deps';
 const V_SECRET = 'virtual:ogygia/secret';
 const V_SIGN = 'virtual:ogygia/sign';
 const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
@@ -249,6 +250,62 @@ export function dev_hmr_client_source() {
 
 /** Virtual island module id — `virtual:` so Vite skips injectSourcesContent disk reads. */
 export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.svelte`;
+
+/** Deterministic island facade filename (content-hashed Vite deps are separate). */
+const ISLAND_FACADE_RE = /(?:^|\/)ogygia-island\.[0-9a-f]+\.js$/;
+
+/**
+ * From a client `generateBundle` output, collect transitive static `imports` for each
+ * `ogygia-island.<id>.js` facade. Keys/values are public URLs (`/_app/immutable/…`).
+ * Used so SSR can `modulepreload` hashed dependency chunks for `hydrate: 'load'` islands
+ * (Vite’s auto graph does not apply to `@vite-ignore` `import(entry)`).
+ *
+ * @internal Exported for unit tests.
+ */
+export function collectIslandDepModulepreloads(
+	bundle: Record<
+		string,
+		{ type: string; fileName?: string; imports?: string[]; dynamicImports?: string[] }
+	>
+): Record<string, string[]> {
+	const out: Record<string, string[]> = {};
+
+	const walk = (fileName: string, seen: Set<string>): string[] => {
+		const chunk = bundle[fileName];
+		if (!chunk || chunk.type !== 'chunk') return [];
+		const deps: string[] = [];
+		for (const imp of chunk.imports ?? []) {
+			if (seen.has(imp)) continue;
+			seen.add(imp);
+			deps.push(imp.startsWith('/') ? imp : '/' + imp);
+			deps.push(...walk(imp, seen));
+		}
+		return deps;
+	};
+
+	for (const [key, chunk] of Object.entries(bundle)) {
+		if (chunk.type !== 'chunk') continue;
+		const fileName = chunk.fileName || key;
+		if (!ISLAND_FACADE_RE.test(fileName)) continue;
+		const entryUrl = fileName.startsWith('/') ? fileName : '/' + fileName;
+		const seen = new Set<string>([fileName]);
+		const raw = walk(fileName, seen);
+		const uniq: string[] = [];
+		const have = new Set<string>([entryUrl]);
+		for (const d of raw) {
+			if (have.has(d)) continue;
+			have.add(d);
+			uniq.push(d);
+		}
+		out[entryUrl] = uniq;
+	}
+	return out;
+}
+
+/** Stable handoff path: client `generateBundle` writes; SSR reads at render (Kit is SSR-first). */
+export function islandDepsHandoffPath(root: string) {
+	return path.join(root, '.svelte-kit', 'ogygia-island-deps.json');
+}
 
 function is_island_path(id: string) {
 	const bare = id.split('?')[0];
@@ -864,6 +921,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (source === V_RUNTIME) return RESOLVED(V_RUNTIME);
 			if (source === V_DEV_HMR) return RESOLVED(V_DEV_HMR);
 			if (source === V_DEV_HMR_URL) return RESOLVED(V_DEV_HMR_URL);
+			if (source === V_ISLAND_DEPS) return RESOLVED(V_ISLAND_DEPS);
 			if (source === V_SECRET) return RESOLVED(V_SECRET);
 			if (source === V_SIGN) return RESOLVED(V_SIGN);
 			if (source === V_RATE_LIMIT) return RESOLVED(V_RATE_LIMIT);
@@ -977,6 +1035,51 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// compiled by the app's Vite (not pre-frozen like a package-level import.meta.env).
 				if (!is_dev) return `export default '';`;
 				return `export default ${JSON.stringify('/@id/__x00__' + V_DEV_HMR)};`;
+			}
+			if (id === RESOLVED(V_ISLAND_DEPS)) {
+				// Client: unused (modulepreload is SSR HTML). SSR: read the handoff JSON at
+				// *render* time — Kit builds the server bundle before the client, so baking at
+				// `load()` would always be empty; prerender/live SSR run after client generateBundle.
+				// Resolve via import.meta.url walk (not absolute build-machine paths) so adapters
+				// find `output/server/ogygia-island-deps.json` next to the server bundle.
+				if (!ssr) return `export function islandDeps(_entry) { return []; }`;
+				return (
+					`import fs from 'node:fs';\n` +
+					`import path from 'node:path';\n` +
+					`import { fileURLToPath } from 'node:url';\n` +
+					`let cache;\n` +
+					`function candidates() {\n` +
+					`  const out = [];\n` +
+					`  try {\n` +
+					`    let dir = path.dirname(fileURLToPath(import.meta.url));\n` +
+					`    for (let i = 0; i < 8; i++) {\n` +
+					`      out.push(path.join(dir, 'ogygia-island-deps.json'));\n` +
+					`      const parent = path.dirname(dir);\n` +
+					`      if (parent === dir) break;\n` +
+					`      dir = parent;\n` +
+					`    }\n` +
+					`  } catch {}\n` +
+					`  if (typeof process !== 'undefined' && process.cwd) {\n` +
+					`    const cwd = process.cwd();\n` +
+					`    out.push(path.join(cwd, '.svelte-kit', 'ogygia-island-deps.json'));\n` +
+					`    out.push(path.join(cwd, '.svelte-kit', 'output', 'server', 'ogygia-island-deps.json'));\n` +
+					`  }\n` +
+					`  return out;\n` +
+					`}\n` +
+					`function load() {\n` +
+					`  if (cache) return cache;\n` +
+					`  for (const p of candidates()) {\n` +
+					`    try { cache = JSON.parse(fs.readFileSync(p, 'utf8')); return cache; } catch {}\n` +
+					`  }\n` +
+					`  cache = {};\n` +
+					`  return cache;\n` +
+					`}\n` +
+					`export function islandDeps(entry) {\n` +
+					`  if (!entry) return [];\n` +
+					`  const list = load()[entry];\n` +
+					`  return Array.isArray(list) ? list : [];\n` +
+					`}\n`
+				);
 			}
 			if (id === RESOLVED(V_TRANSPORT)) {
 				// re-export the app's universal `transport` hook (or an empty map) for the client
@@ -1123,7 +1226,37 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 
 			return touched ? { code: out, map } : null;
+		},
+
+		generateBundle(_options, bundle) {
+			// Client only — Kit builds SSR first, so Island.svelte reads this JSON at render
+			// (prerender / live SSR), not at SSR-bundle `load()` time.
+			if (!is_build || is_ssr) return;
+			const map = collectIslandDepModulepreloads(
+				bundle as Record<
+					string,
+					{ type: string; fileName?: string; imports?: string[]; dynamicImports?: string[] }
+				>
+			);
+			const json = JSON.stringify(map);
+			const handoff = islandDepsHandoffPath(root);
+			fs.mkdirSync(path.dirname(handoff), { recursive: true });
+			fs.writeFileSync(handoff, json);
+			// Adapter-friendly copy next to the server bundle (Kit SSR out already exists).
+			const server_copy = path.join(
+				root,
+				'.svelte-kit',
+				'output',
+				'server',
+				'ogygia-island-deps.json'
+			);
+			try {
+				fs.mkdirSync(path.dirname(server_copy), { recursive: true });
+				fs.writeFileSync(server_copy, json);
+			} catch {
+				/* ignore — handoff path is enough for prerender */
 			}
+		}
 		},
 		{
 			name: 'ogygia:island-sourcemaps',

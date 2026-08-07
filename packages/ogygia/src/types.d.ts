@@ -22,6 +22,10 @@ declare module 'virtual:ogygia/runtime-url' {
 	const url: string;
 	export default url;
 }
+declare module 'virtual:ogygia/island-deps' {
+	/** Public URLs of hashed dependency chunks for a hydrate island entry (`/_app/immutable/…`). */
+	export function islandDeps(entry: string): string[];
+}
 declare module 'virtual:ogygia/dev-hmr' {
 	/* side-effect only — CSS HMR bridge under csr=false */
 }

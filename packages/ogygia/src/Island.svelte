@@ -3,6 +3,7 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
+	import { islandDeps } from 'virtual:ogygia/island-deps';
 	import { asset } from '$app/paths';
 	import { isNested, setNested, claimRuntimeEmit } from './context.js';
 
@@ -90,13 +91,22 @@
 		nested ? '' : __entry.startsWith('/@') ? __entry : asset(__entry)
 	);
 
-	// `hydrate: 'load'` — modulepreload in <head> (not beside the region) so discovery is early
-	// and props stay the immediate sibling of the region. Idle/visible/media skip this.
-	const preload_link = $derived(
-		!nested && hydrate_attr === 'load'
-			? LT + 'link rel="modulepreload" href="' + module_url + '"' + GT
-			: ''
-	);
+	// `hydrate: 'load'` — modulepreload facade + dependency chunks in <head> (not beside the
+	// region) so discovery is early and props stay the immediate sibling of the region.
+	// Idle/visible/media skip this. Dep URLs come from the client generateBundle handoff.
+	const preload_link = $derived.by(() => {
+		if (nested || hydrate_attr !== 'load') return '';
+		const hrefs = [module_url];
+		for (const dep of islandDeps(__entry)) {
+			const href = dep.startsWith('/@') ? dep : asset(dep);
+			if (href && !hrefs.includes(href)) hrefs.push(href);
+		}
+		let html = '';
+		for (const href of hrefs) {
+			html += LT + 'link rel="modulepreload" href="' + href + '"' + GT;
+		}
+		return html;
+	});
 
 	// Fallback only when <OgygiaRouter/> did not claim the slot (MPA page with islands alone).
 	// Same `asset(runtimeUrl)` as the router so URLs dedupe if both paths ever race.

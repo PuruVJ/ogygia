@@ -57,18 +57,48 @@
 		return path === href || path.startsWith(`${href}/`);
 	}
 
-	function pickToc() {
-		if (!onDocs) return;
-		const y = window.scrollY;
-		const line = y + 120;
-		let next = docsTocItems[0].id;
+	/** Cached document Y of each docs section — measured once, not on every scroll. */
+	let section_tops: { id: string; top: number }[] = [];
+	let tops_dirty = true;
+	let scroll_raf = 0;
+	let measure_raf = 0;
+	let measure_raf2 = 0;
+
+	function invalidateSectionTops() {
+		tops_dirty = true;
+	}
+
+	function measureSectionTops() {
+		section_tops = [];
 		for (const item of docsTocItems) {
 			const el = document.getElementById(item.id);
 			if (!el) continue;
-			const top = el.getBoundingClientRect().top + window.scrollY;
-			if (top <= line) next = item.id;
+			section_tops.push({
+				id: item.id,
+				top: el.getBoundingClientRect().top + window.scrollY
+			});
+		}
+		tops_dirty = false;
+	}
+
+	function pickToc() {
+		if (!onDocs) return;
+		if (tops_dirty) measureSectionTops();
+		const line = window.scrollY + 120;
+		let next = docsTocItems[0]?.id ?? activeToc;
+		for (const s of section_tops) {
+			if (s.top <= line) next = s.id;
 		}
 		activeToc = next;
+	}
+
+	/** One pickToc per frame — scroll fires far more often than paint. */
+	function schedulePickToc() {
+		if (scroll_raf) return;
+		scroll_raf = requestAnimationFrame(() => {
+			scroll_raf = 0;
+			pickToc();
+		});
 	}
 
 	function onDocsLinkClick(id: string) {
@@ -114,13 +144,15 @@
 
 	$effect(() => {
 		if (!onDocs || !activeToc || !root_el || (mobile && !open)) return;
-		const el = root_el.querySelector<HTMLElement>(`.side-link.is-active`);
-		el?.scrollIntoView({ block: 'nearest' });
+		// Defer off the hydrate/effect turn — same rAF gate as the initial measure.
+		const id = requestAnimationFrame(() => {
+			const el = root_el.querySelector<HTMLElement>(`.side-link.is-active`);
+			el?.scrollIntoView({ block: 'nearest' });
+		});
+		return () => cancelAnimationFrame(id);
 	});
 
 	$effect(() => {
-		pickToc();
-
 		const mq = window.matchMedia('(max-width: 1099px)');
 		const syncMobile = () => {
 			mobile = mq.matches;
@@ -130,17 +162,52 @@
 				playgroundOpen = true;
 			}
 		};
+		const onResize = () => {
+			invalidateSectionTops();
+			syncMobile();
+			schedulePickToc();
+		};
+		const onHash = () => {
+			// Hash targets can shift layout; remeasure then pick.
+			invalidateSectionTops();
+			schedulePickToc();
+		};
+
 		syncMobile();
 		mq.addEventListener('change', syncMobile);
-		window.addEventListener('resize', syncMobile);
-		window.addEventListener('hashchange', pickToc);
-		window.addEventListener('scroll', pickToc, { passive: true });
+		window.addEventListener('resize', onResize);
+		window.addEventListener('hashchange', onHash);
+		window.addEventListener('scroll', schedulePickToc, { passive: true });
+
+		// Defer first measure/pick off the hydrate turn (double rAF: after layout settles).
+		measure_raf = requestAnimationFrame(() => {
+			measure_raf = 0;
+			measure_raf2 = requestAnimationFrame(() => {
+				measure_raf2 = 0;
+				invalidateSectionTops();
+				pickToc();
+			});
+		});
+
+		let fonts_alive = true;
+		document.fonts?.ready?.then(() => {
+			if (!fonts_alive) return;
+			invalidateSectionTops();
+			schedulePickToc();
+		});
 
 		return () => {
+			fonts_alive = false;
 			mq.removeEventListener('change', syncMobile);
-			window.removeEventListener('resize', syncMobile);
-			window.removeEventListener('hashchange', pickToc);
-			window.removeEventListener('scroll', pickToc);
+			window.removeEventListener('resize', onResize);
+			window.removeEventListener('hashchange', onHash);
+			window.removeEventListener('scroll', schedulePickToc);
+			if (scroll_raf) cancelAnimationFrame(scroll_raf);
+			if (measure_raf) cancelAnimationFrame(measure_raf);
+			if (measure_raf2) cancelAnimationFrame(measure_raf2);
+			scroll_raf = 0;
+			measure_raf = 0;
+			measure_raf2 = 0;
 		};
 	});
 
