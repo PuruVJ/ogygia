@@ -1,10 +1,8 @@
 <script lang="ts">
 	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
 	// page → island (LakeShell) → lake (FrozenReport) → island-in-lake (InnerBadge)
-	// Two lake imports: default remount cache vs preset frozenSwr (paint cache, then revalidate).
+	// LakeShell owns both lake imports (cache vs frozenSwr); the page only passes a serializable variant.
 	import LakeShell from '$lib/playground/LakeShell.svelte' with { hydrate: 'load' };
-	import FrozenCache from '$lib/playground/FrozenReport.svelte' with { hydrate: 'none' };
-	import FrozenSwr from '$lib/playground/FrozenReport.svelte' with { preset: 'frozenSwr' };
 	import PageHead from '$lib/PageHead.svelte';
 </script>
 
@@ -44,9 +42,7 @@
 				<div class="prose">
 					<p>Toggle restores the cached lake DOM. The SSR stamp should not change.</p>
 				</div>
-				<LakeShell>
-					<FrozenCache />
-				</LakeShell>
+				<LakeShell variant="cache" />
 			</div>
 
 			<div class="strategy">
@@ -59,9 +55,7 @@
 						revalidate.
 					</p>
 				</div>
-				<LakeShell>
-					<FrozenSwr />
-				</LakeShell>
+				<LakeShell variant="swr" />
 			</div>
 		</div>
 	</section>

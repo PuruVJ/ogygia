@@ -1,9 +1,11 @@
 <script lang="ts">
 	import '$lib/styles/widget.css';
+	// Hydrated island that owns its lakes (portable bindings: host children cannot cross the
+	// island boundary — lakes are imported here, not passed from the page).
+	import FrozenCache from '$lib/playground/FrozenReport.svelte' with { hydrate: 'none' };
+	import FrozenSwr from '$lib/playground/FrozenReport.svelte' with { preset: 'frozenSwr' };
 
-	// A hydrated island (hydrate: 'load') that contains a lake in its children. The counter proves
-	// it is interactive. The {#if} toggle exercises remount (default cache).
-	let { children } = $props();
+	let { variant }: { variant: 'cache' | 'swr' } = $props();
 	let count = $state(0);
 	let show = $state(true);
 </script>
@@ -19,6 +21,10 @@
 	</div>
 
 	{#if show}
-		{@render children?.()}
+		{#if variant === 'swr'}
+			<FrozenSwr />
+		{:else}
+			<FrozenCache />
+		{/if}
 	{/if}
 </div>
