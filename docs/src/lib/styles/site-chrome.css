@@ -1,5 +1,26 @@
 /* Shared docs/playground chrome — imported by the root layout. */
 
+/* Sidebar layout reservation lives here (eager, render-blocking) rather than in the SideNav
+   island's scoped CSS, so the space for the fixed sidebar is reserved from the first paint and
+   content does not shift when the island's own styles load. */
+:root {
+	--side-w: 16.75rem;
+	--side-gap: 0.85rem;
+	--side-bar-h: calc(3.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 1100px) {
+	body {
+		padding-left: calc(var(--side-w) + var(--side-gap) * 2);
+	}
+}
+
+@media (max-width: 1099px) {
+	body {
+		padding-bottom: var(--side-bar-h);
+	}
+}
+
 .shell {
 	box-sizing: border-box;
 	width: 100%;

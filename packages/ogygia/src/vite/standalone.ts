@@ -1,77 +1,21 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
 
-const RUNTIME_ENTRY = fileURLToPath(new URL('../runtime/index.js', import.meta.url));
+// ─────────────────────────────────────────────────────────────────────────────
+// csr detection.
+//
+// When every route NODE is csr=false, Kit skips its client build entirely, so the ogygia runtime chunk
+// is never emitted and the SSR'd `<script src>` 404s. ogygia fixes this transparently: during a build,
+// the plugin injects a URL-less keepalive layout (`src/routes/.ogygia-keep-client/+layout.ts`, a single
+// `csr = true` node) that keeps Kit building the client, then removes it at process exit — nothing is
+// committed and no Kit internal is consulted (see index.ts). `clientBuildWillSkip` (ignoring that
+// injected dir) drives WHEN to inject; `hasAnyCsrFalseRoute` drives the "pure csr=true app ships zero
+// ogygia" runtime gate.
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Client shims for Kit `$app/*` used when we build islands WITHOUT sveltekit().
-// NOTE: `$app/paths/internal/client` (imported by Kit's reused remote client) MUST come before the
-// `$app/paths` entry — a vite string alias also matches the `$app/paths/…` prefix, so without the
-// more-specific entry first, `$app/paths/internal/client` would rewrite to `app-paths.js/internal/
-// client` and fail to load (only bites a standalone build that includes a remote island).
-const APP_ALIASES = {
-	'$app/paths/internal/client': fileURLToPath(new URL('../shims/kit-remote/paths-internal-stub.js', import.meta.url)),
-	'$app/paths': fileURLToPath(new URL('../shims/app-paths.js', import.meta.url)),
-	// Kit's reused client `prerender.svelte.js` imports `version` from the internal `$app/env` module
-	// (a Kit virtual absent in a standalone build) — point it at our environment shim.
-	'$app/env': fileURLToPath(new URL('../shims/app-environment.js', import.meta.url)),
-	'$app/environment': fileURLToPath(new URL('../shims/app-environment.js', import.meta.url)),
-	'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),
-	'$app/stores': fileURLToPath(new URL('../shims/app-stores.js', import.meta.url)),
-	'$app/navigation': fileURLToPath(new URL('../shims/app-navigation.js', import.meta.url))
-};
-
-/** Kit's djb2 hash (src/utils/hash.js), used for `.remote` function ids. */
-export function kitHash(str) {
-	let hash = 5381;
-	let i = str.length;
-	while (i) hash = (hash * 33) ^ str.charCodeAt(--i);
-	return (hash >>> 0).toString(36);
-}
-
-const REMOTE_FILE = /\.remote\.(js|ts|mjs)$/;
-// Match `query.batch` / `query.live` before bare `query`.
-const REMOTE_EXPORT =
-	/export\s+const\s+(\w+)\s*=\s*(query\.batch|query\.live|query|command|form|prerender)\s*\(/g;
 const CSR_EXPORT = /export\s+const\s+csr\s*=\s*(true|false)/;
-const BACKSLASH = /\\/g;
 
-const TYPE_MAP = {
-	'query.batch': 'query_batch',
-	'query.live': 'query_live',
-	query: 'query',
-	command: 'command',
-	form: 'form',
-	prerender: 'prerender'
-};
-
-/**
- * Reproduces Kit's CLIENT `.remote` transform: turn a `.remote` module into stubs that
- * call `__sveltekit/remote` (which we alias to our island remote client). Only used in
- * the standalone build, where sveltekit()'s own remote plugin isn't present.
- */
-export function remoteStubPlugin(root) {
-	return {
-		name: 'ogygia-remote-stub',
-		enforce: 'pre',
-		transform(code, id) {
-			const clean = id.split('?')[0];
-			if (!REMOTE_FILE.test(clean)) return null;
-			const rel = path.relative(root, clean).split(path.sep).join('/');
-			const h = kitHash(rel);
-			const stubs = [];
-			REMOTE_EXPORT.lastIndex = 0;
-			let m;
-			while ((m = REMOTE_EXPORT.exec(code))) {
-				stubs.push(`export const ${m[1]} = __r.${TYPE_MAP[m[2]]}(${JSON.stringify(h + '/' + m[1])});`);
-			}
-			return { code: `import * as __r from '__sveltekit/remote';\n${stubs.join('\n')}\n`, map: null };
-		}
-	};
-}
-
-/** Read `export const csr = true|false` from a route option file. */
+/** Read `export const csr = true|false` from a route options file; `undefined` if unset/absent. */
 export function read_csr(file) {
 	try {
 		const src = fs.readFileSync(file, 'utf-8');
@@ -122,11 +66,19 @@ export function routeCsrIsFalse(hostFile, routesDir) {
 }
 
 /**
- * Replicates Kit's `nodes.every(n => n.page_options?.csr === false)` client-build skip
- * check: true when every page route resolves (through its layout chain) to csr === false.
+ * True when `hostFile` is a route host (`+page.svelte` / `+layout.svelte`) whose effective csr is
+ * TRUE (Kit's default, or an explicit `csr = true` that beats a `false` up the chain). On such a host
+ * ogygia steps aside — Kit hydrates the page itself. `false` for non-route files (shared components):
+ * their csr depends on which page renders them, so they keep their islands.
  */
-export function allRoutesCsrFalse(routesDir) {
-	if (!fs.existsSync(routesDir)) return false;
+export function routeCsrIsTrue(hostFile, routesDir) {
+	const base = path.basename(hostFile);
+	if (base !== '+page.svelte' && base !== '+layout.svelte') return false;
+	if (!hostFile.startsWith(routesDir)) return false;
+	return !routeCsrIsFalse(hostFile, routesDir);
+}
+
+function pageLeaves(routesDir) {
 	/** @type {string[]} */
 	const leaves = [];
 	const walk = (dir) => {
@@ -137,72 +89,87 @@ export function allRoutesCsrFalse(routesDir) {
 		}
 	};
 	walk(routesDir);
-	if (leaves.length === 0) return false;
+	return leaves;
+}
 
-	return leaves.every((page_file) => routeCsrIsFalse(page_file, routesDir));
+// The build-time keepalive route ogygia injects to defeat Kit's skip (see index.ts). It must be
+// invisible to the skip detection itself — otherwise its own csr=true node would mask whether the
+// USER's real routes are all csr=false.
+export const KEEP_CLIENT_DIR = '.ogygia-keep-client';
+
+const PAGE_UNIVERSAL = ['+page.js', '+page.ts'];
+const PAGE_SERVER = ['+page.server.js', '+page.server.ts'];
+const LAYOUT_UNIVERSAL = ['+layout.js', '+layout.ts'];
+const LAYOUT_SERVER = ['+layout.server.js', '+layout.server.ts'];
+
+/** A node's OWN csr (server module then universal wins), independent of the layout chain. */
+function own_csr(dir, universal, server) {
+	let csr; // undefined = not set on this node
+	for (const f of server) {
+		const v = read_csr(path.join(dir, f));
+		if (v !== undefined) csr = v;
+	}
+	for (const f of universal) {
+		const v = read_csr(path.join(dir, f));
+		if (v !== undefined) csr = v;
+	}
+	return csr;
 }
 
 /**
- * Run our own client build for islands + runtime when Kit skips its client build.
- * Outputs into Kit's client output dir so adapters/prerender pick it up.
+ * Collects every route node's OWN csr the way Kit does — a node exists per `+page` and per
+ * `+layout` (component OR standalone module). Layout groups like `(ogygia)/+layout.ts` count too.
+ * @returns {Array<boolean | undefined>} one entry per node (undefined = csr unset on that node)
  */
-export async function runStandaloneClientBuild({ root, base, clientDir, makePlugin, sourcemap }) {
-	const require = createRequire(path.join(root, 'noop.js'));
-	const { build } = await import(path_to_file_url(require.resolve('vite', { paths: [root] })));
-	const vps = await import(
-		path_to_file_url(require.resolve('@sveltejs/vite-plugin-svelte', { paths: [root] }))
-	);
+function collectNodeOwnCsr(routesDir) {
+	/** @type {Array<boolean | undefined>} */
+	const nodes = [];
+	let saw_root_layout = false;
+	const walk = (dir, is_root) => {
+		const entries = fs.readdirSync(dir, { withFileTypes: true });
+		const names = new Set(entries.filter((e) => e.isFile()).map((e) => e.name));
 
-	const result = await build({
-		root,
-		base: base || '/',
-		configFile: false,
-		logLevel: 'warn',
-		resolve: {
-			alias: {
-				$lib: path.join(root, 'src', 'lib'),
-				...APP_ALIASES
-			}
-		},
-		plugins: [
-			remoteStubPlugin(root),
-			makePlugin({ standalone: true }),
-			vps.svelte({ preprocess: vps.vitePreprocess() })
-		],
-		build: {
-			ssr: false,
-			outDir: clientDir,
-			emptyOutDir: false,
-			assetsDir: '_app/immutable',
-			sourcemap: sourcemap ?? false,
-			minify: true,
-			rolldownOptions: {
-				input: RUNTIME_ENTRY,
-				// Island emitFile entries often re-export a shared component (two strategies →
-				// one Comp). Keep entry `export default` on the facade (Vite 8 / Rolldown).
-				preserveEntrySignatures: 'exports-only' as const,
-				output: {
-					// content-hashed like every other immutable chunk
-					entryFileNames: '_app/immutable/ogygia-runtime.[hash].js',
-					chunkFileNames: '_app/immutable/[name]-[hash].js',
-					assetFileNames: '_app/immutable/[name]-[hash][extname]'
-				}
-			}
+		const has = (list) => list.some((f) => names.has(f));
+		// layout node: +layout.svelte, +layout.js/ts, or +layout.server.js/ts
+		if (names.has('+layout.svelte') || has(LAYOUT_UNIVERSAL) || has(LAYOUT_SERVER)) {
+			if (is_root) saw_root_layout = true;
+			nodes.push(own_csr(dir, LAYOUT_UNIVERSAL, LAYOUT_SERVER));
 		}
-	});
-
-	// find the hashed runtime entry filename to hand back to the (still-running) SSR build
-	const outputs = Array.isArray(result) ? result : [result];
-	for (const out of outputs) {
-		for (const chunk of out.output ?? []) {
-			if (chunk.type === 'chunk' && chunk.isEntry && chunk.facadeModuleId === RUNTIME_ENTRY) {
-				return { runtimeFileName: chunk.fileName };
-			}
+		// page node: +page.svelte, +page.js/ts, or +page.server.js/ts
+		if (names.has('+page.svelte') || has(PAGE_UNIVERSAL) || has(PAGE_SERVER)) {
+			nodes.push(own_csr(dir, PAGE_UNIVERSAL, PAGE_SERVER));
 		}
-	}
-	return { runtimeFileName: null };
+		for (const e of entries) {
+			if (!e.isDirectory()) continue;
+			if (e.name === KEEP_CLIENT_DIR) continue; // ignore our own injected keepalive
+			walk(path.join(dir, e.name), false);
+		}
+	};
+	walk(routesDir, true);
+	// Kit always synthesizes a root layout node; if the app has none, it carries null options
+	// (csr unset) — which alone is enough to keep the client build alive.
+	if (!saw_root_layout) nodes.push(undefined);
+	return nodes;
 }
 
-function path_to_file_url(p: string) {
-	return new URL(`file://${p.replace(BACKSLASH, '/')}`).href;
+/**
+ * Replicates Kit's `manifest_data.nodes.every(n => n.page_options?.csr === false)` — the exact
+ * condition under which Kit skips the client build. Reads each node's OWN csr (NOT the resolved
+ * layout chain), so a single node whose csr is `true` (e.g. an `(ogygia)/+layout.ts` keepalive)
+ * or simply unset keeps the build alive. When this is true, ogygia's runtime is never emitted.
+ */
+export function clientBuildWillSkip(routesDir) {
+	if (!fs.existsSync(routesDir)) return false;
+	const nodes = collectNodeOwnCsr(routesDir);
+	if (nodes.length === 0) return false;
+	return nodes.every((csr) => csr === false);
+}
+
+/**
+ * True when AT LEAST ONE page route is csr=false. A pure csr=true app (this returns false) needs no
+ * ogygia runtime at all — Kit hydrates everything itself — so the runtime chunk is skipped entirely.
+ */
+export function hasAnyCsrFalseRoute(routesDir) {
+	if (!fs.existsSync(routesDir)) return false;
+	return pageLeaves(routesDir).some((page_file) => routeCsrIsFalse(page_file, routesDir));
 }

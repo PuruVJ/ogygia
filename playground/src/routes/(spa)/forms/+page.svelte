@@ -4,8 +4,8 @@
 	// only handles <a> clicks). Successful submits use post-redirect-get.
 	// A Counter island is present so the runtime (and SPA router) are active — proving the form
 	// still submits natively even with the router running.
-	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
-	import GuestbookForm from '$lib/GuestbookForm.svelte' with { hydrate: 'load' };
+	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+	import GuestbookForm from '$lib/GuestbookForm.svelte' with { wake: 'load' };
 	let { data, form } = $props();
 </script>
 

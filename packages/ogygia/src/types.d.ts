@@ -22,6 +22,10 @@ declare module 'virtual:ogygia/runtime-url' {
 	const url: string;
 	export default url;
 }
+declare module 'virtual:ogygia/runtime-entry' {
+	export const __features: string[];
+}
+
 declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of hashed dependency chunks for a hydrate island entry (`/_app/immutable/…`). */
 	export function islandDeps(entry: string): string[];
@@ -35,6 +39,8 @@ declare module 'virtual:ogygia/dev-hmr-url' {
 }
 declare module 'virtual:ogygia/secret' {
 	export const secret: string;
+	/** True when the key is env-provided (OGYGIA_SECRET) and thus survives redeploys. */
+	export const secretStable: boolean;
 }
 declare module 'virtual:ogygia/sign' {
 	export function sign(secret: string, message: string): string;
@@ -63,6 +69,18 @@ declare module 'virtual:ogygia/session-cookie' {
 declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regionTtl })` (default 3600). */
 	export const regionTtl: number;
+}
+declare module 'virtual:ogygia/stream' {
+	/** Stream `defer: 'load'` holes down the page response. From `ogygia({ stream })` (default true). */
+	export const stream: boolean;
+}
+/** CONTINUITY compile-time constants (Vite `define`; typeof-guarded so node dist import is safe). */
+declare const __OGYGIA_CONTINUITY_FORMS__: boolean;
+declare const __OGYGIA_CONTINUITY_SPECULATE__: 'hover' | 'viewport' | false;
+
+declare module 'virtual:ogygia/shell' {
+	/** Kit route id → shell policy. From per-page/layout `shell` + `ogygia({ shell })`. */
+	export const policies: Record<string, { mode: 'cache' | 'swr'; maxAgeMs?: number }>;
 }
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;

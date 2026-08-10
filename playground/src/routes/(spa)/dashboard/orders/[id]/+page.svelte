@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import OrderDetail from '$lib/OrderDetail.svelte' with { hydrate: 'load' };
-	import PageDataProbe from '$lib/PageDataProbe.svelte' with { hydrate: 'load' };
-	import PageUrlProbe from '$lib/PageUrlProbe.svelte' with { hydrate: 'load' };
+	import OrderDetail from '$lib/OrderDetail.svelte' with { wake: 'load' };
+	import PageDataProbe from '$lib/PageDataProbe.svelte' with { wake: 'load' };
+	import PageUrlProbe from '$lib/PageUrlProbe.svelte' with { wake: 'load' };
 	let { data } = $props();
 </script>
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// This route is NOT under <OgygiaRouter/>, so navigation here is a real document
 	// load (MPA). Islands still hydrate — only client-side routing is opt-in.
-	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
+	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
 </script>
 
 <!-- Full site nav, but as PLAIN MPA links: /plain is not under <OgygiaRouter/>, so each click is

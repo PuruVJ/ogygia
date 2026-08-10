@@ -16,8 +16,28 @@ dist/
 .vercel
 *.tmp.mjs
 *.tmp.*
+# ogygiaBench local installs / builds / packed tarballs
+/bench/frameworks/*/node_modules/
+/bench/frameworks/*/.svelte-kit/
+/bench/frameworks/*/build/
+/bench/frameworks/*/dist/
+/bench/frameworks/*/.mochi/
+/bench/frameworks/*/src/routes/posts/*/+page.md
+/bench/frameworks/*/src/posts/*.md
+/bench/frameworks/*/src/pages/posts/*.mdx
+/bench/frameworks/*/src/lib/Counter.svelte
+/bench/frameworks/*/src/Counter.svelte
+/bench/frameworks/*/src/components/Counter.jsx
+/bench/frameworks/*/static/post.css
+/bench/frameworks/*/public/post.css
+/bench/.tarballs/
+/bench/node_modules/
+# fidelity.md is ephemeral; latest.* are committed after a hermetic run
+
 # leftover on-disk island dirs from older ogygia versions (now virtual: modules)
 **/.ogygia/
+# build-time keep-client route (injected + removed by the plugin; only survives a crashed build)
+**/.ogygia-keep-client/
 
 # local experiments — not part of the published library
 /experiment/

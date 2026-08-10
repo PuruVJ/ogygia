@@ -1,5 +1,21 @@
 # Verification
 
+## Run everything (one command)
+
+```bash
+pnpm test:e2e          # build lib + playground, serve, run ALL checks, summary
+pnpm test:e2e:fast     # skip the build, reuse the existing playground build
+node verify/run.mjs --only=lakes,router-race,prefetch   # a subset
+PORT=3060 node verify/run.mjs
+```
+
+`verify/run.mjs` builds the library and playground, serves the production build (with `ORIGIN`
+set for remote `command` / form CSRF), runs every check below in turn, and prints a green/red
+summary. Exit code is non-zero if anything fails, so it drops straight into CI or a pre-release
+gate. Run it every time — it is the regression net for every island/lake/partial/router surface.
+
+## Manual / individual runs
+
 ```bash
 # 1. Build the library, then the playground
 pnpm --filter ogygia build
@@ -18,6 +34,7 @@ node verify/dashboard.ts       http://localhost:3051   # page shim, island goto,
 node verify/page-state.ts      http://localhost:3051   # page.url.* + params/route/status/data/form/error/state inside islands
 node verify/console.ts         http://localhost:3051   # zero hydration_mismatch (includes /lakes)
 node verify/remote.ts          http://localhost:3051   # client query+args+refresh, command, live
+node verify/live-partial.ts   http://localhost:3051   # query.live partials: swap no-fetch, keep-alive, static morph
 node verify/mixed.ts           http://localhost:3051   # csr=true coexistence + opt-in router
 node verify/server-islands.ts  http://localhost:3051   # defer:'true' fallback/endpoint/HMAC/cookie/CSS
 node verify/nested.ts          http://localhost:3051   # island-in-island single hydration + dev warn
@@ -36,6 +53,17 @@ node verify/dedup.ts                                   # same-component-two-stra
 node verify/portable-bindings.ts http://localhost:3051 # portable bindings: static/dynamic/list + shared entry dedupe
 ```
 
+
+### Streaming server islands (opt-in — not in the default runner)
+
+Streaming (`ogygia({ stream: true })`) changes `defer: 'load'` holes to fill from the page response
+instead of a per-hole fetch, so it deliberately changes what `server-islands.ts` / `defer-timing.ts`
+assert (preload + fetch). It is therefore **not** enabled in the shared playground and not wired into
+`run.mjs`. Its pure scanner/parcel logic is covered by unit tests
+(`packages/ogygia/test/stream-regions.test.ts`). To exercise it end-to-end, flip `stream: true` in a
+throwaway fixture's `vite.config.ts` and assert: shell paints first, each hole fills from a
+`<template data-ogygia-slot>` parcel with no request to `/🏝️`, and a forced render error falls back to
+the fetch.
 
 Trust-boundary notes for region HMAC / SPA / seeds live in [`INVARIANTS.md`](../INVARIANTS.md).
 

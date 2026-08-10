@@ -1,4 +1,4 @@
-// LAKES: a `hydrate: 'none'` component INSIDE a hydrated island is a frozen region. This suite
+// LAKES: a `wake: 'none'` component INSIDE a hydrated island is a frozen region. This suite
 // proves the full alternation shell -> island -> lake -> island-in-lake, plus the two guarantees
 // that make a lake a lake: its component code ships in NO client chunk, and its DOM is frozen
 // (events inert) yet an island authored inside it self-hydrates. Also exercises remount:'cache'
@@ -67,14 +67,14 @@ try {
 	await page.waitForSelector('ogygia-region[data-hydrated]', { timeout: 6000 }).catch(() => {});
 	await sleep(1500);
 
-	// SSR structure: frozen region (`hydrate="none"`) + remount attr (default cache).
+	// SSR structure: frozen region (`wake="none"`) + remount attr (default cache).
 	check(
-		'frozen region emitted as <ogygia-region hydrate="none">',
-		(await page.locator('ogygia-region[hydrate="none"]').count()) >= 1
+		'frozen region emitted as <ogygia-region wake="none">',
+		(await page.locator('ogygia-region[wake="none"]').count()) >= 1
 	);
 	check(
 		'default remount is cache on hydrate=none',
-		(await page.locator('ogygia-region[hydrate="none"][remount="cache"]').count()) >= 1
+		(await page.locator('ogygia-region[wake="none"][remount="cache"]').count()) >= 1
 	);
 
 	// Frozen content is present (SSR rendered inline, restored around parent hydration).
@@ -125,7 +125,7 @@ try {
 		await swrRoot.locator('[data-toggle-btn]').click();
 		await sleep(800);
 		check("remount 'swr': {#if}-toggle triggers region endpoint fetch", fetches.length >= 1, `${fetches.length} fetch(es)`);
-		const revalidated = await swrRoot.locator('ogygia-region[hydrate="none"][data-revalidated]').count();
+		const revalidated = await swrRoot.locator('ogygia-region[wake="none"][data-revalidated]').count();
 		check("remount 'swr': region marked data-revalidated after fetch", revalidated >= 1, `${revalidated}`);
 		if (stampBefore != null) {
 			const stampAfter = await swrRoot.locator('[data-frozen-stamp]').first().getAttribute('data-frozen-stamp');

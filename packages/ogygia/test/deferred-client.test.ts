@@ -56,10 +56,10 @@ describe('deferred client island runtime contracts', () => {
 		const el = new FakeEl({
 			render: 'defer',
 			when: 'idle',
-			hydrate: 'visible',
+			wake: 'visible',
 			'hydrate-margin': '200px',
 			entry: '/_app/immutable/ogygia-island.abc123.js',
-			endpoint: '/🏝️ogygia🏝️?id=x'
+			endpoint: '/🏝️?id=x'
 		});
 		expect(is_deferred(el)).toBe(true);
 		expect(is_awake(el)).toBe(true);

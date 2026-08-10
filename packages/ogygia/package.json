@@ -1,79 +1,173 @@
 {
-  "name": "ogygia",
-	"version": "0.4.3",
-  "type": "module",
-  "description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
-  "homepage": "https://ogygia.puruvj.dev",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/PuruVJ/ogygia.git",
-    "directory": "packages/ogygia"
-  },
-  "bugs": {
-    "url": "https://github.com/PuruVJ/ogygia/issues"
-  },
-  "license": "MIT",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "svelte": "./dist/index.js",
-      "default": "./dist/index.js"
-    },
-    "./vite": {
-      "types": "./dist/vite/index.d.ts",
-      "default": "./dist/vite/index.js"
-    },
-    "./runtime": {
-      "types": "./dist/runtime/index.d.ts",
-      "default": "./dist/runtime/index.js"
-    },
-    "./hooks": {
-      "types": "./dist/hooks.d.ts",
-      "default": "./dist/hooks.js"
-    },
-    "./app": {
-      "types": "./dist/app.d.ts",
-      "default": "./dist/app.js"
-    },
-    "./internal": {
-      "types": "./dist/internal.d.ts",
-      "svelte": "./dist/internal.js",
-      "default": "./dist/internal.js"
-    },
-    "./internal/server": {
-      "types": "./dist/internal-server.d.ts",
-      "svelte": "./dist/internal-server.js",
-      "default": "./dist/internal-server.js"
-    }
-  },
+	"name": "ogygia",
+	"version": "0.5.0",
+	"type": "module",
+	"sideEffects": false,
+	"description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
+	"homepage": "https://ogygia.puruvj.dev",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/PuruVJ/ogygia.git",
+		"directory": "packages/ogygia"
+	},
+	"bugs": {
+		"url": "https://github.com/PuruVJ/ogygia/issues"
+	},
+	"license": "MIT",
+	"exports": {
+		".": {
+			"svelte": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./src/index.ts"
+		},
+		"./vite": {
+			"types": "./dist/vite/index.d.ts",
+			"default": "./dist/vite/index.js"
+		},
+		"./runtime": {
+			"types": "./dist/runtime/index.d.ts",
+			"default": "./src/runtime/index.ts"
+		},
+		"./hooks": {
+			"types": "./dist/hooks.d.ts",
+			"default": "./src/hooks.ts"
+		},
+		"./app": {
+			"types": "./dist/app.d.ts",
+			"default": "./src/app.ts"
+		},
+		"./internal": {
+			"svelte": "./src/internal.ts",
+			"types": "./dist/internal.d.ts",
+			"default": "./src/internal.ts"
+		},
+		"./internal/server": {
+			"svelte": "./src/internal-server.ts",
+			"types": "./dist/internal-server.d.ts",
+			"default": "./src/internal-server.ts"
+		},
+		"./content": {
+			"types": "./dist/content/index.d.ts",
+			"svelte": "./src/content/index.ts",
+			"default": "./src/content/index.ts"
+		},
+		"./content/server": {
+			"types": "./dist/content/server.d.ts",
+			"svelte": "./src/content/server.ts",
+			"default": "./src/content/server.ts"
+		},
+		"./content/markdown": {
+			"types": "./dist/content/markdown/index.d.ts",
+			"default": "./dist/content/markdown/index.js"
+		},
+		"./content/vite": {
+			"types": "./dist/content/vite/index.d.ts",
+			"default": "./dist/content/vite/index.js"
+		},
+		"./server": {
+			"types": "./dist/hooks.d.ts",
+			"default": "./src/hooks.ts"
+		}
+	},
+	"bin": {
+		"ogygia": "./dist/cli.mjs"
+	},
 	"files": [
 		"dist",
 		"README.md",
 		"LICENSE",
 		"CHANGELOG.md"
 	],
-  "scripts": {
-    "build": "tsdown && node scripts/copy-svelte.mjs",
-    "test": "vitest run",
-    "lint": "oxlint -c .oxlintrc.json src",
-    "check": "tsc --noEmit && vitest run && pnpm run lint",
-    "prepublishOnly": "pnpm run build"
-  },
-  "dependencies": {
-    "devalue": "^5.9.0",
-    "estree-walker": "^3.0.3",
-    "magic-string": "^1.1.0"
-  },
-  "peerDependencies": {
-    "@sveltejs/kit": ">=2.70.2 <3",
-    "svelte": "^5.40.0",
-    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^26.1.2",
-    "oxlint": "^1.77.0",
-    "tsdown": "^0.22.14",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
-  }
+	"scripts": {
+		"build": "tsdown && node scripts/copy-svelte.mjs",
+		"test": "vitest run",
+		"lint": "oxlint -c .oxlintrc.json src",
+		"check": "tsc --noEmit && vitest run && pnpm run lint",
+		"prepublishOnly": "pnpm run build"
+	},
+	"dependencies": {
+		"devalue": "^5.9.0",
+		"estree-walker": "^3.0.3",
+		"magic-string": "^1.1.0",
+		"yaml": "^2.8.0"
+	},
+	"peerDependencies": {
+		"@sveltejs/kit": ">=2.70.2 <3",
+		"svelte": "^5.40.0",
+		"vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0",
+		"mdsvex": "^0.12.0",
+		"shiki": "^3.0.0 || ^4.0.0"
+	},
+	"peerDependenciesMeta": {
+		"mdsvex": {
+			"optional": true
+		},
+		"shiki": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@sveltejs/sv-utils": "^0.3.3",
+		"@types/node": "^26.1.2",
+		"oxlint": "^1.77.0",
+		"tsdown": "^0.22.14",
+		"typescript": "^7.0.2",
+		"vitest": "^4.1.10",
+		"mdsvex": "^0.12.8",
+		"shiki": "^4.4.1",
+		"valibot": "^1.4.2",
+		"vite": "^8.2.0"
+	},
+	"publishConfig": {
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"svelte": "./dist/index.js",
+				"default": "./dist/index.js"
+			},
+			"./vite": {
+				"types": "./dist/vite/index.d.ts",
+				"default": "./dist/vite/index.js"
+			},
+			"./runtime": {
+				"types": "./dist/runtime/index.d.ts",
+				"default": "./dist/runtime/index.js"
+			},
+			"./hooks": {
+				"types": "./dist/hooks.d.ts",
+				"default": "./dist/hooks.js"
+			},
+			"./app": {
+				"types": "./dist/app.d.ts",
+				"default": "./dist/app.js"
+			},
+			"./internal": {
+				"types": "./dist/internal.d.ts",
+				"svelte": "./dist/internal.js",
+				"default": "./dist/internal.js"
+			},
+			"./internal/server": {
+				"types": "./dist/internal-server.d.ts",
+				"svelte": "./dist/internal-server.js",
+				"default": "./dist/internal-server.js"
+			},
+			"./content": {
+				"types": "./dist/content/index.d.ts",
+				"svelte": "./dist/content/index.js",
+				"default": "./dist/content/index.js"
+			},
+			"./content/markdown": {
+				"types": "./dist/content/markdown/index.d.ts",
+				"default": "./dist/content/markdown/index.js"
+			},
+			"./content/vite": {
+				"types": "./dist/content/vite/index.d.ts",
+				"default": "./dist/content/vite/index.js"
+			},
+			"./server": {
+				"types": "./dist/hooks.d.ts",
+				"default": "./dist/hooks.js"
+			}
+		}
+	}
 }

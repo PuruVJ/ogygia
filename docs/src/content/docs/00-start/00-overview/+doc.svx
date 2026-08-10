@@ -1,0 +1,62 @@
+---
+title: Overview
+summary: SSR islands for SvelteKit. Pages ship as server HTML with no Kit client bootstrap — JS arrives only for the components you mark.
+related:
+  - start/how-it-works
+  - start/install
+---
+
+ogygia is an islands architecture for SvelteKit. A page ships as **server HTML with no framework on it**. The only JavaScript that loads is a small shared runtime plus the code for the specific components you mark as interactive.
+
+```svelte
+<script>
+  import Cart from './Cart.svelte' with { wake: 'visible' };
+</script>
+
+<h1>Everything here is static HTML.</h1>
+<Cart />   <!-- hydrates only when it scrolls into view -->
+```
+
+That is the whole idea: opt the route out of the Kit client with `csr = false`, then mark the imports you want interactive. The heading ships zero JS. `Cart` ships its own, and only when it is needed.
+
+The island below is real — it lives on this page, marked `wake: 'load'`, while the prose around it stays HTML:
+
+<script>
+  import Counter from '$lib/demos/Counter.svelte' with { wake: 'load' };
+</script>
+
+<div class="doc-demo">
+  <Counter start={10} label="A live island" note="Everything else on this page is static HTML." />
+</div>
+
+## Why you'd want this
+
+- **Ship far less JavaScript.** No app-wide hydration. A mostly-static page stays mostly static, so most pages cost a ~7.6 KB runtime and nothing else.
+- **Keep writing normal Svelte.** Islands are ordinary components. The import attribute is the only new syntax; there is no special island API to learn.
+- **It is still SvelteKit.** Remote functions, form actions, the router, content — the Kit features you rely on work inside islands. No forked framework, no patched Kit.
+- **One vocabulary.** Client islands, server islands, lakes, and partials are the same handful of ideas combined, not four unrelated systems.
+
+## When it fits
+
+- Content-heavy or mostly-static pages with pockets of interactivity — marketing, docs, blogs, dashboards, storefronts.
+- Anywhere you feel you are shipping a whole framework to run one widget.
+
+If your page is a single large interactive app, plain SvelteKit with `csr = true` is the simpler tool — and ogygia [coexists](/docs/start/adoption) with those pages route by route.
+
+## Start here
+
+- [How it works](/docs/start/how-it-works) — the whole mental model in five words.
+- [Install](/docs/start/install) — add the package and wire the plugin.
+- [Quickstart](/docs/start/quickstart) — your first island, end to end.
+- [Client islands](/docs/islands/client-islands) — the primitive you will reach for most.
+
+<style>
+  .doc-demo {
+    margin: 1.5rem 0;
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md, 12px);
+    background: var(--bg-sunken);
+    max-width: 24rem;
+  }
+</style>

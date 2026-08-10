@@ -26,7 +26,7 @@ function makeFrag(nodes: NodeLike[]): FragmentLike & { nodes: NodeLike[] } {
 }
 
 describe('relocate_trailing_empty_comments', () => {
-	test('moves trailing empty comments from fragment into lake (contentful lake = 3)', () => {
+	test('moves trailing empty comments from partial into lake (contentful lake = 3)', () => {
 		const content = comment('keep');
 		const d1 = comment('');
 		const d2 = comment('');
@@ -55,7 +55,7 @@ describe('relocate_trailing_empty_comments', () => {
 		expect(kids).toEqual([a, b, c]);
 	});
 
-	test('leaves non-empty trailing comments on the fragment', () => {
+	test('leaves non-empty trailing comments on the partial', () => {
 		const keep = comment('[');
 		const frag = makeFrag([keep]);
 		const kids: NodeLike[] = [];
@@ -65,7 +65,7 @@ describe('relocate_trailing_empty_comments', () => {
 		expect(kids).toEqual([]);
 	});
 
-	test('no-op on empty fragment', () => {
+	test('no-op on empty partial', () => {
 		const frag = makeFrag([]);
 		const kids: NodeLike[] = [];
 		const lake: ParentLike = { appendChild: (n) => kids.push(n) };

@@ -1,0 +1,68 @@
+---
+title: Markdown & Shiki
+summary: An opinionated mdsvex + Shiki preprocessor with heading ids and collected headings for TOCs.
+related:
+  - content/collections
+  - content/live
+  - data-state/partials
+---
+
+ogygia ships an opinionated markdown pipeline: mdsvex for `.svx` / `.md`, Shiki for fences, pandoc-style heading ids, and a headings collector that fills each entry's `meta.headings` for a TOC. Turn it on under `ogygia({ content: { markdown } })` — the setup lives on the [Install](/docs/start/install) page.
+
+## Options
+
+Everything is configured under the one plugin surface — no separate preprocessor to register:
+
+```ts
+// vite.config.ts
+ogygia({
+  content: {
+    markdown: {
+      themes: { light: 'github-light', dark: 'github-dark' },
+      defaultColor: 'light-dark()',
+      wrapperClass: 'code-only'
+      // also: headingIds, headings, langs, remarkPlugins, rehypePlugins
+    }
+  }
+});
+```
+
+An empty `markdown: {}` uses the defaults: Shiki `github-light` / `github-dark` via `light-dark()`, pandoc `## Title {#id}` heading ids, collected h2–h4 headings, wrapper class `code-only`. Every fenced code block on this site is highlighted by exactly this.
+
+## Headings for free
+
+The preprocessor collects `h2`–`h4` into `meta.headings`, auto-slugging any heading that lacks an explicit `{#id}`. `get()` hands that array back on the entry:
+
+```svelte
+<script>
+  import { Region } from 'ogygia';
+  const entry = await docs.get(slug);
+</script>
+
+<Toc headings={entry.meta.headings} />   <!-- [{ depth, id, text }] -->
+<Region of={entry.body} />
+```
+
+The **On this page** rail beside these docs is built from exactly that array.
+
+## Islands inside markdown
+
+Because ogygia's transform runs after mdsvex, marked island imports work inside a `.svx` file — same as a `.svelte` page:
+
+```svelte
+<script>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+</script>
+
+<Counter start={3} />
+```
+
+That is how the live demos in these docs live right inside the prose.
+
+## Do / don't
+
+- **Do** leave `markdown: {}` at defaults to start — the built-in Shiki themes and heading collector cover most sites.
+- **Do** build your TOC from `entry.meta.headings` rather than re-parsing the body.
+- **Don't** register a separate mdsvex plugin — configuration lives entirely under `ogygia({ content: { markdown } })`.
+
+

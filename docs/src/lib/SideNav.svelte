@@ -1,109 +1,33 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import Logo from '$lib/Logo.svelte';
-	import { docsTocItems, playgroundLinks } from '$lib/toc-items';
+	import { docNav } from '$lib/docs.remote';
+	import { groupNav, docHref } from '$lib/toc-items';
 
-	// SSR: real Kit `$app/state`. Client island: ogygia shim (location → SPA set_page).
-	const initialPath = page.url.pathname;
+	// Nav is a prerendered remote — cheap static JSON, grouped into ordered sections.
+	const groups = groupNav(await docNav());
 
 	let open = $state(false);
-	let docsOpen = $state(!initialPath.startsWith('/playground'));
-	let playgroundOpen = $state(initialPath.startsWith('/playground'));
-	let lastSectionPg = $state(initialPath.startsWith('/playground'));
-	let activeToc = $state('features');
 	let mobile = $state(false);
 	let root_el: HTMLElement | undefined = $state();
 	let scroll_el: HTMLElement | undefined = $state();
-	/** Skip panel height transition when open state follows a route change. */
-	let panelInstant = $state(false);
 
 	const path = $derived(page.url.pathname);
-	const onDocs = $derived(path === '/');
-	const onPlayground = $derived(path.startsWith('/playground'));
 	const sheetInert = $derived(mobile && !open);
-	/** On mobile both sections stay expanded; collapse is desktop-only. */
-	const docsExpanded = $derived(mobile || docsOpen);
-	const playgroundExpanded = $derived(mobile || playgroundOpen);
 
-	function applySectionDefaults(pathname: string) {
-		if (mobile) {
-			docsOpen = true;
-			playgroundOpen = true;
-			return;
-		}
-		const pg = pathname.startsWith('/playground');
-		panelInstant = true;
-		docsOpen = !pg;
-		playgroundOpen = pg;
-		queueMicrotask(() => {
-			panelInstant = false;
-		});
+	function sectionHasActive(items: { slug: string }[]) {
+		return items.some((i) => path === docHref(i.slug));
+	}
+
+	function isActive(slug: string) {
+		return path === docHref(slug);
 	}
 
 	function close() {
 		open = false;
 	}
-
 	function toggle() {
 		open = !open;
-	}
-
-	function docsHref(id: string) {
-		return onDocs ? `#${id}` : `/#${id}`;
-	}
-
-	function playgroundActive(href: string) {
-		if (href === '/playground') return path === '/playground';
-		return path === href || path.startsWith(`${href}/`);
-	}
-
-	/** Cached document Y of each docs section — measured once, not on every scroll. */
-	let section_tops: { id: string; top: number }[] = [];
-	let tops_dirty = true;
-	let scroll_raf = 0;
-	let measure_raf = 0;
-	let measure_raf2 = 0;
-
-	function invalidateSectionTops() {
-		tops_dirty = true;
-	}
-
-	function measureSectionTops() {
-		section_tops = [];
-		for (const item of docsTocItems) {
-			const el = document.getElementById(item.id);
-			if (!el) continue;
-			section_tops.push({
-				id: item.id,
-				top: el.getBoundingClientRect().top + window.scrollY
-			});
-		}
-		tops_dirty = false;
-	}
-
-	function pickToc() {
-		if (!onDocs) return;
-		if (tops_dirty) measureSectionTops();
-		const line = window.scrollY + 120;
-		let next = docsTocItems[0]?.id ?? activeToc;
-		for (const s of section_tops) {
-			if (s.top <= line) next = s.id;
-		}
-		activeToc = next;
-	}
-
-	/** One pickToc per frame — scroll fires far more often than paint. */
-	function schedulePickToc() {
-		if (scroll_raf) return;
-		scroll_raf = requestAnimationFrame(() => {
-			scroll_raf = 0;
-			pickToc();
-		});
-	}
-
-	function onDocsLinkClick(id: string) {
-		activeToc = id;
-		close();
 	}
 
 	function scrollActiveIntoView() {
@@ -117,19 +41,15 @@
 		root.scrollTop += delta;
 	}
 
-	// Docs ↔ Playground boundary only — don't fight manual expand/collapse on sub-routes.
 	$effect(() => {
-		const pg = path.startsWith('/playground');
-		if (pg === lastSectionPg) return;
-		lastSectionPg = pg;
-		applySectionDefaults(path);
-	});
-
-	$effect(() => {
-		if (mobile) {
-			docsOpen = true;
-			playgroundOpen = true;
-		}
+		const mq = window.matchMedia('(max-width: 1099px)');
+		const sync = () => {
+			mobile = mq.matches;
+			if (!mq.matches) open = false;
+		};
+		sync();
+		mq.addEventListener('change', sync);
+		return () => mq.removeEventListener('change', sync);
 	});
 
 	$effect(() => {
@@ -142,73 +62,13 @@
 		};
 	});
 
+	// Keep the active nav link visible WITHIN the sidebar's own scroll box only.
+	// `element.scrollIntoView()` would also scroll the document (jumping the page down to
+	// wherever the active link sits) — scrollActiveIntoView only touches scroll_el.scrollTop.
 	$effect(() => {
-		if (!onDocs || !activeToc || !root_el || (mobile && !open)) return;
-		// Defer off the hydrate/effect turn — same rAF gate as the initial measure.
-		const id = requestAnimationFrame(() => {
-			const el = root_el.querySelector<HTMLElement>(`.side-link.is-active`);
-			el?.scrollIntoView({ block: 'nearest' });
-		});
+		if (!root_el || (mobile && !open)) return;
+		const id = requestAnimationFrame(scrollActiveIntoView);
 		return () => cancelAnimationFrame(id);
-	});
-
-	$effect(() => {
-		const mq = window.matchMedia('(max-width: 1099px)');
-		const syncMobile = () => {
-			mobile = mq.matches;
-			if (!mq.matches) open = false;
-			else {
-				docsOpen = true;
-				playgroundOpen = true;
-			}
-		};
-		const onResize = () => {
-			invalidateSectionTops();
-			syncMobile();
-			schedulePickToc();
-		};
-		const onHash = () => {
-			// Hash targets can shift layout; remeasure then pick.
-			invalidateSectionTops();
-			schedulePickToc();
-		};
-
-		syncMobile();
-		mq.addEventListener('change', syncMobile);
-		window.addEventListener('resize', onResize);
-		window.addEventListener('hashchange', onHash);
-		window.addEventListener('scroll', schedulePickToc, { passive: true });
-
-		// Defer first measure/pick off the hydrate turn (double rAF: after layout settles).
-		measure_raf = requestAnimationFrame(() => {
-			measure_raf = 0;
-			measure_raf2 = requestAnimationFrame(() => {
-				measure_raf2 = 0;
-				invalidateSectionTops();
-				pickToc();
-			});
-		});
-
-		let fonts_alive = true;
-		document.fonts?.ready?.then(() => {
-			if (!fonts_alive) return;
-			invalidateSectionTops();
-			schedulePickToc();
-		});
-
-		return () => {
-			fonts_alive = false;
-			mq.removeEventListener('change', syncMobile);
-			window.removeEventListener('resize', onResize);
-			window.removeEventListener('hashchange', onHash);
-			window.removeEventListener('scroll', schedulePickToc);
-			if (scroll_raf) cancelAnimationFrame(scroll_raf);
-			if (measure_raf) cancelAnimationFrame(measure_raf);
-			if (measure_raf2) cancelAnimationFrame(measure_raf2);
-			scroll_raf = 0;
-			measure_raf = 0;
-			measure_raf2 = 0;
-		};
 	});
 
 	$effect(() => {
@@ -240,13 +100,7 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div class="side-backdrop" class:is-open={open} onclick={close} aria-hidden={!open}></div>
 
-	<aside
-		class="side"
-		class:is-open={open}
-		id="side-nav"
-		aria-label="Site"
-		inert={sheetInert}
-	>
+	<aside class="side" class:is-open={open} id="side-nav" aria-label="Site" inert={sheetInert}>
 		<div class="side-brand">
 			<a class="side-logo" href="/" onclick={close}>
 				<span class="side-logo-mark" aria-hidden="true"><Logo size={22} /></span>
@@ -270,161 +124,63 @@
 		<div class="side-sheet-handle" aria-hidden="true"><span></span></div>
 
 		<div class="side-scroll" class:side-scroll--mobile={mobile} bind:this={scroll_el}>
-			{#if mobile}
-				<!-- Flat sticky stack: Docs sticks top, Playground sticks bottom then top. -->
-				<div class="side-cat-toggle side-cat-toggle--sticky-top" class:is-current={onDocs}>
-					<span class="side-cat-label">Docs</span>
-				</div>
-				<nav class="side-links side-links--mobile-block" aria-label="Docs">
-					<ul class="side-list">
-						{#each docsTocItems as item (item.id)}
-							<li>
-								<a
-									class="side-link"
-									class:side-link--sub={item.sub}
-									class:is-active={onDocs && activeToc === item.id}
-									href={docsHref(item.id)}
-									onclick={() => onDocsLinkClick(item.id)}
-								>
-									{#if item.sub}<span class="side-link-tick" aria-hidden="true"></span>{/if}
-									<span class="side-link-text">{item.label}</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				</nav>
+			<a
+				class="side-home-link"
+				class:is-active={path === '/'}
+				href="/"
+				onclick={close}
+			>
+				<span class="side-link-text">Home</span>
+			</a>
 
-				<div
-					class="side-cat-toggle side-cat-toggle--sticky-both"
-					class:is-current={onPlayground}
-				>
-					<span class="side-cat-label">Playground</span>
-				</div>
-				<nav class="side-links side-links--mobile-block" aria-label="Playground">
-					<ul class="side-list">
-						{#each playgroundLinks as link}
-							<li>
-								<a
-									class="side-link"
-									class:is-active={playgroundActive(link.href)}
-									href={link.href}
-									onclick={close}
-								>
-									<span class="side-link-text">{link.label}</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				</nav>
-			{:else}
-				<section class="side-cat" class:is-current={onDocs}>
-					<button
-						type="button"
-						class="side-cat-toggle"
-						aria-expanded={docsOpen}
-						onclick={() => (docsOpen = !docsOpen)}
-					>
-						<span class="side-cat-label">Docs</span>
-						<svg
-							class="side-chevron"
-							class:is-open={docsOpen}
-							width="14"
-							height="14"
-							viewBox="0 0 12 12"
-							aria-hidden="true"
-						>
-							<path
-								d="M3 4.5 6 7.5 9 4.5"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.75"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							/>
-						</svg>
-					</button>
+			{#each groups as group (group.section)}
+				{#if mobile}
 					<div
-						class="side-cat-panel"
-						class:is-open={docsExpanded}
-						class:is-instant={panelInstant}
-						inert={!docsExpanded}
+						class="side-cat-toggle side-cat-toggle--sticky-top"
+						class:is-current={sectionHasActive(group.items)}
 					>
-						<div class="side-cat-panel-inner">
-							<nav class="side-links" aria-label="Docs">
-								<ul class="side-list">
-									{#each docsTocItems as item (item.id)}
-										<li>
-											<a
-												class="side-link"
-												class:side-link--sub={item.sub}
-												class:is-active={onDocs && activeToc === item.id}
-												href={docsHref(item.id)}
-												onclick={() => onDocsLinkClick(item.id)}
-											>
-												{#if item.sub}<span class="side-link-tick" aria-hidden="true"></span>{/if}
-												<span class="side-link-text">{item.label}</span>
-											</a>
-										</li>
-									{/each}
-								</ul>
-							</nav>
-						</div>
+						<span class="side-cat-label">{group.section}</span>
 					</div>
-				</section>
-
-				<section class="side-cat" class:is-current={onPlayground}>
-					<button
-						type="button"
-						class="side-cat-toggle"
-						aria-expanded={playgroundOpen}
-						onclick={() => (playgroundOpen = !playgroundOpen)}
-					>
-						<span class="side-cat-label">Playground</span>
-						<svg
-							class="side-chevron"
-							class:is-open={playgroundOpen}
-							width="14"
-							height="14"
-							viewBox="0 0 12 12"
-							aria-hidden="true"
-						>
-							<path
-								d="M3 4.5 6 7.5 9 4.5"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.75"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							/>
-						</svg>
-					</button>
-					<div
-						class="side-cat-panel"
-						class:is-open={playgroundExpanded}
-						class:is-instant={panelInstant}
-						inert={!playgroundExpanded}
-					>
-						<div class="side-cat-panel-inner">
-							<nav class="side-links" aria-label="Playground">
-								<ul class="side-list">
-									{#each playgroundLinks as link}
-										<li>
-											<a
-												class="side-link"
-												class:is-active={playgroundActive(link.href)}
-												href={link.href}
-												onclick={close}
-											>
-												<span class="side-link-text">{link.label}</span>
-											</a>
-										</li>
-									{/each}
-								</ul>
-							</nav>
+					<nav class="side-links side-links--mobile-block" aria-label={group.section}>
+						<ul class="side-list">
+							{#each group.items as item (item.slug)}
+								<li>
+									<a
+										class="side-link"
+										class:is-active={isActive(item.slug)}
+										href={docHref(item.slug)}
+										onclick={close}
+									>
+										<span class="side-link-text">{item.title}</span>
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</nav>
+				{:else}
+					<section class="side-cat" class:is-current={sectionHasActive(group.items)}>
+						<div class="side-cat-header">
+							<span class="side-cat-label">{group.section}</span>
 						</div>
-					</div>
-				</section>
-			{/if}
+						<nav class="side-links" aria-label={group.section}>
+							<ul class="side-list">
+								{#each group.items as item (item.slug)}
+									<li>
+										<a
+											class="side-link"
+											class:is-active={isActive(item.slug)}
+											href={docHref(item.slug)}
+											onclick={close}
+										>
+											<span class="side-link-text">{item.title}</span>
+										</a>
+									</li>
+								{/each}
+							</ul>
+						</nav>
+					</section>
+				{/if}
+			{/each}
 		</div>
 	</aside>
 
@@ -466,12 +222,8 @@
 </div>
 
 <style>
-/* Layout tokens the sidenav reserves on the page. */
-:global(:root) {
-	--side-w: 16.75rem;
-	--side-gap: 0.85rem;
-	--side-bar-h: calc(3.25rem + env(safe-area-inset-bottom, 0px));
-}
+/* Layout tokens + body padding reservation live in site-chrome.css (eager) so content does not
+   shift when this island's CSS loads. */
 
 .side-backdrop {
 	display: none;
@@ -484,7 +236,6 @@
 	flex-direction: column;
 	gap: 0.85rem;
 	width: var(--side-w);
-	/* Full-height floating panel */
 	top: var(--side-gap);
 	bottom: var(--side-gap);
 	left: var(--side-gap);
@@ -583,9 +334,42 @@
 	padding: 0.1rem 0.2rem 0.35rem 0.05rem;
 }
 
+.side-home-link {
+	display: flex;
+	align-items: center;
+	min-height: 1.85rem;
+	padding: 0.32rem 0.55rem 0.32rem 0.7rem;
+	border-radius: 8px;
+	font: 500 0.84375rem/1.25 var(--font-body);
+	letter-spacing: -0.014em;
+	color: var(--text-dim);
+	text-decoration: none;
+	transition:
+		color 140ms ease,
+		background 140ms ease;
+}
+
+.side-home-link:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
+}
+
+.side-home-link.is-active {
+	color: var(--text);
+	font-weight: 600;
+	background: color-mix(in srgb, var(--accent-deep) 78%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent);
+}
+
 .side-cat + .side-cat {
 	padding-top: 0.85rem;
 	border-top: 1px solid color-mix(in srgb, var(--accent-line) 35%, var(--line));
+}
+
+/* Static, non-collapsible category header (desktop). Mobile reuses `.side-cat-toggle` +
+   `--sticky-top` for its sticky section labels. */
+.side-cat-header {
+	padding: 0.4rem 0.45rem;
 }
 
 .side-cat-toggle {
@@ -599,78 +383,18 @@
 	border-radius: 7px;
 	background: transparent;
 	color: var(--text-dim);
-	cursor: pointer;
 	text-align: left;
-	transition:
-		color 160ms ease,
-		background 160ms ease;
 }
 
 .side-cat-label {
 	font: 600 0.6875rem/1 var(--font-mono);
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
+	color: var(--text-dim);
 }
 
-.side-cat-toggle:hover {
-	color: var(--text);
-	background: color-mix(in srgb, var(--accent-deep) 32%, transparent);
-}
-
-.side-cat.is-current .side-cat-toggle {
+.side-cat.is-current .side-cat-label {
 	color: var(--accent);
-}
-
-.side-chevron {
-	display: block;
-	width: 14px;
-	height: 14px;
-	flex-shrink: 0;
-	opacity: 0.85;
-	transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
-	transform: rotate(-90deg);
-	/* optical center — stroke path sits slightly high in the viewBox */
-	translate: 0 0.5px;
-}
-
-.side-cat-toggle:hover .side-chevron,
-.side-cat.is-current .side-cat-toggle .side-chevron {
-	opacity: 1;
-}
-
-.side-chevron.is-open {
-	transform: rotate(0deg);
-}
-
-.side-cat-panel {
-	display: grid;
-	grid-template-rows: 0fr;
-	opacity: 0;
-	transition:
-		grid-template-rows 280ms cubic-bezier(0.23, 1, 0.32, 1),
-		opacity 200ms ease;
-}
-
-.side-cat-panel.is-open {
-	grid-template-rows: 1fr;
-	opacity: 1;
-}
-
-/* Route sync (docs ↔ playground) — snap open/close so SPA View Transitions
-   don't hide the live panel mid-collapse and make it flash. */
-.side-cat-panel.is-instant {
-	transition: none;
-}
-
-.side-cat-panel-inner {
-	overflow: hidden;
-	min-height: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.side-cat-panel {
-		transition: none;
-	}
 }
 
 .side-links {
@@ -684,10 +408,6 @@
 	display: flex;
 	flex-direction: column;
 	gap: 0.1rem;
-}
-
-.side-list > li:has(.side-link--sub) + li:has(.side-link:not(.side-link--sub)) {
-	margin-top: 0.55rem;
 }
 
 .side-link {
@@ -715,38 +435,9 @@
 	white-space: nowrap;
 }
 
-.side-link--sub {
-	min-height: 1.5rem;
-	margin-left: 0.7rem;
-	padding: 0.22rem 0.5rem 0.22rem 0.85rem;
-	border-radius: 0 8px 8px 0;
-	border-left: 1px solid color-mix(in srgb, var(--accent-line) 85%, var(--text-dim));
-	font: 400 0.6875rem/1.35 var(--font-mono);
-	letter-spacing: -0.01em;
-	/* Keep hierarchy without dropping below readable contrast on dark panels */
-	color: color-mix(in srgb, var(--text-dim) 78%, var(--text));
-}
-
-.side-link-tick {
-	position: absolute;
-	left: -1px;
-	top: 50%;
-	width: 5px;
-	height: 5px;
-	border-radius: 50%;
-	background: transparent;
-	transform: translate(-50%, -50%);
-	transition: background 140ms ease;
-}
-
 .side-link:hover {
 	color: var(--text);
 	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
-}
-
-.side-link--sub:hover {
-	color: var(--text);
-	border-left-color: color-mix(in srgb, var(--accent) 55%, var(--accent-line));
 }
 
 .side-link.is-active {
@@ -756,7 +447,7 @@
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent);
 }
 
-.side-link.is-active:not(.side-link--sub)::before {
+.side-link.is-active::before {
 	content: '';
 	position: absolute;
 	left: 0.35rem;
@@ -768,21 +459,8 @@
 	pointer-events: none;
 }
 
-.side-link.is-active:not(.side-link--sub) {
+.side-link.is-active {
 	padding-left: 0.85rem;
-}
-
-.side-link--sub.is-active {
-	color: var(--accent-strong);
-	font-weight: 500;
-	background: color-mix(in srgb, var(--accent-deep) 55%, transparent);
-	border-left-color: var(--accent);
-	box-shadow: none;
-}
-
-.side-link--sub.is-active .side-link-tick {
-	background: var(--accent);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-deep) 80%, transparent);
 }
 
 .side-sheet-handle,
@@ -791,11 +469,6 @@
 }
 
 @media (min-width: 1100px) {
-	:global(body) {
-		/* Make room for the floating sidebar so content doesn't sit under it */
-		padding-left: calc(var(--side-w) + var(--side-gap) * 2);
-	}
-
 	.side-bottombar,
 	.side-sheet-handle {
 		display: none !important;
@@ -807,10 +480,6 @@
 }
 
 @media (max-width: 1099px) {
-	:global(body) {
-		padding-bottom: var(--side-bar-h);
-	}
-
 	.side {
 		top: auto;
 		left: 0;
@@ -837,7 +506,6 @@
 		transform: translate3d(0, 0, 0);
 		pointer-events: auto;
 		visibility: visible;
-		/* Definite height so the scroll pane + sticky headers can fill the sheet. */
 		height: min(78dvh, calc(100dvh - var(--side-bar-h) - 0.35rem));
 	}
 
@@ -864,57 +532,48 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0;
-		padding: 0 0.15rem 0.15rem;
+		padding: 0.25rem 0.35rem 0.5rem;
 		flex: 1 1 auto;
 		min-height: 0;
 	}
 
-	/* Docs links fill leftover sheet height so Playground rests on the bottom edge. */
-	.side-scroll--mobile > .side-links--mobile-block:first-of-type {
-		flex: 1 0 auto;
-		min-height: calc(100% - 5rem);
-		margin-top: 0.2rem;
-		padding-bottom: 0.35rem;
+	/* Bigger touch targets + higher contrast for the phone sheet. */
+	.side-scroll--mobile .side-home-link,
+	.side-scroll--mobile .side-link {
+		min-height: 2.75rem;
+		padding-left: 0.9rem;
+		border-radius: 10px;
+		font-size: 0.95rem;
+		color: color-mix(in srgb, var(--text-dim) 55%, var(--text));
 	}
 
-	.side-scroll--mobile > .side-links--mobile-block:last-of-type {
-		margin-top: 0.2rem;
-		padding-bottom: 0.5rem;
+	.side-scroll--mobile .side-link.is-active {
+		color: var(--text);
 	}
 
-	.side-cat-toggle--sticky-top,
-	.side-cat-toggle--sticky-both {
+	/* Section labels: clean inline headers, aligned with links, no hard divider line. */
+	.side-cat-toggle--sticky-top {
 		position: sticky;
+		top: 0;
 		z-index: 3;
-		margin: 0;
+		margin: 1.1rem 0 0.1rem;
+		padding: 0.5rem 0.9rem 0.4rem;
 		border-radius: 0;
-		background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+		background: linear-gradient(
+			var(--bg-raised) 55%,
+			color-mix(in srgb, var(--bg-raised) 80%, transparent)
+		);
 		backdrop-filter: blur(12px) saturate(1.1);
 		-webkit-backdrop-filter: blur(12px) saturate(1.1);
-		box-shadow: 0 1px 0 color-mix(in srgb, var(--accent-line) 40%, var(--line));
 		flex-shrink: 0;
 	}
 
-	.side-cat-toggle--sticky-top {
-		top: 0;
+	.side-scroll--mobile .side-cat-label {
+		font-size: 0.625rem;
+		color: var(--text-faint);
 	}
 
-	/* Bottom while Docs scrolls; top once Playground content takes the sheet. */
-	.side-cat-toggle--sticky-both {
-		top: 0;
-		bottom: 0;
-		box-shadow:
-			0 -1px 0 color-mix(in srgb, var(--accent-line) 40%, var(--line)),
-			0 1px 0 color-mix(in srgb, var(--accent-line) 40%, var(--line));
-	}
-
-	.side-cat-toggle--sticky-top.is-current,
-	.side-cat-toggle--sticky-both.is-current {
-		color: var(--accent);
-	}
-
-	.side-cat-toggle--sticky-top.is-current .side-cat-label,
-	.side-cat-toggle--sticky-both.is-current .side-cat-label {
+	.side-cat-toggle--sticky-top.is-current .side-cat-label {
 		color: var(--accent);
 	}
 

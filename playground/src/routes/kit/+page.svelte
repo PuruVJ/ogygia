@@ -2,7 +2,7 @@
 	// Mixed mode: an island on a csr=true page. Kit hydrates the whole tree, so the
 	// island degrades gracefully to a normal component (single hydration; our runtime
 	// detects Kit and skips its own hydration).
-	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
+	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
 	import KitStatus from '$lib/KitStatus.svelte';
 </script>
 

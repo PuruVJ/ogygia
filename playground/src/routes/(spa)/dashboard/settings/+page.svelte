@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
+	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
 </script>
 
 <h1 data-static-shell>Settings</h1>

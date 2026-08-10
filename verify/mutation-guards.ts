@@ -32,7 +32,7 @@ const baseCtx = {
 const HOST = '/app/src/routes/+page.svelte';
 const wrap = (imp: string, usage: string) => `<script>\n${imp}\n</script>\n${usage}`;
 const run = (src: string) => transformHost(src, HOST, baseCtx);
-const IMP = `import C from './C.svelte' with { hydrate: 'load' };`;
+const IMP = `import C from './C.svelte' with { wake: 'load' };`;
 
 function expectError(label: string, src: string, re: RegExp) {
 	try {
@@ -51,20 +51,18 @@ function expectOk(label: string, src: string) {
 	}
 }
 
-// Portable bindings: host children cannot cross the boundary
+// Cross-island composition: host children now CROSS into a hydrate island (synthesized entry).
+expectOk('host static children now cross', wrap(IMP, '<C><p>x</p></C>'));
+expectOk('host children with captured value cross', wrap(IMP + '\nconst who = "x";', '<C><p>{who}</p></C>'));
+// But a child that ASSIGNS to a captured host value is still rejected — a snapshot can't write back.
 expectError(
-	'host children rejected',
-	wrap(IMP, '<C><p>x</p></C>'),
-	/host children\/snippets/
-);
-expectError(
-	'host bind: children rejected',
+	'host bind: mutating children rejected',
 	wrap(IMP + '\nlet name = "x";', '<C><input bind:value={name} /></C>'),
-	/host children/
+	/assign to host value/
 );
 expectError(
-	'error names the file',
-	wrap(IMP, '<C><span /></C>'),
+	'mutation error names the file',
+	wrap(IMP + '\nlet name = "x";', '<C><input bind:value={name} /></C>'),
 	/src\/routes\/\+page\.svelte/
 );
 

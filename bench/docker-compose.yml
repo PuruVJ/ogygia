@@ -1,0 +1,11 @@
+services:
+  bench:
+    build:
+      context: ..
+      dockerfile: bench/Dockerfile
+    volumes:
+      - ./results:/repo/bench/results
+    environment:
+      - CHROME_PATH=/usr/local/bin/chrome
+      - ASTRO_TELEMETRY_DISABLED=1
+      - MOCHI_KEY=dGVzdC1rZXktMzItYnl0ZXMtYmFzZTY0dXJsISEh

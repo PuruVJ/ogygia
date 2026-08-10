@@ -1,0 +1,78 @@
+---
+title: API reference
+summary: Every public export, grouped by entry point — components, functions, the plugin, the server handle, and content.
+related:
+  - reference/glossary
+  - reference/constraints
+---
+
+Everything ogygia exposes, by import path. Deep pages are linked where a symbol has one.
+
+## `ogygia`
+
+The runtime surface. Import the namespace (`import * as ogygia from 'ogygia'`) or named exports.
+
+| Export | Kind | What it is |
+| --- | --- | --- |
+| `Router` | component | Opt-in SPA router — intercepts links, swaps the body. See [SPA router](/docs/app/router). |
+| `Boundary` | component | Error boundary for island subtrees. |
+| `Partial` | component | Renders a [partial](/docs/data-state/partials): `<Region of={x} />`. |
+| `partial` | function | Mints a partial: `region(Component, props)`. |
+| `isRegion` | function | Type guard for a partial value. |
+| `transport` | hook value | The Kit `transport` entry that lets a partial cross the wire. |
+| `wire` | symbol | The reserved codec key for [shared state](/docs/data-state/state-context#sharing-state): `static [ogygia.wire] = { encode, decode }`. |
+
+Types: `RegionValue`, `AwaitableRegion`, `InlineRegion`, `DualRegion`, `DeferredRegion`, `TransportCodec`.
+
+### Import attributes
+
+Authored on a component import, not called:
+
+| Attribute | Makes | Values |
+| --- | --- | --- |
+| `with { wake }` | a client island (or a lake at `'none'`) | `'load'` · `'idle'` · `'visible'` · `'(media)'` · `'none'` |
+| `with { defer }` | a server island | `'load'` · `'idle'` · `'visible'` · `'(media)'` |
+| `with { region }` | a server-chosen partial | `'load'` · `'static'` · `'idle'` · `'visible'` · `'(media)'` |
+| `with { preset }` | a named preset from plugin config | any preset name |
+
+## `ogygia/vite`
+
+```ts
+import { ogygia } from 'ogygia/vite';
+```
+
+`ogygia(options)` — the Vite plugin. Runs before `sveltekit()`. Every option is documented in [Plugin config](/docs/reference/plugin-config).
+
+## `ogygia/server`
+
+```ts
+import * as ogygia from 'ogygia/server';
+export const handle = ogygia.handle();
+```
+
+`handle(options)` — the SvelteKit server handle. Serves the signed region endpoint, injects client seeds, and streams holes when `stream: true`.
+
+## `ogygia/app`
+
+Island-safe replacements for `$app/navigation` (a csr=false page has no Kit client):
+
+`goto` · `invalidate` · `invalidateAll` · `preloadData` · `preloadCode` · `beforeNavigate` · `afterNavigate` · `disableScrollHandling`
+
+Prefer these over `$app/navigation` inside islands. See [SPA router](/docs/app/router).
+
+## `ogygia/content`
+
+```ts
+import { content, mdsvex, json, yaml, raw, blocks, glob, mapRaw, fromArray } from 'ogygia/content';
+```
+
+| Export | What it is |
+| --- | --- |
+| `content({ loader, schema, relations })` | Defines a collection. `Data` is inferred from `schema`, `Meta` from the loader — no annotations. `get` / `entry` / `ids` / `entries`; wire remotes via `withRemotes()`. See [Content collections](/docs/content/collections). |
+| `mdsvex` · `json` · `yaml` · `raw` · `blocks` | Source builders — `content({ loader: mdsvex(import.meta.glob(…)) })`. `mdsvex` provides `meta.headings`. |
+| `glob` · `mapRaw` · `fromArray` · `defineSource` | Source primitives for building custom loaders (a CMS, an API). See [Live & CMS sources](/docs/content/live). |
+| `parseSchema` | Lower-level helper. `parseFrontmatter` lives on `ogygia/content/markdown`. |
+
+An entry is `{ id, data, meta, body, rel, backlinks }`: `data` (schema output), `meta` (source-derived, e.g. `{ headings }`), `body` (a partial). Types: `Entry`, `ContentEntry`, `ContentHandle`, `Source`, `Heading`, `SchemaLike`.
+
+

@@ -7,7 +7,7 @@
 </script>
 
 <DemoBlock
-	title="hydrate: 'idle'"
+	title="wake: 'idle'"
 	{codeHtml}
 	onLabel="live"
 	offLabel="static"

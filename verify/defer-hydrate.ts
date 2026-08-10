@@ -1,5 +1,5 @@
 // Deferred client islands (defer + hydrate). Usage: node verify/defer-hydrate.ts [baseUrl]
-// Against /defer-hydrate:
+// Against /defer-wake:
 //   - match (load+load): fallback → swap → hydrate → counter click
 //   - idle-match (idle+idle): coalesce after idle fetch → interactive
 //   - mismatch (load+visible): HTML below fold after load fetch; NOT hydrated until scroll;
@@ -28,7 +28,7 @@ const count = (s: string, re: RegExp) => (s.match(re) || []).length;
 	);
 	check(
 		'/defer-hydrate regions carry hydrate (deferred client)',
-		count(html, /<ogygia-region\b[^>]*\bhydrate="/g) === 3
+		count(html, /<ogygia-region\b[^>]*\bwake="/g) === 3
 	);
 	check(
 		'/defer-hydrate entry is a module URL (not opaque id alone)',
@@ -41,7 +41,7 @@ const count = (s: string, re: RegExp) => (s.match(re) || []).length;
 		count(html, /data-ogygia-props/g) === 3,
 		`${count(html, /data-ogygia-props/g)}`
 	);
-	// Coalesce cases (hydrate:load OR hydrate===defer) → modulepreload; mismatch visible does not.
+	// Coalesce cases (wake:load OR hydrate===defer) → modulepreload; mismatch visible does not.
 	const modulepreloads = count(html, /rel="modulepreload"/g);
 	check(
 		'/defer-hydrate modulepreload for coalesce cases (>=2)',
@@ -118,8 +118,8 @@ try {
 	const mismatchHtml = (await page.locator('[data-dh="mismatch"] [data-counter]').count()) === 1;
 	const mismatchHydratedBefore =
 		(await page.locator('[data-dh="mismatch"] ogygia-region[data-hydrated]').count()) === 1;
-	check('mismatch: HTML swapped before scroll (defer:load)', mismatchHtml);
-	check('mismatch: NOT hydrated before scroll (hydrate:visible)', !mismatchHydratedBefore);
+	check('mismatch: HTML swapped before scroll (fill:load)', mismatchHtml);
+	check('mismatch: NOT hydrated before scroll (wake:visible)', !mismatchHydratedBefore);
 
 	if (mismatchHtml && !mismatchHydratedBefore) {
 		const deadBtn = page.locator('[data-dh="mismatch"] [data-counter] button');

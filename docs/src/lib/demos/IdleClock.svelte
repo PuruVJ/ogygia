@@ -1,12 +1,3 @@
-<div class="widget">
-	<span class="widget-label">Idle clock</span>
-	<div class="widget-row">
-		<span class="widget-value" style="font-size:1.15rem">{time}</span>
-		<button type="button" onclick={() => (ticks += 1)}>Tick {ticks}</button>
-	</div>
-	<p class="widget-meta">Hydrated after idle</p>
-</div>
-
 <script lang="ts">
 	import '$lib/styles/widget.css';
 
@@ -20,3 +11,12 @@
 		return () => clearInterval(id);
 	});
 </script>
+
+<div class="widget">
+	<span class="widget-label">Idle clock</span>
+	<div class="widget-row">
+		<span class="widget-value" style="font-size:1.15rem">{time}</span>
+		<button type="button" onclick={() => (ticks += 1)}>Tick {ticks}</button>
+	</div>
+	<p class="widget-meta">Hydrated after idle</p>
+</div>

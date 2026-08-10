@@ -168,8 +168,23 @@ export async function load_ogygia_themes() {
 		bundledThemes['github-light']()
 	]);
 
+	// Bundled Shiki themes are already resolved (colors + tokenColors present).
 	return {
-		dark: remap_theme(dark_mod.default, 'ogygia-dark', 'Ogygia Dark', 'dark', DARK, DARK_MAP),
-		light: remap_theme(light_mod.default, 'ogygia-light', 'Ogygia Light', 'light', LIGHT, LIGHT_MAP)
+		dark: remap_theme(
+			dark_mod.default as ThemeRegistrationResolved,
+			'ogygia-dark',
+			'Ogygia Dark',
+			'dark',
+			DARK,
+			DARK_MAP
+		),
+		light: remap_theme(
+			light_mod.default as ThemeRegistrationResolved,
+			'ogygia-light',
+			'Ogygia Light',
+			'light',
+			LIGHT,
+			LIGHT_MAP
+		)
 	};
 }

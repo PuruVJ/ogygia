@@ -21,17 +21,23 @@ import { walk } from 'estree-walker';
 export const FOUC_CSS_PREFIX = 'virtual:ogygia/fouc-css/';
 export const FOUC_SCOPED_PREFIX = 'virtual:ogygia/fouc-scoped/';
 
+const PATH_SEP = /[/\\]/;
+const SCRIPT_TAG = /<script\b[^>]*>[\s\S]*?<\/script>/gi;
+const STYLE_OPEN = /<style\b/i;
+const STYLE_BODY = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
 const STYLE_EXT = /\.(css|scss|sass|less|styl|stylus|pcss)(?:\?|$)/i;
 const SVELTE_EXT = /\.svelte(?:\?|$)/i;
+const IMPORT_SPEC =
+	/import\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+\.(?:svelte|css|scss|sass|less|styl|pcss)(?:\?[^"']*)?)["']/g;
 
 /** @param {string} relPosix */
 export function foucCssVirtualId(relPosix: string) {
-	return FOUC_CSS_PREFIX + encodeURIComponent(relPosix.split(/[/\\]/).join('/')) + '.js';
+	return FOUC_CSS_PREFIX + encodeURIComponent(relPosix.split(PATH_SEP).join('/')) + '.js';
 }
 
 /** @param {string} relPosix */
 export function foucScopedVirtualId(relPosix: string) {
-	return FOUC_SCOPED_PREFIX + encodeURIComponent(relPosix.split(/[/\\]/).join('/')) + '.css';
+	return FOUC_SCOPED_PREFIX + encodeURIComponent(relPosix.split(PATH_SEP).join('/')) + '.css';
 }
 
 /** @param {string} id */
@@ -101,7 +107,7 @@ export function buildFoucCssModuleSource(
 				return null;
 			}
 		});
-	const posix_rel = (abs: string) => path.relative(opts.root, abs).split(/[/\\]/).join('/');
+	const posix_rel = (abs: string) => path.relative(opts.root, abs).split(PATH_SEP).join('/');
 
 	/** @type {Set<string>} */
 	const imports = new Set();
@@ -146,7 +152,7 @@ export function buildFoucCssModuleSource(
  * @param {string} source
  */
 export function compileFoucScopedCss(abs: string, source: string) {
-	const stripped = source.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+	const stripped = source.replace(SCRIPT_TAG, '');
 	try {
 		const result = compile(stripped, {
 			filename: abs,
@@ -162,16 +168,12 @@ export function compileFoucScopedCss(abs: string, source: string) {
 
 /** @param {string} source */
 export function svelteHasStyle(source: string) {
-	return /<style\b/i.test(source);
+	return STYLE_OPEN.test(source);
 }
 
 /** @param {string} source */
 function extractRawStyleBodies(source: string) {
-	const out: string[] = [];
-	const re = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
-	let m;
-	while ((m = re.exec(source))) out.push(m[1]);
-	return out.join('\n');
+	return [...source.matchAll(STYLE_BODY)].map((m) => m[1]).join('\n');
 }
 
 /**
@@ -197,9 +199,7 @@ export function listStaticImportSpecs(source: string, filename: string) {
 			});
 		}
 	} catch {
-		for (const m of source.matchAll(
-			/import\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+\.(?:svelte|css|scss|sass|less|styl|pcss)(?:\?[^"']*)?)["']/g
-		)) {
+		for (const m of source.matchAll(IMPORT_SPEC)) {
 			specs.push(m[1]);
 		}
 	}

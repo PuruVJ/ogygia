@@ -1,12 +1,3 @@
-<div class="feel" class:feel--static={!matches}>
-	<p class="feel-status">
-		{width}px · {matches ? 'matched' : 'no match'}
-	</p>
-	<button type="button" class="feel-btn" disabled={!matches} onclick={() => (taps += 1)}>
-		Tap · {taps}
-	</button>
-</div>
-
 <script lang="ts">
 	import '$lib/styles/feel.css';
 
@@ -31,3 +22,12 @@
 		};
 	});
 </script>
+
+<div class="feel" class:feel--static={!matches}>
+	<p class="feel-status">
+		{width}px · {matches ? 'matched' : 'no match'}
+	</p>
+	<button type="button" class="feel-btn" disabled={!matches} onclick={() => (taps += 1)}>
+		Tap · {taps}
+	</button>
+</div>

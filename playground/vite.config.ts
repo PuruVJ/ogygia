@@ -8,6 +8,8 @@ export default defineConfig({
 		ogygia({
 			// global default rootMargin for every `hydrate: 'visible'` island (per-import wins)
 			visible: { margin: '0px' },
+			// CONTINUITY: ambient form survival (default on) + native next-page speculation on hover.
+			continuity: { speculate: 'hover' },
 			// named presets referenced from imports via `with { preset: 'chart' }`
 			presets: {
 				chart: { hydrate: 'visible', margin: '200px' },

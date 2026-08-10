@@ -21,17 +21,17 @@ export default defineConfig({
     ogygia({
       visible: { margin: '200px' },
       presets: {
-        chart: { hydrate: 'visible', margin: '200px' },
-        modal: { hydrate: 'idle' },
+        chart: { wake: 'visible', margin: '200px' },
+        modal: { wake: 'idle' },
         frozen: {
-          hydrate: 'none',
+          wake: 'none',
           remount: { revalidate: 'idle', maxAge: '10m' }
         }
       },
       rateLimit: { max: 60, windowMs: 60_000 },
       regionTtl: 3600 // seconds; default 1h
       // sessionCookie: 'sessionid' // bind personalized defer/SWR holes
-      // importKeys: { hydrate: 'ogygiaHydrate' } // only if another tool claims \`hydrate\`
+      // importKeys: { wake: 'ogygiaHydrate' } // only if another tool claims \`hydrate\`
     }),
     sveltekit()
   ]
@@ -39,9 +39,9 @@ export default defineConfig({
 
 export const layoutAndHooks = `// src/hooks.server.ts
 import { sequence } from '@sveltejs/kit/hooks';
-import { ogygiaHandle } from 'ogygia/hooks';
+import * as ogygia from 'ogygia/server';
 
-export const handle = sequence(ogygiaHandle(), myOtherHandle);
+export const handle = sequence(ogygia.handle(), myOtherHandle);
 
 // On each route (or layout) you convert to islands:
 // src/routes/marketing/+page.ts
@@ -50,10 +50,10 @@ export const csr = false;`;
 /** Gradual migration — root router + per-route csr=false. */
 export const adoptionMigrate = `// src/routes/+layout.svelte — safe on mixed apps
 <script>
-  import { OgygiaRouter } from 'ogygia';
+  import * as ogygia from 'ogygia';
 </script>
 
-<OgygiaRouter />
+<ogygia.Router />
 {@render children()}
 
 // src/routes/blog/+page.ts — convert one route at a time
@@ -61,7 +61,7 @@ export const csr = false;
 
 // src/routes/blog/+page.svelte
 <script>
-  import Comments from '$lib/Comments.svelte' with { hydrate: 'visible' };
+  import Comments from '$lib/Comments.svelte' with { wake: 'visible' };
 </script>
 
 <article>…SSR content…</article>
@@ -71,37 +71,97 @@ export const csr = false;
 // no \`csr = false\` → full Kit client, router stays idle`;
 
 export const authoringImports = `<script>
-  import Counter  from '$lib/Counter.svelte'  with { hydrate: 'load' };     // island
-  import Chart    from '$lib/Chart.svelte'    with { hydrate: 'visible' }; // island, later
-  import Drawer   from '$lib/Drawer.svelte'   with { hydrate: '(max-width: 600px)' };
-  import Report   from '$lib/Report.svelte'   with { hydrate: 'none' };    // lake (inside an island)
-  import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };      // server island
+  import Counter  from '$lib/Counter.svelte'  with { wake: 'load' };     // island
+  import Chart    from '$lib/Chart.svelte'    with { wake: 'visible' }; // island, later
+  import Drawer   from '$lib/Drawer.svelte'   with { wake: '(max-width: 600px)' };
+  import Report   from '$lib/Report.svelte'   with { wake: 'none' };    // lake (inside an island)
+  import Greeting from '$lib/Greeting.svelte' with { fill: 'load' };      // server island
   import Panel    from '$lib/Panel.svelte'    with { preset: 'chart' };
 </script>
 
 <Counter start={10} />`;
 
+export const fragmentSearch = `<script>
+  // the server picks the component; the client just paints it
+  import { Region } from 'ogygia';
+  import { search } from './search.remote';
+
+  let q = $state('svelte');
+  let result = $state(null);
+</script>
+
+<button onclick={async () => (result = await search(q))}>
+  Search
+</button>
+
+{#if result}
+  <Region of={result} />
+{/if}`;
+
+export const livePartial = `// tick.remote.ts — the server pushes rendered HTML each second.
+// \`yield\` awaits the partial, so its HTML rides the ticket (no fetch).
+export const liveTick = query.live(async function* () {
+  let n = 1;
+  while (true) {
+    yield region(Tick, { n: n++, at: new Date().toISOString() });
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+});
+
+// the island just paints the latest tick — static partials morph in place
+<Region of={liveTick().current} />`;
+
+export const sharedObject = `// cart.svelte.ts — a live class that can cross island boundaries
+import * as ogygia from 'ogygia';
+
+export class Cart {
+  items = $state([]);
+  get count() { return this.items.length; }
+  add(item) { this.items.push(item); }
+
+  // the whole opt-in: how this instance travels as a prop
+  static [ogygia.wire] = {
+    encode: (c) => $state.snapshot(c.items),
+    decode: (items) => Object.assign(new Cart(), { items }),
+  };
+}
+
+// page.svelte — one instance, handed to two separate islands
+const cart = new Cart();
+<CartCount {cart} />   <!-- reads cart.count -->
+<AddButton {cart} />   <!-- calls cart.add() -->
+// click Add → the count island repaints. One live object, two islands.`;
+
+export const lakeFrozen = `<script>
+  // a frozen subtree inside an island: SSR HTML, ships no client JS
+  import Snapshot from '$lib/Snapshot.svelte' with {
+    wake: 'none'
+  };
+</script>
+
+<Snapshot value={42} />`;
+
 export const ogygiaRouter = `<script>
-  import { OgygiaRouter } from 'ogygia';
+  import * as ogygia from 'ogygia';
 </script>
 
 <!-- View Transitions on (default) -->
-<OgygiaRouter />
+<ogygia.Router />
 
 <!-- plain swap -->
-<OgygiaRouter viewTransitions={false} />`;
+<ogygia.Router viewTransitions={false} />`;
 
 export const ogygiaBoundary = `<script>
-  import { OgygiaBoundary } from 'ogygia';
-  import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
-  import Report from '$lib/Report.svelte' with { hydrate: 'none' };
+  import { Boundary } from 'ogygia';
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Report from '$lib/Report.svelte' with { wake: 'none' };
 </script>
 
 <!-- Transparent passthrough — marks region usages in source; zero runtime effect -->
-<OgygiaBoundary>
+<Boundary>
   <Counter />
   <Report />
-</OgygiaBoundary>`;
+</Boundary>`;
 
 export const persistNav = `<!-- in a layout shared by SPA routes -->
 <nav data-ogygia-persist="main-nav">
@@ -111,7 +171,7 @@ export const persistNav = `<!-- in a layout shared by SPA routes -->
 
 export const hydrateLoad = `<script>
   import Panel from '$lib/Panel.svelte' with {
-    hydrate: 'load'
+    wake: 'load'
   };
 </script>
 
@@ -119,7 +179,7 @@ export const hydrateLoad = `<script>
 
 export const hydrateIdle = `<script>
   import Widget from '$lib/Widget.svelte' with {
-    hydrate: 'idle'
+    wake: 'idle'
   };
 </script>
 
@@ -127,7 +187,7 @@ export const hydrateIdle = `<script>
 
 export const hydrateVisible = `<script>
   import Chart from '$lib/Chart.svelte' with {
-    hydrate: 'visible'
+    wake: 'visible'
   };
 </script>
 
@@ -135,7 +195,7 @@ export const hydrateVisible = `<script>
 
 export const hydrateMedia = `<script>
   import Drawer from '$lib/Drawer.svelte' with {
-    hydrate: '(max-width: 600px)'
+    wake: '(max-width: 600px)'
   };
 </script>
 
@@ -143,7 +203,7 @@ export const hydrateMedia = `<script>
 
 export const hydrateLoadCounter = `<script>
   import Counter from '$lib/Counter.svelte' with {
-    hydrate: 'load'
+    wake: 'load'
   };
 </script>
 
@@ -151,7 +211,7 @@ export const hydrateLoadCounter = `<script>
 
 export const hydrateLoadPoke = `<script>
   import Counter from '$lib/Counter.svelte' with {
-    hydrate: 'load'
+    wake: 'load'
   };
 </script>
 
@@ -159,7 +219,7 @@ export const hydrateLoadPoke = `<script>
 
 export const hydrateVisiblePoke = `<script>
   import Widget from '$lib/Widget.svelte' with {
-    hydrate: 'visible'
+    wake: 'visible'
   };
 </script>
 
@@ -167,7 +227,7 @@ export const hydrateVisiblePoke = `<script>
 
 export const deferLoadGreeting = `<script>
   import Greeting from '$lib/Greeting.svelte' with {
-    defer: 'load'
+    fill: 'load'
   };
 </script>
 
@@ -179,7 +239,7 @@ export const deferLoadGreeting = `<script>
 
 export const deferIdleGreeting = `<script>
   import Greeting from '$lib/Greeting.svelte' with {
-    defer: 'idle'
+    fill: 'idle'
   };
 </script>
 
@@ -191,7 +251,7 @@ export const deferIdleGreeting = `<script>
 
 export const deferVisibleGreeting = `<script>
   import Greeting from '$lib/Greeting.svelte' with {
-    defer: 'visible'
+    fill: 'visible'
   };
 </script>
 
@@ -203,7 +263,7 @@ export const deferVisibleGreeting = `<script>
 
 export const deferMediaGreeting = `<script>
   import Greeting from '$lib/Greeting.svelte' with {
-    defer: '(max-width: 600px)'
+    fill: '(max-width: 600px)'
   };
 </script>
 
@@ -216,7 +276,7 @@ export const deferMediaGreeting = `<script>
 export const presetDemo = `// vite.config.ts
 ogygia({
   presets: {
-    demo: { hydrate: 'visible', margin: '200px' }
+    demo: { wake: 'visible', margin: '200px' }
   }
 });
 
@@ -231,16 +291,16 @@ ogygia({
 export const remountConfig = `// vite.config.ts
 ogygia({
   presets: {
-    frozen: { hydrate: 'none' }, // remount: 'cache'
-    blank: { hydrate: 'none', remount: 'empty' },
+    frozen: { wake: 'none' }, // remount: 'cache'
+    blank: { wake: 'none', remount: 'empty' },
     // cache until TTL, then blank
     brief: {
-      hydrate: 'none',
+      wake: 'none',
       remount: { revalidate: false, maxAge: '5m' }
     },
     // SWR: paint stale, refetch on idle; past 10m skip stale and fetch
     live: {
-      hydrate: 'none',
+      wake: 'none',
       remount: { revalidate: 'idle', maxAge: '10m', onExpire: 'fetch' }
     }
   }
@@ -259,7 +319,7 @@ ogygia({
 /** Client-only lazy mount — plain dynamic import inside a host island. */
 export const lazyClientMount = `<!-- +page.svelte — host is the island -->
 <script>
-  import Host from '$lib/Host.svelte' with { hydrate: 'load' };
+  import Host from '$lib/Host.svelte' with { wake: 'load' };
 </script>
 <Host />
 
@@ -269,7 +329,7 @@ export const lazyClientMount = `<!-- +page.svelte — host is the island -->
   let Lazy = $state();
 
   async function load() {
-    // plain component — NOT an island (no with { hydrate })
+    // plain component — NOT an island (no with { wake })
     Lazy = (await import('./Widget.svelte')).default;
   }
 </script>
@@ -282,7 +342,7 @@ export const lazyClientMount = `<!-- +page.svelte — host is the island -->
 
 /** Delayed island boundary — static region import + {#if}, not import()+with. */
 export const delayedIslandIf = `<script>
-  import Widget from '$lib/Widget.svelte' with { hydrate: 'load' };
+  import Widget from '$lib/Widget.svelte' with { wake: 'load' };
   let show = $state(false);
 </script>
 
@@ -293,11 +353,11 @@ export const delayedIslandIf = `<script>
 
 /** Portable island bindings — dictionary + barrel + capitalized binding tag (ogygia 0.4). */
 export const portableBindings = `<script>
-  import Pulse from '$lib/Pulse.svelte' with { hydrate: 'load' };
-  import Ticker from '$lib/Ticker.svelte' with { hydrate: 'load' };
-  import Notch from '$lib/Notch.svelte' with { hydrate: 'load' };
+  import Pulse from '$lib/Pulse.svelte' with { wake: 'load' };
+  import Ticker from '$lib/Ticker.svelte' with { wake: 'load' };
+  import Notch from '$lib/Notch.svelte' with { wake: 'load' };
   // Controls island: serializable props only — never pass constructors across.
-  import Controls from '$lib/Controls.svelte' with { hydrate: 'load' };
+  import Controls from '$lib/Controls.svelte' with { wake: 'load' };
 
   const registry = { pulse: Pulse, ticker: Ticker, notch: Notch };
   const barrel = [

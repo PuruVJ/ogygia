@@ -1,3 +1,9 @@
+<script lang="ts">
+	import '$lib/styles/widget.css';
+
+	let clicks = $state(0);
+</script>
+
 <div class="widget">
 	<span class="widget-label">Visible island</span>
 	<div class="widget-row">
@@ -6,9 +12,3 @@
 	</div>
 	<p class="widget-meta">Hydrated on intersect</p>
 </div>
-
-<script lang="ts">
-	import '$lib/styles/widget.css';
-
-	let clicks = $state(0);
-</script>

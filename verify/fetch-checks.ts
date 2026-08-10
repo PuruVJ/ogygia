@@ -92,8 +92,11 @@ const count = (s, re) => (s.match(re) || []).length;
 	const { status, html } = await get('/kit');
 	check('/kit returns 200', status === 200);
 	check('/kit IS a normal hydrated Kit page (has __sveltekit)', /__sveltekit/.test(html));
-	check('/kit still SSRs its island (<ogygia-region>)', count(html, /<ogygia-region/g) === 1);
-	check('/kit island SSR content (count is 42)', /count is 42/.test(html));
+	// csr=true → ogygia steps aside entirely: the island compiles to a plain component (Kit hydrates
+	// it), so NO <ogygia-region> and NO runtime script. Zero ogygia on a csr=true page.
+	check('/kit ships ZERO ogygia (no <ogygia-region>)', count(html, /<ogygia-region/g) === 0);
+	check('/kit ships ZERO ogygia (no runtime script)', !/ogygia-runtime/.test(html));
+	check('/kit island SSR content still present (count is 42)', /count is 42/.test(html));
 	check('/kit normal component SSR (real $app/state path)', /path: <strong>\/kit/.test(html));
 }
 

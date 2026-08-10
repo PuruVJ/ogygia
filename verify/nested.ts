@@ -1,5 +1,5 @@
 // Nested-region checks (fetch + Playwright). Usage: node verify/nested.ts [baseUrl]
-// A region whose own source imports another component `with { hydrate }`: the inner region
+// A region whose own source imports another component `with { wake }`: the inner region
 // degrades to a normal component and hydrates ONCE, with its parent.
 import { chromium } from 'playwright';
 

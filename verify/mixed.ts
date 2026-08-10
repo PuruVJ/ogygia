@@ -19,8 +19,9 @@ try {
 		await page.goto(base + '/kit', { waitUntil: 'networkidle' });
 		await sleep(500);
 		check('mixed: exactly one counter in DOM (no duplicate)', (await page.locator('[data-counter]').count()) === 1);
-		check('mixed: ogygia-region did NOT self-hydrate (single hydration)', (await page.locator('ogygia-region[data-hydrated]').count()) === 0);
-		check('mixed: ogygia-region marked kit-hydrated (skip)', (await page.locator('ogygia-region[data-kit-hydrated]').count()) === 1);
+		// csr=true → ogygia steps aside: the island compiled to a plain component, so there is NO
+		// <ogygia-region> at all (zero ogygia on the page). Kit hydrates the plain component itself.
+		check('mixed: NO ogygia-region on the csr=true page (zero ogygia)', (await page.locator('ogygia-region').count()) === 0);
 		const btn = page.locator('[data-counter] button');
 		await btn.click();
 		await btn.click();

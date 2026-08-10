@@ -1,13 +1,13 @@
 <script lang="ts">
 	// This component is used as an island, and its OWN source imports other components as
 	// islands. Both inner islands degrade to normal components that hydrate with this one.
-	import Inner from '$lib/Inner.svelte' with { hydrate: 'visible' };
+	import Inner from '$lib/Inner.svelte' with { wake: 'visible' };
 	// A SERVER island nested inside a client island degrades too: it renders inline as a
 	// normal component ('server' strategy ignored), so its data still appears.
-	import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
+	import Greeting from '$lib/Greeting.svelte' with { fill: 'load' };
 	// Deferred *client* island nested inside a waking island: same degrade — inline + parent
 	// hydrate (no second region, no defer fetch). Documented + verified in verify/nested.ts.
-	import DeferredCounter from '$lib/Counter.svelte' with { defer: 'load', hydrate: 'load' };
+	import DeferredCounter from '$lib/Counter.svelte' with { fill: 'load', wake: 'load' };
 
 	let { title = 'outer' }: { title?: string } = $props();
 	let m = $state(0);

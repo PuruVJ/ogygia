@@ -22,9 +22,9 @@ const baseCtx = {
 	devUrlFor: (p: string) => '/@id/' + p,
 	visibleMargin: '0px',
 	presets: {
-		chart: { hydrate: 'visible', margin: '200px' },
-		lazy: { hydrate: 'load', margin: '999px' }, // margin inapplicable to load -> tolerated
-		srv: { defer: 'load' }
+		chart: { wake: 'visible', margin: '200px' },
+		lazy: { wake: 'load', margin: '999px' }, // margin inapplicable to load -> tolerated
+		srv: { fill: 'load' }
 	}
 };
 const HOST = '/app/src/routes/+page.svelte';
@@ -46,7 +46,7 @@ function expectError(label: string, src: string, re: RegExp) {
 	check(
 		'preset chart -> visible with margin 200px',
 		/visible=\{?"200px"\}?/.test(wrapSrc(r)),
-		wrapSrc(r).match(/<OgygiaIsland__Wrapper[^>]*/)?.[0]?.slice(0, 60)
+		wrapSrc(r).match(/<OgygiaRegion__Wrapper[^>]*/)?.[0]?.slice(0, 60)
 	);
 	check('preset chart -> host keeps <C />', /<C\s*\/>/.test(r!.code));
 }
@@ -55,7 +55,7 @@ function expectError(label: string, src: string, re: RegExp) {
 	const r = run(wrap(`import C from './C.svelte' with { preset: 'lazy' };`));
 	check(
 		'preset lazy -> load strategy (inapplicable margin tolerated)',
-		/<OgygiaIsland__Wrapper load /.test(wrapSrc(r))
+		/<OgygiaRegion__Wrapper __mode="island" load /.test(wrapSrc(r))
 	);
 }
 // preset defer -> server island
@@ -63,26 +63,26 @@ function expectError(label: string, src: string, re: RegExp) {
 	const r = run(
 		wrap(`import C from './C.svelte' with { preset: 'srv' };`, '<C>{#snippet ogygiaFallback()}x{/snippet}</C>')
 	);
-	check('preset srv -> server island (ServerIsland wrapper)', /OgygiaServerIsland__Wrapper/.test(wrapSrc(r)));
+	check('preset srv -> server island (ServerIsland wrapper)', /OgygiaRegion__Wrapper __mode="server"/.test(wrapSrc(r)));
 }
 // inline hydrate visible uses the global default margin (0px)
 {
-	const r = run(wrap(`import C from './C.svelte' with { hydrate: 'visible' };`));
+	const r = run(wrap(`import C from './C.svelte' with { wake: 'visible' };`));
 	check('inline hydrate visible -> global default margin 0px', /visible=\{?"0px"\}?/.test(wrapSrc(r)));
 }
 // inline media query
 {
-	const r = run(wrap(`import C from './C.svelte' with { hydrate: '(min-width: 768px)' };`));
+	const r = run(wrap(`import C from './C.svelte' with { wake: '(min-width: 768px)' };`));
 	check('inline media query strategy', /media=\{?"\(min-width: 768px\)"\}?/.test(wrapSrc(r)));
 }
 
 // --- build errors ---
 expectError('unknown preset lists available', wrap(`import C from './C.svelte' with { preset: 'nope' };`), /unknown preset 'nope'.*chart/s);
-expectError('inline option key rejected (margin)', wrap(`import C from './C.svelte' with { hydrate: 'visible', margin: '9px' };`), /not allowed inline/);
-expectError('preset + another inline key rejected', wrap(`import C from './C.svelte' with { preset: 'chart', hydrate: 'load' };`), /must be the only import attribute/);
+expectError('inline option key rejected (margin)', wrap(`import C from './C.svelte' with { wake: 'visible', margin: '9px' };`), /not allowed inline/);
+expectError('preset + another inline key rejected', wrap(`import C from './C.svelte' with { preset: 'chart', wake: 'load' };`), /must be the only import attribute/);
 // defer + hydrate is supported (deferred client island)
 {
-	const r = run(wrap(`import C from './C.svelte' with { defer: 'load', hydrate: 'load' };`));
+	const r = run(wrap(`import C from './C.svelte' with { fill: 'load', wake: 'load' };`));
 	check(
 		'defer + hydrate -> ServerIsland with __hydrate + __module',
 		/__hydrate=\{"load"\}/.test(wrapSrc(r)) && /__module=\{/.test(wrapSrc(r))
@@ -98,7 +98,7 @@ expectError('preset + another inline key rejected', wrap(`import C from './C.sve
 		...baseCtx,
 		presets: {
 			...baseCtx.presets,
-			lazyClient: { defer: 'load', hydrate: 'visible', margin: '150px' }
+			lazyClient: { fill: 'load', wake: 'visible', margin: '150px' }
 		}
 	};
 	const r = run(wrap(`import C from './C.svelte' with { preset: 'lazyClient' };`), ctx);
@@ -109,35 +109,34 @@ expectError('preset + another inline key rejected', wrap(`import C from './C.sve
 }
 // matching schedules still emit both attrs (runtime coalesce)
 {
-	const r = run(wrap(`import C from './C.svelte' with { defer: 'idle', hydrate: 'idle' };`));
+	const r = run(wrap(`import C from './C.svelte' with { fill: 'idle', wake: 'idle' };`));
 	check(
 		'matching defer+hydrate still emits both schedules at transform',
 		/__defer=\{"idle"\}/.test(wrapSrc(r)) && /__hydrate=\{"idle"\}/.test(wrapSrc(r))
 	);
 }
-expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from './C.svelte' with { hydrate: 'false' };`), /hydrate: 'false'.*use .*hydrate: 'none'/i);
+expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from './C.svelte' with { wake: 'false' };`), /wake: 'false'.*use .*wake: 'none'/i);
 
-// --- lakes (hydrate: 'none') — portable lake wrapper ---
+// --- lakes (wake: 'none') — portable lake wrapper ---
 {
-	const r = run(wrap(`import Lake from './Lake.svelte' with { hydrate: 'none' };`, '<Lake />'));
+	const r = run(wrap(`import Lake from './Lake.svelte' with { wake: 'none' };`, '<Lake />'));
 	const lake = r?.islands?.find((i) => i.kind === 'lake');
 	check(
 		'lake binding -> LakeRegion wrapper source',
-		!!lake?.wrapperSource && /OgygiaLakeRegion__Wrapper/.test(lake.wrapperSource)
+		!!lake?.wrapperSource && /OgygiaRegion__Wrapper __mode="lake"/.test(lake.wrapperSource)
 	);
 	check('lake binding -> placeholder local recorded', !!lake && lake.lakes?.includes('OgygiaLakeInner'));
 	check('lake binding -> host import rewritten to wrapper', /virtual:ogygia\/wrapper\//.test(r!.code));
 }
-// host children on hydrate island rejected (lakes must live inside the island component)
-expectError(
-	'host children on hydrate island rejected',
-	wrap(
-		`import Host from './Host.svelte' with { hydrate: 'load' };\nimport Lake from './Lake.svelte' with { hydrate: 'none' };`,
-		'<Host><Lake /></Host>'
-	),
-	/host children/
-);
-expectError('unknown key alongside a region key rejected', wrap(`import C from './C.svelte' with { hydrate: 'load', wat: 'x' };`), /not allowed inline/);
+// host children on a hydrate island now CROSS: the compiler ships them as a synthesized `.svelte`
+// entry that inlines the snippet and wraps the real component.
+{
+	const r = run(wrap(`import Host from './Host.svelte' with { wake: 'load' };`, '<Host><p>x</p></Host>'));
+	const entry = r?.islands?.[0]?.virtualPath ?? '';
+	check('host children cross → synthesized .svelte entry', entry.endsWith('.svelte'), `entry=${entry}`);
+	check('host children entry inlines the real component', /OgygiaChildTarget/.test(r?.islands?.[0]?.source ?? ''));
+}
+expectError('unknown key alongside a region key rejected', wrap(`import C from './C.svelte' with { wake: 'load', wat: 'x' };`), /not allowed inline/);
 {
 	const r = run(wrap(`import data from './d.json' with { type: 'json' };`, '<p>{data}</p>'));
 	check('non-region import attribute left alone (no transform)', r === null);

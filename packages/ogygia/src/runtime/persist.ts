@@ -8,6 +8,23 @@
  * Only top-level persist nodes (not nested inside another persist ancestor).
  * First duplicate key wins; later duplicates are ignored.
  */
+import { slots } from './slots.js';
+
+/**
+ * Feature entry: fill the `persist` slot (router relocates matching chrome; core keeps a relocating
+ * island mounted). A persist island hydrates through `LiveHost` (the `live` slot) so the next page
+ * can push fresh props into the relocated app — persist declares `live` as a build dep so that slot
+ * is always filled, without this module importing the Svelte component (keeps it unit-testable).
+ */
+export function install() {
+	slots.persist = {
+		is_persist_preserving,
+		collect: collect_persist_pairs,
+		relocate: relocate_persist_pairs,
+		end: end_persist_preserve
+	};
+}
+
 export const PERSIST_ATTR = 'data-ogygia-persist';
 
 const preserving = new WeakSet<Element>();
@@ -60,6 +77,12 @@ function unmark_tree(live: Element) {
 export function relocate_persist_pairs(pairs: PersistPair[]) {
 	for (const { live, next } of pairs) {
 		mark_tree(live);
+		// CONTINUITY: a persisted ISLAND relocates its live app; feed it the incoming page's props
+		// (read from `next` while it still sits in the parsed doc with its props sibling) so a
+		// persisted component reflects the new route instead of freezing at first-mount props.
+		const absorb = (live as unknown as { absorbPersistProps?: (n: Element) => void })
+			.absorbPersistProps;
+		if (typeof absorb === 'function') absorb.call(live, next);
 		next.replaceWith(live);
 	}
 }

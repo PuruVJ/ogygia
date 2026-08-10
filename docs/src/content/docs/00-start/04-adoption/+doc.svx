@@ -1,0 +1,49 @@
+---
+title: Adoption
+summary: Convert one route at a time. Existing Kit pages keep working, even with the router in the root layout.
+related:
+  - start/how-it-works
+  - islands/client-islands
+  - reference/plugin-config
+---
+
+ogygia is incremental. You do not convert the whole app — you turn islands on one route at a time, and everything else stays a normal SvelteKit page.
+
+> **When to use which mode.** A mostly-static route → `csr = false` + islands (the biggest win). A route that is still a full interactive app → leave it `csr = true`; you can still drop an island into it. A whole site of static-first pages → all-islands mode. You are never forced to pick one globally.
+
+## One route at a time
+
+Opt a single route out of the Kit client and mark its islands. Neighbouring routes are untouched.
+
+```ts
+// src/routes/marketing/+page.ts
+export const csr = false;
+```
+
+## Root router without breaking Kit pages
+
+You can put `<ogygia.Router />` in the root layout even while some routes are still `csr = true`. On those pages Kit's client owns navigation and ogygia does not intercept clicks — the two coexist.
+
+```svelte
+<!-- +layout.svelte -->
+<ogygia.Router />
+{@render children()}
+```
+
+## Islands on a normal Kit page
+
+You do not need `csr = false` to use an island. Marked imports work on a `csr = true` Kit page too — the component becomes an island; the rest of the page hydrates the Kit way.
+
+## All-islands apps
+
+At the other end, opt the whole app out of the Kit client. If **every** route is `csr = false`, Kit would normally skip the client build entirely — ogygia detects this and runs a standalone islands build so your island chunks still ship. No placeholder `csr = true` page needed.
+
+> Server islands and command / form POSTs need `ORIGIN` set in production (Kit's CSRF protection). See [Install](/docs/start/install).
+
+## Do / don't
+
+- **Do** start with your most static, highest-traffic route — that is where dropping the Kit client pays off most.
+- **Do** leave genuinely app-like routes on `csr = true`; ogygia coexists with them.
+- **Don't** flip the whole app to `csr = false` on day one — convert route by route and measure.
+
+

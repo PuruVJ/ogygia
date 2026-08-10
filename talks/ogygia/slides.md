@@ -10,44 +10,95 @@ highlighter: shiki
 lineNumbers: false
 drawings:
   persist: false
-transition: fade
+transition: fade-out
 fonts:
-  sans: Instrument Sans
-  serif: Newsreader
-  mono: JetBrains Mono
+  # Names for UnoCSS stacks only — faces load via styles/fonts*.css (fontsource, like docs).
+  sans: 'Instrument Sans Variable'
+  serif: 'Newsreader Variable'
+  mono: 'JetBrains Mono Variable'
+  provider: none
 themeConfig:
   primary: '#6fe3b0'
+head:
+  - - link
+    - rel: preload
+      as: font
+      type: font/woff2
+      crossorigin: anonymous
+      href: /node_modules/@fontsource-variable/newsreader/files/newsreader-latin-opsz-italic.woff2
 layout: cover
 ---
+
+<div class="contours" aria-hidden="true">
+<svg viewBox="0 0 640 640" fill="none" stroke="currentColor" stroke-width="1">
+  <path d="M320 88 C430 84 556 160 566 300 C576 440 480 552 330 556 C180 560 78 452 74 312 C70 172 210 92 320 88 Z" />
+  <path d="M322 148 C408 144 502 204 510 306 C518 408 446 496 328 500 C210 504 130 420 126 314 C122 208 236 152 322 148 Z" />
+  <path d="M324 206 C388 202 452 246 458 314 C464 382 410 442 326 444 C242 446 180 390 178 316 C176 242 260 210 324 206 Z" />
+  <path d="M326 260 C368 258 408 286 412 320 C416 354 380 388 326 390 C272 392 228 360 226 322 C224 284 284 262 326 260 Z" />
+  <path d="M328 296 C352 295 372 306 374 322 C376 338 356 354 328 354 C300 354 280 340 279 324 C278 308 304 297 328 296 Z" />
+  <path d="M330 318 C340 317 348 321 348 326 C348 331 340 335 330 335 C320 335 313 331 313 326 C313 321 320 319 330 318 Z" />
+</svg>
+</div>
 
 # ogygia
 
 <div class="subtitle">
 
-SSR islands for SvelteKit — no Kit patches.
+SSR islands for SvelteKit. No Kit patches.
 
 </div>
 
-<div class="meta mt-8">
-
-npm · ogygia &nbsp;·&nbsp; docs · ogygia.puruvj.dev &nbsp;·&nbsp; 0.4.x
-
-</div>
-
-<div class="footer-note">
+<div class="cover-kicker">
 
 csr = false &nbsp;·&nbsp; ~7.6 KB runtime &nbsp;·&nbsp; real Kit remotes
 
 </div>
 
+<div class="meta">
+
+npm · ogygia &nbsp;·&nbsp; docs · ogygia.puruvj.dev
+
+</div>
+
 <!--
-Okay — quick name check. ogygia. It's Calypso's island in the Odyssey. You wash up, you stay awhile. That's the joke and also kind of the point: this is the islands layer for SvelteKit.
+Hey everyone. Today I want to show you Ogygia: SSR islands for SvelteKit, without patching SvelteKit.
 
-I'm not pitching a new framework. Kit stays Kit. What ogygia does is: keep the page as server HTML, and let you opt individual components into JavaScript — Astro-style islands, without patching Kit.
+The basic promise is simple. The page can stay server-rendered HTML, and only the components that genuinely need JavaScript have to receive it. That sounds like a small performance trick, but it changes how you can build content-heavy pages, partially interactive apps, and even pages that use Kit's Remote Functions.
 
-You'll see the docs URL and the version. We're on 0.4.x. If you're short on time later, the only chapter you can't skip is Remote Functions — that's the "this is real product" part.
+I’ll start with the problem that pushed me into building this. Then we’ll build up the mental model one piece at a time: islands, lakes, deferred HTML, and the optional router. Once that foundation is clear, we’ll get to the part I care about most—using real SvelteKit Remote Functions inside those islands.
 
-Optional aside if the room knows mythology: yeah, Odysseus got stuck there for seven years. Hopefully your JS budget is smaller than that.
+Before all of that, a very quick introduction.
+-->
+
+---
+layout: center
+class: intro text-left
+---
+
+<div class="speaker-intro">
+  <div class="speaker-copy">
+    <div class="eyebrow">Hello</div>
+    <h1>Hi, I’m Puru.</h1>
+    <p class="speaker-handle">puruvj.dev · @puruvjdev</p>
+    <p class="speaker-bio">Svelte Ambassador · works with the Svelte team · conference speaker</p>
+    <p class="speaker-motive">I built Ogygia because I wanted Kit pages to stay HTML until a component actually needed JavaScript.</p>
+  </div>
+  <img class="speaker-avatar" src="/puruvjdev-avatar.jpg" alt="Puru's cat profile picture" />
+</div>
+
+<!--
+Hi, I’m Puru. You can find me at puruvj.dev, or as puruvjdev on Twitter. And yes, the cat is the official profile picture. At this point it represents me more reliably than an actual headshot.
+
+I’m a Svelte Ambassador, I work with the Svelte team, and I care perhaps a little too much about web performance. I spend a lot of time looking at what frameworks ship to the browser.
+
+Ogygia came out of a very specific frustration. I like SvelteKit. I wanted to keep its server rendering, its routing conventions, and its Remote Functions. But on pages that were mostly content, I kept facing a binary choice: boot the whole client app, or get no component interactivity at all.
+
+I wanted a third answer. That is the story of this talk, and it starts with the choice Kit gives us today.
+
+[Sources]
+- Profile photo: https://x.com/puruvjdev
+- Image asset: https://pbs.twimg.com/profile_images/1811643663186788352/L01Li01B_400x400.jpg
+[/Sources]
 -->
 
 ---
@@ -55,16 +106,16 @@ layout: center
 class: text-left
 ---
 
-<div class="eyebrow">The gap</div>
+<div class="eyebrow">Why this exists</div>
 
 # Kit is all-or-nothing on the client
 
 <div class="compare mt-6">
 <div class="card">
 
-### `csr = true` (default)
+### `csr = true`
 
-Whole route boots Kit's client. Great for apps. You pay for interactivity you may not need on marketing, docs, content.
+Whole route boots Kit's client. Fine for apps. Expensive when three widgets need clicks and the rest is prose.
 
 </div>
 <div class="vs">vs</div>
@@ -72,36 +123,32 @@ Whole route boots Kit's client. Great for apps. You pay for interactivity you ma
 
 ### `csr = false`
 
-No Kit client. Forms still work. But you get **zero** component interactivity — no islands story built in.
+No Kit client. Forms still post. Component interactivity? None. Kit has no islands API here.
 
 </div>
 </div>
 
 <p class="lede mt-8">
 
-Astro proved the islands model. SvelteKit never shipped one — until you add it without forking Kit.
+Astro shipped islands years ago. Kit didn't. So I added them on top of Kit instead of forking it.
 
 </p>
 
 <!--
-So here's the problem I'm solving. Look at the two cards.
+Here is the choice I kept running into.
 
-Left side: csr true — Kit's default. The whole route boots the client. That's correct for a dashboard. It's a weird tax for a docs site where three widgets need clicks and the rest is prose.
+With `csr` set to true, SvelteKit boots the client for the whole route. For a highly interactive application, that is usually exactly what you want. But imagine a long documentation page with one search box, one chart, and one little counter. The browser still receives the machinery for the whole route, even though almost everything on screen is just prose.
 
-Right side: csr false. Kit will happily give you that. Forms still post. But there's no built-in "and this one Counter hydrates." You're just… static. Or you invent your own thing.
+So we can set `csr` to false. Now the page is beautifully simple server HTML. Normal links work. Forms still post. But that little counter cannot wake up on its own, because Kit does not expose an islands API.
 
-Astro made islands boring and good. Kit never shipped that story. People either live with full hydration, or they leave Kit for content pages. ogygia is: stay on Kit, get the islands model, don't fork the framework.
-
-Emphasize: I'm not saying Kit is wrong. I'm saying the gap is real for content-heavy and selectively interactive pages.
-
-If short on time: skip the Astro name-drop, jump straight to "csr false has no islands API."
+That is the gap. I did not want to leave Kit, and I definitely did not want to maintain a fork of it. I wanted to keep the server page and selectively wake up a few components. Once you say the problem that way, the design goal becomes quite clear.
 -->
 
 ---
 layout: center
 ---
 
-<div class="eyebrow">One-liner</div>
+<div class="eyebrow">In one line</div>
 
 # Keep the page as server HTML.<br>Opt components into JS.
 
@@ -115,62 +162,67 @@ layout: center
 
 <p class="dim mt-8" style="max-width: 34em">
 
-Mark an import with `hydrate` / `defer` / `preset`. Everything else stays SSR HTML. Optional SPA router when you want soft navigations.
+Mark an import with `hydrate`, `defer`, or a preset. Unmarked stuff stays SSR HTML. SPA router is optional.
 
 </p>
 
 <!--
-If you remember one sentence from this talk, make it the headline: keep the page as server HTML, opt components into JS.
+So this is the one-sentence answer: keep the page as server HTML, and opt individual components into JavaScript.
 
-How it's built — the accent pills. Vite plugin first. Tiny custom-element runtime. A server handle for signed holes. That's the whole surface. We do not patch Kit. When remotes show up later, that's Kit's own code deep-imported, not a fake RPC layer I invented.
+Ogygia does that from the outside. A Vite plugin understands which imports are islands. A small browser runtime wakes those regions up. And a server handle can fill signed HTML holes when you want part of a static page to arrive later. SvelteKit itself remains unpatched.
 
-Authoring is an import attribute: hydrate, defer, or a named preset. Everything unmarked stays SSR HTML. SPA router is optional — MPA is a valid way to run this.
+That last point matters throughout this talk. I am not trying to rebuild Kit beside Kit. If you want normal document navigation, you can keep it. If you want soft navigation, the router is optional. And when we reach Remote Functions, those are Kit's own remote primitives—not an Ogygia-flavoured replacement.
 
-Numbers if someone asks: runtime's about 7.6 KB min+brotli with the router. Peers are current Svelte 5 / Kit 2 / Vite 5 through 8.
-
-Skip the peer versions unless someone asks. Don't linger on the pills — the sentence is the slide.
+That is the promise. Now let’s turn it into a picture we can keep in our heads for the rest of the talk.
 -->
 
 ---
 
-<div class="eyebrow">Mental model</div>
+<div class="eyebrow">Shape</div>
 
-# Page host vs island regions
+# The page is HTML. Islands opt in.
 
-```mermaid
-flowchart TB
-  subgraph PAGE["Page · csr = false SSR HTML"]
-    direction TB
-    STATIC["Static markup · no JS"]
-    R1["ogygia-region<br/>hydrate=load · entry=module URL"]
-    R2["ogygia-region<br/>hydrate=visible"]
-    R3["ogygia-region<br/>render=defer · signed endpoint"]
-  end
-  RT["ogygia runtime · custom element + optional router<br/>~7.6 KB sticky"]
-  RT -->|import entry| I1["Island chunk"]
-  RT -->|when visible| I2["Island chunk"]
-  RT -->|fetch HTML| S1["Server island HTML"]
-  PAGE --- RT
-```
+<div class="arch">
+  <div class="arch-page">
+    <div class="arch-label">page · csr = false</div>
+    <div class="arch-prose">Most of the route stays static markup. No Kit client.</div>
+    <div class="arch-row">
+      <div class="arch-region">
+        <strong>Counter</strong>
+        <span>hydrate · load</span>
+      </div>
+      <div class="arch-region">
+        <strong>Chart</strong>
+        <span>hydrate · visible</span>
+      </div>
+      <div class="arch-region defer">
+        <strong>Greeting</strong>
+        <span>defer · HTML later</span>
+      </div>
+    </div>
+  </div>
+  <div class="arch-runtime">
+    <span>runtime <em>· custom element</em></span>
+    <span>~7.6 KB</span>
+  </div>
+</div>
 
 <p class="faint mt-4">
 
-Each hydrate island puts its **module URL** on `<ogygia-region entry>` — Astro-style. The sticky runtime does not grow with island count.
+Hydrate regions put their module URL on <code>entry</code>. Adding islands does not grow the runtime.
 
 </p>
 
 <!--
-Walk the diagram with me — start at the top box. That's the page. csr false. Mostly static markup. No Kit client bootstrap.
+This is the mental model I want you to carry from here.
 
-Inside it you'll see ogygia-region custom elements. Three flavors on the slide: hydrate on load with an entry module URL, hydrate when visible, and defer — that's a signed endpoint, HTML arrives later.
+The large box is still a `csr = false` page. It arrived as complete server-rendered HTML, and most of it will remain exactly that. Inside the page are a few regions with different jobs.
 
-Below that: the sticky runtime. One custom element plus an optional router. Small. It doesn't embed a map of every island in your app. Point at the arrows — for hydrate it does import(entry). For visible it waits, then imports. For defer it fetches HTML and swaps.
+The counter wakes up immediately. The chart waits until it is visible. The greeting is different: its HTML itself arrives later from the server. Under all three is one small runtime. It reads the region, waits for the right moment, and either imports that island’s module or fetches the deferred HTML.
 
-The thing that matters for scale: each hydrate region carries its own module URL on the entry attribute. Astro does this. So adding the thousandth counter doesn't grow the runtime bundle. The runtime stays dumb and sticky; the islands own their JS.
+Each interactive region carries its own entry URL, so adding another island adds that island’s code, not another copy of the runtime. And if one island contains another, the inner component simply joins the parent’s interactive tree.
 
-Vocabulary I'll use the rest of the talk — four words: page, island, lake, server island. Nesting rule in one breath: island inside island shares the parent's JS. We'll hit lakes in a minute.
-
-If short on time: don't explain all three region types — just "page is HTML, regions wake up via a tiny runtime, entry URL per island."
+So the page remains the unit of HTML, while each region owns its own JavaScript decision. The next question is: what does that feel like to author?
 -->
 
 ---
@@ -193,56 +245,40 @@ If short on time: don't explain all three region types — just "page is HTML, r
 </Greeting>
 ```
 
-<div class="grid-3 mt-4">
-<div class="card">
+<p class="dim mt-4">
 
-### Setup
+Setup: `ogygia()` before `sveltekit()` in Vite, `ogygiaHandle()` in hooks, `csr = false` on the route.
 
-`ogygia()` **before** `sveltekit()` in Vite. `ogygiaHandle()` in hooks. `csr = false` on the route.
+</p>
 
-</div>
-<div class="card">
+<p class="faint mt-4">
 
-### Binding is the island
+Portable component binding: lists and dynamic `<Active />` work normally. Static imports only; lazy work belongs inside a host island.
 
-`A` is a portable wrapper — not a tag-site rewrite. Lists / `svelte:component` work (0.4).
-
-</div>
-<div class="card">
-
-### Static import only
-
-Dynamic `import(…, { with })` **fails the build**. Lazy mount = plain `await import` inside a host island.
-
-</div>
-</div>
+</p>
 
 <!--
-This is what you actually type. Look at the script — three imports, three with-clauses. load, visible, defer. Then you use them like normal components. The Greeting one has ogygiaFallback — that's the placeholder snippet while the server HTML is in flight.
+The authoring API is deliberately small. You keep writing a normal Svelte import, then describe the boundary with an import attribute.
 
-Three cards under it, left to right.
+`hydrate: 'load'` says this component already has HTML and should wake up immediately. `hydrate: 'visible'` says the same thing, but only once it reaches the viewport. `defer: 'load'` says the component’s HTML should come later, and the `ogygiaFallback` snippet is what the audience sees while that happens.
 
-Setup: plugin before sveltekit — order matters. Handle in hooks. csr false on the routes you convert. You can adopt one route at a time.
+The project setup is three pieces: put `ogygia()` before `sveltekit()` in Vite, add `ogygiaHandle()` to the server hooks, and set `csr = false` on the routes you want to convert. That can be one route at a time; this is not an all-at-once migration.
 
-Middle card — this is the 0.4 punchline, next slide goes deeper: the binding itself is the island. Counter isn't a magical tag rewrite. It's a portable component. You can put it in a list. You can svelte:component it.
-
-Right card — gotcha. Dynamic import with those attributes? We fail the build on purpose. Vite strips them, it'd silently no-op, that's worse. Want click-to-load JS? Host island, plain await import, regular component. Not a second island.
-
-Emphasize the code block more than the cards. If short: skip the dynamic-import gotcha.
+The marked import behaves like a real Svelte component binding, which we’ll come back to. The one intentional limitation is dynamic imports with these attributes. Ogygia fails those at build time, because allowing Vite to strip the metadata would produce a silent non-island. First, though, we need one shared vocabulary for when work begins.
 -->
 
 ---
 
-<div class="eyebrow">Strategies</div>
+<div class="eyebrow">Timing</div>
 
-# Same timing words · two meanings
+# Same words, different jobs
 
 <dl class="kv mt-4">
   <dt>load</dt><dd>Right away</dd>
   <dt>idle</dt><dd>When the browser is idle</dd>
   <dt>visible</dt><dd>When scrolled into view</dd>
   <dt>'(mq)'</dt><dd>When a media query matches</dd>
-  <dt>none</dt><dd>Lake — static HTML inside an island · no lake JS</dd>
+  <dt>none</dt><dd>Lake: static HTML inside an island, no lake JS</dd>
 </dl>
 
 <div class="grid-2 mt-6">
@@ -250,132 +286,130 @@ Emphasize the code block more than the cards. If short: skip the dynamic-import 
 
 ### On `hydrate`
 
-When **JS** starts for that region.
+When JS starts for that region.
 
 </div>
 <div class="card">
 
 ### On `defer`
 
-When the placeholder is replaced with **HTML** from the signed endpoint.
+When the placeholder swaps to HTML from the signed endpoint.
 
 </div>
 </div>
 
 <p class="dim mt-4">
 
-Combo: `with { defer: '…', hydrate: '…' }` — fetch HTML, then hydrate that DOM. Matching schedules coalesce (no second idle/IO after swap).
+You can combine: `with { defer: '…', hydrate: '…' }`. Matching schedules coalesce so you don't wait idle twice.
 
 </p>
 
 <!--
-Timing vocabulary is shared on purpose so you don't learn two APIs.
+Ogygia reuses the same timing words in two different phases, which keeps the API learnable.
 
-Read the list once: load, idle, visible, a media query string, and none — none is the lake, we'll do that next.
+`load` means now. `idle` means when the browser has breathing room. `visible` means when the region reaches the viewport. A media query lets the environment decide. And `none` is special—we’ll use that in a moment to make a lake.
 
-Here's the trick. Same word, two meanings depending on the attribute. On hydrate, "visible" means when JS starts. On defer, "visible" means when we fetch and swap the HTML. Point at the two cards.
+The word stays the same, but the job depends on the attribute. With `hydrate`, `visible` controls when JavaScript starts. With `defer`, it controls when the browser asks the server for HTML. You can even combine the two: fetch the HTML on one schedule, then hydrate it on another.
 
-You can combine them: defer plus hydrate. Phase one gets HTML. Phase two hydrates that DOM. If both say idle, we don't make you wait idle twice — they coalesce after the swap. hydrate load after any defer just means ASAP once the HTML is there.
+The runtime understands that these are two phases of the same region. If both phases say idle, it does not make you wait twice. If hydration says load after a defer, it starts as soon as the new HTML arrives.
 
-Don't recite every strategy. Pick visible as the example people feel in their gut. Skip the coalesce detail if you're running long — it's in the docs.
+Now that the timing is clear, we can look at what the marked import actually becomes.
 -->
 
 ---
 
-<div class="eyebrow">0.4 · Portable bindings</div>
+<div class="eyebrow">Portable bindings</div>
 
 # `A` is the wrapper
 
-```js
-import A from './A.svelte' with { hydrate: 'load' };
+```svelte
+<script>
+  import A from './A.svelte' with { hydrate: 'load' };
+  let Active = $state(A);
+</script>
 
-// all of these work
 <A start={n} />
-<svelte:component this={A} {...props} />
-list = [{ comp: A, props }];  // + {#each}
+<Active {...props} />
+{#each items as item}<A {...item} />{/each}
 ```
 
-<div class="grid-2 mt-6">
+<div class="grid-2 mt-2">
 <div class="card">
 
 ### Rules
 
-- Props are real Svelte props → **devalue** for the region/endpoint
-- Put UI + lakes **inside** the island file
-- Host children are a **build error** (except `ogygiaFallback` on defer)
+- Real props, then devalue for the wire
+- UI + lakes stay in the island file
+- Host children fail build (`ogygiaFallback` ok)
 
 </div>
 <div class="card">
 
 ### Dedupe
 
-Same path + strategy → **one** wrapper + one client entry. 1000× same binding → 1 module, not 1000. Each instance still gets its own region + props at SSR.
+Same path + strategy → one wrapper, one client entry. Many instances share that module; each keeps its own region and props.
 
 </div>
 </div>
 
 <!--
-0.4 changed the mental model, so I'm going to slow down here.
+An island in Ogygia is a component binding, not a special tag site. That is what makes it feel natural inside Svelte code.
 
-You import A with hydrate load. A is not "the original component plus a compiler magic at the tag site." A is a portable island wrapper. So all three usages in the snippet are legal — normal tag, svelte:component, stash it in a list and each over it. That's what people actually build.
+When I import `A` with `hydrate: 'load'`, the binding `A` becomes the island wrapper. I can render it directly, store it in `Active`, or use it repeatedly in a list. Those are all normal Svelte patterns, and they all keep working.
 
-Rules on the left — say them like boundaries, not footnotes. Props are real props; they get devalue'd for the wire. Your UI and your lakes live inside the island file. Host children across that boundary? Build error. Exception: ogygiaFallback on defer, because something has to show while HTML is loading.
+The props are also normal Svelte props during server rendering. At the boundary, Ogygia serializes the captured values with devalue so the browser can reconstruct them. That is why functions, promises, or class instances cannot cross from the host page into an island: they are not portable data. Keep the behaviour inside the island, and pass serializable state in.
 
-Right card — identity dedupe. Same file, same strategy, one client entry for the whole app. A thousand counters sharing that binding share one module URL. Each instance still gets its own region and its own props at SSR. So you're not paying N bundles for N instances of the same thing.
+For a given component path and strategy, the build creates one shared client entry. A thousand instances reuse that module, while each instance still gets its own server HTML and props.
 
-Aside if someone's on an older blog post: pre-0.4 we hoisted tag-site markup into virtual modules. That's gone. Good riddance.
-
-If short on time: read the three usages, say "portable," skip dedupe numbers.
+That gives us a clean interactive boundary. But sometimes, inside that boundary, we still want a large piece of HTML to remain completely asleep. That is what lakes are for.
 -->
 
 ---
 
-<div class="eyebrow">Lakes · remount</div>
+<div class="eyebrow">Lakes</div>
 
-# Freeze a subtree · cache what you can
+# Static HTML inside an island
 
-```mermaid
-flowchart LR
-  I["Island · hydrate"] --> L["Lake · hydrate: none"]
-  L --> I2["Island inside lake<br/>gets its own JS again"]
-  L -. remount .-> C["cache · paint stale HTML"]
-  L -. remount .-> S["swr · stale then revalidate"]
-```
+<div class="nest">
+  <div class="nest-island">
+    <div class="arch-label">island</div>
+    <div class="nest-lake">
+      <div class="arch-label">lake · hydrate: none</div>
+      <p class="arch-prose" style="margin:0;font-size:1.3rem">Article body. Zero lake JS.</p>
+      <div class="nest-inner">widget · island again</div>
+    </div>
+  </div>
+  <div class="nest-side">
+    <div class="arch-label" style="padding-top:0.15rem">on remount</div>
+    <div class="nest-chip">
+      <strong>cache</strong>
+      <p>Keep the HTML you had.</p>
+    </div>
+    <div class="nest-chip">
+      <strong>swr</strong>
+      <p>Show stale, then hit the signed endpoint.</p>
+    </div>
 
-<div class="grid-2 mt-6">
-<div class="card">
-
-### Lake
-
-`with { hydrate: 'none' }` inside an island. SSR keeps the real component; client gets a placeholder. **Zero** lake client JS.
-
-</div>
-<div class="card">
-
-### Remount
-
-When a lake CE is re-created: `cache` or `swr` (+ schedule / `maxAge`). SWR hits the signed endpoint — same trust model as defer.
-
-</div>
+  </div>
 </div>
 
 <!--
-Diagram, left to right. Start at Island — that's interactive, it has JS. Inside it you can mark a child with hydrate none. That's a lake. Frozen HTML. The lake's client JS never ships. SSR still rendered the real component; on the client we restore that DOM around hydrate.
+Think of a lake as a frozen patch of server HTML inside an otherwise interactive island.
 
-Then the arrow into "island inside lake" — nesting flips again. Walk up the tree, closest marked parent wins. So you can re-enter interactivity inside a frozen pocket. Weird the first time you hear it; really useful for a static article body with a live widget in the middle.
+The outer region on the left has JavaScript. But the article body inside it is marked with `hydrate: 'none'`, so Ogygia lifts that DOM out before the parent hydrates and restores it afterwards. The server still rendered the real content, but the lake component’s client JavaScript never ships.
 
-Dashed arrows on the right: remount. When that lake custom element gets recreated — SPA nav, conditional, whatever — you pick cache or SWR. Cache paints what you had. SWR paints stale then revalidates through the signed endpoint, same trust story as server islands.
+This can nest in a useful way. If the article contains a small widget that is marked as an island again, that widget gets its own boundary and wakes independently. So you can have an interactive shell, a large static body, and then another live component inside the body without turning the whole tree into JavaScript.
 
-Emphasize zero lake JS. That's the whole point of the word.
+The choices on the right matter when that lake reappears after a route change or a conditional. `cache` restores the HTML you already had. `swr` restores it immediately, then revalidates it through the same signed server-region mechanism we are about to see.
 
-Skip remount options if short — "lakes freeze; remount can SWR" is enough.
+Lakes answer “how do I keep HTML asleep inside an island?” The mirror-image question is “how do I leave a hole in the page and render its HTML later?”
 -->
 
 ---
 
 <div class="eyebrow">Server islands</div>
 
-# HTML later · no JS required
+# HTML later. No JS required.
 
 ```svelte
 <script>
@@ -392,50 +426,48 @@ Skip remount options if short — "lakes freeze; remount can SWR" is enough.
 
 ### Contract
 
-Signed capability URL (`?id=&props=&exp=&sig=`). Runtime fetches same-origin HTML and swaps the placeholder. Scripts in that HTML do **not** run.
+Signed capability URL (`?id=&props=&exp=&sig=`). Runtime fetches same-origin HTML and swaps the placeholder. Scripts in that HTML do not run.
 
 </div>
 <div class="card">
 
-### Why it matters
+### Why bother
 
-Static shell + personalized hole. Prerender the page; fill defer at request time. Flagship combo for CDN HTML + runtime personalization.
+Prerender the shell to a CDN. Leave a hole. Fill it at request time with personalized HTML. Static page, live greeting.
 
 </div>
 </div>
 
 <p class="faint mt-4">
 
-Nested: server island inside an island renders inline (`defer` ignored) — one interactive tree rule.
+Nested: server island inside an island renders inline (`defer` ignored). One interactive tree, one schedule.
 
 </p>
 
 <!--
-Server islands are the "HTML later" story. Look at the snippet — defer load, fallback snippet while you wait. No hydrate attribute. So: no JS for that region. Just HTML when you're ready.
+That is a server island: show a fallback now, then replace it with server-rendered HTML later. If there is no `hydrate` attribute, that region never needs client JavaScript at all.
 
-Contract on the left, say it carefully because it's a trust boundary. We mint a signed capability URL — id, props, expiry, signature. Runtime fetches same-origin, swaps the placeholder. Scripts in that HTML do not execute. You're trusting our HMAC'd SSR, not random HTML.
+The browser does not send an arbitrary component name to a public renderer. The server creates a signed capability URL containing an opaque region id, the serialized props, an expiry, and an HMAC signature. The runtime only fetches that same-origin URL, and the server verifies it before rendering. The returned scripts are inert; this is an HTML swap, not a script injection path.
 
-Why you care — right card. Prerender the shell to a CDN. Leave a hole. Fill it at request time with personalized HTML. That's the flagship combo. Marketing page that's mostly static, greeting that's not.
+The practical use case is a mostly static page. You can prerender the shell onto a CDN, leave a small personalized hole, and fill only that greeting—or price, or account summary—at request time.
 
-One nesting note at the bottom: server island inside an interactive island renders inline. defer gets ignored. We refuse to grow a second schedule inside an already-hydrating tree.
+One security note is worth saying plainly: the signature protects integrity, not secrecy. The URL is a bearer capability, so do not put secrets in the props.
 
-Aside for the security-curious: don't put secrets in defer props — the URL is a bearer capability, integrity not confidentiality. Don't run the hole HTML through a sanitizer that strips ogygia-region or you'll break lakes.
-
-If short: code + "signed HTML hole, no JS" and move on.
+At this point we can build rich pages with almost no client surface. The moment we want those pages to navigate like an app, we need one more optional layer.
 -->
 
 ---
 
 <div class="eyebrow">SPA · persist</div>
 
-# Opt-in router · durable chrome
+# Opt-in router, durable chrome
 
 <div class="grid-2 mt-4">
 <div class="card">
 
 ### `<OgygiaRouter />`
 
-Intercepts same-origin clicks, body swap, head merge, view transitions (default on). Without it: full document loads — still a valid islands app.
+Intercepts same-origin clicks, body swap, head merge, view transitions on by default. Without it: full document loads. Still a valid islands app.
 
 </div>
 <div class="card">
@@ -451,154 +483,156 @@ Layout chrome survives SPA nav. Islands inside stay mounted. Missing key on eith
 
 ### Soft vs hard
 
-**Soft `invalidateAll`** (0.4.3): bust HTML cache, re-fetch, merge head, refresh page/remote **seeds in place** — no body swap, no VT, no island remount, no nav hooks.
+**Soft `invalidateAll`:** bust HTML cache, re-fetch, merge head, refresh page/remote seeds in place. No body swap, no VT, no island remount, no nav hooks.
 
 **Hard navigate**: real route change → remount + optional VT.
 
 </div>
 
 <!--
-Router is opt-in. Drop OgygiaRouter in a layout if you want click interception, body swap, head merge, view transitions. Don't drop it in? Every nav is a full document load. That's not a failure mode — a lot of islands sites should just be MPAs.
+The router is deliberately optional. If you do nothing, links perform normal document navigations, and that is a perfectly complete Ogygia application. For many content sites, I would keep it that way.
 
-Persist is for the chrome that shouldn't flicker. data-ogygia-persist with a key on the layout shell. Same key on the incoming page? We keep that DOM, islands inside stay alive. Key missing on either side? Remount. Nested keys: outer wins.
+If you add `<OgygiaRouter />` to a layout, same-origin links can become soft navigations. The router fetches the next document, merges the head, swaps the body, and uses view transitions by default.
 
-Bottom card is the important distinction for the next chapter — soft versus hard. Soft invalidateAll, as of 0.4.3, does not body-swap. It refreshes seeds in place. Islands stay mounted. No view transition, no nav hooks. Hard navigate is a real route change.
+The persist key is how stable layout chrome survives that swap. When the current and incoming documents share the same `data-ogygia-persist` key, Ogygia keeps that DOM and the islands inside it remain mounted. If the key disappears on either side, the region remounts.
 
-Why I'm planting this now: Kit remote form() always calls invalidateAll on success. If we treated that like a full SPA nav, we'd tear your islands down every submit. Soft is how we stay Kit-shaped.
+There is one distinction here that will become crucial in a minute. A hard navigation changes the document body. A soft invalidation only re-fetches the current URL and refreshes its data seeds in place. It does not remount the islands.
 
-Adoption aside: you can put the router in the root layout while some routes are still csr true — it's a no-op there so the two routers don't fight.
-
-If short: "router optional, persist for chrome, soft invalidate ≠ navigate" and go.
+Why make that distinction so carefully? Because a real application does more than click counters. It reads from the server, submits forms, and invalidates data. That is where the project nearly becomes a toy—or becomes genuinely useful.
 -->
 
 ---
 layout: section
 ---
 
+<div class="contours" aria-hidden="true">
+<svg viewBox="0 0 640 640" fill="none" stroke="currentColor" stroke-width="1">
+  <path d="M320 88 C430 84 556 160 566 300 C576 440 480 552 330 556 C180 560 78 452 74 312 C70 172 210 92 320 88 Z" />
+  <path d="M322 148 C408 144 502 204 510 306 C518 408 446 496 328 500 C210 504 130 420 126 314 C122 208 236 152 322 148 Z" />
+  <path d="M324 206 C388 202 452 246 458 314 C464 382 410 442 326 444 C242 446 180 390 178 316 C176 242 260 210 324 206 Z" />
+  <path d="M326 260 C368 258 408 286 412 320 C416 354 380 388 326 390 C272 392 228 360 226 322 C224 284 284 262 326 260 Z" />
+  <path d="M328 296 C352 295 372 306 374 322 C376 338 356 354 328 354 C300 354 280 340 279 324 C278 308 304 297 328 296 Z" />
+  <path d="M330 318 C340 317 348 321 348 326 C348 331 340 335 330 335 C320 335 313 331 313 326 C313 321 320 319 330 318 Z" />
+</svg>
+</div>
+
 # Remote Functions
 
-<p class="dim mt-4" style="font-size: 1.25rem">
+<p class="dim mt-4" style="font-size: 2rem">
 
-The chapter where islands stop being demos and start shipping product.
+Islands with Kit remotes. This is the part that made the rest worth building.
 
 </p>
 
 <!--
-Pause here. Drink of water. Reset the room.
+So far, we have built a convincing islands demo. We can wake a counter, freeze a lake, defer some HTML, and navigate without reloading the whole page.
 
-Everything so far is "how islands work." Counters, charts, defer holes — cool. The reason I built this for real apps is the next part: SvelteKit remote functions inside those islands.
+But this was the point where I had to ask whether Ogygia was actually useful. Real interfaces need server data. They need queries, commands, forms, validation, invalidation, and progressive enhancement. If an island needs a second, Ogygia-specific RPC system to do that, then I have split the application in two and made the architecture worse.
 
-Not a parallel RPC. Not "ogygia remotes." Kit's query, form, command — running in the island graph, with progressive enhancement, with the same single-flight patterns Kit teaches.
+The better answer was much harder, but much cleaner: make SvelteKit’s own Remote Functions run inside the island graph, even though the full Kit client page never boots.
 
-If you only came for one chapter, it's this one. The rest was setup so this isn't magic.
+That is the second half of the story. Everything we have covered so far is the foundation that makes this part possible.
 -->
 
 ---
 
-<div class="eyebrow">Why RFs × islands</div>
+<div class="eyebrow">Remotes × islands</div>
 
 # Interactivity that talks to the server
 
 <p class="lede mt-4">
 
-Server data flows in as **props**. Client talk-back goes through Kit's own remotes — deep-imported wire codec + client entry, not a parallel RPC layer.
+Server data comes in as props. Talk-back goes through Kit's own remotes: deep-imported wire codec and client entry, not a parallel RPC layer.
 
 </p>
 
-<div class="grid-3 mt-8">
+<div class="grid-2 mt-8">
 <div class="card">
 
-### Without RFs
+### Without remotes
 
-Islands are counters and charts. Forms are classic actions (still great!).
+Islands are counters and charts. Classic form actions still work on csr false, and the SPA router doesn't steal the POST.
 
 </div>
 <div class="card">
 
-### With RFs
+### With remotes
 
-`query` / `command` / `form` / `query.live` / `batch` / `prerender` inside the island graph.
-
-</div>
-<div class="card">
-
-### Progressive enhancement
-
-`form()` posts natively with JS off. Enhanced submit when JS is on. Same endpoint.
+`query` / `command` / `form` / `query.live` / `batch` / `prerender` inside the island. `form()` posts natively with JS off; enhanced submit when JS is on. Same endpoint.
 
 </div>
 </div>
 
 <p class="dim mt-6">
 
-SSR resolves queries in-process and **seeds** the client cache — adopt what's on screen, no flash of pending.
+SSR resolves queries in-process and seeds the client cache. Adopt what's on screen, no flash of pending.
 
 </p>
 
 <!--
-Two pipes for data. Server → client: props. That's the boring path, and it's good. Client → server for rich interactivity: remotes.
+It helps to separate the data flow into two directions.
 
-Left card — without remotes you're not stuck. Classic form actions still work on csr false. SPA router doesn't steal the POST. That's the most robust interactivity on the page and it costs nothing.
+Data that the server already knows can enter an island as serializable props. For richer interaction going back to the server, the island can import Kit’s own Remote Functions: query, command, form, live query, batch, and prerender.
 
-Middle — with remotes you get the full kit: query, command, form, live, batch, prerender. Inside the island. We deep-import Kit's wire codec and client entry. Your app's transport hook still applies. Custom types, File args — same as Kit.
+Ogygia reuses Kit’s wire codec and client runtime rather than inventing a parallel protocol. That means the transport hook still applies, custom types still serialize the Kit way, and `File` arguments still behave as expected.
 
-Right — progressive enhancement isn't a brochure line. form() with JS off posts to the remote endpoint and comes back. With JS on you get enhance, fields, issues, pending.
+The progressive-enhancement story also survives. With JavaScript off, a remote form posts natively to Kit’s endpoint. Once the island hydrates, the same form gains enhanced submission, pending state, fields, and issues.
 
-Bottom line about seeding: SSR runs the query in-process, we seed the client cache, the island adopts what's already painted. No flash of "loading…" for data you already rendered.
+On the first render, queries run in-process on the server. Ogygia places their responses into the document so the island can adopt the data that is already painted instead of flashing back to a pending state.
 
-Emphasize "Kit's own remotes." If someone smells a fake, walk them to the playground guestbook later.
-
-Skip live/batch names if short — query and form are enough.
+To see how that works without booting the whole Kit app, let’s walk through the pieces around a single island.
 -->
 
 ---
 
 <div class="eyebrow">Composition</div>
 
-# Island + query / form / command
+# Remotes live inside the island
 
-```mermaid
-flowchart TB
-  subgraph ISLAND["Island · hydrate region"]
-    Q["query() · seeded .current"]
-    F["form() · enhance + fields + issues"]
-    C["command() · mutate + refresh"]
-    L["query.live · Kit SSE"]
-  end
-  PAGE["application/ogygia-page seed"] --> ISLAND
-  REM["application/ogygia-remote seed"] --> Q
-  F -->|"POST · CSRF · ORIGIN"| EP["Kit remote endpoint"]
-  C --> EP
-  Q --> EP
-  EP -->|"single-flight q"| Q
-  F -.->|"default success"| INV["invalidateAll · soft"]
-```
+<div class="comp">
+  <div class="comp-col">
+    <div class="arch-label">SSR seeds</div>
+    <div class="comp-item">ogygia-page</div>
+    <div class="comp-item">ogygia-remote</div>
+  </div>
+  <div class="comp-col island">
+    <div class="arch-label">island</div>
+    <div class="comp-item">query()</div>
+    <div class="comp-item">form()</div>
+    <div class="comp-item">command()</div>
+    <div class="comp-item">query.live</div>
+  </div>
+  <div class="comp-col">
+    <div class="arch-label">Kit endpoint</div>
+    <div class="comp-item">POST + CSRF</div>
+    <div class="comp-item">single-flight q</div>
+    <div class="comp-item">soft invalidate</div>
+  </div>
+</div>
 
-<p class="faint mt-4">
+<p class="comp-note">
 
-`$app/*` shims for island importers only — Kit's client page is uninitialized under `csr=false`.
+`$app/*` shims for island importers only. Under `csr=false`, Kit's client page never boots.
 
 </p>
 
 <!--
-Okay, eye on the diagram. Big box in the middle is one hydrate island. Inside it: query with a seeded current, form with enhance, command, live SSE. Those are Kit primitives living in that region.
+The middle column is the interactive island. Inside it, the application imports the familiar Kit primitives: query, form, command, and live query.
 
-Left side feeding in — two seeds. application/ogygia-page so page.data and friends work under csr false. application/ogygia-remote so the query doesn't refetch what SSR already knew.
+The left column is what lets that island begin from the server-rendered state. One document-level seed carries the current page data. Another carries Remote Function responses collected during SSR. The browser applies those seeds before the island starts, so `$app/state` and the remote cache already agree with the HTML on screen.
 
-Everything talks to Kit's remote endpoint on the right. POSTs still go through CSRF — if commands 403 in prod, check ORIGIN. That's a Kit footgun we didn't invent.
+The right column remains Kit’s endpoint. Form and command posts keep Kit’s CSRF rules and transport behaviour. Ogygia is only providing the isolated client environment around them.
 
-Dashed line down from form to invalidateAll soft — that's the default success path. Form wins, Kit calls invalidateAll, we soft-refresh seeds. Solid arrow back labeled single-flight q — that's the updates plus requested path on the next slides. Don't explain it yet; just say "there's a way to refresh the live query in the same POST."
+That environment uses narrow `$app/*` shims for island imports, because under `csr = false` there is no Kit client page to provide those modules. The shims expose the current page snapshot and navigation hooks without pretending that the full router is running.
 
-Footer: islands get $app shims because Kit's client page isn't booted. Only island importers. Shared modules stay honest.
-
-If the diagram feels busy, narrate only: seeds in, Kit endpoint out, soft invalidate on form success.
+When a form succeeds, Kit normally calls `invalidateAll`. That sounds simple, but in an islands architecture the exact meaning of invalidation decides whether the UI stays alive or gets torn down.
 -->
 
 ---
 
-<div class="eyebrow">Kit-compat</div>
+<div class="eyebrow">Matching Kit</div>
 
-# Soft invalidate · not a navigation
+# Soft invalidate is not a navigation
 
 <div class="compare mt-4">
 <div class="card">
@@ -608,13 +642,13 @@ If the diagram feels busy, narrate only: seeds in, Kit endpoint out, soft invali
 - Bust SPA HTML cache
 - Re-fetch current URL
 - Merge `<head>`
-- Refresh page + remote **seeds**
+- Refresh page + remote seeds
 - Islands stay mounted
 
 </div>
 <div class="card">
 
-### What soft does **not**
+### What soft does not
 
 - `body.replaceWith`
 - View transition
@@ -628,20 +662,16 @@ If the diagram feels busy, narrate only: seeds in, Kit endpoint out, soft invali
 
 <p class="lede mt-8">
 
-Kit remote `form()` always calls `invalidateAll` on success. Matching Kit's soft invalidate avoids tearing down live islands and re-painting stale SSR HTML.
+Kit remote `form()` always calls `invalidateAll` on success. Soft invalidate matches that without tearing down live islands or re-painting stale SSR HTML.
 
 </p>
 
 <!--
-This is the "we read Kit's source" slide. Left is what soft invalidate does. Right is what it refuses to do. Read the right list out loud if you want the room to feel the difference — no body swap, no view transition, no remount, no clearing live queries, no nav hooks. Soft invalidate is not a navigation. Kit agrees.
+Ogygia treats `invalidateAll` as a soft refresh, not as a navigation. It throws away the cached HTML for the current URL, fetches a fresh copy, merges the head, and reapplies the page and Remote Function seeds. The body stays where it is, so every mounted island keeps its local state.
 
-Why it exists: remote form always calls invalidateAll when it succeeds. Early ogygia treated that like "re-navigate to the same URL." Islands died. Sometimes you even re-painted stale SSR HTML from another isolate. Bad.
+Just as importantly, soft invalidation does not pretend that navigation happened. There is no body swap, no view transition, no remount, and no `beforeNavigate` or `afterNavigate` cycle. Live query instances are not cleared either.
 
-So 0.4.3 made invalidate soft. Seeds refresh in place. Your guestbook island keeps its local state. If you need the query's .current to move, that's the next slide — soft alone won't push live Query instances.
-
-Aside: soft fetch has its own generation so it can't cancel an in-flight click navigation. Small, but it's the kind of bug you only find in anger.
-
-Emphasize the lede sentence. If short: "invalidateAll ≠ remount" and flip.
+There is one boundary to understand: refreshing the document seed does not automatically update an already-mounted live `Query` object. For single-flight form updates, Kit already has a more precise mechanism, which is what we will look at next.
 -->
 
 ---
@@ -651,62 +681,60 @@ Emphasize the lede sentence. If short: "invalidateAll ≠ remount" and flip.
 # `updates` + `requested().refreshAll`
 
 ```ts
-// island — skip invalidateAll; send refresh keys
+// island: skip invalidateAll; send refresh keys
 await submit().updates(entries);
 
-// .remote.ts — honor keys so POST response includes `q`
+// .remote.ts: honor keys so POST response includes `q`
 await requested(getEntries, 1).refreshAll();
 ```
 
 <div class="card mt-6">
 
-### Prove it's real Kit
+### Both sides required
 
-`updates` alone only sends keys + skips invalidate — **without** `requested`, the POST has no `q` and live `.current` stays stale. Soft-invalidate alone refreshes seeds, not mounted Query instances. Islands that need fresh data: `.refresh()`, or this pair.
+`updates` alone only sends keys and skips invalidate. Without `requested`, the POST has no `q` and live `.current` stays stale. Soft invalidate refreshes seeds, not mounted Query instances. Need fresh data: `.refresh()`, or this pair.
 
 </div>
 
 <p class="dim mt-4">
 
-Same guestbook pattern as the docs playground — ogygia reuses Kit's form runtime inside islands.
+Same guestbook pattern as the docs playground. ogygia reuses Kit's form runtime inside islands.
 
 </p>
 
 <!--
-Here's the receipt that we're not faking Kit.
+Here is the precise pattern for “submit this form and return the fresh query value in the same response.”
 
-Two lines. Client: submit().updates(entries). That says "skip invalidateAll, and please refresh this query in the same flight." Server: requested(getEntries).refreshAll(). That honors the keys and puts fresh data in the response's q payload so the live Query .current updates.
+On the island, `submit().updates(entries)` tells Kit which query keys should be refreshed and skips the broad `invalidateAll`. On the server, `requested(getEntries).refreshAll()` sees those keys, recomputes the query, and includes the new result in the form response. The mounted `Query` object can then update its current value immediately.
 
-The gotcha — and I want you to hear this — updates alone is not enough. It sends the keys and skips invalidate. If the server never calls requested, there's no q in the POST response, and the island stares at stale .current. Soft invalidate won't save you either; it refreshes seeds, not mounted queries.
+Both sides are necessary. `updates` by itself only sends the request for fresh keys. If the server never calls `requested`, the response has no refreshed query payload, and the live value remains stale. A soft invalidation does something different: it refreshes the document seeds, not that mounted query instance.
 
-So the pair is the pattern. Same one as the docs guestbook playground. Sign the book, list updates, island never remounts.
+This is the pattern used by the guestbook in the Ogygia playground. You submit, the list updates in the same flight, and the island never remounts.
 
-If someone asks "why not just invalidateAll and remount?" — because you'd lose in-flight UI state and you might flash SSR that hasn't seen the write yet. Single-flight is the grown-up path.
-
-This is the slide to slow down on. Read both code lines. Pause. Then the gotcha.
+That closes the loop. We started with a mostly static page, and we now have selective JavaScript that can still use Kit’s real data model. So the final question is not “can this work?” It is “when is this the right trade?”
 -->
 
 ---
 
-<div class="eyebrow">Who it's for</div>
+<div class="eyebrow">Fit</div>
 
-# What you get
+# Who should install this
 
 <div class="grid-2 mt-4">
 <div>
 
-- Marketing / docs / content with **surgical** JS
-- App chrome that must stay Kit (loads, remotes, forms)
-- CDN-static shells + **defer** personalization
-- Gradual adoption — convert one route at a time
-- ~7.6 KB runtime; island entries own their modules (no thin facades)
+- Marketing / docs / content with a few interactive bits
+- App chrome that still needs Kit loads, remotes, forms
+- CDN-static shells + defer personalization
+- Gradual adoption, one route at a time
+- ~7.6 KB runtime; island entries own their modules
 
 </div>
 <div class="card">
 
-### Not for
+### Skip it if
 
-Replacing Kit on highly interactive csr=true apps where the whole tree should hydrate anyway. ogygia is an opt-in islands layer, not a Kit replacement.
+Your whole product is csr=true and everything hydrates anyway. Just use Kit. ogygia is for when the page is mostly HTML.
 
 </div>
 </div>
@@ -722,15 +750,107 @@ Replacing Kit on highly interactive csr=true apps where the whole tree should hy
 </div>
 
 <!--
-Who should actually install this.
+Ogygia is a good fit when the page is mostly HTML and interactivity is the exception.
 
-Left list — say it like use cases, not features. Docs and marketing with three interactive bits. Apps that need Kit's loads and remotes but don't want the whole marketing page to hydrate. CDN shell plus defer holes. Gradual adoption — plugin once, convert routes when you're ready. Small runtime, and the island entry owns its module so Rolldown doesn't thin-facade you into a mystery re-export. That last one's a war story from 0.4.1/0.4.2 if anyone cares about FOUC CSS.
+That could be a marketing site with a few live widgets, documentation with search and playgrounds, or an application shell that still needs Kit loads, forms, and Remote Functions. It also fits the CDN-static case we saw earlier, where deferred regions add request-time personalization to a prerendered page.
 
-Right card — honesty. If your whole product is a csr true app and everything's interactive, you don't need ogygia. Use Kit. This is an opt-in layer for when the default is "mostly HTML."
+Adoption can be gradual. A route can move to `csr = false` when it is ready, while other routes continue using the normal Kit client. The optional router knows to stay out of the way on those `csr = true` pages.
 
-Pills at the bottom are the inventory recap. Don't read them all. Pick the ones you actually covered.
+But if almost every component in your product is interactive and the whole route should hydrate, please just use SvelteKit as designed. Ogygia is not a cheaper way to rebuild a fully client-rendered app. It is a way to preserve HTML as the default and spend JavaScript deliberately.
 
-If short: two sentences — "surgical JS on Kit" and "not a Kit replacement."
+That is the whole story of Ogygia itself: start with server HTML, wake only the regions that need it, keep static content asleep even inside them, defer HTML when useful, and still speak Kit when the island talks back to the server.
+
+Or at least, that was the whole story—until the same experiment made one more missing piece impossible to ignore.
+-->
+
+---
+layout: section
+class: content-reveal
+---
+
+# One more thing…
+
+<p class="dim mt-4" style="font-size: 2.16rem">
+
+`@ogygia/content`
+
+</p>
+
+<p class="lede mt-4" style="font-size: 1.68rem; max-width: 34em; margin-inline: auto">
+
+Astro-style content collections, built from SvelteKit Remote Functions. Optional. Separately installed. Not released yet.
+
+</p>
+
+<!--
+I said that was the whole story. There is one more thing.
+
+Once Ogygia made a `csr = false` SvelteKit page feel this close to an Astro page, the next missing piece became very obvious: content collections.
+
+So this is `@ogygia/content`. It is not released yet, and it is intentionally not bundled into Ogygia. You install it separately because these are two different decisions. Ogygia decides where JavaScript runs. The content package decides how files or CMS entries become application data.
+
+The important part is that it does not introduce another data framework. It is built directly out of the Remote Functions we just spent time understanding. That keeps content inside the same SvelteKit application model instead of bolting an Astro-shaped island onto the side.
+
+Let me show you the whole API on one slide.
+-->
+
+---
+
+<div class="eyebrow">Preview · not released</div>
+
+# Content becomes Kit remotes
+
+```ts
+const blog = content({
+  from: import.meta.glob('../content/**/*.{svx,md}', { eager: true }),
+  format: mdsvex,
+  schema: postSchema
+});
+
+export const posts = blog.list();
+export const post = blog.get({ mode: 'prerender', dynamic: true });
+```
+
+<div class="grid-3 mt-4">
+<div class="card">
+
+### Bring content
+
+Markdown, JSON, YAML, a CMS fetch, or a push stream.
+
+</div>
+<div class="card">
+
+### Keep it honest
+
+Explicit formats, schema validation, filters, mapping, stable ids.
+
+</div>
+<div class="card">
+
+### Export Kit
+
+Real `prerender`, `query`, and `query.live` remotes. Pages import only those.
+
+</div>
+</div>
+
+<p class="dim mt-4">
+
+`.svx` can contain Ogygia islands. `render()` returns SSR HTML, and the region boundaries survive `{@html}`.
+
+</p>
+
+<!--
+The content handle stays private inside a `.remote.ts` file. You give it a source, an explicit format, and a schema. The source can be Markdown or SVX from `import.meta.glob`, JSON, YAML, a one-time CMS fetch, or even a stream that keeps pushing new entries.
+
+Then `.list()` and `.get()` mint real Kit remotes. Static files naturally become `prerender` remotes with generated inputs. An async CMS can use `query`. A streaming source can become `query.live`. The page never imports the catalog or the filesystem—it imports only the remotes and calls them like the rest of the app.
+
+The experiment goes one step further. An SVX entry can contain Ogygia islands of its own. The content remote server-renders that entry to HTML, the page inserts it with `{@html}`, and the Ogygia region boundaries survive. So a Markdown article can contain a hydrated counter or a deferred server region without turning the entire article into a client app.
+
+For content-heavy sites, this is the point where SvelteKit plus Ogygia can replace Astro while staying deeply integrated with Kit: one router when you want it, one Remote Functions model, one schema boundary, and islands all the way through the content. But it remains opt-in. Install it only when you want the content layer.
+
+It is not on npm yet. Consider this the teaser.
 -->
 
 ---
@@ -738,7 +858,7 @@ layout: center
 class: text-left
 ---
 
-<div class="eyebrow">Status · 0.4.x</div>
+<div class="eyebrow">Get Ogygia</div>
 
 # Links
 
@@ -758,13 +878,15 @@ MIT · built on SvelteKit · inventory talk, not a framework pitch.
 </p>
 
 <!--
-Links, nothing cute. npm package is ogygia. Docs and playground live at ogygia.puruvj.dev — if you've got five minutes after, the remotes playground and the guestbook are the demo I can't run inside Slidev. Source is github.com/PuruVJ/ogygia. MIT.
+If you want to try it, the one address to remember is ogygia.puruvj.dev.
 
-I'm on 0.4.x — portable bindings, soft invalidate, FOUC CSS without thin facades. Stuff moves; the docs are the source of truth over this deck.
+The docs cover installation, every timing strategy, lakes, server regions, the router, and the Remote Functions setup. The playground includes the pieces I cannot demonstrate properly inside this Slidev deck—especially the guestbook flow, router behaviour, and the different hydration schedules.
 
-If you remember three URLs, remember the docs one. Everything else is linked from there.
+The package name on npm is simply `ogygia`, and the source is on GitHub under PuruVJ. It is MIT licensed. `@ogygia/content` is still a preview in that repository, so please do not go looking for a published package just yet.
 
-Optional: point at the playground path specifically for people who learn by clicking.
+The project is still moving, so if the deck and the docs ever disagree, trust the docs and the current package.
+
+I’ll leave these links up for a moment. Then I’d love to hear where this model feels useful, where it feels suspicious, or which boundary you want to pull apart.
 -->
 
 ---
@@ -775,22 +897,24 @@ layout: center
 
 <p class="dim mt-4">
 
-Hydrate · defer · lakes · remotes · soft invalidate
+Hydrate · defer · lakes · remotes · `@ogygia/content`
 
 </p>
 
-<div class="meta mt-10" style="font-family: var(--slidev-font-mono); font-size: 0.8rem; color: var(--ogy-faint);">
+<div class="meta mt-10" style="font-family: var(--slidev-font-mono); font-size: 1.28rem; color: var(--ogy-faint);">
 
 ogygia.puruvj.dev
 
 </div>
 
 <!--
-Alright — questions.
+Thank you.
 
-Good prompts if the room goes quiet: "where's the trust boundary on defer?" "what happens to query.live across SPA nav?" "can I put the router in root and keep some Kit pages?" "why fail the build on dynamic import with?"
+I’m happy to go deeper on any part of the path we just walked: how the signed defer boundary works, how lakes survive hydration, what happens to live queries across soft navigation, or how the Ogygia router coexists with ordinary `csr = true` Kit routes.
 
-I'll also take "you're wrong about X" — please.
+And please challenge the design. If one of these boundaries feels wrong, or you think Kit already provides a cleaner path, that is a much more interesting conversation than a polite question.
 
-If nobody starts: I'll mention the soft-invalidate versus updates pair again, because that's the one that bites in production. Otherwise, thanks for the time — docs are ogygia.puruvj.dev.
+If we need a place to start, ask me about the difference between soft invalidation and the `updates` plus `requested` pair. They sound similar, but they refresh two different kinds of state, and that distinction is one of the most useful lessons from building this.
+
+The docs are at ogygia.puruvj.dev. Thanks again.
 -->

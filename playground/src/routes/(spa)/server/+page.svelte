@@ -2,7 +2,7 @@
 	// Server island: rendered on the server on demand, streamed in after the page.
 	// The reserved `ogygiaFallback` snippet shows immediately; the component itself is NOT
 	// rendered at page-SSR time.
-	import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
+	import Greeting from '$lib/Greeting.svelte' with { fill: 'load' };
 </script>
 
 <h1 data-static-shell>Server islands</h1>

@@ -1,0 +1,89 @@
+---
+title: Streaming & PPR
+summary: Stream server-island HTML down one response instead of a fetch per hole — and where that meets partial prerendering.
+related:
+  - islands/server-islands
+  - data-state/partials
+  - app/router
+---
+
+By default, every server island (`defer`) fetches its HTML in its own request after the page loads. That is correct and simple, but a page with several holes makes several round-trips. Streaming collapses them into one.
+
+## Turn it on
+
+```ts
+// vite.config.ts
+ogygia({ stream: true });
+```
+
+On a dynamic page request, the handle now sends the shell first, then appends each hole's server-rendered HTML down the **same response** as a `<template data-ogygia-slot>` parcel. The runtime drops each parcel into its region as it arrives. Zero extra requests.
+
+```svelte
+<!-- both of these fill from the streamed response, not a second fetch -->
+<Greeting {defer} />
+<Recommendations {defer} />
+```
+
+## When it applies
+
+Streaming is not a new schedule — it is a better *how* for `fill: 'load'`:
+
+- **`fill: 'load'`** holes stream into the shell response.
+- **`idle` / `visible` / media** holes keep fetching on their schedule — deferring the *server* work is the whole point of those.
+- **Prerendered / CDN pages** and any hole that cannot render server-side fall back to the per-hole fetch, so streaming never changes correctness.
+
+## Partial prerendering
+
+The name is not an accident: a [Partial](/docs/data-state/partials) is exactly the dynamic hole in an otherwise-static page. There are two tiers, and both are just combinations of things you already know:
+
+- **Real PPR** — `prerender = true` + server islands. The shell is a genuine static file on the CDN; the holes fill per visitor. Fastest possible TTFB, zero shell renders, ever.
+- **Shell caching** — for routes that can't prerender. The server renders the shell once, then replays it as the streaming envelope while holes stream fresh.
+
+## Real PPR
+
+Prerender the page. Keep the holes. That's the whole recipe:
+
+```ts
+// +page.ts
+export const prerender = true;
+```
+
+```svelte
+<script>
+  import Hero from './Hero.svelte';                              // static — baked at build
+  import Recommendations from './Recs.svelte' with { fill: 'load' };  // dynamic hole
+  import Greeting from './Greeting.svelte' with { fill: 'load' };     // personalized hole
+</script>
+```
+
+At build, Kit emits the page as a **static file** — the shell plus each hole's fallback and a signed endpoint reference. Your CDN serves it like any asset: no server render, no cold start, edge-fast everywhere. When the page loads, each hole fetches its server-rendered HTML — fresh per visitor, cookie-personalized if the island reads cookies.
+
+**The holes never age out.** A capability minted at prerender is signed effectively-forever (the props are already public in the static HTML, so a longer signature reveals nothing). A dynamic page's capabilities keep the short `regionTtl` window — only prerendered pages get the long-lived mint.
+
+**Set `OGYGIA_SECRET`.** By default each build signs with a fresh random key, so a redeploy would orphan the holes on previously-built static pages (and anything a CDN still caches). A stable `OGYGIA_SECRET` env var keeps every past build's holes verifying. The build warns if you prerender holes without one.
+
+Constraints:
+
+- A hole on a prerendered page fills by client fetch (streaming needs a live response; a static file has none).
+- `sessionCookie` sealing and prerendered holes don't mix: the capability is baked once for everyone, so it can't be bound to one visitor's session. Personalize inside the island (read cookies in the component) instead.
+
+## Shell caching (dynamic routes)
+
+For a route that *can't* prerender — the shell depends on params or per-request data — shell caching is the runtime version of the same idea: a cached shell and server-streamed holes, with no client waterfall.
+
+Opt a route in with `export const shell` — **the same config as [lake `remount`](/docs/islands/lakes)**:
+
+```ts
+// +page.ts (or +page.server.ts / +layout.ts to cover a subtree)
+export const shell = 'cache';   // render the shell once, replay it forever (per process)
+export const shell = 'swr';     // serve the cached shell, revalidate it in the background
+export const shell = { revalidate: 'load', maxAge: '5m' };  // swr, revalidate once stale after 5m
+```
+
+On the first request the handle renders the shell and caches it by path; later requests replay that cached shell as the streaming envelope — the shell is instant (no re-render) while the `fill: 'load'` holes still stream fresh each time. `'swr'` re-renders the shell out of band to keep it current; `'cache'` freezes it until the process restarts.
+
+Layout config inherits down to child routes, and a `+page` overrides its `+layout`. A global default is `ogygia({ shell: 'cache' })`. Only genuinely static shells are cached — a page with per-request data in the shell silently falls back to per-request rendering.
+
+> The one difference from lake `remount`: `revalidate`'s *schedule* and `onExpire` are client-side lake concepts. A shell revalidates on the request, so for a shell `revalidate` only chooses cache-vs-swr, and `maxAge` sets staleness.
+
+

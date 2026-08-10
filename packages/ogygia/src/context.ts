@@ -1,10 +1,18 @@
-import { createContext } from 'svelte';
+import { getContext, setContext } from 'svelte';
 import { getRequestEvent } from 'virtual:ogygia/request-event';
 
-// Type-safe context (Svelte 5.40+ `createContext`) marking "this subtree is already inside a
-// hydrated island". Nested island wrappers read it and degrade to a plain inline component so
-// an island-within-an-island hydrates exactly once, together with its parent.
-const [get_nested_context, set_nested_context] = createContext<boolean>();
+// Context key marking "this subtree is already inside a hydrated island". Nested island wrappers
+// read it and degrade to a plain inline component so an island-within-an-island hydrates exactly
+// once, together with its parent.
+//
+// KEY IDENTITY (CTX-KEY): must be `Symbol.for` (global registry), NOT `createContext`'s per-call
+// `Symbol()`. The runtime bundle (which mounts NestedProvider → setNested) and each island-entry
+// bundle (which renders a lake region → isNested) are SEPARATE Vite entry graphs; `context.ts` is
+// duplicated across them on the client, so a per-module `Symbol()` mints a different key in each —
+// setNested and isNested then miss each other and a lake renders no `<ogygia-region hydrate="none">`,
+// so the lift/restore drops it. SSR bundles once, so the key matches there — hence it broke ONLY
+// after client hydration. A global `Symbol.for` is one key across every graph.
+const NESTED_KEY = Symbol.for('ogygia.nested-island');
 
 /**
  * Mark the current subtree's hydration state. `true` = inside a hydrated island (nested islands
@@ -12,19 +20,15 @@ const [get_nested_context, set_nested_context] = createContext<boolean>();
  * hydrates again (the nearest-boundary rule — DESIGN.md).
  */
 export function setNested(value = true): void {
-	set_nested_context(value);
+	setContext(NESTED_KEY, value);
 }
 
 /**
- * True when an ancestor island wrapper already marked the subtree. `createContext`'s getter
- * throws when no ancestor set it (a top-level island) — that absence is exactly "not nested".
+ * True when an ancestor island wrapper already marked the subtree. `getContext` returns `undefined`
+ * when no ancestor set it (a top-level island) — that absence is exactly "not nested".
  */
 export function isNested(): boolean {
-	try {
-		return get_nested_context() === true;
-	} catch {
-		return false;
-	}
+	return getContext(NESTED_KEY) === true;
 }
 
 /** Per-request: only one `data-ogygia-runtime` script should be emitted (router, else first island). */

@@ -1,0 +1,54 @@
+---
+title: Performance
+summary: Real numbers — client JS, Lighthouse, CLS/LCP, JS eval — measured against SvelteKit, Astro and Mochi on identical pages.
+related:
+  - reference/plugin-config
+  - start/how-it-works
+  - start/adoption
+---
+
+<script>
+	import BenchCharts from '$lib/BenchCharts.svelte';
+</script>
+
+ogygia is a lightweight, performant islands library. Rather than market a single number, here are the
+real measurements — reproducible in-repo under [`bench/`](https://github.com/PuruVJ/ogygia/tree/main/bench).
+
+## The benchmark
+
+The same blog post — same prose, same five interactive widgets, same CSS — is built four ways, and we
+measure how much client JavaScript each ships as the post gets longer. Islands ship JS only for the
+widgets, so their payload is **flat**. Whole-page hydration ships JS for the entire document, so it
+**grows with the content**.
+
+The method is a port of Stanislav Khromov's
+[interactive-blogs-benchmark](https://github.com/khromov/interactive-blogs-benchmark) — full credit to
+[@khromov](https://github.com/khromov). We run it on latest tooling with ogygia added.
+
+<BenchCharts />
+
+## Reading it
+
+- **Islands stay flat.** ogygia, Astro and Mochi ship the same JS whether the post is 9k or 71k words.
+  SvelteKit's whole-page hydration climbs with the prose.
+- **ogygia vs the other islands.** Astro's Preact islands are the smallest; Mochi (Svelte 5 islands) is
+  leaner than ogygia. ogygia trades a little more baseline runtime for a much larger feature surface —
+  server islands, held/live/frozen regions, and full SvelteKit integration. See the
+  [feature matrices](https://github.com/PuruVJ/ogygia/tree/main/bench#feature-matrices).
+- **The runtime is feature-selected.** ogygia ships only the features your app uses; a load-only page
+  never pays for the router, lakes, or persistence. We track the per-profile runtime size in
+  [`bench/bundle-size.snapshot.json`](https://github.com/PuruVJ/ogygia/tree/main/verify/bundle-size.snapshot.json)
+  so it can only shrink over time.
+
+## Reproduce it
+
+```bash
+# hermetic (Docker): builds every framework + runs Lighthouse
+docker compose -f bench/docker-compose.yml up --build
+
+# isolated runtime size per feature profile (rolldown, brotli)
+pnpm run bundle-size
+```
+
+Numbers on this page are regenerated from `bench/results/latest.json` — the exact JSON the benchmark
+emits.

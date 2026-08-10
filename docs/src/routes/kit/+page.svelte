@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Counter from '$lib/demos/Counter.svelte' with { hydrate: 'load' };
+	import Counter from '$lib/demos/Counter.svelte' with { wake: 'load' };
 	import PageHead from '$lib/PageHead.svelte';
 </script>
 
@@ -13,7 +13,7 @@
 	<h1 style="font-size: clamp(2rem, 4vw, 3rem);">csr = true route</h1>
 	<p>
 		This route opts into full Kit hydration so the client build stays available. Islands still
-		work; Kit hydrates them once as normal components. <code>&lt;OgygiaRouter /&gt;</code> sits in
+		work; Kit hydrates them once as normal components. <code>&lt;ogygia.Router /&gt;</code> sits in
 		the root layout for the rest of the site — on this page Kit owns navigation, so the ogygia
 		router stays idle (gradual-migration story).
 	</p>

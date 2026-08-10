@@ -23,7 +23,7 @@ let isDev = false;
 	check('/static returns 200', res.status === 200);
 	check('/static counter island SSR (count is 7)', /count is 7/.test(html));
 	check('/static server-island fallback present', /loading personalized greeting/.test(html));
-	check('/static server-island endpoint reference present', /endpoint="[^"]*🏝️ogygia🏝️/.test(html));
+	check('/static server-island endpoint reference present', /endpoint="[^"]*🏝️/.test(html));
 	check('/static ships NO Kit bootstrap', !/__sveltekit/.test(html));
 
 	if (!isDev) {
@@ -31,10 +31,52 @@ let isDev = false;
 		if (existsSync(prerenderedFile)) {
 			const file = readFileSync(prerenderedFile, 'utf-8');
 			check('prerendered file is static (counter + fallback baked in)', /count is 7/.test(file) && /loading personalized greeting/.test(file));
-			check('prerendered file omits the preload hint (no request context at build)', !/rel="preload" as="fetch"/.test(file));
+
+			// ---- real PPR: the static file's holes must outlive regionTtl ----
+			// The baked capability is minted ~forever (a CDN file has no TTL); a 1h exp would strand
+			// every hole an hour after deploy. Assert exp is at least a year out.
+			// `&` rides as `&amp;` inside the HTML attribute.
+			const exp = Number(file.match(/endpoint="[^"]*(?:&amp;|[?&])exp=(\d+)/)?.[1] ?? 0);
+			const yearOut = Math.floor(Date.now() / 1000) + 365 * 24 * 3600;
+			check('PPR: baked capability is long-lived (exp > 1y out)', exp > yearOut, `exp=${exp}`);
+			// No preload hint in the static file — Kit's prerender crawler follows <link href>, so a
+			// baked preload would make the build crawl the region endpoint itself (429s the build).
+			check('PPR: prerendered file omits the fetch preload hint (crawler-safe)', !/rel="preload" as="fetch"/.test(file));
+			// And the baked capability actually verifies against the running server (same build).
+			const endpoint = file.match(/endpoint="([^"]+)"/)?.[1]?.replace(/&amp;/g, '&');
+			if (endpoint) {
+				// endpoint is document-relative (`./🏝️?…`) — resolve like the browser would.
+				const holeRes = await fetch(new URL(endpoint, base + '/'));
+				check('PPR: baked capability verifies (hole endpoint 200)', holeRes.status === 200, `status=${holeRes.status}`);
+			} else {
+				check('PPR: baked capability verifies (hole endpoint 200)', false, 'no endpoint attr found');
+			}
 		}
 	} else {
 		out.push('SKIP  on-disk prerender checks (dev server does not prerender)');
+	}
+}
+
+// ---- real PPR for the LAKE mint path: prerendered swr lake ----
+// /static-lake bakes an swr lake's signed revalidate endpoint into a static file at build. The
+// capability must be long-lived (same rule as server-island holes) and must verify at runtime.
+if (!isDev) {
+	const lakeFile = fileURLToPath(new URL('../playground/.svelte-kit/output/prerendered/pages/static-lake.html', import.meta.url));
+	check('PPR lake: static-lake.html prerendered to disk', existsSync(lakeFile));
+	if (existsSync(lakeFile)) {
+		const file = readFileSync(lakeFile, 'utf-8');
+		const swrRegion = file.match(/<ogygia-region[^>]*remount="swr"[^>]*>/)?.[0] ?? '';
+		check('PPR lake: swr region baked into the static file', swrRegion.length > 0);
+		const exp = Number(swrRegion.match(/(?:&amp;|[?&])exp=(\d+)/)?.[1] ?? 0);
+		const yearOut = Math.floor(Date.now() / 1000) + 365 * 24 * 3600;
+		check('PPR lake: baked revalidate capability is long-lived (exp > 1y)', exp > yearOut, `exp=${exp}`);
+		const endpoint = swrRegion.match(/endpoint="([^"]+)"/)?.[1]?.replace(/&amp;/g, '&');
+		if (endpoint) {
+			const res = await fetch(new URL(endpoint, base + '/'));
+			check('PPR lake: baked capability verifies (endpoint 200)', res.status === 200, `status=${res.status}`);
+		} else {
+			check('PPR lake: baked capability verifies (endpoint 200)', false, 'no endpoint attr');
+		}
 	}
 }
 

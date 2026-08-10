@@ -1,0 +1,69 @@
+---
+title: How it works
+summary: The whole mental model in five words — Page, Island, Lake, Server island, Partial — and the tiny runtime that ties them together.
+related:
+  - start/install
+  - islands/client-islands
+---
+
+ogygia is small on purpose. Once you hold five words in your head, every feature is a combination of them. This page is the map; the rest of the docs are the territory.
+
+## The page ships no framework
+
+A normal SvelteKit page boots the Kit client: it hydrates the whole tree, so every page carries the framework whether it needs it or not. ogygia flips that. You set `csr = false`, and the page is **just HTML**. No Kit client, no app-wide hydration.
+
+What ships instead is a **~7.6 KB runtime** — a custom element (`<ogygia-region>`) plus an optional router. It sits and waits. JS arrives only for the components you explicitly mark.
+
+```ts
+// src/routes/+layout.ts — the whole page opts out of the Kit client
+export const csr = false;
+```
+
+## Five words
+
+Everything you build is one of these:
+
+| Word | What it is | How you write it |
+| --- | --- | --- |
+| **Page** | Server HTML, no client framework. | `csr = false` |
+| **Island** | A component that becomes interactive — gets JS on a schedule. | `import C from './C.svelte' with { wake: 'load' }` |
+| **Lake** | Static HTML *inside* an island. Zero JS for that part. | `with { wake: 'none' }` used inside an island |
+| **Server island** | HTML fetched from the server after load. Placeholder first, no JS. | `with { fill: 'load' }` |
+| **Partial** | A server-*chosen* renderable you place like data — the server picks the component. | `region(Card, props)` + `<Region of={x} />` |
+
+`hydrate` and `defer` are the two import attributes. Everything else in that table is plain English.
+
+## When things happen
+
+Islands and server islands share the same four timing words, so you only learn them once:
+
+| Value | Meaning |
+| --- | --- |
+| `load` | Right away |
+| `idle` | When the browser goes idle |
+| `visible` | When scrolled into view |
+| `'(max-width: 600px)'` | When the media query matches |
+
+On an **island** the word says *when JS runs*. On a **server island** it says *when the HTML arrives*. Same words, two axes. See [Timing & nesting](/docs/islands/timing-nesting).
+
+## One nesting rule
+
+Walk up the tree. The closest marked parent decides what a component is.
+
+```
+page → island → lake → island → …
+```
+
+- Island on the page → gets its own JS.
+- Island inside an island → shares the parent's JS (one interactive tree, not two).
+- Lake inside an island → stays static HTML; its JS never ships.
+- Island inside a lake → gets its own JS again.
+
+That single rule is the whole nesting model. The details live in [Timing & nesting](/docs/islands/timing-nesting).
+
+## Where to go next
+
+- [Install](/docs/start/install) — add the package and wire the plugin.
+- [Quickstart](/docs/start/quickstart) — your first island, end to end.
+- [Client islands](/docs/islands/client-islands) — the primitive you'll reach for most.
+- [Glossary](/docs/reference/glossary) — one-line definitions for every term.

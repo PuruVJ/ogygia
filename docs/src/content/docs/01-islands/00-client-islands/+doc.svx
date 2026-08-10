@@ -1,0 +1,125 @@
+---
+title: Client islands
+summary: Mark an import with hydrate and the component gets JS on a schedule. Everything else stays static.
+related:
+  - islands/timing-nesting
+  - islands/server-islands
+  - islands/lakes
+---
+
+A **client island** is a component that becomes interactive. You mark its import with `hydrate`, and ogygia ships JS for that component on a schedule. The rest of the page stays server HTML with zero client JS.
+
+> **When to use.** Reach for a client island whenever a piece of the page needs to respond to the user — a counter, a menu, a form widget, a chart. If it never needs JS, leave it unmarked (it stays HTML) or make it a [lake](/docs/islands/lakes).
+
+```svelte
+<script>
+  import Counter from './Counter.svelte' with { wake: 'load' };
+</script>
+
+<Counter start={3} />
+```
+
+The marked import binding **is** the island — a portable wrapper. Use it like any component: `<Counter />`, a dynamic `<Comp />`, or a `{#each}` list of `{ Comp, props }`. See [Portable bindings](/docs/islands/portable-bindings).
+
+## The schedules
+
+`hydrate` takes the same timing words everywhere:
+
+| Value | JS runs |
+| --- | --- |
+| `load` | right away |
+| `idle` | when the browser is idle |
+| `visible` | when scrolled into view |
+| `interaction` | on the first pointer / key / focus inside it — the waking click replays, typing survives |
+| `'(max-width: 600px)'` | when the media query matches |
+
+Same import binding wraps the demos below — each is a real island on this page, marked with a different schedule. Reload with JS disabled and the markup is still here; the widgets just stay static.
+
+<script>
+  import LoadLive from './LoadLive.svelte' with { wake: 'load' };
+  import IdleLive from './IdleLive.svelte' with { wake: 'idle' };
+  import VisibleLive from './VisibleLive.svelte' with { wake: 'visible' };
+</script>
+
+<div class="doc-demo-row">
+  <figure class="doc-demo">
+    <figcaption><code>wake: 'load'</code></figcaption>
+    <LoadLive />
+  </figure>
+  <figure class="doc-demo">
+    <figcaption><code>wake: 'idle'</code></figcaption>
+    <IdleLive />
+  </figure>
+  <figure class="doc-demo">
+    <figcaption><code>wake: 'visible'</code></figcaption>
+    <VisibleLive />
+  </figure>
+</div>
+
+The `Live since …` / `Idle after …` / `In view …` stamps are written by each island's `$effect` after it wakes, so they prove the component actually hydrated rather than shipping a baked value — and the `idle` and `visible` ones wake later than `load`. The full schedule reference, plus `visible` margin tuning, lives in [Timing & nesting](/docs/islands/timing-nesting).
+
+## Props cross the boundary
+
+Props are real Svelte props into the wrapper, serialized with devalue for the island payload. So they must be serializable — numbers, strings, plain objects, arrays. What cannot cross:
+
+- **Functions** (an `onSave` callback) — devalue can't carry a closure. Do the work inside the island, or call a [remote function](/docs/data-state/remote-functions).
+- **Host children / snippets** — put the island's UI and its [lakes](/docs/islands/lakes) inside the island's own `.svelte` file.
+- **Live class instances** — unless the class opts in as [shared state](/docs/data-state/state-context#sharing-state).
+
+See [Constraints](/docs/reference/constraints) for the full list.
+
+## A worked example: a cart badge
+
+A header badge that reflects a cart, hydrated on `load` so it is live immediately:
+
+```svelte
+<!-- CartBadge.svelte -->
+<script>
+  let { count = 0 } = $props();
+</script>
+
+<span class="badge">{count}</span>
+```
+
+```svelte
+<!-- +page.svelte -->
+<script>
+  import CartBadge from '$lib/CartBadge.svelte' with { wake: 'load' };
+</script>
+
+<CartBadge count={items.length} />
+```
+
+To let a *separate* "Add to cart" island update this badge, the two share one live object — see [Shared state](/docs/data-state/state-context#sharing-state).
+
+## Do / don't
+
+- **Do** default anything below the fold to `wake: 'visible'` — it is free performance.
+- **Do** keep islands small and focused; the smaller the island, the less JS ships.
+- **Don't** pass callbacks or class instances as props expecting them to work — they can't cross the wire. Move the logic inside, or reach for a remote function or shared state.
+- **Don't** wrap the whole page in one island — that is just `csr = true` with extra steps.
+
+
+<style>
+  .doc-demo-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .doc-demo {
+    margin: 0;
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md, 12px);
+    background: var(--bg-sunken);
+  }
+  .doc-demo figcaption {
+    margin-bottom: 0.75rem;
+    font: 400 0.75rem/1 var(--font-mono);
+    color: var(--text-faint);
+  }
+  .doc-demo figcaption code {
+    color: var(--accent);
+  }
+</style>

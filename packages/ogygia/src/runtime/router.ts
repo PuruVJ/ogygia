@@ -8,12 +8,8 @@
  */
 import { html_has_kit_bootstrap, document_has_kit_bootstrap } from './kit-boot.js';
 import { PageCache } from './page-cache.js';
-import {
-	collect_persist_pairs,
-	end_persist_preserve,
-	relocate_persist_pairs,
-	type PersistPair
-} from './persist.js';
+import { slots } from './slots.js';
+import type { PersistPair } from './persist.js';
 import { runtime_session } from './session.js';
 
 const WS = /\s+/;
@@ -204,10 +200,6 @@ function is_dangerous_head_node(node: Element): boolean {
 }
 
 class SpaRouter {
-	#after_body_swap: (() => void) | undefined;
-	#after_body_connected: (() => void) | undefined;
-	/** Apply page/remote seeds from fetched HTML without a body swap (`invalidateAll`). */
-	#apply_soft_invalidate: ((doc: Document) => void) | undefined;
 	#started = false;
 	#before_hooks = new Set<BeforeNavigateCallback>();
 	#after_hooks = new Set<AfterNavigateCallback>();
@@ -228,18 +220,14 @@ class SpaRouter {
 	#viewport_seen = new WeakSet<Element>();
 	/** pathname+search of the document currently in the DOM (hash ignored). */
 	#doc_key = '';
-
-	set_after_body_swap(fn: () => void) {
-		this.#after_body_swap = fn;
-	}
-
-	set_after_body_connected(fn: () => void) {
-		this.#after_body_connected = fn;
-	}
-
-	set_apply_soft_invalidate(fn: (doc: Document) => void) {
-		this.#apply_soft_invalidate = fn;
-	}
+	/**
+	 * Full URL of the document currently displayed in the DOM. `navigate()` uses this as its `from`
+	 * instead of `location.href`, because on a `popstate` (back/forward) the browser has ALREADY
+	 * changed `location` to the target — so `location.href` would equal the target and the
+	 * same-document guard would wrongly bail into the hash-only branch, never swapping the body
+	 * (browser back left the old page's DOM in place). POP-FROM.
+	 */
+	#current_url: URL | null = null;
 
 	beforeNavigate(fn: BeforeNavigateCallback) {
 		this.#before_hooks.add(fn);
@@ -296,13 +284,15 @@ class SpaRouter {
 	}
 
 	fetch_page(href: string, signal?: AbortSignal) {
-		// Warm cache hit (prefetch path only — navigations use signal and must be abortable).
-		if (!signal) {
-			const cached = this.#page_cache.get(href);
-			if (cached != null) return Promise.resolve(cached);
-			const pending = this.#inflight.get(href);
-			if (pending) return pending;
-		}
+		// Warm cache hit (a prefetched page, or an in-flight prefetch): serving it is instant, so
+		// even an abortable navigation uses it — there is nothing to abort on a resolved cache hit
+		// or a shared prefetch promise. Without this, a click after a hover-prefetch would re-fetch
+		// (the whole point of prefetch is to skip that second request). Real navigations delete the
+		// entry after use (one-shot — see navigate()), so the next visit is still fresh. PREFETCH-HIT.
+		const cached = this.#page_cache.get(href);
+		if (cached != null) return Promise.resolve(cached);
+		const pending = this.#inflight.get(href);
+		if (pending) return pending;
 
 		const settled = fetch(href, {
 			signal,
@@ -353,7 +343,7 @@ class SpaRouter {
 			replace?: boolean;
 		} = {}
 	) {
-		const from = new URL(location.href);
+		const from = this.#current_url ?? new URL(location.href);
 
 		// Same document, hash-only (or identical URL): never fetch / swap / view-transition.
 		// (`invalidateAll` is a soft seed refresh — it does not call navigate.)
@@ -365,6 +355,7 @@ class SpaRouter {
 				history.replaceState({ ...(history.state || {}), ogygia: true }, '', url.href);
 			}
 			jump_to_hash(url.hash);
+			this.#current_url = url;
 			this.#run_after(from, url, type);
 			return;
 		}
@@ -431,19 +422,27 @@ class SpaRouter {
 			if (gen !== this.#nav_gen) return;
 			this.#merge_head(doc.head); // keeps our runtime module script alive across swaps
 			if (gen !== this.#nav_gen) return;
+			// CONTINUITY: snapshot the LEAVING page's changed island form fields (session-scoped) so
+			// returning to it restores what the visitor was mid-typing. Read the old body now.
+			if (slots.forms.enabled && this.#current_url) {
+				slots.forms.snapshot(document.body, this.#current_url.pathname);
+			}
 			// Clear session state BEFORE body connect so new regions never see the previous page.
-			this.#after_body_swap?.();
+			slots.spaLifecycle?.prepare();
 			if (gen !== this.#nav_gen) return;
 			// Relocate immediately before replaceWith — never leave live nodes in a discarded parse tree.
-			persist_pairs = collect_persist_pairs(document.body, doc.body);
-			relocate_persist_pairs(persist_pairs);
+			persist_pairs = slots.persist.collect(document.body, doc.body);
+			slots.persist.relocate(persist_pairs);
 			document.body.replaceWith(doc.body);
 			document.title = doc.title;
 			// Lakes inside persisted chrome survived reset — re-mark settled so island-in-lake can wake.
 			for (const { live } of persist_pairs) runtime_session.settle_lakes_in(live);
-			end_persist_preserve(persist_pairs);
+			slots.persist.end(persist_pairs);
 			// Old islands disconnected; new hydrates are awaiting — sweep stale Kit remotes now.
-			this.#after_body_connected?.();
+			slots.spaLifecycle?.finish();
+			// CONTINUITY: restore fields the visitor left on THIS page in a prior visit (this session),
+			// as each island hydrates.
+			if (slots.forms.enabled) slots.forms.restore(url.pathname);
 		};
 
 		if (use_vt && document.startViewTransition) {
@@ -455,6 +454,7 @@ class SpaRouter {
 		if (gen !== this.#nav_gen) return;
 
 		this.#doc_key = document_key(url);
+		this.#current_url = url;
 
 		// Instant after a body swap — CSS smooth must not animate programmatic post-nav scroll.
 		if (replace) {
@@ -529,7 +529,7 @@ class SpaRouter {
 		if (!doc.querySelector('meta[name="ogygia-router"]')) return;
 
 		this.#merge_head(doc.head);
-		this.#apply_soft_invalidate?.(doc);
+		slots.spaLifecycle?.softInvalidate(doc);
 	}
 
 	invalidate() {
@@ -571,6 +571,7 @@ class SpaRouter {
 		if (document_has_kit_bootstrap()) return;
 		this.#started = true;
 		this.#doc_key = document_key(new URL(location.href));
+		this.#current_url = new URL(location.href);
 		this.install_remote_mutation_cache_bust();
 
 		document.addEventListener('click', (event) => {
@@ -588,7 +589,7 @@ class SpaRouter {
 		window.addEventListener('popstate', () => {
 			const url = new URL(location.href);
 			// Hash-only back/forward on the same document — browser already updated the URL;
-			// do not fetch or swap. Scroll to the fragment if present.
+			// do not fetch or swap. Scroll to the target if present.
 			if (document_key(url) === this.#doc_key) {
 				jump_to_hash(url.hash);
 				return;
@@ -775,19 +776,6 @@ class SpaRouter {
 
 const spa = new SpaRouter();
 
-/** Called after a successful body swap so the runtime can reset per-document session state. */
-export function set_after_body_swap(fn: () => void) {
-	spa.set_after_body_swap(fn);
-}
-
-/**
- * Called after `body.replaceWith` (old islands disconnected; new hydrates still pending).
- * Used to sweep Kit query/live instance caches before the next page mounts remotes.
- */
-export function set_after_body_connected(fn: () => void) {
-	spa.set_after_body_connected(fn);
-}
-
 /**
  * Register a callback before a client-side navigation.
  * Call `nav.cancel()` to abort. Returns an unsubscribe function.
@@ -849,11 +837,6 @@ export function invalidate() {
 	return spa.invalidate();
 }
 
-/** Wire soft-invalidate seed application (called from the runtime bootstrap). */
-export function set_apply_soft_invalidate(fn: (doc: Document) => void) {
-	spa.set_apply_soft_invalidate(fn);
-}
-
 /**
  * Warm the SPA HTML cache for a URL.
  * Note: this fetches the **page**, not Kit `load` data in isolation.
@@ -898,4 +881,25 @@ export function replaceState() {
  */
 export function startRouter() {
 	spa.start();
+}
+
+/**
+ * Feature entry: start the SPA router once the DOM is ready, but only when the page opted in with
+ * `<meta name="ogygia-router">` (emitted by `<Router />`) and Kit is not already booting it.
+ */
+export function install() {
+	if (typeof document === 'undefined') return;
+	// Expose SPA nav to the kit-remote client stub (remote commands that navigate/invalidate) without
+	// that stub statically importing this ~10 KB module. Only set when the router feature is loaded.
+	slots.nav = { goto, invalidateAll };
+	const start = () => {
+		if (!document.querySelector('meta[name="ogygia-router"]')) return;
+		if (document_has_kit_bootstrap()) return;
+		startRouter();
+	};
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', start, { once: true });
+	} else {
+		start();
+	}
 }

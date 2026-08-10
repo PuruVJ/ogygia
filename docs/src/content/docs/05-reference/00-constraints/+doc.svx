@@ -1,0 +1,40 @@
+---
+title: Constraints
+summary: What crosses the island boundary and what does not — the honest edges of the model.
+related:
+  - reference/patterns
+  - reference/api
+---
+
+Islands are a real boundary. Knowing what crosses it keeps you out of trouble.
+
+## Props cross. Children do not.
+
+Props are serialized with devalue and cross into the island. Host children, snippets, and functions **do not** — they live in the host scope, not the island's. Put UI and lakes inside the island's own `.svelte` file.
+
+The one reserved exception is `ogygiaFallback` on a [server island](/docs/islands/server-islands).
+
+## Captured host state is a snapshot
+
+A value you read from the host into island markup is a serialized snapshot, not live state. Mutating it is a mistake, and ogygia stops you:
+
+- a **build error** for captured-variable writes in island markup,
+- a **dev-only deep proxy** that throws at runtime.
+
+Pass data as props; own mutable state inside the island.
+
+## Page-level lifecycle is dead code
+
+On a `csr = false` page, the page module never runs on the client. Top-level `onMount`, effects, and event listeners in the page do nothing. Move anything that needs to run in the browser into an island.
+
+## Inline scripts run once per document
+
+The SPA router swaps `<body>` without executing injected `<script>` tags (standard browser behavior). Inline scripts in page markup run once, on first load — not per navigation. Per-navigation code belongs in an island.
+
+## Choose the boundary honestly
+
+If a subtree needs interactivity, it is an island. If it does not, it is a [lake](/docs/islands/lakes) or plain page HTML. Do not wrap static content in an island to "be safe" — that just ships JS you did not need.
+
+## Dev is not prod
+
+Two behaviors differ in dev: SSR query seeding degrades to a client refetch, and the mutation-guard proxy only runs in dev. Always sanity-check data flows against a production build.

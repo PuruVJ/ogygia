@@ -1,3 +1,7 @@
+<script lang="ts">
+	let { class: className = '' }: { class?: string } = $props();
+</script>
+
 <svg
 	class={className}
 	viewBox="0 0 640 640"
@@ -25,7 +29,3 @@
 		d="M330 318 C340 317 348 321 348 326 C348 331 340 335 330 335 C320 335 313 331 313 326 C313 321 320 319 330 318 Z"
 	/>
 </svg>
-
-<script lang="ts">
-	let { class: className = '' }: { class?: string } = $props();
-</script>

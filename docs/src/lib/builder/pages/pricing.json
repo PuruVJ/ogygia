@@ -1,0 +1,35 @@
+{
+  "data": {
+    "blocks": [
+      {
+        "@type": "@builder.io/sdk:Element",
+        "id": "builder-hero-2",
+        "component": {
+          "name": "Hero",
+          "options": { "title": "Pricing", "tagline": "A second Builder page — same registry, different JSON." }
+        }
+      },
+      {
+        "@type": "@builder.io/sdk:Element",
+        "id": "builder-grid-2",
+        "component": { "name": "Grid" },
+        "children": [
+          {
+            "@type": "@builder.io/sdk:Element",
+            "component": {
+              "name": "Feature",
+              "options": { "title": "Hobby", "body": "Free. Static blocks only, zero JS." }
+            }
+          },
+          {
+            "@type": "@builder.io/sdk:Element",
+            "component": {
+              "name": "Feature",
+              "options": { "title": "Pro", "body": "Interactive blocks hydrate on demand." }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

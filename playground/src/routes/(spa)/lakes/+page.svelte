@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Alternation: shell -> island (LakeCounter) -> lake (FrozenBox) -> island-in-lake (InnerLive).
 	// Remount policy lives on presets (U1): default cache; frozenSwr paints stale then re-fetches.
-	import LakeCounter from '$lib/lakes/LakeCounter.svelte' with { hydrate: 'load' };
+	import LakeCounter from '$lib/lakes/LakeCounter.svelte' with { wake: 'load' };
 </script>
 
 <h1 data-static-shell>Lakes — frozen regions inside a hydrated island</h1>

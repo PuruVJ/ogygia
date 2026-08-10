@@ -1,12 +1,12 @@
 <script lang="ts">
-	// Portable island bindings: same import works as a static tag, svelte:component, and list/each.
-	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
-	import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
+	// Portable island bindings: same import works as a static tag, dynamic <Comp />, and list/each.
+	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+	import Greeting from '$lib/Greeting.svelte' with { fill: 'load' };
 
-	const dynamic = Counter;
+	const Dynamic = Counter;
 	const list = [
-		{ comp: Counter, props: { start: 1, label: 'list-a' } },
-		{ comp: Counter, props: { start: 2, label: 'list-b' } }
+		{ Comp: Counter, props: { start: 1, label: 'list-a' } },
+		{ Comp: Counter, props: { start: 2, label: 'list-b' } }
 	];
 </script>
 
@@ -18,14 +18,14 @@
 </section>
 
 <section data-dynamic-use>
-	<h2>svelte:component</h2>
-	<svelte:component this={dynamic} start={20} label="dynamic" />
+	<h2>dynamic component</h2>
+	<Dynamic start={20} label="dynamic" />
 </section>
 
 <section data-list-use>
 	<h2>each list</h2>
-	{#each list as item (item.props.label)}
-		<svelte:component this={item.comp} {...item.props} />
+	{#each list as { Comp, props } (props.label)}
+		<Comp {...props} />
 	{/each}
 </section>
 

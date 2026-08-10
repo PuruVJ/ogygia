@@ -1,0 +1,30 @@
+{
+  "Static content": {
+    "raw": 34608,
+    "brotli": 10347
+  },
+  "Interactive": {
+    "raw": 36853,
+    "brotli": 11008
+  },
+  "Forms": {
+    "raw": 36298,
+    "brotli": 10863
+  },
+  "SPA router": {
+    "raw": 36560,
+    "brotli": 10891
+  },
+  "Frozen regions": {
+    "raw": 38146,
+    "brotli": 11236
+  },
+  "Live regions": {
+    "raw": 35691,
+    "brotli": 10633
+  },
+  "Everything": {
+    "raw": 45929,
+    "brotli": 13315
+  }
+}

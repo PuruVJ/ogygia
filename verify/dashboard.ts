@@ -79,11 +79,11 @@ try {
 		await page.click('aside nav a[href="/dashboard/analytics"]');
 		await page.waitForSelector('.spacer', { timeout: 4000 });
 		check('sidebar: SPA nav to analytics (marker kept)', (await page.evaluate(() => window.__marker)) === m1);
-		const chart = page.locator('ogygia-region[hydrate="visible"]');
+		const chart = page.locator('ogygia-region[wake="visible"]');
 		await sleep(300);
 		check('analytics: chart island NOT hydrated before scroll', (await chart.getAttribute('data-hydrated')) === null);
 		await page.locator('[data-barchart]').scrollIntoViewIfNeeded();
-		await page.waitForSelector('ogygia-region[hydrate="visible"][data-hydrated]', { timeout: 3000 }).catch(() => {});
+		await page.waitForSelector('ogygia-region[wake="visible"][data-hydrated]', { timeout: 3000 }).catch(() => {});
 		check('analytics: chart island hydrated after scroll', (await chart.getAttribute('data-hydrated')) !== null);
 		check('analytics: SVG bars rendered', (await page.locator('[data-barchart] rect').count()) >= 3);
 		await page.close();

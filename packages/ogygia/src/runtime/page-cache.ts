@@ -11,10 +11,10 @@ export class PageCache {
 	#maxEntries: number;
 	#maxBytes: number;
 
-	constructor(opts: { ttlMs: number; maxEntries: number; maxBytes: number }) {
-		this.#ttlMs = opts.ttlMs;
-		this.#maxEntries = opts.maxEntries;
-		this.#maxBytes = opts.maxBytes;
+	constructor(opts?: { ttlMs?: number; maxEntries?: number; maxBytes?: number }) {
+		this.#ttlMs = opts?.ttlMs ?? 8_000;
+		this.#maxEntries = opts?.maxEntries ?? 32;
+		this.#maxBytes = opts?.maxBytes ?? 4_000_000;
 	}
 
 	#drop(href: string) {

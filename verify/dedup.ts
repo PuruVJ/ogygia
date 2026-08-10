@@ -1,16 +1,15 @@
 // Duplicate-import dedup (task 5): when the SAME component is imported twice with different
 // strategies, each usage becomes its own island virtual module — but the component's compiled code
 // must ship in exactly ONE client chunk (Rolldown shares it between the two island entry chunks),
-// never duplicated. Verified in BOTH build modes:
-//   - Kit-driven: inspect the already-built playground client output (/dup demo).
-//   - standalone (all-csr=false): build a minimal fixture via the library's own standalone client
-//     build and inspect its output.
+// never duplicated. Inspected in Kit's built playground client output (/dup demo).
+//
+// (An all-csr=false variant used to build a fixture via the library's own standalone client build;
+// that build was replaced by the boot-route mechanism — Kit's NORMAL client build now handles the
+// all-csr=false case, so there is no separate build path to dedup-check here.)
 // A build-output inspector — no server needed. Usage: node verify/dedup.ts
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ogygia } from '../packages/ogygia/dist/vite/index.js';
-import { runStandaloneClientBuild } from '../packages/ogygia/dist/vite/standalone.js';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 let failures = 0;
@@ -50,36 +49,6 @@ function chunksWith(dir: string, marker: string): string[] {
 		const hits = chunksWith(clientDir, marker);
 		check('kit-driven: the dup component is emitted (marker found)', hits.length >= 1, `${hits.length} chunk(s)`);
 		check('kit-driven: dup component code in EXACTLY ONE chunk (not duplicated)', hits.length === 1, hits.join(', ') || '(none)');
-	}
-}
-
-// ---------- (B) standalone: build a minimal all-csr=false fixture ----------
-{
-	const root = path.join(repo, 'playground', 'dedup-fixture');
-	const outDir = path.join(repo, 'playground', '.dedup-standalone-out');
-	const marker = 'standalone-dedup-marker-7b21';
-	fs.rmSync(outDir, { recursive: true, force: true });
-	try {
-		const { runtimeFileName } = await runStandaloneClientBuild({
-			root,
-			base: '/',
-			clientDir: outDir,
-			sourcemap: false,
-			makePlugin: (opts: Record<string, unknown>) => ogygia({ ...opts })
-		});
-		// A successful build ALSO proves the standalone `.remote` stub + client resolution handle the
-		// fixture's query.batch + prerender functions (an unmatched stub would drop the export and the
-		// island's `import { getSquare, getManifesto }` would fail to resolve).
-		check('standalone: build succeeded (resolves query.batch + prerender remote)', !!runtimeFileName, String(runtimeFileName));
-		const immutable = path.join(outDir, '_app', 'immutable');
-		const hits = chunksWith(immutable, marker);
-		check('standalone: the dup component is emitted (marker found)', hits.length >= 1, `${hits.length} chunk(s)`);
-		check('standalone: dup component code in EXACTLY ONE chunk (not duplicated)', hits.length === 1, hits.join(', ') || '(none)');
-		check('standalone: remote-probe island present (batch/prerender island built)', chunksWith(immutable, 'standalone-remote-probe-marker').length >= 1, 'marker');
-	} catch (e) {
-		check('standalone: build succeeded', false, (e as Error).message.slice(0, 120));
-	} finally {
-		fs.rmSync(outDir, { recursive: true, force: true });
 	}
 }
 

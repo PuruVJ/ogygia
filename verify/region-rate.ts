@@ -1,5 +1,7 @@
 // RATE-BURN: forged signatures must NOT burn the per-IP budget (verify MAC first, then charge).
 // Usage: node verify/region-rate.ts [baseUrl]
+export {};
+
 const base = process.argv[2] || 'http://localhost:3051';
 let failures = 0;
 function check(name, cond, extra = '') {

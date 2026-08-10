@@ -30,7 +30,7 @@ let endpoint;
 		'/server preload uses crossorigin=anonymous (matches fetch credentials: same-origin)',
 		/rel="preload" as="fetch" crossorigin="anonymous"/.test(html)
 	);
-	check('/server preload points at the island endpoint (raw-emoji path)', /href="[^"]*🏝️ogygia🏝️/.test(html));
+	check('/server preload points at the island endpoint (raw-emoji path)', /href="[^"]*🏝️/.test(html));
 	check('/server ships NO Kit bootstrap (csr=false)', !/__sveltekit/.test(html));
 	// The "zero component JS" guarantee is a production-build property. In dev, Vite injects
 	// module URLs for HMR/tooling, so only assert this against a real build.
@@ -103,7 +103,7 @@ let endpoint;
 	check('tampered props rejected (403)', resP.status === 403, `got ${resP.status}`);
 
 	// unknown region id with forged sig -> 403 (no existence oracle)
-	const resU = await fetch(base + '/🏝️ogygia🏝️?id=deadbeefdead&props=W3t9XQ&exp=9999999999&sig=' + '0'.repeat(64));
+	const resU = await fetch(base + '/🏝️?id=deadbeefdead&props=W3t9XQ&exp=9999999999&sig=' + '0'.repeat(64));
 	check('unknown region id rejected (403, no oracle)', resU.status === 403, `got ${resU.status}`);
 
 	// cross-region replay: valid sig for this endpoint's props, but swapped id

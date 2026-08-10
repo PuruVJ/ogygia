@@ -1,0 +1,83 @@
+---
+title: Plugin config
+summary: Every option on the ogygia() Vite plugin — visible margins, presets, endpoint, rate limits, secret.
+related:
+  - reference/api
+  - islands/server-islands
+---
+
+All tuning lives on the `ogygia()` Vite plugin. Every option is optional.
+
+```ts
+ogygia({
+  visible: { margin: '120px' },
+  presets: {
+    demo: { wake: 'visible', margin: '200px' },
+    frozenSwr: { wake: 'none', remount: { revalidate: 'load' } }
+  }
+})
+```
+
+## visible
+
+Default `rootMargin` for `visible` islands and server islands, so they warm slightly before entering the viewport.
+
+```ts
+ogygia({ visible: { margin: '200px' } })
+```
+
+## presets
+
+Named bundles of strategy + options, referenced from an import with `preset: 'name'`:
+
+```svelte
+<script>
+  import Chart from './Chart.svelte' with { preset: 'demo' };
+</script>
+```
+
+## stream
+
+Turn on single-response server islands: `fill: 'load'` holes stream into the page's own response instead of a fetch each. See [Streaming & PPR](/docs/app/streaming-ppr).
+
+```ts
+ogygia({ stream: true })
+```
+
+## shell
+
+Default shell-cache policy for opted-in routes — same API as lake `remount` (`'cache' | 'swr' | { revalidate, maxAge, onExpire }`). Per-route `export const shell` overrides it. See [Streaming & PPR](/docs/app/streaming-ppr).
+
+```ts
+ogygia({ shell: 'cache' })
+```
+
+## content
+
+Turn on the markdown pipeline (mdsvex + Shiki + heading collection) for `.svx` / `.md` content collections. See [Markdown & Shiki](/docs/content/markdown).
+
+```ts
+ogygia({ content: { markdown: {} } })
+```
+
+## importKeys
+
+Extra import-attribute keys to treat as ogygia directives, for interop with other tooling that reads import attributes.
+
+## rateLimit
+
+Guard the signed island endpoint against abuse — requests per window per client.
+
+## sessionCookie
+
+Name / options for the session cookie ogygia uses to scope signed capabilities.
+
+## regionTtl
+
+How long a signed region capability URL stays valid.
+
+## OGYGIA_SECRET
+
+The HMAC secret for signing `defer` capability URLs. Set it in the environment for stable signatures across a deployment; otherwise a per-build key is generated. Server islands and lake `remount: 'swr'` need the [server handle](/docs/start/install) installed to serve the endpoint.
+
+

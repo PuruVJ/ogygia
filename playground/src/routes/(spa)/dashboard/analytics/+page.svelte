@@ -1,5 +1,5 @@
 <script lang="ts">
-	// `preset: 'chart'` resolves to { hydrate: 'visible', margin: '200px' } (see vite.config.ts)
+	// `preset: 'chart'` resolves to { wake: 'visible', margin: '200px' } (see vite.config.ts)
 	import BarChart from '$lib/BarChart.svelte' with { preset: 'chart' };
 	let { data } = $props();
 </script>

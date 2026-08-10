@@ -1,0 +1,146 @@
+---
+title: Timing & nesting
+summary: The schedules that decide when JS runs or HTML arrives, and the one rule that governs islands inside islands.
+related:
+  - islands/client-islands
+  - islands/server-islands
+  - islands/lakes
+---
+
+Two small systems cover a lot of ground: **when** a region wakes, and **what happens** when regions nest. Both are deliberately tiny.
+
+## The schedules
+
+Islands (`hydrate`) and server islands (`defer`) share the same timing words, so you learn them once:
+
+| Value | When it fires | Good for |
+| --- | --- | --- |
+| `load` | Immediately after the runtime boots | Above-the-fold, interactive-now UI |
+| `idle` | On `requestIdleCallback` | Nice-to-have widgets that can wait |
+| `visible` | When scrolled into the viewport | Anything below the fold |
+| `interaction` | On the first pointer / key / focus inside it (hydrate-only) | Anything most visitors never touch |
+| `'(media query)'` | When the CSS media query matches | Mobile-only or desktop-only UI |
+
+On an **island** the schedule says *when JS runs*. On a **server island** it says *when the HTML is fetched*. Same words, two axes. (`interaction` is hydrate-only — fetching HTML on interaction would mean interacting with a fallback.)
+
+```svelte
+<script>
+  import Now from '$lib/Now.svelte' with { wake: 'load' };
+  import Later from '$lib/Later.svelte' with { wake: 'idle' };
+  import Below from '$lib/Below.svelte' with { wake: 'visible' };
+  import Phone from '$lib/Phone.svelte' with { wake: '(max-width: 600px)' };
+</script>
+```
+
+Each of the four below is a real island using exactly that schedule:
+
+<script>
+  import LoadLive from '$lib/demos/LoadLive.svelte' with { wake: 'load' };
+  import IdleLive from '$lib/demos/IdleLive.svelte' with { wake: 'idle' };
+  import VisibleLive from '$lib/demos/VisibleLive.svelte' with { wake: 'visible' };
+  import MediaLive from '$lib/demos/MediaLive.svelte' with { wake: '(max-width: 600px)' };
+</script>
+
+<div class="doc-demo-grid">
+  <div class="doc-demo"><LoadLive /></div>
+  <div class="doc-demo"><IdleLive /></div>
+  <div class="doc-demo"><VisibleLive /></div>
+  <div class="doc-demo"><MediaLive /></div>
+</div>
+
+### `interaction`: JS only for what people actually use
+
+`wake: 'interaction'` is the laziest schedule: the island ships **zero JS until someone uses
+it**. A pointer press, a keystroke, or focus landing inside the region wakes it — and the
+interaction that woke it is not lost:
+
+- **The first click counts.** It is captured while the island wakes and replayed the moment it is
+  live — a button, checkbox, or link activates exactly once.
+- **Typing survives.** Characters land in the field natively (it is real HTML); after hydration
+  the typed value, selection, and focus are restored and `bind:` syncs up.
+- **Hover warms it.** The pointer entering the region prefetches the chunk, so by the time the
+  press lands the wake is usually instant.
+
+One honest caveat: the replayed first event is not a *trusted* browser gesture, so gesture-gated
+APIs — `window.open`, clipboard, fullscreen — will be blocked if called from it. A component can
+detect this and adapt:
+
+```svelte
+<script>
+  import { hydratedBy } from 'ogygia';
+
+  // 'load' | 'idle' | 'visible' | 'interaction' | a media query — or null during SSR.
+  // Call during setup, like getContext.
+  const woke = hydratedBy();
+</script>
+
+{#if woke === 'interaction'}
+  <!-- first activation was a replay: render a real <a target="_blank"> instead of window.open -->
+{/if}
+```
+
+Don't put gesture-gated actions behind `interaction`; everything else — counters, carts, menus,
+forms, editors — just works, and costs nothing until it is touched.
+
+### Tuning `visible`
+
+`visible` uses an IntersectionObserver. Widen its trigger margin per-import, or set a default for the whole app:
+
+```svelte
+import Chart from '$lib/Chart.svelte' with { wake: 'visible', margin: '200px' };
+```
+
+```ts
+// vite.config.ts — default margin for every `visible` island
+ogygia({ visible: { margin: '0px' } });
+```
+
+## Deferred client islands: two phases
+
+Combine `defer` and `hydrate` and you get HTML-later *then* JS on it. `defer` is phase one (fetch and swap); `hydrate` is phase two (import and hydrate).
+
+```svelte
+import Panel from '$lib/Panel.svelte' with { fill: 'visible', wake: 'load' };
+```
+
+Matching schedules coalesce: after the swap, `wake: 'load'` runs immediately — no second wait. A stricter `hydrate` arms its own schedule on top.
+
+## Nesting: one rule
+
+Walk up the tree. The **closest marked parent decides**.
+
+| Nesting | What happens |
+| --- | --- |
+| Island on the page | Gets its own JS |
+| Island inside an island | Shares the parent's JS — one interactive tree, not two |
+| Lake inside an island | Stays static HTML; the lake's JS never ships |
+| Island inside a lake | Gets its own JS again |
+| Server island inside an island | Renders inline with the parent (`defer` ignored) |
+
+```
+page → island → lake → island → …
+```
+
+Because an island-in-an-island shares one tree, a child island's schedule is ignored — it hydrates with its parent. Dev warns when it drops a redundant strategy.
+
+## Do / don't
+
+- **Do** default below-the-fold islands to `visible` — it is free performance.
+- **Do** use `idle` for anything the user will not touch immediately.
+- **Don't** pair `wake: 'none'` with `defer` — HTML-later with no JS is just `defer` alone (dev warns and treats it as defer-only).
+
+
+<style>
+  .doc-demo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .doc-demo {
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md, 12px);
+    background: var(--bg-sunken);
+  }
+</style>

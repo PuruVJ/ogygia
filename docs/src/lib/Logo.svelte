@@ -1,3 +1,11 @@
+<script lang="ts">
+	let {
+		size = 20,
+		stroke = 2.25,
+		decorative = false
+	}: { size?: number; stroke?: number; decorative?: boolean } = $props();
+</script>
+
 <svg
 	viewBox="0 0 32 32"
 	width={size}
@@ -19,11 +27,3 @@
 	<path d="M17 8 Q17 4 21 3.5" />
 	<path d="M17 8 Q22 6.5 25.5 9.5" />
 </svg>
-
-<script lang="ts">
-	let {
-		size = 20,
-		stroke = 2.25,
-		decorative = false
-	}: { size?: number; stroke?: number; decorative?: boolean } = $props();
-</script>

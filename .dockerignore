@@ -1,0 +1,18 @@
+# Used when building bench/Dockerfile (context = repo root)
+**/node_modules
+**/.svelte-kit
+**/build
+**/dist
+**/.mochi
+**/.tarballs
+.git
+docs
+playground
+verify
+talks
+experiment
+packages/content
+bench/results/fidelity.md
+
+# ...but ogygia ships its built dist (the image reuses it instead of rebuilding tsdown)
+!packages/ogygia/dist

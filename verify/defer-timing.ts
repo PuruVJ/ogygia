@@ -29,7 +29,7 @@ try {
 
 	// --- preload: only the 'load' variant emits a preload hint ---
 	const preloads = await page.$$eval('link[rel="preload"][as="fetch"]', (els) => els.length);
-	check('exactly one preload <link> (only defer:load preloads)', preloads === 1, `count=${preloads}`);
+	check('exactly one preload <link> (only fill:load preloads)', preloads === 1, `count=${preloads}`);
 
 	// island entry ids per section
 	const idOf = async (variant: string) =>

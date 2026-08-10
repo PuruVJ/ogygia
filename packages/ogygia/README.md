@@ -19,6 +19,8 @@
   · <code>load / idle / visible</code>
   · <code>Media queries</code>
   · <code>Server islands</code>
+  · <code>Streaming islands</code>
+  · <code>Live partials</code>
   · <code>Lakes</code>
   · <code>Remote functions</code>
   · <code>Async Svelte</code>
@@ -69,12 +71,12 @@ Dev HMR still works with `csr = false` — soft updates for CSS and shared modul
 	import Chart from '$lib/Chart.svelte' with { hydrate: 'visible' };
 	import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
 
-	// Counter is a portable island binding — lists / svelte:component work too
-	const dyn = Counter;
+	// Counter is a portable island binding — lists / dynamic <Comp /> work too
+	const Dyn = Counter;
 </script>
 
 <Counter start={10} />
-<svelte:component this={dyn} start={1} />
+<Dyn start={1} />
 <Chart />
 <Greeting name="world">
 	{#snippet ogygiaFallback()}<p>loading…</p>{/snippet}
@@ -94,6 +96,40 @@ For a chunk that downloads only after a click, use a host island and plain
 `await import('./Widget.svelte')` (no region attributes) — that mounts a **regular** component, not a second island. Docs: [pesky patterns](https://ogygia.puruvj.dev/#patterns-dynamic-import) · [playground demo](https://ogygia.puruvj.dev/playground/on-demand).
 
 Trust boundaries and design constraints: [`INVARIANTS.md`](../../INVARIANTS.md) in the monorepo root.
+
+## Live partials
+
+A partial made from a `with { partial }` import is **awaitable**. Await it on the server (or just
+`yield` it from a `query.live` — the language awaits it) and it renders to HTML there and travels with
+its markup, so the client swaps it in with no fetch:
+
+```ts
+export const dashboard = query.live(v.string(), async function* (id) {
+	for await (const stats of feed(id)) yield partial(StatCard, { stats });
+});
+```
+
+```svelte
+<Partial of={dashboard(id).current} />
+```
+
+Static partials (`partial: 'static'`) **morph** in place across ticks; interactive ones **keep-alive**
+(new props pushed into the mounted island, local state intact). LiveView, with Svelte components.
+
+## Streaming server islands
+
+`ogygia({ stream: true })` fills `defer: 'load'` holes from the page's own response instead of a second
+request: `handle()` streams the shell, then appends each hole's server-rendered HTML as a
+`<template data-ogygia-slot>` parcel — zero extra round-trips, holes fill as they finish. Prerender /
+CDN pages and any hole that can't render server-side fall back to the per-hole fetch automatically.
+
+## Content collections
+
+RF-native content collections ship inside ogygia — `content()` mints Kit `prerender` / `query` /
+`query.live` remotes, and `get(id)` hands back `{ id, data, headings, body }` where `body` is a
+[partial](https://ogygia.puruvj.dev/docs/islands/partials) you render with `<Partial>`. Import
+from `ogygia/content`; configure markdown via `ogygia({ content: { markdown } })`. `mdsvex` / `shiki`
+are optional peers.
 
 ## License
 

@@ -1,4 +1,4 @@
-// Portable island bindings (0.4.0): marked imports are values — static tag, svelte:component,
+// Portable island bindings (0.4.0): marked imports are values — static tag, dynamic <Comp />,
 // and each/list share one entry module. csr=false client hosts omit wrappers (scale).
 // Usage: node verify/portable-bindings.ts [baseUrl]
 import { chromium } from 'playwright';
@@ -38,20 +38,20 @@ function check(name: string, cond: unknown, extra = '') {
 		presets: {}
 	};
 	const src = `<script>
-import A from './A.svelte' with { hydrate: 'load' };
-import B from './A.svelte' with { hydrate: 'load' };
-const dyn = A;
-const list = [{ comp: A, props: { n: 1 } }, { comp: B, props: { n: 2 } }];
+import A from './A.svelte' with { wake: 'load' };
+import B from './A.svelte' with { wake: 'load' };
+const Dyn = A;
+const list = [{ Comp: A, props: { n: 1 } }, { Comp: B, props: { n: 2 } }];
 </script>
 <A n={1} />
 <A n={2} />
-<svelte:component this={dyn} n={3} />
-{#each list as item}<svelte:component this={item.comp} {...item.props} />{/each}
+<Dyn n={3} />
+{#each list as { Comp, props }}<Comp {...props} />{/each}
 `;
 	const r = transformHost(src, HOST, ctx);
 	check(
-		'transform: portable rewrite keeps host tags as A/B',
-		!!r && /import A from "virtual:ogygia\/wrapper\//.test(r.code)
+		'transform: portable rewrite points A at its attach binding (placeable + holdable)',
+		!!r && /import A from "virtual:ogygia\/region\//.test(r.code)
 	);
 	check(
 		'transform: two imports same path+strategy → one island id',
@@ -69,7 +69,7 @@ const list = [{ comp: A, props: { n: 1 } }, { comp: B, props: { n: 2 } }];
 		r!.islands[0].virtualPath === `virtual:ogygia/island/${id}.js`
 	);
 	check(
-		'transform: svelte:component + each allowed (no static-tag error)',
+		'transform: dynamic Comp + each allowed (no static-tag error)',
 		!/never used as a static/.test(r!.code)
 	);
 
@@ -102,12 +102,12 @@ try {
 	const dynBtn = page.locator('[data-dynamic-use] [data-counter] button');
 	await dynBtn.waitFor({ timeout: 5000 });
 	check(
-		'svelte:component: SSR count',
+		'dynamic Comp: SSR count',
 		(await dynBtn.textContent())?.includes('count is 20') ?? false
 	);
 	await dynBtn.click();
 	check(
-		'svelte:component: hydrated click',
+		'dynamic Comp: hydrated click',
 		(await dynBtn.textContent())?.includes('count is 21') ?? false
 	);
 
@@ -119,7 +119,7 @@ try {
 	check('list[1] interactive', (await listBtns.nth(1).textContent())?.includes('count is 3') ?? false);
 
 	const entries = await page.evaluate(() => {
-		const els = [...document.querySelectorAll('ogygia-region[hydrate]')];
+		const els = [...document.querySelectorAll('ogygia-region[wake]')];
 		return [...new Set(els.map((e) => e.getAttribute('entry')).filter(Boolean))];
 	});
 	check('shared entry URL across Counter instances', entries.length === 1, entries.join(', '));
@@ -131,7 +131,7 @@ try {
 		.catch(() => {});
 	const greeted = (await page.locator('[data-defer-use]').textContent()) || '';
 	check(
-		'defer: fallback or greeting present',
+		'fill: fallback or greeting present',
 		/loading greeting|Portable/i.test(greeted),
 		greeted.slice(0, 80)
 	);
@@ -188,7 +188,7 @@ try {
 			.readdirSync(clientDir)
 			.filter((f) => f.startsWith('ogygia-island.') && f.endsWith('.js'));
 		const counterFacades = facades.filter((f) => reaches(f));
-		// Portable page shares one hydrate:load Counter entry; other routes may add more
+		// Portable page shares one wake:load Counter entry; other routes may add more
 		// strategies for Counter — assert the portable shared URL exists once, and component
 		// body is not fan-out duplicated across many chunks.
 		check(

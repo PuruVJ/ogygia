@@ -1,7 +1,7 @@
 <script lang="ts">
-	import Clock from '$lib/Clock.svelte' with { hydrate: 'load' };
-	import Counter from '$lib/Counter.svelte' with { hydrate: 'visible' };
-	import Marker from '$lib/Marker.svelte' with { hydrate: 'load' };
+	import Clock from '$lib/Clock.svelte' with { wake: 'load' };
+	import Counter from '$lib/Counter.svelte' with { wake: 'visible' };
+	import Marker from '$lib/Marker.svelte' with { wake: 'load' };
 </script>
 
 <h1 data-static-shell>About</h1>

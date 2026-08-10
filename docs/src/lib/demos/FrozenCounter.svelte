@@ -1,3 +1,12 @@
+<script lang="ts">
+	import '$lib/styles/widget.css';
+
+	let {
+		start = 0,
+		note = ''
+	}: { start?: number; note?: string } = $props();
+</script>
+
 <div class="widget">
 	<span class="widget-label">Static snapshot</span>
 	<div class="widget-row">
@@ -8,12 +17,3 @@
 		<p class="widget-meta">{note}</p>
 	{/if}
 </div>
-
-<script lang="ts">
-	import '$lib/styles/widget.css';
-
-	let {
-		start = 0,
-		note = ''
-	}: { start?: number; note?: string } = $props();
-</script>

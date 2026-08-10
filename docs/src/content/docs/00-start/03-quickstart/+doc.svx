@@ -1,0 +1,90 @@
+---
+title: Quickstart
+summary: A static page with one interactive island, from empty route to working demo, in five minutes.
+related:
+  - start/adoption
+  - islands/client-islands
+---
+
+This walks the shortest path to something real: a page that ships as pure HTML with a single island that hydrates. If you have not added the package yet, do [Install](/docs/start/install) first.
+
+## 1. Turn the page into a Page
+
+Opt the route out of the Kit client so it ships no framework JS.
+
+```ts
+// src/routes/+layout.ts
+export const csr = false;
+```
+
+## 2. Write a normal Svelte component
+
+Nothing ogygia-specific here — it is just a component.
+
+```svelte
+<!-- src/lib/Counter.svelte -->
+<script>
+  let { start = 0 } = $props();
+  let count = $state(start);
+</script>
+
+<button onclick={() => (count += 1)}>count is {count}</button>
+```
+
+## 3. Mark the import to make it an island
+
+The import attribute is the whole opt-in. The rest of the page stays static HTML.
+
+```svelte
+<!-- src/routes/+page.svelte -->
+<script>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+</script>
+
+<h1>A static page</h1>
+<p>This heading and text ship zero JS.</p>
+
+<Counter start={3} />
+```
+
+That is a working islands page. The heading and paragraph are server HTML forever; only `Counter` downloads JS, and only because you marked it.
+
+## 4. See it live
+
+The counter below is a real island on this very page, hydrated on `load` exactly like the code above:
+
+<script>
+  import LoadLive from '$lib/demos/LoadLive.svelte' with { wake: 'load' };
+</script>
+
+<div class="doc-demo-row">
+  <div class="doc-demo"><LoadLive /></div>
+</div>
+
+<style>
+  .doc-demo-row { margin: 1.5rem 0; }
+  .doc-demo {
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md, 12px);
+    background: var(--bg-sunken);
+    max-width: 22rem;
+  }
+</style>
+
+## 5. Change when it wakes
+
+Swap the strategy and the island hydrates later — no other change:
+
+```svelte
+import Counter from '$lib/Counter.svelte' with { wake: 'idle' };     // when the browser is idle
+import Counter from '$lib/Counter.svelte' with { wake: 'visible' };  // when scrolled into view
+import Counter from '$lib/Counter.svelte' with { wake: '(max-width: 600px)' }; // on small screens
+```
+
+## Where to go next
+
+- [Client islands](/docs/islands/client-islands) — every hydrate option in depth.
+- [Timing & nesting](/docs/islands/timing-nesting) — schedules and the nesting rule.
+- [Server islands](/docs/islands/server-islands) — HTML from the server, no JS.
+- [Adoption](/docs/start/adoption) — bring this into an existing Kit app one route at a time.

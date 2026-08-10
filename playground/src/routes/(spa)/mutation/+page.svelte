@@ -3,7 +3,7 @@
 	// boundary as a devalue snapshot (a Map + Set survive). The island mutates it inside its own
 	// script — a no-op that the DEV guard Proxy flags. The host markup below never writes to `config`
 	// (that would be a build error), it only reads it.
-	import MutatingIsland from '$lib/MutatingIsland.svelte' with { hydrate: 'load' };
+	import MutatingIsland from '$lib/MutatingIsland.svelte' with { wake: 'load' };
 
 	const config = {
 		count: 1,
