@@ -257,10 +257,11 @@
 		<PermalinkHeading id="adoption-end" level={3} class="doc-subhead">All-islands apps</PermalinkHeading>
 		<div class="prose">
 			<p>
-				When <em>every</em> route is <code>csr = false</code>, Kit skips its client build. ogygia
-				detects that and runs a standalone client build so island chunks and the runtime still
-				ship — you do not need a token <code>csr = true</code> page. Until then, any remaining Kit
-				route keeps Kit’s client build available for the whole app.
+				When <em>every</em> route is <code>csr = false</code>, Kit would skip its client build
+				entirely. ogygia prevents that by injecting a hidden layout-only route (no page, no URL)
+				for the duration of the build, so Kit’s own client build — island chunks, the runtime,
+				<code>version.json</code>, your preprocessors — always runs. You do not need a token
+				<code>csr = true</code> page.
 			</p>
 			<p>
 				Suggested order: plugin + handle → convert a low-risk content route → add the root router
@@ -1265,9 +1266,10 @@
 				top-level <code>await</code> in components. Both are still upstream-experimental; the
 				coupling section of the README carries the current status. Prerendering, adapter-node,
 				and Vercel-style adapters are exercised; anything serverless works for client islands, but
-				server islands need a running origin (and remotes need a server too). Kit skips its client
-				build when every route is <code>csr = false</code>; ogygia detects that and runs its own
-				standalone island build, so an all-islands app needs no token csr page.
+				server islands need a running origin (and remotes need a server too). Kit would skip its
+				client build when every route is <code>csr = false</code>; ogygia keeps it alive by
+				injecting a hidden URL-less route node during the build, so an all-islands app needs no
+				token csr page.
 			</p>
 			<p>
 				Generated island wrappers are Vite virtual modules

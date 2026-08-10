@@ -122,27 +122,6 @@ export function routeCsrIsFalse(hostFile, routesDir) {
 }
 
 /**
- * Replicates Kit's `nodes.every(n => n.page_options?.csr === false)` client-build skip
- * check: true when every page route resolves (through its layout chain) to csr === false.
- */
-export function allRoutesCsrFalse(routesDir) {
-	if (!fs.existsSync(routesDir)) return false;
-	/** @type {string[]} */
-	const leaves = [];
-	const walk = (dir) => {
-		for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-			const full = path.join(dir, e.name);
-			if (e.isDirectory()) walk(full);
-			else if (e.name === '+page.svelte') leaves.push(full);
-		}
-	};
-	walk(routesDir);
-	if (leaves.length === 0) return false;
-
-	return leaves.every((page_file) => routeCsrIsFalse(page_file, routesDir));
-}
-
-/**
  * Run our own client build for islands + runtime when Kit skips its client build.
  * Outputs into Kit's client output dir so adapters/prerender pick it up.
  */

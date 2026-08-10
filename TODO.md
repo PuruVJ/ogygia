@@ -1,5 +1,35 @@
 # ogygia — status & remaining work
 
+## Keep-client route injection — DONE: Kit's client build always runs (standalone mode retired for apps)
+- **Why:** Kit skips its ENTIRE client build when every route node resolves to `csr === false`
+  (`skip_client_build`, kit `src/exports/vite/index.js:1334`). The old answer was our standalone
+  client build, with real caveats (assumed `appDir === '_app'`, forced `vitePreprocess()` over the
+  user's preprocessors, re-implemented Kit's `.remote` client transform, regex `csr` detection that
+  could disagree with Kit's AST analyzer). Skip mode also had Kit-side defects we inherited: no
+  `_app/version.json`, service-worker `build` lists got SERVER chunk filenames, and with no
+  `static/` dir the build crashed (prerender ENOENT on a never-created `output/client`).
+- **Fix:** the plugin's `config` hook (now `{ order: 'pre', handler }` — must precede Kit's
+  `plugin_setup.config`, which runs `sync.all()`) unconditionally writes
+  `src/routes/.ogygia-keep-client/+layout.ts` (`export const csr = true`) during `vite build`. A
+  layout-only dir creates a manifest node with `page_options.csr !== false` — flipping
+  `skip_client_build` — but has no `+page`, so NO servable URL (server manifest routes unchanged;
+  cost: one ~200 B unreferenced node chunk). Mode A (emitFile piggyback) is now the single app
+  build path; `hashed_runtime_url` is gone (runtime URL is always the deterministic source hash).
+- **Traps (empirically found):** Kit's postbuild analyse/prerender workers run with
+  `SVELTEKIT_FORK=true` and RE-RUN all config hooks + `sync.all` — injection is gated on
+  `!process.env.SVELTEKIT_FORK`, else the prerender worker resurrects the dir after cleanup.
+  Cleanup lives in the SERVER pass `closeBundle` with `order: 'post'` (client build, workers and
+  prerender all nest inside the server pass's `writeBundle`; the route files must survive until
+  its very end — the generated `client-optimized/nodes/N.js` imports the layout during the client
+  build). Dev never injects (`env.command` gate); `configResolved` self-heals crash leftovers in
+  dev; `**/.ogygia-keep-client/` is gitignored.
+- **Retired:** the `allRoutesCsrFalse` build trigger (deleted — it only approximated Kit's node
+  analysis). `runStandaloneClientBuild` stays exported (verify/dedup.ts + non-Kit builds); the
+  `standalone` plugin option is unchanged. Trade-off accepted: Kit's client build compiles a
+  `nodes/i` chunk for every route (csr=false pages never reference them at runtime —
+  `render.js:373` gates on `page_config.csr && client` — but the deploy artifact grows vs the old
+  islands-only standalone output).
+
 ## Flicker fix (round 7) — DONE: remote-query SSR→client seeding (prod), graceful dev fallback
 - **Server capture** — `ogygiaHandle` now wraps `resolve(event, { transformPageChunk })`. On a
   csr=false page it reads Kit's INTERNAL request store (`try_get_request_store` from

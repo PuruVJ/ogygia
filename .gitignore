@@ -18,6 +18,8 @@ dist/
 *.tmp.*
 # leftover on-disk island dirs from older ogygia versions (now virtual: modules)
 **/.ogygia/
+# build-time keep-client route (injected + removed by the plugin; only survives a crashed build)
+**/.ogygia-keep-client/
 
 # local experiments — not part of the published library
 /experiment/
