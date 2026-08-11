@@ -65,6 +65,8 @@ export type AfterNavigateCallback = (nav: AfterNavigation) => void;
 const PREFETCH_TTL_MS = 8_000;
 const PAGE_CACHE_MAX_ENTRIES = 32;
 const PAGE_CACHE_MAX_BYTES = 4_000_000; // ~4MB of UTF-16-ish HTML
+/** Cap on waiting for a destination stylesheet to load before the body swap (cold-cache FOUC guard). */
+const STYLESHEET_WAIT_MS = 2_000;
 /** Responses that must never warm the SPA HTML cache (personalized / must revalidate). */
 const CC_UNCACHEABLE = /(?:^|,)\s*(?:private|no-store|no-cache)\b/i;
 /** Kit remote-function POSTs live under `…/_app/remote/…` (or custom `appDir`). */
@@ -439,6 +441,13 @@ class SpaRouter {
 		// synchronously so every reservation is in place before the body swap connects any binder.
 		this.#weave_regions(doc);
 
+		// Cold-cache FOUC guard: get the destination's stylesheets loaded and applied BEFORE the body
+		// swap, so the first post-deploy navigation never flashes unstyled content (a full-width column
+		// snapping to its styled width). Warm caches resolve this instantly. Old body keeps its styles
+		// until the swap, so adding the sheets early is invisible.
+		await this.#preload_stylesheets(doc.head);
+		if (gen !== this.#nav_gen) return;
+
 		let persist_pairs: PersistPair[] = [];
 		const swap = () => {
 			// Stale nav: do not mutate the DOM (view-transition can otherwise commit a superseded swap).
@@ -661,6 +670,46 @@ class SpaRouter {
 				current.appendChild(node.cloneNode(true));
 			}
 		}
+	}
+
+	/**
+	 * Load the destination page's stylesheets into the live `<head>` and resolve once they have
+	 * applied — call this BEFORE the body swap. A freshly appended `<link rel="stylesheet">` loads
+	 * asynchronously, so swapping the body first shows the new route unstyled (e.g. a content column
+	 * at full width) until the sheet arrives. That window is invisible on a warm cache but flashes on
+	 * the first visit after a deploy, when the route CSS isn't cached yet. Preloading here closes it;
+	 * `#merge_head` then dedupes these by key so nothing is added twice. Capped so a stalled sheet
+	 * can't hang navigation.
+	 */
+	#preload_stylesheets(new_head: HTMLHeadElement): Promise<unknown> {
+		const present = new Set<string>();
+		for (const node of Array.from(document.head.children)) {
+			if (node.tagName === 'LINK' && node.getAttribute('rel') === 'stylesheet') {
+				present.add(head_node_key(node));
+			}
+		}
+		const pending: Promise<void>[] = [];
+		for (const node of Array.from(new_head.children)) {
+			if (node.tagName !== 'LINK' || node.getAttribute('rel') !== 'stylesheet') continue;
+			if (is_dangerous_head_node(node)) continue;
+			const key = head_node_key(node);
+			if (present.has(key)) continue;
+			present.add(key);
+			const link = node.cloneNode(true) as HTMLLinkElement;
+			pending.push(
+				new Promise<void>((resolve) => {
+					link.addEventListener('load', () => resolve(), { once: true });
+					link.addEventListener('error', () => resolve(), { once: true });
+				})
+			);
+			document.head.appendChild(link);
+		}
+		if (!pending.length) return Promise.resolve();
+		// Never let a hung stylesheet block the swap indefinitely.
+		return Promise.race([
+			Promise.all(pending),
+			new Promise((resolve) => setTimeout(resolve, STYLESHEET_WAIT_MS))
+		]);
 	}
 
 	#should_intercept(event: MouseEvent, anchor: HTMLAnchorElement | null) {

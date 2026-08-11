@@ -55,10 +55,7 @@
 		crossorigin="anonymous"
 	/>
 	{@html themeTag}
-	<!-- TEMP: deferred JetBrains Mono loader disabled to test whether its page-wide font swap (it
-	     applies right around the load event, reflowing every `--font-mono` element) is the end-of-load
-	     flash. If the flash is gone on Vercel with this off, the swap is the cause. -->
-	<!-- {@html monoTag} -->
+	{@html monoTag}
 </svelte:head>
 
 <ogygia.Router />
