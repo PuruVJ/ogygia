@@ -15,7 +15,7 @@ One rule governs the whole surface: **the boundary picks the representation.** S
 
 | read | returns | where |
 | --- | --- | --- |
-| `get(id)` | `{ id, data, meta, body }` — body is a partial | server only |
+| `get(id)` | `{ id, data, meta, body }` — body is a held region | server only |
 | `list({ map })` | a mapped data array | over the wire |
 | `live.get` / `live.list` | mapped data, re-emitted on change | over the wire (live) |
 
@@ -59,7 +59,7 @@ export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title:
 
 ## An entry is `{ id, data, meta, body }`
 
-`get(slug)` is server-only and returns the whole entry — `data` (validated frontmatter), `meta.headings` (for a TOC), and `body`, a [partial](/docs/data-state/partials) you render with `<Region>` — **or `null`** when the id is unknown or filtered out. `get` never throws; the caller decides the 404, so validate the slug in `load`:
+`get(slug)` is server-only and returns the whole entry — `data` (validated frontmatter), `meta.headings` (for a TOC), and `body`, a [held region](/docs/data-state/held-regions) you render with `<Region>` — **or `null`** when the id is unknown or filtered out. `get` never throws; the caller decides the 404, so validate the slug in `load`:
 
 ```ts
 // src/routes/docs/[...slug]/+page.ts — clean 404 for a missing entry
@@ -97,6 +97,6 @@ export const entries = async () => (await docs.ids()).map((slug) => ({ slug }));
 
 ## Rendering entries the client fetches
 
-`get()` is server-only — the body is a live component, so it stays in the SSR pass. When the client needs to render an entry it fetched **over the wire** (an index, a live feed, search), map the entry to a partial of your own `with { region }` component and return that. `<Region>` fetches and hydrates it — see [Partials](/docs/data-state/partials).
+`get()` is server-only — the body is a live component, so it stays in the SSR pass. When the client needs to render an entry it fetched **over the wire** (an index, a live feed, search), map the entry to a held region of your own `with { region }` component and return that. `<Region>` fetches and hydrates it — see [Held regions](/docs/data-state/held-regions).
 
 See [Markdown & Shiki](/docs/content/markdown) for the preprocessor, and [Live & CMS sources](/docs/content/live) for `async` and streaming loaders.

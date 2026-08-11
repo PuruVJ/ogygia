@@ -43,8 +43,8 @@ const heavy = wrap(
 		`import B from '$lib/B.svelte' with { wake: 'visible' };`,
 		`import C from '$lib/C.svelte' with { wake: 'idle' };`,
 		`import D from '$lib/D.svelte' with { wake: 'interaction' };`,
-		`import E from '$lib/E.svelte' with { fill: 'load' };`,
-		`import F from '$lib/F.svelte' with { fill: 'visible', wake: 'load' };`,
+		`import E from '$lib/E.svelte' with { render: 'deferred' };`,
+		`import F from '$lib/F.svelte' with { render: 'deferred', wake: 'visible' };`,
 		`const items = [1,2,3];`
 	].join('\n'),
 	`<A n={1}/><A n={2}/><B/><C/><D/>{#each items as i}<E name={i}/>{/each}<F/>`

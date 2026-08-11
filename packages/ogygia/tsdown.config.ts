@@ -26,29 +26,31 @@ export default defineConfig([
 		dts: true,
 		clean: true,
 		treeshake: false, // keep every module intact; nothing here is dead code
-		external: [
-			// peers / deps — never inline
-			'svelte',
-			'svelte/compiler',
-			'svelte/server',
-			/^@sveltejs\/kit(\/|$)/,
-			'devalue',
-			'magic-string',
-			'estree-walker',
-			// content deps / optional peers — never inline
-			'yaml',
-			'mdsvex',
-			'shiki',
-			'vite',
-			// consumer-resolved specifiers
-			/^node:/,
-			/^virtual:/,
-			/^\$app\//,
-			/\.svelte$/, // the 3 wrapper components (shipped as source)
-			'ogygia/runtime',
-			'ogygia/internal',
-			'ogygia/internal/server'
-		]
+		deps: {
+			// never inline — peers / deps / consumer-resolved specifiers
+			neverBundle: [
+				'svelte',
+				'svelte/compiler',
+				'svelte/server',
+				/^@sveltejs\/kit(\/|$)/,
+				'devalue',
+				'magic-string',
+				'estree-walker',
+				// content deps / optional peers
+				'yaml',
+				'mdsvex',
+				'shiki',
+				'vite',
+				// consumer-resolved specifiers
+				/^node:/,
+				/^virtual:/,
+				/^\$app\//,
+				/\.svelte$/, // the 3 wrapper components (shipped as source)
+				'ogygia/runtime',
+				'ogygia/internal',
+				'ogygia/internal/server'
+			]
+		}
 	},
 	{
 		entry: ['src/cli.ts'],
@@ -58,7 +60,9 @@ export default defineConfig([
 		clean: false, // library build [0] already cleaned dist/
 		treeshake: true,
 		// Bundle EVERYTHING (`@sveltejs/sv-utils` + its deps) into one file; keep only node builtins external.
-		noExternal: [/.*/],
-		external: [/^node:/]
+		deps: {
+			alwaysBundle: [/.*/],
+			neverBundle: [/^node:/]
+		}
 	}
 ]);

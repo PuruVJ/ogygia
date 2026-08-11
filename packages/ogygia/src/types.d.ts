@@ -14,6 +14,12 @@ declare module 'virtual:ogygia/manifest' {
 }
 declare module 'virtual:ogygia/region-endpoint' {
 	export function makeRegionEndpoint(entry: string, props?: Record<string, unknown>): string;
+	/** @param ttl response cache max-age in seconds (`0`/absent = no-store). Signed into the URL. */
+	export function mintServerIsland(
+		entry: string,
+		props: Record<string, unknown>,
+		ttl?: number
+	): string;
 }
 declare module 'virtual:ogygia/server-manifest' {
 	export const islands: Record<string, () => Promise<{ default: unknown }>>;
@@ -49,7 +55,8 @@ declare module 'virtual:ogygia/sign' {
 		id: string,
 		exp: number | string,
 		props: string,
-		session?: string
+		session?: string,
+		ttl?: number | string
 	): string;
 }
 declare module 'virtual:ogygia/request-event' {
@@ -70,18 +77,10 @@ declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regionTtl })` (default 3600). */
 	export const regionTtl: number;
 }
-declare module 'virtual:ogygia/stream' {
-	/** Stream `defer: 'load'` holes down the page response. From `ogygia({ stream })` (default true). */
-	export const stream: boolean;
-}
 /** CONTINUITY compile-time constants (Vite `define`; typeof-guarded so node dist import is safe). */
 declare const __OGYGIA_CONTINUITY_FORMS__: boolean;
 declare const __OGYGIA_CONTINUITY_SPECULATE__: 'hover' | 'viewport' | false;
 
-declare module 'virtual:ogygia/shell' {
-	/** Kit route id → shell policy. From per-page/layout `shell` + `ogygia({ shell })`. */
-	export const policies: Record<string, { mode: 'cache' | 'swr'; maxAgeMs?: number }>;
-}
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;
 }

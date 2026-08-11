@@ -1,5 +1,7 @@
 import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
+import { frameAddress } from '../frame.js';
+import * as frames from './frame-store.js';
 import { set_current_region } from '../context-bridge.js';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import NestedProvider from '../NestedProvider.svelte';
@@ -10,7 +12,6 @@ import {
 	is_same_origin_response,
 	island_module_url
 } from './region-endpoint-url.js';
-import { region_slot_key } from '../server/stream-regions.js';
 import {
 	is_awake,
 	is_deferred,
@@ -108,6 +109,15 @@ class PropMutationGuard {
 		if (value instanceof Map) return this.#guard_map(value as Map<unknown, unknown>, entry, prop_path);
 		if (value instanceof Set) return this.#guard_set(value as Set<unknown>, entry, prop_path);
 		if (value instanceof Date || value instanceof RegExp || value instanceof URL) return value;
+		// A class INSTANCE must never be wrapped. A wired live object (e.g. a `Cart` whose `$state`
+		// fields Svelte compiles to private `#fields`) breaks under a Proxy: private-field access and
+		// `this`-dependent getters/methods run against the proxy, not the real instance, and throw
+		// ("cannot read private member … from an object whose class did not declare it"). The guard
+		// only needs to catch mutation of captured SNAPSHOT props, which are always plain data —
+		// devalue serializes exactly plain objects, arrays, Map/Set/Date. So guard those; pass class
+		// instances (the intentionally-live wired objects) straight through.
+		const proto = Object.getPrototypeOf(value);
+		if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) return value;
 		return new Proxy(value as Record<string | symbol, unknown>, {
 			get: (target, prop, receiver) => {
 				const child = Reflect.get(target, prop, receiver);
@@ -291,6 +301,12 @@ class OgygiaRegion extends HTMLElement {
 	#fetching = false;
 	/** Bounded automatic retries after a failed defer/SWR fetch. */
 	#fetch_attempts = 0;
+	/** Frame-store address (endpoint call) this region is fetching, so disconnect can release it. */
+	#frame_address: string | null = null;
+	/** Unsubscribe from the frame store (a defer region binds to its address). */
+	#frame_unsub: (() => void) | null = null;
+	/** Set while an SWR revalidate is in flight, so the next apply marks `data-revalidated`. */
+	#revalidating = false;
 	#hydrating = false;
 	#app: unknown = null;
 	#io: IntersectionObserver | null = null;
@@ -396,6 +412,14 @@ class OgygiaRegion extends HTMLElement {
 	 * island), schedule phase-2 hydrate — coalescing matching schedules to immediate load.
 	 */
 	async #server() {
+		// Bind to the store: this region applies whatever frame lands at its address — from its own
+		// fetch, a navigation batch stream, or (later) a mutation. subscribe() replays current
+		// content immediately, so a late-mounting twin catches up free.
+		const endpoint = this.getAttribute('endpoint');
+		if (endpoint && !this.#frame_unsub) {
+			const address = (this.#frame_address = frameAddress(endpoint));
+			this.#frame_unsub = frames.subscribe(address, (f) => this.#apply(f.html));
+		}
 		await this.#deliver_html();
 		if (!this.#done || !this.isConnected) return;
 		const hydrate = region_hydrate_schedule(this);
@@ -409,43 +433,56 @@ class OgygiaRegion extends HTMLElement {
 		this.#arm(phase2, () => void this.#hydrate(), margin);
 	}
 
-	/**
-	 * Get the hole's HTML: prefer a streamed parcel (same page, no request), else fetch. Only a
-	 * streamed page with a `when="load"` hole can have a parcel; everything else fetches as before.
-	 */
+	/** Get the hole's HTML by fetching its signed capability endpoint. */
 	async #deliver_html() {
-		const stream = slots.stream;
-		if (stream?.active && (this.getAttribute('when') || 'load') === 'load' && !this.#done) {
-			const endpoint = this.getAttribute('endpoint') || '';
-			const slot = region_slot_key(endpoint);
-			if (slot) {
-				const html = await stream.wait(slot);
-				if (this.#done || !this.isConnected) return;
-				if (html != null) {
-					this.#swap_streamed(html);
-					return;
-				}
-				// null → stream finished with no parcel for this hole: fall through to fetch.
-			}
-		}
 		await this.#fetch_html();
 	}
 
 	/**
-	 * Swap streamed parcel HTML into a deferred region (server island / deferred client island).
-	 * Mirrors the fetch success path for non-frozen deferred regions (no SWR/lake cache — streamed
-	 * holes are never `wake="none"` lakes). HOLE-TRUST: the HTML is our own SSR (rendered
-	 * in-process under a verified MAC) delivered same-origin in the page body.
+	 * THE single apply path. A frame's HTML lands here from any source (own fetch, stream parcel,
+	 * navigation batch, mutation). First arrival hydrates the hole; a later arrival at a newer
+	 * version (SWR revalidate, live refresh) re-applies. Keeps all the DOM-side work — lakes settle
+	 * offline before custom elements connect, then swap, mark, event. HOLE-TRUST: the HTML is our own
+	 * signed same-origin SSR.
 	 */
-	#swap_streamed(html: string) {
-		if (this.#done || !this.isConnected) return;
+	#apply(html: string) {
+		if (!this.isConnected) return;
+		// A refresh is either an explicit SWR revalidate or a later frame after the first swap.
+		const revalidate = this.#revalidating || this.#done;
+		this.#revalidating = false;
 		const frag = document.createRange().createContextualFragment(html);
 		slots.lakes.settle_in(frag);
+		slots.lakes.mark_frozen_settled(this);
 		this.replaceChildren(frag);
 		this.#done = true;
-		// Defer-only holes mark HTML arrival here; deferred client islands wait until `#hydrate`.
-		if (!is_awake(this)) this.setAttribute('data-hydrated', '');
+		if (revalidate) this.setAttribute('data-revalidated', '');
+		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
+		slots.lakes.after_html_swap(this, { revalidate });
 		this.dispatchEvent(new CustomEvent('ogygia:server', { bubbles: true }));
+	}
+
+	/**
+	 * Store applicator for a STATIC live/held region (`<ogygia-region live>` with no interactive
+	 * module). Every frame at its address lands here — first paint (store replay), a live-query tick,
+	 * or a single-flight mutation. First paint swaps in; a later frame morphs in place (same node
+	 * survives — the breathing update live partials rely on). Interactive live regions never reach
+	 * here: they keep the imperative keep-alive path in {@link applyLive}.
+	 */
+	#morph_live(html: string) {
+		if (!this.isConnected) return;
+		const frag = document.createRange().createContextualFragment(html);
+		slots.lakes.settle_in(frag);
+		if (!this.#live_ready) {
+			this.replaceChildren(frag);
+			this.#live_ready = true;
+			this.setAttribute('data-hydrated', '');
+		} else {
+			const nodes = Array.from(frag.childNodes);
+			const morph = slots.morph;
+			if (morph) morph(this, nodes);
+			else this.replaceChildren(...nodes);
+		}
+		this.dispatchEvent(new CustomEvent('ogygia:live', { bubbles: true }));
 	}
 
 	/**
@@ -457,7 +494,8 @@ class OgygiaRegion extends HTMLElement {
 	 * not (the endpoint answers `cache-control: private, max-age=30`, and stale is the whole point).
 	 */
 	async #fetch_html(opts: { revalidate?: boolean } = {}) {
-		if (this.#done || this.#fetching) return;
+		// A revalidate re-fetches even after the first swap; a plain fetch is one-shot.
+		if (this.#fetching || (this.#done && !opts.revalidate)) return;
 		const endpoint = this.getAttribute('endpoint');
 		// Don't start a fetch without an endpoint (would block a later remount retry on the same
 		// element if one were ever scheduled).
@@ -470,42 +508,45 @@ class OgygiaRegion extends HTMLElement {
 			return;
 		}
 		this.#fetching = true;
+		// Per-element relevance signal: aborting it (on disconnect / {#if}-toggle) skips the APPLY.
+		// The network fetch is owned by the frame store, keyed by `address`, shared across twins and
+		// aborted only when the last waiter abandons — so one element toggling off never kills a fetch
+		// a sibling with the same call still needs.
 		this.#fetch_abort?.abort();
 		this.#fetch_abort = new AbortController();
-		const { signal } = this.#fetch_abort;
+		const outer = this.#fetch_abort.signal;
+		const address = (this.#frame_address = frameAddress(endpoint));
+		// Bind if we haven't (SWR/lake remount reaches #fetch_html without going through #server).
+		// Idempotent: #server already subscribed for the normal defer flow.
+		if (!this.#frame_unsub) {
+			this.#frame_unsub = frames.subscribe(address, (f) => this.#apply(f.html));
+		}
+		if (opts.revalidate) this.#revalidating = true;
 		try {
-			await runtime_session.server_gate.run(async () => {
-				const res = await fetch(endpoint, {
-					credentials: 'same-origin',
-					cache: opts.revalidate ? 'no-store' : 'default',
-					signal
-				});
-				if (!is_same_origin_response(res)) {
-					throw new Error('cross-origin redirect');
-				}
-				if (!res.ok) throw new Error('status ' + res.status);
-				const html = await res.text();
-				// The region may have been {#if}-toggled away while the fetch was in flight.
-				if (!this.isConnected || signal.aborted) return;
-				// Parse offline so we can settle lakes BEFORE custom elements connect — otherwise an
-				// island-in-lake inside the hole waits forever on an unsettled lake boundary.
-				// createContextualFragment — signed same-origin HTML trust boundary (HOLE-TRUST).
-				const frag = document.createRange().createContextualFragment(html);
-				slots.lakes.settle_in(frag);
-				// SWR remount paints cache without settling so islands wait for this swap (one hydrate).
-				slots.lakes.mark_frozen_settled(this);
-				this.replaceChildren(frag);
-				this.#done = true;
-				// `data-hydrated` means "JS woke here". Defer-only holes use it for HTML arrival;
-				// deferred client islands (awake + defer) wait until `#hydrate`. SWR revalidate is
-				// marked separately so the vocabulary stays distinct.
-				if (opts.revalidate) this.setAttribute('data-revalidated', '');
-				else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
-				slots.lakes.after_html_swap(this, opts);
-				this.dispatchEvent(new CustomEvent('ogygia:server', { bubbles: true }));
-			});
+			// Network → STORE (never straight to DOM). N regions with the same address ⇒ one request;
+			// a stale response can't overwrite a newer one (the store tickets at request time).
+			const html = await frames.ensure(
+				address,
+				(signal) =>
+					runtime_session.server_gate.run(async () => {
+						const res = await fetch(endpoint, {
+							credentials: 'same-origin',
+							cache: opts.revalidate ? 'no-store' : 'default',
+							signal
+						});
+						if (!is_same_origin_response(res)) throw new Error('cross-origin redirect');
+						if (!res.ok) throw new Error('status ' + res.status);
+						return res.text();
+					}),
+				{ force: opts.revalidate }
+			);
+			// Network went to the STORE, not the DOM: the write notifies our subscriber (set in
+			// #server), which is the single apply path. If our subscription was severed (disconnect)
+			// or a twin already applied before us, this is a no-op. `outer.aborted` / relevance is
+			// handled by #apply's isConnected guard; `html` is intentionally unused here.
+			void html;
 		} catch (err) {
-			if ((err as { name?: string })?.name === 'AbortError' || signal.aborted) return;
+			if ((err as { name?: string })?.name === 'AbortError' || outer.aborted) return;
 			if (import.meta.env.DEV) {
 				console.warn('[ogygia] region fetch failed for', endpoint, err);
 			}
@@ -639,12 +680,12 @@ class OgygiaRegion extends HTMLElement {
 				// A PERSIST island hydrates through LiveHost (same no-DOM render as NestedProvider) so
 				// that when it relocates onto the next page its props can be pushed in reactively.
 				const LiveHost = slots.live;
-				if (this.hasAttribute('data-ogygia-persist') && LiveHost) {
-					// Persist needs SPA navigation — a full-page load throws the DOM away, so there is
+				if (this.hasAttribute('data-ogygia-keep') && LiveHost) {
+					// Keep needs SPA navigation — a full-page load throws the DOM away, so there is
 					// nothing to relocate. Warn (dev) when there is no <Router/> on the page.
 					if (import.meta.env.DEV && !document.querySelector('meta[name="ogygia-router"]')) {
 						console.warn(
-							`[ogygia] island "${entry}" has persist:'${this.getAttribute('data-ogygia-persist')}' but this app has no <Router/> — persistence relies on SPA navigation; a full-page load replaces the DOM, so the attribute is a no-op here.`
+							`[ogygia] island "${entry}" has keep:'${this.getAttribute('data-ogygia-keep')}' but this app has no <Router/> — keep relies on SPA navigation; a full-page load replaces the DOM, so the attribute is a no-op here.`
 						);
 					}
 					this.#app = hydrate(LiveHost, {
@@ -724,20 +765,23 @@ class OgygiaRegion extends HTMLElement {
 
 		const interactive = !!desc.hydrate && !!desc.module;
 
-		// Keep-alive: same interactive module, already mounted → reactive prop push, no DOM churn.
-		if (this.#live_ready && interactive && this.#live_app && desc.module === this.#live_module) {
-			this.#live_app.setProps?.(prop_guard.wrap(desc.props, desc.module));
-			this.dispatchEvent(new CustomEvent('ogygia:live', { bubbles: true }));
+		// Static live/held region → the frame store is its single applicator. Every static frame — the
+		// first paint, a `query.live` tick, or a SINGLE-FLIGHT mutation — flows through `#morph_live`
+		// (first swap, then breathing morph). Binding also catches OUT-OF-BAND writes: a command that
+		// returns `await region(C, props)` is decoded on its own response and written at this same
+		// address (id|props), so the mounted region morphs with NO extra fetch. Subscribe once.
+		if (!interactive) {
+			if (desc.url && !this.#frame_unsub) {
+				this.#frame_address = frameAddress(desc.url);
+				this.#frame_unsub = frames.subscribe(this.#frame_address, (f) => this.#morph_live(f.html));
+			}
+			this.#morph_live(desc.html);
 			return;
 		}
 
-		// Static update: morph the freshly rendered HTML into the existing DOM (breathing update).
-		if (this.#live_ready && !interactive) {
-			const frag = document.createRange().createContextualFragment(desc.html);
-			slots.lakes.settle_in(frag);
-			const morph = slots.morph;
-			if (morph) morph(this, Array.from(frag.childNodes));
-			else this.replaceChildren(...Array.from(frag.childNodes));
+		// Keep-alive: same interactive module, already mounted → reactive prop push, no DOM churn.
+		if (this.#live_ready && interactive && this.#live_app && desc.module === this.#live_module) {
+			this.#live_app.setProps?.(prop_guard.wrap(desc.props, desc.module));
 			this.dispatchEvent(new CustomEvent('ogygia:live', { bubbles: true }));
 			return;
 		}
@@ -809,6 +853,14 @@ class OgygiaRegion extends HTMLElement {
 		}
 		this.#fetch_abort?.abort();
 		this.#fetch_abort = null;
+		// Unbind from the store + release our stake in the shared fetch (aborted only if we were the
+		// last waiter). A persist move returns early above, so a relocating island keeps its binding.
+		this.#frame_unsub?.();
+		this.#frame_unsub = null;
+		if (this.#frame_address) {
+			frames.abandon(this.#frame_address);
+			this.#frame_address = null;
+		}
 		if (this.#idle_handle != null) {
 			if ('cancelIdleCallback' in window) {
 				cancelIdleCallback(this.#idle_handle);
@@ -842,8 +894,7 @@ class OgygiaRegion extends HTMLElement {
  * Boot the always-on custom element after each selected feature has filled its {@link slots} entry.
  * Core never statically imports an optional feature — the generated entry (or {@link ./full.js})
  * passes each feature's `install` here, in {@link ../vite/runtime-entry.js FEATURE_ORDER}. Order is
- * load-bearing: `stream` must register before the CE upgrades (a `when="load"` hole may wait for a
- * parcel immediately), and `live` needs `morph` present first.
+ * load-bearing: `live` needs `morph` present first.
  */
 export function boot(installers: Array<() => void> = []): void {
 	// Core owns the per-document lifecycle; the router reads it through this slot so router modules
@@ -854,9 +905,6 @@ export function boot(installers: Array<() => void> = []): void {
 		softInvalidate: apply_soft_invalidate_doc
 	};
 	for (const install of installers) install();
-
-	// Stream must start before CE upgrades (deliver_html may wait immediately).
-	if (slots.stream?.active) slots.stream.start();
 
 	if (typeof customElements !== 'undefined' && !customElements.get('ogygia-region')) {
 		customElements.define('ogygia-region', OgygiaRegion);

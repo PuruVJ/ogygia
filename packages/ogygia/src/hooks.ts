@@ -28,22 +28,21 @@ import * as devalue from 'devalue';
 // `resolve()` is deliberately RELATIVE on the server (for browser-resolved link generation), so
 // it's the wrong tool here — server-side pathname matching uses `base`.
 import { base } from '$app/paths';
-import { building } from '$app/environment';
 import { islands as island_modules } from 'virtual:ogygia/server-manifest';
+import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { secret } from 'virtual:ogygia/secret';
 import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
-import { stream as stream_enabled } from 'virtual:ogygia/stream';
-import { policies as shell_policies } from 'virtual:ogygia/shell';
 import { verify, region_mac_message } from './server/hmac.js';
 import { B64Url } from './server/payload.js';
 import { TRANSPORT_WIRE_KEY, revive_transportable } from './live-transport.js';
-import { DEFAULT_ISLANDS_ENDPOINT, MAX_REGION_PROPS_LEN, REGION_ID_RE } from './server/endpoint.js';
 import {
-	build_parcel,
-	done_parcel,
-	find_streamable_regions
-} from './server/stream-regions.js';
+	DEFAULT_ISLANDS_ENDPOINT,
+	MAX_REGION_PROPS_LEN,
+	REGION_ID_RE,
+	REGION_TTL_RE
+} from './server/endpoint.js';
+import { build_parcel, done_parcel } from './server/stream-regions.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
@@ -51,38 +50,7 @@ import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrenc
 
 /** Hard cap on rendered region HTML (bytes). */
 const MAX_REGION_BODY = 2_000_000;
-/** Per-route shell-cache policy (from `virtual:ogygia/shell`). */
-type ShellPolicy = { mode: 'cache' | 'swr'; maxAgeMs?: number };
-/** The `resolve` passed to a Kit handle (subset used for background shell revalidation). */
-type ResolveFn = (
-	event: RequestEvent,
-	opts?: {
-		transformPageChunk?: (i: {
-			html: string;
-			done: boolean;
-		}) => string | undefined | Promise<string | undefined>;
-	}
-) => Response | Promise<Response>;
-interface ShellEntry {
-	html: string;
-	/** capture time (ms) — used for `ttl` staleness. */
-	at: number;
-}
-/**
- * Shell cache: pathname → captured static shell. Process-lifetime, LRU-bounded. Replaying an
- * entry skips the per-request render; `defer` holes still stream fresh into it.
- */
-const shell_cache = new Map<string, ShellEntry>();
-/** LRU cap on the shell cache; oldest entry is evicted when exceeded. */
-const SHELL_CACHE_MAX = 1024;
-/** Move an entry to the end of the Map (most-recently-used). */
-function shell_cache_touch(pathname: string) {
-	const e = shell_cache.get(pathname);
-	if (e) { shell_cache.delete(pathname); shell_cache.set(pathname, e); }
-}
-function shell_entry_stale(entry: ShellEntry, policy: ShellPolicy): boolean {
-	return policy.maxAgeMs != null && Date.now() - entry.at >= policy.maxAgeMs;
-}
+
 /** Abort waiting on slow region SSR (work may continue — see INVARIANTS · RENDER-TIMEOUT). */
 const RENDER_TIMEOUT_MS = 10_000;
 
@@ -163,112 +131,70 @@ class OgygiaHandle {
 			// store is captured synchronously here (active inside Kit's `with_request_store`); it is
 			// the SAME object reference Kit mutates during the render inside `resolve`.
 			const store = try_get_request_store();
-			const shell_policy = this.#shell_policy(event);
-			// Shell caching implies streaming: the replayed shell needs the stream meta + parcels.
-			const streaming = this.#should_stream(event) || shell_policy != null;
-			// A Kit-bootstrapped (csr=true) page serializes its own remotes and hydrates the whole
-			// tree — we skip seeds there, and must not stream (the runtime won't read parcels without
-			// the meta). `inject_client_seeds` flips this once it sees the bootstrap in any chunk; the
-			// wrapper checks it only after the full body is read, so the decision is final.
-			const stream_token = { skip: false };
-
-			// Replay a cached shell: skip resolve() entirely (instant TTFB), stream holes fresh. A
-			// `swr` route also kicks off a background revalidation; a `cache` route with a stale ttl
-			// falls through to a fresh render.
-			if (shell_policy) {
-				const entry = shell_cache.get(event.url.pathname);
-				if (entry && !(shell_policy.mode === 'cache' && shell_entry_stale(entry, shell_policy))) {
-					shell_cache_touch(event.url.pathname);
-					if (shell_policy.mode === 'swr' && (shell_policy.maxAgeMs == null || shell_entry_stale(entry, shell_policy))) {
-						void this.#revalidate_shell(event, resolve);
-					}
-					const shell_res = new Response(entry.html, {
-						headers: { 'content-type': 'text/html; charset=utf-8' }
-					});
-					return this.#stream_regions(shell_res, event, stream_token);
-				}
-			}
-
-			const res = await resolve(event, {
+			return await resolve(event, {
 				transformPageChunk: async ({ html }) =>
-					this.inject_client_seeds(html, store?.state, event, streaming, stream_token)
+					this.inject_client_seeds(html, store?.state, event)
 			});
-
-			// Capture the shell for later replay — only when it is genuinely static (no Kit bootstrap,
-			// no per-request remote data). A dynamic shell silently falls back to per-request render.
-			if (shell_policy) {
-				const shell_text = await res.text();
-				if (!stream_token.skip) this.#store_shell(event.url.pathname, shell_text, store?.state);
-				const shell_res = new Response(shell_text, {
-					status: res.status,
-					headers: res.headers
-				});
-				return this.#stream_regions(shell_res, event, stream_token);
-			}
-
-			return streaming ? this.#stream_regions(res, event, stream_token) : res;
 		}
+		// POST to the endpoint = a BATCH frame stream (client-side navigation / weaving): render a set
+		// of signed region calls and flush each as an out-of-order frame in one response.
+		if (event.request.method.toUpperCase() === 'POST') return await this.render_batch(event);
 		return await this.render_region(event);
 	};
 
 	/**
-	 * Stream `defer: 'load'` holes down THIS response only on a real, dynamic page request. Never
-	 * while prerendering (no live connection — those holes keep client-fetch), never for a
-	 * sub-request, only for GET. Off entirely unless `ogygia({ stream: true })`.
+	 * Batch frame stream (client navigation / route weaving). POST body: a JSON `string[]` of signed
+	 * region endpoints — the calls the client needs. Renders them in parallel and flushes each as a
+	 * `<template data-ogygia-slot="sig">…</template>` frame the moment IT settles (out of order); a
+	 * done sentinel ends it. One response, many frames. Every call carries its own MAC so there's no
+	 * extra auth; same-origin + per-IP budget mirror the single-region path.
 	 */
-	#should_stream(event: RequestEvent): boolean {
-		if (!stream_enabled || building) return false;
-		if (event.request.method.toUpperCase() !== 'GET') return false;
-		if (event.isSubRequest) return false;
-		return true;
-	}
-
-	/**
-	 * The shell policy for this request, or null. Eligible on a real, dynamic GET with no query
-	 * string (the cache is keyed by pathname; a query-varying shell would serve stale bytes)
-	 * whose ROUTE opted in (`export const shell` on the page/layout, or the global default).
-	 */
-	#shell_policy(event: RequestEvent): ShellPolicy | null {
-		if (building) return null;
-		if (event.request.method.toUpperCase() !== 'GET') return null;
-		if (event.isSubRequest) return null;
-		if (event.url.search) return null;
-		const id = event.route?.id;
-		return id != null ? (shell_policies[id] ?? null) : null;
-	}
-
-	/**
-	 * Store a captured shell — only when it is genuinely static: no Kit bootstrap (csr=true) and
-	 * no per-request remote data. LRU-evicts the oldest entry past the cap.
-	 */
-	#store_shell(pathname: string, html: string, state: RequestState | undefined) {
-		const implicit = state?.remote?.implicit;
-		if (html_has_kit_bootstrap(html) || (implicit && implicit.size > 0)) return;
-		if (shell_cache.size >= SHELL_CACHE_MAX && !shell_cache.has(pathname)) {
-			const oldest = shell_cache.keys().next().value;
-			if (oldest !== undefined) shell_cache.delete(oldest);
+	async render_batch(event: RequestEvent): Promise<Response> {
+		const MAX_BATCH = 32;
+		if (event.request.headers.get('sec-fetch-site') === 'cross-site') {
+			return region_response('Forbidden', { status: 403 });
 		}
-		shell_cache.delete(pathname);
-		shell_cache.set(pathname, { html, at: Date.now() });
-	}
-
-	/**
-	 * Background `swr` revalidation: re-render the shell out of band and refresh the cache for
-	 * the next request. Fire-and-forget — never rejects into the served (stale) response.
-	 */
-	async #revalidate_shell(event: RequestEvent, resolve: ResolveFn): Promise<void> {
+		const ip = client_ip(event);
+		if (!ip) return region_response('Too Many Requests', { status: 429 });
+		if (this.probe_rate.limited(ip) || this.render_rate.limited(ip)) {
+			return region_response('Too Many Requests', { status: 429 });
+		}
+		let parsed: unknown;
 		try {
-			const token = { skip: false };
-			const store = try_get_request_store();
-			const res = await resolve(event, {
-				transformPageChunk: async ({ html }: { html: string }) =>
-					this.inject_client_seeds(html, store?.state, event, true, token)
-			});
-			const text = await res.text();
-			if (!token.skip) this.#store_shell(event.url.pathname, text, store?.state);
+			parsed = await event.request.json();
 		} catch {
-			/* stale entry stays; revalidation is best-effort */
+			return region_response('Bad Request', { status: 400 });
 		}
+		if (!Array.isArray(parsed) || parsed.length === 0) {
+			return region_response('Bad Request', { status: 400 });
+		}
+		const calls = parsed.filter((e): e is string => typeof e === 'string').slice(0, MAX_BATCH);
+		const render = (endpoint: string) => this.#render_capability(endpoint, event);
+		const encoder = new TextEncoder();
+
+		const stream = new ReadableStream<Uint8Array>({
+			async start(controller) {
+				// Each call renders independently; enqueue its frame on settle, whatever the order.
+				await Promise.all(
+					calls.map(async (endpoint) => {
+						const out = await render(endpoint).catch(() => null);
+						const parcel = out ? build_parcel(out.slot, out.html) : null;
+						if (parcel) controller.enqueue(encoder.encode(parcel));
+					})
+				);
+				controller.enqueue(encoder.encode(done_parcel()));
+				controller.close();
+			}
+		});
+
+		return region_response(stream, {
+			status: 200,
+			headers: {
+				'content-type': 'text/html; charset=utf-8',
+				'cache-control': 'no-store',
+				'x-accel-buffering': 'no'
+			}
+		});
 	}
 
 	/**
@@ -278,23 +204,12 @@ class OgygiaHandle {
 	async inject_client_seeds(
 		html: string,
 		state: RequestState | undefined,
-		event?: RequestEvent,
-		streaming = false,
-		stream_token?: { skip: boolean }
+		event?: RequestEvent
 	): Promise<string> {
-		if (html_has_kit_bootstrap(html)) {
-			// csr=true page — do not stream (no meta injected → runtime cannot consume parcels).
-			if (stream_token) stream_token.skip = true;
-			return html;
-		}
+		// csr=true page — Kit serializes its own remotes and hydrates the whole tree; skip seeds.
+		if (html_has_kit_bootstrap(html)) return html;
 
 		const scripts: string[] = [];
-
-		// Tell the runtime this page streams its holes, so a `defer: 'load'` region waits for its
-		// parcel (or the done-sentinel) before falling back to a fetch. Absent → fetch immediately.
-		if (streaming) {
-			scripts.push('<meta name="ogygia-stream" content="1">');
-		}
 
 		// Single page seed (PAGE-DUP) — islands read it through the `$app/state` shim. Sourced from
 		// the RequestEvent, NOT `$app/state`'s `page`: that is a rune (component-scoped) and throws
@@ -327,21 +242,37 @@ class OgygiaHandle {
 		const implicit = state.remote?.implicit;
 		if (!implicit) return null;
 
-		const q: Record<string, { v: unknown }> = {};
+		// Mirror Kit's OWN seed bucketing (server/remote.js) over the side-channel — Kit only serializes
+		// remote data inline when csr===true, so on csr=false pages we do it here. Bucket every implicit
+		// remote by type: q(query) / p(prerender) / l(query.live) / f(form). Seeding PRERENDER remotes
+		// (not only queries) is the fix for the async-island FOUC: a prerender remote awaited inside an
+		// island otherwise re-fetches on hydrate, so the component re-renders and Svelte RE-MOUNTS the
+		// subtree — a frame of unstyled DOM. With the seed in `prerender_responses`, the client resolves
+		// it synchronously and never re-fetches. Keys use `create_remote_key`, exactly like Kit's client.
+		const data: Record<'q' | 'p' | 'l' | 'f', Record<string, { v: unknown }>> = {
+			q: {},
+			p: {},
+			l: {},
+			f: {}
+		};
 		for (const [internals, record] of implicit) {
-			// Private (non-exported) remote functions have no `id` and must never be serialized.
-			if (!internals.id || internals.type !== 'query') continue;
+			// Private (non-exported) remotes have no id and must never be serialized.
+			if (!internals.id) continue;
+			const type = internals.type as string;
+			const bucket = type === 'query_live' ? 'l' : (type[0] as 'q' | 'p' | 'l' | 'f');
+			if (bucket !== 'q' && bucket !== 'p' && bucket !== 'l' && bucket !== 'f') continue;
 			for (const key in record) {
-				const remote_key = internals.id + '/' + key;
+				// form outputs are keyed by the client-side action id directly (Kit parity).
+				const remote_key = type === 'form' ? key : create_remote_key(internals.id, key);
 				const promise = state.remote.data?.get(internals)?.[key] ?? record[key]();
 				let resolved = true;
 				await Promise.race([
 					Promise.resolve(promise).then(
 						(v) => {
-							if (resolved) q[remote_key] = { v };
+							if (resolved) data[bucket][remote_key] = { v };
 						},
 						() => {
-							/* errored queries are not seeded */
+							/* errored/pending remotes are omitted → the client fetches them itself */
 						}
 					),
 					Promise.resolve().then(() => {
@@ -351,20 +282,20 @@ class OgygiaHandle {
 			}
 		}
 
-		if (Object.keys(q).length === 0) return null;
+		if (!Object.values(data).some((b) => Object.keys(b).length > 0)) return null;
 
 		const transport = state.transport || {};
 		const reducers = Object.fromEntries(
 			Object.entries(transport).map(([name, codec]) => [name, codec.encode])
 		);
-		const payload = devalue.stringify({ q }, reducers).replaceAll('<', '\\u003C');
+		const payload = devalue.stringify(data, reducers).replaceAll('<', '\\u003C');
 		return `<script type="application/ogygia-remote">${payload}</script>`;
 	}
 
 	/**
 	 * `render()` the island under the concurrency gate + timeout. Returns the HTML body, or `null`
 	 * if the render threw or timed out. Shared by the endpoint ({@link render_region}) and the
-	 * streaming path ({@link #render_capability}).
+	 * batch path ({@link #render_capability}).
 	 */
 	async #render_component(
 		load: () => Promise<{ default: unknown }>,
@@ -387,8 +318,8 @@ class OgygiaHandle {
 	}
 
 	/**
-	 * Streaming: verify a hole's OWN signed capability URL and render it in-process. Same trust
-	 * boundary as the endpoint (verify the MAC before touching the manifest), but every failure —
+	 * Batch (route weaving): verify a hole's OWN signed capability URL and render it in-process. Same
+	 * trust boundary as the endpoint (verify the MAC before touching the manifest), but every failure —
 	 * bad/expired MAC, unknown id, non-serializable props, render error, oversize — resolves to
 	 * `null` so the hole silently falls back to a client fetch. Never throws.
 	 */
@@ -402,15 +333,18 @@ class OgygiaHandle {
 		const id = params.get('id') ?? '';
 		const payload = params.get('props') ?? '';
 		const exp_raw = params.get('exp') ?? '';
+		const ttl_raw = params.get('ttl') ?? '';
 		const sig = params.get('sig') ?? '';
 
-		if (!REGION_ID_RE.test(id) || payload.length > MAX_REGION_PROPS_LEN) return null;
+		if (!REGION_ID_RE.test(id) || payload.length > MAX_REGION_PROPS_LEN || !REGION_TTL_RE.test(ttl_raw))
+			return null;
 		const exp = Number(exp_raw);
 		if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return null;
 
-		// The capability was minted this same request, sealing the same session cookie (if any).
+		// The capability was minted this same request, sealing the same session cookie (if any). `ttl`
+		// is part of the signed message even though the batch renders inline (no per-hole HTTP cache).
 		const session = session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
-		if (!verify(secret, region_mac_message(id, exp_raw, payload, session), sig)) return null;
+		if (!verify(secret, region_mac_message(id, exp_raw, payload, session, ttl_raw), sig)) return null;
 
 		if (!Object.hasOwn(island_modules, id)) return null;
 		const load = island_modules[id];
@@ -433,87 +367,6 @@ class OgygiaHandle {
 		const html = await this.#render_component(load, props as Record<string, unknown>);
 		if (html === null || html.length > MAX_REGION_BODY) return null;
 		return { slot: sig, html };
-	}
-
-	/**
-	 * Wrap the resolved page response so the shell streams out immediately, each immediate deferred
-	 * hole renders in parallel, and its HTML is appended after the document as a
-	 * `<template data-ogygia-slot>` parcel. The parser drops appended templates into `<body>` inert;
-	 * the runtime moves each into its region. A final done-sentinel tells still-waiting regions to
-	 * fall back to fetch. Non-HTML responses pass through untouched.
-	 */
-	#stream_regions(res: Response, event: RequestEvent, stream_token: { skip: boolean }): Response {
-		const content_type = res.headers.get('content-type') || '';
-		if (!res.body || !content_type.includes('text/html')) return res;
-
-		const source = res.body;
-		const render_capability = (endpoint: string) => this.#render_capability(endpoint, event);
-		const encoder = new TextEncoder();
-		const decoder = new TextDecoder();
-
-		const stream = new ReadableStream<Uint8Array>({
-			async start(controller) {
-				const seen = new Set<string>();
-				const parked: Array<Promise<string | null>> = [];
-				let buffer = '';
-
-				// Discover any newly-complete hole tags in the buffer and start rendering each. Skip
-				// once the page proves to be csr=true (Kit-bootstrapped) — parcels would be unused.
-				const scan = () => {
-					if (stream_token.skip) return;
-					for (const region of find_streamable_regions(buffer)) {
-						if (seen.has(region.slot)) continue;
-						seen.add(region.slot);
-						parked.push(
-							render_capability(region.endpoint)
-								.then((out) => (out ? build_parcel(out.slot, out.html) : null))
-								.catch(() => null)
-						);
-					}
-				};
-
-				const reader = source.getReader();
-				try {
-					for (;;) {
-						const { done, value } = await reader.read();
-						if (done) break;
-						controller.enqueue(value); // forward the shell chunk NOW — early paint
-						buffer += decoder.decode(value, { stream: true });
-						scan();
-					}
-					buffer += decoder.decode();
-					scan();
-				} catch {
-					// Source errored mid-stream — stop scanning; flush whatever parcels resolved.
-				}
-
-				// csr=true page (bootstrap seen in a later chunk): append nothing, just end.
-				if (stream_token.skip) {
-					controller.close();
-					return;
-				}
-
-				// Append each parcel as its render settles. Out-of-order is fine: the slot id routes it.
-				await Promise.all(
-					parked.map(async (p) => {
-						const parcel = await p;
-						if (parcel) controller.enqueue(encoder.encode(parcel));
-					})
-				);
-				controller.enqueue(encoder.encode(done_parcel()));
-				controller.close();
-			},
-			cancel() {
-				source.cancel().catch(() => {});
-			}
-		});
-
-		const headers = new Headers(res.headers);
-		// Chunked now — a stale Content-Length would truncate the body. Ask nginx-style proxies not
-		// to buffer, so the shell still paints early behind a reverse proxy.
-		headers.delete('content-length');
-		headers.set('x-accel-buffering', 'no');
-		return new Response(stream, { status: res.status, statusText: res.statusText, headers });
 	}
 
 	/**
@@ -549,10 +402,13 @@ class OgygiaHandle {
 		const id = url.searchParams.get('id') ?? '';
 		const payload = url.searchParams.get('props') ?? '';
 		const exp_raw = url.searchParams.get('exp') ?? '';
+		const ttl_raw = url.searchParams.get('ttl') ?? '';
 		const sig = url.searchParams.get('sig') ?? '';
 
-		// Length/charset gate BEFORE HMAC (P5-HMAC-CPU). Ids are always 12-hex from the transform.
-		if (!REGION_ID_RE.test(id) || payload.length > MAX_REGION_PROPS_LEN) {
+		// Length/charset gate BEFORE HMAC (P5-HMAC-CPU). Ids are always 12-hex from the transform;
+		// `ttl` (cache max-age seconds) is signed, but charset-gate it here so a forged value can't
+		// reach the response header before verify rejects it.
+		if (!REGION_ID_RE.test(id) || payload.length > MAX_REGION_PROPS_LEN || !REGION_TTL_RE.test(ttl_raw)) {
 			return region_response('Forbidden', { status: 403 });
 		}
 
@@ -570,9 +426,13 @@ class OgygiaHandle {
 		const session = session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
 
 		// Verify before consulting the manifest — bad MAC never distinguishes unknown vs known id.
-		if (!verify(secret, region_mac_message(id, exp_raw, payload, session), sig)) {
+		if (!verify(secret, region_mac_message(id, exp_raw, payload, session, ttl_raw), sig)) {
 			return region_response('Forbidden', { status: 403 });
 		}
+
+		// Cache policy travels signed in the URL: a positive `ttl` opts this hole into a private browser
+		// cache; absent/0 keeps it dynamic (`no-store`). A hole is fresh-per-request by default.
+		const cache_control = ttl_raw ? `private, max-age=${Number(ttl_raw)}` : 'no-store';
 
 		// Valid capability — now charge the per-IP render budget.
 		if (this.render_rate.limited(ip)) {
@@ -617,7 +477,7 @@ class OgygiaHandle {
 				headers: {
 					'content-type': 'text/html; charset=utf-8',
 					'content-length': String(new TextEncoder().encode(body).byteLength),
-					'cache-control': 'private, max-age=30'
+					'cache-control': cache_control
 				}
 			});
 		}
@@ -626,10 +486,11 @@ class OgygiaHandle {
 			status: 200,
 			headers: {
 				'content-type': 'text/html; charset=utf-8',
-				// `private` keeps shared/CDN caches out (responses are cookie-personalized) while
-				// letting THIS browser reuse the `<link rel="preload">` response for the runtime
-				// fetch (a short max-age is enough; the runtime fetches each region once).
-				'cache-control': 'private, max-age=30'
+				// Per-hole policy signed into the URL (see `cache_control` above). A hole is `no-store`
+				// (dynamic) unless it opts into caching via its preset's `maxAge`, which mints a positive
+				// `ttl` → `private, max-age=ttl`. `private` keeps shared/CDN caches out (responses are
+				// cookie-personalized) while still letting THIS browser reuse the response.
+				'cache-control': cache_control
 			}
 		});
 	}

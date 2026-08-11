@@ -13,7 +13,7 @@
 		children
 	}: { label?: string; children?: import('svelte').Snippet } = $props();
 	let frozen = $state(0);
-	// Increments per SERVER render, so a `remount: 'swr'` revalidate is visibly newer than the cache.
+	// Increments per SERVER render, so a `render: 'live'` revalidate is visibly newer than the cache.
 	const stamp = next_stamp();
 </script>
 

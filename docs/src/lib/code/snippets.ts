@@ -23,9 +23,10 @@ export default defineConfig({
       presets: {
         chart: { wake: 'visible', margin: '200px' },
         modal: { wake: 'idle' },
-        frozen: {
-          wake: 'none',
-          remount: { revalidate: 'idle', maxAge: '10m' }
+        live: {
+          render: 'live',
+          wake: 'idle',
+          maxAge: '10m'
         }
       },
       rateLimit: { max: 60, windowMs: 60_000 },
@@ -75,7 +76,7 @@ export const authoringImports = `<script>
   import Chart    from '$lib/Chart.svelte'    with { wake: 'visible' }; // island, later
   import Drawer   from '$lib/Drawer.svelte'   with { wake: '(max-width: 600px)' };
   import Report   from '$lib/Report.svelte'   with { wake: 'none' };    // lake (inside an island)
-  import Greeting from '$lib/Greeting.svelte' with { fill: 'load' };      // server island
+  import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };      // server island
   import Panel    from '$lib/Panel.svelte'    with { preset: 'chart' };
 </script>
 
@@ -164,7 +165,7 @@ export const ogygiaBoundary = `<script>
 </Boundary>`;
 
 export const persistNav = `<!-- in a layout shared by SPA routes -->
-<nav data-ogygia-persist="main-nav">
+<nav data-ogygia-keep="main-nav">
   <a href="/">Home</a>
   <!-- islands here keep their client state across nav -->
 </nav>`;
@@ -227,7 +228,7 @@ export const hydrateVisiblePoke = `<script>
 
 export const deferLoadGreeting = `<script>
   import Greeting from '$lib/Greeting.svelte' with {
-    fill: 'load'
+    render: 'deferred'
   };
 </script>
 
@@ -239,7 +240,8 @@ export const deferLoadGreeting = `<script>
 
 export const deferIdleGreeting = `<script>
   import Greeting from '$lib/Greeting.svelte' with {
-    fill: 'idle'
+    render: 'deferred',
+    wake: 'idle'
   };
 </script>
 
@@ -251,7 +253,8 @@ export const deferIdleGreeting = `<script>
 
 export const deferVisibleGreeting = `<script>
   import Greeting from '$lib/Greeting.svelte' with {
-    fill: 'visible'
+    render: 'deferred',
+    wake: 'visible'
   };
 </script>
 
@@ -263,7 +266,8 @@ export const deferVisibleGreeting = `<script>
 
 export const deferMediaGreeting = `<script>
   import Greeting from '$lib/Greeting.svelte' with {
-    fill: '(max-width: 600px)'
+    render: 'deferred',
+    wake: '(max-width: 600px)'
   };
 </script>
 
@@ -287,21 +291,18 @@ ogygia({
   };
 </script>`;
 
-/** Lake remount presets — docs Remount section. */
+/** render: live presets — docs Live section. */
 export const remountConfig = `// vite.config.ts
 ogygia({
   presets: {
-    frozen: { wake: 'none' }, // remount: 'cache'
-    blank: { wake: 'none', remount: 'empty' },
-    // cache until TTL, then blank
-    brief: {
-      wake: 'none',
-      remount: { revalidate: false, maxAge: '5m' }
-    },
-    // SWR: paint stale, refetch on idle; past 10m skip stale and fetch
+    // a frozen static lake — baked once, never refetched
+    frozen: { wake: 'none' },
+    // render: live — baked, then revalidates (stale-while-revalidate)
     live: {
-      wake: 'none',
-      remount: { revalidate: 'idle', maxAge: '10m', onExpire: 'fetch' }
+      render: 'live',
+      wake: 'idle',        // revalidate schedule
+      maxAge: '10m',       // past this, skip stale and fetch fresh
+      onExpire: 'fetch'
     }
   }
 });
@@ -374,3 +375,17 @@ export const portableBindings = `<script>
 
 <Controls {active} {items} />
 <Active />`;
+
+/** Content collections — RF-native. Homepage content-layer beat. */
+export const contentCollection = `// collections.ts — one browser-safe definition
+import { content, mdsvex } from 'ogygia/content';
+
+export const docs = content({
+  loader: mdsvex(import.meta.glob('./docs/**/*.svx', { eager: true })),
+  schema
+});
+
+// docs.remote.ts — expose it over the wire, bodies stripped
+export const docNav = withRemotes(docs).list({
+  map: (e) => ({ slug: e.id, title: e.data.title })
+});`;

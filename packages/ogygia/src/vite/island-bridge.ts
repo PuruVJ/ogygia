@@ -3,7 +3,7 @@
  *
  * The marked-import transform must run on CLEAN svelte, which for `.svx` / `.md` only exists AFTER
  * mdsvex has preprocessed the file — a stage no Vite plugin can wedge into. So a preprocessor
- * (composed into `@ogygia/content`'s `markdown()` after mdsvex) runs the transform instead. But
+ * (composed into `ogygia/content`'s `markdown()` after mdsvex) runs the transform instead. But
  * the transform's islands must reach THIS plugin instance's registry to be emitted / resolved.
  *
  * The plugin sets `islandBridge.transform` to a closure bound to its `run_transform` + `register`

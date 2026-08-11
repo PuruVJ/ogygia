@@ -18,11 +18,10 @@ import type { Component, ComponentProps } from 'svelte';
 /** Brand so the transport can recognize a region without false-matching plain objects. */
 export const REGION_BRAND = Symbol.for('ogygia.region');
 
-/** Schedule options for a held region. `wake` = when its JS runs; `fill` = when its HTML arrives
- * (deferred); `margin` = IntersectionObserver rootMargin for `wake: 'visible'`. Merged OVER the
- * binding's baked schedule (from a `wake:` mark) — anything set here WINS; a `region: 'raw'` binding
- * bakes nothing, so this is the whole schedule. */
-export type RegionOptions = { wake?: string; fill?: string; margin?: string };
+/** Schedule options for a held region. `wake` = when its JS runs; `margin` = IntersectionObserver
+ * rootMargin for `wake: 'visible'`. Merged OVER the binding's baked schedule (from a `wake:` mark) —
+ * anything set here WINS; a `region: 'raw'` binding bakes nothing, so this is the whole schedule. */
+export type RegionOptions = { wake?: string; margin?: string };
 
 /**
  * The `region()` schedule argument: a function handed the component's own props (its "generated

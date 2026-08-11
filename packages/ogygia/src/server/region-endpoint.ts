@@ -1,6 +1,6 @@
 /**
  * Build a signed region capability URL (same shape as server-island holes).
- * Used by Region's lake branch for `remount: 'swr'`. Client build gets a stub that returns ''.
+ * Used by Region's lake branch for `render: 'live'`. Client build gets a stub that returns ''.
  */
 import { secret, secretStable } from 'virtual:ogygia/secret';
 import { sessionCookie } from 'virtual:ogygia/session-cookie';
@@ -54,16 +54,23 @@ function warn_unstable_secret(): void {
  *
  * @param entry region id (server-manifest key baked into the MAC)
  * @param payload b64url props blob (already encoded + size-checked by the caller)
+ * @param ttl response cache max-age in **seconds** (`0` = no-store, the default). Signed into the MAC
+ *   and echoed as a `ttl` query param so the handle sets `Cache-Control` from it — a harvested URL
+ *   can't be re-pointed at a longer browser cache.
  */
-export function mintRegionCapability(entry: string, payload: string): string {
+export function mintRegionCapability(entry: string, payload: string, ttl = 0): string {
 	const session = region_session();
 	// Prerendered (real PPR): the capability lives in a static file that outlives any TTL — mint it
 	// effectively-forever (props are public in the HTML; session sealed empty). Dynamic pages keep
 	// the short `regionTtl` window so harvested URLs age out.
 	const exp = Math.floor(Date.now() / 1000) + (building ? PRERENDER_REGION_TTL_SEC : regionTtl);
 	warn_unstable_secret();
-	const sig = sign(secret, region_mac_message(entry, exp, payload, session));
-	return `${resolve(DEFAULT_ISLANDS_ENDPOINT)}?id=${encodeURIComponent(entry)}&props=${payload}&exp=${exp}&sig=${sig}`;
+	// A hole is dynamic by default (`ttl` 0 → the handle answers `no-store`); a positive `ttl` opts
+	// into a `private, max-age=ttl` browser cache. Empty string when 0 keeps the MAC field stable.
+	const ttl_field = ttl > 0 ? String(Math.floor(ttl)) : '';
+	const sig = sign(secret, region_mac_message(entry, exp, payload, session, ttl_field));
+	const ttl_param = ttl_field ? `&ttl=${ttl_field}` : '';
+	return `${resolve(DEFAULT_ISLANDS_ENDPOINT)}?id=${encodeURIComponent(entry)}&props=${payload}&exp=${exp}${ttl_param}&sig=${sig}`;
 }
 
 /**
@@ -73,7 +80,7 @@ export function mintRegionCapability(entry: string, payload: string): string {
  * `virtual:ogygia/region-endpoint` virtual so the client build stubs it to `''` (server islands never
  * mint on the client — the runtime fetches the endpoint). Mirrors the old `ServerIsland.svelte`.
  */
-export function mintServerIsland(entry: string, props: Record<string, unknown>): string {
+export function mintServerIsland(entry: string, props: Record<string, unknown>, ttl = 0): string {
 	const payload = B64Url.encode(stringify(props, { [TRANSPORT_WIRE_KEY]: reduce_transportable }));
 	if (payload.length > MAX_REGION_PROPS_LEN) {
 		throw new Error(
@@ -81,7 +88,7 @@ export function mintServerIsland(entry: string, props: Record<string, unknown>):
 				`Shrink what you pass into the deferred region — the handle would reject this capability anyway.`
 		);
 	}
-	return mintRegionCapability(entry, payload);
+	return mintRegionCapability(entry, payload, ttl);
 }
 
 /** HMAC-signed `/🏝️?id&props&exp&sig` for re-rendering `entry` with `props`. */
@@ -89,9 +96,9 @@ export function makeRegionEndpoint(entry: string, props: Record<string, unknown>
 	const payload = encode_region_props(props);
 	if (payload == null) {
 		// Non-serializable or oversized props. Degrading to "no endpoint" makes the region behave
-		// like `remount: 'cache'`; throwing would 500 the PAGE. The handle would 403 the same blob.
+		// like a static lake; throwing would 500 the PAGE. The handle would 403 the same blob.
 		console.warn(
-			`[ogygia] remount:'swr' region ${entry} has props that cannot cross the wire (non-serializable or >${MAX_REGION_PROPS_LEN} b64 chars) — no revalidate endpoint minted (behaves like remount:'cache').`
+			`[ogygia] render:'live' region ${entry} has props that cannot cross the wire (non-serializable or >${MAX_REGION_PROPS_LEN} b64 chars) — no revalidate endpoint minted (behaves like a static lake).`
 		);
 		return '';
 	}

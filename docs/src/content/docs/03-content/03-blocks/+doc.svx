@@ -135,4 +135,4 @@ The live demo on this site uses local JSON in Builder's exact shape: **[/demo/bu
 
 ## Thousands of blocks, only a few shipped
 
-The registry can hold a thousand blocks. A page that names three loads three chunks — the other 997 never ship. That is not special-cased; it falls out of the model. The registry is fixed at build (the vocabulary); the page JSON picks the arrangement at runtime. Each block is a `partial`, and a partial's client chunk loads only when it is actually on the page. So the bundle stays tiny no matter how big the registry grows.
+The registry can hold a thousand blocks. A page that names three loads three chunks — the other 997 never ship. That is not special-cased; it falls out of the model. The registry is fixed at build (the vocabulary); the page JSON picks the arrangement at runtime. Each block is a `held region`, and a held region's client chunk loads only when it is actually on the page. So the bundle stays tiny no matter how big the registry grows.

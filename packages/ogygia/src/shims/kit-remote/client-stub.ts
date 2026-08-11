@@ -51,6 +51,7 @@ export function set_nearest_error_page() {}
 export function seed_query_responses(text: string): void {
 	let data: {
 		q?: Record<string, (typeof query_responses)[string]>;
+		p?: Record<string, (typeof prerender_responses)[string]>;
 		l?: Record<string, (typeof query_responses)[string]>;
 		f?: Record<string, (typeof query_responses)[string]>;
 	} | null;
@@ -60,8 +61,11 @@ export function seed_query_responses(text: string): void {
 		return;
 	}
 	if (!data) return;
-	const { q = {}, l = {}, f = {} } = data;
+	const { q = {}, p = {}, l = {}, f = {} } = data;
 	for (const k in q) query_responses[k] = q[k];
 	for (const k in l) query_responses[k] = l[k];
 	for (const k in f) query_responses[k] = f[k];
+	// PRERENDER remotes seed a separate cache (Kit parity, client.js) — without this a prerender
+	// remote awaited inside an island re-fetches on hydrate and the island re-mounts (FOUC).
+	for (const k in p) prerender_responses[k] = p[k];
 }

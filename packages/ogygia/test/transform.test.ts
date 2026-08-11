@@ -76,13 +76,13 @@ describe('normalize_import_keys', () => {
 	test('defaults', () => {
 		expect(normalize_import_keys()).toEqual({
 			wake: 'wake',
-			fill: 'fill',
+			render: 'render',
 			preset: 'preset',
 			region: 'region'
 		});
 	});
 	test('rejects collisions', () => {
-		expect(() => normalize_import_keys({ wake: 'x', fill: 'x' })).toThrow(/distinct/);
+		expect(() => normalize_import_keys({ wake: 'x', render: 'x' })).toThrow(/distinct/);
 	});
 });
 
@@ -104,6 +104,13 @@ describe('strategyKey / regionIdentity dedupe', () => {
 				options: { when: 'idle', hydrate: 'visible', hydrateMargin: '10px' }
 			})
 		).toBe('defer:idle+hydrate:visible:hmargin:10px');
+	});
+	test('strategyKey fingerprints cache ttl (a cached hole never dedupes onto a no-store one)', () => {
+		const plain = strategyKey({ strategy: 'server', options: { when: 'load' } });
+		const cached = strategyKey({ strategy: 'server', options: { when: 'load', cacheTtlSec: 3600 } });
+		expect(plain).toBe('defer:load');
+		expect(cached).toBe('defer:load:ttl:3600');
+		expect(cached).not.toBe(plain);
 	});
 });
 
@@ -282,7 +289,7 @@ describe('portable binding rewrite', () => {
 
 describe('defer / server islands', () => {
 	test('defer:load → ServerIsland wrapper + defer entry', () => {
-		const r = run(wrap(`import G from './G.svelte' with { fill: 'load' };`, '<G name="w" />'))!;
+		const r = run(wrap(`import G from './G.svelte' with { render: 'deferred' };`, '<G name="w" />'))!;
 		const iid = idFor('src/routes/G.svelte', {
 			strategy: 'server',
 			options: { when: 'load' }
@@ -298,7 +305,7 @@ describe('defer / server islands', () => {
 	test('ogygiaFallback snippet stays at call site', () => {
 		const r = run(
 			wrap(
-				`import G from './G.svelte' with { fill: 'load' };`,
+				`import G from './G.svelte' with { render: 'deferred' };`,
 				'<G>{#snippet ogygiaFallback()}<p>loading…</p>{/snippet}</G>'
 			)
 		)!;
@@ -308,26 +315,56 @@ describe('defer / server islands', () => {
 
 	test('non-fallback children on defer are an error', () => {
 		expectThrows(
-			() => run(wrap(`import G from './G.svelte' with { fill: 'load' };`, '<G><p>x</p></G>')),
+			() => run(wrap(`import G from './G.svelte' with { render: 'deferred' };`, '<G><p>x</p></G>')),
 			/host children/
 		);
 	});
 
-	test('defer+hydrate combo', () => {
+	test('render: deferred is content-only (never hydrates)', () => {
 		const r = run(
-			wrap(`import C from './C.svelte' with { fill: 'idle', wake: 'load' };`, '<C />')
+			wrap(`import C from './C.svelte' with { render: 'deferred', wake: 'idle' };`, '<C />')
 		)!;
-		expect(r.islands[0].kind).toBe('hydrate');
+		expect(r.islands[0].kind).toBe('defer');
 		expect(r.islands[0].server).toBe(true);
-		expect(r.islands[0].wrapperSource).toMatch(/__hydrate=\{"load"\}/);
-		expect(r.islands[0].wrapperSource).toMatch(/__module=/);
+		expect(r.islands[0].wrapperSource).toMatch(/__defer=\{"idle"\}/);
+		// content-only: no client hydrate module is emitted
+		expect(r.islands[0].wrapperSource).not.toMatch(/__hydrate=/);
 	});
 
-	test("fill: 'true' retired", () => {
+	test('a deferred hole must fetch (wake: none is rejected)', () => {
 		expectThrows(
-			() => run(wrap(`import G from './G.svelte' with { fill: 'true' };`, '<G />')),
-			/`fill: 'true'` is no longer valid/
+			() => run(wrap(`import G from './G.svelte' with { render: 'deferred', wake: 'none' };`, '<G />')),
+			/a hole must fetch/
 		);
+	});
+
+	test('deferred is no-store by default (no __cacheTtl emitted)', () => {
+		const r = run(wrap(`import C from './C.svelte' with { render: 'deferred' };`, '<C />'))!;
+		expect(r.islands[0].wrapperSource).not.toMatch(/__cacheTtl/);
+	});
+
+	test('preset maxAge → __cacheTtl in seconds (duration string)', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { preset: 'cached' };`, '<C />'),
+			makeCtx({ presets: { cached: { render: 'deferred', maxAge: '1h' } } })
+		)!;
+		expect(r.islands[0].wrapperSource).toMatch(/__cacheTtl=\{3600\}/);
+	});
+
+	test('preset maxAge → __cacheTtl in seconds (bare number is seconds)', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { preset: 'cached' };`, '<C />'),
+			makeCtx({ presets: { cached: { render: 'deferred', maxAge: 45 } } })
+		)!;
+		expect(r.islands[0].wrapperSource).toMatch(/__cacheTtl=\{45\}/);
+	});
+
+	test('preset maxAge: 0 stays no-store (no __cacheTtl)', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { preset: 'fresh' };`, '<C />'),
+			makeCtx({ presets: { fresh: { render: 'deferred', maxAge: 0 } } })
+		)!;
+		expect(r.islands[0].wrapperSource).not.toMatch(/__cacheTtl/);
 	});
 });
 
@@ -342,11 +379,11 @@ describe('lakes', () => {
 		expect(r.code).toMatch(/virtual:ogygia\/wrapper\//);
 	});
 
-	test('swr lake gets server entry module', () => {
+	test('render: live gets a server entry module (baked + revalidate)', () => {
 		const r = run(
-			wrap(`import L from './L.svelte' with { preset: 'frozenSwr' };`, '<L />'),
+			wrap(`import L from './L.svelte' with { preset: 'liveBox' };`, '<L />'),
 			makeCtx({
-				presets: { frozenSwr: { wake: 'none', remount: 'swr' } }
+				presets: { liveBox: { render: 'live' } }
 			})
 		)!;
 		expect(r.islands[0].server).toBe(true);
@@ -354,12 +391,11 @@ describe('lakes', () => {
 		expect(r.islands[0].source).toMatch(/export default __OgygiaComp_/);
 	});
 
-	test('swr lake with children is an error', () => {
+	test('render: live with children is an error (revalidate endpoint re-renders from props)', () => {
 		expectThrows(
 			() =>
 				run(
-					wrap(`import L from './L.svelte' with { preset: 'swr' };`, '<L><p>x</p></L>'),
-					makeCtx({ presets: { swr: { wake: 'none', remount: 'swr' } } })
+					wrap(`import L from './L.svelte' with { render: 'live' };`, '<L><p>x</p></L>')
 				),
 			/cannot have children/
 		);
@@ -549,7 +585,7 @@ describe('cross-island children', () => {
 
 	test('a server island still rejects host children (only the fallback snippet crosses)', () => {
 		expectThrows(
-			() => run(wrap(`import G from './G.svelte' with { fill: 'load' };`, '<G><p>x</p></G>')),
+			() => run(wrap(`import G from './G.svelte' with { render: 'deferred' };`, '<G><p>x</p></G>')),
 			/host children\/snippets/
 		);
 	});
@@ -580,17 +616,10 @@ describe('interaction schedule', () => {
 		expect(r.islands[0].wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="island" interaction /);
 	});
 
-	test('defer + hydrate: interaction (phase-2 wake after swap) is accepted', () => {
-		const r = run(
-			wrap(`import G from './G.svelte' with { fill: 'load', wake: 'interaction' };`, '<G />')
-		)!;
-		expect(r.islands[0].wrapperSource).toMatch(/__hydrate=\{"interaction"\}/);
-	});
-
-	test("fill: 'interaction' is rejected (fetch-timing has no interaction)", () => {
+	test("render: deferred + wake: 'interaction' is rejected (a hole can't fetch on interaction)", () => {
 		expectThrows(
-			() => run(wrap(`import G from './G.svelte' with { fill: 'interaction' };`, '<G />')),
-			/unknown fill timing 'interaction'/
+			() => run(wrap(`import G from './G.svelte' with { render: 'deferred', wake: 'interaction' };`, '<G />')),
+			/fetches on the .*wake.* schedule/
 		);
 	});
 
@@ -604,32 +633,32 @@ describe('interaction schedule', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// continuity: persist — `with { persist: 'name' }` keeps the live island across SPA nav.
+// continuity: keep — `with { keep: 'name' }` keeps the live island across SPA nav.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('persist attribute', () => {
-	test("hydrate + persist → wrapper passes __persist", () => {
-		const r = run(wrap(`import P from './P.svelte' with { wake: 'load', persist: 'player' };`, '<P />'))!;
-		expect(r.islands[0].wrapperSource).toMatch(/__persist=\{"player"\}/);
-		// persist rides on the hydrate strategy (still a load island)
+describe('keep attribute', () => {
+	test("hydrate + keep → wrapper passes __keep", () => {
+		const r = run(wrap(`import P from './P.svelte' with { wake: 'load', keep: 'player' };`, '<P />'))!;
+		expect(r.islands[0].wrapperSource).toMatch(/__keep=\{"player"\}/);
+		// keep rides on the hydrate strategy (still a load island)
 		expect(r.islands[0].wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="island" load/);
 	});
 
-	test('persist alone (default load schedule) is allowed', () => {
-		const r = run(wrap(`import P from './P.svelte' with { wake: 'visible', persist: 'x' };`, '<P />'))!;
-		expect(r.islands[0].wrapperSource).toMatch(/__persist=\{"x"\}/);
+	test('keep alone (default load schedule) is allowed', () => {
+		const r = run(wrap(`import P from './P.svelte' with { wake: 'visible', keep: 'x' };`, '<P />'))!;
+		expect(r.islands[0].wrapperSource).toMatch(/__keep=\{"x"\}/);
 		expect(r.islands[0].wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="island" visible/);
 	});
 
-	test('empty persist name is a build error', () => {
+	test('empty keep name is a build error', () => {
 		expectThrows(
-			() => run(wrap(`import P from './P.svelte' with { wake: 'load', persist: '' };`, '<P />')),
-			/persist.*non-empty name/
+			() => run(wrap(`import P from './P.svelte' with { wake: 'load', keep: '' };`, '<P />')),
+			/keep.*non-empty name/
 		);
 	});
 
-	test('persist in a preset works', () => {
-		const ctx = makeCtx({ presets: { pl: { wake: 'load', persist: 'player' } } });
+	test('keep in a preset works', () => {
+		const ctx = makeCtx({ presets: { pl: { wake: 'load', keep: 'player' } } });
 		const r = run(wrap(`import P from './P.svelte' with { preset: 'pl' };`, '<P />'), ctx)!;
-		expect(r.islands[0].wrapperSource).toMatch(/__persist=\{"player"\}/);
+		expect(r.islands[0].wrapperSource).toMatch(/__keep=\{"player"\}/);
 	});
 })

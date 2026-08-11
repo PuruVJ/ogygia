@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Portable island bindings: same import works as a static tag, dynamic <Comp />, and list/each.
 	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
-	import Greeting from '$lib/Greeting.svelte' with { fill: 'load' };
+	import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
 
 	const Dynamic = Counter;
 	const list = [

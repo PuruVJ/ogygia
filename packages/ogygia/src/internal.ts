@@ -2,7 +2,7 @@
  * Internal wrappers the compile-time transform emits into host/island modules.
  *
  * **Not a public API** — do not import from app code. Prefer authoring regions with
- * `with { wake | fill | preset }` and the public exports from `ogygia`.
+ * `with { wake | render | preset }` and the public exports from `ogygia`.
  *
  * One `Region` renders every placement (island / server / lake) and every held value. Server-island
  * minting is routed through the client-stubbed `virtual:ogygia/region-endpoint` virtual, so `Region`

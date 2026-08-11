@@ -92,9 +92,9 @@ Make one on the server, pass it to as many islands as you like — `<Badge {cart
 
 Plain module-level `$state` already shares across islands with no ceremony (one client chunk = one instance); `[ogygia.wire]` is for the case where the instance is **born on the server** and handed down as a prop.
 
-## Streaming server islands — no new word
+## Route weaving — no new word
 
-Streaming is not a new *when*; it is a better *how* for `defer: 'load'`. Enable `ogygia({ stream: true })` and on a dynamic page `handle()` sends the shell, then appends each hole’s server-rendered HTML down the same response as a `<template data-ogygia-slot>` parcel — zero extra requests. Prerender/CDN pages and any hole that can’t render server-side fall back to the per-hole fetch, so it never changes correctness. `idle` / `visible` / media keep fetching on schedule (deferring the *server* work is their point).
+Each `defer: 'load'` hole fetches its own signed HTML on load. On a SPA navigation the router prescans the incoming page and pulls **all** its holes down **one** batch request to `/🏝️` — no fetch-per-hole waterfall. Each hole's HTML streams back as a `<template data-ogygia-slot>` parcel the moment that region settles (out of order, fast-first). A forged or errored call in the batch is dropped, not fatal — its region falls back to its own fetch, so weaving never changes correctness. `idle` / `visible` / media holes keep fetching on their own schedule (deferring the *server* work is their point). A command that returns a region rides the same parcel format for single-flight mutation.
 
 `hydrate: 'none'` with any `defer` is nonsense (HTML later and no JS) — use `defer` alone. Dev warns and treats it as defer-only.
 

@@ -11,17 +11,17 @@ Two small systems cover a lot of ground: **when** a region wakes, and **what hap
 
 ## The schedules
 
-Islands (`hydrate`) and server islands (`defer`) share the same timing words, so you learn them once:
+One key, `wake`, carries the schedule for both islands (`wake`) and server islands (`render: 'deferred'`), so you learn the words once:
 
 | Value | When it fires | Good for |
 | --- | --- | --- |
 | `load` | Immediately after the runtime boots | Above-the-fold, interactive-now UI |
 | `idle` | On `requestIdleCallback` | Nice-to-have widgets that can wait |
 | `visible` | When scrolled into the viewport | Anything below the fold |
-| `interaction` | On the first pointer / key / focus inside it (hydrate-only) | Anything most visitors never touch |
+| `interaction` | On the first pointer / key / focus inside it (islands only) | Anything most visitors never touch |
 | `'(media query)'` | When the CSS media query matches | Mobile-only or desktop-only UI |
 
-On an **island** the schedule says *when JS runs*. On a **server island** it says *when the HTML is fetched*. Same words, two axes. (`interaction` is hydrate-only — fetching HTML on interaction would mean interacting with a fallback.)
+On an **island** (`render` defaults to `static`) `wake` says *when JS runs*. On a **server island** (`render: 'deferred'`) `wake` says *when the HTML is fetched*. Same words, whichever the region comes alive by. (`interaction` is islands-only — fetching HTML on interaction would mean interacting with a fallback.)
 
 ```svelte
 <script>
@@ -95,15 +95,15 @@ import Chart from '$lib/Chart.svelte' with { wake: 'visible', margin: '200px' };
 ogygia({ visible: { margin: '0px' } });
 ```
 
-## Deferred client islands: two phases
+## Deferred content that is also interactive
 
-Combine `defer` and `hydrate` and you get HTML-later *then* JS on it. `defer` is phase one (fetch and swap); `hydrate` is phase two (import and hydrate).
+A `render: 'deferred'` region is content only — it never ships JS. On it, `wake` is the *fetch* schedule (below, the hole waits until it scrolls into view before it even costs a request):
 
 ```svelte
-import Panel from '$lib/Panel.svelte' with { fill: 'visible', wake: 'load' };
+import Panel from '$lib/Panel.svelte' with { render: 'deferred', wake: 'visible' };
 ```
 
-Matching schedules coalesce: after the swap, `wake: 'load'` runs immediately — no second wait. A stricter `hydrate` arms its own schedule on top.
+When a fetched hole *also* needs interactivity, you do not stack two schedules on one import — you nest a normal `wake` island inside the server island's own component. `render` decides how the HTML arrives; `wake` on the inner island decides when its JS runs. See [Server islands → nesting an island](/docs/islands/server-islands).
 
 ## Nesting: one rule
 
@@ -115,7 +115,7 @@ Walk up the tree. The **closest marked parent decides**.
 | Island inside an island | Shares the parent's JS — one interactive tree, not two |
 | Lake inside an island | Stays static HTML; the lake's JS never ships |
 | Island inside a lake | Gets its own JS again |
-| Server island inside an island | Renders inline with the parent (`defer` ignored) |
+| Server island inside an island | Renders inline with the parent (`render: 'deferred'` ignored) |
 
 ```
 page → island → lake → island → …
@@ -127,7 +127,7 @@ Because an island-in-an-island shares one tree, a child island's schedule is ign
 
 - **Do** default below-the-fold islands to `visible` — it is free performance.
 - **Do** use `idle` for anything the user will not touch immediately.
-- **Don't** pair `wake: 'none'` with `defer` — HTML-later with no JS is just `defer` alone (dev warns and treats it as defer-only).
+- **Don't** try to make a `render: 'deferred'` region interactive on its own — it ships no JS. Nest a `wake` island inside it instead.
 
 
 <style>

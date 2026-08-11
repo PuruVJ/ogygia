@@ -24,7 +24,7 @@ const baseCtx = {
 	presets: {
 		chart: { wake: 'visible', margin: '200px' },
 		lazy: { wake: 'load', margin: '999px' }, // margin inapplicable to load -> tolerated
-		srv: { fill: 'load' }
+		srv: { render: 'deferred' }
 	}
 };
 const HOST = '/app/src/routes/+page.svelte';
@@ -80,39 +80,31 @@ function expectError(label: string, src: string, re: RegExp) {
 expectError('unknown preset lists available', wrap(`import C from './C.svelte' with { preset: 'nope' };`), /unknown preset 'nope'.*chart/s);
 expectError('inline option key rejected (margin)', wrap(`import C from './C.svelte' with { wake: 'visible', margin: '9px' };`), /not allowed inline/);
 expectError('preset + another inline key rejected', wrap(`import C from './C.svelte' with { preset: 'chart', wake: 'load' };`), /must be the only import attribute/);
-// defer + hydrate is supported (deferred client island)
+// render: deferred is content-only — a server island that never ships JS (Option A)
 {
-	const r = run(wrap(`import C from './C.svelte' with { fill: 'load', wake: 'load' };`));
+	const r = run(wrap(`import C from './C.svelte' with { render: 'deferred', wake: 'idle' };`, '<C>{#snippet ogygiaFallback()}x{/snippet}</C>'));
 	check(
-		'defer + hydrate -> ServerIsland with __hydrate + __module',
-		/__hydrate=\{"load"\}/.test(wrapSrc(r)) && /__module=\{/.test(wrapSrc(r))
+		'render: deferred -> server island, fetch on wake, no hydrate module',
+		/__mode="server"/.test(wrapSrc(r)) && /__defer=\{"idle"\}/.test(wrapSrc(r)) && !/__hydrate=/.test(wrapSrc(r)) && !/__module=/.test(wrapSrc(r))
 	);
 	check(
-		'defer + hydrate -> kind hydrate + server true',
-		r!.islands?.[0]?.kind === 'hydrate' && r!.islands?.[0]?.server === true
+		'render: deferred -> kind defer + server true',
+		r!.islands?.[0]?.kind === 'defer' && r!.islands?.[0]?.server === true
 	);
 }
-// preset with defer+hydrate+margin
+// preset: a deferred hole fetched on visible threads the fetch margin
 {
 	const ctx = {
 		...baseCtx,
 		presets: {
 			...baseCtx.presets,
-			lazyClient: { fill: 'load', wake: 'visible', margin: '150px' }
+			srvVisible: { render: 'deferred', wake: 'visible', margin: '150px' }
 		}
 	};
-	const r = run(wrap(`import C from './C.svelte' with { preset: 'lazyClient' };`), ctx);
+	const r = run(wrap(`import C from './C.svelte' with { preset: 'srvVisible' };`, '<C>{#snippet ogygiaFallback()}x{/snippet}</C>'), ctx);
 	check(
-		'preset defer+hydrate+margin -> hydrateMargin threaded',
-		/__hydrate=\{"visible"\}/.test(wrapSrc(r)) && /__hydrateMargin=\{"150px"\}/.test(wrapSrc(r))
-	);
-}
-// matching schedules still emit both attrs (runtime coalesce)
-{
-	const r = run(wrap(`import C from './C.svelte' with { fill: 'idle', wake: 'idle' };`));
-	check(
-		'matching defer+hydrate still emits both schedules at transform',
-		/__defer=\{"idle"\}/.test(wrapSrc(r)) && /__hydrate=\{"idle"\}/.test(wrapSrc(r))
+		'preset deferred+visible -> fetch margin threaded',
+		/__defer=\{"visible"\}/.test(wrapSrc(r)) && /__margin=\{"150px"\}/.test(wrapSrc(r))
 	);
 }
 expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from './C.svelte' with { wake: 'false' };`), /wake: 'false'.*use .*wake: 'none'/i);

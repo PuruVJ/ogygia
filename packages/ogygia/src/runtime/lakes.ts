@@ -125,7 +125,7 @@ export function on_frozen_connect(el: HTMLElement, arm: LakeArm): boolean {
 				arm.wake_children();
 				if (import.meta.env.DEV) {
 					console.warn(
-						`[ogygia] region "${id}" is remount:'swr' but no signed endpoint was captured at SSR — painting the cache only.`
+						`[ogygia] region "${id}" is render:'live' but no signed endpoint was captured at SSR — painting the cache only.`
 					);
 				}
 				return true;

@@ -366,6 +366,23 @@ function fullTable(results, posts) {
 	return l.join('\n');
 }
 
+/**
+ * Chrome for Lighthouse: honour `CHROME_PATH`, else fall back to Playwright's bundled Chromium (it is
+ * already installed for the verify suite), else let chrome-launcher search the system. Keeps
+ * `npm run bench` working without a separate system Chrome install.
+ */
+async function resolveChromePath() {
+	if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+	try {
+		const { chromium } = await import('playwright');
+		const p = chromium.executablePath();
+		if (p) return p;
+	} catch {
+		/* playwright absent — chrome-launcher will search the system */
+	}
+	return undefined;
+}
+
 async function main() {
 	const args = parseArgs(process.argv.slice(2));
 	const cfg = JSON.parse(readFileSync(resolve(ROOT, args.config), 'utf8'));
@@ -386,7 +403,7 @@ async function main() {
 	}
 
 	const chrome = await launch({
-		chromePath: process.env.CHROME_PATH,
+		chromePath: await resolveChromePath(),
 		chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
 	});
 

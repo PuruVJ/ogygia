@@ -14,6 +14,7 @@ const count = (s, re) => (s.match(re) || []).length;
 
 // ---------------------------------------------------------------- fetch/SSR --
 let endpoint;
+let cachedEndpoint;
 {
 	const res = await fetch(base + '/server');
 	const html = await res.text();
@@ -53,6 +54,15 @@ let endpoint;
 	endpoint = m ? new URL(m[1].replace(/&amp;/g, '&'), base + '/server').href : '';
 }
 
+// The /server-cached island opts into a browser cache via `maxAge: '1h'` (preset cachedGreeting).
+{
+	const res = await fetch(base + '/server-cached');
+	const html = await res.text();
+	const mc = html.match(/data-cached-greeting[\s\S]*?endpoint="([^"]*)"/);
+	check('/server-cached island carries a endpoint', !!mc);
+	cachedEndpoint = mc ? new URL(mc[1].replace(/&amp;/g, '&'), base + '/server-cached').href : '';
+}
+
 // --------------------------------------------------------------- endpoint ----
 {
 	// valid signed request (from the page) + cookie -> personalized rendered HTML
@@ -61,6 +71,18 @@ let endpoint;
 	check('endpoint returns 200 for a valid signed request', res.status === 200);
 	check('endpoint returns rendered island HTML', /data-server-greeting/.test(html));
 	check('endpoint personalizes from cookie (Hello, Ada!)', /Hello, Ada!/.test(html), html.slice(0, 80));
+	// A deferred hole is dynamic by DEFAULT: no `maxAge` preset → no signed `ttl` in the URL → the
+	// handle answers `no-store` (a reload re-renders fresh). Opting into a cache is the exception.
+	check(
+		'default deferred hole carries no signed ttl',
+		!new URL(endpoint).searchParams.has('ttl'),
+		endpoint
+	);
+	check(
+		'default deferred hole is no-store (dynamic per request)',
+		(res.headers.get('cache-control') || '') === 'no-store',
+		res.headers.get('cache-control') || ''
+	);
 	check(
 		'region response denies framing (XFO)',
 		/DENY/i.test(res.headers.get('x-frame-options') || ''),
@@ -71,6 +93,23 @@ let endpoint;
 		/frame-ancestors\s+'none'/.test(res.headers.get('content-security-policy') || ''),
 		res.headers.get('content-security-policy') || ''
 	);
+
+	// -------- opt-in cache path (maxAge: '1h' preset) — signed ttl + private max-age --------
+	{
+		const u = new URL(cachedEndpoint);
+		check('cached hole carries a signed ttl=3600', u.searchParams.get('ttl') === '3600', cachedEndpoint);
+		const rc = await fetch(cachedEndpoint);
+		check('cached hole renders (200)', rc.status === 200);
+		check(
+			'cached hole is private, max-age=3600',
+			(rc.headers.get('cache-control') || '') === 'private, max-age=3600',
+			rc.headers.get('cache-control') || ''
+		);
+		// ttl is SIGNED: re-pointing it at a longer cache invalidates the MAC (403, not a longer cache).
+		const tampered = cachedEndpoint.replace(/([?&])ttl=3600/, '$1ttl=99999999');
+		const rt = await fetch(tampered);
+		check('re-pointing ttl breaks the MAC (403)', rt.status === 403, String(rt.status));
+	}
 
 	// P1-ID: with OGYGIA_SECRET, live ids must differ from the unsalted md5(host::index)
 	{

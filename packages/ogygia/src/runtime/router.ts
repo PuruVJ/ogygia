@@ -2,7 +2,7 @@
  * Minimal SPA router for ogygia (Astro's ClientRouter equivalent).
  *
  * Intercepts same-origin <a> clicks, fetches the target page, swaps <body>,
- * merges <head>, and updates history. `data-ogygia-persist` keeps matching chrome.
+ * merges <head>, and updates history. `data-ogygia-keep` keeps matching chrome.
  * Islands on the new page auto-initialise via custom-element connection; old ones
  * auto-unmount via disconnection (except inside persisted subtrees).
  */
@@ -11,8 +11,25 @@ import { PageCache } from './page-cache.js';
 import { slots } from './slots.js';
 import type { PersistPair } from './persist.js';
 import { runtime_session } from './session.js';
+import { streamFrames } from './frame-nav.js';
 
 const WS = /\s+/;
+
+// SvelteKit's remote-function client (which ogygia reuses for query/command) patches
+// `history.pushState`/`replaceState` on the instance and warns whenever they are called directly.
+// On csr=false pages ogygia owns navigation — Kit's router is not running — so we update history via
+// the un-patched `History.prototype` methods. Same effect on the history stack, without the spurious
+// "conflict with SvelteKit's router" warning. Captured lazily so a test/SSR without `History` is safe.
+const native_push =
+	typeof History !== 'undefined' ? History.prototype.pushState : null;
+const native_replace =
+	typeof History !== 'undefined' ? History.prototype.replaceState : null;
+const push_state = (state: unknown, url: string) =>
+	(native_push ?? history.pushState).call(history, state, '', url);
+const replace_state = (state: unknown, url?: string) => {
+	const fn = native_replace ?? history.replaceState;
+	return url === undefined ? fn.call(history, state, '') : fn.call(history, state, '', url);
+};
 
 // ---- navigation lifecycle hooks (for the $app/navigation shim + `ogygia/app`) ----
 
@@ -350,9 +367,9 @@ class SpaRouter {
 		if (same_document(url, from) && !replace) {
 			if (!this.#run_before(from, url, type)) return;
 			if (push && url.href !== location.href) {
-				history.pushState({ ...(history.state || {}), ogygia: true }, '', url.href);
+				push_state({ ...(history.state || {}), ogygia: true }, url.href);
 			} else if (url.href !== location.href) {
-				history.replaceState({ ...(history.state || {}), ogygia: true }, '', url.href);
+				replace_state({ ...(history.state || {}), ogygia: true }, url.href);
 			}
 			jump_to_hash(url.hash);
 			this.#current_url = url;
@@ -371,11 +388,11 @@ class SpaRouter {
 		// Update history SYNCHRONOUSLY (before any await) so the URL is correct and
 		// races between overlapping navigations can't drop the pushState.
 		if (replace) {
-			history.replaceState({ ...(history.state || {}), ogygia: true }, '', url.href);
+			replace_state({ ...(history.state || {}), ogygia: true }, url.href);
 		} else if (push) {
 			// save outgoing scroll into the current entry, then push the new URL
-			history.replaceState({ ...(history.state || {}), scroll: { x: scrollX, y: scrollY } }, '');
-			history.pushState({ ogygia: true }, '', url.href);
+			replace_state({ ...(history.state || {}), scroll: { x: scrollX, y: scrollY } });
+			push_state({ ogygia: true }, url.href);
 		}
 
 		let html: string | null;
@@ -415,6 +432,12 @@ class SpaRouter {
 			typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 		const use_vt =
 			marker.getAttribute('content') !== 'plain' && !prefer_reduced_motion;
+
+		// ROUTE WEAVING: prescan the incoming page for its load-timed deferred region calls and stream
+		// them ALL in one batch request, kicked off now (before the swap). Each region binder joins the
+		// batch via the store when it connects — no per-region fetch waterfall on navigation. Fired
+		// synchronously so every reservation is in place before the body swap connects any binder.
+		this.#weave_regions(doc);
 
 		let persist_pairs: PersistPair[] = [];
 		const swap = () => {
@@ -599,7 +622,7 @@ class SpaRouter {
 		});
 
 		// seed initial history entry so scroll is restored on the first back
-		history.replaceState({ ...(history.state || {}), ogygia: true }, '');
+		replace_state({ ...(history.state || {}), ogygia: true });
 	}
 
 	/** Merge <head>: keep nodes present in both, remove stale, add new. Keeps runtime scripts alive. */
@@ -771,6 +794,35 @@ class SpaRouter {
 
 	#build_nav_target(url: URL): NavTarget {
 		return { url, params: {}, route: { id: null } };
+	}
+
+	/**
+	 * ROUTE WEAVING. Collect the incoming page's deferred, load-timed region calls and stream them as
+	 * one batch. Reads the RENDERED holes (`<ogygia-region render="defer" endpoint>`), so it covers
+	 * both placed server islands and held `region()` deferred regions alike — authoring syntax is
+	 * irrelevant. Only `when="load"` (or unset) is woven: a region scheduled `visible`/`idle`/media
+	 * stays lazy and fetches on its own trigger, so dynamic schedules are preserved, not eagerly pulled.
+	 */
+	#weave_regions(doc: Document) {
+		const endpoints: string[] = [];
+		const woven = new Set<string>();
+		for (const el of Array.from(doc.querySelectorAll('ogygia-region[render="defer"][endpoint]'))) {
+			const when = el.getAttribute('when') || 'load';
+			if (when !== 'load') continue; // lazy schedules keep their own timing — never batch them early
+			const ep = el.getAttribute('endpoint');
+			if (ep) {
+				endpoints.push(ep);
+				woven.add(ep);
+			}
+		}
+		if (!endpoints.length) return;
+		// Drop the per-region `<link rel="preload" as="fetch">` hints for these calls before the head is
+		// merged: on initial load they front-run the fetch, but on a woven navigation the batch serves
+		// them — left in, the browser would fire the very GET waterfall weaving exists to remove.
+		for (const link of Array.from(doc.querySelectorAll('link[rel="preload"][as="fetch"]'))) {
+			if (woven.has(link.getAttribute('href') || '')) link.remove();
+		}
+		void streamFrames(endpoints);
 	}
 }
 

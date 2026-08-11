@@ -15,29 +15,32 @@ export { foucCssVirtualId } from './fouc-css.js';
 export const ISLAND_DIR = '.ogygia';
 
 /**
- * Default import-attribute keys — the three-dial grammar. Internal role names stay `hydrate`/`defer`
+ * Default import-attribute keys — the two-dial grammar. Internal role names stay `hydrate`/`defer`
  * (the wire format + runtime keep those anchors); the user-facing ATTRIBUTE names are the values.
  * Override via `ogygia({ importKeys })`.
- * - `hydrate` role → `wake` attribute (when JS runs)
- * - `defer` role → `fill` attribute (when HTML arrives)
+ * - `render` attribute → the MODE: `static` (inline HTML) | `deferred` (a hole, fetched) | `live`
+ *   (a hole that revalidates). Defaults to `static`.
+ * - `wake` attribute → when the region comes alive: for `static` that is HYDRATION; for
+ *   `deferred`/`live` that is the FETCH schedule.
  */
 export const DEFAULT_IMPORT_KEYS = {
 	wake: 'wake',
-	fill: 'fill',
+	render: 'render',
 	preset: 'preset',
 	region: 'region'
 } as const;
 
 /**
  * Import-attribute key names claimed by the transform
- * (`with { wake | fill | preset | region }`). Override via `ogygia({ importKeys })` when
+ * (`with { wake | render | preset | region }`). Override via `ogygia({ importKeys })` when
  * another tool already uses the default names.
  */
 export type ImportKeys = {
-	/** When JS runs (default attribute `'wake'`). */
+	/** When the region comes alive (default attribute `'wake'`) — hydration for `static`, the fetch
+	 * schedule for `deferred`/`live`. */
 	wake: string;
-	/** When HTML arrives — server island (default attribute `'fill'`). */
-	fill: string;
+	/** The delivery MODE (default attribute `'render'`): `static` | `deferred` | `live`. */
+	render: string;
 	/** Named preset attribute (default `'preset'`). */
 	preset: string;
 	/** Held-across-a-boundary marker (default attribute `'region'`, only value `'raw'`) — a component
@@ -45,15 +48,18 @@ export type ImportKeys = {
 	region: string;
 };
 
+/** The three delivery modes the `render` attribute accepts. */
+const RENDER_MODES = new Set(['static', 'deferred', 'live']);
+
 const JS_IDENT = /^[A-Za-z_$][\w$]*$/;
 
 // Invariant per-build — hoisted to module scope so they aren't reallocated on every transformHost.
 const KNOWN_STRATEGIES = new Set(['load', 'idle', 'visible']);
 // `interaction` is a wake-only schedule (first pointer/key/focus inside the region, with click
-// replay) — not a fetch timing, so it is not a valid `fill` value.
+// replay) — a wake-only schedule, never a deferred fetch timing.
 const HYDRATE_STRATEGIES = new Set([...KNOWN_STRATEGIES, 'interaction']);
 /** Inline attribute keys accepted after normalization (canonical internal names). */
-const ATTR_SCHEMA = new Set(['hydrate', 'defer', 'margin', 'persist']);
+const ATTR_SCHEMA = new Set(['hydrate', 'defer', 'margin', 'keep']);
 /** AST fragment child-key names walked when descending the template. */
 const CHILD_KEYS = ['consequent', 'alternate', 'body', 'fallback', 'pending', 'then', 'catch', 'fragment'];
 
@@ -80,12 +86,12 @@ export function normalize_import_keys(overrides?: Partial<ImportKeys> | null): I
 
 function normalize_import_keys_uncached(overrides?: Partial<ImportKeys> | null): ImportKeys {
 	const wake = (overrides?.wake ?? DEFAULT_IMPORT_KEYS.wake).trim();
-	const fill = (overrides?.fill ?? DEFAULT_IMPORT_KEYS.fill).trim();
+	const render = (overrides?.render ?? DEFAULT_IMPORT_KEYS.render).trim();
 	const preset = (overrides?.preset ?? DEFAULT_IMPORT_KEYS.preset).trim();
 	const region = (overrides?.region ?? DEFAULT_IMPORT_KEYS.region).trim();
 	for (const [role, name] of [
 		['wake', wake],
-		['fill', fill],
+		['render', render],
 		['preset', preset],
 		['region', region]
 	] as const) {
@@ -95,12 +101,12 @@ function normalize_import_keys_uncached(overrides?: Partial<ImportKeys> | null):
 			);
 		}
 	}
-	if (new Set([wake, fill, preset, region]).size !== 4) {
+	if (new Set([wake, render, preset, region]).size !== 4) {
 		throw new Error(
-			'[ogygia] importKeys.wake, importKeys.fill, importKeys.preset, and importKeys.region must be distinct.'
+			'[ogygia] importKeys.wake, importKeys.render, importKeys.preset, and importKeys.region must be distinct.'
 		);
 	}
-	return { wake, fill, preset, region };
+	return { wake, render, preset, region };
 }
 
 /**
@@ -117,7 +123,7 @@ export function import_keys_hint(import_keys: ImportKeys) {
 	if (re) return re;
 	const esc = (s: string) => s.replace(REGEXP_META, '\\$&');
 	re = new RegExp(
-		`${esc(import_keys.wake)}|${esc(import_keys.fill)}|${esc(import_keys.preset)}|${esc(import_keys.region)}`
+		`${esc(import_keys.wake)}|${esc(import_keys.render)}|${esc(import_keys.preset)}|${esc(import_keys.region)}`
 	);
 	HINT_CACHE.set(import_keys, re);
 	return re;
@@ -183,6 +189,10 @@ export function strategyKey(mark: { strategy: string; options?: Record<string, u
 	if (mark.strategy === 'server') {
 		let k = `defer:${o.when ?? 'load'}`;
 		if (o.margin != null) k += `:margin:${o.margin}`;
+		// Cache TTL is baked into the wrapper (it signs the endpoint), so it MUST fingerprint the
+		// wrapper — else a cached hole (maxAge) dedupes onto a plain no-store wrapper of the same
+		// component+schedule and silently loses its `ttl`.
+		if (o.cacheTtlSec != null) k += `:ttl:${o.cacheTtlSec}`;
 		if (o.hydrate) {
 			k += `+hydrate:${o.hydrate}`;
 			if (o.hydrateMargin != null) k += `:hmargin:${o.hydrateMargin}`;
@@ -300,7 +310,7 @@ function make_region_binding(opts: {
 	// Descriptor metadata `region()` reads. `__hydrate` is baked only for a `wake:` mark; a
 	// `region: 'raw'` binding bakes none and the schedule comes from the `region()` call's `{ wake }`.
 	// The runtime `<ogygia-region>` fetches on mount (`when: 'load'`) and wakes on the resolved schedule.
-	// Fetch timing is the consumer's own `{#if}` — a held region has no `fill` axis.
+	// Fetch timing is the consumer's own `{#if}` — a held region has no render axis.
 	let meta = `__ogRegion: ${JSON.stringify(opts.iid)}, __module: ${JSON.stringify(opts.moduleUrl)}`;
 	if (opts.hydrate) meta += `, __hydrate: ${JSON.stringify(opts.hydrate)}`;
 	if (opts.hydrate && opts.hydrateMargin != null)
@@ -388,7 +398,7 @@ function clean_import_text(source, node) {
 function region_keys_on_dynamic_import(node, import_keys) {
 	const opts = node.options;
 	if (!opts || opts.type !== 'ObjectExpression') return [];
-	const claimed = new Set([import_keys.wake, import_keys.fill, import_keys.preset]);
+	const claimed = new Set([import_keys.wake, import_keys.render, import_keys.preset]);
 	/** @type {string[]} */
 	const found = [];
 	for (const prop of opts.properties) {
@@ -499,6 +509,36 @@ function parse_max_age(raw, err, names) {
 		return Math.floor(n * mult);
 	}
 	throw err(names, `\`remount.maxAge\` must be a number (ms) or duration string.`);
+}
+
+/**
+ * Parse a deferred hole's `maxAge` → response cache max-age in **seconds**. Unlike `remount.maxAge`
+ * (client staleness, ms), this is an HTTP header value, so a bare number is SECONDS; duration units
+ * (`'30s'` / `'5m'` / `'1h'`, or `'500ms'` rounded down) are converted to seconds. `0` = no-store.
+ * @returns {number | undefined} seconds
+ */
+function parse_cache_ttl_sec(raw, err, names) {
+	if (raw == null) return undefined;
+	if (typeof raw === 'number') {
+		if (!Number.isFinite(raw) || raw < 0) {
+			throw err(names, `\`maxAge\` must be a non-negative number of seconds, got ${raw}.`);
+		}
+		return Math.floor(raw);
+	}
+	if (typeof raw === 'string') {
+		const m = raw.trim().match(DURATION);
+		if (!m) {
+			throw err(
+				names,
+				`unknown \`maxAge\` '${raw}'. Use seconds (a number) or a duration like '30s' | '5m' | '1h'.`
+			);
+		}
+		const n = Number(m[1]);
+		const unit = (m[2] || 's').toLowerCase(); // bare number = seconds for an HTTP cache
+		const secs = unit === 'ms' ? n / 1000 : unit === 's' ? n : unit === 'm' ? n * 60 : n * 3600;
+		return Math.floor(secs);
+	}
+	throw err(names, `\`maxAge\` must be a number of seconds or a duration string.`);
 }
 
 /**
@@ -654,7 +694,7 @@ const SWR_EVENT_ATTR = new Set([
 ]);
 
 /**
- * Everything a `remount: 'swr'` region needs must survive the wire: the endpoint re-renders the
+ * Everything a `render: 'live'` region needs must survive the wire: the endpoint re-renders the
  * component from devalue'd PROPS alone. Children (snippets) and `bind:` targets cannot cross, and
  * silently losing them on revalidate would be worse than refusing the build.
  */
@@ -665,7 +705,7 @@ function assert_swr_lake_crossable(node, err) {
 	if (kids.length) {
 		throw err(
 			node.name,
-			`\`remount: 'swr'\` region <${node.name}> cannot have children — the revalidate endpoint re-renders it from serialized props only, so snippets cannot cross. Move the content inside the component, or use remount 'cache' / 'empty'.`
+			`\`render: 'live'\` region <${node.name}> cannot have children — the revalidate endpoint re-renders it from serialized props only, so snippets cannot cross. Move the content inside the component, or make it a static lake with \`wake: 'none'\`.`
 		);
 	}
 	for (const attr of node.attributes ?? []) {
@@ -673,7 +713,7 @@ function assert_swr_lake_crossable(node, err) {
 		if (attr.type !== 'Attribute') {
 			throw err(
 				node.name,
-				`\`remount: 'swr'\` region <${node.name}> cannot use \`${attr.type === 'BindDirective' ? 'bind:' + attr.name : attr.name || attr.type}\` — only plain attributes and spreads can be serialized for the revalidate endpoint.`
+				`\`render: 'live'\` region <${node.name}> cannot use \`${attr.type === 'BindDirective' ? 'bind:' + attr.name : attr.name || attr.type}\` — only plain attributes and spreads can be serialized for the revalidate endpoint.`
 			);
 		}
 		const name = attr.name;
@@ -684,7 +724,7 @@ function assert_swr_lake_crossable(node, err) {
 		if (typeof name === 'string' && SWR_EVENT_ATTR.has(name)) {
 			throw err(
 				node.name,
-				`\`remount: 'swr'\` region <${node.name}> cannot use \`${name}\` — event/callback attributes cannot be serialized for the revalidate endpoint. Pass serializable data props instead.`
+				`\`render: 'live'\` region <${node.name}> cannot use \`${name}\` — event/callback attributes cannot be serialized for the revalidate endpoint. Pass serializable data props instead.`
 			);
 		}
 		// Inline function values on any attr (`render={() => …}`) likewise cannot cross.
@@ -695,7 +735,7 @@ function assert_swr_lake_crossable(node, err) {
 			if (t === 'ArrowFunctionExpression' || t === 'FunctionExpression') {
 				throw err(
 					node.name,
-					`\`remount: 'swr'\` region <${node.name}> cannot use a function value for \`${name}\` — functions cannot be serialized for the revalidate endpoint.`
+					`\`render: 'live'\` region <${node.name}> cannot use a function value for \`${name}\` — functions cannot be serialized for the revalidate endpoint.`
 				);
 			}
 		}
@@ -756,7 +796,7 @@ export function transformHost(source, id, ctx) {
 	if (ctx.csrTrue) {
 		const region_keys = new Set([
 			import_keys.wake,
-			import_keys.fill,
+			import_keys.render,
 			import_keys.preset,
 			import_keys.region
 		]);
@@ -791,7 +831,7 @@ export function transformHost(source, id, ctx) {
 		throw new Error(
 			`[ogygia] ${rel_host}: dynamic import() with { with: { ${keys.join(', ')} } } is not supported. ` +
 				`Mark islands with a static \`import X from '…' with { ${import_keys.wake}: '…' }\` ` +
-				`(or \`${import_keys.fill}\` / \`${import_keys.preset}\`) — the binding becomes a portable island component. ` +
+				`(or \`${import_keys.render}\` / \`${import_keys.preset}\`) — the binding becomes a portable island component. ` +
 				`For a click-loaded chunk that is not an island, use plain \`await import('./Comp.svelte')\` ` +
 				`(no region attributes) inside a host island. ` +
 				`To delay a real island until click, gate a static region import with \`{#if}\`.`
@@ -801,7 +841,7 @@ export function transformHost(source, id, ctx) {
 		throw new Error(
 			`[ogygia] ${rel_host}: dynamic import() with { with: { ${keys.join(', ')} } } is not supported. ` +
 				`Mark islands with a static \`import X from '…' with { ${import_keys.wake}: '…' }\` ` +
-				`(or \`${import_keys.fill}\` / \`${import_keys.preset}\`) — the binding becomes a portable island component. ` +
+				`(or \`${import_keys.render}\` / \`${import_keys.preset}\`) — the binding becomes a portable island component. ` +
 				`For a click-loaded chunk that is not an island, use plain \`await import('./Comp.svelte')\` ` +
 				`(no region attributes) inside a host island. ` +
 				`To delay a real island until click, gate a static region import with \`{#if}\`.`
@@ -821,7 +861,7 @@ export function transformHost(source, id, ctx) {
 	const imports_to_strip = new Set<{ start: number; end: number }>(); // ImportDeclaration nodes to remove from host
 
 	// The region attribute names, once per host (invariant across the import loop below).
-	const REGION_KEYS = [import_keys.wake, import_keys.fill, import_keys.preset, import_keys.region];
+	const REGION_KEYS = [import_keys.wake, import_keys.render, import_keys.preset, import_keys.region];
 
 	const err = (specifiers, msg) =>
 		new Error(`[ogygia] ${rel_host}: import { ${specifiers} } — ${msg}`);
@@ -870,18 +910,24 @@ export function transformHost(source, id, ctx) {
 			continue;
 		}
 
-		// The import block carries hydrate and/or defer, or a preset (under configured names).
-		// No option keys inline — all tuning lives in plugin config (ogygia({ presets })).
-		/** @type {Map<string,string>} effective attributes (canonical hydrate/defer + margin) */
-		let attrs;
+		// The import block carries a `render` MODE + a `wake` schedule, or a preset. No option keys
+		// inline — all tuning lives in plugin config (ogygia({ presets })). `render` picks the mode
+		// (static | deferred | live); `wake` is hydration for `static`, the fetch schedule for
+		// `deferred`/`live`. Canonical internal slots stay `hydrate`/`defer` (+ a `live` flag).
+		/** @type {Map<string,string>} effective attributes (canonical hydrate/defer + margin + live) */
+		let attrs = new Map();
 		/** @type {{ strategy: string, when?: string } | undefined} */
 		let remount_opt;
 		let from_preset = null;
+		let render_mode; // undefined | 'static' | 'deferred' | 'live'
+		let wake_val; // the schedule string (slotted by render mode below)
+		/** render:'live' policy (from preset). */
+		const live_opts: { revalidate?: unknown; maxAge?: unknown; onExpire?: unknown } = {};
 		if (inline.has(import_keys.preset)) {
 			if (inline.size > 1) {
 				throw err(
 					names,
-					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, remount, …) in the preset definition (ogygia({ presets })).`
+					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, maxAge, …) in the preset definition (ogygia({ presets })).`
 				);
 			}
 			from_preset = inline.get(import_keys.preset);
@@ -893,46 +939,73 @@ export function transformHost(source, id, ctx) {
 					`unknown ${import_keys.preset} '${from_preset}'. Available: ${avail.length ? avail.join(', ') : '(none)'}.`
 				);
 			}
-			attrs = new Map();
 			for (const [k, v] of Object.entries(preset)) {
 				if (v == null) continue;
-				if (k === 'remount') {
-					remount_opt = parse_remount(v, err, names);
-					continue;
-				}
-				// Presets speak the same attribute vocabulary as imports (`wake` / `fill` / `margin`);
-				// normalize to the internal canonical keys the rest of the pipeline uses.
-				const canon =
-					k === import_keys.wake ? 'hydrate' : k === import_keys.fill ? 'defer' : k;
-				attrs.set(canon, String(v));
-			}
-			if (!attrs.has('hydrate') && !attrs.has('defer')) {
-				throw err(
-					names,
-					`${import_keys.preset} '${from_preset}' must set \`hydrate\` or \`defer\` — a margin-only (or empty) preset is a no-op.`
-				);
-			}
-		} else {
-			// inline may carry the configured hydrate and/or defer keys (combo = deferred client
-			// island), and the continuity `persist` key (a session name for the live island).
-			for (const k of inline.keys()) {
-				if (k !== import_keys.wake && k !== import_keys.fill && k !== 'persist') {
+				if (k === import_keys.render) render_mode = String(v);
+				else if (k === import_keys.wake) wake_val = String(v);
+				// `render: 'deferred'` cache + `render: 'live'` revalidate policy — resolved by mode below.
+				else if (k === 'maxAge' || k === 'onExpire' || k === 'revalidate') live_opts[k] = v;
+				else if (k === 'margin' || k === 'keep') attrs.set(k, String(v));
+				else {
 					throw err(
 						names,
-						`\`${k}\` is not allowed inline. Use \`${import_keys.wake}\`, \`${import_keys.fill}\`, \`persist\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`remount\` belong in plugin config (ogygia({ presets })).`
+						`unknown key \`${k}\` in preset '${from_preset}'. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`margin\`, \`maxAge\`, \`onExpire\`, \`revalidate\`.`
 					);
 				}
 			}
-			// Normalize to canonical names for the rest of the pipeline.
-			attrs = new Map();
-			if (inline.has(import_keys.wake)) attrs.set('hydrate', inline.get(import_keys.wake));
-			if (inline.has(import_keys.fill)) attrs.set('defer', inline.get(import_keys.fill));
-			if (inline.has('persist')) attrs.set('persist', inline.get('persist'));
+		} else {
+			// inline may carry the configured render + wake keys, and the continuity `keep` key.
+			for (const k of inline.keys()) {
+				if (k !== import_keys.wake && k !== import_keys.render && k !== 'keep') {
+					throw err(
+						names,
+						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ presets })).`
+					);
+				}
+			}
+			if (inline.has(import_keys.render)) render_mode = inline.get(import_keys.render);
+			if (inline.has(import_keys.wake)) wake_val = inline.get(import_keys.wake);
+			if (inline.has('keep')) attrs.set('keep', inline.get('keep'));
+		}
+
+		// Slot `wake` by render mode. `deferred`/`live` → `wake` is the FETCH schedule (defer, defaults
+		// load; content-only, never hydrates — nest a `wake` island for interactivity). `static`/absent
+		// → `wake` is the HYDRATE schedule (island, or lake at `none`).
+		if (render_mode != null && !RENDER_MODES.has(render_mode)) {
+			throw err(
+				names,
+				`unknown ${import_keys.render} '${render_mode}'. Use 'static' (inline HTML) | 'deferred' (a hole, fetched) | 'live' (a hole that revalidates).`
+			);
+		}
+		if (render_mode === 'live') {
+			// `live` = baked static content that revalidates (Option A). Internally a frozen region +
+			// swr revalidate: the first frame renders inline at SSR/build (prerender-friendly, instant),
+			// then re-fetches from its signed endpoint when stale. `wake` is the revalidate schedule;
+			// `maxAge`/`onExpire` come from the preset.
+			attrs.set('hydrate', 'none');
+			remount_opt = parse_remount(
+				{
+					revalidate: wake_val ?? live_opts.revalidate ?? 'load',
+					...(live_opts.maxAge != null ? { maxAge: live_opts.maxAge } : {}),
+					...(live_opts.onExpire != null ? { onExpire: live_opts.onExpire } : {})
+				},
+				err,
+				names
+			);
+		} else if (render_mode === 'deferred') {
+			attrs.set('defer', wake_val ?? 'load');
+		} else if (wake_val != null) {
+			attrs.set('hydrate', wake_val);
+		}
+		if (from_preset && !attrs.has('hydrate') && !attrs.has('defer')) {
+			throw err(
+				names,
+				`${import_keys.preset} '${from_preset}' must set \`${import_keys.render}\` or \`${import_keys.wake}\` — a margin-only (or empty) preset is a no-op.`
+			);
 		}
 
 		// Only UNKNOWN keys are errors. Presets are TOLERANT: a known-but-inapplicable key
-		// (e.g. `margin` with `hydrate: 'load'`) is silently ignored — it applies wherever it's
-		// relevant. `margin` / `remount` never reach here inline (rejected above).
+		// (e.g. `margin` with a `load` island) is silently ignored — it applies wherever it's relevant.
 		for (const k of attrs.keys()) {
 			if (!ATTR_SCHEMA.has(k)) {
 				throw err(names, from_preset ? `unknown key \`${k}\` in preset '${from_preset}'.` : `unknown import attribute \`${k}\`.`);
@@ -942,67 +1015,29 @@ export function transformHost(source, id, ctx) {
 			throw err(names, `\`remount\` is only valid with \`${import_keys.wake}: 'none'\`.`);
 		}
 
-		// `hydrate: 'none'` + `defer` is nonsense (HTML later AND no JS) — warn and treat as defer-only.
-		if (attrs.has('defer') && attrs.get('hydrate') === 'none') {
-			if (ctx.dev) {
-				console.warn(
-					`[ogygia] ${rel_host}: \`${import_keys.wake}: 'none'\` together with \`${import_keys.fill}\` is nonsense — ` +
-						`use \`${import_keys.fill}\` alone (HTML later, no JS). Ignoring hydrate; treating as a server island.`
-				);
-			}
-			attrs.delete('hydrate');
-		}
-
-		// `defer` -> SERVER island (render: defer). Optional `hydrate` → deferred client island
-		// (fetch HTML on defer schedule, then import(entry) + hydrate). Defer VALUE is the
-		// fetch-timing: 'load' (immediate, preload-hinted) | 'idle' | 'visible' | a media query.
-		// The old boolean spelling `defer: 'true'` is retired — point authors at `defer: 'load'`.
+		// `defer` -> SERVER island (`render: deferred` or `live`). CONTENT-ONLY: a deferred region
+		// never ships JS (Option A) — for interactivity nest a `wake` island inside its HTML. The value
+		// is the FETCH schedule (from `wake`): 'load' (immediate, preload-hinted) | 'idle' | 'visible'
+		// | a media query. `live` marks a hole that revalidates after its first fetch.
 		if (attrs.has('defer')) {
 			const dval = attrs.get('defer');
-			if (dval === 'true') {
-				throw err(
-					names,
-					`\`${import_keys.fill}: 'true'\` is no longer valid — a server island now takes a fetch-timing value. Use \`${import_keys.fill}: 'load'\` (immediate + preload) | 'idle' | 'visible' | a media query. See DESIGN.md.`
-				);
-			}
 			let when;
 			if (KNOWN_STRATEGIES.has(dval)) when = dval; // load | idle | visible
 			else if (is_media_query(dval)) when = dval; // media query is the value itself
 			else
 				throw err(
 					names,
-					`unknown ${import_keys.fill} timing '${dval}'. Use 'load' | 'idle' | 'visible' | a media query.`
+					`\`${import_keys.render}: 'deferred'\` fetches on the \`${import_keys.wake}\` schedule, but '${dval}' is not one. Use \`${import_keys.wake}: 'load' | 'idle' | 'visible'\` or a media query (not 'none'/'interaction' — a hole must fetch).`
 				);
 
-			// `margin` applies to whichever axis is `visible` (tolerantly ignored otherwise).
-			const options: {
-				when: string;
-				margin?: string;
-				hydrate?: string;
-				hydrateMargin?: string;
-			} = { when };
+			// `margin` applies when the fetch schedule is `visible` (tolerantly ignored otherwise).
+			const options: { when: string; margin?: string; cacheTtlSec?: number } = { when };
 			if (when === 'visible') options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
-
-			if (attrs.has('hydrate')) {
-				const hval = attrs.get('hydrate');
-				if (hval === 'false') {
-					throw err(
-						names,
-						`\`${import_keys.wake}: 'false'\` is not valid — use \`${import_keys.wake}: 'none'\` for a lake (a frozen region inside a hydrated island). See DESIGN.md.`
-					);
-				}
-				let hydrate_strategy;
-				if (HYDRATE_STRATEGIES.has(hval)) hydrate_strategy = hval;
-				else if (is_media_query(hval)) hydrate_strategy = hval;
-				else
-					throw err(
-						names,
-						`unknown ${import_keys.wake} strategy '${hval}'. Use 'load' | 'idle' | 'visible' | 'interaction' | a media query.`
-					);
-				options.hydrate = hydrate_strategy;
-				if (hydrate_strategy === 'visible') {
-					options.hydrateMargin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
-				}
+			// `maxAge` (preset) → response cache max-age in seconds, signed into the hole's endpoint. A
+			// deferred hole is `no-store` (dynamic) unless it opts in here.
+			if (live_opts.maxAge != null) {
+				const ttl = parse_cache_ttl_sec(live_opts.maxAge, err, names);
+				if (ttl != null && ttl > 0) options.cacheTtlSec = ttl;
 			}
 
 			for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy: 'server', options });
@@ -1059,17 +1094,17 @@ export function transformHost(source, id, ctx) {
 
 			// `margin` applies only to `visible` (tolerantly ignored otherwise). Falls back to the
 			// plugin-level default ogygia({ visible: { margin } }).
-			const options: { margin?: string; persist?: string } = {};
+			const options: { margin?: string; keep?: string } = {};
 			if (strategy === "visible") {
 				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
 			}
-			// CONTINUITY: `persist: 'name'` keeps the live island (DOM + mounted app + its $state)
+			// CONTINUITY: `keep: 'name'` keeps the live island (DOM + mounted app + its $state)
 			// across SPA navigations — the same node relocates onto the next page's slot instead of
-			// remounting. A player keeps playing. Rides the existing data-ogygia-persist relocation.
-			if (attrs.has('persist')) {
-				const p = String(attrs.get('persist')).trim();
-				if (!p) throw err(names, `\`persist\` needs a non-empty name (e.g. persist: 'player').`);
-				options.persist = p;
+			// remounting. A player keeps playing. Rides the data-ogygia-keep relocation.
+			if (attrs.has('keep')) {
+				const p = String(attrs.get('keep')).trim();
+				if (!p) throw err(names, `\`keep\` needs a non-empty name (e.g. keep: 'player').`);
+				options.keep = p;
 			}
 
 			for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy, options });
@@ -1210,7 +1245,7 @@ export function transformHost(source, id, ctx) {
 
 	const hydrate_wrapper_source = (iid, componentPath, entryPath, strategy, options) => {
 		const strategy_attrs = strategy_to_attr(strategy, options);
-		const persist_attr = options?.persist ? ` __persist={${JSON.stringify(options.persist)}}` : '';
+		const persist_attr = options?.keep ? ` __keep={${JSON.stringify(options.keep)}}` : '';
 		const entry_url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid);
 		return (
 			`<script${lang}>\n` +
@@ -1230,6 +1265,8 @@ export function transformHost(source, id, ctx) {
 		const fetch_when = options?.when || 'load';
 		let server_attrs = `__defer={${JSON.stringify(fetch_when)}}`;
 		if (options?.margin != null) server_attrs += ` __margin={${JSON.stringify(options.margin)}}`;
+		// Signed at mint into the hole's endpoint → the handle answers `private, max-age=cacheTtlSec`.
+		if (options?.cacheTtlSec != null) server_attrs += ` __cacheTtl={${JSON.stringify(options.cacheTtlSec)}}`;
 		if (deferred_hydrate) {
 			const module_url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid);
 			server_attrs += ` __hydrate={${JSON.stringify(options.hydrate)}}`;
@@ -1362,14 +1399,17 @@ export function transformHost(source, id, ctx) {
 			.update(`${markup}\0${captures.join(',')}\0${cleaned_imports.join('\n')}`)
 			.digest('hex')
 			.slice(0, 12);
-		const cap_line = captures.length ? `\tconst { ${captures.join(', ')} } = __ogFv;\n` : '';
+		const cap_line = captures.length
+			? `\t// svelte-ignore state_referenced_locally\n\tconst { ${captures.join(', ')} } = __ogFv;\n`
+			: '';
 		const synth =
 			`<script${lang}>\n` +
 			`\timport 'virtual:ogygia/transportables';\n` +
 			`\timport OgygiaChildTarget from ${JSON.stringify(componentPath)};\n` +
 			cleaned_imports.map((s) => `\t${s}\n`).join('') +
 			`\tlet { __ogFv = {}, children: __ogSlot, ...__ogp } = $props();\n` +
-			`\t__ogSlot; __ogFv;\n` +
+			`\t// svelte-ignore state_referenced_locally\n\t__ogSlot;\n` +
+			`\t// svelte-ignore state_referenced_locally\n\t__ogFv;\n` +
 			cap_line +
 			`</script>\n` +
 			`<OgygiaChildTarget {...__ogp}>${markup}</OgygiaChildTarget>\n`;
@@ -1470,7 +1510,7 @@ export function transformHost(source, id, ctx) {
 				lakes: [],
 				identity: ci.identity,
 				strategy: ci.mark.strategy,
-				persist: ci.mark.options?.persist
+				keep: ci.mark.options?.keep
 			});
 		}
 		const list = synth_imports_by_local.get(ci.local) ?? [];
@@ -1607,7 +1647,7 @@ export function transformHost(source, id, ctx) {
 		const deferred_hydrate = is_server && !!mark.options?.hydrate;
 		// A `wake` island is ALSO holdable: its binding attaches a descriptor onto the wrapper so
 		// `region(C)` respects the baked wake (and portable/dynamic `<C/>` still renders it). Server
-		// (`fill`) and lake islands are placement-only. The attach binding is the leg-split module the
+		// (deferred) and lake islands are placement-only. The attach binding is the leg-split module the
 		// host imports (SSR carries the signer; client is metadata) — see `wrapper_attach_binding`.
 		const wants_attach = !is_server;
 		const attach_binding = wants_attach
@@ -1649,9 +1689,9 @@ export function transformHost(source, id, ctx) {
 				// Capability marks for the per-app runtime: the actual wake schedule + defer timing +
 				// persist name, so the generated entry bundles only the features this island needs.
 				strategy: mark.strategy,
-				fill: is_server ? mark.options?.when : undefined,
+				fetchWhen: is_server ? mark.options?.when : undefined,
 				wakeAfter: deferred_hydrate ? mark.options?.hydrate : undefined,
-				persist: mark.options?.persist
+				keep: mark.options?.keep
 			});
 		}
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import Logo from '$lib/Logo.svelte';
 	import { docNav } from '$lib/docs.remote';
@@ -6,6 +7,32 @@
 
 	// Nav is a prerendered remote — cheap static JSON, grouped into ordered sections.
 	const groups = groupNav(await docNav());
+
+	// Theme switcher: light | system | dark. A no-flash inline script in the layout applies a forced
+	// theme before paint; this just reflects/cycles it. 'system' clears the attribute → prefers-color.
+	let theme = $state<'system' | 'light' | 'dark'>('system');
+	onMount(() => {
+		try {
+			const t = localStorage.getItem('ogygia-theme');
+			if (t === 'light' || t === 'dark' || t === 'system') theme = t;
+		} catch {
+			/* private mode */
+		}
+	});
+	const themeLabel = $derived(
+		theme === 'light' ? 'Light theme' : theme === 'dark' ? 'Dark theme' : 'System theme'
+	);
+	function cycleTheme() {
+		theme = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
+		try {
+			localStorage.setItem('ogygia-theme', theme);
+		} catch {
+			/* ignore */
+		}
+		const root = document.documentElement;
+		if (theme === 'system') root.removeAttribute('data-theme');
+		else root.setAttribute('data-theme', theme);
+	}
 
 	let open = $state(false);
 	let mobile = $state(false);
@@ -66,9 +93,17 @@
 	// `element.scrollIntoView()` would also scroll the document (jumping the page down to
 	// wherever the active link sits) — scrollActiveIntoView only touches scroll_el.scrollTop.
 	$effect(() => {
+		// Reading `path` makes this re-run on navigation too — the sidebar is `keep`-persisted, so it
+		// never remounts, and without this the active item would only be centred on the first load.
+		void path;
 		if (!root_el || (mobile && !open)) return;
 		const id = requestAnimationFrame(scrollActiveIntoView);
-		return () => cancelAnimationFrame(id);
+		// Fallback once layout has settled (fonts/async island hydrate can shift row heights).
+		const t = window.setTimeout(scrollActiveIntoView, 140);
+		return () => {
+			cancelAnimationFrame(id);
+			clearTimeout(t);
+		};
 	});
 
 	$effect(() => {
@@ -106,6 +141,30 @@
 				<span class="side-logo-mark" aria-hidden="true"><Logo size={22} /></span>
 				<span class="side-logo-word">ogygia</span>
 			</a>
+			<span class="side-exp" title="Experimental — the API may still change">experimental</span>
+			<button
+				type="button"
+				class="side-theme"
+				onclick={cycleTheme}
+				aria-label={themeLabel}
+				title={themeLabel}
+			>
+				{#if theme === 'light'}
+					<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="4" />
+						<path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+					</svg>
+				{:else if theme === 'dark'}
+					<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+						<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+					</svg>
+				{:else}
+					<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+						<rect x="2" y="4" width="20" height="13" rx="2" />
+						<path d="M8 21h8M12 17v4" />
+					</svg>
+				{/if}
+			</button>
 			<a
 				class="side-github"
 				href="https://github.com/PuruVJ/ogygia"
@@ -265,6 +324,18 @@
 	flex-shrink: 0;
 }
 
+.side-exp {
+	font: 600 0.5625rem/1 var(--font-mono);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent-deep) 28%, transparent);
+	border: 1px solid color-mix(in srgb, var(--accent-line) 55%, transparent);
+	padding: 0.22rem 0.4rem;
+	border-radius: 5px;
+	white-space: nowrap;
+}
+
 .side-logo {
 	display: inline-flex;
 	align-items: center;
@@ -298,8 +369,33 @@
 	padding-bottom: 0.06em;
 }
 
-.side-github {
+.side-theme {
 	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2rem;
+	height: 2rem;
+	padding: 0;
+	color: var(--text-faint);
+	background: none;
+	border-radius: 8px;
+	border: 1px solid transparent;
+	flex-shrink: 0;
+	cursor: pointer;
+	transition:
+		color 160ms ease,
+		background 160ms ease,
+		border-color 160ms ease;
+}
+
+.side-theme:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 45%, transparent);
+	border-color: color-mix(in srgb, var(--accent-line) 55%, transparent);
+}
+
+.side-github {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;

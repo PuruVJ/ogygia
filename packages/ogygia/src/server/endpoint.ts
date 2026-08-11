@@ -26,3 +26,10 @@ export const PRERENDER_REGION_TTL_SEC = 10 * 365 * 24 * 3600;
 
 /** Region ids are always 12 lowercase hex chars from the transform. */
 export const REGION_ID_RE = /^[0-9a-f]{12}$/;
+
+/**
+ * A hole's optional cache `ttl` (max-age seconds) as it rides in the endpoint URL: empty (no-store,
+ * the default) or 1–7 digits (up to ~115 days). Charset-gated before HMAC so a forged value can't
+ * reach the response header, though the MAC is the real guard.
+ */
+export const REGION_TTL_RE = /^(|[0-9]{1,7})$/;

@@ -1,5 +1,5 @@
 /**
- * `data-ogygia-persist="key"` — keep matching layout chrome across SPA body swaps.
+ * `data-ogygia-keep="key"` — keep matching layout chrome across SPA body swaps.
  *
  * Same key on outgoing + incoming body → the live node is moved into the new tree
  * (SSR markup for that key is discarded). Custom elements inside are marked so
@@ -25,7 +25,7 @@ export function install() {
 	};
 }
 
-export const PERSIST_ATTR = 'data-ogygia-persist';
+export const KEEP_ATTR = 'data-ogygia-keep';
 
 const preserving = new WeakSet<Element>();
 
@@ -33,13 +33,13 @@ export function is_persist_preserving(el: Element): boolean {
 	return preserving.has(el);
 }
 
-/** Top-level `[data-ogygia-persist]` nodes keyed by attribute value. */
+/** Top-level `[data-ogygia-keep]` nodes keyed by attribute value. */
 export function index_top_level_persist(root: ParentNode): Map<string, Element> {
 	const map = new Map<string, Element>();
-	for (const el of root.querySelectorAll(`[${PERSIST_ATTR}]`)) {
-		const key = el.getAttribute(PERSIST_ATTR)?.trim() ?? '';
+	for (const el of root.querySelectorAll(`[${KEEP_ATTR}]`)) {
+		const key = el.getAttribute(KEEP_ATTR)?.trim() ?? '';
 		if (!key || map.has(key)) continue;
-		if (el.parentElement?.closest(`[${PERSIST_ATTR}]`)) continue;
+		if (el.parentElement?.closest(`[${KEEP_ATTR}]`)) continue;
 		map.set(key, el);
 	}
 	return map;

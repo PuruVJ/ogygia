@@ -43,7 +43,7 @@ export default defineConfig({
 
 ### hooks.server.ts
 
-`ogygia.handle()` serves the signed island endpoint used by `defer` and lake `remount: 'swr'`. Compose it with `sequence()` if you already have handles. Override the path with `ogygia.handle({ endpoint: '/my-islands' })` if you do not want the default clash-safe emoji route.
+`ogygia.handle()` serves the signed island endpoint used by `render: 'deferred'` and `render: 'live'`. Compose it with `sequence()` if you already have handles. Override the path with `ogygia.handle({ endpoint: '/my-islands' })` if you do not want the default clash-safe emoji route.
 
 ```ts
 import * as ogygia from 'ogygia/server';
@@ -80,9 +80,9 @@ export default defineConfig({
 
 `mdsvex` / `shiki` stay optional peers — `ogygia.preprocess()` is `async`, loads no mdsvex when markdown is off, and `ogygia.extensions()` only adds `.svx` / `.md` when it is on. Tune themes and headings under `content: { markdown }` — see [Markdown &amp; Shiki](/docs/content/markdown).
 
-## Transport (partials over the wire)
+## Transport (held regions over the wire)
 
-Partials render inline for free, but any partial that **crosses the wire** — a search remote, a live content source — needs the `transport` hook installed once in your universal hooks:
+Held regions render inline for free, but any held region that **crosses the wire** — a search remote, a live content source — needs the `transport` hook installed once in your universal hooks:
 
 ```ts
 // src/hooks.ts

@@ -17,8 +17,8 @@ export default defineConfig({
 		ogygia({
 			visible: { margin: '120px' },
 			presets: {
-				demo: { hydrate: 'visible', margin: '200px' },
-				frozenSwr: { hydrate: 'none', remount: { revalidate: 'load' } },
+				demo: { wake: 'visible', margin: '200px' },
+				frozenSwr: { render: 'live', wake: 'load' },
 			},
 			content: {
 				markdown: {

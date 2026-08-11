@@ -63,16 +63,19 @@ export class Hmac {
 	}
 
 	/**
-	 * MAC message for a signed region capability (`v1`, always four length-prefixed fields).
-	 * Empty `session` is still a field (prerender / unbound) — never optional concat.
+	 * MAC message for a signed region capability (`v1`, always five length-prefixed fields).
+	 * Empty `session`/`ttl` are still fields (prerender / unbound / no-store) — never optional concat.
+	 * `ttl` is the response cache max-age in seconds (`''` = no-store); signing it keeps a harvested
+	 * URL from being re-pointed at a longer browser cache.
 	 */
 	static region_message(
 		id: string,
 		exp: number | string,
 		props: string,
-		session = ''
+		session = '',
+		ttl: number | string = ''
 	): string {
-		return `v1|${lp(String(id))}|${lp(String(exp))}|${lp(String(props))}|${lp(String(session))}`;
+		return `v1|${lp(String(id))}|${lp(String(exp))}|${lp(String(props))}|${lp(String(session))}|${lp(String(ttl))}`;
 	}
 }
 

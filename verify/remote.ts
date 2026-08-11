@@ -97,11 +97,14 @@ try {
 	check('query.batch: batch size reported as 3', /size 3/.test(b2) && /size 3/.test(b9), b2);
 	check('query.batch: all results from ONE server run (identical batchAt)', (await page.locator('[data-batch-onerun]').textContent()) === 'one batched run');
 
-	// prerender() on a non-prerendered page: renders (SSR + hydration) via a single GET
+	// prerender() on a non-prerendered page: renders (SSR + hydration) and is SEEDED inline (Kit
+	// csr=true parity — `p` → `prerender_responses`), so the client resolves it synchronously and does
+	// NOT re-fetch. Re-fetching a prerender remote awaited inside an island re-renders/re-mounts it on
+	// hydrate — the async-island FOUC. This asserts the seed path so that regression can't come back.
 	await page.waitForFunction(() => document.querySelector('[data-prerender-text]')?.textContent === 'islands, not hydration', { timeout: 6000 }).catch(() => {});
 	check('prerender: renders on a non-prerendered page', (await page.locator('[data-prerender-text]').textContent()) === 'islands, not hydration');
 	const manifestoReqs = remoteReqs.filter((u) => /getManifesto/.test(u));
-	check('prerender: served via a single remote GET', manifestoReqs.length === 1 && manifestoReqs[0].startsWith('GET'), manifestoReqs.join(' | ') || '(none)');
+	check('prerender: seeded inline, no client re-fetch (FOUC guard)', manifestoReqs.length === 0, manifestoReqs.join(' | ') || '(none = seeded)');
 
 	check('no unexpected page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 	await page.close();

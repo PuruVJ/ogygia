@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Svelte async hydration flash</title>
+    <!--ssr-head-->
+  </head>
+  <body style="font-family: system-ui, sans-serif; padding: 2rem">
+    <p>Open DevTools console. The box below is server-rendered green, then hydrated.</p>
+    <div id="app"><!--ssr-body--></div>
+    <script type="module" src="/src/entry-client.js"></script>
+  </body>
+</html>

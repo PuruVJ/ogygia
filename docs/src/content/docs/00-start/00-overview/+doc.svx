@@ -34,7 +34,7 @@ The island below is real — it lives on this page, marked `wake: 'load'`, while
 - **Ship far less JavaScript.** No app-wide hydration. A mostly-static page stays mostly static, so most pages cost a ~7.6 KB runtime and nothing else.
 - **Keep writing normal Svelte.** Islands are ordinary components. The import attribute is the only new syntax; there is no special island API to learn.
 - **It is still SvelteKit.** Remote functions, form actions, the router, content — the Kit features you rely on work inside islands. No forked framework, no patched Kit.
-- **One vocabulary.** Client islands, server islands, lakes, and partials are the same handful of ideas combined, not four unrelated systems.
+- **One vocabulary.** Client islands, server islands, lakes, and held regions are the same handful of ideas combined, not four unrelated systems.
 
 ## When it fits
 

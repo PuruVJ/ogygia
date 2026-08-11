@@ -70,12 +70,6 @@ export type ArmFn = (el: HTMLElement, fire: () => void) => void | (() => void);
 
 export type MorphFn = (parent: Element, nodes: Node[]) => void;
 
-export type StreamOps = {
-	active: boolean;
-	wait(slot: string): Promise<string | null>;
-	start(): void;
-};
-
 export type WireOps = {
 	TRANSPORT_WIRE_KEY: string;
 	revive_transportable: (payload: never, remember: boolean) => unknown;
@@ -117,7 +111,6 @@ export type Slots = {
 	interaction: ArmFn | null;
 	morph: MorphFn | null;
 	live: Component<Record<string, unknown>> | null;
-	stream: StreamOps | null;
 	wire: WireOps | null;
 	remoteSeeds: RemoteSeedOps | null;
 	speculate: SpeculateOps | null;
@@ -151,7 +144,6 @@ export const slots: Slots = {
 	interaction: null,
 	morph: null,
 	live: null,
-	stream: null,
 	wire: null,
 	remoteSeeds: null,
 	speculate: null,

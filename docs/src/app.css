@@ -34,8 +34,36 @@
 	--section-gap: clamp(5rem, 10vw, 8.5rem);
 }
 
+/* Light palette — applied for `data-theme="light"` (forced) OR, in system mode (no forced theme),
+   when the OS prefers light. `data-theme="dark"` forces dark by opting out of the media query. */
+:root[data-theme='light'],
+:root.__theme-light {
+	color-scheme: light;
+
+	--bg: #f2f6f4;
+	--bg-raised: #ffffff;
+	--bg-sunken: #e6ece9;
+
+	--text: #121a16;
+	--text-dim: #4a5c52;
+	--text-faint: #7a8c82;
+	--text-on-invert: #f2f6f4;
+
+	--accent: #0f7a4f;
+	--accent-strong: #0a5c3b;
+	--accent-deep: #d5efe3;
+	--accent-line: #b0d4c2;
+
+	--line: #d5e0da;
+	--line-strong: #b8c9bf;
+
+	--warn: #9a6b1c;
+
+	--shadow-panel: 0 1px 0 rgba(15, 122, 79, 0.06), 0 12px 32px -16px rgba(18, 26, 22, 0.18);
+}
+
 @media (prefers-color-scheme: light) {
-	:root {
+	:root:not([data-theme='dark']):not([data-theme='light']) {
 		color-scheme: light;
 
 		--bg: #f2f6f4;

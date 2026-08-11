@@ -38,22 +38,22 @@ The island below is interactive — the counter increments. The snapshot inside 
   <LakeDemo />
 </div>
 
-## Remount behavior
+## Keeping a lake fresh — render: live
 
-By default a lake is lifted and restored untouched. When the lake's inputs change and you want fresh server HTML, opt into a remount strategy:
+By default a lake is baked once and restored untouched. When its content should refresh in the background, make it `render: 'live'` — baked static content that revalidates:
 
 ```svelte
-<HeavyChart data={rows} with={{ wake: 'none', remount: { revalidate: 'visible' } }} />
+<HeavyChart data={rows} with={{ render: 'live', wake: 'visible' }} />
 ```
 
-`revalidate` takes the same schedule words (`load` / `idle` / `visible` / media). `remount: 'swr'` serves the cached lake immediately and refreshes it in the background through the signed island endpoint.
+`wake` is the revalidate schedule (`load` / `idle` / `visible` / media); `maxAge` and `onExpire` (set in a preset) tune staleness. `render: 'live'` serves the baked content immediately and refreshes it in the background through the signed island endpoint.
 
 > A lake restored inside persisted layout chrome is re-marked as settled after an SPA navigation, so an island nested in a lake can still wake. See [SPA router](/docs/app/router).
 
 ## Do / don't
 
 - **Do** put your heaviest static content (long prose, big charts, code) in a lake when it sits inside an island.
-- **Do** reach for `remount: 'swr'` when a lake's server HTML should refresh in the background.
+- **Do** reach for `render: 'live'` when a lake's server HTML should refresh in the background.
 - **Don't** put interactive UI in a lake — it ships no JS, so buttons and inputs are inert. That is a nested [client island](/docs/islands/client-islands) instead.
 
 

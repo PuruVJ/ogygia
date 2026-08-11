@@ -19,7 +19,7 @@
   · <code>load / idle / visible</code>
   · <code>Media queries</code>
   · <code>Server islands</code>
-  · <code>Streaming islands</code>
+  · <code>Route weaving</code>
   · <code>Live partials</code>
   · <code>Lakes</code>
   · <code>Remote functions</code>
@@ -116,12 +116,12 @@ export const dashboard = query.live(v.string(), async function* (id) {
 Static partials (`partial: 'static'`) **morph** in place across ticks; interactive ones **keep-alive**
 (new props pushed into the mounted island, local state intact). LiveView, with Svelte components.
 
-## Streaming server islands
+## Route weaving
 
-`ogygia({ stream: true })` fills `defer: 'load'` holes from the page's own response instead of a second
-request: `handle()` streams the shell, then appends each hole's server-rendered HTML as a
-`<template data-ogygia-slot>` parcel — zero extra round-trips, holes fill as they finish. Prerender /
-CDN pages and any hole that can't render server-side fall back to the per-hole fetch automatically.
+Each `defer: 'load'` server-island hole fetches its own signed HTML on load. On a SPA navigation the
+router prescans the incoming page and pulls **all** its holes down **one** batch request — no
+fetch-per-hole waterfall. Holes stream back out of order (fast-first) as each settles, and a command
+that returns a region repaints in a single flight — one round trip that both mutates and repaints.
 
 ## Content collections
 

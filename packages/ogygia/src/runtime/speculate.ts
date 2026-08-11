@@ -39,7 +39,14 @@ export function install_speculation(mode: 'hover' | 'viewport' | false): void {
 						{ href_matches: '/*' }, // same-origin path links
 						{ not: { href_matches: '/\u{1F3DD}️*' } }, // never the region endpoint
 						{ not: { selector_matches: '[rel~=nofollow]' } },
-						{ not: { selector_matches: '[data-ogygia-no-speculate]' } }
+						// `data-ogygia-speculate` cascade: `off` disables a subtree; `on` re-enables a link
+						// (or subtree) inside an off region. `on` wins over `off`.
+						{
+							or: [
+								{ not: { selector_matches: '[data-ogygia-speculate="off"], [data-ogygia-speculate="off"] *' } },
+								{ selector_matches: '[data-ogygia-speculate="on"], [data-ogygia-speculate="on"] *' }
+							]
+						}
 					]
 				},
 				eagerness

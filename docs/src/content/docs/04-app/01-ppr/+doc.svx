@@ -1,0 +1,49 @@
+---
+title: Partial prerendering
+summary: Bake the static shell at build, fill the dynamic holes per visitor — the fastest TTFB with no edge infrastructure.
+related:
+  - islands/server-islands
+  - data-state/held-regions
+  - app/router
+---
+
+A [Held region](/docs/data-state/held-regions) is exactly the dynamic hole in an otherwise-static page. Partial prerendering bakes the shell at build and fills each hole per visitor. Prerender the page, keep the holes — that's the whole recipe:
+
+```ts
+// +page.ts
+export const prerender = true;
+```
+
+```svelte
+<script>
+  import Hero from './Hero.svelte';                              // static — baked at build
+  import Recommendations from './Recs.svelte' with { render: 'deferred' };  // dynamic hole
+  import Greeting from './Greeting.svelte' with { render: 'deferred' };     // personalized hole
+</script>
+```
+
+At build, Kit emits the page as a **static file** — the shell plus each hole's fallback and a signed endpoint reference. Your CDN serves it like any asset: no server render, no cold start, edge-fast everywhere. When the page loads, each hole fetches its server-rendered HTML — fresh per visitor, cookie-personalized if the island reads cookies. The fastest possible TTFB, zero shell renders ever.
+
+## See it
+
+The frame below is a real prerendered page (`/demo/ppr`). Its **shell** clock is baked into the static file — it never moves. Its **hole** clock is a `render: 'deferred'` server island, rendered per request — it changes every reload. Hit reload and watch one page tell two different times.
+
+<script>
+  import PprFrame from '$lib/PprFrame.svelte' with { wake: 'load' };
+</script>
+
+<PprFrame />
+
+
+## The holes never age out
+
+A capability minted at prerender is signed effectively-forever (the props are already public in the static HTML, so a longer signature reveals nothing). A dynamic page's capabilities keep the short `regionTtl` window — only prerendered pages get the long-lived mint.
+
+## Set OGYGIA_SECRET
+
+By default each build signs with a fresh random key, so a redeploy would orphan the holes on previously-built static pages (and anything a CDN still caches). A stable `OGYGIA_SECRET` env var keeps every past build's holes verifying. The build warns if you prerender holes without one.
+
+## Constraints
+
+- `sessionCookie` sealing and prerendered holes don't mix: the capability is baked once for everyone, so it can't be bound to one visitor's session. Personalize inside the island (read cookies in the component) instead.
+- Speculation makes this nearly free: with the [SPA router](/docs/app/router)'s `continuity: { speculate: 'hover' }` on, the browser prerenders the next PPR page — shell from the CDN, holes filled — before the click.

@@ -27,7 +27,7 @@ function unwrap_default(resolved: unknown): unknown {
 function as_object(value: unknown, label: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error(
-			`[@ogygia/content] ${label}: expected a plain object (got ${Array.isArray(value) ? 'array' : typeof value})`
+			`[ogygia/content] ${label}: expected a plain object (got ${Array.isArray(value) ? 'array' : typeof value})`
 		);
 	}
 	return value as Record<string, unknown>;
@@ -40,11 +40,11 @@ export type MdsvexMeta = { headings: Heading[] };
 
 const mdsvex_format: Format<unknown, MdsvexMeta> = (resolved, id) => {
 	if (!resolved || typeof resolved !== 'object' || Array.isArray(resolved)) {
-		throw new Error(`[@ogygia/content] mdsvex: ${id}: expected a module with metadata`);
+		throw new Error(`[ogygia/content] mdsvex: ${id}: expected a module with metadata`);
 	}
 	const mod = resolved as Record<string, unknown>;
 	if (!('metadata' in mod)) {
-		throw new Error(`[@ogygia/content] mdsvex: ${id}: missing metadata (is mdsvex configured?)`);
+		throw new Error(`[ogygia/content] mdsvex: ${id}: missing metadata (is mdsvex configured?)`);
 	}
 	const meta = as_object(mod.metadata ?? {}, `mdsvex:${id}`);
 	const { headings, ...data } = meta as { headings?: Heading[] } & Record<string, unknown>;
@@ -78,7 +78,7 @@ export function json(input: Input<unknown>, opts: BuilderOpts = {}): Source {
 /** YAML strings (`import.meta.glob(..., { query: '?raw' })`) parsed with the `yaml` package (lazy). */
 export function yaml(input: Input<unknown>, opts: BuilderOpts = {}): Source {
 	let parseYaml: (s: string) => unknown = () => {
-		throw new Error('[@ogygia/content] yaml source used before init()');
+		throw new Error('[ogygia/content] yaml source used before init()');
 	};
 	const format: Format<unknown> = (resolved, id) => {
 		const value = unwrap_default(resolved);
@@ -87,7 +87,7 @@ export function yaml(input: Input<unknown>, opts: BuilderOpts = {}): Source {
 			try {
 				data = parseYaml(value);
 			} catch (e) {
-				throw new Error(`[@ogygia/content] yaml: ${id}: ${e instanceof Error ? e.message : String(e)}`);
+				throw new Error(`[ogygia/content] yaml: ${id}: ${e instanceof Error ? e.message : String(e)}`);
 			}
 		} else {
 			data = value;
@@ -106,7 +106,7 @@ export function yaml(input: Input<unknown>, opts: BuilderOpts = {}): Source {
 const raw_format: Format<unknown> = (resolved, id) => {
 	const value = unwrap_default(resolved);
 	if (typeof value !== 'string') {
-		throw new Error(`[@ogygia/content] raw: ${id}: expected a string (got ${typeof value})`);
+		throw new Error(`[ogygia/content] raw: ${id}: expected a string (got ${typeof value})`);
 	}
 	return { data: { body: value } };
 };

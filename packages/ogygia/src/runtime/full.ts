@@ -7,7 +7,6 @@
 import { boot } from './core.js';
 import * as remoteSeeds from './remote-seeds.js';
 import * as wire from '../live-transport.js';
-import * as stream from './stream-slots.js';
 import * as lakes from './lakes.js';
 import * as morph from './morph.js';
 import * as live from './live.js';
@@ -20,7 +19,6 @@ import * as speculate from './speculate.js';
 boot([
 	remoteSeeds.install,
 	wire.install,
-	stream.install,
 	lakes.install,
 	morph.install,
 	live.install,

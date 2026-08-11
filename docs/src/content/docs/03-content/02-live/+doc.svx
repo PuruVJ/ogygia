@@ -3,7 +3,7 @@ title: Live & CMS sources
 summary: Beyond files on disk — fetch from an API, or stream entries from something that pushes.
 related:
   - content/collections
-  - data-state/partials
+  - data-state/held-regions
 ---
 
 A `loader` is not limited to a glob. Any object with `get` / `list` / `ids` is a source, so the same collection API covers a REST API and a source that pushes over time.
@@ -75,8 +75,20 @@ export const headlines = withRemotes(press).live.list({ map: (e) => ({ id: e.id,
 
 Yield anything to re-read the whole source, or a **`string[]` of changed ids** for an incremental reload (`get(id)` each) — for a large collection where a full re-list is wasteful.
 
+## Watch it push
+
+Below, a `query.live` yields a rendered [held region](/docs/data-state/held-regions) every second. The server renders each tick and pushes the HTML down the channel; the client **morphs** it in place — no client data code, no per-tick fetch.
+
+<script>
+  import LivePartialDemo from '$lib/demos/LivePartialDemo.svelte' with { wake: 'load' };
+</script>
+
+<div class="doc-demo">
+  <LivePartialDemo />
+</div>
+
 ## Bodies over the wire
 
-These sources deliver **data** — a CMS row has no compiled `.svx` body. When a client needs to *render* an entry (a live article, a feed card), map it to a [partial](/docs/data-state/partials) of one of your own `with { region }` components: `map: (e) => region(Card, e.data)`. `<Region>` fetches and hydrates it — the one renderable that crosses the wire.
+These sources deliver **data** — a CMS row has no compiled `.svx` body. When a client needs to *render* an entry (a live article, a feed card), map it to a [held region](/docs/data-state/held-regions) of one of your own `with { region }` components: `map: (e) => region(Card, e.data)`. `<Region>` fetches and hydrates it — the one renderable that crosses the wire.
 
 > Live sources need a long-lived server. On short-lived serverless functions an in-memory stream is per-isolate — document it, and degrade gracefully rather than promising continuity.

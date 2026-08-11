@@ -54,16 +54,14 @@ node verify/portable-bindings.ts http://localhost:3051 # portable bindings: stat
 ```
 
 
-### Streaming server islands (opt-in — not in the default runner)
+### Route weaving (navigation OOO batch)
 
-Streaming (`ogygia({ stream: true })`) changes `defer: 'load'` holes to fill from the page response
-instead of a per-hole fetch, so it deliberately changes what `server-islands.ts` / `defer-timing.ts`
-assert (preload + fetch). It is therefore **not** enabled in the shared playground and not wired into
-`run.mjs`. Its pure scanner/parcel logic is covered by unit tests
-(`packages/ogygia/test/stream-regions.test.ts`). To exercise it end-to-end, flip `stream: true` in a
-throwaway fixture's `vite.config.ts` and assert: shell paints first, each hole fills from a
-`<template data-ogygia-slot>` parcel with no request to `/🏝️`, and a forced render error falls back to
-the fetch.
+On a SPA navigation the router pulls all of the incoming page's `defer: 'load'` holes down **one**
+batch POST to `/🏝️`, and each hole's HTML streams back as a `<template data-ogygia-slot>` parcel the
+moment it settles (out of order). This is covered end-to-end by `frame-weave.ts` (no per-hole
+waterfall), `frame-ooo.ts` (fast-first flush order), `frame-batch.ts` (one response, a frame per
+call, forged calls dropped), and `frame-single-flight.ts` (a command returns its region). The pure
+parcel builder is covered by unit tests (`packages/ogygia/test/stream-regions.test.ts`).
 
 Trust-boundary notes for region HMAC / SPA / seeds live in [`INVARIANTS.md`](../INVARIANTS.md).
 

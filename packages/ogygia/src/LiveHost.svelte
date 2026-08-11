@@ -12,6 +12,8 @@
 	 */
 	let { component: Component, initialProps } = $props();
 
+	// Seed once from the incoming prop; later ticks replace it via setProps(). Intentional initial read.
+	// svelte-ignore state_referenced_locally
 	let current = $state(initialProps);
 
 	/** Called by the runtime on each live tick with the same component — reactive prop push. */

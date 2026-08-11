@@ -5,10 +5,10 @@
 	import TransportWriter from '$lib/TransportWriter.svelte' with { wake: 'load' };
 	import TransportReader from '$lib/TransportReader.svelte' with { wake: 'load' };
 	// Transportable prop into a SERVER island (defer only): endpoint payload carries the wire codec.
-	import TransportServer from '$lib/TransportServerReader.svelte' with { fill: 'load' };
+	import TransportServer from '$lib/TransportServerReader.svelte' with { render: 'deferred' };
 	// Transportable prop into a deferred CLIENT island (defer+hydrate): props-sibling carries it too,
 	// and after hydration it reunites into the one live instance.
-	import TransportDeferHydrate from '$lib/TransportServerReader.svelte' with { fill: 'load', wake: 'load' };
+	import TransportDeferHydrate from '$lib/TransportServerReader.svelte' with { wake: 'load' };
 	import WidgetStore from '$lib/WidgetStore.svelte' with { wake: 'load' };
 	import WidgetReader from '$lib/WidgetReader.svelte' with { wake: 'load' };
 	import { SharedCounter } from '$lib/counter-object.svelte.js';

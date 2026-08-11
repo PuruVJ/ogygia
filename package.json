@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:lib": "pnpm --filter ogygia build && pnpm --filter @ogygia/content build",
+    "build:lib": "pnpm --filter ogygia build",
     "build": "pnpm run build:lib && pnpm --filter playground build",
     "build:docs": "pnpm run build:lib && pnpm --filter docs build",
     "dev": "pnpm run build:lib && pnpm --filter playground dev",
@@ -22,9 +22,9 @@
     "test:adapters": "node verify/adapters/run.ts",
     "e2e": "node verify/e2e.ts",
     "bundle-size": "node verify/bundle-size.ts",
-    "bench": "node bench/build-all.mjs && node bench/benchmark.mjs --config bench/frameworks.config.json --out bench/results/latest.md --json",
-    "bench:build": "node bench/build-all.mjs",
-    "bench:run": "node bench/benchmark.mjs --config bench/frameworks.config.json --out bench/results/latest.md --json"
+    "bench": "node bench/build-all.ts && node bench/benchmark.ts --config frameworks.config.json --out results/latest.md --json",
+    "bench:build": "node bench/build-all.ts",
+    "bench:run": "node bench/benchmark.ts --config frameworks.config.json --out results/latest.md --json"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

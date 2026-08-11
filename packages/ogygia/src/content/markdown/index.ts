@@ -5,7 +5,7 @@
  *
  * ```js
  * import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
- * import { markdown } from '@ogygia/content/markdown';
+ * import { markdown } from 'ogygia/content/markdown';
  *
  * export default {
  *   extensions: ['.svelte', ...markdown.extensions],
@@ -164,7 +164,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): ReturnType<typeof m
 	register_island_scanner(md, exts);
 
 	// Compose ogygia's marked-import transform AFTER mdsvex so islands authored inside `.svx` / `.md`
-	// (`import X from '…' with { wake | fill | region }`) become real islands. It runs on the
+	// (`import X from '…' with { wake | render | region }`) become real islands. It runs on the
 	// clean svelte mdsvex produces. No-op if `ogygia` isn't installed (plain content app).
 	return {
 		...md,

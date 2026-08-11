@@ -5,10 +5,10 @@
 	//   idle    -> on requestIdleCallback
 	//   visible -> when scrolled into view (IntersectionObserver) — placed far below the fold
 	//   media   -> when the media query matches
-	import GLoad from '$lib/Greeting.svelte' with { fill: 'load' };
-	import GIdle from '$lib/Greeting.svelte' with { fill: 'idle' };
-	import GVisible from '$lib/Greeting.svelte' with { fill: 'visible' };
-	import GMedia from '$lib/Greeting.svelte' with { fill: '(min-width: 300px)' };
+	import GLoad from '$lib/Greeting.svelte' with { render: 'deferred' };
+	import GIdle from '$lib/Greeting.svelte' with { render: 'deferred', wake: 'idle' };
+	import GVisible from '$lib/Greeting.svelte' with { render: 'deferred', wake: 'visible' };
+	import GMedia from '$lib/Greeting.svelte' with { render: 'deferred', wake: '(min-width: 300px)' };
 </script>
 
 <h1 data-static-shell>Defer timing variants</h1>

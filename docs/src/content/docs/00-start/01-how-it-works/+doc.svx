@@ -1,6 +1,6 @@
 ---
 title: How it works
-summary: The whole mental model in five words — Page, Island, Lake, Server island, Partial — and the tiny runtime that ties them together.
+summary: The whole mental model in five words — Page, Island, Lake, Server island, Held region — and the tiny runtime that ties them together.
 related:
   - start/install
   - islands/client-islands
@@ -28,10 +28,10 @@ Everything you build is one of these:
 | **Page** | Server HTML, no client framework. | `csr = false` |
 | **Island** | A component that becomes interactive — gets JS on a schedule. | `import C from './C.svelte' with { wake: 'load' }` |
 | **Lake** | Static HTML *inside* an island. Zero JS for that part. | `with { wake: 'none' }` used inside an island |
-| **Server island** | HTML fetched from the server after load. Placeholder first, no JS. | `with { fill: 'load' }` |
-| **Partial** | A server-*chosen* renderable you place like data — the server picks the component. | `region(Card, props)` + `<Region of={x} />` |
+| **Server island** | HTML fetched from the server after load. Placeholder first, no JS. | `with { render: 'deferred' }` |
+| **Held region** | A server-*chosen* renderable you place like data — the server picks the component. | `region(Card, props)` + `<Region of={x} />` |
 
-`hydrate` and `defer` are the two import attributes. Everything else in that table is plain English.
+`wake` and `render` are the two import attributes. Everything else in that table is plain English.
 
 ## When things happen
 

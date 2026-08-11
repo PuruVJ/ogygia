@@ -25,7 +25,7 @@
 	 * @type {{
 	 *   tree: BlockNode | BlockNode[] | null | undefined,
 	 *   registry: Record<string, unknown>,
-	 *   schedule?: (data: Record<string, unknown>) => { wake?: string, fill?: string, margin?: string }
+	 *   schedule?: (data: Record<string, unknown>) => { wake?: string, margin?: string }
 	 * }}
 	 */
 	// `schedule` (optional): a `(data) => options` resolver forwarded as `region()`'s 3rd arg — for a

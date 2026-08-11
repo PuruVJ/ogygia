@@ -76,7 +76,7 @@ function collection_of<T extends Record<string, unknown>>(handle: unknown): Coll
 	const c = (handle as Record<symbol, unknown>)?.[COLLECTION];
 	if (!(c instanceof Collection)) {
 		throw new Error(
-			'[@ogygia/content] withRemotes() expects a collection from content()/collection()'
+			'[ogygia/content] withRemotes() expects a collection from content()/collection()'
 		);
 	}
 	return c as Collection<T>;
@@ -116,7 +116,7 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 			if (mode === 'query') return query(run) as unknown as ListRemote<Out>;
 			if (c.streaming) {
 				throw new Error(
-					'[@ogygia/content] streaming `from` cannot use prerender list — use live.list() or mode: "query"'
+					'[ogygia/content] streaming `from` cannot use prerender list — use live.list() or mode: "query"'
 				);
 			}
 			return prerender(run, { dynamic: options.dynamic ?? true }) as unknown as ListRemote<Out>;

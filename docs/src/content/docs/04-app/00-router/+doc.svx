@@ -2,7 +2,7 @@
 title: SPA router
 summary: Opt-in client navigation for islands apps — intercept links, swap the body, keep chrome persistent.
 related:
-  - app/streaming-ppr
+  - app/ppr
   - data-state/remote-functions
 ---
 
@@ -34,12 +34,48 @@ The router honors Kit's full preload grammar, so existing `data-sveltekit-preloa
 
 Values `eager` / `viewport` / `hover` / `tap` warm the page-HTML cache at the matching moment, with Kit's nearest-ancestor inheritance.
 
-## Persist layout chrome {#persist}
+## Weaving server islands {#weave}
 
-Mark a subtree with `data-ogygia-persist` and it survives navigations untouched — its DOM (and any island state, scroll position, or playing media inside) is relocated across the body swap instead of remounted. This is how a sidebar keeps its scroll position as you move between pages.
+When you navigate into a page with several [server islands](/docs/islands/server-islands), the router prescans the incoming page and pulls **all** its `render: 'deferred'` load holes down **one** batch request — not a fetch per hole, no waterfall. It is automatic; there is no attribute to set.
+
+The flush is out of order: each hole's HTML comes back the moment that region settles, so a fast region lands before a slow one regardless of source order. Content appears as it is ready. A [command that returns a region](/docs/data-state/held-regions) rides the same one-response path — a single flight that both mutates and repaints.
+
+## Speculative prerender {#speculate}
+
+Prefetch warms the *HTML cache*. **Speculation goes further: the browser fully prerenders the next page** — runs its JS, fills its islands, resolves its server-island holes — in a hidden tab, before you click. Click, and it is swapped in instantly, already interactive. Combined with [PPR static shells](/docs/app/ppr) the prerender is nearly free, so navigation feels like it has no cost at all.
+
+Turn it on in the plugin config:
+
+```ts
+// vite.config.ts
+ogygia({
+  continuity: {
+    speculate: 'hover'    // prerender on ~200ms hover dwell (moderate eagerness)
+    // speculate: 'viewport'  // prerender as soon as a link scrolls into view (eager)
+  }
+});
+```
+
+It uses the native [Speculation Rules API](https://developer.mozilla.org/en-US/docs/Web/API/Speculation_Rules_API) — no library, no client cost. ogygia injects one rules script that matches same-origin path links, and it is feature-detected: where the browser has no support it does nothing (the router's own prefetch still applies).
+
+Two things are never speculated: the signed region endpoint, and `rel="nofollow"` links. Beyond that, `data-ogygia-speculate` gives you a cascade — set `off` on a subtree, and `on` back on a single link (or subtree) inside it. `on` wins over `off`.
 
 ```svelte
-<div data-ogygia-persist="sidebar">
+<!-- turn a whole section off, re-enable one link inside it -->
+<nav data-ogygia-speculate="off">
+  <a href="/logout">Log out</a>          <!-- not prerendered (has a side effect) -->
+  <a href="/inbox" data-ogygia-speculate="on">Inbox</a>  <!-- prerendered anyway -->
+</nav>
+```
+
+Reach for `off` on links with side effects you do not want fired early (a logout, a one-time action), or when you are debugging navigation and want a cold click; reach for `on` to re-enable the ones inside that are safe.
+
+## Keep layout chrome {#keep}
+
+Mark a subtree with `data-ogygia-keep` and it survives navigations untouched — its DOM (and any island state, scroll position, or playing media inside) is relocated across the body swap instead of remounted. This is how a sidebar keeps its scroll position as you move between pages.
+
+```svelte
+<div data-ogygia-keep="sidebar">
   <SideNav />
 </div>
 ```
@@ -54,8 +90,9 @@ The router does no script processing: `<script>` tags injected by a body swap do
 
 ## Do / don't
 
-- **Do** wrap persistent chrome (sidebar, player, header) in `data-ogygia-persist` so it keeps state across navigations.
+- **Do** wrap persistent chrome (sidebar, player, header) in `data-ogygia-keep` so it keeps state across navigations.
 - **Do** use the `data-sveltekit-preload-*` attributes you already know — they work unchanged.
+- **Do** turn on `continuity: { speculate: 'hover' }` for app-like instant navigation — with PPR shells it is nearly free. Opt risky links out with `data-ogygia-speculate="off"` (and `="on"` to re-enable one inside).
 - **Don't** expect injected `<script>` tags to run after a body swap; put per-navigation code in an island.
 - **Don't** add the router if a plain MPA is enough — it is opt-in for a reason.
 

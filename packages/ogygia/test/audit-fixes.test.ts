@@ -87,7 +87,7 @@ describe('audit fixes — transform contract', () => {
 			() =>
 				run(
 					wrap(
-						`import G from './G.svelte' with { fill: 'load' };\n\timport Lake from './Lake.svelte' with { wake: 'none' };`,
+						`import G from './G.svelte' with { render: 'deferred' };\n\timport Lake from './Lake.svelte' with { wake: 'none' };`,
 						'<G><Lake /></G>'
 					)
 				),
@@ -118,7 +118,7 @@ describe('audit fixes — transform contract', () => {
 				run(wrap(`import C from './C.svelte' with { preset: 'marginOnly' };`, '<C />'), makeCtx({
 					presets: { marginOnly: { margin: '10px' } }
 				})),
-			/must set `hydrate` or `defer`/
+			/must set `render` or `wake`/
 		);
 	});
 
@@ -411,11 +411,12 @@ describe('audit fixes — remote clear', () => {
 });
 
 describe('audit fixes — session-bound MAC', () => {
-	it('always uses v1 length-prefixed fields; empty session is still a field', () => {
+	it('always uses v1 length-prefixed fields; empty session/ttl are still fields', () => {
 		const secret = 'test-secret-key-16b';
 		const unbound = region_mac_message('id', '1', 'props');
 		expect(unbound).toMatch(/^v1\|/);
-		expect(unbound).toContain('|0:'); // empty session field
+		// Five fields: id | exp | props | session('') | ttl('').
+		expect(unbound).toBe('v1|2:id|1:1|5:props|0:|0:');
 		const bound = region_mac_message('id', '1', 'props', 'sess');
 		expect(bound).toContain('|4:sess');
 		expect(unbound).not.toBe(bound);
@@ -423,6 +424,10 @@ describe('audit fixes — session-bound MAC', () => {
 		expect(verify(secret, bound, sig)).toBe(true);
 		expect(verify(secret, region_mac_message('id', '1', 'props', 'other'), sig)).toBe(false);
 		expect(verify(secret, unbound, sig)).toBe(false);
+		// A different ttl is a different message (ttl is signed, so it can't be re-pointed).
+		const ttl_bound = region_mac_message('id', '1', 'props', 'sess', '300');
+		expect(ttl_bound).toContain('|3:300');
+		expect(verify(secret, ttl_bound, sign(secret, bound))).toBe(false);
 	});
 });
 

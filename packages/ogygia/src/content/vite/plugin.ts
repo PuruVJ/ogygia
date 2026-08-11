@@ -50,7 +50,7 @@ function is_remote_module(id: string) {
  * ```ts
  * // vite.config.ts
  * import { sveltekit } from '@sveltejs/kit/vite';
- * import content from '@ogygia/content/vite';
+ * import content from 'ogygia/content/vite';
  *
  * export default {
  *   plugins: [content(), sveltekit()]
@@ -111,7 +111,7 @@ export function content(options: ContentPluginOptions = {}): Plugin {
 				}
 
 				server.config.logger.info(
-					`[@ogygia/content] sources changed (${files.length} file(s)) → invalidate ${invalidated} module(s), full-reload`
+					`[ogygia/content] sources changed (${files.length} file(s)) → invalidate ${invalidated} module(s), full-reload`
 				);
 				server.ws.send({ type: 'full-reload', path: '*' });
 			};

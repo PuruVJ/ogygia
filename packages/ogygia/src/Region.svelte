@@ -24,7 +24,6 @@
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { islandDeps } from 'virtual:ogygia/island-deps';
-	import { stream as streamEnabled } from 'virtual:ogygia/stream';
 	import { makeRegionEndpoint, mintServerIsland } from 'virtual:ogygia/region-endpoint';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
@@ -44,7 +43,7 @@
 		media,
 		load,
 		interaction,
-		__persist,
+		__keep,
 		// island + server shared
 		__entry,
 		__component,
@@ -56,6 +55,8 @@
 		__hydrate,
 		__hydrateMargin,
 		__module,
+		// Response cache max-age in seconds for this deferred hole (absent/0 → no-store). Signed at mint.
+		__cacheTtl,
 		ogygiaFallback,
 		// lake
 		__remount = 'cache',
@@ -65,6 +66,7 @@
 	} = $props();
 
 	// Keep entry `.svelte` imports alive for FOUC without rendering them (the virtual owns the tree).
+	// svelte-ignore state_referenced_locally
 	void __css;
 
 	const LT = String.fromCharCode(60); // <
@@ -72,9 +74,15 @@
 
 	// A held interactive dual renders exactly like a placed island — same SSR-inline + self-hydrate —
 	// so both feed the island branch. A held static dual (no schedule) renders bare, like inline.
+	// These read fixed-per-instance props (`of`/`__mode` never change for a given wrapper), so reading
+	// them once is intentional — not a missed reactive capture.
+	// svelte-ignore state_referenced_locally
 	const held_dual_island = !!(of && of.kind === 'dual' && of.hydrate);
+	// svelte-ignore state_referenced_locally
 	const is_island = __mode === 'island' || held_dual_island;
+	// svelte-ignore state_referenced_locally
 	const is_server = __mode === 'server';
+	// svelte-ignore state_referenced_locally
 	const is_lake = __mode === 'lake';
 
 	// Nested rule (islands/server): a region inside an already-awake region hydrates with its parent,
@@ -162,8 +170,10 @@
 	const server_endpoint = $derived.by(() => {
 		if (!is_server || nested) return '';
 		// Routed through the client-stubbed virtual (returns '' on the client); encodes, size-checks
-		// (throws), and signs on the server. Same URL/MAC/TTL as every other mint path.
-		return mintServerIsland(__entry, __props);
+		// (throws), and signs on the server. Same URL/MAC/TTL as every other mint path. `__cacheTtl`
+		// (seconds, from the preset's `maxAge`) is signed in so the handle sets Cache-Control; absent
+		// → 0 → the hole is served `no-store` (dynamic by default).
+		return mintServerIsland(__entry, __props, __cacheTtl || 0);
 	});
 
 	// DOM `entry`: importable module URL when a deferred island wakes after swap; opaque id otherwise.
@@ -195,8 +205,8 @@
 		return html;
 	});
 	const server_fetch_preload = $derived.by(() => {
-		// Only `defer: 'load'`, non-stream, non-prerender: start the endpoint fetch during HTML parse.
-		if (nested || building || streamEnabled || __defer !== 'load' || !server_endpoint) return '';
+		// Only `defer: 'load'`: start the endpoint fetch during HTML parse (warms the per-hole load).
+		if (nested || building || __defer !== 'load' || !server_endpoint) return '';
 		const href_attr = server_endpoint.split('&').join('&amp;');
 		return LT + 'link rel="preload" as="fetch" crossorigin="anonymous" href="' + href_attr + '"' + GT;
 	});
@@ -277,7 +287,7 @@
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}
-			data-ogygia-persist={__persist || undefined}
+			data-ogygia-keep={__keep || undefined}
 		>{#if Component}<Component {...island_props}>{@render island_children?.()}</Component>{/if}</ogygia-region>{@html island_props_script}{/if}
 {:else if is_server}
 	{@const Component = __component}

@@ -120,9 +120,9 @@ export function glob<V = unknown>(
 	for (const key of keys) {
 		const id = idFor(key);
 		if (!id || id.includes('..') || id.startsWith('/')) {
-			throw new Error(`[@ogygia/content] illegal id '${id}' for ${key}`);
+			throw new Error(`[ogygia/content] illegal id '${id}' for ${key}`);
 		}
-		if (byId.has(id)) throw new Error(`[@ogygia/content] duplicate id '${id}' (${key})`);
+		if (byId.has(id)) throw new Error(`[ogygia/content] duplicate id '${id}' (${key})`);
 		byId.set(id, key);
 	}
 	const load = async (key: string): Promise<V> => {
@@ -198,7 +198,7 @@ export function mapRaw<A, B>(src: RawSource<A>, fn: (value: A) => B): RawSource<
 /** A source over an in-memory array — for tests, fixtures, or already-fetched records. */
 export function fromArray<Meta = Record<string, never>>(entries: SourceEntry<Meta>[]): Source<Meta> {
 	const map = new Map(entries.map((e) => [e.id, e]));
-	if (map.size !== entries.length) throw new Error('[@ogygia/content] fromArray: duplicate id');
+	if (map.size !== entries.length) throw new Error('[ogygia/content] fromArray: duplicate id');
 	return {
 		async get(id) {
 			return map.get(id) ?? null;

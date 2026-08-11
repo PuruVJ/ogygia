@@ -1,13 +1,13 @@
 ---
 title: Client islands
-summary: Mark an import with hydrate and the component gets JS on a schedule. Everything else stays static.
+summary: Mark an import with `wake` and the component gets JS on a schedule. Everything else stays static.
 related:
   - islands/timing-nesting
   - islands/server-islands
   - islands/lakes
 ---
 
-A **client island** is a component that becomes interactive. You mark its import with `hydrate`, and ogygia ships JS for that component on a schedule. The rest of the page stays server HTML with zero client JS.
+A **client island** is a component that becomes interactive. You mark its import with `wake`, and ogygia ships JS for that component on a schedule. The rest of the page stays server HTML with zero client JS.
 
 > **When to use.** Reach for a client island whenever a piece of the page needs to respond to the user — a counter, a menu, a form widget, a chart. If it never needs JS, leave it unmarked (it stays HTML) or make it a [lake](/docs/islands/lakes).
 
@@ -23,7 +23,7 @@ The marked import binding **is** the island — a portable wrapper. Use it like 
 
 ## The schedules
 
-`hydrate` takes the same timing words everywhere:
+`wake` takes the same timing words everywhere:
 
 | Value | JS runs |
 | --- | --- |

@@ -37,3 +37,4 @@ catalog), fatal on a big one. A page doing K reads over an N-entry collection wa
 
 Transform side was already linear and needed no change: 3400–4000 hosts/s, dedupe holds
 (49k island usages → 420 distinct chunks at millions scale).
+| render-vocab-refactor | 88.1 | 32.8 | 0.0 | 11997 | 13051 | - |

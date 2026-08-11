@@ -86,14 +86,14 @@ export class Collection<
 	#backlinkKey: string | null = null;
 
 	constructor(opts: CollectionBaseOptions<Data, Meta>) {
-		if (!opts || opts.loader == null) throw new Error('[@ogygia/content] content() requires `loader`');
+		if (!opts || opts.loader == null) throw new Error('[ogygia/content] content() requires `loader`');
 		if (
 			typeof opts.loader.get !== 'function' ||
 			typeof opts.loader.list !== 'function' ||
 			typeof opts.loader.ids !== 'function'
 		) {
 			throw new Error(
-				'[@ogygia/content] `loader` must be a source ({ get, list, ids }) — use mdsvex()/json()/blocks()/… or glob()/fromArray()'
+				'[ogygia/content] `loader` must be a source ({ get, list, ids }) — use mdsvex()/json()/blocks()/… or glob()/fromArray()'
 			);
 		}
 		this.#opts = opts;
@@ -166,10 +166,10 @@ export class Collection<
 	/** Validate + shape one source record into a catalog entry (schema runs on `data`). */
 	async #normalize(row: SourceEntry<Meta>, seen?: Set<string>): Promise<ContentEntry<Data, Meta>> {
 		if (!row?.id || typeof row.id !== 'string') {
-			throw new Error('[@ogygia/content] source entry missing string id');
+			throw new Error('[ogygia/content] source entry missing string id');
 		}
 		if (seen) {
-			if (seen.has(row.id)) throw new Error(`[@ogygia/content] duplicate id '${row.id}'`);
+			if (seen.has(row.id)) throw new Error(`[ogygia/content] duplicate id '${row.id}'`);
 			seen.add(row.id);
 		}
 		const data = (await parseSchema(this.#opts.schema, row.data ?? {}, `content/${row.id}`)) as Data;
@@ -229,7 +229,7 @@ export class Collection<
 							}
 						}
 					} catch (err) {
-						console.error('[@ogygia/content] live source failed:', err);
+						console.error('[ogygia/content] live source failed:', err);
 					}
 				})();
 			}

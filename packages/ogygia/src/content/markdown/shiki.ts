@@ -138,7 +138,7 @@ export async function highlight(
 	const cfg = options ? normalize_shiki(options) : active;
 	if (!cfg) {
 		throw new Error(
-			'[@ogygia/content/markdown] highlight() needs markdown() in svelte.config, or pass options as the third argument'
+			'[ogygia/content/markdown] highlight() needs markdown() in svelte.config, or pass options as the third argument'
 		);
 	}
 	const highlighter = await get_highlighter(cfg);

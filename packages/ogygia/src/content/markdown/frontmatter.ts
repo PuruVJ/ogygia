@@ -31,7 +31,7 @@ export function parseFrontmatter(source: string): FrontmatterResult {
 		}
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : String(e);
-		throw new Error(`[@ogygia/content] invalid frontmatter YAML: ${msg}`);
+		throw new Error(`[ogygia/content] invalid frontmatter YAML: ${msg}`);
 	}
 	return { data, body: after };
 }

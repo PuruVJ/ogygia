@@ -16,6 +16,8 @@
  * ```
  */
 import { REGION_BRAND } from './region.js';
+import { frameAddress } from './frame.js';
+import { ticket, write } from './runtime/frame-store.js';
 
 type EncodedRegion = {
 	i: string; // id
@@ -53,6 +55,15 @@ export const ogygiaTransport = {
 			);
 		},
 		decode(raw: EncodedRegion) {
+			// SINGLE-FLIGHT: an awaited region carries baked HTML (`x`). Writing it to the frame store
+			// at its CALL address updates any region already mounted for that call — in place, no
+			// fetch. So a command that returns `await region(C, props)` settles the write AND refreshes
+			// every matching region in one response. Client-only (decode revives the wire value in the
+			// browser); on the server the store is inert.
+			if (raw.x != null && typeof document !== 'undefined') {
+				const a = frameAddress(raw.u);
+				write({ a, v: ticket(a), html: raw.x });
+			}
 			return {
 				[REGION_BRAND]: true,
 				kind: 'deferred' as const,

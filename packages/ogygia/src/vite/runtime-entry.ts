@@ -16,7 +16,6 @@ export type RuntimeMarks = {
 	router?: boolean;
 	live?: boolean;
 	morph?: boolean;
-	stream?: boolean;
 	lakes?: boolean;
 	speculate?: 'hover' | 'viewport' | false;
 	forms?: boolean;
@@ -27,7 +26,6 @@ export type RuntimeMarks = {
 export type FeatureId =
 	| 'remote-seeds'
 	| 'wire'
-	| 'stream'
 	| 'lakes'
 	| 'morph'
 	| 'live'
@@ -80,11 +78,6 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 		deps: [],
 		detect: (m) => m.live === true
 	},
-	stream: {
-		module: 'stream-slots.js',
-		deps: [],
-		detect: (m) => m.stream === true || (m.defer || []).includes('load')
-	},
 	speculate: {
 		module: 'speculate.js',
 		deps: [],
@@ -105,7 +98,6 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 export const FEATURE_ORDER: FeatureId[] = [
 	'remote-seeds',
 	'wire',
-	'stream',
 	'lakes',
 	'morph',
 	'live',

@@ -4,7 +4,7 @@
 	import '$lib/styles/widget.css';
 
 	let {
-		title = "fill: 'load' · ServerGreeting.svelte",
+		title = "render: 'deferred' · ServerGreeting.svelte",
 		codeHtml,
 		live
 	}: {

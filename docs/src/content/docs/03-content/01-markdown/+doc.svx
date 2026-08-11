@@ -4,7 +4,7 @@ summary: An opinionated mdsvex + Shiki preprocessor with heading ids and collect
 related:
   - content/collections
   - content/live
-  - data-state/partials
+  - data-state/held-regions
 ---
 
 ogygia ships an opinionated markdown pipeline: mdsvex for `.svx` / `.md`, Shiki for fences, pandoc-style heading ids, and a headings collector that fills each entry's `meta.headings` for a TOC. Turn it on under `ogygia({ content: { markdown } })` — the setup lives on the [Install](/docs/start/install) page.

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A persisted island: an ever-ticking "playback" counter. With `persist: 'player'` the SAME live
+	// A persisted island: an ever-ticking "playback" counter. With `keep: 'player'` the SAME live
 	// app + DOM relocate across SPA navigations, so playback never resets and never skips a beat.
 	let { track = 'none' }: { track?: string } = $props();
 	let ticks = $state(0);

@@ -5,9 +5,9 @@
  *
  * ```svelte
  * <script>
- *   import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
- *   import Chart from '$lib/Chart.svelte' with { hydrate: 'visible' };
- *   import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
+ *   import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+ *   import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
+ *   import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
  * </script>
  * ```
  *
@@ -25,6 +25,12 @@ export { default as Boundary } from './OgygiaBoundary.svelte';
 // Regions held as values — server-chosen renders you place like data. `region()` mints, `<Region>` renders.
 export { default as Region } from './Region.svelte';
 export { region, isRegion } from './region.js';
+// Warm a deferred/live region's frame now, before its binder wakes — the "fetch now, activate later" escape hatch.
+export { preload } from './preload.js';
+
+// Serialize a self-contained function into a blocking inline `<script>` string — a theme setter (no
+// dark-mode flash), a deferred font, an early flag. `{@html script(fn)}`, put the tag where you like.
+export { script } from './script.js';
 
 // Blocks — the render half of a visual/JSON page builder. A tree of `type`d nodes → registered
 // islands, only the referenced block types load. Pairs with the `blocks()` content format.
