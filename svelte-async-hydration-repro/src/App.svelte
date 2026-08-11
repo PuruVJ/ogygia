@@ -1,14 +1,27 @@
 <script>
-  // A top-level `await` makes this an ASYNC component (needs experimental.async).
-  const label = await new Promise((r) => setTimeout(() => r('server-rendered content'), 50));
+  // Async data driving an `{#each}` INSIDE the fixed root — mirrors SideNav: `await docNav()` feeds a
+  // nav list rendered inside `<div class="side-root" class:side-root--open={open}>`.
+  const items = await Promise.resolve(['Overview', 'How it works', 'Install', 'Quickstart']);
+  let open = false;
 </script>
 
-<div class="box" data-box>{label}</div>
+<div class="panel" class:panel--open={open} data-box>
+  <div class="header">nav</div>
+  <ul>
+    {#each items as it}
+      <li>{it}</li>
+    {/each}
+  </ul>
+</div>
 
 <style>
-  /* If the class is present the box is green. If the class is (transiently) removed during
-     hydration, the box paints unstyled — that is the visible flash. */
-  .box {
+  .panel {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: 220px;
+  }
+  .header {
     padding: 1.5rem 2rem;
     border-radius: 12px;
     background: seagreen;

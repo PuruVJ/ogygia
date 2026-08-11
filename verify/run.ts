@@ -32,6 +32,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['fetch-checks.ts', true, 'SSR island HTML, no Kit bootstrap'],
 	['browser.ts', true, 'hydration, load/idle/visible/media, devalue, SPA'],
 	['console.ts', true, 'zero hydration_mismatch across pages (incl. /lakes)'],
+	['hydrate-in-place.ts', true, 'islands adopt SSR root (no discard+recreate / class-less flash)'],
 	['lakes.ts', true, 'frozen region, no client JS, island-in-lake, restore, remount cache/swr'],
 	['nested.ts', true, 'island-in-island single hydration + dev warn'],
 	['server-islands.ts', true, "defer fallback/endpoint/HMAC/cookie/CSS"],

@@ -112,6 +112,15 @@ try {
 		await nav.waitForTimeout(250);
 		const navCount = () => nav.locator('[data-ctx-reader="nav"] [data-ctx-count]').innerText();
 		check('SPA nav: reader reads context on new page (3)', (await navCount()) === '3', `count=${await navCount()}`);
+		// Regression: the destination page's CSS must survive island `<svelte:head>` hydration. Clean
+		// in-place hydration runs that head reconciliation, which removes a TRAILING head-node range —
+		// so the router inserts SPA stylesheets at the TOP of <head>. Before the fix, this page's
+		// `:global(ogygia-region){display:block}` was reclaimed, collapsing the layout until the reader
+		// island overlapped the writer button (making it unclickable).
+		const navRegionDisplay = await nav.evaluate(
+			() => getComputedStyle(document.querySelector('ogygia-region')!).display
+		);
+		check('SPA nav: destination page CSS survives hydration (region display:block)', navRegionDisplay === 'block', navRegionDisplay);
 		await nav.locator('[data-ctx-writer] button').click();
 		await nav.waitForTimeout(80);
 		check('SPA nav: live update works after nav (4)', (await navCount()) === '4', `count=${await navCount()}`);

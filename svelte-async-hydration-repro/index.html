@@ -7,7 +7,11 @@
   </head>
   <body style="font-family: system-ui, sans-serif; padding: 2rem">
     <p>Open DevTools console. The box below is server-rendered green, then hydrated.</p>
-    <div id="app"><!--ssr-body--></div>
+    <!-- The island host. An UNREGISTERED custom element renders as `display: inline` by default —
+         exactly like ogygia's <ogygia-region>. That inline box can pick up a transient line box during
+         hydration; a <div> (block) can't, which is why the earlier control missed the bounce. -->
+    <repro-region id="app"><!--ssr-body--></repro-region>
+    <div id="sibling" style="height: 40px; background: #eee; margin-top: 8px">sibling — watch my top</div>
     <script type="module" src="/src/entry-client.js"></script>
   </body>
 </html>

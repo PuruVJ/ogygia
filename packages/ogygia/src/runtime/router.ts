@@ -702,7 +702,9 @@ class SpaRouter {
 					link.addEventListener('error', () => resolve(), { once: true });
 				})
 			);
-			document.head.appendChild(link);
+			// Insert at the TOP of <head>, not the end: an island's `<svelte:head>` hydration removes a
+			// trailing node range, so a stylesheet appended after the island head blocks gets reclaimed.
+			document.head.insertBefore(link, document.head.firstChild);
 		}
 		if (!pending.length) return Promise.resolve();
 		// Never let a hung stylesheet block the swap indefinitely.
