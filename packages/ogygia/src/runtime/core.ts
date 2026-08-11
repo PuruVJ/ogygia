@@ -629,6 +629,27 @@ class OgygiaRegion extends HTMLElement {
 		if (this.#app || this.#hydrating) return;
 		this.#hydrating = true;
 		let lifted: Array<LiftedLake> | null = null;
+		// [ogygia][hydrate-debug] TEMP instrumentation (remove after the deploy-only hydration bug is
+		// diagnosed): snapshot the island's DOM state; logged ONLY when hydrate throws, so it tells us
+		// whether the SSR content was empty / partial / complete and correctly comment-marked at the
+		// moment of failure — distinguishing a streaming/timing race from a structural mismatch.
+		let __pre: Record<string, unknown> | null = null;
+		const __snap = (): Record<string, unknown> => {
+			const html = this.innerHTML;
+			return {
+				entry: this.getAttribute('entry'),
+				readyState: typeof document !== 'undefined' ? document.readyState : '?',
+				connected: this.isConnected,
+				deferred: is_deferred(this),
+				childNodes: this.childNodes.length,
+				firstChild: this.firstChild ? `${this.firstChild.nodeName}#${this.firstChild.nodeType}` : 'NULL',
+				openMarker: html.includes('<!--['),
+				closeMarker: html.includes('<!--]'),
+				htmlLen: html.length,
+				htmlHead: html.slice(0, 200),
+				t: Math.round(performance.now())
+			};
+		};
 		try {
 			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page
 			await dom_ready();
@@ -661,6 +682,8 @@ class OgygiaRegion extends HTMLElement {
 
 			lifted = slots.lakes.lift(this);
 			if (!this.isConnected) return;
+
+			__pre = __snap(); // [ogygia][hydrate-debug] DOM state right before the envelope + hydrate
 
 			// Hydration envelope: `hydrate()` anchors on a top-level `<!--[-->` comment and then
 			// expects the component's OWN region envelope — but embedded SSR (Region.svelte)
@@ -727,6 +750,19 @@ class OgygiaRegion extends HTMLElement {
 			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		} catch (err) {
 			console.error('[ogygia] hydration failed for', this.getAttribute('entry'), err);
+			// [ogygia][hydrate-debug] TEMP — ground-truth DOM state at the failure (remove after diagnosis).
+			try {
+				console.error(
+					'[ogygia][hydrate-debug]',
+					JSON.stringify({
+						pre: __pre,
+						post: __snap(),
+						err: err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+					})
+				);
+			} catch {
+				/* noop */
+			}
 		} finally {
 			// If hydrate threw after lift, put lake DOM back so the page isn't permanently blank.
 			if (lifted) slots.lakes.restore(this, lifted);
