@@ -44,6 +44,16 @@ export type {
 	RegionOptions,
 	RegionSchedule
 } from './region.js';
+
+// A deferred / server island renders its own HTML on the server; while it's in flight the call site
+// may pass a reserved `{#snippet ogygiaFallback()}` to show meanwhile. Declare the island
+// component's props with this so `svelte-check` accepts that snippet at the call site:
+//   `let { …realProps }: Fallback<{ …realProps }> = $props();`
+// The compiler consumes the snippet (the island component never receives it) — this is purely the
+// type that teaches the checker the reserved slot exists. `svelte-check` type-checks raw component
+// source (it does not run preprocessors for its type pass), so the fallback slot must be declared
+// here, on the component, and cannot be injected by tooling.
+export type Fallback<P = unknown> = P & { ogygiaFallback?: import('svelte').Snippet };
 export { ogygiaTransport as transport } from './transport.js';
 
 // Transportable state — a class crosses island boundaries as a prop by declaring

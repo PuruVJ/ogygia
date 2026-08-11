@@ -51,8 +51,8 @@ jobs:
           pnpm -r update --latest svelte @sveltejs/kit
           # Record the resolved versions the apps actually build against, for the failure report.
           {
-            echo "SVELTE_VERSION=$(node -p "require('./docs/node_modules/svelte/package.json').version")"
-            echo "KIT_VERSION=$(node -p "require('./docs/node_modules/@sveltejs/kit/package.json').version")"
+            echo "SVELTE_VERSION=$(node -p "require('./apps/docs/node_modules/svelte/package.json').version")"
+            echo "KIT_VERSION=$(node -p "require('./apps/docs/node_modules/@sveltejs/kit/package.json').version")"
           } >> "$GITHUB_ENV"
 
       - name: Show the versions under test

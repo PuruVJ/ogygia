@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Frame — the one wire unit of the frames architecture (see thinking/frames.md).
+// Frame — the one wire unit of the frames architecture (see internal/notes/frames.md).
 //
 // A region is a call (component + props); the call is the ADDRESS; content travels as frames:
 // `{ a, v, html }`. Every delivery channel (defer fetch, streamed parcel, mutation fragment, live

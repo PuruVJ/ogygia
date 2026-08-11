@@ -21,9 +21,8 @@
 	import { region } from './region.js';
 
 	/**
-	 * @typedef {{ type: string, props?: Record<string, unknown>, children?: BlockNode[], id?: string | number }} BlockNode
 	 * @type {{
-	 *   tree: BlockNode | BlockNode[] | null | undefined,
+	 *   tree: import('./content/blocks.js').BlockNode | import('./content/blocks.js').BlockNode[] | null | undefined,
 	 *   registry: Record<string, unknown>,
 	 *   schedule?: (data: Record<string, unknown>) => { wake?: string, margin?: string }
 	 * }}
@@ -35,6 +34,7 @@
 
 	const nodes = $derived(Array.isArray(tree) ? tree : tree ? [tree] : []);
 
+	/** @param {string} type */
 	function binding_for(type) {
 		const b = registry?.[type];
 		if (!b && import.meta.env && import.meta.env.DEV) {
@@ -50,7 +50,7 @@
 {#each nodes as node, i (node?.id ?? i)}
 	{@const binding = binding_for(node?.type)}
 	{#if binding}
-		<Region of={region(binding, node.props ?? {}, schedule)}>
+		<Region of={region(/** @type {import('svelte').Component<Record<string, unknown>>} */ (binding), node.props ?? {}, schedule)}>
 			{#if node.children && node.children.length}<Self tree={node.children} {registry} {schedule} />{/if}
 		</Region>
 	{/if}

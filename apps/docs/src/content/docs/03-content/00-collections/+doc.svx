@@ -1,0 +1,102 @@
+---
+title: Content collections
+summary: RF-native content collections. One collection, two faces — data over the wire, bodies as components.
+related:
+  - content/markdown
+  - content/live
+  - content/blocks
+---
+
+`ogygia/content` gives SvelteKit content collections that fit the islands model. **This docs site is built on it** — every page you are reading is a `.svx` entry rendered through it.
+
+> **When to use.** Reach for collections whenever you have a *set of content* with typed frontmatter — docs, a blog, a changelog, product pages — and you want a nav or index over the wire *and* full rendered bodies on the page. The [live sources](/docs/content/live) variant extends the same API to a CMS or an API feed.
+
+One rule governs the whole surface: **the boundary picks the representation.** Stay on the server and you get the whole entry, body and all. Cross the wire and you get plain data.
+
+| read | returns | where |
+| --- | --- | --- |
+| `get(id)` | `{ id, data, meta, body }` — body is a held region | server only |
+| `list({ map })` | a mapped data array | over the wire |
+| `live.get` / `live.list` | mapped data, re-emitted on change | over the wire (live) |
+
+## Define the collection once
+
+Put it in a plain module so both faces can reach it:
+
+```ts
+// src/lib/collections.ts
+import { content, markdown } from 'ogygia/content';
+import * as v from 'valibot';
+
+export const docs = content({
+  // `loader` is a source; `markdown()` wraps the glob. Data + Meta are inferred — no annotations.
+  loader: markdown(import.meta.glob('../content/docs/**/*.svx', { eager: true })),
+  schema: v.object({ title: v.string(), section: v.string() }),
+  filter: (e) => !e.data.draft   // visibility, declared ONCE
+});
+```
+
+`filter` is honored on every read path — `list`, `get`, `live`, and prerender inputs. A draft is invisible everywhere, including by direct URL. A per-remote filter can only narrow it further, never widen.
+
+## Data for the wire: `list`
+
+`list` and `live.list` mint real Kit remotes. Mint them in a `.remote.ts` (Kit requires every export there to be a remote); the consumer passes the args:
+
+```ts
+// src/lib/docs.remote.ts
+import { withRemotes } from 'ogygia/content/server';
+import { docs } from './collections';
+
+export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title: e.data.title }) });
+```
+
+```svelte
+<script>
+  import { docNav } from '$lib/docs.remote';
+  const nav = await docNav();
+</script>
+```
+
+## An entry is `{ id, data, meta, body }`
+
+`get(slug)` is server-only and returns the whole entry — `data` (validated frontmatter), `meta.headings` (for a TOC), and `body`, a [held region](/docs/data-state/held-regions) you render with `<Region>` — **or `null`** when the id is unknown or filtered out. `get` never throws; the caller decides the 404, so validate the slug in `load`:
+
+```ts
+// src/routes/docs/[...slug]/+page.ts — clean 404 for a missing entry
+import { error } from '@sveltejs/kit';
+import { docs } from '$lib/collections';
+
+export async function load({ params }) {
+  if (!(await docs.get(params.slug))) error(404, 'Not found');
+}
+```
+
+```svelte
+<!-- src/routes/docs/[...slug]/+page.svelte — load guaranteed it exists -->
+<script>
+  import { page } from '$app/state';
+  import { Region } from 'ogygia';
+  import { docs } from '$lib/collections';
+
+  const entry = (await docs.get(page.params.slug))!;
+</script>
+
+<h1>{entry.data.title}</h1>
+<Region of={entry.body} />   <!-- a demo island in the .svx hydrates here -->
+```
+
+Doing the 404 in `load` matters: `error()` maps to a real status from a load function, but thrown from the component's top-level `await` it escalates to a 500.
+
+Prerender every entry from the route:
+
+```ts
+// +page.ts
+export const prerender = true;
+export const entries = async () => (await docs.ids()).map((slug) => ({ slug }));
+```
+
+## Rendering entries the client fetches
+
+`get()` is server-only — the body is a live component, so it stays in the SSR pass. When the client needs to render an entry it fetched **over the wire** (an index, a live feed, search), map the entry to a held region of your own `with { region }` component and return that. `<Region>` fetches and hydrates it — see [Held regions](/docs/data-state/held-regions).
+
+See [Markdown & Shiki](/docs/content/markdown) for the preprocessor, and [Live & CMS sources](/docs/content/live) for `async` and streaming loaders.

@@ -1,0 +1,1 @@
+import{dt as e}from"./Bz2BBfIh.js";import"./BMPPvsVT.js";import"./DammN11E.js";import{t}from"./XIu3DyGk.js";var n=e({default:()=>r});function r(e){t(e,{start:7,label:`Settings counter`})}export{r as n,n as t};

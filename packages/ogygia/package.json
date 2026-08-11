@@ -46,6 +46,10 @@
 			"types": "./dist/internal-server.d.ts",
 			"default": "./src/internal-server.ts"
 		},
+		"./internal/compiler": {
+			"types": "./dist/compiler/index.d.ts",
+			"default": "./dist/compiler/index.js"
+		},
 		"./content": {
 			"types": "./dist/content/index.d.ts",
 			"svelte": "./src/content/index.ts",
@@ -67,6 +71,9 @@
 		"./server": {
 			"types": "./dist/hooks.d.ts",
 			"default": "./src/hooks.ts"
+		},
+		"./types": {
+			"types": "./ambient.d.ts"
 		}
 	},
 	"bin": {
@@ -76,7 +83,8 @@
 		"dist",
 		"README.md",
 		"LICENSE",
-		"CHANGELOG.md"
+		"CHANGELOG.md",
+		"ambient.d.ts"
 	],
 	"scripts": {
 		"build": "tsdown && node scripts/copy-svelte.mjs",
@@ -88,8 +96,7 @@
 	"dependencies": {
 		"devalue": "^5.9.0",
 		"estree-walker": "^3.0.3",
-		"magic-string": "^1.1.0",
-		"yaml": "^2.8.0"
+		"magic-string": "^1.1.0"
 	},
 	"peerDependencies": {
 		"@sveltejs/kit": ">=2.70.2 <3",

@@ -1,0 +1,138 @@
+---
+title: Blocks
+summary: Render a JSON tree of components — a Builder.io-style page builder where only the block types a page names ever ship.
+related:
+  - content/collections
+  - islands/client-islands
+---
+
+<script>
+  import BlocksDemo from '$lib/demos/BlocksDemo.svelte';
+</script>
+
+A **block** page is data: a tree of nodes, each naming a component `type` plus its `props`. `blocks()` renders that tree the same way `markdown()` renders `.svx` — as an entry `body` you drop in with `<Region of={entry.body} />`. It is the render half of a visual page builder: your CMS (or a JSON file) owns the layout; ogygia owns the rendering.
+
+> **When to use.** Reach for blocks when *content decides layout* — marketing pages assembled in a visual editor, CMS-driven landing pages, anything where a non-developer arranges components. If a developer writes the layout in a `.svelte` file, you do not need this; just write the components.
+
+The panel below is a block tree — a `Hero`, a `Grid` of two `Feature`s, and one interactive `CounterBlock` — rendered live from the data further down this page.
+
+<div class="doc-demo">
+  <BlocksDemo />
+</div>
+
+## Register your blocks
+
+The registry maps a block `type` name to a component. A **static** block is a plain import — it renders inline and ships zero JS. An **interactive** block bakes its schedule with `with { wake: … }`, which also makes it **load only when a page names it** (`load` · `idle` · `visible` · a media query decides when it hydrates).
+
+```ts
+// src/lib/blocks.ts — a .ts module: a `wake:` mark here is a held block
+import Hero    from './blocks/Hero.svelte';
+import Grid    from './blocks/Grid.svelte';
+import Feature from './blocks/Feature.svelte';
+import Counter from './blocks/Counter.svelte' with { wake: 'load' };
+
+export const registry = { Hero, Grid, Feature, Counter };
+```
+
+You decide which component a `type` means — no guessing, no auto-discovery. An unregistered `type` is skipped with a dev warning, never rendered as something it is not.
+
+## A page is JSON
+
+```json
+[
+  { "type": "Hero", "props": { "title": "Welcome" } },
+  { "type": "Grid", "children": [
+    { "type": "Feature", "props": { "title": "Fast" } },
+    { "type": "Feature", "props": { "title": "Typed" } }
+  ] },
+  { "type": "Counter", "props": { "start": 3 } }
+]
+```
+
+Nodes nest through `children` — a `Grid` holds `Feature`s, a section holds a grid. That is what makes it a page tree and not a flat stack.
+
+## Render it — a construct of the content API
+
+`blocks()` is a content source. Point a collection at your page JSON and every entry's `body` is the rendered tree:
+
+```ts
+import { content, blocks } from 'ogygia/content';
+import { registry } from '$lib/blocks';
+
+export const pages = content({
+  loader: blocks(import.meta.glob('./pages/*.json'), registry)
+});
+```
+
+Then render it exactly like a markdown body — same `get()`, same `<Region>`:
+
+```svelte
+<script>
+  import { Region } from 'ogygia';
+  let { data } = $props();   // data.page = await pages.get(slug)
+</script>
+
+<Region of={data.page.body} />
+```
+
+Or, if the tree comes from somewhere without a collection, render it directly with `<Blocks>`:
+
+```svelte
+<script>
+  import { Blocks } from 'ogygia';
+  import { registry } from '$lib/blocks';
+</script>
+
+<Blocks tree={page} {registry} />
+```
+
+## Data from a CMS (Builder.io)
+
+Builder is headless — it serves your pages as JSON over an HTTP API. Write a **loader** that fetches it and renders through `blocks()`. Copy this, drop in your public key, and you have a Builder-driven site:
+
+```ts
+// src/lib/builder.ts
+import { content, blocks, mapRaw } from 'ogygia/content';
+import type { RawSource } from 'ogygia/content';
+import { registry } from './blocks';
+
+const KEY = 'YOUR_BUILDER_PUBLIC_KEY';
+const API = `https://cdn.builder.io/api/v3/content/page?apiKey=${KEY}`;
+
+// Builder element → block node.
+const toTree = (els = []) =>
+  els.filter((e) => e.component?.name).map((e) => ({
+    type: e.component.name,
+    props: e.component.options ?? {},
+    children: e.children ? toTree(e.children) : undefined
+  }));
+
+// A raw source over Builder's Content API: get() fetches ONE page, list() fetches them all.
+const builderApi: RawSource<any> = {
+  async get(id) {
+    const { results } = await fetch(`${API}&limit=1&url=/${id}`).then((r) => r.json());
+    return results[0] ? { id, value: results[0] } : null;
+  },
+  async list() {
+    const { results } = await fetch(`${API}&limit=100`).then((r) => r.json());
+    return results.map((r) => ({ id: (r.data?.url ?? r.id).replace(/^\//, ''), value: r }));
+  },
+  async ids() {
+    const { results } = await fetch(`${API}&limit=100&fields=data.url`).then((r) => r.json());
+    return results.map((r) => (r.data?.url ?? '').replace(/^\//, ''));
+  }
+};
+
+// Convert each result to a block tree, then render through blocks().
+export const pages = content({
+  loader: blocks(mapRaw(builderApi, (r) => ({ blocks: toTree(r.data?.blocks) })), registry)
+});
+```
+
+That is the whole integration. `get(slug)` fetches one page on demand; `list()` / `ids()` drive a nav or prerender. Nothing else in your app changes — it is a content collection like any other.
+
+The live demo on this site uses local JSON in Builder's exact shape: **[/demo/builder/home](/demo/builder/home)** and **[/demo/builder/pricing](/demo/builder/pricing)**. Whole pages, assembled as data, rendered as islands — only the interactive block ships JS.
+
+## Thousands of blocks, only a few shipped
+
+The registry can hold a thousand blocks. A page that names three loads three chunks — the other 997 never ship. That is not special-cased; it falls out of the model. The registry is fixed at build (the vocabulary); the page JSON picks the arrangement at runtime. Each block is a `held region`, and a held region's client chunk loads only when it is actually on the page. So the bundle stays tiny no matter how big the registry grows.

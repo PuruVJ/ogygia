@@ -210,7 +210,7 @@ async function run() {
 				if (!has('preprocess')) {
 					js.object.property(optsObj, {
 						name: 'preprocess',
-						fallback: js.common.parseExpression('[vitePreprocess(), ...(await ogygia.preprocess())]')
+						fallback: js.common.parseExpression('[vitePreprocess(), ...ogygia.preprocess()]')
 					});
 				}
 			} catch {

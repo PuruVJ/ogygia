@@ -195,19 +195,5 @@ export function mapRaw<A, B>(src: RawSource<A>, fn: (value: A) => B): RawSource<
 	};
 }
 
-/** A source over an in-memory array — for tests, fixtures, or already-fetched records. */
-export function fromArray<Meta = Record<string, never>>(entries: SourceEntry<Meta>[]): Source<Meta> {
-	const map = new Map(entries.map((e) => [e.id, e]));
-	if (map.size !== entries.length) throw new Error('[ogygia/content] fromArray: duplicate id');
-	return {
-		async get(id) {
-			return map.get(id) ?? null;
-		},
-		async list() {
-			return entries.slice();
-		},
-		async ids() {
-			return entries.map((e) => e.id);
-		}
-	};
-}
+// NB: no `fromArray` / in-memory-array source is shipped — write a `{ get, list, ids }` object
+// directly (or use `defineSource`) for fixtures or already-fetched records.

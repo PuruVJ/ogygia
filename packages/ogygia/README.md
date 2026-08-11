@@ -95,7 +95,7 @@ Not supported — ogygia **fails the build** if it sees
 For a chunk that downloads only after a click, use a host island and plain
 `await import('./Widget.svelte')` (no region attributes) — that mounts a **regular** component, not a second island. Docs: [pesky patterns](https://ogygia.puruvj.dev/#patterns-dynamic-import) · [playground demo](https://ogygia.puruvj.dev/playground/on-demand).
 
-Trust boundaries and design constraints: [`INVARIANTS.md`](../../INVARIANTS.md) in the monorepo root.
+Trust boundaries and design constraints: [`INVARIANTS.md`](../../internal/notes/INVARIANTS.md) in the monorepo root.
 
 ## Live partials
 

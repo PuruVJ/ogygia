@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['bench/**', 'packages/ogygia/**']
+    paths: ['internal/bench/**', 'packages/ogygia/**']
 
 jobs:
   bench:
@@ -38,27 +38,27 @@ jobs:
           echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
 
       - name: Install bench harness deps
-        working-directory: bench
+        working-directory: internal/bench
         run: pnpm install --ignore-workspace --no-lockfile --config.confirmModulesPurge=false
 
       - name: Build all frameworks
-        working-directory: bench
+        working-directory: internal/bench
         run: node build-all.ts
 
       - name: Start mochi
-        working-directory: bench/frameworks/mochi
+        working-directory: internal/bench/frameworks/mochi
         run: |
           PORT=3335 MOCHI_KEY=dGVzdC1rZXktMzItYnl0ZXMtYmFzZTY0dXJsISEh bun run start &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:3335/posts/small >/dev/null && break; sleep 1; done
 
       - name: Run benchmark (Lighthouse + sizes, brotli)
-        working-directory: bench
+        working-directory: internal/bench
         run: node benchmark.ts --config frameworks.config.json --out results/latest.md --json
 
       - uses: actions/upload-artifact@v4
         with:
           name: ogygiabench-results
           path: |
-            bench/results/latest.md
-            bench/results/latest.json
-            bench/results/fidelity.md
+            internal/bench/results/latest.md
+            internal/bench/results/latest.json
+            internal/bench/results/fidelity.md

@@ -8,7 +8,7 @@ import { loadEnv, type Plugin } from 'vite';
 import type { PreprocessorGroup } from 'svelte/compiler';
 import { islandBridge } from './island-bridge.js';
 import { content as contentHmrPlugin, type ContentPluginOptions } from '../content/vite/plugin.js';
-import type { MarkdownOptions } from '../content/markdown/index.js';
+import { ogygiaPreprocess, type MarkdownOptions } from '../content/markdown/index.js';
 import {
 	transformHost,
 	transformTsRegions,
@@ -18,7 +18,7 @@ import {
 	wrapperVirtualId,
 	CLIENT_BINDING_STUB,
 	type ImportKeys
-} from './transform.js';
+} from '../compiler/transform.js';
 
 export {
 	normalize_import_keys,
@@ -32,8 +32,8 @@ export {
 	regionId,
 	regionIdentity,
 	strategyKey
-} from './transform.js';
-export type { ImportKeys } from './transform.js';
+} from '../compiler/transform.js';
+export type { ImportKeys } from '../compiler/transform.js';
 import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,
@@ -62,7 +62,7 @@ import {
 	foucRelFromId,
 	isFoucCssId,
 	isFoucScopedId
-} from './fouc-css.js';
+} from '../compiler/fouc-css.js';
 
 /** `packages/ogygia` — Vite must serve absolute shim/runtime resolves from outside the app root. */
 const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -1779,23 +1779,22 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 }
 
 /**
- * ogygia's svelte preprocessor, configured from `ogygia({ content: { markdown } })`. Spread it into
- * the svelte config's `preprocess`; it's `[]` (and loads no mdsvex) when markdown isn't configured,
- * so `mdsvex` / `shiki` stay optional peers — imported only when you actually use content.
+ * ogygia's svelte preprocessor. Spread into the svelte config's `preprocess`:
  *
  * ```js
  * extensions: ogygia.extensions(),
- * preprocess: [vitePreprocess(), ...(await ogygia.preprocess())],
+ * preprocess: [vitePreprocess(), ...ogygia.preprocess()],
  * ```
  *
- * Async because mdsvex is loaded lazily. `ogygia({ content: { markdown } })` must appear earlier in
- * the plugins array so its config is registered before this reads it (it does, being before `sveltekit()`).
+ * Synchronous (no `await`) — returns the markdown preprocessor when `ogygia({ content: { markdown } })`
+ * is set, otherwise an empty array. mdsvex (an optional peer) loads lazily on first use, so this is
+ * safe to import and call even without it installed.
+ *
+ * `ogygia({ content: { markdown } })` must appear earlier in the plugins array so its config is
+ * registered before this reads it (it does, being before `sveltekit()`).
  */
-ogygia.preprocess = async (): Promise<PreprocessorGroup[]> => {
-	if (!islandBridge.markdownConfig) return [];
-	const { ogygiaPreprocess } = await import('../content/markdown/index.js');
-	return [ogygiaPreprocess() as PreprocessorGroup];
-};
+ogygia.preprocess = (): PreprocessorGroup[] =>
+	islandBridge.markdownConfig ? [ogygiaPreprocess()] : [];
 
 /**
  * The full svelte `extensions` list — pass it straight through: `extensions: ogygia.extensions()`.

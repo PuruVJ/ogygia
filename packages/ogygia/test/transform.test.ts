@@ -1,6 +1,6 @@
 // Transform suite — portable binding rewrite (0.4.0). Asserts host import rewrites, wrapper/entry
 // virtual modules, path+strategy dedupe, props/fallback/children rules, defer+hydrate, lakes,
-// presets, and csr-independent emit metadata. Runs against built `../dist/vite/transform.js`.
+// presets, and csr-independent emit metadata. Runs against built `../dist/compiler/transform.js`.
 
 import { describe, test, expect } from 'vitest';
 import path from 'node:path';
@@ -15,7 +15,7 @@ import {
 	regionBindingVirtualId,
 	CLIENT_BINDING_STUB,
 	foucCssVirtualId
-} from '../dist/vite/transform.js';
+} from '../dist/compiler/transform.js';
 
 const ROOT = '/app';
 const HOST = '/app/src/routes/+page.svelte';

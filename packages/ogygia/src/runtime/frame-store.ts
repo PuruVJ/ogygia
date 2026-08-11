@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // The frame store — the ONLY meeting point between the network and region DOM.
 //
-// Invariant (see thinking/frames.md): no code path from network arrival to DOM. Every channel
+// Invariant (see internal/notes/frames.md): no code path from network arrival to DOM. Every channel
 // (defer fetch, streamed parcel, mutation fragment, live refresh) WRITES a frame here; region
 // elements are BINDERS that subscribe to their address and apply store state to themselves.
 //

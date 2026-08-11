@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as v from 'valibot';
-import { content, glob, fromArray, mdsvex, json, yaml, raw } from '../src/content/index.js';
+import { content, glob, markdown, json } from '../src/content/index.js';
 import type { Source, SourceEntry } from '../src/content/index.js';
 import { parseFrontmatter } from '../src/content/markdown/frontmatter.js';
 import { withRemotes } from '../src/content/server.js';
@@ -18,11 +18,28 @@ const blogSchema = v.object({
 	draft: v.optional(v.boolean(), false)
 });
 
-/** A tiny `.svx`-module fixture as the mdsvex source sees it (compiled by the markdown pipeline). */
+/** A tiny `.svx`-module fixture as the markdown source sees it (compiled by the markdown pipeline). */
 const svx = (metadata: Record<string, unknown>, component: unknown = {}) => ({
 	metadata,
 	default: component
 });
+
+/** In-memory source for fixtures. The lib no longer ships `fromArray` (write a `{get,list,ids}`
+ *  directly), so tests keep this local copy for building fixtures with explicit ids. */
+function fromArray<Meta = Record<string, never>>(entries: SourceEntry<Meta>[]): Source<Meta> {
+	const map = new Map(entries.map((e) => [e.id, e]));
+	return {
+		async get(id) {
+			return map.get(id) ?? null;
+		},
+		async list() {
+			return entries.slice();
+		},
+		async ids() {
+			return entries.map((e) => e.id);
+		}
+	};
+}
 
 describe('frontmatter', () => {
 	it('parses yaml and strips body', () => {
@@ -62,9 +79,9 @@ describe('glob() source ids', () => {
 });
 
 describe('format source-builders', () => {
-	it('mdsvex: data + inline-partial body + headings in meta', async () => {
+	it('markdown: data + inline-partial body + headings in meta', async () => {
 		const Comp = { __c: true };
-		const src = mdsvex({
+		const src = markdown({
 			'./x.svx': svx({ title: 'Hi', headings: [{ depth: 2, id: 'intro', text: 'Intro' }] }, Comp)
 		});
 		const [e] = await src.list();
@@ -83,40 +100,24 @@ describe('format source-builders', () => {
 		expect(byId.get('a')?.body).toBeUndefined();
 	});
 
-	it('yaml: parses ?raw strings after init()', async () => {
-		const src = yaml({ './t.yaml': 'name: Team\nslug: t\nmembers:\n  - a\n' });
-		await src.init?.();
-		const [e] = await src.list();
-		expect(e.data).toEqual({ name: 'Team', slug: 't', members: ['a'] });
-	});
-
-	it('yaml: rejects broken input', async () => {
-		const src = yaml({ './bad.yaml': ': : :' });
-		await src.init?.();
-		await expect(src.list()).rejects.toThrow(/yaml/);
-	});
-
-	it('raw: wraps a string as { body }', async () => {
-		const src = raw({ './x.txt': 'hello' });
-		const [e] = await src.list();
-		expect(e.data).toEqual({ body: 'hello' });
-	});
+	// NB: no `yaml()` / `raw()` content sources are shipped — ogygia's YAML parser is
+	// frontmatter-only; a `.yaml` or raw-string loader is a short docs recipe.
 });
 
 describe('content() catalog', () => {
 	it('rejects a bare glob map (from must be a source)', () => {
 		expect(() =>
 			content({
-				// @ts-expect-error a glob map is not a source — wrap it in mdsvex()/json()/glob()
+				// @ts-expect-error a glob map is not a source — wrap it in markdown()/json()/glob()
 				loader: { './blog/hello.svx': svx({ title: 'Hi', date: '2026-01-01' }) },
 				schema: blogSchema
 			})
 		).toThrow(/must be a source/);
 	});
 
-	it('entries / entry from mdsvex(glob)', async () => {
+	it('entries / entry from markdown(glob)', async () => {
 		const blog = content({
-			loader: mdsvex({ './blog/hello.svx': svx({ title: 'Hi', date: '2026-01-01' }) }),
+			loader: markdown({ './blog/hello.svx': svx({ title: 'Hi', date: '2026-01-01' }) }),
 			schema: blogSchema
 		});
 		expect(await blog.ids()).toEqual(['hello']);
@@ -126,7 +127,7 @@ describe('content() catalog', () => {
 	it('get() returns id/data/meta + inline-partial body', async () => {
 		const Comp = { __c: true };
 		const blog = content({
-			loader: mdsvex({
+			loader: markdown({
 				'./blog/hello.svx': svx(
 					{ title: 'Hi', date: '2026-01-01', headings: [{ depth: 2, id: 'intro', text: 'Intro' }] },
 					Comp
@@ -143,7 +144,7 @@ describe('content() catalog', () => {
 
 	it('get() returns null on a filtered-out / unknown id', async () => {
 		const blog = content({
-			loader: mdsvex({ './blog/draft.svx': svx({ title: 'D', date: '2026-01-01', draft: true }) }),
+			loader: markdown({ './blog/draft.svx': svx({ title: 'D', date: '2026-01-01', draft: true }) }),
 			schema: blogSchema,
 			filter: (e) => !e.data.draft
 		});
@@ -154,7 +155,7 @@ describe('content() catalog', () => {
 	it('get() on a data-only entry has no body', async () => {
 		const cms = content({
 			schema: v.object({ title: v.string() }),
-			loader: fromArray([{ id: 'a', data: { title: 'A' } }])
+			loader: json({ './a.json': { title: 'A' } })
 		});
 		const out = (await cms.get('a'))!;
 		expect(out.body).toBeUndefined();
@@ -162,15 +163,9 @@ describe('content() catalog', () => {
 		expect(out.meta).toEqual({});
 	});
 
-	it('fromArray source carries a pre-built body partial', async () => {
-		const body = { [REGION_BRAND]: true, kind: 'inline', component: { __c: 1 }, props: {} } as SourceEntry['body'];
-		const col = content({ loader: fromArray([{ id: 'p', data: { title: 'P' }, body }]) });
-		expect((await col.get('p'))!.body).toBe(body);
-	});
-
 	it('list mints a prerender remote (static source)', async () => {
 		const blog = content({
-			loader: mdsvex({
+			loader: markdown({
 				'./blog/hello.svx': svx({ title: 'Hi', date: '2026-01-01', draft: false }),
 				'./blog/draft.svx': svx({ title: 'Nope', date: '2026-01-01', draft: true })
 			}),
@@ -186,7 +181,7 @@ describe('content() catalog', () => {
 
 	it('collection-level filter hides entries from every read path', async () => {
 		const blog = content({
-			loader: mdsvex({
+			loader: markdown({
 				'./blog/live.svx': svx({ title: 'Live', date: '2026-01-01', draft: false }),
 				'./blog/draft.svx': svx({ title: 'Draft', date: '2026-01-01', draft: true })
 			}),
@@ -207,7 +202,7 @@ describe('content() catalog', () => {
 
 	it('per-remote filter narrows the collection filter (AND), never widens it', async () => {
 		const blog = content({
-			loader: mdsvex({
+			loader: markdown({
 				'./blog/a.svx': svx({ title: 'A', date: '2026-01-01', draft: false }),
 				'./blog/b.svx': svx({ title: 'B', date: '2026-01-01', draft: false }),
 				'./blog/d.svx': svx({ title: 'D', date: '2026-01-01', draft: true })

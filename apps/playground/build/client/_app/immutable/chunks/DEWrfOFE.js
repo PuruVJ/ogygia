@@ -1,0 +1,1 @@
+var e=class{celsius;constructor(e){this.celsius=e}get fahrenheit(){return this.celsius*1.8+32}},t={Temperature:{encode:t=>t instanceof e&&[t.celsius],decode:([t])=>new e(t)}};export{t as n,e as t};

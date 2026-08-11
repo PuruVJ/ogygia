@@ -24,10 +24,6 @@ import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import type { RequestState } from '@sveltejs/kit/internal/server';
 import * as devalue from 'devalue';
-// Route MATCHING needs the ABSOLUTE base-prefixed path to compare against `event.url.pathname`.
-// `resolve()` is deliberately RELATIVE on the server (for browser-resolved link generation), so
-// it's the wrong tool here — server-side pathname matching uses `base`.
-import { base } from '$app/paths';
 import { islands as island_modules } from 'virtual:ogygia/server-manifest';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { secret } from 'virtual:ogygia/secret';
@@ -103,7 +99,12 @@ class OgygiaHandle {
 	readonly probe_rate: RateLimiter;
 
 	constructor(options: OgygiaHandleOptions = {}) {
-		this.#endpoint = (base || '') + (options.endpoint || DEFAULT_ISLANDS_ENDPOINT);
+		// Stored WITHOUT a base prefix. Getting the app's absolute base path inside a hook has no
+		// public, forward-compatible API — `base` from `$app/paths` is deprecated (removed in Kit 3)
+		// and `resolve()` is page-relative here — so instead of prefixing the base we match the request
+		// pathname by SUFFIX (see `handle`). The endpoint is a clash-safe path, so a suffix match is
+		// unambiguous regardless of `paths.base`.
+		this.#endpoint = options.endpoint || DEFAULT_ISLANDS_ENDPOINT;
 		this.render_rate = new RateLimiter({
 			max: rate_limit_cfg.max,
 			windowMs: rate_limit_cfg.windowMs
@@ -121,8 +122,10 @@ class OgygiaHandle {
 			return new Response('Bad Request', { status: 400 });
 		}
 		// Compare against the DECODED request pathname so the percent-encoded UTF-8 the browser
-		// sends matches our raw-emoji literal regardless of how Kit hands us the URL.
-		if (path !== this.#endpoint) {
+		// sends matches our raw-emoji literal regardless of how Kit hands us the URL. Suffix match
+		// (not `===`) so it works under any `paths.base` without needing the base at all: the request
+		// arrives at `<base>/🏝️`, and the endpoint is a leading-slash, clash-safe path.
+		if (!path.endsWith(this.#endpoint)) {
 			// Flicker fix: on csr=false pages Kit resolves top-level `await query()` calls during
 			// SSR (populating the internal request store's `remote.implicit`) but only serializes
 			// them into the page when csr===true. We capture the resolved query responses and emit

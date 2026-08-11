@@ -1,0 +1,1 @@
+import{dt as e}from"../chunks/Bz2BBfIh.js";import{a as t}from"../chunks/2vKNWGK0.js";function n(e,n){throw new t(e,n.toString())}var r=e({load:()=>i}),i=()=>{n(307,`/dashboard/orders`)};export{r as universal};

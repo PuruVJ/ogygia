@@ -1,4 +1,4 @@
-import { parse as parseYaml } from 'yaml';
+import { parse_yaml } from './yaml.js';
 
 const BOM = /^\uFEFF/;
 const LEADING_NEWLINE = /^\r?\n/;
@@ -25,7 +25,7 @@ export function parseFrontmatter(source: string): FrontmatterResult {
 	const after = text.slice(close + 4).replace(LEADING_NEWLINE, '');
 	let data: Record<string, unknown> = {};
 	try {
-		const parsed = parseYaml(yamlBlock);
+		const parsed = parse_yaml(yamlBlock);
 		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
 			data = parsed as Record<string, unknown>;
 		}

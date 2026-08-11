@@ -6,7 +6,7 @@ import {
 	foucCssVirtualId,
 	foucScopedVirtualId,
 	listStaticImportSpecs
-} from '../dist/vite/fouc-css.js';
+} from '../dist/compiler/fouc-css.js';
 
 describe('fouc-css collector', () => {
 	const root = '/app';

@@ -14,7 +14,7 @@ import {
 	regionIdentity,
 	regionId,
 	regionBindingVirtualId
-} from '../dist/vite/transform.js';
+} from '../dist/compiler/transform.js';
 
 const ROOT = '/app';
 

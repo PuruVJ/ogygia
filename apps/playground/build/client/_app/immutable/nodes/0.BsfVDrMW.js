@@ -1,0 +1,1 @@
+import{T as e,V as t,dt as n,h as r,w as i}from"../chunks/Bz2BBfIh.js";import"../chunks/BMPPvsVT.js";var a=n({csr:()=>!1,prerender:()=>!1});function o(n,a){var o=e(),s=t(o);r(s,()=>a.children),i(n,o)}export{o as component,a as universal};

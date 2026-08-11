@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
-import { transformHost, islandId } from '../dist/vite/transform.js';
+import { transformHost, islandId } from '../dist/compiler/transform.js';
 import { rewrite_lake_import_to_placeholder } from '../dist/vite/index.js';
 import { RateLimiter } from '../dist/server/rate-limit.js';
 import { sign, verify, region_mac_message } from '../dist/server/hmac.js';

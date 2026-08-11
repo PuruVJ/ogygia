@@ -31,6 +31,22 @@
 	import { TRANSPORT_WIRE_KEY, reduce_transportable } from './live-transport.js';
 	import LakeBoundary from './LakeBoundary.svelte';
 
+	/**
+	 * Every prop is optional: a HELD usage passes only `of`, a PLACEMENT usage (the transform's
+	 * wrappers) passes only the `__*` internals — so `<Region of={value} />` type-checks for consumers
+	 * without the internal props.
+	 * @type {{
+	 *   of?: import('./region.js').RegionValue;
+	 *   children?: import('svelte').Snippet;
+	 *   __mode?: 'island' | 'server' | 'lake';
+	 *   visible?: string | boolean; idle?: boolean; media?: string; load?: boolean; interaction?: boolean;
+	 *   __keep?: string; __entry?: string; __component?: import('svelte').Component; __css?: unknown;
+	 *   __props?: Record<string, unknown>; __defer?: string; __margin?: string; __hydrate?: string;
+	 *   __hydrateMargin?: string; __module?: string; __cacheTtl?: number;
+	 *   ogygiaFallback?: import('svelte').Snippet;
+	 *   __remount?: string; __when?: string; __maxAge?: number; __onExpire?: 'empty' | 'fetch';
+	 * }}
+	 */
 	let {
 		// Held API: a `RegionValue` from `region()` (inline / dual / deferred).
 		of,
@@ -45,7 +61,7 @@
 		interaction,
 		__keep,
 		// island + server shared
-		__entry,
+		__entry = '',
 		__component,
 		__css,
 		__props,
@@ -54,7 +70,7 @@
 		__margin,
 		__hydrate,
 		__hydrateMargin,
-		__module,
+		__module = '',
 		// Response cache max-age in seconds for this deferred hole (absent/0 → no-store). Signed at mint.
 		__cacheTtl,
 		ogygiaFallback,
@@ -98,11 +114,12 @@
 		);
 	}
 
+	/** @param {unknown} value @param {string} entry */
 	function stringify_props(value, entry) {
 		try {
 			return stringify(value, { [TRANSPORT_WIRE_KEY]: reduce_transportable });
 		} catch (e) {
-			const detail = e && e.message ? e.message : String(e);
+			const detail = e instanceof Error ? e.message : String(e);
 			throw new Error(
 				`[ogygia] island "${entry}": a captured prop is not serializable — ${detail}. ` +
 					`Captured host values cross the boundary via devalue; functions/Promises cannot, and a ` +
@@ -173,7 +190,7 @@
 		// (throws), and signs on the server. Same URL/MAC/TTL as every other mint path. `__cacheTtl`
 		// (seconds, from the preset's `maxAge`) is signed in so the handle sets Cache-Control; absent
 		// → 0 → the hole is served `no-store` (dynamic by default).
-		return mintServerIsland(__entry, __props, __cacheTtl || 0);
+		return mintServerIsland(__entry, __props || {}, __cacheTtl || 0);
 	});
 
 	// DOM `entry`: importable module URL when a deferred island wakes after swap; opaque id otherwise.
@@ -217,7 +234,7 @@
 	const lake_inside = is_lake && nested;
 	const lake_swr = $derived(__remount === 'swr');
 	const lake_endpoint = $derived(
-		lake_inside && lake_swr ? makeRegionEndpoint(__entry, __props || {}) : ''
+		lake_inside && lake_swr ? makeRegionEndpoint(__entry || '', __props || {}) : ''
 	);
 
 	// ─────────────────────────────────────────────── head (runtime + preload) ──
@@ -250,6 +267,7 @@
 
 	// ────────────────────────────────────────────────────── held: live / deferred ──
 	const stringify_devalue = stringify;
+	/** @param {Element & { applyLive?: (v: unknown) => void }} node */
 	function apply_live(node) {
 		const f = of;
 		if (!f || f.kind !== 'deferred' || f.html == null) return;
@@ -263,6 +281,7 @@
 			hydrateMargin: f.hydrateMargin
 		});
 	}
+	/** @param {import('./region.js').DeferredRegion} f */
 	function identity(f) {
 		try {
 			return f.id + ' ' + stringify_devalue(f.props);
@@ -317,16 +336,17 @@
 	{:else}
 		{@render children?.()}
 	{/if}
-{:else if of.kind === 'inline'}
+{:else if of?.kind === 'inline'}
 	{@const Component = of.component}
 	<Component {...of.props}>{#if children}{@render children()}{/if}</Component>
-{:else if of.kind === 'dual'}
+{:else if of?.kind === 'dual'}
 	{@const Component = of.component}
 	<Component {...of.props}>{#if children}{@render children()}{/if}</Component>
-{:else if of.html != null}
+{:else if of?.html != null}
 	<ogygia-region live {@attach apply_live}>{#if children}{@render children()}{/if}</ogygia-region>
 {:else}
-	{#key identity(of)}
-		<ogygia-region entry={of.module || of.id} render="defer" when="load" wake={of.hydrate || undefined} hydrate-margin={of.hydrateMargin || undefined} endpoint={of.url}>{#if children}{@render children()}{/if}</ogygia-region>{@html held_props_script}
+	{@const d = /** @type {import('./region.js').DeferredRegion} */ (of)}
+	{#key identity(d)}
+		<ogygia-region entry={d.module || d.id} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url}>{#if children}{@render children()}{/if}</ogygia-region>{@html held_props_script}
 	{/key}
 {/if}

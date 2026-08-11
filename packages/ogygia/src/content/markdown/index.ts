@@ -14,7 +14,8 @@
  * ```
  */
 
-import { mdsvex, type MdsvexOptions } from 'mdsvex';
+import type { MdsvexOptions } from 'mdsvex';
+import type { PreprocessorGroup, Processed } from 'svelte/compiler';
 import { islandBridge } from '../../vite/island-bridge.js';
 import { remarkHeadingId } from './remark-heading-id.js';
 import { remarkHeadings, type RemarkHeadingsOptions } from './remark-headings.js';
@@ -56,6 +57,29 @@ export type MarkdownOptions = MarkdownShikiOptions & {
 	layout?: MdsvexOptions['layout'];
 };
 
+/**
+ * Load the optional `mdsvex` peer on demand, with a clear install hint if it's absent. Keeps mdsvex
+ * (and its heavy transitive deps) out of this module's static import graph, so `content/markdown` —
+ * and therefore `ogygia.preprocess()` — can be imported synchronously by apps that don't use it.
+ */
+async function load_mdsvex(): Promise<typeof import('mdsvex').mdsvex> {
+	try {
+		return (await import('mdsvex')).mdsvex;
+	} catch {
+		throw new Error(
+			'[ogygia] Markdown content needs the optional peer dependency "mdsvex". Install it:\n' +
+				'  npm i -D mdsvex   (or the pnpm / yarn / bun equivalent)'
+		);
+	}
+}
+
+/** Pull the emitted `code` out of a preprocessor `markup` result (whose type includes `void`),
+ *  falling back to the original input when the hook returned nothing. */
+function markup_code(out: Processed | void | undefined, fallback: string): string {
+	const p = out as Processed | undefined;
+	return p ? p.code : fallback;
+}
+
 /** Rewrite marked island imports in already-mdsvex'd Svelte via the plugin's in-process bridge
  *  (the plugin owns `transform`; we register `scan`). No-op when the ogygia plugin isn't active. */
 function transform_islands(content: string, filename: string): string | null {
@@ -69,7 +93,10 @@ function transform_islands(content: string, filename: string): string | null {
  * walks `src` for the configured extensions, runs mdsvex, and registers each via
  * {@link transform_islands}. Set synchronously at config time — always before `buildStart` reads it.
  */
-function register_island_scanner(md: ReturnType<typeof mdsvex>, exts: readonly string[]): void {
+function register_island_scanner(
+	get_md: () => Promise<PreprocessorGroup>,
+	exts: readonly string[]
+): void {
 	islandBridge.scan = async ({
 		root,
 		readFile
@@ -77,6 +104,7 @@ function register_island_scanner(md: ReturnType<typeof mdsvex>, exts: readonly s
 		root: string;
 		readFile: (abs: string) => string | null;
 	}) => {
+		const md = await get_md();
 		const { readdirSync } = await import('node:fs');
 		const { join } = await import('node:path');
 		const files: string[] = [];
@@ -104,7 +132,7 @@ function register_island_scanner(md: ReturnType<typeof mdsvex>, exts: readonly s
 			if (raw == null) continue;
 			// Same pipeline as a real compile: mdsvex → island transform (which registers).
 			const out = await md.markup?.({ content: raw, filename: file });
-			transform_islands(out?.code ?? raw, file);
+			transform_islands(markup_code(out, raw), file);
 		}
 	};
 }
@@ -117,13 +145,15 @@ function register_island_scanner(md: ReturnType<typeof mdsvex>, exts: readonly s
  * config lives in the one plugin and the svelte config only needs the value-free call:
  *
  * ```js
- * extensions: ['.svelte', ...ogygiaPreprocess.extensions],
- * preprocess: [vitePreprocess(), ogygiaPreprocess()],
+ * extensions: ogygia.extensions(),
+ * preprocess: [vitePreprocess(), ...ogygia.preprocess()],
  * ```
  *
- * Pass options directly to override (`ogygiaPreprocess({ themes })`).
+ * Pass options directly to override (`ogygiaPreprocess({ themes })`). Synchronous: mdsvex (an
+ * optional peer) is loaded and constructed lazily on first use via {@link load_mdsvex}, so importing
+ * this module — and calling this — never requires mdsvex to be installed.
  */
-export function ogygiaPreprocess(options?: MarkdownOptions): ReturnType<typeof mdsvex> {
+export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 	const {
 		headingIds = true,
 		headings = true,
@@ -157,27 +187,31 @@ export function ogygiaPreprocess(options?: MarkdownOptions): ReturnType<typeof m
 	if (rehypePlugins) mdsvex_opts.rehypePlugins = rehypePlugins;
 	if (layout !== undefined) mdsvex_opts.layout = layout;
 
-	const md = mdsvex(mdsvex_opts);
+	// Construct mdsvex lazily and once. The config above needs no mdsvex; only the instance does.
+	let md_p: Promise<PreprocessorGroup> | null = null;
+	const get_md = (): Promise<PreprocessorGroup> =>
+		(md_p ??= load_mdsvex().then((mdsvex) => mdsvex(mdsvex_opts) as PreprocessorGroup));
 
 	// Give ogygia a way to discover content-page islands at build time (its own scan can't read
-	// markdown). Registered SYNCHRONOUSLY at config time — set before the plugin's buildStart reads it.
-	register_island_scanner(md, exts);
+	// markdown). Registered SYNCHRONOUSLY here — set before the plugin's buildStart reads it — while
+	// mdsvex itself stays deferred (the scanner awaits `get_md` when buildStart runs it).
+	register_island_scanner(get_md, exts);
 
 	// Compose ogygia's marked-import transform AFTER mdsvex so islands authored inside `.svx` / `.md`
 	// (`import X from '…' with { wake | render | region }`) become real islands. It runs on the
 	// clean svelte mdsvex produces. No-op if `ogygia` isn't installed (plain content app).
 	return {
-		...md,
 		name: 'ogygia-markdown',
 		async markup(input: { content: string; filename: string }) {
+			const md = await get_md();
 			const out = await md.markup?.(input);
-			const code = out?.code ?? input.content;
+			const code = markup_code(out, input.content);
 			const islandCode = transform_islands(code, input.filename);
-			if (islandCode == null) return out;
+			if (islandCode == null) return out ?? undefined;
 			// Drop mdsvex's map — the island rewrite invalidates it (dev sourcemap only).
-			return { ...out, code: islandCode, map: undefined };
+			return { code: islandCode, map: undefined };
 		}
-	} as ReturnType<typeof mdsvex>;
+	};
 }
 
 ogygiaPreprocess.extensions = extensions;

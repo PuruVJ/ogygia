@@ -93,7 +93,7 @@ export class Collection<
 			typeof opts.loader.ids !== 'function'
 		) {
 			throw new Error(
-				'[ogygia/content] `loader` must be a source ({ get, list, ids }) — use mdsvex()/json()/blocks()/… or glob()/fromArray()'
+				'[ogygia/content] `loader` must be a source ({ get, list, ids }) — use markdown()/json()/blocks()/… or glob()'
 			);
 		}
 		this.#opts = opts;

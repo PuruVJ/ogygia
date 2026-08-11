@@ -4,8 +4,8 @@
  * Define once with `content({ loader, schema, relations })` — browser-safe, import anywhere. `loader`
  * is a **source** (`{ get, list, ids }`); the built-in formats are source builders that produce one:
  *
- *   import { content, mdsvex } from 'ogygia/content';
- *   export const docs = content({ loader: mdsvex(import.meta.glob('./docs/**\/*.svx')), schema });
+ *   import { content, markdown } from 'ogygia/content';
+ *   export const docs = content({ loader: markdown(import.meta.glob('./docs/**\/*.svx')), schema });
  *
  * Read paths — `get` / `entry` / `ids` / `entries` + the content graph — live here. To mint the Kit
  * remotes that cross the wire, wrap it with `withRemotes()` from `ogygia/content/server` in a
@@ -13,7 +13,7 @@
  */
 import type { RegionValue } from '../region.js';
 
-/** A heading pulled from the markdown pass (h2–h4). Powers on-page TOCs; rides `mdsvex` `meta`. */
+/** A heading pulled from the markdown pass (h2–h4). Powers on-page TOCs; rides `markdown` `meta`. */
 export type Heading = { depth: 2 | 3 | 4; id: string; text: string };
 
 /**
@@ -34,7 +34,7 @@ export type ContentRelations = Record<string, unknown>;
 
 /**
  * A content entry. `data` is the validated frontmatter (typed by `schema`); `meta` is what the
- * source derives (typed by the source — e.g. `mdsvex` provides `{ headings }`); `body` is a
+ * source derives (typed by the source — e.g. `markdown` provides `{ headings }`); `body` is a
  * `<Region>` you render.
  */
 export type ContentEntry<Data = Record<string, unknown>, Meta = Record<string, never>> = {
@@ -81,7 +81,7 @@ export type SchemaLike = {
 };
 
 // ── the source axis ──
-export { glob, defineSource, toRawSource, fromArray, mapRaw } from './source.js';
+export { glob, defineSource, toRawSource, mapRaw } from './source.js';
 export type {
 	Source,
 	SourceEntry,
@@ -94,8 +94,8 @@ export type {
 } from './source.js';
 
 // ── format source-builders (all live on `ogygia/content`) ──
-export { mdsvex, json, yaml, raw } from './formats.js';
-export type { MdsvexMeta } from './formats.js';
+export { markdown, json } from './formats.js';
+export type { MarkdownMeta } from './formats.js';
 export { blocks } from './blocks.js';
 export type { BlockNode, BlockRegistry, BlockSource } from './blocks.js';
 
