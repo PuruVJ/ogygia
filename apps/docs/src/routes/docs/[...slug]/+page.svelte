@@ -31,7 +31,7 @@
 	const keepReading: Ref[] = declared.length ? declared : await nextInOrder();
 </script>
 
-<PageHead title={`${entry.data.title} · ogygia`} description={entry.data.summary} />
+<PageHead title={entry.data.title} category={section} description={entry.data.summary} />
 
 <div class="doc-layout">
 	<main class="doc-main">

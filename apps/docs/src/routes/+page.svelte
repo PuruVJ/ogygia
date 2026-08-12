@@ -30,7 +30,8 @@
 </script>
 
 <PageHead
-	description="The islands library for SvelteKit. No Kit client bootstrap — a lightweight runtime (custom element + router), and JS only for the components you mark. Server islands, lakes, partials, and content collections are all the same island."
+	home
+	description="The islands library for SvelteKit. No Kit client bootstrap — a lightweight runtime (custom element + router), and JS only for the components you mark. Server islands, lakes, held regions, and content collections are all the same region."
 />
 
 <div id="top"></div>

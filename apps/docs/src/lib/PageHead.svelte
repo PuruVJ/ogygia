@@ -1,15 +1,38 @@
 <script lang="ts">
-	/** Per-route document head. Title segments join as `A · B · ogygia`. */
+	/** Per-route document head. Title segments join as `A · ogygia`. */
 	let {
 		title = '',
-		description = 'ogygia: Astro-style SSR islands for SvelteKit. Hydrate only what needs JavaScript.'
+		description = 'ogygia: Astro-style SSR islands for SvelteKit. Hydrate only what needs JavaScript.',
+		category = '',
+		home = false
 	}: {
 		title?: string;
 		description?: string;
+		/** Section label shown as a chip on the OG image (e.g. "Regions", "App"). */
+		category?: string;
+		/** Homepage variant — big italic tagline instead of a titled card. */
+		home?: boolean;
 	} = $props();
 
 	const full_title = $derived(title ? `${title} · ogygia` : 'ogygia — SSR islands for SvelteKit');
-	const og_image = 'https://ogygia.puruvj.dev/og.png';
+
+	// Absolute origin, baked into the (prerendered) pages. `page.url.origin` is a placeholder during
+	// prerender, so hard-code the canonical host; the `/og` endpoint that renders the image is dynamic.
+	const SITE = 'https://ogygia.puruvj.dev';
+	const og_image = $derived.by(() => {
+		const p = new URLSearchParams();
+		if (home) {
+			// home card shows the "ogygia" wordmark itself — no title needed
+			p.set('home', '1');
+		} else {
+			p.set('title', title || 'SSR islands for SvelteKit');
+			if (category) p.set('category', category);
+		}
+		return `${SITE}/og?${p}`;
+	});
+	const og_alt = $derived(
+		home ? 'ogygia — SSR islands for SvelteKit' : title ? `${title} — ogygia` : 'ogygia'
+	);
 </script>
 
 <svelte:head>
@@ -27,7 +50,7 @@
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
 	<meta property="og:image:type" content="image/png" />
-	<meta property="og:image:alt" content="ogygia — SSR islands for SvelteKit" />
+	<meta property="og:image:alt" content={og_alt} />
 
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content={full_title} />
