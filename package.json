@@ -2,6 +2,7 @@
   "name": "ogygia-monorepo",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.17.0",
   "scripts": {
     "build:lib": "pnpm --filter ogygia build",
     "build": "pnpm run build:lib && pnpm --filter playground build",
@@ -14,13 +15,22 @@
     "check:lib": "pnpm --filter ogygia check",
     "check:playground": "pnpm --filter playground check",
     "check:docs": "pnpm --filter docs check",
-    "check:verify": "tsc --noEmit -p verify/tsconfig.json",
+    "check:verify": "tsc --noEmit -p e2e/tsconfig.json",
+    "test:e2e": "node e2e/run.ts",
+    "test:e2e:fast": "node e2e/run.ts --no-build",
     "check:no-any": "node scripts/no-any.mjs",
-    "check": "pnpm run check:no-any && pnpm run build:lib && pnpm run check:lib && pnpm run check:playground && pnpm run check:verify"
+    "check": "pnpm run check:no-any && pnpm run build:lib && pnpm run check:lib && pnpm run check:playground && pnpm run check:verify",
+    "test:adapters": "node e2e/adapters/run.ts",
+    "e2e": "node e2e/e2e.ts",
+    "bundle-size": "node e2e/bundle-size.ts",
+    "bench": "node internal/bench/build-all.ts && node internal/bench/benchmark.ts --config frameworks.config.json --out results/latest.md --json",
+    "bench:build": "node internal/bench/build-all.ts",
+    "bench:run": "node internal/bench/benchmark.ts --config frameworks.config.json --out results/latest.md --json"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
     "playwright": "^1.62.1",
+    "rolldown": "^1.2.2",
     "typescript": "^7.0.2"
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
-import { transformHost, islandId } from '../dist/vite/transform.js';
+import { transformHost, islandId } from '../dist/compiler/transform.js';
 import { rewrite_lake_import_to_placeholder } from '../dist/vite/index.js';
 import { RateLimiter } from '../dist/server/rate-limit.js';
 import { sign, verify, region_mac_message } from '../dist/server/hmac.js';
@@ -45,28 +45,31 @@ function expectThrows(fn: () => unknown, re: RegExp) {
 }
 
 describe('audit fixes — transform contract', () => {
-	it('allows marked import via svelte:component (portable binding)', () => {
+	it('allows a marked import used as a portable/dynamic binding', () => {
+		// Svelte 5 has no <svelte:component>; a dynamic component is `<Comp/>` where Comp is a variable.
 		const r = run(
 			wrap(
-				`import C from './C.svelte' with { hydrate: 'load' };\n\tlet comp = C;`,
-				'<svelte:component this={comp} />'
+				`import C from './C.svelte' with { wake: 'load' };\n\tlet Comp = C;`,
+				'<Comp />'
 			)
 		);
 		expect(r).toBeTruthy();
 		expect(r!.islands.length).toBe(1);
-		expect(r!.code).toMatch(/virtual:ogygia\/wrapper\//);
+		// The import lands on the attach binding (which re-exports the wrapper with the descriptor).
+		expect(r!.code).toMatch(/virtual:ogygia\/region\//);
+		expect(r!.islands[0].wrapperPath).toMatch(/virtual:ogygia\/wrapper\//);
 	});
 
 	it('allows this={C} on svelte:component', () => {
 		const r = run(
-			wrap(`import C from './C.svelte' with { hydrate: 'load' };`, '<svelte:component this={C} />')
+			wrap(`import C from './C.svelte' with { wake: 'load' };`, '<svelte:component this={C} />')
 		);
 		expect(r).toBeTruthy();
 		expect(r!.islands.length).toBe(1);
 	});
 
 	it('unused marked import is stripped even when markup text mentions the local name', () => {
-		const r = run(wrap(`import C from './C.svelte' with { hydrate: 'load' };`, '<p>no usage of C</p>'));
+		const r = run(wrap(`import C from './C.svelte' with { wake: 'load' };`, '<p>no usage of C</p>'));
 		expect(r).toBeTruthy();
 		expect(r!.islands.length).toBe(0);
 		expect(r!.code).not.toMatch(/import C from/);
@@ -74,7 +77,7 @@ describe('audit fixes — transform contract', () => {
 
 	it('errors when marked import is used as dotted Menu.Item', () => {
 		expectThrows(
-			() => run(wrap(`import Menu from './Menu.svelte' with { hydrate: 'load' };`, '<Menu.Item x={1} />')),
+			() => run(wrap(`import Menu from './Menu.svelte' with { wake: 'load' };`, '<Menu.Item x={1} />')),
 			/dotted tag/
 		);
 	});
@@ -84,7 +87,7 @@ describe('audit fixes — transform contract', () => {
 			() =>
 				run(
 					wrap(
-						`import G from './G.svelte' with { defer: 'load' };\n\timport Lake from './Lake.svelte' with { hydrate: 'none' };`,
+						`import G from './G.svelte' with { render: 'deferred' };\n\timport Lake from './Lake.svelte' with { wake: 'none' };`,
 						'<G><Lake /></G>'
 					)
 				),
@@ -94,16 +97,16 @@ describe('audit fixes — transform contract', () => {
 
 	it('lake binding rewrite produces a portable lake wrapper', () => {
 		const r = run(
-			wrap(`import Lake from './Lake.svelte' with { hydrate: 'none' };`, '<Lake />')
+			wrap(`import Lake from './Lake.svelte' with { wake: 'none' };`, '<Lake />')
 		);
 		expect(r).toBeTruthy();
 		const lake = r!.islands.find((i) => i.kind === 'lake')!;
-		expect(lake.wrapperSource).toMatch(/OgygiaLakeRegion__Wrapper/);
+		expect(lake.wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="lake"/);
 		expect(lake.lakes).toEqual(['OgygiaLakeInner']);
 	});
 
 	it('strips unused hydrate:none import (no with{} left)', () => {
-		const r = run(wrap(`import L from './L.svelte' with { hydrate: 'none' };`, '<p>no lake</p>'));
+		const r = run(wrap(`import L from './L.svelte' with { wake: 'none' };`, '<p>no lake</p>'));
 		expect(r).toBeTruthy();
 		expect(r!.code).not.toMatch(/hydrate:\s*'none'/);
 		expect(r!.code).not.toMatch(/from '\.\/L\.svelte'/);
@@ -115,14 +118,14 @@ describe('audit fixes — transform contract', () => {
 				run(wrap(`import C from './C.svelte' with { preset: 'marginOnly' };`, '<C />'), makeCtx({
 					presets: { marginOnly: { margin: '10px' } }
 				})),
-			/must set `hydrate` or `defer`/
+			/must set `render` or `wake`/
 		);
 	});
 
 	it('rejects hydrate values with lone "(" as unknown (not media)', () => {
 		expectThrows(
-			() => run(wrap(`import C from './C.svelte' with { hydrate: 'weird(thing' };`, '<C />')),
-			/unknown hydrate strategy/
+			() => run(wrap(`import C from './C.svelte' with { wake: 'weird(thing' };`, '<C />')),
+			/unknown wake strategy/
 		);
 	});
 
@@ -408,11 +411,12 @@ describe('audit fixes — remote clear', () => {
 });
 
 describe('audit fixes — session-bound MAC', () => {
-	it('always uses v1 length-prefixed fields; empty session is still a field', () => {
+	it('always uses v1 length-prefixed fields; empty session/ttl are still fields', () => {
 		const secret = 'test-secret-key-16b';
 		const unbound = region_mac_message('id', '1', 'props');
 		expect(unbound).toMatch(/^v1\|/);
-		expect(unbound).toContain('|0:'); // empty session field
+		// Five fields: id | exp | props | session('') | ttl('').
+		expect(unbound).toBe('v1|2:id|1:1|5:props|0:|0:');
 		const bound = region_mac_message('id', '1', 'props', 'sess');
 		expect(bound).toContain('|4:sess');
 		expect(unbound).not.toBe(bound);
@@ -420,6 +424,10 @@ describe('audit fixes — session-bound MAC', () => {
 		expect(verify(secret, bound, sig)).toBe(true);
 		expect(verify(secret, region_mac_message('id', '1', 'props', 'other'), sig)).toBe(false);
 		expect(verify(secret, unbound, sig)).toBe(false);
+		// A different ttl is a different message (ttl is signed, so it can't be re-pointed).
+		const ttl_bound = region_mac_message('id', '1', 'props', 'sess', '300');
+		expect(ttl_bound).toContain('|3:300');
+		expect(verify(secret, ttl_bound, sign(secret, bound))).toBe(false);
 	});
 });
 
@@ -429,8 +437,8 @@ describe('audit fixes — region endpoint allowlist', () => {
 			'../dist/runtime/region-endpoint-url.js'
 		);
 		const origin = 'https://app.example';
-		expect(is_allowed_region_endpoint('/🏝️ogygia🏝️?id=abc', origin)).toBe(true);
-		expect(is_allowed_region_endpoint('https://app.example/🏝️ogygia🏝️?id=1', origin)).toBe(true);
+		expect(is_allowed_region_endpoint('/🏝️?id=abc', origin)).toBe(true);
+		expect(is_allowed_region_endpoint('https://app.example/🏝️?id=1', origin)).toBe(true);
 		expect(is_allowed_region_endpoint('https://evil.example/x', origin)).toBe(false);
 		expect(is_allowed_region_endpoint('//evil.example/x', origin)).toBe(false);
 		expect(is_allowed_region_endpoint('javascript:alert(1)', origin)).toBe(false);

@@ -27,21 +27,21 @@ class FakeParent {
 
 describe('region-attrs (two-axis DOM)', () => {
 	it('is_awake only for hydrate schedules, not none', () => {
-		expect(is_awake(new FakeEl({ hydrate: 'load' }))).toBe(true);
-		expect(is_awake(new FakeEl({ hydrate: 'idle' }))).toBe(true);
-		expect(is_awake(new FakeEl({ hydrate: '(max-width: 600px)' }))).toBe(true);
-		expect(is_awake(new FakeEl({ hydrate: 'none' }))).toBe(false);
+		expect(is_awake(new FakeEl({ wake: 'load' }))).toBe(true);
+		expect(is_awake(new FakeEl({ wake: 'idle' }))).toBe(true);
+		expect(is_awake(new FakeEl({ wake: '(max-width: 600px)' }))).toBe(true);
+		expect(is_awake(new FakeEl({ wake: 'none' }))).toBe(false);
 		expect(is_awake(new FakeEl({ render: 'defer', when: 'load' }))).toBe(false);
 	});
 
 	it('is_frozen matches hydrate="none"', () => {
-		expect(is_frozen(new FakeEl({ hydrate: 'none' }))).toBe(true);
-		expect(is_frozen(new FakeEl({ hydrate: 'load' }))).toBe(false);
+		expect(is_frozen(new FakeEl({ wake: 'none' }))).toBe(true);
+		expect(is_frozen(new FakeEl({ wake: 'load' }))).toBe(false);
 		expect(is_frozen(new FakeEl({}))).toBe(false);
 	});
 
 	it('region_remount defaults to cache', () => {
-		expect(region_remount(new FakeEl({ hydrate: 'none' }))).toBe('cache');
+		expect(region_remount(new FakeEl({ wake: 'none' }))).toBe('cache');
 		expect(region_remount(new FakeEl({ remount: 'cache' }))).toBe('cache');
 		expect(region_remount(new FakeEl({ remount: 'empty' }))).toBe('empty');
 		expect(region_remount(new FakeEl({ remount: 'swr' }))).toBe('swr');
@@ -75,17 +75,17 @@ describe('region-attrs (two-axis DOM)', () => {
 		expect(is_deferred(hole)).toBe(true);
 		expect(region_schedule(hole)).toBe('visible');
 		expect(region_schedule(new FakeEl({ render: 'defer' }))).toBe('load');
-		expect(region_schedule(new FakeEl({ hydrate: 'idle' }))).toBe('idle');
+		expect(region_schedule(new FakeEl({ wake: 'idle' }))).toBe('idle');
 		// frozen regions don't schedule a wake; default load is unused for them
-		expect(region_schedule(new FakeEl({ hydrate: 'none' }))).toBe('load');
+		expect(region_schedule(new FakeEl({ wake: 'none' }))).toBe('load');
 	});
 
 	it('region_hydrate_schedule / phase2 coalesce', () => {
 		expect(region_hydrate_schedule(new FakeEl({ render: 'defer', when: 'load' }))).toBe(null);
 		expect(
-			region_hydrate_schedule(new FakeEl({ render: 'defer', when: 'visible', hydrate: 'idle' }))
+			region_hydrate_schedule(new FakeEl({ render: 'defer', when: 'visible', wake: 'idle' }))
 		).toBe('idle');
-		expect(region_hydrate_schedule(new FakeEl({ hydrate: 'none' }))).toBe(null);
+		expect(region_hydrate_schedule(new FakeEl({ wake: 'none' }))).toBe(null);
 
 		// Matching schedules → immediate phase-2 load (no re-arm)
 		expect(phase2_hydrate_schedule('load', 'load')).toBe('load');
@@ -105,7 +105,7 @@ describe('region-attrs (two-axis DOM)', () => {
 		const combo = new FakeEl({
 			render: 'defer',
 			when: 'load',
-			hydrate: 'visible',
+			wake: 'visible',
 			'hydrate-margin': '100px'
 		});
 		expect(is_deferred(combo)).toBe(true);

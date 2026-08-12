@@ -1,9 +1,10 @@
 /**
- * Internal server-island wrapper used only on the SSR / region-endpoint graph.
+ * Internal server-only region helpers used on the SSR / region-endpoint graph.
  *
  * **Not a public API** — do not import from app code.
  *
  * @packageDocumentation
  * @internal
  */
-export { default as ServerIsland } from './ServerIsland.svelte';
+/** Signer for deferred regions — SSR-only (the client region binding never imports this). */
+export { makeRegionEndpoint } from './server/region-endpoint.js';

@@ -1,3 +1,5 @@
+const ABSOLUTE_URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
 /**
  * Defense-in-depth: only fetch region HTML from same-origin capability URLs.
  * Mint always emits a path-only URL (`resolve(DEFAULT_ISLANDS_ENDPOINT)?…`). Absolute /
@@ -39,7 +41,7 @@ export function is_same_origin_response(res: Response, page_origin = location.or
  */
 export function island_module_url(entry: string, base?: string): string {
 	if (!entry) return entry;
-	if (entry.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(entry)) return entry;
+	if (entry.startsWith('/') || ABSOLUTE_URL_SCHEME.test(entry)) return entry;
 	const resolved = new URL(entry, base ?? location.href);
 	return resolved.pathname + resolved.search + resolved.hash;
 }

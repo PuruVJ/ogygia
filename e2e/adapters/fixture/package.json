@@ -1,0 +1,30 @@
+{
+	"name": "ogygia-adapter-fixture",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"build": "vite build",
+		"prepare": "svelte-kit sync || echo ''"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/adapter-cloudflare": "^7.0.0",
+		"@sveltejs/adapter-netlify": "^5.0.0",
+		"@sveltejs/adapter-node": "^5.2.0",
+		"@sveltejs/adapter-static": "^3.0.0",
+		"@sveltejs/adapter-vercel": "^5.5.0",
+		"@sveltejs/kit": "^2.63.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"svelte": "^5.56.1",
+		"svelte-check": "^4.6.0",
+		"typescript": "^6.0.3",
+		"vite": "^8.0.16"
+	},
+	"dependencies": {
+		"ogygia": "workspace:*"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": ["esbuild", "workerd"]
+	}
+}

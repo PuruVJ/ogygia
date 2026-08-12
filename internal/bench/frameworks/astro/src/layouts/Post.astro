@@ -1,0 +1,9 @@
+---
+import Base from './Base.astro';
+const { frontmatter } = Astro.props;
+---
+<Base title={frontmatter?.title ?? 'ogygiaBench — astro'}>
+	<main>
+		<slot />
+	</main>
+</Base>

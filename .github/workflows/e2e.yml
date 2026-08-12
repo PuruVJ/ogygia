@@ -1,0 +1,47 @@
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 22: adapter-vercel rejects unpinned bleeding-edge Node; 22 is a supported runtime.
+          node-version: 22
+          cache: pnpm
+
+      # Bun runtime dimension — the adapter e2e suite runs the node-server output under bun too.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # wrangler (Cloudflare workerd) is fetched on demand by the suite via npx; warm it so the
+      # cloudflare adapter boots the real Workers runtime instead of skipping.
+      - name: Warm wrangler
+        run: npx --yes wrangler --version
+
+      - name: Run the full e2e suite (verify + adapters, node + bun)
+        run: pnpm run e2e
+        env:
+          OGYGIA_E2E_WRANGLER: '1'
+          # Stable CI-only signing key so the warn-path probe's production build is silent (locally
+          # this comes from apps/playground/.env, which is gitignored). NOT a production secret —
+          # the Vercel deploy sets its own OGYGIA_SECRET.
+          OGYGIA_SECRET: 3f9a2b7c1e5d8046af62c93b1d7e4058a6c2f19b3e8d70425c9a1f6b8d3e07c4

@@ -10,15 +10,14 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 // `.svelte.js` with the `$state` runes left intact, and the consumer's svelte pipeline compiles
 // those (verified in dist). So they are NOT copied here.
 const files = [
-	'src/Island.svelte',
-	'src/ServerIsland.svelte',
-	'src/OgygiaRouter.svelte',
+	'src/Region.svelte',
 	'src/NestedProvider.svelte',
-	'src/LakePlaceholder.svelte',
+	'src/LiveHost.svelte',
 	'src/LakeBoundary.svelte',
-	'src/LakeRegion.svelte',
 	'src/OgygiaBoundary.svelte',
-	'src/ClientBindingStub.svelte'
+	'src/ClientBindingStub.svelte',
+	'src/Context.svelte',
+	'src/Blocks.svelte'
 ];
 
 for (const rel of files) {

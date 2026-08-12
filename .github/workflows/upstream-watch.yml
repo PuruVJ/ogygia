@@ -1,0 +1,109 @@
+name: upstream-watch
+
+# Periodically pull the LATEST svelte + @sveltejs/kit and run the whole suite against them, so an
+# upstream change that breaks ogygia is caught here — with a filed issue — instead of by a user.
+# This never touches main: it bumps versions in a throwaway checkout and reports.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC. Weekly is enough to catch a regression while it's still fresh upstream.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch/tag to test (default: main)'
+        required: false
+        default: 'main'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  upstream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || 'main' }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 22: adapter-vercel rejects unpinned bleeding-edge Node; 22 is a supported runtime.
+          node-version: 22
+          cache: pnpm
+
+      # Bun runtime dimension — the adapter e2e suite runs the node-server output under bun too.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install workspace deps (baseline lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Bump svelte + @sveltejs/kit to latest across the workspace
+        run: |
+          # `--latest` ignores the semver ranges and jumps to the newest published versions. Runs in
+          # every workspace package that depends on them (docs, playground, lib devDeps).
+          pnpm -r update --latest svelte @sveltejs/kit
+          # Record the resolved versions the apps actually build against, for the failure report.
+          {
+            echo "SVELTE_VERSION=$(node -p "require('./apps/docs/node_modules/svelte/package.json').version")"
+            echo "KIT_VERSION=$(node -p "require('./apps/docs/node_modules/@sveltejs/kit/package.json').version")"
+          } >> "$GITHUB_ENV"
+
+      - name: Show the versions under test
+        run: |
+          echo "svelte      = ${SVELTE_VERSION}"
+          echo "@sveltejs/kit = ${KIT_VERSION}"
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # wrangler (Cloudflare workerd) is fetched on demand by the suite via npx; warm it so the
+      # cloudflare adapter boots the real Workers runtime instead of skipping.
+      - name: Warm wrangler
+        run: npx --yes wrangler --version
+
+      - name: Type-check + unit tests (build:lib, check:lib, check:playground, check:verify)
+        run: pnpm run check
+
+      - name: Full e2e suite (verify + adapters, node + bun)
+        run: pnpm run e2e
+        env:
+          OGYGIA_E2E_WRANGLER: '1'
+
+      # ── Report ─────────────────────────────────────────────────────────────────────────────────
+      # On failure, open (or comment on) a single tracking issue so a green upstream never spams and a
+      # broken one is loud. De-duped by the `upstream-break` label.
+      - name: File an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="upstream break: svelte ${SVELTE_VERSION:-?} / @sveltejs/kit ${KIT_VERSION:-?}"
+          # Build the body without a heredoc (YAML-safe) and write it to a file for --body-file.
+          {
+            printf '%s\n\n' 'The scheduled **upstream-watch** run failed against the latest published upstream:'
+            printf -- '- `svelte` = `%s`\n' "${SVELTE_VERSION:-unknown}"
+            printf -- '- `@sveltejs/kit` = `%s`\n\n' "${KIT_VERSION:-unknown}"
+            printf '%s\n\n' 'The suite (`pnpm run check` + `pnpm run e2e`) is red on these versions while the pinned lockfile is green — something changed upstream. Reproduce locally:'
+            printf '%s\n' '```sh'
+            printf '%s\n' 'pnpm -r update --latest svelte @sveltejs/kit'
+            printf '%s\n' 'pnpm run check && pnpm run e2e'
+            printf '%s\n\n' '```'
+            printf 'Failing run: %s\n' "${RUN_URL}"
+          } > /tmp/upstream-issue.md
+          # One open tracking issue at a time: comment if it exists, else create it.
+          EXISTING=$(gh issue list --state open --label upstream-break --json number --jq '.[0].number' || echo "")
+          if [ -n "${EXISTING}" ]; then
+            gh issue comment "${EXISTING}" --body-file /tmp/upstream-issue.md
+          else
+            gh label create upstream-break --color b60205 --description "Suite red against latest svelte/kit" 2>/dev/null || true
+            gh issue create --title "${TITLE}" --body-file /tmp/upstream-issue.md --label upstream-break
+          fi

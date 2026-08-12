@@ -1,0 +1,163 @@
+---
+title: SPA router & PPR
+summary: Global client navigation for islands apps — intercept links, keep chrome, prefetch and prerender the next page, and serve partially-prerendered shells that fill their holes per visitor.
+related:
+  - app/dashboards
+  - regions/held-regions
+  - regions/server-islands
+---
+
+The SPA router is **on by default**, app-wide — there is no component to render. Same-origin link clicks become client-side navigations: ogygia fetches the target page, merges `<head>`, swaps `<body>`, and updates history — no full reload, no Kit client bootstrap. View transitions are on too, so pages cross-fade instead of flashing white.
+
+It is configured in **one place**, the Vite plugin:
+
+```ts
+// vite.config.ts
+import { ogygia } from 'ogygia/vite';
+
+export default {
+  plugins: [
+    ogygia(),                                       // router on, view transitions on (default)
+    // ogygia({ router: { viewTransitions: false } })  // SPA nav, but no view transitions
+    // ogygia({ router: false })                        // opt out of the SPA router entirely
+    sveltekit(),
+  ],
+};
+```
+
+> **When to opt out.** Keep the router for **app-like navigation** — no white flash between pages, persistent chrome, prefetch on hover. Turn it off with `router: false` only if a plain MPA is all you need: then same-origin links are ordinary full-page loads. On routes that are still `csr = true`, Kit owns navigation and ogygia stays out of the way — the two coexist either way.
+
+### Opt one page out of view transitions
+
+View transitions are global, but a single page can turn them off with a meta tag in its head — handy for a page whose swap animation you do not want (a checkout step, a full-bleed media page):
+
+```svelte
+<!-- src/routes/checkout/+page.svelte -->
+<svelte:head>
+  <meta name="ogygia-router" content="plain" />
+</svelte:head>
+```
+
+The page's tag wins over the global default; navigation is still client-side, it just skips the transition.
+
+## Link prefetch
+
+The router honors Kit's full preload grammar, so existing `data-sveltekit-preload-*` attributes just work:
+
+```svelte
+<div data-sveltekit-preload-data="hover">
+  <a href="/docs/start/install">Install</a>
+</div>
+```
+
+Values `eager` / `viewport` / `hover` / `tap` warm the page-HTML cache at the matching moment, with Kit's nearest-ancestor inheritance.
+
+## Weaving server islands {#weave}
+
+When you navigate into a page with several [server islands](/docs/regions/server-islands), the router prescans the incoming page and pulls **all** its `render: 'deferred'` load holes down **one** batch request — not a fetch per hole, no waterfall. It is automatic; there is no attribute to set.
+
+The flush is out of order: each hole's HTML comes back the moment that region settles, so a fast region lands before a slow one regardless of source order. Content appears as it is ready. A [command that returns a region](/docs/regions/held-regions) rides the same one-response path — a single flight that both mutates and repaints.
+
+## Speculative prerender {#speculate}
+
+Prefetch warms the *HTML cache*. **Speculation goes further: the browser fully prerenders the next page** — runs its JS, fills its islands, resolves its server-island holes — in a hidden tab, before you click. Click, and it is swapped in instantly, already interactive.
+
+Turn it on in the plugin config:
+
+```ts
+// vite.config.ts
+ogygia({
+  continuity: {
+    speculate: 'hover'    // prerender on ~200ms hover dwell (moderate eagerness)
+    // speculate: 'viewport'  // prerender as soon as a link scrolls into view (eager)
+  }
+});
+```
+
+It uses the native [Speculation Rules API](https://developer.mozilla.org/en-US/docs/Web/API/Speculation_Rules_API) — no library, no client cost. ogygia injects one rules script that matches same-origin path links, and it is feature-detected: where the browser has no support it does nothing (the router's own prefetch still applies).
+
+Two things are never speculated: the signed region endpoint, and `rel="nofollow"` links. Beyond that, `data-ogygia-speculate` gives you a cascade — set `off` on a subtree, and `on` back on a single link (or subtree) inside it. `on` wins over `off`.
+
+```svelte
+<!-- turn a whole section off, re-enable one link inside it -->
+<nav data-ogygia-speculate="off">
+  <a href="/logout">Log out</a>          <!-- not prerendered (has a side effect) -->
+  <a href="/inbox" data-ogygia-speculate="on">Inbox</a>  <!-- prerendered anyway -->
+</nav>
+```
+
+Reach for `off` on links with side effects you do not want fired early (a logout, a one-time action), or when you are debugging navigation and want a cold click; reach for `on` to re-enable the ones inside that are safe.
+
+**Where speculation pays off most is a partially-prerendered page.** Its shell is already a static file on the CDN, so prerendering the next page means fetching that shell and filling its holes — there is almost nothing to render. Navigation to a PPR shell is nearly free, which is the setup for the next section.
+
+## Partial prerendering (PPR) {#ppr}
+
+A [Held region](/docs/regions/held-regions) is exactly the dynamic hole in an otherwise-static page. Partial prerendering bakes the shell at build and fills each hole per visitor. Prerender the page, keep the holes — that's the whole recipe:
+
+```ts
+// +page.ts
+export const prerender = true;
+```
+
+```svelte
+<script>
+  import Hero from './Hero.svelte';                              // static — baked at build
+  import Recommendations from './Recs.svelte' with { render: 'deferred' };  // dynamic hole
+  import Greeting from './Greeting.svelte' with { render: 'deferred' };     // personalized hole
+</script>
+```
+
+At build, Kit emits the page as a **static file** — the shell plus each hole's fallback and a signed endpoint reference. Your CDN serves it like any asset: no server render, no cold start, edge-fast everywhere. When the page loads, each hole fetches its server-rendered HTML — fresh per visitor, cookie-personalized if the island reads cookies. The fastest possible TTFB, zero shell renders ever. See [held regions](/docs/regions/held-regions) and [server islands](/docs/regions/server-islands) for how the holes and signing work.
+
+And because [speculation](#speculate) prerenders the shell from the CDN and fills its holes before the click, navigation between PPR pages feels like it has no cost at all — turn on `continuity: { speculate: 'hover' }` and the whole app moves at that speed.
+
+### See it
+
+The frame below is a real prerendered page (`/demo/ppr`). Its **shell** clock is baked into the static file — it never moves. Its **hole** clock is a `render: 'deferred'` server island, rendered per request — it changes every reload. Hit reload and watch one page tell two different times.
+
+<script>
+  import PprFrame from '$lib/PprFrame.svelte' with { wake: 'load' };
+</script>
+
+<PprFrame />
+
+### The holes never age out
+
+A capability minted at prerender is signed effectively-forever (the props are already public in the static HTML, so a longer signature reveals nothing). A dynamic page's capabilities keep the short `regionTtl` window — only prerendered pages get the long-lived mint.
+
+### Set OGYGIA_SECRET
+
+By default each build signs with a fresh random key, so a redeploy would orphan the holes on previously-built static pages (and anything a CDN still caches). A stable `OGYGIA_SECRET` env var keeps every past build's holes verifying. The build warns if you prerender holes without one. See [`OGYGIA_SECRET` in the API reference](/docs/reference/api) for the full option.
+
+### Constraints
+
+- `sessionCookie` sealing and prerendered holes don't mix: the capability is baked once for everyone, so it can't be bound to one visitor's session. Personalize inside the island (read cookies in the component) instead. See [`sessionCookie` in the API reference](/docs/reference/api).
+- Only `render: 'deferred'` holes survive prerendering — a `render: 'ssr'` region would need the shell rendered per request, which defeats the point.
+
+## Keep layout chrome {#keep}
+
+Mark a subtree with `data-ogygia-keep` and it survives navigations untouched — its DOM (and any island state, scroll position, or playing media inside) is relocated across the body swap instead of remounted. This is how a sidebar keeps its scroll position as you move between pages.
+
+```svelte
+<div data-ogygia-keep="sidebar">
+  <SideNav />
+</div>
+```
+
+The sidebar on this very site uses it — notice it does not flash or reset as you navigate. For sharing island state across a kept subtree, see [state context](/docs/data-state/state-context).
+
+## What it is not
+
+The router does no script processing: `<script>` tags injected by a body swap do not execute (standard browser behavior). If you need code to run per navigation, use an island. Shallow routing (`pushState` / `replaceState`) is not supported without Kit's client — use `goto()`.
+
+> `invalidateAll` is a soft seed refresh, not a navigation: it re-fetches the current page and refreshes data seeds in place, with no view transition, body swap, or island remount. See [Data & remote functions](/docs/data-state/remote-functions).
+
+## Do / don't
+
+- **Do** wrap persistent chrome (sidebar, player, header) in `data-ogygia-keep` so it keeps state across navigations.
+- **Do** use the `data-sveltekit-preload-*` attributes you already know — they work unchanged.
+- **Do** turn on `continuity: { speculate: 'hover' }` for app-like instant navigation — with PPR shells it is nearly free. Opt risky links out with `data-ogygia-speculate="off"` (and `="on"` to re-enable one inside).
+- **Do** set a stable `OGYGIA_SECRET` before you ship prerendered holes, so redeploys don't orphan them.
+- **Don't** expect injected `<script>` tags to run after a body swap; put per-navigation code in an island.
+- **Don't** bind `sessionCookie` to a prerendered hole — personalize inside the island instead.
+- **Don't** leave the router on if a plain MPA is enough — `router: false` drops it (and its runtime) entirely.

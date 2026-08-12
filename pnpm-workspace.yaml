@@ -1,7 +1,9 @@
 packages:
   - 'packages/*'
-  - 'playground'
-  - 'docs'
+  - 'apps/*'
+  # Non-library projects (talk deck, benchmark harness, repros) — workspace members so they share
+  # the root install instead of each spawning its own node_modules.
+  - 'internal/*'
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:

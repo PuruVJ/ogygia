@@ -14,17 +14,32 @@ declare module 'virtual:ogygia/manifest' {
 }
 declare module 'virtual:ogygia/region-endpoint' {
 	export function makeRegionEndpoint(entry: string, props?: Record<string, unknown>): string;
+	/** @param ttl response cache max-age in seconds (`0`/absent = no-store). Signed into the URL. */
+	export function mintServerIsland(
+		entry: string,
+		props: Record<string, unknown>,
+		ttl?: number
+	): string;
 }
 declare module 'virtual:ogygia/server-manifest' {
 	export const islands: Record<string, () => Promise<{ default: unknown }>>;
+	/** Server-island id → its built client-chunk URL (the key `islandCss()` is keyed by). */
+	export const island_url: Record<string, string>;
 }
 declare module 'virtual:ogygia/runtime-url' {
 	const url: string;
 	export default url;
 }
+declare module 'virtual:ogygia/runtime-entry' {
+	export const __features: string[];
+}
+
 declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of hashed dependency chunks for a hydrate island entry (`/_app/immutable/…`). */
 	export function islandDeps(entry: string): string[];
+	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
+	 *  region response so a server-picked component styles a page that never imported it. */
+	export function islandCss(entry: string): string[];
 }
 declare module 'virtual:ogygia/dev-hmr' {
 	/* side-effect only — CSS HMR bridge under csr=false */
@@ -35,6 +50,8 @@ declare module 'virtual:ogygia/dev-hmr-url' {
 }
 declare module 'virtual:ogygia/secret' {
 	export const secret: string;
+	/** True when the key is env-provided (OGYGIA_SECRET) and thus survives redeploys. */
+	export const secretStable: boolean;
 }
 declare module 'virtual:ogygia/sign' {
 	export function sign(secret: string, message: string): string;
@@ -43,7 +60,8 @@ declare module 'virtual:ogygia/sign' {
 		id: string,
 		exp: number | string,
 		props: string,
-		session?: string
+		session?: string,
+		ttl?: number | string
 	): string;
 }
 declare module 'virtual:ogygia/request-event' {
@@ -60,10 +78,20 @@ declare module 'virtual:ogygia/session-cookie' {
 	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ sessionCookie })`. */
 	export const sessionCookie: string;
 }
+declare module 'virtual:ogygia/router-config' {
+	/** SPA router on (default) or opted out via `ogygia({ router: false })`. */
+	export const enabled: boolean;
+	/** Use the View Transitions API on navigation. `ogygia({ router: { viewTransitions } })`. */
+	export const viewTransitions: boolean;
+}
 declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regionTtl })` (default 3600). */
 	export const regionTtl: number;
 }
+/** CONTINUITY compile-time constants (Vite `define`; typeof-guarded so node dist import is safe). */
+declare const __OGYGIA_CONTINUITY_FORMS__: boolean;
+declare const __OGYGIA_CONTINUITY_SPECULATE__: 'hover' | 'viewport' | false;
+
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;
 }

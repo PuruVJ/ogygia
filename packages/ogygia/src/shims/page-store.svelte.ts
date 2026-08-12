@@ -76,7 +76,16 @@ export class PageState {
 	}
 }
 
-export const page_state = new PageState();
+// One instance across EVERY bundle. In production the runtime and island entries share a single
+// `page-store` chunk, so a module-local `new PageState()` was already a singleton — but `vite dev`
+// serves this module as two instances (the runtime imports it relatively; islands reach it through
+// the `$app/state` alias, a different resolved URL), so `set_page()`/`reset_page()` from the runtime
+// updated one instance while an island read the other → stale `page.url`/`params` after SPA nav
+// (e.g. a sidebar's active link stuck on the old page in dev). A `globalThis` + `Symbol.for` handle
+// is one instance regardless of how many times the module is evaluated. PAGE-STATE-SINGLETON.
+const PAGE_STATE_KEY = Symbol.for('ogygia.page-state');
+const global_scope = globalThis as unknown as Record<symbol, PageState | undefined>;
+export const page_state: PageState = (global_scope[PAGE_STATE_KEY] ??= new PageState());
 
 /** Seed from an island's SSR snapshot (pre-hydration / SPA remount). */
 export function set_page(snap: Partial<PageSnapshot> | undefined | null): void {

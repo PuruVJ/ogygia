@@ -1,0 +1,49 @@
+{
+  "data": {
+    "blocks": [
+      {
+        "@type": "@builder.io/sdk:Element",
+        "@version": 2,
+        "id": "builder-hero-1",
+        "component": {
+          "name": "Hero",
+          "options": {
+            "title": "Assembled in Builder, rendered by ogygia",
+            "tagline": "This whole page is Builder JSON — fetched, mapped, and rendered as islands."
+          }
+        }
+      },
+      {
+        "@type": "@builder.io/sdk:Element",
+        "id": "builder-grid-1",
+        "component": { "name": "Grid" },
+        "children": [
+          {
+            "@type": "@builder.io/sdk:Element",
+            "id": "builder-feat-1",
+            "component": {
+              "name": "Feature",
+              "options": { "title": "Editors arrange", "body": "Non-developers drag blocks in Builder's canvas." }
+            }
+          },
+          {
+            "@type": "@builder.io/sdk:Element",
+            "id": "builder-feat-2",
+            "component": {
+              "name": "Feature",
+              "options": { "title": "ogygia ships", "body": "Only the block types this page names load their chunk." }
+            }
+          }
+        ]
+      },
+      {
+        "@type": "@builder.io/sdk:Element",
+        "id": "builder-counter-1",
+        "component": {
+          "name": "CounterBlock",
+          "options": { "label": "The one interactive block", "start": 5 }
+        }
+      }
+    ]
+  }
+}

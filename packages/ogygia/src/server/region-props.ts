@@ -5,6 +5,7 @@
 import { stringify } from 'devalue';
 import { B64Url } from './payload.js';
 import { MAX_REGION_PROPS_LEN } from './endpoint.js';
+import { TRANSPORT_WIRE_KEY, reduce_transportable } from '../live-transport.js';
 
 /**
  * @returns b64url payload, or null when props cannot cross the wire (non-devalue or oversized).
@@ -12,7 +13,7 @@ import { MAX_REGION_PROPS_LEN } from './endpoint.js';
 export function encode_region_props(props: Record<string, unknown>): string | null {
 	let payload: string;
 	try {
-		payload = B64Url.encode(stringify(props));
+		payload = B64Url.encode(stringify(props, { [TRANSPORT_WIRE_KEY]: reduce_transportable }));
 	} catch {
 		return null;
 	}

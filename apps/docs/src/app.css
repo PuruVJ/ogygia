@@ -1,0 +1,215 @@
+:root {
+	color-scheme: dark;
+
+	--bg: #0a0f0d;
+	--bg-raised: #101713;
+	--bg-sunken: #060907;
+
+	--text: #e6eee9;
+	--text-dim: #8fa398;
+	--text-faint: #74867c; /* AA on --bg / --bg-raised / --bg-sunken */
+	--text-on-invert: #0a0f0d;
+
+	--accent: #6fe3b0;
+	--accent-strong: #8ff0c6;
+	--accent-deep: #173b2d;
+	--accent-line: #234a3a;
+
+	--line: #1c2620;
+	--line-strong: #2a3830;
+
+	--warn: #e0b56f;
+
+	--shadow-panel: 0 1px 0 rgba(111, 227, 176, 0.04), 0 12px 32px -16px rgba(0, 0, 0, 0.6);
+
+	--r-sm: 6px;
+	--r-md: 10px;
+
+	--font-display: 'Newsreader Variable', Georgia, serif;
+	--font-body: 'Instrument Sans Variable', system-ui, -apple-system, sans-serif;
+	--font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace;
+
+	--maxw: 1000px;
+	--gutter: clamp(1.25rem, 3vw, 2.5rem);
+	--section-gap: clamp(5rem, 10vw, 8.5rem);
+}
+
+/* Light palette — applied for `data-theme="light"` (forced) OR, in system mode (no forced theme),
+   when the OS prefers light. `data-theme="dark"` forces dark by opting out of the media query. */
+:root[data-theme='light'],
+:root.__theme-light {
+	color-scheme: light;
+
+	--bg: #f2f6f4;
+	--bg-raised: #ffffff;
+	--bg-sunken: #e6ece9;
+
+	--text: #121a16;
+	--text-dim: #4a5c52;
+	--text-faint: #7a8c82;
+	--text-on-invert: #f2f6f4;
+
+	--accent: #0f7a4f;
+	--accent-strong: #0a5c3b;
+	--accent-deep: #d5efe3;
+	--accent-line: #b0d4c2;
+
+	--line: #d5e0da;
+	--line-strong: #b8c9bf;
+
+	--warn: #9a6b1c;
+
+	--shadow-panel: 0 1px 0 rgba(15, 122, 79, 0.06), 0 12px 32px -16px rgba(18, 26, 22, 0.18);
+}
+
+@media (prefers-color-scheme: light) {
+	:root:not([data-theme='dark']):not([data-theme='light']) {
+		color-scheme: light;
+
+		--bg: #f2f6f4;
+		--bg-raised: #ffffff;
+		--bg-sunken: #e6ece9;
+
+		--text: #121a16;
+		--text-dim: #4a5c52;
+		--text-faint: #7a8c82;
+		--text-on-invert: #f2f6f4;
+
+		--accent: #0f7a4f;
+		--accent-strong: #0a5c3b;
+		--accent-deep: #d5efe3;
+		--accent-line: #b0d4c2;
+
+		--line: #d5e0da;
+		--line-strong: #b8c9bf;
+
+		--warn: #9a6b1c;
+
+		--shadow-panel: 0 1px 0 rgba(15, 122, 79, 0.06), 0 12px 32px -16px rgba(18, 26, 22, 0.18);
+	}
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	/* In-page #hash clicks only — SPA post-nav scroll forces behavior:instant in the router. */
+	scroll-behavior: smooth;
+	scroll-padding-top: 1.5rem;
+}
+
+body {
+	margin: 0;
+	font: 400 1rem/1.65 var(--font-body);
+	color: var(--text);
+	background: var(--bg);
+	-webkit-font-smoothing: antialiased;
+}
+
+h1 {
+	margin: 0;
+	font-family: var(--font-display);
+	font-style: italic;
+	font-weight: 500;
+	font-size: clamp(3rem, 6vw, 5rem);
+	line-height: 1.05;
+	letter-spacing: -0.02em;
+	font-variation-settings: 'opsz' 72;
+	color: var(--text);
+	padding-bottom: 0.08em;
+}
+
+h2 {
+	margin: 0 0 1rem;
+	font-family: var(--font-display);
+	font-weight: 500;
+	font-size: clamp(1.75rem, 3vw, 2.5rem);
+	line-height: 1.15;
+	letter-spacing: -0.01em;
+	color: var(--text);
+}
+
+h2 em {
+	font-style: italic;
+	color: var(--accent);
+}
+
+h3 {
+	margin: 0 0 0.75rem;
+	font: 600 1.0625rem/1.4 var(--font-body);
+	color: var(--text);
+}
+
+h3 code {
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 0.9375rem;
+	color: var(--accent);
+}
+
+p {
+	margin: 0 0 1rem;
+	color: var(--text-dim);
+}
+
+p:last-child {
+	margin-bottom: 0;
+}
+
+p strong,
+li strong {
+	color: var(--text);
+	font-weight: 600;
+}
+
+code,
+pre {
+	font-family: var(--font-mono);
+	font-weight: 400;
+	font-size: 0.875rem;
+	line-height: 1.7;
+}
+
+p code,
+li code {
+	font-size: 0.8125rem;
+	color: var(--accent);
+	background: var(--accent-deep);
+	padding: 0.1em 0.35em;
+	border-radius: 4px;
+}
+
+a {
+	color: var(--accent);
+	text-decoration: none;
+	transition: color 120ms ease;
+}
+
+/* Body links: accent vs --text-dim is ~1.7:1 — underline for link-in-text-block. */
+.prose a,
+.section-lede a {
+	text-decoration: underline;
+	text-decoration-thickness: from-font;
+	text-underline-offset: 0.14em;
+}
+
+a:hover {
+	color: var(--accent-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}

@@ -2,21 +2,34 @@
  * Minimal SPA router for ogygia (Astro's ClientRouter equivalent).
  *
  * Intercepts same-origin <a> clicks, fetches the target page, swaps <body>,
- * merges <head>, and updates history. `data-ogygia-persist` keeps matching chrome.
+ * merges <head>, and updates history. `data-ogygia-keep` keeps matching chrome.
  * Islands on the new page auto-initialise via custom-element connection; old ones
  * auto-unmount via disconnection (except inside persisted subtrees).
  */
 import { html_has_kit_bootstrap, document_has_kit_bootstrap } from './kit-boot.js';
 import { PageCache } from './page-cache.js';
-import {
-	collect_persist_pairs,
-	end_persist_preserve,
-	relocate_persist_pairs,
-	type PersistPair
-} from './persist.js';
+import { slots } from './slots.js';
+import type { PersistPair } from './persist.js';
 import { runtime_session } from './session.js';
+import { streamFrames } from './frame-nav.js';
 
 const WS = /\s+/;
+
+// SvelteKit's remote-function client (which ogygia reuses for query/command) patches
+// `history.pushState`/`replaceState` on the instance and warns whenever they are called directly.
+// On csr=false pages ogygia owns navigation — Kit's router is not running — so we update history via
+// the un-patched `History.prototype` methods. Same effect on the history stack, without the spurious
+// "conflict with SvelteKit's router" warning. Captured lazily so a test/SSR without `History` is safe.
+const native_push =
+	typeof History !== 'undefined' ? History.prototype.pushState : null;
+const native_replace =
+	typeof History !== 'undefined' ? History.prototype.replaceState : null;
+const push_state = (state: unknown, url: string) =>
+	(native_push ?? history.pushState).call(history, state, '', url);
+const replace_state = (state: unknown, url?: string) => {
+	const fn = native_replace ?? history.replaceState;
+	return url === undefined ? fn.call(history, state, '') : fn.call(history, state, '', url);
+};
 
 // ---- navigation lifecycle hooks (for the $app/navigation shim + `ogygia/app`) ----
 
@@ -52,6 +65,8 @@ export type AfterNavigateCallback = (nav: AfterNavigation) => void;
 const PREFETCH_TTL_MS = 8_000;
 const PAGE_CACHE_MAX_ENTRIES = 32;
 const PAGE_CACHE_MAX_BYTES = 4_000_000; // ~4MB of UTF-16-ish HTML
+/** Cap on waiting for a destination stylesheet to load before the body swap (cold-cache FOUC guard). */
+const STYLESHEET_WAIT_MS = 2_000;
 /** Responses that must never warm the SPA HTML cache (personalized / must revalidate). */
 const CC_UNCACHEABLE = /(?:^|,)\s*(?:private|no-store|no-cache)\b/i;
 /** Kit remote-function POSTs live under `…/_app/remote/…` (or custom `appDir`). */
@@ -204,10 +219,6 @@ function is_dangerous_head_node(node: Element): boolean {
 }
 
 class SpaRouter {
-	#after_body_swap: (() => void) | undefined;
-	#after_body_connected: (() => void) | undefined;
-	/** Apply page/remote seeds from fetched HTML without a body swap (`invalidateAll`). */
-	#apply_soft_invalidate: ((doc: Document) => void) | undefined;
 	#started = false;
 	#before_hooks = new Set<BeforeNavigateCallback>();
 	#after_hooks = new Set<AfterNavigateCallback>();
@@ -228,18 +239,14 @@ class SpaRouter {
 	#viewport_seen = new WeakSet<Element>();
 	/** pathname+search of the document currently in the DOM (hash ignored). */
 	#doc_key = '';
-
-	set_after_body_swap(fn: () => void) {
-		this.#after_body_swap = fn;
-	}
-
-	set_after_body_connected(fn: () => void) {
-		this.#after_body_connected = fn;
-	}
-
-	set_apply_soft_invalidate(fn: (doc: Document) => void) {
-		this.#apply_soft_invalidate = fn;
-	}
+	/**
+	 * Full URL of the document currently displayed in the DOM. `navigate()` uses this as its `from`
+	 * instead of `location.href`, because on a `popstate` (back/forward) the browser has ALREADY
+	 * changed `location` to the target — so `location.href` would equal the target and the
+	 * same-document guard would wrongly bail into the hash-only branch, never swapping the body
+	 * (browser back left the old page's DOM in place). POP-FROM.
+	 */
+	#current_url: URL | null = null;
 
 	beforeNavigate(fn: BeforeNavigateCallback) {
 		this.#before_hooks.add(fn);
@@ -296,13 +303,15 @@ class SpaRouter {
 	}
 
 	fetch_page(href: string, signal?: AbortSignal) {
-		// Warm cache hit (prefetch path only — navigations use signal and must be abortable).
-		if (!signal) {
-			const cached = this.#page_cache.get(href);
-			if (cached != null) return Promise.resolve(cached);
-			const pending = this.#inflight.get(href);
-			if (pending) return pending;
-		}
+		// Warm cache hit (a prefetched page, or an in-flight prefetch): serving it is instant, so
+		// even an abortable navigation uses it — there is nothing to abort on a resolved cache hit
+		// or a shared prefetch promise. Without this, a click after a hover-prefetch would re-fetch
+		// (the whole point of prefetch is to skip that second request). Real navigations delete the
+		// entry after use (one-shot — see navigate()), so the next visit is still fresh. PREFETCH-HIT.
+		const cached = this.#page_cache.get(href);
+		if (cached != null) return Promise.resolve(cached);
+		const pending = this.#inflight.get(href);
+		if (pending) return pending;
 
 		const settled = fetch(href, {
 			signal,
@@ -353,18 +362,19 @@ class SpaRouter {
 			replace?: boolean;
 		} = {}
 	) {
-		const from = new URL(location.href);
+		const from = this.#current_url ?? new URL(location.href);
 
 		// Same document, hash-only (or identical URL): never fetch / swap / view-transition.
 		// (`invalidateAll` is a soft seed refresh — it does not call navigate.)
 		if (same_document(url, from) && !replace) {
 			if (!this.#run_before(from, url, type)) return;
 			if (push && url.href !== location.href) {
-				history.pushState({ ...(history.state || {}), ogygia: true }, '', url.href);
+				push_state({ ...(history.state || {}), ogygia: true }, url.href);
 			} else if (url.href !== location.href) {
-				history.replaceState({ ...(history.state || {}), ogygia: true }, '', url.href);
+				replace_state({ ...(history.state || {}), ogygia: true }, url.href);
 			}
 			jump_to_hash(url.hash);
+			this.#current_url = url;
 			this.#run_after(from, url, type);
 			return;
 		}
@@ -380,11 +390,11 @@ class SpaRouter {
 		// Update history SYNCHRONOUSLY (before any await) so the URL is correct and
 		// races between overlapping navigations can't drop the pushState.
 		if (replace) {
-			history.replaceState({ ...(history.state || {}), ogygia: true }, '', url.href);
+			replace_state({ ...(history.state || {}), ogygia: true }, url.href);
 		} else if (push) {
 			// save outgoing scroll into the current entry, then push the new URL
-			history.replaceState({ ...(history.state || {}), scroll: { x: scrollX, y: scrollY } }, '');
-			history.pushState({ ogygia: true }, '', url.href);
+			replace_state({ ...(history.state || {}), scroll: { x: scrollX, y: scrollY } });
+			push_state({ ogygia: true }, url.href);
 		}
 
 		let html: string | null;
@@ -411,8 +421,9 @@ class SpaRouter {
 
 		const doc = new DOMParser().parseFromString(html, 'text/html');
 
-		// Mixed sites: if the target page has no <OgygiaRouter/> marker, hand over to a
-		// real document navigation (and stop SPA behaviour from here on).
+		// Mixed sites: if the target page has no `ogygia-router` marker (the handle injects it on
+		// every ogygia page), it is not an ogygia page — hand over to a real document navigation
+		// (and stop SPA behaviour from here on).
 		const marker = doc.querySelector('meta[name="ogygia-router"]');
 		if (!marker) {
 			location.href = url.href;
@@ -425,25 +436,46 @@ class SpaRouter {
 		const use_vt =
 			marker.getAttribute('content') !== 'plain' && !prefer_reduced_motion;
 
+		// ROUTE WEAVING: prescan the incoming page for its load-timed deferred region calls and stream
+		// them ALL in one batch request, kicked off now (before the swap). Each region binder joins the
+		// batch via the store when it connects — no per-region fetch waterfall on navigation. Fired
+		// synchronously so every reservation is in place before the body swap connects any binder.
+		this.#weave_regions(doc);
+
+		// Cold-cache FOUC guard: get the destination's stylesheets loaded and applied BEFORE the body
+		// swap, so the first post-deploy navigation never flashes unstyled content (a full-width column
+		// snapping to its styled width). Warm caches resolve this instantly. Old body keeps its styles
+		// until the swap, so adding the sheets early is invisible.
+		await this.#preload_stylesheets(doc.head);
+		if (gen !== this.#nav_gen) return;
+
 		let persist_pairs: PersistPair[] = [];
 		const swap = () => {
 			// Stale nav: do not mutate the DOM (view-transition can otherwise commit a superseded swap).
 			if (gen !== this.#nav_gen) return;
 			this.#merge_head(doc.head); // keeps our runtime module script alive across swaps
 			if (gen !== this.#nav_gen) return;
+			// CONTINUITY: snapshot the LEAVING page's changed island form fields (session-scoped) so
+			// returning to it restores what the visitor was mid-typing. Read the old body now.
+			if (slots.forms.enabled && this.#current_url) {
+				slots.forms.snapshot(document.body, this.#current_url.pathname);
+			}
 			// Clear session state BEFORE body connect so new regions never see the previous page.
-			this.#after_body_swap?.();
+			slots.spaLifecycle?.prepare();
 			if (gen !== this.#nav_gen) return;
 			// Relocate immediately before replaceWith — never leave live nodes in a discarded parse tree.
-			persist_pairs = collect_persist_pairs(document.body, doc.body);
-			relocate_persist_pairs(persist_pairs);
+			persist_pairs = slots.persist.collect(document.body, doc.body);
+			slots.persist.relocate(persist_pairs);
 			document.body.replaceWith(doc.body);
 			document.title = doc.title;
 			// Lakes inside persisted chrome survived reset — re-mark settled so island-in-lake can wake.
 			for (const { live } of persist_pairs) runtime_session.settle_lakes_in(live);
-			end_persist_preserve(persist_pairs);
+			slots.persist.end(persist_pairs);
 			// Old islands disconnected; new hydrates are awaiting — sweep stale Kit remotes now.
-			this.#after_body_connected?.();
+			slots.spaLifecycle?.finish();
+			// CONTINUITY: restore fields the visitor left on THIS page in a prior visit (this session),
+			// as each island hydrates.
+			if (slots.forms.enabled) slots.forms.restore(url.pathname);
 		};
 
 		if (use_vt && document.startViewTransition) {
@@ -455,6 +487,7 @@ class SpaRouter {
 		if (gen !== this.#nav_gen) return;
 
 		this.#doc_key = document_key(url);
+		this.#current_url = url;
 
 		// Instant after a body swap — CSS smooth must not animate programmatic post-nav scroll.
 		if (replace) {
@@ -529,7 +562,7 @@ class SpaRouter {
 		if (!doc.querySelector('meta[name="ogygia-router"]')) return;
 
 		this.#merge_head(doc.head);
-		this.#apply_soft_invalidate?.(doc);
+		slots.spaLifecycle?.softInvalidate(doc);
 	}
 
 	invalidate() {
@@ -564,13 +597,15 @@ class SpaRouter {
 
 	start() {
 		if (this.#started || typeof document === 'undefined') return;
-		// OPT-IN: only activate when a <OgygiaRouter/> put its marker in the head.
+		// Only activate when the page carries the `ogygia-router` marker (the handle injects it
+		// globally unless `ogygia({ router: false })`).
 		if (!document.querySelector('meta[name="ogygia-router"]')) return;
-		// Gradual migration: <OgygiaRouter/> may sit in the root layout while some routes stay
-		// csr=true. On those pages Kit owns navigation — do not intercept clicks alongside it.
+		// Gradual migration: the marker is on every ogygia page, but some routes may stay csr=true.
+		// On those pages Kit owns navigation — do not intercept clicks alongside it.
 		if (document_has_kit_bootstrap()) return;
 		this.#started = true;
 		this.#doc_key = document_key(new URL(location.href));
+		this.#current_url = new URL(location.href);
 		this.install_remote_mutation_cache_bust();
 
 		document.addEventListener('click', (event) => {
@@ -588,7 +623,7 @@ class SpaRouter {
 		window.addEventListener('popstate', () => {
 			const url = new URL(location.href);
 			// Hash-only back/forward on the same document — browser already updated the URL;
-			// do not fetch or swap. Scroll to the fragment if present.
+			// do not fetch or swap. Scroll to the target if present.
 			if (document_key(url) === this.#doc_key) {
 				jump_to_hash(url.hash);
 				return;
@@ -598,7 +633,7 @@ class SpaRouter {
 		});
 
 		// seed initial history entry so scroll is restored on the first back
-		history.replaceState({ ...(history.state || {}), ogygia: true }, '');
+		replace_state({ ...(history.state || {}), ogygia: true });
 	}
 
 	/** Merge <head>: keep nodes present in both, remove stale, add new. Keeps runtime scripts alive. */
@@ -637,6 +672,48 @@ class SpaRouter {
 				current.appendChild(node.cloneNode(true));
 			}
 		}
+	}
+
+	/**
+	 * Load the destination page's stylesheets into the live `<head>` and resolve once they have
+	 * applied — call this BEFORE the body swap. A freshly appended `<link rel="stylesheet">` loads
+	 * asynchronously, so swapping the body first shows the new route unstyled (e.g. a content column
+	 * at full width) until the sheet arrives. That window is invisible on a warm cache but flashes on
+	 * the first visit after a deploy, when the route CSS isn't cached yet. Preloading here closes it;
+	 * `#merge_head` then dedupes these by key so nothing is added twice. Capped so a stalled sheet
+	 * can't hang navigation.
+	 */
+	#preload_stylesheets(new_head: HTMLHeadElement): Promise<unknown> {
+		const present = new Set<string>();
+		for (const node of Array.from(document.head.children)) {
+			if (node.tagName === 'LINK' && node.getAttribute('rel') === 'stylesheet') {
+				present.add(head_node_key(node));
+			}
+		}
+		const pending: Promise<void>[] = [];
+		for (const node of Array.from(new_head.children)) {
+			if (node.tagName !== 'LINK' || node.getAttribute('rel') !== 'stylesheet') continue;
+			if (is_dangerous_head_node(node)) continue;
+			const key = head_node_key(node);
+			if (present.has(key)) continue;
+			present.add(key);
+			const link = node.cloneNode(true) as HTMLLinkElement;
+			pending.push(
+				new Promise<void>((resolve) => {
+					link.addEventListener('load', () => resolve(), { once: true });
+					link.addEventListener('error', () => resolve(), { once: true });
+				})
+			);
+			// Insert at the TOP of <head>, not the end: an island's `<svelte:head>` hydration removes a
+			// trailing node range, so a stylesheet appended after the island head blocks gets reclaimed.
+			document.head.insertBefore(link, document.head.firstChild);
+		}
+		if (!pending.length) return Promise.resolve();
+		// Never let a hung stylesheet block the swap indefinitely.
+		return Promise.race([
+			Promise.all(pending),
+			new Promise((resolve) => setTimeout(resolve, STYLESHEET_WAIT_MS))
+		]);
 	}
 
 	#should_intercept(event: MouseEvent, anchor: HTMLAnchorElement | null) {
@@ -771,22 +848,38 @@ class SpaRouter {
 	#build_nav_target(url: URL): NavTarget {
 		return { url, params: {}, route: { id: null } };
 	}
+
+	/**
+	 * ROUTE WEAVING. Collect the incoming page's deferred, load-timed region calls and stream them as
+	 * one batch. Reads the RENDERED holes (`<ogygia-region render="defer" endpoint>`), so it covers
+	 * both placed server islands and held `region()` deferred regions alike — authoring syntax is
+	 * irrelevant. Only `when="load"` (or unset) is woven: a region scheduled `visible`/`idle`/media
+	 * stays lazy and fetches on its own trigger, so dynamic schedules are preserved, not eagerly pulled.
+	 */
+	#weave_regions(doc: Document) {
+		const endpoints: string[] = [];
+		const woven = new Set<string>();
+		for (const el of Array.from(doc.querySelectorAll('ogygia-region[render="defer"][endpoint]'))) {
+			const when = el.getAttribute('when') || 'load';
+			if (when !== 'load') continue; // lazy schedules keep their own timing — never batch them early
+			const ep = el.getAttribute('endpoint');
+			if (ep) {
+				endpoints.push(ep);
+				woven.add(ep);
+			}
+		}
+		if (!endpoints.length) return;
+		// Drop the per-region `<link rel="preload" as="fetch">` hints for these calls before the head is
+		// merged: on initial load they front-run the fetch, but on a woven navigation the batch serves
+		// them — left in, the browser would fire the very GET waterfall weaving exists to remove.
+		for (const link of Array.from(doc.querySelectorAll('link[rel="preload"][as="fetch"]'))) {
+			if (woven.has(link.getAttribute('href') || '')) link.remove();
+		}
+		void streamFrames(endpoints);
+	}
 }
 
 const spa = new SpaRouter();
-
-/** Called after a successful body swap so the runtime can reset per-document session state. */
-export function set_after_body_swap(fn: () => void) {
-	spa.set_after_body_swap(fn);
-}
-
-/**
- * Called after `body.replaceWith` (old islands disconnected; new hydrates still pending).
- * Used to sweep Kit query/live instance caches before the next page mounts remotes.
- */
-export function set_after_body_connected(fn: () => void) {
-	spa.set_after_body_connected(fn);
-}
 
 /**
  * Register a callback before a client-side navigation.
@@ -849,11 +942,6 @@ export function invalidate() {
 	return spa.invalidate();
 }
 
-/** Wire soft-invalidate seed application (called from the runtime bootstrap). */
-export function set_apply_soft_invalidate(fn: (doc: Document) => void) {
-	spa.set_apply_soft_invalidate(fn);
-}
-
 /**
  * Warm the SPA HTML cache for a URL.
  * Note: this fetches the **page**, not Kit `load` data in isolation.
@@ -893,9 +981,31 @@ export function replaceState() {
 
 /**
  * Install click/popstate listeners and start SPA navigation.
- * Invoked by the runtime when `<OgygiaRouter />` (or an island) loads the runtime module.
+ * Invoked by the runtime once the module loads (handle-injected on every ogygia page, or by an island).
  * @internal
  */
 export function startRouter() {
 	spa.start();
+}
+
+/**
+ * Feature entry: start the SPA router once the DOM is ready, but only when the page carries
+ * `<meta name="ogygia-router">` (the handle injects it globally unless `ogygia({ router: false })`)
+ * and Kit is not already booting it.
+ */
+export function install() {
+	if (typeof document === 'undefined') return;
+	// Expose SPA nav to the kit-remote client stub (remote commands that navigate/invalidate) without
+	// that stub statically importing this ~10 KB module. Only set when the router feature is loaded.
+	slots.nav = { goto, invalidateAll };
+	const start = () => {
+		if (!document.querySelector('meta[name="ogygia-router"]')) return;
+		if (document_has_kit_bootstrap()) return;
+		startRouter();
+	};
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', start, { once: true });
+	} else {
+		start();
+	}
 }

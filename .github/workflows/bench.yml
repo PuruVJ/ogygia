@@ -1,0 +1,64 @@
+name: bench
+
+# The ogygiaBench suite. GitHub-hosted `ubuntu-latest` ships Google Chrome pre-installed at
+# /usr/bin/google-chrome, and Lighthouse's chrome-launcher auto-detects it — so we reuse the runner's
+# Chrome directly (no Docker image, no `playwright install`). Frameworks build on Node 22 (latest
+# tooling, no legacy targets) + bun (for mochi). Results are uploaded as an artifact.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['internal/bench/**', 'packages/ogygia/**']
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NODE_OPTIONS: --experimental-strip-types
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Locate the runner's pre-installed Chrome
+        run: |
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium-browser || command -v chromium)"
+          echo "Using Chrome at: $CHROME"
+          echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+
+      - name: Install bench harness deps
+        working-directory: internal/bench
+        run: pnpm install --ignore-workspace --no-lockfile --config.confirmModulesPurge=false
+
+      - name: Build all frameworks
+        working-directory: internal/bench
+        run: node build-all.ts
+
+      - name: Start mochi
+        working-directory: internal/bench/frameworks/mochi
+        run: |
+          PORT=3335 MOCHI_KEY=dGVzdC1rZXktMzItYnl0ZXMtYmFzZTY0dXJsISEh bun run start &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:3335/posts/small >/dev/null && break; sleep 1; done
+
+      - name: Run benchmark (Lighthouse + sizes, brotli)
+        working-directory: internal/bench
+        run: node benchmark.ts --config frameworks.config.json --out results/latest.md --json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ogygiabench-results
+          path: |
+            internal/bench/results/latest.md
+            internal/bench/results/latest.json
+            internal/bench/results/fidelity.md

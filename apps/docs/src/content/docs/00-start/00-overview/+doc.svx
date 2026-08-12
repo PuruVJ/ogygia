@@ -1,0 +1,86 @@
+---
+title: Overview
+summary: SSR islands for SvelteKit. Pages ship as server HTML with no Kit client bootstrap — JS arrives only for the components you mark, on a ~7.6 KB runtime.
+related:
+  - regions/regions
+  - start/quickstart
+  - start/install
+---
+
+ogygia is an islands architecture for SvelteKit. A page ships as **server HTML with no framework on it**. The only JavaScript that loads is a small shared runtime plus the code for the specific components you mark as interactive.
+
+```svelte
+<script>
+  import Cart from './Cart.svelte' with { wake: 'visible' };
+</script>
+
+<h1>Everything here is static HTML.</h1>
+<Cart />   <!-- hydrates only when it scrolls into view -->
+```
+
+That is the whole idea: opt the route out of the Kit client with `csr = false`, then mark the imports you want interactive. The heading ships zero JS. `Cart` ships its own, and only when it is needed.
+
+> **When to use.** Reach for ogygia on content-heavy or mostly-static pages with pockets of interactivity — marketing, docs, blogs, dashboards, storefronts. Anywhere you feel you are shipping a whole framework to run one widget. If your page is a single large interactive app, plain SvelteKit with `csr = true` is the simpler tool — and ogygia [coexists](/docs/start/install) with those pages route by route.
+
+The island below is real — it lives on this page, marked `wake: 'load'`, while the prose around it stays HTML:
+
+<script>
+  import Counter from '$lib/demos/Counter.svelte' with { wake: 'load' };
+</script>
+
+<div class="doc-demo">
+  <Counter start={10} label="A live island" note="Everything else on this page is static HTML." />
+</div>
+
+## Why you'd want this
+
+- **Ship far less JavaScript.** No app-wide hydration. A mostly-static page stays mostly static, so most pages cost the runtime and nothing else.
+- **Keep writing normal Svelte.** Islands are ordinary components. The import attribute is the only new syntax; there is no special island API to learn.
+- **It is still SvelteKit.** Remote functions, form actions, the router, content — the Kit features you rely on work inside islands. No forked framework, no patched Kit.
+- **One vocabulary.** Client islands, server islands, lakes, and held regions are the same handful of ideas combined, not four unrelated systems.
+
+## How it works
+
+A normal SvelteKit page boots the Kit client: it hydrates the whole tree, so every page carries the framework whether it needs it or not. ogygia flips that. You set `csr = false`, and the page is **just HTML** — no Kit client, no app-wide hydration.
+
+```ts
+// src/routes/+layout.ts — the whole page opts out of the Kit client
+export const csr = false;
+```
+
+What ships instead is a **~7.6 KB runtime** — a custom element (`<ogygia-region>`) plus an optional router. It sits and waits. JS arrives only for the components you explicitly mark, and it attaches to the HTML that is already there rather than replacing it.
+
+## When things happen
+
+Marking an import takes two attributes: `wake` (does this ship client JS, and when does it run?) and `render` (where does the HTML come from, and when?). The `wake` schedule is one small set of words:
+
+| Value | Meaning |
+| --- | --- |
+| `load` | Right away |
+| `idle` | When the browser goes idle |
+| `visible` | When scrolled into view |
+| `'(max-width: 600px)'` | When the media query matches |
+
+On an **island** the word says *when JS runs*. On a **server island** it says *when the HTML arrives*. Same words, two axes. The full schedule, `visible` margins, and what happens when regions nest live in [Timing & nesting](/docs/regions/timing-nesting).
+
+## One primitive, four kinds
+
+Islands, server islands, lakes, and held regions are not four features — they are four settings of one `<Region>` envelope. That canonical table, and the two dials behind it, live on the [Regions](/docs/regions/regions) landing page.
+
+## Start here
+
+- [Install](/docs/start/install) — add the package and wire the plugin.
+- [Quickstart](/docs/start/quickstart) — your first island, end to end.
+- [Regions](/docs/regions/regions) — the one primitive everything compiles to.
+- [Client islands](/docs/regions/client-islands) — the primitive you'll reach for most.
+
+<style>
+  .doc-demo {
+    margin: 1.5rem 0;
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md, 12px);
+    background: var(--bg-sunken);
+    max-width: 24rem;
+  }
+</style>

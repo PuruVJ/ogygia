@@ -1,0 +1,13 @@
+{
+	"posts": [
+		{ "id": "small", "path": "/posts/small", "words": 8800 },
+		{ "id": "medium", "path": "/posts/medium", "words": 23000 },
+		{ "id": "large", "path": "/posts/large", "words": 71000 }
+	],
+	"frameworks": [
+		{ "id": "ogygia", "approach": "islands (svelte 5)", "dist": "frameworks/ogygia/build" },
+		{ "id": "sveltekit", "approach": "whole-page (svelte 5)", "dist": "frameworks/sveltekit/build" },
+		{ "id": "astro", "approach": "islands (preact)", "dist": "frameworks/astro/dist" },
+		{ "id": "mochi", "approach": "islands (svelte 5)", "url": "http://127.0.0.1:3335" }
+	]
+}

@@ -5,7 +5,7 @@ import { encode_region_props } from '../src/server/region-props.js';
 import { MAX_REGION_PROPS_LEN } from '../src/server/endpoint.js';
 import { html_has_kit_bootstrap } from '../src/runtime/kit-boot.js';
 import { RuntimeSession } from '../src/runtime/session.js';
-import { islandId } from '../src/vite/transform.js';
+import { islandId } from '../src/compiler/transform.js';
 
 describe('region_mac_message', () => {
 	const secret = 'test-secret-key-16b';

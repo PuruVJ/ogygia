@@ -1,0 +1,23 @@
+{
+	"name": "sveltekit-bench",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"sync": "node ../../shared/sync.ts sveltekit",
+		"prebuild": "node ../../shared/sync.ts sveltekit",
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-static": "3.0.10",
+		"@sveltejs/kit": "2.70.2",
+		"@sveltejs/vite-plugin-svelte": "7.3.0",
+		"mdsvex": "0.12.8",
+		"svelte": "5.56.8",
+		"typescript": "5.9.3",
+		"vite": "8.2.1"
+	}
+}

@@ -1,0 +1,17 @@
+{
+	"name": "ogygia-bench-harness",
+	"private": true,
+	"type": "module",
+	"description": "ogygiaBench — port of khromov/interactive-blogs-benchmark with ogygia added.",
+	"scripts": {
+		"posts": "node generate-posts.ts",
+		"sync": "node shared/sync.ts",
+		"build:all": "node build-all.ts",
+		"benchmark": "node benchmark.ts --config frameworks.config.json --out results/latest.md --json",
+		"benchmark:gzip": "node benchmark.ts --config frameworks.config.json --out results/latest.md --json --gzip"
+	},
+	"dependencies": {
+		"chrome-launcher": "1.2.1",
+		"lighthouse": "13.4.1"
+	}
+}

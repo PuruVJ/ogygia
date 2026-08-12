@@ -1,0 +1,57 @@
+/*
+ * Shared page + widget styling for EVERY framework app in ogygiaBench.
+ * Fidelity rule: every framework renders the identical post (same markdown from bench/posts/, the same
+ * five Counter widgets, this exact CSS). Only the hydration approach may differ — never the design or
+ * content — so the JS comparison is apples-to-apples.
+ */
+:root {
+	--fg: #1a1a1a;
+	--muted: #6b7280;
+	--accent: #2563eb;
+	--border: #e5e7eb;
+}
+* {
+	box-sizing: border-box;
+}
+body {
+	margin: 0;
+	font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+	color: var(--fg);
+	line-height: 1.7;
+}
+main {
+	max-width: 42rem;
+	margin: 0 auto;
+	padding: 3rem 1.25rem 6rem;
+}
+h1 {
+	font-size: 2rem;
+	line-height: 1.2;
+	margin: 0 0 2rem;
+}
+h2 {
+	font-size: 1.35rem;
+	margin: 2.5rem 0 1rem;
+}
+p {
+	margin: 0 0 1.1rem;
+}
+
+/* The one interactive widget, identical across frameworks. */
+.bench-counter {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 1.5rem 0;
+	padding: 0.6rem 1rem;
+	font: inherit;
+	font-weight: 600;
+	color: #fff;
+	background: var(--accent);
+	border: 0;
+	border-radius: 0.5rem;
+	cursor: pointer;
+}
+.bench-counter:hover {
+	filter: brightness(1.08);
+}
