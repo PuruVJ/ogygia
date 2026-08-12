@@ -43,7 +43,11 @@ The island below is interactive — the counter increments. The snapshot inside 
 By default a lake is baked once and restored untouched. When its content should refresh in the background, make it `render: 'live'` — baked static content that revalidates:
 
 ```svelte
-<HeavyChart data={rows} with={{ render: 'live', wake: 'visible' }} />
+<script>
+  import HeavyChart from './HeavyChart.svelte' with { render: 'live', wake: 'visible' };
+</script>
+
+<HeavyChart data={rows} />
 ```
 
 `wake` is the revalidate schedule (`load` / `idle` / `visible` / media); `maxAge` and `onExpire` (set in a preset) tune staleness. `render: 'live'` serves the baked content immediately and refreshes it in the background through the signed island endpoint.

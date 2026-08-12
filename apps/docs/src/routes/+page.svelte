@@ -287,33 +287,42 @@
 
 	<p class="content-lead">One <code>content()</code> definition; the source decides where it comes from.</p>
 
-	<div class="content-grid">
-		<figure class="content-code">
-			<figcaption class="content-code-head">
-				<span class="content-kicker">Markdown &amp; islands</span>
-				<span class="content-title">Prose with live components in it</span>
-			</figcaption>
-			<div class="demo-code">{@html data.contentMarkdownHtml}</div>
-			<a class="content-code-link" href="/docs/content/collections">Markdown &amp; Shiki →</a>
-		</figure>
+	<div class="content-beats">
+		<div class="beat">
+			<div class="beat-head">
+				<span class="beat-num">01</span>
+				<span class="content-eyebrow">Markdown &amp; islands</span>
+				<h3>Prose with live components in it</h3>
+			</div>
+			<figure class="content-code">
+				<div class="demo-code">{@html data.contentMarkdownHtml}</div>
+				<a class="content-code-link" href="/docs/content/collections">Markdown &amp; Shiki →</a>
+			</figure>
+		</div>
 
-		<figure class="content-code">
-			<figcaption class="content-code-head">
-				<span class="content-kicker">Typed data</span>
-				<span class="content-title">JSON through the same API</span>
-			</figcaption>
-			<div class="demo-code">{@html data.contentJsonHtml}</div>
-			<a class="content-code-link" href="/docs/content/collections">Collections →</a>
-		</figure>
+		<div class="beat">
+			<div class="beat-head">
+				<span class="beat-num">02</span>
+				<span class="content-eyebrow">Typed data</span>
+				<h3>JSON through the same API</h3>
+			</div>
+			<figure class="content-code">
+				<div class="demo-code">{@html data.contentJsonHtml}</div>
+				<a class="content-code-link" href="/docs/content/collections">Collections →</a>
+			</figure>
+		</div>
 
-		<figure class="content-code content-code--wide">
-			<figcaption class="content-code-head">
-				<span class="content-kicker">Any source, even live</span>
-				<span class="content-title">A CMS, a REST API, a push feed</span>
-			</figcaption>
-			<div class="demo-code">{@html data.contentCustomHtml}</div>
-			<a class="content-code-link" href="/docs/content/blocks">Blocks &amp; custom sources →</a>
-		</figure>
+		<div class="beat">
+			<div class="beat-head">
+				<span class="beat-num">03</span>
+				<span class="content-eyebrow">Any source, even live</span>
+				<h3>A CMS, a REST API, a push feed</h3>
+			</div>
+			<figure class="content-code">
+				<div class="demo-code">{@html data.contentCustomHtml}</div>
+				<a class="content-code-link" href="/docs/content/blocks">Blocks &amp; custom sources →</a>
+			</figure>
+		</div>
 	</div>
 </section>
 
@@ -329,7 +338,7 @@
 
 	<div class="beat">
 		<div class="beat-head">
-			<span class="beat-num">08</span>
+			<span class="beat-num">01</span>
 			<h3>Bake the shell, fill the holes</h3>
 			<p>
 				Partial prerendering serves a static file from the CDN with dynamic server islands fetched
@@ -341,7 +350,7 @@
 
 	<div class="beat">
 		<div class="beat-head">
-			<span class="beat-num">09</span>
+			<span class="beat-num">02</span>
 			<h3>One request per navigation</h3>
 			<p>
 				The SPA router pulls a whole page's server-island holes down one batch, out of order, with no
@@ -352,7 +361,7 @@
 
 	<div class="beat">
 		<div class="beat-head">
-			<span class="beat-num">10</span>
+			<span class="beat-num">03</span>
 			<h3>Mutate and repaint in one trip</h3>
 			<p>
 				A command returns its re-rendered region in the same response, so the mounted region morphs
@@ -363,7 +372,7 @@
 
 	<div class="beat">
 		<div class="beat-head">
-			<span class="beat-num">11</span>
+			<span class="beat-num">04</span>
 			<h3>Prerender the next page on hover</h3>
 			<p>
 				Native Speculation Rules run the next page's JS and holes in a hidden tab, so the click is
@@ -570,42 +579,39 @@
 		color: var(--text-dim);
 		font: 400 1rem/1.5 var(--font-body);
 	}
-	.content-grid {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
+	/* Content sources as a numbered timeline — same beats as the seven moves, so it reads down the
+	   page with room to breathe instead of a crowded stack of cards. */
+	.content-beats {
+		margin-top: 0.5rem;
 	}
-	/* A code showcase tile: header, the highlighted sample, a learn-more link. Reuses the global
+	.content-eyebrow {
+		display: block;
+		margin-bottom: 0.45rem;
+		font: 600 0.6875rem/1 var(--font-mono);
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--accent);
+	}
+	/* The highlighted sample + a learn-more link, sitting under each beat's title. Reuses the global
 	   `.demo-code` styling from demo-block.css (loaded by ShowcaseCard on this page). */
 	.content-code {
 		display: flex;
 		flex-direction: column;
 		margin: 0;
-		border: 1px solid color-mix(in srgb, var(--accent-line) 40%, var(--line));
+		border: 1px solid color-mix(in srgb, var(--accent-line) 32%, var(--line));
 		border-radius: 14px;
 		overflow: hidden;
 		background: color-mix(in srgb, var(--bg-raised) 45%, transparent);
 	}
-	/* The custom/live sample is longer — let it span the full row when the grid has room. */
-	.content-code--wide {
-		grid-column: 1 / -1;
-	}
-	.content-code-head {
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-		padding: 0.85rem 1rem;
-		border-bottom: 1px solid color-mix(in srgb, var(--accent-line) 28%, var(--line));
-	}
 	.content-code :global(.demo-code) {
 		flex: 1;
 		margin: 0;
-		padding: 0.9rem 1rem;
+		padding: 1rem 1.15rem;
 		overflow-x: auto;
 		font-size: 0.8125rem;
 	}
 	.content-code-link {
-		padding: 0.7rem 1rem;
+		padding: 0.75rem 1.15rem;
 		border-top: 1px solid color-mix(in srgb, var(--accent-line) 22%, var(--line));
 		color: var(--accent);
 		text-decoration: none;
@@ -613,17 +619,6 @@
 	}
 	.content-code-link:hover {
 		background: color-mix(in srgb, var(--accent-deep) 18%, transparent);
-	}
-	.content-kicker {
-		font: 600 0.6875rem/1 var(--font-mono);
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
-		color: var(--accent);
-	}
-	.content-title {
-		color: var(--text);
-		font: 600 1rem/1.3 var(--font-display);
-		letter-spacing: -0.02em;
 	}
 	.content-head code {
 		font: 500 0.9em/1 var(--font-mono);
