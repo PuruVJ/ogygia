@@ -15,6 +15,7 @@ import {
 	ISLAND_DIR,
 	normalize_import_keys,
 	islandChunkFileName,
+	islandPublicUrl,
 	wrapperVirtualId,
 	CLIENT_BINDING_STUB,
 	type ImportKeys
@@ -108,6 +109,7 @@ const V_SIGN = 'virtual:ogygia/sign';
 const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
 const V_SESSION_COOKIE = 'virtual:ogygia/session-cookie';
 const V_REGION_TTL = 'virtual:ogygia/region-ttl';
+const V_ROUTER_CONFIG = 'virtual:ogygia/router-config';
 const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
 const V_REQUEST_EVENT = 'virtual:ogygia/request-event';
 const V_REGION_ENDPOINT = 'virtual:ogygia/region-endpoint';
@@ -325,12 +327,27 @@ const ISLAND_FACADE_RE = /(?:^|\/)ogygia-island\.[0-9a-f]+\.js$/;
 export function collectIslandDepModulepreloads(
 	bundle: Record<
 		string,
-		{ type: string; fileName?: string; imports?: string[]; dynamicImports?: string[] }
+		{
+			type: string;
+			fileName?: string;
+			imports?: string[];
+			dynamicImports?: string[];
+			/** Vite/rolldown-vite chunk metadata — `importedCss` lists the CSS assets a chunk owns. */
+			viteMetadata?: { importedCss?: Set<string> | string[] };
+		}
 	>
-): Record<string, string[]> {
-	const out: Record<string, string[]> = {};
+): { js: Record<string, string[]>; css: Record<string, string[]> } {
+	const js: Record<string, string[]> = {};
+	const css: Record<string, string[]> = {};
 
-	const walk = (fileName: string, seen: Set<string>): string[] => {
+	const css_of = (fileName: string): string[] => {
+		const chunk = bundle[fileName];
+		const imported = chunk?.viteMetadata?.importedCss;
+		if (!imported) return [];
+		return [...imported].map((f) => (f.startsWith('/') ? f : '/' + f));
+	};
+
+	const walk = (fileName: string, seen: Set<string>, css_acc: string[]): string[] => {
 		const chunk = bundle[fileName];
 		if (!chunk || chunk.type !== 'chunk') return [];
 		const deps: string[] = [];
@@ -344,7 +361,8 @@ export function collectIslandDepModulepreloads(
 			const dep = bundle[imp];
 			if (!dep || dep.type !== 'chunk') continue;
 			deps.push(imp.startsWith('/') ? imp : '/' + imp);
-			deps.push(...walk(imp, seen));
+			css_acc.push(...css_of(imp));
+			deps.push(...walk(imp, seen, css_acc));
 		}
 		return deps;
 	};
@@ -355,7 +373,11 @@ export function collectIslandDepModulepreloads(
 		if (!ISLAND_FACADE_RE.test(fileName)) continue;
 		const entryUrl = fileName.startsWith('/') ? fileName : '/' + fileName;
 		const seen = new Set<string>([fileName]);
-		const raw = walk(fileName, seen);
+		// CSS: the facade's own styles + every dep chunk's — this is how a server-picked (held)
+		// component's scoped CSS reaches a page that never imported it (the page's stylesheet set
+		// can't know; the region response carries these hrefs instead).
+		const css_acc = css_of(fileName);
+		const raw = walk(fileName, seen, css_acc);
 		const uniq: string[] = [];
 		const have = new Set<string>([entryUrl]);
 		for (const d of raw) {
@@ -363,9 +385,10 @@ export function collectIslandDepModulepreloads(
 			have.add(d);
 			uniq.push(d);
 		}
-		out[entryUrl] = uniq;
+		js[entryUrl] = uniq;
+		css[entryUrl] = [...new Set(css_acc)];
 	}
-	return out;
+	return { js, css };
 }
 
 /** Stable handoff path: client `generateBundle` writes; SSR reads at render (Kit is SSR-first). */
@@ -457,6 +480,21 @@ export interface OgygiaOptions {
 		/** Default `IntersectionObserver` `rootMargin` (e.g. `'200px'`). */
 		margin?: string;
 	};
+
+	/**
+	 * Client-side SPA router — app-wide, on by default. It intercepts same-origin links, swaps
+	 * `<body>`, merges `<head>`, and keeps `data-ogygia-keep` chrome across navigations. No component
+	 * to place: the server handle injects the runtime + the `ogygia-router` meta into every page.
+	 *
+	 * - `true` (default) — router on, View Transitions on.
+	 * - `false` — router off (the whole feature is tree-shaken out; same-origin links do full MPA loads).
+	 * - `{ viewTransitions: false }` — router on, but no View Transitions API on navigation.
+	 *
+	 * Per-page escape hatch (no second config): a page opts *itself* out of View Transitions by
+	 * emitting `<svelte:head><meta name="ogygia-router" content="plain" /></svelte:head>` — the handle
+	 * injects the app default but a page that sets its own meta wins.
+	 */
+	router?: boolean | { viewTransitions?: boolean };
 
 	/**
 	 * Content-collection config. `markdown` configures the mdsvex preprocessor (themes, remark
@@ -593,6 +631,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		Math.max(60, Math.floor(options.regionTtl ?? DEFAULT_REGION_TTL_SEC))
 	);
 
+	// ROUTER config (app-wide, one place). On by default; View Transitions on unless disabled. `false`
+	// tree-shakes the whole feature out. Baked into `virtual:ogygia/router-config` for the handle.
+	const router_enabled = options.router !== false;
+	const router_view_transitions =
+		options.router === false
+			? false
+			: typeof options.router === 'object'
+				? options.router.viewTransitions !== false
+				: true;
+
 	// CONTINUITY config. Ambient island-form survival across SPA nav is ON by default; speculation
 	// rules (native prerender of likely-next pages) are opt-in ('hover' | 'viewport').
 	const continuity_forms = options.continuity?.forms !== false;
@@ -611,7 +659,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		hydrate: [],
 		defer: [],
 		persistKeys: [],
-		router: false,
+		// Router is app-wide config now (not detected from a `<Router/>` usage): the feature ships
+		// whenever `router` isn't `false`.
+		router: router_enabled,
 		live: false,
 		lakes: false
 	};
@@ -1007,11 +1057,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// A `<script module>` transportable class goes in the manifest too (keyed by the
 					// .svelte path — side-effect-importing the component runs its module registration).
 					if (svelteModuleHasTransportable(src, full)) transportable_modules.add(full);
-					// SPA router usage (`import { Router } from 'ogygia'` / `<ogygia.Router/>`) → the
-					// runtime needs the router feature. Err toward inclusion (over-include is safe).
-					if (/['"]ogygia['"]/.test(src) && /\bRouter\b/.test(src)) {
-						note_runtime_mark({ router: true });
-					}
 					const result = run_transform(src, full);
 					if (result) register(result, full);
 				} else if (
@@ -1266,6 +1311,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (source === V_SECRET) return RESOLVED(V_SECRET);
 			if (source === V_SIGN) return RESOLVED(V_SIGN);
 			if (source === V_RATE_LIMIT) return RESOLVED(V_RATE_LIMIT);
+			if (source === V_ROUTER_CONFIG) return RESOLVED(V_ROUTER_CONFIG);
 			if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);
 			if (source === V_REGION_TTL) return RESOLVED(V_REGION_TTL);
 			if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
@@ -1430,7 +1476,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// `load()` would always be empty; prerender/live SSR run after client generateBundle.
 				// Resolve via import.meta.url walk (not absolute build-machine paths) so adapters
 				// find `output/server/ogygia-island-deps.json` next to the server bundle.
-				if (!ssr) return `export function islandDeps(_entry) { return []; }`;
+				if (!ssr)
+					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }`;
+				// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
+				// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
+				// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
+				// channel as prod's `<link>`, resolved for dev. `islandDeps` (JS modulepreload) is prod-only.
+				if (is_dev)
+					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }`;
 				return (
 					`import fs from 'node:fs';\n` +
 					`import path from 'node:path';\n` +
@@ -1462,10 +1515,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					`  cache = {};\n` +
 					`  return cache;\n` +
 					`}\n` +
-					`export function islandDeps(entry) {\n` +
-					`  if (!entry) return [];\n` +
-					`  const list = load()[entry];\n` +
+					// Handoff shape: `{ js: { entryUrl: [...] }, css: { entryUrl: [...] } }`. A stale flat
+					`// map (pre-css build) degrades gracefully: js falls back to the root, css to [].\n` +
+					`function pick(kind, entry) {\n` +
+					`  const all = load();\n` +
+					`  const map = all && typeof all[kind] === 'object' ? all[kind] : kind === 'js' ? all : null;\n` +
+					`  const list = map ? map[entry] : null;\n` +
 					`  return Array.isArray(list) ? list : [];\n` +
+					`}\n` +
+					`export function islandDeps(entry) {\n` +
+					`  return entry ? pick('js', entry) : [];\n` +
+					`}\n` +
+					`export function islandCss(entry) {\n` +
+					`  return entry ? pick('css', entry) : [];\n` +
 					`}\n`
 				);
 			}
@@ -1532,6 +1594,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!ssr) return `export const rateLimit = { max: 0, windowMs: 60000 };`;
 				return `export const rateLimit = ${JSON.stringify(rate_limit)};`;
 			}
+			if (id === RESOLVED(V_ROUTER_CONFIG)) {
+				// The handle reads this to inject the runtime + `ogygia-router` meta into every page head
+				// (app-wide SPA router). Just two booleans; safe on either leg.
+				return (
+					`export const enabled = ${router_enabled};\n` +
+					`export const viewTransitions = ${router_view_transitions};`
+				);
+			}
 			if (id === RESOLVED(V_SESSION_COOKIE)) {
 				// SERVER only — sealed into the region MAC when non-empty.
 				if (!ssr) return `export const sessionCookie = '';`;
@@ -1546,14 +1616,25 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// Map of SERVER-island id -> dynamic import, used by the `ogygiaHandle()` handle to
 				// render an island server-side. Populated in BOTH dev and build (unlike the
 				// client manifest, which dev fills from URLs). Client build gets an empty map.
-				if (!ssr) return `export const islands = {};`;
+				if (!ssr) return `export const islands = {};\nexport const island_url = {};`;
 				prescan();
 				const entries = [];
+				const urls = [];
 				for (const [iid, virtualPath] of by_id) {
 					if (!registry.get(virtualPath)?.server) continue;
 					entries.push(`  ${JSON.stringify(iid)}: () => import(${JSON.stringify(virtualPath)})`);
+					// id → the URL `islandCss()` is keyed by, so the handle can ship a server-picked hole's
+					// CSS with its response (a page that never imported the component still styles it). In a
+					// build that's the hashed client chunk (→ handoff CSS assets); in dev it's the entry's
+					// dev module URL (→ `islandCss` returns it, the client imports it for CSS). Same channel.
+					urls.push(
+						`  ${JSON.stringify(iid)}: ${JSON.stringify(is_dev ? devUrlFor(virtualPath) : islandPublicUrl(iid))}`
+					);
 				}
-				return `export const islands = {\n${entries.join(',\n')}\n};`;
+				return (
+					`export const islands = {\n${entries.join(',\n')}\n};\n` +
+					`export const island_url = {\n${urls.join(',\n')}\n};`
+				);
 			}
 			if (id === RESOLVED(V_MANIFEST)) {
 				// Legacy stub — hydrate modules are loaded via `<ogygia-region entry>` URLs, not this map.
@@ -1702,7 +1783,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			const map = collectIslandDepModulepreloads(
 				bundle as Record<
 					string,
-					{ type: string; fileName?: string; imports?: string[]; dynamicImports?: string[] }
+					{
+						type: string;
+						fileName?: string;
+						imports?: string[];
+						dynamicImports?: string[];
+						viteMetadata?: { importedCss?: Set<string> | string[] };
+					}
 				>
 			);
 			const json = JSON.stringify(map);
@@ -1731,7 +1818,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			transform(code, id) {
 				const bare = strip_id(id);
 				if (!is_island_path(bare)) return null;
-				// After vite-plugin-svelte: maps often list sources as bare `<hash>.svelte`.
+				// A generated WRAPPER virtual (`virtual:ogygia/wrapper/<hash>.svelte`) is glue with no source
+				// on disk. vite-plugin-svelte emits a map whose `sources` is the bare `<hash>.svelte` basename
+				// with no `sourcesContent`; Vite then disk-probes it and warns "points to missing source files"
+				// — once per island, on every dev page. Rewriting the sources to the virtual id does NOT stick
+				// (Vite's `combineSourcemaps` re-traces to svelte's basename map) and inlining `sourcesContent`
+				// is lost the same way — so we drop the map for wrappers: Vite skips `injectSourcesContent` when
+				// `mappings` is empty, and a wrapper is generated code no one steps through.
+				if (bare.includes('/wrapper/')) return { code, map: { mappings: '' } };
+				// Other island svelte virtuals (if any): rewrite basename `<hash>.svelte` sources to the full
+				// virtual id and inline the generated source as `sourcesContent`.
 				let map: {
 					version: number;
 					mappings: string;
@@ -1746,10 +1842,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					return null;
 				}
 				if (!map?.mappings || !map.sources?.length) return null;
-				// A basename-only `<hash>.svelte` source is rewritten to the full virtual id (island
-				// case). A wrapper's source is already `virtual:ogygia/wrapper/<hash>.svelte`, so there
-				// is nothing to rewrite — but Vite still disk-reads it and warns. In BOTH cases we inline
-				// the generated source as `sourcesContent`, which is what actually silences the warning.
 				const rewritten = rewrite_island_sourcemap_sources(bare, map.sources);
 				const sources = rewritten ?? map.sources;
 				const entry = registry.get(bare);
@@ -1760,8 +1852,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						? (map.sourcesContent as (string | null)[])[i]
 						: null;
 					if (prev != null) return prev;
-					// This source IS our own virtual module (rewritten to `bare`, already `bare`, or the
-					// bare `<hash>.svelte` basename vite-plugin-svelte emitted). Inline its source text.
 					if (entry && (s === bare || s === base_name)) {
 						injected = true;
 						return entry.source;

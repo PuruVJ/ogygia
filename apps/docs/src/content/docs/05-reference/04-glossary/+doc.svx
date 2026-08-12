@@ -10,11 +10,11 @@ The whole vocabulary in one place. If a word in the docs is unfamiliar, it is de
 
 ## The five words
 
-- **Page** — a route that ships as server HTML with no Kit client (`csr = false`). Only islands hydrate. See [How it works](/docs/start/how-it-works).
-- **Island** — a component that becomes interactive by getting JS on a schedule. See [Client islands](/docs/islands/client-islands).
-- **Lake** — static HTML *inside* an island that ships zero client JS. See [Lakes](/docs/islands/lakes).
-- **Server island** — HTML fetched from the server after load; placeholder first, no JS. See [Server islands](/docs/islands/server-islands).
-- **Held region** — a server-*chosen* renderable you place like data (`<Region of={x} />`). See [Held regions](/docs/data-state/held-regions).
+- **Page** — a route that ships as server HTML with no Kit client (`csr = false`). Only islands hydrate. See [How it works](/docs/start/overview).
+- **Island** — a component that becomes interactive by getting JS on a schedule. See [Client islands](/docs/regions/client-islands).
+- **Lake** — static HTML *inside* an island that ships zero client JS. See [Lakes](/docs/regions/lakes).
+- **Server island** — HTML fetched from the server after load; placeholder first, no JS. See [Server islands](/docs/regions/server-islands).
+- **Held region** — a server-*chosen* renderable you place like data (`<Region of={x} />`). See [Held regions](/docs/regions/held-regions).
 
 ## Attributes & schedules
 
@@ -23,20 +23,20 @@ The whole vocabulary in one place. If a word in the docs is unfamiliar, it is de
 - **`region: 'raw'`** — marks a held, server-chosen region (handed to `region()` where the transform can't see the call).
 - **`keep`** — keep a live island's node + state across SPA navigation (was `persist`).
 - **`preset`** — a named bundle of attributes defined in plugin config, applied with `with { preset: 'name' }`.
-- **`load` / `idle` / `visible` / `interaction` / `(media)`** — the schedules. `interaction` (islands only) wakes on first pointer/key/focus, replaying the click that woke it. On an island they say when JS runs; on a `deferred`/`live` region, when the HTML fetches. See [Timing & nesting](/docs/islands/timing-nesting).
+- **`load` / `idle` / `visible` / `interaction` / `(media)`** — the schedules. `interaction` (islands only) wakes on first pointer/key/focus, replaying the click that woke it. On an island they say when JS runs; on a `deferred`/`live` region, when the HTML fetches. See [Timing & nesting](/docs/regions/timing-nesting).
 
 ## Mechanics
 
 - **Region** — the DOM element (`<ogygia-region>`) the runtime manages for every island, lake, or server island.
 - **Runtime** — the ~7.6 KB custom element + router that boots on a Page and wakes regions on schedule.
-- **Portable binding** — a marked import whose *binding* is the island, so you can pass it around like any component. See [Portable bindings](/docs/islands/portable-bindings).
-- **Nearest-boundary rule** — nesting is decided by the closest marked parent. See [Timing & nesting](/docs/islands/timing-nesting).
+- **Portable binding** — a marked import whose *binding* is the island, so you can pass it around like any component. See [Client islands](/docs/regions/client-islands).
+- **Nearest-boundary rule** — nesting is decided by the closest marked parent. See [Timing & nesting](/docs/regions/timing-nesting).
 - **Dedupe** — the same component + strategy produces one client chunk, however many times it is used.
 
 ## Data & state
 
 - **Remote function** — a Kit `query` / `command` / `form` etc., callable from inside islands. See [Remote functions](/docs/data-state/remote-functions).
-- **Live region** — a held region re-emitted over time by `query.live`, morphed or kept-alive in place. See [Held regions](/docs/data-state/held-regions).
+- **Live region** — a held region re-emitted over time by `query.live`, morphed or kept-alive in place. See [Held regions](/docs/regions/held-regions).
 - **Transportable** — a class that can cross an island boundary as a prop by declaring `static [ogygia.wire]`. See [Shared state](/docs/data-state/state-context#sharing-state).
 - **Codec** — the `{ encode, decode }` pair on a transportable class that says how its instances travel.
 - **Wire tag** — the stable identity (`module#Class`) a transportable is registered under on both sides.
@@ -45,11 +45,11 @@ The whole vocabulary in one place. If a word in the docs is unfamiliar, it is de
 
 - **Collection** — a set of content entries defined with `content()`. See [Content collections](/docs/content/collections).
 - **Entry** — a single item: `{ id, data, meta, body }`, where `body` is a held region and `meta` is source-derived (e.g. `{ headings }`).
-- **Source / loader** — where a collection's entries come from: a `{ get, list, ids }` object. `markdown()`, `json()`, `blocks()` build one from a glob; write your own to fetch a CMS. See [Live & CMS sources](/docs/content/live).
+- **Source / loader** — where a collection's entries come from: a `{ get, list, ids }` object. `markdown()`, `json()`, `blocks()` build one from a glob; write your own to fetch a CMS. See [Content collections](/docs/content/collections).
 
 ## PPR & weaving
 
-- **PPR (partial prerendering)** — a static shell baked at build with dynamic held regions filled per visitor at request time. `export const prerender = true` + `render: 'deferred'` holes. See [Partial prerendering](/docs/app/ppr).
+- **PPR (partial prerendering)** — a static shell baked at build with dynamic held regions filled per visitor at request time. `export const prerender = true` + `render: 'deferred'` holes. See [Partial prerendering](/docs/app/router).
 - **Route weaving** — on a SPA navigation, the router pulls all of the incoming page's load holes down **one** batch request instead of a fetch per hole. See [SPA router](/docs/app/router#weave).
 - **Parcel** — one hole's rendered HTML in a batch response, delivered as a `<template data-ogygia-slot>`.
 - **Out-of-order flush** — batched holes stream back in settle order, so a fast region lands before a slow one regardless of source order.

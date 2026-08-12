@@ -5,7 +5,7 @@
 	 * schedule, so it is the only chunk this page fetches. The `tree` is plain data — swap it for JSON
 	 * from a CMS and nothing else changes.
 	 */
-	import { Blocks } from 'ogygia';
+	import BlockTree from './blocks/BlockTree.svelte';
 	import type { BlockNode } from 'ogygia/content';
 	import { registry } from './blocks/registry';
 
@@ -26,7 +26,7 @@
 </script>
 
 <div class="blocks-demo">
-	<Blocks {tree} {registry} />
+	<BlockTree {tree} {registry} />
 </div>
 
 <style>

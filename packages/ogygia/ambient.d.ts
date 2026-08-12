@@ -18,6 +18,9 @@ declare module 'virtual:ogygia/dev-hmr-url' {
 }
 declare module 'virtual:ogygia/island-deps' {
 	export function islandDeps(entry: string): string[];
+	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
+	 *  region response so a server-picked component styles a page that never imported it. */
+	export function islandCss(entry: string): string[];
 }
 declare module 'virtual:ogygia/manifest' {
 	export const dev: boolean;
@@ -28,6 +31,8 @@ declare module 'virtual:ogygia/manifest' {
 }
 declare module 'virtual:ogygia/server-manifest' {
 	export const islands: Record<string, () => Promise<{ default: unknown }>>;
+	/** Server-island id → its built client-chunk URL (the key `islandCss()` is keyed by). */
+	export const island_url: Record<string, string>;
 }
 declare module 'virtual:ogygia/region-endpoint' {
 	export function makeRegionEndpoint(entry: string, props?: Record<string, unknown>): string;
@@ -60,6 +65,10 @@ declare module 'virtual:ogygia/request-event' {
 }
 declare module 'virtual:ogygia/rate-limit' {
 	export const rateLimit: { max: number; windowMs: number };
+}
+declare module 'virtual:ogygia/router-config' {
+	export const enabled: boolean;
+	export const viewTransitions: boolean;
 }
 declare module 'virtual:ogygia/session-cookie' {
 	export const sessionCookie: string;

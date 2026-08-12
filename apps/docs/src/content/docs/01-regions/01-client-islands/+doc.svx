@@ -1,0 +1,162 @@
+---
+title: Client islands
+summary: Mark an import with `wake` and that component ships JS on a schedule — the binding itself becomes a portable island you can pass around.
+related:
+  - regions/timing-nesting
+  - regions/server-islands
+  - reference/constraints
+---
+
+A **client island** is a component that becomes interactive. You mark its import with `wake`, and ogygia ships JS for that component on a schedule. The rest of the page stays server HTML with zero client JS.
+
+> **When to use.** Reach for a client island whenever a piece of the page needs to respond to the user — a counter, a menu, a form widget, a chart. If it never needs JS, leave it unmarked (it stays HTML) or make it a [lake](/docs/regions/lakes).
+
+```svelte
+<script>
+  import Counter from './Counter.svelte' with { wake: 'load' };
+</script>
+
+<Counter start={3} />
+```
+
+The rest of the page is untouched. Only `Counter` gets JS, and only on the schedule you named.
+
+## The schedules
+
+`wake` takes a timing word that decides *when* the island's JS runs:
+
+| Value | JS runs |
+| --- | --- |
+| `load` | right away |
+| `visible` | when scrolled into view |
+| `interaction` | on the first pointer / key / focus inside it — the waking click replays, typing survives |
+
+There are two more (`idle` and CSS media queries), plus `visible` margin tuning and the nesting rules. The full schedule reference lives in [Timing & nesting](/docs/regions/timing-nesting).
+
+Each demo below is a real island on this page, marked with a different schedule. Reload with JS disabled and the markup is still here; the widgets just stay static.
+
+<script>
+  import LoadLive from './LoadLive.svelte' with { wake: 'load' };
+  import IdleLive from './IdleLive.svelte' with { wake: 'idle' };
+  import VisibleLive from './VisibleLive.svelte' with { wake: 'visible' };
+</script>
+
+<div class="doc-demo-row">
+  <figure class="doc-demo">
+    <figcaption><code>wake: 'load'</code></figcaption>
+    <LoadLive />
+  </figure>
+  <figure class="doc-demo">
+    <figcaption><code>wake: 'idle'</code></figcaption>
+    <IdleLive />
+  </figure>
+  <figure class="doc-demo">
+    <figcaption><code>wake: 'visible'</code></figcaption>
+    <VisibleLive />
+  </figure>
+</div>
+
+The `Live since …` / `Idle after …` / `In view …` stamps are written by each island's `$effect` after it wakes, so they prove the component actually hydrated rather than shipping a baked value — and the `idle` and `visible` ones wake later than `load`.
+
+## The binding is the island
+
+When you mark an import, ogygia rewrites the **binding itself** into a virtual island wrapper. The template still says `<Counter />`, but `Counter` is now a portable component you can use anywhere a Svelte component goes — assign it, pass it around, render it in a list.
+
+```svelte
+<script>
+  import A from './A.svelte' with { wake: 'load' };
+</script>
+
+<A start={3} />
+
+<!-- dynamic -->
+{@const Active = A}
+<Active start={3} />
+
+<!-- in a list -->
+{#each [{ Comp: A, props }] as { Comp, props }}
+  <Comp {...props} />
+{/each}
+```
+
+No `<svelte:component>` needed — this is Svelte 5. Because the marked import is a normal component value, islands compose the way Svelte components already do. There is no special island slot or registry to learn.
+
+### Dedupe by identity
+
+Wrappers are deduped by **component path + strategy/options**, not by tag site or host. The same marked import used a thousand times across a page produces **one** wrapper module and **one** client entry chunk. Every instance shares that entry URL, and each still gets its own region and props payload at SSR (a deferred island's signature stays per-instance).
+
+So `<A />` × 1000 ships one module, not one thousand.
+
+Here is one marked import rendered three times on this page. All three share a single client entry chunk, yet each hydrates into its own independent state:
+
+<div class="doc-demo-row">
+  <div class="doc-demo"><LoadLive /></div>
+  <div class="doc-demo"><LoadLive /></div>
+  <div class="doc-demo"><LoadLive /></div>
+</div>
+
+## Props, not children
+
+Props are real Svelte props into the wrapper, serialized with devalue for the island payload. So they must be serializable — numbers, strings, plain objects, arrays. What **cannot** cross the boundary:
+
+- **Functions** (an `onSave` callback) — devalue can't carry a closure. Do the work inside the island, or call a [remote function](/docs/data-state/remote-functions).
+- **Host children / snippets** — put the island's UI and its [lakes](/docs/regions/lakes) inside the island's own `.svelte` file. The one exception is the reserved `ogygiaFallback` snippet on a [server island](/docs/regions/server-islands).
+- **Live class instances** — unless the class opts in as [shared state](/docs/data-state/state-context#sharing-state).
+
+See [Constraints](/docs/reference/constraints) for the full list of what crosses the boundary and what does not.
+
+## A worked example: a cart badge
+
+A header badge that reflects a cart, hydrated on `load` so it is live immediately:
+
+```svelte
+<!-- CartBadge.svelte -->
+<script>
+  let { count = 0 } = $props();
+</script>
+
+<span class="badge">{count}</span>
+```
+
+```svelte
+<!-- +page.svelte -->
+<script>
+  import CartBadge from '$lib/CartBadge.svelte' with { wake: 'load' };
+</script>
+
+<CartBadge count={items.length} />
+```
+
+To let a *separate* "Add to cart" island update this badge, the two share one live object — see [Shared state](/docs/data-state/state-context#sharing-state).
+
+## Do / don't
+
+| Do | Don't |
+| --- | --- |
+| Default anything below the fold to `wake: 'visible'` — it is free performance | Pass callbacks or class instances as props expecting them to work — move the logic inside, or reach for a remote function or shared state |
+| Keep islands small and focused — the smaller the island, the less JS ships | Wrap the whole page in one island — that is just `csr = true` with extra steps |
+
+
+<style>
+  .doc-demo-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .doc-demo {
+    margin: 0;
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md, 12px);
+    background: var(--bg-sunken);
+  }
+  .doc-demo figcaption {
+    margin-bottom: 0.75rem;
+    font: 400 0.75rem/1 var(--font-mono);
+    color: var(--text-faint);
+  }
+  .doc-demo figcaption code {
+    color: var(--accent);
+  }
+</style>

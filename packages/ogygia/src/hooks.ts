@@ -24,11 +24,18 @@ import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import type { RequestState } from '@sveltejs/kit/internal/server';
 import * as devalue from 'devalue';
-import { islands as island_modules } from 'virtual:ogygia/server-manifest';
+import { islands as island_modules, island_url } from 'virtual:ogygia/server-manifest';
+import { islandCss } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { secret } from 'virtual:ogygia/secret';
 import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
+import {
+	enabled as router_enabled,
+	viewTransitions as router_view_transitions
+} from 'virtual:ogygia/router-config';
+import runtime_url from 'virtual:ogygia/runtime-url';
+import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import { verify, region_mac_message } from './server/hmac.js';
 import { B64Url } from './server/payload.js';
 import { TRANSPORT_WIRE_KEY, revive_transportable } from './live-transport.js';
@@ -91,6 +98,24 @@ function client_ip(event: RequestEvent): string | null {
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Stylesheet `<link>`s a server-picked region needs so a page that never imported the component
+ * still styles the fetched HTML (the whole point of a held region — the page can't know which
+ * component the server will choose). Tagged `data-ogygia-region-css` so the client runtime HOISTS
+ * them into `<head>`: a body `<link>` wouldn't load inside a `<template>` batch parcel, and a head
+ * link loads once and is deduped across regions. Empty for a plain island (its CSS is already in the
+ * page's own stylesheet) or before a build (`islandCss` reads the build-time handoff).
+ */
+function region_css_links(id: string): string {
+	const url = island_url[id];
+	if (!url) return '';
+	let out = '';
+	for (const href of islandCss(url)) {
+		out += `<link rel="stylesheet" href="${href}" data-ogygia-region-css>`;
+	}
+	return out;
 }
 
 class OgygiaHandle {
@@ -211,6 +236,33 @@ class OgygiaHandle {
 	): Promise<string> {
 		// csr=true page — Kit serializes its own remotes and hydrates the whole tree; skip seeds.
 		if (html_has_kit_bootstrap(html)) return html;
+
+		// Router (global, opt out with `ogygia({ router: false })`). The handle owns the runtime
+		// bootstrap + the `ogygia-router` meta the client router reads per-navigation, so no
+		// `<Router/>` component is needed. Every injection is presence-checked, so it composes with
+		// what a page already emits:
+		//  • an island page already carries `data-ogygia-runtime` (Region emits it) → we skip it, and
+		//    only load-only pages get the runtime injected here;
+		//  • a page can override view transitions per-route by emitting its own
+		//    `<meta name="ogygia-router" content="plain">` — present → we leave it, so the page wins.
+		// The runtime URL is root-relative (base-correct for `base: ''`); island pages under a base
+		// path get the base-correct URL from Region's `asset()`, so only base-path + island-less pages
+		// are affected — a rare follow-up.
+		if (router_enabled) {
+			const head: string[] = [];
+			if (!html.includes('name="ogygia-router"')) {
+				head.push(`<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`);
+			}
+			if (runtime_url && !html.includes('data-ogygia-runtime')) {
+				head.push(`<script type="module" data-ogygia-runtime src="${runtime_url}"></script>`);
+			}
+			if (dev_hmr_url && !html.includes('data-ogygia-dev-hmr')) {
+				head.push(`<script type="module" data-ogygia-dev-hmr src="${dev_hmr_url}"></script>`);
+			}
+			if (head.length && html.includes('</head>')) {
+				html = html.replace('</head>', head.join('') + '</head>');
+			}
+		}
 
 		const scripts: string[] = [];
 
@@ -367,9 +419,12 @@ class OgygiaHandle {
 		}
 		if (props === null || typeof props !== 'object' || Array.isArray(props)) return null;
 
-		const html = await this.#render_component(load, props as Record<string, unknown>);
-		if (html === null || html.length > MAX_REGION_BODY) return null;
-		return { slot: sig, html };
+		const body = await this.#render_component(load, props as Record<string, unknown>);
+		if (body === null || body.length > MAX_REGION_BODY) return null;
+		// CSS links ride in the parcel; the client hoists them to <head> (a body/parcel link is inert
+		// inside the `<template>` box), so a weaved server-island still styles a page that never
+		// imported its component.
+		return { slot: sig, html: region_css_links(id) + body };
 	}
 
 	/**
@@ -474,18 +529,21 @@ class OgygiaHandle {
 			return region_response('Forbidden', { status: 403 });
 		}
 
+		// Ship the component's stylesheet links ahead of its HTML (the client hoists them to <head>).
+		const html = region_css_links(id) + body;
+
 		if (method === 'HEAD') {
 			return region_response(null, {
 				status: 200,
 				headers: {
 					'content-type': 'text/html; charset=utf-8',
-					'content-length': String(new TextEncoder().encode(body).byteLength),
+					'content-length': String(new TextEncoder().encode(html).byteLength),
 					'cache-control': cache_control
 				}
 			});
 		}
 
-		return region_response(body, {
+		return region_response(html, {
 			status: 200,
 			headers: {
 				'content-type': 'text/html; charset=utf-8',

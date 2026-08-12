@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	// A container block: renders its child blocks in a grid. `children` is the nested block subtree,
-	// rendered by <Blocks> and handed to this block — this is how a block tree nests.
+	// rendered by the recomposer and handed to this block — this is how a block tree nests.
 	let { children }: { children?: Snippet } = $props();
 </script>
 

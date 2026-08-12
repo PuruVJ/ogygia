@@ -47,11 +47,15 @@ export const ogygiaTransport = {
 				const props = (f.props ?? {}) as Record<string, unknown>;
 				return pack(f.id as string, props, sign(f.id as string, props), f.module as string, f.hydrate as string, f.hydrateMargin as string, f.html as string);
 			}
-			// Inline (plain component) — nothing prepared it to travel.
+			// Inline (plain component) — nothing prepared it to travel: no island id, no chunk, no
+			// signer, so there is no addressable capability the client could reconcile.
 			throw new Error(
 				'[ogygia] a held region reached the wire but its component is a plain import, so nothing ' +
 					"built a chunk for it. Import that component `with { region: 'raw' }` (or a `wake:` mark) " +
-					'to make it sendable.'
+					'to make it sendable. If this is a content `body` (markdown/blocks) returned from a ' +
+					'`+page.server.ts` load: bodies are same-pass SSR values — move the `get()` to a ' +
+					'universal `+page.ts` load (its data reaches the render by reference, nothing crosses ' +
+					'a wire on a csr=false page).'
 			);
 		},
 		decode(raw: EncodedRegion) {

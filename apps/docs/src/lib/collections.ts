@@ -17,7 +17,7 @@ const docSchema = v.object({
 	title: v.string(),
 	summary: v.optional(v.string(), ''),
 	draft: v.optional(v.boolean(), false),
-	// "Keep reading" links, by slug (e.g. 'islands/server-islands'). Resolved through the content
+	// "Keep reading" links, by slug (e.g. 'regions/server-islands'). Resolved through the content
 	// graph's self `related` relation into `entry.rel.related` (title + summary come along).
 	related: v.optional(v.array(v.string()), [])
 });

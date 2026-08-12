@@ -1,40 +1,101 @@
 ---
-title: Constraints
-summary: What crosses the island boundary and what does not — the honest edges of the model.
+title: Constraints & patterns
+summary: What crosses the island boundary and what does not — each rule paired with the mistake it prevents and the honest fix.
 related:
-  - reference/patterns
+  - regions/client-islands
+  - data-state/state-context
   - reference/api
 ---
 
-Islands are a real boundary. Knowing what crosses it keeps you out of trouble.
+Islands are a real boundary. Knowing what crosses it — and what quietly does not — keeps you out of trouble. Each rule below is the constraint plus the mistake people hit first, with the way around it.
 
-## Props cross. Children do not.
+## Props cross. Children and snippets do not.
 
-Props are serialized with devalue and cross into the island. Host children, snippets, and functions **do not** — they live in the host scope, not the island's. Put UI and lakes inside the island's own `.svelte` file.
+Props are serialized with devalue and cross into the island. Host children, snippets, and callbacks **do not** — they live in the host scope, not the island's. You cannot hand an island a snippet or a function from the page.
 
-The one reserved exception is `ogygiaFallback` on a [server island](/docs/islands/server-islands).
+```svelte
+<!-- ✗ the island never sees this snippet or callback -->
+<Island onselect={handleSelect}>
+  {#snippet row(item)}<Row {item} />{/snippet}
+</Island>
+```
+
+Model the interaction with props and remote functions, or move the UI inside the island's own `.svelte` file.
+
+The one reserved exception is `ogygiaFallback` on a [server island](/docs/regions/server-islands) — see there for its handling.
 
 ## Captured host state is a snapshot
 
-A value you read from the host into island markup is a serialized snapshot, not live state. Mutating it is a mistake, and ogygia stops you:
+A value you read from the host into island markup is a serialized snapshot, not live state. Mutating it updates nothing.
 
-- a **build error** for captured-variable writes in island markup,
-- a **dev-only deep proxy** that throws at runtime.
+```svelte
+<!-- ✗ writes to a serialized snapshot; nothing updates -->
+<button onclick={() => count++}>{count}</button>
+```
+
+```svelte
+<!-- ✓ own the state inside the island -->
+<script>
+  let count = $state(props.initial);
+</script>
+<button onclick={() => count++}>{count}</button>
+```
+
+ogygia stops the mistake for you two ways:
+
+| Guard | When | What |
+| --- | --- | --- |
+| Build error | compile | captured-variable writes in island markup fail the build |
+| Dev proxy | runtime | a deep proxy throws on mutation (dev only) |
 
 Pass data as props; own mutable state inside the island.
 
 ## Page-level lifecycle is dead code
 
-On a `csr = false` page, the page module never runs on the client. Top-level `onMount`, effects, and event listeners in the page do nothing. Move anything that needs to run in the browser into an island.
+On a `csr = false` page, the page module never runs on the client. Top-level `onMount`, effects, and event listeners in the page do nothing.
 
-## Inline scripts run once per document
+```svelte
+<!-- ✗ in a csr = false page, this never fires -->
+<script>
+  onMount(() => startPolling());
+</script>
+```
 
-The SPA router swaps `<body>` without executing injected `<script>` tags (standard browser behavior). Inline scripts in page markup run once, on first load — not per navigation. Per-navigation code belongs in an island.
+If you reach for `onMount`, you actually want an island. Move anything that needs to run in the browser inside one.
 
-## Choose the boundary honestly
+Inline `<script>` tags in page markup are a related trap: they run **once**, on first load, not per navigation — the router swaps `<body>` without executing them. Per-navigation code belongs in an island. See [the router](/docs/app/router) for why.
 
-If a subtree needs interactivity, it is an island. If it does not, it is a [lake](/docs/islands/lakes) or plain page HTML. Do not wrap static content in an island to "be safe" — that just ships JS you did not need.
+## Reach for an island, not a bare dynamic import
+
+If you find yourself hand-rolling `import()` + mount to lazy-load a component, stop.
+
+```ts
+// ✗ hand-rolled lazy mount: no SSR HTML, no signed boundary
+const { default: Chart } = await import('./Chart.svelte');
+mount(Chart, { target, props });
+```
+
+That is exactly what `wake: 'idle'` and `wake: 'visible'` already do — with SSR HTML first and a signed boundary around it. Use the island.
+
+## Choose the boundary honestly, before you build
+
+If a subtree needs interactivity, it is an island. If it does not, it is a [lake](/docs/regions/lakes) or plain page HTML. Do not wrap static content in an island to "be safe" — that just ships JS you did not need.
+
+Decide up front:
+
+| Need | Boundary |
+| --- | --- |
+| Interactive | island |
+| Static but heavy | [lake](/docs/regions/lakes) |
+| Request-dependent HTML | [server island](/docs/regions/server-islands) |
+
+Retrofitting the boundary later is the expensive path.
 
 ## Dev is not prod
 
-Two behaviors differ in dev: SSR query seeding degrades to a client refetch, and the mutation-guard proxy only runs in dev. Always sanity-check data flows against a production build.
+Two behaviors differ in dev, and both can hide bugs until you ship:
+
+- SSR query seeding degrades to a client refetch.
+- The mutation-guard proxy only runs in dev.
+
+Something that works in `dev` may behave differently in production. Always sanity-check data flows against a production build before shipping.

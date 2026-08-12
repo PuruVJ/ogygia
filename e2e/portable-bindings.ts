@@ -310,12 +310,18 @@ try {
 			for (const m of appCode.matchAll(/"\/kit":\[(\d+)/g)) {
 				csrTrueNodes.add(m[1]);
 			}
+			// A raw-binding client leg is metadata-only: it CONTAINS `__module: "…ogygia-island.x.js"`
+			// as a plain string (a registry node, e.g. /blocks). That's fine — the invariant is no
+			// static/dynamic IMPORT of an island or wrapper module (dual ownership), so match import
+			// syntax, not bare mentions of the filename.
+			const island_import_re =
+				/(?:from\s*|import\s*\(?\s*)["'][^"']*ogygia-island\.|virtual:ogygia\/(?:wrapper|island)\//;
 			const bad: string[] = [];
 			for (const f of fs.readdirSync(nodesDir).filter((n) => n.endsWith('.js'))) {
 				const nodeNum = f.split('.')[0];
 				if (csrTrueNodes.has(nodeNum)) continue; // csr=true coexistence keeps wrapper link
 				const code = fs.readFileSync(path.join(nodesDir, f), 'utf-8');
-				if (/ogygia-island\.|virtual:ogygia\/(?:wrapper|island)\//.test(code)) {
+				if (island_import_re.test(code)) {
 					bad.push(f);
 				}
 			}
@@ -332,7 +338,7 @@ try {
 				const pcode = pf ? fs.readFileSync(path.join(nodesDir, pf), 'utf-8') : '';
 				check(
 					'build: portable (csr=false) node has no island static import',
-					!!pf && !/ogygia-island\.|virtual:ogygia\/(?:wrapper|island)\//.test(pcode),
+					!!pf && !island_import_re.test(pcode),
 					pf || 'missing'
 				);
 			}
@@ -341,15 +347,20 @@ try {
 		}
 
 		if (fs.existsSync(depsPath)) {
-			const deps = JSON.parse(fs.readFileSync(depsPath, 'utf-8')) as Record<string, string[]>;
+			const deps = JSON.parse(fs.readFileSync(depsPath, 'utf-8')) as {
+				js: Record<string, string[]>;
+				css: Record<string, string[]>;
+			};
 			const portableEntry = '/_app/immutable/ogygia-island.' +
 				(counterFacades[0]?.match(/ogygia-island\.([0-9a-f]+)\.js/)?.[1] ?? '') +
 				'.js';
 			// Presence of deps handoff proves generateBundle walked Rolldown OutputChunk.imports.
+			// Shape is `{ js: { entry: [...] }, css: { entry: [...] } }`.
+			const jsKeys = Object.keys(deps.js ?? {});
 			check(
 				'build: island-deps handoff exists (Rolldown generateBundle)',
-				Object.keys(deps).some((k) => k.includes('ogygia-island.')),
-				`${Object.keys(deps).length} entries`
+				jsKeys.some((k) => k.includes('ogygia-island.')),
+				`${jsKeys.length} js entries, ${Object.keys(deps.css ?? {}).length} css entries`
 			);
 			void portableEntry;
 		}

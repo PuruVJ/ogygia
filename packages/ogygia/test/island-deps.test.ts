@@ -34,16 +34,16 @@ describe('collectIslandDepModulepreloads', () => {
 			}
 		};
 
-		const map = collectIslandDepModulepreloads(bundle);
-		expect(map['/_app/immutable/ogygia-island.abc123def456.js']).toEqual([
+		const { js } = collectIslandDepModulepreloads(bundle);
+		expect(js['/_app/immutable/ogygia-island.abc123def456.js']).toEqual([
 			'/_app/immutable/chunk-shared-aaaa.js',
 			'/_app/immutable/chunk-leaf-bbbb.js'
 		]);
-		expect(map['/_app/immutable/ogygia-island.deadbeef0001.js']).toEqual([
+		expect(js['/_app/immutable/ogygia-island.deadbeef0001.js']).toEqual([
 			'/_app/immutable/chunk-shared-aaaa.js',
 			'/_app/immutable/chunk-leaf-bbbb.js'
 		]);
-		expect(map['/_app/immutable/unrelated-entry.js']).toBeUndefined();
+		expect(js['/_app/immutable/unrelated-entry.js']).toBeUndefined();
 	});
 
 	test('dedupes cycles and skips the facade itself', () => {
@@ -65,7 +65,7 @@ describe('collectIslandDepModulepreloads', () => {
 				imports: ['_app/immutable/a.js']
 			}
 		};
-		expect(collectIslandDepModulepreloads(bundle)['/' + facade]).toEqual([
+		expect(collectIslandDepModulepreloads(bundle).js['/' + facade]).toEqual([
 			'/_app/immutable/a.js',
 			'/_app/immutable/b.js'
 		]);
@@ -81,7 +81,29 @@ describe('collectIslandDepModulepreloads', () => {
 					imports: ['_app/immutable/x.js']
 				}
 			})
-		).toEqual({});
+		).toEqual({ js: {}, css: {} });
+	});
+
+	test('collects CSS from the facade + dep chunks (viteMetadata.importedCss)', () => {
+		const facade = '_app/immutable/ogygia-island.c55beef00001.js';
+		const bundle = {
+			[facade]: {
+				type: 'chunk',
+				fileName: facade,
+				imports: ['_app/immutable/dep.js'],
+				viteMetadata: { importedCss: new Set(['_app/immutable/card.abcd.css']) }
+			},
+			'_app/immutable/dep.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/dep.js',
+				imports: [],
+				viteMetadata: { importedCss: new Set(['_app/immutable/shared.ef01.css']) }
+			}
+		};
+		expect(collectIslandDepModulepreloads(bundle).css['/' + facade]).toEqual([
+			'/_app/immutable/card.abcd.css',
+			'/_app/immutable/shared.ef01.css'
+		]);
 	});
 });
 

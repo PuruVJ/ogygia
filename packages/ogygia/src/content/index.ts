@@ -96,8 +96,10 @@ export type {
 // ── format source-builders (all live on `ogygia/content`) ──
 export { markdown, json } from './formats.js';
 export type { MarkdownMeta } from './formats.js';
+// `blocks()` is the content source; `blocks.resolve(tree, registry)` is the no-collection recipe
+// helper (`type → region`, server-side). Both live on the one `blocks` export.
 export { blocks } from './blocks.js';
-export type { BlockNode, BlockRegistry, BlockSource } from './blocks.js';
+export type { BlockNode, BlockRegistry, BlockSource, ResolvedBlockNode, BlockSchedule } from './blocks.js';
 
 // ── the collection ──
 export { content } from './factory.js';

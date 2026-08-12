@@ -23,12 +23,13 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
-	import { islandDeps } from 'virtual:ogygia/island-deps';
+	import { islandDeps, islandCss } from 'virtual:ogygia/island-deps';
 	import { makeRegionEndpoint, mintServerIsland } from 'virtual:ogygia/region-endpoint';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
-	import { isNested, setNested, claimRuntimeEmit } from './context.js';
+	import { isNested, setNested, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { TRANSPORT_WIRE_KEY, reduce_transportable } from './live-transport.js';
+	import { isRegion } from './region.js';
 	import LakeBoundary from './LakeBoundary.svelte';
 
 	/**
@@ -36,7 +37,8 @@
 	 * wrappers) passes only the `__*` internals — so `<Region of={value} />` type-checks for consumers
 	 * without the internal props.
 	 * @type {{
-	 *   of?: import('./region.js').RegionValue;
+	 *   of?: import('./region.js').RegionValue | Promise<import('./region.js').RegionValue>;
+	 *   placeholder?: import('svelte').Snippet;
 	 *   children?: import('svelte').Snippet;
 	 *   __mode?: 'island' | 'server' | 'lake';
 	 *   visible?: string | boolean; idle?: boolean; media?: string; load?: boolean; interaction?: boolean;
@@ -48,8 +50,12 @@
 	 * }}
 	 */
 	let {
-		// Held API: a `RegionValue` from `region()` (inline / dual / deferred).
+		// Held API: a `RegionValue` from `region()` (inline / dual / deferred), or a Promise of one
+		// (a remote call: `of={search(q)}`) — the region owns the whole wait, `placeholder` fills it.
 		of,
+		// Not-ready UI: rendered while a Promise `of` is in flight AND while a client-painted region's
+		// styled HTML is still arriving. Distinct from `children` (the rendered component's slot).
+		placeholder,
 		children,
 		// Placement API (the transform's wrappers): `__mode` selects island / server / lake.
 		__mode,
@@ -88,12 +94,48 @@
 	const LT = String.fromCharCode(60); // <
 	const GT = String.fromCharCode(62); // >
 
+	// ─────────────────────────────────────────────── held: resolve (Promise `of`) ──
+	// `of` may be a Promise<RegionValue> (a remote call). Note an awaitable dual IS thenable too —
+	// the brand tells a real region value apart from a bare promise. Whether a usage passes a value
+	// or a promise is fixed per instance, so reading `of` once here is intentional.
+	// svelte-ignore state_referenced_locally
+	const of_is_promise = !!of && typeof (/** @type {{ then?: unknown }} */ (of).then) === 'function' && !isRegion(of);
+	// A promise with no placeholder guarantees a blank window on first load (nothing to show while
+	// the promise and its stylesheet resolve). The model is "loading UI lives on the region" — say so.
+	// svelte-ignore state_referenced_locally
+	if (of_is_promise && !placeholder && !children && import.meta.env && import.meta.env.DEV) {
+		console.warn(
+			'[ogygia] <Region of={promise}> has no `placeholder` — the region will sit empty until the ' +
+				'promise resolves and its stylesheet loads. Add {#snippet placeholder()}…{/snippet} for the wait.'
+		);
+	}
+	/** @type {import('./region.js').RegionValue | undefined} */
+	let awaited = $state(undefined);
+	// What every held branch below renders. A plain value resolves synchronously (SSR renders it in
+	// this same pass — blocks/SDUI never see a placeholder). A promise resolves client-side only.
+	const resolved = $derived(of_is_promise ? awaited : /** @type {import('./region.js').RegionValue | undefined} */ (of));
+	$effect(() => {
+		if (!of_is_promise) return;
+		const p = /** @type {Promise<import('./region.js').RegionValue>} */ (of);
+		let live = true;
+		// LAG, don't clear: on a re-search `of` is a NEW promise — keep showing the previous value
+		// until the new one lands, so the old content morphs instead of flashing through empty.
+		Promise.resolve(p).then((r) => {
+			if (live) awaited = r;
+		});
+		return () => {
+			live = false;
+		};
+	});
+
 	// A held interactive dual renders exactly like a placed island — same SSR-inline + self-hydrate —
 	// so both feed the island branch. A held static dual (no schedule) renders bare, like inline.
 	// These read fixed-per-instance props (`of`/`__mode` never change for a given wrapper), so reading
-	// them once is intentional — not a missed reactive capture.
+	// them once is intentional — not a missed reactive capture. A Promise `of` is never a dual here:
+	// a promise resolves to a wire value (deferred) — only a same-pass VALUE can be a dual.
 	// svelte-ignore state_referenced_locally
-	const held_dual_island = !!(of && of.kind === 'dual' && of.hydrate);
+	const of_init = of_is_promise ? undefined : /** @type {import('./region.js').RegionValue | undefined} */ (of);
+	const held_dual_island = !!(of_init && of_init.kind === 'dual' && of_init.hydrate);
 	// svelte-ignore state_referenced_locally
 	const is_island = __mode === 'island' || held_dual_island;
 	// svelte-ignore state_referenced_locally
@@ -130,17 +172,21 @@
 	}
 
 	// ─────────────────────────────────────────────────────────── island branch ──
-	// Normalized island inputs, from placement props OR a held dual.
-	const island_entry = $derived(
-		held_dual_island ? of.module : __mode === 'island' ? __entry : ''
+	// Normalized island inputs, from placement props OR a held dual. `as_dual` is the type-narrowed
+	// reactive read of the dual value (a Promise `of` never lands here — see `held_dual_island`).
+	const as_dual = $derived(
+		/** @type {import('./region.js').DualRegion | undefined} */ (
+			held_dual_island && resolved?.kind === 'dual' ? resolved : undefined
+		)
 	);
-	const island_component = $derived(held_dual_island ? of.component : __component);
-	const island_props = $derived(held_dual_island ? of.props : __props);
-	const island_children = $derived(held_dual_island ? children : children);
+	const island_entry = $derived(as_dual ? as_dual.module : __mode === 'island' ? __entry : '');
+	const island_component = $derived(as_dual ? as_dual.component : __component);
+	const island_props = $derived(as_dual ? as_dual.props : __props);
+	const island_children = $derived(children);
 	// The `wake` value IS the strategy: 'load' | 'idle' | 'visible' | 'interaction' | a media query.
 	const hydrate_attr = $derived(
-		held_dual_island
-			? of.hydrate
+		as_dual
+			? as_dual.hydrate
 			: media
 				? media
 				: idle
@@ -152,8 +198,8 @@
 							: 'load'
 	);
 	const root_margin = $derived(
-		held_dual_island
-			? of.hydrateMargin || undefined
+		as_dual
+			? as_dual.hydrateMargin || undefined
 			: typeof visible === 'string'
 				? visible
 				: undefined
@@ -238,8 +284,10 @@
 	);
 
 	// ─────────────────────────────────────────────── head (runtime + preload) ──
-	// Runtime fallback when no <OgygiaRouter/> claimed the slot. Claim once, only for a top-level
-	// island/server placement (lakes render inside an island; held regions rely on an existing runtime).
+	// The runtime bootstrap for this page. Claim once, only for a top-level island/server placement
+	// (lakes render inside an island; held regions rely on an existing runtime). With the router on,
+	// the handle injects the same script on island-less pages — this is the with-islands path, and it
+	// keeps islands hydrating even when the router is off (`ogygia({ router: false })`).
 	const runtime_script =
 		!nested && (is_island || is_server) && claimRuntimeEmit()
 			? LT +
@@ -261,15 +309,31 @@
 						GT
 					: '')
 			: '';
+	// Held dual: the component was server-picked (a registry), so its CSS is on no page stylesheet —
+	// Kit links CSS from the route's STATIC import graph, never from what actually rendered. This
+	// render pass knows, so link it here: real `<link>`s into <head> via svelte:head, claimed
+	// per-request so a page rendering five of the same block links its sheet once. Server-only —
+	// `claim_region_css` returns [] on the client (SSR already emitted them).
+	const region_css_html = $derived.by(() => {
+		if (!resolved || resolved.kind !== 'dual' || !resolved.module) return '';
+		let html = '';
+		for (const href of claim_region_css(islandCss(resolved.module)))
+			html += LT + 'link rel="stylesheet" href="' + href + '" data-ogygia-region-css' + GT;
+		return html;
+	});
+
 	const head_html = $derived(
-		is_island ? runtime_script + island_preload : is_server ? runtime_script + server_preload : ''
+		(is_island ? runtime_script + island_preload : is_server ? runtime_script + server_preload : '') +
+			region_css_html
 	);
 
 	// ────────────────────────────────────────────────────── held: live / deferred ──
 	const stringify_devalue = stringify;
 	/** @param {Element & { applyLive?: (v: unknown) => void }} node */
 	function apply_live(node) {
-		const f = of;
+		// Reads `resolved`, so the attachment re-runs when a Promise `of` re-resolves — the mounted
+		// region morphs to the new HTML instead of remounting (LAG keeps the old content meanwhile).
+		const f = resolved;
 		if (!f || f.kind !== 'deferred' || f.html == null) return;
 		node.applyLive?.({
 			id: f.id,
@@ -290,8 +354,8 @@
 		}
 	}
 	const held_props_script = $derived.by(() => {
-		if (!of || of.kind !== 'deferred' || !of.hydrate || !of.url) return '';
-		const payload = stringify_devalue(of.props).split(LT).join('\\u003C');
+		if (!resolved || resolved.kind !== 'deferred' || !resolved.hydrate || !resolved.url) return '';
+		const payload = stringify_devalue(resolved.props).split(LT).join('\\u003C');
 		return (
 			LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + payload + LT + '/script' + GT
 		);
@@ -336,17 +400,21 @@
 	{:else}
 		{@render children?.()}
 	{/if}
-{:else if of?.kind === 'inline'}
-	{@const Component = of.component}
-	<Component {...of.props}>{#if children}{@render children()}{/if}</Component>
-{:else if of?.kind === 'dual'}
-	{@const Component = of.component}
-	<Component {...of.props}>{#if children}{@render children()}{/if}</Component>
-{:else if of?.html != null}
-	<ogygia-region live {@attach apply_live}>{#if children}{@render children()}{/if}</ogygia-region>
-{:else}
-	{@const d = /** @type {import('./region.js').DeferredRegion} */ (of)}
+{:else if resolved?.kind === 'inline'}
+	{@const Component = resolved.component}
+	<Component {...resolved.props}>{#if children}{@render children()}{/if}</Component>
+{:else if resolved?.kind === 'dual'}
+	{@const Component = resolved.component}
+	<Component {...resolved.props}>{#if children}{@render children()}{/if}</Component>
+{:else if resolved?.html != null}
+	<!-- placeholder (or legacy children) shows until the styled HTML paints (replaceChildren). -->
+	<ogygia-region live {@attach apply_live}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>
+{:else if resolved}
+	{@const d = /** @type {import('./region.js').DeferredRegion} */ (resolved)}
 	{#key identity(d)}
-		<ogygia-region entry={d.module || d.id} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url}>{#if children}{@render children()}{/if}</ogygia-region>{@html held_props_script}
+		<ogygia-region entry={d.module || d.id} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{@html held_props_script}
 	{/key}
+{:else if of}
+	<!-- Promise `of` still in flight (first resolution) — the region owns the whole wait. -->
+	{@render placeholder?.()}
 {/if}

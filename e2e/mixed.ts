@@ -35,31 +35,31 @@ try {
 		await page.close();
 	}
 
-	// ---------- Opt-in router: SPA within (spa) group, MPA handoff to /plain ----------
+	// ---------- Global router: SPA everywhere; /plain opts out of view transitions per-page ----------
 	{
 		const page = await browser.newPage();
 		await page.goto(base + '/', { waitUntil: 'networkidle' });
 		const m1 = await page.evaluate(() => window.__marker);
-		// SPA nav within router-enabled section keeps the marker
+		// SPA nav keeps the runtime marker (no full document reload)
 		await page.click('nav a[href="/about"]');
 		await page.waitForSelector('[data-clock-island]', { timeout: 3000 });
-		check('router: SPA nav inside (spa) group (marker kept)', (await page.evaluate(() => window.__marker)) === m1);
+		check('router: SPA nav keeps the marker', (await page.evaluate(() => window.__marker)) === m1);
 
-		// nav to /plain (no <OgygiaRouter/>) -> MPA handoff (real document load)
+		// nav to /plain -> still SPA (router is global); the page only opts out of view transitions
 		let loaded: boolean = false;
 		page.on('load', () => (loaded = true));
 		await page.click('nav a[href="/plain"]');
 		await page.waitForSelector('[data-static-shell]', { timeout: 4000 });
 		await sleep(200);
-		check('router: nav to no-router page did a REAL document load', loaded);
+		check('router: nav to /plain stayed SPA (no document reload)', !loaded);
 		check('router: at /plain', page.url().endsWith('/plain'));
 		const m2 = await page.evaluate(() => window.__marker);
-		check('router: full load reset the runtime marker', m2 !== m1);
-		// island on /plain still hydrates (MPA page)
+		check('router: SPA nav to /plain kept the runtime marker', m2 === m1);
+		// island on /plain still hydrates
 		await page.waitForSelector('ogygia-region[data-hydrated]', { timeout: 3000 });
 		const pbtn = page.locator('[data-counter] button');
 		await pbtn.click();
-		check('router: island on no-router page still hydrates & works', (await pbtn.textContent()).includes('count is 6'));
+		check('router: island on /plain still hydrates & works', (await pbtn.textContent()).includes('count is 6'));
 		await page.close();
 	}
 } finally {

@@ -1,0 +1,59 @@
+---
+title: Lakes
+summary: Static HTML inside an island — a frozen region that ships zero client JS even though it lives in an interactive tree.
+related:
+  - regions/timing-nesting
+  - regions/client-islands
+---
+
+A **lake** is static HTML *inside* an island. The island around it is interactive, but the lake itself never ships JS. It is marked with `wake: 'none'`, used within an island's own `.svelte` file.
+
+> **When to use.** A lake is for a **big, static subtree that lives inside something interactive** — prose, a pre-rendered chart, a highlighted code block, an image gallery — that you do not want compiled into the island's client bundle. If the static content is *not* inside an island, it is already free (unmarked markup on a Page ships no JS); lakes matter only within a hydrating tree.
+
+```svelte
+<!-- inside an island -->
+<script>
+  import HeavyChart from './HeavyChart.svelte' with { wake: 'none' };
+</script>
+
+<section>
+  <LiveControls />        <!-- interactive -->
+  <HeavyChart data={rows} /> <!-- frozen: rendered once on the server, never hydrated -->
+</section>
+```
+
+The lake renders on the server, and its DOM is lifted out and preserved when the surrounding island hydrates, then dropped back in place. So a costly, non-interactive subtree stays free of JS even inside a live component.
+
+## Why not just render it inline?
+
+Inside a hydrating island, ordinary markup is compiled into the island's client bundle. A lake opts a subtree out of that bundle entirely. Use it for anything expensive to ship but static: prose, a big pre-rendered chart, a syntax-highlighted code block.
+
+The island below is interactive — the counter increments. The snapshot inside it is a lake: server HTML, lifted out and restored around the island's hydration, shipping no JS of its own.
+
+<script>
+  import LakeDemo from '$lib/demos/LakeDemo.svelte' with { wake: 'load' };
+</script>
+
+<div class="doc-demo">
+  <LakeDemo />
+</div>
+
+## Keeping a lake fresh — render: live
+
+By default a lake is baked once and restored untouched. When its content should refresh in the background, make it `render: 'live'` — baked static content that revalidates:
+
+```svelte
+<HeavyChart data={rows} with={{ render: 'live', wake: 'visible' }} />
+```
+
+`wake` is the revalidate schedule (`load` / `idle` / `visible` / media); `maxAge` and `onExpire` (set in a preset) tune staleness. `render: 'live'` serves the baked content immediately and refreshes it in the background through the signed island endpoint.
+
+> A lake restored inside persisted layout chrome is re-marked as settled after an SPA navigation, so an island nested in a lake can still wake. See [SPA router](/docs/app/router).
+
+## Do / don't
+
+- **Do** put your heaviest static content (long prose, big charts, code) in a lake when it sits inside an island.
+- **Do** reach for `render: 'live'` when a lake's server HTML should refresh in the background.
+- **Don't** put interactive UI in a lake — it ships no JS, so buttons and inputs are inert. That is a nested [client island](/docs/regions/client-islands) instead.
+
+

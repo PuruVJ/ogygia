@@ -40,7 +40,10 @@ export const docsPageSnippets = prerender(
 			remountConfigHtml,
 			lazyClientMountHtml,
 			delayedIslandIfHtml,
-			contentCollectionHtml
+			contentCollectionHtml,
+			contentMarkdownHtml,
+			contentJsonHtml,
+			contentCustomHtml
 		] = await Promise.all([
 			highlight(snip.hydrateLoadCounter, 'svelte'),
 			highlight(snip.hydrateLoad, 'svelte'),
@@ -66,7 +69,10 @@ export const docsPageSnippets = prerender(
 			highlight(snip.remountConfig, 'typescript'),
 			highlight(snip.lazyClientMount, 'svelte'),
 			highlight(snip.delayedIslandIf, 'svelte'),
-			highlight(snip.contentCollection, 'typescript')
+			highlight(snip.contentCollection, 'typescript'),
+			highlight(snip.contentMarkdown, 'svelte'),
+			highlight(snip.contentJson, 'typescript'),
+			highlight(snip.contentCustom, 'typescript')
 		]);
 
 		return {
@@ -94,7 +100,10 @@ export const docsPageSnippets = prerender(
 			remountConfigHtml,
 			lazyClientMountHtml,
 			delayedIslandIfHtml,
-			contentCollectionHtml
+			contentCollectionHtml,
+			contentMarkdownHtml,
+			contentJsonHtml,
+			contentCustomHtml
 		};
 	},
 	{ dynamic: true }

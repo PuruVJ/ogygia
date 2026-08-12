@@ -2,8 +2,8 @@
 title: Quickstart
 summary: A static page with one interactive island, from empty route to working demo, in five minutes.
 related:
-  - start/adoption
-  - islands/client-islands
+  - start/install
+  - regions/client-islands
 ---
 
 This walks the shortest path to something real: a page that ships as pure HTML with a single island that hydrates. If you have not added the package yet, do [Install](/docs/start/install) first.
@@ -84,7 +84,7 @@ import Counter from '$lib/Counter.svelte' with { wake: '(max-width: 600px)' }; /
 
 ## Where to go next
 
-- [Client islands](/docs/islands/client-islands) — every hydrate option in depth.
-- [Timing & nesting](/docs/islands/timing-nesting) — schedules and the nesting rule.
-- [Server islands](/docs/islands/server-islands) — HTML from the server, no JS.
-- [Adoption](/docs/start/adoption) — bring this into an existing Kit app one route at a time.
+- [Client islands](/docs/regions/client-islands) — every hydrate option in depth.
+- [Timing & nesting](/docs/regions/timing-nesting) — schedules and the nesting rule.
+- [Server islands](/docs/regions/server-islands) — HTML from the server, no JS.
+- [Adoption](/docs/start/install) — bring this into an existing Kit app one route at a time.

@@ -9,7 +9,11 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [
 		ogygia({
-			content: { markdown: {} }
+			content: { markdown: {} },
+			// The benchmark is a single blog page that never navigates — measure the islands runtime
+			// only (apples-to-apples with Astro/Mochi, which ship no router). The SPA router is on by
+			// default; `false` tree-shakes it out.
+			router: false
 		}),
 		sveltekit({
 			adapter: adapter({ strict: true }),

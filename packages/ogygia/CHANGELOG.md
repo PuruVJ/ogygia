@@ -5,15 +5,16 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] — 2026-08-09
+## [0.5.0] — 2026-08-12
 
-The unification release. Partials become the one renderable, content collapses onto them, the
-`@ogygia/content` package dissolves into ogygia, and config + exports get a single surface.
+The unification release. **Regions** become the one renderable — placed, held, deferred, live —
+content collapses onto them, the `@ogygia/content` package dissolves into ogygia, the SPA router
+becomes a global opt-out plugin feature, and config + exports get a single surface.
 
 ### Added
 
-- **Live partials — LiveView over `query.live`, one word: `await`.** A dual partial (a component
-  imported `with { partial: … }`, made into a value with `partial(Component, props)`) is now
+- **Live regions — LiveView over `query.live`, one word: `await`.** A dual region (a component
+  imported `with { region: 'raw' }`, made into a value with `region(Component, props)`) is now
   **awaitable**. Awaiting it renders the component to HTML on the server and bakes that HTML into the
   ticket, so the client swaps it in with **no fetch**. In an async generator, JavaScript awaits what
   you `yield`, so it is automatic:
@@ -22,52 +23,52 @@ The unification release. Partials become the one renderable, content collapses o
   // stats.remote.ts
   export const dashboard = query.live(v.string(), async function* (id) {
     for await (const stats of feed(id)) {
-      yield partial(StatCard, { stats }); // awaited by the language → HTML rides the ticket
+      yield region(StatCard, { stats }); // awaited by the language → HTML rides the ticket
     }
   });
   ```
 
   ```svelte
-  <Partial of={dashboard(id).current} />
+  <Region of={dashboard(id).current} />
   ```
 
   The client swaps the first tick in immediately, then per tick does the right thing with no new API:
-  - **static partial** (`partial: 'static'`, ships no client JS) → the runtime **morphs** the new
-    HTML in place, so focus, typed-in input values, scroll, and CSS transitions survive the tick;
-  - **interactive partial** (`partial: 'load' | 'idle' | 'visible' | media`) → **keep-alive**: the
-    mounted island gets the new props pushed in (Svelte reconciles); local island state is not reset
-    and it is not re-hydrated. A different component id replaces + re-hydrates.
+  - **static dual region** (`region: 'raw'`, no `wake`, ships no client JS) → the runtime **morphs**
+    the new HTML in place, so focus, typed-in input values, scroll, and CSS transitions survive;
+  - **interactive dual region** (`region: 'raw'` + `wake: 'load' | 'idle' | 'visible' | media`) →
+    **keep-alive**: the mounted island gets the new props pushed in (Svelte reconciles); local island
+    state is not reset and it is not re-hydrated. A different component id replaces + re-hydrates.
 
-  A partial you **don't** await still renders inline where it lands (first paint, same SSR pass) —
-  delivery is a per-moment decision, not a per-import one. `partial()` returns an `AwaitablePartial`
-  (a `Partial` you can render now, and a `PromiseLike<Partial>` you can await). The baked HTML rides
-  the existing `ogygia.transport` Partial codec (install it once in your universal hooks). Playground:
+  A region you **don't** await still renders inline where it lands (first paint, same SSR pass) —
+  delivery is a per-moment decision, not a per-import one. `region()` returns an `AwaitableRegion`
+  (a `RegionValue` you can render now, and a `PromiseLike<RegionValue>` you can await). The baked HTML
+  rides the existing `ogygia.transport` codec (install it once in your universal hooks). Playground:
   `/live-partial`; suite: `verify/live-partial.ts`.
 
 - **Streaming server islands (opt-in) — `ogygia({ stream: true })`.** On a dynamic csr=false page,
-  `handle()` keeps the response open after the shell, renders each immediate `defer: 'load'` hole
-  in-process, and appends its HTML as a `<template data-ogygia-slot>` parcel after the document —
+  `handle()` keeps the response open after the shell, renders each immediate load-scheduled deferred
+  hole in-process, and appends its HTML as a `<template data-ogygia-slot>` parcel after the document —
   **zero extra requests**, holes fill as they finish, out of order. The browser paints the shell
   first; each parcel is inert (`<template>` — no paint, no scripts, no image loads) until the runtime
   moves it into its region. Fallback is total and automatic: prerender / CDN pages, holes that need
   per-request server context the stream can't provide, and any render error all fall back to the
   per-hole fetch — streaming never changes correctness, only round-trips. `idle` / `visible` / media
-  defers keep fetching on their schedule (deferring the SERVER work is their whole point). Default
+  deferrals keep fetching on their schedule (deferring the SERVER work is their whole point). Default
   `false` while the e2e matrix is validated; drops `Content-Length` (chunked) and sets
-  `X-Accel-Buffering: no` so the shell still paints early behind an nginx-style proxy. Live-partial
-  `renderHtml` and streaming's render both use `svelte/server` on the SSR leg only — no server render
-  code reaches the client bundle.
+  `X-Accel-Buffering: no` so the shell still paints early behind an nginx-style proxy. Live-region
+  render and streaming's render both use `svelte/server` on the SSR leg only — no server render code
+  reaches the client bundle.
 
-- **Partials — a server-chosen island you render like data.** `partial(Component, props)` mints a
-  descriptor and `<Partial of={f} />` renders it, props type-checked against the component.
+- **Regions — a server-chosen renderable you place like data.** `region(Component, props)` mints a
+  descriptor and `<Region of={f} />` renders it, props type-checked against the component.
   - **Inline** (a plain component import): renders in the current SSR pass — the RSC-shaped path.
-  - **Deferred** (`import Card from './Card.svelte' with { partial: 'load' }`): the server mints a
-    signed capability in a load / remote function; the client fetches, swaps the HTML in, and
-    hydrates. The one `partial` value carries the whole schedule — `'load' | 'idle' | 'visible' | a
-    media query` set when the JS wakes, and `'static'` ships HTML only (no client chunk, never
-    interactive). Works from `.svelte`, `.svx`, and `.ts` (load / remote) modules.
-- **Dual-face partials + `ogygia.transport`.** A `partial()` made from a component imported
-  `with { partial: … }` renders **inline** where it's created (server pass → first paint, hydrates)
+  - **Deferred** (`import Card from './Card.svelte' with { render: 'deferred', wake: 'load' }`): the
+    server mints a signed capability in a load / remote function; the client fetches, swaps the HTML
+    in, and hydrates. `render: 'deferred'` with no `wake` ships HTML only (no client chunk, never
+    interactive); adding `wake` (`'load' | 'idle' | 'visible' | a media query`) sets when the JS
+    wakes. Works from `.svelte`, `.svx`, and `.ts` (load / remote) modules.
+- **Dual-face regions + `ogygia.transport`.** A `region()` made from a component imported
+  `with { region: 'raw' }` renders **inline** where it's created (server pass → first paint, hydrates)
   and becomes a **signed ticket** only when it actually crosses the wire. The one new mechanism is
   `transport`, a SvelteKit `transport` hook entry that signs on serialize and rebuilds on the
   client. Install it once in your **universal** hooks:
@@ -78,8 +79,8 @@ The unification release. Partials become the one renderable, content collapses o
   export const transport = { ...ogygia.transport };
   ```
 
-  A partial returned from a `load`/render renders inline; one returned from a remote (search, a
-  live query) arrives deferred and self-fetches. Same `partial()`, locality automatic.
+  A region returned from a `load`/render renders inline; one returned from a remote (search, a
+  live query) arrives deferred and self-fetches. Same `region()`, locality automatic.
 - **`content` is now part of ogygia.** Import from `ogygia/content`, `ogygia/content/collection`,
   `ogygia/content/formats`. `mdsvex` / `shiki` stay **optional peers** — ogygia never installs them.
 - **One config surface.** All config lives in `ogygia({ … })`, including `content: { markdown }`.
@@ -96,26 +97,80 @@ The unification release. Partials become the one renderable, content collapses o
   `ogygia.extensions()` includes `.svelte` (adds `.svx`/`.md` when markdown is configured);
   `ogygia.preprocess()` is `[]` and loads no mdsvex when markdown isn't configured. The content dev
   HMR plugin is folded into `ogygia()` — no separate plugin to add.
-- **Namespace API.** `import * as ogygia from 'ogygia'` → `<ogygia.Router />`, `ogygia.transport`,
-  `<ogygia.Partial />`. `import * as ogygia from 'ogygia/server'` → `ogygia.handle()`.
+- **Namespace API.** `import * as ogygia from 'ogygia'` → `<ogygia.Region />`, `<ogygia.Boundary />`,
+  `ogygia.region()`, `ogygia.transport`. `import * as ogygia from 'ogygia/server'` → `ogygia.handle()`.
+- **`npx ogygia init`.** A bundled CLI (in core — no separate add-on) wires a SvelteKit project in one
+  command: registers the Vite plugin **before** `sveltekit()`, installs the `transport` codec (merging
+  into an existing `transport`), adds the server `handle()` (sequencing an existing handle), writes
+  `src/ogygia.d.ts` with `/// <reference types="ogygia/types" />` so `svelte-check` resolves the
+  `virtual:ogygia/*` modules, updates `.gitignore`, and optionally turns on markdown (`--markdown`).
+  The old `@ogygia/add` package is retired. **Type setup**: without the `ogygia/types` reference above,
+  `svelte-check` flags the virtual imports as unresolved even though the build works — `ogygia init`
+  writes it for you; add it by hand in a manual setup.
+- **Async regions — `<Region of={promise}>` owns the whole wait.** Pass a promise (a remote call,
+  `of={search(q)}`) and the region renders its `{#snippet placeholder()}` until the value **and its
+  stylesheet** arrive, then swaps in. A plain (non-promise) `of` still resolves in the same SSR pass —
+  no placeholder ever shows. One model for "the data is loading" and "the styled HTML is arriving",
+  so loading UI lives on the region rather than in an ad-hoc boundary.
+- **`blocks.resolve(tree, registry)`.** Resolve a data tree (from a content collection, a CMS, or a
+  `+page.ts`) into placed regions — the whole tree crosses the wire because its leaves are regions.
+  "Blocks without a content collection" is now a documented recipe on this helper; there is no shipped
+  `<Blocks>` component to render.
+- **Per-hole browser cache — `maxAge`.** Deferred holes are dynamic by default (`Cache-Control:
+  no-store`), so a reload re-renders them. Opt a hole into a private browser cache with `maxAge` in a
+  preset; the TTL is **signed into the endpoint**, so a harvested URL can't be re-pointed at a longer
+  cache. This is what lets a prerendered (PPR) hole cache safely without freezing on reload.
+- **`ogygia.script(fn, ...args)`.** Serialize a self-contained function into a blocking inline
+  `<script>` string (a no-flash theme, a deferred font loader, …). Trailing `args` are JSON-serialized
+  and passed in as parameters; any `</script` in the body is escaped so it can't break out of the tag.
+- **`Fallback<P>` type.** Types a deferred island's fallback slot. `svelte-check` type-checks raw
+  source, so the fallback must live on the component — this type gives its props a shape.
+- **`ogygia/internal/compiler`.** The pure transform engine (the island transform + FOUC-CSS graph +
+  free-variable analysis) is carved into its own module, importable outside the Vite plugin.
+- **Zero-file all-csr=false apps.** When **every** route is `csr = false`, ogygia injects a URL-less
+  keepalive route at build time and removes it at process exit, so island chunks still ship — no
+  placeholder `csr=true` page in your project, no Kit internals touched. A `csr = true` app ships zero
+  ogygia runtime.
 
 ### Changed
 
-- **Breaking: content `render()` → the entry's `body` (a partial).** `get(id)` (server-only)
-  returns `{ id, data, headings, body }`; render the body with `<Partial of={entry.body} />`. It's
-  an inline partial — SSR'd in the page's own pass, islands inside hydrate as before.
-- **Breaking: `OgygiaRouter` → `Router`, `OgygiaBoundary` → `Boundary`** (namespace-friendly).
-  Use `<ogygia.Router />`.
+- **Breaking: the SPA router is now global — there is no `<Router/>` component.** It is on by default
+  and configured in one place, the Vite plugin. `ogygia({ router: false })` opts out entirely (and
+  tree-shakes the router out of the runtime); `ogygia({ router: { viewTransitions: false } })` keeps
+  SPA navigation without view transitions. A single page opts out of view transitions with
+  `<meta name="ogygia-router" content="plain">` in its head. The server `handle()` injects the runtime
+  bootstrap and the `ogygia-router` marker, so no component or layout wiring is needed.
+- **Breaking: content `render()` → the entry's `body` (a region).** `get(id)` (server-only)
+  returns `{ id, data, headings, body }`; render the body with `<Region of={entry.body} />`. It's
+  an inline region — SSR'd in the page's own pass, islands inside hydrate as before.
+- **Breaking: `OgygiaBoundary` → `Boundary`** (namespace-friendly). Use `<ogygia.Boundary />`.
 - **Breaking: `ogygiaHandle` → `handle`, exported from `ogygia/server`** (`ogygia/hooks` kept as an
   alias). `ogygiaTransport` is now `ogygia.transport` (from the main `ogygia` entry).
 - **Breaking: the default island endpoint is now `/🏝️` (single emoji), not `/🏝️ogygia🏝️`.** The
   single 🏝️ is already clash-safe against real routes; the brackets were redundant. Override with
   `ogygia.handle({ endpoint })`. No change to signing, props, or expiry.
+- **Breaking: presets speak the `render` / `wake` grammar.** The old `hydrate` / `defer` / `remount`
+  preset keys are removed — an unknown key now errors — and the vestigial `OgygiaRemount` type is
+  dropped. A preset reads like an inline import: `render` (the mode) + `wake` (the schedule), plus the
+  tuning options not allowed inline (`margin`, `maxAge`, …).
+- **Deferred holes are dynamic by default (`Cache-Control: no-store`).** A reload re-renders a hole
+  unless it opts into `maxAge` (see Added) — the signed TTL rides the endpoint MAC.
+- **`ogygia.preprocess()` is synchronous.** mdsvex loads lazily on first use (with a clear "install
+  mdsvex" hint) instead of being awaited up front, so a markdown-free app pays nothing.
+- **Content sources trimmed.** The mdsvex source builder is renamed `markdown()`; the `yaml()` /
+  `raw()` / `fromArray()` sources are dropped (a `.yaml` or raw loader is a short recipe). Content
+  collections now parse frontmatter with ogygia's own dependency-free parser — the `yaml` dependency
+  is gone.
+- **The island endpoint is matched base-independently.** A request-path suffix match replaces the
+  deprecated `base` import from `$app/paths` (removed in Kit 3), so a `paths.base` app needs no extra
+  wiring for the endpoint to resolve.
 
 ### Removed
 
-- **Breaking: `content.render()` and `renderHtml()`.** Replaced by `get()` + `<Partial>`. Content
-  delivered over the wire (feeds, search) maps entries to partials of your own `with { partial }`
+- **Breaking: the `<Router/>` component.** The SPA router is global now (see Changed) — configure it
+  on the `ogygia()` plugin instead of rendering a component in a layout.
+- **Breaking: `content.render()` and `renderHtml()`.** Replaced by `get()` + `<Region>`. Content
+  delivered over the wire (feeds, search) maps entries to regions of your own `with { region: 'raw' }`
   components instead of returning HTML strings.
 - **`@ogygia/content` as a separate package.** Its cross-package bridge, the `ogygia/preprocess`
   seam, and the optional-peer dance are gone — all internal now.
@@ -164,12 +219,36 @@ The unification release. Partials become the one renderable, content collapses o
   `csr=false`, ogygia runs a standalone client build that re-invokes the plugin factory, which
   reassigned the shared island-bridge transform. The bridge transform is now saved and restored
   around the standalone build.
-- **Deferred regions hydrate on `csr=true` pages.** A server island / `<Partial>` on a `csr=true`
+- **Deferred regions hydrate on `csr=true` pages.** A server island / `<Region>` on a `csr=true`
   page fetches its HTML after load, so Kit never hydrated it — but `#hydrate` bailed via its "Kit
   hydrates this" guard and left it inert. The guard now exempts deferred regions.
 - **Dropped phantom modulepreload chunks.** Island dependency preloads are now collected in
   `writeBundle` (post-merge) and filtered to emitted chunks, so a rolldown-eliminated shared chunk
   can't leave a `modulepreload` pointing at a file that was never written (404 at prerender).
+- **Island hydration adopts SSR roots in place (the "hero bounce" reflow).** The unified
+  `Region.svelte` wraps island SSR in `{#if Component}…{/if}`, but the client `NestedProvider`
+  rendered a bare `<Component/>` — the mismatched fragment layers stopped Svelte from adopting the SSR
+  nodes, so it discarded and **re-created** each island root. A re-created root is class-less for one
+  tick, so a root whose `position: fixed` comes from a `class:` briefly fell to `static`, dropped into
+  flow, and shoved downstream layout (the sidebar-above-a-centered-hero bounce). `NestedProvider` now
+  mirrors the island SSR shape exactly, so hydration adopts the root in place.
+- **First-navigation-after-deploy FOUC.** The router merged the new `<head>` and swapped `<body>` in
+  one step, but a freshly-appended `<link rel="stylesheet">` loads asynchronously — on a cold cache
+  the new route rendered unstyled until its CSS arrived (warm caches hid it, so it only showed
+  post-deploy). The router now appends and **awaits** the destination stylesheets (capped at 2s so a
+  stalled sheet can't hang navigation) before the swap, and inserts them at the top of `<head>` so an
+  island's `<svelte:head>` reconciliation can't reclaim them.
+- **Held-region CSS styles the page — in dev too.** A held / dual region's component is server-picked
+  (a registry), so its CSS is on no page stylesheet (Kit links CSS from the route's static import
+  graph, never from what actually rendered). The render pass now links it from `<svelte:head>` (claimed
+  once per request, so five copies of a block link their sheet once) and the client hoists it to
+  `<head>`. Production links the built CSS asset; dev imports the same component's style module — so a
+  deferred / held hole is styled under `vite dev` exactly as in a production build.
+- **Live command refresh.** A client `submit().updates(...)` that sends only refresh keys now triggers
+  `requested(...).refreshAll()` on the server, so a live `Query.current` refreshes in place instead of
+  staying stale until a full page reload.
+- **`morph` keyed-diff rewrite.** Live / streamed HTML now morphs with a keyed diff that preserves
+  form state and input focus across a tick.
 
 ## [0.4.3] — 2026-08-07
 

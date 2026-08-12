@@ -162,6 +162,83 @@ function dom_ready() {
 	return new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
 }
 
+/**
+ * Parse a fetched region's HTML into a fragment, HOISTING any `<link data-ogygia-region-css>` it
+ * carries into `<head>` (deduped by href). A held / server-picked region's component was never
+ * imported by the page, so its scoped CSS is in no stylesheet the page loaded; the region response
+ * ships the links and the runtime lifts them to the head — where they load once and stick. (A link
+ * left in the body would also fail to load inside a `<template>` batch parcel.)
+ */
+function region_fragment(html: string): { frag: DocumentFragment; ready: Promise<void> } {
+	const frag = document.createRange().createContextualFragment(html);
+	const links = frag.querySelectorAll('link[data-ogygia-region-css]');
+	const pending: Array<Promise<void>> = [];
+	if (links.length && import.meta.env.DEV) {
+		// DEV: there is no linkable CSS asset — Vite serves component CSS only as an importable module
+		// (importing it injects the scoped `<style>`). `islandCss` handed us the region's dev module URL
+		// as the href, so import it here. Same region-css channel as prod, resolved for the dev server;
+		// this is why one mechanism now covers held regions AND server-island holes in both environments.
+		const seen = new Set<string>();
+		for (const link of links) {
+			const href = link.getAttribute('href');
+			link.remove();
+			if (!href || seen.has(href)) continue;
+			seen.add(href);
+			pending.push(import(/* @vite-ignore */ href).then(
+				() => undefined,
+				() => undefined
+			));
+		}
+	} else if (links.length) {
+		const existing = new Map(
+			Array.from(document.querySelectorAll('link[rel="stylesheet"]'), (l) => [
+				l.getAttribute('href'),
+				l as HTMLLinkElement
+			])
+		);
+		// Resolve on load OR error (a broken sheet must not wedge the paint) so the caller can await
+		// the stylesheet before swapping the HTML in — no flash of unstyled server-picked content.
+		const until_loaded = (l: HTMLLinkElement) =>
+			new Promise<void>((resolve) => {
+				l.addEventListener('load', () => resolve(), { once: true });
+				l.addEventListener('error', () => resolve(), { once: true });
+				// Attach-then-check closes the race where the sheet finished between our lookup and the
+				// listener registration (`sheet` is set synchronously with the load event).
+				if (l.sheet) resolve();
+			});
+		for (const link of links) {
+			const href = link.getAttribute('href');
+			link.remove();
+			if (!href) continue;
+			const present = existing.get(href);
+			if (present) {
+				// Already in the document — but "present" is not "loaded". A concurrent applier (frame
+				// morph vs applyLive of the same ticket) hoists first and awaits; every later applier
+				// must await the SAME in-flight sheet, or it paints unstyled mid-download.
+				if (!present.sheet) pending.push(until_loaded(present));
+				continue;
+			}
+			const clone = document.createElement('link');
+			clone.rel = 'stylesheet';
+			clone.href = href;
+			clone.setAttribute('data-ogygia-region-css', '');
+			pending.push(until_loaded(clone));
+			existing.set(href, clone);
+			document.head.appendChild(clone);
+		}
+	}
+	// Cap the wait so a genuinely hung stylesheet eventually paints (unstyled) rather than blocking
+	// forever — generous, because the caller shows a placeholder meanwhile, so a slow-link stylesheet
+	// (seconds on 4G) should still win the race and paint styled.
+	const ready = pending.length
+		? Promise.race([
+				Promise.all(pending).then(() => undefined),
+				new Promise<void>((r) => setTimeout(r, 5000))
+			])
+		: Promise.resolve();
+	return { frag, ready };
+}
+
 /** Apply `application/ogygia-remote` text into the reused Kit query seed bag. */
 function apply_remote_seed_text(text: string | null | undefined) {
 	if (!text) return;
@@ -297,6 +374,10 @@ class OgygiaRegion extends HTMLElement {
 	#scheduled = false;
 	/** True after a successful HTML swap — failures leave this false so a later schedule can retry. */
 	#done = false;
+	/** In-flight `#apply` run. `#apply` awaits the region's stylesheet before swapping, so anyone
+	 * who needs the post-swap state (`#done`, phase-2 hydrate arming) must await this first —
+	 * sampling `#done` right after the fetch races the CSS wait and reads stale `false`. */
+	#applying: Promise<void> | undefined;
 	/** In-flight fetch guard (separate from `#done` so a failed fetch does not one-shot the region). */
 	#fetching = false;
 	/** Bounded automatic retries after a failed defer/SWR fetch. */
@@ -418,9 +499,13 @@ class OgygiaRegion extends HTMLElement {
 		const endpoint = this.getAttribute('endpoint');
 		if (endpoint && !this.#frame_unsub) {
 			const address = (this.#frame_address = frameAddress(endpoint));
-			this.#frame_unsub = frames.subscribe(address, (f) => this.#apply(f.html));
+			this.#frame_unsub = frames.subscribe(address, (f) => void (this.#applying = this.#apply(f.html)));
 		}
 		await this.#deliver_html();
+		// The subscribe callback fired #apply, but #apply awaits the stylesheet before swapping —
+		// wait for it, or `#done` below reads stale `false` and phase-2 hydrate is never armed
+		// (an interactive deferred leaf would swap in and stay dead).
+		await this.#applying;
 		if (!this.#done || !this.isConnected) return;
 		const hydrate = region_hydrate_schedule(this);
 		if (!hydrate) return;
@@ -445,12 +530,14 @@ class OgygiaRegion extends HTMLElement {
 	 * offline before custom elements connect, then swap, mark, event. HOLE-TRUST: the HTML is our own
 	 * signed same-origin SSR.
 	 */
-	#apply(html: string) {
+	async #apply(html: string) {
 		if (!this.isConnected) return;
 		// A refresh is either an explicit SWR revalidate or a later frame after the first swap.
 		const revalidate = this.#revalidating || this.#done;
 		this.#revalidating = false;
-		const frag = document.createRange().createContextualFragment(html);
+		const { frag, ready } = region_fragment(html);
+		await ready; // let the server-picked component's stylesheet load before painting (no FOUC)
+		if (!this.isConnected) return;
 		slots.lakes.settle_in(frag);
 		slots.lakes.mark_frozen_settled(this);
 		this.replaceChildren(frag);
@@ -468,9 +555,15 @@ class OgygiaRegion extends HTMLElement {
 	 * survives — the breathing update live partials rely on). Interactive live regions never reach
 	 * here: they keep the imperative keep-alive path in {@link applyLive}.
 	 */
-	#morph_live(html: string) {
+	async #morph_live(html: string) {
 		if (!this.isConnected) return;
-		const frag = document.createRange().createContextualFragment(html);
+		const { frag, ready } = region_fragment(html);
+		// Wait for the component's stylesheet before painting. On first paint the region's placeholder
+		// CHILDREN stay visible meanwhile; on a later morph the OLD content stays — either way no flash
+		// of unstyled or missing content. An already-loaded sheet resolves instantly, so live ticks
+		// (query.live breathing) stay fast.
+		await ready;
+		if (!this.isConnected) return;
 		slots.lakes.settle_in(frag);
 		if (!this.#live_ready) {
 			this.replaceChildren(frag);
@@ -519,7 +612,7 @@ class OgygiaRegion extends HTMLElement {
 		// Bind if we haven't (SWR/lake remount reaches #fetch_html without going through #server).
 		// Idempotent: #server already subscribed for the normal defer flow.
 		if (!this.#frame_unsub) {
-			this.#frame_unsub = frames.subscribe(address, (f) => this.#apply(f.html));
+			this.#frame_unsub = frames.subscribe(address, (f) => void (this.#applying = this.#apply(f.html)));
 		}
 		if (opts.revalidate) this.#revalidating = true;
 		try {
@@ -682,10 +775,10 @@ class OgygiaRegion extends HTMLElement {
 				const LiveHost = slots.live;
 				if (this.hasAttribute('data-ogygia-keep') && LiveHost) {
 					// Keep needs SPA navigation — a full-page load throws the DOM away, so there is
-					// nothing to relocate. Warn (dev) when there is no <Router/> on the page.
+					// nothing to relocate. Warn (dev) when the router is off on this page.
 					if (import.meta.env.DEV && !document.querySelector('meta[name="ogygia-router"]')) {
 						console.warn(
-							`[ogygia] island "${entry}" has keep:'${this.getAttribute('data-ogygia-keep')}' but this app has no <Router/> — keep relies on SPA navigation; a full-page load replaces the DOM, so the attribute is a no-op here.`
+							`[ogygia] island "${entry}" has keep:'${this.getAttribute('data-ogygia-keep')}' but the SPA router is off (ogygia({ router: false })) — keep relies on SPA navigation; a full-page load replaces the DOM, so the attribute is a no-op here.`
 						);
 					}
 					this.#app = hydrate(LiveHost, {
@@ -799,7 +892,9 @@ class OgygiaRegion extends HTMLElement {
 		this.#live_module = desc.module;
 		// createContextualFragment — signed same-origin HTML trust boundary (HOLE-TRUST). The HTML is
 		// our own SSR under a verified MAC (or, for a live tick, rendered in-process on the server).
-		const frag = document.createRange().createContextualFragment(desc.html);
+		const { frag, ready } = region_fragment(desc.html);
+		await ready; // stylesheet before paint — an interactive held region has CSS too (no FOUC)
+		if (!this.isConnected) return;
 		slots.lakes.settle_in(frag);
 		this.replaceChildren(frag);
 		if (interactive) {

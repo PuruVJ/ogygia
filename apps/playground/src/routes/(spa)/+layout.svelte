@@ -1,10 +1,8 @@
 <script lang="ts">
-	// This layout opts into the SPA router (+ view transitions) via <Router/>.
-	import { Router } from 'ogygia';
+	// The SPA router (+ view transitions) is global — enabled by the ogygia() vite plugin, no
+	// component to render. `/plain` opts OUT of view transitions per-page via a meta tag.
 	let { children } = $props();
 </script>
-
-<Router />
 
 <nav>
 	<a href="/">Home</a>
@@ -18,7 +16,7 @@
 	<a href="/dashboard/orders">Dashboard</a>
 	<a href="/weave" data-weave-link data-ogygia-speculate="off">Weave</a>
 	<a href="/ooo" data-ooo-link data-ogygia-speculate="off">OOO</a>
-	<a href="/plain">Plain (no router)</a>
+	<a href="/plain">Plain (no view transitions)</a>
 </nav>
 <hr />
 {@render children()}

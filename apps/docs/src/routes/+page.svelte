@@ -30,7 +30,7 @@
 </script>
 
 <PageHead
-	description="The islands library for SvelteKit. No Kit client bootstrap — a ~7.6 KB runtime (custom element + router), and JS only for the components you mark. Server islands, lakes, partials, and content collections are all the same island."
+	description="The islands library for SvelteKit. No Kit client bootstrap — a lightweight runtime (custom element + router), and JS only for the components you mark. Server islands, lakes, partials, and content collections are all the same island."
 />
 
 <div id="top"></div>
@@ -46,12 +46,13 @@
 			</p>
 			<p>
 				No Kit client bootstrap. The shared runtime is a custom element plus an optional router —
-				about <strong>7.6&nbsp;KB</strong> min+brotli. Mark a component with an import attribute and
-				it wakes on a schedule; everything else stays server HTML. Server islands, lakes, held
-				regions, and prerendering are all the same idea, shaped differently.
+				<strong>lightweight</strong>, and JS ships only for the components you mark. Mark a
+				component with an import attribute and it wakes on a schedule; everything else stays
+				server HTML. Server islands, lakes, held regions, and prerendering are all the same idea,
+				shaped differently.
 			</p>
 			<div class="btn-row">
-				<a class="btn btn--primary" href="/docs/start/adoption">Adoption</a>
+				<a class="btn btn--primary" href="/docs/start/install">Adoption</a>
 				<a class="btn btn--ghost" href="/docs/start/install">Install</a>
 				<a
 					class="btn btn--ghost"
@@ -255,16 +256,21 @@
 		</ShowcaseCard>
 	</div>
 
-	<div class="beat">
-		<div class="beat-head">
-			<span class="beat-num">08</span>
-			<h3>Your content is a collection, too</h3>
-			<p>
-				Define a collection once with <code>content()</code> — markdown, JSON, or a CMS. Query it
-				over the wire like any remote function; the bodies never ship. These very docs run on it —
-				the list below is live from the collection.
-			</p>
-		</div>
+</section>
+
+<section class="shell content-story" aria-labelledby="content-story">
+	<div class="content-head">
+		<span class="story-kicker">Content is an island too</span>
+		<h2 id="content-story">Your content is a collection</h2>
+		<p>
+			Define a collection once with <code>content()</code> — markdown, JSON, or a CMS behind a few
+			lines. Query it over the wire like any remote function and the bodies never ship; the entry you
+			render is a region, so a page's content wakes on the same schedule as everything else. These
+			very docs run on it.
+		</p>
+	</div>
+
+	<div class="content-showcase">
 		<ShowcaseCard
 			title="Content collection"
 			tag="ogygia/content"
@@ -277,6 +283,37 @@
 			{/snippet}
 		</ShowcaseCard>
 	</div>
+
+	<p class="content-lead">One <code>content()</code> definition; the source decides where it comes from.</p>
+
+	<div class="content-grid">
+		<figure class="content-code">
+			<figcaption class="content-code-head">
+				<span class="content-kicker">Markdown &amp; islands</span>
+				<span class="content-title">Prose with live components in it</span>
+			</figcaption>
+			<div class="demo-code">{@html data.contentMarkdownHtml}</div>
+			<a class="content-code-link" href="/docs/content/collections">Markdown &amp; Shiki →</a>
+		</figure>
+
+		<figure class="content-code">
+			<figcaption class="content-code-head">
+				<span class="content-kicker">Typed data</span>
+				<span class="content-title">JSON through the same API</span>
+			</figcaption>
+			<div class="demo-code">{@html data.contentJsonHtml}</div>
+			<a class="content-code-link" href="/docs/content/collections">Collections →</a>
+		</figure>
+
+		<figure class="content-code content-code--wide">
+			<figcaption class="content-code-head">
+				<span class="content-kicker">Any source, even live</span>
+				<span class="content-title">A CMS, a REST API, a push feed</span>
+			</figcaption>
+			<div class="demo-code">{@html data.contentCustomHtml}</div>
+			<a class="content-code-link" href="/docs/content/blocks">Blocks &amp; custom sources →</a>
+		</figure>
+	</div>
 </section>
 
 <section class="shell applayer" aria-labelledby="applayer">
@@ -288,7 +325,7 @@
 		</p>
 	</div>
 	<div class="applayer-grid">
-		<a class="applayer-card" href="/docs/app/ppr">
+		<a class="applayer-card" href="/docs/app/router">
 			<span class="applayer-kicker">Partial prerendering</span>
 			<span class="applayer-title">Bake the shell, fill the holes</span>
 			<span class="applayer-body">A static file on the CDN with dynamic server islands fetched per visitor. A live reload demo shows one page telling two times.</span>
@@ -298,7 +335,7 @@
 			<span class="applayer-title">One request per navigation</span>
 			<span class="applayer-body">The SPA router pulls a whole page's server-island holes down one batch, out of order, no waterfall.</span>
 		</a>
-		<a class="applayer-card" href="/docs/data-state/held-regions">
+		<a class="applayer-card" href="/docs/regions/held-regions">
 			<span class="applayer-kicker">Single-flight</span>
 			<span class="applayer-title">Mutate and repaint in one trip</span>
 			<span class="applayer-body">A command returns its re-rendered region in the same response, so the mounted region morphs with no follow-up fetch.</span>
@@ -321,7 +358,7 @@
 			<span class="home-docs-kicker">Start</span>
 			<span class="home-docs-title">The model, install, adoption</span>
 		</a>
-		<a class="home-docs-card" href="/docs/islands/client-islands">
+		<a class="home-docs-card" href="/docs/regions/client-islands">
 			<span class="home-docs-kicker">Islands</span>
 			<span class="home-docs-title">Client &amp; server islands, lakes, portable bindings</span>
 		</a>
@@ -333,9 +370,9 @@
 			<span class="home-docs-kicker">Content</span>
 			<span class="home-docs-title">RF-native collections, markdown, live sources</span>
 		</a>
-		<a class="home-docs-card" href="/docs/reference/patterns">
+		<a class="home-docs-card" href="/docs/reference/constraints">
 			<span class="home-docs-kicker">Reference</span>
-			<span class="home-docs-title">Pesky patterns and constraints</span>
+			<span class="home-docs-title">Constraints and patterns</span>
 		</a>
 	</div>
 </main>
@@ -381,10 +418,10 @@
 	}
 
 	/* Each beat: a narrative lead-in, then the code+demo card. A quiet rail on the left ties the
-	   sequence together so it reads as one story rather than a grid of tiles. */
+	   sequence together so it reads as one story rather than a grid of tiles. Fills the shell like
+	   every other section (the App-layer grid, the docs cards) so the section widths stay consistent. */
 	.beat {
 		position: relative;
-		max-width: 52rem;
 		margin: 0 auto;
 		padding: 0 0 3.5rem 3.5rem;
 	}
@@ -529,6 +566,94 @@
 	.applayer-body {
 		color: var(--text-dim);
 		font: 400 0.875rem/1.5 var(--font-body);
+	}
+
+	/* Content — its own section (pulled out of the islands story), mirrors the app-layer shell. */
+	.content-story {
+		padding-block: 2rem 1rem;
+	}
+	.content-head {
+		max-width: 46rem;
+		margin-bottom: 2rem;
+	}
+	.content-head h2 {
+		margin: 0.5rem 0;
+		font: 600 1.75rem/1.15 var(--font-display);
+		letter-spacing: -0.03em;
+		color: var(--text);
+	}
+	.content-head p {
+		margin: 0;
+		color: var(--text-dim);
+		line-height: 1.6;
+	}
+	.content-showcase {
+		margin-bottom: 2.5rem;
+	}
+	.content-lead {
+		margin: 0 0 1.1rem;
+		color: var(--text-dim);
+		font: 400 1rem/1.5 var(--font-body);
+	}
+	.content-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+		gap: 1rem;
+		align-items: start;
+	}
+	/* A code showcase tile: header, the highlighted sample, a learn-more link. Reuses the global
+	   `.demo-code` styling from demo-block.css (loaded by ShowcaseCard on this page). */
+	.content-code {
+		display: flex;
+		flex-direction: column;
+		margin: 0;
+		border: 1px solid color-mix(in srgb, var(--accent-line) 40%, var(--line));
+		border-radius: 14px;
+		overflow: hidden;
+		background: color-mix(in srgb, var(--bg-raised) 45%, transparent);
+	}
+	/* The custom/live sample is longer — let it span the full row when the grid has room. */
+	.content-code--wide {
+		grid-column: 1 / -1;
+	}
+	.content-code-head {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		padding: 0.85rem 1rem;
+		border-bottom: 1px solid color-mix(in srgb, var(--accent-line) 28%, var(--line));
+	}
+	.content-code :global(.demo-code) {
+		flex: 1;
+		margin: 0;
+		padding: 0.9rem 1rem;
+		overflow-x: auto;
+		font-size: 0.8125rem;
+	}
+	.content-code-link {
+		padding: 0.7rem 1rem;
+		border-top: 1px solid color-mix(in srgb, var(--accent-line) 22%, var(--line));
+		color: var(--accent);
+		text-decoration: none;
+		font: 500 0.8125rem/1 var(--font-mono);
+	}
+	.content-code-link:hover {
+		background: color-mix(in srgb, var(--accent-deep) 18%, transparent);
+	}
+	.content-kicker {
+		font: 600 0.6875rem/1 var(--font-mono);
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--accent);
+	}
+	.content-title {
+		color: var(--text);
+		font: 600 1rem/1.3 var(--font-display);
+		letter-spacing: -0.02em;
+	}
+	.content-head code {
+		font: 500 0.9em/1 var(--font-mono);
+		color: var(--accent);
 	}
 
 	.home-docs {

@@ -208,6 +208,9 @@ function make_awaitable(dual: DualRegion): AwaitableRegion {
 			onRejected?: ((reason: unknown) => unknown) | null
 		) {
 			const run = async (): Promise<DualRegion> => {
+				// `renderHtml` (generated per binding) already prefixes the component's stylesheet
+				// `<link>`s — the page never imported this server-picked component, so its CSS is on no
+				// page stylesheet; the client hoists those links to <head>.
 				const html = dual.renderHtml ? await dual.renderHtml(dual.props) : undefined;
 				// Spread copies only enumerable own props → drops `then`, so the result is NOT a
 				// thenable and `await` settles here instead of chaining forever.

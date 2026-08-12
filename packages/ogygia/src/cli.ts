@@ -282,7 +282,16 @@ async function run() {
 		return c.trim() ? c.replace(/\n*$/, '\n\n') + line : line;
 	});
 
-	// 5. Install (best-effort; skipped with --no-install).
+	// 5. Ambient types — one reference line so `svelte-check` / `tsc` resolve the `virtual:ogygia/*`
+	//    modules the shipped source imports. TS projects only; never clobber an existing file.
+	if (ext === 'ts') {
+		editFile('src/ogygia.d.ts', (c) =>
+			c.includes('ogygia/types') ? c : (c.trim() ? c.replace(/\n*$/, '\n\n') : '') + '/// <reference types="ogygia/types" />\n'
+		);
+		stdout.write(`  ${ok('✓')} src/ogygia.d.ts ${dim('(types)')}\n`);
+	}
+
+	// 6. Install (best-effort; skipped with --no-install).
 	if (!noInstall) {
 		const pm = existsSync(path.join(cwd, 'pnpm-lock.yaml'))
 			? 'pnpm'
@@ -302,7 +311,7 @@ async function run() {
 		}
 	}
 
-	// 6. Next steps.
+	// 7. Next steps.
 	stdout.write(
 		`\n${ok('✔')} ogygia is wired up.\n\n` +
 			`Next:\n` +

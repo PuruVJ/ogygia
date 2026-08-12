@@ -11,7 +11,6 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 // those (verified in dist). So they are NOT copied here.
 const files = [
 	'src/Region.svelte',
-	'src/OgygiaRouter.svelte',
 	'src/NestedProvider.svelte',
 	'src/LiveHost.svelte',
 	'src/LakeBoundary.svelte',

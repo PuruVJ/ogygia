@@ -2,7 +2,7 @@
 title: Data & remote functions
 summary: All six Kit remote primitives work inside islands — query, command, form, and more.
 related:
-  - data-state/held-regions
+  - regions/held-regions
   - app/router
 ---
 

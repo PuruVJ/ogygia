@@ -17,9 +17,9 @@
  *
  * @packageDocumentation
  */
-// Namespace-friendly names: `import * as ogygia from 'ogygia'` → `<ogygia.Router />`,
-// `<ogygia.Region />`, `ogygia.region()`, `ogygia.transport`.
-export { default as Router } from './OgygiaRouter.svelte';
+// Namespace-friendly names: `import * as ogygia from 'ogygia'` → `<ogygia.Region />`,
+// `ogygia.region()`, `ogygia.transport`. The SPA router is global (opt out with
+// `ogygia({ router: false })`), so there is no `<Router/>` component to render.
 export { default as Boundary } from './OgygiaBoundary.svelte';
 
 // Regions held as values — server-chosen renders you place like data. `region()` mints, `<Region>` renders.
@@ -32,9 +32,9 @@ export { preload } from './preload.js';
 // dark-mode flash), a deferred font, an early flag. `{@html script(fn)}`, put the tag where you like.
 export { script } from './script.js';
 
-// Blocks — the render half of a visual/JSON page builder. A tree of `type`d nodes → registered
-// islands, only the referenced block types load. Pairs with the `blocks()` content format.
-export { default as Blocks } from './Blocks.svelte';
+// Builder.io-style pages: the blessed path is the `blocks()` content source (see `ogygia/content`).
+// For a tree in hand without a collection, `blocks.resolve(tree, registry)` turns it into region nodes
+// you render with a small recomposer — a recipe, not a shipped component.
 export type {
 	RegionValue,
 	AwaitableRegion,

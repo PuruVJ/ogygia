@@ -22,7 +22,8 @@ const count = (s, re) => (s.match(re) || []).length;
 	check('/ has 9 <ogygia-region> elements', count(html, /<ogygia-region/g) === 9, `${count(html, /<ogygia-region/g)}`);
 	check('/ counter island SSR content (count is 10)', /count is 10/.test(html));
 	check('/ per-use strategy: same module, visible (count is 99)', /count is 99/.test(html));
-	check('/ opt-in router marker present (OgygiaRouter)', /name="ogygia-router"/.test(html));
+	check('/ global router marker present (handle-injected)', /name="ogygia-router"/.test(html));
+	check('/ router marker defaults to view transitions', /name="ogygia-router" content="vt"/.test(html));
 	check('/ each-block islands SSR (Alpha/Bravo/Charlie)', /Alpha/.test(html) && /Bravo/.test(html) && /Charlie/.test(html));
 	check('/ devalue props payload present', /application\/ogygia-props/.test(html));
 	check('/ 9 devalue payloads', count(html, /application\/ogygia-props/g) === 9);
@@ -68,12 +69,14 @@ const count = (s, re) => (s.match(re) || []).length;
 	check('/data NO Kit bootstrap', !/__sveltekit/.test(html));
 }
 
-// --- Plain page: island page (csr=false) that opted OUT of the router ---
+// --- Plain page: global router still applies, but this page opts OUT of view transitions ---
 {
 	const { status, html } = await get('/plain');
 	check('/plain returns 200', status === 200);
 	check('/plain has an island (still hydrates)', count(html, /<ogygia-region/g) === 1);
-	check('/plain has NO router marker (opt-out)', !/name="ogygia-router"/.test(html));
+	check('/plain router marker present (router is global)', /name="ogygia-router"/.test(html));
+	check('/plain page opts out of view transitions (content="plain")', /name="ogygia-router" content="plain"/.test(html));
+	check('/plain single router marker (page tag wins, handle skips)', count(html, /name="ogygia-router"/g) === 1, `${count(html, /name="ogygia-router"/g)}`);
 	check('/plain NO Kit bootstrap (csr=false island page)', !/__sveltekit/.test(html));
 }
 

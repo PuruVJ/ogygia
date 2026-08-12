@@ -31,13 +31,38 @@ export function isNested(): boolean {
 	return getContext(NESTED_KEY) === true;
 }
 
-/** Per-request: only one `data-ogygia-runtime` script should be emitted (router, else first island). */
+/** Per-request: only one `data-ogygia-runtime` script should be emitted (the first island). */
 const runtime_claimed = new WeakMap<object, true>();
 
+/** Per-request: stylesheet hrefs already linked for held regions rendered in this SSR pass. */
+const region_css_claimed = new WeakMap<object, Set<string>>();
+
 /**
- * Claim the single runtime-script slot for this SSR request.
- * OgygiaRouter claims first when present; islands/server-islands only emit if this returns true
- * (pages with no router). Client / no-request → false (SSR already emitted).
+ * Claim stylesheet hrefs for this SSR request, returning only the not-yet-claimed ones. A held
+ * region's component is server-picked, so its CSS is on no page stylesheet (Kit links CSS from the
+ * route's STATIC import graph — it never reads the rendered page). The region wrapper links it from
+ * the render pass instead, via `<svelte:head>`; claiming here dedupes so five `Feature` blocks on a
+ * page link their shared sheet once. Client / no-request → [] (SSR already linked them).
+ */
+export function claim_region_css(hrefs: string[]): string[] {
+	if (!hrefs.length) return [];
+	try {
+		const event = getRequestEvent() as object;
+		let seen = region_css_claimed.get(event);
+		if (!seen) region_css_claimed.set(event, (seen = new Set()));
+		const fresh = hrefs.filter((h) => !seen.has(h));
+		for (const h of fresh) seen.add(h);
+		return fresh;
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Claim the single runtime-script slot for this SSR request. An island/server placement emits the
+ * runtime bootstrap so it hydrates even with the router off; when the router is on, the handle
+ * injects the same script into `<head>` (presence-checked) on pages that have no island to emit it.
+ * Client / no-request → false (SSR already emitted).
  */
 export function claimRuntimeEmit(): boolean {
 	try {

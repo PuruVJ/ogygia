@@ -48,14 +48,10 @@ export const handle = sequence(ogygia.handle(), myOtherHandle);
 // src/routes/marketing/+page.ts
 export const csr = false;`;
 
-/** Gradual migration — root router + per-route csr=false. */
-export const adoptionMigrate = `// src/routes/+layout.svelte — safe on mixed apps
-<script>
-  import * as ogygia from 'ogygia';
-</script>
-
-<ogygia.Router />
-{@render children()}
+/** Gradual migration — router is global (plugin), convert routes one at a time. */
+export const adoptionMigrate = `// vite.config.ts — the SPA router is on by default, app-wide
+import { ogygia } from 'ogygia/vite';
+export default { plugins: [ogygia(), sveltekit()] };
 
 // src/routes/blog/+page.ts — convert one route at a time
 export const csr = false;
@@ -142,15 +138,22 @@ export const lakeFrozen = `<script>
 
 <Snapshot value={42} />`;
 
-export const ogygiaRouter = `<script>
-  import * as ogygia from 'ogygia';
-</script>
+export const ogygiaRouter = `// vite.config.ts — the router is global; configure it in ONE place
+import { ogygia } from 'ogygia/vite';
 
-<!-- View Transitions on (default) -->
-<ogygia.Router />
+export default {
+  plugins: [
+    ogygia(),                                       // router on, view transitions on (default)
+    // ogygia({ router: { viewTransitions: false } })  // SPA nav, no view transitions
+    // ogygia({ router: false })                        // opt out of the SPA router entirely
+    sveltekit(),
+  ],
+};
 
-<!-- plain swap -->
-<ogygia.Router viewTransitions={false} />`;
+<!-- src/routes/checkout/+page.svelte — opt ONE page out of view transitions -->
+<svelte:head>
+  <meta name="ogygia-router" content="plain" />
+</svelte:head>`;
 
 export const ogygiaBoundary = `<script>
   import { Boundary } from 'ogygia';
@@ -389,3 +392,38 @@ export const docs = content({
 export const docNav = withRemotes(docs).list({
   map: (e) => ({ slug: e.id, title: e.data.title })
 });`;
+
+export const contentMarkdown = `<!-- posts/hello.svx — markdown, with real islands in the prose -->
+<script>
+  import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
+</script>
+
+# {frontmatter.title}
+
+Shiki-highlighted fences, heading ids, and a TOC in \`meta.headings\` —
+and a live island, right in the copy:
+
+<Chart {data} />`;
+
+export const contentJson = `// typed data, not just prose — JSON through the same API
+import { content, json } from 'ogygia/content';
+import * as v from 'valibot';
+
+export const authors = content({
+  loader: json(import.meta.glob('./authors/*.json', { eager: true })),
+  schema: v.object({ name: v.string(), bio: v.string() })
+});
+
+const ada = await authors.get('ada'); // fully typed { name, bio }`;
+
+export const contentCustom = `// any source — a CMS, a REST API, or a push feed
+export const press = content({
+  schema,
+  loader: {
+    async get(id) { const p = await api(\`/posts/\${id}\`); return p && { id, data: p }; },
+    async list()  { return (await api('/posts')).map((p) => ({ id: p.slug, data: p })); }
+  }
+});
+
+// pushes? add live() — a change signal; the list re-emits on every change.
+export const feed = withRemotes(press).live.list({ map: (e) => e.data });`;

@@ -1,21 +1,15 @@
 <script lang="ts">
 	// Homepage partial demo: the server picks the component per result, signs it, and hands it back.
 	// This island never imports PackageCard / EmptyResult — it renders whatever the wire delivers.
-	import { Region, type RegionValue } from 'ogygia';
+	//
+	// ONE loading indicator: `of` takes the remote call's promise, so the region owns the whole
+	// wait (fetch AND styled paint) and `placeholder` fills it. No `loading` state to reconcile —
+	// there is nothing here that claims to know when the card is ready, so nothing can disagree.
+	import { Region } from 'ogygia';
 	import { search } from '$lib/partials/search.remote';
 
 	let q = $state('svelte');
-	let result = $state<RegionValue | null>(null);
-	let loading = $state(false);
-
-	async function run() {
-		loading = true;
-		try {
-			result = await search(q);
-		} finally {
-			loading = false;
-		}
-	}
+	let query = $state<string | null>(null);
 </script>
 
 <div class="search-demo">
@@ -23,7 +17,7 @@
 		class="search-demo-form"
 		onsubmit={(e) => {
 			e.preventDefault();
-			run();
+			query = q;
 		}}
 	>
 		<input
@@ -32,14 +26,14 @@
 			placeholder="try: svelte, kit, vite, ogygia"
 			aria-label="Search packages"
 		/>
-		<button class="search-demo-btn" type="submit" disabled={loading}>
-			{loading ? 'Searching…' : 'Search'}
-		</button>
+		<button class="search-demo-btn" type="submit">Search</button>
 	</form>
 
 	<div class="search-demo-result" aria-live="polite">
-		{#if result}
-			<Region of={result} />
+		{#if query}
+			<Region of={search(query)}>
+				{#snippet placeholder()}<p class="search-demo-hint">Searching…</p>{/snippet}
+			</Region>
 		{:else}
 			<p class="search-demo-hint">Search to fetch a component from the server.</p>
 		{/if}
@@ -49,7 +43,7 @@
 <style>
 	.search-demo {
 		display: grid;
-		gap: 1rem;
+		gap: 0.75rem;
 	}
 	.search-demo-form {
 		display: flex;
@@ -57,26 +51,21 @@
 	}
 	.search-demo-input {
 		flex: 1;
-		min-width: 0;
-		padding: 0.55rem 0.8rem;
-		border-radius: 8px;
-		border: 1px solid var(--line-strong);
-		background: none;
-		color: inherit;
 		font: inherit;
+		padding: 0.45rem 0.7rem;
+		border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+		border-radius: 8px;
+		background: transparent;
+		color: inherit;
 	}
 	.search-demo-btn {
-		padding: 0.55rem 1rem;
-		border-radius: 8px;
+		font: inherit;
+		padding: 0.45rem 0.9rem;
 		border: 1px solid currentColor;
-		background: none;
+		border-radius: 8px;
+		background: transparent;
 		color: inherit;
 		cursor: pointer;
-		font: inherit;
-	}
-	.search-demo-btn:disabled {
-		opacity: 0.6;
-		cursor: default;
 	}
 	.search-demo-hint {
 		margin: 0;

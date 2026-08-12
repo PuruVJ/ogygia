@@ -15,12 +15,12 @@
   <code>SvelteKit native</code>
   · <code>No Kit patches</code>
   · <code>SSR islands</code>
-  · <code>~7.6 KB runtime</code>
+  · <code>Feature-selected runtime</code>
   · <code>load / idle / visible</code>
   · <code>Media queries</code>
   · <code>Server islands</code>
   · <code>Route weaving</code>
-  · <code>Live partials</code>
+  · <code>Live regions</code>
   · <code>Lakes</code>
   · <code>Remote functions</code>
   · <code>Async Svelte</code>
@@ -37,7 +37,7 @@
   · <code>csr=false HMR</code>
 </p>
 
-No Kit client bootstrap — the shared runtime is a custom element plus an optional router (~7.6&nbsp;KB min+brotli). Mark components with an import attribute; only those get their own JS. Each hydrate island’s module URL is written onto `<ogygia-region entry>` (Astro-style), so the sticky runtime does not grow with app-wide island count. Not a new framework — it sits on SvelteKit.
+No Kit client bootstrap — the shared runtime is a custom element plus the features your app actually uses (a load-only app is ~8&nbsp;KB min+brotli; the SPA router, lakes, live regions, and persistence are bundled only when used). Mark components with an import attribute; only those get their own JS. Each hydrate island’s module URL is written onto `<ogygia-region entry>` (Astro-style), so the sticky runtime does not grow with app-wide island count. Not a new framework — it sits on SvelteKit.
 
 ## Install
 
@@ -67,9 +67,9 @@ Dev HMR still works with `csr = false` — soft updates for CSS and shared modul
 
 ```svelte
 <script>
-	import Counter from '$lib/Counter.svelte' with { hydrate: 'load' };
-	import Chart from '$lib/Chart.svelte' with { hydrate: 'visible' };
-	import Greeting from '$lib/Greeting.svelte' with { defer: 'load' };
+	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+	import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
+	import Greeting from '$lib/Greeting.svelte' with { render: 'deferred', wake: 'load' };
 
 	// Counter is a portable island binding — lists / dynamic <Comp /> work too
 	const Dyn = Counter;
@@ -97,28 +97,29 @@ For a chunk that downloads only after a click, use a host island and plain
 
 Trust boundaries and design constraints: [`INVARIANTS.md`](../../internal/notes/INVARIANTS.md) in the monorepo root.
 
-## Live partials
+## Live regions
 
-A partial made from a `with { partial }` import is **awaitable**. Await it on the server (or just
+A region made from a `with { region: 'raw' }` import is **awaitable**. Await it on the server (or just
 `yield` it from a `query.live` — the language awaits it) and it renders to HTML there and travels with
 its markup, so the client swaps it in with no fetch:
 
 ```ts
 export const dashboard = query.live(v.string(), async function* (id) {
-	for await (const stats of feed(id)) yield partial(StatCard, { stats });
+	for await (const stats of feed(id)) yield region(StatCard, { stats });
 });
 ```
 
 ```svelte
-<Partial of={dashboard(id).current} />
+<Region of={dashboard(id).current} />
 ```
 
-Static partials (`partial: 'static'`) **morph** in place across ticks; interactive ones **keep-alive**
-(new props pushed into the mounted island, local state intact). LiveView, with Svelte components.
+Static dual regions (`region: 'raw'`, no `wake`) **morph** in place across ticks; interactive ones
+(`region: 'raw'` + `wake`) **keep-alive** (new props pushed into the mounted island, local state
+intact). LiveView, with Svelte components.
 
 ## Route weaving
 
-Each `defer: 'load'` server-island hole fetches its own signed HTML on load. On a SPA navigation the
+Each load-scheduled server-island hole fetches its own signed HTML on load. On a SPA navigation the
 router prescans the incoming page and pulls **all** its holes down **one** batch request — no
 fetch-per-hole waterfall. Holes stream back out of order (fast-first) as each settles, and a command
 that returns a region repaints in a single flight — one round trip that both mutates and repaints.
@@ -127,7 +128,7 @@ that returns a region repaints in a single flight — one round trip that both m
 
 RF-native content collections ship inside ogygia — `content()` mints Kit `prerender` / `query` /
 `query.live` remotes, and `get(id)` hands back `{ id, data, headings, body }` where `body` is a
-[partial](https://ogygia.puruvj.dev/docs/islands/partials) you render with `<Partial>`. Import
+[region](https://ogygia.puruvj.dev/docs/regions/held-regions) you render with `<Region>`. Import
 from `ogygia/content`; configure markdown via `ogygia({ content: { markdown } })`. `mdsvex` / `shiki`
 are optional peers.
 

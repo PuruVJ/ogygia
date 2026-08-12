@@ -23,6 +23,8 @@ declare module 'virtual:ogygia/region-endpoint' {
 }
 declare module 'virtual:ogygia/server-manifest' {
 	export const islands: Record<string, () => Promise<{ default: unknown }>>;
+	/** Server-island id → its built client-chunk URL (the key `islandCss()` is keyed by). */
+	export const island_url: Record<string, string>;
 }
 declare module 'virtual:ogygia/runtime-url' {
 	const url: string;
@@ -35,6 +37,9 @@ declare module 'virtual:ogygia/runtime-entry' {
 declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of hashed dependency chunks for a hydrate island entry (`/_app/immutable/…`). */
 	export function islandDeps(entry: string): string[];
+	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
+	 *  region response so a server-picked component styles a page that never imported it. */
+	export function islandCss(entry: string): string[];
 }
 declare module 'virtual:ogygia/dev-hmr' {
 	/* side-effect only — CSS HMR bridge under csr=false */
@@ -72,6 +77,12 @@ declare module 'virtual:ogygia/rate-limit' {
 declare module 'virtual:ogygia/session-cookie' {
 	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ sessionCookie })`. */
 	export const sessionCookie: string;
+}
+declare module 'virtual:ogygia/router-config' {
+	/** SPA router on (default) or opted out via `ogygia({ router: false })`. */
+	export const enabled: boolean;
+	/** Use the View Transitions API on navigation. `ogygia({ router: { viewTransitions } })`. */
+	export const viewTransitions: boolean;
 }
 declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regionTtl })` (default 3600). */

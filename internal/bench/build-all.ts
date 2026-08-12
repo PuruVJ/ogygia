@@ -7,7 +7,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-const REPO = join(ROOT, '..');
+// Repo root holds the pnpm workspace + packages/ogygia. This script lives at <root>/internal/bench,
+// so the root is two levels up. (The hermetic Docker image copies a self-contained tree; there the
+// prebuilt-dist branch below is what runs, so this path only matters for a local `pnpm bench`.)
+const REPO = join(ROOT, '..', '..');
 const OGY = join(REPO, 'packages', 'ogygia');
 const TARBALLS = join(ROOT, '.tarballs');
 

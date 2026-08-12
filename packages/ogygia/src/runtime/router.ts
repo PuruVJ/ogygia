@@ -421,8 +421,9 @@ class SpaRouter {
 
 		const doc = new DOMParser().parseFromString(html, 'text/html');
 
-		// Mixed sites: if the target page has no <OgygiaRouter/> marker, hand over to a
-		// real document navigation (and stop SPA behaviour from here on).
+		// Mixed sites: if the target page has no `ogygia-router` marker (the handle injects it on
+		// every ogygia page), it is not an ogygia page — hand over to a real document navigation
+		// (and stop SPA behaviour from here on).
 		const marker = doc.querySelector('meta[name="ogygia-router"]');
 		if (!marker) {
 			location.href = url.href;
@@ -596,10 +597,11 @@ class SpaRouter {
 
 	start() {
 		if (this.#started || typeof document === 'undefined') return;
-		// OPT-IN: only activate when a <OgygiaRouter/> put its marker in the head.
+		// Only activate when the page carries the `ogygia-router` marker (the handle injects it
+		// globally unless `ogygia({ router: false })`).
 		if (!document.querySelector('meta[name="ogygia-router"]')) return;
-		// Gradual migration: <OgygiaRouter/> may sit in the root layout while some routes stay
-		// csr=true. On those pages Kit owns navigation — do not intercept clicks alongside it.
+		// Gradual migration: the marker is on every ogygia page, but some routes may stay csr=true.
+		// On those pages Kit owns navigation — do not intercept clicks alongside it.
 		if (document_has_kit_bootstrap()) return;
 		this.#started = true;
 		this.#doc_key = document_key(new URL(location.href));
@@ -979,7 +981,7 @@ export function replaceState() {
 
 /**
  * Install click/popstate listeners and start SPA navigation.
- * Invoked by the runtime when `<OgygiaRouter />` (or an island) loads the runtime module.
+ * Invoked by the runtime once the module loads (handle-injected on every ogygia page, or by an island).
  * @internal
  */
 export function startRouter() {
@@ -987,8 +989,9 @@ export function startRouter() {
 }
 
 /**
- * Feature entry: start the SPA router once the DOM is ready, but only when the page opted in with
- * `<meta name="ogygia-router">` (emitted by `<Router />`) and Kit is not already booting it.
+ * Feature entry: start the SPA router once the DOM is ready, but only when the page carries
+ * `<meta name="ogygia-router">` (the handle injects it globally unless `ogygia({ router: false })`)
+ * and Kit is not already booting it.
  */
 export function install() {
 	if (typeof document === 'undefined') return;

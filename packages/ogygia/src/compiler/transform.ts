@@ -239,6 +239,25 @@ export function regionId(identityKey: string, salt = '') {
 	return createHash('md5').update(msg).digest('hex').slice(0, 12);
 }
 
+/**
+ * Source of the generated `__renderHtml(props)` for a binding's SSR leg. The returned HTML must be
+ * self-sufficient when it crosses a wire, so it carries stylesheets THREE ways:
+ * - the component's OWN `<link>`s (its island entry's CSS assets — the page never imported it);
+ * - links NESTED regions emitted into `render().head` (a region rendered inside this render pass —
+ *   props-composition, a recomposer's leaves — emits its `<link>`s via `svelte:head`, and keeping
+ *   only `.body` would silently drop them: the leaf arrives unstyled);
+ * - the body itself (which may contain nested self-describing `<ogygia-region>` island markup).
+ */
+function render_html_source(moduleUrl: string): string {
+	return (
+		`(props) => { const r = __ogRegionRender(__ogRegionComp, { props }); ` +
+		`const own = __ogRegionCss(${JSON.stringify(moduleUrl)}).map((h) => ` +
+		`'<link rel="stylesheet" href="' + h + '" data-ogygia-region-css>').join(''); ` +
+		`const nested = (r.head.match(/<link\\b[^>]*data-ogygia-region-css[^>]*>/g) || []).join(''); ` +
+		`return own + nested + r.body; }`
+	);
+}
+
 /** True if `val` looks like a CSS media query (must contain a balanced-ish `(…)`). */
 function is_media_query(val: string) {
 	const open = val.indexOf('(');
@@ -330,8 +349,12 @@ function make_region_binding(opts: {
 			`import __ogRegionComp from ${JSON.stringify(opts.componentPath)};\n` +
 			`import { makeRegionEndpoint as __ogRegionSign } from 'ogygia/internal/server';\n` +
 			`import { render as __ogRegionRender } from 'svelte/server';\n` +
+			// The page never imported this server-picked component, so its scoped CSS is on no page
+			// stylesheet. Prefix the render with the island's `<link>`s (the client hoists them to
+			// <head>). Resolved on the SSR leg only — the client binding stays metadata-only.
+			`import { islandCss as __ogRegionCss } from 'virtual:ogygia/island-deps';\n` +
 			`export default { ${meta}, __component: __ogRegionComp, __sign: __ogRegionSign, ` +
-			`__renderHtml: (props) => __ogRegionRender(__ogRegionComp, { props }).body };\n`,
+			`__renderHtml: ${render_html_source(opts.moduleUrl)} };\n`,
 		bindingClientSource: `export default { ${meta} };\n`,
 		hostPath: opts.hostPath,
 		componentPath: opts.componentPath,
@@ -370,8 +393,9 @@ function wrapper_attach_binding(opts: {
 			`import __ogRegionComp from ${JSON.stringify(opts.componentPath)};\n` +
 			`import { makeRegionEndpoint as __ogRegionSign } from 'ogygia/internal/server';\n` +
 			`import { render as __ogRegionRender } from 'svelte/server';\n` +
+			`import { islandCss as __ogRegionCss } from 'virtual:ogygia/island-deps';\n` +
 			`Object.assign(__OgygiaWrap, { ${meta}, __component: __ogRegionComp, __sign: __ogRegionSign, ` +
-			`__renderHtml: (props) => __ogRegionRender(__ogRegionComp, { props }).body });\n` +
+			`__renderHtml: ${render_html_source(opts.moduleUrl)} });\n` +
 			`export default __OgygiaWrap;\n`,
 		client:
 			`import __OgygiaWrap from ${JSON.stringify(opts.wrapperPath)};\n` +
@@ -849,10 +873,11 @@ export function transformHost(source, id, ctx) {
 	});
 
 	// --- collect host imports & region marks (the two-key region model) --------
-	// The authoring syntax is the import attribute, one concern per key:
-	//   import Comp from './Comp.svelte' with { hydrate: 'visible', margin: '200px' };
-	//   import Comp from './Comp.svelte' with { hydrate: '(min-width: 768px)' };
-	//   import Comp from './Comp.svelte' with { defer: 'load' };   // deferred HTML hole
+	// The authoring syntax is the import attribute, one concern per key (`wake` = the schedule,
+	// `render` = the delivery mode). These become the internal `hydrate` / `defer` DOM attributes below:
+	//   import Comp from './Comp.svelte' with { wake: 'visible', margin: '200px' };
+	//   import Comp from './Comp.svelte' with { wake: '(min-width: 768px)' };
+	//   import Comp from './Comp.svelte' with { render: 'deferred', wake: 'load' };   // deferred HTML hole
 	// Values MUST be string literals (ES import-attribute spec). See DESIGN.md.
 	/** localName -> { node, cleaned } */
 	const imports = new Map();

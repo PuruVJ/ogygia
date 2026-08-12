@@ -1,12 +1,16 @@
+<script module lang="ts">
+	// Baked ONCE at MODULE-eval, not per render. In a prod build (prerender = true) that is BUILD time —
+	// frozen into the static shell file. In the dev server it is module-load time, cached across
+	// requests — so the shell stays frozen on reload in dev too, matching prod. (Instance scope would
+	// call `new Date()` every request, making the "static shell" look dynamic in dev.)
+	const built = new Date().toLocaleTimeString();
+</script>
+
 <script lang="ts">
 	import PprClock from './PprClock.svelte' with { render: 'deferred' };
 
-	// Baked at BUILD (prerender = true): this timestamp is frozen into the static shell file. It is
-	// the SAME on every reload — that is the point. The hole below re-renders per request.
-	//
 	// The hole re-renders fresh on each reload because a deferred hole is dynamic by default: with no
 	// `maxAge` preset it is served `Cache-Control: no-store`. (Opt into caching via a preset's `maxAge`.)
-	const built = new Date().toLocaleTimeString();
 </script>
 
 <main class="ppr">

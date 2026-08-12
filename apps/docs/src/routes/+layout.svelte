@@ -58,7 +58,6 @@
 	{@html monoTag}
 </svelte:head>
 
-<ogygia.Router />
 {#if !bare}
 	<!-- body is preload=off; sidenav opts hover back in so playground/docs links warm on hover -->
 	<div data-ogygia-keep="site-sidenav" data-sveltekit-preload-data="hover">
