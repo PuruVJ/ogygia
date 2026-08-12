@@ -1,1 +1,0 @@
-import{i as e,n as t,t as n}from"./DjMa-xav2.js";var r=e(`bjveep/bump`),i=n(`bjveep/clock`),a=t(`bjveep/getCount`),o=t(`bjveep/getGreeting`),s=t(`bjveep/getTemperature`);export{s as a,o as i,i as n,a as r,r as t};

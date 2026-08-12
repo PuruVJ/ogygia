@@ -1,1 +1,0 @@
-import{dt as e}from"./Bz2BBfIh.js";import"./BMPPvsVT.js";import"./DammN11E.js";import{t}from"./XIu3DyGk.js";var n=e({default:()=>r});function r(e){t(e,{start:5,label:`Plain-page counter`})}export{n,r as t};

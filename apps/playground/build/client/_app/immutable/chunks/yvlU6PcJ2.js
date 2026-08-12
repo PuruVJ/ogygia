@@ -1,1 +1,0 @@
-import"./Bz2BBfIh.js";import{t as e}from"./5CK9GVrq2.js";var t={get url(){return e.url},get params(){return e.params},get route(){return e.route},get status(){return e.status},get data(){return e.data},get form(){return e.form??null},get error(){return e.error??null},get state(){return e.state??{}}};export{t};

@@ -5,8 +5,8 @@
 node_modules/
 .pnpm-store/
 .svelte-kit/
-/playground/build/
-/docs/build/
+/apps/playground/build/
+/apps/docs/build/
 dist/
 *.log
 .DS_Store

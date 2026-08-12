@@ -1,1 +1,0 @@
-import{$ as e}from"./Bz2BBfIh.js";var[t,n]=e();function r(){n(!0)}function i(){try{return t()===!0}catch{return!1}}export{r as n,i as t};
