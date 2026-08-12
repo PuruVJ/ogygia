@@ -1488,7 +1488,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					`import fs from 'node:fs';\n` +
 					`import path from 'node:path';\n` +
 					`import { fileURLToPath } from 'node:url';\n` +
-					`let cache;\n` +
+					// PRIMARY source: a string slot the client build patches in-place with the manifest JSON
+					// (see writeBundle). Inlining it into the server bundle is what makes it survive serverless
+					// tracing — Vercel/Netlify (@vercel/nft) only bundle *imported* files, not runtime fs reads,
+					// so the co-located JSON below is dropped there. The fs walk stays as the fallback for
+					// adapter-node & dev-preview (whole server dir ships). Unpatched, the token starts with '_'
+					// (char 95), the guard is false, and we fall through to the walk.
+					`const __OG_INLINE = '__OGYGIA_ISLAND_DEPS_INLINE__';\n` +
+					// Defensive: a bad patch must degrade to the fs walk, never crash the server at import.
+					`let cache = null;\n` +
+					`try { if (__OG_INLINE.charCodeAt(0) === 123) cache = JSON.parse(__OG_INLINE); } catch {}\n` +
 					`function candidates() {\n` +
 					`  const out = [];\n` +
 					`  try {\n` +
@@ -1809,6 +1818,51 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				fs.writeFileSync(server_copy, json);
 			} catch {
 				/* ignore — handoff path is enough for prerender */
+			}
+
+			// Inline the manifest into the SSR bundle so serverless tracing ships it. The co-located JSON
+			// above is dropped by @vercel/nft (it is fs-read, not imported), which is why held/dual regions
+			// that cross the wire rendered unstyled on Vercel/Netlify. Patch the token slot the island-deps
+			// virtual emits (V_ISLAND_DEPS load) in every server chunk that carries it; unpatched builds keep
+			// the fs fallback (adapter-node, dev-preview).
+			try {
+				const server_dir = path.join(root, '.svelte-kit', 'output', 'server');
+				const token = '__OGYGIA_ISLAND_DEPS_INLINE__';
+				// Escape for BOTH quote styles: the SSR bundler may emit the slot in single OR double
+				// quotes, and an escaped quote is valid in either literal \u2014 so this is safe regardless.
+				const inline = json
+					.replace(/\\/g, '\\\\')
+					.replace(/'/g, "\\'")
+					.replace(/"/g, '\\"')
+					.replace(/\u2028/g, '\\u2028')
+					.replace(/\u2029/g, '\\u2029');
+				const patch_server = (dir) => {
+					let entries;
+					try {
+						entries = fs.readdirSync(dir, { withFileTypes: true });
+					} catch {
+						return;
+					}
+					for (const e of entries) {
+						const full = path.join(dir, e.name);
+						if (e.isDirectory()) {
+							patch_server(full);
+							continue;
+						}
+						if (!e.name.endsWith('.js')) continue;
+						let code;
+						try {
+							code = fs.readFileSync(full, 'utf8');
+						} catch {
+							continue;
+						}
+						if (!code.includes(token)) continue;
+						fs.writeFileSync(full, code.split(token).join(inline));
+					}
+				};
+				patch_server(server_dir);
+			} catch {
+				/* ignore — fs fallback still serves adapter-node / preview */
 			}
 		}
 		},

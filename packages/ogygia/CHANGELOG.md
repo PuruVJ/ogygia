@@ -249,6 +249,15 @@ becomes a global opt-out plugin feature, and config + exports get a single surfa
   staying stale until a full page reload.
 - **`morph` keyed-diff rewrite.** Live / streamed HTML now morphs with a keyed diff that preserves
   form state and input focus across a tick.
+- **Server-picked region CSS on serverless adapters (Vercel / Netlify).** A held / dual region that
+  crosses the wire carries its component's CSS through the island-deps manifest, which the server read
+  from disk at render time. Serverless adapters bundle the function with `@vercel/nft`, which traces
+  `import`s but not `fs.readFileSync` targets — so the manifest was dropped from the function and
+  `islandCss` returned nothing, leaving every server-picked region **unstyled in production** (it
+  worked under adapter-node / `vite preview`, which deploy the whole server directory). The manifest is
+  now **inlined into the server bundle** at build time (a slot the client build patches in place), so
+  it ships with the function; the on-disk read stays as the fallback. The same fix restores
+  `modulepreload` for islands that cross the wire.
 
 ## [0.4.3] — 2026-08-07
 

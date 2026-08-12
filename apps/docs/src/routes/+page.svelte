@@ -317,34 +317,58 @@
 </section>
 
 <section class="shell applayer" aria-labelledby="applayer">
-	<div class="applayer-head">
+	<div class="story-intro">
+		<span class="story-kicker">Around the islands</span>
 		<h2 id="applayer">And a whole app layer</h2>
 		<p>
 			The islands are the primitive. Around them, ogygia makes the page itself fast — prerender the
 			shell, weave the holes, and navigate like an app, all with no extra client code.
 		</p>
 	</div>
-	<div class="applayer-grid">
-		<a class="applayer-card" href="/docs/app/router">
-			<span class="applayer-kicker">Partial prerendering</span>
-			<span class="applayer-title">Bake the shell, fill the holes</span>
-			<span class="applayer-body">A static file on the CDN with dynamic server islands fetched per visitor. A live reload demo shows one page telling two times.</span>
-		</a>
-		<a class="applayer-card" href="/docs/app/router#weave">
-			<span class="applayer-kicker">Route weaving</span>
-			<span class="applayer-title">One request per navigation</span>
-			<span class="applayer-body">The SPA router pulls a whole page's server-island holes down one batch, out of order, no waterfall.</span>
-		</a>
-		<a class="applayer-card" href="/docs/regions/held-regions">
-			<span class="applayer-kicker">Single-flight</span>
-			<span class="applayer-title">Mutate and repaint in one trip</span>
-			<span class="applayer-body">A command returns its re-rendered region in the same response, so the mounted region morphs with no follow-up fetch.</span>
-		</a>
-		<a class="applayer-card" href="/docs/app/router#speculate">
-			<span class="applayer-kicker">Speculation</span>
-			<span class="applayer-title">Prerender the next page on hover</span>
-			<span class="applayer-body">Native Speculation Rules run the next page's JS and holes in a hidden tab, so the click is instant.</span>
-		</a>
+
+	<div class="beat">
+		<div class="beat-head">
+			<span class="beat-num">08</span>
+			<h3>Bake the shell, fill the holes</h3>
+			<p>
+				Partial prerendering serves a static file from the CDN with dynamic server islands fetched
+				per visitor — a live reload demo shows one page telling two times.
+				<a href="/docs/app/router">Partial prerendering →</a>
+			</p>
+		</div>
+	</div>
+
+	<div class="beat">
+		<div class="beat-head">
+			<span class="beat-num">09</span>
+			<h3>One request per navigation</h3>
+			<p>
+				The SPA router pulls a whole page's server-island holes down one batch, out of order, with no
+				waterfall. <a href="/docs/app/router#weave">Route weaving →</a>
+			</p>
+		</div>
+	</div>
+
+	<div class="beat">
+		<div class="beat-head">
+			<span class="beat-num">10</span>
+			<h3>Mutate and repaint in one trip</h3>
+			<p>
+				A command returns its re-rendered region in the same response, so the mounted region morphs
+				with no follow-up fetch. <a href="/docs/regions/held-regions">Single-flight →</a>
+			</p>
+		</div>
+	</div>
+
+	<div class="beat">
+		<div class="beat-head">
+			<span class="beat-num">11</span>
+			<h3>Prerender the next page on hover</h3>
+			<p>
+				Native Speculation Rules run the next page's JS and holes in a hidden tab, so the click is
+				instant. <a href="/docs/app/router#speculate">Speculation →</a>
+			</p>
+		</div>
 	</div>
 </section>
 
@@ -501,71 +525,21 @@
 		}
 	}
 
+	/* App layer: same numbered-beat rhythm as the seven moves (continues 08–11), so the page reads
+	   as one linear sequence instead of dropping into a card grid. */
 	.applayer {
-		padding-block: 2rem 1rem;
+		padding-block: 4rem 1rem;
 	}
 
-	.applayer-head {
-		max-width: 44rem;
-		margin-bottom: 2.5rem;
-	}
-
-	.applayer-head h2 {
-		margin: 0 0 0.5rem;
-		font: 600 1.75rem/1.15 var(--font-display);
-		letter-spacing: -0.03em;
-		color: var(--text);
-	}
-
-	.applayer-head p {
-		margin: 0;
-		color: var(--text-dim);
-		line-height: 1.6;
-	}
-
-	.applayer-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-		gap: 1rem;
-	}
-
-	.applayer-card {
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-		padding: 1.35rem 1.4rem;
-		border: 1px solid color-mix(in srgb, var(--accent-line) 45%, var(--line));
-		border-radius: 14px;
-		background: color-mix(in srgb, var(--bg-raised) 60%, transparent);
-		text-decoration: none;
-		transition:
-			border-color 160ms ease,
-			background 160ms ease,
-			transform 160ms ease;
-	}
-
-	.applayer-card:hover {
-		border-color: color-mix(in srgb, var(--accent-line) 80%, var(--accent));
-		background: color-mix(in srgb, var(--accent-deep) 22%, var(--bg-raised));
-		transform: translateY(-2px);
-	}
-
-	.applayer-kicker {
-		font: 600 0.6875rem/1 var(--font-mono);
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
+	.beat-head p a {
 		color: var(--accent);
+		text-decoration: none;
+		font-weight: 500;
+		white-space: nowrap;
 	}
 
-	.applayer-title {
-		color: var(--text);
-		font: 600 1.0625rem/1.3 var(--font-display);
-		letter-spacing: -0.02em;
-	}
-
-	.applayer-body {
-		color: var(--text-dim);
-		font: 400 0.875rem/1.5 var(--font-body);
+	.beat-head p a:hover {
+		text-decoration: underline;
 	}
 
 	/* Content — its own section (pulled out of the islands story), mirrors the app-layer shell. */
@@ -596,10 +570,9 @@
 		font: 400 1rem/1.5 var(--font-body);
 	}
 	.content-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+		display: flex;
+		flex-direction: column;
 		gap: 1rem;
-		align-items: start;
 	}
 	/* A code showcase tile: header, the highlighted sample, a learn-more link. Reuses the global
 	   `.demo-code` styling from demo-block.css (loaded by ShowcaseCard on this page). */
