@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { page } from '$app/state';
+
 	/** Per-route document head. Title segments join as `A · ogygia`. */
 	let {
 		title = '',
@@ -16,9 +18,10 @@
 
 	const full_title = $derived(title ? `${title} · ogygia` : 'ogygia — SSR islands for SvelteKit');
 
-	// Absolute origin, baked into the (prerendered) pages. `page.url.origin` is a placeholder during
-	// prerender, so hard-code the canonical host; the `/og` endpoint that renders the image is dynamic.
-	const SITE = 'https://ogygia.puruvj.dev';
+	// This deployment's origin (from +layout.server.ts). A preview build must point og:image at ITS
+	// own /og, not production's — `page.url.origin` is a placeholder while prerendering, so the origin
+	// is resolved server-side from Vercel env and passed through page data. Falls back to canonical.
+	const SITE = $derived(page.data.ogOrigin ?? 'https://ogygia.puruvj.dev');
 	const og_image = $derived.by(() => {
 		const p = new URLSearchParams();
 		if (home) {
