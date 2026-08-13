@@ -5,6 +5,29 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] — 2026-08-13
+
+A packaging patch. 0.5.0 installed but didn't run: the published manifest pointed at unshipped
+`src/*.ts`, and the browser runtime got tree-shaken away. Both fixed — no API changes.
+
+### Fixed
+
+- **Published `exports` now resolve to `dist`, not `src`.** 0.5.0's tarball shipped `exports` targeting
+  `./src/*.ts`, which `files: ["dist"]` never ships, so the package entry and several subpaths
+  (`ogygia`, `/runtime`, `/hooks`, `/app`, `/server`, `/internal`, `/internal/server`, `/content`,
+  `/content/server`) resolved to missing files. Root cause: **`npm publish` ignores
+  `publishConfig.exports`** (a pnpm-only feature), so the dev manifest shipped verbatim. ogygia now
+  releases with pnpm (a top-level `pub` script), and `publishConfig.exports` was completed — it had
+  been missing `./internal/compiler`, `./content/server`, and `./types`.
+
+- **The browser runtime no longer vanishes to tree-shaking.** `import 'ogygia/runtime'` booted the
+  kitchen-sink runtime as a pure side-effect import (`runtime/index` → `import './full.js'`). With
+  `sideEffects: false`, bundlers and Vite's dep-prebundler dropped it, so `<ogygia-region>` was never
+  registered and no island woke. Boot is now an explicit function the compiler calls: `full.ts`
+  exports `bootDev()`, `runtime/index` re-exports it (no side-effect import), and the plugin's dev
+  entry injects `import { bootDev } from 'ogygia/runtime'; bootDev()`. The per-app production entry
+  already booted explicitly. `sideEffects` is now `["**/*.css"]`.
+
 ## [0.5.0] — 2026-08-12
 
 The unification release. **Regions** become the one renderable — placed, held, deferred, live —
