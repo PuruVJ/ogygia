@@ -25,7 +25,8 @@
     "bundle-size": "node e2e/bundle-size.ts",
     "bench": "node internal/bench/build-all.ts && node internal/bench/benchmark.ts --config frameworks.config.json --out results/latest.md --json",
     "bench:build": "node internal/bench/build-all.ts",
-    "bench:run": "node internal/bench/benchmark.ts --config frameworks.config.json --out results/latest.md --json"
+    "bench:run": "node internal/bench/benchmark.ts --config frameworks.config.json --out results/latest.md --json",
+    "pub": "pnpm --filter ogygia publish"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

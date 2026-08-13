@@ -1,8 +1,10 @@
 {
 	"name": "ogygia",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"type": "module",
-	"sideEffects": false,
+	"sideEffects": [
+		"**/*.css"
+	],
 	"description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
 	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
@@ -174,6 +176,18 @@
 			"./server": {
 				"types": "./dist/hooks.d.ts",
 				"default": "./dist/hooks.js"
+			},
+			"./internal/compiler": {
+				"types": "./dist/compiler/index.d.ts",
+				"default": "./dist/compiler/index.js"
+			},
+			"./content/server": {
+				"types": "./dist/content/server.d.ts",
+				"svelte": "./dist/content/server.js",
+				"default": "./dist/content/server.js"
+			},
+			"./types": {
+				"types": "./ambient.d.ts"
 			}
 		}
 	}

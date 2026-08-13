@@ -1454,8 +1454,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				return code;
 			}
 			if (id === RESOLVED(V_RUNTIME)) {
-				// Dev sticky: kitchen-sink package entry. Build uses the hashed emitFile chunk.
-				return `import 'ogygia/runtime';`;
+				// Dev sticky: kitchen-sink package entry. Build uses the hashed emitFile chunk. An EXPLICIT
+				// `bootDev()` call (not a bare side-effect import) so Vite's dep prebundler can't tree-shake
+				// the boot away — the bug that left `sideEffects:false` apps with a runtime that never woke.
+				return `import { bootDev } from 'ogygia/runtime'; bootDev();`;
 			}
 			if (id === RESOLVED(V_DEV_HMR)) {
 				// Dev-only soft HMR bridge under csr=false (no Kit client entry):
