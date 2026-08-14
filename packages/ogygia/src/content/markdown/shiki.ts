@@ -36,15 +36,56 @@ export type MarkdownShikiOptions = {
 	defaultColor?: string | false;
 };
 
+// A generous docs-friendly default. Highlighting runs at BUILD time (SSR) producing static HTML — the
+// client ships zero Shiki — so loading many grammars costs nothing at runtime. Each canonical language
+// also registers its Shiki aliases, so ```md, ```sh, ```ts, ```js, ```yml, ```console, … all resolve.
 const DEFAULT_LANGS = [
+	// web / svelte
 	'svelte',
-	'typescript',
-	'javascript',
+	'typescript', // ts
+	'javascript', // js
+	'jsx',
+	'tsx',
 	'html',
 	'css',
-	'bash',
+	'scss',
+	'sass',
+	'less',
+	'vue',
+	'astro',
+	// data / config
 	'json',
-	'yaml',
+	'jsonc',
+	'json5',
+	'yaml', // yml
+	'toml',
+	'ini',
+	'xml',
+	'graphql', // gql
+	'sql',
+	// shell / diff / docker
+	'bash', // sh, shell, zsh
+	'shellsession', // console
+	'powershell', // ps, ps1
+	'diff',
+	'docker', // dockerfile
+	'make',
+	'nginx',
+	// prose
+	'markdown', // md
+	'mdx',
+	// general-purpose
+	'python', // py
+	'rust', // rs
+	'go',
+	'ruby', // rb
+	'php',
+	'java',
+	'kotlin',
+	'c',
+	'cpp',
+	'csharp', // cs, c#
+	'swift',
 	'text'
 ] as const;
 
@@ -152,16 +193,37 @@ export async function highlight(
 	});
 }
 
-/** mdsvex `highlight.highlighter` — fences stay normal ``` in `.svx` / `.md`. */
+/** Pull the `ogygia-code-id=<id>` token that `remarkCodeIds` stashed on the fence meta. Returns the
+ *  id (or null) so the highlighter can stamp it onto the `<pre>` — the build-time half of the stable
+ *  `slug-code-<hash>` permalink id (see `remark-code-ids.ts`). Matches an unquoted, space-free id. */
+function pluck_code_id(meta: string | undefined | null): string | null {
+	if (!meta) return null;
+	const m = /ogygia-code-id=(\S+)/.exec(meta);
+	return m ? m[1]! : null;
+}
+
+/** mdsvex `highlight.highlighter` — fences stay normal ``` in `.svx` / `.md`. mdsvex threads the fence
+ *  `meta` in as the third argument, which carries the `remarkCodeIds` id token. */
 export function create_mdsvex_highlighter(cfg: ResolvedShiki) {
-	return async function content_mdsvex_highlighter(code: string, lang: string | undefined) {
+	return async function content_mdsvex_highlighter(
+		code: string,
+		lang: string | undefined,
+		meta?: string | null
+	) {
 		const html = await highlight(code, lang || 'text', {
 			themes: cfg.themes,
 			langs: cfg.langs,
 			wrapperClass: false,
 			defaultColor: cfg.defaultColor
 		});
-		const wrapped = wrap_html(html, cfg.wrapperClass);
+		// Build the extra `<pre>` attributes: a language badge (pharos shows `data-lang` top-right) and,
+		// when `remarkCodeIds` supplied one, the stable permalink id. Both stamped in a single splice.
+		const id = pluck_code_id(meta);
+		let attrs = '';
+		if (lang && lang !== 'text') attrs += `data-lang="${lang}" `;
+		if (id) attrs += `id="${id}" `;
+		const tagged = attrs ? html.replace('<pre ', `<pre ${attrs}`) : html;
+		const wrapped = wrap_html(tagged, cfg.wrapperClass);
 		return `{@html \`${escape_svelte(wrapped)}\`}`;
 	};
 }

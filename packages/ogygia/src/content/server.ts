@@ -18,7 +18,7 @@
  * ```
  */
 import { prerender, query } from '$app/server';
-import type { ContentEntry, Entry } from './index.js';
+import type { ContentRef, Entry } from './index.js';
 import { Collection, COLLECTION } from './collection-base.js';
 
 export type ContentMode = 'prerender' | 'query';
@@ -27,34 +27,33 @@ export type ContentMode = 'prerender' | 'query';
 export type ListRemote<Out> = () => Promise<Out[]>;
 export type GetRemote<Out> = (id: string) => Promise<Out>;
 
-type ListOptions<T extends Record<string, unknown>, Out> = {
+type RefsOptions<T extends Record<string, unknown>, Out> = {
 	/** `'prerender'` (default for static globs) or `'query'` (default for async/streaming sources). */
 	mode?: ContentMode;
 	/** Kit prerender `dynamic` — default `true` when mode is prerender. */
 	dynamic?: boolean;
-	filter?: (entry: ContentEntry<T>) => boolean;
-	map?: (entry: ContentEntry<T>) => Out;
+	filter?: (entry: ContentRef<T>) => boolean;
+	map?: (entry: ContentRef<T>) => Out;
 };
-type LiveListOptions<T extends Record<string, unknown>, Out> = {
-	filter?: (entry: ContentEntry<T>) => boolean;
-	map?: (entry: ContentEntry<T>) => Out;
+type LiveRefsOptions<T extends Record<string, unknown>, Out> = {
+	filter?: (entry: ContentRef<T>) => boolean;
+	map?: (entry: ContentRef<T>) => Out;
 };
 type LiveGetOptions<T extends Record<string, unknown>, Out> = {
-	filter?: (entry: ContentEntry<T>) => boolean;
-	map?: (entry: ContentEntry<T>) => Out;
+	filter?: (entry: ContentRef<T>) => boolean;
+	map?: (entry: ContentRef<T>) => Out;
 	/** Yielded when missing / filtered out. Default `null`. */
 	notFound?: Out | null;
 };
 
 /** The server-side handle `withRemotes()` returns: the collection's read paths + its remotes. */
 export interface WithRemotes<T extends Record<string, unknown>> {
-	entries(): Promise<ContentEntry<T>[]>;
-	entry(id: string): Promise<ContentEntry<T> | null>;
-	ids(): Promise<string[]>;
+	refs(): Promise<ContentRef<T>[]>;
 	get(id: string): Promise<Entry<T> | null>;
-	list<Out = { id: string; data: T }>(options?: ListOptions<T, Out>): ListRemote<Out>;
+	/** Prerendered/query remote over the corpus refs (wire-safe metadata). */
+	list<Out = { id: string; data: T }>(options?: RefsOptions<T, Out>): ListRemote<Out>;
 	live: {
-		list<Out = { id: string; data: T }>(options?: LiveListOptions<T, Out>): ListRemote<Out>;
+		list<Out = { id: string; data: T }>(options?: LiveRefsOptions<T, Out>): ListRemote<Out>;
 		get<Out = { id: string; data: T } | null>(options?: LiveGetOptions<T, Out>): GetRemote<Out>;
 	};
 }
@@ -97,15 +96,13 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 			: 'prerender';
 
 	return {
-		entries: () => c.entries(),
-		entry: (id: string) => c.entry(id),
-		ids: () => c.ids(),
+		refs: () => c.refs(),
 		get: (id: string) => c.get(id),
 
-		list<Out = { id: string; data: T }>(options: ListOptions<T, Out> = {}): ListRemote<Out> {
+		list<Out = { id: string; data: T }>(options: RefsOptions<T, Out> = {}): ListRemote<Out> {
 			const mode = options.mode ?? default_mode;
 			const filter = c.compose(options.filter);
-			const map = options.map ?? ((e: ContentEntry<T>) => ({ id: e.id, data: e.data }) as Out);
+			const map = options.map ?? ((e: ContentRef<T>) => ({ id: e.id, data: e.data }) as Out);
 
 			const run = async () => {
 				const all = await c.ready();
@@ -116,17 +113,17 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 			if (mode === 'query') return query(run) as unknown as ListRemote<Out>;
 			if (c.streaming) {
 				throw new Error(
-					'[ogygia/content] streaming `from` cannot use prerender list — use live.list() or mode: "query"'
+					'[ogygia/content] streaming `loader` cannot use prerender list — use live.list() or mode: "query"'
 				);
 			}
 			return prerender(run, { dynamic: options.dynamic ?? true }) as unknown as ListRemote<Out>;
 		},
 
 		live: {
-			list<Out = { id: string; data: T }>(options: LiveListOptions<T, Out> = {}): ListRemote<Out> {
+			list<Out = { id: string; data: T }>(options: LiveRefsOptions<T, Out> = {}): ListRemote<Out> {
 				const filter = c.compose(options.filter);
-				const map = options.map ?? ((e: ContentEntry<T>) => ({ id: e.id, data: e.data }) as Out);
-				const project = async (rows: ContentEntry<T>[]) =>
+				const map = options.map ?? ((e: ContentRef<T>) => ({ id: e.id, data: e.data }) as Out);
+				const project = async (rows: ContentRef<T>[]) =>
 					Promise.all((await Promise.all(rows.filter(filter).map((e) => c.withGraph(e)))).map(map));
 
 				return query.live(async function* () {
@@ -138,7 +135,7 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 			get<Out = { id: string; data: T } | null>(options: LiveGetOptions<T, Out> = {}): GetRemote<Out> {
 				const filter = c.compose(options.filter);
 				const notFound = ('notFound' in options ? options.notFound : null) as Out;
-				const map = options.map ?? ((e: ContentEntry<T>) => ({ id: e.id, data: e.data }) as Out);
+				const map = options.map ?? ((e: ContentRef<T>) => ({ id: e.id, data: e.data }) as Out);
 				const project = async (id: string): Promise<Out> => {
 					const e = c.lookup(id);
 					if (!e || !filter(e)) return notFound;

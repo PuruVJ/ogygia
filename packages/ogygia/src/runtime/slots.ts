@@ -73,6 +73,9 @@ export type MorphFn = (parent: Element, nodes: Node[]) => void;
 export type WireOps = {
 	TRANSPORT_WIRE_KEY: string;
 	revive_transportable: (payload: never, remember: boolean) => unknown;
+	/** Portable-snippet codec key + decode (rebuilds a live snippet from its descriptor). */
+	REGION_SNIPPET_WIRE_KEY: string;
+	revive_region_snippet: (payload: never) => unknown;
 };
 
 export type RemoteSeedOps = {

@@ -62,6 +62,11 @@ export { ogygiaTransport as transport } from './transport.js';
 export { wire } from './live-transport.js';
 export type { TransportCodec } from './live-transport.js';
 
+// Portable snippets — the compiler rewrites a `{#snippet}` handed to a component into
+// `og_portable(Entry, captures, url)` so it can cross an island boundary and come alive there. Not
+// authored by hand; exported because the transform emits calls to it. See region-snippet.ts.
+export { og_portable } from './region-snippet.js';
+
 // Cross-island context — `createContext()` (typed, no string key) + `<Context of={ctx} value={v}>`.
 // Bridges the DOM so a provider's value reaches islands in separate hydration roots below it.
 export { createContext, __tag_context } from './context-bridge.js';

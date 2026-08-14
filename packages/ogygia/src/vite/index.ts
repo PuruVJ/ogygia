@@ -603,6 +603,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const presets = options.presets || {};
 	const import_keys = normalize_import_keys(options.importKeys);
 
+	// Cheap content-gate: does a source use an ogygia island hint (`import X from '…' with { wake|… }`)?
+	// Lets LIBRARY components in node_modules opt INTO the island transform without taxing every lib
+	// `.svelte` — the enabler for an ecosystem of ogygia-hinted component libraries.
+	const hint_keys = Object.values(import_keys).filter((v) => typeof v === 'string');
+	const island_hint_re = hint_keys.length
+		? new RegExp(`\\bwith\\s*\\{[^}]*\\b(?:${hint_keys.join('|')})\\b`)
+		: /$^/;
+	const has_island_hint = (code) => island_hint_re.test(code);
+
 	// Publish the markdown config so a value-free `markdown()` in the svelte config reads it — all
 	// content/markdown config stays here in the one plugin. `standalone` re-invokes this factory for
 	// its throwaway client build; don't let that clobber the real config with `null`.
@@ -708,6 +717,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const host_index = new Map();
 	/** region id → hosts still claiming it (cross-host dedupe: don't drop shared wrappers) */
 	const id_hosts = new Map();
+	/** Client-leg: hydrate island ids whose deterministic chunk has been emitFile'd (dedup across the
+	 *  buildStart prescan emit AND the transform-time emit that catches islands prescan can't see —
+	 *  those declared inside LIBRARY components, where the host lives outside the app's `src`). */
+	const emitted_island_chunks = new Set();
 
 	let root;
 	let base = '';
@@ -825,7 +838,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			idSalt: id_salt,
 			linkVirtualIsland: link_virtual,
 			clientBindingStub: V_CLIENT_BINDING_STUB,
-			csrTrue: csr_true
+			csrTrue: csr_true,
+			ssr
 		});
 		transform_cache.set(cache_key, { code: source, result });
 		return result;
@@ -957,7 +971,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					server: !!isl.server,
 					lakes: [],
 					componentPath: isl.componentPath ?? null,
-					role: 'entry'
+					role: 'entry',
+					// A portable-snippet synth entry is AUTHORED markup (a slice of user source) — the
+					// transform hook re-processes it (nested island marks, nested snippets), unlike glue.
+					portable: isl.portable === true
 				});
 				by_id.set(isl.id, isl.virtualPath);
 				idx.vpaths.add(isl.virtualPath);
@@ -1251,6 +1268,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					if (kind !== 'hydrate') continue;
 					const virtualPath = by_id.get(rid);
 					if (!virtualPath) continue;
+					if (emitted_island_chunks.has(rid)) continue;
+					emitted_island_chunks.add(rid);
 					this.emitFile({
 						type: 'chunk',
 						id: virtualPath,
@@ -1389,6 +1408,25 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				const host = registry.get(importer_id).hostPath;
 				const resolved = await this.resolve(source, host, { skipSelf: true });
 				if (resolved?.id) island_graph.add(strip_id(resolved.id));
+				// A BARE specifier a generated island module re-emits (a marked package import like
+				// `import TabGroup from 'ogygia/pharos/tab-group' with { wake: 'load' }`, or a specifier
+				// its child synth re-imports) that Vite cannot resolve must fail HERE, loudly — falling
+				// through surfaces later as an opaque "Failed to resolve import" with the virtual module
+				// as the only context. Relative/absolute/virtual sources keep Vite's own error path.
+				if (
+					!resolved &&
+					!source.startsWith('.') &&
+					!source.startsWith('\0') &&
+					!source.startsWith('virtual:') &&
+					!path.isAbsolute(source)
+				) {
+					throw new Error(
+						`[ogygia] cannot resolve '${source}' imported by the generated island module for ` +
+							`${path.relative(root, host)}. That island was marked on a package import, so the ` +
+							`specifier must resolve from the host file: check the package is installed and its ` +
+							`"exports" map exposes this subpath (with a "svelte" condition for .svelte components).`
+					);
+				}
 				return resolved;
 			}
 			// Transitive island-graph module (not a virtual entry): mark deps so nested
@@ -1701,10 +1739,22 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			let map = null;
 			let touched = false;
 
+			// App `.svelte` always; a node_modules `.svelte` ONLY if it carries an ogygia hint (so a
+			// library can declare its own islands — Calypso → CalypsoBar). `is_island_path` still
+			// excludes GENERATED island glue (wrappers, region bindings, plain re-export entries) —
+			// but a PORTABLE SNIPPET entry is authored markup (a slice of user source) and MUST be
+			// re-processed: its `with { wake }` imports become nested islands, and nested snippets
+			// re-portable-ize. Normalize the dev `/@id/` prefix so dev and build take the SAME gate
+			// (dev previously transformed these only because the prefix slipped past the exclusion —
+			// which is why islands inside snippets worked in dev and died in prod).
+			const in_node_modules = id_n.includes('/node_modules/');
+			const bare_v = id_n.startsWith('/@id/') ? id_n.slice(5) : id_n;
+			const portable_entry =
+				id_n.endsWith('.svelte') && is_island_path(bare_v) && registry.get(bare_v)?.portable === true;
 			if (
 				id_n.endsWith('.svelte') &&
-				!id_n.includes('/node_modules/') &&
-				!is_island_path(id_n)
+				(!is_island_path(bare_v) || portable_entry) &&
+				(!in_node_modules || has_island_hint(code))
 			) {
 				// Pass Vite's ssr flag through — client csr=false hosts omit wrapper links.
 				const result = run_transform(code, id_n, { ssr });
@@ -1713,6 +1763,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					out = result.code;
 					map = result.map;
 					touched = true;
+
+					// Emit the deterministic island chunk for any hydrate island discovered HERE that the
+					// buildStart prescan couldn't see — i.e. declared inside a library component (host
+					// outside the app's `src`). Without this the client leg lets Rolldown content-hash the
+					// entry, diverging from the deterministic name SSR baked into `<ogygia-region entry>`.
+					if (is_build && !ssr) {
+						for (const isl of result.islands ?? []) {
+							const kind = isl.kind ?? (isl.server ? 'defer' : 'hydrate');
+							if (kind !== 'hydrate' || !isl.virtualPath || emitted_island_chunks.has(isl.id)) continue;
+							emitted_island_chunks.add(isl.id);
+							this.emitFile({ type: 'chunk', id: isl.virtualPath, fileName: islandChunkFileName(isl.id) });
+						}
+					}
 				}
 
 				// A transportable class can live in this component's `<script module>` — register it
@@ -1791,6 +1854,38 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// `generateBundle`, so a chunk's `imports` there can name a phantom that's gone by write.
 			// By `writeBundle` the bundle reflects the files actually on disk.
 			if (!is_build || is_ssr) return;
+
+			// ── Guardrail: a content collection must never reach a CLIENT chunk ──────────────
+			// Ground truth is the finished bundle. A compiled corpus module (.svx/.md) in a client
+			// chunk means a `content()` collection was imported into client-shipped code (usually an
+			// island), which drags its eager `import.meta.glob` — every doc — into the browser. On a
+			// csr=false site the corpus renders server-side and should never appear here, so any hit is
+			// a real leak. A warning, not a throw: the guardrail must never break a build.
+			try {
+				const CORPUS_RE = /\.(svx|md)(\?|$)/;
+				const leaks: Array<{ chunk: string; modules: string[] }> = [];
+				for (const [key, chunk] of Object.entries(bundle)) {
+					if ((chunk as { type?: string }).type !== 'chunk') continue;
+					const ids: string[] =
+						(chunk as { moduleIds?: string[] }).moduleIds ??
+						Object.keys((chunk as { modules?: Record<string, unknown> }).modules ?? {});
+					const corpus = ids.filter((id) => CORPUS_RE.test(id) && !is_island_path(id));
+					if (corpus.length) leaks.push({ chunk: (chunk as { fileName?: string }).fileName ?? key, modules: corpus });
+				}
+				if (leaks.length) {
+					const all = [...new Set(leaks.flatMap((l) => l.modules))];
+					const sample = all.slice(0, 5).map((m) => '    ' + path.relative(root, m.split('?')[0])).join('\n');
+					console.warn(
+						`[ogygia] content leaked into the CLIENT bundle: ${all.length} corpus module(s) (.svx/.md) shipped to the browser (in chunk '${leaks[0].chunk}').\n` +
+							`  A content() collection was imported into client-shipped code — usually an island — which drags its eager import.meta.glob (every doc) in.\n` +
+							`  Fix: keep the collection in a server-only module (or a .remote.ts) and feed islands DATA (refs) via props or a remote, never the collection itself.\n` +
+							`${sample}${all.length > 5 ? '\n    …' : ''}`
+					);
+				}
+			} catch {
+				/* a guardrail must never break the build */
+			}
+
 			const map = collectIslandDepModulepreloads(
 				bundle as Record<
 					string,

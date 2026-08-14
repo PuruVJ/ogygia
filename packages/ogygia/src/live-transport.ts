@@ -30,10 +30,16 @@
  */
 
 import { slots } from './runtime/slots.js';
+import { REGION_SNIPPET_WIRE_KEY, revive_region_snippet } from './region-snippet.js';
 
 /** Feature entry: fill the `wire` slot so core revives transportables from `data-ogygia-props`. */
 export function install() {
-	slots.wire = { TRANSPORT_WIRE_KEY, revive_transportable };
+	slots.wire = {
+		TRANSPORT_WIRE_KEY,
+		revive_transportable,
+		REGION_SNIPPET_WIRE_KEY,
+		revive_region_snippet
+	};
 }
 
 /** Reserved key for the static codec. `Symbol.for` — identical across every bundle. */

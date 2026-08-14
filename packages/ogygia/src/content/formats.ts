@@ -7,7 +7,7 @@
  * Two typed axes: `data` (authored, schema-validated) and `meta` (format-derived, typed here).
  */
 import type { Component } from 'svelte';
-import type { Heading } from './index.js';
+import type { Heading, LinkRef } from './index.js';
 import { region } from '../region.js';
 import { defineSource, toRawSource, type Format, type GlobMap, type RawSource, type Source } from './source.js';
 
@@ -35,8 +35,9 @@ function as_object(value: unknown, label: string): Record<string, unknown> {
 
 // ── markdown ────────────────────────────────────────────────────────────────────
 
-/** Meta the markdown source derives: the h2–h4 headings collected during compile (for a TOC). */
-export type MarkdownMeta = { headings: Heading[] };
+/** Meta the markdown source derives: h2–h4 headings (for a TOC) and every markdown link (for the
+ *  pharos link audit), both collected during compile. */
+export type MarkdownMeta = { headings: Heading[]; links: LinkRef[] };
 
 const markdown_format: Format<unknown, MarkdownMeta> = (resolved, id) => {
 	if (!resolved || typeof resolved !== 'object' || Array.isArray(resolved)) {
@@ -47,13 +48,17 @@ const markdown_format: Format<unknown, MarkdownMeta> = (resolved, id) => {
 		throw new Error(`[ogygia/content] markdown: ${id}: missing metadata (is markdown configured?)`);
 	}
 	const meta = as_object(mod.metadata ?? {}, `markdown:${id}`);
-	const { headings, ...data } = meta as { headings?: Heading[] } & Record<string, unknown>;
+	const { headings, links, ...data } = meta as { headings?: Heading[]; links?: LinkRef[] } & Record<string, unknown>;
+	// The preprocessor injects a lazy `__ogygia_source` self-import (`() => import(self + '?raw')`)
+	// when it compiles a `.svx` / `.md`. Surface it as the entry's `source`; absent in plain apps.
+	const source = typeof mod.__ogygia_source === 'function' ? (mod.__ogygia_source as () => Promise<string>) : undefined;
 	return {
 		data,
 		...(mod.default !== undefined
 			? { body: region(mod.default as Component<Record<string, never>>, {}) }
 			: {}),
-		meta: { headings: Array.isArray(headings) ? headings : [] }
+		...(source ? { source } : {}),
+		meta: { headings: Array.isArray(headings) ? headings : [], links: Array.isArray(links) ? links : [] }
 	};
 };
 

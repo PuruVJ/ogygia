@@ -1,12 +1,15 @@
 /**
- * `Collection` — the browser-safe, stateful core behind `content()`. Holds a catalog cache, the
- * graph (relations + backlinks), and the live lifecycle. It consumes a single {@link Source}
- * (`{ init?, get, list, ids, live? }`); every format (`mdsvex`, `json`, `blocks`, …) is just a
- * builder that produces one. Schema validation and relations layer on top of whatever the source
- * yields — the source never knows about them.
+ * `Collection` — the browser-safe, stateful core behind `content()`. Holds a catalog of REFS (never
+ * bodies), the graph (relations + backlinks), and the live lifecycle. It consumes a single
+ * {@link Source} (`{ init?, refs, get, live?, groups? }`).
+ *
+ * The refs/get split is load-bearing here: the catalog is materialized from `source.refs()` — pure
+ * metadata — so nav/weave/graph never fetch a body. A body is fetched exactly once, by `get(id)`, on
+ * the read that renders it. Visibility (`filter`) is applied at READ time with an optional request
+ * context, so the catalog stays a single unfiltered instance (no per-request cache to poison).
  */
-import type { ContentEntry, ContentRelations, Entry, RefEntry, SchemaLike } from './index.js';
-import type { Source, SourceEntry } from './source.js';
+import type { ContentRef, ContentRelations, Entry, RefEntry, SchemaLike } from './index.js';
+import type { GroupMeta, Source, SourceEntry, SourceRef } from './source.js';
 import { parseSchema } from './schema.js';
 
 // ── content graph registry ───────────────────────────────────────────────────
@@ -40,18 +43,22 @@ function ref_ids(value: unknown): string[] {
 	if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string');
 	return [];
 }
-function to_ref(entry: ContentEntry): RefEntry {
+function to_ref(entry: ContentRef): RefEntry {
 	return { id: entry.id, data: entry.data };
 }
 
-/** Options for a `content()` collection. `from` is a source; formats build the source. */
+/** A request context threaded into the `filter` at read time (preview, roles). Flat + bounded. */
+export type ReadContext = Record<string, unknown>;
+
+/** Options for a `content()` collection. `loader` is a source; formats build the source. */
 export type CollectionBaseOptions<
 	Data extends Record<string, unknown> = Record<string, unknown>,
 	Meta = Record<string, never>
 > = {
 	loader: Source<Meta>;
-	schema?: SchemaLike;
-	filter?: (entry: ContentEntry<Data, Meta>) => boolean;
+	/** One schema, or an ARRAY of schemas layered left→right (outputs merge; later wins on collision). */
+	schema?: SchemaLike | SchemaLike[];
+	filter?: (entry: ContentRef<Data, Meta>, ctx: ReadContext) => boolean;
 	/**
 	 * Relations to other collections — always a `(self) => object` callback. `self` is this
 	 * collection's own handle, so a SELF relation is `related: self` with no reference to the `const`
@@ -68,12 +75,11 @@ export class Collection<
 > {
 	readonly #opts: CollectionBaseOptions<Data, Meta>;
 	readonly #source: Source<Meta>;
-	readonly #catalog = new Map<string, ContentEntry<Data, Meta>>();
-	readonly #visible: (entry: ContentEntry<Data, Meta>) => boolean;
+	readonly #schema: SchemaLike[];
+	readonly #catalog = new Map<string, ContentRef<Data, Meta>>();
+	readonly #visible: (entry: ContentRef<Data, Meta>, ctx: ReadContext) => boolean;
 	/** This collection's own handle (for the `relations: (self) => …` callback). */
 	#self: unknown;
-	/** Resolved relation definitions ({ name: target }) — computed lazily at first graph read so
-	 * forward / mutual references resolve (every collection exists by then). */
 	#relationsDef: Record<string, unknown> = {};
 	#relationNames: string[] = [];
 	#relationsResolved = false;
@@ -87,29 +93,23 @@ export class Collection<
 
 	constructor(opts: CollectionBaseOptions<Data, Meta>) {
 		if (!opts || opts.loader == null) throw new Error('[ogygia/content] content() requires `loader`');
-		if (
-			typeof opts.loader.get !== 'function' ||
-			typeof opts.loader.list !== 'function' ||
-			typeof opts.loader.ids !== 'function'
-		) {
+		if (typeof opts.loader.refs !== 'function' || typeof opts.loader.get !== 'function') {
 			throw new Error(
-				'[ogygia/content] `loader` must be a source ({ get, list, ids }) — use markdown()/json()/blocks()/… or glob()'
+				'[ogygia/content] `loader` must be a source ({ refs, get }) — use markdown()/json()/blocks()/folder()/glob()'
 			);
 		}
 		this.#opts = opts;
 		this.#source = opts.loader;
+		this.#schema = opts.schema == null ? [] : Array.isArray(opts.schema) ? opts.schema : [opts.schema];
 		this.#visible = opts.filter ?? (() => true);
-		// Relations are always a `(self) => …` callback — resolved once the handle exists (bindSelf).
 		GRAPH.all.add(this as unknown as Collection<Record<string, unknown>>);
 	}
 
-	/** Supply the collection's own handle for the `relations: (self) => …` callback. Called once by
-	 * `content()` after the handle is built; the callback itself runs lazily at first graph read. */
+	/** Supply the collection's own handle for the `relations: (self) => …` callback. */
 	bindSelf(self: unknown): void {
 		this.#self = self;
 	}
 
-	/** Run the relations callback once, at first graph read (so forward / mutual refs are defined). */
 	#resolveRelations(): void {
 		if (this.#relationsResolved) return;
 		this.#relationsResolved = true;
@@ -119,18 +119,23 @@ export class Collection<
 		}
 	}
 
-	/** A live source drives streaming re-reads (query-mode remotes + `live.*`). */
 	get streaming() {
 		return !!this.#source.live;
 	}
-	/** A dynamic (non-prerenderable) source — remotes default to query mode. */
 	get fromIsFunction() {
 		return !!this.#source.live || !!(this.#source as { dynamic?: boolean }).dynamic;
 	}
 
+	/** Directory/section decoration from the source, if it exposes any (`folder()` / a CMS folders API). */
+	groups(): Promise<Map<string, GroupMeta>> {
+		return this.#source.groups?.() ?? Promise.resolve(new Map());
+	}
+
 	/** AND-compose a per-remote filter onto collection visibility (narrow only). */
-	compose(extra?: (entry: ContentEntry<Data, Meta>) => boolean) {
-		return extra ? (e: ContentEntry<Data, Meta>) => this.#visible(e) && extra(e) : this.#visible;
+	compose(extra?: (entry: ContentRef<Data, Meta>) => boolean, ctx: ReadContext = {}) {
+		return extra
+			? (e: ContentRef<Data, Meta>) => this.#visible(e, ctx) && extra(e)
+			: (e: ContentRef<Data, Meta>) => this.#visible(e, ctx);
 	}
 
 	#notify() {
@@ -163,31 +168,32 @@ export class Collection<
 		}
 	}
 
-	/** Validate + shape one source record into a catalog entry (schema runs on `data`). */
-	async #normalize(row: SourceEntry<Meta>, seen?: Set<string>): Promise<ContentEntry<Data, Meta>> {
+	/** Validate one source ref into a catalog ref (schema layers run on `data`, left→right). */
+	async #normalizeRef(row: SourceRef<Meta>, seen?: Set<string>): Promise<ContentRef<Data, Meta>> {
 		if (!row?.id || typeof row.id !== 'string') {
-			throw new Error('[ogygia/content] source entry missing string id');
+			throw new Error('[ogygia/content] source ref missing string id');
 		}
 		if (seen) {
 			if (seen.has(row.id)) throw new Error(`[ogygia/content] duplicate id '${row.id}'`);
 			seen.add(row.id);
 		}
-		const data = (await parseSchema(this.#opts.schema, row.data ?? {}, `content/${row.id}`)) as Data;
+		let data = (row.data ?? {}) as Record<string, unknown>;
+		for (const schema of this.#schema) data = await parseSchema(schema, data, `content/${row.id}`);
 		return {
 			id: row.id,
-			data,
+			data: data as Data,
 			meta: (row.meta ?? {}) as Meta,
-			...(row.body !== undefined ? { body: row.body } : {}),
+			...(row.order !== undefined ? { order: row.order } : {}),
 			...(row.filePath !== undefined ? { filePath: row.filePath } : {})
 		};
 	}
 
-	/** Materialize the whole source into the catalog (list). Re-run on each live change. */
+	/** Materialize the whole source (refs) into the catalog. Re-run on each live change. */
 	async #reload(): Promise<void> {
-		const rows = await this.#source.list();
+		const rows = await this.#source.refs();
 		const seen = new Set<string>();
-		const next: ContentEntry<Data, Meta>[] = [];
-		for (const row of rows) next.push(await this.#normalize(row, seen));
+		const next: ContentRef<Data, Meta>[] = [];
+		for (const row of rows) next.push(await this.#normalizeRef(row, seen));
 		this.#catalog.clear();
 		for (const e of next) this.#catalog.set(e.id, e);
 		this.#backlinkIndex = null;
@@ -198,19 +204,17 @@ export class Collection<
 	async #reloadIds(ids: string[]): Promise<void> {
 		for (const id of ids) {
 			const row = await this.#source.get(id);
-			if (row) this.#catalog.set(id, await this.#normalize(row));
+			if (row) this.#catalog.set(id, await this.#normalizeRef(row));
 			else this.#catalog.delete(id);
 		}
 		this.#backlinkIndex = null;
 		this.#notify();
 	}
 
-	/** Run the source's async `init()` once. Cheap for sources that need none. */
 	#init(): Promise<void> {
 		return (this.#initPromise ??= Promise.resolve(this.#source.init?.()).then(() => undefined));
 	}
 
-	/** Load once (init + full materialize), and, for a live source, watch for changes. */
 	#start(): Promise<void> {
 		if (this.#startPromise) return this.#startPromise;
 		this.#startPromise = (async () => {
@@ -221,7 +225,6 @@ export class Collection<
 				void (async () => {
 					try {
 						for await (const change of changes) {
-							// A `string[]` yield reloads just those ids; anything else re-lists the whole source.
 							if (Array.isArray(change) && change.every((x) => typeof x === 'string')) {
 								await this.#reloadIds(change as string[]);
 							} else {
@@ -237,12 +240,10 @@ export class Collection<
 		return this.#startPromise;
 	}
 
-	/** Await the catalog being loaded (materialized) without copying it. */
 	async #loaded(): Promise<void> {
 		await this.#start();
 	}
 
-	/** Start (once) and return the visible-agnostic snapshot. */
 	async ready() {
 		await this.#loaded();
 		return this.snapshot();
@@ -257,18 +258,18 @@ export class Collection<
 		return out;
 	}
 
-	/** Visible entry by id, or null. */
-	lookup(id: string): ContentEntry<Data, Meta> | null {
+	/** Visible ref by id (default context), or null. */
+	lookup(id: string, ctx: ReadContext = {}): ContentRef<Data, Meta> | null {
 		const e = this.#catalog.get(id);
-		return e && this.#visible(e) ? e : null;
+		return e && this.#visible(e, ctx) ? e : null;
 	}
-	visibleEntries(): ContentEntry<Data, Meta>[] {
-		return this.snapshot().filter(this.#visible);
+	visibleRefs(ctx: ReadContext = {}): ContentRef<Data, Meta>[] {
+		return this.snapshot().filter((e) => this.#visible(e, ctx));
 	}
 
-	async resolveGraph(entry: ContentEntry<Data, Meta>) {
+	async resolveGraph(entry: ContentRef<Data, Meta>) {
 		const rel: Record<string, RefEntry | RefEntry[] | null> = {};
-		const targets = this.relationTargets(); // resolves relations
+		const targets = this.relationTargets();
 		for (const name of this.#relationNames) {
 			const target = targets[name];
 			const field = (entry.data as Record<string, unknown>)[name];
@@ -281,7 +282,7 @@ export class Collection<
 			const refs: RefEntry[] = [];
 			for (const id of ref_ids(field)) {
 				const e = target.lookup(id);
-				if (e) refs.push(to_ref(e as ContentEntry));
+				if (e) refs.push(to_ref(e as ContentRef));
 			}
 			rel[name] = many ? refs : (refs[0] ?? null);
 		}
@@ -289,7 +290,6 @@ export class Collection<
 		return { rel, backlinks: index.get(entry.id) ?? [] };
 	}
 
-	/** Inverted backlink index (id → who points here), memoized by contributing sources' versions. */
 	async #backlinks(): Promise<Map<string, RefEntry[]>> {
 		const contributors: { src: Collection<Record<string, unknown>>; names: string[] }[] = [];
 		for (const src of GRAPH.all) {
@@ -302,7 +302,7 @@ export class Collection<
 		if (this.#backlinkKey === key && this.#backlinkIndex) return this.#backlinkIndex;
 		const index = new Map<string, RefEntry[]>();
 		for (const { src, names } of contributors) {
-			for (const se of src.visibleEntries()) {
+			for (const se of src.visibleRefs()) {
 				const ref = to_ref(se);
 				for (const rname of names) {
 					for (const id of new Set(ref_ids((se.data as Record<string, unknown>)[rname]))) {
@@ -318,7 +318,6 @@ export class Collection<
 		return index;
 	}
 
-	/** Does this collection participate in the graph — has relations, or is something's target? */
 	#hasGraph(): boolean {
 		this.#resolveRelations();
 		if (this.#relationNames.length > 0) return true;
@@ -330,7 +329,7 @@ export class Collection<
 		return false;
 	}
 
-	async withGraph(entry: ContentEntry<Data, Meta>): Promise<ContentEntry<Data, Meta>> {
+	async withGraph(entry: ContentRef<Data, Meta>): Promise<ContentRef<Data, Meta>> {
 		if (!this.#hasGraph()) return entry;
 		const { rel, backlinks } = await this.resolveGraph(entry);
 		return { ...entry, rel, backlinks };
@@ -338,42 +337,42 @@ export class Collection<
 
 	// ── read paths (browser-safe) ────────────────────────────────────────────────
 
-	async entries(): Promise<ContentEntry<Data, Meta>[]> {
-		return Promise.all((await this.ready()).filter(this.#visible).map((e) => this.withGraph(e)));
+	/** All visible refs (each graphed) — the corpus as metadata, never bodies. */
+	async refs(ctx: ReadContext = {}): Promise<ContentRef<Data, Meta>[]> {
+		return Promise.all((await this.ready()).filter((e) => this.#visible(e, ctx)).map((e) => this.withGraph(e)));
 	}
-	async entry(id: string): Promise<ContentEntry<Data, Meta> | null> {
-		await this.#loaded();
-		const e = this.lookup(id);
-		return e ? this.withGraph(e) : null;
+
+	/** Build a full {@link Entry} (ref + body + source + graph) from a source `get`. */
+	async #entryFrom(ref: ContentRef<Data, Meta>, full: SourceEntry<Meta> | null, rel: Record<string, RefEntry | RefEntry[] | null>, backlinks: RefEntry[]): Promise<Entry<Data, Meta>> {
+		return {
+			id: ref.id,
+			data: ref.data,
+			meta: ref.meta,
+			...(full?.body !== undefined ? { body: full.body } : {}),
+			...(full?.source !== undefined ? { source: full.source } : {}),
+			rel,
+			backlinks
+		};
 	}
-	async ids(): Promise<string[]> {
-		// A graph-less, unfiltered collection can answer ids without materializing (a filter needs
-		// each entry's data, so it forces a full load).
-		if (!this.#opts.filter && !this.#hasGraph() && this.#catalog.size === 0) {
-			await this.#init();
-			return this.#source.ids();
-		}
-		return (await this.ready()).filter(this.#visible).map((e) => e.id);
-	}
-	async get(id: string): Promise<Entry<Data, Meta> | null> {
-		// On-demand: a graph-less collection fetches ONE record, no full materialize.
+
+	/** Resolve one entry to `{ id, data, meta, body, source, rel, backlinks }`, or `null`. */
+	async get(id: string, ctx: ReadContext = {}): Promise<Entry<Data, Meta> | null> {
 		if (!this.#hasGraph()) {
+			// On-demand: a graph-less collection needs no catalog — fetch ONE full record.
 			await this.#init();
-			let e = this.#catalog.get(id) ?? null;
-			if (!e) {
-				const row = await this.#source.get(id);
-				if (row) {
-					e = await this.#normalize(row);
-					this.#catalog.set(e.id, e);
-				}
+			let ref = this.#catalog.get(id) ?? null;
+			const full = await this.#source.get(id);
+			if (!ref) {
+				if (!full) return null;
+				ref = await this.#normalizeRef(full);
 			}
-			if (!e || !this.#visible(e)) return null;
-			return { id: e.id, data: e.data, meta: e.meta, body: e.body, rel: {}, backlinks: [] };
+			if (!this.#visible(ref, ctx)) return null;
+			return this.#entryFrom(ref, full, {}, []);
 		}
 		await this.#loaded();
-		const e = this.lookup(id);
-		if (!e) return null;
-		const { rel, backlinks } = await this.resolveGraph(e);
-		return { id: e.id, data: e.data, meta: e.meta, body: e.body, rel, backlinks };
+		const ref = this.lookup(id, ctx);
+		if (!ref) return null;
+		const [full, graph] = await Promise.all([this.#source.get(id), this.resolveGraph(ref)]);
+		return this.#entryFrom(ref, full, graph.rel, graph.backlinks);
 	}
 }

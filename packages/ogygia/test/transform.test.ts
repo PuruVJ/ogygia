@@ -453,134 +453,57 @@ describe('entry module shape', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cross-island composition — host children/snippets cross into a hydrate island.
-// The compiler ships them as a synthesized `.svelte` entry that inlines the snippet and wraps the
-// real component; captured host VALUES ride across as an `__ogFv` prop; host IMPORTS the snippet
-// uses (e.g. a nested island) are re-imported into the synth; globals are left alone; a snippet
-// that ASSIGNS to a host value is rejected. This is the suite that guards that whole surface.
+// Cross-island children — host children cross a hydrate island at RUNTIME, not compile time.
+// The compiler leaves the call site alone: children stay in the host markup and flow through the
+// wrapper into Region's slot; the server renders them IN-PLACE inside a `<ogygia-slot>` marker and
+// the payload carries a slot POINTER the client revives into an adopting snippet (region-snippet.ts).
+// Nested islands inside render as full regions (SlotBoundary resets the nested context) and wake
+// independently. This suite guards that the compiler does NOTHING special for children.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('cross-island children', () => {
+describe('cross-island children (runtime slot crossing)', () => {
 	const entryOf = (r: Result) => r.islands[0]?.virtualPath ?? '';
 	const synthOf = (r: Result) => r.islands[0]?.source ?? '';
 
-	test('static children → synthesized .svelte entry inlining the real component', () => {
+	test('children stay at the call site; the entry is the plain .js re-export', () => {
 		const r = run(wrap(LOAD, '<C><p>x</p></C>'))!;
-		expect(entryOf(r)).toMatch(/\.svelte$/);
-		expect(synthOf(r)).toMatch(/import OgygiaChildTarget from/);
-		expect(synthOf(r)).toMatch(/<OgygiaChildTarget \{\.\.\.__ogp\}><p>x<\/p><\/OgygiaChildTarget>/);
-		// the manifest side-effect import ships so a transportable in the children still registers
-		expect(synthOf(r)).toMatch(/import 'virtual:ogygia\/transportables'/);
+		expect(entryOf(r)).toMatch(/\.js$/);
+		expect(synthOf(r)).toMatch(/export default __OgygiaComp_/);
+		// the host tag keeps its children — the wrapper forwards them into Region's slot
+		expect(r.code).toMatch(/<C\s*><p>x<\/p><\/C>/);
 	});
 
-	test('a plain island (no children) keeps its .js re-export entry', () => {
+	test('a plain island (no children) compiles identically', () => {
 		const r = run(wrap(LOAD, '<C />'))!;
 		expect(entryOf(r)).toMatch(/\.js$/);
 		expect(synthOf(r)).toMatch(/export default __OgygiaComp_/);
 	});
 
-	test('captured host value → __ogFv prop on the tag + destructure in the synth', () => {
-		const r = run(wrap(LOAD + '\nconst who = "Ada";', '<C><p>{who}</p></C>'))!;
-		expect(r.code).toMatch(/__ogFv=\{\{ who \}\}/);
-		expect(synthOf(r)).toMatch(/const \{ who \} = __ogFv;/);
-		expect(synthOf(r)).toMatch(/<p>\{who\}<\/p>/);
-	});
-
-	test('multiple captured values all ride __ogFv', () => {
-		const r = run(wrap(LOAD + '\nconst a = 1;\nconst b = 2;', '<C><p>{a}{b}</p></C>'))!;
-		expect(r.code).toMatch(/__ogFv=\{\{ (a, b|b, a) \}\}/);
-		expect(synthOf(r)).toMatch(/const \{ (a, b|b, a) \} = __ogFv;/);
-	});
-
-	test('named snippet inlines verbatim into the synth', () => {
-		const r = run(wrap(LOAD, '<C>{#snippet header()}<em>hi</em>{/snippet}</C>'))!;
-		expect(synthOf(r)).toMatch(/\{#snippet header\(\)\}<em>hi<\/em>\{\/snippet\}/);
-	});
-
-	test('parameterized snippet inlines; its param is not captured', () => {
-		const r = run(wrap(LOAD + '\nconst who = "A";', '<C>{#snippet row(item)}<li>{item}{who}</li>{/snippet}</C>'))!;
-		expect(synthOf(r)).toMatch(/\{#snippet row\(item\)\}/);
-		// `item` is snippet-local → not captured; `who` is captured
-		expect(r.code).toMatch(/__ogFv=\{\{ who \}\}/);
-		expect(r.code).not.toMatch(/item/);
-	});
-
-	test('nested island in children → synth re-imports it (unmarked) so it degrades + hydrates with the parent', () => {
-		const r = run(
-			wrap(
-				LOAD + `\nimport B from './B.svelte' with { wake: 'load' };`,
-				'<C><B start={5} /></C>'
-			)
-		)!;
-		// re-imported into the synth WITHOUT the region attribute → renders inline (nested degrade)
-		expect(synthOf(r)).toMatch(/import B from ['"]\.\/B\.svelte['"];/);
-		expect(synthOf(r)).not.toMatch(/import B from[^\n]*with/);
-		expect(synthOf(r)).toMatch(/<B start=\{5\} \/>/);
-		// the parent island itself is the only emitted region (B has no separate entry here)
-		expect(r.islands).toHaveLength(1);
-	});
-
-	test('a global reference is neither captured nor imported', () => {
-		const r = run(wrap(LOAD, '<C><p>{Math.max(1, 2)}</p></C>'))!;
-		expect(synthOf(r)).not.toMatch(/const \{ Math/);
-		expect(r.code).not.toMatch(/__ogFv/);
-		expect(synthOf(r)).toMatch(/\{Math\.max\(1, 2\)\}/);
-	});
-
-	test('distinct children → distinct region ids; identical children dedupe', () => {
-		const a = run(wrap(LOAD, '<C><p>one</p></C>'))!;
-		const b = run(wrap(LOAD, '<C><p>two</p></C>'))!;
-		const c = run(wrap(LOAD, '<C><p>one</p></C>'))!;
-		expect(a.islands[0].id).not.toBe(b.islands[0].id);
-		expect(a.islands[0].id).toBe(c.islands[0].id);
-	});
-
-	test('a children id differs from the same component with no children', () => {
+	test('children do not change the region id — one island either way', () => {
 		const withKids = run(wrap(LOAD, '<C><p>x</p></C>'))!;
 		const noKids = run(wrap(LOAD, '<C />'))!;
-		expect(withKids.islands[0].id).not.toBe(noKids.islands[0].id);
+		expect(withKids.islands).toHaveLength(1);
+		expect(withKids.islands[0].id).toBe(noKids.islands[0].id);
 	});
 
-	test('the host tag keeps its real props; children are stripped from the host', () => {
-		const r = run(wrap(LOAD, '<C title="hi"><p>x</p></C>'))!;
-		// tag renamed to a synthetic per-usage binding; real props preserved; children gone
-		expect(r.code).toMatch(/<C__og0 title="hi"/);
-		expect(r.code).not.toMatch(/<C__og0[^>]*><p>x<\/p>/);
-		expect(r.code).toMatch(/<\/C__og0>/);
-	});
-
-	test('one import composed at MANY call sites → distinct islands per children', () => {
+	test('many call sites with different children share the ONE island', () => {
 		const r = run(wrap(LOAD, '<C><p>a</p></C>\n<C><p>b</p></C>\n<C><p>a</p></C>'))!;
-		// three usages → three synthetic bindings, but identical children (a) dedupe to one island id
-		expect(r.code).toMatch(/<C__og0/);
-		expect(r.code).toMatch(/<C__og1/);
-		expect(r.code).toMatch(/<C__og2/);
-		const ids = new Set(r.islands.map((i) => i.id));
-		expect(ids.size).toBe(2); // {a-children, b-children}
-		expect(r.islands.every((i) => i.virtualPath.endsWith('.svelte'))).toBe(true);
+		expect(r.islands).toHaveLength(1);
+		// no synthetic per-usage bindings — every usage keeps the real import
+		expect(r.code).not.toMatch(/__og\d/);
 	});
 
-	test('plain usages and children usages of the same import coexist', () => {
-		const r = run(wrap(LOAD, '<C />\n<C><p>x</p></C>'))!;
-		// plain <C /> keeps its (attach) binding; the children usage gets a synthetic binding
-		expect(r.code).toMatch(/import C from ["']virtual:ogygia\/region\//);
-		expect(r.code).toMatch(/<C__og0/);
-		expect(r.code).toMatch(/<C\s*\/>/);
-		expect(r.islands.length).toBe(2);
+	test('host values referenced by children need no capture wiring (server closure renders them)', () => {
+		const r = run(wrap(LOAD + '\nconst who = "Ada";', '<C><p>{who}</p></C>'))!;
+		expect(r.code).not.toMatch(/__ogFv/);
+		expect(r.code).toMatch(/<p>\{who\}<\/p>/);
 	});
 
-	// ---- guards ----
-	test('a child that assigns to a host value (bind:) is rejected', () => {
-		expectThrows(
-			() => run(wrap(LOAD + '\nlet name = "x";', '<C><input bind:value={name} /></C>')),
-			/assign to host value/
-		);
-	});
-
-	test('the mutation error names the host file', () => {
-		expectThrows(
-			() => run(wrap(LOAD + '\nlet name = "x";', '<C><input bind:value={name} /></C>')),
-			/src\/routes\/\+page\.svelte/
-		);
+	test('a nested marked island inside children keeps its OWN region (wakes independently)', () => {
+		const r = run(
+			wrap(LOAD + `\nimport B from './B.svelte' with { wake: 'load' };`, '<C><B start={5} /></C>')
+		)!;
+		expect(r.islands).toHaveLength(2);
+		expect(r.code).toMatch(/<B start=\{5\} \/>/);
 	});
 
 	test('a server island still rejects host children (only the fallback snippet crosses)', () => {
@@ -623,11 +546,11 @@ describe('interaction schedule', () => {
 		);
 	});
 
-	test('interaction island can carry crossed children', () => {
+	test('interaction island can carry crossed children (runtime slot, plain entry)', () => {
 		const r = run(
 			wrap(`import C from './C.svelte' with { wake: 'interaction' };`, '<C><p>x</p></C>')
 		)!;
-		expect(r.islands[0].virtualPath).toMatch(/\.svelte$/);
+		expect(r.islands[0].virtualPath).toMatch(/\.js$/);
 		expect(r.islands[0].wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="island" interaction /);
 	});
 });
@@ -662,3 +585,155 @@ describe('keep attribute', () => {
 		expect(r.islands[0].wrapperSource).toMatch(/__keep=\{"player"\}/);
 	});
 })
+
+describe('portable snippets — a named snippet handed to a non-island component', () => {
+	const portableIslands = (r: Result) => r.islands.filter((i) => (i as { portable?: boolean }).portable);
+
+	test('is rewritten to og_portable + emits a hydrate entry', () => {
+		const r = run(wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet actions()}<a href="#">GH</a>{/snippet}</Shell>`))!;
+		expect(r.code).toMatch(/og_portable/);
+		expect(r.code).toMatch(/actions=\{__og_portable\(/);
+		expect(portableIslands(r).length).toBe(1);
+	});
+
+	test('captured host value is passed to the entry as a prop', () => {
+		const r = run(wrap(`import Shell from './Shell.svelte';\nconst who = 'Ada';`, `<Shell>{#snippet actions()}<a>{who}</a>{/snippet}</Shell>`))!;
+		// og_portable receives { who } and the entry destructures it.
+		expect(r.code).toMatch(/__og_portable\(\s*[^,]+,\s*\{ who \}/);
+		expect(portableIslands(r)[0].source).toMatch(/let \{ who \} = \$props\(\)/);
+	});
+
+	test('two identical snippets dedupe to ONE entry + ONE import', () => {
+		const src = wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet a()}<a>x</a>{/snippet}</Shell>\n<Shell>{#snippet b()}<a>x</a>{/snippet}</Shell>`);
+		const r = run(src, makeCtx({ ssr: true }))!;
+		expect(portableIslands(r).length).toBe(1);
+		expect((r.code.match(/import __OgPS_/g) || []).length).toBe(1);
+	});
+
+	test('SSR emits a static entry import; the csr=false client loads by url', () => {
+		const src = wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`);
+		const ssr = run(src, makeCtx({ ssr: true }))!;
+		expect(ssr.code).toMatch(/import __OgPS_[a-f0-9]+ from/);
+		expect(ssr.code).toMatch(/__og_portable\(__OgPS_/);
+		const client = run(src, makeCtx({ ssr: false }))!;
+		expect(client.code).not.toMatch(/import __OgPS_/);
+		expect(client.code).toMatch(/__og_portable\(null,/);
+	});
+
+	test('a parameterized snippet on a PLAIN component stays native (library-internal wiring)', () => {
+		// Branding isolates the snippet body from the surrounding tree (getContext breaks) — think
+		// Bits UI passing `{#snippet x(props)}` between its own context-coupled components.
+		const r = run(wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet row(item)}<li>{item}</li>{/snippet}</Shell>`));
+		expect(r?.code ?? '').not.toMatch(/og_portable/);
+	});
+
+	test('a parameterized snippet at an ISLAND call site compiles portable — args ride __ogArgs', () => {
+		const r = run(wrap(LOAD, `<C>{#snippet row(item)}<li>{item}</li>{/snippet}</C>`))!;
+		expect(r.code).toMatch(/row=\{__og_portable\(/);
+		const entry = r.islands.find((i) => (i as { portable?: boolean }).portable)!;
+		// the entry re-binds the params from the __ogArgs prop; `item` is never a capture
+		expect(entry.source).toMatch(/let \{ __ogArgs = \[\] \} = \$props\(\);/);
+		expect(entry.source).toMatch(/const \[item\] = __ogArgs;/);
+	});
+
+	test('node_modules-swept sources are never portable-branded (bits-ui safety)', () => {
+		const src = wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet header()}<em>x</em>{/snippet}</Shell>`);
+		const r = transformHost(src, '/app/node_modules/some-lib/dist/Widget.svelte', makeCtx());
+		expect(r?.code ?? '').not.toMatch(/og_portable/);
+	});
+
+	test('a snippet that writes host state is left native (a snapshot can’t write back)', () => {
+		const r = run(wrap(`import Shell from './Shell.svelte';\nlet count = $state(0);`, `<Shell>{#snippet actions()}<button onclick={() => count++}>{count}</button>{/snippet}</Shell>`));
+		expect(r?.code ?? '').not.toMatch(/og_portable/);
+	});
+
+	test('a named snippet handed to an ISLAND call site compiles portable too (live crossing)', () => {
+		const r = run(wrap(LOAD, `<C>{#snippet actions()}<a>x</a>{/snippet}</C>`))!;
+		expect(r.code).toMatch(/actions=\{__og_portable\(/);
+		// the island itself + the portable entry
+		expect(r.islands.length).toBe(2);
+	});
+
+	test('SSR hoists a modulepreload for the portable entry (no waterfall)', () => {
+		const r = run(wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`), makeCtx({ ssr: true }))!;
+		expect(r.code).toMatch(/<svelte:head><link rel="modulepreload" href="\/_app\/immutable\/ogygia-island\.[a-f0-9]+\.js"/);
+	});
+
+	test('a snippet-only file with no islands still transforms (relaxed bailout)', () => {
+		const r = run(wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`));
+		expect(r).not.toBeNull();
+	});
+})
+;
+
+describe('package-specifier island marks', () => {
+	const PKG = `import TabGroup from 'ogygia/pharos/tab-group' with { wake: 'load' };`;
+	const PKG_SPEC = 'ogygia/pharos/tab-group';
+
+	test('a marked package import (no children) becomes an island keyed by the specifier', () => {
+		const r = run(wrap(PKG, '<TabGroup />'))!;
+		expect(r.islands).toHaveLength(1);
+		const isl = r.islands[0];
+		// identity IS the verbatim specifier (stable + shared across hosts), not a root-relative path
+		expect(isl.id).toBe(idFor(PKG_SPEC, loadMark));
+		expect(isl.componentPath).toBe(PKG_SPEC);
+		// generated entry + wrapper RE-EMIT the original specifier for Vite to resolve
+		expect(isl.source).toContain(`from "${PKG_SPEC}"`);
+		expect(isl.wrapperSource).toContain(`from "${PKG_SPEC}"`);
+	});
+
+	test('children at the call site stay put — the package island crosses them at runtime', () => {
+		const src = wrap(
+			PKG + `\nimport { Tab } from 'ogygia/pharos';`,
+			`<TabGroup group="install"><Tab label="npm"><p>x</p></Tab></TabGroup>`
+		);
+		const r = run(src)!;
+		expect(r.islands).toHaveLength(1);
+		const isl = r.islands[0];
+		// plain .js re-export entry — no synthesized wrapper component
+		expect(isl.virtualPath).toMatch(/\.js$/);
+		expect(isl.source).toContain(`from "${PKG_SPEC}"`);
+		// host tag untouched: real import name, children in place (they flow through the wrapper's slot)
+		expect(r.code).toMatch(/<TabGroup group="install"><Tab label="npm"><p>x<\/p><\/Tab><\/TabGroup>/);
+		expect(r.code).not.toMatch(/__og\d/);
+		// the plain named package import (Tab) rides along untouched
+		expect(r.code).toContain(`import { Tab } from 'ogygia/pharos';`);
+	});
+
+	test('two hosts marking the same package specifier share one region id', () => {
+		const a = transformHost(wrap(PKG, '<TabGroup />'), '/app/src/routes/a/+page.svelte', makeCtx())!;
+		const b = transformHost(wrap(PKG, '<TabGroup />'), '/app/src/routes/deep/b/+page.svelte', makeCtx())!;
+		expect(a.islands[0].id).toBe(b.islands[0].id);
+	});
+
+	test('package islands with children share one id across hosts (children no longer key the id)', () => {
+		const src = (host: string) =>
+			transformHost(
+				wrap(
+					PKG + `\nimport { Tab } from 'ogygia/pharos';`,
+					`<TabGroup group="pm"><Tab label="npm"><p>i</p></Tab></TabGroup>`
+				),
+				host,
+				makeCtx()
+			)!;
+		const a = src('/app/src/content/one.md');
+		const b = src('/app/src/content/two.md');
+		expect(a.islands[0].id).toBe(b.islands[0].id);
+	});
+
+	test('csr=false client host: package island skips the fouc-css side-effect import (needs a real path)', () => {
+		const r = transformHost(wrap(PKG, '<TabGroup />'), HOST, makeCtx({ linkVirtualIsland: false }))!;
+		expect(r.code).toContain(CLIENT_BINDING_STUB);
+		expect(r.code).not.toContain('virtual:ogygia/fouc-css');
+		// a relative island on the same host still gets its fouc-css import
+		const rel = run(wrap(LOAD, '<C />'), makeCtx({ linkVirtualIsland: false }))!;
+		expect(rel.code).toContain(foucCssVirtualId(C_REL));
+	});
+
+	test('an empty specifier still errors loudly', () => {
+		expectThrows(
+			() => run(wrap(`import X from '' with { wake: 'load' };`, '<X />')),
+			/needs a module specifier/
+		);
+	});
+});

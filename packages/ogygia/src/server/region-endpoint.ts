@@ -18,6 +18,7 @@ import { encode_region_props } from './region-props.js';
 import { stringify } from 'devalue';
 import { B64Url } from './payload.js';
 import { TRANSPORT_WIRE_KEY, reduce_transportable } from '../live-transport.js';
+import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet } from '../region-snippet.js';
 
 /** Session sealed into the MAC when `ogygia({ sessionCookie })` is set; empty at prerender. */
 function region_session(): string {
@@ -81,7 +82,12 @@ export function mintRegionCapability(entry: string, payload: string, ttl = 0): s
  * mint on the client — the runtime fetches the endpoint). Mirrors the old `ServerIsland.svelte`.
  */
 export function mintServerIsland(entry: string, props: Record<string, unknown>, ttl = 0): string {
-	const payload = B64Url.encode(stringify(props, { [TRANSPORT_WIRE_KEY]: reduce_transportable }));
+	const payload = B64Url.encode(
+		stringify(props, {
+			[TRANSPORT_WIRE_KEY]: reduce_transportable,
+			[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
+		})
+	);
 	if (payload.length > MAX_REGION_PROPS_LEN) {
 		throw new Error(
 			`[ogygia] server island "${entry}": props payload is ${payload.length} b64 chars (max ${MAX_REGION_PROPS_LEN}). ` +

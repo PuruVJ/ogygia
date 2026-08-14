@@ -16,6 +16,11 @@ import type { RegionValue } from '../region.js';
 /** A heading pulled from the markdown pass (h2–h4). Powers on-page TOCs; rides `markdown` `meta`. */
 export type Heading = { depth: 2 | 3 | 4; id: string; text: string };
 
+/** One markdown link collected during the compile pass (raw, unclassified). Rides `markdown` `meta`;
+ *  pharos's audit resolves these against the site's address space. `line` is approximate (relative
+ *  to the post-frontmatter text). */
+export type LinkRef = { href: string; text: string; line?: number };
+
 /**
  * A resolved relation target: a shallow reference to another entry — its `id` and validated `data`.
  * Deliberately shallow (no body, no URL); build the link from `ref.id`, or `collection.get(ref.id)`.
@@ -33,18 +38,19 @@ export type RefEntry<Data = Record<string, unknown>> = {
 export type ContentRelations = Record<string, unknown>;
 
 /**
- * A content entry. `data` is the validated frontmatter (typed by `schema`); `meta` is what the
- * source derives (typed by the source — e.g. `markdown` provides `{ headings }`); `body` is a
- * `<Region>` you render.
+ * A content REF — the shallow face of an entry, what `refs()` yields and the catalog holds: identity
+ * + validated `data` (+ source-derived `meta`, structural `order`, `filePath`, and graph fields). NO
+ * body, NO source text — those are heavy faces that live only on {@link Entry}, fetched by `get()`.
+ * "Refs are what a corpus admits to having; an entry is what one page pays for."
  */
-export type ContentEntry<Data = Record<string, unknown>, Meta = Record<string, never>> = {
+export type ContentRef<Data = Record<string, unknown>, Meta = Record<string, never>> = {
 	id: string;
 	/** Validated frontmatter. */
 	data: Data;
 	/** Source-derived facts (headings, reading time, …). `{}` for a source that derives none. */
 	meta: Meta;
-	/** The rendered body — `<Region of={entry.body} />`. Absent for data-only sources. */
-	body?: RegionValue;
+	/** Per-level sibling order, when the source supplies it (`folder()` from `NN-`, a CMS from a field). */
+	order?: number[];
 	/** Glob key / file path when the source has one. */
 	filePath?: string;
 	/** Resolved relations (populated by the graph pass on read paths that resolve them). */
@@ -52,6 +58,9 @@ export type ContentEntry<Data = Record<string, unknown>, Meta = Record<string, n
 	/** Entries pointing at this one (populated by the graph pass). */
 	backlinks?: RefEntry[];
 };
+
+/** @deprecated Old name for {@link ContentRef}. A ref never carries a body; use `Entry` (from `get()`) for that. */
+export type ContentEntry<Data = Record<string, unknown>, Meta = Record<string, never>> = ContentRef<Data, Meta>;
 
 /**
  * A resolved entry from `get()` — `data`, `meta`, `body`, and the graph fields fully populated. `rel`
@@ -63,6 +72,8 @@ export type Entry<Data = Record<string, unknown>, Meta = Record<string, never>> 
 	data: Data;
 	meta: Meta;
 	body?: RegionValue;
+	/** Lazy raw SOURCE text, when the source provides it (`markdown()` does). Server-only; never wired. */
+	source?: () => Promise<string>;
 	rel: Record<string, RefEntry | RefEntry[] | null>;
 	backlinks: RefEntry[];
 };
@@ -84,18 +95,25 @@ export type SchemaLike = {
 export { glob, defineSource, toRawSource, mapRaw } from './source.js';
 export type {
 	Source,
+	SourceRef,
 	SourceEntry,
 	EntryParts,
 	RawSource,
 	RawRecord,
 	Format,
 	GlobMap,
+	GroupMeta,
 	SourceChanges
 } from './source.js';
 
 // ── format source-builders (all live on `ogygia/content`) ──
 export { markdown, json } from './formats.js';
 export type { MarkdownMeta } from './formats.js';
+// `folder()` — the filesystem-convention preset (one glob of `{+doc.svx,+meta.json}` → a full source).
+export { folder } from './folder.js';
+// The filename convention it runs on (moved here from pharos — ordering is generic corpus knowledge).
+export { numbered, title_case, strip_order_prefix, order_of } from './convention.js';
+export type { Convention, NumberedOptions, MetaDecoration } from './convention.js';
 // `blocks()` is the content source; `blocks.resolve(tree, registry)` is the no-collection recipe
 // helper (`type → region`, server-side). Both live on the one `blocks` export.
 export { blocks } from './blocks.js';

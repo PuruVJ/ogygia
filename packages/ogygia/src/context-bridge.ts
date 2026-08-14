@@ -16,6 +16,11 @@
 import { getContext as svelte_get_context } from 'svelte';
 import { parse, stringify } from 'devalue';
 import { TRANSPORT_WIRE_KEY, reduce_transportable, revive_transportable } from './live-transport.js';
+import {
+	REGION_SNIPPET_WIRE_KEY,
+	reduce_region_snippet,
+	revive_region_snippet
+} from './region-snippet.js';
 
 /** Build-assigned identity (`module#export`) carried on the context handle. */
 const CTX_TAG = Symbol.for('ogygia.context.tag');
@@ -42,7 +47,12 @@ export function context_tag(handle: unknown): string {
 
 /** Serialize a context value for the DOM — same codec as island props (transportables included). */
 export function serialize_context(value: unknown): string {
-	return stringify(value, { [TRANSPORT_WIRE_KEY]: reduce_transportable }).split('<').join('\\u003C');
+	return stringify(value, {
+		[TRANSPORT_WIRE_KEY]: reduce_transportable,
+		[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
+	})
+		.split('<')
+		.join('\\u003C');
 }
 
 /** Walk up the DOM from `start` to the nearest `<ogygia-context ctx=tag>` and decode its value. */
@@ -54,7 +64,10 @@ function read_from_dom(start: Element | null, tag: string): unknown {
 			const text = script?.textContent;
 			if (text) {
 				try {
-					return parse(text, { [TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, true) });
+					return parse(text, {
+						[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, true),
+						[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
+					});
 				} catch {
 					return undefined;
 				}

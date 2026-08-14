@@ -14,6 +14,7 @@
  *   and (if interactive) hydrates. No component.
  */
 import type { Component, ComponentProps } from 'svelte';
+import { region_snippet } from './region-snippet.js';
 
 /** Brand so the transport can recognize a region without false-matching plain objects. */
 export const REGION_BRAND = Symbol.for('ogygia.region');
@@ -220,4 +221,11 @@ function make_awaitable(dual: DualRegion): AwaitableRegion {
 		}
 	});
 	return dual as AwaitableRegion;
+}
+
+// `region.snippet()` — the SNIPPET shape of a region, sibling of `region()` for components. Freeze a
+// parameterless snippet to static server HTML, or build the raw `{ render, setup?, captures? }` form
+// (mirrors Svelte's `createRawSnippet`). Pure runtime, passable, renderable with plain `{@render}`.
+export namespace region {
+	export const snippet = region_snippet;
 }

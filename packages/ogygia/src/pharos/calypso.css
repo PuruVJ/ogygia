@@ -1,0 +1,244 @@
+/**
+ * Calypso — the FORM. Layout only: header + sidebar + content, bottom-first on mobile. Zero colors;
+ * everything paints from the pharos `--ph-*` tokens (theme.css). A different named shell is a
+ * different file exactly like this one, same tokens.
+ */
+
+@layer pharos {
+	/* The shell takes over the page — clear the UA body margin. `:where` keeps specificity 0 so an
+	 * app stylesheet still wins. */
+	:where(body:has(.ph-calypso)) {
+		margin: 0;
+	}
+
+	.ph-calypso {
+		--ph-cheader-h: 3.5rem;
+		min-height: 100vh;
+		background: var(--ph-bg);
+		color: var(--ph-text);
+		font-family: var(--ph-font);
+		line-height: 1.6;
+	}
+
+	/* ── header ────────────────────────────────────────────────────────────── */
+	.ph-cheader {
+		position: sticky;
+		top: 0;
+		z-index: 40;
+		display: flex;
+		align-items: center;
+		gap: 1.25rem;
+		height: var(--ph-cheader-h);
+		padding: 0 1.5rem;
+		border-bottom: 1px solid var(--ph-line);
+		background: color-mix(in srgb, var(--ph-bg) 82%, transparent);
+		backdrop-filter: blur(12px) saturate(1.4);
+		/* a whisper of elevation so the header floats over the content that scrolls beneath it */
+		box-shadow: 0 1px 3px -1px color-mix(in srgb, var(--ph-text) 7%, transparent);
+	}
+	.ph-cheader-brand {
+		font-weight: 700;
+		font-size: 1.05rem;
+		color: var(--ph-text);
+		text-decoration: none;
+	}
+	.ph-cheader-nav {
+		display: flex;
+		gap: 1rem;
+	}
+	.ph-cheader-link {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--ph-text-dim);
+		text-decoration: none;
+	}
+	.ph-cheader-link:hover {
+		color: var(--ph-text);
+	}
+	.ph-cheader-tools {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-left: auto;
+	}
+	.ph-cheader-search {
+		width: 14rem;
+	}
+	/* Wide screens: the search sits CENTERED in the bar (absolute, so brand/nav/tools keep their
+	 * flex flow); below 1200px it returns to the tools cluster. */
+	@media (min-width: 1200px) {
+		.ph-cheader {
+			position: sticky;
+		}
+		.ph-cheader-search {
+			position: absolute;
+			left: 50%;
+			transform: translateX(-50%);
+			width: min(30rem, 30vw);
+		}
+	}
+	.ph-cheader-github {
+		display: inline-flex;
+		width: 2rem;
+		height: 2rem;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		color: var(--ph-text-dim);
+	}
+	.ph-cheader-github:hover {
+		color: var(--ph-text);
+		background: var(--ph-bg-raised);
+	}
+
+	/* ── frame: sidebar + content ────────────────────────────────────────────── */
+	/* Full-bleed: sidebar pinned flush-left, content fills the rest (no centered frame with big side
+	 * gutters). The article+toc are centered WITHIN the main column at a comfortable reading width. */
+	.ph-cframe {
+		display: grid;
+		grid-template-columns: var(--ph-side-w) minmax(0, 1fr);
+	}
+	.ph-cside {
+		position: sticky;
+		top: var(--ph-cheader-h);
+		height: calc(100vh - var(--ph-cheader-h));
+		overflow-y: auto;
+		padding: 1.75rem 1rem 2rem 1.5rem;
+		border-right: 1px solid var(--ph-line);
+		/* A recessed rail: the sidebar sits a shade below the content plane, so the three columns read
+		 * as distinct depths instead of one flat sheet. The content stays on the brighter `--ph-bg`.
+		 * The tone difference + the hairline border do the separation — no edge shadow (it read as a
+		 * light smudge in dark, where `--ph-text` is light). */
+		background: var(--ph-bg-subtle);
+		scrollbar-width: thin;
+	}
+	.ph-cmain {
+		padding: 2.75rem 3.5rem;
+		min-width: 0;
+	}
+	/* The doc fills a generous width and centers on ultra-wide screens; the article then centers within
+	 * its own column (below) so it sits with balanced gaps between the sidebar and the on-this-page rail
+	 * — not shoved against the TOC. */
+	.ph-cmain > :where(.ph-doc) {
+		max-width: 84rem;
+		margin-inline: auto;
+	}
+
+	/* ── mobile: bottom-first ────────────────────────────────────────────────── */
+	.ph-bottombar,
+	.ph-sheet,
+	.ph-sheet-backdrop {
+		display: none; /* desktop: mobile island chrome hidden */
+	}
+
+	.ph-cbar-brand {
+		font-weight: 700;
+		color: var(--ph-text);
+		text-decoration: none;
+	}
+	.ph-cbar-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.6rem;
+		height: 2.6rem;
+		border: 1px solid transparent;
+		border-radius: 10px;
+		background: none;
+		color: var(--ph-text-dim);
+		cursor: pointer;
+	}
+	.ph-cbar-btn:hover {
+		color: var(--ph-text);
+		background: var(--ph-bg-raised);
+	}
+	.ph-cbar-bars {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		width: 18px;
+		height: 12px;
+	}
+	.ph-cbar-bars span {
+		height: 2px;
+		width: 100%;
+		background: currentColor;
+		border-radius: 2px;
+		transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), opacity 120ms ease;
+	}
+	.ph-cbar-bars.ph-open span:nth-child(1) {
+		transform: translateY(5px) rotate(45deg);
+	}
+	.ph-cbar-bars.ph-open span:nth-child(2) {
+		opacity: 0;
+	}
+	.ph-cbar-bars.ph-open span:nth-child(3) {
+		transform: translateY(-5px) rotate(-45deg);
+	}
+
+	.ph-cbar-search {
+		margin-bottom: 0.6rem;
+	}
+	.ph-cbar-github {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 0.2rem;
+		color: var(--ph-text-dim);
+		font-weight: 500;
+		text-decoration: none;
+	}
+	.ph-cbar-empty {
+		color: var(--ph-text-faint);
+		font-size: 0.85rem;
+		padding: 0.5rem;
+	}
+
+	/* segmented Contents / On-this-page */
+	.ph-seg {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.25rem;
+		margin: 0.25rem 0 0.75rem;
+		padding: 0.2rem;
+		border-radius: 10px;
+		background: var(--ph-bg-raised);
+	}
+	.ph-seg-btn {
+		padding: 0.45rem;
+		border: 0;
+		border-radius: 7px;
+		background: none;
+		color: var(--ph-text-dim);
+		font: 600 0.8rem/1 var(--ph-font);
+		cursor: pointer;
+	}
+	.ph-seg-btn.ph-active {
+		background: var(--ph-bg);
+		color: var(--ph-text);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+	}
+
+	@media (max-width: 900px) {
+		.ph-cheader {
+			display: none;
+		}
+		.ph-cframe {
+			grid-template-columns: 1fr;
+		}
+		.ph-cside {
+			display: none;
+		}
+		.ph-cmain {
+			padding: 1.5rem 1.25rem calc(var(--ph-bar-h, 3.5rem) + 1.5rem);
+		}
+		.ph-bottombar,
+		.ph-sheet,
+		.ph-sheet-backdrop {
+			display: flex;
+		}
+		.ph-sheet {
+			flex-direction: column;
+		}
+	}
+}

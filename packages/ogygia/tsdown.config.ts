@@ -1,4 +1,59 @@
+import { cpSync, existsSync, globSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { preprocess, type PreprocessorGroup } from 'svelte/compiler';
+import { emitDts } from 'svelte2tsx';
 import { defineConfig } from 'tsdown';
+
+const pkg_root = fileURLToPath(new URL('.', import.meta.url));
+
+// Ship `.svelte` COMPONENTS and standalone `.css` into dist/ at their parallel paths, plus a
+// `.svelte.d.ts` beside each component — the full svelte-package treatment, without compiling
+// the template to JS:
+//   - `buildStart` runs each `.svelte` through `preprocess()` (stripping `lang="ts"` + the leftover
+//     `lang` attribute) and emits it as a raw Svelte template the CONSUMER's vite-plugin-svelte
+//     compiles. `.css` is copied verbatim. A glob replaces the old hardcoded copy-svelte.mjs list.
+//   - `writeBundle` runs svelte2tsx's `emitDts` (the same engine svelte-package uses) to generate
+//     component types, then copies only the `*.svelte.d.ts` into dist — tsdown stays the source of
+//     truth for `.ts`/`.svelte.ts` declarations. NOTE: svelte2tsx needs classic TypeScript; it hard-
+//     refuses the TS7 Go port, so this package pins `typescript@6`.
+// Pass the preprocessor group (e.g. `vitePreprocess({ script: true })`); no svelte.config.js reuse.
+// Assets are emitted in `buildStart` / copied in `writeBundle` so `clean: true` does not wipe them.
+const copy_svelte_source = (preprocessor: PreprocessorGroup | PreprocessorGroup[]) => ({
+	name: 'ogygia:copy-svelte-source',
+	async buildStart() {
+		for (const abs of globSync('src/**/*.{svelte,css}')) {
+			const fileName = abs.replace(/^src[\\/]/, '');
+			let source: string | Buffer = readFileSync(abs, 'utf8');
+			if (abs.endsWith('.svelte')) {
+				({ code: source } = await preprocess(source as string, preprocessor, { filename: abs }));
+				// preprocess strips the TS but leaves `lang="ts"` on the tag; drop it so the shipped
+				// component is plain JS the consumer compiles with no TS preprocessor required.
+				source = source.replace(/(<script\b[^>]*?)\s+lang=(["'])ts\2/g, '$1');
+			}
+			// @ts-expect-error — rolldown plugin context `this.emitFile`
+			this.emitFile({ type: 'asset', fileName, source });
+		}
+	},
+	async writeBundle() {
+		// Emit component d.ts into a scratch dir (svelte2tsx also emits `.ts` d.ts we don't want),
+		// then graft only the component `*.svelte.d.ts` onto dist.
+		const tmp = join(pkg_root, '.svelte-dts');
+		rmSync(tmp, { recursive: true, force: true });
+		await emitDts({
+			libRoot: join(pkg_root, 'src'),
+			declarationDir: tmp,
+			svelteShimsPath: fileURLToPath(import.meta.resolve('svelte2tsx/svelte-shims-v4.d.ts'))
+		});
+		for (const abs of globSync('src/**/*.svelte')) {
+			const rel = `${abs.replace(/^src[\\/]/, '')}.d.ts`;
+			const from = join(tmp, rel);
+			if (existsSync(from)) cpSync(from, join(pkg_root, 'dist', rel));
+		}
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
 
 // Build the library's JS/TS modules to dist/ with .d.ts, PRESERVING the source module
 // structure (`unbundle`). Structure must stay parallel because:
@@ -26,6 +81,8 @@ export default defineConfig([
 		dts: true,
 		clean: true,
 		treeshake: false, // keep every module intact; nothing here is dead code
+		// `script: true` strips `lang="ts"` types (off by default in vite-plugin-svelte v7).
+		plugins: [copy_svelte_source(vitePreprocess({ script: true }))],
 		deps: {
 			// never inline — peers / deps / consumer-resolved specifiers
 			neverBundle: [

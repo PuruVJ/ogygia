@@ -39,6 +39,7 @@ import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import { verify, region_mac_message } from './server/hmac.js';
 import { B64Url } from './server/payload.js';
 import { TRANSPORT_WIRE_KEY, revive_transportable } from './live-transport.js';
+import { REGION_SNIPPET_WIRE_KEY, revive_region_snippet } from './region-snippet.js';
 import {
 	DEFAULT_ISLANDS_ENDPOINT,
 	MAX_REGION_PROPS_LEN,
@@ -412,7 +413,8 @@ class OgygiaHandle {
 			// hit a process where the minting page never rendered).
 			await load();
 			props = devalue.parse(B64Url.decode(payload), {
-				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false)
+				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false),
+				[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
 			});
 		} catch {
 			return null;
@@ -510,7 +512,8 @@ class OgygiaHandle {
 			// Module eval first — registers transportable codecs the reviver needs (cold start).
 			await load();
 			props = devalue.parse(B64Url.decode(payload), {
-				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false)
+				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false),
+				[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
 			});
 		} catch {
 			// Same status as bad MAC — no decode oracle (STATUS-ORACLE).

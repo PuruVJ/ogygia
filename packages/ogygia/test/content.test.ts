@@ -24,7 +24,7 @@ const svx = (metadata: Record<string, unknown>, component: unknown = {}) => ({
 	default: component
 });
 
-/** In-memory source for fixtures. The lib no longer ships `fromArray` (write a `{get,list,ids}`
+/** In-memory source for fixtures. The lib no longer ships `fromArray` (write a `{get,refs}`
  *  directly), so tests keep this local copy for building fixtures with explicit ids. */
 function fromArray<Meta = Record<string, never>>(entries: SourceEntry<Meta>[]): Source<Meta> {
 	const map = new Map(entries.map((e) => [e.id, e]));
@@ -32,11 +32,8 @@ function fromArray<Meta = Record<string, never>>(entries: SourceEntry<Meta>[]): 
 		async get(id) {
 			return map.get(id) ?? null;
 		},
-		async list() {
+		async refs() {
 			return entries.slice();
-		},
-		async ids() {
-			return entries.map((e) => e.id);
 		}
 	};
 }
@@ -66,7 +63,7 @@ describe('glob() source ids', () => {
 			'./content/blog/nested/deep-post.svx': {},
 			'./content/blog/top.svx': {}
 		});
-		expect((await src.ids()).sort()).toEqual(['nested/deep-post', 'top']);
+		expect(((await src.refs()).map((r) => r.id)).sort()).toEqual(['nested/deep-post', 'top']);
 	});
 
 	it('honors a custom id mapper', async () => {
@@ -74,7 +71,7 @@ describe('glob() source ids', () => {
 			{ './pages/00-intro.json': {} },
 			{ id: (k) => k.replace(/.*\//, '').replace(/^\d+-/, '').replace(/\.json$/, '') }
 		);
-		expect(await src.ids()).toEqual(['intro']);
+		expect((await src.refs()).map((r) => r.id)).toEqual(['intro']);
 	});
 });
 
@@ -84,17 +81,43 @@ describe('format source-builders', () => {
 		const src = markdown({
 			'./x.svx': svx({ title: 'Hi', headings: [{ depth: 2, id: 'intro', text: 'Intro' }] }, Comp)
 		});
-		const [e] = await src.list();
+		const [e] = await src.refs();
 		expect(e.data.title).toBe('Hi');
 		expect('headings' in e.data).toBe(false);
 		expect(e.meta.headings).toEqual([{ depth: 2, id: 'intro', text: 'Intro' }]);
-		expect(e.body).toMatchObject({ kind: 'inline', component: Comp, props: {} });
-		expect((e.body as Record<symbol, unknown>)[REGION_BRAND]).toBe(true);
+		// a ref carries NO body — the renderable is a get()-only face
+		expect('body' in e).toBe(false);
+		const full = (await src.get('x'))!;
+		expect(full.body).toMatchObject({ kind: 'inline', component: Comp, props: {} });
+		expect((full.body as Record<symbol, unknown>)[REGION_BRAND]).toBe(true);
+	});
+
+	it('markdown: surfaces the compiler-injected __ogygia_source as a LAZY entry.source', async () => {
+		let called = 0;
+		const withSource = {
+			...svx({ title: 'Raw' }),
+			__ogygia_source: () => {
+				called++;
+				return Promise.resolve('---\ntitle: Raw\n---\n\n# Raw\n\nbody');
+			}
+		};
+		const src = markdown({ './a.svx': withSource, './b.svx': svx({ title: 'NoSrc' }) });
+		// refs are metadata only: no `source` face at all, and listing reads no raw text
+		const refs = await src.refs();
+		expect(called).toBe(0);
+		expect('source' in (refs.find((r) => r.id === 'a') as object)).toBe(false);
+		// the lazy raw text lives on the get() entry
+		const a = (await src.get('a'))!;
+		expect(typeof a.source).toBe('function');
+		expect(await a.source!()).toContain('# Raw');
+		expect(called).toBe(1);
+		// a module without the injected source has none
+		expect((await src.get('b'))?.source).toBeUndefined();
 	});
 
 	it('json: unwraps default, data-only (no body)', async () => {
 		const src = json({ './a.json': { default: { name: 'Ada' } }, './b.json': { name: 'Bob' } });
-		const byId = new Map((await src.list()).map((e) => [e.id, e]));
+		const byId = new Map((await src.refs()).map((e) => [e.id, e]));
 		expect(byId.get('a')?.data.name).toBe('Ada');
 		expect(byId.get('b')?.data.name).toBe('Bob');
 		expect(byId.get('a')?.body).toBeUndefined();
@@ -120,8 +143,8 @@ describe('content() catalog', () => {
 			loader: markdown({ './blog/hello.svx': svx({ title: 'Hi', date: '2026-01-01' }) }),
 			schema: blogSchema
 		});
-		expect(await blog.ids()).toEqual(['hello']);
-		expect((await blog.entry('hello'))?.data.title).toBe('Hi');
+		expect((await blog.refs()).map((r) => r.id)).toEqual(['hello']);
+		expect((await blog.get('hello'))?.data.title).toBe('Hi');
 	});
 
 	it('get() returns id/data/meta + inline-partial body', async () => {
@@ -189,9 +212,9 @@ describe('content() catalog', () => {
 			filter: (e) => !e.data.draft
 		});
 
-		expect(await blog.ids()).toEqual(['live']);
-		expect((await blog.entries()).map((e) => e.id)).toEqual(['live']);
-		expect(await blog.entry('draft')).toBeNull();
+		expect((await blog.refs()).map((r) => r.id)).toEqual(['live']);
+		expect((await blog.refs()).map((e) => e.id)).toEqual(['live']);
+		expect(await blog.get('draft')).toBeNull();
 
 		const list = withRemotes(blog).list();
 		expect(await list()).toEqual([{ id: 'live', data: expect.objectContaining({ title: 'Live' }) }]);
@@ -218,7 +241,7 @@ describe('content() catalog', () => {
 	});
 });
 
-/** A live source: `list()` returns accumulated rows, `live()` yields whenever a new row is pushed. */
+/** A live source: `refs()` returns accumulated rows, `live()` yields whenever a new row is pushed. */
 function liveSource() {
 	const rows: SourceEntry[] = [];
 	const waiters: Array<() => void> = [];
@@ -226,11 +249,8 @@ function liveSource() {
 		async get(id) {
 			return rows.find((r) => r.id === id) ?? null;
 		},
-		async list() {
+		async refs() {
 			return rows.slice();
-		},
-		async ids() {
-			return rows.map((r) => r.id);
 		},
 		async *live() {
 			while (true) {

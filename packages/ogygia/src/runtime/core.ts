@@ -17,7 +17,8 @@ import {
 	is_deferred,
 	phase2_hydrate_schedule,
 	region_hydrate_schedule,
-	region_schedule
+	region_schedule,
+	region_ssr_truncated
 } from './region-attrs.js';
 import { slots, type LiftedLake } from './slots.js';
 
@@ -32,7 +33,10 @@ function read_region_props(region: Element): Record<string, unknown> {
 		if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]')) {
 			const wire = slots.wire;
 			const revivers = wire
-				? { [wire.TRANSPORT_WIRE_KEY]: (d: never) => wire.revive_transportable(d, true) }
+				? {
+						[wire.TRANSPORT_WIRE_KEY]: (d: never) => wire.revive_transportable(d, true),
+						[wire.REGION_SNIPPET_WIRE_KEY]: (d: never) => wire.revive_region_snippet(d)
+					}
 				: undefined;
 			return parse(sib.textContent, revivers);
 		}
@@ -435,11 +439,14 @@ class OgygiaRegion extends HTMLElement {
 		if (slots.lakes.on_frozen_connect(this, lake_arm)) return;
 		if (this.#scheduled) return;
 		// Region rule (DESIGN.md): a nested region rides its awake ancestor's hydration — its SSR DOM
-		// is already inside that parent, so self-running would double-hydrate. A DEFERRED region is the
-		// exception: its HTML is remote (fetched from `endpoint`), never in the parent's DOM — e.g. a
-		// <Region> rendered inside a hydrated island. It must always self-run.
+		// is already inside that parent, so self-running would double-hydrate. Two exceptions self-run:
+		// a DEFERRED region (its HTML is remote, never in the parent's DOM), and a region inside an
+		// ADOPTED SLOT (`<ogygia-slot>`) — slot children are host-page content the parent island adopts
+		// as opaque DOM; they are NOT part of its hydrated graph, so nothing else will wake them.
 		const boundary = this.parentElement && this.parentElement.closest('ogygia-region');
-		if (boundary && is_awake(boundary) && !is_deferred(this)) {
+		const slot = this.parentElement && this.parentElement.closest('ogygia-slot');
+		const in_adopted_slot = !!(boundary && slot && boundary.contains(slot));
+		if (boundary && is_awake(boundary) && !is_deferred(this) && !in_adopted_slot) {
 			this.setAttribute('data-nested', '');
 			if (import.meta.env.DEV) {
 				console.warn(
@@ -750,6 +757,23 @@ class OgygiaRegion extends HTMLElement {
 					);
 				}
 				return;
+			}
+
+			// INVALID-NESTING GUARD: the browser parser hoists a BLOCK island rendered inline inside a
+			// `<p>` out of its region before any JS runs (see region_ssr_truncated). The region is now
+			// empty, so the hydrate below fresh-mounts a SECOND copy while the server copy lingers as an
+			// orphan sibling of the paragraph. This is invalid HTML the framework cannot un-parse — warn
+			// loudly (dev) instead of silently duplicating; the real fix lives in authoring (render an
+			// inline element, or place the island in block context).
+			if (import.meta.env.DEV && !is_deferred(this) && region_ssr_truncated(this)) {
+				console.warn(
+					`[ogygia] island "${entry}" rendered a BLOCK element inline inside a <p> (or other ` +
+						`phrasing-only context). The browser's HTML parser hoisted that block out of the ` +
+						`paragraph before hydration, so this region is empty and a SECOND copy is about to mount ` +
+						`here — the server-rendered copy is now an orphaned sibling of the paragraph. Fix: make ` +
+						`the component render an inline element (e.g. <span> instead of <div>), or place the ` +
+						`island on its own line (block context) rather than inside a sentence.`
+				);
 			}
 
 			lifted = slots.lakes.lift(this);

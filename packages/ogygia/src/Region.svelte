@@ -29,8 +29,10 @@
 	import { building } from '$app/environment';
 	import { isNested, setNested, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { TRANSPORT_WIRE_KEY, reduce_transportable } from './live-transport.js';
+	import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet, prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
 	import LakeBoundary from './LakeBoundary.svelte';
+	import SlotBoundary from './SlotBoundary.svelte';
 
 	/**
 	 * Every prop is optional: a HELD usage passes only `of`, a PLACEMENT usage (the transform's
@@ -159,7 +161,10 @@
 	/** @param {unknown} value @param {string} entry */
 	function stringify_props(value, entry) {
 		try {
-			return stringify(value, { [TRANSPORT_WIRE_KEY]: reduce_transportable });
+			return stringify(value, {
+				[TRANSPORT_WIRE_KEY]: reduce_transportable,
+				[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
+			});
 		} catch (e) {
 			const detail = e instanceof Error ? e.message : String(e);
 			throw new Error(
@@ -183,6 +188,42 @@
 	const island_component = $derived(as_dual ? as_dual.component : __component);
 	const island_props = $derived(as_dual ? as_dual.props : __props);
 	const island_children = $derived(children);
+	// Freeze bare snippet PROPS (named-snippet props) to static region snippets (server) so the island
+	// BODY and the serialized PAYLOAD render byte-for-byte identically — hydration then adopts the frozen
+	// HTML with no mismatch. A live (branded) snippet passes through; `nested` islands render inline, no
+	// crossing, so untouched. CHILDREN are not frozen — they cross via the slot marker below.
+	const island_props_ready = $derived(nested ? island_props : prepare_region_props(island_props));
+
+	// ── slot crossing: an island's children render IN-PLACE, the client ADOPTS them ──
+	// The marker id fencing THIS island's children to its payload pointer. Server-assigned; the client
+	// reads it back from the serialized descriptor, never regenerates it.
+	const slot_id = next_slot_id();
+	const has_slot_children = $derived(!nested && island_children != null);
+	// The BODY-side children: a server-convention snippet (`(renderer) => …`) that emits EXACTLY ONE
+	// element — `<ogygia-slot>` wrapping the natural children — with no extra snippet-layer anchors.
+	// That single-element contract is what lets the client's revived slot snippet ADOPT the SSR DOM
+	// (svelte's raw-snippet hydration takes the element at the render position verbatim). SlotBoundary
+	// resets the nested context so an island INSIDE the children renders as a full region (own
+	// `<ogygia-region>` + payload) and wakes independently after adoption. Server-only by construction:
+	// on a csr=false page the client never renders Region, it revives the payload's slot pointer.
+	const slot_children = (renderer) => {
+		renderer.push(slot_marker_open(slot_id));
+		SlotBoundary(renderer, { children: island_children });
+		renderer.push(SLOT_MARKER_CLOSE);
+	};
+	// Body props: children ride as a PROP (the island renders them via its own `{@render children()}`),
+	// never as Region's template slot — a template slot would pass an implicit children snippet that both
+	// OVERRIDES the prop and adds an extra `<!---->` anchor per layer, desyncing hydration.
+	const island_props_body = $derived(
+		has_slot_children && typeof window === 'undefined'
+			? { ...island_props_ready, children: slot_children }
+			: island_props_ready
+	);
+	// Wire props: the same children as a serializable slot POINTER the client revives into an adopting
+	// snippet. Everything else is shared with the body, so both legs agree byte-for-byte.
+	const island_props_wire = $derived(
+		has_slot_children ? { ...island_props_ready, children: slot_pointer(slot_id) } : island_props_ready
+	);
 	// The `wake` value IS the strategy: 'load' | 'idle' | 'visible' | 'interaction' | a media query.
 	const hydrate_attr = $derived(
 		as_dual
@@ -210,7 +251,7 @@
 	);
 
 	const island_payload = $derived(
-		nested ? '' : stringify_props(island_props, island_entry).split(LT).join('\\u003C')
+		nested ? '' : stringify_props(island_props_wire, island_entry).split(LT).join('\\u003C')
 	);
 	const island_props_script = $derived(
 		LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + island_payload + LT + '/script' + GT
@@ -366,12 +407,12 @@
 <svelte:head>{@html head_html}</svelte:head>
 {#if is_island}
 	{@const Component = island_component}
-	{#if nested}{#if Component}<Component {...island_props}>{@render island_children?.()}</Component>{/if}{:else}<ogygia-region
+	{#if nested}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}
 			data-ogygia-keep={__keep || undefined}
-		>{#if Component}<Component {...island_props}>{@render island_children?.()}</Component>{/if}</ogygia-region>{@html island_props_script}{/if}
+		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region>{@html island_props_script}{/if}
 {:else if is_server}
 	{@const Component = __component}
 	{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region

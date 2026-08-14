@@ -13,12 +13,12 @@
 // codemods and BUNDLE it into this file at build time — ogygia declares no extra runtime dependency.
 // ─────────────────────────────────────────────────────────────────────────────
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
-import { color, fileExists, loadFile, saveFile, transforms } from '@sveltejs/sv-utils';
+import { color, fileExists, loadFile, saveFile, svelteConfig, transforms } from '@sveltejs/sv-utils';
 
 const require = createRequire(import.meta.url);
 // This CLI ships inside `ogygia`, so our own version IS the version to pin the user's dependency to.
@@ -37,16 +37,21 @@ const argv = process.argv.slice(2);
 const command = argv[0];
 const flags = new Set(argv.slice(1).filter((a) => a.startsWith('-')));
 
-if (command !== 'init') {
+if (command !== 'init' && command !== 'pharos') {
 	const unknown = command && command !== 'help' && !command.startsWith('-');
 	stdout.write(
 		`${strong('ogygia')} ${dim(`v${version}`)}\n\n` +
 			`Usage:\n` +
-			`  ${accent('npx ogygia init')} ${dim('[--markdown] [--no-install] [-y]')}\n\n` +
-			`Wires ogygia into the SvelteKit app in the current directory.\n` +
+			`  ${accent('npx ogygia init')} ${dim('[--markdown] [--no-install] [-y]')}\n` +
+			`  ${accent('npx ogygia pharos init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n\n` +
+			`${strong('init')}  — wires ogygia into the SvelteKit app in the current directory.\n` +
 			`  --markdown / --no-markdown   turn markdown content collections on/off (else you are asked)\n` +
 			`  -y, --yes                    accept defaults, no prompts\n` +
-			`  --no-install                 edit package.json but skip installing\n`
+			`  --no-install                 edit package.json but skip installing\n\n` +
+			`${strong('pharos init')}  — scaffolds a docs site (site, content, routes, a Calypso layout).\n` +
+			`  --layout <path>              layout route to write (default ${dim('src/routes/+layout.svelte')})\n` +
+			`  --force                      overwrite existing route/site files (the layout always asks)\n` +
+			`  -y, --yes                    accept defaults, no prompts\n`
 	);
 	process.exit(unknown ? 1 : 0);
 }
@@ -109,34 +114,15 @@ function findExportedConst(ast: AnyNode, name: string): AnyNode | null {
 	return null;
 }
 
-/** Walk an estree AST for the first `<name>(…)` call expression. */
-function findCall(node: AnyNode, name: string): AnyNode | null {
-	if (!node || typeof node !== 'object') return null;
-	if (Array.isArray(node)) {
-		for (const child of node) {
-			const found = findCall(child, name);
-			if (found) return found;
-		}
-		return null;
-	}
-	if (
-		node.type === 'CallExpression' &&
-		node.callee?.type === 'Identifier' &&
-		node.callee.name === name
-	) {
-		return node;
-	}
-	for (const key in node) {
-		if (key === 'type' || key === 'start' || key === 'end' || key === 'loc') continue;
-		const found = findCall(node[key], name);
-		if (found) return found;
-	}
-	return null;
+// ── preflight (shared by `init` and `pharos init`) ───────────────────────────
+interface Preflight {
+	pkg: AnyNode;
+	pkgRaw: string;
+	viteConfig: string;
+	ext: 'ts' | 'js';
 }
 
-// ── run ──────────────────────────────────────────────────────────────────────
-async function run() {
-	// Must be a SvelteKit project.
+function preflight(): Preflight {
 	const pkgRaw = loadFile(cwd, 'package.json');
 	if (!pkgRaw) die(`no package.json in ${strong(cwd)} — run this inside your SvelteKit project.`);
 	let pkg: AnyNode;
@@ -149,31 +135,85 @@ async function run() {
 	if (!allDeps['@sveltejs/kit']) {
 		die('this does not look like a SvelteKit project (`@sveltejs/kit` is not a dependency).');
 	}
-
-	// Language + vite config location.
 	const viteConfig = fileExists(cwd, 'vite.config.ts')
 		? 'vite.config.ts'
 		: fileExists(cwd, 'vite.config.js')
 			? 'vite.config.js'
 			: die('could not find vite.config.ts or vite.config.js.');
 	const ext = viteConfig.endsWith('.ts') || fileExists(cwd, 'tsconfig.json') ? 'ts' : 'js';
+	return { pkg, pkgRaw, viteConfig, ext };
+}
 
-	// Markdown: flag wins, else prompt (default off), else default off in non-interactive.
-	const markdown = wantMarkdown ?? (yes ? false : await confirm('Add markdown content collections (.md / .svx)?', false));
+/** Add `ogygia@^version` to dependencies (idempotent). */
+function addOgygiaDep(pf: Preflight): void {
+	if (!pf.pkg.dependencies?.['ogygia']) {
+		pf.pkg.dependencies = { ...(pf.pkg.dependencies ?? {}), ogygia: `^${version}` };
+		const indent = /\n(\t| +)/.exec(pf.pkgRaw)?.[1] ?? '\t';
+		saveFile(cwd, 'package.json', JSON.stringify(pf.pkg, null, indent) + '\n');
+	}
+}
 
-	stdout.write(`\n${strong('ogygia')} — wiring your project…\n`);
+/** A minimal `sv`-style file API over the real cwd, for helpers that expect `sv.file(path, edit)`. */
+const svFileApi = {
+	file(rel: string, edit: (content: string) => string | false): void {
+		const before = loadFile(cwd, rel); // '' when absent
+		const after = edit(before);
+		if (after !== false && after !== before) saveFile(cwd, rel, after);
+	}
+};
+
+/**
+ * Wire `.svx` support + (optionally) the async compiler into wherever the svelte/kit config lives —
+ * a `svelte.config.{js,ts}` OR the `sveltekit({ … })` call in `vite.config`. `svelteConfig.edit`
+ * routes each option to the right place. We MERGE (never clobber) an existing `preprocess`/`extensions`.
+ */
+function wireSvelteConfig(asyncCompiler: boolean): void {
+	svelteConfig.edit({ sv: svFileApi, cwd }, ({ ast, js, property, override }) => {
+		js.imports.addNamed(ast, { from: '@sveltejs/vite-plugin-svelte', imports: ['vitePreprocess'] });
+		js.imports.addNamed(ast, { from: 'ogygia/vite', imports: ['ogygia'] });
+
+		// extensions — create `ogygia.extensions()` if absent; if an array is already there, spread ours in.
+		const extFallback = js.common.parseExpression('ogygia.extensions()');
+		const ext = property('extensions', { fallback: extFallback });
+		if (ext !== extFallback && ext.type === 'ArrayExpression') {
+			ext.elements.push(js.common.createSpread(js.common.parseExpression('ogygia.extensions()')));
+		}
+
+		// preprocess — must include `...ogygia.preprocess()`. Merge into an array; wrap a lone value.
+		const ppFallback = js.common.parseExpression('[vitePreprocess(), ...ogygia.preprocess()]');
+		const pp = property('preprocess', { fallback: ppFallback });
+		if (pp !== ppFallback) {
+			const spread = js.common.createSpread(js.common.parseExpression('ogygia.preprocess()'));
+			if (pp.type === 'ArrayExpression') {
+				pp.elements.push(spread);
+			} else {
+				// `[ <existing>, ...ogygia.preprocess() ]` — parse a well-formed array, drop in the existing.
+				const arr = js.common.parseExpression('[0, ...ogygia.preprocess()]') as AnyNode;
+				arr.elements[0] = pp;
+				override({ preprocess: arr });
+			}
+		}
+
+		// experimental.async — pharos components use top-level `await`; the compiler needs this on.
+		if (asyncCompiler) {
+			const co = property('compilerOptions', { fallback: js.object.create({}) });
+			const experimental = js.object.property(co, { name: 'experimental', fallback: js.object.create({}) });
+			js.object.property(experimental, { name: 'async', fallback: js.common.parseExpression('true') });
+		}
+	});
+}
+
+/** Steps that wire the ogygia RUNTIME into the app (plugin, hooks, types). Shared by both commands. */
+function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): void {
+	const { viteConfig, ext } = pf;
 
 	// 1. Dependency — pinned to this CLI's own (matching) version.
-	if (!pkg.dependencies?.[ 'ogygia' ]) {
-		pkg.dependencies = { ...(pkg.dependencies ?? {}), ogygia: `^${version}` };
-		// Preserve the file's existing indentation.
-		const indent = /\n(\t| +)/.exec(pkgRaw)?.[1] ?? '\t';
-		saveFile(cwd, 'package.json', JSON.stringify(pkg, null, indent) + '\n');
-	}
+	addOgygiaDep(pf);
 	stdout.write(`  ${ok('✓')} dependency ${dim(`ogygia@^${version}`)}\n`);
 
-	// 2. vite.config — ogygia() BEFORE sveltekit() (mode: 'prepend'). With markdown on, opt into
-	//    content/markdown and wire the .md/.svx extensions + preprocessor into the sveltekit() call.
+	// 2. vite.config — the ogygia() plugin BEFORE sveltekit() (mode: 'prepend'). Compiler/preprocess
+	//    options do NOT go here — passing args to `sveltekit()` silently drops svelte.config settings
+	//    (e.g. experimental.async). Those go through `wireSvelteConfig` below, to the right file.
 	editFile(
 		viteConfig,
 		transforms.script(({ ast, js }) => {
@@ -182,43 +222,15 @@ async function run() {
 				code: markdown ? 'ogygia({ content: { markdown: {} } })' : 'ogygia()',
 				mode: 'prepend'
 			});
-
-			if (!markdown) return;
-
-			js.imports.addNamed(ast, {
-				from: '@sveltejs/vite-plugin-svelte',
-				imports: ['vitePreprocess']
-			});
-			try {
-				const svelteKitCall = findCall(ast, 'sveltekit');
-				if (!svelteKitCall) return;
-				let optsObj = svelteKitCall.arguments[0];
-				if (!optsObj || optsObj.type !== 'ObjectExpression') {
-					optsObj = js.object.create({});
-					svelteKitCall.arguments[0] = optsObj;
-				}
-				const has = (name: string) =>
-					optsObj.properties.some(
-						(p: AnyNode) => p.type === 'Property' && p.key && p.key.name === name
-					);
-				if (!has('extensions')) {
-					js.object.property(optsObj, {
-						name: 'extensions',
-						fallback: js.common.parseExpression('ogygia.extensions()')
-					});
-				}
-				if (!has('preprocess')) {
-					js.object.property(optsObj, {
-						name: 'preprocess',
-						fallback: js.common.parseExpression('[vitePreprocess(), ...ogygia.preprocess()]')
-					});
-				}
-			} catch {
-				// Unusual vite.config shape — nextSteps covers the manual markdown wiring.
-			}
 		})
 	);
-	stdout.write(`  ${ok('✓')} ${viteConfig} ${dim(markdown ? '(+ markdown)' : '')}\n`);
+	stdout.write(`  ${ok('✓')} ${viteConfig} ${dim('(plugin)')}\n`);
+
+	// 2b. svelte config — `.svx` extensions + preprocessor (and the async compiler for pharos).
+	if (markdown) {
+		wireSvelteConfig(asyncCompiler);
+		stdout.write(`  ${ok('✓')} svelte config ${dim(asyncCompiler ? '(.svx + async)' : '(.svx)')}\n`);
+	}
 
 	// 3. Universal hooks — the transport codec. Canonical: `export const transport = ogygia.transport`.
 	//    Merge into an existing `transport` instead of clobbering the author's own codecs.
@@ -290,28 +302,34 @@ async function run() {
 		);
 		stdout.write(`  ${ok('✓')} src/ogygia.d.ts ${dim('(types)')}\n`);
 	}
+}
 
-	// 6. Install (best-effort; skipped with --no-install).
-	if (!noInstall) {
-		const pm = existsSync(path.join(cwd, 'pnpm-lock.yaml'))
-			? 'pnpm'
-			: existsSync(path.join(cwd, 'yarn.lock'))
-				? 'yarn'
-				: existsSync(path.join(cwd, 'bun.lockb')) || existsSync(path.join(cwd, 'bun.lock'))
-					? 'bun'
-					: 'npm';
-		stdout.write(`\n  Installing with ${accent(pm)}…\n`);
-		const res = spawnSync(pm, ['install'], {
-			cwd,
-			stdio: 'inherit',
-			shell: process.platform === 'win32'
-		});
-		if (res.status !== 0) {
-			stdout.write(`  ${bad('✗')} install failed — run ${accent(`${pm} install`)} yourself.\n`);
-		}
+/** Install with the detected package manager (best-effort). */
+function installDeps(): void {
+	const pm = existsSync(path.join(cwd, 'pnpm-lock.yaml'))
+		? 'pnpm'
+		: existsSync(path.join(cwd, 'yarn.lock'))
+			? 'yarn'
+			: existsSync(path.join(cwd, 'bun.lockb')) || existsSync(path.join(cwd, 'bun.lock'))
+				? 'bun'
+				: 'npm';
+	stdout.write(`\n  Installing with ${accent(pm)}…\n`);
+	const res = spawnSync(pm, ['install'], { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
+	if (res.status !== 0) {
+		stdout.write(`  ${bad('✗')} install failed — run ${accent(`${pm} install`)} yourself.\n`);
 	}
+}
 
-	// 7. Next steps.
+// ── `ogygia init` ────────────────────────────────────────────────────────────
+async function run() {
+	const pf = preflight();
+	// Markdown: flag wins, else prompt (default off), else default off in non-interactive.
+	const markdown = wantMarkdown ?? (yes ? false : await confirm('Add markdown content collections (.md / .svx)?', false));
+
+	stdout.write(`\n${strong('ogygia')} — wiring your project…\n`);
+	wireOgygia(pf, markdown);
+	if (!noInstall) installDeps();
+
 	stdout.write(
 		`\n${ok('✔')} ogygia is wired up.\n\n` +
 			`Next:\n` +
@@ -319,8 +337,375 @@ async function run() {
 			`  • Make a component interactive:\n` +
 			`      ${dim("import Counter from './Counter.svelte' with { wake: 'load' };")}\n` +
 			(markdown ? `  • Markdown is on: author .md / .svx content collections.\n` : '') +
+			`  • Scaffold a docs site: ${accent('npx ogygia pharos init')}\n` +
 			`  Docs: ${accent('https://ogygia.puruvj.dev')}\n`
 	);
 }
 
-run().catch((err) => die(err?.message ?? String(err)));
+// ── `ogygia pharos init` ─────────────────────────────────────────────────────
+// Scaffolds a docs site as REAL files — no build-time magic, no template to pick. It writes the
+// PHAROS-LEVEL plumbing (site, content, the three-file mount, emit routes) and a layout that mounts
+// `<Calypso>` — Calypso is just a component you import, not a theme the CLI branches on. The layout is
+// the one interactive decision (it's the file you own); everything else is created if absent, skipped
+// if you already wrote it (unless `--force`). Agents can drive it non-interactively with flags + `-y`.
+
+/** Write a file, creating parent dirs. Skips an existing file unless `overwrite`. Returns written?. */
+function place(rel: string, content: string, overwrite: boolean): boolean {
+	const existed = fileExists(cwd, rel);
+	if (existed && !overwrite) {
+		stdout.write(`  ${dim('•')} ${rel} ${dim('(exists, kept)')}\n`);
+		return false;
+	}
+	const abs = path.join(cwd, rel);
+	mkdirSync(path.dirname(abs), { recursive: true });
+	writeFileSync(abs, content);
+	stdout.write(`  ${ok('✓')} ${rel}${existed ? dim(' (overwritten)') : ''}\n`);
+	return true;
+}
+
+async function pharosInit(): Promise<void> {
+	// argv: pharos init [--layout p] [--force] [-y] [--no-install]
+	if (argv[1] !== 'init') {
+		stdout.write(
+			`${strong('ogygia pharos')} ${dim(`v${version}`)}\n\n` +
+				`Usage:\n  ${accent('npx ogygia pharos init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n\n` +
+				`Scaffolds a pharos docs site (site + content + routes + a Calypso layout).\n`
+		);
+		process.exit(argv[1] ? 1 : 0);
+	}
+
+	const rest = argv.slice(2);
+	let flagLayout: string | undefined;
+	for (let i = 0; i < rest.length; i++) {
+		if (rest[i] === '--layout') flagLayout = rest[++i];
+	}
+	const restFlags = new Set(rest.filter((a) => a.startsWith('-')));
+	const force = restFlags.has('--force');
+	const yesP = restFlags.has('-y') || restFlags.has('--yes');
+	const noInstallP = restFlags.has('--no-install');
+
+	const pf = preflight();
+
+	// The layout — the ONE file you own. Its DIRECTORY is where the docs mount; a nested layout
+	// (e.g. src/routes/docs/+layout.svelte) mounts the site under that URL prefix.
+	const layoutRel = (flagLayout || 'src/routes/+layout.svelte').replace(/\\/g, '/');
+	if (!layoutRel.startsWith('src/routes/') || path.basename(layoutRel) !== '+layout.svelte') {
+		die(`--layout must be a +layout.svelte under src/routes (got ${strong(layoutRel)}).`);
+	}
+	const routeDir = path.posix.dirname(layoutRel); // 'src/routes' | 'src/routes/docs'
+	const sub = routeDir.slice('src/routes'.length); // '' | '/docs'
+	const urlBase = sub; // mount prefix in URLs ('' = root)
+	const rd = (rel: string) => path.posix.join(routeDir, rel);
+	const emitArg = urlBase ? `{ base: ${JSON.stringify(urlBase)} }` : '';
+	const searchBase = urlBase ? `, { base: ${JSON.stringify(urlBase)} }` : '';
+
+	stdout.write(`\n${strong('ogygia pharos')} — scaffolding your docs site…\n`);
+
+	// Wire the ogygia runtime (plugin + markdown + hooks). Idempotent; pharos needs .svx, the async
+	// compiler (its components use top-level await), and the server handle.
+	wireOgygia(pf, true, true);
+
+	// The site — nav, doc resolver, search, sitemap/llms/raw, prev/next. Never clobbered without --force.
+	place(
+		'src/lib/docs.ts',
+		`import { content, markdown } from 'ogygia/content';
+import { outline, pharos } from 'ogygia/pharos';
+
+// A docs collection: every file under \`src/content/docs\` becomes a page. Its id is the path below
+// \`content/docs\` without the extension, so \`guides/deploy.svx\` is served at \`/guides/deploy\`.
+const docs = content({
+	loader: markdown(import.meta.glob('../content/docs/**/*.svx', { eager: true }))
+});
+
+// \`pharos()\` mints the site the shell + routes consume.
+export const site = pharos(outline([{ label: 'Docs', items: docs }]), { prevNext: 'graph' });
+`,
+		force
+	);
+
+	// Starter content (two pages) — only if the docs folder has no pages yet.
+	const hasContent = globHasSvx(path.join(cwd, 'src/content/docs'));
+	if (!hasContent || force) {
+		place(
+			'src/content/docs/introduction.svx',
+			`---
+title: Introduction
+summary: What this site is.
+---
+
+Welcome to your docs, built with **pharos** on ogygia. The page title comes from the
+frontmatter above, so start the body at \`##\`. Every \`.svx\` file in \`src/content/docs\`
+becomes a page — this one lives at \`src/content/docs/introduction.svx\`.
+
+## What you get
+
+The shell gives you navigation, full-text search (press \`⌘K\`), an on-this-page rail,
+and light / dark out of the box.
+`,
+			force
+		);
+		place(
+			'src/content/docs/getting-started.svx',
+			`---
+title: Getting started
+summary: Add your own pages.
+---
+
+Drop a new \`.svx\` file into \`src/content/docs\` and it becomes a page. The file path is
+the URL: \`src/content/docs/guides/deploy.svx\` is served at \`/guides/deploy\`.
+
+## Live components
+
+Because ogygia renders islands, you can place an interactive Svelte component right in
+your prose and it hydrates on its own — no client bundle for the rest of the page.
+`,
+			force
+		);
+	} else {
+		stdout.write(`  ${dim('•')} src/content/docs ${dim('(has pages, kept)')}\n`);
+	}
+
+	// Doc route — the three-file mount + the render page.
+	place(
+		rd('[...slug]/+page.ts'),
+		`import { site } from '$lib/docs';
+
+// The three-file mount: page options are yours; load + entries come off the site.
+export const prerender = true;
+export const load = site.load;
+export const entries = site.entries;
+`,
+		force
+	);
+	place(
+		rd('[...slug]/+page.svelte'),
+		`<script lang="ts">
+	import { page } from '$app/state';
+	import { Doc } from 'ogygia/pharos';
+	import { site } from '$lib/docs';
+
+	// csr=false: the body renders in this route's SSR pass, so islands inside the .svx hydrate.
+	const view = (await site.doc(page.params.slug ?? ''))!;
+</script>
+
+<Doc {view} />
+`,
+		force
+	);
+
+	// Route options for the subtree (csr=false server islands, prerendered).
+	place(
+		rd('+layout.ts'),
+		`// ogygia renders server-side islands — opt this subtree out of the SPA client and prerender it.
+export const csr = false;
+export const prerender = true;
+`,
+		force
+	);
+
+	// Home page (the mount root) — a landing that links into the first doc, so \`/\` never 404s.
+	place(
+		rd('+page.svelte'),
+		`<script lang="ts">
+	import { site } from '$lib/docs';
+
+	// \`site.nav()\` is plain data — queryable outside the sidebar. Find the first real page to link to.
+	const tree = await site.nav(${emitArg || ''});
+	const first = tree
+		.flatMap((n) => (n.kind === 'group' ? n.items : [n]))
+		.find((n) => n.kind === 'leaf');
+</script>
+
+<svelte:head><title>Docs</title></svelte:head>
+
+<div class="ph-home">
+	<h1 class="ph-home-title">Your docs</h1>
+	<p class="ph-home-lede">Built with pharos on ogygia. Edit this page and the sidebar in your project.</p>
+	{#if first && first.kind === 'leaf'}
+		<a class="ph-home-cta" href={first.href}>Start reading → {first.title}</a>
+	{/if}
+</div>
+
+<style>
+	.ph-home { max-width: 42rem; margin: 0 auto; padding: 4rem 0; }
+	.ph-home-title { margin: 0 0 0.5rem; font-size: 2rem; letter-spacing: -0.02em; }
+	.ph-home-lede { margin: 0 0 1.5rem; color: var(--ph-text-dim, #5b6069); }
+	.ph-home-cta { color: var(--ph-accent, #0d9488); font-weight: 600; text-decoration: none; }
+</style>
+`,
+		force
+	);
+
+	// The layout — the one file that might already be yours. Three cases:
+	//  · absent            → write it.
+	//  · already a pharos shell (ours) → keep it, so re-running is idempotent (the "redeemable" case).
+	//  · a DIFFERENT layout you wrote  → never clobber without opt-in: `--force`, or a "yes" at the
+	//    interactive prompt. `-y` (accept safe defaults) does NOT clobber — it aborts with guidance.
+	const layoutBody = `<script lang="ts">
+	import { Calypso } from 'ogygia/pharos';
+	// Styling is opt-in — import the pharos look here, or delete these two lines and bring your own
+	// CSS against the \`.ph-*\` hooks.
+	import 'ogygia/pharos/theme.css';
+	import 'ogygia/pharos/calypso.css';
+	import { site } from '$lib/docs';
+
+	let { children } = $props();
+</script>
+
+<Calypso {site} base=${JSON.stringify(urlBase)} title="Docs">
+	{@render children()}
+</Calypso>
+`;
+	const layoutExisted = fileExists(cwd, layoutRel);
+	const layoutIsOurs =
+		layoutExisted &&
+		/from ['"]ogygia\/pharos['"]/.test(loadFile(cwd, layoutRel)) &&
+		loadFile(cwd, layoutRel).includes('<Calypso');
+
+	if (!layoutExisted || force) {
+		place(layoutRel, layoutBody, true);
+	} else if (layoutIsOurs) {
+		stdout.write(`  ${dim('•')} ${layoutRel} ${dim('(pharos shell, kept)')}\n`);
+	} else {
+		const proceed =
+			stdin.isTTY && !yesP
+				? await confirm(`${strong(layoutRel)} exists — overwrite EVERYTHING in it?`, false)
+				: false;
+		if (!proceed) {
+			die(
+				`${strong(layoutRel)} already exists. Re-run with ${accent('--force')} to overwrite it, ` +
+					`or ${accent('--layout <path>')} to write the shell somewhere else.`
+			);
+		}
+		place(layoutRel, layoutBody, true);
+	}
+
+	// Emit routes — search index, sitemap, llms.txt, raw markdown, and the no-JS /search page.
+	place(
+		rd('search.json/+server.ts'),
+		`import { site } from '$lib/docs';
+
+export const prerender = true;
+export const GET = site.emit.search(${emitArg});
+`,
+		force
+	);
+	place(
+		rd('sitemap.xml/+server.ts'),
+		`import { site } from '$lib/docs';
+
+export const prerender = true;
+export const GET = site.emit.sitemap(${emitArg});
+`,
+		force
+	);
+	place(
+		rd('llms.txt/+server.ts'),
+		`import { site } from '$lib/docs';
+
+export const prerender = true;
+export const GET = site.emit.llms(${emitArg});
+`,
+		force
+	);
+	place(
+		rd('[...slug].md/+server.ts'),
+		`import { site } from '$lib/docs';
+
+// Every doc, served as raw markdown at \`<slug>.md\` (great for LLMs and \`view source\`).
+export const prerender = true;
+const raw = site.emit.raw();
+export const GET = raw.GET;
+export const entries = raw.entries;
+`,
+		force
+	);
+	place(
+		rd('search/+page.server.ts'),
+		`import { site } from '$lib/docs';
+
+// No-JS search: the /search page renders results server-side. With JS, the ⌘K palette takes over.
+export const prerender = false;
+export const load = async ({ url }) => {
+	const q = (url.searchParams.get('q') ?? '').trim();
+	return { q, hits: q ? await site.search(q${searchBase}) : [] };
+};
+`,
+		force
+	);
+	place(
+		rd('search/+page.svelte'),
+		`<script lang="ts">
+	import { SearchPage } from 'ogygia/pharos';
+	let { data } = $props();
+</script>
+
+<svelte:head><title>Search</title></svelte:head>
+
+<SearchPage q={data.q} hits={data.hits} />
+`,
+		force
+	);
+
+	// A friendly error page (uses the theme tokens so it matches the shell).
+	place(
+		rd('+error.svelte'),
+		`<script lang="ts">
+	import { page } from '$app/state';
+</script>
+
+<div class="ph-err">
+	<p class="ph-err-code">{page.status}</p>
+	<h1 class="ph-err-title">{page.status === 404 ? 'Page not found' : 'Something went wrong'}</h1>
+	<p class="ph-err-msg">{page.error?.message ?? 'Unknown error'}</p>
+	<a class="ph-err-home" href=${JSON.stringify(urlBase || '/')}>← Back to the docs</a>
+</div>
+
+<style>
+	.ph-err { max-width: 32rem; margin: 0 auto; padding: 6rem 1.5rem; text-align: center; }
+	.ph-err-code { margin: 0; font-size: 3rem; font-weight: 800; letter-spacing: -0.03em; color: var(--ph-text-faint, #9096a1); }
+	.ph-err-title { margin: 0.25rem 0 0.5rem; font-size: 1.4rem; }
+	.ph-err-msg { margin: 0 0 1.5rem; color: var(--ph-text-dim, #5b6069); }
+	.ph-err-home { color: var(--ph-accent, #0d9488); text-decoration: none; font-weight: 600; }
+</style>
+`,
+		force
+	);
+
+	if (!noInstallP) installDeps();
+
+	stdout.write(
+		`\n${ok('✔')} your pharos docs site is scaffolded.\n\n` +
+			`Next:\n` +
+			`  • Start it: ${accent('npm run dev')} ${dim(`(then open ${urlBase || '/'})`)}\n` +
+			`  • Write pages in ${dim('src/content/docs')} — the file path is the URL.\n` +
+			`  • Tune the site (nav, versions, i18n) in ${dim('src/lib/docs.ts')}.\n` +
+			`  Docs: ${accent('https://ogygia.puruvj.dev')}\n`
+	);
+}
+
+/** True if any `.svx` file exists anywhere under `dir`. */
+function globHasSvx(dir: string): boolean {
+	let stack = [dir];
+	while (stack.length) {
+		const d = stack.pop()!;
+		let entries;
+		try {
+			entries = readdirSync(d, { withFileTypes: true });
+		} catch {
+			continue;
+		}
+		for (const e of entries) {
+			if (e.isDirectory()) stack.push(path.join(d, e.name));
+			else if (e.name.endsWith('.svx')) return true;
+		}
+	}
+	return false;
+}
+
+// ── dispatch ─────────────────────────────────────────────────────────────────
+if (command === 'pharos') {
+	pharosInit().catch((err) => die(err?.message ?? String(err)));
+} else {
+	run().catch((err) => die(err?.message ?? String(err)));
+}

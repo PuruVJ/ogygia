@@ -2,6 +2,16 @@
  * Collect `h2`–`h4` into `metadata.headings` and auto-slug any heading without an explicit
  * `{#id}`. Runs **after** {@link remarkHeadingId} so pandoc-style explicit ids win.
  *
+ * Auto-slugged ids are SCOPED (hierarchical): a heading's id joins the ids of its open ancestor
+ * headings (shallower depth, most recent per level) with its own slug. For
+ *
+ *   # A / ## B / ### C / ## D
+ *
+ * the ids are `a`, `a-b`, `a-b-c`, `a-d`. An explicit `{#id}` stays VERBATIM (never prefixed) and
+ * becomes the scope segment its descendants nest under. Ids are assigned to headings of every depth
+ * (so the ancestor path is complete and an `h1` gets its `a`), but only `minDepth`–`maxDepth` are
+ * collected into `metadata.headings`.
+ *
  * The collected array is stashed on `file.data.fm.headings`, which mdsvex emits as part of the
  * module `metadata` export. The `mdsvex` format adapter lifts it back off `metadata` so it never
  * pollutes validated `data`.
@@ -39,6 +49,9 @@ export type RemarkHeadingsOptions = {
 	maxDepth?: 2 | 3 | 4;
 };
 
+/** An open ancestor heading: its depth and its resolved (deduped) id, used to scope descendants. */
+type Frame = { depth: number; id: string };
+
 export function remarkHeadings(options: RemarkHeadingsOptions = {}) {
 	const min = options.minDepth ?? 2;
 	const max = options.maxDepth ?? 4;
@@ -46,6 +59,9 @@ export function remarkHeadings(options: RemarkHeadingsOptions = {}) {
 	return (tree: MdNode, file: { data: Record<string, unknown> }) => {
 		const headings: Heading[] = [];
 		const seen = new Map<string, number>();
+		// Stack of open ancestor headings (shallower, most recent per level). Each new heading pops
+		// every frame at its depth or deeper, then scopes under whatever remains on top.
+		const stack: Frame[] = [];
 
 		// mdsvex escapes Svelte-reserved chars (`{` → `&#123;`, `}` → `&#125;`) before this plugin
 		// sees the AST, so inline-code heading text arrives entity-encoded. Decode it back to plain
@@ -67,27 +83,37 @@ export function remarkHeadings(options: RemarkHeadingsOptions = {}) {
 		};
 
 		const walk = (node: MdNode) => {
-			if (
-				node.type === 'heading' &&
-				typeof node.depth === 'number' &&
-				node.depth >= min &&
-				node.depth <= max
-			) {
+			if (node.type === 'heading' && typeof node.depth === 'number') {
+				const depth = node.depth;
 				const text = decodeEntities(textOf(node)).trim();
 				const data = (node.data ??= {});
 				const props = (data.hProperties ??= {});
-				let id = props.id;
-				if (!id) {
-					const base = slugify(text) || 'section';
+
+				// Pop ancestors that are as deep or deeper — they no longer scope this heading.
+				while (stack.length && stack[stack.length - 1].depth >= depth) stack.pop();
+				const parent = stack.length ? stack[stack.length - 1].id : null;
+
+				let id: string;
+				if (props.id) {
+					// Explicit `{#id}` (from remark-heading-id): keep VERBATIM, never prefixed. Still
+					// register it in the dedupe pool so a later auto-slug can't collide with it.
+					id = props.id;
+					seen.set(id, (seen.get(id) ?? 0) + 1);
+				} else {
+					const ownSlug = slugify(text) || 'section';
+					const base = parent ? `${parent}-${ownSlug}` : ownSlug;
 					const n = seen.get(base) ?? 0;
 					seen.set(base, n + 1);
 					id = n ? `${base}-${n}` : base;
 					props.id = id;
-				} else {
-					// keep explicit ids in the dedupe pool so a later auto-slug can't collide
-					seen.set(id, (seen.get(id) ?? 0) + 1);
 				}
-				headings.push({ depth: node.depth as 2 | 3 | 4, id, text });
+
+				// This heading is now the open ancestor for its level; descendants scope under its id.
+				stack.push({ depth, id });
+
+				if (depth >= min && depth <= max) {
+					headings.push({ depth: depth as 2 | 3 | 4, id, text });
+				}
 			}
 			if (Array.isArray(node.children)) node.children.forEach(walk);
 		};
