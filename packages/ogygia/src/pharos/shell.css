@@ -1,5 +1,5 @@
 /**
- * Calypso — the FORM. Layout only: header + sidebar + content, bottom-first on mobile. Zero colors;
+ * Shell — the FORM. Layout only: header + sidebar + content, bottom-first on mobile. Zero colors;
  * everything paints from the pharos `--ph-*` tokens (theme.css). A different named shell is a
  * different file exactly like this one, same tokens.
  */
@@ -7,11 +7,11 @@
 @layer pharos {
 	/* The shell takes over the page — clear the UA body margin. `:where` keeps specificity 0 so an
 	 * app stylesheet still wins. */
-	:where(body:has(.ph-calypso)) {
+	:where(body:has(.ph-shell)) {
 		margin: 0;
 	}
 
-	.ph-calypso {
+	.ph-shell {
 		--ph-cheader-h: 3.5rem;
 		min-height: 100vh;
 		background: var(--ph-bg);

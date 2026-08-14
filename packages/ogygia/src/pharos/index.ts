@@ -17,7 +17,7 @@
  * ```
  */
 export { outline, pick, href_of } from './outline.js';
-export type { Outline, OutlineSpec, OutlineOptions, OutlineNode, OutlineThunk, GroupSpec, LinkSpec, Selection, Collection } from './outline.js';
+export type { Outline, OutlineSpec, OutlineOptions, OutlineNode, OutlineThunk, GroupSpec, LinkSpec, Selection, Collection, TrailScope } from './outline.js';
 
 export { pharos, mountBase } from './pharos.js';
 export type { SiteData, ReadContext } from './pharos.js';
@@ -25,7 +25,9 @@ export { fields } from './fields.js';
 export type { PageFields, PostFields, ChangeFields } from './fields.js';
 export { dimensions, is_dimensioned } from './dimensions.js';
 export type { Axis, Coordinate, DimensionsSpec, Dimensioned, Switcher, SwitcherAxis, Fallback } from './dimensions.js';
-export type { Site, PharosOptions, EmitHandler, EmitOptions, LlmsEmitOptions, RawEmit, AuditOptions, AuditReport, AuditFinding, AuditRedirected } from './pharos.js';
+export type { Site, PharosOptions, EmitHandler, EmitOptions, LlmsEmitOptions, RawEmit } from './pharos.js';
+export { links } from './checks.js';
+export type { Check, Finding, Severity, CheckContext, LinkOptions } from './checks.js';
 
 export { orama_engine, build_docs, split_sections, strip_prose, create_search } from './search.js';
 export type { SearchDoc, SearchHit, SearchEngine, SearchIndex, SearchOptions, SearchBrain } from './search.js';

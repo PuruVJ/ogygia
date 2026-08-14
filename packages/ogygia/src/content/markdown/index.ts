@@ -17,6 +17,8 @@
 import type { MdsvexOptions } from 'mdsvex';
 import type { PreprocessorGroup, Processed } from 'svelte/compiler';
 import { islandBridge } from '../../vite/island-bridge.js';
+import { BuildCache } from '../../build-cache.js';
+import { RegionStore } from '../region-store.js';
 import { remarkHeadingId } from './remark-heading-id.js';
 import { remarkHeadings, type RemarkHeadingsOptions } from './remark-headings.js';
 import { remarkLinks } from './remark-links.js';
@@ -24,6 +26,8 @@ import { remarkCodeIds } from './remark-code-ids.js';
 import { transform_containers } from './containers.js';
 import { transform_tabs } from './tabs.js';
 import { rehypeHeadingAnchors } from './rehype-heading-anchors.js';
+import { parse_yaml } from './frontmatter.js';
+import { try_region_emit } from './region-emit.js';
 import { DEFAULT_OVERRIDE_TAGS, rehypeOverrides, SLOT_TAG } from './rehype-overrides.js';
 import {
 	configure_shiki,
@@ -33,6 +37,32 @@ import {
 } from './shiki.js';
 
 export type { MarkdownShikiOptions, MarkdownThemePair, RemarkHeadingsOptions };
+import type { ShikiTransformer } from 'shiki';
+import type { MetaParser, VariantGenerator } from './code.js';
+import { default_pipeline } from './code-render.js';
+export { infostring, slash_meta } from './code.js';
+export type { Fence, MetaParser, VariantGenerator, Variant } from './code.js';
+
+/**
+ * The CODE fence pipeline config — one bag for the whole fence dialect. Core knows CONTRACTS, not
+ * features: each slot takes imported adapter VALUES, never feature flags. (Stages `meta` and
+ * `variants` arrive in later steps; `transformers` is the Shiki decoration contract.)
+ */
+export type CodeOptions = {
+	/** Shiki transformers applied to every fence — diff/focus/highlight, twoslash, or your own. */
+	transformers?: ShikiTransformer[];
+	/** Fence-meta parsers (LAYER). Default `[infostring()]`; add `slash_meta()` for `/// file:` etc. */
+	meta?: MetaParser[];
+	/** Variant generators (RACE) — one authored fence → N switchable versions (a JS↔TS converter,
+	 *  package-manager tabs, …). App-authored values; core ships the contract, not the features. */
+	variants?: VariantGenerator[];
+	/**
+	 * Folded into the fence-cache address. The cache identifies stages by NAME (transformers) /
+	 * preference + `cache_key` (variants) — editing a stage's BEHAVIOR without renaming it is
+	 * invisible, so bump this (or version the stage's name) while iterating on custom stages.
+	 */
+	cacheSalt?: string;
+};
 export type { Heading } from '../index.js';
 export { highlight, escape_svelte, wrap_html, normalize_shiki } from './shiki.js';
 export { remarkHeadingId } from './remark-heading-id.js';
@@ -40,6 +70,28 @@ export { remarkHeadings, slugify } from './remark-headings.js';
 export { remarkLinks } from './remark-links.js';
 export { parseFrontmatter } from './frontmatter.js';
 export type { FrontmatterResult } from './frontmatter.js';
+
+/** One unified plugin entry (a plugin, or a `[plugin, options]` tuple), as mdsvex accepts them. */
+type UnifiedEntry = NonNullable<MdsvexOptions['remarkPlugins']>[number];
+/**
+ * A prose/rehype chain entry, optionally staged Vite-style: a plain entry runs in the default slot;
+ * `{ enforce: 'pre', plugin }` runs before the built-in passes (`'post'` = the default, explicit).
+ */
+export type StagedPlugin = UnifiedEntry | { enforce: 'pre' | 'post'; plugin: UnifiedEntry };
+
+/** Split a staged chain into its pre/post halves (plain entries and `enforce: 'post'` → post). */
+function split_staged(list: Array<StagedPlugin> | undefined): { pre: UnifiedEntry[]; post: UnifiedEntry[] } {
+	const pre: UnifiedEntry[] = [];
+	const post: UnifiedEntry[] = [];
+	for (const e of list ?? []) {
+		if (e && typeof e === 'object' && !Array.isArray(e) && 'plugin' in e) {
+			(e.enforce === 'pre' ? pre : post).push(e.plugin);
+		} else {
+			post.push(e as UnifiedEntry);
+		}
+	}
+	return { pre, post };
+}
 
 /** Default file extensions handled by {@link markdown}. */
 export const extensions = ['.svx', '.md'] as const;
@@ -78,14 +130,36 @@ export type MarkdownOptions = MarkdownShikiOptions & {
 	/** Give every code block a stable content-hash id (`slug-code-<hash>`) so it can be permalinked, in
 	 *  the SSR HTML (works on cold load). Default `true`. See `remark-code-ids.ts`. */
 	codeIds?: boolean;
-	/** Extra remark plugins (after heading-id / heading collection). */
-	remarkPlugins?: MdsvexOptions['remarkPlugins'];
-	/** Extra rehype plugins. */
-	rehypePlugins?: MdsvexOptions['rehypePlugins'];
+	/**
+	 * The PROSE DIALECT contract — extra remark plugins (unified ecosystem values: `remark-math`,
+	 * mermaid, an include/type-docs expander, …). Core ships none by default.
+	 *
+	 * A plain entry runs AFTER the built-in passes (heading ids, heading + link collection, code
+	 * ids) — the common case. An entry may instead declare its stage Vite-style:
+	 * `{ enforce: 'pre', plugin }` runs BEFORE every built-in, so content it GENERATES (an expanded
+	 * directive's headings + fences) flows through the TOC collectors, code ids, and the link audit
+	 * exactly as if hand-authored. `enforce: 'post'` is the explicit spelling of the default.
+	 */
+	remark?: Array<StagedPlugin>;
+	/** Extra rehype plugins — same staging contract as {@link MarkdownOptions.remark}: plain entries
+	 *  run after the pharos override wrap (before heading anchors); `{ enforce: 'pre', plugin }` runs
+	 *  before the wrap. */
+	rehype?: Array<StagedPlugin>;
+	/** The fence pipeline — `{ transformers, … }`. See {@link CodeOptions}. */
+	code?: CodeOptions;
 	/** Override extensions (default `.svx` / `.md`). */
 	extensions?: string[];
 	/** Forwarded to mdsvex `layout`. */
 	layout?: MdsvexOptions['layout'];
+	/**
+	 * Compile pure-static `.md` files to **serialized regions**: the whole document becomes one plain
+	 * HTML string in the module script (`__ogygia_region`), the template a single `{@html}` reference —
+	 * content crosses into Svelte as DATA, never as template source. Bodies arrive pre-baked (awaiting
+	 * them is a no-op) and the escaping hazard class is structurally gone. A file that is NOT pure
+	 * static (islands, `<script>`, component tags, svelte expressions, tabs) keeps the component path
+	 * automatically — `.svx` always does. Default `false` (flip-on per app while it bakes).
+	 */
+	region?: boolean;
 };
 
 /**
@@ -220,17 +294,25 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 		tabs = true,
 		headingAnchors = true,
 		codeIds = true,
-		remarkPlugins = [],
-		rehypePlugins,
+		remark = [],
+		rehype: rehypeExtra,
+		code,
 		extensions: exts = [...extensions],
 		layout,
+		region: region_mode = false,
 		...shiki_opts
 	} = options ?? (islandBridge.markdownConfig as MarkdownOptions | null) ?? {};
 
 	// Element overrides: which tags get wrapped in the pharos slot (values live in `pharos()`).
 	const override_tags = overrides ? (overrides === true ? [...DEFAULT_OVERRIDE_TAGS] : (overrides.tags ?? [...DEFAULT_OVERRIDE_TAGS])) : [];
 
-	const cfg = configure_shiki(shiki_opts);
+	// The fence pipeline's transformers ride the shiki config (applied at codeToHtml).
+	const cfg = configure_shiki({ ...shiki_opts, ...(code?.transformers ? { transformers: code.transformers } : {}) });
+	// meta parsers (default infostring) + variant generators — the meta/variants stages.
+	const pipeline = {
+		meta: code?.meta ?? default_pipeline().meta,
+		variants: code?.variants ?? []
+	};
 
 	// heading-id (explicit `{#id}`) must run before the collector so explicit ids win.
 	// Passed as `[attacher, options]` (unified/mdsvex plugin form), not called.
@@ -238,9 +320,53 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 		? [[remarkHeadings, typeof headings === 'object' ? headings : {}]]
 		: [];
 
+	const remark_staged = split_staged(remark);
+	const rehype_staged = split_staged(rehypeExtra);
+
+	// ── the DOC-LEVEL cache ────────────────────────────────────────────────────────
+	// The whole markup() stage — tabs/containers → mdsvex (remark/rehype/fences/twoslash) → island
+	// transform → region emit — is a pure function of (file content, this configuration). Cache the
+	// OUTPUT per content file, content-addressed like the fence cache one level down: a hit skips
+	// everything, which is what makes the first dev request O(cache-reads) instead of O(recompile),
+	// and a `node_modules`-cached CI build recompile-free. Alongside it, `regions` stores each
+	// region-emitted document's serialized `{ html }` — content as data-with-an-address, the artifact
+	// future layers (incremental builds, edge, on-demand baking) consume directly.
+	// Stage identity: functions can't be hashed — plugins/transformers count by NAME/count, and
+	// `code.cacheSalt` is the documented bump for behavior edits (same contract as the fence cache).
+	const doc_cache = new BuildCache<{ code: string }>('markup');
+	// The document REGION rides ogygia's core RegionStore — markdown is one producer harnessing the
+	// shared currency, not the owner of a private format. Same address as the module-code entry.
+	const docs_store = new RegionStore('docs');
+	const doc_sig = () =>
+		[
+			'v3', // markup-cache format
+			String(region_mode),
+			String(headingIds),
+			JSON.stringify(headings),
+			JSON.stringify(override_tags),
+			String(containers),
+			String(tabs),
+			String(headingAnchors),
+			String(codeIds),
+			`r${remark_staged.pre.length}.${remark_staged.post.length}`,
+			`h${rehype_staged.pre.length}.${rehype_staged.post.length}`,
+			cfg.lightName,
+			cfg.darkName,
+			String(cfg.defaultColor),
+			String(cfg.wrapperClass),
+			cfg.transformers.map((t) => t.name ?? '?').join(','),
+			`m${pipeline.meta.length}`,
+			// variant cache_keys are dynamic (a getter that includes the loaded TS version) — read late
+			pipeline.variants.map((g) => g.pref.name + ':' + (g.cache_key ?? '')).join(','),
+			code?.cacheSalt ?? ''
+		].join('\0');
+
 	const mdsvex_opts: MdsvexOptions = {
 		extensions: exts,
 		remarkPlugins: [
+			// `enforce: 'pre'` entries FIRST — content they generate (an expanded type-docs directive's
+			// headings + fences) flows through the built-ins below exactly as if hand-authored.
+			...remark_staged.pre,
 			...(headingIds ? [remarkHeadingId] : []),
 			...collector,
 			// Content-hash code ids run AFTER the heading collector (so headings carry scoped ids) and
@@ -248,20 +374,33 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			...(codeIds ? [remarkCodeIds] : []),
 			// Always collect links into `metadata.links` — the substrate for pharos's link audit.
 			remarkLinks,
-			...(remarkPlugins ?? [])
+			...remark_staged.post
 		] as MdsvexOptions['remarkPlugins'],
 		highlight: {
-			highlighter: create_mdsvex_highlighter(cfg)
+			highlighter: create_mdsvex_highlighter(cfg, pipeline, code?.cacheSalt)
+		},
+		// Use OUR frontmatter parser, not mdsvex's default js-yaml. It's a frontmatter parser first and
+		// a YAML parser second: a brace-wrapped title like `{@const}` / `{#each}` (Svelte docs source)
+		// stays the STRING it looks like instead of parsing to a `{ '@const': null }` object. mdsvex
+		// hands `parse` the text between the `---` fences; a top-level sequence/scalar coerces to `{}`.
+		frontmatter: {
+			type: 'yaml',
+			marker: '-',
+			parse: (fm: string) => {
+				const data = parse_yaml(fm);
+				return data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+			}
 		}
 	};
 
-	const rehype: NonNullable<MdsvexOptions['rehypePlugins']> = [
+	const rehype_chain: NonNullable<MdsvexOptions['rehypePlugins']> = [
+		...rehype_staged.pre,
 		...(override_tags.length ? [[rehypeOverrides, override_tags]] : []),
-		...(rehypePlugins ?? []),
+		...rehype_staged.post,
 		// LAST so the anchor `<a>` it adds isn't swept into the pharos slot by `rehypeOverrides`.
 		...(headingAnchors ? [rehypeHeadingAnchors] : [])
 	] as NonNullable<MdsvexOptions['rehypePlugins']>;
-	if (rehype.length) mdsvex_opts.rehypePlugins = rehype;
+	if (rehype_chain.length) mdsvex_opts.rehypePlugins = rehype_chain;
 	if (layout !== undefined) mdsvex_opts.layout = layout;
 
 	// Construct mdsvex lazily and once. The config above needs no mdsvex; only the instance does.
@@ -279,6 +418,18 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			// content-file check up front so the VitePress `:::` container pass only touches `.svx`/`.md`.
 			const path = input.filename.split('?')[0];
 			const isContent = exts.some((x) => path.endsWith(x));
+
+			// Doc-level cache: content files only. The variant generators' `cache_key` includes lazily
+			// loaded identity (the TS compiler version), so settle their `ready()` BEFORE keying — a key
+			// taken pre-load would give the same doc a second address on the next run.
+			let doc_key: string | null = null;
+			if (isContent) {
+				await Promise.all(pipeline.variants.map((g) => g.ready?.()));
+				const base_name = path.replace(/\\/g, '/').split('/').pop() ?? '';
+				doc_key = docs_store.key([doc_sig(), base_name, input.content]);
+				const hit = doc_cache.get(doc_key);
+				if (hit) return { code: hit.code, map: undefined };
+			}
 			// Tab groups first (they emit `:::`-free `<TabGroup>`/`<Tab>`), then admonition containers.
 			let raw = input.content;
 			let inject_tabs = false;
@@ -293,24 +444,51 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 				}
 				if (containers) raw = transform_containers(raw);
 			}
+			// OWNERSHIP RULE (load-bearing): the island transform runs here for CONTENT files ONLY.
+			// Islands in a `.svelte` belong to the Vite plugin's transform hook, which runs BEFORE
+			// vite-plugin-svelte and therefore before this markup hook. Running the bridge on a
+			// `.svelte` here means transforming the plugin's OUTPUT — the marked import is already
+			// rewritten, so a server island reads as a plain component and its `{#snippet}` children
+			// get branded as phantom portable snippets, whose registration then WIPES the host's real
+			// wrapper registrations (the csr=false + `render:'deferred'` prerender crash).
+			if (!isContent) return undefined;
 			const md = await get_md();
 			const out = await md.markup?.(raw === input.content ? input : { ...input, content: raw });
 			const code = markup_code(out, raw);
 			const islandCode = transform_islands(code, input.filename);
-			// Source injection is for CONTENT files only (`.svx` / `.md`); mdsvex no-ops on non-content.
-			if (islandCode == null && !isContent) return out ?? undefined;
 			const base = islandCode ?? code;
-			if (!isContent) return { code: base, map: undefined };
 			// Content module: carry its raw source, and (when overrides are on) import the slot the
 			// rehype pass rewrote tags into. Both are module-script lines injected once.
 			const lines: string[] = [];
 			const src = source_line(input.filename);
 			if (src) lines.push(src);
+			// REGION path: a pure-static `.md` re-emits as a serialized region — content as data, one
+			// `{@html}` reference in the template, body pre-baked. Only when nothing dynamic touched the
+			// file: no island transform, no tab injection, no slot overrides; the emitter itself vetoes
+			// scripts / component tags / svelte expressions and falls back to the component path.
+			if (region_mode && path.endsWith('.md') && islandCode == null && !inject_tabs && !override_tags.length) {
+				const emitted = try_region_emit(base, lines);
+				if (emitted) {
+					// Store BOTH artifacts: the compiled module (next compile is a read), and the
+					// serialized region itself — the address future layers (incremental builds, edge,
+					// on-demand baking) fetch without ever seeing a module.
+					if (doc_key) {
+						doc_cache.set(doc_key, { code: emitted.code });
+						docs_store.set(doc_key, { html: emitted.html });
+					}
+					return { code: emitted.code, map: undefined };
+				}
+			}
 			if (override_tags.length) lines.push(`import ${SLOT_TAG} from 'ogygia/pharos/slot';`);
 			// `:::` tab syntax with no author import → inject the pair (zero-import authoring). Plain barrel
 			// import: TabGroup is a plain OVERRIDABLE wrapper; its internal island carries the `wake`.
 			if (inject_tabs) lines.push(`import { TabGroup, Tab } from 'ogygia/pharos';`);
-			return { code: inject_module(base, lines), map: undefined };
+			const compiled = inject_module(base, lines);
+			// Cache ONLY island-free outputs: transforming an island REGISTERS it (a build-time side
+			// effect the scanner needs) — a cached hit would skip that, so island-carrying files pay
+			// their compile every time. Everything a hit returns is side-effect-free by construction.
+			if (doc_key && islandCode == null) doc_cache.set(doc_key, { code: compiled });
+			return { code: compiled, map: undefined };
 		}
 	};
 
@@ -326,3 +504,4 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 }
 
 ogygiaPreprocess.extensions = extensions;
+

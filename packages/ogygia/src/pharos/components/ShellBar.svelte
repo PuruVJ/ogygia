@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * Calypso's mobile chrome — ONE island (open state can't bind across island boundaries, and
+	 * Shell's mobile chrome — ONE island (open state can't bind across island boundaries, and
 	 * `site.nav()` can't run client-side, so the nav arrives as serialized data). A bottom bar with
 	 * search / theme / menu, opening a `Sheet` that holds: the search brick, a segmented
 	 * Contents ↔ On-this-page toggle. Headings are read from the rendered page's DOM (the shell has no

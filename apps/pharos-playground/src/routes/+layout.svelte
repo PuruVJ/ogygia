@@ -1,14 +1,14 @@
 <script lang="ts">
-	// Dogfood the Calypso shell. Header extras are a SNIPPET — it renders in the desktop header and,
+	// Dogfood the Shell. Header extras are a SNIPPET — it renders in the desktop header and,
 	// because the compiler makes a forwarded snippet PORTABLE, crosses into the mobile island's sheet
 	// footer and comes alive there.
-	import Calypso from 'ogygia/pharos/calypso';
-	// Styling is OPT-IN: Calypso ships no CSS, so we import the pharos look explicitly.
-	// FORM + LANGUAGE compose: calypso.css is the building blocks (layout only); the LANGUAGE is one
+	import Shell from 'ogygia/pharos/shell';
+	// Styling is OPT-IN: the Shell ships no CSS, so we import the pharos look explicitly.
+	// FORM + LANGUAGE compose: shell.css is the building blocks (layout only); the LANGUAGE is one
 	// of nine zen-garden theme files, loaded via a swappable <link> (see <svelte:head>) so the
 	// floating ThemePicker can switch skins at runtime. Thalassa is the default.
-	// (The STOCK pair still works too: `import 'ogygia/pharos/theme.css'` BEFORE calypso.css.)
-	import 'ogygia/pharos/calypso.css'; // the FORM: header + sidebar + content grid + mobile chrome
+	// (The STOCK pair still works too: `import 'ogygia/pharos/theme.css'` BEFORE shell.css.)
+	import 'ogygia/pharos/shell.css'; // the FORM: header + sidebar + content grid + mobile chrome
 	import stock from 'ogygia/pharos/theme.css?url'; // the stock default language
 	import thalassa from 'ogygia/pharos/themes/thalassa.css?url';
 	import alexandria from 'ogygia/pharos/themes/alexandria.css?url';
@@ -32,23 +32,23 @@
 	<link id="pg-theme" rel="stylesheet" href={thalassa} />
 </svelte:head>
 
-<Calypso {site} base="" title="pharos playground">
+<Shell {site} base="" title="pharos playground">
 	{#snippet actions()}
 		<a class="pg-gh" href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer"
 			>GitHub ↗</a
 		>
 	{/snippet}
 	{@render children()}
-</Calypso>
+</Shell>
 <ThemePicker {themes} />
 
 <style>
-	/* Stock-theme guard: it sets `display` on the mobile chrome; when swapped in AFTER calypso.css
+	/* Stock-theme guard: it sets `display` on the mobile chrome; when swapped in AFTER shell.css
 	   via the theme link, re-assert the form's desktop visibility (unlayered wins over @layer). */
 	@media (min-width: 901px) {
-		:global(.ph-calypso .ph-bottombar),
-		:global(.ph-calypso .ph-sheet),
-		:global(.ph-calypso .ph-sheet-backdrop) {
+		:global(.ph-shell .ph-bottombar),
+		:global(.ph-shell .ph-sheet),
+		:global(.ph-shell .ph-sheet-backdrop) {
 			display: none;
 		}
 	}

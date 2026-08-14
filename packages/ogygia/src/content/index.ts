@@ -92,7 +92,7 @@ export type SchemaLike = {
 };
 
 // ── the source axis ──
-export { glob, defineSource, toRawSource, mapRaw } from './source.js';
+export { glob, defineSource, toRawSource, mapRaw, enrich } from './source.js';
 export type {
 	Source,
 	SourceRef,
@@ -111,8 +111,10 @@ export { markdown, json } from './formats.js';
 export type { MarkdownMeta } from './formats.js';
 // `folder()` — the filesystem-convention preset (one glob of `{+doc.svx,+meta.json}` → a full source).
 export { folder } from './folder.js';
+export type { FolderOptions } from './folder.js';
+
 // The filename convention it runs on (moved here from pharos — ordering is generic corpus knowledge).
-export { numbered, title_case, strip_order_prefix, order_of } from './convention.js';
+export { numbered, dated, date_of, title_case, strip_order_prefix, order_of } from './convention.js';
 export type { Convention, NumberedOptions, MetaDecoration } from './convention.js';
 // `blocks()` is the content source; `blocks.resolve(tree, registry)` is the no-collection recipe
 // helper (`type → region`, server-side). Both live on the one `blocks` export.
@@ -128,3 +130,26 @@ export { parseSchema } from './schema.js';
 // Remote types live in the server-only `ogygia/content/server` module; re-export TYPES here
 // (type-only, fully erased — never pulls `$app/server` into a browser graph).
 export type { ContentMode, GetRemote, ListRemote, WithRemotes } from './server.js';
+
+// `import.meta.ogygia.loader.git()` — a build-time construct (like `import.meta.glob`), not a runtime
+// import. Any module that imports from `ogygia/content` picks up this global, so a `server/*.ts`
+// collection can call it directly. The ogygia Vite plugin rewrites the call to
+// `folder(import.meta.glob('<materialized checkout>/…'), opts)`; here it's only the type.
+declare global {
+	interface ImportMeta {
+		readonly ogygia: {
+			readonly loader: {
+				/**
+				 * Source a content collection straight from another git repository — no committed copy,
+				 * no sync script. `spec` is a LITERAL string `owner/repo[@ref][:path]` (e.g.
+				 * `'sveltejs/svelte@main:documentation/docs'`); `opts` is forwarded verbatim to
+				 * {@link folder}. The plugin materializes a shallow checkout at build time.
+				 */
+				git<Meta = Record<string, never>>(
+					spec: string,
+					opts?: import('./folder.js').FolderOptions<Meta>
+				): import('./source.js').Source<Meta>;
+			};
+		};
+	}
+}

@@ -1613,12 +1613,21 @@ export function transformHost(source, id, ctx) {
 	const walk_portable = (nodes) => {
 		for (const node of nodes ?? []) {
 			if (node.type === 'Component') {
-				const mark = marked_components.get(String(node.name || '').split('.')[0]);
+				const base_name = String(node.name || '').split('.')[0];
+				const mark = marked_components.get(base_name);
 				const island_site = !!mark && !['lake', 'server', 'held'].includes(mark.strategy);
+				// GENERATED-OUTPUT GUARD (load-bearing): a component imported from one of ogygia's own
+				// virtuals (the client-binding stub, a wrapper/island/region module) means this source
+				// is ALREADY-TRANSFORMED output — its mark was consumed, so it reads as "plain" here.
+				// Branding its snippets would mint a PHANTOM portable island whose registration wipes
+				// the host's real wrapper entries (the csr=false server-island prerender crash). A
+				// re-transform of generated output must never widen the island set.
+				const import_spec = String(imports.get(base_name)?.node?.source?.value ?? '');
+				const from_generated = import_spec.startsWith('virtual:ogygia/');
 				for (const child of node.fragment?.nodes ?? []) {
 					if (child.type !== 'SnippetBlock' || !child.expression?.name) continue;
 					const zero_arg = (child.parameters?.length ?? 0) === 0;
-					if (island_site || (!mark && zero_arg)) {
+					if (island_site || (!mark && zero_arg && !from_generated)) {
 						portable_candidates.push({ comp: node, snip: child });
 					}
 				}
@@ -1748,7 +1757,15 @@ export function transformHost(source, id, ctx) {
 		const links = [...new Set(portable_preloads)]
 			.map((u) => `<link rel="modulepreload" href=${JSON.stringify(u)} />`)
 			.join('');
-		s.append(`\n<svelte:head>${links}</svelte:head>\n`);
+		// A component may have ONE `<svelte:head>` — if the host already has one, MERGE the links
+		// into it (appending a second head is a compile error the dev server never surfaces, since
+		// this branch only runs for builds).
+		const existing_head = /<svelte:head>/.exec(source);
+		if (existing_head) {
+			s.appendLeft(existing_head.index + '<svelte:head>'.length, links);
+		} else {
+			s.append(`\n<svelte:head>${links}</svelte:head>\n`);
+		}
 	}
 
 	if (portable_emitted) {

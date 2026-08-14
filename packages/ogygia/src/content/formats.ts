@@ -8,7 +8,7 @@
  */
 import type { Component } from 'svelte';
 import type { Heading, LinkRef } from './index.js';
-import { region } from '../region.js';
+import { prebaked_region, region } from '../region.js';
 import { defineSource, toRawSource, type Format, type GlobMap, type RawSource, type Source } from './source.js';
 
 type Input<V> = GlobMap | RawSource<V>;
@@ -52,10 +52,20 @@ const markdown_format: Format<unknown, MarkdownMeta> = (resolved, id) => {
 	// The preprocessor injects a lazy `__ogygia_source` self-import (`() => import(self + '?raw')`)
 	// when it compiles a `.svx` / `.md`. Surface it as the entry's `source`; absent in plain apps.
 	const source = typeof mod.__ogygia_source === 'function' ? (mod.__ogygia_source as () => Promise<string>) : undefined;
+	// A SERIALIZED-REGION module (the region emitter): the document HTML was baked at compile time and
+	// rides `__ogygia_region`. The body is a pre-baked inline region — renders like any inline region
+	// (the default export is the thin `{@html}` shell), but awaiting it is a no-op: no svelte/server
+	// render on the wire path, the ticket carries this HTML directly.
+	const baked = (mod.__ogygia_region as { html?: string } | undefined)?.html;
 	return {
 		data,
 		...(mod.default !== undefined
-			? { body: region(mod.default as Component<Record<string, never>>, {}) }
+			? {
+					body:
+						typeof baked === 'string'
+							? prebaked_region(mod.default as Component<Record<string, never>>, baked)
+							: region(mod.default as Component<Record<string, never>>, {})
+				}
 			: {}),
 		...(source ? { source } : {}),
 		meta: { headings: Array.isArray(headings) ? headings : [], links: Array.isArray(links) ? links : [] }

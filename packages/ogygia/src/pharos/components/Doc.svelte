@@ -23,7 +23,9 @@
 		toc = true,
 		pager = true,
 		suggested = true,
-		keepReading
+		keepReading,
+		eyebrow,
+		footer
 	}: {
 		view: DocView;
 		crumbs?: boolean;
@@ -33,6 +35,11 @@
 		/** Refs for the "keep reading" cards. Defaults to the trail's policy-selected `suggested`;
 		 *  pass `view.trail.related` to show curated links only (when a pager already covers order). */
 		keepReading?: NavRef[];
+		/** Override the eyebrow text (defaults to the section label) — e.g. "SVELTE • RUNES" on a
+		 *  dimensioned site where the coordinate belongs in it. */
+		eyebrow?: string;
+		/** Rendered between the body and the pager — page-meta chrome ("Edit this page", llms.txt). */
+		footer?: import('svelte').Snippet;
 	} = $props();
 
 	// The user's schema owns `data`; the default chrome reads the two conventional display fields.
@@ -58,7 +65,7 @@
 				{#each view.crumbs as c (c.label)}<span class="ph-crumb">{c.label}</span>{/each}
 			</nav>
 		{/if}
-		{#if view.section}<p class="ph-eyebrow">{view.section}</p>{/if}
+		{#if eyebrow ?? view.section}<p class="ph-eyebrow">{eyebrow ?? view.section}</p>{/if}
 		<h1 class="ph-title">{title}</h1>
 		{#if data.summary}<p class="ph-summary">{data.summary}</p>{/if}
 
@@ -73,6 +80,8 @@
 			<div class="ph-body"><Region of={view.entry.body} /></div>
 			<CodeChrome />
 		{/if}
+
+		{#if footer}<div class="ph-doc-footer">{@render footer()}</div>{/if}
 
 		{#if suggested && view.trail.suggested.length}
 			<nav class="ph-suggested" aria-label="Keep reading">
@@ -92,7 +101,9 @@
 
 		{#if pager}<Pager trail={view.trail} />{/if}
 	</article>
-	{#if toc && view.headings.length}
-		<aside class="ph-aside" aria-label="On this page"><OnThisPage headings={view.headings} /></aside>
+	{#if toc}
+		<!-- Always present (not gated on headings): the outline starts with the page TITLE, so even a
+		     heading-less page keeps the rail — consistent chrome page to page (svelte.dev's model). -->
+		<aside class="ph-aside" aria-label="On this page"><OnThisPage {title} headings={view.headings} /></aside>
 	{/if}
 </div>

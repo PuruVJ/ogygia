@@ -9,6 +9,10 @@ const TRAILING_LF = /\n$/;
  * Server/preprocess only — never import from client islands.
  */
 
+import type { ShikiTransformer } from 'shiki';
+import { render_fence, default_pipeline, type CodePipeline } from './code-render.js';
+import { fence_key, fence_cache_get, fence_cache_set } from './fence-cache.js';
+
 /** A Shiki bundled theme name, or a theme object (e.g. `ThemeRegistrationResolved`). */
 export type MarkdownThemeInput = string | { name?: string };
 
@@ -34,6 +38,13 @@ export type MarkdownShikiOptions = {
 	 * Shiki `defaultColor` (default `'light-dark()'` so `color-scheme` picks tokens).
 	 */
 	defaultColor?: string | false;
+	/**
+	 * Shiki TRANSFORMERS — the ecosystem's highlight-decoration contract (`@shikijs/transformers`
+	 * for diff/focus/highlight, `@shikijs/twoslash` for typed hovers, or your own). Applied to every
+	 * fence at `codeToHtml`. Core ships none; svelte.dev's inline `+++`/`---` markers are one custom
+	 * transformer value.
+	 */
+	transformers?: ShikiTransformer[];
 };
 
 // A generous docs-friendly default. Highlighting runs at BUILD time (SSR) producing static HTML — the
@@ -105,6 +116,7 @@ export type ResolvedShiki = {
 	langs: string[];
 	wrapperClass: string | false;
 	defaultColor: string | false;
+	transformers: ShikiTransformer[];
 };
 
 let active: ResolvedShiki | null = null;
@@ -124,7 +136,8 @@ export function normalize_shiki(options: MarkdownShikiOptions = {}): ResolvedShi
 		darkName,
 		langs: [...(options.langs ?? DEFAULT_LANGS)],
 		wrapperClass: options.wrapperClass === undefined ? DEFAULT_WRAPPER : options.wrapperClass,
-		defaultColor: options.defaultColor === undefined ? DEFAULT_COLOR : options.defaultColor
+		defaultColor: options.defaultColor === undefined ? DEFAULT_COLOR : options.defaultColor,
+		transformers: options.transformers ?? []
 	};
 }
 
@@ -167,6 +180,12 @@ export function escape_svelte(html: string) {
 	return html.replace(ESCAPE_BACKSLASH, '\\\\').replace(ESCAPE_BACKTICK, '\\`').replace(ESCAPE_INTERPOLATION, '\\${');
 }
 
+/** Wrap plain fence HTML in the svelte-embeddable form the COMPONENT path needs. The region emitter
+ *  reverses this exactly (see `region-emit.ts` `unescape_svelte`) — the pair is a lossless codec. */
+export function fence_embed(plain_html: string) {
+	return `{@html \`${escape_svelte(plain_html)}\`}`;
+}
+
 /**
  * Highlight a code string. Uses the config from the last {@link configure_shiki} /
  * {@link markdown} call, or pass options explicitly.
@@ -174,7 +193,10 @@ export function escape_svelte(html: string) {
 export async function highlight(
 	code: string,
 	lang: string = 'typescript',
-	options?: MarkdownShikiOptions
+	options?: MarkdownShikiOptions,
+	/** Raw fence infostring — passed to Shiki as `meta.__raw` so meta-reading transformers
+	 *  (`transformerMetaHighlight` for `{1-3,5}`, word highlight, `// [!code …]`) can read it. */
+	rawMeta?: string
 ) {
 	const cfg = options ? normalize_shiki(options) : active;
 	if (!cfg) {
@@ -183,13 +205,20 @@ export async function highlight(
 		);
 	}
 	const highlighter = await get_highlighter(cfg);
+	// An unknown fence language (a `tree` file-listing, a bespoke DSL) must NOT throw — one exotic
+	// fence in a large imported corpus would otherwise fail the whole build. Fall back to plain text.
+	const loaded = highlighter.getLoadedLanguages();
+	const safe_lang =
+		lang === 'text' || lang === 'plaintext' || lang === 'txt' || loaded.includes(lang) ? lang : 'text';
 	return highlighter.codeToHtml(code.replace(LEADING_LF, '').replace(TRAILING_LF, ''), {
-		lang,
+		lang: safe_lang,
 		themes: {
 			light: cfg.lightName,
 			dark: cfg.darkName
 		},
-		defaultColor: cfg.defaultColor === false ? undefined : cfg.defaultColor
+		defaultColor: cfg.defaultColor === false ? undefined : cfg.defaultColor,
+		...(cfg.transformers.length ? { transformers: cfg.transformers } : {}),
+		...(rawMeta ? { meta: { __raw: rawMeta } } : {})
 	});
 }
 
@@ -203,27 +232,64 @@ function pluck_code_id(meta: string | undefined | null): string | null {
 }
 
 /** mdsvex `highlight.highlighter` — fences stay normal ``` in `.svx` / `.md`. mdsvex threads the fence
- *  `meta` in as the third argument, which carries the `remarkCodeIds` id token. */
-export function create_mdsvex_highlighter(cfg: ResolvedShiki) {
+ *  `meta` in as the third argument, which carries the `remarkCodeIds` id token. Runs the fence pipeline
+ *  (meta parsers → variants → highlight) when a `pipeline` is given; else the plain single-variant path.
+ *  Output is memoized in the content-addressed fence cache (`node_modules/.ogygia/fences`) — Shiki +
+ *  variant generation dominate a cold corpus compile and are pure functions of the inputs hashed below. */
+export function create_mdsvex_highlighter(cfg: ResolvedShiki, pipeline?: CodePipeline, cache_salt = '') {
+	const pipe = pipeline ?? default_pipeline();
+	// Everything that shapes the output, EXCEPT the per-fence (lang, meta, code) added per call.
+	// Meta parsers are counted (not identified — they're plain functions); variants contribute their
+	// preference name + `cache_key`; transformers their `name`s. A custom stage whose BEHAVIOR changes
+	// while its name stays put is invisible here — bump `code.cacheSalt` (or version the name:
+	// `my-markers@2`) while iterating on one.
+	const config_key = [
+		cache_salt,
+		theme_key(cfg),
+		String(cfg.defaultColor),
+		String(cfg.wrapperClass),
+		cfg.transformers.map((t) => t.name ?? '?').join(','),
+		`m${pipe.meta.length}`,
+		pipe.variants.map((g) => g.pref.name + ':' + (g.cache_key ?? '')).join(',')
+	];
 	return async function content_mdsvex_highlighter(
 		code: string,
 		lang: string | undefined,
 		meta?: string | null
 	) {
-		const html = await highlight(code, lang || 'text', {
-			themes: cfg.themes,
-			langs: cfg.langs,
-			wrapperClass: false,
-			defaultColor: cfg.defaultColor
-		});
-		// Build the extra `<pre>` attributes: a language badge (pharos shows `data-lang` top-right) and,
-		// when `remarkCodeIds` supplied one, the stable permalink id. Both stamped in a single splice.
+		const key = fence_key([...config_key, lang ?? '', meta ?? '', code]);
+		// The cache stores SERIALIZED REGIONS (`{ html }` JSON) — content as data, the framework's one
+		// currency. The `{@html}` wrap is an embedding concern applied on the way OUT (and reversed
+		// wholesale by the region emitter).
+		const cached = fence_cache_get(key);
+		if (cached != null) return fence_embed(cached.html);
+
+		// Strip our internal `ogygia-code-id=…` token from the meta before handing the REST to Shiki as
+		// `__raw`, so meta transformers (`{1-3,5}` line highlight, word highlight, `// [!code …]`) read
+		// the author's infostring without our bookkeeping leaking in.
+		const shiki_meta = (meta ?? '').replace(/\s*ogygia-code-id=\S+/, '').trim();
+		const hl = (source: string, l: string, rm: string) =>
+			highlight(source, l || 'text', { themes: cfg.themes, langs: cfg.langs, wrapperClass: false, defaultColor: cfg.defaultColor, transformers: cfg.transformers }, rm || undefined);
+
+		const { html, count, file } = await render_fence(code, lang || 'text', shiki_meta, pipe, hl);
+
 		const id = pluck_code_id(meta);
-		let attrs = '';
-		if (lang && lang !== 'text') attrs += `data-lang="${lang}" `;
-		if (id) attrs += `id="${id}" `;
-		const tagged = attrs ? html.replace('<pre ', `<pre ${attrs}`) : html;
-		const wrapped = wrap_html(tagged, cfg.wrapperClass);
-		return `{@html \`${escape_svelte(wrapped)}\`}`;
+		let plain: string;
+		if (count > 1) {
+			// Multi-variant container: stamp the permalink id on the outer `<div class="og-code">`.
+			const tagged = id ? html.replace('<div class="og-code"', `<div id="${id}" class="og-code"`) : html;
+			plain = wrap_html(tagged, cfg.wrapperClass);
+		} else {
+			// Single variant: stamp `data-lang` + id + the pipeline's `file` (chrome draws the filename
+			// bar from `attr(data-file)`) on the `<pre>` — a fence with none stays byte-identical.
+			let attrs = '';
+			if (lang && lang !== 'text') attrs += `data-lang="${lang}" `;
+			if (id) attrs += `id="${id}" `;
+			if (file) attrs += `data-file="${file.replace(/"/g, '&quot;')}" `;
+			const tagged = attrs ? html.replace('<pre ', `<pre ${attrs}`) : html;
+			plain = wrap_html(tagged, cfg.wrapperClass);
+		}
+		fence_cache_set(key, { html: plain });
+		return fence_embed(plain);
 	};
 }

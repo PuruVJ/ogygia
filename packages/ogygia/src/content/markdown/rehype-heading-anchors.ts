@@ -35,7 +35,11 @@ export function rehypeHeadingAnchors() {
 					typeof child.properties?.id === 'string'
 				) {
 					const id = child.properties.id as string;
-					const label = text_of(child).trim();
+					// The label rides an `aria-label` attribute. Heading text can hold a literal `"` (e.g. a
+						// `` `<script lang="ts">` `` code span) — mdsvex's serializer escapes `<`/`>` but NOT quotes,
+						// so a raw `"` would close the attribute and break compilation. Fold straight double-quotes
+						// to typographic ones: attribute-safe, still readable to a screen reader.
+						const label = text_of(child).trim().replace(/"/g, '”');
 					// mark the heading so CSS can anchor the absolutely-positioned link
 					const cls = child.properties.className;
 					child.properties.className = Array.isArray(cls)

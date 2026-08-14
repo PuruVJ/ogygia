@@ -98,6 +98,9 @@ export default defineConfig([
 				'mdsvex',
 				'shiki',
 				'vite',
+				// lazy optional peer of js_to_ts() — bundling would freeze a store path (it once
+				// resolved to typescript/lib/version.js and shipped a ts with no ScriptTarget)
+				'typescript',
 				// consumer-resolved specifiers
 				/^node:/,
 				/^virtual:/,

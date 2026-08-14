@@ -130,8 +130,8 @@ describe('pharos init — svelte.config project', () => {
 		expect(vc).toMatch(/ogygia\(\{\s*content:\s*\{\s*markdown:/);
 		expect(vc).toMatch(/sveltekit\(\)/);
 
-		// the layout mounts Calypso at the root base
-		expect(read(dir, 'src/routes/+layout.svelte')).toMatch(/<Calypso \{site\} base="" title="Docs">/);
+		// the layout mounts the Shell at the root base
+		expect(read(dir, 'src/routes/+layout.svelte')).toMatch(/<Shell \{site\} base="" title="Docs">/);
 		// hooks wired
 		expect(read(dir, 'src/hooks.server.ts')).toContain('ogygia.handle()');
 	});
@@ -169,18 +169,18 @@ describe('pharos init — existing layout', () => {
 		const dir = svelteConfigProject({ 'src/routes/+layout.svelte': CUSTOM });
 		const { status } = run(dir, ['init', '--force', '--no-install']);
 		expect(status).toBe(0);
-		expect(read(dir, 'src/routes/+layout.svelte')).toContain('<Calypso {site}');
+		expect(read(dir, 'src/routes/+layout.svelte')).toContain('<Shell {site}');
 	});
 
 	it('recognises an existing pharos shell as redeemable and keeps it (no --force needed)', () => {
 		const shell = [
 			'<script lang="ts">',
-			"\timport { Calypso } from 'ogygia/pharos';",
+			"\timport Shell from 'ogygia/pharos/shell';",
 			"\timport { site } from '$lib/docs';",
 			'\tlet { children } = $props();',
 			'</script>',
 			'',
-			'<Calypso {site} base="" title="My Edited Title">{@render children()}</Calypso>'
+			'<Shell {site} base="" title="My Edited Title">{@render children()}</Shell>'
 		].join('\n');
 		const dir = svelteConfigProject({ 'src/routes/+layout.svelte': shell });
 		const { status, out } = run(dir, ['init', '-y', '--no-install']);

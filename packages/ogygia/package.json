@@ -82,11 +82,6 @@
 		},
 		"./pharos/theme.css": "./src/pharos/theme.css",
 		"./pharos/themes/*": "./src/pharos/themes/*",
-		"./pharos/calypso.css": "./src/pharos/calypso.css",
-		"./pharos/calypso": {
-			"svelte": "./src/pharos/components/Calypso.svelte",
-			"default": "./src/pharos/components/Calypso.svelte"
-		},
 		"./pharos/slot": {
 			"types": "./dist/pharos/components/PharosSlot.svelte.d.ts",
 			"svelte": "./src/pharos/components/PharosSlot.svelte",
@@ -98,6 +93,12 @@
 		},
 		"./types": {
 			"types": "./ambient.d.ts"
+		},
+		"./pharos/shell.css": "./src/pharos/shell.css",
+		"./pharos/shell": {
+			"types": "./dist/pharos/components/Shell.svelte.d.ts",
+			"svelte": "./src/pharos/components/Shell.svelte",
+			"default": "./src/pharos/components/Shell.svelte"
 		}
 	},
 	"bin": {
@@ -115,7 +116,8 @@
 		"test": "vitest run",
 		"lint": "oxlint -c .oxlintrc.json src",
 		"check": "tsc --noEmit && vitest run && pnpm run lint",
-		"prepublishOnly": "pnpm run build"
+		"prepublishOnly": "pnpm run build && pnpm run verify:package",
+		"verify:package": "node scripts/verify-package.mjs"
 	},
 	"dependencies": {
 		"devalue": "^5.9.0",
@@ -220,12 +222,6 @@
 			},
 			"./pharos/theme.css": "./dist/pharos/theme.css",
 			"./pharos/themes/*": "./dist/pharos/themes/*",
-			"./pharos/calypso.css": "./dist/pharos/calypso.css",
-			"./pharos/calypso": {
-				"types": "./dist/pharos/components/Calypso.svelte.d.ts",
-				"svelte": "./dist/pharos/components/Calypso.svelte",
-				"default": "./dist/pharos/components/Calypso.svelte"
-			},
 			"./pharos/slot": {
 				"types": "./dist/pharos/components/PharosSlot.svelte.d.ts",
 				"svelte": "./dist/pharos/components/PharosSlot.svelte",
@@ -246,6 +242,12 @@
 			},
 			"./types": {
 				"types": "./ambient.d.ts"
+			},
+			"./pharos/shell.css": "./dist/pharos/shell.css",
+			"./pharos/shell": {
+				"types": "./dist/pharos/components/Shell.svelte.d.ts",
+				"svelte": "./dist/pharos/components/Shell.svelte",
+				"default": "./dist/pharos/components/Shell.svelte"
 			}
 		}
 	}

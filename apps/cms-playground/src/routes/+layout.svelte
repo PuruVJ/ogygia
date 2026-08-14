@@ -1,12 +1,12 @@
 <script lang="ts">
-	// The same Calypso shell the filesystem playground dogfoods — pointed at a CMS-backed site.
-	import Calypso from 'ogygia/pharos/calypso';
+	// The same Shell the filesystem playground dogfoods — pointed at a CMS-backed site.
+	import Shell from 'ogygia/pharos/shell';
 	import 'ogygia/pharos/theme.css';
-	import 'ogygia/pharos/calypso.css';
+	import 'ogygia/pharos/shell.css';
 	import { site } from '$lib/cms';
 	let { children } = $props();
 </script>
 
-<Calypso {site} base="" title="cms playground">
+<Shell {site} base="" title="cms playground">
 	{@render children()}
-</Calypso>
+</Shell>

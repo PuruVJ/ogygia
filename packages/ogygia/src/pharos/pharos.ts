@@ -14,24 +14,14 @@
  */
 import { error, redirect } from '@sveltejs/kit';
 import type { Component } from 'svelte';
-import type { Entry, LinkRef } from '../content/index.js';
-import { build_llms, build_sitemap, strip_frontmatter } from './emit.js';
-import { href_of, outline, type Collection, type Outline, type OutlineSpec } from './outline.js';
+import type { Entry } from '../content/index.js';
+import { format_findings, run_page_checks, run_site_checks, type Check, type Finding } from './checks.js';
+import { build_llms, build_rss, build_sitemap, strip_frontmatter } from './emit.js';
+import type { RssItem } from './emit.js';
+import { href_of, outline, type Collection, type Outline, type OutlineSpec, type TrailScope } from './outline.js';
 import { is_dimensioned, type Switcher } from './dimensions.js';
 import { build_docs, create_search, orama_engine, type SearchBrain, type SearchEngine } from './search.js';
 import type { BaseOption, DocView, Heading, NavRef, NavTree, PrevNext } from './types.js';
-
-/** Link-audit tuning. `audit: true` = all defaults. */
-export type AuditOptions = {
-	/** Validate `#fragments` against the target page's collected headings (default `true`).
-	 *  Turn off if your pages link to hand-placed ids the h2–h4 collector can't see. */
-	anchors?: boolean;
-	/** Policy for links that resolve through a declared redirect: they WORK (308), but are stale.
-	 *  `'warn'` (default) logs; `'error'` fails like a broken link; `'ok'` stays silent. */
-	redirected?: 'error' | 'warn' | 'ok';
-	/** Skip hrefs the audit should not judge (e.g. generated or intentionally external-ish paths). */
-	ignore?: (href: string) => boolean;
-};
 
 /** Site-level facts, surfaced as `site.data` and used as the default for every emission. */
 export type SiteData = {
@@ -61,12 +51,16 @@ export type PharosOptions = {
 	context?: (event: { url: URL; request?: Request; cookies?: unknown }) => ReadContext;
 	/** How "keep reading" is chosen. `'graph'` = content relations then order; default `'order'`. */
 	prevNext?: PrevNext;
+	/** Reading-order scope for prev/next: `'weave'` (whole corpus, default) or `'group'` (stop at the
+	 *  top-level section boundary, so a multi-topic site never links across topics). */
+	trail?: TrailScope;
 	/**
-	 * Validate each page's markdown links (`meta.links`) against the site's address space inside
-	 * `load`. A broken link THROWS: the build fails during prerender, and dev errors on page open —
-	 * the same check in every render mode, which Kit's prerender-only crawler can't give you.
+	 * Content CHECKS — corpus invariants as pluggable values (`links()`, and your own). Each runs
+	 * per-page in `load` (an ERROR finding throws, in every render mode) AND whole-corpus via
+	 * `site.check()` (plain data, never throws). `[links()]` reproduces the old `audit: true`.
+	 * Structural invariants (orphans, slug collisions, `NN-`) stay always-on build errors, not checks.
 	 */
-	audit?: boolean | AuditOptions;
+	checks?: Check[];
 	/**
 	 * Override markdown element rendering with components — real VALUES, in app code (no import
 	 * paths). Reaches the compiled `PharosSlot` via context. Built-in default: `a → Link`.
@@ -78,19 +72,6 @@ export type PharosOptions = {
 	redirects?: (entry: import('../content/index.js').ContentRef) => string[] | string | undefined;
 };
 
-/** One broken link: the page that holds it, the href, and why it failed. */
-export type AuditFinding = {
-	page: string;
-	href: string;
-	text?: string;
-	/** Approximate (relative to post-frontmatter source). */
-	line?: number;
-	reason: 'missing-page' | 'missing-anchor';
-};
-/** A link that works but goes through declared redirect history — update it when convenient. */
-export type AuditRedirected = { page: string; href: string; canonical: string; line?: number };
-export type AuditReport = { broken: AuditFinding[]; redirected: AuditRedirected[] };
-
 /** The minimal SvelteKit `load` event shape the guard reads (kept narrow so it stays isomorphic). */
 type LoadLike = { params: Record<string, string | undefined>; url: URL | { pathname: string } };
 
@@ -101,6 +82,11 @@ export type EmitHandler = (event: EmitEvent) => Promise<Response>;
 /** Common emission options. `origin` overrides the request origin (needed for prerendered output). */
 export type EmitOptions = { base?: string; origin?: string };
 export type LlmsEmitOptions = EmitOptions & { title?: string; description?: string };
+export type RssEmitOptions = EmitOptions & {
+	title: string;
+	description?: string;
+	items: () => Promise<RssItem[]> | RssItem[];
+};
 
 /** The raw-markdown emission: a GET handler + its prerender entries, for a `[...slug].md/+server.ts`. */
 export type RawEmit = {
@@ -130,9 +116,9 @@ export interface Site {
 	/** Everything one page position needs, or `null` for an unknown slug. Call in the page component.
 	 *  Pass `context` (e.g. `{ preview: true }`) to see the same projection the load guard used. */
 	doc: <Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(slug: string, opts?: BaseOption & { context?: ReadContext }) => Promise<DocView<Data, Meta> | null>;
-	/** Whole-site link audit as plain data (never throws) — for vitest/CI, and for dynamic sites
-	 *  where the prerender crawler never runs. */
-	audit: (opts?: { base?: string; ignore?: (href: string) => boolean }) => Promise<AuditReport>;
+	/** Run all `checks` over the whole corpus as plain data (never throws) — for vitest/CI, and for
+	 *  dynamic sites where the prerender crawler never runs. */
+	check: (opts?: { base?: string; context?: ReadContext }) => Promise<Finding[]>;
 	/** Full-text search brain — lazy in-memory index over the collections' section documents. Query
 	 *  from a server load / remote; scope with `{ in: [collection] }`. Server-side (or the worker over
 	 *  the emitted index); do not call over a glob collection in the browser. */
@@ -147,6 +133,9 @@ export interface Site {
 		raw: (opts?: { frontmatter?: 'keep' | 'strip' }) => RawEmit;
 		/** Prerendered `search.json` — the section documents the client worker indexes with Orama. */
 		search: (opts?: EmitOptions) => EmitHandler;
+		/** RSS 2.0 over dated items (the blog genre's feed). `items` typically maps a collection's
+		 *  refs; hrefs are root-relative and absolutized against the origin at emit time. */
+		rss: (opts: RssEmitOptions) => EmitHandler;
 	};
 }
 
@@ -160,13 +149,9 @@ function is_outline(x: unknown): x is Outline {
 	);
 }
 
-type AuditCfg =
-	| (Required<Pick<AuditOptions, 'anchors' | 'redirected'>> & Pick<AuditOptions, 'ignore'>)
-	| null;
-
 /**
- * The site brains as a class — state (outline, prevNext, audit policy, search) as fields, each brain
- * a method. `pharos()` mints one; nothing here is global or registered.
+ * The site brains as a class — state (outline, prevNext, checks, search) as fields, each brain a
+ * method. `pharos()` mints one; nothing here is global or registered.
  */
 class PharosSite implements Site {
 	readonly outline: Outline;
@@ -174,11 +159,10 @@ class PharosSite implements Site {
 	readonly components: Record<string, Component<Record<string, unknown>>>;
 	readonly search: SearchBrain;
 	readonly #prevNext: PrevNext;
-	readonly #audit: AuditCfg;
+	readonly #trail: TrailScope;
+	readonly #checks: Check[];
 	readonly #base: string;
 	readonly #context?: PharosOptions['context'];
-	/** Collections already warned about (audit on, but the format collects no `meta.links`). Warn once. */
-	readonly #auditWarned = new WeakSet<object>();
 
 	constructor(opts: PharosOptions) {
 		const source = opts.outline;
@@ -186,13 +170,8 @@ class PharosSite implements Site {
 			? source
 			: outline(source as OutlineSpec, opts.redirects ? { redirects: opts.redirects } : {});
 		this.#prevNext = opts.prevNext ?? 'order';
-		this.#audit = opts.audit
-			? {
-					anchors: (opts.audit === true ? undefined : opts.audit.anchors) ?? true,
-					redirected: (opts.audit === true ? undefined : opts.audit.redirected) ?? 'warn',
-					...(opts.audit !== true && opts.audit.ignore ? { ignore: opts.audit.ignore } : {})
-				}
-			: null;
+		this.#trail = opts.trail ?? 'weave';
+		this.#checks = opts.checks ?? [];
 		this.components = opts.components ?? {};
 		if (opts.data) this.data = opts.data;
 		this.#base = opts.base ?? '';
@@ -210,25 +189,13 @@ class PharosSite implements Site {
 		const ctx = this.#deriveCtx(event);
 		const hit = await ol.resolve(slug, ctx);
 		if (hit) {
-			if (this.#audit) {
+			if (this.#checks.length) {
 				const base = mountBase(url, slug);
-				const entry = await hit.collection.get(hit.record.entryId, ctx);
-				// The audit reads `meta.links`, which only the markdown format collects. A blocks/CMS
-				// corpus provides none, so the audit silently passes it — warn once so that isn't mistaken
-				// for "no broken links". Any format can fill `meta.links` to opt this collection back in.
-				if (!has_link_data(entry?.meta) && !this.#auditWarned.has(hit.collection)) {
-					this.#auditWarned.add(hit.collection);
-					if (import.meta.env?.DEV) {
-						console.warn(`[ogygia/pharos] audit is on, but '${slug}' comes from a collection whose entries carry no 'meta.links' (only markdown collects them). Link checking is a NO-OP for this corpus — fill 'meta.links' in the format to enable it.`);
-					}
-				}
-				const { broken, redirected } = await check_links(ol, slug, extract_links(entry?.meta), base, this.#audit, ctx);
-				if (redirected.length && this.#audit.redirected !== 'ok') {
-					const lines = redirected.map((r) => `  '${r.href}' works via redirect_from → update to ${r.canonical}`);
-					if (this.#audit.redirected === 'error') broken.push(...redirected.map((r) => ({ page: r.page, href: r.href, reason: 'missing-page' as const, ...(r.line !== undefined ? { line: r.line } : {}) })));
-					else console.warn(`[ogygia/pharos] ${slug}: stale link${redirected.length === 1 ? '' : 's'}:\n${lines.join('\n')}`);
-				}
-				if (broken.length) throw new Error(format_findings(slug, broken, hit.record.filePath));
+				const findings = await run_page_checks(this.#checks, slug, { outline: ol, base, ctx });
+				const warns = findings.filter((f) => f.severity === 'warn');
+				const errors = findings.filter((f) => f.severity === 'error');
+				if (warns.length) console.warn(format_findings(slug, warns, hit.record.filePath));
+				if (errors.length) throw new Error(format_findings(slug, errors, hit.record.filePath));
 			}
 			return;
 		}
@@ -256,19 +223,8 @@ class PharosSite implements Site {
 		return [...slugs, ...[...aliases.keys()].map((slug) => ({ slug }))];
 	};
 
-	async audit(o: { base?: string; ignore?: (href: string) => boolean } = {}) {
-		const ol = this.outline;
-		const report: AuditReport = { broken: [], redirected: [] };
-		const base = o.base ?? this.#base;
-		for (const slug of await ol.addresses()) {
-			const hit = await ol.resolve(slug);
-			if (!hit) continue;
-			const entry = await hit.collection.get(hit.record.entryId);
-			const { broken, redirected } = await check_links(ol, slug, extract_links(entry?.meta), base, { anchors: true, ...(o.ignore ? { ignore: o.ignore } : {}) });
-			report.broken.push(...broken);
-			report.redirected.push(...redirected);
-		}
-		return report;
+	async check(o: { base?: string; context?: ReadContext } = {}) {
+		return run_site_checks(this.#checks, { outline: this.outline, base: o.base ?? this.#base, ctx: o.context ?? {} });
 	}
 
 	nav(o: BaseOption & { slug?: string; context?: ReadContext } = {}) {
@@ -296,7 +252,7 @@ class PharosSite implements Site {
 		if (!entry) return null;
 
 		const headings = extract_headings(entry.meta);
-		const { prev, next } = await ol.neighbors(record.slug, base, ctx);
+		const { prev, next } = await ol.neighbors(record.slug, base, ctx, this.#trail);
 		const related = await resolve_related(entry, collection, ol, base, ctx);
 		const suggested = choose_suggested(this.#prevNext, related, next);
 
@@ -341,6 +297,16 @@ class PharosSite implements Site {
 				const docs = await build_docs(ol);
 				return new Response(JSON.stringify(docs), { headers: { 'content-type': 'application/json' } });
 			},
+			rss: (o: RssEmitOptions) => async (event) => {
+				const origin = o.origin ?? data?.origin ?? event.url.origin;
+				const body = build_rss(origin, {
+					title: o.title,
+					...(o.description ? { description: o.description } : {}),
+					base: o.base ?? base0,
+					items: await o.items()
+				});
+				return new Response(body, { headers: { 'content-type': 'application/xml' } });
+			},
 			raw: (o: { frontmatter?: 'keep' | 'strip' } = {}) => {
 				const strip = (o.frontmatter ?? 'strip') === 'strip';
 				const source_of = async (slug: string): Promise<string | null> => {
@@ -380,90 +346,6 @@ function extract_headings(meta: unknown): Heading[] {
 		if (Array.isArray(h)) return h as Heading[];
 	}
 	return [];
-}
-
-/** Did the source's format collect link data at all? `links: []` counts; an absent property does not. */
-function has_link_data(meta: unknown): boolean {
-	return !!meta && typeof meta === 'object' && 'links' in meta;
-}
-
-/** Pull `links` off a source-derived meta (`markdown` supplies it), defensively. */
-function extract_links(meta: unknown): LinkRef[] {
-	if (meta && typeof meta === 'object' && 'links' in meta) {
-		const l = (meta as { links: unknown }).links;
-		if (Array.isArray(l)) return l as LinkRef[];
-	}
-	return [];
-}
-
-const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
-
-/**
- * Classify + resolve one page's collected links against the address space. Judges only what is
- * OURS: `#self-anchors` and absolute paths under the mount `base`. External URLs, paths outside the
- * mount, and relative asset links pass through unjudged.
- */
-async function check_links(
-	ol: Outline,
-	page: string,
-	links: LinkRef[],
-	base: string,
-	opts: { anchors: boolean; ignore?: (href: string) => boolean },
-	ctx: ReadContext = {}
-): Promise<{ broken: AuditFinding[]; redirected: AuditRedirected[] }> {
-	const broken: AuditFinding[] = [];
-	const redirected: AuditRedirected[] = [];
-	const b = (base || '').replace(/\/+$/, '');
-
-	for (const link of links) {
-		const href = link.href;
-		if (!href || opts.ignore?.(href)) continue;
-
-		let path: string;
-		let frag: string | undefined;
-		if (href.startsWith('#')) {
-			path = page;
-			frag = href.slice(1);
-		} else if (URL_SCHEME.test(href) || href.startsWith('//')) {
-			continue; // external — not ours to judge
-		} else if (href.startsWith('/')) {
-			let rest: string;
-			if (b && (href === b || href.startsWith(b + '/'))) rest = href.slice(b.length);
-			else if (!b) rest = href;
-			else continue; // absolute, but outside the mount — the app's business, not the site's
-			const [p, f] = rest.split('#');
-			path = p.replace(/^\/+|\/+$/g, '');
-			frag = f;
-		} else {
-			continue; // relative (colocated asset etc.) — not judged
-		}
-
-		const at = { page, href, ...(link.text ? { text: link.text } : {}), ...(link.line !== undefined ? { line: link.line } : {}) };
-		const hit = await ol.resolve(path, ctx);
-		if (hit) {
-			if (frag && opts.anchors) {
-				const target = await hit.collection.get(hit.record.entryId, ctx);
-				if (!extract_headings(target?.meta).some((h) => h.id === frag)) {
-					broken.push({ ...at, reason: 'missing-anchor' });
-				}
-			}
-			continue;
-		}
-		const canonical = await ol.alias(path, ctx);
-		if (canonical) {
-			redirected.push({ page, href, canonical: href_of(b, canonical), ...(link.line !== undefined ? { line: link.line } : {}) });
-			continue;
-		}
-		broken.push({ ...at, reason: 'missing-page' });
-	}
-
-	return { broken, redirected };
-}
-
-/** One thrown message for a page's broken links — file-anchored, every finding named. */
-function format_findings(slug: string, findings: AuditFinding[], filePath: string | undefined): string {
-	const rows = findings.map((f) => `  - '${f.href}'${f.line !== undefined ? ` (line ~${f.line})` : ''}: ${f.reason}${f.text ? ` — link text "${f.text}"` : ''}`);
-	return `[ogygia/pharos] broken link${findings.length === 1 ? '' : 's'} on '${slug}'${filePath ? ` (${filePath})` : ''}:\n${rows.join('\n')}`;
 }
 
 /** Resolve an entry's content-graph `related` refs to nav refs (address + display fields). */

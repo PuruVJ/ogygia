@@ -200,9 +200,9 @@
 
 	/* border-box for all chrome — a width:100% box with padding must not overflow its slot. `:where`
 	 * keeps specificity 0 so app content can opt out. */
-	:where(.ph-shell, .ph-calypso) *,
-	:where(.ph-shell, .ph-calypso) *::before,
-	:where(.ph-shell, .ph-calypso) *::after {
+	:where(.ph-shell) *,
+	:where(.ph-shell) *::before,
+	:where(.ph-shell) *::after {
 		box-sizing: border-box;
 	}
 
@@ -1162,7 +1162,7 @@
 		background: var(--ph-bg);
 		box-shadow: var(--ph-shadow-lg);
 		overflow: hidden;
-		/* portaled outside `.ph-calypso` — inherit nothing, so set the shell's font + text colour. */
+		/* portaled outside `.ph-shell` — inherit nothing, so set the shell's font + text colour. */
 		font-family: var(--ph-font);
 		color: var(--ph-text);
 		animation: ph-pop var(--ph-dur-slow) var(--ph-ease-out);
@@ -1207,9 +1207,9 @@
 	}
 
 	/* One consistent keyboard focus ring across every interactive pharos surface — visible for
-	   keyboard users (`:focus-visible`), never for mouse clicks. Covers the shell, the Calypso layout,
+	   keyboard users (`:focus-visible`), never for mouse clicks. Covers the shell, the Shell layout,
 	   and Bits UI surfaces portaled to <body> (search palette, switcher menu, sheet). */
-	:is(.ph-shell, .ph-calypso, [class*='ph-search'], [class*='ph-sw-'], .ph-sheet)
+	:is(.ph-shell, .ph-shell, [class*='ph-search'], [class*='ph-sw-'], .ph-sheet)
 		:is(a, button, [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='option'], input, summary):focus-visible {
 		outline: 2px solid var(--ph-accent);
 		outline-offset: 2px;
@@ -1435,7 +1435,7 @@
 	.ph-sw-trigger[data-state='open'] .ph-sw-caret {
 		transform: rotate(180deg);
 	}
-	/* Portaled to <body> (outside .ph-calypso) — restate font + color so it isn't the page serif. */
+	/* Portaled to <body> (outside .ph-shell) — restate font + color so it isn't the page serif. */
 	.ph-sw-menu {
 		z-index: 60;
 		display: flex;

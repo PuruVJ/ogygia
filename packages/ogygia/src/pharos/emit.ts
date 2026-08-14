@@ -85,3 +85,50 @@ export function build_llms(tree: NavTree, origin: string, opts: LlmsOptions = {}
 
 	return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
 }
+
+// ── RSS — the blog genre's emission ──────────────────────────────────────────────
+
+/** One feed item. `href` is root-relative (the emitter absolutizes); `date` is ISO `YYYY-MM-DD`. */
+export type RssItem = { href: string; title: string; description?: string; date: string };
+
+export type RssOptions = {
+	/** Channel title (`Svelte blog`). */
+	title: string;
+	/** Channel description. */
+	description?: string;
+	/** The section's mount (`/blog`) — becomes the channel link. */
+	base: string;
+	/** Feed items, newest-first preferred (the emitter re-sorts by date DESC to be safe). */
+	items: RssItem[];
+};
+
+/** Pure RSS 2.0 over a list of dated items — same contract as the other emissions: no I/O, the
+ *  caller supplies the origin. */
+export function build_rss(origin: string, opts: RssOptions): string {
+	const items = [...opts.items].sort((a, b) => (a.date < b.date ? 1 : -1));
+	const rows = items
+		.map((p) => {
+			const url = origin + p.href;
+			return [
+				`\t\t<item>`,
+				`\t\t\t<title>${xml_escape(p.title)}</title>`,
+				`\t\t\t<link>${xml_escape(url)}</link>`,
+				`\t\t\t<guid isPermaLink="true">${xml_escape(url)}</guid>`,
+				...(p.description ? [`\t\t\t<description>${xml_escape(p.description)}</description>`] : []),
+				`\t\t\t<pubDate>${new Date(p.date + 'T00:00:00Z').toUTCString()}</pubDate>`,
+				`\t\t</item>`
+			].join('\n');
+		})
+		.join('\n');
+	return [
+		`<?xml version="1.0" encoding="UTF-8"?>`,
+		`<rss version="2.0">`,
+		`\t<channel>`,
+		`\t\t<title>${xml_escape(opts.title)}</title>`,
+		`\t\t<link>${xml_escape(origin + opts.base)}</link>`,
+		...(opts.description ? [`\t\t<description>${xml_escape(opts.description)}</description>`] : []),
+		rows,
+		`\t</channel>`,
+		`</rss>`
+	].join('\n');
+}

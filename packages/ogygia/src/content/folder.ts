@@ -21,7 +21,7 @@ import type { GlobMap, RawRecord, RawSource, Source } from './source.js';
 const BACKSLASH = /\\/g;
 const norm = (k: string) => k.replace(BACKSLASH, '/').split('?')[0];
 
-type FolderOptions<Meta> = {
+export type FolderOptions<Meta> = {
 	/** Which keys are pages (become entries). Default: `+doc.svx` / `+doc.md` / `index.*`. */
 	page?: RegExp;
 	/** Which keys are directory sidecars. Default: `+meta.json`. `false` = no sidecars. */
@@ -79,7 +79,21 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 
 	for (const key of Object.keys(map)) {
 		const k = norm(key);
-		if (page_rx.test(k)) {
+		// Sidecars are matched BEFORE pages: a file-page convention needs `page: /\.md$/` (so the
+		// filename survives as an id segment), which also matches a section-label `index.md`. Meta-first
+		// lets that `index.md` be the label, not a bodyless junk page. Safe for the `+doc.svx`/`+meta.json`
+		// defaults — those regexes don't overlap, so order can't change their outcome.
+		if (meta_rx && meta_rx.test(k)) {
+			const dir = rel(key).replace(meta_rx, '').split('/').map(strip_order_prefix).filter(Boolean).join('/');
+			meta_entries.push({ dir, value: map[key] });
+			const mod = unwrap(map[key]);
+			const deco = read_meta(mod);
+			// An `index.md` sidecar (the svelte.dev convention) is a compiled markdown MODULE — its
+			// frontmatter `title` is the section label ("Template syntax", not the title-cased slug).
+			const fm = (mod as { metadata?: { title?: unknown } }).metadata;
+			if (deco.label === undefined && typeof fm?.title === 'string') deco.label = fm.title;
+			decorations.set(dir, deco);
+		} else if (page_rx.test(k)) {
 			page_map[key] = map[key];
 			// Register each level's sibling set for verify().
 			const segs = raw_segments(key);
@@ -87,10 +101,6 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 				const parent = segs.slice(0, d).map(strip_order_prefix).join('/');
 				(siblings.get(parent) ?? siblings.set(parent, new Set()).get(parent)!).add(segs[d]);
 			}
-		} else if (meta_rx && meta_rx.test(k)) {
-			const dir = rel(key).replace(meta_rx, '').split('/').map(strip_order_prefix).filter(Boolean).join('/');
-			meta_entries.push({ dir, value: map[key] });
-			decorations.set(dir, read_meta(unwrap(map[key])));
 		} else {
 			throw new Error(`[ogygia/content] folder(): unexpected file '${key}' — expected a page (${page_rx}) or sidecar (${meta_rx || 'none'}). A '**/*' glob drags colocated components into the bundle; narrow it.`);
 		}

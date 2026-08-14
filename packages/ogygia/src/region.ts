@@ -41,12 +41,17 @@ export type RegionSchedule<P = Record<string, unknown>> = (data: P) => RegionOpt
  */
 type AnyComponent = Component<Record<string, unknown>>;
 
-/** A plain component, renderable only in the current server pass. */
+/** A plain component. Renders in the current server pass; **awaiting** it bakes its SSR HTML so it
+ *  can cross the wire as an HTML-only ticket (no chunk, no signer — nothing to fetch). */
 export type InlineRegion = {
 	readonly [REGION_BRAND]: true;
 	readonly kind: 'inline';
 	readonly component: AnyComponent;
 	readonly props: Record<string, unknown>;
+	/** Server-rendered HTML, present once the region has been awaited. What lets an inline region
+	 *  (a content `body`) travel: the transport ships the markup, the runtime swaps it in and wakes
+	 *  any islands inside it — the same machinery as body-swap navigation. */
+	readonly html?: string;
 };
 
 /** A marked component: renders inline here, or becomes a signed ticket when it crosses the wire. */
@@ -186,8 +191,47 @@ export function region<C extends Component<never>>(
 		component: component as AnyComponent,
 		props: p
 	};
-	// Inline regions aren't thenable at runtime; awaiting one returns it unchanged (`await` on a
-	// non-thenable is a no-op). The type is uniform so `await region(…)` type-checks either way.
+	return make_inline_awaitable(inline);
+}
+
+/**
+ * Give an inline region a non-enumerable `then` so `await`-ing it (server-side) renders the
+ * component to HTML and resolves to a plain (non-thenable) inline region carrying that HTML — which
+ * is what lets it cross the wire as an HTML-only ticket (see the transport). Mirrors
+ * {@link make_awaitable} for duals; `svelte/server` is imported lazily and only on the server, so
+ * this module stays browser-safe. Awaiting on the client settles to an unchanged copy.
+ */
+function make_inline_awaitable(inline: InlineRegion): AwaitableRegion {
+	Object.defineProperty(inline, 'then', {
+		enumerable: false,
+		configurable: true,
+		writable: true,
+		value(
+			onFulfilled?: ((value: InlineRegion) => unknown) | null,
+			onRejected?: ((reason: unknown) => unknown) | null
+		) {
+			const run = async (): Promise<InlineRegion> => {
+				if (typeof document !== 'undefined') return { ...inline };
+				// PRE-BAKED (a serialized-region content body): the HTML was rendered at compile time and
+				// travels with the value — awaiting is a no-op, no svelte/server pass. This is what makes
+				// prerendering a region-native corpus O(html-concat) instead of O(svelte-render).
+				if (inline.html != null) return { ...inline };
+				// Plain static specifier — Vite MUST resolve this to the app's single `svelte/server`
+				// instance. A computed/`@vite-ignore` specifier resolves to a SECOND instance whose
+				// module-level `ssr_context` is disjoint from the page render's, so nested body renders
+				// tear down the outer render's context → `push_element` reads null (a systemic 500). The
+				// `typeof document` guard above already keeps this leg server-only.
+				const { render } = await import('svelte/server');
+				const r = await render(inline.component, { props: inline.props });
+				// Keep nested regions' stylesheet links — a body's server-picked blocks emit their
+				// `<link data-ogygia-region-css>` via head, and dropping head would ship them unstyled.
+				const nested = (r.head.match(/<link\b[^>]*data-ogygia-region-css[^>]*>/g) || []).join('');
+				// Spread copies only enumerable own props → drops `then`, so `await` settles here.
+				return { ...inline, html: nested + r.body };
+			};
+			return run().then(onFulfilled, onRejected);
+		}
+	});
 	return inline as AwaitableRegion;
 }
 
@@ -221,6 +265,26 @@ function make_awaitable(dual: DualRegion): AwaitableRegion {
 		}
 	});
 	return dual as AwaitableRegion;
+}
+
+/**
+ * INTERNAL (content formats): an inline region whose SSR HTML is already known — a serialized-region
+ * content body, baked at markdown-compile time. Renders like any inline region (the component is the
+ * thin `{@html}` shell the emitter produced); awaiting it is a no-op because the HTML is present from
+ * birth, so the wire crossing never pays a svelte/server render.
+ */
+export function prebaked_region(
+	component: Component<Record<string, never>>,
+	html: string
+): AwaitableRegion {
+	const inline: InlineRegion = {
+		[REGION_BRAND]: true,
+		kind: 'inline',
+		component: component as AnyComponent,
+		props: {},
+		html
+	};
+	return make_inline_awaitable(inline);
 }
 
 // `region.snippet()` — the SNIPPET shape of a region, sibling of `region()` for components. Freeze a

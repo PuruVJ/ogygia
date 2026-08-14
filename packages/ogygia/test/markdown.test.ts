@@ -77,6 +77,90 @@ const metadataOf = (code: string): { headings: Array<{ depth: number; id: string
 	return JSON.parse(m[1]!);
 };
 
+describe('code dialect — shiki transformers passthrough', () => {
+	it('applies a transformer to every fence (the ecosystem contract)', async () => {
+		// A transformer that stamps the <pre> — proof the shiki decoration contract is wired.
+		const stamp = { name: 'stamp', pre(node: { properties: Record<string, unknown> }) { node.properties['data-tx'] = 'on'; } };
+		const pp = ogygiaPreprocess({ code: { transformers: [stamp] } });
+		const out = await pp.markup?.({ content: '```ts\nconst a = 1;\n```', filename: '/x/page.md' });
+		expect((out as { code: string }).code).toContain('data-tx="on"');
+	});
+
+	it('a variant generator produces a multi-variant switcher (both versions inline)', async () => {
+		const casing = {
+			pref: { name: 'case', values: ['lower', 'upper'], default: 'lower' },
+			generate: (f: { lang: string; source: string }) =>
+				f.lang === 'bash'
+					? [
+							{ label: 'lower', value: 'lower', fence: f },
+							{ label: 'UPPER', value: 'upper', fence: { ...f, source: f.source.toUpperCase() } }
+						]
+					: null
+		};
+		const pp = ogygiaPreprocess({ code: { variants: [casing as never] } });
+		const out = await pp.markup?.({ content: '```bash\necho hi\n```', filename: '/x/page.md' });
+		const c = (out as { code: string }).code; // inside {@html `...`}; only backtick/backslash/${ are escaped, not "
+		expect(c).toContain('class="og-code"');
+		expect(c).toContain('data-pref="case"');
+		expect(c).toContain('data-pref-set="upper"');
+		// two variant panels inline, and the UPPER variant's uppercased token is present (shiki splits
+		// tokens into spans, so assert on the distinguishing token, not the whole line)
+		expect((c.match(/class="og-variant"/g) ?? []).length).toBe(2);
+		expect(c).toContain('ECHO');
+		expect((c.match(/class="og-variant-btn"/g) ?? []).length).toBe(2);
+	});
+
+	it('a plain fence (no variant claims it) stays the single-variant path', async () => {
+		const casing = { pref: { name: 'case', values: ['a', 'b'], default: 'a' }, generate: (f: { lang: string }) => (f.lang === 'bash' ? [{ label: 'a', value: 'a', fence: f }, { label: 'b', value: 'b', fence: f }] : null) };
+		const pp = ogygiaPreprocess({ code: { variants: [casing as never] } });
+		const out = await pp.markup?.({ content: '```ts\nconst a = 1;\n```', filename: '/x/page.md' });
+		expect((out as { code: string }).code).not.toContain('og-code');
+		expect((out as { code: string }).code).toContain('data-lang="ts"');
+	});
+
+	it('passes the raw fence infostring to transformers as meta.__raw (so {1-3} line highlight works)', async () => {
+		// A transformer that echoes the raw meta it received — proves the __raw passthrough.
+		const echo = {
+			name: 'echo-meta',
+			pre(this: { options: { meta?: { __raw?: string } } }, node: { properties: Record<string, unknown> }) {
+				node.properties['data-raw'] = this.options.meta?.__raw ?? '';
+			}
+		};
+		const pp = ogygiaPreprocess({ code: { transformers: [echo] } });
+		const out = await pp.markup?.({ content: '```js {1,3}\nconst a = 1;\n```', filename: '/x/page.md' });
+		expect((out as { code: string }).code).toContain('data-raw="{1,3}"');
+	});
+});
+
+describe('prose dialect — remark/rehype passthrough', () => {
+	it('runs a user remark plugin after the built-in passes', async () => {
+		// A tiny remark plugin that uppercases text nodes — proof the ecosystem contract is wired.
+		const shout = () => (tree: { children?: unknown[] }) => {
+			const walk = (n: { type?: string; value?: string; children?: unknown[] }) => {
+				if (n.type === 'text' && typeof n.value === 'string') n.value = n.value.toUpperCase();
+				(n.children as Array<typeof n> | undefined)?.forEach(walk);
+			};
+			walk(tree as { children?: unknown[] });
+		};
+		const pp = ogygiaPreprocess({ remark: [shout] });
+		const out = await pp.markup?.({ content: '# hello world', filename: '/x/page.md' });
+		expect((out as { code: string }).code).toContain('HELLO WORLD');
+	});
+
+	it('runs a user rehype plugin (adds an attribute to an element)', async () => {
+		const stamp = () => (tree: unknown) => {
+			const walk = (n: { type?: string; tagName?: string; properties?: Record<string, unknown>; children?: unknown[] }) => {
+				if (n.type === 'element' && n.tagName === 'h1') (n.properties ??= {})['data-stamped'] = 'yes';
+				(n.children as Array<typeof n> | undefined)?.forEach(walk);
+			};
+			walk(tree as Parameters<typeof walk>[0]);
+		};
+		const pp = ogygiaPreprocess({ rehype: [stamp] });
+		const out = await pp.markup?.({ content: '# hi', filename: '/x/page.md' });
+		expect((out as { code: string }).code).toContain('data-stamped="yes"');
+	});
+});
+
 describe('scoped heading ids', () => {
 	it('joins the ancestor path for auto-slugged headings', async () => {
 		const code = await render(['# A', '', '## B', '', '### C', '', '## D'].join('\n'));

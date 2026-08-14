@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { isMainThread } from 'node:worker_threads';
 import { loadEnv, type Plugin } from 'vite';
 import type { PreprocessorGroup } from 'svelte/compiler';
+import { configure_build_cache } from '../build-cache.js';
 import { islandBridge } from './island-bridge.js';
+import { rewrite_git_loaders, materialize } from './git.js';
 import { content as contentHmrPlugin, type ContentPluginOptions } from '../content/vite/plugin.js';
 import { ogygiaPreprocess, type MarkdownOptions } from '../content/markdown/index.js';
 import {
@@ -991,11 +993,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// `markdown()`) that runs AFTER mdsvex, then handed back to this plugin's registry. Wrapper-always
 	// (linkVirtual: true) because a preprocessor output is shared across the ssr/client legs and can't
 	// make the csr=false stub split; content files aren't routes, so they'd get wrappers anyway.
-	islandBridge.transform = (source, filename) => {
+	const island_bridge_transform = (source: string, filename: string) => {
 		const result = run_transform(source, filename, { ssr: false, linkVirtual: true });
 		if (!result || !result.islands?.length) return null;
 		register(result, filename);
 		return result.code;
+	};
+	// `islandBridge` is a MODULE singleton, but Kit evaluates the Vite config more than once (a second,
+	// throwaway plugin instance for its SSR environment). If the factory body claimed the bridge, the
+	// LAST instance created would win — even one whose `configResolved` never runs, leaving `root`
+	// undefined and every content-island transform crashing on `path.join(root, …)`. So the bridge is
+	// claimed in `configResolved` instead: only an instance Vite actually configures (root set) owns it.
+	const claim_island_bridge = () => {
+		islandBridge.transform = island_bridge_transform;
 	};
 
 	const invalidate_module_id = (server, id) => {
@@ -1048,6 +1058,33 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		invalidate_module_id(server, RESOLVED(V_SERVER_MANIFEST));
 		invalidate_module_id(server, RESOLVED(V_MANIFEST));
 		return true;
+	};
+
+	/** Files already warned about a non-server `content()` definition (once per file per process). */
+	const content_placement_warned = new Set<string>();
+
+	/**
+	 * Nudge (never error): a `content()` collection defined OUTSIDE a server-only module. Kit's own
+	 * guard makes `.server.ts` / `src/lib/server/` / `.remote.ts` mechanically un-importable from
+	 * client code — anywhere else, one innocent import from an island or route component can drag the
+	 * whole corpus (megabytes of compiled markdown) into a client bundle, silently.
+	 */
+	const warn_content_placement = (bare: string, source: string) => {
+		if (content_placement_warned.has(bare)) return;
+		// APP source only — never library code (a workspace-linked ogygia sits outside node_modules).
+		if (!bare.startsWith(path.join(root, 'src') + path.sep)) return;
+		const defines_collection = source.includes('ogygia/content') && /\bcontent\s*\(/.test(source);
+		const defines_git = source.includes('import.meta.ogygia.loader.git');
+		if (!defines_collection && !defines_git) return;
+		const server_only =
+			/\.(server|remote)\.(ts|js|mjs)$/.test(bare) || /\/(src\/lib\/server|server)\//.test(bare.slice(root.length));
+		if (server_only) return;
+		content_placement_warned.add(bare);
+		console.warn(
+			`[ogygia/content] ${path.relative(root, bare)} defines a collection outside a server-only module. ` +
+				`Move it to a \`.server.ts\` file (or \`src/lib/server/\`) and mint remotes for the wire — ` +
+				`Kit then guarantees the corpus can never reach a client bundle.`
+		);
 	};
 
 	/** Pre-scan every app .svelte so the build manifest is complete before it loads. */
@@ -1168,7 +1205,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		configResolved(config) {
 			root = config.root;
 			base = config.base || '';
+			// The shared build cache (fences, git checkouts, shas) persists under THIS app's
+			// node_modules/.ogygia — point it before anything derives.
+			configure_build_cache(root);
 			libDir = path.join(root, 'src', 'lib');
+			// Claim the content-island preprocessor bridge for THIS (configured) instance — root is set.
+			claim_island_bridge();
 			is_dev = config.command === 'serve';
 			is_build = config.command === 'build';
 			is_ssr = !!config.build?.ssr;
@@ -1735,12 +1777,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (!scanned) prescan();
 
 			const id_n = strip_id(id);
+
+			// (There is deliberately NO csr=false route-client stripping here. Kit collects a route's
+			// CSS manifest from the CLIENT graph — stubbing those modules silently drops every component
+			// stylesheet from the prerendered pages. Keeping the corpus out of client bundles is the
+			// `.server.ts` placement rule's job — see the content-placement warning — and Kit enforces
+			// it mechanically; a csr=false page never fetches its route JS anyway, so the dead client
+			// nodes cost disk, not wire.)
 			let out = code;
 			let map = null;
 			let touched = false;
 
 			// App `.svelte` always; a node_modules `.svelte` ONLY if it carries an ogygia hint (so a
-			// library can declare its own islands — Calypso → CalypsoBar). `is_island_path` still
+			// library can declare its own islands — Shell → ShellBar). `is_island_path` still
 			// excludes GENERATED island glue (wrappers, region bindings, plain re-export entries) —
 			// but a PORTABLE SNIPPET entry is authored markup (a slice of user source) and MUST be
 			// re-processed: its `with { wake }` imports become nested islands, and nested snippets
@@ -1798,6 +1847,24 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				!id_n.includes('/node_modules/') &&
 				!is_island_path(id_n)
 			) {
+				warn_content_placement(id_n, out);
+
+				// `import.meta.ogygia.loader.git(spec, opts)` — a compiler construct (like import.meta.glob).
+				// Materialize each repo's shallow checkout into the app's `ogygia_content/` cache (sync,
+				// idempotent, lock-gated), then rewrite the call to `folder(import.meta.glob(<cache>/…))`.
+				// Runs BEFORE Vite's glob plugin scans the emitted pattern, so the files are already on disk.
+				// (Keeping the corpus out of client bundles is the `.server.ts` placement rule — see the
+				// content-placement warning above; Kit's server-module guard enforces it mechanically.)
+				if (out.includes('import.meta.ogygia.loader.git')) {
+					const { code: rewritten, specs } = rewrite_git_loaders(out);
+					if (specs.length) {
+						for (const spec of specs) materialize(spec, { root });
+						out = rewritten;
+						map = null; // injected import + call rewrite invalidates any prior map
+						touched = true;
+					}
+				}
+
 				const result = transformTsRegions(out, id_n, {
 					root,
 					libDir,

@@ -68,7 +68,7 @@
 								>{hit.title}{#if hit.heading}<span class="ph-search-hit-heading"> › {hit.heading}</span
 									>{/if}</span
 							>
-							{#if hit.excerpt}<span class="ph-search-hit-excerpt">{hit.excerpt}</span>{/if}
+							{#if hit.excerpt}<span class="ph-search-hit-excerpt">{@html hit.excerpt}</span>{/if}
 							<span class="ph-search-hit-section">{hit.section}</span>
 						</a>
 					</li>

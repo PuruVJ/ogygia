@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parse_yaml } from '../src/content/markdown/yaml.js';
+import { parse_yaml } from '../src/content/markdown/frontmatter.js';
 
 describe('parse_yaml — empty & trivial', () => {
 	it('empty string → {}', () => {
@@ -191,6 +191,25 @@ describe('parse_yaml — flow collections', () => {
 
 	it('quoted string inside flow keeps commas/colons', () => {
 		expect(parse_yaml('a: ["x, y", "p:q"]')).toEqual({ a: ['x, y', 'p:q'] });
+	});
+
+	it('a brace-wrapped token with no top-level colon is a STRING, not a mapping', () => {
+		// Svelte docs title pages with tags — these must survive as plain strings.
+		expect(parse_yaml('title: {@const}')).toEqual({ title: '{@const}' });
+		expect(parse_yaml('title: {#each ...}')).toEqual({ title: '{#each ...}' });
+		expect(parse_yaml('title: {let/const ...}')).toEqual({ title: '{let/const ...}' });
+		// a real flow mapping (has a top-level colon) still parses as an object
+		expect(parse_yaml('a: { x: 1 }')).toEqual({ a: { x: 1 } });
+		// empty braces are still an empty mapping
+		expect(parse_yaml('a: {}')).toEqual({ a: {} });
+	});
+
+	it('a single bracketed phrase (no top-level comma) is a STRING, not a 1-element array', () => {
+		// svelte CLI docs title a page `[create your own]` — a literal, not `['create your own']`.
+		expect(parse_yaml('title: [create your own]')).toEqual({ title: '[create your own]' });
+		// a real multi-element array still parses
+		expect(parse_yaml('tags: [a, b]')).toEqual({ tags: ['a', 'b'] });
+		expect(parse_yaml('a: []')).toEqual({ a: [] });
 	});
 
 	it('top-level flow', () => {

@@ -6,6 +6,7 @@ import type { Heading, Source, SourceEntry } from '../src/content/index.js';
 // (no svelte plugin here) can't parse.
 import { outline, pick } from '../src/pharos/outline.js';
 import { pharos as pharosRaw, mountBase } from '../src/pharos/pharos.js';
+import { links } from '../src/pharos/checks.js';
 import type { NavGroup, NavLeaf, NavTree } from '../src/pharos/types.js';
 
 // Test shim: keep the positional call style in the fixtures; the real API is `pharos({ outline, …opts })`.
@@ -98,6 +99,53 @@ describe('outline — convention (bare collection)', () => {
 		const first = leaves(groups(tree)[0])[0];
 		expect(first.slug).toBe('start/install');
 		expect(first.href).toBe('/docs/start/install');
+	});
+});
+
+describe('address seams — group slug + trail scope', () => {
+	// Two topics, each a group with its own collection; ids are `topic/page`.
+	const svelteDocs = () =>
+		content({
+			loader: fromArray([
+				page('runes/state', 'svelte/00-runes/00-state/+doc.svx', { title: 'State' }),
+				page('runes/derived', 'svelte/00-runes/01-derived/+doc.svx', { title: 'Derived' })
+			]),
+			schema: docSchema
+		});
+	const kitDocs = () =>
+		content({
+			loader: fromArray([page('routing/pages', 'kit/00-routing/00-pages/+doc.svx', { title: 'Pages' })]),
+			schema: docSchema
+		});
+
+	it('group `slug` drops a segment from the ADDRESS while nav/id keep structure', async () => {
+		const site = pharos([
+			{ label: 'Svelte', items: svelteDocs(), base: 'docs/svelte', slug: (id) => id.split('/').pop()! }
+		]);
+		// Addresses (prerender slugs) use the dropped-segment policy…
+		const addresses = (await site.entries()).map((e) => e.slug).sort();
+		expect(addresses).toEqual(['docs/svelte/derived', 'docs/svelte/state']);
+		// …and resolve by the shortened address works.
+		expect(await site.doc('docs/svelte/state')).not.toBeNull();
+		// …while nav STRUCTURE is unchanged: the `runes` section grouping is still there (id-derived).
+		const tree = await site.nav();
+		const svelte = groups(tree)[0] as NavGroup;
+		expect(svelte.items.some((n) => n.kind === 'group' && n.label === 'Runes')).toBe(true);
+	});
+
+	it("trail: 'group' stops prev/next at the section boundary; 'weave' crosses it", async () => {
+		const spec = () => [
+			{ label: 'Svelte', items: svelteDocs(), base: 'svelte' },
+			{ label: 'Kit', items: kitDocs(), base: 'kit' }
+		];
+		// last Svelte page: weave → next is the first Kit page; group → no next.
+		const woven = await pharos(spec(), { trail: 'weave' }).doc('svelte/runes/derived');
+		expect(woven?.trail.next?.slug).toBe('kit/routing/pages');
+		const grouped = await pharos(spec(), { trail: 'group' }).doc('svelte/runes/derived');
+		expect(grouped?.trail.next).toBeUndefined();
+		// within a section, group still links
+		const inner = await pharos(spec(), { trail: 'group' }).doc('svelte/runes/state');
+		expect(inner?.trail.next?.slug).toBe('svelte/runes/derived');
 	});
 });
 
@@ -367,7 +415,7 @@ describe('link audit', () => {
 			schema: v.object({ title: v.string(), redirect_from: v.optional(v.array(v.string()), []) })
 		});
 
-	it('audit() flags a missing page and a missing anchor; skips external + out-of-mount', async () => {
+	it('links() check flags a missing page and a missing anchor; skips external + out-of-mount', async () => {
 		const site = pharos(
 			linked({
 				guide: [
@@ -378,36 +426,38 @@ describe('link audit', () => {
 					{ href: 'https://example.com/x', text: 'external' },
 					{ href: '/demo/other', text: 'outside mount' }
 				]
-			})
+			}),
+			{ checks: [links()] }
 		);
-		const report = await site.audit({ base: '/docs' });
-		expect(report.broken).toEqual([
-			{ page: 'guide', href: '/docs/start/install#nope', text: 'bad anchor', line: 12, reason: 'missing-anchor' },
-			{ page: 'guide', href: '/docs/gone/page', text: 'dead', line: 3, reason: 'missing-page' }
+		const findings = await site.check({ base: '/docs' });
+		expect(findings.map((f) => ({ slug: f.slug, severity: f.severity, message: f.message }))).toEqual([
+			{ slug: 'guide', severity: 'error', message: `'/docs/start/install#nope': missing anchor #nope — link text "bad anchor"` },
+			{ slug: 'guide', severity: 'error', message: `'/docs/gone/page': missing page — link text "dead"` }
 		]);
 	});
 
-	it('a link through redirect history is redirected, not broken', async () => {
-		const site = pharos(linked({ guide: [{ href: '/docs/start/old-name', text: 'stale' }] }, { redirect_from: ['start/old-name'] }));
-		const report = await site.audit({ base: '/docs' });
-		expect(report.broken).toEqual([]);
-		expect(report.redirected).toEqual([{ page: 'guide', href: '/docs/start/old-name', canonical: '/docs/start/install' }]);
+	it('a link through redirect history is a warn (stale), not an error', async () => {
+		const site = pharos(linked({ guide: [{ href: '/docs/start/old-name', text: 'stale' }] }, { redirect_from: ['start/old-name'] }), { checks: [links()] });
+		const findings = await site.check({ base: '/docs' });
+		expect(findings.map((f) => ({ severity: f.severity, message: f.message }))).toEqual([
+			{ severity: 'warn', message: `'/docs/start/old-name' works via redirect_from → update to /docs/start/install` }
+		]);
 	});
 
-	it('audit in load throws on a broken link (build/dev failure)', async () => {
-		const site = pharos(linked({ guide: [{ href: '/docs/gone', text: 'dead' }] }), { audit: true });
+	it('checks in load throw on an error finding (build/dev failure)', async () => {
+		const site = pharos(linked({ guide: [{ href: '/docs/gone', text: 'dead' }] }), { checks: [links()] });
 		const event = { params: { slug: 'guide' }, url: new URL('https://x.dev/docs/guide') };
-		await expect(site.load(event)).rejects.toThrow(/broken link.*'guide'/s);
+		await expect(site.load(event)).rejects.toThrow(/check failure.*'guide'/s);
 	});
 
-	it('audit in load passes a clean page; self-anchor resolves against own headings', async () => {
+	it('checks in load pass a clean page; self-anchor resolves against own headings', async () => {
 		const clean = content({
 			loader: fromArray([
 				{ id: 'solo', filePath: 'content/docs/00-a/00-solo/+doc.svx', data: { title: 'Solo' }, meta: { headings: [{ depth: 2, id: 'here', text: 'Here' }], links: [{ href: '#here', text: 'self' }] } as unknown as Meta }
 			]),
 			schema: v.object({ title: v.string() })
 		});
-		const site = pharos(clean, { audit: true });
+		const site = pharos(clean, { checks: [links()] });
 		await expect(site.load({ params: { slug: 'solo' }, url: new URL('https://x.dev/docs/solo') })).resolves.toBeUndefined();
 	});
 });
@@ -523,5 +573,25 @@ describe('remarkLinks collector', () => {
 			{ href: '/docs/a', text: 'A page', line: 4 },
 			{ href: 'https://x.dev', text: 'code' }
 		]);
+	});
+});
+
+describe('build_rss', () => {
+	it('emits sorted RSS 2.0 with absolutized links', async () => {
+		const { build_rss } = await import('../src/pharos/emit.js');
+		const xml = build_rss('https://example.dev', {
+			title: 'Feed <T>',
+			description: 'desc',
+			base: '/blog',
+			items: [
+				{ href: '/blog/old', title: 'Old', date: '2020-01-01' },
+				{ href: '/blog/new', title: 'New & shiny', description: 'd', date: '2026-08-13' }
+			]
+		});
+		expect(xml).toContain('<title>Feed &lt;T&gt;</title>');
+		expect(xml).toContain('<link>https://example.dev/blog</link>');
+		expect(xml.indexOf('New &amp; shiny')).toBeLessThan(xml.indexOf('>Old<'));
+		expect(xml).toContain('<guid isPermaLink="true">https://example.dev/blog/new</guid>');
+		expect(xml).toContain('<pubDate>Thu, 13 Aug 2026 00:00:00 GMT</pubDate>');
 	});
 });

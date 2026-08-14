@@ -195,6 +195,48 @@ async function load_orama(): Promise<OramaModule> {
 	}
 }
 
+const ESC_RX = /[.*+?^${}()|[\]\\]/g;
+const esc_html = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * A match-centered excerpt with the query terms wrapped in `<mark>` — the window starts just before
+ * the FIRST term occurrence (not the chunk start). Output is HTML-escaped first, so the consumer
+ * renders it with `{@html}` safely; `<mark>` is the only markup.
+ */
+export function excerpt_of(text: string, terms: string[], span = 150): string {
+	const lower = text.toLowerCase();
+	let at = -1;
+	for (const t of terms) {
+		const i = lower.indexOf(t);
+		if (i > -1 && (at === -1 || i < at)) at = i;
+	}
+	const start = at <= 40 ? 0 : at - 40;
+	let out = esc_html(text.slice(start, start + span));
+	for (const t of [...terms].sort((a, b) => b.length - a.length)) {
+		out = out.replace(new RegExp(`(${esc_html(t).replace(ESC_RX, '\\$&')})`, 'gi'), '<mark>$1</mark>');
+	}
+	return (start > 0 ? '…' : '') + out + (start + span < text.length ? '…' : '');
+}
+
+/** Title-match re-rank: a hit whose TITLE carries the query outranks body matches (svelte.dev's
+ *  feel — searching "snippet" puts the `{#snippet …}` page first, sections after). */
+export function rerank(hits: SearchHit[], query: string): SearchHit[] {
+	const q = query.toLowerCase();
+	const terms = q.split(/\s+/).filter(Boolean);
+	const scored = hits.map((h) => {
+		const title = h.title.toLowerCase();
+		const heading = (h.heading ?? '').toLowerCase();
+		let m = 1;
+		if (title.includes(q)) m *= 4;
+		else if (terms.every((t) => title.includes(t))) m *= 2;
+		if (heading && terms.every((t) => heading.includes(t))) m *= 1.5;
+		// the PAGE doc (no anchor) with a matching title is the canonical entry — nudge it up
+		if (!h.href.includes('#') && title.includes(q)) m *= 1.5;
+		return { ...h, score: h.score * m };
+	});
+	return scored.sort((a, b) => b.score - a.score);
+}
+
 /** The default engine — Orama over the section documents, title/heading boosted. */
 export function orama_engine(): SearchEngine {
 	let mod: OramaModule | null = null;
@@ -218,12 +260,15 @@ export function orama_engine(): SearchEngine {
 			});
 			return {
 				async query(q, { limit, base }) {
+					// Over-fetch, then re-rank by title match and trim — orama's tf scoring alone lets
+					// term-dense body chunks outrank the page whose TITLE is the query.
 					const res = await mod!.search(db, {
 						term: q,
-						limit,
+						limit: limit * 3,
 						boost: { title: 3, heading: 2, text: 1 },
 						tolerance: 1
 					});
+					const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
 					const hits: SearchHit[] = [];
 					for (const h of res.hits) {
 						const doc = by_id.get(String(h.id));
@@ -234,11 +279,11 @@ export function orama_engine(): SearchEngine {
 							title: doc.title,
 							section: doc.section,
 							heading: doc.heading,
-							excerpt: doc.text.slice(0, 140),
+							excerpt: excerpt_of(doc.text, terms),
 							score: h.score
 						});
 					}
-					return hits;
+					return rerank(hits, q).slice(0, limit);
 				}
 			};
 		}

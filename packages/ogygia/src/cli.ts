@@ -48,7 +48,7 @@ if (command !== 'init' && command !== 'pharos') {
 			`  --markdown / --no-markdown   turn markdown content collections on/off (else you are asked)\n` +
 			`  -y, --yes                    accept defaults, no prompts\n` +
 			`  --no-install                 edit package.json but skip installing\n\n` +
-			`${strong('pharos init')}  — scaffolds a docs site (site, content, routes, a Calypso layout).\n` +
+			`${strong('pharos init')}  — scaffolds a docs site (site, content, routes, a Shell layout).\n` +
 			`  --layout <path>              layout route to write (default ${dim('src/routes/+layout.svelte')})\n` +
 			`  --force                      overwrite existing route/site files (the layout always asks)\n` +
 			`  -y, --yes                    accept defaults, no prompts\n`
@@ -345,7 +345,7 @@ async function run() {
 // ── `ogygia pharos init` ─────────────────────────────────────────────────────
 // Scaffolds a docs site as REAL files — no build-time magic, no template to pick. It writes the
 // PHAROS-LEVEL plumbing (site, content, the three-file mount, emit routes) and a layout that mounts
-// `<Calypso>` — Calypso is just a component you import, not a theme the CLI branches on. The layout is
+// `<Shell>` — the Shell is just a component you import, not a theme the CLI branches on. The layout is
 // the one interactive decision (it's the file you own); everything else is created if absent, skipped
 // if you already wrote it (unless `--force`). Agents can drive it non-interactively with flags + `-y`.
 
@@ -369,7 +369,7 @@ async function pharosInit(): Promise<void> {
 		stdout.write(
 			`${strong('ogygia pharos')} ${dim(`v${version}`)}\n\n` +
 				`Usage:\n  ${accent('npx ogygia pharos init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n\n` +
-				`Scaffolds a pharos docs site (site + content + routes + a Calypso layout).\n`
+				`Scaffolds a pharos docs site (site + content + routes + a Shell layout).\n`
 		);
 		process.exit(argv[1] ? 1 : 0);
 	}
@@ -542,25 +542,25 @@ export const prerender = true;
 	//  · a DIFFERENT layout you wrote  → never clobber without opt-in: `--force`, or a "yes" at the
 	//    interactive prompt. `-y` (accept safe defaults) does NOT clobber — it aborts with guidance.
 	const layoutBody = `<script lang="ts">
-	import { Calypso } from 'ogygia/pharos';
+	import Shell from 'ogygia/pharos/shell';
 	// Styling is opt-in — import the pharos look here, or delete these two lines and bring your own
 	// CSS against the \`.ph-*\` hooks.
 	import 'ogygia/pharos/theme.css';
-	import 'ogygia/pharos/calypso.css';
+	import 'ogygia/pharos/shell.css';
 	import { site } from '$lib/docs';
 
 	let { children } = $props();
 </script>
 
-<Calypso {site} base=${JSON.stringify(urlBase)} title="Docs">
+<Shell {site} base=${JSON.stringify(urlBase)} title="Docs">
 	{@render children()}
-</Calypso>
+</Shell>
 `;
 	const layoutExisted = fileExists(cwd, layoutRel);
 	const layoutIsOurs =
 		layoutExisted &&
-		/from ['"]ogygia\/pharos['"]/.test(loadFile(cwd, layoutRel)) &&
-		loadFile(cwd, layoutRel).includes('<Calypso');
+		/from ['"]ogygia\/pharos(\/shell)?['"]/.test(loadFile(cwd, layoutRel)) &&
+		loadFile(cwd, layoutRel).includes('<Shell');
 
 	if (!layoutExisted || force) {
 		place(layoutRel, layoutBody, true);

@@ -47,15 +47,21 @@ export const ogygiaTransport = {
 				const props = (f.props ?? {}) as Record<string, unknown>;
 				return pack(f.id as string, props, sign(f.id as string, props), f.module as string, f.hydrate as string, f.hydrateMargin as string, f.html as string);
 			}
-			// Inline (plain component) — nothing prepared it to travel: no island id, no chunk, no
-			// signer, so there is no addressable capability the client could reconcile.
+			// Inline region that was AWAITED — its SSR HTML is baked, so it crosses as an HTML-only
+			// ticket: no chunk, no signer, nothing to fetch. The client swaps the markup in and the
+			// runtime wakes any `<ogygia-region>` islands inside it (body-swap machinery). This is how
+			// a content `body` (markdown/blocks) rides a remote: `await` it (pharos's `doc` remote does).
+			if (typeof f.html === 'string') {
+				return pack('', (f.props ?? {}) as Record<string, unknown>, '', '', undefined, undefined, f.html);
+			}
+			// Inline and NOT awaited — nothing prepared it to travel: no chunk, no signer, no HTML.
 			throw new Error(
 				'[ogygia] a held region reached the wire but its component is a plain import, so nothing ' +
-					"built a chunk for it. Import that component `with { region: 'raw' }` (or a `wake:` mark) " +
-					'to make it sendable. If this is a content `body` (markdown/blocks) returned from a ' +
-					'`+page.server.ts` load: bodies are same-pass SSR values — move the `get()` to a ' +
-					'universal `+page.ts` load (its data reaches the render by reference, nothing crosses ' +
-					'a wire on a csr=false page).'
+					'built a chunk for it. `await` the region before returning it from a remote/load — an ' +
+					'awaited region bakes its SSR HTML and crosses as an HTML-only ticket. Or import the ' +
+					"component `with { region: 'raw' }` (or a `wake:` mark) to make it a signed, fetchable " +
+					'capability. On a csr=false page you can also skip the wire entirely: call `get()` in a ' +
+					'universal `+page.ts` load / the component — its data reaches the render by reference.'
 			);
 		},
 		decode(raw: EncodedRegion) {
@@ -63,8 +69,10 @@ export const ogygiaTransport = {
 			// at its CALL address updates any region already mounted for that call — in place, no
 			// fetch. So a command that returns `await region(C, props)` settles the write AND refreshes
 			// every matching region in one response. Client-only (decode revives the wire value in the
-			// browser); on the server the store is inert.
-			if (raw.x != null && typeof document !== 'undefined') {
+			// browser); on the server the store is inert. An HTML-ONLY ticket (awaited inline region —
+			// no capability url) has no frame address, so there is nothing to write; it renders where
+			// it's placed instead.
+			if (raw.x != null && raw.u && typeof document !== 'undefined') {
 				const a = frameAddress(raw.u);
 				write({ a, v: ticket(a), html: raw.x });
 			}

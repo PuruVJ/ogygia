@@ -1,7 +1,7 @@
 /**
  * PYROS — the signal-fire pharos skin (zen garden: same markup, a third voice).
  *
- *   import 'ogygia/pharos/calypso.css';        // the FORM (building blocks, layout)
+ *   import 'ogygia/pharos/shell.css';        // the FORM (building blocks, layout)
  *   import 'ogygia/pharos/themes/pyros.css';   // the LANGUAGE (this file) — import LAST
  *
  * Named for the lighthouse's fire. The voice: BRUTALIST SIGNAL. Stark monochrome, one hot signal
@@ -206,7 +206,7 @@
 	}
 
 	/* selection — a dip in the lagoon */
-	:where(.ph-shell, .ph-calypso) ::selection {
+	:where(.ph-shell) ::selection {
 		background: color-mix(in oklab, var(--ph-accent) 24%, transparent);
 	}
 
@@ -230,9 +230,9 @@
 		text-transform: uppercase;
 	}
 
-	:where(.ph-shell, .ph-calypso) *,
-	:where(.ph-shell, .ph-calypso) *::before,
-	:where(.ph-shell, .ph-calypso) *::after {
+	:where(.ph-shell) *,
+	:where(.ph-shell) *::before,
+	:where(.ph-shell) *::after {
 		box-sizing: border-box;
 	}
 
@@ -1255,7 +1255,7 @@
 		outline: none;
 	}
 
-	:is(.ph-shell, .ph-calypso, [class*='ph-search'], [class*='ph-sw-'], .ph-sheet)
+	:is(.ph-shell, .ph-shell, [class*='ph-search'], [class*='ph-sw-'], .ph-sheet)
 		:is(a, button, [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='option'], input, summary):focus-visible {
 		outline: 2px solid var(--ph-accent);
 		outline-offset: 2px;
@@ -1541,7 +1541,7 @@
 	/* ═══════════════════════════════ bottom bar + sheet (mobile) ═══════════════════════════ */
 
 	/* NB: no `display` here — visibility (desktop hide / mobile show) belongs to the FORM
-	 * (calypso.css), which imports before this file and must keep the final word. */
+	 * (shell.css), which imports before this file and must keep the final word. */
 	.ph-bottombar {
 		position: fixed;
 		left: 0;
@@ -1636,29 +1636,29 @@
 		border-top: 1px solid var(--ph-line);
 	}
 
-	/* ══════════════════ calypso ACCENTS — paint only, composes over the FORM ══════════════════
-	 * Calypso stays a separate building-block import (`ogygia/pharos/calypso.css` owns ALL layout:
+	/* ══════════════════ shell ACCENTS — paint only, composes over the FORM ══════════════════
+	 * Shell stays a separate building-block import (`ogygia/pharos/shell.css` owns ALL layout:
 	 * grids, sticky rails, sheet/bottombar mechanics, breakpoints). Import order is form first,
 	 * language second, so these same-specificity accents win the paint:
 	 *
-	 *   import 'ogygia/pharos/calypso.css';
+	 *   import 'ogygia/pharos/shell.css';
 	 *   import 'ogygia/pharos/themes/thalassa.css';
 	 */
-	.ph-calypso {
+	.ph-shell {
 		background: var(--ph-depth), var(--ph-aurora), var(--ph-bg);
 		background-attachment: fixed, fixed, scroll;
 		-webkit-font-smoothing: antialiased;
 		text-rendering: optimizeLegibility;
 	}
 	/* glass header that lets the canvas wash through, with the signature hairline beneath */
-	.ph-calypso .ph-cheader {
+	.ph-shell .ph-cheader {
 		position: sticky;
 		top: 0;
 		background: var(--ph-bg);
 		border-bottom-width: 2px;
 		box-shadow: none;
 	}
-	.ph-calypso .ph-cheader::after {
+	.ph-shell .ph-cheader::after {
 		content: '';
 		position: absolute;
 		left: 0;
@@ -1674,9 +1674,9 @@
 
 	/* ═══════════════════════════════ reduced motion: silence ═══════════════════════════════ */
 	@media (prefers-reduced-motion: reduce) {
-		:where(.ph-shell, .ph-calypso) *,
-		:where(.ph-shell, .ph-calypso) *::before,
-		:where(.ph-shell, .ph-calypso) *::after,
+		:where(.ph-shell) *,
+		:where(.ph-shell) *::before,
+		:where(.ph-shell) *::after,
 		.ph-sheet,
 		.ph-sheet-backdrop,
 		.ph-search-panel,

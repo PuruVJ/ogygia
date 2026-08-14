@@ -244,5 +244,34 @@ export function mapRaw<A, B>(src: RawSource<A>, fn: (value: A) => B): RawSource<
 	};
 }
 
+/**
+ * Enrich every entry's `meta` with derived facts — SOURCE middleware, the read-side sibling of
+ * {@link mapRaw}. The enricher sees the finished ref (id, data, meta, filePath) and returns extra
+ * meta merged over it, on `refs()` and `get()` alike. Loader-agnostic: `git_meta()` / `reading_time()`
+ * style values work over `folder()` and a CMS the same way (a CMS that already has the fact simply
+ * ships it in `data` and skips the enricher).
+ *
+ *   content({ loader: enrich(folder(map), reading_time()) })
+ */
+export function enrich<Meta, Extra extends Record<string, unknown>>(
+	src: Source<Meta>,
+	fn: (ref: SourceRef<Meta>) => Extra | Promise<Extra>
+): Source<Meta & Extra> {
+	const widen = async <R extends SourceRef<Meta>>(r: R): Promise<R & { meta: Meta & Extra }> => ({
+		...r,
+		meta: { ...(r.meta as Meta), ...(await fn(r)) }
+	});
+	return {
+		...(src.init ? { init: src.init } : {}),
+		...(src.live ? { live: src.live } : {}),
+		...(src.groups ? { groups: src.groups } : {}),
+		refs: async (q) => Promise.all((await src.refs(q)).map(widen)),
+		async get(id) {
+			const e = await src.get(id);
+			return e ? widen(e) : null;
+		}
+	} as Source<Meta & Extra>;
+}
+
 // NB: no `fromArray` / in-memory-array source is shipped — write a `{ refs, get }` object directly
 // (or use `defineSource`) for fixtures or already-fetched records.

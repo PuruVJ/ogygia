@@ -8,7 +8,7 @@
 	 * since inline scripts don't re-run on a body-swap.)
 	 *
 	 * Pair with a no-flash head script that applies the stored theme before first paint (a shell like
-	 * Calypso includes it; standalone users add it once in their layout):
+	 * the Shell includes it; standalone users add it once in their layout):
 	 * `{@html script((k) => { try { var t = localStorage.getItem(k); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {} }, 'ph-theme')}`
 	 */
 

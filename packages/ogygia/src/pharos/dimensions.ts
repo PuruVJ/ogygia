@@ -18,7 +18,7 @@
  * Versions are just collections: hand `weave` whichever collection sources a coordinate. pharos does
  * not copy trees or read git — sourcing a version is the app's concern.
  */
-import { outline, href_of, type Outline, type OutlineSpec, type ReadContext } from './outline.js';
+import { outline, href_of, type Outline, type OutlineSpec, type ReadContext, type TrailScope } from './outline.js';
 import type { NavRef, NavTree } from './types.js';
 
 /** One axis of the content matrix. */
@@ -263,10 +263,10 @@ class Dimensions implements Dimensioned {
 		return [...new Set(all)];
 	}
 
-	async neighbors(slug: string, base = '', ctx: ReadContext = {}) {
+	async neighbors(slug: string, base = '', ctx: ReadContext = {}, scope: TrailScope = 'weave') {
 		const { coord, rest } = this.#peel(slug);
 		const inner = await this.#outline_for(coord);
-		const { prev, next } = await inner.neighbors(rest, base_join(base, this.#encode(coord)), ctx);
+		const { prev, next } = await inner.neighbors(rest, base_join(base, this.#encode(coord)), ctx, scope);
 		const reslug = (ref?: NavRef) => (ref ? { ...ref, slug: this.#prefix_slug(coord, ref.slug) } : undefined);
 		return { ...(prev ? { prev: reslug(prev)! } : {}), ...(next ? { next: reslug(next)! } : {}) };
 	}

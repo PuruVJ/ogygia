@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as v from 'valibot';
-import { content, glob, markdown, json } from '../src/content/index.js';
+import { content, enrich, glob, markdown, json } from '../src/content/index.js';
 import type { Source, SourceEntry } from '../src/content/index.js';
 import { parseFrontmatter } from '../src/content/markdown/frontmatter.js';
 import { withRemotes } from '../src/content/server.js';
@@ -238,6 +238,29 @@ describe('content() catalog', () => {
 			map: (e) => e.id
 		});
 		expect(await list()).toEqual(['a']);
+	});
+});
+
+describe('enrich() source middleware', () => {
+	it('merges derived meta into refs() and get(), keeps existing meta', async () => {
+		const base = fromArray([
+			{ id: 'a', data: { title: 'A' }, meta: {} },
+			{ id: 'b', data: { title: 'Bee' }, meta: {} }
+		]);
+		const src = enrich(base, (ref) => ({ title_len: String((ref.data as { title: string }).title).length }));
+		const refs = await src.refs();
+		expect(refs.map((r) => (r.meta as { title_len: number }).title_len)).toEqual([1, 3]);
+		expect(((await src.get('b'))!.meta as { title_len: number }).title_len).toBe(3);
+	});
+
+	it('threads groups() through', async () => {
+		const base: Source = {
+			get: async () => null,
+			refs: async () => [],
+			groups: async () => new Map([['g', { label: 'G' }]])
+		};
+		const src = enrich(base, () => ({}));
+		expect((await src.groups!()).get('g')?.label).toBe('G');
 	});
 });
 

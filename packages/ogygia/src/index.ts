@@ -31,6 +31,8 @@ export { preload } from './preload.js';
 // Serialize a self-contained function into a blocking inline `<script>` string — a theme setter (no
 // dark-mode flash), a deferred font, an early flag. `{@html script(fn)}`, put the tag where you like.
 export { script } from './script.js';
+export { preference, preference_switch } from './preference.js';
+export type { Preference, PreferenceSpec } from './preference.js';
 
 // Builder.io-style pages: the blessed path is the `blocks()` content source (see `ogygia/content`).
 // For a tree in hand without a collection, `blocks.resolve(tree, registry)` turns it into region nodes

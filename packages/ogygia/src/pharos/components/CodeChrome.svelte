@@ -74,6 +74,10 @@
 
 		function enhance(pre: Element) {
 			if ((pre as { __ogc?: boolean }).__ogc) return;
+			// Skip HIDDEN code blocks — a `<pre>` that isn't laid out is chrome-in-chrome (a twoslash
+			// hover popup's baked code, a collapsed variant), not a doc block; copy/permalink don't
+			// belong on it. `offsetParent === null` catches `display:none` ancestors generically.
+			if ((pre as HTMLElement).offsetParent === null) return;
 			(pre as { __ogc?: boolean }).__ogc = true;
 			const id = assign_id(pre);
 

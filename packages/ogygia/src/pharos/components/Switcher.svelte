@@ -6,7 +6,7 @@
 	 * per axis) all come for free. Options carry pharos-baked hrefs; selecting one routes through the
 	 * ogygia SPA router.
 	 *
-	 * Interactive → use as an ISLAND (Calypso marks it `with { wake: 'load' }`). It re-hydrates per nav,
+	 * Interactive → use as an ISLAND (the Shell marks it `with { wake: 'load' }`). It re-hydrates per nav,
 	 * so the picker stays live after a body-swap.
 	 */
 	import { DropdownMenu } from 'bits-ui';

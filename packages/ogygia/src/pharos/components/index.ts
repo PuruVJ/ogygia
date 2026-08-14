@@ -4,7 +4,7 @@
  * (`import 'ogygia/pharos/theme.css'` — skip it for zero CSS). Logic (outline, pharos, search,
  * dimensions, …) lives one level up; this directory is COMPONENTS ONLY.
  */
-export { default as Shell } from './Shell.svelte';
+export { default as Frame } from './Frame.svelte';
 export { default as Sidebar } from './Sidebar.svelte';
 export { default as OnThisPage } from './OnThisPage.svelte';
 export { default as Pager } from './Pager.svelte';
@@ -23,5 +23,6 @@ export { default as PharosSlot } from './PharosSlot.svelte';
 // The roving-tabindex keyboard primitive behind every nav surface — reusable for custom nav.
 export { roving } from './roving.js';
 export type { RovingOptions } from './roving.js';
-// Calypso (and its bar) is deliberately NOT here: a named shell is its own export —
-// `import Calypso from 'ogygia/pharos/calypso'`. The barrel holds the generic bricks.
+// Shell (and its bar) is deliberately NOT here: the batteries-included shell is its own export —
+// `import Shell from 'ogygia/pharos/shell'`. The barrel holds the generic bricks (Frame = the
+// headless, every-region-overridable composition you build a custom shell from).

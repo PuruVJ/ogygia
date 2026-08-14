@@ -17,11 +17,16 @@
 
 	let {
 		headings,
+		title,
 		label = 'On this page',
 		scrollspy = true,
 		item
 	}: {
 		headings: Heading[];
+		/** The page title, shown as the FIRST entry (linking back to the top) — so the outline exists
+		 *  even on a page with no headings, and reads like svelte.dev's. Active when nothing below
+		 *  the fold is. */
+		title?: string;
 		label?: string;
 		/** Highlight the section currently in view (default `true`). */
 		scrollspy?: boolean;
@@ -77,10 +82,16 @@
 	}
 </script>
 
-{#if headings.length}
+{#if headings.length || title}
 	<nav class="ph-toc" aria-label={label}>
 		<p class="ph-toc-label">{label}</p>
 		<ul class="ph-toc-list" {@attach spy} {@attach roving({ selector: '.ph-toc-link', orientation: 'vertical' })}>
+			{#if title}
+				<!-- `#` = the document top, natively (empty fragment); active whenever no heading is. -->
+				<li class="ph-toc-item ph-toc-d2 ph-toc-title">
+					<a class="ph-toc-link" class:ph-active={active === ''} href="#" aria-current={active === '' ? 'true' : undefined}>{title}</a>
+				</li>
+			{/if}
 			{#each headings as h (h.id)}
 				<li class={`ph-toc-item ph-toc-d${h.depth}`}>
 					{#if item}{@render item(h)}{:else}

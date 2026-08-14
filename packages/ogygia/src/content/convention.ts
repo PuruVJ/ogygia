@@ -70,6 +70,13 @@ export type NumberedOptions = {
 	pad?: number;
 	/** Require `01,02,03…` with no gaps. Default `false` (deleting a page shouldn't break the build). */
 	contiguous?: boolean;
+	/**
+	 * How to treat two siblings that share a prefix number (`21-svelte-store`, `21-svelte-motion`).
+	 * `'error'` (default) — a duplicate is usually an authoring mistake, so fail. `'allow'` — the
+	 * prefix is a deliberate GROUP key (an imported corpus like the Svelte docs does this); ties then
+	 * order alphabetically by segment. Set `'allow'` when sourcing folders you don't hand-number.
+	 */
+	duplicates?: 'error' | 'allow';
 };
 
 /**
@@ -102,13 +109,115 @@ export function numbered(opts: NumberedOptions = {}): Convention {
 			}
 			const nums = digits.map(Number).sort((a, b) => a - b);
 			const dupes = [...new Set(nums.filter((n, i) => i > 0 && nums[i - 1] === n))];
-			if (dupes.length) {
-				issues.push(`ordering in ${at}: duplicate prefix number${dupes.length > 1 ? 's' : ''} ${dupes.join(', ')} — siblings: ${[...prefixed].sort().join(', ')}`);
+			if (dupes.length && opts.duplicates !== 'allow') {
+				issues.push(`ordering in ${at}: duplicate prefix number${dupes.length > 1 ? 's' : ''} ${dupes.join(', ')} — siblings: ${[...prefixed].sort().join(', ')} (intentional? pass numbered({ duplicates: 'allow' }))`);
 			}
 			if (opts.contiguous && bare.length === 0 && dupes.length === 0) {
 				const gaps = nums.some((n, i) => i > 0 && n !== nums[i - 1] + 1);
 				if (gaps || (nums[0] !== 0 && nums[0] !== 1)) {
 					issues.push(`ordering in ${at}: numbers are not contiguous (${nums.join(', ')})`);
+				}
+			}
+			return issues;
+		}
+	};
+}
+
+// ── the DATED convention — date-prefixed filenames (a blog's native ordering) ──
+
+export type DatedOptions = {
+	/** Date-prefix format: `YYYY`/`MM`/`DD` tokens plus literal separators — `'YYYY-MM-DD'` (default),
+	 *  `'YYYYMMDD'`, `'DD-MM-YYYY'`, `'YYYY.MM.DD'`, …. The prefix is joined to the slug by `-`. */
+	format?: string;
+};
+
+type CompiledFormat = { re: RegExp; date_re: RegExp; order: Array<'Y' | 'M' | 'D'> };
+
+const compiled_formats = new Map<string, CompiledFormat>();
+
+function compile_format(format: string): CompiledFormat {
+	const hit = compiled_formats.get(format);
+	if (hit) return hit;
+	let re = '';
+	const order: Array<'Y' | 'M' | 'D'> = [];
+	for (let i = 0; i < format.length; ) {
+		if (format.startsWith('YYYY', i)) {
+			re += String.raw`(\d{4})`;
+			order.push('Y');
+			i += 4;
+		} else if (format.startsWith('MM', i)) {
+			re += String.raw`(\d{2})`;
+			order.push('M');
+			i += 2;
+		} else if (format.startsWith('DD', i)) {
+			re += String.raw`(\d{2})`;
+			order.push('D');
+			i += 2;
+		} else {
+			re += format[i]!.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+			i += 1;
+		}
+	}
+	if (!(order.includes('Y') && order.includes('M') && order.includes('D')) || order.length !== 3) {
+		throw new Error(
+			`[ogygia/content] dated(): format '${format}' must contain YYYY, MM and DD exactly once`
+		);
+	}
+	const out: CompiledFormat = {
+		re: new RegExp(`^${re}-(.+)$`),
+		date_re: new RegExp(`^${re}-`),
+		order
+	};
+	compiled_formats.set(format, out);
+	return out;
+}
+
+function parts_of(segment: string, format: string): { y: number; m: number; d: number; slug: string } | null {
+	const { re, order } = compile_format(format);
+	const match = re.exec(segment);
+	if (!match) return null;
+	const by = { Y: 0, M: 0, D: 0 };
+	order.forEach((k, i) => (by[k] = Number(match[i + 1])));
+	if (by.M < 1 || by.M > 12 || by.D < 1 || by.D > 31) return null;
+	return { y: by.Y, m: by.M, d: by.D, slug: match[order.length + 1]! };
+}
+
+/** Read the date prefix off one segment as ISO `YYYY-MM-DD` (whatever the authored format), or null
+ *  when the segment isn't date-prefixed / the date is impossible. Exported so an app can recover the
+ *  date for DISPLAY from `filePath` — the convention strips it from the slug. */
+export function date_of(segment: string, format = 'YYYY-MM-DD'): string | null {
+	const p = parts_of(segment, format);
+	if (!p) return null;
+	const pad = (n: number, w: number) => String(n).padStart(w, '0');
+	return `${pad(p.y, 4)}-${pad(p.m, 2)}-${pad(p.d, 2)}`;
+}
+
+/**
+ * The dated convention: date-prefixed segments order siblings chronologically (order = days since
+ * epoch, so `refs()` come back oldest→newest; a blog index reverses). The date is stripped from the
+ * slug — URLs stay `/blog/release`, not `/blog/2026-08-13-release` — and recoverable for display
+ * via {@link date_of} on the entry's `filePath`. Undated segments (directories, one-off pages) pass
+ * through unordered. Verification is deliberately loose: only an UNPARSEABLE date-looking prefix is
+ * an error — mixing dated posts with undated pages is normal for a blog.
+ */
+export function dated(opts: DatedOptions = {}): Convention {
+	const format = opts.format ?? 'YYYY-MM-DD';
+	compile_format(format); // validate the format eagerly — a bad one is a config error, not per-file
+	return {
+		segment(raw) {
+			const p = parts_of(raw, format);
+			if (!p) return { slug: raw, order: Number.MAX_SAFE_INTEGER };
+			return { slug: p.slug, order: Math.floor(Date.UTC(p.y, p.m - 1, p.d) / 86_400_000) };
+		},
+		label: title_case,
+		verify(dir, segments, meta) {
+			if (meta?.ordered === false) return [];
+			const at = dir || '(root)';
+			const { date_re } = compile_format(format);
+			const issues: string[] = [];
+			for (const s of segments) {
+				if (date_re.test(s) && !parts_of(s, format)) {
+					issues.push(`dated ordering in ${at}: '${s}' has an impossible date prefix`);
 				}
 			}
 			return issues;

@@ -27,6 +27,7 @@ import * as devalue from 'devalue';
 import { islands as island_modules, island_url } from 'virtual:ogygia/server-manifest';
 import { islandCss } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
+import { REGION_BRAND } from './region.js';
 import { secret } from 'virtual:ogygia/secret';
 import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
@@ -294,6 +295,20 @@ class OgygiaHandle {
 		return html.includes('</body>') ? html.replace('</body>', block + '</body>') : html + block;
 	}
 
+	/**
+	 * True when a remote's resolved value (deep) contains a region carrying baked SSR HTML — a
+	 * page-sized render, not seed data (see the skip in {@link build_remote_seed_script}). Depth-capped:
+	 * a region ticket sits shallow in any sane payload (a DocView's `entry.body` is 2 levels deep).
+	 */
+	has_baked_region(value: unknown, depth = 0): boolean {
+		if (depth > 6 || value === null || typeof value !== 'object') return false;
+		const r = value as Record<PropertyKey, unknown>;
+		if (r[REGION_BRAND] === true && typeof r.html === 'string') return true;
+		if (Array.isArray(value)) return value.some((x) => this.has_baked_region(x, depth + 1));
+		for (const k in r) if (this.has_baked_region(r[k], depth + 1)) return true;
+		return false;
+	}
+
 	async build_remote_seed_script(state: RequestState): Promise<string | null> {
 		const implicit = state.remote?.implicit;
 		if (!implicit) return null;
@@ -325,7 +340,12 @@ class OgygiaHandle {
 				await Promise.race([
 					Promise.resolve(promise).then(
 						(v) => {
-							if (resolved) data[bucket][remote_key] = { v };
+							// A seed is DATA; a value carrying a BAKED region (SSR HTML in the ticket — a
+							// page body from a `doc`-style remote) is a page-sized RENDER, and the page that
+							// awaited it server-side has already rendered it. Seeding it would ship the body
+							// twice (measured ~130kb/page on a docs site); skip it — a client consumer that
+							// ever needs the value just fetches the remote.
+							if (resolved && !this.has_baked_region(v)) data[bucket][remote_key] = { v };
 						},
 						() => {
 							/* errored/pending remotes are omitted → the client fetches them itself */
