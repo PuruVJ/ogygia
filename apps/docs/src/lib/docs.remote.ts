@@ -1,10 +1,11 @@
 /**
- * The docs navigation as a Kit remote — the pharos site nav (`NavTree`, hrefs baked for the `/docs`
- * mount), devalue-safe metadata, no bodies. The sidebar island and the homepage `ContentPeek` both
- * await this. (Search is CLIENT-side — a worker over the static `/search.json` — so it isn't a
- * remote here; see `SideNav.svelte`.)
+ * The docs wire layer — pharos remotes over the server-only `site`. `nav` is the sidebar tree
+ * (`NavTree`, hrefs baked for `/docs`, no bodies). `doc` resolves one page's view and BAKES its body
+ * into a region ticket, so the corpus stays server-side and the page component imports only this —
+ * never the collection. The `.svx` demos inside a body wake from the baked ticket exactly as they
+ * would in-pass. (Search is client-side — a worker over the static `/search.json`; see `SideNav`.)
  */
 import { remotes } from 'ogygia/pharos/server';
-import { site } from './docs';
+import { site } from './docs.server';
 
-export const { nav } = remotes(site, { base: '/docs' });
+export const { nav, doc } = remotes(site, { base: '/docs' });

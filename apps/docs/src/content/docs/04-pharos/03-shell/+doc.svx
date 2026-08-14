@@ -1,0 +1,85 @@
+---
+title: Shell & components
+summary: The chrome around a page. Frame is the headless composition you build from; Shell is the batteries-included default — header, sidebar, search, mobile bar. Plus Doc, Sidebar, Pager, and an opt-in theme.
+related:
+  - pharos/pharos
+  - pharos/search
+  - regions/client-islands
+---
+
+Pharos ships the *brains* as data; the components render them. Two shells and a handful of bricks turn a `Site` into a page that looks like docs — and every piece is overridable or ejectable.
+
+> **When to use.** Use `Shell` when you want a working docs layout in one import. Drop to `Frame` when you want the composition but your own header and sidebar. Use the bricks (`Doc`, `Sidebar`, `Pager`) directly when you compose the page yourself.
+
+## Two shells
+
+**`Frame`** is the headless composition — sidebar + main, with every region overridable. Pass a component to *replace* a region, `false`/`null` to *remove* it, nothing for the default. It imports no CSS and makes no design decisions:
+
+```svelte
+<script>
+  import { Frame } from 'ogygia/pharos';
+  import { site } from '$lib/site.server';   // in a csr=false layout, server-only is fine
+  import MyHeader from '$lib/MyHeader.svelte';
+</script>
+
+<Frame {site} header={MyHeader} footer={null}>
+  {@render children()}
+</Frame>
+```
+
+**`Shell`** is the batteries-included default — the VitePress form: top header (brand, links, search, theme toggle), left sidebar, content column, and a mobile bottom bar with a slide-up sheet. It's the same public bricks, arranged. Styling is **opt-in** — `Shell` ships structure and `.ph-*` hooks, and imports no CSS:
+
+```svelte
+<script>
+  import Shell from 'ogygia/pharos/shell';
+  import 'ogygia/pharos/theme.css';   // the design language (tokens + element styles)
+  import 'ogygia/pharos/shell.css';   // this shell's layout (header + sidebar + grid)
+  import { site } from '$lib/site.server';
+</script>
+
+<Shell {site} base="/docs" title="Docs">
+  {@render children()}
+</Shell>
+```
+
+Want the pharos look? Import the two stylesheets once, in your root layout. Want your own? Don't, and style the `.ph-*` classes yourself — you only pay for the CSS you ask for.
+
+## The bricks
+
+Each is a plain component you can use without a shell:
+
+- **`<Doc {view} />`** — lays out one page from a [`site.doc()`](/docs/pharos/remotes) view: eyebrow, title, the rendered body, the **On this page** rail from `view.headings`, and prev/next. Props toggle the crumbs, the pager, the keep-reading list.
+- **`<Sidebar />`** — the nav tree with the active row tracked. A [client island](/docs/regions/client-islands) so its marker glides across SPA navigations.
+- **`<Pager />`** — the prev/next footer, from the outline's `prevNext`.
+- **`<OnThisPage headings={…} />`** — the scroll-spy rail. `<Doc>` mounts it; use it standalone if you compose your own article.
+- **`<Switcher />`** — the version/locale picker on a [dimensioned](/docs/pharos/dimensions) site. A Bits UI dropdown, so it's an island.
+- **`<Search />`** — the ⌘K palette; see [Search](/docs/pharos/search).
+- **`<TabGroup>` / `<Tab>`** — tabbed panels, also mintable from `:::code-group` markdown.
+
+## Doc, on its own
+
+The article layout works with just a view — no shell required:
+
+```svelte
+<script>
+  import { Doc } from 'ogygia/pharos';
+  import { doc } from '$lib/site.remote';
+
+  const view = await doc(slug);
+</script>
+
+<Doc {view} keepReading={view.trail?.related} />
+```
+
+The body inside `view` is a baked [region](/docs/regions/held-regions) ticket, so any island the source `.svx` imported wakes on the page exactly as an in-pass render would. **These docs are `<Doc>`** — the article you are reading, its on-this-page rail, and the pager below are this brick.
+
+## Theme and design language
+
+`theme.css` is the **design language** — the token palette and element styles (`.ph-*`) shared by every shell. `shell.css` is `Shell`'s **layout** — header, sidebar, grid, mobile chrome. They're separate imports so you can keep the tokens and swap the layout, or keep the layout and repaint with your own tokens. Alternate token themes live under `ogygia/pharos/themes/*`.
+
+## Do / don't
+
+- **Do** reach for `Shell` first. It's a working docs site in one import; drop to `Frame` or the bricks only when you need to.
+- **Do** import the CSS in your root layout, once. The shells import none themselves — that's what lets you bring your own.
+- **Don't** thread `site` through every component. A shell sets it on context; the bricks inside read it without props.
+- **Don't** re-implement the on-this-page rail or the pager. `view.headings` and `view.prevNext` already carry the data; `<Doc>` renders both.

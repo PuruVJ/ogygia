@@ -21,7 +21,7 @@ The runtime surface. Import the namespace (`import * as ogygia from 'ogygia'`) o
 | `isRegion` | function | Type guard for a held region value. |
 | `transport` | hook value | The Kit `transport` entry that lets a held region cross the wire. |
 | `wire` | symbol | The reserved codec key for [shared state](/docs/data-state/state-context#sharing-state): `static [ogygia.wire] = { encode, decode }`. |
-| `script` | function | Serialize a self-contained function into a blocking inline `<script>` string. See [Pre-hydration scripts](#pre-hydration-scripts). |
+| `script` | function | Serialize a self-contained function into a blocking inline `<script>` string. See [Pre-hydration scripts](#ogygia-pre-hydration-scripts). |
 
 Types: `RegionValue`, `AwaitableRegion`, `InlineRegion`, `DualRegion`, `DeferredRegion`, `TransportCodec`.
 

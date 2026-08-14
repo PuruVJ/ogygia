@@ -1,4 +1,4 @@
-import { site } from '$lib/docs';
+import { site } from '$lib/docs.server';
 
 // The prerendered search index — section documents the client worker indexes with Orama. Static, so
 // the sidebar's search is instantaneous and on-device (no per-keystroke network, no server build).

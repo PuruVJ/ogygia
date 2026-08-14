@@ -1,0 +1,82 @@
+---
+title: Emissions
+summary: Machine-facing serializations of the site. sitemap.xml for crawlers, llms.txt for models, RSS for readers, raw markdown per page — each a one-line GET handler off the same outline.
+related:
+  - pharos/pharos
+  - pharos/search
+  - pharos/outline
+---
+
+Docs have a second audience in 2026: crawlers, language models, feed readers. Pharos emits the formats they expect straight off the outline — no parallel content, no separate build step. Each is a GET handler you mount in a `+server.ts`.
+
+> **When to use.** Add the emissions your audience asks for. A public docs site wants `sitemap.xml` and `llms.txt`; a blog wants RSS; an "open in your editor / copy as markdown" affordance wants the raw source. They cost one line each.
+
+## Sitemap
+
+Every leaf of the outline, as `sitemap.xml`. Pass the canonical origin so prerendered URLs are absolute:
+
+```ts
+// src/routes/sitemap.xml/+server.ts
+import { site } from '$lib/site.server';
+export const prerender = true;
+export const GET = site.emit.sitemap({ base: '/docs', origin: 'https://example.dev' });
+```
+
+## llms.txt
+
+The [llmstxt.org](https://llmstxt.org) index — a model-readable map of the docs, built from the nav tree:
+
+```ts
+// src/routes/llms.txt/+server.ts
+import { site } from '$lib/site.server';
+export const prerender = true;
+export const GET = site.emit.llms({ title: 'Example', description: 'Docs for Example.' });
+```
+
+## Raw markdown
+
+The pre-compile source of each page, for "copy as markdown" or an LLM that wants the real thing. Mount it at a catch-all `.md` route; it prerenders one file per entry that carries source:
+
+```ts
+// src/routes/docs/[...slug].md/+server.ts
+import { site } from '$lib/site.server';
+export const { GET, entries } = site.emit.raw();          // strips frontmatter by default
+// site.emit.raw({ frontmatter: 'keep' })                 // …or keep it
+```
+
+Now `/docs/routing.md` serves the source of `/docs/routing`. **This site does exactly that** — append `.md` to any docs URL.
+
+## RSS
+
+A feed over dated items — the [blog](/docs/pharos/outline) genre's emission. `items` maps a collection's refs; hrefs are root-relative and absolutized at emit time:
+
+```ts
+// src/routes/blog/rss.xml/+server.ts
+import { site, blog } from '$lib/site.server';
+export const prerender = true;
+export const GET = site.emit.rss({
+  title: 'Example blog',
+  base: '/blog',
+  items: async () =>
+    (await blog.refs()).map((r) => ({
+      href: `/blog/${r.id}`,
+      title: r.data.title,
+      description: r.data.description,
+      date: r.data.date
+    }))
+});
+```
+
+## Search index
+
+The prerendered index the client worker queries — also an emission. See [Search](/docs/pharos/search):
+
+```ts
+export const GET = site.emit.search();
+```
+
+## Do / don't
+
+- **Do** emit off the outline, not off a second copy of the content. The sitemap and llms.txt are always in sync because they are views of the same tree.
+- **Do** pass a canonical `origin` for prerendered emissions, so absolute URLs are correct without a request to read.
+- **Don't** hand-write these files. A new page joins the sitemap, the llms index, and the raw route the moment it exists — that is the point.

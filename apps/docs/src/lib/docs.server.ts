@@ -5,12 +5,12 @@
  * the brains the routes and the sidebar consume. Browser-safe — the nav remote is minted from this in
  * `docs.remote.ts`.
  */
-import { pharos } from 'ogygia/pharos';
-import { docs } from './collections';
+import { links, pharos } from 'ogygia/pharos';
+import { docs } from './collections.server';
 
 /** The site: the `docs` collection auto-woven by convention (`folder()` supplies order + `+meta.json`
  *  labels as data), "keep reading" from the content graph, and the link audit — a broken in-prose
  *  link fails the BUILD (prerender) and errors in dev on page open. */
-export const site = pharos({ outline: docs, prevNext: 'graph', audit: true });
+export const site = pharos({ outline: docs, prevNext: 'graph', checks: [links()] });
 
 export { docs };

@@ -1,5 +1,5 @@
 import { prerender } from '$app/server';
-import * as snip from '$lib/code/snippets.js';
+import * as snip from '$lib/code/snippets.server.js';
 
 /**
  * Shiki-highlight docs/playground snippet sources once at build (`prerender()`), then serve the

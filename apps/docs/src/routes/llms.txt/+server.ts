@@ -1,4 +1,4 @@
-import { site } from '$lib/docs';
+import { site } from '$lib/docs.server';
 
 // The docs, as an llms.txt index for models (llmstxt.org). One line off the site — the nav tree
 // serialized with titles + summaries. Prerendered; canonical origin for stable absolute URLs.

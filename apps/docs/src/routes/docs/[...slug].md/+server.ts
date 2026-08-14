@@ -1,4 +1,4 @@
-import { site } from '$lib/docs';
+import { site } from '$lib/docs.server';
 
 // Every doc page as raw markdown at `/docs/<slug>.md` — the source text for models and copy-paste.
 // The source rides on each entry (the markdown compiler injects a lazy `?raw` self-import), so there

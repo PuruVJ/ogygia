@@ -75,7 +75,7 @@ Pass an `ogygiaFallback` snippet — it shows in the placeholder until the real 
 
 A server island is **fresh on every request**: its endpoint is served `Cache-Control: no-store`, so a
 reload re-renders it. That's the right default for a hole (a per-request clock, cookie-personalized
-data). To let a hole sit in the browser cache, give it a `maxAge` in a [preset](/docs/reference/api#presets):
+data). To let a hole sit in the browser cache, give it a `maxAge` in a [preset](/docs/reference/api#ogygiavite-presets):
 
 ```ts
 // vite.config.ts

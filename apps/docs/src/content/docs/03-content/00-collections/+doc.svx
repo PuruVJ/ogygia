@@ -23,12 +23,12 @@ One rule governs the whole surface: **the boundary picks the representation.** S
 
 For a *page assembled from typed blocks* rather than a single markdown body, see [Blocks](/docs/content/blocks) — a separate, block-level API.
 
-## Define the collection once
+## Define the collection once — in a server module
 
-Put it in a plain module so both faces — server and wire — can reach it:
+A collection's `loader` is an **eager glob**: it pulls the whole compiled corpus into the module. Define it in a **`.server.ts`** file (or `.remote.ts`, or under `src/lib/server/`), so Kit mechanically guarantees no client module can import it — the corpus can never reach a browser bundle:
 
 ```ts
-// src/lib/collections.ts
+// src/lib/collections.server.ts
 import { content, markdown } from 'ogygia/content';
 import * as v from 'valibot';
 
@@ -39,6 +39,10 @@ export const docs = content({
   filter: (e) => !e.data.draft   // visibility, declared ONCE
 });
 ```
+
+> **ogygia warns you.** Define a collection outside a server module and the build prints a warning naming the file — because a client component that imports it would drag the entire corpus into its bundle (silently, and often megabytes). Keep the definition server-side and mint the wire crossing in a `.remote.ts`; that split is the whole defense.
+
+The collection *handle* is still browser-safe by **type** — `docs.get` and `docs.list` have no `$app/server` in their signatures — but the *module that defines it* is server-only because of the glob. Import the handle's types anywhere; import the module only from the server.
 
 `filter` is honored on every read path — `list`, `get`, `live`, and prerender inputs. A draft is invisible everywhere, including by direct URL. A per-remote filter can only narrow it further, never widen.
 
@@ -53,35 +57,48 @@ export const docs = content({
 `get` returns **`null`** when the id is unknown or filtered out, and never throws — the caller decides the 404. Validate the slug in `load`:
 
 ```ts
-// src/routes/docs/[...slug]/+page.ts — clean 404 for a missing entry
+// src/routes/docs/[...slug]/+page.server.ts — clean 404 for a missing entry
 import { error } from '@sveltejs/kit';
-import { docs } from '$lib/collections';
+import { docs } from '$lib/collections.server';
 
-export async function load({ params }) {
+export const load = async ({ params }) => {
   if (!(await docs.get(params.slug))) error(404, 'Not found');
-}
+};
+```
+
+The collection is server-only, so the page component can't import it. It gets the entry — including a **baked body** that legally crosses the wire — from a `.remote.ts`:
+
+```ts
+// src/lib/docs.remote.ts — mint a getter that bakes the body into a region ticket
+import { query } from '$app/server';
+import * as v from 'valibot';
+import { docs } from './collections.server';
+
+export const entry = query(v.string(), async (slug) => {
+  const e = await docs.get(slug);
+  if (!e) return null;
+  return { data: e.data, meta: e.meta, body: e.body ? await e.body : undefined };
+});
 ```
 
 ```svelte
-<!-- src/routes/docs/[...slug]/+page.svelte — load guaranteed it exists -->
+<!-- src/routes/docs/[...slug]/+page.svelte — the body arrives as a ticket, islands inside wake -->
 <script>
   import { page } from '$app/state';
   import { Region } from 'ogygia';
-  import { docs } from '$lib/collections';
+  import { entry } from '$lib/docs.remote';
 
-  const entry = (await docs.get(page.params.slug))!;
+  const view = (await entry(page.params.slug))!;
 </script>
 
-<h1>{entry.data.title}</h1>
-<Region of={entry.body} />   <!-- a demo island in the .svx hydrates here -->
+<h1>{view.data.title}</h1>
+<Region of={view.body} />   <!-- a demo island in the .svx hydrates here -->
 ```
 
-Doing the 404 in `load` matters: `error()` maps to a real status from a load function, but thrown from the component's top-level `await` it escalates to a 500.
-
-Prerender every entry from the route:
+Awaiting `e.body` bakes its SSR HTML into the region ticket — the one representation of a body that can cross the wire (a raw body is a same-pass live render and cannot be serialized). Prerender every entry from `+page.server.ts`:
 
 ```ts
-// +page.ts
+// src/routes/docs/[...slug]/+page.server.ts
 export const prerender = true;
 export const entries = async () => (await docs.ids()).map((slug) => ({ slug }));
 ```
@@ -93,7 +110,7 @@ export const entries = async () => (await docs.ids()).map((slug) => ({ slug }));
 ```ts
 // src/lib/docs.remote.ts
 import { withRemotes } from 'ogygia/content/server';
-import { docs } from './collections';
+import { docs } from './collections.server';
 
 export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title: e.data.title }) });
 ```
@@ -267,7 +284,7 @@ Below, a `query.live` yields a rendered [held region](/docs/regions/held-regions
 
 ## Do / don't
 
-- **Do** define the collection once in a plain module, then reach it from both server (`get`) and `.remote.ts` (`list`).
+- **Do** define the collection once in a `.server.ts` module, then reach it from server code (`get`) and mint the wire (`list` / a body-baking getter) in a `.remote.ts`.
 - **Do** do your 404 in `load` with `error()`, not in the component's top-level `await`.
 - **Do** leave `markdown: {}` at defaults to start — the built-in Shiki themes and heading collector cover most sites.
 - **Do** build your TOC from `entry.meta.headings` rather than re-parsing the body.
