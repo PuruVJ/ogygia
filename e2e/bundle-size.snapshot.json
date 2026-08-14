@@ -1,30 +1,30 @@
 {
   "Static content": {
-    "raw": 26075,
-    "brotli": 8155
+    "raw": 26823,
+    "brotli": 8407
   },
   "Interactive": {
-    "raw": 28320,
-    "brotli": 8852
+    "raw": 29068,
+    "brotli": 9098
   },
   "Forms": {
-    "raw": 27765,
-    "brotli": 8671
+    "raw": 28513,
+    "brotli": 8919
   },
   "SPA router": {
-    "raw": 41419,
-    "brotli": 12457
+    "raw": 42168,
+    "brotli": 12702
   },
   "Frozen regions": {
-    "raw": 29619,
-    "brotli": 9055
+    "raw": 30367,
+    "brotli": 9324
   },
   "Live regions": {
-    "raw": 28882,
-    "brotli": 8957
+    "raw": 29632,
+    "brotli": 9225
   },
   "Everything": {
-    "raw": 51496,
-    "brotli": 15072
+    "raw": 52245,
+    "brotli": 15310
   }
 }

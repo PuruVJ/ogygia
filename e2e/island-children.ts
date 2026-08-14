@@ -16,7 +16,7 @@ function check(name: string, cond: unknown, extra = '') {
 // ---------- SSR ----------
 const raw = await (await fetch(base + '/island-children')).text();
 // Two CardShell call sites → two regions; the nested Bumper degrades inline (would be 3 otherwise).
-check('SSR: one region per call site, nested island degrades inline', (raw.match(/ogygia-region entry="/g) || []).length === 2, `regions=${(raw.match(/ogygia-region entry="/g) || []).length}`);
+check('SSR: one region per call site + the nested island as its OWN region (slot crossing)', (raw.match(/ogygia-region entry="/g) || []).length === 3, `regions=${(raw.match(/ogygia-region entry="/g) || []).length}`);
 check('SSR: captured value in named snippet', /data-child-header[^>]*>header for Ada/.test(raw));
 check('SSR: default children with captured value', /data-child-static[^>]*>hello Ada/.test(raw));
 check('SSR: parameterized snippet rendered by the island', (raw.match(/data-child-row[^>]*>(one|two) · Ada/g) || []).length === 2);

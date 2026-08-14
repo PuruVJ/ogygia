@@ -59,6 +59,8 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['continuity.ts', true, 'named wire codec: session-lifetime cart survives SPA nav, merge, tab-isolated'],
 	['context.ts', true, 'createContext + <Context>: subtree provide, DOM-bridged, live across roots'],
 	['island-children.ts', true, 'host children/snippets cross into a hydrate island (synth entry)'],
+	['portable-snippet.ts', true, 'a snippet forwarded THROUGH a plain shell into an island crosses + comes alive'],
+	['snippet-islands.ts', true, 'islands in a {#snippet} to a plain shell: marks survive + top-level await SSRs'],
 	['interaction.ts', true, "wake:'interaction' — cold until used, click replay, typing survives"],
 	['presets.ts', false, 'transform-level: region syntax + presets + errors'],
 	['dedup.ts', false, 'same-component-two-strategies → ONE client chunk']
@@ -88,8 +90,8 @@ async function waitForServer(timeoutMs = 30000) {
 // ── 1. build ────────────────────────────────────────────────────────────────
 if (!noBuild) {
 	banner('▸ Building library');
+	// The tsdown config's svelte plugin copies `.svelte` sources into dist — no separate copy step.
 	if (!sh('node', ['node_modules/tsdown/dist/run.mjs'], { cwd: join(repo, 'packages/ogygia') })) process.exit(1);
-	if (!sh('node', ['scripts/copy-svelte.mjs'], { cwd: join(repo, 'packages/ogygia') })) process.exit(1);
 	// ── prerender-secret warning, BOTH directions ─────────────────────────────
 	// Prerendered pages mint ~forever capabilities. With NO stable OGYGIA_SECRET the build must
 	// warn (once — ServerIsland + swr-lake mints share the guard); WITH one it must stay silent.

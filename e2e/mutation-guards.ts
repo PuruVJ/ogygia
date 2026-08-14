@@ -51,20 +51,12 @@ function expectOk(label: string, src: string) {
 	}
 }
 
-// Cross-island composition: host children now CROSS into a hydrate island (synthesized entry).
-expectOk('host static children now cross', wrap(IMP, '<C><p>x</p></C>'));
-expectOk('host children with captured value cross', wrap(IMP + '\nconst who = "x";', '<C><p>{who}</p></C>'));
-// But a child that ASSIGNS to a captured host value is still rejected — a snapshot can't write back.
-expectError(
-	'host bind: mutating children rejected',
-	wrap(IMP + '\nlet name = "x";', '<C><input bind:value={name} /></C>'),
-	/assign to host value/
-);
-expectError(
-	'mutation error names the file',
-	wrap(IMP + '\nlet name = "x";', '<C><input bind:value={name} /></C>'),
-	/src\/routes\/\+page\.svelte/
-);
+// Cross-island composition: host children cross at RUNTIME (slot marker + adopting snippet), so
+// the compiler accepts every children shape — including host-value references (the server closure
+// renders them) and bindings (the frozen client DOM simply never writes back; static freezes).
+expectOk('host static children cross', wrap(IMP, '<C><p>x</p></C>'));
+expectOk('host children referencing a host value cross', wrap(IMP + '\nconst who = "x";', '<C><p>{who}</p></C>'));
+expectOk('host children with a bind: compile (frozen DOM never writes back)', wrap(IMP + '\nlet name = "x";', '<C><input bind:value={name} /></C>'));
 
 // Explicit serializable props are fine (no free-var hoist)
 expectOk('serializable prop on tag is fine', wrap(IMP + '\nlet count = 0;', '<C value={count} />'));
