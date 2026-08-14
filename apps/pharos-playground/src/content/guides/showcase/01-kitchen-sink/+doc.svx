@@ -1,0 +1,346 @@
+---
+title: Kitchen sink
+summary: Every element the design system renders, on one very long page. The stress test.
+related:
+  - showcase/interactive
+  - guides/theming
+---
+
+<script>
+	import { TabGroup, Tab } from 'ogygia/pharos';
+	import Counter from '$lib/demos/Counter.svelte' with { wake: 'visible' };
+	import Stopwatch from '$lib/demos/Stopwatch.svelte' with { wake: 'visible' };
+	import Palette from '$lib/demos/Palette.svelte' with { wake: 'visible' };
+</script>
+
+This page exists to exercise the design system at scale. It uses every heading level, all list types, multiple tables, blockquotes, code in every language the highlighter supports, tabbed panels, and all three live demos. If something looks wrong here, it will look wrong everywhere. Read it top to bottom, or use the on-this-page rail to jump around.
+
+## Prose and typography
+
+Good documentation is mostly words, so the reading experience for plain prose has to be excellent before anything else matters. Paragraphs should have comfortable measure, generous line height, and enough contrast to read for an hour without strain. The body font carries the bulk of the page, and it must sit calmly next to headings, code, and the occasional inline element like `--ph-accent` without any of them fighting for attention.
+
+Here is a second paragraph, because a single one never reveals the rhythm between blocks. The space above and below a paragraph, the way a heading pulls the eye down to the next section, the weight of **bold** against the lightness of *italic* — all of it only becomes visible once there is enough text for a rhythm to exist. This page has plenty.
+
+### Emphasis and inline elements
+
+You can combine emphasis freely: **bold**, *italic*, ***bold italic***, and `inline code`. Inline code should read as code without shouting — a subtle background, a monospace face, and the same syntax color family as the fenced blocks. A token like `wake: 'visible'` should be instantly recognizable as something you would type.
+
+### Links
+
+Links come in two kinds. External links leave the site, like [the Svelte docs](https://svelte.dev/docs) or [the Vite guide](https://vite.dev/guide/). Internal links point at sibling pages by bare slug, like [islands](../concepts/islands), [regions](../concepts/regions), and [theming](../guides/theming). Both should be clearly clickable and clearly distinct from surrounding text.
+
+## Lists
+
+### Unordered lists
+
+- ogygia renders pages on the server as static HTML.
+- Only components marked as islands ship client JavaScript.
+- Each island wakes on its own schedule.
+	- Nested items are supported for sub-points.
+	- They indent cleanly and keep their bullet style.
+- The result is less JavaScript and a faster first paint.
+
+### Ordered lists
+
+1. Install the package with your package manager.
+2. Register the Vite plugin before SvelteKit's.
+3. Enable the Markdown preprocessor.
+4. Create a content collection.
+5. Mount the catch-all route and render.
+
+### Mixed and nested
+
+1. Set up the project.
+	- Node 18 or newer.
+	- Svelte 5 in runes mode.
+2. Author content.
+	- Write `.svx` files with frontmatter.
+	- Co-locate island components.
+3. Ship it.
+
+## Blockquotes
+
+A single-line quote is the simplest form:
+
+> Static by default, interactive on purpose.
+
+A multi-line quote holds a longer thought, and it should keep its left rule and its calmer text color across every line without breaking rhythm:
+
+> An island is an interactive component in a sea of static HTML.
+> Everything around it stays as server-rendered markup that never
+> re-runs, which is exactly why the model stays cheap even as a
+> page grows.
+
+Callout-style quotes lead with a bold label:
+
+> **Note.** Wake strategies change *when* an island hydrates, never *whether* it is interactive. A lazier strategy defers cost; it never removes functionality.
+
+> **Warning.** Props passed into an island must be serializable. Functions and class instances do not survive the trip across the hydration boundary.
+
+## Tables
+
+A simple two-column table:
+
+| Term | Meaning |
+| --- | --- |
+| Island | An interactive component that hydrates on its own. |
+| Region | Any addressable block: island, server island, lake, or held. |
+| Lake | A large static region rendered once and cached. |
+
+A wider table with alignment and inline code:
+
+| Strategy | Wakes when | Cost | Use for |
+| --- | --- | --- | --- |
+| `load` | Immediately | Highest | Above-the-fold, reached at once. |
+| `idle` | On `requestIdleCallback` | Medium | Non-urgent interactive widgets. |
+| `visible` | On scroll into view | Low | The safe default for below the fold. |
+| `interaction` | On first hover/focus/tap | Lowest | Rarely-used controls. |
+
+A reference-style table with more rows, the kind an API page produces:
+
+| Token | Default (light) | Default (dark) | Controls |
+| --- | --- | --- | --- |
+| `--ph-bg` | `#ffffff` | `#101014` | Page background |
+| `--ph-bg-subtle` | `#f7f7f8` | `#17171d` | Cards and code blocks |
+| `--ph-line` | `#e4e4e8` | `#26262e` | Borders |
+| `--ph-text` | `#1c1c21` | `#e8e8ee` | Body text |
+| `--ph-text-muted` | `#6b6b76` | `#9a9aa6` | Secondary text |
+| `--ph-accent` | `#0d9488` | `#0d9488` | Links and active states |
+
+## Code in every language
+
+### Bash
+
+```bash
+pnpm add ogygia
+pnpm dev --host --port 4321
+git commit -m "docs: add kitchen sink"
+```
+
+### TypeScript
+
+```ts
+import { content, markdown, json } from 'ogygia/content';
+import { z } from 'zod';
+
+export const guides = content({
+	source: markdown('guides/**/+doc.svx'),
+	schema: z.object({
+		title: z.string(),
+		summary: z.string().optional(),
+		related: z.array(z.string()).default([])
+	})
+});
+
+export async function resolve(slug: string) {
+	const doc = await guides.get(slug);
+	if (!doc) throw new Error(`No doc for ${slug}`);
+	return { doc, related: await guides.related(slug) };
+}
+```
+
+### Svelte
+
+```svelte
+<script lang="ts">
+	import Counter from '$lib/demos/Counter.svelte' with { wake: 'visible' };
+
+	let { title, summary } = $props();
+	let expanded = $state(false);
+	const label = $derived(expanded ? 'Hide' : 'Show');
+</script>
+
+<section>
+	<h2>{title}</h2>
+	{#if summary}<p>{summary}</p>{/if}
+
+	<button onclick={() => (expanded = !expanded)}>{label} demo</button>
+	{#if expanded}
+		<Counter />
+	{/if}
+</section>
+```
+
+### JSON
+
+```json
+{
+	"name": "pharos-playground",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview"
+	},
+	"dependencies": {
+		"ogygia": "^0.5.0",
+		"svelte": "^5.0.0"
+	}
+}
+```
+
+### CSS
+
+```css
+:root {
+	--ph-accent: #0d9488;
+	--ph-radius: 12px;
+}
+
+.doc-demo {
+	display: grid;
+	gap: 1rem;
+	padding: 1.5rem;
+	border: 1px solid var(--ph-line);
+	border-radius: var(--ph-radius);
+	background: var(--ph-bg-subtle);
+}
+
+@media (prefers-color-scheme: dark) {
+	.doc-demo {
+		box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+	}
+}
+```
+
+### HTML
+
+```html
+<article class="doc" data-page="kitchen-sink">
+	<h1>Kitchen sink</h1>
+	<p>Everything the design system renders, on one page.</p>
+	<div data-island="Counter" data-wake="visible">
+		<!-- server HTML here, hydrates on scroll -->
+	</div>
+</article>
+```
+
+## Tabs
+
+Grouped, synced tabs for a package-manager instruction:
+
+<TabGroup group="pm">
+<Tab label="npm">
+
+```bash
+npm install ogygia
+```
+
+</Tab>
+<Tab label="pnpm">
+
+```bash
+pnpm add ogygia
+```
+
+</Tab>
+<Tab label="yarn">
+
+```bash
+yarn add ogygia
+```
+
+</Tab>
+<Tab label="bun">
+
+```bash
+bun add ogygia
+```
+
+</Tab>
+</TabGroup>
+
+Tabs are not only for shells. Here they compare the same config across formats:
+
+<TabGroup group="config-lang">
+<Tab label="TypeScript">
+
+```ts
+export default {
+	content: 'src/content',
+	defaultWake: 'visible'
+};
+```
+
+</Tab>
+<Tab label="JSON">
+
+```json
+{
+	"content": "src/content",
+	"defaultWake": "visible"
+}
+```
+
+</Tab>
+</TabGroup>
+
+## Live demo: Counter
+
+A client island holding local state. It rendered on the server showing `0`, then hydrated on scroll. Click to change the count.
+
+<Counter />
+
+```svelte
+<script>
+	import Counter from '$lib/demos/Counter.svelte' with { wake: 'visible' };
+</script>
+
+<Counter />
+```
+
+## Live demo: Stopwatch
+
+An island driven by an effect and a timer. Start it, watch it tick, and note that the prose around it never re-renders as it runs.
+
+<Stopwatch />
+
+```svelte
+<script>
+	import Stopwatch from '$lib/demos/Stopwatch.svelte' with { wake: 'visible' };
+</script>
+
+<Stopwatch />
+```
+
+## Live demo: Palette
+
+Drag the slider to rewrite `--ph-accent`. The whole page recolors because every accented element reads the same token.
+
+<Palette />
+
+```svelte
+<script>
+	import Palette from '$lib/demos/Palette.svelte' with { wake: 'visible' };
+</script>
+
+<Palette />
+```
+
+## Deep headings
+
+### A third-level heading
+
+The on-this-page rail lists this one.
+
+#### A fourth-level heading
+
+This renders but stays out of the rail, keeping the rail short even on a page this long.
+
+##### A fifth-level heading
+
+Rarely needed, but it should still be styled sensibly rather than falling back to a browser default.
+
+## A long-form section
+
+Sometimes a docs page needs several dense paragraphs in a row with no lists or code to break them up, and the typography has to hold up under that weight. The islands model is a good example of something that rewards a few paragraphs of careful explanation. On the surface it sounds like a performance trick — ship less JavaScript — but the deeper value is architectural. When the default is static, interactivity becomes a decision you make deliberately, component by component, rather than a cost you pay by default across the entire page.
+
+That shift changes how you build. You stop thinking of the page as one big application that happens to render on the server, and start thinking of it as a document with a few live spots. The document is fast because it is mostly text. The live spots are cheap because they are small and independent. And the boundary between them is a hard wall: a click inside an island never causes the paragraph beside it to re-run, because that paragraph is inert HTML with no reactivity attached.
+
+The payoff compounds as a site grows. A hundred-page documentation site built this way ships almost no JavaScript per page — only the handful of islands each page actually uses. The sidebar, the prose, the tables, and the code blocks are all static, generated once and cached. What remains is exactly the interactive surface the reader can touch, and nothing more.
+
+> **Takeaway.** The kitchen sink is long on purpose. A design system that holds together on a page this varied will hold together anywhere.
+
+## Wrap-up
+
+That is every element in one place: prose, all heading levels, both list types, nested lists, single and multi-line and callout blockquotes, three tables of increasing width, code in six languages, two tab groups, and three live islands. For a focused look at just the interactive pieces, continue to [interactive islands](interactive).

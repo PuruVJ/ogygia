@@ -420,10 +420,11 @@ export const contentCustom = `// any source — a CMS, a REST API, or a push fee
 export const press = content({
   schema,
   loader: {
-    async get(id) { const p = await api(\`/posts/\${id}\`); return p && { id, data: p }; },
-    async list()  { return (await api('/posts')).map((p) => ({ id: p.slug, data: p })); }
+    // get() carries the body; refs() is metadata only (never a body on the wire).
+    async get(id)  { const p = await api(\`/posts/\${id}\`); return p && { id, data: p }; },
+    async refs()   { return (await api('/posts')).map((p) => ({ id: p.slug, data: p })); }
   }
 });
 
-// pushes? add live() — a change signal; the list re-emits on every change.
+// pushes? add live() — a change signal; the feed re-emits on every change.
 export const feed = withRemotes(press).live.list({ map: (e) => e.data });`;

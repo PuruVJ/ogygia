@@ -1,9 +1,6 @@
-import { error } from '@sveltejs/kit';
-import { docs } from '$lib/collections';
+import { site } from '$lib/docs';
 
-// Validate the slug in `load` (not the component). `error(404)` thrown from a load is mapped to a
-// real 404; thrown from the page component's top-level `await` it escalates to a 500 in dev. This
-// guarantees a clean, styled 404 for a missing/moved page in both dev and prod.
-export async function load({ params }) {
-	if (!(await docs.get(params.slug ?? ''))) error(404, 'Page not found');
-}
+// The pharos site's `load` is a thin 404 guard: `error(404)` thrown from a load maps to a real,
+// styled 404 (thrown from the component's top-level await it would escalate to a 500 in dev). The
+// page's actual data comes from `site.doc()` in the component (csr=false island-body semantics).
+export const load = site.load;

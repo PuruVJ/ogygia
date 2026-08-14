@@ -1,0 +1,192 @@
+---
+title: Markdown & MDX
+summary: Frontmatter, headings, Shiki highlighting, component overrides, and smart links.
+related:
+  - concepts/content-collections
+  - guides/tabs-and-code
+---
+
+ogygia reads `.svx` files: Markdown with Svelte mixed in. You get the whole of CommonMark plus the ability to import and render components right in the prose. This page covers everything the Markdown pipeline gives you.
+
+::: code-group
+```bash [npm]
+npm create ogygia@latest
+```
+```bash [pnpm]
+pnpm create ogygia
+```
+:::
+
+## Frontmatter
+
+Every file opens with a YAML frontmatter block fenced by `---`. It becomes the entry's `data`, validated against the collection schema.
+
+```markdown
+---
+title: Markdown & MDX
+summary: Everything the Markdown pipeline gives you.
+related:
+  - concepts/content-collections
+draft: false
+---
+```
+
+The body begins right after the closing `---`. **Do not** write an `# H1` in the body — the title comes from frontmatter, and a stray H1 would double it up.
+
+## Headings
+
+Use `##` and `###` for structure. Those two levels feed the on-this-page rail; deeper levels render but stay out of the rail to keep it readable.
+
+```markdown
+## A top-level section
+
+### A subsection
+
+#### Detail (renders, but not in the rail)
+```
+
+Each heading gets a slug and an anchor automatically, so `## Wake strategies` becomes a link target at `#wake-strategies`.
+
+## Text formatting
+
+The usual Markdown emphasis all works: **bold**, *italic*, `inline code`, and combinations like ***both***. Inline code is highlighted with the same theme as fenced blocks, so a token like `$state` reads consistently everywhere.
+
+Lists come in both flavors. Unordered:
+
+- Server-rendered by default.
+- Interactive only where you opt in.
+- No client JavaScript for prose.
+
+And ordered, for steps:
+
+1. Write the file.
+2. Add frontmatter.
+3. Save and reload.
+
+> Blockquotes work too, and they can span
+> several lines to hold a longer aside without
+> breaking the flow of the surrounding prose.
+
+## Code highlighting with Shiki
+
+Fenced code blocks are highlighted at build time with [Shiki](https://shiki.style/), the same engine VS Code uses. That means the exact grammar your editor shows, rendered to static HTML — no client-side highlighter, no flash of unstyled code.
+
+Name the language after the opening fence:
+
+```ts
+const doc = await guides.get('concepts/islands');
+if (!doc) throw new Error('missing');
+```
+
+```css
+:root {
+	--ph-accent: #0d9488;
+	--ph-bg: #ffffff;
+}
+```
+
+```json
+{
+	"label": "Guides",
+	"collapsed": false
+}
+```
+
+Because highlighting happens at build time, it costs nothing at runtime and works even with JavaScript disabled.
+
+## A bigger Markdown example
+
+Here is a fuller sample showing how the pieces combine in one document. This is what an authored page looks like on disk:
+
+````markdown
+---
+title: Wake strategies
+summary: When each island comes alive.
+---
+
+Islands wake on a schedule you choose.
+
+## The four strategies
+
+| Strategy | Wakes when |
+| --- | --- |
+| `load` | Immediately |
+| `visible` | On scroll into view |
+
+Use `visible` unless you have a reason not to.
+
+> **Tip.** Lazier is usually better.
+
+```svelte
+<script>
+  import Chart from './Chart.svelte' with { wake: 'visible' };
+</script>
+
+<Chart />
+```
+````
+
+Note how a fenced Svelte block can live inside the prose — the highlighter treats it as code, while a real `<script>` block outside a fence is compiled and run.
+
+## Component overrides
+
+You can replace the HTML elements Markdown generates with your own components. This is how the design system styles links, tables, and callouts without you writing wrapper markup by hand.
+
+```ts
+// markdown.config.ts
+import { markdown } from 'ogygia/markdown';
+import Link from '$lib/md/Link.svelte';
+import Table from '$lib/md/Table.svelte';
+
+export default markdown({
+	components: {
+		a: Link,
+		table: Table
+	}
+});
+```
+
+Now every `[link](...)` renders through your `Link` component and every pipe table through `Table`, so styling stays central.
+
+## Links
+
+Two kinds of links show up in docs, and ogygia handles both:
+
+- **External links** point elsewhere and open with the usual `https://` URL, like [the Svelte site](https://svelte.dev).
+- **Internal links** use a bare slug and resolve within the collection, like [content collections](../concepts/content-collections) or [theming](theming).
+
+Internal links are checked at build time. A slug that does not resolve to a real entry fails the build, so broken cross-references never make it to production.
+
+> **Why bare slugs?** They survive restructuring. Because the slug is the entry id and the id is stable across renumbering, a link written today keeps working after you reorder the sidebar tomorrow.
+
+Continue to [tabs & code](tabs-and-code) for tabbed content and richer code presentation.
+
+## Custom containers
+
+VitePress-style `:::` containers are supported, so docs migrated from VitePress keep working. Each type gets its own colour, and `details` is collapsible.
+
+::: tip
+This is a tip. Use it for a helpful aside that most readers will want.
+:::
+
+::: info Good to know
+An info block with a custom title after the type.
+:::
+
+::: warning
+Props passed into an island must be serializable — no functions or class instances.
+:::
+
+::: danger Careful
+A danger block for the things that will bite. `csr = true` opts a whole route back into the client.
+:::
+
+::: details Show the config
+```ts
+export default defineConfig({
+	plugins: [ogygia(), sveltekit()]
+});
+```
+:::
+
+The same syntax you already write in VitePress — `::: tip`, `::: warning`, `::: danger`, `::: info`, `::: details` — renders here unchanged.

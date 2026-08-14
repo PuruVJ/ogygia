@@ -1,0 +1,143 @@
+---
+title: Content collections
+summary: content(), markdown(), and json() turn folders of files into typed, queryable data.
+related:
+  - getting-started/quick-start
+  - guides/markdown
+---
+
+A content collection is a typed view over a folder of files. You describe where the files live and what their frontmatter should look like, and ogygia gives you back validated entries with stable ids. There is no runtime store — everything resolves at build time from the file system.
+
+## content()
+
+`content()` is the entry point. It takes a **source** (where the files are and how to read them) and an optional **schema** (what their metadata must contain).
+
+```ts
+// src/content/config.ts
+import { content, markdown } from 'ogygia/content';
+import { z } from 'zod';
+
+export const guides = content({
+	source: markdown('guides/**/+doc.svx'),
+	schema: z.object({
+		title: z.string(),
+		summary: z.string().optional(),
+		related: z.array(z.string()).default([])
+	})
+});
+```
+
+The returned object is your query API. Every collection exposes the same handful of methods.
+
+| Method | Returns |
+| --- | --- |
+| `get(id)` | One compiled entry, or `undefined`. |
+| `all()` | Every entry, ordered by path. |
+| `tree()` | The nested sidebar structure. |
+| `related(id)` | Entries named in the `related` field. |
+
+## Sources
+
+A source knows how to find files and how to parse them. ogygia ships three.
+
+### markdown()
+
+Reads `.svx` files. Each file compiles to a Svelte component, its frontmatter is parsed, and its headings are extracted for the on-this-page rail.
+
+```ts
+import { markdown } from 'ogygia/content';
+
+const source = markdown('guides/**/+doc.svx');
+```
+
+Every entry from a `markdown()` source carries these fields:
+
+```ts
+interface MarkdownEntry {
+	id: string;              // derived from the file path
+	data: Frontmatter;       // validated against your schema
+	headings: Heading[];     // h2 / h3 for the page rail
+	Component: Component;     // the compiled body
+}
+```
+
+### json()
+
+Reads `.json` files as pure data. Useful for API references, config-driven pages, or anything you generate rather than write by hand.
+
+```ts
+import { content, json } from 'ogygia/content';
+import { z } from 'zod';
+
+export const api = content({
+	source: json('api/*.json'),
+	schema: z.object({
+		name: z.string(),
+		props: z.array(z.object({
+			name: z.string(),
+			type: z.string(),
+			required: z.boolean().default(false)
+		}))
+	})
+});
+```
+
+### content()
+
+You can compose sources too. Passing a plain object of named sources builds a collection whose entries come from several places, which is handy when prose and generated reference data share one sidebar.
+
+```ts
+export const docs = content({
+	source: {
+		guides: markdown('guides/**/+doc.svx'),
+		api: json('api/*.json')
+	}
+});
+```
+
+## Schemas
+
+The schema is a Zod object that validates every entry's frontmatter at build time. A missing required field or a wrong type fails the build with a message that names the offending file, so you never ship a page with broken metadata.
+
+```ts
+schema: z.object({
+	title: z.string(),
+	summary: z.string().optional(),
+	draft: z.boolean().default(false),
+	tags: z.array(z.string()).default([])
+})
+```
+
+> **Why validate at build time?** Because content bugs are silent otherwise. A typo in a frontmatter key does not throw — it just renders an empty title. The schema turns that into a hard error you catch before deploy.
+
+## Ids from file paths
+
+The id is how you address an entry. It is computed from the file path, and the rules are the same ones the router uses.
+
+1. Start from the path: `guides/concepts/01-islands/+doc.svx`.
+2. Remove the glob's fixed root: `concepts/01-islands/+doc.svx`.
+3. Drop the `+doc.svx` leaf: `concepts/01-islands`.
+4. Strip numeric prefixes: `concepts/islands`.
+
+```ts
+const doc = await guides.get('concepts/islands');
+```
+
+The prefixes matter for ordering the sidebar but never leak into ids, so you can renumber files freely without breaking links.
+
+## The Source contract
+
+Everything above is built on one small interface. If you need a source ogygia does not ship — say, entries from a headless CMS or a database — you implement the `Source` contract and pass it to `content()` like any other.
+
+```ts
+interface Source<T> {
+	// Enumerate every entry id this source can produce.
+	list(): Promise<string[]>;
+	// Load and parse a single entry by id.
+	load(id: string): Promise<Entry<T>>;
+}
+```
+
+As long as a source can list its ids and load an entry for each, the collection API, the router, and the sidebar all work unchanged. That is the whole point of the contract: the rest of ogygia never needs to know where content actually comes from.
+
+Next, learn how the Markdown itself is authored and highlighted in [Markdown & MDX](../guides/markdown).

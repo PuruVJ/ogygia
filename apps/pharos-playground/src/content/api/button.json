@@ -1,0 +1,5 @@
+{
+	"title": "Button",
+	"summary": "A clickable action.",
+	"signature": "<Button variant=\"primary\" onclick={fn}>Label</Button>"
+}

@@ -1,0 +1,101 @@
+---
+title: Project structure
+summary: A tour of the folders and file conventions an ogygia site uses.
+related:
+  - getting-started/quick-start
+  - concepts/content-collections
+---
+
+ogygia is not opinionated about most of your app, but it does lean on a few conventions for content. Following them means less config: numeric prefixes order your sidebar, `+doc.svx` marks a page, and co-located components stay next to the prose that uses them.
+
+## The layout at a glance
+
+Here is a typical site. The `content` tree holds your docs; everything else is ordinary SvelteKit.
+
+```bash
+my-docs/
+├── src/
+│   ├── content/
+│   │   ├── config.ts              # collection definitions
+│   │   └── guides/
+│   │       ├── getting-started/
+│   │       │   ├── 01-installation/
+│   │       │   │   └── +doc.svx
+│   │       │   ├── 02-quick-start/
+│   │       │   │   └── +doc.svx
+│   │       │   └── +meta.json     # label for this group
+│   │       └── concepts/
+│   │           ├── 01-islands/
+│   │           │   ├── +doc.svx
+│   │           │   └── WakeDemo.svelte   # co-located island
+│   │           └── +meta.json
+│   ├── lib/
+│   │   └── demos/                 # shared interactive components
+│   │       ├── Counter.svelte
+│   │       ├── Stopwatch.svelte
+│   │       └── Palette.svelte
+│   ├── routes/
+│   │   ├── +layout.svelte
+│   │   └── [...slug]/
+│   │       ├── +page.ts
+│   │       └── +page.svelte
+│   ├── app.css                    # --ph-* theme tokens
+│   └── app.html
+├── svelte.config.js
+└── vite.config.ts
+```
+
+## What each folder is for
+
+| Path | Role |
+| --- | --- |
+| `src/content/config.ts` | Declares your collections and their schemas. |
+| `src/content/<collection>/` | Source files for one collection. |
+| `+doc.svx` | The page body. One per folder. |
+| `+meta.json` | Optional. Sets the display label for a group. |
+| `src/lib/demos/` | Reusable islands imported by many pages. |
+| `src/routes/[...slug]/` | The catch-all route that renders any doc. |
+| `src/app.css` | Global styles and the `--ph-*` design tokens. |
+
+## File conventions
+
+A few naming rules do a lot of work. Learn these four and the rest follows.
+
+- **`+doc.svx` is a page.** A folder with a `+doc.svx` is a route. A folder without one is just a grouping container.
+- **Numeric prefixes order, then vanish.** `01-installation` sorts before `02-quick-start`, but the slug is `installation` and `quick-start`. The prefix never appears in the URL.
+- **`+meta.json` labels a group.** Folders do not carry titles, so a `+meta.json` supplies the human-readable name for the sidebar section.
+- **Co-locate components.** An island used by exactly one page lives next to it. An island used by several pages moves to `src/lib/demos`.
+
+### A group's meta file
+
+```json
+{
+	"label": "Getting started",
+	"collapsed": false
+}
+```
+
+`label` is the sidebar heading. `collapsed` controls whether the group starts folded. Both are optional; without a `+meta.json`, ogygia falls back to a title-cased version of the folder name.
+
+## Slugs and ids
+
+The id is everything ogygia knows a document by. It is deterministic, so two people who lay out the same files get the same URLs.
+
+> **Rule of thumb.** Start from the file path, drop the collection root and the `+doc.svx` leaf, then strip every `NN-` prefix. What remains is the slug.
+
+```ts
+// guides/concepts/01-islands/+doc.svx
+//   -> collection root:  guides/
+//   -> leaf removed:     concepts/01-islands
+//   -> prefix stripped:  concepts/islands
+```
+
+## Keeping things tidy
+
+As a site grows, a couple of habits keep it navigable:
+
+1. Group by concept, not by file type. All the islands docs live together, prose and demos side by side.
+2. Reserve `src/lib/demos` for genuinely shared islands. If a component has one caller, keep it co-located.
+3. Let numbers do the ordering. Never hand-maintain a sidebar array — the folder names already carry the order.
+
+Next, see how those islands actually wake in [islands](../concepts/islands).

@@ -1,0 +1,31 @@
+{
+	"name": "pharos-playground",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+	},
+	"devDependencies": {
+		"@fontsource-variable/inter": "^5.3.0",
+		"@fontsource-variable/jetbrains-mono": "^5.3.0",
+		"@sveltejs/adapter-node": "^5.5.7",
+		"@sveltejs/kit": "^2.70.2",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"@typescript/native": "npm:typescript@^7.0.2",
+		"svelte": "^5.56.8",
+		"svelte-check": "^4.7.4",
+		"typescript": "^6.0.3",
+		"vite": "^8.2.0"
+	},
+	"dependencies": {
+		"bits-ui": "^2.18.1",
+		"devalue": "^5.9.0",
+		"mdsvex": "^0.12.8",
+		"ogygia": "workspace:*",
+		"valibot": "^1.4.2"
+	}
+}

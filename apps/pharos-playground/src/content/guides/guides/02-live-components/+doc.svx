@@ -1,0 +1,106 @@
+---
+title: Live components
+summary: A deep dive on the island model — hydration boundaries, state, and the Counter demo.
+related:
+  - concepts/islands
+  - showcase/interactive
+---
+
+<script>
+	import Counter from '$lib/demos/Counter.svelte' with { wake: 'visible' };
+</script>
+
+A live component is an island once it has woken. This page goes past *how to declare one* and into *how it actually works*: where the hydration boundary sits, what crosses it, and why the prose around a live component never re-runs.
+
+## The island model, up close
+
+When ogygia's Vite plugin sees an import with a `wake` hint, it does three things:
+
+1. Splits the component into its own client chunk, separate from the page bundle.
+2. Renders the component to HTML on the server, exactly like the surrounding prose.
+3. Wraps that HTML in a small boundary marker and emits the code that will hydrate it.
+
+The page arrives as one HTML document. Inside it, each island is a labeled region. Nothing runs on the client until a wake condition fires for a specific island — at which point only that island's chunk loads.
+
+## Meet the Counter
+
+Below is a live Counter. It rendered to HTML on the server showing `0`, then hydrated when it scrolled into view. Click it — the state lives entirely in your browser.
+
+<Counter />
+
+Here is exactly how it is placed on the page. The import carries the wake hint; the tag drops into prose like any other element:
+
+```svelte
+<script>
+	import Counter from '$lib/demos/Counter.svelte' with { wake: 'visible' };
+</script>
+
+<Counter />
+```
+
+And here is the component itself. It is a plain Svelte 5 component using runes — there is nothing island-specific inside it:
+
+```svelte
+<script lang="ts">
+	let count = $state(0);
+</script>
+
+<div class="counter">
+	<button onclick={() => count--}>−</button>
+	<output>{count}</output>
+	<button onclick={() => count++}>+</button>
+</div>
+```
+
+## Hydration boundaries
+
+The boundary is the edge of the island. Inside it, Svelte owns the DOM: it attaches listeners, tracks `$state`, and re-renders on change. Outside it, the HTML is inert forever.
+
+> **Key property.** Prose does not hydrate. When the Counter above re-renders on a click, the paragraph you are reading does not re-run, does not diff, and does not cost anything. The boundary is a hard wall.
+
+This is what makes the model cheap. A page with twenty paragraphs and one counter ships the counter's code and nothing else. The paragraphs are HTML that the browser painted once and will never touch again.
+
+### What crosses the boundary
+
+Only two things travel from server to a client island:
+
+| Crosses | Does not cross |
+| --- | --- |
+| The rendered HTML (initial markup) | The surrounding prose's reactivity |
+| Serializable props you pass in | Server-only imports and secrets |
+| Seeded query results (for live data) | The rest of the page bundle |
+
+Props must be serializable because they are embedded in the page and read back during hydration. Pass numbers, strings, and plain objects — not functions or class instances.
+
+## State and lifecycle
+
+Once woken, an island has a full Svelte lifecycle. It can:
+
+- Hold local state with `$state` and derive from it with `$derived`.
+- Run side effects with `$effect`, including timers and subscriptions.
+- Call Kit remote functions to read or mutate server data.
+
+```svelte
+<script lang="ts">
+	let count = $state(0);
+	const doubled = $derived(count * 2);
+
+	$effect(() => {
+		document.title = `Count: ${count}`;
+	});
+</script>
+```
+
+Each island's state is its own. Two Counters on the same page do not share a count — they are independent instances with independent boundaries.
+
+## When to reach for a live component
+
+Use a live component when the page needs to *respond* to the user in the browser: toggling, filtering, dragging, counting, playing. Keep everything else static.
+
+1. Does it need to change after paint in response to input? Make it a live island.
+2. Does it only need per-request server data with no interaction? Use a server island.
+3. Is it just content? Leave it as prose.
+
+> **Rule of thumb.** Reach for a live component last, not first. The best-performing page is mostly static with a few small islands, not a static shell wrapped around one giant island.
+
+See all three demos together, each with its import shown, in [interactive islands](../showcase/interactive).

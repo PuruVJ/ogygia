@@ -6,4 +6,4 @@ import { builderPages } from '$lib/builder/pages';
 export const prerender = true;
 
 /** Prerender every Builder page. */
-export const entries: EntryGenerator = async () => (await builderPages.ids()).map((page) => ({ page }));
+export const entries: EntryGenerator = async () => (await builderPages.refs()).map((r) => ({ page: r.id }));

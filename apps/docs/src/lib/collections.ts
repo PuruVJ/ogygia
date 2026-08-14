@@ -10,7 +10,7 @@
  * route can call `get()` without dragging `$app/server` into the graph. The `docNav` remote is
  * minted by wrapping this same `docs` with `withRemotes()` in `docs.remote.ts` (server-only).
  */
-import { content, markdown } from 'ogygia/content';
+import { content, folder } from 'ogygia/content';
 import * as v from 'valibot';
 
 const docSchema = v.object({
@@ -24,26 +24,15 @@ const docSchema = v.object({
 
 export type DocData = v.InferOutput<typeof docSchema>;
 
-/** `…/00-start/01-install/+doc.svx` → clean slug `start/install` (drop `+doc.svx` + `NN-`). */
-function docId(key: string): string {
-	return key
-		.replace(/\\/g, '/')
-		.replace(/.*content\/docs\//, '')
-		.replace(/\/\+doc\.svx$/, '')
-		.split('/')
-		.map((seg) => seg.replace(/^\d+-/, ''))
-		.join('/');
-}
-
 /**
  * The ONE definition — browser-safe. Import in routes/components; wrap with `withRemotes()` in a
- * `.remote.ts`. The explicit `ContentHandle<DocData>` annotation is required because the `related`
- * self-relation getter references `docs` (a cycle) — without it `docs` infers `any`.
+ * `.remote.ts`. `folder()` takes ONE glob of `{+doc.svx,+meta.json}` and derives clean ids, sibling
+ * order (NN-), and section labels (+meta.json) — no id function, no second glob, no meta collection.
  */
-// Fully inferred: `Data` from `docSchema`, `Meta` ({ headings }) from `markdown`. No annotation.
 export const docs = content({
-	// The source IS the format now: markdown wraps the glob, `id` gives the clean slugs.
-	loader: markdown(import.meta.glob('../content/docs/**/+doc.svx', { eager: true }), { id: docId }),
+	loader: folder(
+		import.meta.glob(['../content/docs/**/+doc.svx', '../content/docs/**/+meta.json'], { eager: true })
+	),
 	schema: docSchema,
 	// Self relation via `self` — a doc's `related` slugs resolve to sibling docs, no type cycle.
 	relations: (self) => ({ related: self }),

@@ -1,12 +1,172 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
 	import Logo from '$lib/Logo.svelte';
-	import { docNav } from '$lib/docs.remote';
-	import { groupNav, docHref } from '$lib/toc-items';
+	import { nav } from '$lib/docs.remote';
+	import { search, type NavGroup, type NavLeaf, type SearchClient, type SearchHit } from 'ogygia/pharos';
 
-	// Nav is a prerendered remote — cheap static JSON, grouped into ordered sections.
-	const groups = groupNav(await docNav());
+	// Nav is the pharos site tree — one prerendered remote, already grouped + ordered, hrefs baked
+	// for the /docs mount. Flatten the one-level tree to the shape this sidebar renders.
+	const groups = (await nav())
+		.filter((n): n is NavGroup => n.kind === 'group')
+		.map((g) => ({ section: g.label, items: g.items.filter((i): i is NavLeaf => i.kind === 'leaf') }));
+
+	// ── search ──────────────────────────────────────────────────────────────
+	// On-demand full-text search over the wire (the pharos `search` remote — server brain, lazy
+	// Orama index). Desktop: results replace the nav in the sidebar, Clear restores it. Mobile: the
+	// bottom-bar search opens the sheet showing recent queries (localStorage), live results as you type.
+	let query = $state('');
+	let results = $state<SearchHit[]>([]);
+	let searchLoading = $state(false);
+	let recent = $state<string[]>([]);
+	let searchInput: HTMLInputElement | undefined;
+	// Search is "active" when focused / opened even with an empty query — then we show recent
+	// searches in place of the nav (desktop and mobile alike). Typing → results.
+	let searchActive = $state(false);
+
+	const searching = $derived(query.trim().length > 0);
+	const RECENT_KEY = 'ogygia-recent-search';
+
+	// Client-side search: a worker over the static index (Orama), on-device and instant. Built
+	// lazily on first focus, so Orama + the index load only for users who actually search. The
+	// `search()` mint derives the index location from the mount by convention (/docs/search.json).
+	let searchClient: SearchClient | undefined;
+	function ensureSearch() {
+		searchClient ??= search({ base: '/docs' });
+	}
+
+	// Crossfade the nav ↔ search-content swap with the View Transitions API — it snapshots before/
+	// after and animates size + position, no layout hacks. Unsupported browsers just swap instantly.
+	function withTransition(mutate: () => void) {
+		const start = (document as unknown as { startViewTransition?: (cb: () => Promise<void> | void) => void }).startViewTransition;
+		if (!start) return mutate();
+		start.call(document, async () => {
+			mutate();
+			await tick();
+		});
+	}
+
+	/** Only cross the nav↔results boundary through a transition; typing within results is instant. */
+	function onSearchInput(e: Event & { currentTarget: HTMLInputElement }) {
+		const v = e.currentTarget.value;
+		const crossing = !query.trim() !== !v.trim();
+		if (crossing) withTransition(() => (query = v));
+		else query = v;
+	}
+	function onSearchFocus() {
+		ensureSearch(); // warm the worker + index before the first keystroke
+		if (!searchActive) withTransition(() => (searchActive = true));
+	}
+	function onSearchBlur() {
+		// Let a recent-item / result click land before reverting to nav.
+		setTimeout(() => {
+			if (!query.trim() && document.activeElement !== searchInput) withTransition(() => (searchActive = false));
+		}, 160);
+	}
+	function onSearchKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			withTransition(() => {
+				query = '';
+				results = [];
+				searchActive = false;
+			});
+			searchInput?.blur();
+		}
+	}
+
+	function saveRecent(q: string) {
+		const t = q.trim();
+		if (!t) return;
+		recent = [t, ...recent.filter((x) => x !== t)].slice(0, 6);
+		try {
+			localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
+		} catch {
+			/* private mode */
+		}
+	}
+
+	let searchSeq = 0;
+	let debounceT: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		const t = query.trim();
+		clearTimeout(debounceT);
+		if (!t) {
+			results = [];
+			searchLoading = false;
+			return;
+		}
+		searchLoading = true;
+		ensureSearch();
+		debounceT = setTimeout(async () => {
+			const id = ++searchSeq;
+			const hits = (await searchClient?.query(t)) ?? [];
+			if (id === searchSeq && query.trim() === t) {
+				results = hits;
+				searchLoading = false;
+			}
+		}, 90);
+	});
+
+	// Attachment: capture the input node for imperative focus/blur (no bind:this).
+	function bindInput(node: HTMLInputElement) {
+		searchInput = node;
+		return () => {
+			if (searchInput === node) searchInput = undefined;
+		};
+	}
+
+	// Attachment on the results list: highlight the matched terms IN PLACE via the CSS Custom
+	// Highlight API — Range objects over the text nodes, painted by `::highlight(search-hit)`. No
+	// <mark> markup. Runs in an effect, so it re-highlights when `query` / `results` change; the
+	// returned cleanup clears the highlight. Unsupported browsers just show plain results.
+	function highlightMatches(node: HTMLElement) {
+		void results;
+		const store = (globalThis.CSS as unknown as { highlights?: { delete(k: string): void; set(k: string, v: unknown): void } }).highlights;
+		const HighlightCtor = (globalThis as unknown as { Highlight?: new (...r: Range[]) => unknown }).Highlight;
+		if (!store || !HighlightCtor) return;
+		const terms = query.trim().toLowerCase().split(/\s+/).filter((t) => t.length >= 2);
+		if (terms.length) {
+			const ranges: Range[] = [];
+			const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+			let n = walker.nextNode();
+			while (n) {
+				const text = (n.nodeValue ?? '').toLowerCase();
+				for (const term of terms) {
+					for (let i = text.indexOf(term); i !== -1; i = text.indexOf(term, i + term.length)) {
+						const r = new Range();
+						r.setStart(n, i);
+						r.setEnd(n, i + term.length);
+						ranges.push(r);
+					}
+				}
+				n = walker.nextNode();
+			}
+			store.set('search-hit', new HighlightCtor(...ranges));
+		}
+		return () => store.delete('search-hit');
+	}
+
+	function clearSearch() {
+		withTransition(() => {
+			query = '';
+			results = [];
+		});
+		searchInput?.focus();
+	}
+
+	function commitSearch(q: string) {
+		// Navigating to the result; reset so the (persisted) sidebar shows nav again on the next page.
+		saveRecent(q);
+		query = '';
+		searchActive = false;
+		close();
+	}
+
+	async function useRecent(q: string) {
+		withTransition(() => (query = q));
+		await tick();
+		searchInput?.focus();
+	}
 
 	// Theme switcher: light | system | dark. A no-flash inline script in the layout applies a forced
 	// theme before paint; this just reflects/cycles it. 'system' clears the attribute → prefers-color.
@@ -15,6 +175,12 @@
 		try {
 			const t = localStorage.getItem('ogygia-theme');
 			if (t === 'light' || t === 'dark' || t === 'system') theme = t;
+		} catch {
+			/* private mode */
+		}
+		try {
+			const r = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
+			if (Array.isArray(r)) recent = r.filter((x) => typeof x === 'string').slice(0, 6);
 		} catch {
 			/* private mode */
 		}
@@ -42,19 +208,26 @@
 	const path = $derived(page.url.pathname);
 	const sheetInert = $derived(mobile && !open);
 
-	function sectionHasActive(items: { slug: string }[]) {
-		return items.some((i) => path === docHref(i.slug));
+	function sectionHasActive(items: { href: string }[]) {
+		return items.some((i) => path === i.href);
 	}
 
-	function isActive(slug: string) {
-		return path === docHref(slug);
+	function isActive(href: string) {
+		return path === href;
 	}
 
 	function close() {
 		open = false;
 	}
 	function toggle() {
+		searchActive = false;
 		open = !open;
+	}
+	async function openSearch() {
+		searchActive = true;
+		open = true;
+		await tick();
+		searchInput?.focus();
 	}
 
 	function scrollActiveIntoView() {
@@ -194,65 +367,125 @@
 
 		<div class="side-sheet-handle" aria-hidden="true"><span></span></div>
 
-		<div class="side-scroll" class:side-scroll--mobile={mobile} bind:this={scroll_el}>
-			<a
-				class="side-home-link"
-				class:is-active={path === '/'}
-				href="/"
-				onclick={close}
-			>
-				<span class="side-link-text">Home</span>
-			</a>
+		<!-- Search replaces the Home link: sits under the top nav; focusing/typing swaps the nav below
+		     for results (desktop) or recent+results (mobile sheet). Clear (✕) restores the nav. -->
+		<div class="side-search">
+			<span class="side-search-icon" aria-hidden="true">
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+					<circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+				</svg>
+			</span>
+			<input
+				{@attach bindInput}
+				class="side-search-input"
+				type="search"
+				value={query}
+				oninput={onSearchInput}
+				onfocus={onSearchFocus}
+				onblur={onSearchBlur}
+				onkeydown={onSearchKeydown}
+				placeholder="Search docs…"
+				aria-label="Search documentation"
+				autocomplete="off"
+				spellcheck="false"
+			/>
+			{#if searching}
+				<button type="button" class="side-search-clear" onclick={clearSearch} aria-label="Clear search">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+				</button>
+			{/if}
+		</div>
 
-			{#each groups as group (group.section)}
-				{#if mobile}
-					<div
-						class="side-cat-toggle side-cat-toggle--sticky-top"
-						class:is-current={sectionHasActive(group.items)}
-					>
-						<span class="side-cat-label">{group.section}</span>
-					</div>
-					<nav class="side-links side-links--mobile-block" aria-label={group.section}>
+		<div class="side-scroll" class:side-scroll--mobile={mobile} bind:this={scroll_el}>
+			{#if searching}
+				<!-- results -->
+				<nav class="side-results" aria-label="Search results" {@attach highlightMatches}>
+					{#if results.length}
 						<ul class="side-list">
-							{#each group.items as item (item.slug)}
+							{#each results as hit (hit.href)}
 								<li>
-									<a
-										class="side-link"
-										class:is-active={isActive(item.slug)}
-										href={docHref(item.slug)}
-										onclick={close}
-									>
-										<span class="side-link-text">{item.title}</span>
+									<a class="side-result" href={hit.href} onclick={() => commitSearch(query)}>
+										<span class="side-result-title">{hit.title}{#if hit.heading}<span class="side-result-heading"> › {hit.heading}</span>{/if}</span>
+										{#if hit.excerpt}<span class="side-result-excerpt">{hit.excerpt}</span>{/if}
+										<span class="side-result-section">{hit.section}</span>
 									</a>
 								</li>
 							{/each}
 						</ul>
-					</nav>
-				{:else}
-					<section class="side-cat" class:is-current={sectionHasActive(group.items)}>
-						<div class="side-cat-header">
+					{:else if searchLoading}
+						<p class="side-search-note">Searching…</p>
+					{:else}
+						<p class="side-search-note">No results for “{query.trim()}”</p>
+					{/if}
+				</nav>
+			{:else if searchActive}
+				<!-- recent searches (desktop focus + mobile sheet) -->
+				<div class="side-recent">
+					<p class="side-cat-label side-recent-label">Recent</p>
+					{#if recent.length}
+						<ul class="side-list">
+							{#each recent as r (r)}
+								<li>
+									<button type="button" class="side-recent-item" onclick={() => useRecent(r)}>
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 8v4l3 2" /><circle cx="12" cy="12" r="9" /></svg>
+										<span class="side-link-text">{r}</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{:else}
+						<p class="side-search-note">Your recent searches will appear here.</p>
+					{/if}
+				</div>
+			{:else}
+				<!-- nav -->
+				<a class="side-home-link" class:is-active={path === '/'} href="/" onclick={close}>
+					<span class="side-link-text">Home</span>
+				</a>
+
+				{#each groups as group (group.section)}
+					{#if mobile}
+						<div class="side-cat-toggle side-cat-toggle--sticky-top" class:is-current={sectionHasActive(group.items)}>
 							<span class="side-cat-label">{group.section}</span>
 						</div>
-						<nav class="side-links" aria-label={group.section}>
+						<nav class="side-links side-links--mobile-block" aria-label={group.section}>
 							<ul class="side-list">
 								{#each group.items as item (item.slug)}
 									<li>
-										<a
-											class="side-link"
-											class:is-active={isActive(item.slug)}
-											href={docHref(item.slug)}
-											onclick={close}
-										>
+										<a class="side-link" class:is-active={isActive(item.href)} href={item.href} onclick={close}>
 											<span class="side-link-text">{item.title}</span>
 										</a>
 									</li>
 								{/each}
 							</ul>
 						</nav>
-					</section>
-				{/if}
-			{/each}
+					{:else}
+						<section class="side-cat" class:is-current={sectionHasActive(group.items)}>
+							<div class="side-cat-header">
+								<span class="side-cat-label">{group.section}</span>
+							</div>
+							<nav class="side-links" aria-label={group.section}>
+								<ul class="side-list">
+									{#each group.items as item (item.slug)}
+										<li>
+											<a class="side-link" class:is-active={isActive(item.href)} href={item.href} onclick={close}>
+												<span class="side-link-text">{item.title}</span>
+											</a>
+										</li>
+									{/each}
+								</ul>
+							</nav>
+						</section>
+					{/if}
+				{/each}
+			{/if}
 		</div>
+
+		<!-- Mobile only: GitHub lives at the bottom of the sheet (the bottom bar shows search instead). -->
+		<a class="side-sheet-github" href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer">
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.23c-3.34.73-4.03-1.42-4.03-1.42-.55-1.39-1.33-1.76-1.33-1.76-1.09-.74.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.66-.3-5.46-1.33-5.46-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.82.58A12.01 12.01 0 0 0 24 12c0-6.63-5.37-12-12-12Z" /></svg>
+			<span>GitHub</span>
+		</a>
 	</aside>
 
 	<nav class="side-bottombar" aria-label="Site">
@@ -299,19 +532,16 @@
 					</svg>
 				{/if}
 			</button>
-			<a
-				class="side-bottombar-github"
-				href="https://github.com/PuruVJ/ogygia"
-				aria-label="GitHub repository"
-				target="_blank"
-				rel="noreferrer"
+			<button
+				type="button"
+				class="side-bottombar-search"
+				aria-label="Search"
+				onclick={openSearch}
 			>
-				<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-					<path
-						d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.23c-3.34.73-4.03-1.42-4.03-1.42-.55-1.39-1.33-1.76-1.33-1.76-1.09-.74.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.66-.3-5.46-1.33-5.46-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.82.58A12.01 12.01 0 0 0 24 12c0-6.63-5.37-12-12-12Z"
-					/>
+				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+					<circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
 				</svg>
-			</a>
+			</button>
 			<button
 				type="button"
 				class="side-bottombar-menu"
@@ -837,24 +1067,6 @@
 		border-color: color-mix(in srgb, var(--accent-line) 40%, transparent);
 	}
 
-	.side-bottombar-github {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 2.75rem;
-		height: 2.75rem;
-		color: var(--text-dim);
-		border: 1px solid transparent;
-		border-radius: 10px;
-		text-decoration: none;
-	}
-
-	.side-bottombar-github:hover {
-		color: var(--text);
-		background: color-mix(in srgb, var(--accent-deep) 40%, transparent);
-		border-color: color-mix(in srgb, var(--accent-line) 40%, transparent);
-	}
-
 	.side-bottombar-menu {
 		display: inline-flex;
 		align-items: center;
@@ -910,6 +1122,206 @@
 		.side {
 			transition: none;
 		}
+	}
+}
+
+/* ── search ─────────────────────────────────────────────────────────────── */
+
+/* The nav ↔ results ↔ recent swap crossfades as one named region (View Transitions API). */
+.side-scroll {
+	view-transition-name: side-nav-content;
+}
+
+/* The matched terms, painted in place by the CSS Custom Highlight API (no <mark> markup). */
+:global(::highlight(search-hit)) {
+	background: color-mix(in srgb, var(--accent) 30%, transparent);
+	color: var(--text);
+	border-radius: 2px;
+}
+
+.side-search {
+	position: relative;
+	display: flex;
+	align-items: center;
+	margin-bottom: 0.35rem;
+	flex-shrink: 0;
+}
+
+.side-search-icon {
+	position: absolute;
+	left: 0.6rem;
+	display: inline-flex;
+	color: var(--text-faint);
+	pointer-events: none;
+}
+
+.side-search-input {
+	width: 100%;
+	padding: 0.4rem 1.9rem 0.4rem 1.95rem;
+	border: 1px solid color-mix(in srgb, var(--accent-line) 45%, var(--line));
+	border-radius: 9px;
+	background: color-mix(in srgb, var(--bg-sunken) 60%, transparent);
+	color: var(--text);
+	font: 500 0.84375rem/1.25 var(--font-body);
+	letter-spacing: -0.014em;
+	appearance: none;
+}
+
+.side-search-input::-webkit-search-cancel-button {
+	display: none;
+}
+
+.side-search-input::placeholder {
+	color: var(--text-faint);
+}
+
+.side-search-input:focus {
+	outline: none;
+	border-color: var(--accent);
+	background: var(--bg-raised);
+}
+
+.side-search-clear {
+	position: absolute;
+	right: 0.45rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.35rem;
+	height: 1.35rem;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	color: var(--text-faint);
+	cursor: pointer;
+}
+
+.side-search-clear:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 45%, transparent);
+}
+
+.side-results .side-list {
+	gap: 0.15rem;
+}
+
+.side-result {
+	display: flex;
+	flex-direction: column;
+	gap: 0.12rem;
+	padding: 0.4rem 0.55rem;
+	border-radius: 8px;
+	text-decoration: none;
+	color: var(--text-dim);
+}
+
+.side-result:hover {
+	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
+}
+
+.side-result-title {
+	font: 600 0.82rem/1.3 var(--font-body);
+	color: var(--text);
+}
+
+.side-result-heading {
+	font-weight: 400;
+	color: var(--text-dim);
+}
+
+.side-result-excerpt {
+	font-size: 0.75rem;
+	line-height: 1.4;
+	color: var(--text-faint);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.side-result-section {
+	font: 600 0.6rem/1 var(--font-mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--accent);
+	opacity: 0.8;
+}
+
+.side-search-note {
+	margin: 0.4rem 0.55rem;
+	font-size: 0.8rem;
+	color: var(--text-faint);
+}
+
+.side-recent-label {
+	margin: 0.3rem 0.45rem 0.5rem;
+}
+
+.side-recent-item {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	padding: 0.4rem 0.55rem;
+	border: 0;
+	border-radius: 8px;
+	background: none;
+	color: var(--text-dim);
+	font: 500 0.84375rem/1.25 var(--font-body);
+	text-align: left;
+	cursor: pointer;
+}
+
+.side-recent-item:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
+}
+
+.side-recent-item svg {
+	color: var(--text-faint);
+	flex-shrink: 0;
+}
+
+/* GitHub in the sheet — desktop hides it (the top brand bar has it); mobile shows it pinned. */
+.side-sheet-github {
+	display: none;
+}
+
+.side-bottombar-search {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	color: var(--text-dim);
+	border: 1px solid transparent;
+	border-radius: 10px;
+	background: none;
+	cursor: pointer;
+}
+
+.side-bottombar-search:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 40%, transparent);
+	border-color: color-mix(in srgb, var(--accent-line) 40%, transparent);
+}
+
+@media (max-width: 1099px) {
+	.side-sheet-github {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
+		margin-top: 0.35rem;
+		padding: 0.7rem 0.9rem;
+		border-top: 1px solid color-mix(in srgb, var(--accent-line) 26%, var(--line));
+		color: var(--text-dim);
+		font: 500 0.9rem/1 var(--font-body);
+		text-decoration: none;
+	}
+
+	.side-sheet-github:hover {
+		color: var(--text);
 	}
 }
 </style>
