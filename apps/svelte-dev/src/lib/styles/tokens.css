@@ -1,0 +1,180 @@
+/*
+ * svelte.dev design tokens — ported verbatim from @sveltejs/site-kit (MIT) for the stress test.
+ * Light + dark are duplicated intentionally (keep them in sync). App-local, svelte.dev-specific.
+ */
+:root {
+	color-scheme: light;
+
+	/* Foreground */
+	--sk-fg-1: hsl(0, 0%, 8%);
+	--sk-fg-2: hsl(0, 0%, 15%);
+	--sk-fg-3: hsl(0, 0%, 40%);
+	--sk-fg-4: hsl(0, 0%, 50%);
+	--sk-fg-accent: hsl(12, 93%, 43%);
+
+	/* Background */
+	--sk-bg-1: hsl(0, 0%, 100%);
+	--sk-bg-2: hsl(0, 0%, 99.3%);
+	--sk-bg-3: hsl(0, 0%, 98.2%);
+	--sk-bg-4: hsl(0, 0%, 95%);
+	--sk-bg-accent: var(--sk-fg-accent);
+	--sk-bg-selection: hsla(204, 100%, 63%, 0.3);
+	--sk-bg-unfocused-selection: hsla(204, 50%, 63%, 0.2);
+	--sk-bg-highlight: hsl(60, 100%, 80%);
+
+	--sk-border: hsl(0, 0%, 92%);
+
+	/* Shiki (css-variables theme) */
+	--shiki-color-text: var(--sk-fg-2);
+	--shiki-token-constant: var(--shiki-color-text);
+	--shiki-token-string: hsl(30, 100%, 30%);
+	--shiki-token-comment: var(--sk-fg-4);
+	--shiki-token-keyword: hsl(204, 100%, 38%);
+	--shiki-token-parameter: var(--shiki-color-text);
+	--shiki-token-function: var(--sk-fg-accent);
+	--shiki-token-string-expression: var(--shiki-token-string);
+	--shiki-token-punctuation: var(--shiki-color-text);
+	--shiki-token-link: var(--shiki-token-keyword);
+
+	--sk-scrollbar: rgba(0, 0, 0, 0.3);
+	--sk-shadow: drop-shadow(0px 0px 14px rgba(0, 0, 0, 0.1));
+
+	/* Typography */
+	--sk-font-family-ui: 'Fira Sans', -apple-system, sans-serif;
+	--sk-font-family-body: Georgia, serif;
+	--sk-font-family-heading: 'DM Serif Display', Georgia, serif;
+	--sk-font-family-mono: 'Fira Mono', monospace;
+
+	--sk-font-size-h1: 3.6rem;
+	--sk-font-size-h2: 3rem;
+	--sk-font-size-h3: 2.4rem;
+	--sk-font-size-body: 1.8rem;
+	--sk-font-size-body-small: 1.6rem;
+	--sk-font-size-ui-small: 1.3rem;
+	--sk-font-size-ui-medium: 1.6rem;
+	--sk-font-size-ui-large: 3rem;
+	--sk-font-size-mono: 1.4rem;
+
+	--sk-line-height-body: calc(1.5 * var(--sk-font-size-body));
+	--sk-line-height-body-small: calc(1.5 * var(--sk-font-size-body-small));
+
+	--sk-font-h1: 500 var(--sk-font-size-h1) / 1.2 var(--sk-font-family-heading);
+	--sk-font-h2: 500 var(--sk-font-size-h2) / 1.2 var(--sk-font-family-heading);
+	--sk-font-h3: 500 var(--sk-font-size-h3) / 1.2 var(--sk-font-family-heading);
+	--sk-font-body: 400 var(--sk-font-size-body) / var(--sk-line-height-body) var(--sk-font-family-body);
+	--sk-font-body-small: 400 var(--sk-font-size-body-small) / var(--sk-line-height-body-small) var(--sk-font-family-body);
+	--sk-font-ui-small: 400 var(--sk-font-size-ui-small) / 1.5 var(--sk-font-family-ui);
+	--sk-font-ui-medium: 400 var(--sk-font-size-ui-medium) / 1.5 var(--sk-font-family-ui);
+	--sk-font-ui-large: 400 var(--sk-font-size-ui-large) / 1.5 var(--sk-font-family-ui);
+	--sk-font-mono: 400 var(--sk-font-size-mono) / 1.7 var(--sk-font-family-mono);
+
+	/* Dimensions */
+	--sk-nav-height: 6rem;
+	--sk-secondary-nav-height: 5rem;
+	--sk-page-padding-top: 6rem;
+	--sk-page-padding-bottom: 8rem;
+	--sk-page-padding-side: 1.6rem;
+	--sk-thick-border-width: 0.3rem;
+	--sk-border-radius: 0.4rem;
+	--sk-border-radius-inner: 0.2rem;
+	--sk-page-content-width: 76rem;
+	--sk-banner-height: 0px;
+	--sk-sidebar-width: 28rem;
+
+	--safari-fix: translate3d(0, 0, 0.01);
+	--quint-out: cubic-bezier(0.23, 1, 0.32, 1);
+
+	/* Raised ("retro") buttons — 4-edge border colors + asymmetric widths do the bevel. */
+	--sk-raised-border: var(--sk-border);
+	--sk-raised-highlight: hsl(0, 0%, 95%);
+	--sk-raised-shadow: hsl(0, 0%, 86%);
+	--sk-raised-color: var(--sk-raised-highlight) var(--sk-raised-border) var(--sk-raised-border) var(--sk-raised-highlight);
+	--sk-raised-hover-color: var(--sk-raised-border) var(--sk-raised-shadow) var(--sk-raised-shadow) var(--sk-raised-border);
+	--sk-raised-active-color: var(--sk-raised-shadow) var(--sk-raised-border) var(--sk-raised-border) var(--sk-raised-shadow);
+	--sk-raised-width: 1px 2px 2px 1px;
+	--sk-raised-active-width: 2px 1px 1px 2px;
+
+	@media screen and (min-width: 480px) {
+		--sk-page-padding-side: 3.2rem;
+	}
+	@media screen and (min-width: 800px) {
+		--sk-page-padding-top: 8rem;
+		--sk-page-padding-side: 4.8rem;
+		--sk-secondary-nav-height: 6rem;
+		--sk-font-size-h1: 5.4rem;
+	}
+
+	&:not(.light) {
+		@media (prefers-color-scheme: dark) {
+			color-scheme: dark;
+			-webkit-font-smoothing: antialiased;
+			--sk-raised-highlight: hsl(var(--sk-bg-hue), 15%, 32%);
+			--sk-raised-shadow: var(--sk-bg-3);
+			--sk-raised-color: var(--sk-raised-border) var(--sk-raised-shadow) var(--sk-raised-shadow) var(--sk-raised-border);
+			--sk-raised-hover-color: var(--sk-raised-highlight) var(--sk-raised-shadow) var(--sk-raised-shadow) var(--sk-raised-highlight);
+			--sk-raised-active-color: var(--sk-raised-shadow) var(--sk-raised-highlight) var(--sk-raised-highlight) var(--sk-raised-shadow);
+			--sk-bg-hue: 220;
+			--sk-fg-1: hsl(var(--sk-bg-hue), 2%, 90%);
+			--sk-fg-2: hsl(var(--sk-bg-hue), 3%, 80%);
+			--sk-fg-3: hsl(var(--sk-bg-hue), 5%, 65%);
+			--sk-fg-4: hsl(var(--sk-bg-hue), 5%, 55%);
+			--sk-fg-accent: hsl(12, 94%, 62%);
+			--sk-bg-0: hsl(var(--sk-bg-hue), 8%, 10%);
+			--sk-bg-1: hsl(var(--sk-bg-hue), 10%, 12%);
+			--sk-bg-2: hsl(var(--sk-bg-hue), 12%, 14%);
+			--sk-bg-3: hsl(var(--sk-bg-hue), 14%, 16%);
+			--sk-bg-4: hsl(var(--sk-bg-hue), 15%, 21%);
+			--sk-bg-accent: hsl(15, 100%, 35%);
+			--sk-bg-highlight: hsl(60, 100%, 15%);
+			--sk-border: hsl(var(--sk-bg-hue), 15%, 22%);
+			--shiki-color-text: hsl(45, 7%, 75%);
+			--shiki-token-comment: hsl(0, 0%, 55%);
+			--shiki-token-keyword: hsl(204, 88%, 65%);
+			--shiki-token-function: hsl(19, 67%, 75%);
+			--shiki-token-string: hsl(41, 37%, 68%);
+			--sk-scrollbar: rgba(255, 255, 255, 0.3);
+			--sk-shadow: drop-shadow(1px 2px 16px rgba(0, 0, 0, 0.5));
+		}
+	}
+}
+
+/* The "boring" font preference — Atkinson Hyperlegible body (svelte.dev's font toggle). */
+:root.font-boring {
+	--sk-font-family-body: 'Atkinson Hyperlegible', sans-serif;
+	--sk-font-size-body: 1.9rem;
+	--sk-font-size-body-small: 1.7rem;
+}
+:root.font-boring p code {
+	font-size: 0.75em;
+}
+
+:root.dark {
+	color-scheme: dark;
+	-webkit-font-smoothing: antialiased;
+	--sk-raised-highlight: hsl(220, 15%, 32%);
+	--sk-raised-shadow: var(--sk-bg-3);
+	--sk-raised-color: var(--sk-raised-border) var(--sk-raised-shadow) var(--sk-raised-shadow) var(--sk-raised-border);
+	--sk-raised-hover-color: var(--sk-raised-highlight) var(--sk-raised-shadow) var(--sk-raised-shadow) var(--sk-raised-highlight);
+	--sk-raised-active-color: var(--sk-raised-shadow) var(--sk-raised-highlight) var(--sk-raised-highlight) var(--sk-raised-shadow);
+	--sk-bg-hue: 220;
+	--sk-fg-1: hsl(var(--sk-bg-hue), 2%, 90%);
+	--sk-fg-2: hsl(var(--sk-bg-hue), 3%, 80%);
+	--sk-fg-3: hsl(var(--sk-bg-hue), 5%, 65%);
+	--sk-fg-4: hsl(var(--sk-bg-hue), 5%, 55%);
+	--sk-fg-accent: hsl(12, 94%, 62%);
+	--sk-bg-0: hsl(var(--sk-bg-hue), 8%, 10%);
+	--sk-bg-1: hsl(var(--sk-bg-hue), 10%, 12%);
+	--sk-bg-2: hsl(var(--sk-bg-hue), 12%, 14%);
+	--sk-bg-3: hsl(var(--sk-bg-hue), 14%, 16%);
+	--sk-bg-4: hsl(var(--sk-bg-hue), 15%, 21%);
+	--sk-bg-accent: hsl(15, 100%, 35%);
+	--sk-bg-highlight: hsl(60, 100%, 15%);
+	--sk-border: hsl(var(--sk-bg-hue), 15%, 22%);
+	--shiki-color-text: hsl(45, 7%, 75%);
+	--shiki-token-comment: hsl(0, 0%, 55%);
+	--shiki-token-keyword: hsl(204, 88%, 65%);
+	--shiki-token-function: hsl(19, 67%, 75%);
+	--shiki-token-string: hsl(41, 37%, 68%);
+	--sk-scrollbar: rgba(255, 255, 255, 0.3);
+	--sk-shadow: drop-shadow(1px 2px 16px rgba(0, 0, 0, 0.5));
+}

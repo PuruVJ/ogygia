@@ -1,0 +1,56 @@
+/*
+ * Twoslash hover UI. The server bakes each typed token as
+ *   <span class="twoslash-hover"><span class="twoslash-popup-container">…</span>token</span>
+ * The popup container is HIDDEN in flow; TwoslashHover.svelte reads its innerHTML and floats it.
+ * Here: the in-flow affordance (dotted underline) + the styling of the popup CONTENT (which the
+ * tooltip renders via {@html}, so these rules must be global, not scoped to the island).
+ */
+
+/* hoverable token: a subtle dotted underline, help cursor */
+.ph-body .twoslash-hover {
+	position: relative;
+	border-bottom: 1px dotted var(--sk-fg-4);
+}
+
+/* the baked popup + twoslash's hidden meta lines never render in flow */
+.ph-body .twoslash-popup-container,
+.ph-body .twoslash-meta-line,
+.ph-body .twoslash-error-line,
+.ph-body .twoslash-completion-cursor {
+	display: none;
+}
+
+/* inline error squiggle twoslash adds under bad tokens — keep it quiet in docs */
+.ph-body .twoslash-error {
+	background: none;
+}
+
+/* ── popup CONTENT (rendered inside the floating .twoslash-tooltip) ── */
+.twoslash-tooltip .twoslash-popup-code,
+.twoslash-tooltip .twoslash-popup-code pre {
+	margin: 0;
+	padding: 0;
+	background: transparent !important;
+	border: none;
+	font: var(--sk-font-mono);
+	font-size: 1.3rem;
+	white-space: pre-wrap;
+}
+.twoslash-tooltip .twoslash-popup-docs {
+	margin-top: 0.8rem;
+	padding-top: 0.8rem;
+	border-top: 1px solid var(--sk-border);
+	color: var(--sk-fg-3);
+	font: var(--sk-font-body-small);
+	white-space: normal;
+}
+.twoslash-tooltip .twoslash-popup-docs-tags {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	column-gap: 0.8rem;
+	margin-top: 0.6rem;
+}
+.twoslash-tooltip .twoslash-popup-docs-tag-name {
+	font: var(--sk-font-mono);
+	color: var(--sk-fg-4);
+}

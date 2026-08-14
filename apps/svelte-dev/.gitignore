@@ -1,0 +1,15 @@
+.DS_Store
+node_modules
+/build
+/.svelte-kit
+/package
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# git() loader materialized checkouts — regenerated from .ogygia/sync.lock. Ignored (heavy, upstream).
+/ogygia_content
+# but the lockfile (repo → resolved sha) IS committed for hermetic builds:
+!.ogygia/sync.lock
