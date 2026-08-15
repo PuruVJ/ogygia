@@ -1,4 +1,7 @@
-# Changelog
+---
+title: Releases
+summary: Every cut of ogygia, newest first — the full changelog.
+---
 
 All notable changes to **ogygia** are documented in this file.
 

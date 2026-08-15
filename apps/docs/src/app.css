@@ -173,8 +173,10 @@ pre {
 	line-height: 1.7;
 }
 
-p code,
-li code {
+/* Inline code only — `:not(pre) >` so a fenced code block nested inside a list item (the changelog's
+   shape: code under a bullet) doesn't get the inline-code pill washed across the whole `<pre><code>`. */
+p :not(pre) > code,
+li :not(pre) > code {
 	font-size: 0.8125rem;
 	color: var(--accent);
 	background: var(--accent-deep);
