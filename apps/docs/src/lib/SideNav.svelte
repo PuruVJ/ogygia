@@ -442,6 +442,14 @@
 				<a class="side-home-link" class:is-active={path === '/'} href="/" onclick={close}>
 					<span class="side-link-text">Home</span>
 				</a>
+				<a
+					class="side-home-link"
+					class:is-active={path === '/releases'}
+					href="/releases"
+					onclick={close}
+				>
+					<span class="side-link-text">Releases</span>
+				</a>
 
 				{#each groups as group (group.section)}
 					{#if mobile}
