@@ -168,7 +168,10 @@ export class Collection<
 		}
 	}
 
-	/** Validate one source ref into a catalog ref (schema layers run on `data`, left→right). */
+	/** Validate one source ref into a catalog ref. Schema layers (a genre stack like `fields.post` =
+	 *  `[page, post_only]`) each validate the ORIGINAL frontmatter and their outputs MERGE left→right —
+	 *  NOT chained. Chaining would let an early layer that returns only its own fields (e.g. `page`)
+	 *  strip a field a later layer needs (e.g. `post`'s `date`) before it ever sees it. */
 	async #normalizeRef(row: SourceRef<Meta>, seen?: Set<string>): Promise<ContentRef<Data, Meta>> {
 		if (!row?.id || typeof row.id !== 'string') {
 			throw new Error('[ogygia/content] source ref missing string id');
@@ -177,8 +180,14 @@ export class Collection<
 			if (seen.has(row.id)) throw new Error(`[ogygia/content] duplicate id '${row.id}'`);
 			seen.add(row.id);
 		}
-		let data = (row.data ?? {}) as Record<string, unknown>;
-		for (const schema of this.#schema) data = await parseSchema(schema, data, `content/${row.id}`);
+		const original = (row.data ?? {}) as Record<string, unknown>;
+		let data: Record<string, unknown> = original;
+		if (this.#schema.length) {
+			data = {};
+			for (const schema of this.#schema) {
+				data = { ...data, ...(await parseSchema(schema, original, `content/${row.id}`)) };
+			}
+		}
 		return {
 			id: row.id,
 			data: data as Data,
