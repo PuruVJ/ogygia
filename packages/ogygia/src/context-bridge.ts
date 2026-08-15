@@ -4,7 +4,7 @@
  * Component trees break at every island boundary; the DOM tree does not. So context is scoped to
  * the DOM: a `<Context of={ctx} value={v}>` writes the value into the DOM at its spot (serialized
  * with the SAME codec as props), and `ctx.get()` in any island below walks up the DOM to the
- * nearest matching provider and decodes it. A `[ogygia.wire]` value resolves to the one live
+ * nearest matching provider and decodes it. A `[import.meta.og.wire]` value resolves to the one live
  * instance (shared + reactive); a plain value comes back as a snapshot.
  *
  * On the SERVER, islands render nested in the page's SSR tree, so Svelte's own context works and

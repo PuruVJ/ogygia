@@ -11,7 +11,7 @@ import { js_to_ts } from './src/lib/markdown/js-to-ts.ts';
 import { twoslash_banner, twoslash_ts, twoslash_svelte, twoslash_popup_markdown } from './src/lib/markdown/twoslash.ts';
 
 // svelte-dev — the svelte.dev stress test. Its docs come from the ACTUAL source repos via
-// `import.meta.ogygia.loader.git()` (see src/lib/topics.ts). Everything svelte.dev-specific is a
+// `import.meta.og.loader.git()` (see src/lib/topics.ts). Everything svelte.dev-specific is a
 // VALUE plugged into ogygia's contracts: the css-variables Shiki theme (tokens.css supplies the
 // `--shiki-*` palette), the admonition rehype pass, the `+++/---` marker transformer, `/// file:`
 // meta, and the JS↔TS variant generator.

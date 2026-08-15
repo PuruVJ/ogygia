@@ -21,20 +21,20 @@ const folderOpts = {
 
 const collections = {
 	svelte: content({
-		loader: import.meta.ogygia.loader.git('sveltejs/svelte@main:documentation/docs', folderOpts),
+		loader: import.meta.og.loader.git('sveltejs/svelte@main:documentation/docs', folderOpts),
 		schema,
 	}),
 	kit: content({
-		loader: import.meta.ogygia.loader.git('sveltejs/kit@main:documentation/docs', folderOpts),
+		loader: import.meta.og.loader.git('sveltejs/kit@main:documentation/docs', folderOpts),
 		schema,
 	}),
 	cli: content({
-		loader: import.meta.ogygia.loader.git('sveltejs/cli@main:documentation/docs', folderOpts),
+		loader: import.meta.og.loader.git('sveltejs/cli@main:documentation/docs', folderOpts),
 		schema,
 	}),
 	// svelte.dev's fourth topic — the AI/MCP tooling docs, from its own repo (same as their sync-docs).
 	ai: content({
-		loader: import.meta.ogygia.loader.git('sveltejs/ai-tools@main:documentation/docs', folderOpts),
+		loader: import.meta.og.loader.git('sveltejs/ai-tools@main:documentation/docs', folderOpts),
 		schema,
 	}),
 };
@@ -62,7 +62,7 @@ export const blogSchema = v.object({
 export type BlogData = v.InferOutput<typeof blogSchema>;
 
 export const blog = content({
-	loader: import.meta.ogygia.loader.git('sveltejs/svelte.dev@main:apps/svelte.dev/content/blog', {
+	loader: import.meta.og.loader.git('sveltejs/svelte.dev@main:apps/svelte.dev/content/blog', {
 		// `page` strips ONLY the extension (the filename must survive as the id segment — folder()
 		// removes the page match from the path); `index.md` is claimed by `meta` first. The `dated()`
 		// convention then peels the date off each surviving filename.

@@ -25,6 +25,9 @@ export { default as Boundary } from './OgygiaBoundary.svelte';
 // Regions held as values — server-chosen renders you place like data. `region()` mints, `<Region>` renders.
 export { default as Region } from './Region.svelte';
 export { region, isRegion } from './region.js';
+// `og_html_region(html)` — a pure-HTML region, what `import.meta.og.code()`/`.md()` inline at build.
+// Exported because the transform emits calls to it; authored code renders the result with `<Region>`.
+export { og_html_region } from './region.js';
 // Warm a deferred/live region's frame now, before its binder wakes — the "fetch now, activate later" escape hatch.
 export { preload } from './preload.js';
 
@@ -59,9 +62,10 @@ export type Fallback<P = unknown> = P & { ogygiaFallback?: import('svelte').Snip
 export { ogygiaTransport as transport } from './transport.js';
 
 // Transportable state — a class crosses island boundaries as a prop by declaring
-// `static [ogygia.wire] = { encode, decode }`. Same instance across islands stays one live
-// object (identity memo); the server decodes per-request so nothing leaks. See live-transport.ts.
-export { wire } from './live-transport.js';
+// `static wire = import.meta.og.wire({ encode, decode })`. Same instance across islands stays one
+// live object (identity memo); the server decodes per-request so nothing leaks. The wire mark is a
+// compile construct (the plugin consumes the member and mints the symbol key), so there is no
+// runtime `wire` export to import — only the codec TYPE crosses into user code.
 export type { TransportCodec } from './live-transport.js';
 
 // Portable snippets — the compiler rewrites a `{#snippet}` handed to a component into

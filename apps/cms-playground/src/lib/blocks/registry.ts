@@ -1,12 +1,9 @@
 /**
- * The block registry — CMS `type` name → component. Held-region imports: each block SSRs inline;
- * only blocks with a `wake` schedule ship any client JS (Counter wakes on visibility, everything
- * else is HTML-only).
+ * The block registry — CMS `type` name → component. `import.meta.og.regions()` globs this folder at
+ * build and emits one `with { region: 'raw' }` import per match (each block SSRs inline; its own
+ * nested islands still wake), keyed by basename. Counter needs a wake schedule, not a raw region, so
+ * it stays a manual import and spreads over the top — overriding the raw Counter the glob produced.
  */
-import Hero from './Hero.svelte' with { region: 'raw' };
-import Prose from './Prose.svelte' with { region: 'raw' };
-import Callout from './Callout.svelte' with { region: 'raw' };
-import Code from './Code.svelte' with { region: 'raw' };
 import Counter from './Counter.svelte' with { wake: 'visible' };
 
-export const registry = { Hero, Prose, Callout, Code, Counter };
+export const registry = { ...import.meta.og.regions('./*.svelte'), Counter };

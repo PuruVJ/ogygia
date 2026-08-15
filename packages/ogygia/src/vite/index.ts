@@ -8,7 +8,19 @@ import { loadEnv, type Plugin } from 'vite';
 import type { PreprocessorGroup } from 'svelte/compiler';
 import { configure_build_cache } from '../build-cache.js';
 import { islandBridge } from './island-bridge.js';
-import { rewrite_git_loaders, materialize } from './git.js';
+import { materialize } from './git.js';
+import { rewrite_loaders } from './loaders.js';
+import { rewrite_wire } from './og-wire.js';
+import { rewrite_regions } from './regions.js';
+import { rewrite_code } from './og-code.js';
+import { render_snippet } from '../content/markdown/snippet.js';
+import { render_markdown } from '../content/markdown/render-md.js';
+import { rewrite_bake } from './og-bake.js';
+
+/** Markup extensions where `import.meta.og.*` constructs are recognized at the VITE-transform layer.
+ *  Just `.svelte` — content files (`.svx`/`.md`) are the markdown preprocessor's domain (see
+ *  og-extract.ts). JS/TS modules are handled by the constructs themselves, not this list. */
+const CONSTRUCT_MARKUP_EXTS = ['.svelte'] as const;
 import { content as contentHmrPlugin, type ContentPluginOptions } from '../content/vite/plugin.js';
 import { ogygiaPreprocess, type MarkdownOptions } from '../content/markdown/index.js';
 import {
@@ -728,6 +740,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	let base = '';
 	let libDir;
 	let is_dev = false;
+	/** Resolved `resolve.alias` entries — passed to bake()'s rolldown eval so `$lib` etc. resolve. */
+	let resolve_alias = [];
 	let is_build = false;
 	let is_ssr = false;
 	let scanned = false;
@@ -1074,8 +1088,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		// APP source only — never library code (a workspace-linked ogygia sits outside node_modules).
 		if (!bare.startsWith(path.join(root, 'src') + path.sep)) return;
 		const defines_collection = source.includes('ogygia/content') && /\bcontent\s*\(/.test(source);
-		const defines_git = source.includes('import.meta.ogygia.loader.git');
-		if (!defines_collection && !defines_git) return;
+		const defines_loader = source.includes('import.meta.og.loader.');
+		if (!defines_collection && !defines_loader) return;
 		const server_only =
 			/\.(server|remote)\.(ts|js|mjs)$/.test(bare) || /\/(src\/lib\/server|server)\//.test(bare.slice(root.length));
 		if (server_only) return;
@@ -1205,6 +1219,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		configResolved(config) {
 			root = config.root;
 			base = config.base || '';
+			// Normalize resolve.alias (array or object form) to `{ find, replacement }[]` for bake().
+			const ra = config.resolve?.alias ?? [];
+			resolve_alias = Array.isArray(ra)
+				? ra.map((a) => ({ find: a.find, replacement: a.replacement }))
+				: Object.entries(ra).map(([find, replacement]) => ({ find, replacement }));
 			// The shared build cache (fences, git checkouts, shas) persists under THIS app's
 			// node_modules/.ogygia — point it before anything derives.
 			configure_build_cache(root);
@@ -1770,7 +1789,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			return null;
 		},
 
-		transform(code, id, options) {
+		async transform(code, id, options) {
 			const ssr = options?.ssr === true;
 			// Discover islands before any module is transformed so island_graph is populated
 			// even when an island entry component is processed before its host page.
@@ -1788,6 +1807,55 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			let map = null;
 			let touched = false;
 
+			// `import.meta.og.wire` — the transportable-codec key, rewritten to `Symbol.for('ogygia.wire')`
+			// BEFORE either branch (island transform / svelte compile / ts region minting) sees the code,
+			// so the class body's computed key is a real symbol expression by compile time. Extension-aware
+			// and AST-precise (see og-wire.ts); a no-op unless the marker is actually present.
+			if (out.includes('import.meta.og.wire')) {
+				const rewritten = rewrite_wire(out, id_n, CONSTRUCT_MARKUP_EXTS);
+				if (rewritten !== out) {
+					out = rewritten;
+					map = null;
+					touched = true;
+				}
+			}
+
+			// `import.meta.og.code(source, lang, meta?)` — a highlighted snippet, baked to a static
+			// region through the app's own Shiki fence pipeline (same themes/transformers/meta parsers)
+			// and inlined as `og_html_region("…")`. Async (Shiki). Runs before the island transform so
+			// the injected `og_html_region` import + region value flow through normally. The renderer is
+			// dynamically imported so a build without any `code()` call never loads Shiki here.
+			if (out.includes('import.meta.og.code') || out.includes('import.meta.og.md')) {
+				const md_cfg = islandBridge.markdownConfig as MarkdownOptions | null;
+				const rewritten = await rewrite_code(out, id_n, CONSTRUCT_MARKUP_EXTS, async (call) => {
+					if (call.kind === 'md') return render_markdown(md_cfg, call.source);
+					const region = await render_snippet(md_cfg, call.source, call.lang, call.meta);
+					return region.html;
+				});
+				if (rewritten !== out) {
+					out = rewritten;
+					map = null;
+					touched = true;
+				}
+			}
+
+			// `import.meta.og.bake(fn)` — run fn at build (rolldown-bundle the imports it uses +
+			// execute), devalue-serialize the result, inline it as a literal, and drop imports that only
+			// fed a baked fn. Extension-aware (whole file for .ts/.js, `<script>` blocks for .svelte).
+			// Runs before the island transform so downstream sees plain data, not a call.
+			if (out.includes('import.meta.og.bake')) {
+				const rewritten = await rewrite_bake(out, id_n, {
+					alias: resolve_alias,
+					root,
+					markupExts: CONSTRUCT_MARKUP_EXTS
+				});
+				if (rewritten !== out) {
+					out = rewritten;
+					map = null;
+					touched = true;
+				}
+			}
+
 			// App `.svelte` always; a node_modules `.svelte` ONLY if it carries an ogygia hint (so a
 			// library can declare its own islands — Shell → ShellBar). `is_island_path` still
 			// excludes GENERATED island glue (wrappers, region bindings, plain re-export entries) —
@@ -1798,6 +1866,18 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// which is why islands inside snippets worked in dev and died in prod).
 			const in_node_modules = id_n.includes('/node_modules/');
 			const bare_v = id_n.startsWith('/@id/') ? id_n.slice(5) : id_n;
+
+			// `import.meta.og.loader.*` is SERVER-ONLY — it materializes a corpus, which must never
+			// reach a client bundle (that's the `.server.ts` placement rule). A component can't hold
+			// one: the rewrite only runs on `.ts/.js/.mjs`, so a loader in `.svelte` would silently
+			// stay un-rewritten and explode at runtime. Warn loudly with the fix instead.
+			if (id_n.endsWith('.svelte') && !in_node_modules && out.includes('import.meta.og.loader.')) {
+				console.warn(
+					`[ogygia/content] ${path.relative(root, bare_v)} calls import.meta.og.loader.* inside a component. ` +
+						`Loaders build a content corpus and are server-only — move the collection to a \`.server.ts\` ` +
+						`module and cross the wire with remotes. (In a component it never rewrites and fails at runtime.)`
+				);
+			}
 			const portable_entry =
 				id_n.endsWith('.svelte') && is_island_path(bare_v) && registry.get(bare_v)?.portable === true;
 			if (
@@ -1849,18 +1929,32 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			) {
 				warn_content_placement(id_n, out);
 
-				// `import.meta.ogygia.loader.git(spec, opts)` — a compiler construct (like import.meta.glob).
-				// Materialize each repo's shallow checkout into the app's `ogygia_content/` cache (sync,
-				// idempotent, lock-gated), then rewrite the call to `folder(import.meta.glob(<cache>/…))`.
-				// Runs BEFORE Vite's glob plugin scans the emitted pattern, so the files are already on disk.
-				// (Keeping the corpus out of client bundles is the `.server.ts` placement rule — see the
-				// content-placement warning above; Kit's server-module guard enforces it mechanically.)
-				if (out.includes('import.meta.ogygia.loader.git')) {
-					const { code: rewritten, specs } = rewrite_git_loaders(out);
-					if (specs.length) {
+				// `import.meta.og.loader.*` — the compiler content constructs (like import.meta.glob).
+				// Rewrite each to its runtime builder wrapping the glob; `git` first materializes a
+				// shallow checkout into the app's content cache (sync, idempotent, lock-gated) and points
+				// the glob at it. Runs BEFORE Vite's glob plugin scans the emitted pattern, so the files
+				// are already on disk. (Keeping the corpus out of client bundles is the `.server.ts`
+				// placement rule — see the content-placement warning above; Kit's server-module guard
+				// enforces it mechanically.)
+				if (out.includes('import.meta.og.loader.')) {
+					const { code: rewritten, specs } = rewrite_loaders(out);
+					if (rewritten !== out) {
 						for (const spec of specs) materialize(spec, { root });
 						out = rewritten;
 						map = null; // injected import + call rewrite invalidates any prior map
+						touched = true;
+					}
+				}
+
+				// `import.meta.og.regions(glob)` — the block registry. Globs the pattern at build and
+				// injects one `with { region: 'raw' }` import per match, assembling a basename-keyed
+				// registry. Runs BEFORE transformTsRegions so the injected region imports flow through
+				// the island transform exactly like hand-authored ones.
+				if (out.includes('import.meta.og.regions')) {
+					const rewritten = rewrite_regions(out, id_n);
+					if (rewritten !== out) {
+						out = rewritten;
+						map = null;
 						touched = true;
 					}
 				}

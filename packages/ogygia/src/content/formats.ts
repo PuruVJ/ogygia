@@ -12,7 +12,7 @@ import { prebaked_region, region } from '../region.js';
 import { defineSource, toRawSource, type Format, type GlobMap, type RawSource, type Source } from './source.js';
 
 type Input<V> = GlobMap | RawSource<V>;
-type BuilderOpts = { id?: (key: string) => string };
+export type BuilderOpts = { id?: (key: string) => string };
 
 /** If Vite wrapped a lone `default` export, unwrap it. */
 function unwrap_default(resolved: unknown): unknown {

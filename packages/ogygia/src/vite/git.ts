@@ -1,9 +1,10 @@
 /**
- * `import.meta.ogygia.loader.git()` — the compiler-materialized git loader. A build-time construct
- * (like `import.meta.glob`): the ogygia Vite plugin sees the call with a LITERAL spec, materializes a
- * shallow checkout of the repo into a glob-able cache, and rewrites the call to
- * `folder(import.meta.glob('<cache>/…', { eager: true }), <opts>)`. So docs whose bodies COMPILE
- * (markdown/islands) can be sourced straight from another repo — no committed copy, no sync script.
+ * `import.meta.og.loader.git()` materialization — the Node side of the compiler git loader. A
+ * build-time construct (like `import.meta.glob`): the plugin sees the call with a LITERAL spec,
+ * materializes a shallow checkout of the repo into a glob-able cache, and (in `./loaders.ts`)
+ * rewrites the call to `folder(import.meta.glob('<cache>/…', { eager: true }), <opts>)`. So docs
+ * whose bodies COMPILE (markdown/islands) can be sourced straight from another repo — no committed
+ * copy, no sync script.
  *
  * The spec is ONE literal string, `owner/repo[@ref][:path]`, so the plugin parses it without touching
  * the (verbatim, forwarded) folder-options object — which may hold regex literals. Node-only.
@@ -26,7 +27,7 @@ const SPEC_RE = /^([^/\s]+)\/([^@:\s]+)(?:@([^:\s]+))?(?::(.+))?$/;
 /** Parse `owner/repo[@ref][:path]` → its parts. Default ref `HEAD`, default sub `''`. Throws on garbage. */
 export function parse_git_spec(spec: string): GitSpec {
 	const m = SPEC_RE.exec(spec.trim());
-	if (!m) throw new Error(`[ogygia] import.meta.ogygia.loader.git(): bad spec '${spec}' — expected 'owner/repo[@ref][:path]'`);
+	if (!m) throw new Error(`[ogygia] import.meta.og.loader.git(): bad spec '${spec}' — expected 'owner/repo[@ref][:path]'`);
 	return { owner: m[1]!, repo: m[2]!, ref: m[3] ?? 'HEAD', sub: (m[4] ?? '').replace(/^\/+|\/+$/g, '') };
 }
 
@@ -126,179 +127,7 @@ function safe<T>(fn: () => T): T | null {
 	}
 }
 
-// ── source rewrite: import.meta.ogygia.loader.git(spec, opts) → folder(import.meta.glob(…), opts) ──
-
-const CALL = 'import.meta.ogygia.loader.git';
-/** Unique alias so injecting the folder import can't collide with a user's own `folder` import. */
-const FOLDER_ALIAS = '__ogygia_git_folder';
-
-export type GitCall = { start: number; end: number; spec: GitSpec; opts: string };
-
-/** A `/` begins a regex (not division) when the previous significant char is an operator/opener —
- *  which is always the case for a regex option value (`{ page: /…/ }`, `[/…/, /…/]`). */
-function regex_context(prev: string): boolean {
-	return prev === '' || '([{,;:=!&|?+-~^<>*%'.includes(prev);
-}
-
-/** Index of the `)` matching the `(` at `open`, skipping strings, comments, and regex literals
- *  (incl. `[…]` char classes, which may hold an unescaped `/`). -1 if unbalanced. */
-function match_close(src: string, open: number): number {
-	let depth = 0;
-	let prev = '';
-	for (let i = open; i < src.length; i++) {
-		const c = src[i]!;
-		const c2 = src[i + 1];
-		if (c === "'" || c === '"' || c === '`') {
-			const q = c;
-			for (i++; i < src.length; i++) {
-				if (src[i] === '\\') i++;
-				else if (src[i] === q) break;
-			}
-			prev = c;
-			continue;
-		}
-		if (c === '/' && c2 === '/') {
-			for (i += 2; i < src.length && src[i] !== '\n'; i++) {}
-			continue;
-		}
-		if (c === '/' && c2 === '*') {
-			for (i += 2; i < src.length && !(src[i] === '*' && src[i + 1] === '/'); i++) {}
-			i++;
-			continue;
-		}
-		if (c === '/' && regex_context(prev)) {
-			let in_class = false;
-			for (i++; i < src.length; i++) {
-				const r = src[i]!;
-				if (r === '\\') i++;
-				else if (r === '[') in_class = true;
-				else if (r === ']') in_class = false;
-				else if (r === '/' && !in_class) break;
-			}
-			while (i + 1 < src.length && /[a-z]/i.test(src[i + 1]!)) i++; // regex flags
-			prev = '/';
-			continue;
-		}
-		if (c === '(' || c === '{' || c === '[') {
-			depth++;
-			prev = c;
-			continue;
-		}
-		if (c === ')' || c === '}' || c === ']') {
-			if (--depth === 0) return i;
-			prev = c;
-			continue;
-		}
-		if (!/\s/.test(c)) prev = c;
-	}
-	return -1;
-}
-
-/** Split a call's argument text into the first-arg spec string (unquoted) and the verbatim rest. */
-function split_first_arg(args: string): { spec: string; rest: string } {
-	let i = 0;
-	while (i < args.length && /\s/.test(args[i]!)) i++;
-	const q = args[i];
-	if (q !== "'" && q !== '"' && q !== '`') {
-		throw new Error(`[ogygia] import.meta.ogygia.loader.git(): the first argument must be a string-literal spec, got '${args.slice(0, 24)}…'`);
-	}
-	let j = i + 1;
-	for (; j < args.length; j++) {
-		if (args[j] === '\\') j++;
-		else if (args[j] === q) break;
-	}
-	const spec = args.slice(i + 1, j);
-	let k = j + 1;
-	while (k < args.length && /\s/.test(args[k]!)) k++;
-	if (args[k] === ',') k++;
-	return { spec, rest: args.slice(k).trim() };
-}
-
-/**
- * Locate every `import.meta.ogygia.loader.git(spec[, opts])` CALL in a module's source. Pure. A
- * single pass that skips strings, comments, and regex literals, so the marker inside a doc comment
- * (`import.meta.ogygia.loader.git()` in this very docstring) or a string is NOT mistaken for a call.
- */
-export function find_git_calls(src: string): GitCall[] {
-	const calls: GitCall[] = [];
-	let prev = '';
-	for (let i = 0; i < src.length; i++) {
-		const c = src[i]!;
-		const c2 = src[i + 1];
-		if (c === "'" || c === '"' || c === '`') {
-			const q = c;
-			for (i++; i < src.length; i++) {
-				if (src[i] === '\\') i++;
-				else if (src[i] === q) break;
-			}
-			prev = c;
-			continue;
-		}
-		if (c === '/' && c2 === '/') {
-			for (i += 2; i < src.length && src[i] !== '\n'; i++) {}
-			continue;
-		}
-		if (c === '/' && c2 === '*') {
-			for (i += 2; i < src.length && !(src[i] === '*' && src[i + 1] === '/'); i++) {}
-			i++;
-			continue;
-		}
-		if (c === '/' && regex_context(prev)) {
-			let in_class = false;
-			for (i++; i < src.length; i++) {
-				const r = src[i]!;
-				if (r === '\\') i++;
-				else if (r === '[') in_class = true;
-				else if (r === ']') in_class = false;
-				else if (r === '/' && !in_class) break;
-			}
-			while (i + 1 < src.length && /[a-z]/i.test(src[i + 1]!)) i++;
-			prev = '/';
-			continue;
-		}
-		// A marker in CODE context (not a string/comment/regex — those `continue`d above).
-		if (c === 'i' && src.startsWith(CALL, i)) {
-			let p = i + CALL.length;
-			while (p < src.length && /\s/.test(src[p]!)) p++;
-			if (src[p] === '(') {
-				const close = match_close(src, p);
-				if (close >= 0) {
-					const { spec, rest } = split_first_arg(src.slice(p + 1, close));
-					calls.push({ start: i, end: close + 1, spec: parse_git_spec(spec), opts: rest });
-					i = close;
-					prev = ')';
-					continue;
-				}
-			}
-			i += CALL.length - 1;
-			prev = 't';
-			continue;
-		}
-		if (!/\s/.test(c)) prev = c;
-	}
-	return calls;
-}
-
-/**
- * Rewrite every git-loader call in `src` to a `folder(import.meta.glob(…), opts)` expression and
- * inject the (aliased) folder import. Returns the new code plus the specs to materialize. Pure — the
- * rewritten CODE never depends on the checkout, so the plugin materializes the specs separately
- * (before Vite's glob plugin scans the emitted pattern). Keeping the corpus out of client bundles is
- * the `.server.ts` placement rule's job (see the plugin's content-placement warning), not a rewrite
- * concern — Kit's server-module guard enforces it mechanically.
- */
-export function rewrite_git_loaders(src: string): { code: string; specs: GitSpec[] } {
-	const calls = find_git_calls(src);
-	if (!calls.length) return { code: src, specs: [] };
-	let out = '';
-	let last = 0;
-	for (const c of calls) {
-		const pattern = git_glob_pattern(c.spec);
-		const opts = c.opts ? `, ${c.opts}` : '';
-		out += src.slice(last, c.start);
-		out += `${FOLDER_ALIAS}(import.meta.glob(${JSON.stringify(pattern)}, { eager: true })${opts})`;
-		last = c.end;
-	}
-	out += src.slice(last);
-	return { code: `import { folder as ${FOLDER_ALIAS} } from 'ogygia/content';\n` + out, specs: calls.map((c) => c.spec) };
-}
+// The source rewrite (`import.meta.og.loader.git(spec, opts)` → `folder(import.meta.glob(…), opts)`)
+// lives in `./loaders.ts`, alongside the other `import.meta.og.loader.*` constructs — it shares the
+// one `import.meta.og.*` scanner in `./og-lexer.ts`. This module is now purely: parse a spec,
+// name its cache slot, and materialize the checkout.

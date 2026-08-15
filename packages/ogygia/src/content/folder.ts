@@ -66,10 +66,11 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 	const rel = (key: string) => norm(key).slice(prefix.length);
 
 	const page_map: GlobMap = {};
+	// A sidecar's clean dir + its (possibly-lazy) module value — loaded on first read, not construction,
+	// so a lazy `import.meta.glob` collection defers even the `+meta.json` reads.
 	const meta_entries: Array<{ dir: string; value: unknown }> = [];
-	// For verification: each directory's raw child segments, and its `+meta.json` decoration.
+	// For verification: each directory's raw child segments.
 	const siblings = new Map<string, Set<string>>();
-	const decorations = new Map<string, MetaDecoration>();
 
 	/** Structural raw segments of a page key: rel path minus the page-file part. */
 	const raw_segments = (key: string) => {
@@ -86,13 +87,6 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 		if (meta_rx && meta_rx.test(k)) {
 			const dir = rel(key).replace(meta_rx, '').split('/').map(strip_order_prefix).filter(Boolean).join('/');
 			meta_entries.push({ dir, value: map[key] });
-			const mod = unwrap(map[key]);
-			const deco = read_meta(mod);
-			// An `index.md` sidecar (the svelte.dev convention) is a compiled markdown MODULE — its
-			// frontmatter `title` is the section label ("Template syntax", not the title-cased slug).
-			const fm = (mod as { metadata?: { title?: unknown } }).metadata;
-			if (deco.label === undefined && typeof fm?.title === 'string') deco.label = fm.title;
-			decorations.set(dir, deco);
 		} else if (page_rx.test(k)) {
 			page_map[key] = map[key];
 			// Register each level's sibling set for verify().
@@ -109,16 +103,35 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 	const page_id = (key: string) => raw_segments(key).map((s) => conv.segment(s).slug).join('/');
 	const page_order = (key: string): number[] => raw_segments(key).map((s) => conv.segment(s).order);
 
-	// The clean group path → its label (decoration wins, else title-cased last segment).
-	const group_map = new Map<string, { label?: string }>();
-	for (const { dir } of meta_entries) {
-		const deco = decorations.get(dir);
-		const last = dir.split('/').pop() ?? '';
-		group_map.set(dir, { label: deco?.label ?? title_case(last) });
-	}
+	// Each directory's `+meta.json` decoration + the clean group path → label map. Resolved ONCE, on
+	// first read — awaiting sidecar modules (a lazy glob hands us thunks, an eager glob the modules).
+	let resolved: Promise<{
+		decorations: Map<string, MetaDecoration>;
+		group_map: Map<string, { label?: string }>;
+	}> | null = null;
+	const resolve_meta = () =>
+		(resolved ??= (async () => {
+			const decorations = new Map<string, MetaDecoration>();
+			for (const { dir, value } of meta_entries) {
+				const mod = unwrap(typeof value === 'function' ? await (value as () => Promise<unknown>)() : value);
+				const deco = read_meta(mod);
+				// An `index.md` sidecar (the svelte.dev convention) is a compiled markdown MODULE — its
+				// frontmatter `title` is the section label ("Template syntax", not the title-cased slug).
+				const fm = (mod as { metadata?: { title?: unknown } }).metadata;
+				if (deco.label === undefined && typeof fm?.title === 'string') deco.label = fm.title;
+				decorations.set(dir, deco);
+			}
+			const group_map = new Map<string, { label?: string }>();
+			for (const { dir } of meta_entries) {
+				const last = dir.split('/').pop() ?? '';
+				group_map.set(dir, { label: decorations.get(dir)?.label ?? title_case(last) });
+			}
+			return { decorations, group_map };
+		})());
 
 	// Verify sibling numbering once, at first read (build-error voice).
-	const verify = () => {
+	const verify = async () => {
+		const { decorations } = await resolve_meta();
 		const errors: string[] = [];
 		for (const [dir, set] of siblings) errors.push(...conv.verify(dir, [...set], decorations.get(dir)));
 		if (errors.length) throw new Error(`[ogygia/content] folder(): ${errors.join('; ')}`);
@@ -150,7 +163,7 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 			const key = keys_by_id.get(id);
 			return key ? record(id, key) : null;
 		},
-		groups: async () => group_map
+		groups: async () => (await resolve_meta()).group_map
 	};
 
 	return build(page_raw);

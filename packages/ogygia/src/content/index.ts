@@ -131,25 +131,6 @@ export { parseSchema } from './schema.js';
 // (type-only, fully erased — never pulls `$app/server` into a browser graph).
 export type { ContentMode, GetRemote, ListRemote, WithRemotes } from './server.js';
 
-// `import.meta.ogygia.loader.git()` — a build-time construct (like `import.meta.glob`), not a runtime
-// import. Any module that imports from `ogygia/content` picks up this global, so a `server/*.ts`
-// collection can call it directly. The ogygia Vite plugin rewrites the call to
-// `folder(import.meta.glob('<materialized checkout>/…'), opts)`; here it's only the type.
-declare global {
-	interface ImportMeta {
-		readonly ogygia: {
-			readonly loader: {
-				/**
-				 * Source a content collection straight from another git repository — no committed copy,
-				 * no sync script. `spec` is a LITERAL string `owner/repo[@ref][:path]` (e.g.
-				 * `'sveltejs/svelte@main:documentation/docs'`); `opts` is forwarded verbatim to
-				 * {@link folder}. The plugin materializes a shallow checkout at build time.
-				 */
-				git<Meta = Record<string, never>>(
-					spec: string,
-					opts?: import('./folder.js').FolderOptions<Meta>
-				): import('./source.js').Source<Meta>;
-			};
-		};
-	}
-}
+// The `import.meta.og.*` ambient types (loader.*, wire, …) live in the package-root
+// `ambient.d.ts`, surfaced to apps via the `ogygia/types` reference every scaffold carries — ONE
+// home, always on, no import required. The constructs themselves are rewritten by the vite plugin.

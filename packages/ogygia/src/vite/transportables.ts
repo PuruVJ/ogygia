@@ -1,11 +1,11 @@
 /**
- * Registration for transportable classes (`static [ogygia.wire]` codecs).
+ * Registration for transportable classes (`static [import.meta.og.wire]` codecs).
  *
  * ALIAS-PROOF BY DESIGN: the build never tries to recognize the codec key — it registers
  * every *exported class declaration* (found by parsing, so strings/comments never
  * false-match), and the RUNTIME decides which matter: `__register_transportable(tag, Cls)`
  * is a no-op unless the class actually carries `Symbol.for('ogygia.wire')`. So
- * `import { wire as w }`, `const k = ogygia.wire`, namespace renames — every spelling works.
+ * `const k = import.meta.og.wire` hops, minified keys — every spelling works (the construct rewrites to the symbol wherever it appears).
  *
  * Tags are root-relative module path + export name: identical in the server build and every
  * island bundle with zero coordination. Registrations import from `ogygia/internal` — a
@@ -127,13 +127,15 @@ interface ClassMember {
  * the eager-registration manifest so islands never need a manual `import` of the class.
  *
  * Signal: an exported class with a `static` member whose key is COMPUTED (`static [x] = …` /
- * `static [x]() {}`). Every `[ogygia.wire]` codec is exactly that, whatever the key is aliased
- * to — so this catches all realistic spellings without tracing the symbol. A false positive
- * (an unrelated computed static member) only eagerly loads one extra module; a transportable
- * class is never missed, because it always has a computed static key.
+ * `static [x]() {}`) — every rewritten wire member is exactly that — OR, pre-rewrite, the
+ * `import.meta.og.wire` construct marker (prescan reads RAW source, where the blessed spelling
+ * `static wire = import.meta.og.wire()` is not yet a computed member). A false positive (an
+ * unrelated computed static, the marker in a comment) only eagerly loads one extra module; a
+ * transportable class is never missed.
  */
 export function moduleHasTransportable(code: string, id_n: string): boolean {
 	if (!CLASS_KW.test(code) || !code.includes('static')) return false;
+	if (code.includes('import.meta.og.wire')) return true;
 	let body: AstNode[];
 	try {
 		const result = parseSync(id_n, code) as { program?: { body?: AstNode[] }; errors?: unknown[] };

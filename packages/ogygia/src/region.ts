@@ -15,6 +15,7 @@
  */
 import type { Component, ComponentProps } from 'svelte';
 import { region_snippet } from './region-snippet.js';
+import RawHtml from './RawHtml.svelte';
 
 /** Brand so the transport can recognize a region without false-matching plain objects. */
 export const REGION_BRAND = Symbol.for('ogygia.region');
@@ -292,4 +293,14 @@ export function prebaked_region(
 // (mirrors Svelte's `createRawSnippet`). Pure runtime, passable, renderable with plain `{@render}`.
 export namespace region {
 	export const snippet = region_snippet;
+}
+
+/**
+ * A pure-HTML region — what `import.meta.og.code()` / `.md()` inline. The html is baked at build
+ * (Shiki / markdown), so this is an INLINE region whose component ({@link RawHtml}) simply renders
+ * the html in the page's own SSR pass. Static by construction: it ships as HTML and no client JS of
+ * its own. Rendered like any region: `<Region of={…} />`.
+ */
+export function og_html_region(html: string): InlineRegion {
+	return { [REGION_BRAND]: true, kind: 'inline', component: RawHtml as AnyComponent, props: { html } };
 }

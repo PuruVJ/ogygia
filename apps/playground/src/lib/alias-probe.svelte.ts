@@ -1,10 +1,5 @@
-// Aliasing torture test: the codec key reaches the class through a RENAMED import and a
-// const hop. The build must not care (it registers exported classes; the runtime symbol
-// decides). If this crosses an island boundary, alias-proofing works.
-import { wire as w } from 'ogygia';
-
-const K = w;
-
+// Minimal-contract probe: the smallest legal wire mark — one field, explicit codec. If this
+// crosses an island boundary and comes back alive, the strict one-contract path works end to end.
 export class AliasProbe {
 	v = $state('');
 
@@ -12,8 +7,8 @@ export class AliasProbe {
 		this.v = v;
 	}
 
-	static [K] = {
+	static wire = import.meta.og.wire({
 		encode: (p: AliasProbe) => p.v,
 		decode: (v: string) => new AliasProbe(v)
-	};
+	});
 }
