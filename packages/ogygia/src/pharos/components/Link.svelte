@@ -25,16 +25,16 @@
 	async function resolve(h: string): Promise<string> {
 		const [slug, frag] = h.split('#');
 		const tail = frag ? `#${frag}` : '';
-		const hit = await ctx!.site.outline.resolve(slug);
+		const hit = await ctx!.site!.outline.resolve(slug);
 		if (hit) return href_of(ctx!.base, hit.record.slug) + tail;
-		const canonical = await ctx!.site.outline.alias(slug);
+		const canonical = await ctx!.site!.outline.alias(slug);
 		if (canonical) return href_of(ctx!.base, canonical) + tail;
 		return h; // unknown — leave as-written; the audit is the reporting surface
 	}
 
 	// Deliberate init-time snapshot (csr=false SSR): a prose link's target never changes mid-mount.
 	// svelte-ignore state_referenced_locally
-	const resolved = ctx && is_bare(href) ? await resolve(href) : href;
+	const resolved = ctx?.site && is_bare(href) ? await resolve(href) : href;
 </script>
 
 <a {...rest} href={resolved}>{@render children?.()}</a>

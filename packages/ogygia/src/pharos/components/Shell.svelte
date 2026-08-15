@@ -15,7 +15,7 @@
 	import { page } from '$app/state';
 	import { script } from '../../script.js';
 	import { set_shell_context } from '../context.js';
-	import { mountBase, type Site } from '../pharos.js';
+	import { mountBase, type Site, type SiteMeta } from '../pharos.js';
 	// KEPT island: the live sidebar (DOM + mounted app) rides the body-swap across nav instead of
 	// re-rendering, so its active-marker element persists and can GLIDE to the new row. `nav`/`base` are
 	// plain serializable data, so they cross the island boundary cleanly.
@@ -36,6 +36,7 @@
 
 	let {
 		site,
+		meta,
 		title = 'Docs',
 		links = [],
 		base,
@@ -43,7 +44,14 @@
 		actions,
 		children
 	}: {
-		site: Site;
+		/** The site brains. Pass it and the Shell computes its nav/switcher itself (the simple path).
+		 *  OR keep the corpus SERVER-ONLY and pass `meta` DATA instead (the leak-free path) — then no
+		 *  route imports the corpus. Exactly one of `site` / `meta` is needed. */
+		site?: Site;
+		/** The pre-computed shell bundle from `site.meta(slug)` — the leak-free path. When present, the
+		 *  Shell uses it and never touches `site`, so a `+layout.svelte` can feed a `meta` remote's
+		 *  result and keep the corpus off the client. */
+		meta?: SiteMeta;
 		/** Brand text in the header (used when the `brand` snippet is absent). */
 		title?: string;
 		/** Top-nav links (data — they cross into the mobile island, which snippets can't). */
@@ -63,15 +71,16 @@
 	// svelte-ignore state_referenced_locally
 	const the_base = base ?? mountBase(page.url, page.params.slug ?? '');
 	// svelte-ignore state_referenced_locally
-	set_shell_context({ site, base: the_base, components: site.components, title });
+	set_shell_context({ site, base: the_base, components: site?.components, title });
 
 	// svelte-ignore state_referenced_locally
 	const current_slug = page.params.slug ?? '';
-	// One nav computation (server-side), shared by the desktop sidebar and the mobile island (as data).
+	// One nav computation shared by the desktop sidebar and the mobile island (as data). Use the
+	// pre-computed `meta` bundle when given (leak-free); else compute from the live `site`.
 	// On a `dimensions()` site the slug selects the coordinate's tree; ignored on a plain site.
-	const tree: NavTree = await site.nav({ base: the_base, slug: current_slug });
+	const tree: NavTree = meta ? meta.nav : await site!.nav({ base: the_base, slug: current_slug });
 	// The version/locale switcher (plain data → native links; `null` on a non-dimensioned site).
-	const switcher = await site.switcher(current_slug, { base: the_base });
+	const switcher = meta ? meta.switcher : site ? await site.switcher(current_slug, { base: the_base }) : null;
 </script>
 
 <svelte:head>

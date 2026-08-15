@@ -19,7 +19,7 @@
  */
 import { prerender, query } from '$app/server';
 import type { ContentMode } from '../content/server.js';
-import type { Site } from './pharos.js';
+import type { Site, SiteMeta } from './pharos.js';
 import type { SearchHit } from './search.js';
 import type { DocView, NavTree } from './types.js';
 
@@ -54,6 +54,10 @@ export type PharosRemotes = {
 	 * argument (or `''`) is the default coordinate. Prerendered per distinct argument.
 	 */
 	nav: (slug?: string) => Promise<NavTree>;
+	/** The whole SHELL bundle (`{ nav, switcher, data }`) as ONE prerendered remote — feed it straight
+	 *  to `<Shell {meta}>` so the layout never imports the corpus. On a `dimensions()` site, pass the
+	 *  slug for that coordinate's tree + switcher. */
+	meta: (slug?: string) => Promise<SiteMeta>;
 	/** On-demand full-text search over the wire (query mode) — server brain, corpus stays server-side. */
 	search: (q: string) => Promise<SearchHit[]>;
 	/** One page view over the wire (query mode). The entry's lazy `body` region crosses as a signed
@@ -90,10 +94,15 @@ export function remotes(
 		const body = entry.body ? await entry.body : undefined;
 		return { ...view, entry: { ...entry, ...(body ? { body } : {}) } };
 	};
+	// The shell bundle for a slug — one payload the leak-free layout feeds to `<Shell {meta}>`.
+	const meta_fn = (slug?: string) => site.meta(slug ? { base, slug } : { base });
 	return {
 		nav: (mode.nav === 'query'
 			? query(optional_string_arg, nav_fn)
 			: prerender(optional_string_arg, nav_fn, { dynamic: true })) as unknown as (slug?: string) => Promise<NavTree>,
+		meta: (mode.nav === 'query'
+			? query(optional_string_arg, meta_fn)
+			: prerender(optional_string_arg, meta_fn, { dynamic: true })) as unknown as (slug?: string) => Promise<SiteMeta>,
 		search: query(string_arg, (q: string) => site.search(q, { base })) as unknown as (q: string) => Promise<SearchHit[]>,
 		doc: (mode.doc === 'query'
 			? query(string_arg, doc_fn)

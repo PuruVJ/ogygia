@@ -20,9 +20,9 @@ export { outline, pick, href_of } from './outline.js';
 export type { Outline, OutlineSpec, OutlineOptions, OutlineNode, OutlineThunk, GroupSpec, LinkSpec, Selection, Collection, TrailScope } from './outline.js';
 
 export { pharos, mountBase } from './pharos.js';
-export type { SiteData, ReadContext } from './pharos.js';
+export type { SiteData, SiteMeta, ReadContext } from './pharos.js';
 export { fields } from './fields.js';
-export type { PageFields, PostFields, ChangeFields } from './fields.js';
+export type { PageFields, PostFields, ChangeFields, BlogPostRef } from './fields.js';
 export { dimensions, is_dimensioned } from './dimensions.js';
 export type { Axis, Coordinate, DimensionsSpec, Dimensioned, Switcher, SwitcherAxis, Fallback } from './dimensions.js';
 export type { Site, PharosOptions, EmitHandler, EmitOptions, LlmsEmitOptions, RawEmit } from './pharos.js';

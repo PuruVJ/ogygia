@@ -14,7 +14,9 @@ const KEY = Symbol.for('ogygia.pharos.shell');
 export type ComponentMap = Record<string, Component<Record<string, unknown>>>;
 
 export type ShellContext = {
-	site: Site;
+	/** Optional: absent on the leak-free path (corpus server-only, nav fed as data). Bricks that need
+	 *  it (a `PharosSlot` component override) fall back to `components` / plain behavior. */
+	site?: Site;
 	base: string;
 	components?: ComponentMap;
 	/** The shell's brand/site name — bricks use it to suffix the document `<title>`. */

@@ -33,6 +33,14 @@ export type SiteData = {
 	origin: string;
 };
 
+/** The SHELL bundle — everything `<Shell>` needs as plain data, so the corpus can stay server-only.
+ *  `site.meta(slug)` returns it; expose it as a remote and pass the result to `<Shell {meta}>`. */
+export type SiteMeta = {
+	nav: NavTree;
+	switcher: Switcher | null;
+	data?: SiteData;
+};
+
 /** A request context the site derives per read (preview, roles) and threads into collection filters. */
 export type ReadContext = Record<string, unknown>;
 
@@ -113,6 +121,9 @@ export interface Site {
 	/** On a `dimensions()` site: the version/locale switcher for the coordinate in `slug` (hrefs baked
 	 *  for `base`). `null` on a plain site. Serializable — the shell renders a `<select>`. */
 	switcher: (slug: string, opts?: BaseOption & { context?: ReadContext }) => Promise<Switcher | null>;
+	/** The whole SHELL bundle in one browser-safe call: `{ nav, switcher, data }` for a slug. Feed it
+	 *  to `<Shell {meta}>` so the corpus stays server-only — this is what a `meta` remote returns. */
+	meta: (opts?: BaseOption & { slug?: string; context?: ReadContext }) => Promise<SiteMeta>;
 	/** Everything one page position needs, or `null` for an unknown slug. Call in the page component.
 	 *  Pass `context` (e.g. `{ preview: true }`) to see the same projection the load guard used. */
 	doc: <Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(slug: string, opts?: BaseOption & { context?: ReadContext }) => Promise<DocView<Data, Meta> | null>;
@@ -239,6 +250,15 @@ class PharosSite implements Site {
 	async switcher(slug: string, o: BaseOption & { context?: ReadContext } = {}) {
 		const ol = this.outline;
 		return is_dimensioned(ol) ? ol.switcher(slug, o.base ?? this.#base, o.context ?? {}) : null;
+	}
+
+	async meta(o: BaseOption & { slug?: string; context?: ReadContext } = {}): Promise<SiteMeta> {
+		const slug = o.slug ?? '';
+		return {
+			nav: await this.nav(o),
+			switcher: await this.switcher(slug, o),
+			...(this.data ? { data: this.data } : {})
+		};
 	}
 
 	async doc<Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(slug: string, o: BaseOption & { context?: ReadContext } = {}): Promise<DocView<Data, Meta> | null> {
