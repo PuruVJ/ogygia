@@ -1,0 +1,59 @@
+---
+title: loader
+summary: The content loaders — markdown, folder, json, git. Each takes a literal glob (or a repo spec) and becomes a source for content({ loader }). The macro owns the import.meta.glob plumbing, so you never write it.
+related:
+  - content/collections
+  - macros/overview
+  - content/blocks
+---
+
+`import.meta.og.loader.*` is the blessed way to point a [content collection](/docs/content/collections) at static files. You give it a **literal glob** (or, for `git`, a repo spec); the macro owns the `import.meta.glob(…)` wrapper and hands `content()` a finished source.
+
+```ts
+// docs.server.ts
+import { content } from 'ogygia/content';
+
+export const docs = content({
+  loader: import.meta.og.loader.markdown('./content/**/*.svx'),
+  schema
+});
+```
+
+That's the whole loader. No `import.meta.glob`, no `{ eager }`, no wrapper import. Compare the old shape — `markdown(import.meta.glob('./content/**/*.svx', { eager: true }))` — and you can see what the macro absorbs.
+
+## The four loaders
+
+Each takes a literal glob and returns a `Source`. They differ only in what they parse.
+
+```ts
+// markdown / .svx — headings come for free on `meta.headings`
+import.meta.og.loader.markdown('./docs/**/*.svx')
+
+// filesystem convention — NN- ordering, +meta.json section labels
+import.meta.og.loader.folder('../content/**/{+doc.svx,+meta.json}')
+
+// JSON data files
+import.meta.og.loader.json('./authors/*.json')
+
+// straight from another git repository — no committed copy, no sync script
+import.meta.og.loader.git('sveltejs/svelte@main:documentation/docs')
+```
+
+- **`markdown(glob)`** — a markdown / `.svx` collection. Bodies compile through the markdown pipeline; each entry's `meta.headings` is populated for on-page tables of contents.
+- **`folder(glob)`** — the filesystem-convention preset. `NN-` prefixes become order, `+meta.json` files become section labels, `index.md` becomes a section's own page. This is what a docs site uses.
+- **`json(glob)`** — a data collection, one entry per JSON file.
+- **`git(spec)`** — sources a collection straight from another repository. The `spec` is `owner/repo[@ref][:path]`; the plugin materializes a shallow checkout at build (cached under `node_modules/.ogygia`, so a warm CI clones nothing) and points the glob at it. This is how you build a docs site on someone else's source without a committed copy or a sync script.
+
+Each accepts the same second `opts` argument the underlying builder takes — `folder` and `git` forward folder options (`page`, `meta`, `convention`), so ordering and labelling are yours to shape.
+
+## Lazy by default
+
+The macro emits a **lazy** glob. Each matched file becomes its own chunk, loaded when `get(id)` reads it — not inlined into one giant module. For a large corpus on a serverless host, that's the difference between a lean function and one that carries megabytes of compiled markdown. The catalog paths (`list`, the nav, the search index) still read frontmatter across the corpus, and that fan-out is paid once and cached.
+
+## The rules
+
+- **The glob (or spec) is a literal string.** A template literal with `${…}` interpolation is a runtime value the build can't resolve — it's a build error naming the expression. Anything genuinely dynamic (a CMS, a database) is a hand-written [source](/docs/content/collections), not a loader.
+- **Loaders are server-only.** They build a content corpus, which must never reach a client bundle — so they belong in a `.server.ts` file (or `src/lib/server/`, or a `.remote.ts`). Kit's server-module guard then makes the corpus mechanically un-leakable. A loader called inside a `.svelte` component is a warning, not a silent success.
+- **The runtime builders still exist.** `markdown()`, `folder()`, `json()` are what the macros rewrite to; they're the escape hatch if you ever need to feed a source builder something other than a literal glob. But for static files, the macro is the path.
+
+See [content collections](/docs/content/collections) for the full read surface (`get`, `list`, `ids`), schemas, relations, and how a source composes with `withRemotes()` to cross the wire.

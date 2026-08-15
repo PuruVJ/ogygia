@@ -25,20 +25,23 @@ For a *page assembled from typed blocks* rather than a single markdown body, see
 
 ## Define the collection once — in a server module
 
-A collection's `loader` is an **eager glob**: it pulls the whole compiled corpus into the module. Define it in a **`.server.ts`** file (or `.remote.ts`, or under `src/lib/server/`), so Kit mechanically guarantees no client module can import it — the corpus can never reach a browser bundle:
+A collection's `loader` sources the compiled corpus. Define it in a **`.server.ts`** file (or `.remote.ts`, or under `src/lib/server/`), so Kit mechanically guarantees no client module can import it — the corpus can never reach a browser bundle:
 
 ```ts
 // src/lib/collections.server.ts
-import { content, markdown } from 'ogygia/content';
+import { content } from 'ogygia/content';
 import * as v from 'valibot';
 
 export const docs = content({
-  // `loader` is a source; `markdown()` wraps the glob. Data + Meta are inferred — no annotations.
-  loader: markdown(import.meta.glob('../content/docs/**/*.svx', { eager: true })),
+  // The loader is a compile macro — it owns the glob, you pass a literal path. Data + Meta are
+  // inferred, no annotations. See the loader macro for markdown/folder/json/git.
+  loader: import.meta.og.loader.markdown('../content/docs/**/*.svx'),
   schema: v.object({ title: v.string(), section: v.string() }),
   filter: (e) => !e.data.draft   // visibility, declared ONCE
 });
 ```
+
+> `import.meta.og.loader.*` is the blessed way to point a collection at static files — it owns the `import.meta.glob` plumbing so you write only a literal path. It comes in four flavours (`markdown`, `folder`, `json`, `git`); see the **[loader macro](/docs/macros/loaders)** for all four and the rules. The runtime builders it rewrites to (`markdown()`, `json()`, `blocks()`) are still exported for the rare hand-built source.
 
 > **ogygia warns you.** Define a collection outside a server module and the build prints a warning naming the file — because a client component that imports it would drag the entire corpus into its bundle (silently, and often megabytes). Keep the definition server-side and mint the wire crossing in a `.remote.ts`; that split is the whole defense.
 
@@ -179,7 +182,8 @@ A `loader` is not limited to a glob. Any object with `get` / `list` / `ids` is a
 
 | Source | Write |
 | --- | --- |
-| Markdown / JSON in repo | `markdown(glob(…))` · `json(glob(…))` · [`blocks(glob(…), registry)`](/docs/content/blocks) |
+| Static files in repo | the [`loader` macro](/docs/macros/loaders) — `import.meta.og.loader.markdown` · `.folder` · `.json` · `.git` |
+| Blocks (CMS tree) | [`blocks(source, registry)`](/docs/content/blocks) with a [`regions()`](/docs/macros/regions) registry |
 | A REST API | a `{ get, list, ids }` source that fetches |
 | Something that **pushes** | add `live()` — a change signal — + `live.list` / `live.get` |
 

@@ -1,0 +1,39 @@
+---
+title: md
+summary: A Markdown string rendered at build through your app's own markdown pipeline — the same remark/rehype plugins, the same highlighted fences — and inlined as a static region. For prose that lives in a component.
+related:
+  - macros/code
+  - content/collections
+  - macros/overview
+---
+
+`import.meta.og.md(text)` renders a Markdown string **at build** and inlines it as a static region. It runs the text through your app's own markdown pipeline — the same remark and rehype plugins, the same Shiki fences — so `md('# Hello')` in a component and the same Markdown in a `.md` document render identically.
+
+```svelte
+<script>
+  import { Region } from 'ogygia';
+
+  const intro = import.meta.og.md(`
+    ## Getting started
+
+    Install, then add the plugin. A fenced block highlights too:
+
+    \`\`\`ts
+    export const csr = false;
+    \`\`\`
+  `);
+</script>
+
+<Region of={intro} />
+```
+
+Headings (with auto-slugged ids), lists, emphasis, links, and highlighted code fences — everything your document pipeline does, `md()` does, because it *is* your pipeline. The result is a region, rendered with `<Region of={…} />`, shipping as HTML with no client JS.
+
+## The rules
+
+- **`text` is a static string or template literal.** A `${…}` interpolation is a build error — it's a runtime value the build can't resolve. Dedent is automatic, exactly as in [`code`](/docs/macros/code).
+- **Static prose only.** `md()` is for prose and fenced code. If the Markdown compiles to something dynamic — an island import, a `<script>`, a component tag, a Svelte expression — that's a build error, because a region is static by construction. For live, interactive content, use a real component (or a `.svx` collection where islands are welcome).
+
+## code vs md
+
+They're siblings. [`code`](/docs/macros/code) is one highlighted snippet with a language and fence meta. `md` is a whole Markdown document — headings, lists, prose, and any number of fences inside it. Reach for `code` when you have exactly one block to show; reach for `md` when you have a passage. Both return a region, so they render the same way.

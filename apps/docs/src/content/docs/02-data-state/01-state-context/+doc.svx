@@ -1,6 +1,6 @@
 ---
 title: State & Context
-summary: Share one live object across islands. A class with static [ogygia.wire] crosses island boundaries as a prop; createContext() provides it to a whole subtree without prop drilling.
+summary: Share one live object across islands. A class with static wire = import.meta.og.wire({…}) crosses island boundaries as a prop; createContext() provides it to a whole subtree without prop drilling.
 related:
   - regions/held-regions
   - reference/constraints
@@ -10,25 +10,23 @@ related:
 
 ## Sharing state
 
-A prop crosses a serialization boundary. A plain object copies fine; a live class instance — a store, an orchestrator — does not. A class opts in by declaring **how it travels**:
+A prop crosses a serialization boundary. A plain object copies fine; a live class instance — a store, an orchestrator — does not. A class opts in by declaring **how it travels**, with the [`wire` macro](/docs/macros/wire):
 
 ```ts
 // cart.svelte.ts
-import * as ogygia from 'ogygia';
-
 export class Cart {
   items = $state<string[]>([]);
   get count() { return this.items.length; }
   add(item: string) { this.items.push(item); }
 
-  static [ogygia.wire] = {
+  static wire = import.meta.og.wire({
     encode: (c: Cart) => $state.snapshot(c.items),
     decode: (items: string[]) => Object.assign(new Cart(), { items }),
-  };
+  });
 }
 ```
 
-`encode` says what leaves. `decode` says how to rebuild. Both are yours, so nothing is hidden.
+`encode` says what leaves. `decode` says how to rebuild. Both are yours, so nothing is hidden. `import.meta.og.wire` is a compile construct — no import; the macro mints the codec key. See the **[`wire` macro](/docs/macros/wire)** for the full contract, the strict rules, and session continuity (`id` / `merge`).
 
 Make one instance and hand it to as many islands as you like:
 

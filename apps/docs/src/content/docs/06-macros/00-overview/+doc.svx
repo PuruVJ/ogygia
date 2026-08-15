@@ -1,0 +1,38 @@
+---
+title: The import.meta.og surface
+summary: One compile-time namespace for the things ogygia can settle at build. Each call looks like runtime code but runs when you build, sees the module graph, and inlines its result. This page is the shared grammar; each macro has its own.
+related:
+  - macros/loaders
+  - macros/wire
+  - macros/bake
+---
+
+Some of what an app does never changes between requests. Which markdown files exist. How a class crosses an island boundary. What a code sample looks like highlighted. The nav tree computed from a corpus. That work belongs at **build**, not in every request — and `import.meta.og.*` is where ogygia puts it.
+
+Everything under `import.meta.og` is a **compile construct**. It reads like a normal call, but the ogygia Vite plugin rewrites it at build time, before your code ever runs. There is no `import.meta.og` object at runtime — if a construct ever reached the browser unrewritten, it would throw on the first line instead of half-working.
+
+## The family
+
+| Construct | Turns into |
+| --- | --- |
+| [`loader.markdown/folder/json/git`](/docs/macros/loaders) | a content **source** for `content({ loader })` |
+| [`code(source, lang, meta?)`](/docs/macros/code) | a highlighted snippet, baked to a static **region** |
+| [`md(text)`](/docs/macros/md) | a Markdown string, rendered to a static **region** |
+| [`regions(glob)`](/docs/macros/regions) | a block **registry** from a folder |
+| [`wire({ encode, decode })`](/docs/macros/wire) | the transportable-codec key on a class |
+| [`bake(fn)`](/docs/macros/bake) | the **result** of running `fn` at build, inlined |
+
+## Why it looks like `import.meta.glob`
+
+Because it behaves like it. Vite's own `import.meta.glob` is the same idea — a call that never runs, that the bundler resolves at build. Living on `import.meta` inherits the intuition everyone already has for that: the arguments are **literals**, you don't alias it, you don't pass it around, it's the build talking. One namespace, one autocomplete entry, collision-proof by ownership.
+
+The rule for what belongs here is simple: **literal inputs, a build-determined result.** A runtime wrapper around `import.meta.glob` is the smell these constructs remove.
+
+## What they share
+
+- **Literal arguments.** A glob, a language, a repo spec — a plain string the build can read. A template literal with `${…}` interpolation is a runtime value, so it's a build error, with the offending expression named.
+- **AST-precise detection.** A construct is found by parsing, not by text search, so the same words inside a comment or a string are never mistaken for a call.
+- **Build-voice errors.** Misuse fails at build with an `[ogygia]` message that names the file, the line, and the fix — never a silent no-op, never a runtime surprise.
+- **No runtime cost.** The rewrite happens once, at build. What ships is the result: a source, a region, a registry, a codec key, a constant.
+
+Each construct has its own page with its full contract. Start with [loaders](/docs/macros/loaders) if you have content, [`wire`](/docs/macros/wire) if you share state across islands, or [`bake`](/docs/macros/bake) for the "run at build, ship the answer" trick.

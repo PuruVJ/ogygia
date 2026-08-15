@@ -1,6 +1,6 @@
-import * as ogygia from 'ogygia';
+import { createContext } from 'ogygia';
 
-/** Live cart that crosses island boundaries as a prop (`static [ogygia.wire]`). */
+/** Live cart that crosses island boundaries as a prop (`static wire = import.meta.og.wire(…)`). */
 export class Cart {
 	items = $state<string[]>([]);
 
@@ -12,11 +12,11 @@ export class Cart {
 		this.items.push(item);
 	}
 
-	static [ogygia.wire] = {
+	static wire = import.meta.og.wire({
 		encode: (c: Cart) => $state.snapshot(c.items),
 		decode: (items: string[]) => Object.assign(new Cart(), { items })
-	};
+	});
 }
 
 /** The same live `Cart`, provided to a subtree instead of drilled as a prop through every island. */
-export const cartCtx = ogygia.createContext<Cart>();
+export const cartCtx = createContext<Cart>();

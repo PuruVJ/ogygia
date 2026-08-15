@@ -380,11 +380,11 @@ export const portableBindings = `<script>
 <Active />`;
 
 /** Content collections — RF-native. Homepage content-layer beat. */
-export const contentCollection = `// collections.ts — one browser-safe definition
-import { content, markdown } from 'ogygia/content';
+export const contentCollection = `// collections.server.ts — one server-only definition
+import { content } from 'ogygia/content';
 
 export const docs = content({
-  loader: markdown(import.meta.glob('./docs/**/*.svx', { eager: true })),
+  loader: import.meta.og.loader.markdown('./docs/**/*.svx'),
   schema
 });
 
@@ -406,11 +406,11 @@ and a live island, right in the copy:
 <Chart {data} />`;
 
 export const contentJson = `// typed data, not just prose — JSON through the same API
-import { content, json } from 'ogygia/content';
+import { content } from 'ogygia/content';
 import * as v from 'valibot';
 
 export const authors = content({
-  loader: json(import.meta.glob('./authors/*.json', { eager: true })),
+  loader: import.meta.og.loader.json('./authors/*.json'),
   schema: v.object({ name: v.string(), bio: v.string() })
 });
 
