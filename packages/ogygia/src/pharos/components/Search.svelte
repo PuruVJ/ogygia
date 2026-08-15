@@ -79,8 +79,16 @@
 </script>
 
 {#if mode === 'dialog'}
-	<!-- A real link to /search — JS intercepts to open the palette; no-JS follows it to the page. -->
-	<a class="ph-search-trigger" href={search_action} onclick={(e) => { e.preventDefault(); void open_palette(); }}>
+	<!-- A real link to /search — JS intercepts to open the palette; no-JS follows it to the page.
+	     Hover/focus WARMS the heavy half (module + worker + index) so the open feels instant: the
+	     palette mounts closed and starts fetching while the pointer is still travelling. -->
+	<a
+		class="ph-search-trigger"
+		href={search_action}
+		onpointerenter={() => void wake_palette()}
+		onfocus={() => void wake_palette()}
+		onclick={(e) => { e.preventDefault(); void open_palette(); }}
+	>
 		<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
 		<span class="ph-search-trigger-label">{placeholder}</span>
 		<kbd class="ph-search-kbd">⌘K</kbd>

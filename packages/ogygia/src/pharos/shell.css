@@ -20,33 +20,37 @@
 		line-height: 1.6;
 	}
 
-	/* ── headerless form (`header={false}`): the sidebar is the whole chrome ── */
-	.ph-headerless .ph-cside {
-		top: 0;
-		height: 100vh;
-		display: flex;
-		flex-direction: column;
-		gap: 0.85rem;
-	}
-	.ph-cside-brand {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex-shrink: 0;
-	}
-	.ph-cside-tools {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		flex-shrink: 0;
-	}
-	.ph-cside-tools .ph-search-trigger {
-		width: 100%;
-	}
-	.ph-headerless .ph-cside .ph-sidebar {
-		min-height: 0;
-		overflow-y: auto;
-		flex: 1;
+	/* ── headerless / panel-chrome form (a `header` snippet passed): the sidebar is the whole
+	      chrome. DESKTOP-ONLY — on mobile the panel hides as usual and the bottom bar + sheet
+	      carry the chrome, exactly like header mode. ── */
+	@media (min-width: 901px) {
+		.ph-headerless .ph-cside {
+			top: 0;
+			height: 100vh;
+			display: flex;
+			flex-direction: column;
+			gap: 0.85rem;
+		}
+		.ph-cside-brand {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			flex-shrink: 0;
+		}
+		.ph-cside-tools {
+			display: flex;
+			flex-direction: column;
+			gap: 0.5rem;
+			flex-shrink: 0;
+		}
+		.ph-cside-tools .ph-search-trigger {
+			width: 100%;
+		}
+		.ph-headerless .ph-cside .ph-sidebar {
+			min-height: 0;
+			overflow-y: auto;
+			flex: 1;
+		}
 	}
 
 	/* ── header ────────────────────────────────────────────────────────────── */
@@ -268,6 +272,36 @@
 		}
 		.ph-sheet {
 			flex-direction: column;
+		}
+
+		/* Mobile-chrome GEOMETRY is FORM and lives here (not theme.css): an unstyled Shell must
+		 * still get a pinned bar + an anchored sheet — the design language only paints them. */
+		.ph-bottombar {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			z-index: 60;
+			align-items: center;
+			justify-content: space-between;
+			gap: 0.75rem;
+			height: var(--ph-bar-h);
+			padding: 0 0.9rem;
+		}
+		.ph-sheet-backdrop {
+			position: fixed;
+			inset: 0;
+			z-index: 55;
+		}
+		.ph-sheet {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: var(--ph-bar-h);
+			z-index: 58;
+			max-height: min(78dvh, calc(100dvh - var(--ph-bar-h) - 0.5rem));
+			padding: 0.35rem 0.85rem 0.6rem;
+			overflow: hidden;
 		}
 	}
 }

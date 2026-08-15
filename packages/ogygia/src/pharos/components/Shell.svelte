@@ -163,19 +163,25 @@
 
 	<div class="ph-cframe">
 		<aside class="ph-cside" aria-label="Documentation">
-			{#if side}<div class="ph-cside-brand">{@render side()}</div>{/if}
 			{#if header !== undefined}
-				<!-- The app took over (or removed) the header, so the panel carries the tools it would
-				     have held. Search's ⌘K keybinding + palette work exactly the same from here. -->
+				<!-- Panel-chrome form: the brand row carries the theme toggle (the old floating-panel
+				     shape — wordmark left, quiet icon buttons right), search rides below. -->
+				{#if side || tools === undefined}
+					<div class="ph-cside-brand">
+						{#if side}{@render side()}{/if}
+						{#if tools === undefined}<ThemeToggle />{/if}
+					</div>
+				{/if}
 				{#if tools}{@render tools()}{:else if tools !== null}
 					<div class="ph-cside-tools">
 						{#if switcher}<Switcher {switcher} for="version" />{/if}
 						<div class="ph-cside-search"><Search base={the_base} /></div>
 						{#if switcher}<Switcher {switcher} for="locale" />{/if}
-						<ThemeToggle />
 						{#if actions}<div class="ph-cside-actions">{@render actions()}</div>{/if}
 					</div>
 				{/if}
+			{:else if side}
+				<div class="ph-cside-brand">{@render side()}</div>
 			{/if}
 			{#if sidebar}
 				{@render sidebar(tree, the_base)}
