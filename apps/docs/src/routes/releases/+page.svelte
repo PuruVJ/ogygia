@@ -52,12 +52,15 @@
 </main>
 
 <style>
+	/* Override the wide site shell — a changelog reads best at a contained measure. */
 	.releases {
+		max-width: 58rem;
 		padding-block: 3.5rem 5rem;
 	}
 	.releases-head {
 		max-width: none;
-		margin-bottom: 3rem;
+		margin-bottom: 1rem;
+		padding-bottom: 2rem;
 	}
 	.releases-title {
 		margin: 0;
@@ -67,7 +70,7 @@
 	}
 	.releases-lede {
 		margin: 0.75rem 0 0;
-		max-width: 42rem;
+		max-width: 40rem;
 		color: var(--text-dim);
 		font-size: 1.0625rem;
 		line-height: 1.6;
@@ -80,23 +83,46 @@
 		text-decoration: underline;
 	}
 
+	/* The timeline: a hairline spine down the left, each release hanging off a dot. */
 	.rel-list {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		display: flex;
-		flex-direction: column;
+		position: relative;
+	}
+	.rel-list::before {
+		content: '';
+		position: absolute;
+		left: 6px;
+		top: 0.9rem;
+		bottom: 0.5rem;
+		width: 1px;
+		background: var(--line);
 	}
 	.rel {
+		position: relative;
 		display: grid;
-		grid-template-columns: 12rem 1fr;
+		grid-template-columns: 8rem 1fr;
 		gap: 2.5rem;
-		padding-block: 2.5rem;
-		border-top: 1px solid var(--line);
+		padding: 2.75rem 0 2.75rem 2rem;
 	}
 	.rel:first-child {
-		border-top: none;
-		padding-top: 0;
+		padding-top: 0.5rem;
+	}
+	/* The dot on the spine, anchored to the release row (stays put while the rail sticks). */
+	.rel::before {
+		content: '';
+		position: absolute;
+		left: 2px;
+		top: 2.9rem;
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--accent);
+		box-shadow: 0 0 0 4px var(--bg);
+	}
+	.rel:first-child::before {
+		top: 0.65rem;
 	}
 
 	.rel-rail {
@@ -105,10 +131,10 @@
 		align-self: start;
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
+		gap: 0.45rem;
 	}
 	.rel-version {
-		font: 600 1.35rem/1 var(--font-mono);
+		font: 600 1.3rem/1.1 var(--font-mono);
 		letter-spacing: -0.01em;
 		color: var(--text);
 		text-decoration: none;
