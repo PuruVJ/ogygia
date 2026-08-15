@@ -34,22 +34,7 @@
 	import type { NavTree } from '../types.js';
 	import type { Snippet } from 'svelte';
 
-	let {
-		site,
-		meta,
-		title = 'Docs',
-		links = [],
-		base,
-		skip,
-		header,
-		brand,
-		side,
-		tools,
-		sidebar,
-		bar,
-		actions,
-		children
-	}: {
+	type ShellProps = {
 		/** The site brains. Pass it and the Shell computes its nav/switcher itself (the simple path).
 		 *  OR keep the corpus SERVER-ONLY and pass `meta` DATA instead (the leak-free path) — then no
 		 *  route imports the corpus. Exactly one of `site` / `meta` is needed. */
@@ -64,37 +49,58 @@
 		links?: { text: string; href: string }[];
 		/** Mount prefix override; default derived by subtraction from the current page. */
 		base?: string;
-		/** ONE pattern, all the way down: every region the Shell renders is a conditional snippet.
-		 *  Absent → the built-in renders. Present → yours renders instead. Empty → the region is gone.
-		 *  The regions nest — replace the whole `header`, or keep it and replace just its `brand`,
-		 *  `nav`, or `tools` — and each default bottoms out at composable public bricks. */
+		/** ONE pattern, all the way down: every region the Shell renders is a conditional snippet prop —
+		 *  pick and choose the Shell's features. Absent → the built-in renders. A snippet → yours
+		 *  renders instead. Passed NULLISH (`header={null}`, or a computed value that came out
+		 *  undefined) → the region is GONE. The regions nest — replace the whole `header`, or keep it
+		 *  and replace just its `brand`, `nav`, or `tools` — and each default bottoms out at
+		 *  composable public bricks. */
 		/** The skip-to-content link (first tab stop). Default: "Skip to content" → `#ph-main`. */
-		skip?: Snippet;
-		/** The whole top header. Empty snippet → NO header, and the Shell shifts to the panel-chrome
-		 *  form: the tools cluster renders INSIDE the sidebar above the nav, so nothing is lost. */
-		header?: Snippet;
+		skip?: Snippet | null;
+		/** The whole top header. Nullish → NO header, and the Shell shifts to the panel-chrome form:
+		 *  the tools cluster renders INSIDE the sidebar above the nav, so nothing is lost. */
+		header?: Snippet | null;
 		/** The header's brand region. Default: `<a>` to the mount root carrying `title`. */
-		brand?: Snippet;
+		brand?: Snippet | null;
 		/** The header's primary-nav region. Default: a link row from `links`. */
-		nav?: Snippet;
+		nav?: Snippet | null;
 		/** The tools cluster (search, switchers, theme, `actions`) — wherever it lives: the built-in
 		 *  header in header mode, the sidebar panel when the header is replaced. */
-		tools?: Snippet;
+		tools?: Snippet | null;
 		/** Rendered at the TOP of the sidebar, above tools + nav — the panel's brand row. */
 		side?: Snippet;
 		/** The sidebar NAV. Default: the built-in `<Sidebar>` (kept island — roving focus, gliding
 		 *  marker). The snippet gets the computed `NavTree` + mount base, so a bespoke sidenav needs
 		 *  no extra data plumbing. */
-		sidebar?: Snippet<[NavTree, string]>;
+		sidebar?: Snippet<[NavTree, string]> | null;
 		/** The mobile chrome (bottom bar + sheet). Default: the built-in `<ShellBar>` island. */
-		bar?: Snippet<[NavTree, string]>;
+		bar?: Snippet<[NavTree, string]> | null;
 		/** Header tools — GitHub, version switcher, socials, anything. Rendered in the desktop header.
 		 *  NOT (yet) in the mobile sheet: `actions` is a forwarded snippet-prop, and a forwarded snippet
 		 *  can't cross into the `ShellBar` island (it captures as a function → not serializable). The
 		 *  fix is to make the mobile sheet SSR + inline-script (non-island) so snippets flow through. */
 		actions?: Snippet;
 		children: Snippet;
-	} = $props();
+	};
+
+	const props: ShellProps = $props();
+	const { site, meta, title = 'Docs', links = [], base, side, actions, children } = props;
+
+	/** Three-state region resolution: the prop ABSENT → `undefined` (built-in renders); the prop
+	 *  passed but NULLISH → `null` (region gone — `header={null}` and a computed `undefined` both
+	 *  count, so callers never need a sentinel dance); a snippet → itself. Presence is detected with
+	 *  `in`, which is what lets passed-nullish differ from absent. */
+	function slot<K extends keyof ShellProps>(key: K): NonNullable<ShellProps[K]> | null | undefined {
+		if (!(key in props)) return undefined;
+		return (props[key] ?? null) as NonNullable<ShellProps[K]> | null;
+	}
+	const skip = slot('skip');
+	const header = slot('header');
+	const brand = slot('brand');
+	const nav = slot('nav');
+	const tools = slot('tools');
+	const sidebar = slot('sidebar');
+	const bar = slot('bar');
 
 	// svelte-ignore state_referenced_locally
 	const the_base = base ?? mountBase(page.url, page.params.slug ?? '');
@@ -122,28 +128,29 @@
 	}, 'ph-theme')}
 </svelte:head>
 
-<div class="ph-shell" class:ph-headerless={!!header}>
-	<!-- Every region below follows ONE pattern: {#if snippet}{@render snippet()}{:else}built-in{/if}.
-	     Absent = batteries-included; present = yours; empty = gone. -->
-	{#if skip}{@render skip()}{:else}
+<div class="ph-shell" class:ph-headerless={header !== undefined}>
+	<!-- Every region below follows ONE pattern:
+	     {#if x}{@render x()}{:else if x !== null}built-in{/if}
+	     — absent = batteries-included, a snippet = yours, null = gone. -->
+	{#if skip}{@render skip()}{:else if skip !== null}
 		<!-- First focusable element: keyboard users jump past the nav straight to the content. -->
 		<a class="ph-skip" href="#ph-main">Skip to content</a>
 	{/if}
 	{#if header}
 		{@render header()}
-	{:else}
+	{:else if header !== null}
 		<header class="ph-cheader">
-			{#if brand}{@render brand()}{:else}
+			{#if brand}{@render brand()}{:else if brand !== null}
 				<a class="ph-cheader-brand" href={the_base || '/'}>{title}</a>
 			{/if}
 			<!-- Version sits by the brand (it scopes the whole doc set); locale rides with the tools. -->
 			{#if switcher}<Switcher {switcher} for="version" />{/if}
-			{#if nav}{@render nav()}{:else}
+			{#if nav}{@render nav()}{:else if nav !== null}
 				<nav class="ph-cheader-nav" aria-label="Primary">
 					{#each links as l (l.href)}<a class="ph-cheader-link" href={l.href}>{l.text}</a>{/each}
 				</nav>
 			{/if}
-			{#if tools}{@render tools()}{:else}
+			{#if tools}{@render tools()}{:else if tools !== null}
 				<div class="ph-cheader-tools">
 					<div class="ph-cheader-search"><Search base={the_base} /></div>
 					{#if switcher}<Switcher {switcher} for="locale" />{/if}
@@ -157,10 +164,10 @@
 	<div class="ph-cframe">
 		<aside class="ph-cside" aria-label="Documentation">
 			{#if side}<div class="ph-cside-brand">{@render side()}</div>{/if}
-			{#if header}
-				<!-- The app took over the header, so the panel carries the tools it would have held.
-				     Search's ⌘K keybinding + palette work exactly the same from here. -->
-				{#if tools}{@render tools()}{:else}
+			{#if header !== undefined}
+				<!-- The app took over (or removed) the header, so the panel carries the tools it would
+				     have held. Search's ⌘K keybinding + palette work exactly the same from here. -->
+				{#if tools}{@render tools()}{:else if tools !== null}
 					<div class="ph-cside-tools">
 						{#if switcher}<Switcher {switcher} for="version" />{/if}
 						<div class="ph-cside-search"><Search base={the_base} /></div>
@@ -172,7 +179,7 @@
 			{/if}
 			{#if sidebar}
 				{@render sidebar(tree, the_base)}
-			{:else}
+			{:else if sidebar !== null}
 				<Sidebar nav={tree} base={the_base} />
 			{/if}
 		</aside>
@@ -183,7 +190,7 @@
 	     call site), so it crosses into the island as a descriptor and comes alive in the sheet footer. -->
 	{#if bar}
 		{@render bar(tree, the_base)}
-	{:else}
+	{:else if bar !== null}
 		<ShellBar nav={tree} base={the_base} brand={title} {actions} />
 	{/if}
 </div>
