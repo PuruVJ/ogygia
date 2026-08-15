@@ -79,7 +79,6 @@
 			clearTimeout(debounce);
 		};
 	}
-	void action;
 </script>
 
 {#snippet field()}

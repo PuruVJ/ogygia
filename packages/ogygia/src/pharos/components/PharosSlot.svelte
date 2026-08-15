@@ -16,7 +16,7 @@
 
 	const DEFAULTS: Record<string, Component<Record<string, unknown>>> = { a: Link as Component<Record<string, unknown>> };
 	const map = get_shell_context()?.components ?? {};
-	const Comp = map[tag] ?? DEFAULTS[tag];
+	const Comp = $derived(map[tag] ?? DEFAULTS[tag]);
 </script>
 
 {#if Comp}

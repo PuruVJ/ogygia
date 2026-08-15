@@ -19,7 +19,7 @@
 	import type { Snippet } from 'svelte';
 
 	let { group = 'tabs', children }: { group?: string; children: Snippet } = $props();
-	const g = tab_group(group);
+	const g = $derived(tab_group(group));
 
 	function control(root: HTMLElement) {
 		const panels = [...root.querySelectorAll<HTMLElement>('.ph-tabs-panel')];

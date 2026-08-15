@@ -35,6 +35,15 @@
 
 	let active = $state('');
 
+	// The "top" entry is a real link to the current page (so it's a valid href, not a bare `#`), but
+	// clicking it just scrolls to the top — no navigation. Server-safe default for the SSR pass.
+	const top_href = $derived(typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/');
+	function to_top(e: MouseEvent) {
+		e.preventDefault();
+		window.scrollTo({ top: 0, behavior: 'smooth' });
+		history.replaceState(history.state, '', top_href);
+	}
+
 	/** Attachment: wire the scrollspy to the rendered list. Returns a teardown Svelte calls on unmount. */
 	function spy(list: HTMLElement) {
 		if (!scrollspy || !headings.length) return;
@@ -87,9 +96,10 @@
 		<p class="ph-toc-label">{label}</p>
 		<ul class="ph-toc-list" {@attach spy} {@attach roving({ selector: '.ph-toc-link', orientation: 'vertical' })}>
 			{#if title}
-				<!-- `#` = the document top, natively (empty fragment); active whenever no heading is. -->
+				<!-- The document top: a valid same-page link, but click just scrolls up (no nav). Active
+				     whenever no heading is. -->
 				<li class="ph-toc-item ph-toc-d2 ph-toc-title">
-					<a class="ph-toc-link" class:ph-active={active === ''} href="#" aria-current={active === '' ? 'true' : undefined}>{title}</a>
+					<a class="ph-toc-link" class:ph-active={active === ''} href={top_href} onclick={to_top} aria-current={active === '' ? 'true' : undefined}>{title}</a>
 				</li>
 			{/if}
 			{#each headings as h (h.id)}

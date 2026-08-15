@@ -28,7 +28,7 @@
 		for?: string | string[];
 	} = $props();
 
-	const wanted = forAxis ? (Array.isArray(forAxis) ? forAxis : [forAxis]) : null;
+	const wanted = $derived(forAxis ? (Array.isArray(forAxis) ? forAxis : [forAxis]) : null);
 	const axes = $derived(wanted ? switcher.filter((a) => wanted.includes(a.axis)) : switcher);
 </script>
 
