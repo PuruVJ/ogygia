@@ -10,7 +10,7 @@ import {
 	read_sha,
 	write_sha
 } from '../src/vite/git.js';
-import { find_loader_calls, rewrite_loaders } from '../src/vite/loaders.js';
+import { find_loader_calls, rewrite_loaders, expand_braces } from '../src/vite/loaders.js';
 import { __set_build_cache_root } from '../src/build-cache.js';
 
 describe('parse_git_spec', () => {
@@ -147,6 +147,34 @@ describe('rewrite_loaders', () => {
 	it('leaves a source with no loader calls untouched (no injected import)', () => {
 		const src = `export const x = 1;`;
 		expect(rewrite_loaders(src)).toEqual({ code: src, specs: [] });
+	});
+	it('brace alternation → Vite array form (dev matcher drops `{+doc,…}` braces, so expand them)', () => {
+		const { code } = rewrite_loaders(
+			`export const d = import.meta.og.loader.folder('../content/docs/**/{+doc.svx,+meta.json}');`
+		);
+		// Not the single brace string — the expanded array both dev and build agree on.
+		expect(code).toContain(
+			`__og_folder(import.meta.glob(["../content/docs/**/+doc.svx","../content/docs/**/+meta.json"], { eager: false }))`
+		);
+		expect(code).not.toContain('{+doc.svx,+meta.json}');
+	});
+});
+
+describe('expand_braces', () => {
+	it('passes a brace-free pattern straight through', () => {
+		expect(expand_braces('./docs/**/*.svx')).toEqual(['./docs/**/*.svx']);
+	});
+	it('expands a single alternation', () => {
+		expect(expand_braces('a/{+doc.svx,+meta.json}')).toEqual(['a/+doc.svx', 'a/+meta.json']);
+	});
+	it('expands multiple groups as a cartesian product', () => {
+		expect(expand_braces('{a,b}/{x,y}')).toEqual(['a/x', 'a/y', 'b/x', 'b/y']);
+	});
+	it('handles nested braces', () => {
+		expect(expand_braces('p/{a,{b,c}}')).toEqual(['p/a', 'p/b', 'p/c']);
+	});
+	it('leaves an unbalanced brace untouched', () => {
+		expect(expand_braces('a/{b,c')).toEqual(['a/{b,c']);
 	});
 });
 

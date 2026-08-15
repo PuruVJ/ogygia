@@ -38,6 +38,57 @@ const ALIAS = { markdown: '__og_markdown', folder: '__og_folder', json: '__og_js
 
 export type LoaderCall = OgCall;
 
+/**
+ * Expand `{a,b}` brace alternation into concrete patterns (cartesian over multiple/nested groups).
+ *
+ * WHY: Vite's DEV glob matcher silently drops a brace group whose members start with `+` — the very
+ * shape `folder()` leans on (`{+doc.svx,+meta.json}`). It matches every file in the production build
+ * (a different matcher) but ZERO in dev, so a whole content collection comes up empty on the dev
+ * server while the build is green. Emitting the expanded ARRAY form
+ * (`import.meta.glob(['…/+doc.svx','…/+meta.json'], …)`) sidesteps braces entirely, and both matchers
+ * agree. Non-brace patterns pass straight through as a single string (unchanged emit).
+ */
+export function expand_braces(pattern: string): string[] {
+	const open = pattern.indexOf('{');
+	if (open < 0) return [pattern];
+	// Find the matching `}` for THIS `{`, tracking nesting so `{a,{b,c}}` closes correctly.
+	let depth = 0;
+	let close = -1;
+	for (let i = open; i < pattern.length; i++) {
+		if (pattern[i] === '{') depth++;
+		else if (pattern[i] === '}' && --depth === 0) {
+			close = i;
+			break;
+		}
+	}
+	if (close < 0) return [pattern]; // unbalanced — leave untouched rather than corrupt it
+	// Split this group's options on TOP-LEVEL commas (a nested `{}` keeps its commas).
+	const inner = pattern.slice(open + 1, close);
+	const options: string[] = [];
+	let start = 0;
+	depth = 0;
+	for (let i = 0; i < inner.length; i++) {
+		if (inner[i] === '{') depth++;
+		else if (inner[i] === '}') depth--;
+		else if (inner[i] === ',' && depth === 0) {
+			options.push(inner.slice(start, i));
+			start = i + 1;
+		}
+	}
+	options.push(inner.slice(start));
+	const head = pattern.slice(0, open);
+	const tail = pattern.slice(close + 1);
+	// Recurse so remaining/nested groups expand too; dedupe stays the caller's concern (none arise here).
+	return options.flatMap((opt) => expand_braces(head + opt + tail));
+}
+
+/** Emit the glob source for a pattern — a plain string when there are no braces, Vite's array form
+ *  when brace expansion yields more than one concrete pattern (so dev + build agree). */
+function glob_arg(pattern: string): string {
+	const patterns = expand_braces(pattern);
+	return JSON.stringify(patterns.length === 1 ? patterns[0] : patterns);
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Node = Record<string, any>;
 
@@ -137,7 +188,7 @@ function emit(c: LoaderCall, used: Set<'markdown' | 'folder' | 'json'>, specs: G
 		specs.push(spec);
 		used.add('folder');
 		const opts = rest ? `, ${rest}` : '';
-		return `${ALIAS.folder}(import.meta.glob(${JSON.stringify(git_glob_pattern(spec))}, { eager: false })${opts})`;
+		return `${ALIAS.folder}(import.meta.glob(${glob_arg(git_glob_pattern(spec))}, { eager: false })${opts})`;
 	}
 
 	const builder = BUILDER[c.method];
@@ -149,5 +200,5 @@ function emit(c: LoaderCall, used: Set<'markdown' | 'folder' | 'json'>, specs: G
 	const { value: glob, rest } = split_first_string(c.args, `import.meta.og.loader.${c.method}()`);
 	used.add(builder);
 	const opts = rest ? `, ${rest}` : '';
-	return `${ALIAS[builder]}(import.meta.glob(${JSON.stringify(glob)}, { eager: false })${opts})`;
+	return `${ALIAS[builder]}(import.meta.glob(${glob_arg(glob)}, { eager: false })${opts})`;
 }
