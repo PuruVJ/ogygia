@@ -1,0 +1,322 @@
+/* The Shell chrome, painted in the SITE's design — the second rung of the same ladder as
+   pharos-docs.css: pharos owns STRUCTURE (`.ph-*` hooks from Shell/Sidebar/Search/ShellBar),
+   we own PIXELS. We do NOT import `ogygia/pharos/theme.css`; `shell.css` gives layout only,
+   and everything visual here comes from the docs tokens (app.css), so the site looks exactly
+   as it did on the bespoke SideNav — same palette, same fonts, same feel. */
+
+/* ── token bridge: the few --ph-* vars shell.css's layout reads ── */
+:root {
+	--ph-bg: var(--bg);
+	--ph-bg-raised: var(--bg-raised);
+	--ph-bg-subtle: var(--bg-sunken);
+	--ph-text: var(--text);
+	--ph-text-dim: var(--text-dim);
+	--ph-text-faint: var(--text-faint);
+	--ph-line: var(--line);
+	--ph-font: var(--font-body);
+	--ph-mono: var(--font-mono);
+	--ph-accent: var(--accent);
+	--ph-side-w: 17rem;
+	--ph-cheader-h: 3.5rem;
+	--ph-bar-h: 3.25rem;
+}
+
+/* ── skip link (Shell's own) ── */
+.ph-skip {
+	position: fixed;
+	top: 0.75rem;
+	left: 0.75rem;
+	z-index: 200;
+	padding: 0.55rem 0.9rem;
+	border-radius: var(--r-sm);
+	background: var(--accent);
+	color: var(--text-on-invert);
+	font: 600 0.8125rem/1 var(--font-body);
+	text-decoration: none;
+	transform: translateY(-150%);
+	transition: transform 0.18s ease;
+}
+.ph-skip:focus-visible {
+	transform: translateY(0);
+	outline: none;
+}
+.ph-cmain:focus {
+	outline: none;
+}
+
+/* ── header ── */
+.ph-cheader {
+	border-bottom: 1px solid var(--line);
+	background: color-mix(in srgb, var(--bg) 88%, transparent);
+	backdrop-filter: blur(8px);
+}
+.ph-cheader-brand {
+	font: 600 1.05rem/1 var(--font-display);
+	letter-spacing: -0.01em;
+	color: var(--text);
+	text-decoration: none;
+}
+.ph-cheader-link {
+	font: 500 0.84375rem/1 var(--font-body);
+	color: var(--text-dim);
+	text-decoration: none;
+}
+.ph-cheader-link:hover {
+	color: var(--text);
+}
+
+/* ── sidebar nav — the old SideNav's FLOATING PANEL on the pharos hooks: detached from the
+      viewport edges, curved, glassy, with the site's panel shadow. Same recipe as the old `.side`. ── */
+.ph-cside {
+	position: fixed;
+	z-index: 50;
+	top: var(--side-gap, 0.85rem);
+	bottom: var(--side-gap, 0.85rem);
+	left: var(--side-gap, 0.85rem);
+	width: var(--ph-side-w);
+	height: auto;
+	padding: 0.85rem 0.55rem 0.9rem 0.7rem;
+	border: 1px solid color-mix(in srgb, var(--accent-line) 55%, var(--line));
+	border-radius: 14px;
+	background:
+		linear-gradient(
+			165deg,
+			color-mix(in srgb, var(--accent-deep) 28%, transparent) 0%,
+			transparent 42%
+		),
+		color-mix(in srgb, var(--bg-raised) 92%, transparent);
+	box-shadow:
+		var(--shadow-panel),
+		inset 0 1px 0 color-mix(in srgb, var(--accent) 8%, transparent);
+	backdrop-filter: blur(16px) saturate(1.15);
+	-webkit-backdrop-filter: blur(16px) saturate(1.15);
+	overflow-y: auto;
+}
+/* The frame no longer reserves a grid column for the sidebar — the panel floats over the page,
+   so the content clears it with padding instead (the old site-chrome.css approach). */
+@media (min-width: 901px) {
+	.ph-cframe {
+		display: block;
+		padding-left: calc(var(--ph-side-w) + var(--side-gap, 0.85rem) * 2);
+	}
+}
+.ph-nav-label {
+	font: 600 0.6875rem/1 var(--font-mono);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+.ph-nav-link {
+	display: flex;
+	align-items: center;
+	min-height: 1.85rem;
+	padding: 0.32rem 0.55rem 0.32rem 0.7rem;
+	border-radius: 8px;
+	font: 500 0.84375rem/1.25 var(--font-body);
+	letter-spacing: -0.014em;
+	color: var(--text-dim);
+	text-decoration: none;
+	transition:
+		color 140ms ease,
+		background 140ms ease;
+}
+.ph-nav-link:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
+}
+.ph-nav-link[aria-current='page'],
+.ph-nav-link.ph-active {
+	color: var(--text);
+	font-weight: 600;
+	background: color-mix(in srgb, var(--accent-deep) 78%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent);
+}
+
+/* ── search trigger (header) ── */
+.ph-search-trigger {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-width: 11rem;
+	padding: 0.42rem 0.65rem;
+	border: 1px solid var(--line);
+	border-radius: var(--r-sm);
+	background: var(--bg-raised);
+	color: var(--text-faint);
+	font: 400 0.8125rem/1 var(--font-body);
+	text-decoration: none;
+	transition: border-color 140ms ease;
+}
+.ph-search-trigger:hover {
+	border-color: var(--line-strong);
+}
+.ph-search-kbd {
+	margin-left: auto;
+	padding: 0.1rem 0.35rem;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	background: var(--bg-sunken);
+	font: 500 0.6875rem/1 var(--font-mono);
+	color: var(--text-faint);
+}
+
+/* ── search palette (portaled dialog) ── */
+.ph-search-backdrop {
+	background: rgb(0 0 0 / 0.5);
+	backdrop-filter: blur(2px);
+}
+.ph-search-panel {
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r-md);
+	background: var(--bg-raised);
+	box-shadow: var(--shadow-panel);
+	color: var(--text);
+	font-family: var(--font-body);
+}
+.ph-search-field {
+	border-bottom: 1px solid var(--line);
+}
+.ph-search-field input {
+	background: transparent;
+	color: var(--text);
+	font: 400 0.95rem/1.4 var(--font-body);
+}
+.ph-search-hit {
+	border-radius: var(--r-sm);
+	color: var(--text-dim);
+}
+.ph-search-hit:hover,
+.ph-search-hit[data-selected],
+.ph-search-hit[aria-selected='true'] {
+	background: color-mix(in srgb, var(--accent-deep) 55%, transparent);
+	color: var(--text);
+}
+.ph-search-hit-title {
+	color: var(--text);
+	font-weight: 500;
+}
+.ph-search-hit-section,
+.ph-search-hit-heading {
+	color: var(--text-faint);
+}
+.ph-search-empty,
+.ph-search-hint,
+.ph-search-error {
+	color: var(--text-faint);
+	font: 400 0.8125rem/1.5 var(--font-body);
+}
+
+/* ── theme toggle + segmented controls ── */
+.ph-theme-toggle,
+.ph-cbar-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--line);
+	border-radius: var(--r-sm);
+	background: var(--bg-raised);
+	color: var(--text-dim);
+	cursor: pointer;
+	transition:
+		color 140ms ease,
+		border-color 140ms ease;
+}
+.ph-theme-toggle:hover,
+.ph-cbar-btn:hover {
+	color: var(--text);
+	border-color: var(--line-strong);
+}
+.ph-seg {
+	border: 1px solid var(--line);
+	border-radius: var(--r-sm);
+	background: var(--bg-sunken);
+}
+.ph-seg-btn {
+	color: var(--text-dim);
+}
+.ph-seg-btn[aria-pressed='true'] {
+	background: var(--bg-raised);
+	color: var(--text);
+}
+
+/* ── mobile bottom bar + sheet ── */
+.ph-cbar,
+.ph-bottombar {
+	border-top: 1px solid var(--line);
+	background: color-mix(in srgb, var(--bg) 92%, transparent);
+	backdrop-filter: blur(10px);
+}
+.ph-cbar-brand {
+	font: 600 0.95rem/1 var(--font-display);
+	color: var(--text);
+	text-decoration: none;
+}
+.ph-sheet {
+	border-top: 1px solid var(--line-strong);
+	border-radius: 14px 14px 0 0;
+	background: var(--bg-raised);
+	color: var(--text);
+}
+.ph-sheet-backdrop {
+	background: rgb(0 0 0 / 0.45);
+}
+
+/* ── on-this-page rail (Doc's toc) — same quiet look as before ── */
+.ph-toc-link {
+	color: var(--text-faint);
+	text-decoration: none;
+	font: 400 0.8125rem/1.6 var(--font-body);
+}
+.ph-toc-link:hover {
+	color: var(--text);
+}
+.ph-toc-link.ph-active {
+	color: var(--accent);
+}
+
+/* ── CodeChrome buttons (copy + permalink on every pre) ── */
+.ph-body pre {
+	position: relative;
+}
+.ph-code-actions {
+	position: absolute;
+	top: 0.5rem;
+	right: 0.5rem;
+	display: flex;
+	gap: 0.3rem;
+}
+.ph-code-actions :is(button, a) {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.85rem;
+	height: 1.85rem;
+	padding: 0;
+	border: 1px solid var(--line);
+	border-radius: var(--r-sm);
+	background: color-mix(in srgb, var(--bg) 78%, transparent);
+	backdrop-filter: blur(6px);
+	color: var(--text-faint);
+	cursor: pointer;
+	text-decoration: none;
+	opacity: 0.6;
+	transition:
+		opacity 0.15s ease,
+		color 0.15s ease,
+		border-color 0.15s ease;
+}
+.ph-body pre:hover .ph-code-actions :is(button, a),
+.ph-code-actions :is(button, a):focus-visible {
+	opacity: 1;
+	color: var(--text-dim);
+}
+.ph-code-actions :is(button, a):hover {
+	color: var(--text);
+	background: var(--bg-raised);
+}
+.ph-body pre[data-copied] .ph-copy,
+.ph-code-link[data-linked] {
+	opacity: 1;
+	color: var(--accent);
+	border-color: var(--accent-line);
+}

@@ -8,8 +8,12 @@
 	 * Styling is opt-in — the two pharos stylesheets give the design language + the shell layout.
 	 */
 	import Shell from 'ogygia/pharos/shell';
-	import 'ogygia/pharos/theme.css'; // design language (tokens + element styles, incl. .ph-body + code)
-	import 'ogygia/pharos/shell.css'; // shell layout (header + sidebar + content grid + mobile chrome)
+	// UNSTYLED components + our own skin — the customization ladder's CSS rung. shell.css is layout
+	// only; the LOOK stays the site's own (NOT pharos theme.css): shell-skin.css paints the chrome
+	// (floating sidebar panel, header, search, sheet) from the docs tokens, and pharos-docs.css
+	// (imported by the doc route) paints the `.ph-*` doc body the same as it always was.
+	import 'ogygia/pharos/shell.css';
+	import '$lib/styles/shell-skin.css';
 	import { page } from '$app/state';
 	import { meta } from '$lib/docs.remote';
 
