@@ -40,9 +40,13 @@
 		title = 'Docs',
 		links = [],
 		base,
-		header = true,
+		skip,
+		header,
 		brand,
 		side,
+		tools,
+		sidebar,
+		bar,
 		actions,
 		children
 	}: {
@@ -60,15 +64,30 @@
 		links?: { text: string; href: string }[];
 		/** Mount prefix override; default derived by subtraction from the current page. */
 		base?: string;
-		/** `false` → no top header; the sidebar becomes the whole chrome. Search + the theme toggle
-		 *  (and the locale switcher) move INTO the sidebar, above the nav — the floating-panel form.
-		 *  Compose the panel's top (logo, wordmark, socials) with the `side` snippet. */
-		header?: boolean;
-		/** The brand region (logo/wordmark). Default: `title`. */
+		/** ONE pattern, all the way down: every region the Shell renders is a conditional snippet.
+		 *  Absent → the built-in renders. Present → yours renders instead. Empty → the region is gone.
+		 *  The regions nest — replace the whole `header`, or keep it and replace just its `brand`,
+		 *  `nav`, or `tools` — and each default bottoms out at composable public bricks. */
+		/** The skip-to-content link (first tab stop). Default: "Skip to content" → `#ph-main`. */
+		skip?: Snippet;
+		/** The whole top header. Empty snippet → NO header, and the Shell shifts to the panel-chrome
+		 *  form: the tools cluster renders INSIDE the sidebar above the nav, so nothing is lost. */
+		header?: Snippet;
+		/** The header's brand region. Default: `<a>` to the mount root carrying `title`. */
 		brand?: Snippet;
-		/** Rendered at the TOP of the sidebar, above search + nav — the panel's brand row. Most useful
-		 *  with `header={false}`, but renders whenever provided. */
+		/** The header's primary-nav region. Default: a link row from `links`. */
+		nav?: Snippet;
+		/** The tools cluster (search, switchers, theme, `actions`) — wherever it lives: the built-in
+		 *  header in header mode, the sidebar panel when the header is replaced. */
+		tools?: Snippet;
+		/** Rendered at the TOP of the sidebar, above tools + nav — the panel's brand row. */
 		side?: Snippet;
+		/** The sidebar NAV. Default: the built-in `<Sidebar>` (kept island — roving focus, gliding
+		 *  marker). The snippet gets the computed `NavTree` + mount base, so a bespoke sidenav needs
+		 *  no extra data plumbing. */
+		sidebar?: Snippet<[NavTree, string]>;
+		/** The mobile chrome (bottom bar + sheet). Default: the built-in `<ShellBar>` island. */
+		bar?: Snippet<[NavTree, string]>;
 		/** Header tools — GitHub, version switcher, socials, anything. Rendered in the desktop header.
 		 *  NOT (yet) in the mobile sheet: `actions` is a forwarded snippet-prop, and a forwarded snippet
 		 *  can't cross into the `ShellBar` island (it captures as a function → not serializable). The
@@ -103,46 +122,68 @@
 	}, 'ph-theme')}
 </svelte:head>
 
-<div class="ph-shell" class:ph-headerless={!header}>
-	<!-- First focusable element: keyboard users jump past the nav straight to the content. -->
-	<a class="ph-skip" href="#ph-main">Skip to content</a>
+<div class="ph-shell" class:ph-headerless={!!header}>
+	<!-- Every region below follows ONE pattern: {#if snippet}{@render snippet()}{:else}built-in{/if}.
+	     Absent = batteries-included; present = yours; empty = gone. -->
+	{#if skip}{@render skip()}{:else}
+		<!-- First focusable element: keyboard users jump past the nav straight to the content. -->
+		<a class="ph-skip" href="#ph-main">Skip to content</a>
+	{/if}
 	{#if header}
+		{@render header()}
+	{:else}
 		<header class="ph-cheader">
-			<a class="ph-cheader-brand" href={the_base || '/'}>{#if brand}{@render brand()}{:else}{title}{/if}</a>
+			{#if brand}{@render brand()}{:else}
+				<a class="ph-cheader-brand" href={the_base || '/'}>{title}</a>
+			{/if}
 			<!-- Version sits by the brand (it scopes the whole doc set); locale rides with the tools. -->
 			{#if switcher}<Switcher {switcher} for="version" />{/if}
-			<nav class="ph-cheader-nav" aria-label="Primary">
-				{#each links as l (l.href)}<a class="ph-cheader-link" href={l.href}>{l.text}</a>{/each}
-			</nav>
-			<div class="ph-cheader-tools">
-				<div class="ph-cheader-search"><Search base={the_base} /></div>
-				{#if switcher}<Switcher {switcher} for="locale" />{/if}
-				<ThemeToggle />
-				{#if actions}<div class="ph-cheader-actions">{@render actions()}</div>{/if}
-			</div>
+			{#if nav}{@render nav()}{:else}
+				<nav class="ph-cheader-nav" aria-label="Primary">
+					{#each links as l (l.href)}<a class="ph-cheader-link" href={l.href}>{l.text}</a>{/each}
+				</nav>
+			{/if}
+			{#if tools}{@render tools()}{:else}
+				<div class="ph-cheader-tools">
+					<div class="ph-cheader-search"><Search base={the_base} /></div>
+					{#if switcher}<Switcher {switcher} for="locale" />{/if}
+					<ThemeToggle />
+					{#if actions}<div class="ph-cheader-actions">{@render actions()}</div>{/if}
+				</div>
+			{/if}
 		</header>
 	{/if}
 
 	<div class="ph-cframe">
 		<aside class="ph-cside" aria-label="Documentation">
 			{#if side}<div class="ph-cside-brand">{@render side()}</div>{/if}
-			{#if !header}
-				<!-- Headerless: the panel owns the tools the header would have carried. Search's ⌘K
-				     keybinding + palette work exactly the same from here. -->
-				<div class="ph-cside-tools">
-					{#if switcher}<Switcher {switcher} for="version" />{/if}
-					<div class="ph-cside-search"><Search base={the_base} /></div>
-					{#if switcher}<Switcher {switcher} for="locale" />{/if}
-					<ThemeToggle />
-					{#if actions}<div class="ph-cside-actions">{@render actions()}</div>{/if}
-				</div>
+			{#if header}
+				<!-- The app took over the header, so the panel carries the tools it would have held.
+				     Search's ⌘K keybinding + palette work exactly the same from here. -->
+				{#if tools}{@render tools()}{:else}
+					<div class="ph-cside-tools">
+						{#if switcher}<Switcher {switcher} for="version" />{/if}
+						<div class="ph-cside-search"><Search base={the_base} /></div>
+						{#if switcher}<Switcher {switcher} for="locale" />{/if}
+						<ThemeToggle />
+						{#if actions}<div class="ph-cside-actions">{@render actions()}</div>{/if}
+					</div>
+				{/if}
 			{/if}
-			<Sidebar nav={tree} base={the_base} />
+			{#if sidebar}
+				{@render sidebar(tree, the_base)}
+			{:else}
+				<Sidebar nav={tree} base={the_base} />
+			{/if}
 		</aside>
 		<main class="ph-cmain" id="ph-main" tabindex="-1">{@render children()}</main>
 	</div>
 
 	<!-- The mobile island. `actions` is a portable snippet (the compiler made it one at the consumer's
 	     call site), so it crosses into the island as a descriptor and comes alive in the sheet footer. -->
-	<ShellBar nav={tree} base={the_base} brand={title} {actions} />
+	{#if bar}
+		{@render bar(tree, the_base)}
+	{:else}
+		<ShellBar nav={tree} base={the_base} brand={title} {actions} />
+	{/if}
 </div>

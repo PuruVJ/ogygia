@@ -24,9 +24,10 @@
 	const shellMeta = await meta(page.params.slug ?? '');
 </script>
 
-<!-- NO top header — the floating panel is the whole chrome (the site's original form). The `side`
-     snippet is the panel's brand row; search + theme render below it via the Shell's headerless mode. -->
-<Shell meta={shellMeta} base="/docs" title="ogygia" header={false}>
+<!-- NO top header — an EMPTY `header` snippet removes it (snippet presence is the config), and the
+     floating panel becomes the whole chrome: search + theme render in-panel, `side` is the brand row. -->
+<Shell meta={shellMeta} base="/docs" title="ogygia">
+	{#snippet header()}{/snippet}
 	{#snippet side()}
 		<a class="doc-brand" href="/" aria-label="ogygia home">
 			<Logo size={22} decorative />
