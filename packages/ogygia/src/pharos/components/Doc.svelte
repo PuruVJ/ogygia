@@ -69,6 +69,22 @@
 		<h1 class="ph-title">{title}</h1>
 		{#if data.summary}<p class="ph-summary">{data.summary}</p>{/if}
 
+		{#if toc && view.headings.length}
+			<!-- MOBILE-ONLY "On this page": inline under the heading (the desktop rail is hidden there,
+			     and a page outline belongs with the page — not buried in the nav sheet). Collapsed by
+			     default; a native <details>, so it costs no JS. -->
+			<details class="ph-mtoc">
+				<summary class="ph-mtoc-summary">On this page</summary>
+				<ul class="ph-toc-list">
+					{#each view.headings as h (h.id)}
+						<li class={`ph-toc-item ph-toc-d${h.depth}`}>
+							<a class="ph-toc-link" href={`#${h.id}`}>{h.text}</a>
+						</li>
+					{/each}
+				</ul>
+			</details>
+		{/if}
+
 		{#if view.fallback}
 			<div class="ph-fallback" role="note">
 				This page isn’t available in <b>{view.fallback.from}</b> yet — showing
@@ -107,3 +123,16 @@
 		<aside class="ph-aside" aria-label="On this page"><OnThisPage {title} headings={view.headings} /></aside>
 	{/if}
 </div>
+
+<style>
+	/* The inline outline is the MOBILE face of "on this page" (the rail takes over ≥901px — the
+	   shell's breakpoint). Structure only; paint belongs to the theme/skin. */
+	.ph-mtoc {
+		display: none;
+	}
+	@media (max-width: 900px) {
+		.ph-mtoc {
+			display: block;
+		}
+	}
+</style>

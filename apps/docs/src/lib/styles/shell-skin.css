@@ -434,12 +434,13 @@
 	-webkit-backdrop-filter: blur(16px) saturate(1.15);
 	color: var(--text);
 }
-/* Open/close with the PRODUCTION slide-up (340ms, the old easing), riding Bits' data-state. */
+/* Slide-up riding Bits' data-state. Open takes the NATURAL sheet curve (fast start, long soft
+   settle — the iOS-sheet feel); close stays brisk with the old curve. */
 .ph-sheet[data-state='open'] {
-	animation: doc-sheet-in 340ms cubic-bezier(0.23, 1, 0.32, 1);
+	animation: doc-sheet-in 420ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 .ph-sheet[data-state='closed'] {
-	animation: doc-sheet-out 340ms cubic-bezier(0.23, 1, 0.32, 1);
+	animation: doc-sheet-out 260ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .ph-sheet-backdrop {
 	background: rgb(0 0 0 / 0.45);

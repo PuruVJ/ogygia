@@ -33,14 +33,7 @@
 
 	let open = $state(false);
 	let view = $state<'nav' | 'search'>('nav');
-	let seg = $state<'contents' | 'toc'>('contents');
-	let toc = $state<{ id: string; text: string; depth: number }[]>([]);
 	let swap_el = $state<HTMLElement | undefined>();
-
-	function collectHeadings() {
-		const nodes = document.querySelectorAll<HTMLElement>('.ph-body :is(h2, h3, h4)[id]');
-		toc = Array.from(nodes).map((h) => ({ id: h.id, text: h.textContent ?? '', depth: Number(h.tagName[1]) }));
-	}
 
 	const reduced = () =>
 		typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -75,7 +68,6 @@
 	}
 
 	function openMenu() {
-		seg = 'contents';
 		if (open) void set_view('nav');
 		else {
 			view = 'nav';
@@ -88,10 +80,6 @@
 			view = 'search';
 			open = true;
 		}
-	}
-	function showToc() {
-		seg = 'toc';
-		collectHeadings();
 	}
 </script>
 
@@ -118,26 +106,15 @@
 			<div class="ph-sheet-view" in:fade={{ duration: reduced() ? 0 : 160 }} out:fade={{ duration: reduced() ? 0 : 110 }}>
 				{#if view === 'search'}
 					<!-- The dedicated SEARCH view: just the inline brick — the input gets the surface. -->
-					<div class="ph-cbar-search"><Search {base} mode="inline" placeholder="Search…" /></div>
-				{:else}
-					<div class="ph-seg" role="tablist">
-						<button type="button" role="tab" class="ph-seg-btn" class:ph-active={seg === 'contents'} aria-selected={seg === 'contents'} onclick={() => (seg = 'contents')}>Contents</button>
-						<button type="button" role="tab" class="ph-seg-btn" class:ph-active={seg === 'toc'} aria-selected={seg === 'toc'} onclick={showToc}>On this page</button>
+					<div class="ph-sheet-scroll">
+						<div class="ph-cbar-search"><Search {base} mode="inline" placeholder="Search…" /></div>
 					</div>
-
-					{#if seg === 'contents'}
+				{:else}
+					<!-- The NAV view is just the contents tree — the page outline lives IN the page
+					     (Doc's mobile inline "On this page"), not buried in the nav sheet. -->
+					<div class="ph-sheet-scroll">
 						<Sidebar {nav} {base} />
-					{:else if toc.length}
-						<nav class="ph-toc" aria-label="On this page">
-							<ul class="ph-toc-list">
-								{#each toc as h (h.id)}
-									<li class={`ph-toc-item ph-toc-d${h.depth}`}><a class="ph-toc-link" href={`#${h.id}`} onclick={() => (open = false)}>{h.text}</a></li>
-								{/each}
-							</ul>
-						</nav>
-					{:else}
-						<p class="ph-cbar-empty">No headings on this page.</p>
-					{/if}
+					</div>
 				{/if}
 			</div>
 		{/key}

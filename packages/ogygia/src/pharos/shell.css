@@ -316,12 +316,39 @@
 			overflow: hidden;
 		}
 
+		/* Scroll plumbing: the sheet is a column; the swap wrapper flexes; each view is a column whose
+		 * `.ph-sheet-scroll` region scrolls while anything after it (tabs, footers) stays pinned. */
+		.ph-sheet-body {
+			display: flex;
+			flex-direction: column;
+			min-height: 0;
+			flex: 1;
+		}
+		.ph-sheet-view {
+			display: flex;
+			flex-direction: column;
+			min-height: 0;
+			flex: 1;
+		}
+		.ph-sheet-scroll {
+			overflow-y: auto;
+			min-height: 0;
+			flex: 1;
+			-webkit-overflow-scrolling: touch;
+		}
+
 		/* View switching inside the sheet (search ↔ nav): the wrapper's height glides between the
 		 * views (ShellBar pins + animates it) while the views crossfade. The OUTGOING view (any
-		 * non-last child while both exist) overlays so the fade never stacks. */
+		 * non-last child while both exist) overlays so the fade never stacks. Part of the flex chain
+		 * (sheet → body → swap → view → scroll) so a tall nav SCROLLS instead of clipping at the
+		 * sheet's max-height. */
 		.ph-sheet-swap {
 			position: relative;
+			display: flex;
+			flex-direction: column;
 			overflow: hidden;
+			min-height: 0;
+			flex: 1;
 			transition: height 280ms cubic-bezier(0.23, 1, 0.32, 1);
 		}
 		.ph-sheet-swap > .ph-sheet-view:not(:last-child) {
