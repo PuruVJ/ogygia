@@ -20,10 +20,10 @@
 
 <PageHead title={data.title} category={view.section} description={data.summary} />
 
-<div class:changelog={isChangelog}>
+<main id="main-content" tabindex="-1" class:changelog={isChangelog}>
 	<Doc {view} crumbs={false} keepReading={view.trail?.related} />
 	{#if isChangelog}<LocaleDates />{/if}
-</div>
+</main>
 
 <style>
 	/* Releases page only. The `remark-changelog` plugin turns each `## [x] — date` into an `<h2>x</h2>`

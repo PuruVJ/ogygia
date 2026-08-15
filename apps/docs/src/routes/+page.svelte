@@ -382,7 +382,7 @@
 	</div>
 </section>
 
-<main class="shell home-docs">
+<main id="main-content" tabindex="-1" class="shell home-docs">
 	<div class="home-docs-head">
 		<h2>Start here</h2>
 		<p>The full guide moved into the docs, split by topic with live demos inline. Pick a track.</p>

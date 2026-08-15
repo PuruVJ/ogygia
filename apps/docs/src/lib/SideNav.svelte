@@ -216,6 +216,46 @@
 		return path === href;
 	}
 
+	/**
+	 * Roving tabindex over the nav links: the group is ONE tab stop (the current page's link, else the
+	 * first), and ArrowUp/Down move focus link-to-link across sections, Home/End jump to the ends. This
+	 * is the "nice roving index" — a screen-reader/keyboard user tabs into the nav once and arrows
+	 * through it, instead of tabbing through every single link. Re-derives when the list changes
+	 * (search ↔ nav swap, route change).
+	 */
+	function roving(el: HTMLElement) {
+		const links = () => [...el.querySelectorAll<HTMLAnchorElement>('a.side-link')];
+		function reset() {
+			const ls = links();
+			if (!ls.length) return;
+			const current = ls.find((a) => a.classList.contains('is-active')) ?? ls[0];
+			for (const a of ls) a.tabIndex = a === current ? 0 : -1;
+		}
+		function onkeydown(e: KeyboardEvent) {
+			const ls = links();
+			const i = ls.indexOf(document.activeElement as HTMLAnchorElement);
+			if (i < 0) return;
+			let j = -1;
+			if (e.key === 'ArrowDown') j = (i + 1) % ls.length;
+			else if (e.key === 'ArrowUp') j = (i - 1 + ls.length) % ls.length;
+			else if (e.key === 'Home') j = 0;
+			else if (e.key === 'End') j = ls.length - 1;
+			else return;
+			e.preventDefault();
+			for (const a of ls) a.tabIndex = -1;
+			ls[j].tabIndex = 0;
+			ls[j].focus();
+		}
+		reset();
+		el.addEventListener('keydown', onkeydown);
+		const mo = new MutationObserver(reset);
+		mo.observe(el, { childList: true, subtree: true });
+		return () => {
+			el.removeEventListener('keydown', onkeydown);
+			mo.disconnect();
+		};
+	}
+
 	function close() {
 		open = false;
 	}
@@ -396,7 +436,12 @@
 			{/if}
 		</div>
 
-		<div class="side-scroll" class:side-scroll--mobile={mobile} bind:this={scroll_el}>
+		<div
+			class="side-scroll"
+			class:side-scroll--mobile={mobile}
+			bind:this={scroll_el}
+			{@attach roving}
+		>
 			{#if searching}
 				<!-- results -->
 				<nav class="side-results" aria-label="Search results" {@attach highlightMatches}>

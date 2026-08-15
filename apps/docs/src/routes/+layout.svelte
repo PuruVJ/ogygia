@@ -59,6 +59,7 @@
 </svelte:head>
 
 {#if !bare}
+	<a class="skip-link" href="#main-content">Skip to content</a>
 	<!-- body is preload=off; sidenav opts hover back in so playground/docs links warm on hover -->
 	<div data-ogygia-keep="site-sidenav" data-sveltekit-preload-data="hover">
 		<SideNav />
