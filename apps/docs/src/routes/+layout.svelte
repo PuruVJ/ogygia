@@ -12,6 +12,9 @@
 
 	// `/demo/*` routes are standalone canvases (embedded in docs via <iframe>) — no site chrome.
 	const bare = $derived(page.url.pathname.startsWith('/demo/'));
+	// `/docs/*` brings its OWN chrome — the pharos Shell (see docs/+layout.svelte). Skip the bespoke
+	// SideNav there so the two don't stack.
+	const isDocs = $derived(page.url.pathname === '/docs' || page.url.pathname.startsWith('/docs/'));
 
 	// No-flash theme: apply a saved forced theme before first paint. `ogygia.script` serializes
 	// the self-contained function into a safe inline <script> (no `String.fromCharCode` gymnastics).
@@ -58,7 +61,7 @@
 	{@html monoTag}
 </svelte:head>
 
-{#if !bare}
+{#if !bare && !isDocs}
 	<a class="skip-link" href="#main-content">Skip to content</a>
 	<!-- body is preload=off; sidenav opts hover back in so playground/docs links warm on hover -->
 	<div data-ogygia-keep="site-sidenav" data-sveltekit-preload-data="hover">

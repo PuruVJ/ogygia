@@ -8,4 +8,5 @@
 import { remotes } from 'ogygia/pharos/server';
 import { site } from './docs.server';
 
-export const { nav, doc } = remotes(site, { base: '/docs' });
+// `meta` = the leak-free shell bundle (`{ nav, switcher }`) the Shell needs; `doc` = one page view.
+export const { nav, meta, doc } = remotes(site, { base: '/docs' });

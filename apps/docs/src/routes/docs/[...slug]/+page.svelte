@@ -7,8 +7,8 @@
 	import PageHead from '$lib/PageHead.svelte';
 	// Island (re-hydrates per SPA nav, like CodeChrome) that localizes the changelog's release dates.
 	import LocaleDates from '$lib/LocaleDates.svelte' with { wake: 'load' };
-	import '$lib/styles/pharos-docs.css';
-	import '$lib/styles/code-block.css';
+	// Body + code + CodeChrome styling now come from pharos theme.css (loaded in docs/+layout.svelte);
+	// no docs-local `.ph-body` overrides here.
 
 	// Dogfood the `.server.ts` rule: the component imports the `doc` REMOTE, never the collection.
 	// `doc` bakes the entry's body into a region ticket (`<Doc>` renders it via `<Region>`); the
@@ -20,10 +20,10 @@
 
 <PageHead title={data.title} category={view.section} description={data.summary} />
 
-<main id="main-content" tabindex="-1" class:changelog={isChangelog}>
+<div class:changelog={isChangelog}>
 	<Doc {view} crumbs={false} keepReading={view.trail?.related} />
 	{#if isChangelog}<LocaleDates />{/if}
-</main>
+</div>
 
 <style>
 	/* Releases page only. The `remark-changelog` plugin turns each `## [x] — date` into an `<h2>x</h2>`
