@@ -106,10 +106,35 @@
 		padding-left: calc(var(--ph-side-w) + var(--side-gap, 0.85rem) * 2);
 	}
 }
+/* Old `.side-cat` rhythm: sections separated by a hairline, tight link stacks. */
+.ph-sidebar {
+	display: flex;
+	flex-direction: column;
+	gap: 1.15rem;
+}
+.ph-nav-group + .ph-nav-group {
+	padding-top: 0.85rem;
+	border-top: 1px solid color-mix(in srgb, var(--accent-line) 35%, var(--line));
+}
+.ph-nav-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+}
+
+/* Old `.side-cat-label`: quiet by default, accent only on the section holding the current page. */
 .ph-nav-label {
+	display: block;
+	padding: 0.4rem 0.45rem;
 	font: 600 0.6875rem/1 var(--font-mono);
-	letter-spacing: 0.14em;
+	letter-spacing: 0.12em;
 	text-transform: uppercase;
+	color: var(--text-dim);
+}
+.ph-nav-group:has(.ph-active) .ph-nav-label {
 	color: var(--accent);
 }
 .ph-nav-link {
@@ -138,23 +163,32 @@
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent);
 }
 
-/* ── search trigger (header) ── */
+/* ── search trigger — dressed as the old panel's INPUT (`.side-search-input` recipe), so the
+      floating panel reads the same: full-width bordered field, quiet placeholder, kbd at right. ── */
 .ph-search-trigger {
-	display: inline-flex;
+	display: flex;
+	width: 100%;
 	align-items: center;
 	gap: 0.5rem;
-	min-width: 11rem;
-	padding: 0.42rem 0.65rem;
-	border: 1px solid var(--line);
-	border-radius: var(--r-sm);
-	background: var(--bg-raised);
+	padding: 0.4rem 0.5rem 0.4rem 0.65rem;
+	border: 1px solid color-mix(in srgb, var(--accent-line) 45%, var(--line));
+	border-radius: 9px;
+	background: color-mix(in srgb, var(--bg-sunken) 60%, transparent);
 	color: var(--text-faint);
-	font: 400 0.8125rem/1 var(--font-body);
+	font: 500 0.84375rem/1.25 var(--font-body);
+	letter-spacing: -0.014em;
 	text-decoration: none;
-	transition: border-color 140ms ease;
+	transition:
+		border-color 140ms ease,
+		background 140ms ease;
 }
-.ph-search-trigger:hover {
-	border-color: var(--line-strong);
+.ph-search-trigger:hover,
+.ph-search-trigger:focus-visible {
+	border-color: var(--accent);
+	background: var(--bg-raised);
+}
+.ph-search-trigger-label {
+	color: var(--text-faint);
 }
 .ph-search-kbd {
 	margin-left: auto;
@@ -212,25 +246,53 @@
 	font: 400 0.8125rem/1.5 var(--font-body);
 }
 
-/* ── theme toggle + segmented controls ── */
-.ph-theme-toggle,
+/* ── the panel's tools ROW: the search field grows, the theme button rides at its right — the old
+      panel's search-line shape. ── */
+.ph-cside-tools {
+	flex-direction: row;
+	align-items: center;
+	gap: 0.4rem;
+	margin-bottom: 0.35rem;
+}
+.ph-cside-search {
+	flex: 1;
+	min-width: 0;
+}
+
+/* ── theme toggle: the old `.side-theme` ghost button — borderless, quiet, 2rem square. ── */
+.ph-theme-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2rem;
+	height: 2rem;
+	padding: 0;
+	border: none;
+	border-radius: 8px;
+	background: none;
+	color: var(--text-faint);
+	cursor: pointer;
+	transition:
+		color 140ms ease,
+		background 140ms ease;
+}
+.ph-theme-toggle:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
+}
 .ph-cbar-btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	border: 1px solid var(--line);
-	border-radius: var(--r-sm);
-	background: var(--bg-raised);
+	border: none;
+	border-radius: 8px;
+	background: none;
 	color: var(--text-dim);
 	cursor: pointer;
-	transition:
-		color 140ms ease,
-		border-color 140ms ease;
+	transition: color 140ms ease;
 }
-.ph-theme-toggle:hover,
 .ph-cbar-btn:hover {
 	color: var(--text);
-	border-color: var(--line-strong);
 }
 .ph-seg {
 	border: 1px solid var(--line);

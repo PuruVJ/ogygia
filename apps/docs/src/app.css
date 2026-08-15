@@ -192,31 +192,6 @@ li :not(pre) > code {
 	border-radius: var(--r-sm, 4px);
 }
 
-/* Skip-to-content — the first tab stop; off-screen until focused, then slides in. */
-.skip-link {
-	position: fixed;
-	top: 0.75rem;
-	left: 0.75rem;
-	z-index: 200;
-	padding: 0.55rem 0.9rem;
-	border-radius: var(--r-sm, 6px);
-	background: var(--accent);
-	color: var(--bg);
-	font: 600 0.8125rem/1 var(--font-body);
-	text-decoration: none;
-	box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
-	transform: translateY(-150%);
-	transition: transform 0.18s ease;
-}
-.skip-link:focus-visible {
-	transform: translateY(0);
-	outline: none;
-}
-/* The main landmark takes programmatic focus from the skip link, but shows no ring itself. */
-#main-content:focus {
-	outline: none;
-}
-
 a {
 	color: var(--accent);
 	text-decoration: none;
