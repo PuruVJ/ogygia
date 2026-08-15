@@ -493,7 +493,13 @@
 							<ul class="side-list">
 								{#each group.items as item (item.slug)}
 									<li>
-										<a class="side-link" class:is-active={isActive(item.href)} href={item.href} onclick={close}>
+										<a
+											class="side-link"
+											class:is-active={isActive(item.href)}
+											aria-current={isActive(item.href) ? 'page' : undefined}
+											href={item.href}
+											onclick={close}
+										>
 											<span class="side-link-text">{item.title}</span>
 										</a>
 									</li>
@@ -509,7 +515,13 @@
 								<ul class="side-list">
 									{#each group.items as item (item.slug)}
 										<li>
-											<a class="side-link" class:is-active={isActive(item.href)} href={item.href} onclick={close}>
+											<a
+											class="side-link"
+											class:is-active={isActive(item.href)}
+											aria-current={isActive(item.href) ? 'page' : undefined}
+											href={item.href}
+											onclick={close}
+										>
 												<span class="side-link-text">{item.title}</span>
 											</a>
 										</li>
@@ -753,33 +765,6 @@
 	padding: 0.1rem 0.2rem 0.35rem 0.05rem;
 }
 
-.side-home-link {
-	display: flex;
-	align-items: center;
-	min-height: 1.85rem;
-	padding: 0.32rem 0.55rem 0.32rem 0.7rem;
-	border-radius: 8px;
-	font: 500 0.84375rem/1.25 var(--font-body);
-	letter-spacing: -0.014em;
-	color: var(--text-dim);
-	text-decoration: none;
-	transition:
-		color 140ms ease,
-		background 140ms ease;
-}
-
-.side-home-link:hover {
-	color: var(--text);
-	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
-}
-
-.side-home-link.is-active {
-	color: var(--text);
-	font-weight: 600;
-	background: color-mix(in srgb, var(--accent-deep) 78%, transparent);
-	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent);
-}
-
 .side-cat + .side-cat {
 	padding-top: 0.85rem;
 	border-top: 1px solid color-mix(in srgb, var(--accent-line) 35%, var(--line));
@@ -957,7 +942,6 @@
 	}
 
 	/* Bigger touch targets + higher contrast for the phone sheet. */
-	.side-scroll--mobile .side-home-link,
 	.side-scroll--mobile .side-link {
 		min-height: 2.75rem;
 		padding-left: 0.9rem;
