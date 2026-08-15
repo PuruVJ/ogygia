@@ -24,22 +24,39 @@
 	// `@fontsource-variable` family names below.
 	import '@fontsource-variable/inter';
 	import '@fontsource-variable/jetbrains-mono';
-	import { site } from '$lib/docs';
+	// LEAK-FREE: the corpus lives in `docs.server.ts`; we pull only the shell bundle over the wire via
+	// the `meta` remote and hand it to `<Shell {meta}>`. Nothing here imports the collections.
+	import { page } from '$app/state';
+	import { meta } from '$lib/docs.remote';
+	import { BlogShell } from 'ogygia/pharos';
 	let { children } = $props();
+	// The blog genre gets its OWN chrome (centered, no docs sidebar); everything else uses the docs
+	// Shell. Branch here so /blog isn't double-wrapped, and skip the docs `meta` fetch on blog pages.
+	const isBlog = page.url.pathname === '/blog' || page.url.pathname.startsWith('/blog/');
+	const shellMeta = isBlog ? null : await meta(page.params.slug ?? '');
 </script>
 
 <svelte:head>
 	<link id="pg-theme" rel="stylesheet" href={thalassa} />
 </svelte:head>
 
-<Shell {site} base="" title="pharos playground">
-	{#snippet actions()}
-		<a class="pg-gh" href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer"
-			>GitHub ↗</a
-		>
-	{/snippet}
-	{@render children()}
-</Shell>
+{#if isBlog}
+	<BlogShell base="/blog" title="pharos blog" links={[{ text: 'Docs', href: '/' }]}>
+		{#snippet actions()}
+			<a class="pg-gh" href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer">GitHub ↗</a>
+		{/snippet}
+		{@render children()}
+	</BlogShell>
+{:else}
+	<Shell meta={shellMeta!} base="" title="pharos playground">
+		{#snippet actions()}
+			<a class="pg-gh" href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer"
+				>GitHub ↗</a
+			>
+		{/snippet}
+		{@render children()}
+	</Shell>
+{/if}
 <ThemePicker {themes} />
 
 <style>

@@ -1,11 +1,22 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { Doc } from 'ogygia/pharos';
-	import { site } from '$lib/docs';
+	import { doc } from '$lib/docs.remote';
+	import OperationDoc from '$lib/openapi/OperationDoc.svelte';
+	import type { Operation } from '$lib/openapi';
 
-	// csr=false: the entry body renders in this page's own SSR pass, so islands inside the .svx
-	// hydrate. `+page.ts` already 404'd unknown slugs, so the view is guaranteed here.
-	const view = (await site.doc(page.params.slug ?? ''))!;
+	// LEAK-FREE: the entry comes over the wire from the `doc` remote (corpus stays server-only). The
+	// `+page.server.ts` guard already 404'd unknown slugs, so the view is guaranteed. A markdown body
+	// arrives as a baked region ticket; islands inside it wake normally.
+	const view = (await doc(page.params.slug ?? ''))!;
+
+	// The `/api` reference is OpenAPI operations (structured `data`, no markdown body) — detect them by
+	// the `method` the openapi() source stamps on `meta`, and render with OperationDoc.
+	const isOperation = $derived((view.entry.meta as { method?: string } | undefined)?.method != null);
 </script>
 
-<Doc {view} />
+{#if isOperation}
+	<OperationDoc op={view.entry.data as unknown as Operation} />
+{:else}
+	<Doc {view} />
+{/if}

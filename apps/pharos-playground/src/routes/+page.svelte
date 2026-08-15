@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { site } from '$lib/docs';
-	// Home: prove the nav data is queryable as plain data outside any sidebar chrome.
-	const tree = await site.nav();
+	import { meta } from '$lib/docs.remote';
+	// Home: prove the nav data is queryable as plain data (over the wire, corpus server-only).
+	const tree = (await meta('')).nav;
 	const first = tree.flatMap((n) => (n.kind === 'group' ? n.items : [])).find((n) => n.kind === 'leaf');
 </script>
 

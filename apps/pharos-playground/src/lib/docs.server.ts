@@ -5,9 +5,10 @@
  * directly under it — category → page, no third level. A `dimensions()` wrap adds a version × locale
  * switcher (the default v2 · en corpus is rich; v1 / hi are thin, to demo the header dropdowns).
  */
-import { content, folder, json } from 'ogygia/content';
+import { content, folder } from 'ogygia/content';
 import { dimensions, outline, pharos } from 'ogygia/pharos';
 import * as v from 'valibot';
+import { openapi } from './openapi';
 
 const guide_schema = v.object({
 	title: v.string(),
@@ -42,16 +43,11 @@ const showcase = content({
 	...guide_opts
 });
 
-const api_schema = v.object({
-	title: v.string(),
-	summary: v.optional(v.string(), ''),
-	signature: v.optional(v.string(), '')
-});
-export type ApiData = v.InferOutput<typeof api_schema>;
-// JSON collection — data-only (no body), woven in under its own `/api` base.
+// The API REFERENCE — a real OpenAPI 3 spec, flattened to an entry per operation by the hand-written
+// `openapi()` source (see ./openapi.ts). Grouped by tag → operation, mounted under `/api`. Data-only
+// (structured `data`, no markdown body); the `[...slug]` route renders it with `OperationDoc`.
 export const api = content({
-	loader: json(import.meta.glob('../content/api/*.json', { eager: true })),
-	schema: api_schema
+	loader: openapi(import.meta.glob('../content/openapi/*.json', { eager: true, import: 'default' }))
 });
 
 // Thin alternate corpora — just enough to make the version / locale switcher real.
