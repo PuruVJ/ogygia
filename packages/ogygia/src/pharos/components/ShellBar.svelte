@@ -2,10 +2,15 @@
 	/**
 	 * Shell's mobile chrome — ONE island (open state can't bind across island boundaries, and
 	 * `site.nav()` can't run client-side, so the nav arrives as serialized data). A bottom bar with
-	 * search / theme / menu, opening a `Sheet` that holds: the search brick, a segmented
-	 * Contents ↔ On-this-page toggle. Headings are read from the rendered page's DOM (the shell has no
-	 * access to the current doc's `meta.headings`, but the DOM does).
+	 * search / theme / menu over ONE sheet with two dedicated VIEWS: the search button opens it on
+	 * the SEARCH view (just the inline brick — full focus, nothing else competing), the menu button
+	 * on the NAV view (segmented Contents ↔ On-this-page + the footer actions). Switching while open
+	 * does NOT close/reopen: the views CROSSFADE and the sheet's height glides between them (both
+	 * skipped under prefers-reduced-motion). Headings are read from the rendered page's DOM (the
+	 * shell has no access to the current doc's `meta.headings`, but the DOM does).
 	 */
+	import { tick } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import BottomBar from './BottomBar.svelte';
 	import Sheet from './Sheet.svelte';
 	import Sidebar from './Sidebar.svelte';
@@ -27,17 +32,62 @@
 	} = $props();
 
 	let open = $state(false);
+	let view = $state<'nav' | 'search'>('nav');
 	let seg = $state<'contents' | 'toc'>('contents');
 	let toc = $state<{ id: string; text: string; depth: number }[]>([]);
+	let swap_el = $state<HTMLElement | undefined>();
 
 	function collectHeadings() {
 		const nodes = document.querySelectorAll<HTMLElement>('.ph-body :is(h2, h3, h4)[id]');
 		toc = Array.from(nodes).map((h) => ({ id: h.id, text: h.textContent ?? '', depth: Number(h.tagName[1]) }));
 	}
 
+	const reduced = () =>
+		typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+	/** Switch views without a height JUMP: pin the swap wrapper at its current height, let the new
+	 *  view render, then glide to the new height and release back to auto. Crossfade is the `{#key}`
+	 *  fade pair below; both collapse to an instant swap under prefers-reduced-motion. */
+	async function set_view(v: 'nav' | 'search') {
+		if (view === v) return;
+		const el = swap_el;
+		if (!open || !el || reduced()) {
+			view = v;
+			return;
+		}
+		const h0 = el.offsetHeight;
+		view = v;
+		await tick();
+		const target = el.lastElementChild as HTMLElement | null;
+		const h1 = target?.offsetHeight ?? h0;
+		el.style.height = `${h0}px`;
+		// Two frames: the first commits the pinned height, the second starts the glide.
+		requestAnimationFrame(() =>
+			requestAnimationFrame(() => {
+				el.style.height = `${h1}px`;
+				const done = () => {
+					el.style.height = '';
+					el.removeEventListener('transitionend', done);
+				};
+				el.addEventListener('transitionend', done);
+			})
+		);
+	}
+
 	function openMenu() {
 		seg = 'contents';
-		open = true;
+		if (open) void set_view('nav');
+		else {
+			view = 'nav';
+			open = true;
+		}
+	}
+	function openSearch() {
+		if (open) void set_view('search');
+		else {
+			view = 'search';
+			open = true;
+		}
 	}
 	function showToc() {
 		seg = 'toc';
@@ -50,40 +100,51 @@
 		<a class="ph-cbar-brand" href={base || '/'}>{brand}</a>
 	{/snippet}
 	{#snippet actions()}
-		<button type="button" class="ph-cbar-btn" aria-label="Search" onclick={openMenu}>
+		<button type="button" class="ph-cbar-btn" data-ph-sheet-toggle aria-label={open && view === 'search' ? 'Close search' : 'Search'} aria-expanded={open && view === 'search'} onclick={() => (open && view === 'search' ? (open = false) : openSearch())}>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
 		</button>
 		<ThemeToggle />
-		<button type="button" class="ph-cbar-btn ph-cbar-menu" data-ph-sheet-toggle aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open} onclick={() => (open ? (open = false) : openMenu())}>
-			<span class="ph-cbar-bars" class:ph-open={open}><span></span><span></span><span></span></span>
+		<button type="button" class="ph-cbar-btn ph-cbar-menu" data-ph-sheet-toggle aria-label={open && view === 'nav' ? 'Close menu' : 'Open menu'} aria-expanded={open && view === 'nav'} onclick={() => (open && view === 'nav' ? (open = false) : openMenu())}>
+			<span class="ph-cbar-bars" class:ph-open={open && view === 'nav'}><span></span><span></span><span></span></span>
 		</button>
 	{/snippet}
 </BottomBar>
 
-<Sheet bind:open label="Navigation">
-	<div class="ph-cbar-search"><Search {base} mode="inline" placeholder="Search…" /></div>
+<!-- ONE sheet, two views. Switching views crossfades the content while the wrapper's height glides
+     (see set_view) — never a close/reopen, never a height jump. -->
+<Sheet bind:open label={view === 'search' ? 'Search' : 'Navigation'}>
+	<div class="ph-sheet-swap" bind:this={swap_el}>
+		{#key view}
+			<div class="ph-sheet-view" in:fade={{ duration: reduced() ? 0 : 160 }} out:fade={{ duration: reduced() ? 0 : 110 }}>
+				{#if view === 'search'}
+					<!-- The dedicated SEARCH view: just the inline brick — the input gets the surface. -->
+					<div class="ph-cbar-search"><Search {base} mode="inline" placeholder="Search…" /></div>
+				{:else}
+					<div class="ph-seg" role="tablist">
+						<button type="button" role="tab" class="ph-seg-btn" class:ph-active={seg === 'contents'} aria-selected={seg === 'contents'} onclick={() => (seg = 'contents')}>Contents</button>
+						<button type="button" role="tab" class="ph-seg-btn" class:ph-active={seg === 'toc'} aria-selected={seg === 'toc'} onclick={showToc}>On this page</button>
+					</div>
 
-	<div class="ph-seg" role="tablist">
-		<button type="button" role="tab" class="ph-seg-btn" class:ph-active={seg === 'contents'} aria-selected={seg === 'contents'} onclick={() => (seg = 'contents')}>Contents</button>
-		<button type="button" role="tab" class="ph-seg-btn" class:ph-active={seg === 'toc'} aria-selected={seg === 'toc'} onclick={showToc}>On this page</button>
+					{#if seg === 'contents'}
+						<Sidebar {nav} {base} />
+					{:else if toc.length}
+						<nav class="ph-toc" aria-label="On this page">
+							<ul class="ph-toc-list">
+								{#each toc as h (h.id)}
+									<li class={`ph-toc-item ph-toc-d${h.depth}`}><a class="ph-toc-link" href={`#${h.id}`} onclick={() => (open = false)}>{h.text}</a></li>
+								{/each}
+							</ul>
+						</nav>
+					{:else}
+						<p class="ph-cbar-empty">No headings on this page.</p>
+					{/if}
+				{/if}
+			</div>
+		{/key}
 	</div>
 
-	{#if seg === 'contents'}
-		<Sidebar {nav} {base} />
-	{:else if toc.length}
-		<nav class="ph-toc" aria-label="On this page">
-			<ul class="ph-toc-list">
-				{#each toc as h (h.id)}
-					<li class={`ph-toc-item ph-toc-d${h.depth}`}><a class="ph-toc-link" href={`#${h.id}`} onclick={() => (open = false)}>{h.text}</a></li>
-				{/each}
-			</ul>
-		</nav>
-	{:else}
-		<p class="ph-cbar-empty">No headings on this page.</p>
-	{/if}
-
 	{#snippet footer()}
-		{#if actions}<div class="ph-cbar-actions">{@render actions()}</div>{/if}
+		{#if view === 'nav' && actions}<div class="ph-cbar-actions">{@render actions()}</div>{/if}
 	{/snippet}
 </Sheet>
 

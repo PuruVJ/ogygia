@@ -357,10 +357,16 @@
 	color: var(--text);
 	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
 }
-.ph-cbar-btn {
+/* All three bar buttons (search / theme / menu) are the SAME quiet 2.25rem square — one color,
+   one alignment. The triple selector outranks ThemeToggle's scoped `color: inherit`. */
+.ph-shell .ph-bottombar .ph-cbar-btn,
+.ph-shell .ph-bottombar .ph-theme-toggle {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	padding: 0;
 	border: none;
 	border-radius: 8px;
 	background: none;
@@ -368,7 +374,8 @@
 	cursor: pointer;
 	transition: color 140ms ease;
 }
-.ph-cbar-btn:hover {
+.ph-shell .ph-bottombar .ph-cbar-btn:hover,
+.ph-shell .ph-bottombar .ph-theme-toggle:hover {
 	color: var(--text);
 }
 .ph-seg {

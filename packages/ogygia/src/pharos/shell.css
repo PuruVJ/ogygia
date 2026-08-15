@@ -287,6 +287,18 @@
 			gap: 0.75rem;
 			height: var(--ph-bar-h);
 			padding: 0 0.9rem;
+			/* The sheet is a modal Dialog: Bits disables pointer-events on the body while it's open
+			 * and re-enables them only inside the dialog. The bar must re-enable ITSELF too — its
+			 * buttons (search/menu toggles, theme) stay live above the backdrop while the sheet is up. */
+			pointer-events: auto;
+		}
+		/* Flex the bar's two clusters so inline-flex buttons CENTER instead of baseline-drifting. */
+		.ph-bottombar-lead,
+		.ph-bottombar-actions {
+			display: flex;
+			align-items: center;
+			gap: 0.35rem;
+			min-width: 0;
 		}
 		.ph-sheet-backdrop {
 			position: fixed;
@@ -299,9 +311,29 @@
 			right: 0;
 			bottom: var(--ph-bar-h);
 			z-index: 58;
-			max-height: min(78dvh, calc(100dvh - var(--ph-bar-h) - 0.5rem));
+			max-height: min(60dvh, calc(100dvh - var(--ph-bar-h) - 0.5rem));
 			padding: 0.35rem 0.85rem 0.6rem;
 			overflow: hidden;
+		}
+
+		/* View switching inside the sheet (search ↔ nav): the wrapper's height glides between the
+		 * views (ShellBar pins + animates it) while the views crossfade. The OUTGOING view (any
+		 * non-last child while both exist) overlays so the fade never stacks. */
+		.ph-sheet-swap {
+			position: relative;
+			overflow: hidden;
+			transition: height 280ms cubic-bezier(0.23, 1, 0.32, 1);
+		}
+		.ph-sheet-swap > .ph-sheet-view:not(:last-child) {
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+		}
+		@media (prefers-reduced-motion: reduce) {
+			.ph-sheet-swap {
+				transition: none;
+			}
 		}
 	}
 }
