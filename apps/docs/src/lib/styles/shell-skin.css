@@ -106,16 +106,9 @@
 		padding-left: calc(var(--ph-side-w) + var(--side-gap, 0.85rem) * 2);
 	}
 }
-/* Old `.side-cat` rhythm: sections separated by a hairline, tight link stacks. */
-.ph-sidebar {
-	display: flex;
-	flex-direction: column;
-	gap: 1.15rem;
-}
-.ph-nav-group + .ph-nav-group {
-	padding-top: 0.85rem;
-	border-top: 1px solid color-mix(in srgb, var(--accent-line) 35%, var(--line));
-}
+/* Old `.side-cat` rhythm: sections separated by a hairline, tight link stacks. The OUTER list
+   (groups) breathes 1.15rem — that's the space ABOVE each divider; the 0.85rem padding is the
+   space below it. Inner lists stay tight. */
 .ph-nav-list {
 	list-style: none;
 	margin: 0;
@@ -123,6 +116,18 @@
 	display: flex;
 	flex-direction: column;
 	gap: 0.1rem;
+}
+.ph-sidebar > .ph-nav-list {
+	gap: 1.15rem;
+}
+.ph-nav-group + .ph-nav-group {
+	padding-top: 0.85rem;
+	border-top: 1px solid color-mix(in srgb, var(--accent-line) 35%, var(--line));
+}
+/* Roving focus: draw the ring INSIDE the row so the panel's scroll clipping can't cut it off. */
+.ph-shell .ph-nav-link:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
 }
 
 /* Old `.side-cat-label`: quiet by default, accent only on the section holding the current page. */
@@ -200,12 +205,28 @@
 	color: var(--text-faint);
 }
 
-/* ── search palette (portaled dialog) ── */
+/* ── the ⌘K palette (the ONE search UX) — portaled to <body>, so it needs its FULL overlay
+      geometry here, not just colors (without theme.css nothing else positions it: unstyled it
+      rendered in normal flow at the page bottom). Structure from the pharos recipe, docs tokens. ── */
 .ph-search-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
 	background: rgb(0 0 0 / 0.5);
-	backdrop-filter: blur(2px);
+	backdrop-filter: blur(3px);
 }
 .ph-search-panel {
+	position: fixed;
+	top: 12vh;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 101;
+	display: flex;
+	flex-direction: column;
+	width: calc(100% - 2rem);
+	max-width: 37rem;
+	max-height: 70vh;
+	overflow: hidden;
 	border: 1px solid var(--line-strong);
 	border-radius: var(--r-md);
 	background: var(--bg-raised);
@@ -213,17 +234,57 @@
 	color: var(--text);
 	font-family: var(--font-body);
 }
-.ph-search-field {
-	border-bottom: 1px solid var(--line);
+.ph-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
 }
-.ph-search-field input {
-	background: transparent;
+.ph-search-field {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.85rem 1rem;
+	border-bottom: 1px solid var(--line);
+	color: var(--text-faint);
+}
+.ph-search-scene-input {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	background: none;
 	color: var(--text);
 	font: 400 0.95rem/1.4 var(--font-body);
+	outline: none;
+}
+.ph-search-scene-input::placeholder {
+	color: var(--text-faint);
+}
+.ph-search-scene-body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 0.4rem;
+}
+.ph-search-results {
+	list-style: none;
+	margin: 0;
+	padding: 0;
 }
 .ph-search-hit {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	padding: 0.55rem 0.7rem;
 	border-radius: var(--r-sm);
+	text-decoration: none;
 	color: var(--text-dim);
+	transition: background-color 140ms ease;
 }
 .ph-search-hit:hover,
 .ph-search-hit[data-selected],
@@ -233,15 +294,29 @@
 }
 .ph-search-hit-title {
 	color: var(--text);
-	font-weight: 500;
+	font-weight: 600;
+	font-size: 0.84375rem;
 }
-.ph-search-hit-section,
 .ph-search-hit-heading {
+	font-weight: 400;
+	color: var(--text-dim);
+}
+.ph-search-hit-excerpt {
+	font-size: 0.8125rem;
+	color: var(--text-dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ph-search-hit-section {
+	font-size: 0.625rem;
 	color: var(--text-faint);
 }
 .ph-search-empty,
 .ph-search-hint,
 .ph-search-error {
+	padding: 1.75rem 1rem;
+	text-align: center;
 	color: var(--text-faint);
 	font: 400 0.8125rem/1.5 var(--font-body);
 }
@@ -259,8 +334,10 @@
 	min-width: 0;
 }
 
-/* ── theme toggle: the old `.side-theme` ghost button — borderless, quiet, 2rem square. ── */
-.ph-theme-toggle {
+/* ── theme toggle: the old `.side-theme` ghost button — borderless, quiet, 2rem square. It lives
+      in the brand row beside the GitHub icon and MUST match its color exactly (`--text-faint`);
+      the triple selector outranks the component's scoped `color: inherit`. ── */
+.ph-shell .ph-cside .ph-theme-toggle {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -276,7 +353,7 @@
 		color 140ms ease,
 		background 140ms ease;
 }
-.ph-theme-toggle:hover {
+.ph-shell .ph-cside .ph-theme-toggle:hover {
 	color: var(--text);
 	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
 }
@@ -307,29 +384,89 @@
 	color: var(--text);
 }
 
-/* ── mobile bottom bar + sheet ── */
-.ph-cbar,
+/* ── mobile bottom bar + sheet — the production `.side-bottombar` recipe, verbatim ── */
 .ph-bottombar {
-	border-top: 1px solid var(--line);
-	background: color-mix(in srgb, var(--bg) 92%, transparent);
-	backdrop-filter: blur(10px);
+	padding: 0 0.85rem env(safe-area-inset-bottom, 0px);
+	border-top: 1px solid color-mix(in srgb, var(--accent-line) 50%, var(--line));
+	background:
+		linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--accent-deep) 18%, transparent) 0%,
+			transparent 70%
+		),
+		color-mix(in srgb, var(--bg-raised) 94%, transparent);
+	box-shadow: 0 -8px 28px -18px rgb(0 0 0 / 0.55);
+	backdrop-filter: blur(16px) saturate(1.15);
+	-webkit-backdrop-filter: blur(16px) saturate(1.15);
 }
+/* Brand: the ogygia mark (inline data-URI of Logo.svelte's strokes) + the wordmark, accent like
+   production. The bar is an island, so the icon rides CSS rather than markup. */
 .ph-cbar-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.55rem;
+	min-width: 0;
 	font: 600 0.95rem/1 var(--font-display);
-	color: var(--text);
+	color: var(--accent);
 	text-decoration: none;
 }
+.ph-cbar-brand::before {
+	content: '';
+	width: 20px;
+	height: 20px;
+	flex-shrink: 0;
+	background-color: currentColor;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 26 Q16 20 28 26'/%3E%3Cpath d='M16 21.5 Q14.5 14 17 8'/%3E%3Cpath d='M17 8 Q12 5 7.5 7'/%3E%3Cpath d='M17 8 Q17 4 21 3.5'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+}
 .ph-sheet {
-	border-top: 1px solid var(--line-strong);
-	border-radius: 14px 14px 0 0;
-	background: var(--bg-raised);
+	border-top: 1px solid color-mix(in srgb, var(--accent-line) 55%, var(--line));
+	border-radius: 16px 16px 0 0;
+	background: color-mix(in srgb, var(--bg-raised) 96%, transparent);
+	backdrop-filter: blur(16px) saturate(1.15);
+	-webkit-backdrop-filter: blur(16px) saturate(1.15);
 	color: var(--text);
+}
+/* Open/close with the PRODUCTION slide-up (340ms, the old easing), riding Bits' data-state. */
+.ph-sheet[data-state='open'] {
+	animation: doc-sheet-in 340ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ph-sheet[data-state='closed'] {
+	animation: doc-sheet-out 340ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .ph-sheet-backdrop {
 	background: rgb(0 0 0 / 0.45);
 }
+@keyframes doc-sheet-in {
+	from {
+		transform: translate3d(0, calc(100% + 0.75rem), 0);
+	}
+}
+@keyframes doc-sheet-out {
+	to {
+		transform: translate3d(0, calc(100% + 0.75rem), 0);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.ph-sheet[data-state='open'],
+	.ph-sheet[data-state='closed'] {
+		animation-duration: 0.01ms;
+	}
+}
 
-/* ── on-this-page rail (Doc's toc) — same quiet look as before ── */
+/* ── on-this-page rail: FIXED, not sticky — it holds its place while the page scrolls. The
+      `.ph-aside` grid column stays in flow as the positioning reference; the inner `.ph-toc`
+      goes fixed at its natural x (no left/right → static position), pinned near the top. ── */
+.ph-doc .ph-aside {
+	position: static;
+}
+.ph-doc .ph-toc {
+	position: fixed;
+	top: 1.5rem;
+	width: 12.5rem;
+	max-height: calc(100vh - 3rem);
+	overflow-y: auto;
+}
 .ph-toc-link {
 	color: var(--text-faint);
 	text-decoration: none;
@@ -342,49 +479,51 @@
 	color: var(--accent);
 }
 
-/* ── CodeChrome buttons (copy + permalink on every pre) ── */
-.ph-body pre {
+/* ── CodeChrome: every snippet gets a TOP BAR — a header strip across the block with the copy +
+      permalink actions at its right. The actions live inside the `<pre>`, so the `.code-only`
+      wrapper is the positioning context and reserves the bar's height with padding. ── */
+.code-only {
 	position: relative;
+	padding-top: 3.4rem;
 }
 .ph-code-actions {
 	position: absolute;
-	top: 0.5rem;
-	right: 0.5rem;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 2.35rem;
 	display: flex;
+	align-items: center;
+	justify-content: flex-end;
 	gap: 0.3rem;
+	padding: 0 0.5rem;
+	border-bottom: 1px solid var(--line);
+	border-radius: var(--r-md) var(--r-md) 0 0;
+	background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
 }
 .ph-code-actions :is(button, a) {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 1.85rem;
-	height: 1.85rem;
+	width: 1.75rem;
+	height: 1.75rem;
 	padding: 0;
-	border: 1px solid var(--line);
-	border-radius: var(--r-sm);
-	background: color-mix(in srgb, var(--bg) 78%, transparent);
-	backdrop-filter: blur(6px);
+	border: none;
+	border-radius: 6px;
+	background: none;
 	color: var(--text-faint);
 	cursor: pointer;
 	text-decoration: none;
-	opacity: 0.6;
 	transition:
-		opacity 0.15s ease,
 		color 0.15s ease,
-		border-color 0.15s ease;
+		background 0.15s ease;
 }
-.ph-body pre:hover .ph-code-actions :is(button, a),
+.ph-code-actions :is(button, a):hover,
 .ph-code-actions :is(button, a):focus-visible {
-	opacity: 1;
-	color: var(--text-dim);
-}
-.ph-code-actions :is(button, a):hover {
 	color: var(--text);
-	background: var(--bg-raised);
+	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
 }
 .ph-body pre[data-copied] .ph-copy,
 .ph-code-link[data-linked] {
-	opacity: 1;
 	color: var(--accent);
-	border-color: var(--accent-line);
 }
