@@ -2,6 +2,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
 import { defineConfig } from 'vite';
 import { load_ogygia_themes } from './src/lib/code/shiki-themes.js';
+import { remarkChangelog } from './src/lib/remark-changelog.js';
 
 // Custom site Shiki themes (forest neutrals + green) — the same ogygia-light / ogygia-dark used by
 // the snippets highlighter, so .svx fences match hand-highlighted code.
@@ -25,6 +26,9 @@ export default defineConfig({
 					themes: { light: themes.light, dark: themes.dark },
 					defaultColor: 'light-dark()',
 					wrapperClass: 'code-only',
+					// Reshape the Releases page's `## [x] — date` headings into a clean version + a date
+					// line under it. `enforce: 'pre'` so the heading-id/TOC collectors see "0.5.0".
+					remark: [{ enforce: 'pre', plugin: remarkChangelog }],
 				},
 			},
 		}),
