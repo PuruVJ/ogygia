@@ -20,6 +20,35 @@
 		line-height: 1.6;
 	}
 
+	/* ── headerless form (`header={false}`): the sidebar is the whole chrome ── */
+	.ph-headerless .ph-cside {
+		top: 0;
+		height: 100vh;
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+	}
+	.ph-cside-brand {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
+	}
+	.ph-cside-tools {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		flex-shrink: 0;
+	}
+	.ph-cside-tools .ph-search-trigger {
+		width: 100%;
+	}
+	.ph-headerless .ph-cside .ph-sidebar {
+		min-height: 0;
+		overflow-y: auto;
+		flex: 1;
+	}
+
 	/* ── header ────────────────────────────────────────────────────────────── */
 	.ph-cheader {
 		position: sticky;

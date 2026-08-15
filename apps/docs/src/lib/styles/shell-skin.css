@@ -44,7 +44,13 @@
 	outline: none;
 }
 
-/* ── header ── */
+/* ── the panel's brand row (headerless form) — the old `.side-brand` recipe ── */
+.ph-cside-brand {
+	padding: 0.2rem 0.4rem 0.75rem;
+	border-bottom: 1px solid color-mix(in srgb, var(--accent-line) 40%, var(--line));
+}
+
+/* ── header (unused in the headerless form; kept for pages that opt back in) ── */
 .ph-cheader {
 	border-bottom: 1px solid var(--line);
 	background: color-mix(in srgb, var(--bg) 88%, transparent);

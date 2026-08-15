@@ -40,7 +40,9 @@
 		title = 'Docs',
 		links = [],
 		base,
+		header = true,
 		brand,
+		side,
 		actions,
 		children
 	}: {
@@ -58,8 +60,15 @@
 		links?: { text: string; href: string }[];
 		/** Mount prefix override; default derived by subtraction from the current page. */
 		base?: string;
+		/** `false` → no top header; the sidebar becomes the whole chrome. Search + the theme toggle
+		 *  (and the locale switcher) move INTO the sidebar, above the nav — the floating-panel form.
+		 *  Compose the panel's top (logo, wordmark, socials) with the `side` snippet. */
+		header?: boolean;
 		/** The brand region (logo/wordmark). Default: `title`. */
 		brand?: Snippet;
+		/** Rendered at the TOP of the sidebar, above search + nav — the panel's brand row. Most useful
+		 *  with `header={false}`, but renders whenever provided. */
+		side?: Snippet;
 		/** Header tools — GitHub, version switcher, socials, anything. Rendered in the desktop header.
 		 *  NOT (yet) in the mobile sheet: `actions` is a forwarded snippet-prop, and a forwarded snippet
 		 *  can't cross into the `ShellBar` island (it captures as a function → not serializable). The
@@ -94,26 +103,40 @@
 	}, 'ph-theme')}
 </svelte:head>
 
-<div class="ph-shell">
+<div class="ph-shell" class:ph-headerless={!header}>
 	<!-- First focusable element: keyboard users jump past the nav straight to the content. -->
 	<a class="ph-skip" href="#ph-main">Skip to content</a>
-	<header class="ph-cheader">
-		<a class="ph-cheader-brand" href={the_base || '/'}>{#if brand}{@render brand()}{:else}{title}{/if}</a>
-		<!-- Version sits by the brand (it scopes the whole doc set); locale rides with the tools. -->
-		{#if switcher}<Switcher {switcher} for="version" />{/if}
-		<nav class="ph-cheader-nav" aria-label="Primary">
-			{#each links as l (l.href)}<a class="ph-cheader-link" href={l.href}>{l.text}</a>{/each}
-		</nav>
-		<div class="ph-cheader-tools">
-			<div class="ph-cheader-search"><Search base={the_base} /></div>
-			{#if switcher}<Switcher {switcher} for="locale" />{/if}
-			<ThemeToggle />
-			{#if actions}<div class="ph-cheader-actions">{@render actions()}</div>{/if}
-		</div>
-	</header>
+	{#if header}
+		<header class="ph-cheader">
+			<a class="ph-cheader-brand" href={the_base || '/'}>{#if brand}{@render brand()}{:else}{title}{/if}</a>
+			<!-- Version sits by the brand (it scopes the whole doc set); locale rides with the tools. -->
+			{#if switcher}<Switcher {switcher} for="version" />{/if}
+			<nav class="ph-cheader-nav" aria-label="Primary">
+				{#each links as l (l.href)}<a class="ph-cheader-link" href={l.href}>{l.text}</a>{/each}
+			</nav>
+			<div class="ph-cheader-tools">
+				<div class="ph-cheader-search"><Search base={the_base} /></div>
+				{#if switcher}<Switcher {switcher} for="locale" />{/if}
+				<ThemeToggle />
+				{#if actions}<div class="ph-cheader-actions">{@render actions()}</div>{/if}
+			</div>
+		</header>
+	{/if}
 
 	<div class="ph-cframe">
 		<aside class="ph-cside" aria-label="Documentation">
+			{#if side}<div class="ph-cside-brand">{@render side()}</div>{/if}
+			{#if !header}
+				<!-- Headerless: the panel owns the tools the header would have carried. Search's ⌘K
+				     keybinding + palette work exactly the same from here. -->
+				<div class="ph-cside-tools">
+					{#if switcher}<Switcher {switcher} for="version" />{/if}
+					<div class="ph-cside-search"><Search base={the_base} /></div>
+					{#if switcher}<Switcher {switcher} for="locale" />{/if}
+					<ThemeToggle />
+					{#if actions}<div class="ph-cside-actions">{@render actions()}</div>{/if}
+				</div>
+			{/if}
 			<Sidebar nav={tree} base={the_base} />
 		</aside>
 		<main class="ph-cmain" id="ph-main" tabindex="-1">{@render children()}</main>
