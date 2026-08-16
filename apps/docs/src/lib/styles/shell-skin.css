@@ -489,8 +489,13 @@
 
 /* ── CodeChrome: every snippet gets a TOP BAR — a header strip across the block with the copy +
       permalink actions at its right. The actions live inside the `<pre>`, so the `.code-only`
-      wrapper is the positioning context and reserves the bar's height with padding. ── */
-.code-only {
+      wrapper is the positioning context and reserves the bar's height with padding.
+      SCOPED to `.og-body` (0,2,0) ON PURPOSE: `code-block.css` sets `.code-only { padding: … }` (a
+      shorthand that resets padding-top) at equal specificity, so a plain `.code-only` selector here
+      would win or lose by CSS load order — which SPA navigation flips, hence the actions overlapping
+      the first line "on nav" but not on a fresh load. The `.og-body` prefix wins by specificity
+      instead, and only reserves the bar where CodeChrome actually adds actions (`.og-body pre`). ── */
+.og-body .code-only {
 	position: relative;
 	padding-top: 3.4rem;
 }
@@ -594,8 +599,9 @@
 		transform 0.25s ease,
 		width 0.25s ease;
 }
-/* inside a group the panel's own frame is gone — the group owns it */
-.og-tabs .code-only {
+/* inside a group the panel's own frame is gone — the group owns it. `.og-body` prefix so this
+   (0,3,0) always beats the `.og-body .code-only` reservation above, order-independent. */
+.og-body .og-tabs .code-only {
 	position: static;
 	margin: 0;
 	border: none;
