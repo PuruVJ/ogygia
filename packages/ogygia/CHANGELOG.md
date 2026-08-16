@@ -8,6 +8,146 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-08-16
+
+The site-kit release. The docs kit sheds its codename and collapses into `ogygia/content` — one
+pillar from collection to shipped site: `sitekit()` mints the brains, `DocsShell` / `BlogShell`
+render them, the `import.meta.og.*` macros bake content at build. Around it: a security audit, an
+8×-flavored perf pass (bundle granularity, router warming, an exponential compiler fix), a unified
+preload architecture that goes native in MPA mode, and the `csr = false` keepalive bug that finally
+dies (#1, #4).
+
+### Added
+
+- **The site kit — `sitekit()` in `ogygia/content`.** Weave collections into a navigable site:
+  `outline()` (spec grammar, `pick()`, single-assignment placement with named build errors),
+  `dimensions()` (versions/locales as coordinates, per-axis fallback instead of 404s, a switcher),
+  full-text search (server brain or a prerendered index queried in an on-device worker, no-JS
+  fallback page included), emissions (`sitemap.xml`, `llms.txt`, RSS, per-page raw markdown,
+  `search.json`), content checks (`links()` — the in-prose link audit that fails the build, plus
+  custom checks), `remotes()` (the wire layer: `nav` / `meta` / `doc` / `search`, prerendered or
+  live, bodies crossing as baked region tickets), and request-context projections (previews, roles).
+
+  ```ts title=src/lib/site.server.ts
+  import { sitekit, links } from 'ogygia/content';
+  import { docs } from './collections.server';
+
+  export const site = sitekit({ outline: docs, prevNext: 'graph', checks: [links()] });
+  ```
+
+- **Shells & bricks.** `Frame` (the headless composition), `DocsShell` (the VitePress form) and
+  `BlogShell` (the blog form) — compositions of public bricks (`Doc`, `Sidebar`, `Pager`,
+  `OnThisPage`, `Search`, `Switcher`, `BlogList`, `BlogPost`), every region a conditional snippet
+  prop: absent → built-in, a snippet → yours, `null` → gone. Styling is opt-in (`theme.css` +
+  `shell.css`, everything in `@layer ogygia` so any unlayered rule of yours wins), with Greek-named
+  alternate themes under `ogygia/content/themes/*`. Scaffold a whole site with `npx ogygia site init`.
+
+- **The `import.meta.og.*` compile-macro family.** `loader.markdown` / `.folder` / `.json` take a
+  bare **directory** and derive their opinionated file set under it (globs remain the escape
+  hatch); `loader.git` pulls a corpus straight from another repository. `code(source, lang, meta?)`
+  renders a snippet at build through the app's own fence pipeline; `md(text)` does the same for
+  markdown; `bake(fn)` runs a function at build and inlines the result; `wire` marks a
+  transportable class codec.
+
+- **Markdown authoring dialect.** VitePress-compatible containers (`::: tip` … `::: details`),
+  markdown-native tab groups (`::: code-group` / `::: tabs`) with site-wide synced, persisted
+  selection; diff markers in two dialects — line-level `+++ `/`--- ` prefixes (`diff_markers()`)
+  and svelte.dev's inline `+++added+++`/`---removed---` (`inline_markers()`, twoslash-safe) — both
+  skipping markdown-family fences so docs can show the syntax; `title=` fence meta for a filename
+  in the code chrome (falls back to the language, never empty); stable code-block ids with
+  permalink + copy actions that re-attach on reveal (tab switches, `<details>`).
+
+- **MPA-mode native speculation.** With `router: false` the server handle injects one static
+  Speculation Rules script: Chromium prerenders likely next pages, Firefox prefetches them, others
+  ignore the JSON — zero config, zero client JS, per-link opt-out via `data-ogygia-speculate`.
+  `preloadData(url)` hints a native prerender and `preloadCode(url)` a native prefetch in that mode.
+
+- **`site.meta()` / the `meta` remote** — the whole shell bundle (`{ nav, switcher, data }`) in one
+  prerendered call, so a layout mounts `<DocsShell {meta}>` without the corpus ever entering its
+  module graph.
+
+### Changed
+
+- **BREAKING: the pharos name is gone.** `ogygia/pharos*` subpaths merged into `ogygia/content*`
+  (`/docs-shell`, `/slot`, `/shell.css`, `/theme.css`, `/themes/*`; the pharos server barrel into
+  `ogygia/content/server`). `pharos()` → `sitekit()`, `Shell` → `DocsShell`, `PharosSlot` →
+  `SiteSlot`, error prefix `[ogygia/pharos]` → `[ogygia/content]`, CLI `ogygia pharos init` →
+  `ogygia site init`, CSS hooks `.ph-*`/`--ph-*` → `.og-*`/`--og-*`, `@layer pharos` →
+  `@layer ogygia`.
+- **BREAKING: emitted chunk names.** Island facades are `og-region.<hash>.js` (was
+  `ogygia-island.*`), the runtime is `og-runtime.<hash>.js` (was `ogygia-runtime.*`), the build
+  handoff is `.svelte-kit/og-region-deps.json`. The `<ogygia-region>` element and
+  `data-ogygia-runtime` attribute are unchanged — nothing locates the runtime by filename.
+- **BREAKING: `continuity.speculate` is removed.** SPA mode now never emits speculation rules — a
+  speculation cache serves real navigations only, which a body-swap router cannot read; the
+  router's own prefetch + island-module warming is the working equivalent. MPA mode speculates by
+  default (see Added).
+- **Preloading is render-gated end to end.** Portable-snippet entries are preloaded by the island
+  whose props actually carry them (the compiler's static scan — which preloaded never-rendered
+  candidates — is gone), joining the island facade + dep-chunk links in one head channel. The three
+  island-module warmers (router prefetch, visible-idle, interaction hover) merged into one deduped
+  `warm_island_module`.
+- **Bundle granularity.** `svelte/server` and the codec graph no longer reach the client (−25% on
+  the reference app: 33.3 → 25.0 kB); the frame store is a feature (`defer`/`live`/`morph`/`lakes`
+  apps only — the router weaves through the slots seam, not a static import); the wire runtime is
+  usage-gated (transportables, portable snippets, or islands with children); conditional shell
+  built-ins load as islands only when the built-in actually renders.
+- **Router.** Prefetch now also warms the incoming page's island modules (Slow-4G: warm nav 18.7×,
+  visible-hydrate 229×); `visible` islands idle-warm their chunk.
+
+### Fixed
+
+- **`csr = false` apps no longer need a token `csr = true` route (#1, #4).** The keepalive
+  predicate read each route node's own `csr` while SvelteKit resolves it through the layout chain —
+  a fresh app with `csr = false` only in the root layout skipped the client build and 404'd the
+  runtime script. Now chain-resolved, matching Kit exactly; verified against the issue's repro.
+- **Childless islands serialized a phantom `children` slot descriptor** — and on minimal apps
+  (no wire feature) every island then failed to hydrate with `Unknown type OgygiaS`. Childless
+  payloads now carry nothing; islands with real children enable the wire revivers automatically.
+- **Nested islands compiled in O(2^depth)** — the usage walk double-descended component fragments;
+  depth-25 hosts hung the build. Now linear.
+- **`import.meta.og.code()` in a `.svelte` host was silently discarded** when the island transform
+  also touched the file (it re-ran on the pre-macro source), exploding at runtime. The transforms
+  now compose.
+- **Loader macro brace globs matched zero files in dev** (Vite's dev matcher drops `{+a,+b}`
+  groups) — emitted in array form so dev and build agree.
+- **View-transition skips no longer surface as unhandled rejections**; deferred-region fetch hints
+  are dropped on woven navigations (no double fetch).
+- **`ogygia/content/slot` resolved to a deleted file** after the rename (broke any app with
+  markdown `overrides: true`).
+
+### Security
+
+- **Dev-server path traversal** in the FOUC CSS virtual (a crafted `/@id/` request could read
+  files outside the project root through the plugin's own `readFileSync`) — the decoded id is now
+  validated against traversal/absolute/UNC forms. Dev-only; production builds never run the plugin.
+- **Region batch endpoint** now rejects oversized bodies by `Content-Length` (413) before parsing.
+- Full audit: the signed-capability pipeline (HKDF-separated keys, length-prefixed MAC message,
+  probe-rate before HMAC, `Sec-Fetch-Site` gating, response caps) reviewed and unchanged.
+
+## [0.5.1] — 2026-08-13
+
+A packaging patch. 0.5.0 installed but didn't run: the published manifest pointed at unshipped
+`src/*.ts`, and the browser runtime got tree-shaken away. Both fixed — no API changes.
+
+### Fixed
+
+- **Published `exports` now resolve to `dist`, not `src`.** 0.5.0's tarball shipped `exports` targeting
+  `./src/*.ts`, which `files: ["dist"]` never ships, so the package entry and several subpaths
+  (`ogygia`, `/runtime`, `/hooks`, `/app`, `/server`, `/internal`, `/internal/server`, `/content`,
+  `/content/server`) resolved to missing files. Root cause: **`npm publish` ignores
+  `publishConfig.exports`** (a pnpm-only feature), so the dev manifest shipped verbatim. ogygia now
+  releases with pnpm (a top-level `pub` script), and `publishConfig.exports` was completed — it had
+  been missing `./internal/compiler`, `./content/server`, and `./types`.
+
+- **The browser runtime no longer vanishes to tree-shaking.** `import 'ogygia/runtime'` booted the
+  kitchen-sink runtime as a pure side-effect import (`runtime/index` → `import './full.js'`). With
+  `sideEffects: false`, bundlers and Vite's dep-prebundler dropped it, so `<ogygia-region>` was never
+  registered and no island woke. Boot is now an explicit function the compiler calls: `full.ts`
+  exports `bootDev()`, `runtime/index` re-exports it (no side-effect import), and the plugin's dev
+  entry injects `import { bootDev } from 'ogygia/runtime'; bootDev()`. The per-app production entry
+  already booted explicitly. `sideEffects` is now `["**/*.css"]`.
+
 ## [0.5.0] — 2026-08-12
 
 The unification release. **Regions** become the one renderable — placed, held, deferred, live —
