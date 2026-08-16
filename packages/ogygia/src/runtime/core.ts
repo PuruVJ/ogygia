@@ -9,7 +9,8 @@ import { runtime_session } from './session.js';
 import {
 	is_allowed_region_endpoint,
 	is_same_origin_response,
-	island_module_url
+	island_module_url,
+	warm_island_module
 } from './region-endpoint-url.js';
 import {
 	is_awake,
@@ -483,7 +484,7 @@ class OgygiaRegion extends HTMLElement {
 	#warm_module() {
 		const entry = this.getAttribute('entry');
 		if (!entry) return;
-		const warm = () => void import(/* @vite-ignore */ island_module_url(entry)).catch(() => {});
+		const warm = () => warm_island_module(entry);
 		if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 2000 });
 		else setTimeout(warm, 200);
 	}

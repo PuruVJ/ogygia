@@ -261,9 +261,21 @@
 	const island_preload = $derived.by(() => {
 		if (nested || !is_island || hydrate_attr !== 'load' || !island_module_url) return '';
 		const hrefs = [island_module_url];
-		for (const dep of islandDeps(island_entry)) {
-			const href = dep.startsWith('/@') ? dep : asset(dep);
-			if (href && !hrefs.includes(href)) hrefs.push(href);
+		const add_with_deps = (entry, url) => {
+			if (url && !hrefs.includes(url)) hrefs.push(url);
+			for (const dep of islandDeps(entry)) {
+				const href = dep.startsWith('/@') ? dep : asset(dep);
+				if (href && !hrefs.includes(href)) hrefs.push(href);
+			}
+		};
+		add_with_deps(island_entry, '');
+		// Portable region-snippets riding THIS island's props come alive via `import(desc.e)` at
+		// hydrate — preload their entries (+ deps) in the same breath. RENDER-GATED by construction:
+		// the link exists iff the island that carries the snippet actually rendered (the compiler's
+		// old static-scan emission preloaded every portable candidate in the host, rendered or not).
+		// The payload embeds each descriptor's public entry URL; prod-shaped (dev has no preloads).
+		for (const m of island_payload.match(/\/_app\/immutable\/og-region\.[0-9a-f]+\.js/g) ?? []) {
+			add_with_deps(m, m);
 		}
 		let html = '';
 		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + GT;

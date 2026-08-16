@@ -11,7 +11,7 @@ import { PageCache } from './page-cache.js';
 import { slots } from './slots.js';
 import type { PersistPair } from './persist.js';
 import { runtime_session } from './session.js';
-import { island_module_url } from './region-endpoint-url.js';
+import { island_module_url, warm_island_module } from './region-endpoint-url.js';
 
 const WS = /\s+/;
 
@@ -228,9 +228,8 @@ class SpaRouter {
 		maxBytes: PAGE_CACHE_MAX_BYTES
 	});
 	#inflight = new Map<string, Promise<string | null>>();
-	/** Island module URLs already handed to import() — warm once, never re-import. */
-	#warmed_modules = new Set<string>();
-	/** Per-href island `entry` lists extracted from prefetched HTML — parse once. */
+	/** Hrefs whose prefetched HTML was already scanned for island entries — parse once. (URL-level
+	 *  import dedupe lives in the shared `warm_island_module`.) */
 	#warmed_pages = new Set<string>();
 	#remote_bust_installed = false;
 	/** Hard SPA navigations only — never shared with soft invalidate. */
@@ -369,18 +368,11 @@ class SpaRouter {
 		if (this.#warmed_pages.has(href)) return;
 		this.#warmed_pages.add(href);
 		// Match `entry="…"` on ogygia-region open tags in our own SSR output (module URLs never contain
-		// a double-quote), collecting the distinct client-island module specifiers.
+		// a double-quote), collecting the distinct client-island module specifiers. URL-level dedupe +
+		// failure-retry live in the shared warmer (one scheme for router/visible/interaction warms).
 		const re = /<ogygia-region\b[^>]*?\bentry="([^"]+)"/g;
 		let m: RegExpExecArray | null;
-		while ((m = re.exec(html))) {
-			const url = island_module_url(m[1], href);
-			if (!url || this.#warmed_modules.has(url)) continue;
-			this.#warmed_modules.add(url);
-			import(/* @vite-ignore */ url).catch(() => {
-				// A failed warm just means the click pays the import cost as before — never fatal.
-				this.#warmed_modules.delete(url);
-			});
-		}
+		while ((m = re.exec(html))) warm_island_module(m[1], href);
 	}
 
 	// NOTE: the library does NO script processing. Scripts inserted via a client-side body swap do

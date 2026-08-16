@@ -654,9 +654,14 @@ describe('portable snippets — a named snippet handed to a non-island component
 		expect(r.islands.length).toBe(2);
 	});
 
-	test('SSR hoists a modulepreload for the portable entry (no waterfall)', () => {
+	test('SSR emits NO static modulepreload — the hint is render-gated in Region.svelte', () => {
+		// The old static scan preloaded every portable CANDIDATE in the host, rendered or not (an
+		// opted-out snippet still cost a head link + fetch). The no-waterfall hint now comes from
+		// Region.svelte when an island's props actually carry the descriptor. The transform's job
+		// is only to thread the public entry url through og_portable for that render-time emission.
 		const r = run(wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`), makeCtx({ ssr: true }))!;
-		expect(r.code).toMatch(/<svelte:head><link rel="modulepreload" href="\/_app\/immutable\/og-region\.[a-f0-9]+\.js"/);
+		expect(r.code).not.toMatch(/<svelte:head><link rel="modulepreload"/);
+		expect(r.code).toMatch(/__og_portable\([^)]*"\/_app\/immutable\/og-region\.[a-f0-9]+\.js"\)/);
 	});
 
 	test('a snippet-only file with no islands still transforms (relaxed bailout)', () => {

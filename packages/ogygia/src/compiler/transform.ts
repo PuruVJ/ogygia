@@ -1651,7 +1651,6 @@ export function transformHost(source, id, ctx) {
 
 	let portable_emitted = false;
 	const portable_imports: string[] = [];
-	const portable_preloads: string[] = [];
 	const portable_seen = new Set<string>();
 	for (const { comp, snip } of outer_candidates) {
 		const name = snip.expression.name;
@@ -1743,9 +1742,11 @@ export function transformHost(source, id, ctx) {
 		if (!portable_seen.has(iid)) {
 			portable_seen.add(iid);
 			if (ctx.ssr) portable_imports.push(`import __OgPS_${iid} from ${JSON.stringify(entryPath)};`);
-			// No-waterfall: the descriptor's entry url is known at SSR, so preload it in <head>. The
-			// browser fetches the portable entry in parallel with the host island's chunk, not after it.
-			if (ctx.ssr && !ctx.dev) portable_preloads.push(islandPublicUrl(iid));
+			// (No static <head> modulepreload here — that preloaded every portable CANDIDATE in the
+			// host, rendered or not. The no-waterfall hint is emitted RENDER-GATED by Region.svelte
+			// instead: an island whose props carry a portable descriptor preloads its entry + deps
+			// alongside its own facade, so only snippets that actually cross a rendered boundary
+			// cost a fetch.)
 		}
 		s.remove(snip.start, snip.end);
 		const insert_at = comp.start + 1 + String(comp.name).length;
@@ -1754,21 +1755,6 @@ export function transformHost(source, id, ctx) {
 			` ${name}={${OG_PORTABLE}(${entry_ref}, ${cap_obj}, ${JSON.stringify(url)})}`
 		);
 		portable_emitted = true;
-	}
-
-	if (portable_preloads.length) {
-		const links = [...new Set(portable_preloads)]
-			.map((u) => `<link rel="modulepreload" href=${JSON.stringify(u)} />`)
-			.join('');
-		// A component may have ONE `<svelte:head>` — if the host already has one, MERGE the links
-		// into it (appending a second head is a compile error the dev server never surfaces, since
-		// this branch only runs for builds).
-		const existing_head = /<svelte:head>/.exec(source);
-		if (existing_head) {
-			s.appendLeft(existing_head.index + '<svelte:head>'.length, links);
-		} else {
-			s.append(`\n<svelte:head>${links}</svelte:head>\n`);
-		}
 	}
 
 	if (portable_emitted) {
