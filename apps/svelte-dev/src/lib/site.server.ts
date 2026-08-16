@@ -1,11 +1,11 @@
 /**
- * The content engine — collections (eager `git()` globs, the whole compiled corpus) and the pharos
+ * The content engine — collections (eager `git()` globs, the whole compiled corpus) and the ogygia
  * site. A `.server.ts` module: Kit GUARANTEES no client code can import it (a build error names the
  * chain), so the corpus is mechanically un-leakable. The wire surface is minted in `docs.remote.ts` /
  * `blog.remote.ts`; server machinery (emissions, prerender entries, load guards) imports this directly.
  */
 import { content, numbered, dated } from 'ogygia/content';
-import { pharos, dimensions } from 'ogygia/pharos';
+import { defineSite, dimensions } from 'ogygia/content';
 import * as v from 'valibot';
 import type { TopicKey } from './topics';
 
@@ -39,7 +39,7 @@ const collections = {
 	}),
 };
 
-export const site = pharos({
+export const site = defineSite({
 	base: '/docs',
 	outline: dimensions({
 		axes: { topic: { values: ['svelte', 'kit', 'cli', 'ai'], default: 'svelte', label: 'Docs' } },

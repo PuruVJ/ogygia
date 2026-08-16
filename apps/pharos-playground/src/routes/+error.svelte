@@ -21,7 +21,7 @@
 		font-size: 3rem;
 		font-weight: 800;
 		letter-spacing: -0.03em;
-		color: var(--ph-text-faint, #9096a1);
+		color: var(--og-text-faint, #9096a1);
 	}
 	.err-title {
 		margin: 0.25rem 0 0.5rem;
@@ -29,10 +29,10 @@
 	}
 	.err-msg {
 		margin: 0 0 1.5rem;
-		color: var(--ph-text-dim, #5b6069);
+		color: var(--og-text-dim, #5b6069);
 	}
 	.err-home {
-		color: var(--ph-accent, #6b8afd);
+		color: var(--og-accent, #6b8afd);
 		text-decoration: none;
 		font-weight: 600;
 	}

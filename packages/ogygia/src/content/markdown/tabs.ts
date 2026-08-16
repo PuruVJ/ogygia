@@ -1,6 +1,6 @@
 /**
  * Markdown-native tab groups — two authoring syntaxes, both rewritten (a RAW-TEXT pass, before
- * mdsvex) to the pharos `<TabGroup>` / `<Tab>` components. The components are AUTO-INJECTED into the
+ * mdsvex) to the ogygia `<TabGroup>` / `<Tab>` components. The components are AUTO-INJECTED into the
  * module scope by the preprocessor when this pass fires, so authors write zero imports.
  *
  * **`::: code-group`** — VitePress-compatible. Each fenced block carries its tab label in the info

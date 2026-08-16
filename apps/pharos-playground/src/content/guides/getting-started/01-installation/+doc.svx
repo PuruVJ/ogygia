@@ -7,7 +7,7 @@ related:
 ---
 
 <script>
-	import { TabGroup, Tab } from 'ogygia/pharos';
+	import { TabGroup, Tab } from 'ogygia/content';
 </script>
 
 ogygia is an islands runtime and docs kit for SvelteKit. It renders your pages on the server as plain HTML, then wakes only the interactive parts on the client. This page walks you from an empty project to a running island in about five minutes.

@@ -771,7 +771,7 @@ function assert_swr_lake_crossable(node, err) {
  *
  * `$lib` + relative specifiers resolve to ABSOLUTE file paths (build machinery — emitFile prescan,
  * HMR invalidation, fouc-css — keys on them). Anything else (a PACKAGE specifier like
- * `'ogygia/pharos/tab-group'`, or a Vite alias) is kept VERBATIM: every generated virtual module
+ * `'ogygia/content/tab-group'`, or a Vite alias) is kept VERBATIM: every generated virtual module
  * (island entry, wrapper, child synth, region binding) re-emits the original specifier and Vite's
  * resolver handles it — exports map, workspace link, or alias — so both a node_modules install and
  * a monorepo workspace link work without this transform ever touching the filesystem. A marked

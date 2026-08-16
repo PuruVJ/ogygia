@@ -1,5 +1,5 @@
 /**
- * Collect every markdown link into `metadata.links` — the raw material for pharos's link audit.
+ * Collect every markdown link into `metadata.links` — the raw material for ogygia's link audit.
  * Mirrors {@link remarkHeadings}: the collected array is stashed on `file.data.fm.links`, mdsvex
  * emits it with the module `metadata`, and the `markdown` format lifts it onto the entry's `meta`.
  *

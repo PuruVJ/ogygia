@@ -17,7 +17,7 @@ import type { RegionValue } from '../region.js';
 export type Heading = { depth: 2 | 3 | 4; id: string; text: string };
 
 /** One markdown link collected during the compile pass (raw, unclassified). Rides `markdown` `meta`;
- *  pharos's audit resolves these against the site's address space. `line` is approximate (relative
+ *  ogygia's audit resolves these against the site's address space. `line` is approximate (relative
  *  to the post-frontmatter text). */
 export type LinkRef = { href: string; text: string; line?: number };
 
@@ -113,7 +113,7 @@ export type { MarkdownMeta } from './formats.js';
 export { folder } from './folder.js';
 export type { FolderOptions } from './folder.js';
 
-// The filename convention it runs on (moved here from pharos — ordering is generic corpus knowledge).
+// The filename convention it runs on (moved here from ogygia — ordering is generic corpus knowledge).
 export { numbered, dated, date_of, title_case, strip_order_prefix, order_of } from './convention.js';
 export type { Convention, NumberedOptions, MetaDecoration } from './convention.js';
 // `blocks()` is the content source; `blocks.resolve(tree, registry)` is the no-collection recipe
@@ -134,3 +134,7 @@ export type { ContentMode, GetRemote, ListRemote, WithRemotes } from './server.j
 // The `import.meta.og.*` ambient types (loader.*, wire, …) live in the package-root
 // `ambient.d.ts`, surfaced to apps via the `ogygia/types` reference every scaffold carries — ONE
 // home, always on, no import required. The constructs themselves are rewritten by the vite plugin.
+
+// ── the site kit ── outline → defineSite → shell components. One barrel: data layer + site brains
+// + chrome all surface from `ogygia/content` (bundlers tree-shake what a given app doesn't touch).
+export * from './site/index.js';

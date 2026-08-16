@@ -3,7 +3,7 @@
  * only, no bodies). `postDoc` resolves one post's view and bakes its body into a region ticket for
  * `<BlogPost>`. The corpus stays in `blog.server.ts`; routes import only these.
  */
-import { remotes } from 'ogygia/pharos/server';
+import { remotes } from 'ogygia/content/server';
 import { withRemotes } from 'ogygia/content/server';
 import { blog, blogSite } from './blog.server';
 

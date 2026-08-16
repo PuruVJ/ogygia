@@ -4,12 +4,12 @@
 	import '../fonts.css';
 	import '../app.css';
 	import '$lib/styles/site-chrome.css';
-	// The WHOLE site chrome — homepage and docs alike — DOGFOODS the pharos `Shell`, in the site's
-	// own skin (never pharos theme.css). An empty `header` snippet removes the top header, so the
+	// The WHOLE site chrome — homepage and docs alike — DOGFOODS the ogygia `Shell`, in the site's
+	// own skin (never ogygia theme.css). An empty `header` snippet removes the top header, so the
 	// floating sidebar panel is the chrome: brand row (`side` snippet), search, theme toggle, and the
 	// docs nav — exactly the shape the bespoke SideNav had, now rendered by the Shell's built-ins.
-	import Shell from 'ogygia/pharos/shell';
-	import 'ogygia/pharos/shell.css'; // layout FORM only (@layer pharos — the unlayered skin wins)
+	import DocsShell from 'ogygia/content/docs-shell';
+	import 'ogygia/content/shell.css'; // layout FORM only (@layer ogygia — the unlayered skin wins)
 	import '$lib/styles/shell-skin.css'; // the site's LOOK on the .ph-* hooks
 	import Logo from '$lib/Logo.svelte';
 	import * as ogygia from 'ogygia';
@@ -76,7 +76,7 @@
 {:else}
 	<!-- body is preload=off; the chrome opts hover back in so docs links warm on hover -->
 	<div data-sveltekit-preload-data="hover">
-		<Shell meta={shellMeta!} base="/docs" title="ogygia" header={null}>
+		<DocsShell meta={shellMeta!} base="/docs" title="ogygia" header={null}>
 			{#snippet side()}
 				<a class="doc-brand" href="/" aria-label="ogygia home">
 					<Logo size={22} decorative />
@@ -93,7 +93,7 @@
 				</a>
 			{/snippet}
 			{@render children()}
-		</Shell>
+		</DocsShell>
 	</div>
 {/if}
 

@@ -1488,7 +1488,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				const resolved = await this.resolve(source, host, { skipSelf: true });
 				if (resolved?.id) island_graph.add(strip_id(resolved.id));
 				// A BARE specifier a generated island module re-emits (a marked package import like
-				// `import TabGroup from 'ogygia/pharos/tab-group' with { wake: 'load' }`, or a specifier
+				// `import TabGroup from 'ogygia/content/tab-group' with { wake: 'load' }`, or a specifier
 				// its child synth re-imports) that Vite cannot resolve must fail HERE, loudly — falling
 				// through surfaces later as an opaque "Failed to resolve import" with the virtual module
 				// as the only context. Relative/absolute/virtual sources keep Vite's own error path.

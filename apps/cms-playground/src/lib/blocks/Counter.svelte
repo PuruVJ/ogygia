@@ -18,14 +18,14 @@
 		gap: 0.6rem;
 		margin: 0 0 1rem;
 		padding: 0.75rem 1rem;
-		border: 1px solid var(--ph-line, #2a2d34);
+		border: 1px solid var(--og-line, #2a2d34);
 		border-radius: 8px;
 		width: fit-content;
 	}
 	button {
 		width: 2rem;
 		height: 2rem;
-		border: 1px solid var(--ph-line, #2a2d34);
+		border: 1px solid var(--og-line, #2a2d34);
 		border-radius: 6px;
 		background: transparent;
 		color: inherit;
@@ -33,7 +33,7 @@
 		cursor: pointer;
 	}
 	button:hover {
-		background: color-mix(in oklab, var(--ph-accent, #6b8afd) 12%, transparent);
+		background: color-mix(in oklab, var(--og-accent, #6b8afd) 12%, transparent);
 	}
 	output {
 		min-width: 2ch;
@@ -43,6 +43,6 @@
 	}
 	span {
 		font-size: 0.8rem;
-		color: var(--ph-text-dim, #8a8f98);
+		color: var(--og-text-dim, #8a8f98);
 	}
 </style>

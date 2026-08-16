@@ -1,6 +1,6 @@
 /**
  * The filename convention — how a folder of files encodes structure. Pure functions + one strategy
- * object ({@link numbered}), consumed by {@link folder}. Lives in CONTENT now (not pharos): ordering
+ * object ({@link numbered}), consumed by {@link folder}. Lives in CONTENT now (not ogygia): ordering
  * from `NN-` prefixes is generic corpus knowledge (a blog wants it too), and the outline reads the
  * RESULT — `order`/`groups` as data — so it never parses a filename.
  */

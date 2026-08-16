@@ -1,0 +1,366 @@
+/**
+ * Shell — the FORM. Layout only: header + sidebar + content, bottom-first on mobile. Zero colors;
+ * everything paints from the ogygia `--og-*` tokens (theme.css). A different named shell is a
+ * different file exactly like this one, same tokens.
+ */
+
+@layer ogygia {
+	/* The shell takes over the page — clear the UA body margin. `:where` keeps specificity 0 so an
+	 * app stylesheet still wins. */
+	:where(body:has(.og-shell)) {
+		margin: 0;
+	}
+
+	.og-shell {
+		--og-cheader-h: 3.5rem;
+		min-height: 100vh;
+		background: var(--og-bg);
+		color: var(--og-text);
+		font-family: var(--og-font);
+		line-height: 1.6;
+	}
+
+	/* ── headerless / panel-chrome form (a `header` snippet passed): the sidebar is the whole
+	      chrome. DESKTOP-ONLY — on mobile the panel hides as usual and the bottom bar + sheet
+	      carry the chrome, exactly like header mode. ── */
+	@media (min-width: 901px) {
+		.og-headerless .og-cside {
+			top: 0;
+			height: 100vh;
+			display: flex;
+			flex-direction: column;
+			gap: 0.85rem;
+		}
+		.og-cside-brand {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			flex-shrink: 0;
+		}
+		.og-cside-tools {
+			display: flex;
+			flex-direction: column;
+			gap: 0.5rem;
+			flex-shrink: 0;
+		}
+		.og-cside-tools .og-search-trigger {
+			width: 100%;
+		}
+		.og-headerless .og-cside .og-sidebar {
+			min-height: 0;
+			overflow-y: auto;
+			flex: 1;
+		}
+	}
+
+	/* ── header ────────────────────────────────────────────────────────────── */
+	.og-cheader {
+		position: sticky;
+		top: 0;
+		z-index: 40;
+		display: flex;
+		align-items: center;
+		gap: 1.25rem;
+		height: var(--og-cheader-h);
+		padding: 0 1.5rem;
+		border-bottom: 1px solid var(--og-line);
+		background: color-mix(in srgb, var(--og-bg) 82%, transparent);
+		backdrop-filter: blur(12px) saturate(1.4);
+		/* a whisper of elevation so the header floats over the content that scrolls beneath it */
+		box-shadow: 0 1px 3px -1px color-mix(in srgb, var(--og-text) 7%, transparent);
+	}
+	.og-cheader-brand {
+		font-weight: 700;
+		font-size: 1.05rem;
+		color: var(--og-text);
+		text-decoration: none;
+	}
+	.og-cheader-nav {
+		display: flex;
+		gap: 1rem;
+	}
+	.og-cheader-link {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--og-text-dim);
+		text-decoration: none;
+	}
+	.og-cheader-link:hover {
+		color: var(--og-text);
+	}
+	.og-cheader-tools {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-left: auto;
+	}
+	.og-cheader-search {
+		width: 14rem;
+	}
+	/* Wide screens: the search sits CENTERED in the bar (absolute, so brand/nav/tools keep their
+	 * flex flow); below 1200px it returns to the tools cluster. */
+	@media (min-width: 1200px) {
+		.og-cheader {
+			position: sticky;
+		}
+		.og-cheader-search {
+			position: absolute;
+			left: 50%;
+			transform: translateX(-50%);
+			width: min(30rem, 30vw);
+		}
+	}
+	.og-cheader-github {
+		display: inline-flex;
+		width: 2rem;
+		height: 2rem;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		color: var(--og-text-dim);
+	}
+	.og-cheader-github:hover {
+		color: var(--og-text);
+		background: var(--og-bg-raised);
+	}
+
+	/* ── frame: sidebar + content ────────────────────────────────────────────── */
+	/* Full-bleed: sidebar pinned flush-left, content fills the rest (no centered frame with big side
+	 * gutters). The article+toc are centered WITHIN the main column at a comfortable reading width. */
+	.og-cframe {
+		display: grid;
+		grid-template-columns: var(--og-side-w) minmax(0, 1fr);
+	}
+	.og-cside {
+		position: sticky;
+		top: var(--og-cheader-h);
+		height: calc(100vh - var(--og-cheader-h));
+		overflow-y: auto;
+		padding: 1.75rem 1rem 2rem 1.5rem;
+		border-right: 1px solid var(--og-line);
+		/* A recessed rail: the sidebar sits a shade below the content plane, so the three columns read
+		 * as distinct depths instead of one flat sheet. The content stays on the brighter `--og-bg`.
+		 * The tone difference + the hairline border do the separation — no edge shadow (it read as a
+		 * light smudge in dark, where `--og-text` is light). */
+		background: var(--og-bg-subtle);
+		scrollbar-width: thin;
+	}
+	.og-cmain {
+		padding: 2.75rem 3.5rem;
+		min-width: 0;
+	}
+	/* The doc fills a generous width and centers on ultra-wide screens; the article then centers within
+	 * its own column (below) so it sits with balanced gaps between the sidebar and the on-this-page rail
+	 * — not shoved against the TOC. */
+	.og-cmain > :where(.og-doc) {
+		max-width: 84rem;
+		margin-inline: auto;
+	}
+
+	/* ── mobile: bottom-first ────────────────────────────────────────────────── */
+	.og-bottombar,
+	.og-sheet,
+	.og-sheet-backdrop {
+		display: none; /* desktop: mobile island chrome hidden */
+	}
+
+	.og-cbar-brand {
+		font-weight: 700;
+		color: var(--og-text);
+		text-decoration: none;
+	}
+	.og-cbar-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.6rem;
+		height: 2.6rem;
+		border: 1px solid transparent;
+		border-radius: 10px;
+		background: none;
+		color: var(--og-text-dim);
+		cursor: pointer;
+	}
+	.og-cbar-btn:hover {
+		color: var(--og-text);
+		background: var(--og-bg-raised);
+	}
+	.og-cbar-bars {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		width: 18px;
+		height: 12px;
+	}
+	.og-cbar-bars span {
+		height: 2px;
+		width: 100%;
+		background: currentColor;
+		border-radius: 2px;
+		transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), opacity 120ms ease;
+	}
+	.og-cbar-bars.og-open span:nth-child(1) {
+		transform: translateY(5px) rotate(45deg);
+	}
+	.og-cbar-bars.og-open span:nth-child(2) {
+		opacity: 0;
+	}
+	.og-cbar-bars.og-open span:nth-child(3) {
+		transform: translateY(-5px) rotate(-45deg);
+	}
+
+	.og-cbar-search {
+		margin-bottom: 0.6rem;
+	}
+	.og-cbar-github {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 0.2rem;
+		color: var(--og-text-dim);
+		font-weight: 500;
+		text-decoration: none;
+	}
+	.og-cbar-empty {
+		color: var(--og-text-faint);
+		font-size: 0.85rem;
+		padding: 0.5rem;
+	}
+
+	/* segmented Contents / On-this-page */
+	.og-seg {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.25rem;
+		margin: 0.25rem 0 0.75rem;
+		padding: 0.2rem;
+		border-radius: 10px;
+		background: var(--og-bg-raised);
+	}
+	.og-seg-btn {
+		padding: 0.45rem;
+		border: 0;
+		border-radius: 7px;
+		background: none;
+		color: var(--og-text-dim);
+		font: 600 0.8rem/1 var(--og-font);
+		cursor: pointer;
+	}
+	.og-seg-btn.og-active {
+		background: var(--og-bg);
+		color: var(--og-text);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+	}
+
+	@media (max-width: 900px) {
+		.og-cheader {
+			display: none;
+		}
+		.og-cframe {
+			grid-template-columns: 1fr;
+		}
+		.og-cside {
+			display: none;
+		}
+		.og-cmain {
+			padding: 1.5rem 1.25rem calc(var(--og-bar-h, 3.5rem) + 1.5rem);
+		}
+		.og-bottombar,
+		.og-sheet,
+		.og-sheet-backdrop {
+			display: flex;
+		}
+		.og-sheet {
+			flex-direction: column;
+		}
+
+		/* Mobile-chrome GEOMETRY is FORM and lives here (not theme.css): an unstyled Shell must
+		 * still get a pinned bar + an anchored sheet — the design language only paints them. */
+		.og-bottombar {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			z-index: 60;
+			align-items: center;
+			justify-content: space-between;
+			gap: 0.75rem;
+			height: var(--og-bar-h);
+			padding: 0 0.9rem;
+			/* The sheet is a modal Dialog: Bits disables pointer-events on the body while it's open
+			 * and re-enables them only inside the dialog. The bar must re-enable ITSELF too — its
+			 * buttons (search/menu toggles, theme) stay live above the backdrop while the sheet is up. */
+			pointer-events: auto;
+		}
+		/* Flex the bar's two clusters so inline-flex buttons CENTER instead of baseline-drifting. */
+		.og-bottombar-lead,
+		.og-bottombar-actions {
+			display: flex;
+			align-items: center;
+			gap: 0.35rem;
+			min-width: 0;
+		}
+		.og-sheet-backdrop {
+			position: fixed;
+			inset: 0;
+			z-index: 55;
+		}
+		.og-sheet {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: var(--og-bar-h);
+			z-index: 58;
+			max-height: min(60dvh, calc(100dvh - var(--og-bar-h) - 0.5rem));
+			padding: 0.35rem 0.85rem 0.6rem;
+			overflow: hidden;
+		}
+
+		/* Scroll plumbing: the sheet is a column; the swap wrapper flexes; each view is a column whose
+		 * `.og-sheet-scroll` region scrolls while anything after it (tabs, footers) stays pinned. */
+		.og-sheet-body {
+			display: flex;
+			flex-direction: column;
+			min-height: 0;
+			flex: 1;
+		}
+		.og-sheet-view {
+			display: flex;
+			flex-direction: column;
+			min-height: 0;
+			flex: 1;
+		}
+		.og-sheet-scroll {
+			overflow-y: auto;
+			min-height: 0;
+			flex: 1;
+			-webkit-overflow-scrolling: touch;
+		}
+
+		/* View switching inside the sheet (search ↔ nav): the wrapper's height glides between the
+		 * views (ShellBar pins + animates it) while the views crossfade. The OUTGOING view (any
+		 * non-last child while both exist) overlays so the fade never stacks. Part of the flex chain
+		 * (sheet → body → swap → view → scroll) so a tall nav SCROLLS instead of clipping at the
+		 * sheet's max-height. */
+		.og-sheet-swap {
+			position: relative;
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
+			min-height: 0;
+			flex: 1;
+			transition: height 280ms cubic-bezier(0.23, 1, 0.32, 1);
+		}
+		.og-sheet-swap > .og-sheet-view:not(:last-child) {
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+		}
+		@media (prefers-reduced-motion: reduce) {
+			.og-sheet-swap {
+				transition: none;
+			}
+		}
+	}
+}

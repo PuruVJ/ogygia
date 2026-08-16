@@ -9,7 +9,7 @@
  *
  * A RAW-TEXT pass (before mdsvex/remark) so it doesn't matter whether the author leaves blank lines —
  * VitePress-style tight blocks work too, which CommonMark would otherwise fold into one paragraph. It
- * rewrites each block into an HTML wrapper the theme styles (`.ph-admonition`), leaving a blank line
+ * rewrites each block into an HTML wrapper the theme styles (`.og-admonition`), leaving a blank line
  * around the inner content so Markdown still renders inside. Fenced code is skipped, so a literal
  * `:::` inside a code block is untouched.
  */
@@ -87,15 +87,15 @@ export function transform_containers(src: string): string {
 				if (kind === 'details') {
 					out.push(
 						'',
-						`<details class="ph-admonition ph-admonition-details">`,
-						`<summary class="ph-admonition-title">${title}</summary>`,
+						`<details class="og-admonition og-admonition-details">`,
+						`<summary class="og-admonition-title">${title}</summary>`,
 						''
 					);
 				} else {
 					out.push(
 						'',
-						`<div class="ph-admonition ph-admonition-${kind}" role="note">`,
-						`<p class="ph-admonition-title">${title}</p>`,
+						`<div class="og-admonition og-admonition-${kind}" role="note">`,
+						`<p class="og-admonition-title">${title}</p>`,
 						''
 					);
 				}

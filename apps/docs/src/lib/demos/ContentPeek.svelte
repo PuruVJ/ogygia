@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '$lib/styles/widget.css';
-	// The site's OWN pharos nav, queried over the wire (bodies stripped). Section labels + hrefs are
-	// pharos-derived (the same `NavTree` the sidebar renders), so the homepage is on pharos too.
+	// The site's OWN ogygia nav, queried over the wire (bodies stripped). Section labels + hrefs are
+	// ogygia-derived (the same `NavTree` the sidebar renders), so the homepage is on ogygia too.
 	//
 	// This island is rendered through a SYNCHRONOUS `{@render demo()}` (it's a `demo` snippet handed to
 	// ShowcaseCard), which drops out of async render mode — so a top-level `await nav()` here throws

@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Doc } from 'ogygia/pharos';
-	import type { DocView } from 'ogygia/pharos';
+	import { Doc } from 'ogygia/content';
+	import type { DocView } from 'ogygia/content';
 	import { doc } from '$lib/docs.remote';
 	import { TOPICS, topicFromPath, type DocData } from '$lib/topics';
 
 	const slug = page.params.slug ?? '';
-	// The page over pharos's `doc` remote — the entry's lazy body rides the wire as a region ticket
+	// The page over ogygia's `doc` remote — the entry's lazy body rides the wire as a region ticket
 	// (transport hook) and <Doc>'s <Region> renders it. +page.ts already 404'd unknown slugs.
 	const view = (await doc(slug))! as DocView<DocData>;
 	const data = view.entry.data;

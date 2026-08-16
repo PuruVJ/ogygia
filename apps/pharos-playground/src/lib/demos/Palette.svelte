@@ -4,11 +4,11 @@
 	let hue = $state(172);
 	$effect(() => {
 		const root = document.documentElement;
-		root.style.setProperty('--ph-accent', `oklch(0.62 0.12 ${hue})`);
-		root.style.setProperty('--ph-accent-hover', `oklch(0.55 0.12 ${hue})`);
+		root.style.setProperty('--og-accent', `oklch(0.62 0.12 ${hue})`);
+		root.style.setProperty('--og-accent-hover', `oklch(0.55 0.12 ${hue})`);
 		return () => {
-			root.style.removeProperty('--ph-accent');
-			root.style.removeProperty('--ph-accent-hover');
+			root.style.removeProperty('--og-accent');
+			root.style.removeProperty('--og-accent-hover');
 		};
 	});
 </script>
@@ -29,20 +29,20 @@
 		gap: 0.6rem;
 		max-width: 22rem;
 		padding: 0.9rem 1rem;
-		border: 1px solid var(--ph-line, #e4e4e8);
+		border: 1px solid var(--og-line, #e4e4e8);
 		border-radius: 14px;
-		background: var(--ph-bg-subtle, #f7f7f8);
+		background: var(--og-bg-subtle, #f7f7f8);
 	}
 	label {
 		font-size: 0.85rem;
-		color: var(--ph-text-dim, #55555c);
+		color: var(--og-text-dim, #55555c);
 	}
 	label b {
-		color: var(--ph-accent, #0d9488);
+		color: var(--og-accent, #0d9488);
 	}
 	input {
 		width: 100%;
-		accent-color: var(--ph-accent, #0d9488);
+		accent-color: var(--og-accent, #0d9488);
 	}
 	.swatches {
 		display: flex;

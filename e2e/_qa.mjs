@@ -3,8 +3,8 @@ const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1280, height: 850 }, colorScheme: 'dark' });
 const probe = () => p.evaluate(() => {
   const out = [];
-  document.querySelectorAll('.ph-body pre').forEach(pre => {
-    const acts = pre.querySelectorAll('.ph-code-actions');
+  document.querySelectorAll('.og-body pre').forEach(pre => {
+    const acts = pre.querySelectorAll('.og-code-actions');
     const wrap = pre.closest('.code-only');
     const a = acts[0];
     if (!a) { out.push({ id: pre.id?.slice(0,20), acts: 0 }); return; }
@@ -31,7 +31,7 @@ await p.goto('http://localhost:5174/docs/start/quickstart', { waitUntil: 'domcon
 await p.waitForTimeout(1500);
 const reload = await probe();
 // SPA NAV state: click a sidebar link
-await p.click('.ph-cside a[href="/docs/start/install"]');
+await p.click('.og-cside a[href="/docs/start/install"]');
 await p.waitForTimeout(1500);
 const nav = await probe();
 console.log(JSON.stringify({ reload, nav }, null, 1));

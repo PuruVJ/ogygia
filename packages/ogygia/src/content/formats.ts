@@ -36,7 +36,7 @@ function as_object(value: unknown, label: string): Record<string, unknown> {
 // ── markdown ────────────────────────────────────────────────────────────────────
 
 /** Meta the markdown source derives: h2–h4 headings (for a TOC) and every markdown link (for the
- *  pharos link audit), both collected during compile. */
+ *  ogygia link audit), both collected during compile. */
 export type MarkdownMeta = { headings: Heading[]; links: LinkRef[] };
 
 const markdown_format: Format<unknown, MarkdownMeta> = (resolved, id) => {

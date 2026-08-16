@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * Renders one OpenAPI operation from a pharos `DocView` whose `entry.data` is an `Operation` (see
+	 * Renders one OpenAPI operation from an ogygia `DocView` whose `entry.data` is an `Operation` (see
 	 * openapi.ts). It's the `[...slug]` route's alternative to `<Doc>` for the `/api` reference:
 	 * method + path header, description, a parameters table grouped by location, the request body and
 	 * every response rendered with the recursive `<Schema>`, and the security requirements.
@@ -114,7 +114,7 @@
 		gap: 0.6rem;
 	}
 	.oa-method {
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-weight: 700;
 		font-size: 0.72rem;
 		letter-spacing: 0.03em;
@@ -128,16 +128,16 @@
 	.oa-m-patch { background: #8a6d2f; }
 	.oa-m-delete { background: #b4402f; }
 	.oa-path {
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-size: 0.95rem;
-		color: var(--ph-text, #111);
+		color: var(--og-text, #111);
 	}
 	.oa-op-title {
 		margin: 0.7rem 0 0.3rem;
 		font-size: 1.7rem;
 	}
 	.oa-op-desc {
-		color: var(--ph-text-dim, #555);
+		color: var(--og-text-dim, #555);
 		line-height: 1.6;
 		margin: 0.3rem 0 0;
 	}
@@ -152,7 +152,7 @@
 		font-size: 0.8rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--ph-text-dim, #888);
+		color: var(--og-text-dim, #888);
 		margin: 1rem 0 0.4rem;
 	}
 	.oa-params {
@@ -165,18 +165,18 @@
 		font-size: 0.72rem;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: var(--ph-text-dim, #999);
+		color: var(--og-text-dim, #999);
 		padding: 0.3rem 0.6rem;
-		border-bottom: 1px solid var(--ph-border, #e2e2e6);
+		border-bottom: 1px solid var(--og-border, #e2e2e6);
 	}
 	.oa-params td {
 		padding: 0.5rem 0.6rem;
-		border-bottom: 1px solid var(--ph-border, #f0f0f2);
+		border-bottom: 1px solid var(--og-border, #f0f0f2);
 		vertical-align: top;
 	}
-	.oa-pname { font-family: var(--ph-mono, monospace); font-weight: 600; }
-	.oa-ptype { font-family: var(--ph-mono, monospace); font-size: 0.82rem; color: var(--ph-accent, #3b6ea5); }
-	.oa-inline-enum { display: block; margin-top: 0.2rem; font-family: var(--ph-mono, monospace); font-size: 0.76rem; color: var(--ph-text-dim, #888); }
+	.oa-pname { font-family: var(--og-mono, monospace); font-weight: 600; }
+	.oa-ptype { font-family: var(--og-mono, monospace); font-size: 0.82rem; color: var(--og-accent, #3b6ea5); }
+	.oa-inline-enum { display: block; margin-top: 0.2rem; font-family: var(--og-mono, monospace); font-size: 0.76rem; color: var(--og-text-dim, #888); }
 	.oa-required {
 		font-size: 0.66rem;
 		text-transform: uppercase;
@@ -187,15 +187,15 @@
 		border-radius: 999px;
 	}
 	.oa-media {
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-size: 0.78rem;
-		color: var(--ph-text-dim, #888);
+		color: var(--og-text-dim, #888);
 		margin: 0.2rem 0 0.5rem;
 	}
 	.oa-responses { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
 	.oa-response-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 	.oa-status {
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-weight: 700;
 		font-size: 0.8rem;
 		padding: 0.15rem 0.5rem;
@@ -205,16 +205,16 @@
 	.oa-status-info { color: #3b6ea5; background: color-mix(in oklab, #3b6ea5 14%, transparent); }
 	.oa-status-warn { color: #b07b1e; background: color-mix(in oklab, #b07b1e 16%, transparent); }
 	.oa-status-err { color: #b4402f; background: color-mix(in oklab, #b4402f 14%, transparent); }
-	.oa-response-desc { color: var(--ph-text, #333); font-size: 0.9rem; }
+	.oa-response-desc { color: var(--og-text, #333); font-size: 0.9rem; }
 	.oa-response-body { margin-top: 0.5rem; }
 	.oa-sec-list { list-style: none; margin: 0; padding: 0; display: flex; gap: 0.6rem; flex-wrap: wrap; }
 	.oa-sec-list li { display: flex; align-items: center; gap: 0.4rem; }
 	.oa-scheme {
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-size: 0.82rem;
-		background: var(--ph-surface-2, #f2f2f5);
+		background: var(--og-surface-2, #f2f2f5);
 		padding: 0.1rem 0.4rem;
 		border-radius: 5px;
 	}
-	.oa-scopes { font-size: 0.8rem; color: var(--ph-text-dim, #888); }
+	.oa-scopes { font-size: 0.8rem; color: var(--og-text-dim, #888); }
 </style>

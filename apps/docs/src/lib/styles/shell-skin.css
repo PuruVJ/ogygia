@@ -1,28 +1,28 @@
 /* The Shell chrome, painted in the SITE's design — the second rung of the same ladder as
-   pharos-docs.css: pharos owns STRUCTURE (`.ph-*` hooks from Shell/Sidebar/Search/ShellBar),
-   we own PIXELS. We do NOT import `ogygia/pharos/theme.css`; `shell.css` gives layout only,
+   doc-skin.css: ogygia owns STRUCTURE (`.og-*` hooks from Shell/Sidebar/Search/ShellBar),
+   we own PIXELS. We do NOT import `ogygia/content/theme.css`; `shell.css` gives layout only,
    and everything visual here comes from the docs tokens (app.css), so the site looks exactly
    as it did on the bespoke SideNav — same palette, same fonts, same feel. */
 
-/* ── token bridge: the few --ph-* vars shell.css's layout reads ── */
+/* ── token bridge: the few --og-* vars shell.css's layout reads ── */
 :root {
-	--ph-bg: var(--bg);
-	--ph-bg-raised: var(--bg-raised);
-	--ph-bg-subtle: var(--bg-sunken);
-	--ph-text: var(--text);
-	--ph-text-dim: var(--text-dim);
-	--ph-text-faint: var(--text-faint);
-	--ph-line: var(--line);
-	--ph-font: var(--font-body);
-	--ph-mono: var(--font-mono);
-	--ph-accent: var(--accent);
-	--ph-side-w: 17rem;
-	--ph-cheader-h: 3.5rem;
-	--ph-bar-h: 3.25rem;
+	--og-bg: var(--bg);
+	--og-bg-raised: var(--bg-raised);
+	--og-bg-subtle: var(--bg-sunken);
+	--og-text: var(--text);
+	--og-text-dim: var(--text-dim);
+	--og-text-faint: var(--text-faint);
+	--og-line: var(--line);
+	--og-font: var(--font-body);
+	--og-mono: var(--font-mono);
+	--og-accent: var(--accent);
+	--og-side-w: 17rem;
+	--og-cheader-h: 3.5rem;
+	--og-bar-h: 3.25rem;
 }
 
 /* ── skip link (Shell's own) ── */
-.ph-skip {
+.og-skip {
 	position: fixed;
 	top: 0.75rem;
 	left: 0.75rem;
@@ -36,50 +36,50 @@
 	transform: translateY(-150%);
 	transition: transform 0.18s ease;
 }
-.ph-skip:focus-visible {
+.og-skip:focus-visible {
 	transform: translateY(0);
 	outline: none;
 }
-.ph-cmain:focus {
+.og-cmain:focus {
 	outline: none;
 }
 
 /* ── the panel's brand row (headerless form) — the old `.side-brand` recipe ── */
-.ph-cside-brand {
+.og-cside-brand {
 	padding: 0.2rem 0.4rem 0.75rem;
 	border-bottom: 1px solid color-mix(in srgb, var(--accent-line) 40%, var(--line));
 }
 
 /* ── header (unused in the headerless form; kept for pages that opt back in) ── */
-.ph-cheader {
+.og-cheader {
 	border-bottom: 1px solid var(--line);
 	background: color-mix(in srgb, var(--bg) 88%, transparent);
 	backdrop-filter: blur(8px);
 }
-.ph-cheader-brand {
+.og-cheader-brand {
 	font: 600 1.05rem/1 var(--font-display);
 	letter-spacing: -0.01em;
 	color: var(--text);
 	text-decoration: none;
 }
-.ph-cheader-link {
+.og-cheader-link {
 	font: 500 0.84375rem/1 var(--font-body);
 	color: var(--text-dim);
 	text-decoration: none;
 }
-.ph-cheader-link:hover {
+.og-cheader-link:hover {
 	color: var(--text);
 }
 
-/* ── sidebar nav — the old SideNav's FLOATING PANEL on the pharos hooks: detached from the
+/* ── sidebar nav — the old SideNav's FLOATING PANEL on the ogygia hooks: detached from the
       viewport edges, curved, glassy, with the site's panel shadow. Same recipe as the old `.side`. ── */
-.ph-cside {
+.og-cside {
 	position: fixed;
 	z-index: 50;
 	top: var(--side-gap, 0.85rem);
 	bottom: var(--side-gap, 0.85rem);
 	left: var(--side-gap, 0.85rem);
-	width: var(--ph-side-w);
+	width: var(--og-side-w);
 	height: auto;
 	padding: 0.85rem 0.55rem 0.9rem 0.7rem;
 	border: 1px solid color-mix(in srgb, var(--accent-line) 55%, var(--line));
@@ -101,15 +101,15 @@
 /* The frame no longer reserves a grid column for the sidebar — the panel floats over the page,
    so the content clears it with padding instead (the old site-chrome.css approach). */
 @media (min-width: 901px) {
-	.ph-cframe {
+	.og-cframe {
 		display: block;
-		padding-left: calc(var(--ph-side-w) + var(--side-gap, 0.85rem) * 2);
+		padding-left: calc(var(--og-side-w) + var(--side-gap, 0.85rem) * 2);
 	}
 }
 /* Old `.side-cat` rhythm: sections separated by a hairline, tight link stacks. The OUTER list
    (groups) breathes 1.15rem — that's the space ABOVE each divider; the 0.85rem padding is the
    space below it. Inner lists stay tight. */
-.ph-nav-list {
+.og-nav-list {
 	list-style: none;
 	margin: 0;
 	padding: 0;
@@ -117,21 +117,21 @@
 	flex-direction: column;
 	gap: 0.1rem;
 }
-.ph-sidebar > .ph-nav-list {
+.og-sidebar > .og-nav-list {
 	gap: 1.15rem;
 }
-.ph-nav-group + .ph-nav-group {
+.og-nav-group + .og-nav-group {
 	padding-top: 0.85rem;
 	border-top: 1px solid color-mix(in srgb, var(--accent-line) 35%, var(--line));
 }
 /* Roving focus: draw the ring INSIDE the row so the panel's scroll clipping can't cut it off. */
-.ph-shell .ph-nav-link:focus-visible {
+.og-shell .og-nav-link:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
 }
 
 /* Old `.side-cat-label`: quiet by default, accent only on the section holding the current page. */
-.ph-nav-label {
+.og-nav-label {
 	display: block;
 	padding: 0.4rem 0.45rem;
 	font: 600 0.6875rem/1 var(--font-mono);
@@ -139,10 +139,10 @@
 	text-transform: uppercase;
 	color: var(--text-dim);
 }
-.ph-nav-group:has(.ph-active) .ph-nav-label {
+.og-nav-group:has(.og-active) .og-nav-label {
 	color: var(--accent);
 }
-.ph-nav-link {
+.og-nav-link {
 	display: flex;
 	align-items: center;
 	min-height: 1.85rem;
@@ -156,12 +156,12 @@
 		color 140ms ease,
 		background 140ms ease;
 }
-.ph-nav-link:hover {
+.og-nav-link:hover {
 	color: var(--text);
 	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
 }
-.ph-nav-link[aria-current='page'],
-.ph-nav-link.ph-active {
+.og-nav-link[aria-current='page'],
+.og-nav-link.og-active {
 	color: var(--text);
 	font-weight: 600;
 	background: color-mix(in srgb, var(--accent-deep) 78%, transparent);
@@ -170,7 +170,7 @@
 
 /* ── search trigger — dressed as the old panel's INPUT (`.side-search-input` recipe), so the
       floating panel reads the same: full-width bordered field, quiet placeholder, kbd at right. ── */
-.ph-search-trigger {
+.og-search-trigger {
 	display: flex;
 	width: 100%;
 	align-items: center;
@@ -187,15 +187,15 @@
 		border-color 140ms ease,
 		background 140ms ease;
 }
-.ph-search-trigger:hover,
-.ph-search-trigger:focus-visible {
+.og-search-trigger:hover,
+.og-search-trigger:focus-visible {
 	border-color: var(--accent);
 	background: var(--bg-raised);
 }
-.ph-search-trigger-label {
+.og-search-trigger-label {
 	color: var(--text-faint);
 }
-.ph-search-kbd {
+.og-search-kbd {
 	margin-left: auto;
 	padding: 0.1rem 0.35rem;
 	border: 1px solid var(--line);
@@ -207,15 +207,15 @@
 
 /* ── the ⌘K palette (the ONE search UX) — portaled to <body>, so it needs its FULL overlay
       geometry here, not just colors (without theme.css nothing else positions it: unstyled it
-      rendered in normal flow at the page bottom). Structure from the pharos recipe, docs tokens. ── */
-.ph-search-backdrop {
+      rendered in normal flow at the page bottom). Structure from the ogygia recipe, docs tokens. ── */
+.og-search-backdrop {
 	position: fixed;
 	inset: 0;
 	z-index: 100;
 	background: rgb(0 0 0 / 0.5);
 	backdrop-filter: blur(3px);
 }
-.ph-search-panel {
+.og-search-panel {
 	position: fixed;
 	top: 12vh;
 	left: 50%;
@@ -234,7 +234,7 @@
 	color: var(--text);
 	font-family: var(--font-body);
 }
-.ph-sr-only {
+.og-sr-only {
 	position: absolute;
 	width: 1px;
 	height: 1px;
@@ -245,7 +245,7 @@
 	white-space: nowrap;
 	border: 0;
 }
-.ph-search-field {
+.og-search-field {
 	display: flex;
 	align-items: center;
 	gap: 0.6rem;
@@ -253,7 +253,7 @@
 	border-bottom: 1px solid var(--line);
 	color: var(--text-faint);
 }
-.ph-search-scene-input {
+.og-search-scene-input {
 	flex: 1;
 	min-width: 0;
 	border: 0;
@@ -262,21 +262,21 @@
 	font: 400 0.95rem/1.4 var(--font-body);
 	outline: none;
 }
-.ph-search-scene-input::placeholder {
+.og-search-scene-input::placeholder {
 	color: var(--text-faint);
 }
-.ph-search-scene-body {
+.og-search-scene-body {
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
 	padding: 0.4rem;
 }
-.ph-search-results {
+.og-search-results {
 	list-style: none;
 	margin: 0;
 	padding: 0;
 }
-.ph-search-hit {
+.og-search-hit {
 	display: flex;
 	flex-direction: column;
 	gap: 0.15rem;
@@ -286,35 +286,35 @@
 	color: var(--text-dim);
 	transition: background-color 140ms ease;
 }
-.ph-search-hit:hover,
-.ph-search-hit[data-selected],
-.ph-search-hit[aria-selected='true'] {
+.og-search-hit:hover,
+.og-search-hit[data-selected],
+.og-search-hit[aria-selected='true'] {
 	background: color-mix(in srgb, var(--accent-deep) 55%, transparent);
 	color: var(--text);
 }
-.ph-search-hit-title {
+.og-search-hit-title {
 	color: var(--text);
 	font-weight: 600;
 	font-size: 0.84375rem;
 }
-.ph-search-hit-heading {
+.og-search-hit-heading {
 	font-weight: 400;
 	color: var(--text-dim);
 }
-.ph-search-hit-excerpt {
+.og-search-hit-excerpt {
 	font-size: 0.8125rem;
 	color: var(--text-dim);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.ph-search-hit-section {
+.og-search-hit-section {
 	font-size: 0.625rem;
 	color: var(--text-faint);
 }
-.ph-search-empty,
-.ph-search-hint,
-.ph-search-error {
+.og-search-empty,
+.og-search-hint,
+.og-search-error {
 	padding: 1.75rem 1rem;
 	text-align: center;
 	color: var(--text-faint);
@@ -323,13 +323,13 @@
 
 /* ── the panel's tools ROW: the search field grows, the theme button rides at its right — the old
       panel's search-line shape. ── */
-.ph-cside-tools {
+.og-cside-tools {
 	flex-direction: row;
 	align-items: center;
 	gap: 0.4rem;
 	margin-bottom: 0.35rem;
 }
-.ph-cside-search {
+.og-cside-search {
 	flex: 1;
 	min-width: 0;
 }
@@ -337,7 +337,7 @@
 /* ── theme toggle: the old `.side-theme` ghost button — borderless, quiet, 2rem square. It lives
       in the brand row beside the GitHub icon and MUST match its color exactly (`--text-faint`);
       the triple selector outranks the component's scoped `color: inherit`. ── */
-.ph-shell .ph-cside .ph-theme-toggle {
+.og-shell .og-cside .og-theme-toggle {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -353,14 +353,14 @@
 		color 140ms ease,
 		background 140ms ease;
 }
-.ph-shell .ph-cside .ph-theme-toggle:hover {
+.og-shell .og-cside .og-theme-toggle:hover {
 	color: var(--text);
 	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
 }
 /* All three bar buttons (search / theme / menu) are the SAME quiet 2.25rem square — one color,
    one alignment. The triple selector outranks ThemeToggle's scoped `color: inherit`. */
-.ph-shell .ph-bottombar .ph-cbar-btn,
-.ph-shell .ph-bottombar .ph-theme-toggle {
+.og-shell .og-bottombar .og-cbar-btn,
+.og-shell .og-bottombar .og-theme-toggle {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -374,25 +374,25 @@
 	cursor: pointer;
 	transition: color 140ms ease;
 }
-.ph-shell .ph-bottombar .ph-cbar-btn:hover,
-.ph-shell .ph-bottombar .ph-theme-toggle:hover {
+.og-shell .og-bottombar .og-cbar-btn:hover,
+.og-shell .og-bottombar .og-theme-toggle:hover {
 	color: var(--text);
 }
-.ph-seg {
+.og-seg {
 	border: 1px solid var(--line);
 	border-radius: var(--r-sm);
 	background: var(--bg-sunken);
 }
-.ph-seg-btn {
+.og-seg-btn {
 	color: var(--text-dim);
 }
-.ph-seg-btn[aria-pressed='true'] {
+.og-seg-btn[aria-pressed='true'] {
 	background: var(--bg-raised);
 	color: var(--text);
 }
 
 /* ── mobile bottom bar + sheet — the production `.side-bottombar` recipe, verbatim ── */
-.ph-bottombar {
+.og-bottombar {
 	padding: 0 0.85rem env(safe-area-inset-bottom, 0px);
 	border-top: 1px solid color-mix(in srgb, var(--accent-line) 50%, var(--line));
 	background:
@@ -408,7 +408,7 @@
 }
 /* Brand: the ogygia mark (inline data-URI of Logo.svelte's strokes) + the wordmark, accent like
    production. The bar is an island, so the icon rides CSS rather than markup. */
-.ph-cbar-brand {
+.og-cbar-brand {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.55rem;
@@ -417,7 +417,7 @@
 	color: var(--accent);
 	text-decoration: none;
 }
-.ph-cbar-brand::before {
+.og-cbar-brand::before {
 	content: '';
 	width: 20px;
 	height: 20px;
@@ -426,7 +426,7 @@
 	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 26 Q16 20 28 26'/%3E%3Cpath d='M16 21.5 Q14.5 14 17 8'/%3E%3Cpath d='M17 8 Q12 5 7.5 7'/%3E%3Cpath d='M17 8 Q17 4 21 3.5'/%3E%3C/svg%3E")
 		center / contain no-repeat;
 }
-.ph-sheet {
+.og-sheet {
 	border-top: 1px solid color-mix(in srgb, var(--accent-line) 55%, var(--line));
 	border-radius: 16px 16px 0 0;
 	background: color-mix(in srgb, var(--bg-raised) 96%, transparent);
@@ -436,13 +436,13 @@
 }
 /* Slide-up riding Bits' data-state. Open takes the NATURAL sheet curve (fast start, long soft
    settle — the iOS-sheet feel); close stays brisk with the old curve. */
-.ph-sheet[data-state='open'] {
+.og-sheet[data-state='open'] {
 	animation: doc-sheet-in 420ms cubic-bezier(0.32, 0.72, 0, 1);
 }
-.ph-sheet[data-state='closed'] {
+.og-sheet[data-state='closed'] {
 	animation: doc-sheet-out 260ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.ph-sheet-backdrop {
+.og-sheet-backdrop {
 	background: rgb(0 0 0 / 0.45);
 }
 @keyframes doc-sheet-in {
@@ -456,34 +456,34 @@
 	}
 }
 @media (prefers-reduced-motion: reduce) {
-	.ph-sheet[data-state='open'],
-	.ph-sheet[data-state='closed'] {
+	.og-sheet[data-state='open'],
+	.og-sheet[data-state='closed'] {
 		animation-duration: 0.01ms;
 	}
 }
 
 /* ── on-this-page rail: FIXED, not sticky — it holds its place while the page scrolls. The
-      `.ph-aside` grid column stays in flow as the positioning reference; the inner `.ph-toc`
+      `.og-aside` grid column stays in flow as the positioning reference; the inner `.og-toc`
       goes fixed at its natural x (no left/right → static position), pinned near the top. ── */
-.ph-doc .ph-aside {
+.og-doc .og-aside {
 	position: static;
 }
-.ph-doc .ph-toc {
+.og-doc .og-toc {
 	position: fixed;
 	top: 1.5rem;
 	width: 12.5rem;
 	max-height: calc(100vh - 3rem);
 	overflow-y: auto;
 }
-.ph-toc-link {
+.og-toc-link {
 	color: var(--text-faint);
 	text-decoration: none;
 	font: 400 0.8125rem/1.6 var(--font-body);
 }
-.ph-toc-link:hover {
+.og-toc-link:hover {
 	color: var(--text);
 }
-.ph-toc-link.ph-active {
+.og-toc-link.og-active {
 	color: var(--accent);
 }
 
@@ -494,7 +494,7 @@
 	position: relative;
 	padding-top: 3.4rem;
 }
-.ph-code-actions {
+.og-code-actions {
 	position: absolute;
 	top: 0;
 	left: 0;
@@ -509,7 +509,7 @@
 	border-radius: var(--r-md) var(--r-md) 0 0;
 	background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
 }
-.ph-code-actions :is(button, a) {
+.og-code-actions :is(button, a) {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -526,12 +526,12 @@
 		color 0.15s ease,
 		background 0.15s ease;
 }
-.ph-code-actions :is(button, a):hover,
-.ph-code-actions :is(button, a):focus-visible {
+.og-code-actions :is(button, a):hover,
+.og-code-actions :is(button, a):focus-visible {
 	color: var(--text);
 	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
 }
-.ph-body pre[data-copied] .ph-copy,
-.ph-code-link[data-linked] {
+.og-body pre[data-copied] .og-copy,
+.og-code-link[data-linked] {
 	color: var(--accent);
 }

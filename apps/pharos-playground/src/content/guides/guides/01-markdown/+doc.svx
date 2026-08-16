@@ -80,8 +80,8 @@ if (!doc) throw new Error('missing');
 
 ```css
 :root {
-	--ph-accent: #0d9488;
-	--ph-bg: #ffffff;
+	--og-accent: #0d9488;
+	--og-bg: #ffffff;
 }
 ```
 

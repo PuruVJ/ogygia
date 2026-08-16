@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as v from 'valibot';
 import { content, folder, json } from '../src/content/index.js';
 import type { GlobMap } from '../src/content/index.js';
-import { outline } from '../src/pharos/outline.js';
+import { outline } from '../src/content/site/outline.js';
 import { numbered, type Convention } from '../src/content/convention.js';
 
 const schema = v.object({ title: v.string() });

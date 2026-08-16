@@ -38,34 +38,34 @@
 		align-items: center;
 		gap: 0.6rem;
 		padding: 0.5rem 0.6rem;
-		border: 1px solid var(--ph-line, #e4e4e8);
+		border: 1px solid var(--og-line, #e4e4e8);
 		border-radius: 12px;
-		background: var(--ph-bg-subtle, #f7f7f8);
+		background: var(--og-bg-subtle, #f7f7f8);
 	}
 	time {
 		min-width: 4.5rem;
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-size: 1.4rem;
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
-		color: var(--ph-text, #1c1c21);
+		color: var(--og-text, #1c1c21);
 	}
 	time.running {
-		color: var(--ph-accent, #0d9488);
+		color: var(--og-accent, #0d9488);
 	}
 	button {
 		padding: 0.4rem 0.85rem;
 		border: 1px solid transparent;
 		border-radius: 9px;
-		background: var(--ph-accent, #0d9488);
+		background: var(--og-accent, #0d9488);
 		color: #fff;
 		font-weight: 600;
 		cursor: pointer;
 	}
 	button.ghost {
-		background: var(--ph-thumb, #fff);
-		color: var(--ph-text-dim, #55555c);
-		border-color: var(--ph-line, #e4e4e8);
+		background: var(--og-thumb, #fff);
+		color: var(--og-text-dim, #55555c);
+		border-color: var(--og-line, #e4e4e8);
 	}
 	button:active {
 		transform: scale(0.96);

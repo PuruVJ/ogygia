@@ -667,8 +667,8 @@ describe('portable snippets — a named snippet handed to a non-island component
 ;
 
 describe('package-specifier island marks', () => {
-	const PKG = `import TabGroup from 'ogygia/pharos/tab-group' with { wake: 'load' };`;
-	const PKG_SPEC = 'ogygia/pharos/tab-group';
+	const PKG = `import TabGroup from 'ogygia/content/tab-group' with { wake: 'load' };`;
+	const PKG_SPEC = 'ogygia/content/tab-group';
 
 	test('a marked package import (no children) becomes an island keyed by the specifier', () => {
 		const r = run(wrap(PKG, '<TabGroup />'))!;
@@ -684,7 +684,7 @@ describe('package-specifier island marks', () => {
 
 	test('children at the call site stay put — the package island crosses them at runtime', () => {
 		const src = wrap(
-			PKG + `\nimport { Tab } from 'ogygia/pharos';`,
+			PKG + `\nimport { Tab } from 'ogygia/content';`,
 			`<TabGroup group="install"><Tab label="npm"><p>x</p></Tab></TabGroup>`
 		);
 		const r = run(src)!;
@@ -697,7 +697,7 @@ describe('package-specifier island marks', () => {
 		expect(r.code).toMatch(/<TabGroup group="install"><Tab label="npm"><p>x<\/p><\/Tab><\/TabGroup>/);
 		expect(r.code).not.toMatch(/__og\d/);
 		// the plain named package import (Tab) rides along untouched
-		expect(r.code).toContain(`import { Tab } from 'ogygia/pharos';`);
+		expect(r.code).toContain(`import { Tab } from 'ogygia/content';`);
 	});
 
 	test('two hosts marking the same package specifier share one region id', () => {
@@ -710,7 +710,7 @@ describe('package-specifier island marks', () => {
 		const src = (host: string) =>
 			transformHost(
 				wrap(
-					PKG + `\nimport { Tab } from 'ogygia/pharos';`,
+					PKG + `\nimport { Tab } from 'ogygia/content';`,
 					`<TabGroup group="pm"><Tab label="npm"><p>i</p></Tab></TabGroup>`
 				),
 				host,

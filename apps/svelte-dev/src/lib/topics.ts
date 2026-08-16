@@ -1,6 +1,6 @@
 /**
  * Client-safe topic metadata — labels, hrefs, the path→topic mapping, and the doc data type.
- * The content engine (collections + pharos site) lives in `site.server.ts`, where Kit guarantees
+ * The content engine (collections + ogygia site) lives in `site.server.ts`, where Kit guarantees
  * no client code can reach it; components and islands import THIS freely.
  */
 import * as v from 'valibot';

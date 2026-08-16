@@ -5,7 +5,7 @@
  * `blog.remote.ts`. `blogSite` gives us `doc()` (a post's view + prev/next) for `<BlogPost>`.
  */
 import { content, dated } from 'ogygia/content';
-import { pharos, outline, fields } from 'ogygia/pharos';
+import { defineSite, outline, fields } from 'ogygia/content';
 
 export const blog = content({
 	loader: import.meta.og.loader.folder('../content/blog/**/*.md', {
@@ -16,5 +16,5 @@ export const blog = content({
 	schema: fields.post
 });
 
-// A one-collection pharos site over the blog — for `doc()` (post view with prev/next by date).
-export const blogSite = pharos({ outline: outline(blog), prevNext: 'order' });
+// A one-collection ogygia site over the blog — for `doc()` (post view with prev/next by date).
+export const blogSite = defineSite({ outline: outline(blog), prevNext: 'order' });

@@ -7,7 +7,7 @@ related:
 ---
 
 <script>
-	import { TabGroup, Tab } from 'ogygia/pharos';
+	import { TabGroup, Tab } from 'ogygia/content';
 	import Counter from '$lib/demos/Counter.svelte' with { wake: 'visible' };
 	import Stopwatch from '$lib/demos/Stopwatch.svelte' with { wake: 'visible' };
 	import Palette from '$lib/demos/Palette.svelte' with { wake: 'visible' };
@@ -17,7 +17,7 @@ This page exists to exercise the design system at scale. It uses every heading l
 
 ## Prose and typography
 
-Good documentation is mostly words, so the reading experience for plain prose has to be excellent before anything else matters. Paragraphs should have comfortable measure, generous line height, and enough contrast to read for an hour without strain. The body font carries the bulk of the page, and it must sit calmly next to headings, code, and the occasional inline element like `--ph-accent` without any of them fighting for attention.
+Good documentation is mostly words, so the reading experience for plain prose has to be excellent before anything else matters. Paragraphs should have comfortable measure, generous line height, and enough contrast to read for an hour without strain. The body font carries the bulk of the page, and it must sit calmly next to headings, code, and the occasional inline element like `--og-accent` without any of them fighting for attention.
 
 Here is a second paragraph, because a single one never reveals the rhythm between blocks. The space above and below a paragraph, the way a heading pulls the eye down to the next section, the weight of **bold** against the lightness of *italic* — all of it only becomes visible once there is enough text for a rhythm to exist. This page has plenty.
 
@@ -100,12 +100,12 @@ A reference-style table with more rows, the kind an API page produces:
 
 | Token | Default (light) | Default (dark) | Controls |
 | --- | --- | --- | --- |
-| `--ph-bg` | `#ffffff` | `#101014` | Page background |
-| `--ph-bg-subtle` | `#f7f7f8` | `#17171d` | Cards and code blocks |
-| `--ph-line` | `#e4e4e8` | `#26262e` | Borders |
-| `--ph-text` | `#1c1c21` | `#e8e8ee` | Body text |
-| `--ph-text-muted` | `#6b6b76` | `#9a9aa6` | Secondary text |
-| `--ph-accent` | `#0d9488` | `#0d9488` | Links and active states |
+| `--og-bg` | `#ffffff` | `#101014` | Page background |
+| `--og-bg-subtle` | `#f7f7f8` | `#17171d` | Cards and code blocks |
+| `--og-line` | `#e4e4e8` | `#26262e` | Borders |
+| `--og-text` | `#1c1c21` | `#e8e8ee` | Body text |
+| `--og-text-muted` | `#6b6b76` | `#9a9aa6` | Secondary text |
+| `--og-accent` | `#0d9488` | `#0d9488` | Links and active states |
 
 ## Code in every language
 
@@ -183,17 +183,17 @@ export async function resolve(slug: string) {
 
 ```css
 :root {
-	--ph-accent: #0d9488;
-	--ph-radius: 12px;
+	--og-accent: #0d9488;
+	--og-radius: 12px;
 }
 
 .doc-demo {
 	display: grid;
 	gap: 1rem;
 	padding: 1.5rem;
-	border: 1px solid var(--ph-line);
-	border-radius: var(--ph-radius);
-	background: var(--ph-bg-subtle);
+	border: 1px solid var(--og-line);
+	border-radius: var(--og-radius);
+	background: var(--og-bg-subtle);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -305,7 +305,7 @@ An island driven by an effect and a timer. Start it, watch it tick, and note tha
 
 ## Live demo: Palette
 
-Drag the slider to rewrite `--ph-accent`. The whole page recolors because every accented element reads the same token.
+Drag the slider to rewrite `--og-accent`. The whole page recolors because every accented element reads the same token.
 
 <Palette />
 

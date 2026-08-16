@@ -50,7 +50,7 @@ export const ogygiaTransport = {
 			// Inline region that was AWAITED — its SSR HTML is baked, so it crosses as an HTML-only
 			// ticket: no chunk, no signer, nothing to fetch. The client swaps the markup in and the
 			// runtime wakes any `<ogygia-region>` islands inside it (body-swap machinery). This is how
-			// a content `body` (markdown/blocks) rides a remote: `await` it (pharos's `doc` remote does).
+			// a content `body` (markdown/blocks) rides a remote: `await` it (ogygia's `doc` remote does).
 			if (typeof f.html === 'string') {
 				return pack('', (f.props ?? {}) as Record<string, unknown>, '', '', undefined, undefined, f.html);
 			}

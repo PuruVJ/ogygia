@@ -1,12 +1,12 @@
 <script lang="ts">
 	/**
-	 * Playground-only dev tool: a floating picker that swaps the active pharos THEME stylesheet at
+	 * Playground-only dev tool: a floating picker that swaps the active ogygia THEME stylesheet at
 	 * runtime (zen-garden style — one `<link id="pg-theme">` in the head, nine language files). An
 	 * ISLAND (`wake:'load'`) so it re-hydrates per SPA nav and re-applies the saved choice. Built on
 	 * Bits UI `Select` for real listbox semantics (keyboard nav, typeahead, ARIA).
 	 */
 	import { Select } from 'bits-ui';
-	import { ThemeToggle } from 'ogygia/pharos';
+	import { ThemeToggle } from 'ogygia/content';
 
 	let { themes }: { themes: Record<string, string> } = $props();
 	const KEY = 'pg-theme';
@@ -58,16 +58,16 @@
 	.pg-picker {
 		position: fixed;
 		right: 1rem;
-		bottom: calc(var(--ph-bar-h, 3.5rem) + 0.75rem);
+		bottom: calc(var(--og-bar-h, 3.5rem) + 0.75rem);
 		z-index: 300;
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.25rem 0.3rem;
-		border: 1px solid var(--ph-line, #ccc);
+		border: 1px solid var(--og-line, #ccc);
 		border-radius: 999px;
-		background: var(--ph-bg, #fff);
-		box-shadow: var(--ph-shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.2));
+		background: var(--og-bg, #fff);
+		box-shadow: var(--og-shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.2));
 	}
 	@media (min-width: 901px) {
 		.pg-picker {
@@ -82,38 +82,38 @@
 		border: 0;
 		border-radius: 999px;
 		background: none;
-		font: 600 0.75rem/1 var(--ph-mono, monospace);
+		font: 600 0.75rem/1 var(--og-mono, monospace);
 		letter-spacing: 0.06em;
-		color: var(--ph-text, #111);
+		color: var(--og-text, #111);
 		cursor: pointer;
 	}
 	.pg-picker :global(.pg-pick-label) {
 		text-transform: uppercase;
-		color: var(--ph-text-faint, #888);
+		color: var(--og-text-faint, #888);
 	}
 	/* portaled to <body> — style via :global, painted with the ACTIVE theme's tokens */
 	:global(.pg-pick-menu) {
 		z-index: 310;
 		min-width: 10rem;
 		padding: 0.3rem;
-		border: 1px solid var(--ph-line, #ccc);
-		border-radius: var(--ph-radius, 10px);
-		background: var(--ph-bg, #fff);
-		box-shadow: var(--ph-shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.25));
-		font: 500 0.8rem/1.2 var(--ph-mono, monospace);
-		color: var(--ph-text, #111);
+		border: 1px solid var(--og-line, #ccc);
+		border-radius: var(--og-radius, 10px);
+		background: var(--og-bg, #fff);
+		box-shadow: var(--og-shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.25));
+		font: 500 0.8rem/1.2 var(--og-mono, monospace);
+		color: var(--og-text, #111);
 	}
 	:global(.pg-pick-opt) {
 		display: block;
 		padding: 0.4rem 0.55rem;
-		border-radius: var(--ph-radius-sm, 6px);
+		border-radius: var(--og-radius-sm, 6px);
 		cursor: pointer;
 	}
 	:global([data-highlighted] > .pg-pick-opt) {
-		background: var(--ph-bg-raised, #eee);
+		background: var(--og-bg-raised, #eee);
 	}
 	:global(.pg-pick-opt[data-selected]) {
-		color: var(--ph-accent-text, #0a7d55);
+		color: var(--og-accent-text, #0a7d55);
 		font-weight: 700;
 	}
 </style>

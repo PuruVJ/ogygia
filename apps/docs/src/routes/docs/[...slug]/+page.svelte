@@ -1,15 +1,15 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Doc } from 'ogygia/pharos';
-	import type { DocView } from 'ogygia/pharos';
+	import { Doc } from 'ogygia/content';
+	import type { DocView } from 'ogygia/content';
 	import type { DocData } from '$lib/collections.server';
 	import { doc } from '$lib/docs.remote';
 	import PageHead from '$lib/PageHead.svelte';
 	// Island (re-hydrates per SPA nav, like CodeChrome) that localizes the changelog's release dates.
 	import LocaleDates from '$lib/LocaleDates.svelte' with { wake: 'load' };
-	// The `.ph-*` doc body painted in the SITE's look (the customization-ladder skin — no pharos
+	// The `.og-*` doc body painted in the SITE's look (the customization-ladder skin — no ogygia
 	// theme.css anywhere); code-block.css styles the Shiki fences.
-	import '$lib/styles/pharos-docs.css';
+	import '$lib/styles/doc-skin.css';
 	import '$lib/styles/code-block.css';
 
 	// Dogfood the `.server.ts` rule: the component imports the `doc` REMOTE, never the collection.
@@ -31,14 +31,14 @@
 	/* Releases page only. The `remark-changelog` plugin turns each `## [x] — date` into an `<h2>x</h2>`
 	   plus a `.release-date` line; here we dress them and flatten the section lists so entries read as
 	   flush release notes rather than deeply-indented bullets. */
-	.changelog :global(.ph-body h2) {
+	.changelog :global(.og-body h2) {
 		margin-top: 4rem;
 		margin-bottom: 0;
 		padding-top: 2.5rem;
 		border-top: 1px solid var(--line);
 		font-size: clamp(1.9rem, 3vw, 2.4rem);
 	}
-	.changelog :global(.ph-body h2:first-of-type) {
+	.changelog :global(.og-body h2:first-of-type) {
 		margin-top: 1.5rem;
 		padding-top: 0;
 		border-top: none;
@@ -60,20 +60,20 @@
 		color: var(--text);
 	}
 	/* Top-level entries: flush, no bullet, generous spacing (they're substantial notes). */
-	.changelog :global(.ph-body ul) {
+	.changelog :global(.og-body ul) {
 		list-style: none;
 		padding-left: 0;
 	}
-	.changelog :global(.ph-body li) {
+	.changelog :global(.og-body li) {
 		margin: 0.9rem 0;
 	}
 	/* Nested sub-points keep a marker + indent so they stay legible. */
-	.changelog :global(.ph-body li ul) {
+	.changelog :global(.og-body li ul) {
 		list-style: disc;
 		padding-left: 1.2rem;
 		margin: 0.5rem 0;
 	}
-	.changelog :global(.ph-body li li) {
+	.changelog :global(.og-body li li) {
 		margin: 0.3rem 0;
 	}
 </style>

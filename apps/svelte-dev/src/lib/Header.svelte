@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Search } from 'ogygia/pharos';
+	import { Search } from 'ogygia/content';
 	import Sidebar from '$lib/Sidebar.svelte';
 	import { TOPICS, topicFromPath } from '$lib/topics';
 
@@ -303,7 +303,7 @@
 		font-family: var(--sk-font-family-heading);
 	}
 
-	/* search trigger sizing lives in content.css (.ph-search-trigger) */
+	/* search trigger sizing lives in content.css (.og-search-trigger) */
 	.search-slot {
 		margin-right: 0.4rem;
 	}

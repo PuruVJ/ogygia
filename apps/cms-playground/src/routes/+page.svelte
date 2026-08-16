@@ -8,7 +8,7 @@
 <h1>cms playground</h1>
 <p>
 	No markdown files, no <code>NN-</code> folders. Pages, order and section names all come from a fake
-	headless CMS over HTTP; the sidebar is the same pharos weave.
+	headless CMS over HTTP; the sidebar is the same ogygia weave.
 </p>
 {#if first && first.kind === 'leaf'}
 	<p><a href={first.href}>Start reading → {first.title}</a></p>

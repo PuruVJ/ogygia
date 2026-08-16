@@ -12,7 +12,7 @@
 		margin: 0 0 1.5rem;
 		padding: 2rem 1.5rem;
 		border-radius: 12px;
-		background: linear-gradient(135deg, var(--ph-accent, #6b8afd) 0%, transparent 220%);
+		background: linear-gradient(135deg, var(--og-accent, #6b8afd) 0%, transparent 220%);
 		color: #fff;
 	}
 	.blk-hero h1 {

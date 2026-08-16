@@ -17,12 +17,12 @@
 </script>
 
 <svelte:element this={tag} {id} class={['ph', className].filter(Boolean).join(' ')}>
-	<span class="ph-text">{@render children()}</span><a
-		class="ph-link"
+	<span class="og-text">{@render children()}</span><a
+		class="og-link"
 		href={`#${id}`}
 		aria-label="Permalink to this section"
 	>
-		<span class="ph-hash" aria-hidden="true">#</span>
+		<span class="og-hash" aria-hidden="true">#</span>
 	</a>
 </svelte:element>
 
@@ -31,7 +31,7 @@
 		scroll-margin-top: 1.5rem;
 	}
 
-	.ph-link {
+	.og-link {
 		display: inline;
 		margin-left: 0.4em;
 		font-family: var(--font-mono);
@@ -49,30 +49,30 @@
 			color 120ms ease;
 	}
 
-	.ph-link:hover,
-	.ph-link:focus-visible {
+	.og-link:hover,
+	.og-link:focus-visible {
 		color: var(--accent);
 		opacity: 1;
 	}
 
-	.ph-link:focus-visible {
+	.og-link:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 		border-radius: 2px;
 	}
 
 	@media (hover: hover) and (pointer: fine) {
-		.ph-link {
+		.og-link {
 			opacity: 0;
 		}
 
-		.ph:hover .ph-link,
-		.ph:focus-within .ph-link {
+		.ph:hover .og-link,
+		.ph:focus-within .og-link {
 			opacity: 0.85;
 		}
 
-		.ph:hover .ph-link:hover,
-		.ph:focus-within .ph-link:focus-visible {
+		.ph:hover .og-link:hover,
+		.ph:focus-within .og-link:focus-visible {
 			opacity: 1;
 			color: var(--accent);
 		}

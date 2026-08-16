@@ -37,18 +37,18 @@ const argv = process.argv.slice(2);
 const command = argv[0];
 const flags = new Set(argv.slice(1).filter((a) => a.startsWith('-')));
 
-if (command !== 'init' && command !== 'pharos') {
+if (command !== 'init' && command !== 'site') {
 	const unknown = command && command !== 'help' && !command.startsWith('-');
 	stdout.write(
 		`${strong('ogygia')} ${dim(`v${version}`)}\n\n` +
 			`Usage:\n` +
 			`  ${accent('npx ogygia init')} ${dim('[--markdown] [--no-install] [-y]')}\n` +
-			`  ${accent('npx ogygia pharos init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n\n` +
+			`  ${accent('npx ogygia site init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n\n` +
 			`${strong('init')}  — wires ogygia into the SvelteKit app in the current directory.\n` +
 			`  --markdown / --no-markdown   turn markdown content collections on/off (else you are asked)\n` +
 			`  -y, --yes                    accept defaults, no prompts\n` +
 			`  --no-install                 edit package.json but skip installing\n\n` +
-			`${strong('pharos init')}  — scaffolds a docs site (site, content, routes, a Shell layout).\n` +
+			`${strong('site init')}  — scaffolds a docs site (site, content, routes, a Shell layout).\n` +
 			`  --layout <path>              layout route to write (default ${dim('src/routes/+layout.svelte')})\n` +
 			`  --force                      overwrite existing route/site files (the layout always asks)\n` +
 			`  -y, --yes                    accept defaults, no prompts\n`
@@ -114,7 +114,7 @@ function findExportedConst(ast: AnyNode, name: string): AnyNode | null {
 	return null;
 }
 
-// ── preflight (shared by `init` and `pharos init`) ───────────────────────────
+// ── preflight (shared by `init` and `site init`) ───────────────────────────
 interface Preflight {
 	pkg: AnyNode;
 	pkgRaw: string;
@@ -194,7 +194,7 @@ function wireSvelteConfig(asyncCompiler: boolean): void {
 			}
 		}
 
-		// experimental.async — pharos components use top-level `await`; the compiler needs this on.
+		// experimental.async — site-kit components use top-level `await`; the compiler needs this on.
 		if (asyncCompiler) {
 			const co = property('compilerOptions', { fallback: js.object.create({}) });
 			const experimental = js.object.property(co, { name: 'experimental', fallback: js.object.create({}) });
@@ -226,7 +226,7 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 	);
 	stdout.write(`  ${ok('✓')} ${viteConfig} ${dim('(plugin)')}\n`);
 
-	// 2b. svelte config — `.svx` extensions + preprocessor (and the async compiler for pharos).
+	// 2b. svelte config — `.svx` extensions + preprocessor (and the async compiler for the site kit).
 	if (markdown) {
 		wireSvelteConfig(asyncCompiler);
 		stdout.write(`  ${ok('✓')} svelte config ${dim(asyncCompiler ? '(.svx + async)' : '(.svx)')}\n`);
@@ -337,12 +337,12 @@ async function run() {
 			`  • Make a component interactive:\n` +
 			`      ${dim("import Counter from './Counter.svelte' with { wake: 'load' };")}\n` +
 			(markdown ? `  • Markdown is on: author .md / .svx content collections.\n` : '') +
-			`  • Scaffold a docs site: ${accent('npx ogygia pharos init')}\n` +
+			`  • Scaffold a docs site: ${accent('npx ogygia site init')}\n` +
 			`  Docs: ${accent('https://ogygia.puruvj.dev')}\n`
 	);
 }
 
-// ── `ogygia pharos init` ─────────────────────────────────────────────────────
+// ── `ogygia site init` ─────────────────────────────────────────────────────
 // Scaffolds a docs site as REAL files — no build-time magic, no template to pick. It writes the
 // PHAROS-LEVEL plumbing (site, content, the three-file mount, emit routes) and a layout that mounts
 // `<Shell>` — the Shell is just a component you import, not a theme the CLI branches on. The layout is
@@ -363,13 +363,13 @@ function place(rel: string, content: string, overwrite: boolean): boolean {
 	return true;
 }
 
-async function pharosInit(): Promise<void> {
-	// argv: pharos init [--layout p] [--force] [-y] [--no-install]
+async function site_init(): Promise<void> {
+	// argv: site init [--layout p] [--force] [-y] [--no-install]
 	if (argv[1] !== 'init') {
 		stdout.write(
-			`${strong('ogygia pharos')} ${dim(`v${version}`)}\n\n` +
-				`Usage:\n  ${accent('npx ogygia pharos init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n\n` +
-				`Scaffolds a pharos docs site (site + content + routes + a Shell layout).\n`
+			`${strong('ogygia site')} ${dim(`v${version}`)}\n\n` +
+				`Usage:\n  ${accent('npx ogygia site init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n\n` +
+				`Scaffolds a docs site (site + content + routes + a Shell layout).\n`
 		);
 		process.exit(argv[1] ? 1 : 0);
 	}
@@ -399,9 +399,9 @@ async function pharosInit(): Promise<void> {
 	const emitArg = urlBase ? `{ base: ${JSON.stringify(urlBase)} }` : '';
 	const searchBase = urlBase ? `, { base: ${JSON.stringify(urlBase)} }` : '';
 
-	stdout.write(`\n${strong('ogygia pharos')} — scaffolding your docs site…\n`);
+	stdout.write(`\n${strong('ogygia site')} — scaffolding your docs site…\n`);
 
-	// Wire the ogygia runtime (plugin + markdown + hooks). Idempotent; pharos needs .svx, the async
+	// Wire the ogygia runtime (plugin + markdown + hooks). Idempotent; the site kit needs .svx, the async
 	// compiler (its components use top-level await), and the server handle.
 	wireOgygia(pf, true, true);
 
@@ -409,7 +409,7 @@ async function pharosInit(): Promise<void> {
 	place(
 		'src/lib/docs.ts',
 		`import { content, markdown } from 'ogygia/content';
-import { outline, pharos } from 'ogygia/pharos';
+import { outline, defineSite } from 'ogygia/content';
 
 // A docs collection: every file under \`src/content/docs\` becomes a page. Its id is the path below
 // \`content/docs\` without the extension, so \`guides/deploy.svx\` is served at \`/guides/deploy\`.
@@ -417,8 +417,8 @@ const docs = content({
 	loader: markdown(import.meta.glob('../content/docs/**/*.svx', { eager: true }))
 });
 
-// \`pharos()\` mints the site the shell + routes consume.
-export const site = pharos(outline([{ label: 'Docs', items: docs }]), { prevNext: 'graph' });
+// \`defineSite()\` mints the site the shell + routes consume.
+export const site = defineSite(outline([{ label: 'Docs', items: docs }]), { prevNext: 'graph' });
 `,
 		force
 	);
@@ -433,7 +433,7 @@ title: Introduction
 summary: What this site is.
 ---
 
-Welcome to your docs, built with **pharos** on ogygia. The page title comes from the
+Welcome to your docs, built with **ogygia**. The page title comes from the
 frontmatter above, so start the body at \`##\`. Every \`.svx\` file in \`src/content/docs\`
 becomes a page — this one lives at \`src/content/docs/introduction.svx\`.
 
@@ -481,7 +481,7 @@ export const entries = site.entries;
 		rd('[...slug]/+page.svelte'),
 		`<script lang="ts">
 	import { page } from '$app/state';
-	import { Doc } from 'ogygia/pharos';
+	import { Doc } from 'ogygia/content';
 	import { site } from '$lib/docs';
 
 	// csr=false: the body renders in this route's SSR pass, so islands inside the .svx hydrate.
@@ -518,19 +518,19 @@ export const prerender = true;
 
 <svelte:head><title>Docs</title></svelte:head>
 
-<div class="ph-home">
-	<h1 class="ph-home-title">Your docs</h1>
-	<p class="ph-home-lede">Built with pharos on ogygia. Edit this page and the sidebar in your project.</p>
+<div class="og-home">
+	<h1 class="og-home-title">Your docs</h1>
+	<p class="og-home-lede">Built with ogygia. Edit this page and the sidebar in your project.</p>
 	{#if first && first.kind === 'leaf'}
-		<a class="ph-home-cta" href={first.href}>Start reading → {first.title}</a>
+		<a class="og-home-cta" href={first.href}>Start reading → {first.title}</a>
 	{/if}
 </div>
 
 <style>
-	.ph-home { max-width: 42rem; margin: 0 auto; padding: 4rem 0; }
-	.ph-home-title { margin: 0 0 0.5rem; font-size: 2rem; letter-spacing: -0.02em; }
-	.ph-home-lede { margin: 0 0 1.5rem; color: var(--ph-text-dim, #5b6069); }
-	.ph-home-cta { color: var(--ph-accent, #0d9488); font-weight: 600; text-decoration: none; }
+	.og-home { max-width: 42rem; margin: 0 auto; padding: 4rem 0; }
+	.og-home-title { margin: 0 0 0.5rem; font-size: 2rem; letter-spacing: -0.02em; }
+	.og-home-lede { margin: 0 0 1.5rem; color: var(--og-text-dim, #5b6069); }
+	.og-home-cta { color: var(--og-accent, #0d9488); font-weight: 600; text-decoration: none; }
 </style>
 `,
 		force
@@ -538,34 +538,34 @@ export const prerender = true;
 
 	// The layout — the one file that might already be yours. Three cases:
 	//  · absent            → write it.
-	//  · already a pharos shell (ours) → keep it, so re-running is idempotent (the "redeemable" case).
+	//  · already our Shell layout → keep it, so re-running is idempotent (the "redeemable" case).
 	//  · a DIFFERENT layout you wrote  → never clobber without opt-in: `--force`, or a "yes" at the
 	//    interactive prompt. `-y` (accept safe defaults) does NOT clobber — it aborts with guidance.
 	const layoutBody = `<script lang="ts">
-	import Shell from 'ogygia/pharos/shell';
-	// Styling is opt-in — import the pharos look here, or delete these two lines and bring your own
-	// CSS against the \`.ph-*\` hooks.
-	import 'ogygia/pharos/theme.css';
-	import 'ogygia/pharos/shell.css';
+	import DocsShell from 'ogygia/content/docs-shell';
+	// Styling is opt-in — import the stock look here, or delete these two lines and bring your own
+	// CSS against the \`.og-*\` hooks.
+	import 'ogygia/content/theme.css';
+	import 'ogygia/content/shell.css';
 	import { site } from '$lib/docs';
 
 	let { children } = $props();
 </script>
 
-<Shell {site} base=${JSON.stringify(urlBase)} title="Docs">
+<DocsShell {site} base=${JSON.stringify(urlBase)} title="Docs">
 	{@render children()}
-</Shell>
+</DocsShell>
 `;
 	const layoutExisted = fileExists(cwd, layoutRel);
 	const layoutIsOurs =
 		layoutExisted &&
-		/from ['"]ogygia\/pharos(\/shell)?['"]/.test(loadFile(cwd, layoutRel)) &&
-		loadFile(cwd, layoutRel).includes('<Shell');
+		/from ['"]ogygia\/content(\/docs-shell)?['"]/.test(loadFile(cwd, layoutRel)) &&
+		loadFile(cwd, layoutRel).includes('Shell');
 
 	if (!layoutExisted || force) {
 		place(layoutRel, layoutBody, true);
 	} else if (layoutIsOurs) {
-		stdout.write(`  ${dim('•')} ${layoutRel} ${dim('(pharos shell, kept)')}\n`);
+		stdout.write(`  ${dim('•')} ${layoutRel} ${dim('(ogygia shell, kept)')}\n`);
 	} else {
 		const proceed =
 			stdin.isTTY && !yesP
@@ -636,7 +636,7 @@ export const load = async ({ url }) => {
 	place(
 		rd('search/+page.svelte'),
 		`<script lang="ts">
-	import { SearchPage } from 'ogygia/pharos';
+	import { SearchPage } from 'ogygia/content';
 	let { data } = $props();
 </script>
 
@@ -654,19 +654,19 @@ export const load = async ({ url }) => {
 	import { page } from '$app/state';
 </script>
 
-<div class="ph-err">
-	<p class="ph-err-code">{page.status}</p>
-	<h1 class="ph-err-title">{page.status === 404 ? 'Page not found' : 'Something went wrong'}</h1>
-	<p class="ph-err-msg">{page.error?.message ?? 'Unknown error'}</p>
-	<a class="ph-err-home" href=${JSON.stringify(urlBase || '/')}>← Back to the docs</a>
+<div class="og-err">
+	<p class="og-err-code">{page.status}</p>
+	<h1 class="og-err-title">{page.status === 404 ? 'Page not found' : 'Something went wrong'}</h1>
+	<p class="og-err-msg">{page.error?.message ?? 'Unknown error'}</p>
+	<a class="og-err-home" href=${JSON.stringify(urlBase || '/')}>← Back to the docs</a>
 </div>
 
 <style>
-	.ph-err { max-width: 32rem; margin: 0 auto; padding: 6rem 1.5rem; text-align: center; }
-	.ph-err-code { margin: 0; font-size: 3rem; font-weight: 800; letter-spacing: -0.03em; color: var(--ph-text-faint, #9096a1); }
-	.ph-err-title { margin: 0.25rem 0 0.5rem; font-size: 1.4rem; }
-	.ph-err-msg { margin: 0 0 1.5rem; color: var(--ph-text-dim, #5b6069); }
-	.ph-err-home { color: var(--ph-accent, #0d9488); text-decoration: none; font-weight: 600; }
+	.og-err { max-width: 32rem; margin: 0 auto; padding: 6rem 1.5rem; text-align: center; }
+	.og-err-code { margin: 0; font-size: 3rem; font-weight: 800; letter-spacing: -0.03em; color: var(--og-text-faint, #9096a1); }
+	.og-err-title { margin: 0.25rem 0 0.5rem; font-size: 1.4rem; }
+	.og-err-msg { margin: 0 0 1.5rem; color: var(--og-text-dim, #5b6069); }
+	.og-err-home { color: var(--og-accent, #0d9488); text-decoration: none; font-weight: 600; }
 </style>
 `,
 		force
@@ -675,7 +675,7 @@ export const load = async ({ url }) => {
 	if (!noInstallP) installDeps();
 
 	stdout.write(
-		`\n${ok('✔')} your pharos docs site is scaffolded.\n\n` +
+		`\n${ok('✔')} your docs site is scaffolded.\n\n` +
 			`Next:\n` +
 			`  • Start it: ${accent('npm run dev')} ${dim(`(then open ${urlBase || '/'})`)}\n` +
 			`  • Write pages in ${dim('src/content/docs')} — the file path is the URL.\n` +
@@ -704,8 +704,8 @@ function globHasSvx(dir: string): boolean {
 }
 
 // ── dispatch ─────────────────────────────────────────────────────────────────
-if (command === 'pharos') {
-	pharosInit().catch((err) => die(err?.message ?? String(err)));
+if (command === 'site') {
+	site_init().catch((err) => die(err?.message ?? String(err)));
 } else {
 	run().catch((err) => die(err?.message ?? String(err)));
 }

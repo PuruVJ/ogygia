@@ -7,21 +7,21 @@
  */
 
 /* hoverable token: a subtle dotted underline, help cursor */
-.ph-body .twoslash-hover {
+.og-body .twoslash-hover {
 	position: relative;
 	border-bottom: 1px dotted var(--sk-fg-4);
 }
 
 /* the baked popup + twoslash's hidden meta lines never render in flow */
-.ph-body .twoslash-popup-container,
-.ph-body .twoslash-meta-line,
-.ph-body .twoslash-error-line,
-.ph-body .twoslash-completion-cursor {
+.og-body .twoslash-popup-container,
+.og-body .twoslash-meta-line,
+.og-body .twoslash-error-line,
+.og-body .twoslash-completion-cursor {
 	display: none;
 }
 
 /* inline error squiggle twoslash adds under bad tokens — keep it quiet in docs */
-.ph-body .twoslash-error {
+.og-body .twoslash-error {
 	background: none;
 }
 

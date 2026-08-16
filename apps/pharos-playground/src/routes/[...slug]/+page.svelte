@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Doc } from 'ogygia/pharos';
+	import { Doc } from 'ogygia/content';
 	import { doc } from '$lib/docs.remote';
 	import OperationDoc from '$lib/openapi/OperationDoc.svelte';
 	import type { Operation } from '$lib/openapi';

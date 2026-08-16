@@ -9,7 +9,7 @@
 	--side-bar-h: calc(3.25rem + env(safe-area-inset-bottom, 0px));
 }
 
-/* (The old body padding-left/-bottom reservations are gone — the pharos Shell's frame clears the
+/* (The old body padding-left/-bottom reservations are gone — the ogygia Shell's frame clears the
    floating panel and the mobile bar itself; see shell-skin.css + shell.css.) */
 
 .shell {

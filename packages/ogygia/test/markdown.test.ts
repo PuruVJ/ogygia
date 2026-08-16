@@ -235,8 +235,8 @@ describe('code-block ids', () => {
 
 describe('tab component injection (plain barrel)', () => {
 	// TabGroup is a plain, overridable wrapper (its internal island carries the `wake`), so the injected
-	// import is an ordinary barrel — no island mark, no `ogygia/pharos/tab-group` specifier, no upgrade.
-	const INJECTED = `import { TabGroup, Tab } from 'ogygia/pharos';`;
+	// import is an ordinary barrel — no island mark, no `ogygia/content/tab-group` specifier, no upgrade.
+	const INJECTED = `import { TabGroup, Tab } from 'ogygia/content';`;
 	const CODE_GROUP = [
 		'::: code-group',
 		'```bash [npm]',
@@ -256,7 +256,7 @@ describe('tab component injection (plain barrel)', () => {
 		const code = await render(['# T', '', CODE_GROUP].join('\n'));
 		expect(code).toContain(INJECTED);
 		// plain wrapper — never the island-mark form
-		expect(code).not.toContain('ogygia/pharos/tab-group');
+		expect(code).not.toContain('ogygia/content/tab-group');
 		expect(code).not.toMatch(/import \{[^}]*Tab[^}]*\}[^\n]*with \{/);
 		// injected exactly once
 		expect(code.split(INJECTED)).toHaveLength(2);
@@ -267,19 +267,19 @@ describe('tab component injection (plain barrel)', () => {
 		expect(code).not.toContain(INJECTED);
 	});
 
-	it("leaves an author's `import { TabGroup, Tab } from 'ogygia/pharos'` untouched (no upgrade)", async () => {
+	it("leaves an author's `import { TabGroup, Tab } from 'ogygia/content'` untouched (no upgrade)", async () => {
 		const code = await render(
 			[
 				'<script>',
-				"\timport { TabGroup, Tab } from 'ogygia/pharos';",
+				"\timport { TabGroup, Tab } from 'ogygia/content';",
 				'</script>',
 				'',
 				'<TabGroup group="pm"><Tab label="npm">hi</Tab></TabGroup>'
 			].join('\n')
 		);
 		// TabGroup is a plain component — the author import stays a plain barrel, never split or marked
-		expect(code).toMatch(/import \{ TabGroup, Tab \} from 'ogygia\/pharos';/);
-		expect(code).not.toContain('ogygia/pharos/tab-group');
+		expect(code).toMatch(/import \{ TabGroup, Tab \} from 'ogygia\/content';/);
+		expect(code).not.toContain('ogygia/content/tab-group');
 		expect(code).not.toMatch(/with \{/);
 	});
 
@@ -287,7 +287,7 @@ describe('tab component injection (plain barrel)', () => {
 		const code = await render(
 			[
 				'<script>',
-				"\timport { TabGroup, Tab } from 'ogygia/pharos';",
+				"\timport { TabGroup, Tab } from 'ogygia/content';",
 				'</script>',
 				'',
 				'<TabGroup group="pm"><Tab label="npm">hi</Tab></TabGroup>',
@@ -296,27 +296,27 @@ describe('tab component injection (plain barrel)', () => {
 			].join('\n')
 		);
 		// the author already imports the pair → the `:::` pass must not inject a second barrel import
-		expect(code.match(/import \{ TabGroup, Tab \} from 'ogygia\/pharos';/g)).toHaveLength(1);
+		expect(code.match(/import \{ TabGroup, Tab \} from 'ogygia\/content';/g)).toHaveLength(1);
 	});
 
 	it('an import inside a fenced code SAMPLE is not treated as a real import (Shiki escapes it)', async () => {
 		const code = await render(
-			['# T', '', '```svelte', '<script>', "\timport { TabGroup, Tab } from 'ogygia/pharos';", '</script>', '```'].join('\n')
+			['# T', '', '```svelte', '<script>', "\timport { TabGroup, Tab } from 'ogygia/content';", '</script>', '```'].join('\n')
 		);
-		expect(code).not.toContain('ogygia/pharos/tab-group');
+		expect(code).not.toContain('ogygia/content/tab-group');
 	});
 
 	it('leaves sibling barrel specifiers untouched (no split)', async () => {
 		const code = await render(
 			[
 				'<script>',
-				"\timport { Doc, TabGroup, Tab } from 'ogygia/pharos';",
+				"\timport { Doc, TabGroup, Tab } from 'ogygia/content';",
 				'</script>',
 				'',
 				'<TabGroup group="pm"><Tab label="npm">hi</Tab></TabGroup>'
 			].join('\n')
 		);
-		expect(code).toMatch(/import \{ Doc, TabGroup, Tab \} from 'ogygia\/pharos';/);
-		expect(code).not.toContain('ogygia/pharos/tab-group');
+		expect(code).toMatch(/import \{ Doc, TabGroup, Tab \} from 'ogygia\/content';/);
+		expect(code).not.toContain('ogygia/content/tab-group');
 	});
 });

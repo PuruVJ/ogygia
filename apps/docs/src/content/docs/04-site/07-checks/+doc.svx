@@ -1,0 +1,63 @@
+---
+title: Checks
+summary: Structural verification that fails the build, not the visitor. The link audit resolves every in-prose link against the site's own address space; a broken one is a named error at prerender and on page open in dev.
+related:
+  - ogygia/ogygia
+  - site/outline
+  - reference/constraints
+---
+
+A broken internal link is a bug you want to hear about at build time, from you — not at runtime, from a visitor. ogygia checks run over the whole corpus as **data**, surface as named findings, and can fail the build. The link audit ships built in; you can add your own.
+
+> **When to use.** Turn on `links()` for any site with cross-references — which is every docs site. It is the safety net that lets you rename and reorganize fearlessly: move a page and every stale link to it fails loudly.
+
+## The link audit
+
+Pass `checks` to `defineSite()`. `links()` resolves every markdown link in every body against the site's own address space:
+
+```ts
+export const site = defineSite({ outline: docs, checks: [links()] });
+```
+
+A link to a page that does not exist, or an `#anchor` that no heading emits, is a finding. **This site runs it** — the cross-links you are clicking through this section were verified by exactly this check. When one of these pages linked to a sibling I had not written yet, the build refused until it existed.
+
+Where it fires:
+
+- **At prerender** — a broken link fails the build with the page, the link text, and the target.
+- **In dev** — the same finding surfaces when you open the page, so you catch it as you write.
+
+Because the audit knows the *whole* address space — including [dimension](/docs/site/dimensions) coordinates and declared redirects — it distinguishes a genuinely dead link from one that resolves through an alias.
+
+## Findings as data
+
+`site.check()` runs every check over the corpus and returns the findings as plain data — never throwing — so you can assert on them in a test or a CI step, independent of a prerender crawl:
+
+```ts
+// a vitest guard: the docs have no broken links
+import { site } from '$lib/site.server';
+
+test('no broken links', async () => {
+  const findings = await site.check({ base: '/docs' });
+  expect(findings).toEqual([]);
+});
+```
+
+This matters for a dynamic site where the prerender crawler never runs — the check is your only structural gate, and it is available as data.
+
+## Custom checks
+
+A check is a function over the corpus that yields findings. Write your own for a house rule — every page has a `summary`, no heading is deeper than `h4`, an image has alt text — and pass it alongside `links()`:
+
+```ts
+import { links } from 'ogygia/content';
+import { requireSummary } from '$lib/checks';
+
+export const site = defineSite({ outline: docs, checks: [links(), requireSummary()] });
+```
+
+## Do / don't
+
+- **Do** run `links()` from day one. The cost is zero and it turns every reorganization into a safe operation.
+- **Do** assert `site.check()` in CI for a dynamic site — it is the structural gate the prerender crawler would otherwise be.
+- **Don't** treat a finding as noise. A broken link or a missing anchor is a real defect the reader would hit; fix the link or the target.
+- **Don't** wait for production to discover a dead cross-reference. The whole point is that the build, and your dev server, tell you first.

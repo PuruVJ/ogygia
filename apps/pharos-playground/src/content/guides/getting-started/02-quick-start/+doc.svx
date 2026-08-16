@@ -67,7 +67,7 @@ The page component pulls the document from `data` and renders its component. Eve
 
 ```svelte
 <script lang="ts">
-	import { Doc, SideNav, OnThisPage } from 'ogygia/pharos';
+	import { Doc, SideNav, OnThisPage } from 'ogygia/content';
 
 	let { data } = $props();
 	const { doc, nav } = data;

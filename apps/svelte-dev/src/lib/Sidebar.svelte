@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { nav } from '$lib/docs.remote';
 	import { topicFromPath } from '$lib/topics';
-	import type { NavGroup, NavLeaf } from 'ogygia/pharos';
+	import type { NavGroup, NavLeaf } from 'ogygia/content';
 
 	// KEPT island across body-swaps (scroll survives) → everything derives from the URL. The topic
 	// (dimension coordinate) picks which prerendered tree `nav()` serves. The topic SWITCHER lives in

@@ -1,13 +1,13 @@
 /**
- * Rewrite chosen markdown elements to the pharos slot so app-land can override how they render.
- * `<a href="y">x</a>` → `<Ph__Slot tag="a" href="y">x</Ph__Slot>`. The compiler only ever knows tag
- * NAMES; the component VALUES live in `pharos({ components })` and reach the slot via context. The
+ * Rewrite chosen markdown elements to the ogygia slot so app-land can override how they render.
+ * `<a href="y">x</a>` → `<Og__Slot tag="a" href="y">x</Og__Slot>`. The compiler only ever knows tag
+ * NAMES; the component VALUES live in `defineSite({ components })` and reach the slot via context. The
  * slot falls back to the plain element for any tag nobody overrides, so wrapping is always safe.
  *
- * Capitalized tag name is deliberate — Svelte renders `<Ph__Slot>` as a component (the injected
+ * Capitalized tag name is deliberate — Svelte renders `<Og__Slot>` as a component (the injected
  * import), not an element. The injection happens in the preprocessor `markup` hook.
  */
-export const SLOT_TAG = 'Ph__Slot';
+export const SLOT_TAG = 'Og__Slot';
 
 /** The curated default set: links, images, code. Widen via `markdown: { overrides: { tags } }`. */
 export const DEFAULT_OVERRIDE_TAGS = ['a', 'img', 'code'] as const;

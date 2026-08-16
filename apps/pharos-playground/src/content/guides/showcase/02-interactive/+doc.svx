@@ -87,7 +87,7 @@ The returned cleanup function is important: it stops the timer if the component 
 
 ## Palette
 
-The most connected of the three. Drag the slider and it writes a new value to `--ph-accent` on the document root. Because every accented element reads that token, the entire page recolors live — links, buttons, active states, and focus rings all at once.
+The most connected of the three. Drag the slider and it writes a new value to `--og-accent` on the document root. Because every accented element reads that token, the entire page recolors live — links, buttons, active states, and focus rings all at once.
 
 <Palette />
 
@@ -109,7 +109,7 @@ And the mechanism is just setting a CSS custom property from island state:
 	const accent = $derived(`hsl(${hue} 84% 32%)`);
 
 	$effect(() => {
-		document.documentElement.style.setProperty('--ph-accent', accent);
+		document.documentElement.style.setProperty('--og-accent', accent);
 	});
 </script>
 
@@ -124,7 +124,7 @@ Here is what is actually running on this page:
 | --- | --- | --- | --- |
 | Counter | `visible` | A single number | No |
 | Stopwatch | `visible` | Elapsed time + a timer | No |
-| Palette | `visible` | A hue value | Yes — writes `--ph-accent` |
+| Palette | `visible` | A hue value | Yes — writes `--og-accent` |
 
 Notice that even Palette, which changes the whole page's color, does so through a single shared token rather than by re-rendering anything. It sets one CSS variable; the browser repaints. No prose re-runs, no other island is disturbed.
 

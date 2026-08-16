@@ -1,6 +1,6 @@
 import { site } from '$lib/site.server';
 
-// llms.txt index (llmstxt.org) over the whole docs corpus — pharos emits it from the nav tree.
+// llms.txt index (llmstxt.org) over the whole docs corpus — ogygia emits it from the nav tree.
 export const prerender = true;
 
 export const GET = site.emit.llms({

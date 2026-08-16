@@ -2,17 +2,17 @@ import { describe, expect, it } from 'vitest';
 import * as v from 'valibot';
 import { content } from '../src/content/index.js';
 import type { Heading, Source, SourceEntry } from '../src/content/index.js';
-import { pharos as pharosRaw } from '../src/pharos/pharos.js';
-import { dimensions, is_dimensioned } from '../src/pharos/dimensions.js';
-import type { NavGroup, NavLeaf, NavTree } from '../src/pharos/types.js';
+import { defineSite as defineSiteRaw } from '../src/content/site/site.js';
+import { dimensions, is_dimensioned } from '../src/content/site/dimensions.js';
+import type { NavGroup, NavLeaf, NavTree } from '../src/content/site/types.js';
 
 type Meta = { headings: Heading[] };
 
-// Test shim: keep the positional call style; the real API is `pharos({ outline, …opts })`.
-const pharos = (
-	outlineArg: Parameters<typeof pharosRaw>[0]['outline'],
-	opts: Partial<Parameters<typeof pharosRaw>[0]> = {}
-) => pharosRaw({ outline: outlineArg, ...opts });
+// Test shim: keep the positional call style; the real API is `mint_site({ outline, …opts })`.
+const mint_site = (
+	outlineArg: Parameters<typeof defineSiteRaw>[0]['outline'],
+	opts: Partial<Parameters<typeof defineSiteRaw>[0]> = {}
+) => defineSiteRaw({ outline: outlineArg, ...opts });
 
 function fromArray(entries: SourceEntry<Meta>[]): Source<Meta> {
 	const map = new Map(entries.map((e) => [e.id, e]));
@@ -59,7 +59,7 @@ const dim = () =>
 		weave: ({ version, locale }) => (version === 'v1' ? v1() : locale === 'fr' ? fr() : en())
 	});
 
-const site = () => pharos(dim(), { prevNext: 'order' });
+const site = () => mint_site(dim(), { prevNext: 'order' });
 const leafTitles = (tree: NavTree) =>
 	tree
 		.filter((n): n is NavGroup => n.kind === 'group')
@@ -168,7 +168,7 @@ describe('dimensions — switcher never dead-ends', () => {
 	});
 
 	it('plain (non-dimensioned) site returns null switcher', async () => {
-		const plain = pharos(en());
+		const plain = mint_site(en());
 		expect(await plain.switcher('guide/a')).toBeNull();
 	});
 });
@@ -181,7 +181,7 @@ describe('dimensions — neighbors are coordinate-prefixed', () => {
 	});
 });
 
-describe('dimensions — pharos load/entries integration (the real mount)', () => {
+describe('dimensions — site load/entries integration (the real mount)', () => {
 	it('load resolves a valid coordinate slug and 404s an unknown one', async () => {
 		const s = site();
 		await expect(

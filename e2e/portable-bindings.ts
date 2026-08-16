@@ -229,11 +229,11 @@ try {
 			`clock=${clockFacades.length} thin=${thinClocks.join(', ') || '0'}`
 		);
 
-		// Docs (when built): the whole-site chrome now DOGFOODS the pharos `Shell` — the bespoke
+		// Docs (when built): the whole-site chrome now DOGFOODS the ogygia `Shell` — the bespoke
 		// SideNav was retired ("ONE Shell for the whole site"). Shell is a plain layout component, not
 		// an island, so there is no island facade to assert. What still matters is FOUC: the Shell's
 		// scoped chrome CSS must land in the layout stylesheet, or the nav flashes unstyled on first
-		// paint. `.ph-shell` / `.ph-cside` are Shell's stable chrome hooks (see pharos/shell.css).
+		// paint. `.og-shell` / `.og-cside` are Shell's stable chrome hooks (see ogygia/shell.css).
 		const docsClient = path.join(
 			repo,
 			'apps/docs',
@@ -253,8 +253,8 @@ try {
 				? fs.readFileSync(path.join(docsClient, 'assets', layoutCss), 'utf-8')
 				: '';
 			check(
-				'build: docs layout CSS carries the pharos Shell chrome rules (FOUC)',
-				!!layoutCss && /\.ph-shell\b/.test(layoutCssCode) && /\.ph-cside\b/.test(layoutCssCode),
+				'build: docs layout CSS carries the ogygia Shell chrome rules (FOUC)',
+				!!layoutCss && /\.og-shell\b/.test(layoutCssCode) && /\.og-cside\b/.test(layoutCssCode),
 				layoutCss || 'missing'
 			);
 		}

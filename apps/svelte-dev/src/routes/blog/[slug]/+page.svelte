@@ -20,7 +20,7 @@
 	{#if view.data.description}<meta name="description" content={view.data.description} />{/if}
 </svelte:head>
 
-<article class="blog-post ph-article">
+<article class="blog-post og-article">
 	<header>
 		{#if view.date}<p class="date">{pretty(view.date)}</p>{/if}
 		<h1>{view.data.title}</h1>
@@ -33,7 +33,7 @@
 	</header>
 
 	{#if view.body}
-		<div class="ph-body">
+		<div class="og-body">
 			<Region of={view.body} />
 		</div>
 	{/if}

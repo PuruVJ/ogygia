@@ -8,9 +8,9 @@
 	.blk-callout {
 		margin: 0 0 1rem;
 		padding: 0.75rem 1rem;
-		border-left: 3px solid var(--ph-accent, #6b8afd);
+		border-left: 3px solid var(--og-accent, #6b8afd);
 		border-radius: 6px;
-		background: color-mix(in oklab, var(--ph-accent, #6b8afd) 8%, transparent);
+		background: color-mix(in oklab, var(--og-accent, #6b8afd) 8%, transparent);
 		font-size: 0.95rem;
 		line-height: 1.55;
 	}

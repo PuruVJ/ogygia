@@ -1,12 +1,12 @@
 /**
- * The pharos playground site — a rich, multi-category docs weave for stressing the design system.
+ * The ogygia playground site — a rich, multi-category docs weave for stressing the design system.
  *
  * Nav is intentionally FLAT (2 levels): each top-level category is one collection, and its pages list
  * directly under it — category → page, no third level. A `dimensions()` wrap adds a version × locale
  * switcher (the default v2 · en corpus is rich; v1 / hi are thin, to demo the header dropdowns).
  */
 import { content, folder } from 'ogygia/content';
-import { dimensions, outline, pharos } from 'ogygia/pharos';
+import { dimensions, outline, defineSite } from 'ogygia/content';
 import * as v from 'valibot';
 import { openapi } from './openapi';
 
@@ -15,7 +15,7 @@ const guide_schema = v.object({
 	summary: v.optional(v.string(), ''),
 	draft: v.optional(v.boolean(), false),
 	related: v.optional(v.array(v.string()), []),
-	// Old addresses this page used to live at — pharos serves a baked 308 for each.
+	// Old addresses this page used to live at — ogygia serves a baked 308 for each.
 	redirect_from: v.optional(v.array(v.string()), [])
 });
 export type GuideData = v.InferOutput<typeof guide_schema>;
@@ -80,7 +80,7 @@ const arrange_thin = (g: typeof getting_started) => [
 	github
 ];
 
-export const site = pharos({
+export const site = defineSite({
 	outline: dimensions({
 		axes: {
 			version: { values: ['v1', 'v2'], default: 'v2', label: 'Version' },

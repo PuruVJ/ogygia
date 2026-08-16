@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { SearchPage } from 'ogygia/pharos';
+	import { SearchPage } from 'ogygia/content';
 
 	// Server-computed results (same brain, csr=false, zero client JS) — the ⌘K palette's fallback.
 	let { data } = $props();

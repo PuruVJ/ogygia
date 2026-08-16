@@ -70,7 +70,7 @@
 
 <style>
 	.oa-object {
-		border: 1px solid var(--ph-border, #e2e2e6);
+		border: 1px solid var(--og-border, #e2e2e6);
 		border-radius: 8px;
 		overflow: hidden;
 	}
@@ -80,30 +80,30 @@
 		gap: 0.5rem;
 		width: 100%;
 		padding: 0.4rem 0.6rem;
-		background: var(--ph-surface-2, #f6f6f8);
+		background: var(--og-surface-2, #f6f6f8);
 		border: 0;
 		font: inherit;
 		cursor: pointer;
-		color: var(--ph-text, #111);
+		color: var(--og-text, #111);
 	}
 	.oa-caret {
 		display: inline-block;
 		transition: transform 0.12s ease;
-		color: var(--ph-text-dim, #888);
+		color: var(--og-text-dim, #888);
 		font-size: 0.7rem;
 	}
 	.oa-caret.oa-open {
 		transform: rotate(90deg);
 	}
 	.oa-type {
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-size: 0.82rem;
-		color: var(--ph-accent, #3b6ea5);
+		color: var(--og-accent, #3b6ea5);
 	}
 	.oa-count {
 		margin-left: auto;
 		font-size: 0.75rem;
-		color: var(--ph-text-dim, #888);
+		color: var(--og-text-dim, #888);
 	}
 	.oa-props {
 		list-style: none;
@@ -112,7 +112,7 @@
 	}
 	.oa-prop {
 		padding: 0.4rem 0;
-		border-top: 1px solid var(--ph-border, #eee);
+		border-top: 1px solid var(--og-border, #eee);
 	}
 	.oa-prop:first-child {
 		border-top: 0;
@@ -124,14 +124,14 @@
 		flex-wrap: wrap;
 	}
 	.oa-prop-name {
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-weight: 600;
-		color: var(--ph-text, #111);
+		color: var(--og-text, #111);
 	}
 	.oa-prop-type {
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-size: 0.8rem;
-		color: var(--ph-accent, #3b6ea5);
+		color: var(--og-accent, #3b6ea5);
 	}
 	.oa-required {
 		font-size: 0.68rem;
@@ -145,7 +145,7 @@
 	.oa-prop-desc {
 		margin: 0.2rem 0 0;
 		font-size: 0.85rem;
-		color: var(--ph-text-dim, #666);
+		color: var(--og-text-dim, #666);
 	}
 	.oa-nested {
 		margin-top: 0.4rem;
@@ -165,20 +165,20 @@
 	}
 	.oa-enum-vals code,
 	.oa-example code {
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-size: 0.78rem;
-		background: var(--ph-surface-2, #f2f2f5);
+		background: var(--og-surface-2, #f2f2f5);
 		padding: 0.05rem 0.35rem;
 		border-radius: 4px;
 	}
 	.oa-example {
 		margin-left: 0.5rem;
 		font-size: 0.8rem;
-		color: var(--ph-text-dim, #888);
+		color: var(--og-text-dim, #888);
 	}
 	.oa-circular {
-		font-family: var(--ph-mono, monospace);
+		font-family: var(--og-mono, monospace);
 		font-size: 0.8rem;
-		color: var(--ph-text-dim, #999);
+		color: var(--og-text-dim, #999);
 	}
 </style>

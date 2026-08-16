@@ -70,22 +70,12 @@
 			"types": "./dist/content/vite/index.d.ts",
 			"default": "./dist/content/vite/index.js"
 		},
-		"./pharos": {
-			"types": "./dist/pharos/index.d.ts",
-			"svelte": "./src/pharos/index.ts",
-			"default": "./src/pharos/index.ts"
-		},
-		"./pharos/server": {
-			"types": "./dist/pharos/server.d.ts",
-			"svelte": "./src/pharos/server.ts",
-			"default": "./src/pharos/server.ts"
-		},
-		"./pharos/theme.css": "./src/pharos/theme.css",
-		"./pharos/themes/*": "./src/pharos/themes/*",
-		"./pharos/slot": {
-			"types": "./dist/pharos/components/PharosSlot.svelte.d.ts",
-			"svelte": "./src/pharos/components/PharosSlot.svelte",
-			"default": "./src/pharos/components/PharosSlot.svelte"
+		"./content/theme.css": "./src/content/site/theme.css",
+		"./content/themes/*": "./src/content/site/themes/*",
+		"./content/slot": {
+			"types": "./dist/content/site/components/PharosSlot.svelte.d.ts",
+			"svelte": "./src/content/site/components/PharosSlot.svelte",
+			"default": "./src/content/site/components/PharosSlot.svelte"
 		},
 		"./server": {
 			"types": "./dist/hooks.d.ts",
@@ -94,11 +84,11 @@
 		"./types": {
 			"types": "./ambient.d.ts"
 		},
-		"./pharos/shell.css": "./src/pharos/shell.css",
-		"./pharos/shell": {
-			"types": "./dist/pharos/components/Shell.svelte.d.ts",
-			"svelte": "./src/pharos/components/Shell.svelte",
-			"default": "./src/pharos/components/Shell.svelte"
+		"./content/shell.css": "./src/content/site/shell.css",
+		"./content/docs-shell": {
+			"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
+			"svelte": "./src/content/site/components/DocsShell.svelte",
+			"default": "./src/content/site/components/DocsShell.svelte"
 		}
 	},
 	"bin": {
@@ -211,22 +201,12 @@
 				"types": "./dist/content/vite/index.d.ts",
 				"default": "./dist/content/vite/index.js"
 			},
-			"./pharos": {
-				"types": "./dist/pharos/index.d.ts",
-				"svelte": "./dist/pharos/index.js",
-				"default": "./dist/pharos/index.js"
-			},
-			"./pharos/server": {
-				"types": "./dist/pharos/server.d.ts",
-				"svelte": "./dist/pharos/server.js",
-				"default": "./dist/pharos/server.js"
-			},
-			"./pharos/theme.css": "./dist/pharos/theme.css",
-			"./pharos/themes/*": "./dist/pharos/themes/*",
-			"./pharos/slot": {
-				"types": "./dist/pharos/components/PharosSlot.svelte.d.ts",
-				"svelte": "./dist/pharos/components/PharosSlot.svelte",
-				"default": "./dist/pharos/components/PharosSlot.svelte"
+			"./content/theme.css": "./dist/content/site/theme.css",
+			"./content/themes/*": "./dist/content/site/themes/*",
+			"./content/slot": {
+				"types": "./dist/content/site/components/PharosSlot.svelte.d.ts",
+				"svelte": "./dist/content/site/components/PharosSlot.svelte",
+				"default": "./dist/content/site/components/PharosSlot.svelte"
 			},
 			"./server": {
 				"types": "./dist/hooks.d.ts",
@@ -244,11 +224,11 @@
 			"./types": {
 				"types": "./ambient.d.ts"
 			},
-			"./pharos/shell.css": "./dist/pharos/shell.css",
-			"./pharos/shell": {
-				"types": "./dist/pharos/components/Shell.svelte.d.ts",
-				"svelte": "./dist/pharos/components/Shell.svelte",
-				"default": "./dist/pharos/components/Shell.svelte"
+			"./content/shell.css": "./dist/content/site/shell.css",
+			"./content/docs-shell": {
+				"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
+				"svelte": "./dist/content/site/components/DocsShell.svelte",
+				"default": "./dist/content/site/components/DocsShell.svelte"
 			}
 		}
 	}

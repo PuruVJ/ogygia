@@ -1,12 +1,12 @@
 /**
- * The CMS-backed pharos site, on the NEW content API. Every wart the old APIs forced is gone:
+ * The CMS-backed ogygia site, on the NEW content API. Every wart the old APIs forced is gone:
  *  - order is DATA (`order: [categoryPos, pagePos]`), not a fake `NN-` filePath smuggled through a string;
  *  - section labels come from the `groups()` facet, not a second hand-built collection;
  *  - `refs()` is a shallow index fetch (no bodies on the wire); `get()` fetches one full document.
  * The loader shape now matches the CMS's own endpoints 1:1.
  */
 import { blocks, content, type RawRecord, type RawSource } from 'ogygia/content';
-import { fields, pharos } from 'ogygia/pharos';
+import { fields, defineSite } from 'ogygia/content';
 import { registry } from './blocks/registry';
 
 // A CMS is external, so its address is config (env in production). Request-blind by design.
@@ -81,9 +81,9 @@ export const docs = content({
  *  Exported so the page component derives the SAME context it renders under as the load guard used. */
 export const preview_ctx = (url: URL) => ({ preview: url.searchParams.get('preview') === 'secret' });
 
-export const site = pharos({
+export const site = defineSite({
 	outline: docs,
-	data: { title: 'CMS Playground', description: 'A pharos site sourced entirely from a REST CMS.', origin: 'http://localhost:5281' },
+	data: { title: 'CMS Playground', description: 'An ogygia site sourced entirely from a REST CMS.', origin: 'http://localhost:5281' },
 	prevNext: 'graph',
 	// Preview mode: `?preview=secret` flips draft visibility. The loader stays request-blind; only the
 	// filter sees ctx, and the weave memoizes one tree per distinct context (public vs preview).

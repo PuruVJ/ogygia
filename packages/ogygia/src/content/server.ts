@@ -151,3 +151,6 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 		}
 	};
 }
+
+// ── the site kit's server half ── `remotes(site)` minting (Kit query()/prerender wiring).
+export * from './site/server.js';

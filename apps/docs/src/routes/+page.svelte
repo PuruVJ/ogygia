@@ -382,7 +382,7 @@
 	</div>
 </section>
 
-<!-- A <section>, not <main>: the Shell's `.ph-cmain` is the page's one main landmark. -->
+<!-- A <section>, not <main>: the Shell's `.og-cmain` is the page's one main landmark. -->
 <section class="shell home-docs" aria-label="Start here">
 	<div class="home-docs-head">
 		<h2>Start here</h2>

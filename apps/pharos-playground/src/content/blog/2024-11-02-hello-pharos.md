@@ -1,12 +1,12 @@
 ---
-title: Hello, pharos
+title: Hello, ogygia
 date: '2024-11-02'
 author: Ada Lovelace
-tags: [announcement, pharos]
-summary: Introducing the pharos docs kit — a batteries-included shell for content sites on ogygia's islands.
+tags: [announcement, ogygia]
+summary: Introducing the ogygia docs kit — a batteries-included shell for content sites on ogygia's islands.
 ---
 
-Welcome to the **pharos** blog. This whole page is a content entry rendered through the blog shell: a dated header, the author, tags, and this body — all from one markdown file.
+Welcome to the **ogygia** blog. This whole page is a content entry rendered through the blog shell: a dated header, the author, tags, and this body — all from one markdown file.
 
 The blog is a separate *genre* from the docs: a flat, dated corpus with `date`, `author`, and `tags` fields, ordered newest-first.
 

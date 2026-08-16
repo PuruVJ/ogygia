@@ -107,10 +107,10 @@ export type MarkdownOptions = MarkdownShikiOptions & {
 	 */
 	headings?: boolean | RemarkHeadingsOptions;
 	/**
-	 * Wrap overridable markdown elements in the pharos slot so a pharos site's `components` map can
+	 * Wrap overridable markdown elements in the ogygia slot so an ogygia site's `components` map can
 	 * replace how they render (id-form links, optimized images, custom code, …). `true` uses the
-	 * default tag set (`a`, `img`, `code`); pass `{ tags }` to widen. Off by default — a non-pharos
-	 * content app must not carry the slot. The component VALUES live in `pharos()`, never here.
+	 * default tag set (`a`, `img`, `code`); pass `{ tags }` to widen. Off by default — a non-ogygia
+	 * content app must not carry the slot. The component VALUES live in `defineSite()`, never here.
 	 */
 	overrides?: boolean | { tags?: string[] };
 	/**
@@ -142,7 +142,7 @@ export type MarkdownOptions = MarkdownShikiOptions & {
 	 */
 	remark?: Array<StagedPlugin>;
 	/** Extra rehype plugins — same staging contract as {@link MarkdownOptions.remark}: plain entries
-	 *  run after the pharos override wrap (before heading anchors); `{ enforce: 'pre', plugin }` runs
+	 *  run after the ogygia override wrap (before heading anchors); `{ enforce: 'pre', plugin }` runs
 	 *  before the wrap. */
 	rehype?: Array<StagedPlugin>;
 	/** The fence pipeline — `{ transformers, … }`. See {@link CodeOptions}. */
@@ -303,7 +303,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 		...shiki_opts
 	} = options ?? (islandBridge.markdownConfig as MarkdownOptions | null) ?? {};
 
-	// Element overrides: which tags get wrapped in the pharos slot (values live in `pharos()`).
+	// Element overrides: which tags get wrapped in the ogygia slot (values live in `defineSite()`).
 	const override_tags = overrides ? (overrides === true ? [...DEFAULT_OVERRIDE_TAGS] : (overrides.tags ?? [...DEFAULT_OVERRIDE_TAGS])) : [];
 
 	// The fence pipeline's transformers ride the shiki config (applied at codeToHtml).
@@ -339,7 +339,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 	const docs_store = new RegionStore('docs');
 	const doc_sig = () =>
 		[
-			'v3', // markup-cache format
+			'v1', // markup-cache format
 			String(region_mode),
 			String(headingIds),
 			JSON.stringify(headings),
@@ -372,7 +372,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			// Content-hash code ids run AFTER the heading collector (so headings carry scoped ids) and
 			// BEFORE mdsvex's own highlight pass, stashing each id on `code.meta` for the highlighter.
 			...(codeIds ? [remarkCodeIds] : []),
-			// Always collect links into `metadata.links` — the substrate for pharos's link audit.
+			// Always collect links into `metadata.links` — the substrate for ogygia's link audit.
 			remarkLinks,
 			...remark_staged.post
 		] as MdsvexOptions['remarkPlugins'],
@@ -397,7 +397,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 		...rehype_staged.pre,
 		...(override_tags.length ? [[rehypeOverrides, override_tags]] : []),
 		...rehype_staged.post,
-		// LAST so the anchor `<a>` it adds isn't swept into the pharos slot by `rehypeOverrides`.
+		// LAST so the anchor `<a>` it adds isn't swept into the ogygia slot by `rehypeOverrides`.
 		...(headingAnchors ? [rehypeHeadingAnchors] : [])
 	] as NonNullable<MdsvexOptions['rehypePlugins']>;
 	if (rehype_chain.length) mdsvex_opts.rehypePlugins = rehype_chain;
@@ -479,10 +479,10 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 					return { code: emitted.code, map: undefined };
 				}
 			}
-			if (override_tags.length) lines.push(`import ${SLOT_TAG} from 'ogygia/pharos/slot';`);
+			if (override_tags.length) lines.push(`import ${SLOT_TAG} from 'ogygia/content/slot';`);
 			// `:::` tab syntax with no author import → inject the pair (zero-import authoring). Plain barrel
 			// import: TabGroup is a plain OVERRIDABLE wrapper; its internal island carries the `wake`.
-			if (inject_tabs) lines.push(`import { TabGroup, Tab } from 'ogygia/pharos';`);
+			if (inject_tabs) lines.push(`import { TabGroup, Tab } from 'ogygia/content';`);
 			const compiled = inject_module(base, lines);
 			// Cache ONLY island-free outputs: transforming an island REGISTERS it (a build-time side
 			// effect the scanner needs) — a cached hit would skip that, so island-carrying files pay

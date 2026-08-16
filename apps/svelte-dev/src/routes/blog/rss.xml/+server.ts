@@ -1,7 +1,7 @@
 import { site, blog } from '$lib/site.server';
 import { post_date } from '$lib/blog';
 
-// The blog's feed — pharos's RSS emission, `site.emit` style. Prerendered.
+// The blog's feed — ogygia's RSS emission, `site.emit` style. Prerendered.
 export const prerender = true;
 
 export const GET = site.emit.rss({

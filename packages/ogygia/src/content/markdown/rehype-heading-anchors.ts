@@ -2,7 +2,7 @@
  * Add a hover permalink anchor to every heading that has an id — a real `<a href="#id">` so clicking
  * it sets the hash URL and scrolls, with NO JavaScript (static markup, nav-safe by construction; the
  * SPA router treats a hash-only link as a native scroll). The icon is drawn by CSS on
- * `.ph-heading-anchor`; the accessible name rides an `aria-label` built from the heading text.
+ * `.og-heading-anchor`; the accessible name rides an `aria-label` built from the heading text.
  *
  * Runs at the rehype (hast) stage, after the id is attached (`remark-heading-id` / `remark-headings`),
  * so the heading element already carries `properties.id`.
@@ -43,16 +43,16 @@ export function rehypeHeadingAnchors() {
 					// mark the heading so CSS can anchor the absolutely-positioned link
 					const cls = child.properties.className;
 					child.properties.className = Array.isArray(cls)
-						? [...cls, 'ph-heading']
+						? [...cls, 'og-heading']
 						: cls
-							? [String(cls), 'ph-heading']
-							: ['ph-heading'];
+							? [String(cls), 'og-heading']
+							: ['og-heading'];
 					child.children = child.children ?? [];
 					child.children.push({
 						type: 'element',
 						tagName: 'a',
 						properties: {
-							className: ['ph-heading-anchor'],
+							className: ['og-heading-anchor'],
 							href: `#${id}`,
 							'aria-label': label ? `Permalink to “${label}”` : 'Permalink to this section'
 						},
