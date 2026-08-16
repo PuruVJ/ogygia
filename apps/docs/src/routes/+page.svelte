@@ -4,7 +4,7 @@
 	import {
 		heroCode, heroCodeHtml, loadCode, visibleCode, lakeCode, serverCode, fragmentCode,
 		livePartialCode, sharedObjectCode, contentCollectionCode, contentMarkdownCode,
-		contentJsonCode, contentCustomCode
+		contentJsonCode, contentCustomCode, sitekitCode
 	} from '$lib/code/snippets';
 	// The hero demo hydrates on load; the showcase islands below each hydrate on the exact schedule
 	// their code shows, so `/` is itself a live demo of the library.
@@ -331,6 +331,77 @@
 	</div>
 </section>
 
+<section class="shell content-story" aria-labelledby="site-story">
+	<div class="content-head">
+		<span class="story-kicker">And then the collection becomes a site</span>
+		<h2 id="site-story">A docs site is one bag of options</h2>
+		<p>
+			This is where the story has been heading. Hand <code>sitekit()</code> a collection and it
+			mints the <em>brains</em>: the nav tree woven from your filenames, prev/next that follows real
+			links, full-text search, <code>sitemap.xml</code> and <code>llms.txt</code>, and a link audit
+			that fails the build before a reader ever sees a dead end. Mount a shell, and you have what
+			you are looking at — <strong>this site is the demo</strong>.
+		</p>
+	</div>
+
+	<div class="content-showcase">
+		<ShowcaseCard
+			title="The whole site"
+			tag="sitekit()"
+			marker="these docs, verbatim"
+			code={sitekitCode}
+			stack
+		>
+			{#snippet demo()}
+				<ContentPeek />
+			{/snippet}
+		</ShowcaseCard>
+	</div>
+
+	<div class="content-beats">
+		<div class="beat">
+			<div class="beat-head">
+				<span class="beat-num">01</span>
+				<span class="content-eyebrow">The weave</span>
+				<h3>Filenames become the nav</h3>
+				<p>
+					<code>NN-</code> prefixes order, <code>+meta.json</code> names sections, and every
+					misplaced page is a named build error — never a silent gap.
+					<a href="/docs/site/outline">Outline →</a>
+				</p>
+			</div>
+		</div>
+
+		<div class="beat">
+			<div class="beat-head">
+				<span class="beat-num">02</span>
+				<span class="content-eyebrow">The chrome</span>
+				<h3>Shells you can keep or shed</h3>
+				<p>
+					<code>DocsShell</code> and <code>BlogShell</code> are compositions of public bricks —
+					replace any region with a snippet, or drop to <code>Frame</code> and bring your own.
+					<a href="/docs/site/shell">Shells →</a>
+				</p>
+			</div>
+		</div>
+
+		<div class="beat">
+			<div class="beat-head">
+				<span class="beat-num">03</span>
+				<span class="content-eyebrow">The audience you don't see</span>
+				<h3>Search, sitemap, llms.txt — emitted</h3>
+				<p>
+					An on-device search worker over a prerendered index, and machine-facing serializations
+					that can never drift — they are views of the same tree.
+					<a href="/docs/site/search">Search →</a>
+				</p>
+			</div>
+		</div>
+	</div>
+
+	<p class="content-lead">One command scaffolds all of it: <code>npx ogygia site init</code>.</p>
+</section>
+
 <section class="shell applayer" aria-labelledby="applayer">
 	<div class="story-intro">
 		<span class="story-kicker">Around the islands</span>
@@ -409,6 +480,10 @@
 		<a class="home-docs-card" href="/docs/content/collections">
 			<span class="home-docs-kicker">Content</span>
 			<span class="home-docs-title">RF-native collections, markdown, live sources</span>
+		</a>
+		<a class="home-docs-card" href="/docs/site/site">
+			<span class="home-docs-kicker">Site</span>
+			<span class="home-docs-title">sitekit() — outline, shells, search, emissions</span>
 		</a>
 		<a class="home-docs-card" href="/docs/reference/constraints">
 			<span class="home-docs-kicker">Reference</span>

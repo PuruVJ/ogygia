@@ -53,3 +53,7 @@ Two pages in this section apply to every kind rather than any one of them:
 - [Client islands](/docs/regions/client-islands) — mark an import with `wake` and it ships JS on a schedule; the marked import is a real component binding you can pass around, render dynamically, or put in an `{#each}`.
 
 From here, read the kind you need — or start with [client islands](/docs/regions/client-islands), the one most pages reach for first.
+
+---
+
+*Next chapter: an island that can't reach the server is just a widget. [Remote functions](/docs/data-state/remote-functions) give it one.*

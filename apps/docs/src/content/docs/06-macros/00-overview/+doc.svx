@@ -36,3 +36,7 @@ The rule for what belongs here is simple: **literal inputs, a build-determined r
 - **No runtime cost.** The rewrite happens once, at build. What ships is the result: a source, a region, a registry, a codec key, a constant.
 
 Each construct has its own page with its full contract. Start with [loaders](/docs/macros/loaders) if you have content, [`wire`](/docs/macros/wire) if you share state across islands, or [`bake`](/docs/macros/bake) for the "run at build, ship the answer" trick.
+
+---
+
+*Last chapter: every power above respects one boundary. [The constraints](/docs/reference/constraints) are the rules that keep it honest.*

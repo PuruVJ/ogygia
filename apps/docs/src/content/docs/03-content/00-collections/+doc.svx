@@ -7,7 +7,7 @@ related:
   - reference/api
 ---
 
-`ogygia/content` gives SvelteKit content collections that fit the islands model. **This docs site is built on it** — every page you are reading is a `.svx` entry rendered through it.
+[Remote functions](/docs/data-state/remote-functions) move data; for most sites the biggest data is the writing itself. `ogygia/content` gives SvelteKit content collections that fit the islands model. **This docs site is built on it** — every page you are reading is a `.svx` entry rendered through it.
 
 You learn one API and reuse it everywhere. Define a collection once with `content({ loader, schema })`. Point its `loader` at a glob of markdown files, at a REST API or CMS, or at a source that pushes over time — the read surface (`list`, `get`, `ids`) never changes.
 
@@ -296,3 +296,7 @@ Below, a `query.live` yields a rendered [held region](/docs/regions/held-regions
 - **Don't** register a separate mdsvex plugin — configuration lives entirely under `ogygia({ content: { markdown } })`.
 - **Don't** expect a compiled body from a CMS row — those sources deliver **data**; render it through a held region.
 - **Don't** promise live continuity on serverless — an in-memory stream is per-isolate there.
+
+---
+
+*Next chapter: a collection knows what exists. [The site kit](/docs/site/site) decides how it reads — nav, search, shell, and all.*

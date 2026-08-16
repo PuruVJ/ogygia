@@ -69,12 +69,31 @@ On an **island** the word says *when JS runs*. On a **server island** it says *w
 
 Islands, server islands, lakes, and held regions are not four features — they are four settings of one `<Region>` envelope. That canonical table, and the two dials behind it, live on the [Regions](/docs/regions/regions) landing page.
 
+## The story these docs tell
+
+The sections read in order, and each one earns the next. It is one arc, from a page that is just
+HTML to a site that runs itself:
+
+1. **A page is HTML** — until you mark a component and part of it [comes alive](/docs/regions/regions).
+   Islands, server islands, lakes, held regions: four settings of one primitive.
+2. **Alive things need to talk** — [remote functions](/docs/data-state/remote-functions) give islands
+   a server, and [shared state](/docs/data-state/state-context) lets one live object span them.
+3. **Your words become data** — a [collection](/docs/content/collections) turns markdown, JSON, or a
+   CMS into typed entries whose bodies render as regions.
+4. **The data becomes a site** — [`sitekit()`](/docs/site/site) weaves collections into a nav tree,
+   search, emissions, and a shell. These docs are that chapter, rendered.
+5. **The site becomes an app** — the [router](/docs/app/router) swaps pages without a reload, weaves
+   server islands into one request, and prerenders what you'll click next.
+6. **The build does the heavy lifting** — [`import.meta.og.*`](/docs/macros/overview) settles at
+   compile time everything that never changes between requests.
+7. **And the boundary has rules** — the [constraints](/docs/reference/constraints) that keep all of
+   the above honest.
+
 ## Start here
 
 - [Install](/docs/start/install) — add the package and wire the plugin.
 - [Quickstart](/docs/start/quickstart) — your first island, end to end.
-- [Regions](/docs/regions/regions) — the one primitive everything compiles to.
-- [Client islands](/docs/regions/client-islands) — the primitive you'll reach for most.
+- [Regions](/docs/regions/regions) — chapter one: the primitive everything compiles to.
 
 <style>
   .doc-demo {

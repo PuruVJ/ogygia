@@ -150,3 +150,17 @@ export const press = content({
 
 // pushes? add live() — a change signal; the feed re-emits on every change.
 export const feed = withRemotes(press).live.list({ map: (e) => e.data });`, 'ts');
+
+export const sitekitCode = import.meta.og.code(`// site.server.ts — the WHOLE site config
+import { content, fields, sitekit, links } from 'ogygia/content';
+
+export const docs = content({
+  loader: import.meta.og.loader.folder('../content/docs'),
+  schema: fields.page
+});
+
+export const site = sitekit({
+  outline: docs,          // filenames become the nav tree
+  prevNext: 'graph',      // "keep reading" follows real links
+  checks: [links()]       // a broken link fails the build
+});`, 'ts');

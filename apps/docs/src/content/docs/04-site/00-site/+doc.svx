@@ -176,3 +176,7 @@ The site kit is one surface with a few clear parts. Each has its own page:
 - **Do** let filename conventions carry structure (`NN-` order, `+meta.json` labels). The outline reads them as data; you write no arrangement config for the common case.
 - **Don't** pass a collection's bodies over the wire yourself. Let `site.doc()` bake the body into a region ticket — that is the only representation meant to cross.
 - **Don't** reach for the site kit to render a single standalone page. That is `content()` plus `<Region>`; the site kit is the *site* around many.
+
+---
+
+*Next chapter: the site stands; now it should move. [The router](/docs/app/router) makes navigation feel like an app — one request, no reload, no waterfall.*

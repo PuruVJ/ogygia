@@ -7,7 +7,7 @@ related:
   - regions/server-islands
 ---
 
-The SPA router is **on by default**, app-wide — there is no component to render. Same-origin link clicks become client-side navigations: ogygia fetches the target page, merges `<head>`, swaps `<body>`, and updates history — no full reload, no Kit client bootstrap. View transitions are on too, so pages cross-fade instead of flashing white.
+Everything so far renders a page; this chapter is about leaving it. The SPA router is **on by default**, app-wide — there is no component to render. Same-origin link clicks become client-side navigations: ogygia fetches the target page, merges `<head>`, swaps `<body>`, and updates history — no full reload, no Kit client bootstrap. View transitions are on too, so pages cross-fade instead of flashing white.
 
 It is configured in **one place**, the Vite plugin:
 
@@ -152,3 +152,7 @@ The router does no script processing: `<script>` tags injected by a body swap do
 - **Don't** expect injected `<script>` tags to run after a body swap; put per-navigation code in an island.
 - **Don't** bind `sessionCookie` to a prerendered hole — personalize inside the island instead.
 - **Don't** leave the router on if a plain MPA is enough — `router: false` drops it (and its runtime) entirely.
+
+---
+
+*Next chapter: much of what a site does never changes between requests. [The `import.meta.og.*` macros](/docs/macros/overview) settle it at build.*
