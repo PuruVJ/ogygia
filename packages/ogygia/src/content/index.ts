@@ -114,7 +114,14 @@ export { folder } from './folder.js';
 export type { FolderOptions } from './folder.js';
 
 // The filename convention it runs on (moved here from ogygia — ordering is generic corpus knowledge).
-export { numbered, dated, date_of, title_case, strip_order_prefix, order_of } from './convention.js';
+export {
+	numbered,
+	dated,
+	date_of as dateOf,
+	title_case as titleCase,
+	strip_order_prefix as stripOrderPrefix,
+	order_of as orderOf
+} from './convention.js';
 export type { Convention, NumberedOptions, MetaDecoration } from './convention.js';
 // `blocks()` is the content source; `blocks.resolve(tree, registry)` is the no-collection recipe
 // helper (`type → region`, server-side). Both live on the one `blocks` export.

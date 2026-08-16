@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { preference, preference_switch } from '../src/preference.js';
+import { preference } from '../src/preference.js';
 
 describe('preference()', () => {
 	it('rejects a default that is not one of the values', () => {
@@ -57,8 +57,8 @@ describe('preference()', () => {
 		expect(p.get()).toBe('light');
 	});
 
-	it('preference_switch() is a self-contained delegated <script> wiring [data-pref][data-pref-set]', () => {
-		const html = preference_switch();
+	it('preference.switch() is a self-contained delegated <script> wiring [data-pref][data-pref-set]', () => {
+		const html = preference.switch();
 		expect(html.startsWith('<script>')).toBe(true);
 		expect(html).toContain('addEventListener');
 		expect(html).toContain('[data-pref][data-pref-set]'); // the delegation selector

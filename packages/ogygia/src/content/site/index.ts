@@ -16,20 +16,26 @@
  * export const site = sitekit(outline([{ label: 'Guides', items: guides, meta }]), { prevNext: 'graph' });
  * ```
  */
-export { outline, pick, href_of } from './outline.js';
+export { outline, pick, href_of as hrefOf } from './outline.js';
 export type { Outline, OutlineSpec, OutlineOptions, OutlineNode, OutlineThunk, GroupSpec, LinkSpec, Selection, Collection, TrailScope } from './outline.js';
 
 export { sitekit, mountBase } from './site.js';
 export type { SiteData, SiteMeta, ReadContext } from './site.js';
 export { fields } from './fields.js';
 export type { PageFields, PostFields, ChangeFields, BlogPostRef } from './fields.js';
-export { dimensions, is_dimensioned } from './dimensions.js';
+export { dimensions, is_dimensioned as isDimensioned } from './dimensions.js';
 export type { Axis, Coordinate, DimensionsSpec, Dimensioned, Switcher, SwitcherAxis, Fallback } from './dimensions.js';
 export type { Site, SiteOptions, EmitHandler, EmitOptions, LlmsEmitOptions, RawEmit } from './site.js';
 export { links } from './checks.js';
 export type { Check, Finding, Severity, CheckContext, LinkOptions } from './checks.js';
 
-export { orama_engine, build_docs, split_sections, strip_prose, create_search } from './search.js';
+export {
+	orama_engine as oramaEngine,
+	build_docs as buildDocs,
+	split_sections as splitSections,
+	strip_prose as stripProse,
+	create_search as createSearch
+} from './search.js';
 export type { SearchDoc, SearchHit, SearchEngine, SearchIndex, SearchOptions, SearchBrain } from './search.js';
 export { search } from './search-client.js';
 export type { SearchClient, SearchClientOptions } from './search-client.js';

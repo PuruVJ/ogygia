@@ -84,18 +84,16 @@ export const liveTick = query.live(async function* () {
 <Region of={liveTick().current} />`, 'svelte');
 
 export const sharedObjectCode = import.meta.og.code(`// cart.svelte.ts — a live class that can cross island boundaries
-import * as ogygia from 'ogygia';
-
 export class Cart {
   items = $state([]);
   get count() { return this.items.length; }
   add(item) { this.items.push(item); }
 
   // the whole opt-in: how this instance travels as a prop
-  static [ogygia.wire] = {
+  static wire = import.meta.og.wire({
     encode: (c) => $state.snapshot(c.items),
     decode: (items) => Object.assign(new Cart(), { items }),
-  };
+  });
 }
 
 // page.svelte — one instance, handed to two separate islands

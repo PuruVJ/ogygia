@@ -25,16 +25,13 @@ export { default as Boundary } from './OgygiaBoundary.svelte';
 // Regions held as values — server-chosen renders you place like data. `region()` mints, `<Region>` renders.
 export { default as Region } from './Region.svelte';
 export { region, isRegion } from './region.js';
-// `og_html_region(html)` — a pure-HTML region, what `import.meta.og.code()`/`.md()` inline at build.
-// Exported because the transform emits calls to it; authored code renders the result with `<Region>`.
-export { og_html_region } from './region.js';
 // Warm a deferred/live region's frame now, before its binder wakes — the "fetch now, activate later" escape hatch.
 export { preload } from './preload.js';
 
 // Serialize a self-contained function into a blocking inline `<script>` string — a theme setter (no
 // dark-mode flash), a deferred font, an early flag. `{@html script(fn)}`, put the tag where you like.
 export { script } from './script.js';
-export { preference, preference_switch } from './preference.js';
+export { preference } from './preference.js';
 export type { Preference, PreferenceSpec } from './preference.js';
 
 // Builder.io-style pages: the blessed path is the `blocks()` content source (see `ogygia/content`).
@@ -69,9 +66,6 @@ export { ogygiaTransport as transport } from './transport.js';
 export type { TransportCodec } from './live-transport.js';
 
 // Portable snippets — the compiler rewrites a `{#snippet}` handed to a component into
-// `og_portable(Entry, captures, url)` so it can cross an island boundary and come alive there. Not
-// authored by hand; exported because the transform emits calls to it. See region-snippet.ts.
-export { og_portable } from './region-snippet.js';
 
 // Cross-island context — `createContext()` (typed, no string key) + `<Context of={ctx} value={v}>`.
 // Bridges the DOM so a provider's value reaches islands in separate hydration roots below it.

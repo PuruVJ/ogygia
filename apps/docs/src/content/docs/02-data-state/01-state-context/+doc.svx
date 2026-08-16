@@ -125,7 +125,7 @@ Any island under the provider calls `get()` — no prop:
 <span>{cart?.count ?? 0}</span>
 ```
 
-Call `get()` during the island's setup, exactly like Svelte's `getContext`. Keep the reference — for a `[ogygia.wire]` value it *is* the one live instance, shared and reactive across every island that read it.
+Call `get()` during the island's setup, exactly like Svelte's `getContext`. Keep the reference — for a wired value it *is* the one live instance, shared and reactive across every island that read it.
 
 The two widgets below are separate island bundles. Neither receives a prop — both call `cartCtx.get()` and reach the same live `Cart`. Click Add; the count island repaints:
 
@@ -143,7 +143,7 @@ The two widgets below are separate island bundles. Neither receives a prop — b
 Both sharing and context accept **any serializable value** — a string, a number, a plain object, an array. The difference is what the reader gets back:
 
 - A **plain value** comes back as a **snapshot**: a copy taken when you provided it. Two islands each get their own copy, so a change in one is not seen by the other. Perfect for a theme, a user name, config.
-- A **`[ogygia.wire]` class** comes back as **one live instance**: the wire id reunites every decode into the same object, shared and reactive. Use this when islands must react to each other's changes.
+- A **wired class** comes back as **one live instance**: the wire id reunites every decode into the same object, shared and reactive. Use this when islands must react to each other's changes.
 
 So `value={'dark'}` gives each island the string `'dark'`; `value={new Cart()}` gives every island the same live cart.
 
@@ -152,14 +152,14 @@ So `value={'dark'}` gives each island the string `'dark'`; `value={new Cart()}` 
 By default state has **page lifetime** — a navigation mints a fresh instance and the visitor's cart is gone. Give a codec a **name** and it gains **session lifetime**: the same live object follows the visitor across every page in the tab.
 
 ```ts
-static [ogygia.wire] = {
+static wire = import.meta.og.wire({
   id: 'cart',                       // a name → session lifetime (one per tab)
   encode: (c) => $state.snapshot(c.items),
   decode: (d) => new Cart(d),
   merge: (live, fresh) => {         // both exist after a navigation — reconcile INTO live
     live.serverStamp = fresh.serverStamp;   // pull server truth (prices, stock, auth)
   },
-};
+});
 ```
 
 - On the next page the server still sends a fresh snapshot. Because the codec is named, the client reunites it with the cart the visitor already had, runs `merge`, and hands every island the **same live instance** — identity never resets.
@@ -194,7 +194,7 @@ Ambient and on by default: an island form you were filling survives navigation a
 - Read context with `get()` during island **setup** (like `getContext`). Called later — in an event handler — there is no island being hydrated to anchor the walk, so read once and keep the reference.
 - A context provider must sit **above** the consuming islands in the DOM. No provider above → the default (or `undefined`).
 - A **server island** (`render: 'deferred'`) renders in isolation on the endpoint, so it sees only a context's default, never the page's provider. If it must read the live context, put the reader in a nested `wake` island — that hydrates on the client and joins the provider.
-- The `[ogygia.wire]` key is a reserved symbol. Rename the import, alias it, stash it in a `const` — it still works, because the build never reads the key, only the runtime does.
+- `import.meta.og.wire` is a compile construct — the macro mints the reserved codec key at build, so there is nothing to import and no runtime symbol to manage.
 
 See [Constraints](/docs/reference/constraints) for the full boundary rules.
 

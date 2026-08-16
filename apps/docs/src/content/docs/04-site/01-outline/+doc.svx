@@ -98,22 +98,22 @@ export const posts = folder(
 	import.meta.glob('../content/blog/**/*.md', { eager: true }),
 	{ convention: dated() }
 );
-// 2026-08-13-release.md  →  /release   (date recoverable via date_of())
+// 2026-08-13-release.md  →  /release   (date recoverable via dateOf())
 ```
 
 :::
 
-`numbered()` verifies siblings as it reads — mixing prefixed and unprefixed files, or inconsistent padding, is an error unless a `+meta.json` opts the directory out with `"ordered": false`. `dated()` recovers the date from the filename for display via `date_of(filePath)` while keeping it out of the URL.
+`numbered()` verifies siblings as it reads — mixing prefixed and unprefixed files, or inconsistent padding, is an error unless a `+meta.json` opts the directory out with `"ordered": false`. `dated()` recovers the date from the filename for display via `dateOf(filePath)` while keeping it out of the URL.
 
 ## The address map
 
-Beyond the tree, the outline knows how to **resolve** a slug to its entry and how to enumerate every address. Downstream brains use this directly — `site.entries()` for prerender inputs, `site.doc(slug)` to resolve one page, `switcher()` on a [dimensioned](/docs/site/dimensions) site. When you build custom chrome, `href_of(base, slug)` is the one sanctioned way to turn an address into a link — it is what keeps a site correct under any mount prefix:
+Beyond the tree, the outline knows how to **resolve** a slug to its entry and how to enumerate every address. Downstream brains use this directly — `site.entries()` for prerender inputs, `site.doc(slug)` to resolve one page, `switcher()` on a [dimensioned](/docs/site/dimensions) site. When you build custom chrome, `hrefOf(base, slug)` is the one sanctioned way to turn an address into a link — it is what keeps a site correct under any mount prefix:
 
 ```ts
-import { href_of } from 'ogygia/content';
+import { hrefOf } from 'ogygia/content';
 
-href_of('/docs', 'routing');   // '/docs/routing'
-href_of('', 'routing');        // '/routing'
+hrefOf('/docs', 'routing');   // '/docs/routing'
+hrefOf('', 'routing');        // '/routing'
 ```
 
 ## Prev/next

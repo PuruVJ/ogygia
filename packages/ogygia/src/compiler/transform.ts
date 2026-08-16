@@ -1772,7 +1772,7 @@ export function transformHost(source, id, ctx) {
 
 	if (portable_emitted) {
 		const head =
-			`import { og_portable as ${OG_PORTABLE} } from 'ogygia';\n` + portable_imports.join('\n') + '\n';
+			`import { og_portable as ${OG_PORTABLE} } from 'ogygia/internal';\n` + portable_imports.join('\n') + '\n';
 		if (ast.instance) s.appendLeft(ast.instance.content.start, `\n${head}`);
 		else s.prepend(`<script${lang}>\n${head}</script>\n`);
 	}

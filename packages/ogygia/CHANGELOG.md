@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.0] — 2026-08-16
 
 The site-kit release. `ogygia/content` grows from collections into one pillar that carries a whole
-site: `sitekit()` mints the brains, `DocsShell` / `BlogShell` render them, the `import.meta.og.*`
-macros bake content at build. Around it: a security audit, an
-8×-flavored perf pass (bundle granularity, router warming, an exponential compiler fix), a unified
-preload architecture that goes native in MPA mode, and the `csr = false` keepalive bug that finally
-dies (#1, #4).
+site — `sitekit()` mints the brains, `DocsShell` / `BlogShell` render them, and the new
+`import.meta.og.*` compile macros bake content at build. Underneath: region snippets become a
+first-class primitive, markdown compiles to serialized regions, preloading goes render-gated (and
+native in MPA mode), the client bundle gets meaningfully smaller, and the `csr = false` keepalive
+bug finally dies (#1, #4).
 
 ### Added
 
@@ -26,7 +26,9 @@ dies (#1, #4).
   fallback page included), emissions (`sitemap.xml`, `llms.txt`, RSS, per-page raw markdown,
   `search.json`), content checks (`links()` — the in-prose link audit that fails the build, plus
   custom checks), `remotes()` (the wire layer: `nav` / `meta` / `doc` / `search`, prerendered or
-  live, bodies crossing as baked region tickets), and request-context projections (previews, roles).
+  live, bodies crossing as baked region tickets), request-context projections (previews, roles),
+  and the `fields` schema family (`fields.page` / `fields.post` / `fields.change` — Standard
+  Schema, zero validator dependency).
 
   ```ts title=src/lib/site.server.ts
   import { sitekit, links } from 'ogygia/content';
@@ -38,54 +40,89 @@ dies (#1, #4).
 - **Shells & bricks.** `Frame` (the headless composition), `DocsShell` (the VitePress form) and
   `BlogShell` (the blog form) — compositions of public bricks (`Doc`, `Sidebar`, `Pager`,
   `OnThisPage`, `Search`, `Switcher`, `BlogList`, `BlogPost`), every region a conditional snippet
-  prop: absent → built-in, a snippet → yours, `null` → gone. Styling is opt-in (`theme.css` +
-  `shell.css`, everything in `@layer ogygia` so any unlayered rule of yours wins), with Greek-named
-  alternate themes under `ogygia/content/themes/*`. Scaffold a whole site with `npx ogygia site init`.
+  prop: absent → built-in, a snippet → yours, `null` → gone. `site.meta()` (and the `meta` remote)
+  hands a shell `{ nav, switcher, data }` in one prerendered call, so the corpus never enters the
+  layout's module graph. Styling is opt-in (`theme.css` + `shell.css`, everything in
+  `@layer ogygia` so any unlayered rule of yours wins), with Greek-named alternate themes under
+  `ogygia/content/themes/*`. Scaffold a whole site with `npx ogygia site init`.
 
-- **The `import.meta.og.*` compile-macro family.** `loader.markdown` / `.folder` / `.json` take a
-  bare **directory** and derive their opinionated file set under it (globs remain the escape
-  hatch); `loader.git` pulls a corpus straight from another repository. `code(source, lang, meta?)`
-  renders a snippet at build through the app's own fence pipeline; `md(text)` does the same for
-  markdown; `bake(fn)` runs a function at build and inlines the result; `wire` marks a
-  transportable class codec.
+- **The `import.meta.og.*` compile-macro family.** One namespace of build-time constructs,
+  AST-precise (TS-aware oxc parse), failing loudly with `file:line` build errors:
+  - `loader.markdown` / `.folder` / `.json` take a bare **directory** and derive their opinionated
+    file set under it (globs remain the escape hatch); `loader.git('owner/repo@ref:path')` pulls a
+    corpus straight from another repository via cached sparse checkout — no committed copy.
+  - `code(source, lang, meta?)` renders a snippet at build through the app's own fence pipeline;
+    `md(text)` does the same for markdown — both inline as static regions.
+  - `bake(fn)` bundles and runs a function at build, inlines the result, drops the imports.
+  - `wire(codec)` declares a transportable-class codec (see Changed).
+  - `regions('./*.svelte')` registers raw-region imports by glob.
 
-- **Markdown authoring dialect.** VitePress-compatible containers (`::: tip` … `::: details`),
-  markdown-native tab groups (`::: code-group` / `::: tabs`) with site-wide synced, persisted
-  selection; diff markers in two dialects — line-level `+++ `/`--- ` prefixes (`diff_markers()`)
-  and svelte.dev's inline `+++added+++`/`---removed---` (`inline_markers()`, twoslash-safe) — both
-  skipping markdown-family fences so docs can show the syntax; `title=` fence meta for a filename
-  in the code chrome (falls back to the language, never empty); stable code-block ids with
-  permalink + copy actions that re-attach on reveal (tab switches, `<details>`).
+- **Region snippets — `region.snippet()`.** A snippet is now a region-shaped value that can cross
+  an island boundary and come alive. One primitive, three modes: **live** (the compiler lifts a
+  `{#snippet}` handed to an island into its own entry — parameters cross, top-level `await` inside
+  the body renders through async SSR), **static** (a parameterless snippet frozen to server HTML,
+  adopted byte-for-byte), and **slot** (an island's children render in place and the client adopts
+  the DOM range — nested islands inside re-wake on their own). `region.snippet()` is the public
+  constructor, mirroring `createRawSnippet`.
+
+- **Awaitable regions.** `await region(Component, props)` bakes the SSR HTML into the ticket — so a
+  content body (or any held region) crosses a remote or a load as HTML-only data, no source and no
+  second render. Markdown leans on this: a pure-static `.md` now compiles to a **serialized
+  region** (one HTML string in the module, the template a single `{@html}` reference), which also
+  retires the whole svelte-template escaping hazard class for prose.
+
+- **`preference()` / `preference.switch()`.** Site-wide, no-flash visitor preferences (the JS↔TS
+  code toggle, package-manager tabs, theme) as one primitive: `preference({ name, values,
+  default })` gives `head()` (a pre-paint inline script), `get`/`set`, and a `data-pref-*`
+  attribute contract on `<html>`; `preference.switch()` is one delegated handler for every
+  `[data-pref][data-pref-set]` control, surviving SPA body swaps with zero islands.
+
+- **Markdown authoring dialect.** VitePress-compatible containers (`::: tip` … `::: details`);
+  markdown-native tab groups (`::: code-group` / `::: tabs`) with synced, persisted selection;
+  diff markers in two dialects — line-level `+++ ` / `--- ` prefixes (`diff_markers()`) and inline
+  `+++added+++` / `---removed---` (`inline_markers()`, twoslash-safe); `title=` fence meta for a
+  filename in the code chrome (falls back to the language — the header is never empty); stable
+  code-block ids with permalink + copy actions that re-attach on reveal (tab switches, `<details>`).
 
 - **MPA-mode native speculation.** With `router: false` the server handle injects one static
   Speculation Rules script: Chromium prerenders likely next pages, Firefox prefetches them, others
   ignore the JSON — zero config, zero client JS, per-link opt-out via `data-ogygia-speculate`.
   `preloadData(url)` hints a native prerender and `preloadCode(url)` a native prefetch in that mode.
 
-- **`site.meta()` / the `meta` remote** — the whole shell bundle (`{ nav, switcher, data }`) in one
-  prerendered call, so a layout mounts `<DocsShell {meta}>` without the corpus ever entering its
-  module graph.
+- **Dev guards.** Mutating a captured host snapshot inside an island warns with the prop path; a
+  block-level island rendered inline in a `<p>` (parser-hoisted, hydrates twice) is detected and
+  explained.
 
 ### Changed
 
+- **BREAKING: transportable codecs are declared with the `wire` macro.** `static [ogygia.wire] =
+  { … }` becomes `static wire = import.meta.og.wire({ … })` — no import, the macro mints the codec
+  key at build, and misuse is a build error instead of a silent non-codec. The runtime `wire`
+  symbol export is removed (the `TransportCodec` type remains).
+- **BREAKING: Vite peer is now `^7 || ^8`** (5 and 6 dropped). New optional peers: `@orama/orama`
+  (search) and `bits-ui` (shell dropdowns/palette) — both load only on their feature paths.
 - **BREAKING: emitted chunk names.** Island facades are `og-region.<hash>.js` (was
-  `ogygia-island.*`), the runtime is `og-runtime.<hash>.js` (was `ogygia-runtime.*`), the build
-  handoff is `.svelte-kit/og-region-deps.json`. The `<ogygia-region>` element and
-  `data-ogygia-runtime` attribute are unchanged — nothing locates the runtime by filename.
-- **BREAKING: `continuity.speculate` is removed.** SPA mode now never emits speculation rules — a
+  `ogygia-island.*`), the runtime is `og-runtime.<hash>.js`, the build handoff is
+  `.svelte-kit/og-region-deps.json`. The `<ogygia-region>` element and `data-ogygia-runtime`
+  attribute are unchanged — nothing locates the runtime by filename.
+- **BREAKING: `continuity.speculate` is removed.** SPA mode never emits speculation rules — a
   speculation cache serves real navigations only, which a body-swap router cannot read; the
   router's own prefetch + island-module warming is the working equivalent. MPA mode speculates by
   default (see Added).
+- **Schema layers merge instead of chaining.** Every layer in a schema array validates the
+  original data and the results merge — a later layer no longer loses fields an earlier layer
+  didn't declare (the cause of spurious `fields.post` "a post needs a date" failures).
 - **Preloading is render-gated end to end.** Portable-snippet entries are preloaded by the island
   whose props actually carry them (the compiler's static scan — which preloaded never-rendered
   candidates — is gone), joining the island facade + dep-chunk links in one head channel. The three
   island-module warmers (router prefetch, visible-idle, interaction hover) merged into one deduped
-  `warm_island_module`.
-- **Bundle granularity.** `svelte/server` and the codec graph no longer reach the client (−25% on
-  the reference app: 33.3 → 25.0 kB); the frame store is a feature (`defer`/`live`/`morph`/`lakes`
-  apps only — the router weaves through the slots seam, not a static import); the wire runtime is
+  `warm_island_module`. Remote seeds skip values carrying a baked region, so a page never ships a
+  body twice.
+- **Bundle granularity.** `svelte/server` and the codec graph no longer reach the client; the
+  frame store is a feature (`defer`/`live`/`morph`/`lakes` apps only); the wire runtime is
   usage-gated (transportables, portable snippets, or islands with children); conditional shell
-  built-ins load as islands only when the built-in actually renders.
+  built-ins load as islands only when the built-in actually renders. Reference-app brotli:
+  static 8.41 → 6.90 kB (−18%), interactive 9.10 → 7.56, forms 8.92 → 7.39.
 - **Router.** Prefetch now also warms the incoming page's island modules (Slow-4G: warm nav 18.7×,
   visible-hydrate 229×); `visible` islands idle-warm their chunk.
 
@@ -95,20 +132,22 @@ dies (#1, #4).
   predicate read each route node's own `csr` while SvelteKit resolves it through the layout chain —
   a fresh app with `csr = false` only in the root layout skipped the client build and 404'd the
   runtime script. Now chain-resolved, matching Kit exactly; verified against the issue's repro.
+- **`folder()` collections came up empty on the dev server** (build green, dev broken): Vite's dev
+  glob matcher silently drops `{+doc.svx,+meta.json}` brace groups. Loader globs now emit in array
+  form, so dev and build agree.
 - **Childless islands serialized a phantom `children` slot descriptor** — and on minimal apps
   (no wire feature) every island then failed to hydrate with `Unknown type OgygiaS`. Childless
   payloads now carry nothing; islands with real children enable the wire revivers automatically.
 - **Nested islands compiled in O(2^depth)** — the usage walk double-descended component fragments;
   depth-25 hosts hung the build. Now linear.
 - **`import.meta.og.code()` in a `.svelte` host was silently discarded** when the island transform
-  also touched the file (it re-ran on the pre-macro source), exploding at runtime. The transforms
-  now compose.
-- **Loader macro brace globs matched zero files in dev** (Vite's dev matcher drops `{+a,+b}`
-  groups) — emitted in array form so dev and build agree.
-- **View-transition skips no longer surface as unhandled rejections**; deferred-region fetch hints
-  are dropped on woven navigations (no double fetch).
-- **`ogygia/content/slot` resolved to a deleted file** after the rename (broke any app with
-  markdown `overrides: true`).
+  also touched the file, exploding at runtime. The transforms now compose.
+- **An interrupted navigation no longer logs an unhandled "Transition was skipped" rejection.**
+- **`ogygia/content/slot` resolved to a missing file**, breaking any app with markdown
+  `overrides: true` at prerender.
+- **Shell reactivity + a11y:** the version switcher, element-override slot, and tab groups now
+  track their inputs (were stale after a slug or group change); the on-this-page rail's top link
+  is a real link; deferred-region fetch hints are dropped on woven navigations (no double fetch).
 
 ### Security
 

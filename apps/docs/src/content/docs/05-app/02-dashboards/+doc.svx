@@ -40,10 +40,10 @@ export class Filters {
   range = $state('30d');
   segment = $state<string | null>(null);   // set by clicking a chart bar
 
-  static [ogygia.wire] = {
+  static wire = import.meta.og.wire({
     encode: (f: Filters) => $state.snapshot({ range: f.range, segment: f.segment }),
     decode: (d) => Object.assign(new Filters(), d),
-  };
+  });
 }
 
 export const filtersCtx = ogygia.createContext<Filters>();

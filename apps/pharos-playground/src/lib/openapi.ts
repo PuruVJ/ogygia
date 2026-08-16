@@ -9,7 +9,7 @@
  * `import.meta.glob` itself and builds a source with `defineSource`. Exactly how `markdown()`/`json()`
  * are made — one level up, for a spec instead of a file.
  */
-import { defineSource, title_case, type GlobMap, type GroupMeta, type RawSource } from 'ogygia/content';
+import { defineSource, titleCase, type GlobMap, type GroupMeta, type RawSource } from 'ogygia/content';
 
 // ── the shapes an operation entry carries (all structured DATA; the page renders it) ──
 
@@ -141,7 +141,7 @@ function collect(specs: Spec[]): { ops: Array<{ id: string; op: Operation; order
 		for (const t of spec.tags ?? []) {
 			if (!tag_index.has(t.name)) {
 				tag_index.set(t.name, tag_index.size);
-				groups.set(t.name, { label: t.description || title_case(t.name) });
+				groups.set(t.name, { label: t.description || titleCase(t.name) });
 			}
 		}
 		const flat: Operation[] = [];
@@ -155,7 +155,7 @@ function collect(specs: Spec[]): { ops: Array<{ id: string; op: Operation; order
 		for (const op of flat) {
 			if (!tag_index.has(op.tag)) {
 				tag_index.set(op.tag, tag_index.size);
-				groups.set(op.tag, { label: title_case(op.tag) });
+				groups.set(op.tag, { label: titleCase(op.tag) });
 			}
 			const oi = per_tag.get(op.tag) ?? 0;
 			per_tag.set(op.tag, oi + 1);

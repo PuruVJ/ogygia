@@ -35,7 +35,7 @@ describe('rewrite_code', () => {
 			'`, "ts");'
 		].join('\n');
 		const out = await rewrite_code(src, '/app/x.ts', MARKUP, echo);
-		expect(out).toContain(`import { og_html_region as __og_html_region } from 'ogygia';`);
+		expect(out).toContain(`import { og_html_region as __og_html_region } from 'ogygia/internal';`);
 		expect(out).toContain('__og_html_region(');
 		expect(out).not.toContain('import.meta.og.code');
 		// dedented (no leading tab) and lang threaded
@@ -57,7 +57,7 @@ describe('rewrite_code', () => {
 			'<p>import.meta.og.code() in prose stays literal</p>'
 		].join('\n');
 		const out = await rewrite_code(src, '/app/C.svelte', MARKUP, echo);
-		expect(out).toContain(`import { og_html_region as __og_html_region } from 'ogygia';`);
+		expect(out).toContain(`import { og_html_region as __og_html_region } from 'ogygia/internal';`);
 		expect(out).toContain('__og_html_region(');
 		expect(out).toContain('<p>import.meta.og.code() in prose stays literal</p>');
 	});
@@ -105,7 +105,7 @@ describe('rewrite_code — md()', () => {
 	it('bakes a markdown string (dedented) and inlines og_html_region', async () => {
 		const src = ['const doc = import.meta.og.md(`', '\t# Title', '\tsome **bold** prose', '`);'].join('\n');
 		const out = await rewrite_code(src, '/app/x.ts', MARKUP, echo);
-		expect(out).toContain(`import { og_html_region as __og_html_region } from 'ogygia';`);
+		expect(out).toContain(`import { og_html_region as __og_html_region } from 'ogygia/internal';`);
 		expect(out).toContain('__og_html_region(');
 		expect(out).toContain('# Title\\nsome **bold** prose'); // dedented, whole text as one arg
 		expect(out).not.toContain('import.meta.og.md');

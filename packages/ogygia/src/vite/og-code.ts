@@ -137,7 +137,7 @@ export async function rewrite_code(
 	const htmls = await Promise.all(calls.map((c) => render(c)));
 
 	const anchor = import_anchor(regions);
-	const import_stmt = `import { og_html_region as ${HELPER} } from 'ogygia';\n`;
+	const import_stmt = `import { og_html_region as ${HELPER} } from 'ogygia/internal';\n`;
 	let out = '';
 	let last = 0;
 	// The import goes at the anchor; a call may sit before or after it, so weave both in offset order.

@@ -47,9 +47,10 @@ const ATTR = (name: string) => 'data-pref-' + name;
  * ONE delegated click handler that wires every preference switcher on the page: a click on any
  * `[data-pref][data-pref-set]` control (the buttons a variant switcher / package-manager tabs emit)
  * persists + applies that preference. Event delegation, so it survives SPA body-swaps and needs no
- * island. `{@html preference_switch()}` once in the layout, alongside each `preference(spec).head()`.
+ * island. `{@html preference.switch()}` once in the layout, alongside each `preference(spec).head()`.
+ * (`switch` is a property, not a binding — reserved words are fine there; mirrors `region.snippet`.)
  */
-export function preference_switch(): string {
+function preference_switch(): string {
 	return script(() => {
 		document.addEventListener('click', function (e) {
 			var t = e.target;
@@ -69,7 +70,7 @@ export function preference_switch(): string {
 }
 
 /** Declare a site-wide client preference. Throws at creation if `default` isn't one of `values`. */
-export function preference(spec: PreferenceSpec): Preference {
+function preference_impl(spec: PreferenceSpec): Preference {
 	if (!spec.values.includes(spec.default)) {
 		throw new Error(`[ogygia] preference('${spec.name}'): default '${spec.default}' is not one of values [${spec.values.join(', ')}]`);
 	}
@@ -116,3 +117,8 @@ export function preference(spec: PreferenceSpec): Preference {
 		}
 	};
 }
+
+// `preference()` + `preference.switch()` — one namespace, like `region.snippet`. Assigned (not a
+// namespace declaration) because `switch` is a reserved word as a binding but a fine property name.
+export const preference: typeof preference_impl & { switch: typeof preference_switch } =
+	Object.assign(preference_impl, { switch: preference_switch });

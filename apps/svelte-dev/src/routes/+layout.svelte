@@ -17,14 +17,14 @@
 	import '$lib/styles/twoslash.css';
 
 	import * as ogygia from 'ogygia';
-	import { preference, preference_switch } from 'ogygia';
+	import { preference } from 'ogygia';
 	// Island: the header carries client state now (mobile bottom-bar hide-on-scroll, the drawer).
 	import Header from '$lib/Header.svelte' with { wake: 'load' };
 
 	let { children } = $props();
 
 	// The JS↔TS code preference (js_to_ts variants bind to it). head() applies the saved choice
-	// before paint; preference_switch() is ONE delegated handler wiring every variant-switcher button.
+	// before paint; preference.switch() is ONE delegated handler wiring every variant-switcher button.
 	const codeLang = preference({ name: 'code-language', values: ['ts', 'js'], default: 'ts' });
 
 	// No-flash theme + font: apply the saved `.dark`/`.light` and `font-*` classes before first
@@ -67,7 +67,7 @@
 	{@html themeTag}
 	{@html toggleTag}
 	{@html codeLang.head()}
-	{@html preference_switch()}
+	{@html preference.switch()}
 </svelte:head>
 
 <Header />
