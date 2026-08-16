@@ -14,7 +14,12 @@
 	import { page } from '$app/state';
 	import { set_shell_context } from '../context.js';
 	import { mountBase, type Site } from '../site.js';
-	import Sidebar from './Sidebar.svelte';
+	import type { NavTree } from '../types.js';
+	// Island, NOT a plain import: the default sidebar loads its code only when it actually renders —
+	// a `sidebar` override drops it — and it comes alive on a csr=false page (roving focus, active
+	// marker) instead of shipping as dead SSR HTML. Mirrors DocsShell. Islands are isolated hydration
+	// roots, so the nav crosses as a DATA prop below (context doesn't cross the boundary).
+	import Sidebar from './Sidebar.svelte' with { wake: 'load' };
 
 	type Region = Component<{ site: Site }> | false | null | undefined;
 
@@ -43,6 +48,12 @@
 	const the_base = base ?? mountBase(page.url, page.params.slug ?? '');
 	// svelte-ignore state_referenced_locally
 	set_shell_context({ site, base: the_base, components: site.components });
+
+	// The nav tree as DATA, so the default `<Sidebar>` island gets it across the boundary (context
+	// doesn't cross). Only computed for the built-in path; an overriding `sidebar` component reads
+	// `site` from context itself. On a dimensions() site the slug selects the coordinate.
+	// svelte-ignore state_referenced_locally
+	const tree: NavTree = await site.nav({ base: the_base, slug: page.params.slug ?? '' });
 </script>
 
 <div class="og-shell">
@@ -60,7 +71,7 @@
 					{@const S = sidebar}
 					<S {site} />
 				{:else}
-					<Sidebar />
+					<Sidebar nav={tree} base={the_base} />
 				{/if}
 			</aside>
 		{/if}

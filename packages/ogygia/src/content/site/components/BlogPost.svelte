@@ -6,7 +6,7 @@
 	 * top to bottom. Styling rides the `.og-*` tokens; blog-specific structure is scoped below.
 	 */
 	import Region from '../../../Region.svelte';
-	import CodeChrome from './CodeChrome.svelte';
+	import CodeChrome from './CodeChrome.svelte' with { wake: 'load' };
 	import { get_shell_context } from '../context.js';
 	import type { DocView } from '../types.js';
 	import type { PostFields } from '../fields.js';
