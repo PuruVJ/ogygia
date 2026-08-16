@@ -36,7 +36,7 @@ export function is_same_origin_response(res: Response, page_origin = location.or
  *
  * Root-absolute paths (`/@id/…`, `/_app/…`) and absolute URLs import as-is. Relative specs
  * (`./_app/…`, `../_app/…`) must resolve against the **document** URL — `import()` would
- * otherwise resolve them against the runtime module (`/_app/immutable/ogygia-runtime.*`)
+ * otherwise resolve them against the runtime module (`/_app/immutable/og-runtime.*`)
  * and produce `/_app/_app/…` 404s on nested routes.
  */
 export function island_module_url(entry: string, base?: string): string {

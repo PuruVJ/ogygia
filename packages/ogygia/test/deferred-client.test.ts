@@ -58,7 +58,7 @@ describe('deferred client island runtime contracts', () => {
 			when: 'idle',
 			wake: 'visible',
 			'hydrate-margin': '200px',
-			entry: '/_app/immutable/ogygia-island.abc123.js',
+			entry: '/_app/immutable/og-region.abc123.js',
 			endpoint: '/🏝️?id=x'
 		});
 		expect(is_deferred(el)).toBe(true);

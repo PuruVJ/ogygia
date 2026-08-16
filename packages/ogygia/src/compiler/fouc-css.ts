@@ -3,7 +3,7 @@
  *
  * Kit only links stylesheets from the *client* page graph. Importing the authored `.svelte`
  * for that purpose (0.4.1) puts the same default-export module in the page graph and the
- * `emitFile` island entry → Rolldown thin-facades `ogygia-island.*`.
+ * `emitFile` island entry → Rolldown thin-facades `og-region.*`.
  *
  * Hosts instead import `virtual:ogygia/fouc-css/<encoded>.js` which side-effect-imports:
  *   - plain `.css` files reachable from the entry

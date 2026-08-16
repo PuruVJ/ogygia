@@ -31,7 +31,7 @@ function region(attrs: Record<string, string>): Element {
 	return el;
 }
 
-const visible = region({ wake: 'visible', entry: '/_app/immutable/ogygia-island.abc123.js', margin: '200px' });
+const visible = region({ wake: 'visible', entry: '/_app/immutable/og-region.abc123.js', margin: '200px' });
 const deferred = region({ wake: 'load', render: 'defer', when: 'visible', endpoint: '/\u{1F3DD}️?call=greet&v=2' });
 const load = region({ wake: 'load', entry: './_app/immutable/nested/x.js' });
 
@@ -47,7 +47,7 @@ export const cases: Record<string, () => unknown> = {
 	region_hydrate_schedule: () => region_hydrate_schedule(visible),
 	region_is_vacant: () => region_is_vacant(populated),
 	region_ssr_truncated: () => region_ssr_truncated(populated),
-	island_module_url_abs: () => island_module_url('/_app/immutable/ogygia-island.abc123.js'),
+	island_module_url_abs: () => island_module_url('/_app/immutable/og-region.abc123.js'),
 	island_module_url_rel: () => island_module_url('./_app/immutable/nested/x.js', 'http://localhost/docs/guide/'),
 	frameAddress: () => frameAddress('/\u{1F3DD}️?call=greet&v=2'),
 	devalue_parse_empty: () => parse(props_empty),

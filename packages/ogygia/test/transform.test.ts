@@ -656,7 +656,7 @@ describe('portable snippets — a named snippet handed to a non-island component
 
 	test('SSR hoists a modulepreload for the portable entry (no waterfall)', () => {
 		const r = run(wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`), makeCtx({ ssr: true }))!;
-		expect(r.code).toMatch(/<svelte:head><link rel="modulepreload" href="\/_app\/immutable\/ogygia-island\.[a-f0-9]+\.js"/);
+		expect(r.code).toMatch(/<svelte:head><link rel="modulepreload" href="\/_app\/immutable\/og-region\.[a-f0-9]+\.js"/);
 	});
 
 	test('a snippet-only file with no islands still transforms (relaxed bailout)', () => {

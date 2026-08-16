@@ -154,7 +154,7 @@ try {
 		'_app',
 		'immutable'
 	);
-	const depsPath = path.join(repo, 'apps/playground', '.svelte-kit', 'ogygia-island-deps.json');
+	const depsPath = path.join(repo, 'apps/playground', '.svelte-kit', 'og-region-deps.json');
 	if (!fs.existsSync(clientDir)) {
 		check('build: playground client present (run playground build)', false);
 	} else {
@@ -186,7 +186,7 @@ try {
 		};
 		const facades = fs
 			.readdirSync(clientDir)
-			.filter((f) => f.startsWith('ogygia-island.') && f.endsWith('.js'));
+			.filter((f) => f.startsWith('og-region.') && f.endsWith('.js'));
 		const counterFacades = facades.filter((f) => reaches(f));
 		// Portable page shares one wake:load Counter entry; other routes may add more
 		// strategies for Counter — assert the portable shared URL exists once, and component
@@ -289,7 +289,7 @@ try {
 			for (const m of appCode.matchAll(/"\/kit":\[(\d+)/g)) {
 				csrTrueNodes.add(m[1]);
 			}
-			// A raw-binding client leg is metadata-only: it CONTAINS `__module: "…ogygia-island.x.js"`
+			// A raw-binding client leg is metadata-only: it CONTAINS `__module: "…og-region.x.js"`
 			// as a plain string (a registry node, e.g. /blocks). That's fine — the invariant is no
 			// static/dynamic IMPORT of an island or wrapper module (dual ownership), so match import
 			// syntax, not bare mentions of the filename.
@@ -330,7 +330,7 @@ try {
 				js: Record<string, string[]>;
 				css: Record<string, string[]>;
 			};
-			const portableEntry = '/_app/immutable/ogygia-island.' +
+			const portableEntry = '/_app/immutable/og-region.' +
 				(counterFacades[0]?.match(/ogygia-island\.([0-9a-f]+)\.js/)?.[1] ?? '') +
 				'.js';
 			// Presence of deps handoff proves generateBundle walked Rolldown OutputChunk.imports.
@@ -338,7 +338,7 @@ try {
 			const jsKeys = Object.keys(deps.js ?? {});
 			check(
 				'build: island-deps handoff exists (Rolldown generateBundle)',
-				jsKeys.some((k) => k.includes('ogygia-island.')),
+				jsKeys.some((k) => k.includes('og-region.')),
 				`${jsKeys.length} js entries, ${Object.keys(deps.css ?? {}).length} css entries`
 			);
 			void portableEntry;

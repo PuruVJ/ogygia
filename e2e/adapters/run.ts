@@ -255,7 +255,7 @@ async function testAdapter(a: Adapter): Promise<Result> {
 	// client build alive: runtime chunk emitted
 	const imm = join(APP, '.svelte-kit', 'output', 'client', '_app', 'immutable');
 	const hasRuntime = existsSync(imm) &&
-		spawnSync('sh', ['-c', `ls ${imm}/ogygia-runtime.*.js 2>/dev/null`], { encoding: 'utf8' }).stdout.trim() !== '';
+		spawnSync('sh', ['-c', `ls ${imm}/og-runtime.*.js 2>/dev/null`], { encoding: 'utf8' }).stdout.trim() !== '';
 	console.log(`    ${hasRuntime ? GREEN + 'PASS' : RED + 'FAIL'}${RESET}  ogygia runtime chunk emitted`);
 	let ok = !leftover && hasRuntime;
 

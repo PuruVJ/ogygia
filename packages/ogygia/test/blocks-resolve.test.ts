@@ -7,7 +7,7 @@ import type { Component } from 'svelte';
 function binding(id: string) {
 	return {
 		__ogRegion: id,
-		__module: `/_app/immutable/ogygia-island.${id}.js`,
+		__module: `/_app/immutable/og-region.${id}.js`,
 		__component: (() => {}) as unknown as Component<Record<string, unknown>>,
 		__sign: () => `./🏝️?id=${id}&sig=x`,
 		__renderHtml: () => '<div>x</div>'

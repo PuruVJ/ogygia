@@ -29,7 +29,7 @@ check('SSR: crossed snippet rendered inside the island bar', /ogygia-snippet/.te
 check('SSR: captured host value crossed (GitHub · Ada)', /GitHub · Ada/.test(bar), bar.slice(0, 120));
 check('SSR: nested island inside the crossed snippet seeded (5)', /data-bumper-n[^>]*>5</.test(bar));
 // No-waterfall: the portable entry is preloaded in <head>, fetched in parallel with the host island.
-check('SSR: portable entry preloaded (no waterfall)', /rel="modulepreload"[^>]*ogygia-island/.test(raw));
+check('SSR: portable entry preloaded (no waterfall)', /rel="modulepreload"[^>]*og-region/.test(raw));
 
 // ---------- Browser ----------
 const browser = await chromium.launch();

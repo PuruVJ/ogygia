@@ -139,12 +139,12 @@ export function islandId(relHostPath: string, index: string | number, salt = '')
 }
 
 /**
- * Deterministic client chunk path for a hydrate island (mirrors `ogygia-runtime.<hash>.js`).
+ * Deterministic client chunk path for a hydrate island (mirrors `og-runtime.<hash>.js`).
  * SSR bakes this into `<ogygia-region entry>` so the sticky runtime can `import(entry)` with no
  * app-wide regions map — Kit builds server before client, so content-hashed Vite names can't hand off.
  */
 export function islandChunkFileName(iid: string) {
-	return `_app/immutable/ogygia-island.${iid}.js`;
+	return `_app/immutable/og-region.${iid}.js`;
 }
 
 /** Public URL for {@link islandChunkFileName} (leading slash, same shape as runtime-url). */
@@ -175,7 +175,7 @@ export function regionBindingVirtualId(iid: string) {
  *
  * Beside the stub the transform emits `import 'virtual:ogygia/fouc-css/<entry>'` so Kit still
  * links stylesheets (FOUC) via CSS-only side effects. Importing the full `.svelte` JS module
- * dual-owns it with the emitFile island entry and Rolldown thin-facades `ogygia-island.*`.
+ * dual-owns it with the emitFile island entry and Rolldown thin-facades `og-region.*`.
  * Omitting CSS entirely orphans rules (scoped class hashes, no stylesheet).
  */
 export const CLIENT_BINDING_STUB = 'virtual:ogygia/client-binding-stub';
@@ -1372,7 +1372,7 @@ export function transformHost(source, id, ctx) {
 	 * csr=false CLIENT: stub replaces the portable wrapper binding, but Kit only links CSS from
 	 * the *client* page graph. Side-effect-import `virtual:ogygia/fouc-css/<entry>` (CSS graph
 	 * only — not the component JS) so stylesheets still ship without dual-owning the module
-	 * that emitFile registers as `ogygia-island.*`.
+	 * that emitFile registers as `og-region.*`.
 	 */
 	const binding_rewrite = (local, bindingPath, componentPathAbs) => {
 		let text = `import ${local} from ${JSON.stringify(bindingPath)};`;

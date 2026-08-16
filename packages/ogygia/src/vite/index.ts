@@ -173,7 +173,7 @@ function runtime_content_hash() {
 	return h.digest('hex').slice(0, 12);
 }
 const RUNTIME_HASH = runtime_content_hash();
-const RUNTIME_FILENAME = `_app/immutable/ogygia-runtime.${RUNTIME_HASH}.js`;
+const RUNTIME_FILENAME = `_app/immutable/og-runtime.${RUNTIME_HASH}.js`;
 const RUNTIME_URL_BUILD = '/' + RUNTIME_FILENAME;
 
 const TRAILING_SLASH = /\/$/;
@@ -328,11 +328,11 @@ export function dev_hmr_client_source() {
 export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.js`;
 
 /** Deterministic island facade filename (content-hashed Vite deps are separate). */
-const ISLAND_FACADE_RE = /(?:^|\/)ogygia-island\.[0-9a-f]+\.js$/;
+const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;
 
 /**
  * From a client `generateBundle` output, collect transitive static `imports` for each
- * `ogygia-island.<id>.js` facade. Keys/values are public URLs (`/_app/immutable/…`).
+ * `og-region.<id>.js` facade. Keys/values are public URLs (`/_app/immutable/…`).
  * Used so SSR can `modulepreload` hashed dependency chunks for `hydrate: 'load'` islands
  * (Vite’s auto graph does not apply to `@vite-ignore` `import(entry)`).
  *
@@ -407,7 +407,7 @@ export function collectIslandDepModulepreloads(
 
 /** Stable handoff path: client `generateBundle` writes; SSR reads at render (Kit is SSR-first). */
 export function islandDepsHandoffPath(root: string) {
-	return path.join(root, '.svelte-kit', 'ogygia-island-deps.json');
+	return path.join(root, '.svelte-kit', 'og-region-deps.json');
 }
 
 function is_island_path(id: string) {
@@ -836,7 +836,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		const ssr = opts.ssr !== false;
 		// Scale: csr=false CLIENT hosts must not statically import portable wrappers (or the
 		// hydrate entries those wrappers pull in). Kit still emits those page nodes; sharing
-		// the emitFile module with the page graph forces Rolldown thin `ogygia-island.*`
+		// the emitFile module with the page graph forces Rolldown thin `og-region.*`
 		// facades. SSR keeps real wrappers for HTML; csr=true client keeps them so Kit can
 		// hydrate islands as normal components. Hydration always uses `import(entry)`.
 		const routesDir = path.join(root, 'src', 'routes');
@@ -1594,7 +1594,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// *render* time — Kit builds the server bundle before the client, so baking at
 				// `load()` would always be empty; prerender/live SSR run after client generateBundle.
 				// Resolve via import.meta.url walk (not absolute build-machine paths) so adapters
-				// find `output/server/ogygia-island-deps.json` next to the server bundle.
+				// find `output/server/og-region-deps.json` next to the server bundle.
 				if (!ssr)
 					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }`;
 				// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
@@ -1622,7 +1622,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					`  try {\n` +
 					`    let dir = path.dirname(fileURLToPath(import.meta.url));\n` +
 					`    for (let i = 0; i < 8; i++) {\n` +
-					`      out.push(path.join(dir, 'ogygia-island-deps.json'));\n` +
+					`      out.push(path.join(dir, 'og-region-deps.json'));\n` +
 					`      const parent = path.dirname(dir);\n` +
 					`      if (parent === dir) break;\n` +
 					`      dir = parent;\n` +
@@ -1630,8 +1630,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					`  } catch {}\n` +
 					`  if (typeof process !== 'undefined' && process.cwd) {\n` +
 					`    const cwd = process.cwd();\n` +
-					`    out.push(path.join(cwd, '.svelte-kit', 'ogygia-island-deps.json'));\n` +
-					`    out.push(path.join(cwd, '.svelte-kit', 'output', 'server', 'ogygia-island-deps.json'));\n` +
+					`    out.push(path.join(cwd, '.svelte-kit', 'og-region-deps.json'));\n` +
+					`    out.push(path.join(cwd, '.svelte-kit', 'output', 'server', 'og-region-deps.json'));\n` +
 					`  }\n` +
 					`  return out;\n` +
 					`}\n` +
@@ -2093,7 +2093,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				'.svelte-kit',
 				'output',
 				'server',
-				'ogygia-island-deps.json'
+				'og-region-deps.json'
 			);
 			try {
 				fs.mkdirSync(path.dirname(server_copy), { recursive: true });
