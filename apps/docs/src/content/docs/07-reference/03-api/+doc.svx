@@ -142,7 +142,11 @@ A `render: 'deferred'` hole is **dynamic by default**: its endpoint is served `C
 ogygia({ presets: { pricing: { render: 'deferred', wake: 'load', maxAge: '1h' } } })
 ```
 
-That hole's endpoint is served `Cache-Control: private, max-age=3600`. The `maxAge` is **signed into the hole's URL**, so a harvested capability can't be re-pointed at a longer cache. `maxAge: 0` (or omitting it) keeps the hole dynamic. With `render: 'live'`, `maxAge` is instead the client revalidate staleness — use a duration string to stay unit-explicit across both.
+That hole's endpoint is served `Cache-Control: private, max-age=3600`. The `maxAge` is **signed into the hole's URL**, so a harvested capability can't be re-pointed at a longer cache. `maxAge: 0` (or omitting it) keeps the hole dynamic. With `render: 'live'`, `maxAge` is instead the client revalidate staleness.
+
+::: warning A bare number changes units by context
+On a **deferred hole**, `maxAge: 60` means 60 **seconds** — it becomes an HTTP `max-age`, which speaks seconds. On a **live / remount lake**, `maxAge: 60` means 60 **milliseconds** — it is client-side staleness, which speaks ms like every JS timer. Same key, two clocks. Duration strings (`'30s'`, `'5m'`, `'1h'`) mean the same thing everywhere — prefer them and the trap disappears.
+:::
 
 ### `content`
 
