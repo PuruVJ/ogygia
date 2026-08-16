@@ -677,7 +677,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		complete: false,
 		speculate: continuity_speculate === false ? false : continuity_speculate,
 		forms: continuity_forms,
-		wire: true,
+		// The wire runtime (transportable-class + portable-snippet prop revival, ~8kB) is the ONLY
+		// consumer of `slots.wire` (read_region_props). It's off until the prescan proves the app
+		// actually ships a transportable class or a portable snippet — so a plain-props app never
+		// pays for a decoder it can't use. Turned on below via note_runtime_mark / the finalize check.
+		wire: false,
 		remoteSeeds: true,
 		hydrate: [],
 		defer: [],
@@ -706,6 +710,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		if (patch.persist) runtime_marks.persist = true;
 		if (patch.morph) runtime_marks.morph = true;
 		if (patch.lakes) runtime_marks.lakes = true;
+		if (patch.wire) runtime_marks.wire = true;
 	};
 
 	// HMAC key for signing region capability URLs (defer / remount:swr). Default: a fresh
@@ -943,6 +948,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (isl.held) note_runtime_mark({ live: true, morph: true });
 			if (isl.lakes?.length) note_runtime_mark({ lakes: true });
 			if (isl.keep) note_runtime_mark({ persist: true, persistKeys: [isl.keep] });
+			// A portable-snippet synth entry crosses a live snippet into an island — it is revived on the
+			// client through the wire codec, so this app needs the wire runtime.
+			if (isl.portable) note_runtime_mark({ wire: true });
 			let holders = id_hosts.get(isl.id);
 			if (!holders) {
 				holders = new Set();
@@ -1154,6 +1162,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 		};
 		walk(src_dir);
+		// A transportable class (`static wire = import.meta.og.wire(…)`) means island props can carry a
+		// live wired object, revived through the wire codec — so this app needs the wire runtime.
+		if (transportable_modules.size > 0) runtime_marks.wire = true;
 		// prescan walked every host — the capability marks are now COMPLETE, so the generated sticky
 		// runtime entry can bundle only the features this app uses (else it stays kitchen-sink).
 		runtime_marks.complete = true;

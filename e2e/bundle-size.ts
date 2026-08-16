@@ -59,6 +59,9 @@ async function measure(marks: RuntimeMarks): Promise<{ raw: number; brotli: numb
 	const bundle = await rolldown({
 		input: entry,
 		external: [/^svelte(\/|$)/, /^\$app\//, 'esm-env', /\.svelte$/],
+		// Strip DEV like a real Vite prod build (import.meta.env.DEV → false), so the numbers reflect
+		// what actually ships — not the dev-only warnings and the PropMutationGuard, which prod DCEs.
+		transform: { define: { 'import.meta.env.DEV': 'false', 'import.meta.env.MODE': '"production"' } },
 		logLevel: 'silent'
 	});
 	const { output } = await bundle.generate({ format: 'es', minify: true });

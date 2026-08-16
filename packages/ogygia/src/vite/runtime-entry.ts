@@ -86,7 +86,9 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 	wire: {
 		module: '../live-transport.js',
 		deps: [],
-		detect: (m) => m.wire !== false
+		// Opt-IN: only when the app actually ships a transportable class or a portable snippet (the
+		// build sets `wire: true` on detecting either). A plain-props app never bundles the ~8kB codec.
+		detect: (m) => m.wire === true
 	},
 	'remote-seeds': {
 		module: 'remote-seeds.js',
