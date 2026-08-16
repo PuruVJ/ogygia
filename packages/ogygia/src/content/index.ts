@@ -142,6 +142,6 @@ export type { ContentMode, GetRemote, ListRemote, WithRemotes } from './server.j
 // `ambient.d.ts`, surfaced to apps via the `ogygia/types` reference every scaffold carries — ONE
 // home, always on, no import required. The constructs themselves are rewritten by the vite plugin.
 
-// ── the site kit ── outline → sitekit → shell components. One barrel: data layer + site brains
+// ── the content kit ── outline → contentkit → shell components. One barrel: data layer + site brains
 // + chrome all surface from `ogygia/content` (bundlers tree-shake what a given app doesn't touch).
 export * from './site/index.js';

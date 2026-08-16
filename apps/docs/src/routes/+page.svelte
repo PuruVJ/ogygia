@@ -4,7 +4,7 @@
 	import {
 		heroCode, heroCodeHtml, loadCode, visibleCode, lakeCode, serverCode, fragmentCode,
 		livePartialCode, sharedObjectCode, contentCollectionCode, contentMarkdownCode,
-		contentJsonCode, contentCustomCode, sitekitCode
+		contentJsonCode, contentCustomCode, contentkitCode
 	} from '$lib/code/snippets';
 	// The hero demo hydrates on load; the showcase islands below each hydrate on the exact schedule
 	// their code shows, so `/` is itself a live demo of the library.
@@ -336,7 +336,7 @@
 		<span class="story-kicker">And then the collection becomes a site</span>
 		<h2 id="site-story">A docs site is one bag of options</h2>
 		<p>
-			This is where the story has been heading. Hand <code>sitekit()</code> a collection and it
+			This is where the story has been heading. Hand <code>contentkit()</code> a collection and it
 			mints the <em>brains</em>: the nav tree woven from your filenames, prev/next that follows real
 			links, full-text search, <code>sitemap.xml</code> and <code>llms.txt</code>, and a link audit
 			that fails the build before a reader ever sees a dead end. Mount a shell, and you have what
@@ -347,9 +347,9 @@
 	<div class="content-showcase">
 		<ShowcaseCard
 			title="The whole site"
-			tag="sitekit()"
+			tag="contentkit()"
 			marker="these docs, verbatim"
-			code={sitekitCode}
+			code={contentkitCode}
 			stack
 		>
 			{#snippet demo()}
@@ -367,7 +367,7 @@
 				<p>
 					<code>NN-</code> prefixes order, <code>+meta.json</code> names sections, and every
 					misplaced page is a named build error — never a silent gap.
-					<a href="/docs/site/outline">Outline →</a>
+					<a href="/docs/content-kit/outline">Outline →</a>
 				</p>
 			</div>
 		</div>
@@ -380,7 +380,7 @@
 				<p>
 					<code>DocsShell</code> and <code>BlogShell</code> are compositions of public bricks —
 					replace any region with a snippet, or drop to <code>Frame</code> and bring your own.
-					<a href="/docs/site/shell">Shells →</a>
+					<a href="/docs/content-kit/shell">Shells →</a>
 				</p>
 			</div>
 		</div>
@@ -393,7 +393,7 @@
 				<p>
 					An on-device search worker over a prerendered index, and machine-facing serializations
 					that can never drift — they are views of the same tree.
-					<a href="/docs/site/search">Search →</a>
+					<a href="/docs/content-kit/search">Search →</a>
 				</p>
 			</div>
 		</div>
@@ -481,9 +481,9 @@
 			<span class="home-docs-kicker">Content</span>
 			<span class="home-docs-title">RF-native collections, markdown, live sources</span>
 		</a>
-		<a class="home-docs-card" href="/docs/site/site">
+		<a class="home-docs-card" href="/docs/content-kit/content-kit">
 			<span class="home-docs-kicker">Site</span>
-			<span class="home-docs-title">sitekit() — outline, shells, search, emissions</span>
+			<span class="home-docs-title">contentkit() — outline, shells, search, emissions</span>
 		</a>
 		<a class="home-docs-card" href="/docs/reference/constraints">
 			<span class="home-docs-kicker">Reference</span>

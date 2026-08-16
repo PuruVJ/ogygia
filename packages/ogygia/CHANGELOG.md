@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] — 2026-08-16
 
-The site-kit release. `ogygia/content` grows from collections into one pillar that carries a whole
-site — `sitekit()` mints the brains, `DocsShell` / `BlogShell` render them, and the new
+The content-kit release. `ogygia/content` grows from collections into one pillar that carries a whole
+site — `contentkit()` mints the brains, `DocsShell` / `BlogShell` render them, and the new
 `import.meta.og.*` compile macros bake content at build. Underneath: region snippets become a
 first-class primitive, markdown compiles to serialized regions, preloading goes render-gated (and
 native in MPA mode), the client bundle gets meaningfully smaller, and the `csr = false` keepalive
@@ -19,7 +19,7 @@ bug finally dies (#1, #4).
 
 ### Added
 
-- **The site kit — `sitekit()` in `ogygia/content`.** Weave collections into a navigable site:
+- **The content kit — `contentkit()` in `ogygia/content`.** Weave collections into a navigable site:
   `outline()` (spec grammar, `pick()`, single-assignment placement with named build errors),
   `dimensions()` (versions/locales as coordinates, per-axis fallback instead of 404s, a switcher),
   full-text search (server brain or a prerendered index queried in an on-device worker, no-JS
@@ -31,10 +31,10 @@ bug finally dies (#1, #4).
   Schema, zero validator dependency).
 
   ```ts title=src/lib/site.server.ts
-  import { sitekit, links } from 'ogygia/content';
+  import { contentkit, links } from 'ogygia/content';
   import { docs } from './collections.server';
 
-  export const site = sitekit({ outline: docs, prevNext: 'graph', checks: [links()] });
+  export const site = contentkit({ outline: docs, prevNext: 'graph', checks: [links()] });
   ```
 
 - **Shells & bricks.** `Frame` (the headless composition), `DocsShell` (the VitePress form) and

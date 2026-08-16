@@ -83,8 +83,8 @@ export type LinkOptions = {
  * anchors, and stale redirect links. A blocks/CMS corpus that collects no `meta.links` is warned
  * about once (dev), then passes (any format can fill `meta.links` to opt in).
  *
- *   sitekit({ outline: docs, checks: [links()] })
- *   sitekit({ outline: docs, checks: [links({ anchors: false, redirected: 'error' })] })
+ *   contentkit({ outline: docs, checks: [links()] })
+ *   contentkit({ outline: docs, checks: [links({ anchors: false, redirected: 'error' })] })
  */
 export function links(opts: LinkOptions = {}): Check {
 	const anchors = opts.anchors ?? true;

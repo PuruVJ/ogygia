@@ -5,7 +5,7 @@
  * `blog.remote.ts`; server machinery (emissions, prerender entries, load guards) imports this directly.
  */
 import { content, numbered, dated } from 'ogygia/content';
-import { sitekit, dimensions } from 'ogygia/content';
+import { contentkit, dimensions } from 'ogygia/content';
 import * as v from 'valibot';
 import type { TopicKey } from './topics';
 
@@ -39,7 +39,7 @@ const collections = {
 	}),
 };
 
-export const site = sitekit({
+export const site = contentkit({
 	base: '/docs',
 	outline: dimensions({
 		axes: { topic: { values: ['svelte', 'kit', 'cli', 'ai'], default: 'svelte', label: 'Docs' } },

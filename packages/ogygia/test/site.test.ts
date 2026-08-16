@@ -5,15 +5,15 @@ import type { Heading, Source, SourceEntry } from '../src/content/index.js';
 // Import from the submodules, not the barrel — the barrel re-exports `.svelte` chrome that vitest
 // (no svelte plugin here) can't parse.
 import { outline, pick } from '../src/content/site/outline.js';
-import { sitekit as sitekitRaw, mountBase } from '../src/content/site/site.js';
+import { contentkit as contentkitRaw, mountBase } from '../src/content/site/site.js';
 import { links } from '../src/content/site/checks.js';
 import type { NavGroup, NavLeaf, NavTree } from '../src/content/site/types.js';
 
 // Test shim: keep the positional call style in the fixtures; the real API is `mint_site({ outline, …opts })`.
 const mint_site = (
-	outlineArg: Parameters<typeof sitekitRaw>[0]['outline'],
-	opts: Partial<Parameters<typeof sitekitRaw>[0]> = {}
-) => sitekitRaw({ outline: outlineArg, ...opts });
+	outlineArg: Parameters<typeof contentkitRaw>[0]['outline'],
+	opts: Partial<Parameters<typeof contentkitRaw>[0]> = {}
+) => contentkitRaw({ outline: outlineArg, ...opts });
 import { remarkLinks } from '../src/content/markdown/remark-links.js';
 import { rehypeOverrides, SLOT_TAG } from '../src/content/markdown/rehype-overrides.js';
 import { build_docs, orama_engine, split_sections, strip_prose } from '../src/content/site/search.js';

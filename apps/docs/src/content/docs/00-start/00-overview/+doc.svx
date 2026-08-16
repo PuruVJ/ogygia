@@ -80,7 +80,7 @@ HTML to a site that runs itself:
    a server, and [shared state](/docs/data-state/state-context) lets one live object span them.
 3. **Your words become data** — a [collection](/docs/content/collections) turns markdown, JSON, or a
    CMS into typed entries whose bodies render as regions.
-4. **The data becomes a site** — [`sitekit()`](/docs/site/site) weaves collections into a nav tree,
+4. **The data becomes a site** — [`contentkit()`](/docs/content-kit/content-kit) weaves collections into a nav tree,
    search, emissions, and a shell. These docs are that chapter, rendered.
 5. **The site becomes an app** — the [router](/docs/app/router) swaps pages without a reload, weaves
    server islands into one request, and prerenders what you'll click next.

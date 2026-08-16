@@ -2,12 +2,12 @@
 title: Emissions
 summary: Machine-facing serializations of the site. sitemap.xml for crawlers, llms.txt for models, RSS for readers, raw markdown per page — each a one-line GET handler off the same outline.
 related:
-  - site/site
-  - site/search
-  - site/outline
+  - content-kit/content-kit
+  - content-kit/search
+  - content-kit/outline
 ---
 
-Docs have a second audience in 2026: crawlers, language models, feed readers. The site kit emits the formats they expect straight off the outline — no parallel content, no separate build step. Each is a GET handler you mount in a `+server.ts`.
+Docs have a second audience in 2026: crawlers, language models, feed readers. The content kit emits the formats they expect straight off the outline — no parallel content, no separate build step. Each is a GET handler you mount in a `+server.ts`.
 
 ::: tip When to use
 Add the emissions your audience asks for. A public docs site wants `sitemap.xml` and `llms.txt`; a blog wants RSS; an "open in your editor / copy as markdown" affordance wants the raw source. They cost one line each.
@@ -67,10 +67,10 @@ export const GET = site.emit.search();
 
 Both are **views of the nav tree** — every leaf, in reading order. That is the property worth having: a new page joins the sitemap and the model index the moment the outline sees it, and neither can drift from the site because neither is a second copy of anything.
 
-`origin` matters when prerendered: at build time there is no request to read an origin from, so absolute URLs come from the option — or from `sitekit({ data: { origin } })`, which every emission defaults to:
+`origin` matters when prerendered: at build time there is no request to read an origin from, so absolute URLs come from the option — or from `contentkit({ data: { origin } })`, which every emission defaults to:
 
 ```ts
-export const site = sitekit({
+export const site = contentkit({
 	outline: docs,
 	data: { title: 'Example', description: 'Docs for Example.', origin: 'https://example.dev' }
 });

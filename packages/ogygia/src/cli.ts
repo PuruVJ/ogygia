@@ -194,7 +194,7 @@ function wireSvelteConfig(asyncCompiler: boolean): void {
 			}
 		}
 
-		// experimental.async — site-kit components use top-level `await`; the compiler needs this on.
+		// experimental.async — content-kit components use top-level `await`; the compiler needs this on.
 		if (asyncCompiler) {
 			const co = property('compilerOptions', { fallback: js.object.create({}) });
 			const experimental = js.object.property(co, { name: 'experimental', fallback: js.object.create({}) });
@@ -226,7 +226,7 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 	);
 	stdout.write(`  ${ok('✓')} ${viteConfig} ${dim('(plugin)')}\n`);
 
-	// 2b. svelte config — `.svx` extensions + preprocessor (and the async compiler for the site kit).
+	// 2b. svelte config — `.svx` extensions + preprocessor (and the async compiler for the content kit).
 	if (markdown) {
 		wireSvelteConfig(asyncCompiler);
 		stdout.write(`  ${ok('✓')} svelte config ${dim(asyncCompiler ? '(.svx + async)' : '(.svx)')}\n`);
@@ -401,7 +401,7 @@ async function site_init(): Promise<void> {
 
 	stdout.write(`\n${strong('ogygia site')} — scaffolding your docs site…\n`);
 
-	// Wire the ogygia runtime (plugin + markdown + hooks). Idempotent; the site kit needs .svx, the async
+	// Wire the ogygia runtime (plugin + markdown + hooks). Idempotent; the content kit needs .svx, the async
 	// compiler (its components use top-level await), and the server handle.
 	wireOgygia(pf, true, true);
 
@@ -409,7 +409,7 @@ async function site_init(): Promise<void> {
 	place(
 		'src/lib/docs.ts',
 		`import { content, markdown } from 'ogygia/content';
-import { outline, sitekit } from 'ogygia/content';
+import { outline, contentkit } from 'ogygia/content';
 
 // A docs collection: every file under \`src/content/docs\` becomes a page. Its id is the path below
 // \`content/docs\` without the extension, so \`guides/deploy.svx\` is served at \`/guides/deploy\`.
@@ -417,8 +417,8 @@ const docs = content({
 	loader: markdown(import.meta.glob('../content/docs/**/*.svx', { eager: true }))
 });
 
-// \`sitekit()\` mints the site the shell + routes consume.
-export const site = sitekit(outline([{ label: 'Docs', items: docs }]), { prevNext: 'graph' });
+// \`contentkit()\` mints the site the shell + routes consume.
+export const site = contentkit(outline([{ label: 'Docs', items: docs }]), { prevNext: 'graph' });
 `,
 		force
 	);

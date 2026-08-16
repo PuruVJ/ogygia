@@ -2,12 +2,12 @@
 title: Search
 summary: One search brain, two ways to run it. Ship a static index to an on-device worker for zero-JS-cost queries, or query it on the server. A no-JS fallback page comes for free.
 related:
-  - site/remotes
-  - site/emit
-  - site/shell
+  - content-kit/remotes
+  - content-kit/emit
+  - content-kit/shell
 ---
 
-The site kit builds a search index from your collections' **section documents** — the prose split by heading, so a hit lands on the exact section, not just the page. You choose where the query runs: on the server, or on the visitor's device against a static index. **The search on this site is the second kind** — a worker over a prerendered file, so a query costs no server round-trip.
+The content kit builds a search index from your collections' **section documents** — the prose split by heading, so a hit lands on the exact section, not just the page. You choose where the query runs: on the server, or on the visitor's device against a static index. **The search on this site is the second kind** — a worker over a prerendered file, so a query costs no server round-trip.
 
 ::: tip When to use
 Any docs site benefits from search. Prefer the static-index path for a prerendered site — it is free to serve and works offline. Reach for the server query when the corpus is private, huge, or changes per request.
@@ -106,7 +106,7 @@ Same index, same ranking, zero client JS — the graceful floor under the palett
 
 `site.search(q, { in: [collection] })` narrows the query to one collection — useful when a site weaves several (docs + blog) and a box should search just one. The static index carries every collection; the worker filters by scope.
 
-The engine itself is a **contract, not a dependency**: the default is Orama, and `sitekit({ search: { engine } })` swaps it for anything that can build and query the section documents — a hosted service, a different library, a test double.
+The engine itself is a **contract, not a dependency**: the default is Orama, and `contentkit({ search: { engine } })` swaps it for anything that can build and query the section documents — a hosted service, a different library, a test double.
 
 ::: details What a hit looks like
 `SearchHit` is plain data, ready to render:

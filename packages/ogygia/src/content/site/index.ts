@@ -1,25 +1,25 @@
 /**
- * The site kit — mounts a docs/blog site on a SvelteKit route group (or the root) instead of owning
+ * The content kit — mounts a docs/blog site on a SvelteKit route group (or the root) instead of owning
  * the repo. The capstone of the content pillar: a site is a corpus (one or more `content()`
- * collections) arranged by an `outline()`, projected through the brains `sitekit()` mints.
+ * collections) arranged by an `outline()`, projected through the brains `contentkit()` mints.
  * Everything here surfaces through the ONE `ogygia/content` barrel.
  *
  * **Browser-safe.** Import anywhere (routes, `+page`, islands, `.remote.ts`). The Kit remotes that an
  * island sidebar awaits are minted from `ogygia/content/server` in a `.remote.ts`.
  *
  * ```ts
- * import { content, markdown, json, outline, sitekit } from 'ogygia/content';
+ * import { content, markdown, json, outline, contentkit } from 'ogygia/content';
  *
  * const guides = content({ loader: markdown(import.meta.glob('../content/**\/+doc.svx', { eager: true })), schema });
  * const meta   = content({ loader: json(import.meta.glob('../content/**\/+meta.json', { eager: true })) });
  *
- * export const site = sitekit(outline([{ label: 'Guides', items: guides, meta }]), { prevNext: 'graph' });
+ * export const site = contentkit(outline([{ label: 'Guides', items: guides, meta }]), { prevNext: 'graph' });
  * ```
  */
 export { outline, pick, href_of as hrefOf } from './outline.js';
 export type { Outline, OutlineSpec, OutlineOptions, OutlineNode, OutlineThunk, GroupSpec, LinkSpec, Selection, Collection, TrailScope } from './outline.js';
 
-export { sitekit, mountBase } from './site.js';
+export { contentkit, mountBase } from './site.js';
 export type { SiteData, SiteMeta, ReadContext } from './site.js';
 export { fields } from './fields.js';
 export type { PageFields, PostFields, ChangeFields, BlogPostRef } from './fields.js';

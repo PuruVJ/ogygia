@@ -1,7 +1,7 @@
 /**
  * Rewrite chosen markdown elements to the ogygia slot so app-land can override how they render.
  * `<a href="y">x</a>` → `<Og__Slot tag="a" href="y">x</Og__Slot>`. The compiler only ever knows tag
- * NAMES; the component VALUES live in `sitekit({ components })` and reach the slot via context. The
+ * NAMES; the component VALUES live in `contentkit({ components })` and reach the slot via context. The
  * slot falls back to the plain element for any tag nobody overrides, so wrapping is always safe.
  *
  * Capitalized tag name is deliberate — Svelte renders `<Og__Slot>` as a component (the injected

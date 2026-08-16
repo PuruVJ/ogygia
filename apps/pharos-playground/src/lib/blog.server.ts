@@ -5,7 +5,7 @@
  * `blog.remote.ts`. `blogSite` gives us `doc()` (a post's view + prev/next) for `<BlogPost>`.
  */
 import { content, dated } from 'ogygia/content';
-import { sitekit, outline, fields } from 'ogygia/content';
+import { contentkit, outline, fields } from 'ogygia/content';
 
 export const blog = content({
 	loader: import.meta.og.loader.folder('../content/blog/**/*.md', {
@@ -17,4 +17,4 @@ export const blog = content({
 });
 
 // A one-collection ogygia site over the blog — for `doc()` (post view with prev/next by date).
-export const blogSite = sitekit({ outline: outline(blog), prevNext: 'order' });
+export const blogSite = contentkit({ outline: outline(blog), prevNext: 'order' });
