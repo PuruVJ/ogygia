@@ -10,7 +10,7 @@ import {
 	read_sha,
 	write_sha
 } from '../src/vite/git.js';
-import { find_loader_calls, rewrite_loaders, expand_braces } from '../src/vite/loaders.js';
+import { find_loader_calls, rewrite_loaders, expand_braces, loader_patterns } from '../src/vite/loaders.js';
 import { __set_build_cache_root } from '../src/build-cache.js';
 
 describe('parse_git_spec', () => {
@@ -192,5 +192,43 @@ describe('lockfile round-trip', () => {
 		expect(read_sha('a-b')).toBe('def456');
 		expect(fs.existsSync(path.join(root, 'git', 'sveltejs-svelte.json'))).toBe(true);
 		__set_build_cache_root(undefined);
+	});
+});
+
+describe('loader_patterns — the opinionated directory form', () => {
+	it('folder(dir) derives the +doc.svx / +meta.json convention set', () => {
+		expect(loader_patterns('folder', '../content/docs')).toEqual([
+			'../content/docs/**/+doc.svx',
+			'../content/docs/**/+meta.json'
+		]);
+	});
+
+	it('markdown(dir) derives *.svx + *.md; json(dir) derives *.json; trailing slash normalized', () => {
+		expect(loader_patterns('markdown', './posts/')).toEqual(['./posts/**/*.svx', './posts/**/*.md']);
+		expect(loader_patterns('json', './authors')).toEqual(['./authors/**/*.json']);
+	});
+
+	it('an explicit glob passes through (brace-expanded, unchanged semantics)', () => {
+		expect(loader_patterns('markdown', './docs/**/*.svx')).toEqual(['./docs/**/*.svx']);
+		expect(loader_patterns('folder', '../c/**/{+doc.svx,+meta.json}')).toEqual([
+			'../c/**/+doc.svx',
+			'../c/**/+meta.json'
+		]);
+	});
+
+	it('a file-looking path (dotted basename) is left alone — never treated as a directory', () => {
+		expect(loader_patterns('markdown', './intro.svx')).toEqual(['./intro.svx']);
+	});
+
+	it('dot-relative directories still expand (`.`/`..` are not file-looking)', () => {
+		expect(loader_patterns('json', '..')).toEqual(['../**/*.json']);
+	});
+
+	it('rewrite emits the array-form glob for a directory argument (dev + build agree)', () => {
+		const { code } = rewrite_loaders(
+			`export const docs = import.meta.og.loader.folder('../content/docs', { convention: numbered() });`
+		);
+		expect(code).toContain(`import.meta.glob(["../content/docs/**/+doc.svx","../content/docs/**/+meta.json"], { eager: false })`);
+		expect(code).toContain(`{ convention: numbered() }`);
 	});
 });

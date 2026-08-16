@@ -13,30 +13,32 @@ related:
 import { content } from 'ogygia/content';
 
 export const docs = content({
-  loader: import.meta.og.loader.markdown('./content/**/*.svx'),
+  loader: import.meta.og.loader.markdown('./content'),
   schema
 });
 ```
 
-That's the whole loader. No `import.meta.glob`, no `{ eager }`, no wrapper import. Compare the old shape — `markdown(import.meta.glob('./content/**/*.svx', { eager: true }))` — and you can see what the macro absorbs.
+That's the whole loader — **a directory**. No glob, no `import.meta.glob`, no `{ eager }`, no wrapper import. Each loader owns an opinionated pattern under the directory you point it at (markdown: every `.svx` / `.md`, recursively). Compare the old shape — `markdown(import.meta.glob('./content/**/*.svx', { eager: true }))` — and you can see what the macro absorbs.
 
 ## The four loaders
 
-Each takes a literal glob and returns a `Source`. They differ only in what they parse.
+Each takes a **directory** and returns a `Source`. They differ only in what they parse — and each derives its own opinionated file set under that directory, so you never author a glob for the conventional case.
 
 ```ts
-// markdown / .svx — headings come for free on `meta.headings`
-import.meta.og.loader.markdown('./docs/**/*.svx')
+// markdown / .svx — every *.svx / *.md below the directory; headings free on `meta.headings`
+import.meta.og.loader.markdown('./docs')
 
-// filesystem convention — NN- ordering, +meta.json section labels
-import.meta.og.loader.folder('../content/**/{+doc.svx,+meta.json}')
+// filesystem convention — +doc.svx pages + +meta.json section labels, NN- ordering
+import.meta.og.loader.folder('../content/docs')
 
-// JSON data files
-import.meta.og.loader.json('./authors/*.json')
+// JSON data files — every *.json below the directory
+import.meta.og.loader.json('./authors')
 
 // straight from another git repository — no committed copy, no sync script
 import.meta.og.loader.git('sveltejs/svelte@main:documentation/docs')
 ```
+
+An argument with glob magic (`*`, `{}`, `?`) — or a single file — is passed through verbatim: `markdown('./docs/**/*.svx')` still means exactly that. The escape hatch for a corpus the convention doesn't fit; the directory is the blessed form.
 
 - **`markdown(glob)`** — a markdown / `.svx` collection. Bodies compile through the markdown pipeline; each entry's `meta.headings` is populated for on-page tables of contents.
 - **`folder(glob)`** — the filesystem-convention preset. `NN-` prefixes become order, `+meta.json` files become section labels, `index.md` becomes a section's own page. This is what a docs site uses.

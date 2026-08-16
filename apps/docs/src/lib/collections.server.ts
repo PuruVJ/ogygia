@@ -31,7 +31,7 @@ export type DocData = v.InferOutput<typeof docSchema>;
  * glob, no meta collection. See docs/macros/loaders.
  */
 export const docs = content({
-	loader: import.meta.og.loader.folder('../content/docs/**/{+doc.svx,+meta.json}'),
+	loader: import.meta.og.loader.folder('../content/docs'),
 	schema: docSchema,
 	// Self relation via `self` — a doc's `related` slugs resolve to sibling docs, no type cycle.
 	relations: (self) => ({ related: self }),

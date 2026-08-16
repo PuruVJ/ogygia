@@ -36,7 +36,7 @@ import * as v from 'valibot';
 export const docs = content({
   // The loader is a compile macro — it owns the glob, you pass a literal path. Data + Meta are
   // inferred, no annotations. See the loader macro for markdown/folder/json/git.
-  loader: import.meta.og.loader.markdown('../content/docs/**/*.svx'),
+  loader: import.meta.og.loader.markdown('../content/docs'),
   schema: v.object({ title: v.string(), section: v.string() }),
   filter: (e) => !e.data.draft   // visibility, declared ONCE
 });

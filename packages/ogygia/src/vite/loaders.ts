@@ -3,9 +3,16 @@
  * a loader call takes a LITERAL glob (or, for `git`, a repo spec) and the macro owns the
  * `import.meta.glob(…, { eager: false })` wrapper. So the app never writes the glob-plumbing itself:
  *
- *   content({ loader: import.meta.og.loader.markdown('./docs/**\/*.svx') })
- *   content({ loader: import.meta.og.loader.folder('../content/**\/{+doc.svx,+meta.json}') })
- *   content({ loader: import.meta.og.loader.json('./authors/*.json') })
+ *   content({ loader: import.meta.og.loader.folder('../content/docs') })      // a DIRECTORY
+ *   content({ loader: import.meta.og.loader.markdown('./posts') })             // a DIRECTORY
+ *   content({ loader: import.meta.og.loader.json('./authors') })               // a DIRECTORY
+ *
+ * The blessed argument is a bare directory — each loader derives its own opinionated pattern under
+ * it (folder → `+doc.svx` + `+meta.json`; markdown → `*.svx` + `*.md`; json → `*.json`, all
+ * recursive). An argument carrying glob magic (`* ? { [`) or a file-looking basename (has a dot) is
+ * passed through verbatim — the escape hatch for corpora the convention doesn't fit:
+ *
+ *   content({ loader: import.meta.og.loader.markdown('./docs/**\/*.svx') })   // explicit glob
  *   content({ loader: import.meta.og.loader.git('sveltejs/svelte@main:documentation/docs') })
  *
  * Each rewrites to the matching runtime builder (`markdown`/`folder`/`json`) wrapping the glob; `git`
@@ -85,8 +92,34 @@ export function expand_braces(pattern: string): string[] {
 /** Emit the glob source for a pattern — a plain string when there are no braces, Vite's array form
  *  when brace expansion yields more than one concrete pattern (so dev + build agree). */
 function glob_arg(pattern: string): string {
-	const patterns = expand_braces(pattern);
+	return glob_arg_list(expand_braces(pattern));
+}
+
+function glob_arg_list(patterns: string[]): string {
 	return JSON.stringify(patterns.length === 1 ? patterns[0] : patterns);
+}
+
+/** Glob magic that marks an argument as an explicit pattern rather than a directory. */
+const GLOB_MAGIC = /[*?{}[\]]/;
+
+/** The opinionated file set each loader owns, rooted under a directory argument. */
+const OPINIONATED: Record<'markdown' | 'folder' | 'json', string[]> = {
+	folder: ['**/+doc.svx', '**/+meta.json'],
+	markdown: ['**/*.svx', '**/*.md'],
+	json: ['**/*.json']
+};
+
+/**
+ * Resolve a loader argument to concrete glob patterns. A bare DIRECTORY (no glob magic, basename
+ * without a dot) gets the loader's opinionated set under it — the blessed authoring form. Anything
+ * else (explicit glob, or a file-looking path) passes through with brace expansion only.
+ */
+export function loader_patterns(builder: 'markdown' | 'folder' | 'json', raw: string): string[] {
+	if (GLOB_MAGIC.test(raw)) return expand_braces(raw);
+	const dir = raw.replace(/\/+$/, '');
+	const base = dir.slice(dir.lastIndexOf('/') + 1);
+	if (base.includes('.') && !/^\.+$/.test(base)) return [raw]; // a single file — leave it alone
+	return OPINIONATED[builder].map((p) => `${dir}/${p}`);
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -200,5 +233,5 @@ function emit(c: LoaderCall, used: Set<'markdown' | 'folder' | 'json'>, specs: G
 	const { value: glob, rest } = split_first_string(c.args, `import.meta.og.loader.${c.method}()`);
 	used.add(builder);
 	const opts = rest ? `, ${rest}` : '';
-	return `${ALIAS[builder]}(import.meta.glob(${glob_arg(glob)}, { eager: false })${opts})`;
+	return `${ALIAS[builder]}(import.meta.glob(${glob_arg_list(loader_patterns(builder, glob))}, { eager: false })${opts})`;
 }
