@@ -101,6 +101,94 @@
 	color: var(--text-faint);
 }
 
+/* ── Admonitions (`::: tip` / `::: warning` / `::: details` … → .og-admonition). One hue token per
+      kind (`--adm`) drives the border, tint, title, and dot — so it reads in light and dark alike.
+      (The component ships the markup only; this is the paint.) ── */
+.og-body .og-admonition {
+	--adm: var(--accent);
+	margin: 1.5rem 0;
+	padding: 0.8rem 1.05rem;
+	border: 1px solid color-mix(in srgb, var(--adm) 22%, var(--line));
+	border-left: 3px solid var(--adm);
+	border-radius: var(--r-md);
+	background: color-mix(in srgb, var(--adm) 6%, var(--bg-sunken));
+	color: var(--text-dim);
+	font-size: 0.9375rem;
+}
+.og-body .og-admonition > :first-child {
+	margin-top: 0;
+}
+.og-body .og-admonition > :last-child {
+	margin-bottom: 0;
+}
+.og-body .og-admonition-title {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 0 0 0.4rem;
+	font: 700 0.9375rem/1.4 var(--font-body);
+	color: var(--adm);
+}
+.og-body .og-admonition-title::before {
+	content: '';
+	flex: none;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: var(--adm);
+}
+/* kinds — each just sets the hue */
+.og-body .og-admonition-tip {
+	--adm: #10b981;
+}
+.og-body .og-admonition-info {
+	--adm: #3b82f6;
+}
+.og-body .og-admonition-note {
+	--adm: #64748b;
+}
+.og-body .og-admonition-important {
+	--adm: #8b5cf6;
+}
+.og-body .og-admonition-warning,
+.og-body .og-admonition-caution {
+	--adm: #f59e0b;
+}
+.og-body .og-admonition-danger {
+	--adm: #ef4444;
+}
+/* details: the title IS the clickable summary — a disclosure caret replaces the dot, no color shout */
+.og-body .og-admonition-details {
+	--adm: var(--text-faint);
+	color: var(--text);
+}
+.og-body summary.og-admonition-title {
+	cursor: pointer;
+	user-select: none;
+	margin: 0;
+	list-style: none;
+	color: var(--text);
+}
+.og-body summary.og-admonition-title::-webkit-details-marker {
+	display: none;
+}
+.og-body summary.og-admonition-title::before {
+	width: 0;
+	height: 0;
+	border-radius: 0;
+	background: none;
+	border-left: 5px solid var(--text-faint);
+	border-top: 4px solid transparent;
+	border-bottom: 4px solid transparent;
+	transition: transform 0.15s ease;
+}
+.og-body .og-admonition-details[open] > summary.og-admonition-title {
+	margin-bottom: 0.55rem;
+}
+.og-body .og-admonition-details[open] > summary.og-admonition-title::before {
+	transform: rotate(90deg);
+}
+
 .og-body table {
 	width: 100%;
 	border-collapse: collapse;
@@ -182,6 +270,70 @@
 .og-toc-link.og-active {
 	color: var(--accent);
 	font-weight: 600;
+}
+
+/* ── Mobile "On this page" — a tidy collapsible block (the desktop rail is hidden ≤900px, where the
+      component reveals this native <details>). Collapsed by default; paint only, no JS. ── */
+.og-mtoc {
+	margin: 0 0 1.75rem;
+	border: 1px solid var(--line);
+	border-radius: var(--r-md);
+	background: var(--bg-sunken);
+	overflow: hidden;
+}
+.og-mtoc-summary {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	padding: 0.7rem 1rem;
+	font: 600 0.7rem/1 var(--font-mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	cursor: pointer;
+	user-select: none;
+	list-style: none;
+}
+.og-mtoc-summary::-webkit-details-marker {
+	display: none;
+}
+.og-mtoc-summary::before {
+	content: '';
+	flex: none;
+	width: 0;
+	height: 0;
+	border-left: 5px solid currentColor;
+	border-top: 4px solid transparent;
+	border-bottom: 4px solid transparent;
+	transition: transform 0.18s ease;
+}
+.og-mtoc[open] .og-mtoc-summary {
+	color: var(--text);
+	border-bottom: 1px solid var(--line);
+}
+.og-mtoc[open] .og-mtoc-summary::before {
+	transform: rotate(90deg);
+}
+.og-mtoc .og-toc-list {
+	padding: 0.45rem 0.55rem 0.6rem;
+}
+.og-mtoc .og-toc-d3,
+.og-mtoc .og-toc-d4 {
+	padding-left: 0; /* the desktop rail indents the <li>; here the link carries the indent */
+}
+.og-mtoc .og-toc-link {
+	padding: 0.32rem 0.5rem;
+	border-radius: var(--r-sm);
+	font-size: 0.875rem;
+}
+.og-mtoc .og-toc-link:hover {
+	background: var(--bg-raised);
+}
+.og-mtoc .og-toc-d3 .og-toc-link {
+	padding-left: 1.3rem;
+}
+.og-mtoc .og-toc-d4 .og-toc-link {
+	padding-left: 2.1rem;
 }
 
 @media (max-width: 1099px) {
