@@ -30,8 +30,8 @@ Mark the import and the component becomes a **signed capability** the server min
 - `with { wake: 'load' }` bakes an interactive schedule — `region()` wakes it on that timing.
 - `with { region: 'raw' }` bakes **no** schedule — HTML only, unless the `region()` call sets one.
 
-```ts
-// search.remote.ts — server picks the component
+```ts title=search.remote.ts
+// server picks the component
 import PackageCard from './PackageCard.svelte' with { wake: 'load' };
 import EmptyResult from './EmptyResult.svelte' with { region: 'raw' };
 import { query } from '$app/server';

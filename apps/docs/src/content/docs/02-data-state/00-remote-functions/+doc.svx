@@ -35,8 +35,7 @@ This counter is a client island reading a `query` and mutating through two `comm
   <CounterDemo />
 </div>
 
-```ts
-// counter.remote.ts
+```ts title=counter.remote.ts
 let count = 3;
 export const getCount = query(async () => count);
 export const bump = command(async () => (count += 1));

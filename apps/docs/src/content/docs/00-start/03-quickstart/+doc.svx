@@ -12,8 +12,7 @@ This walks the shortest path to something real: a page that ships as pure HTML w
 
 Opt the route out of the Kit client so it ships no framework JS.
 
-```ts
-// src/routes/+layout.ts
+```ts title=src/routes/+layout.ts
 export const csr = false;
 ```
 
@@ -21,8 +20,7 @@ export const csr = false;
 
 Nothing ogygia-specific here — it is just a component.
 
-```svelte
-<!-- src/lib/Counter.svelte -->
+```svelte title=src/lib/Counter.svelte
 <script>
   let { start = 0 } = $props();
   let count = $state(start);
@@ -35,8 +33,7 @@ Nothing ogygia-specific here — it is just a component.
 
 The import attribute is the whole opt-in. The rest of the page stays static HTML.
 
-```svelte
-<!-- src/routes/+page.svelte -->
+```svelte title=src/routes/+page.svelte
 <script>
   import Counter from '$lib/Counter.svelte' with { wake: 'load' };
 </script>

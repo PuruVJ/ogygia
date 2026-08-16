@@ -79,8 +79,7 @@ A server island is **fresh on every request**: its endpoint is served `Cache-Con
 reload re-renders it. That's the right default for a hole (a per-request clock, cookie-personalized
 data). To let a hole sit in the browser cache, give it a `maxAge` in a [preset](/docs/reference/api#ogygiavite-presets):
 
-```ts
-// vite.config.ts
+```ts title=vite.config.ts
 ogygia({ presets: { pricing: { render: 'deferred', wake: 'load', maxAge: '1h' } } })
 ```
 
@@ -97,8 +96,8 @@ URL, so a harvested capability can't be re-pointed at a longer cache.
 
 A deferred region is **content only**: it never ships JS. When part of that fetched HTML needs to be interactive, put a normal `wake` island *inside* the server island's own component. The hole delivers the content; the island inside turns on the buttons:
 
-```svelte
-<!-- Cart.svelte — the server island (personalized, fetched) -->
+```svelte title=Cart.svelte
+<!-- the server island (personalized, fetched) -->
 <script>
   import CartButtons from './CartButtons.svelte' with { wake: 'load' };
   const cart = await getCart();

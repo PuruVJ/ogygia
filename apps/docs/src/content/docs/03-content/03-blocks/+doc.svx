@@ -26,8 +26,8 @@ The panel below is a block tree — a `Hero`, a `Grid` of two `Feature`s, and on
 
 The registry maps a block `type` name to a component. A **static** block is a `with { region: 'raw' }` import — it renders inline and ships zero JS, but it is code-split, so a page loads only the CSS (and, for interactive blocks, the JS) of the block types it actually names. An **interactive** block uses `with { wake: … }` instead, which bakes its schedule and makes its JS **load only when a page names it** (`load` · `idle` · `visible` · a media query decides when it hydrates).
 
-```ts
-// src/lib/blocks.ts — a .ts module: a `region`/`wake` mark here makes a held block
+```ts title=src/lib/blocks.ts
+// a .ts module: a `region`/`wake` mark here makes a held block
 import Hero    from './blocks/Hero.svelte'    with { region: 'raw' };
 import Grid    from './blocks/Grid.svelte'    with { region: 'raw' };
 import Feature from './blocks/Feature.svelte' with { region: 'raw' };
@@ -72,8 +72,8 @@ export const pages = content({
 
 Then render it exactly like a markdown body — same `get()`, same `<Region>`. Call `get()` in a **universal** `+page.ts` load (or straight in the page component with `await`): its data reaches the render by reference, in the same server pass.
 
-```ts
-// +page.ts — universal, NOT +page.server.ts
+```ts title=+page.ts
+// universal, NOT +page.server.ts
 import { pages } from '$lib/blocks/pages';
 export const load = async () => ({ page: await pages.get('landing') });
 ```
@@ -97,8 +97,8 @@ Every block's **CSS travels with the render**: the page never imports `Hero` or 
 
 The content source is the blessed path. But if you already hold a tree — a prop, a literal, a one-off CMS call — you don't need a collection. `blocks.resolve(tree, registry)` turns it into region nodes (it must run **server-side**, where the signing key lives — a `+page.server.ts` load, a remote, or the SSR pass of a `csr = false` page). You render those nodes with a small recomposer you own:
 
-```svelte
-<!-- BlockTree.svelte — yours to keep and tweak -->
+```svelte title=BlockTree.svelte
+<!-- yours to keep and tweak -->
 <script>
   import { Region } from 'ogygia';
   import { blocks } from 'ogygia/content';
@@ -124,8 +124,7 @@ That's the whole thing — `blocks.resolve` does the `type → region` walk (ski
 
 Builder is headless — it serves your pages as JSON over an HTTP API. Write a **loader** that fetches it and renders through `blocks()`. Copy this, drop in your public key, and you have a Builder-driven site:
 
-```ts
-// src/lib/builder.ts
+```ts title=src/lib/builder.ts
 import { content, blocks, mapRaw } from 'ogygia/content';
 import type { RawSource } from 'ogygia/content';
 import { registry } from './blocks';

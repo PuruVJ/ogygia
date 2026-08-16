@@ -90,8 +90,8 @@ forms, editors — just works, and costs nothing until it is touched.
 import Chart from '$lib/Chart.svelte' with { wake: 'visible', margin: '200px' };
 ```
 
-```ts
-// vite.config.ts — default margin for every `visible` island
+```ts title=vite.config.ts
+// default margin for every `visible` island
 ogygia({ visible: { margin: '0px' } });
 ```
 

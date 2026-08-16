@@ -14,8 +14,7 @@ Each island is its own hydration root, so a value handed between islands crosses
 
 A prop crosses a serialization boundary. A plain object copies fine; a live class instance — a store, an orchestrator — does not. A class opts in by declaring **how it travels**, with the [`wire` macro](/docs/macros/wire):
 
-```ts
-// cart.svelte.ts
+```ts title=cart.svelte.ts
 export class Cart {
   items = $state<string[]>([]);
   get count() { return this.items.length; }
@@ -81,8 +80,7 @@ Svelte's own `getContext` / `setContext` work down a **component tree**. Islands
 
 No string key. You get a typed handle; the build tags it by module path plus export name, so a provider and every consumer agree on identity with nothing to keep in sync:
 
-```ts
-// cart.svelte.ts
+```ts title=cart.svelte.ts
 import * as ogygia from 'ogygia';
 import { Cart } from './cart.js';
 

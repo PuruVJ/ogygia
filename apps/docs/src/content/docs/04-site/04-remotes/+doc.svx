@@ -15,8 +15,7 @@ Always, for a site-kit site. The remotes are the one sanctioned path from the se
 
 ## Mint them
 
-```ts
-// src/lib/site.remote.ts
+```ts title=src/lib/site.remote.ts
 import { remotes } from 'ogygia/content/server';
 import { site } from './site.server';
 
@@ -80,8 +79,7 @@ export const { nav, meta, doc, search } = remotes(site, {
 
 The route still needs to know which slugs to bake. `site.entries()` is every leaf in the outline, including declared old addresses so redirect stubs bake too:
 
-```ts
-// src/routes/docs/[...slug]/+page.server.ts
+```ts title=src/routes/docs/[...slug]/+page.server.ts
 import { site } from '$lib/site.server';
 
 export const prerender = true;

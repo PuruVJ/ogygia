@@ -39,8 +39,8 @@ Nested islands inside crossed content keep working: they render as full regions 
 
 The reason this matters is composition. A plain (non-island) component can forward its children straight into an island, and the crossing still happens at the boundary — so wrapping an island is just Svelte, no special API:
 
-```svelte
-<!-- CardShell.svelte — a plain wrapper -->
+```svelte title=CardShell.svelte
+<!-- a plain wrapper -->
 <script>
   import Inner from './Inner.svelte' with { wake: 'load' };
   let { children } = $props();

@@ -50,8 +50,8 @@ This matters for a dynamic site where the prerender crawler never runs — the c
 
 A check is a named object with a `page` hook, a `site` hook, or both — each returning findings. `page` runs per slug (in `load`, so dev surfaces it on open; an `error`-severity finding throws); `site` runs once over the corpus via `site.check()`:
 
-```ts
-// $lib/checks.ts — a house rule: every page fills its summary
+```ts title=$lib/checks.ts
+// a house rule: every page fills its summary
 import type { Check, Finding } from 'ogygia/content';
 
 export function requireSummary(): Check {

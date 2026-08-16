@@ -82,9 +82,10 @@ Same-labeled groups **sync** — pick pnpm once and every install block follows,
 
 The infostring after the language flows through the fence pipeline — line highlighting, filenames, [twoslash](/docs/macros/code) — the same for a markdown fence and a `code()` call:
 
+- ` ```ts title=src/lib/site.server.ts ` — a **filename** in the code-block header (left of the copy / permalink actions). This is the common case, and it's what fills the header so it's never empty — when a fence gives no filename, the header falls back to the language name. `title=` reads to end-of-token, so paths with `/`, `.`, and `+page`-style route files work as-is.
 - ` ```ts {2-4} ` — highlight lines 2–4, with `transformerMetaHighlight` from `@shikijs/transformers` wired.
 - ` ```ts twoslash ` — type-aware hovers, with the twoslash transformer wired.
-- `/// file: app.ts` on the first line — a filename bar, via the `slash_meta()` parser.
+- `/// file: app.ts` on the first line — the same filename, but as a magic comment that's stripped from the rendered code (via the `slash_meta()` parser). Prefer `title=` unless you're porting content that already uses the comment form.
 
 ## Diff markers
 

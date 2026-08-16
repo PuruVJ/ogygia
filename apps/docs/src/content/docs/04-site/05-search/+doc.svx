@@ -83,8 +83,7 @@ When you query over the wire instead, the page is a few lines — same hits, sam
 
 Search must work without JavaScript. The `<Search>` trigger is a real `<a href="/docs/search">` — with JS it opens the palette, without JS it follows the link to a plain results page you render from a server load:
 
-```ts
-// src/routes/docs/search/+page.server.ts
+```ts title=src/routes/docs/search/+page.server.ts
 import { site } from '$lib/site.server';
 export const load = async ({ url }) => ({
 	q: url.searchParams.get('q') ?? '',

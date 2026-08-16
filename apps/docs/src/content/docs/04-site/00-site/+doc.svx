@@ -82,8 +82,8 @@ Because they are data, **where** they run is your call. Prerender the nav, or fe
 
 The collection holds the compiled corpus — potentially megabytes of markdown. The site kit never serializes it. A page's **body** crosses the wire as a [held region](/docs/regions/held-regions) ticket (baked HTML, not source); everything else is metadata. [`remotes()`](/docs/site/remotes) mints the crossing from `site` in a `.remote.ts` — server-only, so the corpus stays server-side and the browser gets only the ticketed data:
 
-```ts
-// src/lib/site.remote.ts — the wire layer
+```ts title=src/lib/site.remote.ts
+// the wire layer
 import { remotes } from 'ogygia/content/server';
 import { site } from './site.server';
 
@@ -94,8 +94,7 @@ export const { nav, meta, doc, search } = remotes(site, { base: '/docs' });
 
 The page component reads one brain and renders the view. The [`<Doc>`](/docs/site/shell) component lays out the article, the on-this-page rail, and prev/next from a `site.doc()` view; the [shell](/docs/site/shell) wraps it with the sidebar, header, and search:
 
-```svelte
-<!-- src/routes/docs/[...slug]/+page.svelte -->
+```svelte title=src/routes/docs/[...slug]/+page.svelte
 <script>
 	import { page } from '$app/state';
 	import { Doc } from 'ogygia/content';
@@ -109,8 +108,7 @@ The page component reads one brain and renders the view. The [`<Doc>`](/docs/sit
 
 And the layout mounts the shell over the `meta` remote, so the corpus never enters the layout's module graph:
 
-```svelte
-<!-- src/routes/docs/+layout.svelte -->
+```svelte title=src/routes/docs/+layout.svelte
 <script>
 	import DocsShell from 'ogygia/content/docs-shell';
 	import 'ogygia/content/theme.css';

@@ -11,8 +11,7 @@ The SPA router is **on by default**, app-wide — there is no component to rende
 
 It is configured in **one place**, the Vite plugin:
 
-```ts
-// vite.config.ts
+```ts title=vite.config.ts
 import { ogygia } from 'ogygia/vite';
 
 export default {
@@ -33,8 +32,7 @@ Keep the router for **app-like navigation** — no white flash between pages, pe
 
 View transitions are global, but a single page can turn them off with a meta tag in its head — handy for a page whose swap animation you do not want (a checkout step, a full-bleed media page):
 
-```svelte
-<!-- src/routes/checkout/+page.svelte -->
+```svelte title=src/routes/checkout/+page.svelte
 <svelte:head>
   <meta name="ogygia-router" content="plain" />
 </svelte:head>
@@ -66,8 +64,7 @@ Prefetch warms the *HTML cache*. **Speculation goes further: the browser fully p
 
 Turn it on in the plugin config:
 
-```ts
-// vite.config.ts
+```ts title=vite.config.ts
 ogygia({
   continuity: {
     speculate: 'hover'    // prerender on ~200ms hover dwell (moderate eagerness)
@@ -96,8 +93,7 @@ Reach for `off` on links with side effects you do not want fired early (a logout
 
 A [Held region](/docs/regions/held-regions) is exactly the dynamic hole in an otherwise-static page. Partial prerendering bakes the shell at build and fills each hole per visitor. Prerender the page, keep the holes — that's the whole recipe:
 
-```ts
-// +page.ts
+```ts title=+page.ts
 export const prerender = true;
 ```
 

@@ -9,8 +9,7 @@ related:
 
 A prop crosses a **serialization** boundary between islands, not a reference. A plain object copies fine; a live class instance — a store, an orchestrator — does not. A class opts in by declaring **how it travels**:
 
-```ts
-// cart.svelte.ts
+```ts title=cart.svelte.ts
 export class Cart {
   items = $state<string[]>([]);
   add(item: string) { this.items.push(item); }

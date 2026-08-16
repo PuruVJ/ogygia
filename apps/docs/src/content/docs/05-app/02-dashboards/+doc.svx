@@ -33,8 +33,7 @@ The rest of this page builds a dashboard top-down through that table.
 
 Every dashboard has one gesture at its heart: change the date range, everything updates. Model the filters as a single wire class — **all** shared UI state goes on it, including cross-filter selections:
 
-```ts
-// filters.svelte.ts
+```ts title=filters.svelte.ts
 import * as ogygia from 'ogygia';
 
 export class Filters {
@@ -52,8 +51,8 @@ export const filtersCtx = ogygia.createContext<Filters>();
 
 Provide it once, above the tiles:
 
-```svelte
-<!-- +page.svelte — this page ships no JS of its own -->
+```svelte title=+page.svelte
+<!-- this page ships no JS of its own -->
 <script>
   import { Context } from 'ogygia';
   import RangePicker from './RangePicker.svelte' with { wake: 'load' };
@@ -79,8 +78,7 @@ Each tile is a separate bundle, but they all hold **one live object**. The picke
 
 A tile owns its query. Derive the call from the shared filters and the tile refetches itself whenever they change:
 
-```svelte
-<!-- Revenue.svelte -->
+```svelte title=Revenue.svelte
 <script>
   import { getStats } from './dashboard.remote';
   import { filtersCtx } from './filters.svelte.js';
@@ -140,8 +138,7 @@ Note the trade: a server island's props are captured at mint time — it re-rend
 
 For data that ticks — active users, a status feed — `query.live` pushes; the tile subscribes. Yield a held region each tick and the *server* renders the update:
 
-```ts
-// dashboard.remote.ts
+```ts title=dashboard.remote.ts
 export const activeUsers = query.live(v.string(), async function* (range) {
   for await (const n of metrics(range)) yield region(LiveStat, { n });
 });

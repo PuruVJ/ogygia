@@ -45,8 +45,8 @@ The island below is real — it lives on this page, marked `wake: 'load'`, while
 
 A normal SvelteKit page boots the Kit client: it hydrates the whole tree, so every page carries the framework whether it needs it or not. ogygia flips that. You set `csr = false`, and the page is **just HTML** — no Kit client, no app-wide hydration.
 
-```ts
-// src/routes/+layout.ts — the whole page opts out of the Kit client
+```ts title=src/routes/+layout.ts
+// the whole page opts out of the Kit client
 export const csr = false;
 ```
 

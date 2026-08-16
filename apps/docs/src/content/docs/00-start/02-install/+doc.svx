@@ -85,8 +85,7 @@ That is the whole file. Without it, `svelte-check` flags the virtual imports as 
 
 Held regions render inline for free, but any held region that **crosses the wire** — a search remote, a live content source — needs the `transport` hook installed once in your universal hooks:
 
-```ts
-// src/hooks.ts
+```ts title=src/hooks.ts
 import * as ogygia from 'ogygia';
 export const transport = { ...ogygia.transport };
 ```
@@ -132,8 +131,7 @@ A mostly-static route → `csr = false` + islands (the biggest win). A route tha
 
 Opt a single route out of the Kit client and mark its islands. Neighbouring routes are untouched. (What `csr = false` buys you and why islands still work is covered in the [Overview](/docs/start/overview).)
 
-```ts
-// src/routes/marketing/+page.ts
+```ts title=src/routes/marketing/+page.ts
 export const csr = false;
 ```
 

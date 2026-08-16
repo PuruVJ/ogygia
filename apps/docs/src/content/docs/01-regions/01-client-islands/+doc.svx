@@ -111,8 +111,7 @@ See [Constraints](/docs/reference/constraints) for the full list of what crosses
 
 A header badge that reflects a cart, hydrated on `load` so it is live immediately:
 
-```svelte
-<!-- CartBadge.svelte -->
+```svelte title=CartBadge.svelte
 <script>
   let { count = 0 } = $props();
 </script>
@@ -120,8 +119,7 @@ A header badge that reflects a cart, hydrated on `load` so it is live immediatel
 <span class="badge">{count}</span>
 ```
 
-```svelte
-<!-- +page.svelte -->
+```svelte title=+page.svelte
 <script>
   import CartBadge from '$lib/CartBadge.svelte' with { wake: 'load' };
 </script>

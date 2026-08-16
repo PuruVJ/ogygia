@@ -9,8 +9,7 @@ related:
 
 `import.meta.og.loader.*` is the blessed way to point a [content collection](/docs/content/collections) at static files. You give it a **literal glob** (or, for `git`, a repo spec); the macro owns the `import.meta.glob(…)` wrapper and hands `content()` a finished source.
 
-```ts
-// docs.server.ts
+```ts title=docs.server.ts
 import { content } from 'ogygia/content';
 
 export const docs = content({

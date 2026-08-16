@@ -22,8 +22,7 @@ becomes a global opt-out plugin feature, and config + exports get a single surfa
   ticket, so the client swaps it in with **no fetch**. In an async generator, JavaScript awaits what
   you `yield`, so it is automatic:
 
-  ```ts
-  // stats.remote.ts
+  ```ts title=stats.remote.ts
   export const dashboard = query.live(v.string(), async function* (id) {
     for await (const stats of feed(id)) {
       yield region(StatCard, { stats }); // awaited by the language → HTML rides the ticket
@@ -76,8 +75,7 @@ becomes a global opt-out plugin feature, and config + exports get a single surfa
   `transport`, a SvelteKit `transport` hook entry that signs on serialize and rebuilds on the
   client. Install it once in your **universal** hooks:
 
-  ```ts
-  // src/hooks.ts
+  ```ts title=src/hooks.ts
   import * as ogygia from 'ogygia';
   export const transport = { ...ogygia.transport };
   ```

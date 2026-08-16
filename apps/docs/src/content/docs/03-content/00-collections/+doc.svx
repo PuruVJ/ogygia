@@ -29,8 +29,7 @@ For a *page assembled from typed blocks* rather than a single markdown body, see
 
 A collection's `loader` sources the compiled corpus. Define it in a **`.server.ts`** file (or `.remote.ts`, or under `src/lib/server/`), so Kit mechanically guarantees no client module can import it — the corpus can never reach a browser bundle:
 
-```ts
-// src/lib/collections.server.ts
+```ts title=src/lib/collections.server.ts
 import { content } from 'ogygia/content';
 import * as v from 'valibot';
 
@@ -63,8 +62,8 @@ The collection *handle* is still browser-safe by **type** — `docs.get` and `do
 
 `get` returns **`null`** when the id is unknown or filtered out, and never throws — the caller decides the 404. Validate the slug in `load`:
 
-```ts
-// src/routes/docs/[...slug]/+page.server.ts — clean 404 for a missing entry
+```ts title=src/routes/docs/[...slug]/+page.server.ts
+// clean 404 for a missing entry
 import { error } from '@sveltejs/kit';
 import { docs } from '$lib/collections.server';
 
@@ -75,8 +74,8 @@ export const load = async ({ params }) => {
 
 The collection is server-only, so the page component can't import it. It gets the entry — including a **baked body** that legally crosses the wire — from a `.remote.ts`:
 
-```ts
-// src/lib/docs.remote.ts — mint a getter that bakes the body into a region ticket
+```ts title=src/lib/docs.remote.ts
+// mint a getter that bakes the body into a region ticket
 import { query } from '$app/server';
 import * as v from 'valibot';
 import { docs } from './collections.server';
@@ -88,8 +87,8 @@ export const entry = query(v.string(), async (slug) => {
 });
 ```
 
-```svelte
-<!-- src/routes/docs/[...slug]/+page.svelte — the body arrives as a ticket, islands inside wake -->
+```svelte title=src/routes/docs/[...slug]/+page.svelte
+<!-- the body arrives as a ticket, islands inside wake -->
 <script>
   import { page } from '$app/state';
   import { Region } from 'ogygia';
@@ -104,8 +103,7 @@ export const entry = query(v.string(), async (slug) => {
 
 Awaiting `e.body` bakes its SSR HTML into the region ticket — the one representation of a body that can cross the wire (a raw body is a same-pass live render and cannot be serialized). Prerender every entry from `+page.server.ts`:
 
-```ts
-// src/routes/docs/[...slug]/+page.server.ts
+```ts title=src/routes/docs/[...slug]/+page.server.ts
 export const prerender = true;
 export const entries = async () => (await docs.ids()).map((slug) => ({ slug }));
 ```
@@ -114,8 +112,7 @@ export const entries = async () => (await docs.ids()).map((slug) => ({ slug }));
 
 `list` and `live.list` mint real Kit remotes. Mint them in a `.remote.ts` (Kit requires every export there to be a remote); the consumer passes the args:
 
-```ts
-// src/lib/docs.remote.ts
+```ts title=src/lib/docs.remote.ts
 import { withRemotes } from 'ogygia/content/server';
 import { docs } from './collections.server';
 
@@ -139,8 +136,7 @@ export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title:
 
 Turn the pipeline on under the one plugin surface — no separate preprocessor to register. An empty `markdown: {}` uses the defaults (Shiki `github-light` / `github-dark` via `light-dark()`, pandoc `## Title {#id}` heading ids, collected `h2`–`h4`, wrapper class `code-only`):
 
-```ts
-// vite.config.ts
+```ts title=vite.config.ts
 ogygia({
   content: {
     markdown: {} // defaults: Shiki themes, heading ids, headings collector
