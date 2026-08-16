@@ -35,7 +35,7 @@ export async function render_markdown(options: MarkdownOptions | null | undefine
 	const emitted = try_region_emit(out?.code ?? text, []);
 	if (!emitted) {
 		throw new Error(
-			`[ogygia] import.meta.og.md(): the content compiled to something dynamic (a script, component tag, island import, or Svelte expression). md() is for static prose + fenced code — use a component for anything live.`
+			`[ogygia/content] import.meta.og.md(): the content compiled to something dynamic (a script, component tag, island import, or Svelte expression). md() is for static prose + fenced code — use a component for anything live.`
 		);
 	}
 	return emitted.html;

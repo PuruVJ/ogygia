@@ -59,7 +59,7 @@ function warn_unstable_secret(): void {
  *   and echoed as a `ttl` query param so the handle sets `Cache-Control` from it — a harvested URL
  *   can't be re-pointed at a longer browser cache.
  */
-export function mintRegionCapability(entry: string, payload: string, ttl = 0): string {
+export function mint_region_capability(entry: string, payload: string, ttl = 0): string {
 	const session = region_session();
 	// Prerendered (real PPR): the capability lives in a static file that outlives any TTL — mint it
 	// effectively-forever (props are public in the HTML; session sealed empty). Dynamic pages keep
@@ -94,7 +94,7 @@ export function mintServerIsland(entry: string, props: Record<string, unknown>, 
 				`Shrink what you pass into the deferred region — the handle would reject this capability anyway.`
 		);
 	}
-	return mintRegionCapability(entry, payload, ttl);
+	return mint_region_capability(entry, payload, ttl);
 }
 
 /** HMAC-signed `/🏝️?id&props&exp&sig` for re-rendering `entry` with `props`. */
@@ -108,7 +108,7 @@ export function makeRegionEndpoint(entry: string, props: Record<string, unknown>
 		);
 		return '';
 	}
-	return mintRegionCapability(entry, payload);
+	return mint_region_capability(entry, payload);
 }
 
 export { encode_region_props } from './region-props.js';

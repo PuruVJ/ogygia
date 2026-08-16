@@ -17,7 +17,7 @@ self.onmessage = async (e: MessageEvent) => {
 		index_p = (async () => {
 			const res = await fetch(msg.url!);
 			if (!res.ok) {
-				throw new Error(`could not load the search index at ${msg.url} (HTTP ${res.status}). Did you mount site.emit.search()?`);
+				throw new Error(`[ogygia/pharos] could not load the search index at ${msg.url} (HTTP ${res.status}). Did you mount site.emit.search()?`);
 			}
 			const docs = await res.json();
 			const engine = orama_engine();

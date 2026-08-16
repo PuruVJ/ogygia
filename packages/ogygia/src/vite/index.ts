@@ -1699,7 +1699,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// ServerIsland may appear in a transformed page module that Kit's client guard scans.
 				// Real getRequestEvent only on SSR; client stub never runs (holes fetch HTML).
 				if (!ssr) {
-					return `export function getRequestEvent() { throw new Error('ogygia: getRequestEvent is server-only'); }`;
+					return `export function getRequestEvent() { throw new Error('[ogygia] getRequestEvent is server-only'); }`;
 				}
 				return `export { getRequestEvent } from '$app/server';`;
 			}

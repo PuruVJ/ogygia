@@ -79,7 +79,6 @@ export class Hmac {
 	}
 }
 
-export const hmacSha256 = (secret: string, message: string) => Hmac.sign(secret, message);
 export const sign = Hmac.sign.bind(Hmac);
 export const verify = Hmac.verify.bind(Hmac);
 export const region_mac_message = Hmac.region_message.bind(Hmac);

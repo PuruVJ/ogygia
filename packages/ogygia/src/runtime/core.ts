@@ -79,7 +79,7 @@ class PropMutationGuard {
 		if (this.#warned.has(key)) return;
 		this.#warned.add(key);
 		console.warn(
-			`ogygia: mutating captured host snapshot '${prop_path}' inside island ${entry} — this updates nothing ` +
+			`[ogygia] mutating captured host snapshot '${prop_path}' inside island ${entry} — this updates nothing ` +
 				`(captured host state is a serialized snapshot; move mutable state inside the island component).`
 		);
 	}

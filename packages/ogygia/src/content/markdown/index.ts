@@ -172,7 +172,7 @@ async function load_mdsvex(): Promise<typeof import('mdsvex').mdsvex> {
 		return (await import('mdsvex')).mdsvex;
 	} catch {
 		throw new Error(
-			'[ogygia] Markdown content needs the optional peer dependency "mdsvex". Install it:\n' +
+			'[ogygia/content] Markdown content needs the optional peer dependency "mdsvex". Install it:\n' +
 				'  npm i -D mdsvex   (or the pnpm / yarn / bun equivalent)'
 		);
 	}

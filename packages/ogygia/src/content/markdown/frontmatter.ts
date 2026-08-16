@@ -53,7 +53,7 @@ function indent_of(line: string): number {
 	let i = 0;
 	while (i < line.length && line[i] === ' ') i++;
 	if (line[i] === '\t') {
-		throw new Error('[ogygia/yaml] tabs are not allowed for indentation');
+		throw new Error('[ogygia/content] tabs are not allowed for indentation');
 	}
 	return i;
 }
@@ -562,7 +562,7 @@ function parse_mapping(ctx: Ctx, indent: number): Record<string, unknown> {
 			// An empty key (a line that is just `:` or `: : :`) is malformed, not a valid mapping —
 			// surface it so callers reject broken frontmatter instead of silently keying on "".
 			if (key === '') {
-				throw new Error(`[ogygia/yaml] empty mapping key in line: ${JSON.stringify(line.trim())}`);
+				throw new Error(`[ogygia/content] empty mapping key in line: ${JSON.stringify(line.trim())}`);
 			}
 		const value_part = content.slice(kc + 1);
 		ctx.i++;

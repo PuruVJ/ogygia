@@ -11,7 +11,6 @@ import { PageCache } from './page-cache.js';
 import { slots } from './slots.js';
 import type { PersistPair } from './persist.js';
 import { runtime_session } from './session.js';
-import { streamFrames } from './frame-nav.js';
 import { island_module_url } from './region-endpoint-url.js';
 
 const WS = /\s+/;
@@ -553,14 +552,14 @@ class SpaRouter {
 	goto(url: string | URL, opts: { replaceState?: boolean; external?: boolean } = {}) {
 		const target = new URL(url, location.href);
 		if (target.protocol !== 'http:' && target.protocol !== 'https:') {
-			throw new Error('ogygia: goto() only supports http(s) URLs');
+			throw new Error('[ogygia] goto() only supports http(s) URLs');
 		}
 		if (target.origin !== location.origin) {
 			if (opts.external) {
 				location.assign(target.href);
 				return Promise.resolve();
 			}
-			throw new Error('ogygia: goto() only supports same-origin URLs (pass { external: true } to leave)');
+			throw new Error('[ogygia] goto() only supports same-origin URLs (pass { external: true } to leave)');
 		}
 		return this.navigate(target, { push: !opts.replaceState, replace: false, type: 'goto' });
 	}
@@ -915,7 +914,10 @@ class SpaRouter {
 		for (const link of Array.from(doc.querySelectorAll('link[rel="preload"][as="fetch"]'))) {
 			if (woven.has(link.getAttribute('href') || '')) link.remove();
 		}
-		void streamFrames(endpoints);
+		// Through the seam, never a static `frame-nav` import: an app with `router` but no
+		// deferred/live/lake region has no `frames` feature (and no `render="defer"` holes — so
+		// `endpoints` is empty above and we already returned). Optional-chain keeps that honest.
+		void slots.frames?.stream?.(endpoints);
 	}
 }
 
