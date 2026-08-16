@@ -115,10 +115,13 @@ Each of these is a one-line consequence — no image subsystem behind any of the
 - **Diagram** (markdown): a `mermaid`/`d2` fence renders to SVG at build (crisp, selectable),
   and may wake as a live island for pan/zoom. A diagram is a region that happens to look like
   an image — so it gets image identity (morph, warm) *and* region aliveness.
-- **Placeholder** (SSR): every encoded variant also gets a [thumbhash](https://evanw.github.io/thumbhash/)
-  — ~28 bytes on the descriptor. `<Img>` decodes it server-side to a tiny data-URI and paints it
-  as the `<img>` background, so the blurred preview is in the static HTML and the real pixels
-  cover it on load. Zero client JS — csr:false-native by construction.
+- **Placeholder** (SSR): a default of the whole pipeline, not an `<Img>` feature. EVERY image
+  that passes through it — marked imports, the macro, markdown `![…]()`, provider descriptors —
+  gets a [thumbhash](https://evanw.github.io/thumbhash/) (~28 bytes on the descriptor) at encode
+  time, and every renderer (`<Img>`, the markdown pipeline's `<img>`) decodes it server-side to
+  a tiny data-URI painted as the element's background. The blurred preview is in the static
+  HTML; the real pixels cover it on load. Zero config, zero client JS — csr:false-native.
+  Opt out per image (`placeholder: false`) or per app (plugin config), never opt in.
 
 ## 5. The macro's two sources
 
