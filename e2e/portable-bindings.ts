@@ -229,7 +229,11 @@ try {
 			`clock=${clockFacades.length} thin=${thinClocks.join(', ') || '0'}`
 		);
 
-		// Docs (when built): SideNav must own its entry + CSS must land in layout stylesheet.
+		// Docs (when built): the whole-site chrome now DOGFOODS the pharos `Shell` — the bespoke
+		// SideNav was retired ("ONE Shell for the whole site"). Shell is a plain layout component, not
+		// an island, so there is no island facade to assert. What still matters is FOUC: the Shell's
+		// scoped chrome CSS must land in the layout stylesheet, or the nav flashes unstyled on first
+		// paint. `.ph-shell` / `.ph-cside` are Shell's stable chrome hooks (see pharos/shell.css).
 		const docsClient = path.join(
 			repo,
 			'apps/docs',
@@ -240,31 +244,6 @@ try {
 			'immutable'
 		);
 		if (fs.existsSync(docsClient)) {
-			const docsFacades = fs
-				.readdirSync(docsClient)
-				.filter((f) => f.startsWith('ogygia-island.') && f.endsWith('.js'));
-			const sideNav = docsFacades.find((f) => {
-				const code = fs.readFileSync(path.join(docsClient, f), 'utf-8');
-				if (code.includes('side-backdrop') || code.includes('1il4ztj')) return true;
-				for (const m of code.matchAll(/from\s*["']\.\/chunks\/([^"']+)["']/g)) {
-					const ch = path.join(docsClient, 'chunks', m[1]);
-					if (
-						fs.existsSync(ch) &&
-						/side-backdrop|1il4ztj/.test(fs.readFileSync(ch, 'utf-8'))
-					) {
-						return true;
-					}
-				}
-				return false;
-			});
-			const sideNavCode = sideNav
-				? fs.readFileSync(path.join(docsClient, sideNav), 'utf-8')
-				: '';
-			check(
-				'build: docs SideNav island is not a classic thin re-export facade',
-				!!sideNav && !classicThin(sideNavCode.trim()),
-				sideNav || 'missing'
-			);
 			const layoutCss = fs.existsSync(path.join(docsClient, 'assets'))
 				? fs
 						.readdirSync(path.join(docsClient, 'assets'))
@@ -274,8 +253,8 @@ try {
 				? fs.readFileSync(path.join(docsClient, 'assets', layoutCss), 'utf-8')
 				: '';
 			check(
-				'build: docs layout CSS includes SideNav scoped rules (FOUC)',
-				!!layoutCss && /side-backdrop|1il4ztj|--side-w/.test(layoutCssCode),
+				'build: docs layout CSS carries the pharos Shell chrome rules (FOUC)',
+				!!layoutCss && /\.ph-shell\b/.test(layoutCssCode) && /\.ph-cside\b/.test(layoutCssCode),
 				layoutCss || 'missing'
 			);
 		}

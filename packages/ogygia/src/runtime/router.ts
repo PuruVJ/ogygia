@@ -12,6 +12,7 @@ import { slots } from './slots.js';
 import type { PersistPair } from './persist.js';
 import { runtime_session } from './session.js';
 import { streamFrames } from './frame-nav.js';
+import { island_module_url } from './region-endpoint-url.js';
 
 const WS = /\s+/;
 
@@ -228,6 +229,10 @@ class SpaRouter {
 		maxBytes: PAGE_CACHE_MAX_BYTES
 	});
 	#inflight = new Map<string, Promise<string | null>>();
+	/** Island module URLs already handed to import() — warm once, never re-import. */
+	#warmed_modules = new Set<string>();
+	/** Per-href island `entry` lists extracted from prefetched HTML — parse once. */
+	#warmed_pages = new Set<string>();
 	#remote_bust_installed = false;
 	/** Hard SPA navigations only — never shared with soft invalidate. */
 	#nav_gen = 0;
@@ -342,11 +347,41 @@ class SpaRouter {
 			});
 			settled
 				.then((r) => {
-					if (r.html != null && r.cacheable) this.#page_cache.set(href, r.html);
+					if (r.html == null) return;
+					if (r.cacheable) this.#page_cache.set(href, r.html);
+					// Warm the destination's island JS during the hover/idle runway, so the click path is
+					// swap + hydrate with no first-time import() per island — the module graph is already
+					// resolved when load_island() runs. This is the biggest prefetch win: without it, a warm
+					// (HTML-cached) navigation still stalls hydration on cold island chunks.
+					this.#warm_modules(href, r.html);
 				})
 				.catch(() => {});
 		}
 		return html_p;
+	}
+
+	/**
+	 * Kick off import() for every island module the prefetched page will hydrate, so they are in the
+	 * browser's module cache before the click. `import()` is idempotent (the loader dedupes by URL),
+	 * and a warmed-URL guard skips re-parsing / re-importing across repeated hover+viewport triggers.
+	 * A cheap attribute scan avoids building a whole detached Document during the hover window.
+	 */
+	#warm_modules(href: string, html: string) {
+		if (this.#warmed_pages.has(href)) return;
+		this.#warmed_pages.add(href);
+		// Match `entry="…"` on ogygia-region open tags in our own SSR output (module URLs never contain
+		// a double-quote), collecting the distinct client-island module specifiers.
+		const re = /<ogygia-region\b[^>]*?\bentry="([^"]+)"/g;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(html))) {
+			const url = island_module_url(m[1], href);
+			if (!url || this.#warmed_modules.has(url)) continue;
+			this.#warmed_modules.add(url);
+			import(/* @vite-ignore */ url).catch(() => {
+				// A failed warm just means the click pays the import cost as before — never fatal.
+				this.#warmed_modules.delete(url);
+			});
+		}
 	}
 
 	// NOTE: the library does NO script processing. Scripts inserted via a client-side body swap do
@@ -480,6 +515,11 @@ class SpaRouter {
 
 		if (use_vt && document.startViewTransition) {
 			const t = document.startViewTransition(swap);
+			// A rapid follow-up navigation skips this transition; the browser then rejects `.ready`
+			// and `.finished` with "Transition was skipped". Nothing awaits those, so without a catch
+			// they surface as unhandled rejections (console noise, no functional effect). Swallow them.
+			t.ready?.catch(() => {});
+			t.finished?.catch(() => {});
 			await t.updateCallbackDone.catch(() => {});
 		} else {
 			swap();

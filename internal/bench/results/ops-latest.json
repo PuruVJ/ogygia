@@ -1,0 +1,73 @@
+{
+	"commit": "1ce2594",
+	"date": "2026-08-16T07:53:35.680Z",
+	"budgetMs": 400,
+	"rounds": 5,
+	"results": [
+		{
+			"name": "devalue_parse_complex",
+			"opsPerSec": 751056.9511853429,
+			"nsPerOp": 1331.4569533265978
+		},
+		{
+			"name": "region_ssr_truncated",
+			"opsPerSec": 1414292.8534047008,
+			"nsPerOp": 707.0671378934342
+		},
+		{
+			"name": "frameAddress",
+			"opsPerSec": 1930174.5635910225,
+			"nsPerOp": 518.0878552971576
+		},
+		{
+			"name": "island_module_url_rel",
+			"opsPerSec": 2266600.0990408394,
+			"nsPerOp": 441.18942747032065
+		},
+		{
+			"name": "devalue_parse_small",
+			"opsPerSec": 6296851.573462625,
+			"nsPerOp": 158.80952382844592
+		},
+		{
+			"name": "region_is_vacant",
+			"opsPerSec": 7520000,
+			"nsPerOp": 132.9787234042553
+		},
+		{
+			"name": "devalue_parse_empty",
+			"opsPerSec": 18595000,
+			"nsPerOp": 53.77789728421619
+		},
+		{
+			"name": "region_schedule",
+			"opsPerSec": 43720000,
+			"nsPerOp": 22.872827081427264
+		},
+		{
+			"name": "is_deferred",
+			"opsPerSec": 63805000,
+			"nsPerOp": 15.67275291905023
+		},
+		{
+			"name": "region_hydrate_schedule",
+			"opsPerSec": 65660000,
+			"nsPerOp": 15.229972586049344
+		},
+		{
+			"name": "is_awake",
+			"opsPerSec": 67660000,
+			"nsPerOp": 14.779781259237364
+		},
+		{
+			"name": "region_remount",
+			"opsPerSec": 76920000,
+			"nsPerOp": 13.000520020800833
+		},
+		{
+			"name": "island_module_url_abs",
+			"opsPerSec": 213855000,
+			"nsPerOp": 4.676065558439129
+		}
+	]
+}

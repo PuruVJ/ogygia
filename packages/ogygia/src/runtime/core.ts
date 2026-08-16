@@ -27,18 +27,29 @@ import { slots, type LiftedLake } from './slots.js';
  * client reviver (`remember: true`) so a named/shared transportable reunites with its live instance.
  * Returns `{}` when there is no props sibling.
  */
+// The devalue revivers only depend on `slots.wire`, which is set once at boot and never changes.
+// Building this object (plus its two closures) fresh for every island was pure per-hydrate GC churn;
+// memoize it against the wire identity so N islands share ONE revivers object.
+let cached_wire: (typeof slots)['wire'] | undefined;
+let cached_revivers: Record<string, (d: never) => unknown> | undefined;
+function region_prop_revivers(): Record<string, (d: never) => unknown> | undefined {
+	const wire = slots.wire;
+	if (wire === cached_wire) return cached_revivers;
+	cached_wire = wire;
+	cached_revivers = wire
+		? {
+				[wire.TRANSPORT_WIRE_KEY]: (d: never) => wire.revive_transportable(d, true),
+				[wire.REGION_SNIPPET_WIRE_KEY]: (d: never) => wire.revive_region_snippet(d)
+			}
+		: undefined;
+	return cached_revivers;
+}
+
 function read_region_props(region: Element): Record<string, unknown> {
 	let sib = region.nextElementSibling;
 	while (sib) {
 		if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]')) {
-			const wire = slots.wire;
-			const revivers = wire
-				? {
-						[wire.TRANSPORT_WIRE_KEY]: (d: never) => wire.revive_transportable(d, true),
-						[wire.REGION_SNIPPET_WIRE_KEY]: (d: never) => wire.revive_region_snippet(d)
-					}
-				: undefined;
-			return parse(sib.textContent, revivers);
+			return parse(sib.textContent, region_prop_revivers());
 		}
 		if (sib.tagName === 'LINK') {
 			sib = sib.nextElementSibling;
@@ -461,7 +472,21 @@ class OgygiaRegion extends HTMLElement {
 		const deferred = is_deferred(this);
 		const when = region_schedule(this);
 		const fire = deferred ? () => this.#server() : () => this.#hydrate();
+		// A `visible` island won't hydrate until it scrolls into view — and only THEN fetches its JS
+		// chunk, stalling hydration on a real network. Warm the module during idle so the scroll-in is
+		// instant. Kept to `visible` on purpose: `idle` fires imminently anyway, while `interaction`
+		// and `media` are "maybe never" schedules where NOT downloading is the whole point.
+		if (!deferred && when === 'visible') this.#warm_module();
 		this.#arm(when, fire);
+	}
+
+	/** Idle-import this island's JS so a later `visible` wake hydrates without a cold chunk fetch. */
+	#warm_module() {
+		const entry = this.getAttribute('entry');
+		if (!entry) return;
+		const warm = () => void import(/* @vite-ignore */ island_module_url(entry)).catch(() => {});
+		if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 2000 });
+		else setTimeout(warm, 200);
 	}
 
 	/** Arm idle / visible / load / interaction / media for a schedule callback. */
@@ -730,8 +755,10 @@ class OgygiaRegion extends HTMLElement {
 		this.#hydrating = true;
 		let lifted: Array<LiftedLake> | null = null;
 		try {
-			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page
-			await dom_ready();
+			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page.
+			// On an SPA swap (and any post-load hydrate) the document is already parsed, so skip the
+			// await entirely — no need to burn a microtask turn before every island wakes.
+			if (typeof document !== 'undefined' && document.readyState === 'loading') await dom_ready();
 			// SWR remount (and SPA swaps) can disconnect an island-in-lake while its module load is
 			// in flight — abort rather than hydrate into a detached tree (SWR-ORPHAN-HYDRATE).
 			if (!this.isConnected) return;
