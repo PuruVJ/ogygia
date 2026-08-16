@@ -9,30 +9,78 @@ and provider contracts the photograph path shares.
 
 ---
 
-## 1. The raster pipeline
+## 1. Packaging: images stand alone
 
+**`ogygia/image`** (browser-safe: `<Img>`, `ImageDescriptor`) and **`ogygia/image/server`**
+(`raster()`). Zero dependency on content/site — a bare Kit app with no collections gets the
+whole image story. `site()`'s `og` emission and the markdown pipeline are *consumers* of this
+layer, never its home.
+
+## 2. Engines: satori by default, playwright by choice
+
+The rasterizer is a **plugin-level dial** — a name or a value (the house contract pattern):
+
+```ts
+ogygia({
+  image: { engine: 'satori' }        // default: satori-html → satori → resvg. No browser.
+  // image: { engine: 'playwright' } // full-fidelity: real Chromium, real CSS (grid, filters,
+  //                                 //   web fonts, text shaping). Heavier; see tradeoffs.
+  // image: { engine: myEngine }     // a RasterEngine value — Cloudinary, wasm, whatever.
+})
 ```
-component ──ssr_render──▶ HTML ──satori-html──▶ satori tree ──satori──▶ SVG ──resvg──▶ PNG/JPEG
-                            │
-                            └── root is <svg>? ──────────────────────────▶ resvg direct
+
+```ts
+type RasterEngine = {
+  /** Rasterize one SSR'd component output. `html` is the render; `size`/`fonts` from the call. */
+  render(input: { html: string; size: [number, number]; fonts?: FontData[] }): Promise<Uint8Array>;
+};
 ```
 
-- **Tier A (default): the card dialect.** The component SSRs to HTML; `satori-html` lifts it;
-  `satori` does text layout + flexbox and emits positioned SVG; `@resvg/resvg-js` rasterizes.
-  This is the `@vercel/og` stack — proven on serverless, no headless browser, WASM-capable.
-  The cost: satori renders a **subset** — flexbox only (no grid/float), inline styles only,
-  explicit dimensions on the root. This is the accepted DX of the whole OG-image ecosystem;
-  we document it as "the card dialect" with build-voice errors naming the unsupported property.
-- **Tier B (escape hatch): SVG root.** If the component's rendered root is `<svg>`, satori is
-  skipped entirely — resvg rasterizes directly. Full Svelte power, full SVG fidelity, text
-  wrapping is on you. Mode is **inferred from the output**, never configured.
-- All three packages are **optional peers**, lazily imported only on the raster path (the
-  orama/bits-ui/mdsvex pattern). A build with no raster usage never loads them.
+- **satori** (default): flexbox + inline styles ("the card dialect"), `<svg>` root bypasses
+  satori for resvg-direct full-SVG fidelity. No browser, WASM-capable, serverless-safe.
+  ~30–80 ms/card + ~5–30 ms rasterize (verify in spike). Optional peers, lazy-loaded.
+- **playwright**: one persistent browser per build/server, a small page pool, screenshot of the
+  SSR'd HTML with the app's real CSS. Anything Chromium renders, the card can be. Tradeoffs
+  stated plainly in docs: heavyweight dependency; per-request use needs a long-lived server
+  (bad fit for edge/serverless — satori is the deferred-on-serverless recommendation); build
+  use is unremarkable (browser starts once, hundreds of cards, then exits).
+- Engine choice changes **fidelity only** — every calling surface below is engine-agnostic.
 
-Order-of-magnitude budget (to verify in a spike): satori ~30–80 ms/card, resvg ~5–30 ms at
-1200×630. Fine per-request on a server; fine at build behind the cache.
+## 3. One server primitive, three clocks
 
-## 2. One macro, two sources
+Everything reduces to **`raster()`** — a plain server function, callable anywhere server code
+runs:
+
+```ts
+import { raster } from 'ogygia/image/server';
+
+const png = await raster(SocialCard, { title }, { size: [1200, 630] });   // Uint8Array
+```
+
+The three clocks are three ways to call it:
+
+- **Build** — the macro `import.meta.og.image(Component, props, opts)`: bake-machinery, static
+  literal props enforced (runtime value → build error naming the other two clocks), output a
+  hashed asset + descriptor. Sugar over raster() at compile time.
+- **SSR / your own route** — call `raster()` directly. This is the answer to "what if the image
+  content needs request-time data": it's just server code, cached by *your* route's headers.
+
+  ```ts
+  // src/routes/og/[id].png/+server.ts — og:image with DB data, no ogygia ceremony
+  export const GET = async ({ params, setHeaders }) => {
+    const post = await db.post(params.id);
+    setHeaders({ 'cache-control': 'public, max-age=3600' });
+    return new Response(await raster(SocialCard, { title: post.title }), {
+      headers: { 'content-type': 'image/png' }
+    });
+  };
+  ```
+
+- **Deferred** — the marked import (`render: 'deferred', as: 'image', maxAge`): sugar that
+  mints the signed capability URL and calls raster() on the endpoint. For per-visitor images
+  inside PPR shells, where you want the signing/caching machinery instead of writing a route.
+
+## 4. The macro's two sources
 
 `import.meta.og.image()` settles **any image to a descriptor at build**. The first argument
 picks the source:
@@ -54,7 +102,7 @@ serializable literals** — a runtime value is a build error pointing at `render
 
 Marked-import sugar for files stays: `import hero from './hero.jpg' with { widths: [...] }`.
 
-## 3. The OG emission — cards for every page
+## 5. The OG emission — cards for every page (a consumer)
 
 One declaration on the site, so the brains know:
 
@@ -85,7 +133,7 @@ export const { GET, entries } = docs.emit.og();
   re-renders only pages whose title/summary/card actually changed.
 - Format: PNG default (scrapers don't do AVIF), `format: 'jpeg'` opt-out for photo-heavy cards.
 
-## 4. Pixels per request — the deferred raster
+## 6. Deferred raster details
 
 ```svelte
 <script>
@@ -113,7 +161,7 @@ export const { GET, entries } = docs.emit.og();
 - **Live**: not specced for raster. Live regions morph SVG/HTML in place — strictly better than
   bitmap streams. `as: 'image'` on `render: 'live'` is a build error with that explanation.
 
-## 5. Fonts (satori's hard requirement)
+## 7. Fonts (satori engine only)
 
 Satori needs raw font data — no system fonts, no CSS `@font-face`. Spec:
 
@@ -124,9 +172,9 @@ import interRegular from '$lib/fonts/Inter-Regular.ttf' with { font: true };  //
 A marked font import inlines the buffer at build (bake-style) and infers name/weight/style from
 the file tables. `og: { fonts: [...] }` and the macro's `fonts` option take these values.
 Zero fonts + Tier A card → build error: "satori renders no text without a font — mark a font
-import and pass it." (Tier B SVG cards may embed paths and need none.)
+import and pass it." (SVG-root cards may embed paths and need none; the playwright engine ignores this entirely — it uses the app's real CSS fonts.)
 
-## 6. The descriptor (shared with the photograph path)
+## 8. The descriptor (shared with the photograph path)
 
 ```ts
 type ImageDescriptor = {
@@ -142,7 +190,7 @@ Plain devalue-safe data: crosses island props, rides `refs()`, sits in frontmatt
 (`<Img>` is the sugar). Providers (Cloudinary/imgix/CMS) are app values that map remote
 metadata into this shape — the descriptor **is** the provider contract.
 
-## 7. Failure modes, named
+## 9. Failure modes, named
 
 - Unsupported CSS in a Tier A card → build error citing the property + "the card dialect is
   flexbox + inline styles; render an `<svg>` root for full fidelity."
@@ -151,7 +199,7 @@ metadata into this shape — the descriptor **is** the provider contract.
 - Deferred raster on a runtime without the peers → boot-time error naming the three packages.
 - `images()` check (separate spec): missing file / missing alt / oversized intrinsic vs rendered.
 
-## 8. Open questions
+## 10. Open questions
 
 1. `as: 'image'` vs `render: 'image'` — spec assumes `as:` (output target, orthogonal to when).
 2. Does `emit.og()` allow per-SECTION card components (`og: { card, overrides: { blog: BlogCard } }`)? Lean yes, later.
