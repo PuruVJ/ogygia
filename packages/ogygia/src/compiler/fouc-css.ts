@@ -62,11 +62,21 @@ export function foucRelFromId(id: string) {
 		encoded = bare.slice(FOUC_SCOPED_PREFIX.length, -'.css'.length);
 	}
 	if (encoded == null) return null;
+	let rel: string;
 	try {
-		return decodeURIComponent(encoded);
+		rel = decodeURIComponent(encoded);
 	} catch {
-		return encoded;
+		rel = encoded;
 	}
+	// SECURITY: this rel is `path.join(root, rel)` + `readFileSync` in the dev `load()` hook. A FOUC
+	// id is minted from a module path in our own graph, so a legit rel is always root-relative with no
+	// `..`. Reject traversal / absolute specifiers — otherwise a crafted request to the dev server
+	// (`…/fouc-scoped/..%2F..%2Fetc%2Fpasswd.css`) would read files outside the project (Vite's
+	// `server.fs.allow` does NOT cover a plugin's own `fs.readFileSync`). Mirrors content/source.ts.
+	if (rel.startsWith('/') || rel.startsWith('\\') || /^[a-zA-Z]:/.test(rel) || /(^|[\\/])\.\.([\\/]|$)/.test(rel)) {
+		return null;
+	}
+	return rel;
 }
 
 /**

@@ -56,6 +56,10 @@ import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrenc
 /** Hard cap on rendered region HTML (bytes). */
 const MAX_REGION_BODY = 2_000_000;
 
+/** Cap on a batch POST body before `request.json()` buffers it. 32 endpoints × ~8.5kB (props cap
+ *  8192 + URL overhead) ≈ 270kB; 512kB leaves margin. Rejected up front via `content-length`. */
+const MAX_BATCH_BODY = 512 * 1024;
+
 /** Abort waiting on slow region SSR (work may continue — see INVARIANTS · RENDER-TIMEOUT). */
 const RENDER_TIMEOUT_MS = 10_000;
 
@@ -188,6 +192,15 @@ class OgygiaHandle {
 		if (!ip) return region_response('Too Many Requests', { status: 429 });
 		if (this.probe_rate.limited(ip) || this.render_rate.limited(ip)) {
 			return region_response('Too Many Requests', { status: 429 });
+		}
+		// A batch is at most MAX_BATCH signed endpoints (~8.5kB each), so a well-formed body is a few
+		// hundred kB. `request.json()` buffers the WHOLE body before we can slice to 32 — reject an
+		// oversized body up front (O(1) header check) so a single padded POST can't force a large
+		// buffer. Platform adapters cap the body too, but this makes the bound explicit and covers
+		// adapters that don't. (Chunked uploads without content-length still rely on the platform cap.)
+		const content_length = Number(event.request.headers.get('content-length'));
+		if (Number.isFinite(content_length) && content_length > MAX_BATCH_BODY) {
+			return region_response('Payload Too Large', { status: 413 });
 		}
 		let parsed: unknown;
 		try {
