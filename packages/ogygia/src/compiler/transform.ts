@@ -1245,8 +1245,11 @@ export function transformHost(source, id, ctx) {
 					// their own. This is the single crossing path — the per-usage "child synth" is gone.
 				}
 			}
+			// `CHILD_KEYS` already includes `fragment`, so this one loop covers a Component's children.
+			// A separate explicit `visit_usages(node.fragment.nodes)` for Components re-descended the
+			// SAME subtree a second time — for NESTED island components that doubled the work per level,
+			// i.e. O(2^depth) (measured: depth-18 ≈ 62ms, depth-25 hangs). One traversal, once.
 			for (const k of CHILD_KEYS) if (node[k]?.nodes) visit_usages(node[k].nodes);
-			if (node.type === 'Component' && node.fragment?.nodes) visit_usages(node.fragment.nodes);
 		}
 	};
 	visit_usages(ast.fragment?.nodes ?? []);

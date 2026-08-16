@@ -3,10 +3,11 @@
 // build) → fits a tight loop cadence. Measures scaling with island count, nesting depth, and
 // content size; asserts determinism and flags super-linear / exponential blowup.
 //
-// KNOWN CLIFF (found 2026-08-16): NESTED islands re-transform each level's inner subtree, so time
-// grows ~1.9^depth — exponential. Benign for shallow nesting (≤6, sub-ms) but catastrophic past ~16
-// (depth 18 ≈ 62ms, depth 25+ hangs). Island COUNT is milder but still super-linear (~O(n^1.7)).
-// Caps below stay in the safe zone so this never hangs; the guards fail if the cliffs worsen.
+// FIXED 2026-08-16: nested islands USED to be O(2^depth) — `visit_usages` re-descended every
+// Component's fragment twice (CHILD_KEYS already had `fragment` + a redundant explicit re-visit), so
+// depth-18 ≈ 62ms and depth-25 hung. Now O(depth), linear (~1.0×/level). This harness is the
+// regression guard: the nesting per-level factor must stay ≈ 1. Island COUNT is ~O(n^1.7), content
+// is linear — both fine. Caps stay in the safe zone so this never hangs even if a regression lands.
 import { transformHost } from '../../packages/ogygia/dist/compiler/transform.js';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -44,7 +45,7 @@ console.log('\n  islands (count) — expect ~O(n^1.7):');
 const islMs: Record<number, number> = {};
 for (const n of [1, 10, 50, 100, 200]) { const r = time(manyIslands(n), `/s/i${n}.svelte`); detAll &&= r.det; islMs[n] = r.ms; row(`islands×${n}`, r.ms, `${(r.ms / n).toFixed(3)} ms/island`); }
 
-console.log('\n  nesting (depth) — KNOWN exponential ~1.9^depth:');
+console.log('\n  nesting (depth) — was O(2^depth), fixed to linear (guard: per-level ≈ 1×):');
 const nestMs: number[] = [];
 for (const d of [2, 4, 6, 8, 10, 12]) { const r = time(nest(d), `/s/n${d}.svelte`); detAll &&= r.det; nestMs.push(r.ms); row(`nest depth ${d}`, r.ms); }
 
