@@ -40,7 +40,7 @@ try {
 	const html = await (await fetch(base + '/')).text();
 	line(/data-title/.test(html), 'page server-rendered (SSR HTML present)');
 
-	const rt = html.match(/\/_app\/immutable\/ogygia-runtime\.[a-z0-9]+\.js/)?.[0];
+	const rt = html.match(/\/_app\/immutable\/og-runtime\.[a-z0-9]+\.js/)?.[0];
 	line(!!rt, 'runtime script referenced in HTML', rt || 'none');
 	if (rt) line((await status(base + rt)) === 200, 'runtime script serves 200 (the 404 regression)', rt);
 

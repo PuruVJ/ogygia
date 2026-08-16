@@ -294,7 +294,7 @@ try {
 			// static/dynamic IMPORT of an island or wrapper module (dual ownership), so match import
 			// syntax, not bare mentions of the filename.
 			const island_import_re =
-				/(?:from\s*|import\s*\(?\s*)["'][^"']*ogygia-island\.|virtual:ogygia\/(?:wrapper|island)\//;
+				/(?:from\s*|import\s*\(?\s*)["'][^"']*og-region\.|virtual:ogygia\/(?:wrapper|island)\//;
 			const bad: string[] = [];
 			for (const f of fs.readdirSync(nodesDir).filter((n) => n.endsWith('.js'))) {
 				const nodeNum = f.split('.')[0];
@@ -331,7 +331,7 @@ try {
 				css: Record<string, string[]>;
 			};
 			const portableEntry = '/_app/immutable/og-region.' +
-				(counterFacades[0]?.match(/ogygia-island\.([0-9a-f]+)\.js/)?.[1] ?? '') +
+				(counterFacades[0]?.match(/og-region\.([0-9a-f]+)\.js/)?.[1] ?? '') +
 				'.js';
 			// Presence of deps handoff proves generateBundle walked Rolldown OutputChunk.imports.
 			// Shape is `{ js: { entry: [...] }, css: { entry: [...] } }`.

@@ -1217,6 +1217,7 @@ export function transformHost(source, id, ctx) {
 		);
 	};
 
+	let has_island_children = false;
 	const visit_usages = (nodes) => {
 		for (const node of nodes ?? []) {
 			if (node.type === 'Component') {
@@ -1237,6 +1238,14 @@ export function transformHost(source, id, ctx) {
 						// Server islands render in isolation from serialized props (only the reserved
 						// fallback snippet crosses); held regions are minted as data. Snippets can't cross either.
 						assert_portable_children(node, name, mark.strategy === 'server');
+					} else {
+						// A hydrate island WITH real children crosses them as an OgygiaS slot pointer —
+						// the app's runtime must carry the wire revivers. Surfaced for the plugin's
+						// usage-gated `wire` detection (a childless minimal app stays lean).
+						const kids = (node.fragment?.nodes ?? []).filter(
+							(n) => !(n.type === 'Text' && !String(n.data ?? '').trim())
+						);
+						if (kids.length) has_island_children = true;
 					}
 					// Hydrate-island children need NO compile-time handling: the wrapper forwards them to
 					// Region as its slot, the server renders them IN-PLACE inside a `<ogygia-slot>` marker,
@@ -1295,9 +1304,13 @@ export function transformHost(source, id, ctx) {
 			`\timport __OgygiaCss from ${JSON.stringify(componentPath)};\n` +
 			`\tlet { children, ...__props } = $props();\n` +
 			`</script>\n` +
+			// `children` rides as an EXPLICIT prop, never as template children: wrapping `{@render
+			// children?.()}` in the tags would hand Region a fragment snippet even for a CHILDLESS
+			// call site — Region's `island_children != null` gate would then serialize a pointless
+			// empty slot descriptor (OgygiaS) into every island payload, which also breaks minimal
+			// apps whose usage-gated runtime ships no wire revivers. Absent stays absent.
 			`<OgygiaRegion__Wrapper __mode="island" ${strategy_attrs}${persist_attr} __entry={${JSON.stringify(entry_url)}} ` +
-			`__component={__OgygiaEntry} __css={__OgygiaCss} {__props}>` +
-			`{@render children?.()}</OgygiaRegion__Wrapper>\n`
+			`__component={__OgygiaEntry} __css={__OgygiaCss} {__props} {children} />\n`
 		);
 	};
 
@@ -1770,7 +1783,8 @@ export function transformHost(source, id, ctx) {
 	return {
 		code: s.toString(),
 		map: s.generateMap({ hires: true, source: id, includeContent: true }),
-		islands: [...islands_by_id.values()]
+		islands: [...islands_by_id.values()],
+		hasIslandChildren: has_island_children
 	};
 }
 

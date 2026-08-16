@@ -957,6 +957,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// A portable-snippet synth entry crosses a live snippet into an island — it is revived on the
 			// client through the wire codec, so this app needs the wire runtime.
 			if (isl.portable) note_runtime_mark({ wire: true });
+			// Likewise a hydrate island with real HOST CHILDREN: they cross as an OgygiaS slot
+			// pointer the client must revive (adapters regression: a minimal app with children got a
+			// usage-gated runtime without the revivers → "Unknown type OgygiaS" at hydrate).
+			if (result.hasIslandChildren) note_runtime_mark({ wire: true });
 			let holders = id_hosts.get(isl.id);
 			if (!holders) {
 				holders = new Set();
