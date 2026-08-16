@@ -115,6 +115,10 @@ Each of these is a one-line consequence — no image subsystem behind any of the
 - **Diagram** (markdown): a `mermaid`/`d2` fence renders to SVG at build (crisp, selectable),
   and may wake as a live island for pan/zoom. A diagram is a region that happens to look like
   an image — so it gets image identity (morph, warm) *and* region aliveness.
+- **Placeholder** (SSR): every encoded variant also gets a [thumbhash](https://evanw.github.io/thumbhash/)
+  — ~28 bytes on the descriptor. `<Img>` decodes it server-side to a tiny data-URI and paints it
+  as the `<img>` background, so the blurred preview is in the static HTML and the real pixels
+  cover it on load. Zero client JS — csr:false-native by construction.
 
 ## 5. The macro's two sources
 
@@ -193,6 +197,9 @@ export const { GET, entries } = docs.emit.og();
   HTML batch parcel (mixed content types in one stream buys nothing the browser's parallel
   image fetch doesn't already do). They're plain `<img>` fetches; the single-flight batch stays
   HTML-only.
+- **The hole gets a preview**: at build, the region's *fallback* render is rastered once and
+  thumbhashed; the static PPR shell paints that blur in the hole. The per-visitor image arrives
+  into a frame that already has its shape and palette — no white flash in the shell.
 - `wake` dial applies as loading strategy: default eager; `wake: 'visible'` → `loading="lazy"`.
 - **Live**: not specced for raster. Live regions morph SVG/HTML in place — strictly better than
   bitmap streams. `as: 'image'` on `render: 'live'` is a build error with that explanation.
@@ -217,6 +224,7 @@ type ImageDescriptor = {
   id: string;                              // content hash of the SOURCE — the identity organs key on
   variants: { src: string; format: 'avif' | 'webp' | 'png' | 'jpeg'; width: number;
               theme?: 'light' | 'dark' }[];   // theme: the preference() axis
+  hash?: string;                           // thumbhash, base64 (~28 bytes) — decoded at SSR to the blur placeholder
   width: number; height: number;           // intrinsic — CLS-proof by construction
   sizes?: string;                          // derived (prose column) or authored
   alt?: string;                            // from markdown/frontmatter; <Img> requires alt prop otherwise
@@ -224,7 +232,10 @@ type ImageDescriptor = {
 ```
 
 Plain devalue-safe data: crosses island props, rides `refs()`, sits in frontmatter via
-`fields.image`. `<Img of={desc}>` renders `<picture>`; `<Region>` learns to accept descriptors
+`fields.image`. The `hash` is thumbhash, not blurhash — it encodes aspect ratio and alpha and
+decodes smaller; we store the raw hash (28 bytes crosses every wire for free) and decode to a
+data-URI only at SSR. The encoder/decoder is a few hundred lines, MIT — vendor it into
+`ogygia/image` rather than adding a peer. `<Img of={desc}>` renders `<picture>`; `<Region>` learns to accept descriptors
 (`<Img>` is the sugar). Providers (Cloudinary/imgix/CMS) are app values that map remote
 metadata into this shape — the descriptor **is** the provider contract.
 
