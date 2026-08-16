@@ -1,7 +1,6 @@
 import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
 import { frameAddress } from '../frame.js';
-import * as frames from './frame-store.js';
 import { set_current_region } from '../context-bridge.js';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import NestedProvider from '../NestedProvider.svelte';
@@ -531,7 +530,7 @@ class OgygiaRegion extends HTMLElement {
 		const endpoint = this.getAttribute('endpoint');
 		if (endpoint && !this.#frame_unsub) {
 			const address = (this.#frame_address = frameAddress(endpoint));
-			this.#frame_unsub = frames.subscribe(address, (f) => void (this.#applying = this.#apply(f.html)));
+			this.#frame_unsub = slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ?? null;
 		}
 		await this.#deliver_html();
 		// The subscribe callback fired #apply, but #apply awaits the stylesheet before swapping —
@@ -644,13 +643,13 @@ class OgygiaRegion extends HTMLElement {
 		// Bind if we haven't (SWR/lake remount reaches #fetch_html without going through #server).
 		// Idempotent: #server already subscribed for the normal defer flow.
 		if (!this.#frame_unsub) {
-			this.#frame_unsub = frames.subscribe(address, (f) => void (this.#applying = this.#apply(f.html)));
+			this.#frame_unsub = slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ?? null;
 		}
 		if (opts.revalidate) this.#revalidating = true;
 		try {
 			// Network → STORE (never straight to DOM). N regions with the same address ⇒ one request;
 			// a stale response can't overwrite a newer one (the store tickets at request time).
-			const html = await frames.ensure(
+			const html = await slots.frames?.ensure(
 				address,
 				(signal) =>
 					runtime_session.server_gate.run(async () => {
@@ -917,7 +916,7 @@ class OgygiaRegion extends HTMLElement {
 		if (!interactive) {
 			if (desc.url && !this.#frame_unsub) {
 				this.#frame_address = frameAddress(desc.url);
-				this.#frame_unsub = frames.subscribe(this.#frame_address, (f) => this.#morph_live(f.html));
+				this.#frame_unsub = slots.frames?.subscribe(this.#frame_address, (f) => this.#morph_live(f.html)) ?? null;
 			}
 			this.#morph_live(desc.html);
 			return;
@@ -1004,7 +1003,7 @@ class OgygiaRegion extends HTMLElement {
 		this.#frame_unsub?.();
 		this.#frame_unsub = null;
 		if (this.#frame_address) {
-			frames.abandon(this.#frame_address);
+			slots.frames?.abandon(this.#frame_address);
 			this.#frame_address = null;
 		}
 		if (this.#idle_handle != null) {

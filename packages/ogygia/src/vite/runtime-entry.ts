@@ -26,6 +26,7 @@ export type RuntimeMarks = {
 export type FeatureId =
 	| 'remote-seeds'
 	| 'wire'
+	| 'frames'
 	| 'lakes'
 	| 'morph'
 	| 'live'
@@ -94,12 +95,21 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 		module: 'remote-seeds.js',
 		deps: [],
 		detect: (m) => m.remoteSeeds !== false
+	},
+	frames: {
+		module: 'frames.js',
+		deps: [],
+		// The client frame store, needed by any region that streams HTML: a deferred region (server
+		// island / held region), a live/morphing region, or a lake. A plain load-hydrated app has
+		// none of these and tree-shakes the store away. (Router weave imports the store separately.)
+		detect: (m) => (m.defer || []).length > 0 || m.live === true || m.morph === true || m.lakes === true
 	}
 };
 
 export const FEATURE_ORDER: FeatureId[] = [
 	'remote-seeds',
 	'wire',
+	'frames',
 	'lakes',
 	'morph',
 	'live',

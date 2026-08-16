@@ -11,6 +11,7 @@
  */
 import type { Component } from 'svelte';
 import type { PersistPair } from './persist.js';
+import type { Frame } from '../frame.js';
 import { is_frozen } from './region-attrs.js';
 
 // ── lakes ────────────────────────────────────────────────────────────────
@@ -84,6 +85,21 @@ export type RemoteSeedOps = {
 	clear_remote_instances(): void;
 };
 
+/**
+ * The client frame store, filled by the `frames` feature. Core reads it ONLY on the deferred /
+ * live / SWR-lake paths (a region with a signed `endpoint`), so a plain load-hydrated app never
+ * bundles the store. Null until the feature installs → core's frame calls are optional-chained.
+ */
+export type FrameOps = {
+	subscribe(a: string, cb: (f: Frame) => void): () => void;
+	ensure(
+		a: string,
+		fetcher: (signal: AbortSignal) => Promise<string>,
+		opts?: { force?: boolean }
+	): Promise<string>;
+	abandon(a: string): void;
+};
+
 export type SpeculateOps = { reinstall(): void };
 
 /**
@@ -116,6 +132,7 @@ export type Slots = {
 	live: Component<Record<string, unknown>> | null;
 	wire: WireOps | null;
 	remoteSeeds: RemoteSeedOps | null;
+	frames: FrameOps | null;
 	speculate: SpeculateOps | null;
 	spaLifecycle: SpaLifecycle | null;
 	nav: NavOps | null;
@@ -149,6 +166,7 @@ export const slots: Slots = {
 	live: null,
 	wire: null,
 	remoteSeeds: null,
+	frames: null,
 	speculate: null,
 	spaLifecycle: null,
 	nav: null
