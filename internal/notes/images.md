@@ -1,11 +1,17 @@
 # Images — spec (design only, not built)
 
-The thesis: **an image is a region whose output is pixels.** Pixels settle on the same clock as
-HTML — at build (`static`), per request (`deferred`), or continuously (`live`) — and a
-component-rendered image is the same machinery with a raster step appended.
+The primitive has two halves:
 
-This file specs the component→pixels path (OG cards and friends) end to end, plus the descriptor
-and provider contracts the photograph path shares.
+1. **`raster(renderable)` — one verb.** Anything the framework can render can settle to pixels:
+   a component + props, a route, a region. Pixels settle on the same clock as HTML — build
+   (`static`), per request (`deferred`) — because an image *is* a region whose output is pixels.
+2. **The descriptor — one currency.** Pixels travel under a stable identity (`id`: content hash
+   of the source) with variant axes (format × width × theme) and intrinsic size.
+
+Nothing else is an "image feature." Every capability in this file is an existing organ
+noticing the currency — the router warms and morphs it, preference resolves it, checks audit
+it, emissions publish it, markdown produces it. If a capability needs a new subsystem instead
+of a new reaction, it's designed wrong.
 
 ---
 
@@ -54,8 +60,17 @@ runs:
 ```ts
 import { raster } from 'ogygia/image/server';
 
-const png = await raster(SocialCard, { title }, { size: [1200, 630] });   // Uint8Array
+const png = await raster(SocialCard, { title }, { size: [1200, 630] });   // component → pixels
+const shot = await raster('/docs/routing', { size: [1440, 900] });        // route → pixels
 ```
+
+One verb, every renderable source:
+
+- **component + props** — SSR then rasterize (both engines).
+- **route** (a leading-`/` string) — the full page as the browser would paint it. Requires the
+  playwright engine; under satori it's a build-voice error ("routes need a browser — set
+  `image: { engine: 'playwright' }`"). This is the source that makes visual diffing and page
+  screenshots fall out for free.
 
 The three clocks are three ways to call it:
 
@@ -80,7 +95,28 @@ The three clocks are three ways to call it:
   mints the signed capability URL and calls raster() on the endpoint. For per-visitor images
   inside PPR shells, where you want the signing/caching machinery instead of writing a route.
 
-## 4. The macro's two sources
+## 4. Organs react to the currency
+
+Each of these is a one-line consequence — no image subsystem behind any of them:
+
+- **Warm** (router): descriptors ride the single-flight nav parcel like any region payload; the
+  router preloads the next page's hero variant during the batch. Land → hero's already painted.
+- **Morph** (router): the same `id` visible on both sides of a navigation gets an automatic
+  `view-transition-name` derived from it. Blog thumbnail glides into article hero. Zero config —
+  identity IS the transition key.
+- **Theme** (preference): `theme` is a variant axis; `<Img>` resolves it server-side through the
+  existing preference() machinery. Right variant in the SSR HTML — no swap, no flash.
+- **Diff** (checks): `checks: [snapshots()]` = raster(route) over the outline's leaves,
+  content-addressed in the BuildCache, compared against the previous build. A CSS refactor that
+  silently reshapes 12 pages becomes a named list at build time. (Playwright engine only.)
+- **Embed** (emission): a descriptor mounted on a public route is a component usable where HTML
+  can't go — GitHub READMEs, emails, RSS readers. `emit.og()` is one instance; a bare
+  `raster()` +server.ts route is the general form.
+- **Diagram** (markdown): a `mermaid`/`d2` fence renders to SVG at build (crisp, selectable),
+  and may wake as a live island for pan/zoom. A diagram is a region that happens to look like
+  an image — so it gets image identity (morph, warm) *and* region aliveness.
+
+## 5. The macro's two sources
 
 `import.meta.og.image()` settles **any image to a descriptor at build**. The first argument
 picks the source:
@@ -102,7 +138,7 @@ serializable literals** — a runtime value is a build error pointing at `render
 
 Marked-import sugar for files stays: `import hero from './hero.jpg' with { widths: [...] }`.
 
-## 5. The OG emission — cards for every page (a consumer)
+## 6. The OG emission — cards for every page (a consumer)
 
 One declaration on the site, so the brains know:
 
@@ -133,7 +169,7 @@ export const { GET, entries } = docs.emit.og();
   re-renders only pages whose title/summary/card actually changed.
 - Format: PNG default (scrapers don't do AVIF), `format: 'jpeg'` opt-out for photo-heavy cards.
 
-## 6. Deferred raster details
+## 7. Deferred raster details
 
 ```svelte
 <script>
@@ -161,7 +197,7 @@ export const { GET, entries } = docs.emit.og();
 - **Live**: not specced for raster. Live regions morph SVG/HTML in place — strictly better than
   bitmap streams. `as: 'image'` on `render: 'live'` is a build error with that explanation.
 
-## 7. Fonts (satori engine only)
+## 8. Fonts (satori engine only)
 
 Satori needs raw font data — no system fonts, no CSS `@font-face`. Spec:
 
@@ -174,12 +210,14 @@ the file tables. `og: { fonts: [...] }` and the macro's `fonts` option take thes
 Zero fonts + Tier A card → build error: "satori renders no text without a font — mark a font
 import and pass it." (SVG-root cards may embed paths and need none; the playwright engine ignores this entirely — it uses the app's real CSS fonts.)
 
-## 8. The descriptor (shared with the photograph path)
+## 9. The descriptor (shared with the photograph path)
 
 ```ts
 type ImageDescriptor = {
-  variants: { src: string; format: 'avif' | 'webp' | 'png' | 'jpeg'; width: number }[];
-  width: number; height: number;          // intrinsic — CLS-proof by construction
+  id: string;                              // content hash of the SOURCE — the identity organs key on
+  variants: { src: string; format: 'avif' | 'webp' | 'png' | 'jpeg'; width: number;
+              theme?: 'light' | 'dark' }[];   // theme: the preference() axis
+  width: number; height: number;           // intrinsic — CLS-proof by construction
   sizes?: string;                          // derived (prose column) or authored
   alt?: string;                            // from markdown/frontmatter; <Img> requires alt prop otherwise
 };
@@ -190,7 +228,7 @@ Plain devalue-safe data: crosses island props, rides `refs()`, sits in frontmatt
 (`<Img>` is the sugar). Providers (Cloudinary/imgix/CMS) are app values that map remote
 metadata into this shape — the descriptor **is** the provider contract.
 
-## 9. Failure modes, named
+## 10. Failure modes, named
 
 - Unsupported CSS in a Tier A card → build error citing the property + "the card dialect is
   flexbox + inline styles; render an `<svg>` root for full fidelity."
@@ -199,7 +237,7 @@ metadata into this shape — the descriptor **is** the provider contract.
 - Deferred raster on a runtime without the peers → boot-time error naming the three packages.
 - `images()` check (separate spec): missing file / missing alt / oversized intrinsic vs rendered.
 
-## 10. Open questions
+## 11. Open questions
 
 1. `as: 'image'` vs `render: 'image'` — spec assumes `as:` (output target, orthogonal to when).
 2. Does `emit.og()` allow per-SECTION card components (`og: { card, overrides: { blog: BlogCard } }`)? Lean yes, later.
