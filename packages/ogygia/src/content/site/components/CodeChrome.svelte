@@ -134,7 +134,16 @@
 		scan();
 		const mo =
 			typeof MutationObserver !== 'undefined' ? new MutationObserver(() => scan()) : null;
-		mo?.observe(root, { childList: true, subtree: true });
+		// `childList` catches blocks a live region inserts; `hidden`/`open` catch a block REVEALED
+		// after load — a `::: code-group` tab switch (the panel's `hidden` toggles) or a `::: details`
+		// opening. `enhance` skips hidden `<pre>`s (`offsetParent === null`) at first scan, so without
+		// this a newly-shown tab would carry no copy/permalink. `scan` is idempotent (`__ogc` guard).
+		mo?.observe(root, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+			attributeFilter: ['hidden', 'open']
+		});
 
 		// Heading permalinks (the rehype-added `.og-heading-anchor`) are plain `<a href="#id">` with no
 		// island of their own — delegate here so following one also focuses its heading, same as a code

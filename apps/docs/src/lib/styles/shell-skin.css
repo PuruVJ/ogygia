@@ -535,3 +535,83 @@
 .og-code-link[data-linked] {
 	color: var(--accent);
 }
+
+/* ── Code-group (`::: code-group`) — the tab bar IS the code block's top chrome: tab labels on the
+      LEFT, the copy + permalink actions at the RIGHT end of the same strip. The `.og-tabs` wrapper
+      owns the frame; each panel's `.code-only` drops its own border/bar and the visible panel's
+      `.og-code-actions` (absolute, anchored to `.og-tabs`) rides the bar's right end. ── */
+.og-tabs {
+	position: relative;
+	margin: 1.5rem 0;
+	border: 1px solid var(--line);
+	border-radius: var(--r-md);
+	background: var(--bg-sunken);
+	overflow: hidden;
+}
+/* the bar is built on hydration and inserted as the first child (see TabGroupIsland) */
+.og-tabs-bar {
+	position: relative;
+	display: flex;
+	align-items: stretch;
+	min-height: 2.6rem;
+	padding: 0 5.5rem 0 0.35rem; /* right pad keeps a long tab row clear of the actions overlay */
+	border-bottom: 1px solid var(--line);
+	background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
+}
+.og-tabs-tab {
+	appearance: none;
+	border: none;
+	background: none;
+	cursor: pointer;
+	padding: 0 0.7rem;
+	font: 500 0.8125rem/1 var(--font-body);
+	color: var(--text-faint);
+	display: inline-flex;
+	align-items: center;
+	transition: color 0.15s ease;
+}
+.og-tabs-tab:hover {
+	color: var(--text);
+}
+.og-tabs-tab[aria-selected='true'] {
+	color: var(--text);
+}
+.og-tabs-tab:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+	border-radius: 4px;
+}
+/* the sliding underline the island positions inline (transform/width/opacity) */
+.og-tabs-marker {
+	position: absolute;
+	bottom: -1px;
+	left: 0;
+	height: 2px;
+	background: var(--accent);
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		transform 0.25s ease,
+		width 0.25s ease;
+}
+/* inside a group the panel's own frame is gone — the group owns it */
+.og-tabs .code-only {
+	position: static;
+	margin: 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	padding-top: 1.1rem;
+}
+/* the visible panel's actions ride the tab bar's right end (anchored to `.og-tabs`) */
+.og-tabs .og-code-actions {
+	top: 0;
+	right: 0;
+	left: auto;
+	width: auto;
+	height: 2.6rem;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	padding: 0 0.4rem;
+}
