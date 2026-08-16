@@ -18,7 +18,8 @@ import { region_snippet } from './region-snippet.js';
 import RawHtml from './RawHtml.svelte';
 
 /** Brand so the transport can recognize a region without false-matching plain objects. */
-export const REGION_BRAND = Symbol.for('ogygia.region');
+import { REGION_BRAND } from './region-brand.js';
+export { REGION_BRAND };
 
 /** Schedule options for a held region. `wake` = when its JS runs; `margin` = IntersectionObserver
  * rootMargin for `wake: 'visible'`. Merged OVER the binding's baked schedule (from a `wake:` mark) —

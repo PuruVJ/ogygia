@@ -11,7 +11,7 @@
 // Takes only a region value (from `region()` / a query that returns one). Client-only; a no-op on the
 // server and for regions with nothing to fetch (inline/dual, or content already baked into the ticket).
 // ─────────────────────────────────────────────────────────────────────────────
-import { REGION_BRAND } from './region.js';
+import { REGION_BRAND } from './region-brand.js';
 import { frameAddress } from './frame.js';
 import { ensure } from './runtime/frame-store.js';
 

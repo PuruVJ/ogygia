@@ -167,7 +167,16 @@ export interface RawRegionSnippet {
 
 /** Lift a parameterless snippet, or a raw `{ render, setup?, captures? }`, into a region snippet. */
 export function region_snippet(input: Snippet | RawRegionSnippet): RegionSnippet {
-	if (typeof input === 'function') return capture_static(input as Snippet); // lift form
+	// Lifting a bare snippet freezes it via SSR (`render`) — a server-only capture. Guarding the
+	// client path keeps `svelte/server` out of the client graph (the raw `{render,setup}` form below
+	// is fully client-safe and is what an island actually revives from).
+	if (typeof input === 'function' && !BROWSER) return capture_static(input as Snippet); // lift form
+	if (typeof input === 'function') {
+		throw new Error(
+			'[ogygia] region_snippet(fn) freezes a snippet by server-rendering it — call it during SSR, ' +
+				'not on the client. Pass a raw { render, setup } region snippet for client-constructed regions.'
+		);
+	}
 	const caps = input.captures ?? [];
 	const snip = createRawSnippet(() => ({
 		render: () => WRAP_OPEN + input.render(...caps) + WRAP_CLOSE,
@@ -229,6 +238,10 @@ export function reduce_region_snippet(value: unknown): RegionSnippetDescriptor |
 	if (typeof value !== 'function') return undefined;
 	const branded = (value as RegionSnippet).__ogRegion;
 	if (branded) return branded;
+	// Freezing a bare snippet is an SSR capture (`render` from svelte/server). Encode only ever runs
+	// on the server; guarding here lets the client DCE `capture_static` → `svelte/server` (~13kB) out
+	// entirely. A branded (live) snippet still crosses fine on either side via the `branded` return.
+	if (BROWSER) return undefined;
 	return capture_static(value as Snippet).__ogRegion; // a plain snippet at the boundary freezes
 }
 

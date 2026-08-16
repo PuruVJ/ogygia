@@ -1,7 +1,7 @@
 import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
 import { frameAddress } from '../frame.js';
-import { set_current_region } from '../context-bridge.js';
+import { set_current_region } from '../current-region.js';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import NestedProvider from '../NestedProvider.svelte';
 import { document_has_kit_bootstrap } from './kit-boot.js';

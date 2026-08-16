@@ -15,7 +15,7 @@
  * export const transport = { ...ogygiaTransport };
  * ```
  */
-import { REGION_BRAND } from './region.js';
+import { REGION_BRAND } from './region-brand.js';
 import { frameAddress } from './frame.js';
 import { ticket, write } from './runtime/frame-store.js';
 

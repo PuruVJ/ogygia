@@ -15,6 +15,7 @@
  */
 import { getContext as svelte_get_context } from 'svelte';
 import { parse, stringify } from 'devalue';
+import { current_region } from './current-region.js';
 import { TRANSPORT_WIRE_KEY, reduce_transportable, revive_transportable } from './live-transport.js';
 import {
 	REGION_SNIPPET_WIRE_KEY,
@@ -24,20 +25,11 @@ import {
 
 /** Build-assigned identity (`module#export`) carried on the context handle. */
 const CTX_TAG = Symbol.for('ogygia.context.tag');
-/** The region the runtime is currently hydrating — the DOM anchor `get()` walks up from. */
-const CURRENT_REGION = Symbol.for('ogygia.context.current-region');
 
 interface ContextHandle<T> {
 	[CTX_TAG]: string;
 	/** The value provided above the current island, or the default, or `undefined`. */
 	get(): T | undefined;
-}
-
-const g = globalThis as Record<symbol, unknown>;
-
-/** Runtime sets the region it is about to hydrate so `get()` knows where to start walking. */
-export function set_current_region(el: Element | null) {
-	g[CURRENT_REGION] = el;
 }
 
 /** The context tag for a handle (used by `<Context>` to know which key to write). */
@@ -101,9 +93,7 @@ export function createContext<T>(defaultValue?: T): ContextHandle<T> {
 				return v !== undefined ? v : defaultValue;
 			}
 			// Client: separate roots — walk the DOM from the island being hydrated.
-			const found = read_from_dom((g[CURRENT_REGION] as Element | null) ?? null, tag) as
-				| T
-				| undefined;
+			const found = read_from_dom(current_region(), tag) as T | undefined;
 			return found !== undefined ? found : defaultValue;
 		}
 	};

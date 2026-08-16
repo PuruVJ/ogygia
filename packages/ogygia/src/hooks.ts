@@ -27,7 +27,7 @@ import * as devalue from 'devalue';
 import { islands as island_modules, island_url } from 'virtual:ogygia/server-manifest';
 import { islandCss } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
-import { REGION_BRAND } from './region.js';
+import { REGION_BRAND } from './region-brand.js';
 import { secret } from 'virtual:ogygia/secret';
 import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
