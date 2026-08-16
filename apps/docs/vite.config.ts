@@ -1,5 +1,6 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
+import { diff_markers, inline_markers } from 'ogygia/content/markdown';
 import { defineConfig } from 'vite';
 import { load_ogygia_themes } from './src/lib/code/shiki-themes.js';
 import { remarkChangelog } from './src/lib/remark-changelog.js';
@@ -26,6 +27,9 @@ export default defineConfig({
 					themes: { light: themes.light, dark: themes.dark },
 					defaultColor: 'light-dark()',
 					wrapperClass: 'code-only',
+					// The two diff dialects (line `+++ `/`--- ` prefixes + inline `+++x+++`/`---x---`),
+					// dogfooded on the markdown-authoring page.
+					code: { transformers: [diff_markers(), inline_markers()] },
 					// Reshape the Releases page's `## [x] — date` headings into a clean version + a date
 					// line under it. `enforce: 'pre'` so the heading-id/TOC collectors see "0.5.0".
 					remark: [{ enforce: 'pre', plugin: remarkChangelog }],

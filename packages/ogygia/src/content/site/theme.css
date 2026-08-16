@@ -644,7 +644,8 @@
 	.og-body pre {
 		position: relative;
 		margin: 0 0 1.4rem;
-		padding: 1rem 1.15rem;
+		--og-code-pad: 1.15rem;
+		padding: 1rem var(--og-code-pad);
 		border-radius: var(--og-radius-lg);
 		border: 1px solid var(--og-line);
 		/* `!important`: Shiki writes an INLINE background on the <pre> (the code theme's own bg), which
@@ -664,6 +665,54 @@
 	.og-body pre code {
 		font-family: var(--og-mono);
 		background: transparent !important;
+	}
+
+	/* ── diff-marked lines (the `+++` / `---` fence dialect — content/markdown/diff.ts) ──
+	   A marked line is a full-bleed tinted stripe with a +/- gutter sign; the code itself stays
+	   Shiki-colored. Lines are inline elements inside <code>, so the stripe pads out to the pre's
+	   edges with negative margins. */
+	pre.og-has-diff .og-diff {
+		display: inline-block;
+		width: calc(100% + 2 * var(--og-code-pad, 1rem));
+		margin-inline: calc(-1 * var(--og-code-pad, 1rem));
+		padding-inline: calc(var(--og-code-pad, 1rem) - 0.75em);
+	}
+	pre.og-has-diff .og-diff::before {
+		display: inline-block;
+		width: 0.75em;
+		opacity: 0.75;
+		user-select: none;
+	}
+	.og-diff-add {
+		background: light-dark(rgb(16 185 129 / 0.12), rgb(16 185 129 / 0.16));
+	}
+	.og-diff-add::before {
+		content: '+';
+		color: light-dark(rgb(4 120 87), rgb(52 211 153));
+	}
+	.og-diff-remove {
+		background: light-dark(rgb(239 68 68 / 0.1), rgb(239 68 68 / 0.14));
+	}
+	.og-diff-remove::before {
+		content: '-';
+		color: light-dark(rgb(185 28 28), rgb(248 113 113));
+	}
+
+	/* ── inline diff marks (the `+++added+++` / `---removed---` dialect — inline-markers.ts) ──
+	   A marked SPAN inside a line: tinted pill, code keeps its Shiki colors. */
+	.og-mark {
+		border-radius: 0.25em;
+		padding: 0.08em 0.25em;
+		margin: -0.08em -0.05em;
+	}
+	.og-mark-add {
+		background: light-dark(rgb(16 185 129 / 0.16), rgb(16 185 129 / 0.22));
+	}
+	.og-mark-remove {
+		background: light-dark(rgb(239 68 68 / 0.13), rgb(239 68 68 / 0.2));
+		text-decoration: line-through;
+		text-decoration-thickness: 0.08em;
+		text-decoration-color: light-dark(rgb(185 28 28 / 0.6), rgb(248 113 113 / 0.6));
 	}
 
 	/* Code-block chrome (added by CodeChrome): a permalink + a copy button, grouped top-right. */

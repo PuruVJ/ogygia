@@ -4,7 +4,7 @@ import { imagetools } from 'vite-imagetools';
 import { defineConfig } from 'vite';
 import { createCssVariablesTheme } from 'shiki';
 import { rehypeAdmonitions } from './src/lib/markdown/admonitions.ts';
-import { inline_markers } from './src/lib/markdown/inline-markers.ts';
+import { inline_markers } from 'ogygia/content/markdown';
 import { expandTypes } from './src/lib/markdown/expand-types.ts';
 import { infostring, slash_meta } from 'ogygia/content/markdown';
 import { js_to_ts } from './src/lib/markdown/js-to-ts.ts';
@@ -50,7 +50,7 @@ export default defineConfig({
 						//  5. twoslash_popup_markdown (postprocess LAST): render hover JSDoc as markdown
 						// No twoslash_strip: twoslash CONSUMES `@errors`/`@filename`/`@noErrors`/`---cut---`.
 						transformers: [
-							inline_markers(),
+							inline_markers({ classes: { add: 'highlight add', remove: 'highlight remove' } }),
 							twoslash_banner(),
 							twoslash_ts(),
 							twoslash_svelte(),

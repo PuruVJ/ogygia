@@ -41,6 +41,9 @@ import type { ShikiTransformer } from 'shiki';
 import type { MetaParser, VariantGenerator } from './code.js';
 import { default_pipeline } from './code-render.js';
 export { infostring, slash_meta } from './code.js';
+export { diff_markers } from './diff.js';
+export { inline_markers } from './inline-markers.js';
+export type { InlineMarkerOptions } from './inline-markers.js';
 export type { Fence, MetaParser, VariantGenerator, Variant } from './code.js';
 
 /**
