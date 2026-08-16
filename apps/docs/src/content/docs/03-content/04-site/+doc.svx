@@ -2,8 +2,8 @@
 title: Site
 summary: A documentation-site layer on top of collections. Arrange collections into a navigable site — nav tree, prev/next, search, sitemap, a shell — with the brains browser-safe and the corpus server-only.
 related:
-  - site/outline
-  - site/shell
+  - content/outline
+  - content/shell
   - content/collections
 ---
 
@@ -54,7 +54,7 @@ export const docs = site({
 });
 ```
 
-That is the entire configuration for this site. `docs` is a `folder()` collection, so its `NN-` filename prefixes already encode order and its `+meta.json` sidecars name the sections — the outline reads that structure as **data** and builds the tree with nothing more to say. Point it at several collections, or a `pick()` selection, or explicit groups when you want to arrange by hand — that is the [outline](/docs/site/outline).
+That is the entire configuration for this site. `docs` is a `folder()` collection, so its `NN-` filename prefixes already encode order and its `+meta.json` sidecars name the sections — the outline reads that structure as **data** and builds the tree with nothing more to say. Point it at several collections, or a `pick()` selection, or explicit groups when you want to arrange by hand — that is the [outline](/docs/content/outline).
 
 ::: warning Collections belong in a server module
 A collection's loader is an *eager glob* — the whole compiled corpus. Define it in a `.server.ts` / `.remote.ts` file (or under `src/lib/server/`) and Kit mechanically prevents any client module from importing it, so the corpus can never leak into a browser bundle. Define one elsewhere and ogygia **warns** you at build time. See [Content collections](/docs/content/collections).
@@ -76,11 +76,11 @@ The minted site — name it what it is, `docs`, `blog` — is a bag of read func
 | `docs.entries()` | every leaf slug + declared old addresses | prerender `entries` |
 | `docs.load` | the 404 guard + alias 308s + per-page checks | the route's `load` |
 
-Because they are data, **where** they run is your call. Prerender the nav, or fetch it per request; query search on the server, or ship the static index to a client worker. The [remotes](/docs/site/remotes) helper mints the common wire surface for you.
+Because they are data, **where** they run is your call. Prerender the nav, or fetch it per request; query search on the server, or ship the static index to a client worker. The [remotes](/docs/content/remotes) helper mints the common wire surface for you.
 
 ## The wire layer
 
-The collection holds the compiled corpus — potentially megabytes of markdown. The site layer never serializes it. A page's **body** crosses the wire as a [held region](/docs/regions/held-regions) ticket (baked HTML, not source); everything else is metadata. [`remotes()`](/docs/site/remotes) mints the crossing from `site` in a `.remote.ts` — server-only, so the corpus stays server-side and the browser gets only the ticketed data:
+The collection holds the compiled corpus — potentially megabytes of markdown. The site layer never serializes it. A page's **body** crosses the wire as a [held region](/docs/regions/held-regions) ticket (baked HTML, not source); everything else is metadata. [`remotes()`](/docs/content/remotes) mints the crossing from `site` in a `.remote.ts` — server-only, so the corpus stays server-side and the browser gets only the ticketed data:
 
 ```ts title=src/lib/site.remote.ts
 // the wire layer
@@ -92,7 +92,7 @@ export const { nav, meta, page, search } = remotes(docs, { base: '/docs' });
 
 ## Render it
 
-The page component reads one brain and renders the view. The [`<Doc>`](/docs/site/shell) component lays out the article, the on-this-page rail, and prev/next from a `docs.page()` view; the [shell](/docs/site/shell) wraps it with the sidebar, header, and search:
+The page component reads one brain and renders the view. The [`<Doc>`](/docs/content/shell) component lays out the article, the on-this-page rail, and prev/next from a `docs.page()` view; the [shell](/docs/content/shell) wraps it with the sidebar, header, and search:
 
 ```svelte title=src/routes/docs/[...slug]/+page.svelte
 <script>
@@ -139,7 +139,7 @@ const publicView = await docs.page('roadmap');                        // null �
 const draftView = await docs.page('roadmap', { context: { preview: true } });
 ```
 
-The empty context `{}` is the public, prerendered projection. A context-gated site typically flips its [remotes](/docs/site/remotes) to `query` mode, so each request derives its own.
+The empty context `{}` is the public, prerendered projection. A context-gated site typically flips its [remotes](/docs/content/remotes) to `query` mode, so each request derives its own.
 
 ::: details The full options bag
 Every `site()` key, at a glance. `outline` is the only required one.
@@ -151,10 +151,10 @@ Every `site()` key, at a glance. `outline` is the only required one.
 | `base` | default mount prefix for every read; per-call `{ base }` overrides |
 | `prevNext` | `'order'` (default) or `'graph'` — how "keep reading" is chosen |
 | `trail` | `'site'` (default) or `'group'` — whether prev/next crosses section boundaries |
-| `checks` | `[links(), ...yours]` — corpus invariants; see [Checks](/docs/site/checks) |
-| `components` | markdown element overrides, as real component values; see [Shell](/docs/site/shell) |
+| `checks` | `[links(), ...yours]` — corpus invariants; see [Checks](/docs/content/checks) |
+| `components` | markdown element overrides, as real component values; see [Shell](/docs/content/shell) |
 | `context` | derive `{ preview, roles, … }` from the request; threads into collection filters |
-| `search` | `{ engine }` — swap the search engine; see [Search](/docs/site/search) |
+| `search` | `{ engine }` — swap the search engine; see [Search](/docs/content/search) |
 | `redirects` | old addresses per entry (default reads `data.redirect_from`) — baked 308 stubs |
 :::
 
@@ -162,13 +162,13 @@ Every `site()` key, at a glance. `outline` is the only required one.
 
 The site layer is one surface with a few clear parts. Each has its own page:
 
-- **[Outline](/docs/site/outline)** — arrange collections into a tree. The spec grammar, filename conventions, the address map, prev/next.
-- **[Dimensions](/docs/site/dimensions)** — one site across a matrix of versions or locales, with a switcher and graceful fallback.
-- **[Shell & components](/docs/site/shell)** — `Frame` (headless), `DocsShell` and `BlogShell` (batteries-included), plus `Doc`, `Sidebar`, `Pager`, and the theme.
-- **[Remotes](/docs/site/remotes)** — the wire layer: `nav`, `meta`, `page`, `search`, prerendered or live.
-- **[Search](/docs/site/search)** — the search brain, the static index, the on-device worker, the no-JS fallback.
-- **[Emissions](/docs/site/emit)** — machine-facing serializations: sitemap, `llms.txt`, RSS, raw markdown.
-- **[Checks](/docs/site/checks)** — the link audit and custom checks that fail the build, not the visitor.
+- **[Outline](/docs/content/outline)** — arrange collections into a tree. The spec grammar, filename conventions, the address map, prev/next.
+- **[Dimensions](/docs/content/dimensions)** — one site across a matrix of versions or locales, with a switcher and graceful fallback.
+- **[Shell & components](/docs/content/shell)** — `Frame` (headless), `DocsShell` and `BlogShell` (batteries-included), plus `Doc`, `Sidebar`, `Pager`, and the theme.
+- **[Remotes](/docs/content/remotes)** — the wire layer: `nav`, `meta`, `page`, `search`, prerendered or live.
+- **[Search](/docs/content/search)** — the search brain, the static index, the on-device worker, the no-JS fallback.
+- **[Emissions](/docs/content/emit)** — machine-facing serializations: sitemap, `llms.txt`, RSS, raw markdown.
+- **[Checks](/docs/content/checks)** — the link audit and custom checks that fail the build, not the visitor.
 
 ## Do / don't
 
@@ -177,6 +177,3 @@ The site layer is one surface with a few clear parts. Each has its own page:
 - **Don't** pass a collection's bodies over the wire yourself. Let `docs.page()` bake the body into a region ticket — that is the only representation meant to cross.
 - **Don't** reach for the site layer to render a single standalone page. That is `content()` plus `<Region>`; the site layer is the *site* around many.
 
----
-
-*Next chapter: the site stands; now it should move. [The router](/docs/app/router) makes navigation feel like an app — one request, no reload, no waterfall.*

@@ -367,7 +367,7 @@
 				<p>
 					<code>NN-</code> prefixes order, <code>+meta.json</code> names sections, and every
 					misplaced page is a named build error — never a silent gap.
-					<a href="/docs/site/outline">Outline →</a>
+					<a href="/docs/content/outline">Outline →</a>
 				</p>
 			</div>
 		</div>
@@ -380,7 +380,7 @@
 				<p>
 					<code>DocsShell</code> and <code>BlogShell</code> are compositions of public bricks —
 					replace any region with a snippet, or drop to <code>Frame</code> and bring your own.
-					<a href="/docs/site/shell">Shells →</a>
+					<a href="/docs/content/shell">Shells →</a>
 				</p>
 			</div>
 		</div>
@@ -393,7 +393,7 @@
 				<p>
 					An on-device search worker over a prerendered index, and machine-facing serializations
 					that can never drift — they are views of the same tree.
-					<a href="/docs/site/search">Search →</a>
+					<a href="/docs/content/search">Search →</a>
 				</p>
 			</div>
 		</div>
@@ -479,11 +479,7 @@
 		</a>
 		<a class="home-docs-card" href="/docs/content/collections">
 			<span class="home-docs-kicker">Content</span>
-			<span class="home-docs-title">RF-native collections, markdown, live sources</span>
-		</a>
-		<a class="home-docs-card" href="/docs/site/site">
-			<span class="home-docs-kicker">Site</span>
-			<span class="home-docs-title">site() — outline, shells, search, emissions</span>
+			<span class="home-docs-title">Collections, markdown, site() — outline, shells, search</span>
 		</a>
 		<a class="home-docs-card" href="/docs/reference/constraints">
 			<span class="home-docs-kicker">Reference</span>

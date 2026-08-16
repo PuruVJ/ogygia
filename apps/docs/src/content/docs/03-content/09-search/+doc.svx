@@ -2,9 +2,9 @@
 title: Search
 summary: One search brain, two ways to run it. Ship a static index to an on-device worker for zero-JS-cost queries, or query it on the server. A no-JS fallback page comes for free.
 related:
-  - site/remotes
-  - site/emit
-  - site/shell
+  - content/remotes
+  - content/emit
+  - content/shell
 ---
 
 The site layer builds a search index from your collections' **section documents** — the prose split by heading, so a hit lands on the exact section, not just the page. You choose where the query runs: on the server, or on the visitor's device against a static index. **The search on this site is the second kind** — a worker over a prerendered file, so a query costs no server round-trip.

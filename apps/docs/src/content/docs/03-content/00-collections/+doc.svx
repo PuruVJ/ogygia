@@ -299,4 +299,4 @@ Below, a `query.live` yields a rendered [held region](/docs/regions/held-regions
 
 ---
 
-*Next chapter: a collection knows what exists. [The site layer](/docs/site/site) decides how it reads — nav, search, shell, and all.*
+*Second half of this chapter: a collection knows what exists. [`site()`](/docs/content/site) decides how it reads — nav, search, shell, and all.*

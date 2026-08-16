@@ -3,7 +3,7 @@ title: Markdown authoring
 summary: The prose dialect markdown() understands — containers, tab groups, fence meta, and the diff markers — all rendered by this very page. Zero imports in your content; the compiler injects what a page uses.
 related:
   - content/collections
-  - site/shell
+  - content/shell
   - macros/code
 ---
 

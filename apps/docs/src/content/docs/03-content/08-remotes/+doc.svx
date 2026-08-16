@@ -2,8 +2,8 @@
 title: Remotes
 summary: The wire layer. remotes(site) mints nav, meta, doc, and search as Kit remotes — prerendered by default, live when you ask. The doc body bakes into a region ticket so the corpus stays server-side.
 related:
-  - site/site
-  - site/search
+  - content/site
+  - content/search
   - content/collections
 ---
 
@@ -24,10 +24,10 @@ export const { nav, meta, page, search } = remotes(docs, { base: '/docs' });
 
 Four remotes, each a plain async function the page awaits:
 
-- **`nav(slug?)`** — the sidebar tree, hrefs baked for `base`. On a [dimensioned](/docs/site/dimensions) site, pass the current slug (or a bare coordinate prefix like `'v1/'`) so the tree reflects that coordinate.
+- **`nav(slug?)`** — the sidebar tree, hrefs baked for `base`. On a [dimensioned](/docs/content/dimensions) site, pass the current slug (or a bare coordinate prefix like `'v1/'`) so the tree reflects that coordinate.
 - **`meta(slug?)`** — the whole shell bundle `{ nav, switcher, data }` in **one** prerendered call. Feed it straight to `<DocsShell {meta}>` so the layout never imports the corpus.
 - **`page(slug)`** — one page's view: `data`, `meta`, `headings`, prev/next, and the **baked body**.
-- **`search(q)`** — ranked hits from the [search](/docs/site/search) brain.
+- **`search(q)`** — ranked hits from the [search](/docs/content/search) brain.
 
 ::: tip Prefer `meta` over `nav` for shells
 `nav` exists for custom chrome that wants just the tree. A shell wants the tree *and* the switcher *and* the site facts — `meta` is those three in one prerendered payload, one await, one cache entry.
@@ -73,7 +73,7 @@ export const { nav, meta, page, search } = remotes(docs, {
 - **`'prerender'`** (default for `nav` / `meta` / `doc`) — baked at build, served static. Required when the awaiting pages prerender.
 - **`'query'`** — runs on the server per request; pairs with `site({ context })` for previews and roles.
 
-`search` is always a `query` — a search is inherently dynamic. (For a fully static search box, ship the [index](/docs/site/search) instead and query it in a client worker; then you don't mint `search` at all.)
+`search` is always a `query` — a search is inherently dynamic. (For a fully static search box, ship the [index](/docs/content/search) instead and query it in a client worker; then you don't mint `search` at all.)
 
 ## Prerender entries
 
@@ -87,7 +87,7 @@ export const entries = docs.entries;
 export const load = docs.load;   // the 404 guard + alias redirects + per-page checks
 ```
 
-`docs.load` is the piece people forget: it maps an unknown slug to a real 404 (instead of an empty page), serves a **baked 308** for every address an entry declares in `redirect_from`, and runs the per-page [checks](/docs/site/checks) in dev.
+`docs.load` is the piece people forget: it maps an unknown slug to a real 404 (instead of an empty page), serves a **baked 308** for every address an entry declares in `redirect_from`, and runs the per-page [checks](/docs/content/checks) in dev.
 
 ## Do / don't
 
