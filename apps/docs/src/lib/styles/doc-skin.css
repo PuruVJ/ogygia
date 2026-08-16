@@ -315,16 +315,17 @@
 	transform: rotate(90deg);
 }
 .og-mtoc .og-toc-list {
-	padding: 0.45rem 0.55rem 0.6rem;
+	padding: 0.3rem 0.55rem 0.4rem;
 }
 .og-mtoc .og-toc-d3,
 .og-mtoc .og-toc-d4 {
 	padding-left: 0; /* the desktop rail indents the <li>; here the link carries the indent */
 }
 .og-mtoc .og-toc-link {
-	padding: 0.32rem 0.5rem;
+	padding: 0.14rem 0.5rem;
 	border-radius: var(--r-sm);
 	font-size: 0.875rem;
+	line-height: 1.35;
 }
 .og-mtoc .og-toc-link:hover {
 	background: var(--bg-raised);

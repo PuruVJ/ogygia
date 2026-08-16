@@ -71,9 +71,10 @@
 
 		{#if toc && view.headings.length}
 			<!-- MOBILE-ONLY "On this page": inline under the heading (the desktop rail is hidden there,
-			     and a page outline belongs with the page — not buried in the nav sheet). Collapsed by
-			     default; a native <details>, so it costs no JS. -->
-			<details class="og-mtoc">
+			     and a page outline belongs with the page — not buried in the nav sheet). Open by
+			     default (the outline is the point); a native <details>, so it costs no JS and the
+			     reader can still collapse it. -->
+			<details class="og-mtoc" open>
 				<summary class="og-mtoc-summary">On this page</summary>
 				<ul class="og-toc-list">
 					{#each view.headings as h (h.id)}
