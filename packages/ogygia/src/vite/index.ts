@@ -784,6 +784,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	};
 
 	const transform_cache = new Map();
+	const __prof = { transformMs: 0, transformN: 0, transformHit: 0, prescanMs: 0, bakeMs: 0, bakeN: 0, resolveMs: 0, loadMs: 0 };
+	const __P = !!process.env.OGYGIA_PROFILE;
+	const __outHash = new Map<string, number>();
+	const __fnv = (str: string) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; };
 
 	const host_key = (hostPath) => path.resolve(strip_id(hostPath));
 
@@ -843,7 +847,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		const csr_true = routeCsrIsTrue(id, routesDir);
 		const cache_key = `${id}\0${link_virtual ? '1' : '0'}\0${csr_true ? 't' : 'f'}`;
 		const hit = transform_cache.get(cache_key);
-		if (hit && hit.code === source) return hit.result;
+		if (hit && hit.code === source) { if (__P) __prof.transformHit++; return hit.result; }
+		const __th0 = __P ? performance.now() : 0;
 		const result = transformHost(source, id, {
 			root,
 			libDir,
@@ -862,6 +867,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			csrTrue: csr_true,
 			ssr
 		});
+		if (__P) { __prof.transformMs += performance.now() - __th0; __prof.transformN++; __outHash.set(cache_key, __fnv(JSON.stringify((result as any)?.code ?? result))); }
 		transform_cache.set(cache_key, { code: source, result });
 		return result;
 	};
@@ -1161,7 +1167,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				}
 			}
 		};
-		walk(src_dir);
+		{ const __ps=__P?performance.now():0; walk(src_dir); if(__P)__prof.prescanMs+=performance.now()-__ps; }
 		// A transportable class (`static wire = import.meta.og.wire(…)`) means island props can carry a
 		// live wired object, revived through the wire codec — so this app needs the wire runtime.
 		if (transportable_modules.size > 0) runtime_marks.wire = true;
@@ -1363,6 +1369,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			vite_server.ws.send({ type: 'full-reload', path: '*' });
 		},
 
+		buildEnd() { if (__P) { const keys = [...__outHash.keys()].sort(); let d = 0x811c9dc5; for (const k of keys) { d ^= __outHash.get(k)!; d = Math.imul(d, 0x01000193) >>> 0; } console.error('\n[ogygia-prof] ' + JSON.stringify({ ...__prof, transformDigest: (d >>> 0).toString(16), transformFiles: keys.length })); } },
 		handleHotUpdate({ file, server }) {
 			if (!is_dev) return;
 			vite_server = server;
@@ -1855,6 +1862,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// fed a baked fn. Extension-aware (whole file for .ts/.js, `<script>` blocks for .svelte).
 			// Runs before the island transform so downstream sees plain data, not a call.
 			if (out.includes('import.meta.og.bake')) {
+				const __bk=__P?performance.now():0;
 				const rewritten = await rewrite_bake(out, id_n, {
 					alias: resolve_alias,
 					root,
@@ -1865,6 +1873,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					map = null;
 					touched = true;
 				}
+				if (__P) { __prof.bakeMs += performance.now() - __bk; __prof.bakeN++; }
 			}
 
 			// App `.svelte` always; a node_modules `.svelte` ONLY if it carries an ogygia hint (so a
