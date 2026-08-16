@@ -5,11 +5,11 @@
  */
 import { remotes } from 'ogygia/content/server';
 import { withRemotes } from 'ogygia/content/server';
-import { blog, blogSite } from './blog.server';
+import { posts, blog } from './blog.server';
 
-export const { doc: postDoc } = remotes(blogSite, { base: '/blog' });
+export const { page: postPage } = remotes(blog, { base: '/blog' });
 
-export const postList = withRemotes(blog).list({
+export const postList = withRemotes(posts).list({
 	map: (e) => ({
 		href: `/blog/${e.id}`,
 		title: (e.data.title as string) ?? e.id,

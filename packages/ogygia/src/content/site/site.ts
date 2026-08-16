@@ -1,11 +1,11 @@
 /**
- * `defineSite()` — mints a docs site over an outline (or a bare collection, which it auto-wraps). Returns
- * BRAINS ONLY: `load` / `entries` for the mount, `nav()` for the sidebar, `doc()` for the page. Every
+ * `site()` — mints a docs site over an outline (or a bare collection, which it auto-wraps). Returns
+ * BRAINS ONLY: `load` / `entries` for the mount, `nav()` for the sidebar, `page()` for the page. Every
  * one returns plain serializable data — no components, nothing global, nothing registered. A weird
  * route can ignore the site entirely; the ceiling is the app.
  *
  * ```ts
- * export const site = defineSite(nav, { prevNext: 'graph' });   // defineSite(docs) wraps a single collection
+ * export const site = site(nav, { prevNext: 'graph' });   // site(docs) wraps a single collection
  *
  * // (docs)/[...slug]/+page.ts
  * export const prerender = true;
@@ -21,7 +21,7 @@ import type { RssItem } from './emit.js';
 import { href_of, outline, type Collection, type Outline, type OutlineSpec, type TrailScope } from './outline.js';
 import { is_dimensioned, type Switcher } from './dimensions.js';
 import { build_docs, create_search, orama_engine, type SearchBrain, type SearchEngine } from './search.js';
-import type { BaseOption, DocView, Heading, NavRef, NavTree, PrevNext } from './types.js';
+import type { BaseOption, PageView, Heading, NavRef, NavTree, PrevNext } from './types.js';
 
 /** Site-level facts, surfaced as `site.data` and used as the default for every emission. */
 export type SiteData = {
@@ -44,7 +44,7 @@ export type SiteMeta = {
 /** A request context the site derives per read (preview, roles) and threads into collection filters. */
 export type ReadContext = Record<string, unknown>;
 
-/** The single-object argument to `defineSite()`. `outline` is the only required key. */
+/** The single-object argument to `site()`. `outline` is the only required key. */
 export type SiteOptions = {
 	/** The arrangement: a collection, an outline node[], or `dimensions()`. Auto-woven into an `Outline`. */
 	outline: Outline | OutlineSpec;
@@ -126,7 +126,7 @@ export interface Site {
 	meta: (opts?: BaseOption & { slug?: string; context?: ReadContext }) => Promise<SiteMeta>;
 	/** Everything one page position needs, or `null` for an unknown slug. Call in the page component.
 	 *  Pass `context` (e.g. `{ preview: true }`) to see the same projection the load guard used. */
-	doc: <Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(slug: string, opts?: BaseOption & { context?: ReadContext }) => Promise<DocView<Data, Meta> | null>;
+	page: <Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(slug: string, opts?: BaseOption & { context?: ReadContext }) => Promise<PageView<Data, Meta> | null>;
 	/** Run all `checks` over the whole corpus as plain data (never throws) — for vitest/CI, and for
 	 *  dynamic sites where the prerender crawler never runs. */
 	check: (opts?: { base?: string; context?: ReadContext }) => Promise<Finding[]>;
@@ -162,7 +162,7 @@ function is_outline(x: unknown): x is Outline {
 
 /**
  * The site brains as a class — state (outline, prevNext, checks, search) as fields, each brain a
- * method. `defineSite()` mints one; nothing here is global or registered.
+ * method. `site()` mints one; nothing here is global or registered.
  */
 class OgygiaSite implements Site {
 	readonly outline: Outline;
@@ -261,7 +261,7 @@ class OgygiaSite implements Site {
 		};
 	}
 
-	async doc<Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(slug: string, o: BaseOption & { context?: ReadContext } = {}): Promise<DocView<Data, Meta> | null> {
+	async page<Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(slug: string, o: BaseOption & { context?: ReadContext } = {}): Promise<PageView<Data, Meta> | null> {
 		const ol = this.outline;
 		const base = o.base ?? this.#base;
 		const ctx = o.context ?? {};
@@ -276,7 +276,7 @@ class OgygiaSite implements Site {
 		const related = await resolve_related(entry, collection, ol, base, ctx);
 		const suggested = choose_suggested(this.#prevNext, related, next);
 
-		const view: DocView = {
+		const view: PageView = {
 			slug: record.slug,
 			href: href_of(base, record.slug),
 			entry: entry as Entry<Record<string, unknown>, unknown>,
@@ -293,7 +293,7 @@ class OgygiaSite implements Site {
 				? { coordinate: ol.coordinateOf(slug), fallback: await ol.fallbackOf(slug) }
 				: {})
 		};
-		return view as DocView<Data, Meta>;
+		return view as PageView<Data, Meta>;
 	}
 
 	get emit(): Site['emit'] {
@@ -354,8 +354,8 @@ class OgygiaSite implements Site {
 	}
 }
 
-/** Mint the site brains. `defineSite({ outline })` is the only required key; a bare collection auto-arranges. */
-export function defineSite(opts: SiteOptions): Site {
+/** Mint the site brains. `site({ outline })` is the only required key; a bare collection auto-arranges. */
+export function site(opts: SiteOptions): Site {
 	return new OgygiaSite(opts);
 }
 

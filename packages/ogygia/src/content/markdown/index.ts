@@ -113,7 +113,7 @@ export type MarkdownOptions = MarkdownShikiOptions & {
 	 * Wrap overridable markdown elements in the ogygia slot so an ogygia site's `components` map can
 	 * replace how they render (id-form links, optimized images, custom code, …). `true` uses the
 	 * default tag set (`a`, `img`, `code`); pass `{ tags }` to widen. Off by default — a non-ogygia
-	 * content app must not carry the slot. The component VALUES live in `defineSite()`, never here.
+	 * content app must not carry the slot. The component VALUES live in `site()`, never here.
 	 */
 	overrides?: boolean | { tags?: string[] };
 	/**
@@ -306,7 +306,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 		...shiki_opts
 	} = options ?? (islandBridge.markdownConfig as MarkdownOptions | null) ?? {};
 
-	// Element overrides: which tags get wrapped in the ogygia slot (values live in `defineSite()`).
+	// Element overrides: which tags get wrapped in the ogygia slot (values live in `site()`).
 	const override_tags = overrides ? (overrides === true ? [...DEFAULT_OVERRIDE_TAGS] : (overrides.tags ?? [...DEFAULT_OVERRIDE_TAGS])) : [];
 
 	// The fence pipeline's transformers ride the shiki config (applied at codeToHtml).

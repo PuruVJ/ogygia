@@ -30,7 +30,7 @@ export type DocData = v.InferOutput<typeof docSchema>;
  * derives clean ids, sibling order (NN-), and section labels (+meta.json) — no id function, no second
  * glob, no meta collection. See docs/macros/loaders.
  */
-export const docs = content({
+export const guides = content({
 	loader: import.meta.og.loader.folder('../content/docs'),
 	schema: docSchema,
 	// Self relation via `self` — a doc's `related` slugs resolve to sibling docs, no type cycle.

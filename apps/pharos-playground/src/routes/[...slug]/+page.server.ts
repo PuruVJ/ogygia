@@ -1,6 +1,6 @@
-import { site } from '$lib/docs.server';
+import { docs } from '$lib/docs.server';
 
 // The three-file mount: page options are literal + yours; the functions come off the site mint.
 export const prerender = true;
-export const load = site.load;
-export const entries = site.entries;
+export const load = docs.load;
+export const entries = docs.entries;

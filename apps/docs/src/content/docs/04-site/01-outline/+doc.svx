@@ -10,7 +10,7 @@ related:
 The outline is the one place a site's structure is decided. It takes your collections and an **arrangement spec**, and derives a single normalized tree — the `NavTree` — plus the address map that every other brain reads. Nav, prev/next, section labels, sitemap, prerender entries: all are views of this one tree.
 
 ::: tip When to use
-You give `defineSite()` an outline whenever a site is more than one flat list — multiple collections, hand-ordered sections, a landing link in the sidebar. For a single convention-ordered collection, pass it bare and skip this entirely.
+You give `site()` an outline whenever a site is more than one flat list — multiple collections, hand-ordered sections, a landing link in the sidebar. For a single convention-ordered collection, pass it bare and skip this entirely.
 :::
 
 ## A bare collection arranges itself
@@ -18,10 +18,10 @@ You give `defineSite()` an outline whenever a site is more than one flat list �
 The simplest outline is a collection. When that collection is a [`folder()`](/docs/content/collections), its filenames already carry structure, and the outline reads it as data:
 
 ```ts
-import { defineSite } from 'ogygia/content';
-import { docs } from './collections.server';
+import { site } from 'ogygia/content';
+import { guides } from './collections.server';
 
-export const site = defineSite({ outline: docs });
+export const docs = site({ outline: guides });
 ```
 
 `NN-` prefixes order siblings and are stripped from the URL (`03-routing` → `/routing`, sorted third). A `+meta.json` sidecar names a section. Nothing else to say — the tree is the folder tree.
@@ -31,9 +31,9 @@ export const site = defineSite({ outline: docs });
 When you want to arrange by hand, `outline()` takes a list. Every form composes with every other:
 
 ```ts
-import { outline, pick, defineSite } from 'ogygia/content';
+import { outline, pick, site } from 'ogygia/content';
 
-export const site = defineSite({
+export const docs = site({
 	outline: outline([
 		{ label: 'Start', items: pick(docs, 'overview', 'install', 'quickstart') },
 		docs,                                      // a bare collection: the not-yet-placed remainder
@@ -107,7 +107,7 @@ export const posts = folder(
 
 ## The address map
 
-Beyond the tree, the outline knows how to **resolve** a slug to its entry and how to enumerate every address. Downstream brains use this directly — `site.entries()` for prerender inputs, `site.doc(slug)` to resolve one page, `switcher()` on a [dimensioned](/docs/site/dimensions) site. When you build custom chrome, `hrefOf(base, slug)` is the one sanctioned way to turn an address into a link — it is what keeps a site correct under any mount prefix:
+Beyond the tree, the outline knows how to **resolve** a slug to its entry and how to enumerate every address. Downstream brains use this directly — `docs.entries()` for prerender inputs, `docs.page(slug)` to resolve one page, `switcher()` on a [dimensioned](/docs/site/dimensions) site. When you build custom chrome, `hrefOf(base, slug)` is the one sanctioned way to turn an address into a link — it is what keeps a site correct under any mount prefix:
 
 ```ts
 import { hrefOf } from 'ogygia/content';
@@ -118,10 +118,10 @@ hrefOf('', 'routing');        // '/routing'
 
 ## Prev/next
 
-"Keep reading" comes from two dials on `defineSite()`:
+"Keep reading" comes from two dials on `site()`:
 
 ```ts
-defineSite({ outline: docs, prevNext: 'graph', trail: 'group' });
+site({ outline: guides, prevNext: 'graph', trail: 'group' });
 ```
 
 - **`prevNext: 'order'`** (default) — plain document order, the sidebar read top to bottom.
@@ -129,7 +129,7 @@ defineSite({ outline: docs, prevNext: 'graph', trail: 'group' });
 - **`trail: 'site'`** (default) — the trail runs through the whole site.
 - **`trail: 'group'`** — prev/next stops at the top-level section boundary, so a multi-topic site never links across topics.
 
-The `<Pager>` component and `site.doc()`'s `prevNext` field both read whatever you set.
+The `<Pager>` component and `docs.page()`'s `prevNext` field both read whatever you set.
 
 ## Do / don't
 

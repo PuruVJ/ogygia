@@ -8,7 +8,7 @@ The v1 mount used a single `+page.js`. v2 splits it into three files — see the
 ## Mount
 
 ```ts
-export const load = site.load;
+export const load = docs.load;
 ```
 
 That was the whole contract in v1.

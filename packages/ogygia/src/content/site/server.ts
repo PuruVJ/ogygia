@@ -1,7 +1,7 @@
 /**
  * Server-only remote layer for an ogygia site. The ONLY ogygia module that imports `$app/server`, so
  * it must be used from a `.remote.ts` (Kit guarantees those run on the server). Mirrors
- * `withRemotes()` from `ogygia/content/server`: the browser-safe `defineSite()` defines the site once;
+ * `withRemotes()` from `ogygia/content/server`: the browser-safe `site()` defines the site once;
  * `remotes(site)` mints the wire access.
  *
  * ```ts
@@ -21,7 +21,7 @@ import { prerender, query } from '$app/server';
 import type { ContentMode } from '../server.js';
 import type { Site, SiteMeta } from './site.js';
 import type { SearchHit } from './search.js';
-import type { DocView, NavTree } from './types.js';
+import type { PageView, NavTree } from './types.js';
 
 /** Minimal Standard Schema string validator (avoids a valibot dep in the library). */
 const string_arg = {
@@ -62,7 +62,7 @@ export type SiteRemotes = {
 	search: (q: string) => Promise<SearchHit[]>;
 	/** One page view over the wire (query mode). The entry's lazy `body` region crosses as a signed
 	 *  ticket via the app's `transport` hook (universal hooks) and `<Doc>`/`<Region>` renders it. */
-	doc: (slug: string) => Promise<DocView | null>;
+	page: (slug: string) => Promise<PageView | null>;
 };
 
 /**
@@ -76,10 +76,10 @@ export type SiteRemotes = {
  */
 export function remotes(
 	site: Site,
-	opts: { base?: string; modes?: { nav?: ContentMode; doc?: ContentMode } } = {}
+	opts: { base?: string; modes?: { nav?: ContentMode; page?: ContentMode } } = {}
 ): SiteRemotes {
 	const base = opts.base ?? '';
-	const mode = { nav: opts.modes?.nav ?? 'prerender', doc: opts.modes?.doc ?? 'prerender' };
+	const mode = { nav: opts.modes?.nav ?? 'prerender', page: opts.modes?.page ?? 'prerender' };
 	// The slug argument selects the dimension coordinate; absent / '' = the default coordinate —
 	// so ONE remote serves every topic/version/locale tree.
 	const nav_fn = (slug?: string) => site.nav(slug ? { base, slug } : { base });
@@ -88,7 +88,7 @@ export function remotes(
 	// ticket (inline body) or a signed ticket with markup (dual). Same-pass SSR still renders the
 	// component directly — the baked HTML is for the wire crossing.
 	const doc_fn = async (slug: string) => {
-		const view = await site.doc(slug, { base });
+		const view = await site.page(slug, { base });
 		if (!view) return null;
 		const { source: _source, ...entry } = view.entry as typeof view.entry & { source?: unknown };
 		const body = entry.body ? await entry.body : undefined;
@@ -104,8 +104,8 @@ export function remotes(
 			? query(optional_string_arg, meta_fn)
 			: prerender(optional_string_arg, meta_fn, { dynamic: true })) as unknown as (slug?: string) => Promise<SiteMeta>,
 		search: query(string_arg, (q: string) => site.search(q, { base })) as unknown as (q: string) => Promise<SearchHit[]>,
-		doc: (mode.doc === 'query'
+		page: (mode.page === 'query'
 			? query(string_arg, doc_fn)
-			: prerender(string_arg, doc_fn, { dynamic: true })) as unknown as (slug: string) => Promise<DocView | null>
+			: prerender(string_arg, doc_fn, { dynamic: true })) as unknown as (slug: string) => Promise<PageView | null>
 	};
 }

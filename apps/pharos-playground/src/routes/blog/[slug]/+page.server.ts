@@ -1,5 +1,5 @@
-import { blogSite } from '$lib/blog.server';
+import { blog } from '$lib/blog.server';
 
 export const prerender = true;
-export const load = blogSite.load;
-export const entries = blogSite.entries;
+export const load = blog.load;
+export const entries = blog.entries;

@@ -2,12 +2,12 @@
  * The blog GENRE — a separate, flat, dated corpus (not a docs dimension). `fields.post` layers the
  * post extras (date/author/tags) over the page base (title/summary); `dated()` peels the date off
  * each `YYYY-MM-DD-slug.md` filename and orders newest-first. Server-only: the wire layer is
- * `blog.remote.ts`. `blogSite` gives us `doc()` (a post's view + prev/next) for `<BlogPost>`.
+ * `blog.remote.ts`. `blog` gives us `doc()` (a post's view + prev/next) for `<BlogPost>`.
  */
 import { content, dated } from 'ogygia/content';
-import { defineSite, outline, fields } from 'ogygia/content';
+import { site, outline, fields } from 'ogygia/content';
 
-export const blog = content({
+export const posts = content({
 	loader: import.meta.og.loader.folder('../content/blog/**/*.md', {
 		page: /\.md$/,
 		meta: /(^|\/)index\.md$/,
@@ -16,5 +16,5 @@ export const blog = content({
 	schema: fields.post
 });
 
-// A one-collection ogygia site over the blog — for `doc()` (post view with prev/next by date).
-export const blogSite = defineSite({ outline: outline(blog), prevNext: 'order' });
+// A one-collection ogygia site over the blog — for `page()` (post view with prev/next by date).
+export const blog = site({ outline: outline(posts), prevNext: 'order' });

@@ -1,16 +1,16 @@
 <script lang="ts">
 	/**
-	 * Sequential previous/next — a pure function of a `DocView`'s trail (outline reading order).
+	 * Sequential previous/next — a pure function of a `PageView`'s trail (outline reading order).
 	 * A lone next stays right; `.og-pager` hooks for CSS.
 	 */
-	import type { DocView } from '../types.js';
+	import type { PageView } from '../types.js';
 
 	let {
 		trail,
 		previousLabel = 'Previous',
 		nextLabel = 'Next'
 	}: {
-		trail: Pick<DocView['trail'], 'prev' | 'next'>;
+		trail: Pick<PageView['trail'], 'prev' | 'next'>;
 		previousLabel?: string;
 		nextLabel?: string;
 	} = $props();

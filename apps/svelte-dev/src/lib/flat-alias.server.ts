@@ -10,7 +10,7 @@
  * wrong-section relative links in one lookup. Ambiguous leaves (two pages in one topic sharing a
  * name) are dropped with a warning — svelte.dev serves these corpora flat, so it cannot happen today.
  */
-import { site } from './site.server';
+import { docs } from './site.server';
 
 const TOPIC = /^(kit|cli|ai)\//;
 const AMBIGUOUS = Symbol('ambiguous');
@@ -23,7 +23,7 @@ function leaf_index(): Promise<Map<string, string | typeof AMBIGUOUS>> {
 
 async function build(): Promise<Map<string, string | typeof AMBIGUOUS>> {
 	const map = new Map<string, string | typeof AMBIGUOUS>();
-	for (const { slug } of await site.entries()) {
+	for (const { slug } of await docs.entries()) {
 		const m = TOPIC.exec(slug);
 		const topic = m ? m[1]! : 'svelte'; // bare canonical = the svelte topic
 		const rest = m ? slug.slice(topic.length + 1) : slug;

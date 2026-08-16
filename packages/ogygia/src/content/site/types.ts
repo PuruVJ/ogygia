@@ -1,8 +1,8 @@
 /**
  * ogygia data seams — the plain, serializable shapes every brain returns. Chrome and user code
  * consume ONLY these; nothing structural ever lives inside a component. `NavTree` is what a sidebar
- * renders; `DocView` is what a page renders. Both are devalue-safe (no bodies in `NavTree`; the one
- * `body` in `DocView` is the entry's inline `<Region>`, rendered in the page's own SSR pass).
+ * renders; `PageView` is what a page renders. Both are devalue-safe (no bodies in `NavTree`; the one
+ * `body` in `PageView` is the entry's inline `<Region>`, rendered in the page's own SSR pass).
  */
 import type { ContentEntry, Entry, Heading } from '../index.js';
 
@@ -50,7 +50,7 @@ export type Crumb = { label: string; href?: string };
  * Everything a single page position needs, as plain data. `entry` carries the inline `body` region;
  * everything else is derived from the outline and the content graph.
  */
-export type DocView<Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown> = {
+export type PageView<Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown> = {
 	slug: string;
 	href: string;
 	/** The resolved entry (`data`, `body`, `meta`, `rel`, `backlinks`) — render `entry.body`. */

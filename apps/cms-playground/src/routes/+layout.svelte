@@ -3,7 +3,7 @@
 	import DocsShell from 'ogygia/content/docs-shell';
 	import 'ogygia/content/theme.css';
 	import 'ogygia/content/shell.css';
-	import { site } from '$lib/cms';
+	import { cms } from '$lib/cms';
 	let { children } = $props();
 </script>
 

@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { Doc } from 'ogygia/content';
-	import type { DocView } from 'ogygia/content';
-	import { doc } from '$lib/docs.remote';
+	import type { PageView } from 'ogygia/content';
+	import * as docs from '$lib/docs.remote'; // namespace: `page` would clash with $app/state
 	import { TOPICS, topicFromPath, type DocData } from '$lib/topics';
 
 	const slug = page.params.slug ?? '';
-	// The page over ogygia's `doc` remote — the entry's lazy body rides the wire as a region ticket
+	// The page over ogygia's `page` remote — the entry's lazy body rides the wire as a region ticket
 	// (transport hook) and <Doc>'s <Region> renders it. +page.ts already 404'd unknown slugs.
-	const view = (await doc(slug))! as DocView<DocData>;
+	const view = (await docs.page(slug))! as PageView<DocData>;
 	const data = view.entry.data;
 
 	// svelte.dev's eyebrow is "TOPIC • SECTION" — the dimension coordinate joins the section label.

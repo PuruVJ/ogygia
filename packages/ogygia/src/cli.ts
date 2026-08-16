@@ -408,17 +408,16 @@ async function site_init(): Promise<void> {
 	// The site — nav, doc resolver, search, sitemap/llms/raw, prev/next. Never clobbered without --force.
 	place(
 		'src/lib/docs.ts',
-		`import { content, markdown } from 'ogygia/content';
-import { outline, defineSite } from 'ogygia/content';
+		`import { content, outline, site } from 'ogygia/content';
 
 // A docs collection: every file under \`src/content/docs\` becomes a page. Its id is the path below
 // \`content/docs\` without the extension, so \`guides/deploy.svx\` is served at \`/guides/deploy\`.
-const docs = content({
-	loader: markdown(import.meta.glob('../content/docs/**/*.svx', { eager: true }))
+const guides = content({
+	loader: import.meta.og.loader.markdown('../content/docs')
 });
 
-// \`defineSite()\` mints the site the shell + routes consume.
-export const site = defineSite(outline([{ label: 'Docs', items: docs }]), { prevNext: 'graph' });
+// \`site()\` mints the site the shell + routes consume — name it what it is.
+export const docs = site({ outline: outline([{ label: 'Docs', items: guides }]), prevNext: 'graph' });
 `,
 		force
 	);
@@ -468,12 +467,12 @@ your prose and it hydrates on its own — no client bundle for the rest of the p
 	// Doc route — the three-file mount + the render page.
 	place(
 		rd('[...slug]/+page.ts'),
-		`import { site } from '$lib/docs';
+		`import { docs } from '$lib/docs';
 
 // The three-file mount: page options are yours; load + entries come off the site.
 export const prerender = true;
-export const load = site.load;
-export const entries = site.entries;
+export const load = docs.load;
+export const entries = docs.entries;
 `,
 		force
 	);
@@ -482,10 +481,10 @@ export const entries = site.entries;
 		`<script lang="ts">
 	import { page } from '$app/state';
 	import { Doc } from 'ogygia/content';
-	import { site } from '$lib/docs';
+	import { docs } from '$lib/docs';
 
 	// csr=false: the body renders in this route's SSR pass, so islands inside the .svx hydrate.
-	const view = (await site.doc(page.params.slug ?? ''))!;
+	const view = (await docs.page(page.params.slug ?? ''))!;
 </script>
 
 <Doc {view} />
@@ -507,10 +506,10 @@ export const prerender = true;
 	place(
 		rd('+page.svelte'),
 		`<script lang="ts">
-	import { site } from '$lib/docs';
+	import { docs } from '$lib/docs';
 
-	// \`site.nav()\` is plain data — queryable outside the sidebar. Find the first real page to link to.
-	const tree = await site.nav(${emitArg || ''});
+	// \`docs.nav()\` is plain data — queryable outside the sidebar. Find the first real page to link to.
+	const tree = await docs.nav(${emitArg || ''});
 	const first = tree
 		.flatMap((n) => (n.kind === 'group' ? n.items : [n]))
 		.find((n) => n.kind === 'leaf');
@@ -547,12 +546,12 @@ export const prerender = true;
 	// CSS against the \`.og-*\` hooks.
 	import 'ogygia/content/theme.css';
 	import 'ogygia/content/shell.css';
-	import { site } from '$lib/docs';
+	import { docs } from '$lib/docs';
 
 	let { children } = $props();
 </script>
 
-<DocsShell {site} base=${JSON.stringify(urlBase)} title="Docs">
+<DocsShell site={docs} base=${JSON.stringify(urlBase)} title="Docs">
 	{@render children()}
 </DocsShell>
 `;
@@ -583,38 +582,38 @@ export const prerender = true;
 	// Emit routes — search index, sitemap, llms.txt, raw markdown, and the no-JS /search page.
 	place(
 		rd('search.json/+server.ts'),
-		`import { site } from '$lib/docs';
+		`import { docs } from '$lib/docs';
 
 export const prerender = true;
-export const GET = site.emit.search(${emitArg});
+export const GET = docs.emit.search(${emitArg});
 `,
 		force
 	);
 	place(
 		rd('sitemap.xml/+server.ts'),
-		`import { site } from '$lib/docs';
+		`import { docs } from '$lib/docs';
 
 export const prerender = true;
-export const GET = site.emit.sitemap(${emitArg});
+export const GET = docs.emit.sitemap(${emitArg});
 `,
 		force
 	);
 	place(
 		rd('llms.txt/+server.ts'),
-		`import { site } from '$lib/docs';
+		`import { docs } from '$lib/docs';
 
 export const prerender = true;
-export const GET = site.emit.llms(${emitArg});
+export const GET = docs.emit.llms(${emitArg});
 `,
 		force
 	);
 	place(
 		rd('[...slug].md/+server.ts'),
-		`import { site } from '$lib/docs';
+		`import { docs } from '$lib/docs';
 
 // Every doc, served as raw markdown at \`<slug>.md\` (great for LLMs and \`view source\`).
 export const prerender = true;
-const raw = site.emit.raw();
+const raw = docs.emit.raw();
 export const GET = raw.GET;
 export const entries = raw.entries;
 `,
@@ -622,7 +621,7 @@ export const entries = raw.entries;
 	);
 	place(
 		rd('search/+page.server.ts'),
-		`import { site } from '$lib/docs';
+		`import { docs } from '$lib/docs';
 
 // No-JS search: the /search page renders results server-side. With JS, the ⌘K palette takes over.
 export const prerender = false;

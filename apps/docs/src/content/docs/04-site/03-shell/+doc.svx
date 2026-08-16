@@ -20,11 +20,11 @@ Use `DocsShell` when you want a working docs layout in one import, `BlogShell` f
 ```svelte
 <script>
 	import { Frame } from 'ogygia/content';
-	import { site } from '$lib/site.server';   // in a csr=false layout, server-only is fine
+	import { docs } from '$lib/site.server';   // in a csr=false layout, server-only is fine
 	import MyHeader from '$lib/MyHeader.svelte';
 </script>
 
-<Frame {site} header={MyHeader} footer={null}>
+<Frame site={docs} header={MyHeader} footer={null}>
 	{@render children()}
 </Frame>
 ```
@@ -93,13 +93,13 @@ Alternate token themes live under `ogygia/content/themes/*` — swap the import,
 
 Each is a plain component you can use without a shell:
 
-- **`<Doc {view} />`** — lays out one page from a [`site.doc()`](/docs/site/remotes) view: eyebrow, title, the rendered body, the **On this page** rail from `view.headings`, and prev/next. Props toggle the crumbs, the pager, the keep-reading list.
+- **`<Doc {view} />`** — lays out one page from a [`docs.page()`](/docs/site/remotes) view: eyebrow, title, the rendered body, the **On this page** rail from `view.headings`, and prev/next. Props toggle the crumbs, the pager, the keep-reading list.
 - **`<Sidebar />`** — the nav tree with the active row tracked. A [client island](/docs/regions/client-islands) so its marker glides across SPA navigations.
 - **`<Pager />`** — the prev/next footer, from the outline's `prevNext`.
 - **`<OnThisPage headings={…} />`** — the scroll-spy rail. `<Doc>` mounts it; use it standalone if you compose your own article.
 - **`<Switcher />`** — the version/locale picker on a [dimensioned](/docs/site/dimensions) site. A Bits UI dropdown, so it's an island.
 - **`<Search />` / `<SearchPage />`** — the ⌘K palette and the no-JS results page; see [Search](/docs/site/search).
-- **`<BlogList {posts} />` / `<BlogPost {view} />`** — the blog bricks: a dated index and the article form, both reading the same `DocView` shape `<Doc>` does.
+- **`<BlogList {posts} />` / `<BlogPost {view} />`** — the blog bricks: a dated index and the article form, both reading the same `PageView` shape `<Doc>` does.
 - **`<TabGroup>` / `<Tab>`** — tabbed panels, also minted from `::: code-group` markdown with zero imports (the tabs above are exactly that).
 
 ## Doc, on its own
@@ -109,9 +109,9 @@ The article layout works with just a view — no shell required:
 ```svelte
 <script>
 	import { Doc } from 'ogygia/content';
-	import { doc } from '$lib/site.remote';
+	import * as docs from '$lib/site.remote';
 
-	const view = await doc(slug);
+	const view = await docs.page(slug);
 </script>
 
 <Doc {view} keepReading={view.trail?.related} />
@@ -121,11 +121,11 @@ The body inside `view` is a baked [region](/docs/regions/held-regions) ticket, s
 
 ## Overriding markdown elements
 
-The `components` map on `defineSite()` replaces how markdown elements render, with **real component values in app code** — no import-path config. The compiled markup routes overridable tags through one slot; at render it looks the tag up in the map:
+The `components` map on `site()` replaces how markdown elements render, with **real component values in app code** — no import-path config. The compiled markup routes overridable tags through one slot; at render it looks the tag up in the map:
 
 ```ts
-export const site = defineSite({
-	outline: docs,
+export const docs = site({
+	outline: guides,
 	components: { img: OptimizedImage, code: FancyCode }
 });
 ```

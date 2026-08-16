@@ -151,16 +151,16 @@ export const press = content({
 // pushes? add live() — a change signal; the feed re-emits on every change.
 export const feed = withRemotes(press).live.list({ map: (e) => e.data });`, 'ts');
 
-export const defineSiteCode = import.meta.og.code(`// site.server.ts — the WHOLE site config
-import { content, fields, defineSite, links } from 'ogygia/content';
+export const siteCode = import.meta.og.code(`// site.server.ts — the WHOLE site config
+import { content, fields, site, links } from 'ogygia/content';
 
-export const docs = content({
-  loader: import.meta.og.loader.folder('../content/docs'),
+export const guides = content({
+  loader: import.meta.og.loader.folder('../content/guides'),
   schema: fields.page
 });
 
-export const site = defineSite({
-  outline: docs,          // filenames become the nav tree
+export const docs = site({
+  outline: guides,        // filenames become the nav tree
   prevNext: 'graph',      // "keep reading" follows real links
   checks: [links()]       // a broken link fails the build
 });`, 'ts');

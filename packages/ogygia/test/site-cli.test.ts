@@ -131,7 +131,7 @@ describe('site init — svelte.config project', () => {
 		expect(vc).toMatch(/sveltekit\(\)/);
 
 		// the layout mounts the docs shell at the root base
-		expect(read(dir, 'src/routes/+layout.svelte')).toMatch(/<DocsShell \{site\} base="" title="Docs">/);
+		expect(read(dir, 'src/routes/+layout.svelte')).toMatch(/<DocsShell site=\{docs\} base="" title="Docs">/);
 		// hooks wired
 		expect(read(dir, 'src/hooks.server.ts')).toContain('ogygia.handle()');
 	});
@@ -169,7 +169,7 @@ describe('site init — existing layout', () => {
 		const dir = svelteConfigProject({ 'src/routes/+layout.svelte': CUSTOM });
 		const { status } = run(dir, ['init', '--force', '--no-install']);
 		expect(status).toBe(0);
-		expect(read(dir, 'src/routes/+layout.svelte')).toContain('<DocsShell {site}');
+		expect(read(dir, 'src/routes/+layout.svelte')).toContain('<DocsShell site={docs}');
 	});
 
 	it('recognises an existing ogygia shell as redeemable and keeps it (no --force needed)', () => {
@@ -209,7 +209,7 @@ describe('site init — --layout', () => {
 		expect(read(dir, 'src/routes/docs/+layout.svelte')).toContain('base="/docs"');
 		// the emit endpoints carry the base too
 		expect(read(dir, 'src/routes/docs/search.json/+server.ts')).toMatch(
-			/site\.emit\.search\(\{ base: "\/docs" \}\)/
+			/docs\.emit\.search\(\{ base: "\/docs" \}\)/
 		);
 	});
 

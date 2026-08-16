@@ -5,6 +5,6 @@
  * to `<Shell {meta}>`; `doc` resolves one page (baking a markdown body into a region ticket).
  */
 import { remotes } from 'ogygia/content/server';
-import { site } from './docs.server';
+import { docs } from './docs.server';
 
-export const { meta, doc, search } = remotes(site, { base: '' });
+export const { meta, page, search } = remotes(docs, { base: '' });

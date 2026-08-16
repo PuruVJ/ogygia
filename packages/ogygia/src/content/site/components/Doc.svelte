@@ -1,8 +1,8 @@
 <script lang="ts">
 	/**
-	 * One whole doc page — a pure function of a `DocView`: crumbs, section eyebrow, title, the body
+	 * One whole doc page — a pure function of a `PageView`: crumbs, section eyebrow, title, the body
 	 * region (islands inside hydrate normally), suggested reading, pager, and the on-page toc. Every
-	 * piece removable by prop; the day-1 page is literally `<Doc view={await site.doc(slug)} />`.
+	 * piece removable by prop; the day-1 page is literally `<Doc view={await docs.page(slug)} />`.
 	 */
 	import Region from '../../../Region.svelte';
 	import Pager from './Pager.svelte';
@@ -13,7 +13,7 @@
 	// the old `.og-body`). No props cross the boundary.
 	import CodeChrome from './CodeChrome.svelte' with { wake: 'load' };
 	import { get_shell_context } from '../context.js';
-	import type { DocView, NavRef } from '../types.js';
+	import type { PageView, NavRef } from '../types.js';
 
 	let {
 		view,
@@ -27,7 +27,7 @@
 		eyebrow,
 		footer
 	}: {
-		view: DocView;
+		view: PageView;
 		crumbs?: boolean;
 		toc?: boolean;
 		pager?: boolean;

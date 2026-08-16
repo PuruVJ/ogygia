@@ -4,7 +4,7 @@
 	import {
 		heroCode, heroCodeHtml, loadCode, visibleCode, lakeCode, serverCode, fragmentCode,
 		livePartialCode, sharedObjectCode, contentCollectionCode, contentMarkdownCode,
-		contentJsonCode, contentCustomCode, defineSiteCode
+		contentJsonCode, contentCustomCode, siteCode
 	} from '$lib/code/snippets';
 	// The hero demo hydrates on load; the showcase islands below each hydrate on the exact schedule
 	// their code shows, so `/` is itself a live demo of the library.
@@ -336,7 +336,7 @@
 		<span class="story-kicker">And then the collection becomes a site</span>
 		<h2 id="site-story">A docs site is one bag of options</h2>
 		<p>
-			This is where the story has been heading. Hand <code>defineSite()</code> a collection and it
+			This is where the story has been heading. Hand <code>site()</code> a collection and it
 			mints the <em>brains</em>: the nav tree built from your filenames, prev/next that follows real
 			links, full-text search, <code>sitemap.xml</code> and <code>llms.txt</code>, and a link audit
 			that fails the build before a reader ever sees a dead end. Mount a shell, and you have what
@@ -347,9 +347,9 @@
 	<div class="content-showcase">
 		<ShowcaseCard
 			title="The whole site"
-			tag="defineSite()"
+			tag="site()"
 			marker="these docs, verbatim"
-			code={defineSiteCode}
+			code={siteCode}
 			stack
 		>
 			{#snippet demo()}
@@ -483,7 +483,7 @@
 		</a>
 		<a class="home-docs-card" href="/docs/site/site">
 			<span class="home-docs-kicker">Site</span>
-			<span class="home-docs-title">defineSite() — outline, shells, search, emissions</span>
+			<span class="home-docs-title">site() — outline, shells, search, emissions</span>
 		</a>
 		<a class="home-docs-card" href="/docs/reference/constraints">
 			<span class="home-docs-kicker">Reference</span>

@@ -5,15 +5,15 @@ import type { Heading, Source, SourceEntry } from '../src/content/index.js';
 // Import from the submodules, not the barrel — the barrel re-exports `.svelte` chrome that vitest
 // (no svelte plugin here) can't parse.
 import { outline, pick } from '../src/content/site/outline.js';
-import { defineSite as defineSiteRaw, mountBase } from '../src/content/site/site.js';
+import { site as siteRaw, mountBase } from '../src/content/site/site.js';
 import { links } from '../src/content/site/checks.js';
 import type { NavGroup, NavLeaf, NavTree } from '../src/content/site/types.js';
 
 // Test shim: keep the positional call style in the fixtures; the real API is `mint_site({ outline, …opts })`.
 const mint_site = (
-	outlineArg: Parameters<typeof defineSiteRaw>[0]['outline'],
-	opts: Partial<Parameters<typeof defineSiteRaw>[0]> = {}
-) => defineSiteRaw({ outline: outlineArg, ...opts });
+	outlineArg: Parameters<typeof siteRaw>[0]['outline'],
+	opts: Partial<Parameters<typeof siteRaw>[0]> = {}
+) => siteRaw({ outline: outlineArg, ...opts });
 import { remarkLinks } from '../src/content/markdown/remark-links.js';
 import { rehypeOverrides, SLOT_TAG } from '../src/content/markdown/rehype-overrides.js';
 import { build_docs, orama_engine, split_sections, strip_prose } from '../src/content/site/search.js';
@@ -126,7 +126,7 @@ describe('address seams — group slug + trail scope', () => {
 		const addresses = (await site.entries()).map((e) => e.slug).sort();
 		expect(addresses).toEqual(['docs/svelte/derived', 'docs/svelte/state']);
 		// …and resolve by the shortened address works.
-		expect(await site.doc('docs/svelte/state')).not.toBeNull();
+		expect(await site.page('docs/svelte/state')).not.toBeNull();
 		// …while nav STRUCTURE is unchanged: the `runes` section grouping is still there (id-derived).
 		const tree = await site.nav();
 		const svelte = groups(tree)[0] as NavGroup;
@@ -139,12 +139,12 @@ describe('address seams — group slug + trail scope', () => {
 			{ label: 'Kit', items: kitDocs(), base: 'kit' }
 		];
 		// last Svelte page: site → next is the first Kit page; group → no next.
-		const across = await mint_site(spec(), { trail: 'site' }).doc('svelte/runes/derived');
+		const across = await mint_site(spec(), { trail: 'site' }).page('svelte/runes/derived');
 		expect(across?.trail.next?.slug).toBe('kit/routing/pages');
-		const grouped = await mint_site(spec(), { trail: 'group' }).doc('svelte/runes/derived');
+		const grouped = await mint_site(spec(), { trail: 'group' }).page('svelte/runes/derived');
 		expect(grouped?.trail.next).toBeUndefined();
 		// within a section, group still links
-		const inner = await mint_site(spec(), { trail: 'group' }).doc('svelte/runes/state');
+		const inner = await mint_site(spec(), { trail: 'group' }).page('svelte/runes/state');
 		expect(inner?.trail.next?.slug).toBe('svelte/runes/derived');
 	});
 });
@@ -177,7 +177,7 @@ describe('site — brains', () => {
 
 	it('doc() returns section, headings, and order-based trail', async () => {
 		const site = mint_site(docsFixture());
-		const view = await site.doc('start/install', { base: '/docs' });
+		const view = await site.page('start/install', { base: '/docs' });
 		expect(view?.section).toBe('Start');
 		expect(view?.href).toBe('/docs/start/install');
 		expect(view?.trail.next?.slug).toBe('start/first-island');
@@ -186,20 +186,20 @@ describe('site — brains', () => {
 	});
 
 	it('doc() headings ride through from meta', async () => {
-		const view = await mint_site(docsFixture()).doc('regions/unified');
+		const view = await mint_site(docsFixture()).page('regions/unified');
 		expect(view?.headings).toEqual([{ depth: 2, id: 'why', text: 'Why' }]);
 	});
 
 	it('prevNext "graph" prefers related, falls back to order', async () => {
 		const site = mint_site(docsFixture(), { prevNext: 'graph' });
-		const withRel = await site.doc('regions/unified');
+		const withRel = await site.page('regions/unified');
 		expect(withRel?.trail.suggested.map((r) => r.slug)).toEqual(['regions/held']); // from `related`
-		const noRel = await site.doc('start/install');
+		const noRel = await site.page('start/install');
 		expect(noRel?.trail.suggested.map((r) => r.slug)).toEqual(['start/first-island']); // order fallback
 	});
 
 	it('doc() returns null for an unknown slug', async () => {
-		expect(await mint_site(docsFixture()).doc('nope/missing')).toBeNull();
+		expect(await mint_site(docsFixture()).page('nope/missing')).toBeNull();
 	});
 });
 
@@ -231,7 +231,7 @@ describe('outline — multi-collection arrangement', () => {
 		expect(apiLeaf.href).toBe('/d/api/button');
 
 		// address resolves across collections
-		expect(await site.doc('api/input').then((v) => v?.entry.data.title)).toBe('Input');
+		expect(await site.page('api/input').then((v) => v?.entry.data.title)).toBe('Input');
 	});
 
 	it('pick() places explicit ids in order; a bare remainder mops up the rest', async () => {

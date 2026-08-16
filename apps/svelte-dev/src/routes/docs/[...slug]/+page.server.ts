@@ -1,29 +1,29 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { EntryGenerator } from './$types';
-import { site } from '$lib/site.server';
+import { docs } from '$lib/site.server';
 import { resolve_flat, flat_entries } from '$lib/flat-alias.server';
 
 // Every leaf slug in the dimensioned outline (union across topics) PLUS the flat aliases — the
 // aliases prerender as redirect stubs, so upstream-scheme links work even on static hosting.
 export const prerender = true;
 export const entries: EntryGenerator = async () => [
-	...(await site.entries()),
+	...(await docs.entries()),
 	...(await flat_entries())
 ];
 
 // 404 guard + topic-root redirects (`/docs`, `/docs/kit` → the topic's first page) + the FLAT
 // alias scheme: the upstream corpus links pages without their section segment (svelte.dev's URL
 // shape) — those 308 to the canonical address. Server-only; the page body itself renders in the
-// component via the `doc` remote.
+// component via the `page` remote.
 export const load = async ({ params }: { params: { slug: string } }) => {
 	const slug = params.slug ?? '';
-	if (slug && (await site.doc(slug, { base: '/docs' }))) return {};
+	if (slug && (await docs.page(slug, { base: '/docs' }))) return {};
 
 
 	const prefix =
 		slug === 'kit' || slug === 'cli' || slug === 'ai' ? `${slug}/` : slug === '' ? '' : null;
 	if (prefix !== null) {
-		const all = await site.entries();
+		const all = await docs.entries();
 		const first = prefix
 			? all.find((e) => e.slug.startsWith(prefix))
 			: all.find((e) => !/^(kit|cli|ai)\//.test(e.slug));

@@ -6,7 +6,7 @@
  * switcher (the default v2 · en corpus is rich; v1 / hi are thin, to demo the header dropdowns).
  */
 import { content, folder } from 'ogygia/content';
-import { dimensions, outline, defineSite } from 'ogygia/content';
+import { dimensions, outline, site } from 'ogygia/content';
 import * as v from 'valibot';
 import { openapi } from './openapi';
 
@@ -80,7 +80,7 @@ const arrange_thin = (g: typeof getting_started) => [
 	github
 ];
 
-export const site = defineSite({
+export const docs = site({
 	outline: dimensions({
 		axes: {
 			version: { values: ['v1', 'v2'], default: 'v2', label: 'Version' },

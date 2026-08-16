@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * Renders one OpenAPI operation from an ogygia `DocView` whose `entry.data` is an `Operation` (see
+	 * Renders one OpenAPI operation from an ogygia `PageView` whose `entry.data` is an `Operation` (see
 	 * openapi.ts). It's the `[...slug]` route's alternative to `<Doc>` for the `/api` reference:
 	 * method + path header, description, a parameters table grouped by location, the request body and
 	 * every response rendered with the recursive `<Schema>`, and the security requirements.

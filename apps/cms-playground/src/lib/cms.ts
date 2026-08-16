@@ -6,7 +6,7 @@
  * The loader shape now matches the CMS's own endpoints 1:1.
  */
 import { blocks, content, type RawRecord, type RawSource } from 'ogygia/content';
-import { fields, defineSite } from 'ogygia/content';
+import { fields, site } from 'ogygia/content';
 import { registry } from './blocks/registry';
 
 // A CMS is external, so its address is config (env in production). Request-blind by design.
@@ -81,7 +81,7 @@ export const docs = content({
  *  Exported so the page component derives the SAME context it renders under as the load guard used. */
 export const preview_ctx = (url: URL) => ({ preview: url.searchParams.get('preview') === 'secret' });
 
-export const site = defineSite({
+export const cms = site({
 	outline: docs,
 	data: { title: 'CMS Playground', description: 'An ogygia site sourced entirely from a REST CMS.', origin: 'http://localhost:5281' },
 	prevNext: 'graph',

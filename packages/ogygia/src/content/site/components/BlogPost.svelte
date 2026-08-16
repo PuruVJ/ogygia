@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * One whole blog POST — the blog genre's answer to `<Doc>`. A pure function of a `DocView` whose
+	 * One whole blog POST — the blog genre's answer to `<Doc>`. A pure function of a `PageView` whose
 	 * `data` carries the `PostFields` (`date`, `author?`, `tags`): a dateline, the title, the author,
 	 * tags, the rendered body, and prev/next by date. No sidebar, no on-this-page rail — a post reads
 	 * top to bottom. Styling rides the `.og-*` tokens; blog-specific structure is scoped below.
@@ -8,7 +8,7 @@
 	import Region from '../../../Region.svelte';
 	import CodeChrome from './CodeChrome.svelte' with { wake: 'load' };
 	import { get_shell_context } from '../context.js';
-	import type { DocView } from '../types.js';
+	import type { PageView } from '../types.js';
 	import type { PostFields } from '../fields.js';
 	import type { Snippet } from 'svelte';
 
@@ -18,7 +18,7 @@
 		backLabel = '← All posts',
 		footer
 	}: {
-		view: DocView<{ title?: string; summary?: string } & Partial<PostFields>>;
+		view: PageView<{ title?: string; summary?: string } & Partial<PostFields>>;
 		/** Href of the blog index (the "back" link above the title). Omit to hide it. */
 		back?: string;
 		backLabel?: string;

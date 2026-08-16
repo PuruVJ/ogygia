@@ -4,7 +4,7 @@
 	 * `<Og__Slot tag="a" href="y">x`) into this ONE component; here — at render, in app-land — we
 	 * look the tag up in the site's component map and render that component, else the plain element.
 	 *
-	 * The map holds real component VALUES and lives in `defineSite(outline, { components })`, reaching us
+	 * The map holds real component VALUES and lives in `site(outline, { components })`, reaching us
 	 * via the shell context. No import paths in config; the compiler only ever knew the tag NAMES.
 	 * Built-in default: `a → Link` (id-form + redirect-aware links for plain markdown, zero config).
 	 */
