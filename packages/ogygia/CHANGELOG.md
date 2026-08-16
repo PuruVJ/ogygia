@@ -10,9 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] — 2026-08-16
 
-The site-kit release. The docs kit sheds its codename and collapses into `ogygia/content` — one
-pillar from collection to shipped site: `sitekit()` mints the brains, `DocsShell` / `BlogShell`
-render them, the `import.meta.og.*` macros bake content at build. Around it: a security audit, an
+The site-kit release. `ogygia/content` grows from collections into one pillar that carries a whole
+site: `sitekit()` mints the brains, `DocsShell` / `BlogShell` render them, the `import.meta.og.*`
+macros bake content at build. Around it: a security audit, an
 8×-flavored perf pass (bundle granularity, router warming, an exponential compiler fix), a unified
 preload architecture that goes native in MPA mode, and the `csr = false` keepalive bug that finally
 dies (#1, #4).
@@ -68,12 +68,6 @@ dies (#1, #4).
 
 ### Changed
 
-- **BREAKING: the pharos name is gone.** `ogygia/pharos*` subpaths merged into `ogygia/content*`
-  (`/docs-shell`, `/slot`, `/shell.css`, `/theme.css`, `/themes/*`; the pharos server barrel into
-  `ogygia/content/server`). `pharos()` → `sitekit()`, `Shell` → `DocsShell`, `PharosSlot` →
-  `SiteSlot`, error prefix `[ogygia/pharos]` → `[ogygia/content]`, CLI `ogygia pharos init` →
-  `ogygia site init`, CSS hooks `.ph-*`/`--ph-*` → `.og-*`/`--og-*`, `@layer pharos` →
-  `@layer ogygia`.
 - **BREAKING: emitted chunk names.** Island facades are `og-region.<hash>.js` (was
   `ogygia-island.*`), the runtime is `og-runtime.<hash>.js` (was `ogygia-runtime.*`), the build
   handoff is `.svelte-kit/og-region-deps.json`. The `<ogygia-region>` element and
