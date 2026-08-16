@@ -73,9 +73,9 @@
 		"./content/theme.css": "./src/content/site/theme.css",
 		"./content/themes/*": "./src/content/site/themes/*",
 		"./content/slot": {
-			"types": "./dist/content/site/components/PharosSlot.svelte.d.ts",
-			"svelte": "./src/content/site/components/PharosSlot.svelte",
-			"default": "./src/content/site/components/PharosSlot.svelte"
+			"types": "./dist/content/site/components/SiteSlot.svelte.d.ts",
+			"svelte": "./src/content/site/components/SiteSlot.svelte",
+			"default": "./src/content/site/components/SiteSlot.svelte"
 		},
 		"./server": {
 			"types": "./dist/hooks.d.ts",
@@ -204,9 +204,9 @@
 			"./content/theme.css": "./dist/content/site/theme.css",
 			"./content/themes/*": "./dist/content/site/themes/*",
 			"./content/slot": {
-				"types": "./dist/content/site/components/PharosSlot.svelte.d.ts",
-				"svelte": "./dist/content/site/components/PharosSlot.svelte",
-				"default": "./dist/content/site/components/PharosSlot.svelte"
+				"types": "./dist/content/site/components/SiteSlot.svelte.d.ts",
+				"svelte": "./dist/content/site/components/SiteSlot.svelte",
+				"default": "./dist/content/site/components/SiteSlot.svelte"
 			},
 			"./server": {
 				"types": "./dist/hooks.d.ts",
