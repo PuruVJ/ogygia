@@ -514,6 +514,26 @@
 	border-radius: var(--r-md) var(--r-md) 0 0;
 	background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
 }
+/* Filename / language label — CodeChrome adds it as the first child of the bar, so the header is
+   never empty. `margin-right: auto` takes the left and shoves the action buttons to the right. */
+.og-code-name {
+	margin-right: auto;
+	min-width: 0;
+	max-width: 62%;
+	padding-left: 0.35rem;
+	font: 400 0.75rem/1 var(--font-mono);
+	color: var(--text-faint);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* a bare language tag (no authored filename) reads quieter + uppercased, so it doesn't pose as one */
+.og-code-name:not([data-file]) {
+	text-transform: uppercase;
+	font-size: 0.68rem;
+	letter-spacing: 0.06em;
+	opacity: 0.7;
+}
 .og-code-actions :is(button, a) {
 	display: inline-flex;
 	align-items: center;

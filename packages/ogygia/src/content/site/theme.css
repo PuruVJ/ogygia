@@ -716,6 +716,11 @@
 	}
 
 	/* Code-block chrome (added by CodeChrome): a permalink + a copy button, grouped top-right. */
+	/* The default chrome floats its actions as a corner cluster (no header bar), so the filename
+	   label CodeChrome adds has no bar to fill — hide it. A bar-style skin shows it (see the docs skin). */
+	.og-code-name {
+		display: none;
+	}
 	.og-code-actions {
 		position: absolute;
 		top: 0.55rem;

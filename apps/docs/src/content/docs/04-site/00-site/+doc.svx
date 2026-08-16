@@ -37,8 +37,8 @@ The scaffold is ordinary app code you own from the first second: a `folder()` co
 
 `sitekit()` takes **one options bag** — `outline` is the only required key — and returns a `Site`. It lives in a **`.server.ts` module**, next to the collections it weaves:
 
-```ts
-// src/lib/site.server.ts — server-only: the corpus can never reach a client bundle
+```ts title=src/lib/site.server.ts
+// server-only: the corpus can never reach a client bundle
 import { sitekit, links } from 'ogygia/content';
 import { docs } from './collections.server';
 
