@@ -12,7 +12,9 @@ related:
 
 A **block** page is data: a tree of nodes, each naming a component `type` plus its `props`. `blocks()` renders that tree the same way `markdown()` renders `.svx` — as an entry `body` you drop in with `<Region of={entry.body} />`. It is the render half of a visual page builder: your CMS (or a JSON file) owns the layout; ogygia owns the rendering.
 
-> **When to use.** Reach for blocks when *content decides layout* — marketing pages assembled in a visual editor, CMS-driven landing pages, anything where a non-developer arranges components. If a developer writes the layout in a `.svelte` file, you do not need this; just write the components.
+::: tip When to use
+Reach for blocks when *content decides layout* — marketing pages assembled in a visual editor, CMS-driven landing pages, anything where a non-developer arranges components. If a developer writes the layout in a `.svelte` file, you do not need this; just write the components.
+:::
 
 The panel below is a block tree — a `Hero`, a `Grid` of two `Feature`s, and one interactive `CounterBlock` — rendered live from the data further down this page.
 
@@ -85,7 +87,9 @@ export const load = async () => ({ page: await pages.get('landing') });
 <Region of={data.page.body} />
 ```
 
-> **Not `+page.server.ts`.** A server load's data crosses a serialization boundary, and a `body` is a same-pass SSR value — a live render, not wire data — so it cannot cross (ogygia stops you with an error saying exactly this). On a `csr = false` page a universal load never runs client-side, so it is server code with none of the boundary.
+::: warning Not `+page.server.ts`
+A server load's data crosses a serialization boundary, and a `body` is a same-pass SSR value — a live render, not wire data — so it cannot cross (ogygia stops you with an error saying exactly this). On a `csr = false` page a universal load never runs client-side, so it is server code with none of the boundary.
+:::
 
 Every block's **CSS travels with the render**: the page never imports `Hero` or `Feature`, so their styles are on no page stylesheet — the region links each rendered block's own hashed stylesheet into `<head>` during the server pass, deduped, only for the block types the page actually uses. A registry of 100 blocks costs a page exactly the sheets for the blocks it renders.
 

@@ -9,7 +9,9 @@ related:
 
 A **server island** is a hole in the page whose HTML is fetched from the server *after* the initial load. The page ships a placeholder; the real HTML swaps in on a schedule. No JS hydrates it — it is server HTML, just delivered late.
 
-> **When to use.** A server island is the answer when a piece of the page is **request-specific but not interactive** — a personalized greeting, a "you have 3 unread" count, a slow upstream you don't want to block first paint. It needs no client JS, so it is cheaper than a client island. If part of it needs interactivity, nest a client island inside it (see below). If it can be prerendered, it does not need to be deferred at all.
+::: tip When to use
+A server island is the answer when a piece of the page is **request-specific but not interactive** — a personalized greeting, a "you have 3 unread" count, a slow upstream you don't want to block first paint. It needs no client JS, so it is cheaper than a client island. If part of it needs interactivity, nest a client island inside it (see below). If it can be prerendered, it does not need to be deferred at all.
+:::
 
 Mark the import with `render: 'deferred'`:
 

@@ -10,7 +10,9 @@ related:
 
 A **region** is a piece of the page with its own rendering and waking rules. It is ogygia's only primitive: every marked import — an island, a server island, a lake, a held region — compiles to the same `<Region>` envelope. They are not four features. They are four settings of one thing.
 
-> **Why one primitive.** One envelope means one hydration story, one signing story, one props story, and one mental model. When you understand a region, you understand all of them — the rest of this section is just the settings.
+::: tip Why one primitive
+One envelope means one hydration story, one signing story, one props story, and one mental model. When you understand a region, you understand all of them — the rest of this section is just the settings.
+:::
 
 ## The two dials
 

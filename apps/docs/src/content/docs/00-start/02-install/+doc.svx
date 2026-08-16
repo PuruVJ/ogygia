@@ -13,9 +13,17 @@ ogygia drops into an existing SvelteKit app. First you wire it in — the packag
 
 The fastest way in is the CLI. It installs the package, registers the Vite plugin before `sveltekit()`, and wires the server handle and transport — in one command.
 
-```bash
+::: code-group
+
+```bash [npm]
 npx ogygia init
 ```
+
+```bash [pnpm]
+pnpm dlx ogygia init
+```
+
+:::
 
 Add markdown content collections at the same time with `npx ogygia init --markdown`. If your project already exports a `handle` or `transport`, the CLI merges into them (it sequences your `handle` and spreads into your `transport`) instead of overwriting.
 
@@ -23,9 +31,17 @@ Add markdown content collections at the same time with `npx ogygia init --markdo
 
 Prefer to wire it yourself? Install the package, register the Vite plugin **before** `sveltekit()`, and add the server handle.
 
-```bash
+::: code-group
+
+```bash [npm]
+npm i ogygia
+```
+
+```bash [pnpm]
 pnpm add ogygia
 ```
+
+:::
 
 #### vite.config.ts
 
@@ -51,7 +67,9 @@ import * as ogygia from 'ogygia/server';
 export const handle = ogygia.handle();
 ```
 
-> **In production.** Server islands and command / form POSTs go through Kit's CSRF protection, so set `ORIGIN` on your deployment. Without it, those POSTs are rejected. This is one env var; you set it once.
+::: warning In production
+Server islands and command / form POSTs go through Kit's CSRF protection, so set `ORIGIN` on your deployment. Without it, those POSTs are rejected. This is one env var; you set it once.
+:::
 
 #### TypeScript types
 
@@ -106,7 +124,9 @@ export default defineConfig({
 
 ogygia is incremental. You do not convert the whole app — you turn islands on one route at a time, and everything else stays a normal SvelteKit page.
 
-> **When to use which mode.** A mostly-static route → `csr = false` + islands (the biggest win). A route that is still a full interactive app → leave it `csr = true`; you can still drop an island into it. A whole site of static-first pages → all-islands mode. You are never forced to pick one globally.
+::: tip When to use which mode
+A mostly-static route → `csr = false` + islands (the biggest win). A route that is still a full interactive app → leave it `csr = true`; you can still drop an island into it. A whole site of static-first pages → all-islands mode. You are never forced to pick one globally.
+:::
 
 ### One route
 

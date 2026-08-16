@@ -8,7 +8,9 @@ related:
 
 Islands are real Svelte components, so Kit's remote functions work inside them unchanged. All six primitives — `query`, `query.batch`, `query.live`, `command`, `form`, and `prerender` — run in an island exactly as they do in a Kit page.
 
-> **When to use.** Remote functions are how an island talks to the server: read data (`query`), mutate it (`command` / `form`), or stream it (`query.live`). Use them whenever an island needs server data or has to persist a change — they replace the fetch-and-endpoint boilerplate you would otherwise write, and the server validates every call.
+::: tip When to use
+Remote functions are how an island talks to the server: read data (`query`), mutate it (`command` / `form`), or stream it (`query.live`). Use them whenever an island needs server data or has to persist a change — they replace the fetch-and-endpoint boilerplate you would otherwise write, and the server validates every call.
+:::
 
 ```svelte
 <script>
@@ -64,7 +66,9 @@ Writing to a captured host variable from island markup is a mistake — the valu
 - A **build error** for captured-variable writes in markup.
 - A **dev-only deep proxy** at runtime that throws when you mutate a snapshot.
 
-> **Dev is not prod.** In dev, SSR query seeding degrades to a refetch, and the mutation proxy only runs in dev. Verify data flows against a production build.
+::: warning Dev is not prod
+In dev, SSR query seeding degrades to a refetch, and the mutation proxy only runs in dev. Verify data flows against a production build.
+:::
 
 ## Do / don't
 

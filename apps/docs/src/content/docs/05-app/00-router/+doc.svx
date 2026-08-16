@@ -25,7 +25,9 @@ export default {
 };
 ```
 
-> **When to opt out.** Keep the router for **app-like navigation** — no white flash between pages, persistent chrome, prefetch on hover. Turn it off with `router: false` only if a plain MPA is all you need: then same-origin links are ordinary full-page loads. On routes that are still `csr = true`, Kit owns navigation and ogygia stays out of the way — the two coexist either way.
+::: tip When to opt out
+Keep the router for **app-like navigation** — no white flash between pages, persistent chrome, prefetch on hover. Turn it off with `router: false` only if a plain MPA is all you need: then same-origin links are ordinary full-page loads. On routes that are still `csr = true`, Kit owns navigation and ogygia stays out of the way — the two coexist either way.
+:::
 
 ### Opt one page out of view transitions
 

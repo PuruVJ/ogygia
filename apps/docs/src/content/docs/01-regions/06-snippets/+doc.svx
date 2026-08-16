@@ -8,7 +8,9 @@ related:
 
 A snippet is a function, so it cannot cross an island boundary directly — the props an island ships are serialized, and a function does not serialize. Ogygia handles this for you: **any snippet handed to an island crosses as a region**, the snippet shape of the same primitive behind `<Component/>` regions. You almost never call anything; passing children or a `{#snippet}` into an island just works, including when a plain wrapper forwards them along.
 
-> **When to use.** You do not reach for this on purpose. It is what makes `<Tabs>{@render children()}</Tabs>`, a forwarded `{#snippet header()}`, or a wrapper component that passes content into an island work at all. Reach for `region.snippet()` only when you are building a snippet by hand from raw HTML.
+::: tip When to use
+You do not reach for this on purpose. It is what makes `<Tabs>{@render children()}</Tabs>`, a forwarded `{#snippet header()}`, or a wrapper component that passes content into an island work at all. Reach for `region.snippet()` only when you are building a snippet by hand from raw HTML.
+:::
 
 ## The two shapes of a crossing
 

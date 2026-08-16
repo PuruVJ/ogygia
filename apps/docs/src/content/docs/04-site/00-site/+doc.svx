@@ -7,15 +7,35 @@ related:
   - content/collections
 ---
 
-A [collection](/docs/content/collections) answers **what exists** — a set of typed entries. ogygia answers **how they read as a site**: the nav tree, the order, the prev/next, the search index, the sitemap, the shell around the page. `ogygia/content` is a documentation-site kit built directly on the content pillar. **This site is one** — every page you are reading is woven, navigated, and searched by ogygia.
+A [collection](/docs/content/collections) answers **what exists** — a set of typed entries. The site kit answers **how they read as a site**: the nav tree, the order, the prev/next, the search index, the sitemap, the shell around the page. It is built directly on the content pillar and lives in the same `ogygia/content` barrel. **This site is one** — every page you are reading is woven, navigated, and searched by it.
 
 You hand it collections and an arrangement; it mints the *brains* — small, data-returning, browser-safe functions the routes and the shell consume. The corpus itself never crosses the wire.
 
-> **When to use.** Reach for ogygia when a collection needs to become a *site*: a sidebar, "keep reading", a search box, `llms.txt`, versioned or localized docs. If you only need a list and a body on one page, `content()` alone is enough — ogygia is the layer that turns a corpus into something you navigate.
+::: tip When to use
+Reach for `defineSite()` when a collection needs to become a *site*: a sidebar, "keep reading", a search box, `llms.txt`, versioned or localized docs. If you only need a list and a body on one page, `content()` alone is enough — the site kit is the layer that turns a corpus into something you navigate.
+:::
+
+## From zero
+
+Scaffold the whole thing — site module, content folder, routes, a `DocsShell` layout — in one command:
+
+::: code-group
+
+```bash [npm]
+npx ogygia site init
+```
+
+```bash [pnpm]
+pnpm dlx ogygia site init
+```
+
+:::
+
+The scaffold is ordinary app code you own from the first second: a `folder()` collection, a `defineSite()` next to it, a catch-all route, a layout mounting the shell. Everything below explains what those few files do.
 
 ## The whole thing in one file
 
-`defineSite()` takes an **outline** — how your collections arrange — and returns a `Site`. It lives in a **`.server.ts` module**, next to the collections it weaves:
+`defineSite()` takes **one options bag** — `outline` is the only required key — and returns a `Site`. It lives in a **`.server.ts` module**, next to the collections it weaves:
 
 ```ts
 // src/lib/site.server.ts — server-only: the corpus can never reach a client bundle
@@ -23,15 +43,22 @@ import { defineSite, links } from 'ogygia/content';
 import { docs } from './collections.server';
 
 export const site = defineSite({
-  outline: docs,          // a bare collection weaves itself by convention (see below)
-  prevNext: 'graph',      // "keep reading" follows the content graph
-  checks: [links()]       // a broken in-prose link fails the build
+	outline: docs,          // a bare collection weaves itself by convention (see below)
+	prevNext: 'graph',      // "keep reading" follows the content graph
+	checks: [links()],      // a broken in-prose link fails the build
+	data: {
+		title: 'Example',
+		description: 'Docs for Example.',
+		origin: 'https://example.dev'   // absolute URLs for sitemap/llms when prerendered
+	}
 });
 ```
 
-That is the entire configuration for this site. `docs` is a `folder()` collection, so its `NN-` filename prefixes already encode order and its `+meta.json` sidecars name the sections — ogygia reads that structure as **data** and weaves the tree with nothing more to say. Point ogygia at several collections, or a `pick()` selection, or explicit groups when you want to arrange by hand — that is the [outline](/docs/site/outline).
+That is the entire configuration for this site. `docs` is a `folder()` collection, so its `NN-` filename prefixes already encode order and its `+meta.json` sidecars name the sections — the outline reads that structure as **data** and weaves the tree with nothing more to say. Point it at several collections, or a `pick()` selection, or explicit groups when you want to arrange by hand — that is the [outline](/docs/site/outline).
 
-> **Collections belong in a server module.** A collection's loader is an *eager glob* — the whole compiled corpus. Define it in a `.server.ts` / `.remote.ts` file (or under `src/lib/server/`) and Kit mechanically prevents any client module from importing it, so the corpus can never leak into a browser bundle. Define one elsewhere and ogygia **warns** you at build time. See [Content collections](/docs/content/collections).
+::: warning Collections belong in a server module
+A collection's loader is an *eager glob* — the whole compiled corpus. Define it in a `.server.ts` / `.remote.ts` file (or under `src/lib/server/`) and Kit mechanically prevents any client module from importing it, so the corpus can never leak into a browser bundle. Define one elsewhere and ogygia **warns** you at build time. See [Content collections](/docs/content/collections).
+:::
 
 ## Brains, not a framework
 
@@ -40,24 +67,27 @@ That is the entire configuration for this site. `docs` is a `folder()` collectio
 | brain | returns | used by |
 | --- | --- | --- |
 | `site.nav()` | the sidebar tree, hrefs resolved | the shell / a nav remote |
+| `site.meta()` | `{ nav, switcher, data }` in one call | `<DocsShell {meta}>` |
 | `site.doc(slug)` | one page's view — data, headings, body, prev/next | the page component |
 | `site.search(q)` | ranked hits | a search remote / the worker |
-| `site.emit.*` | GET handlers — sitemap, llms.txt, RSS, raw markdown | `+server.ts` routes |
-| `site.check()` | link-audit findings, as data | vitest / CI |
-| `site.entries()` | every leaf slug | prerender `entries` |
+| `site.switcher(slug)` | the version/locale picker (dimensioned sites) | `<Switcher>` |
+| `site.emit.*` | GET handlers — sitemap, llms.txt, RSS, raw markdown, search index | `+server.ts` routes |
+| `site.check()` | check findings, as data | vitest / CI |
+| `site.entries()` | every leaf slug + declared old addresses | prerender `entries` |
+| `site.load` | the 404 guard + alias 308s + per-page checks | the route's `load` |
 
 Because they are data, **where** they run is your call. Prerender the nav, or fetch it per request; query search on the server, or ship the static index to a client worker. The [remotes](/docs/site/remotes) helper mints the common wire surface for you.
 
 ## The wire layer
 
-The collection holds the compiled corpus — potentially megabytes of markdown. ogygia never serializes it. A page's **body** crosses the wire as a [held region](/docs/regions/held-regions) ticket (baked HTML, not source); everything else is metadata. The [`remotes()`](/docs/site/remotes) helper mints the common wire surface from `site` in a `.remote.ts` — server-only, so the corpus stays server-side and the browser gets only the ticketed data:
+The collection holds the compiled corpus — potentially megabytes of markdown. The site kit never serializes it. A page's **body** crosses the wire as a [held region](/docs/regions/held-regions) ticket (baked HTML, not source); everything else is metadata. [`remotes()`](/docs/site/remotes) mints the crossing from `site` in a `.remote.ts` — server-only, so the corpus stays server-side and the browser gets only the ticketed data:
 
 ```ts
 // src/lib/site.remote.ts — the wire layer
 import { remotes } from 'ogygia/content/server';
 import { site } from './site.server';
 
-export const { nav, doc, search } = remotes(site, { base: '/docs' });
+export const { nav, meta, doc, search } = remotes(site, { base: '/docs' });
 ```
 
 ## Render it
@@ -67,31 +97,84 @@ The page component reads one brain and renders the view. The [`<Doc>`](/docs/sit
 ```svelte
 <!-- src/routes/docs/[...slug]/+page.svelte -->
 <script>
-  import { page } from '$app/state';
-  import { Doc } from 'ogygia/content';
-  import { doc } from '$lib/site.remote';
+	import { page } from '$app/state';
+	import { Doc } from 'ogygia/content';
+	import { doc } from '$lib/site.remote';
 
-  const view = await doc(page.params.slug);
+	const view = await doc(page.params.slug);
 </script>
 
 <Doc {view} />
 ```
 
+And the layout mounts the shell over the `meta` remote, so the corpus never enters the layout's module graph:
+
+```svelte
+<!-- src/routes/docs/+layout.svelte -->
+<script>
+	import DocsShell from 'ogygia/content/docs-shell';
+	import 'ogygia/content/theme.css';
+	import 'ogygia/content/shell.css';
+	import { meta } from '$lib/site.remote';
+	let { children } = $props();
+
+	const shellMeta = await meta();
+</script>
+
+<DocsShell meta={shellMeta} base="/docs" title="Docs">
+	{@render children()}
+</DocsShell>
+```
+
+## Request context: previews and roles
+
+Every brain takes an optional **read context** — a plain object your `context` function derives from the request. Collections thread it into their `filter`, so one site serves a public projection and a preview projection from the same corpus:
+
+```ts
+export const site = defineSite({
+	outline: docs,
+	context: ({ cookies }) => ({ preview: cookies?.get?.('preview') === '1' })
+});
+
+// a draft page exists only in the preview projection
+const publicView = await site.doc('roadmap');                        // null — filtered out
+const draftView = await site.doc('roadmap', { context: { preview: true } });
+```
+
+The empty context `{}` is the public, prerendered projection. A context-gated site typically flips its [remotes](/docs/site/remotes) to `query` mode, so each request derives its own.
+
+::: details The full options bag
+Every `defineSite()` key, at a glance. `outline` is the only required one.
+
+| key | what it does |
+| --- | --- |
+| `outline` | a collection, `outline([...])` spec, or `dimensions()` — the arrangement |
+| `data` | `{ title, description, origin }` — site facts; emissions default from here |
+| `base` | default mount prefix for every read; per-call `{ base }` overrides |
+| `prevNext` | `'order'` (default) or `'graph'` — how "keep reading" is chosen |
+| `trail` | `'weave'` (default) or `'group'` — whether prev/next crosses section boundaries |
+| `checks` | `[links(), ...yours]` — corpus invariants; see [Checks](/docs/site/checks) |
+| `components` | markdown element overrides, as real component values; see [Shell](/docs/site/shell) |
+| `context` | derive `{ preview, roles, … }` from the request; threads into collection filters |
+| `search` | `{ engine }` — swap the search engine; see [Search](/docs/site/search) |
+| `redirects` | old addresses per entry (default reads `data.redirect_from`) — baked 308 stubs |
+:::
+
 ## The map
 
-ogygia is one kit with a few clear parts. Each has its own page:
+The site kit is one surface with a few clear parts. Each has its own page:
 
 - **[Outline](/docs/site/outline)** — weave collections into a tree. The spec grammar, filename conventions, the address map, prev/next.
 - **[Dimensions](/docs/site/dimensions)** — one site across a matrix of versions or locales, with a switcher and graceful fallback.
-- **[Shell & components](/docs/site/shell)** — `Frame` (headless) and `Shell` (batteries-included), plus `Doc`, `Sidebar`, `Pager`, and the theme.
-- **[Remotes](/docs/site/remotes)** — the wire layer: `nav`, `doc`, `search`, prerendered or live.
+- **[Shell & components](/docs/site/shell)** — `Frame` (headless), `DocsShell` and `BlogShell` (batteries-included), plus `Doc`, `Sidebar`, `Pager`, and the theme.
+- **[Remotes](/docs/site/remotes)** — the wire layer: `nav`, `meta`, `doc`, `search`, prerendered or live.
 - **[Search](/docs/site/search)** — the search brain, the static index, the on-device worker, the no-JS fallback.
 - **[Emissions](/docs/site/emit)** — machine-facing serializations: sitemap, `llms.txt`, RSS, raw markdown.
 - **[Checks](/docs/site/checks)** — the link audit and custom checks that fail the build, not the visitor.
 
 ## Do / don't
 
-- **Do** keep `defineSite()` and its collections in a browser-safe module, and mint the wire in a `.remote.ts` — that split is what keeps the corpus out of client bundles.
-- **Do** let filename conventions carry structure (`NN-` order, `+meta.json` labels). ogygia reads them as data; you write no arrangement config for the common case.
+- **Do** keep `defineSite()` and its collections in a server module, and mint the wire in a `.remote.ts` — that split is what keeps the corpus out of client bundles.
+- **Do** let filename conventions carry structure (`NN-` order, `+meta.json` labels). The outline reads them as data; you write no arrangement config for the common case.
 - **Don't** pass a collection's bodies over the wire yourself. Let `site.doc()` bake the body into a region ticket — that is the only representation meant to cross.
-- **Don't** reach for ogygia to render a single standalone page. That is `content()` plus `<Region>`; ogygia is the *site* around many.
+- **Don't** reach for the site kit to render a single standalone page. That is `content()` plus `<Region>`; the site kit is the *site* around many.

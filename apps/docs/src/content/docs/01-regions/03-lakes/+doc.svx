@@ -8,7 +8,9 @@ related:
 
 A **lake** is static HTML *inside* an island. The island around it is interactive, but the lake itself never ships JS. It is marked with `wake: 'none'`, used within an island's own `.svelte` file.
 
-> **When to use.** A lake is for a **big, static subtree that lives inside something interactive** — prose, a pre-rendered chart, a highlighted code block, an image gallery — that you do not want compiled into the island's client bundle. If the static content is *not* inside an island, it is already free (unmarked markup on a Page ships no JS); lakes matter only within a hydrating tree.
+::: tip When to use
+A lake is for a **big, static subtree that lives inside something interactive** — prose, a pre-rendered chart, a highlighted code block, an image gallery — that you do not want compiled into the island's client bundle. If the static content is *not* inside an island, it is already free (unmarked markup on a Page ships no JS); lakes matter only within a hydrating tree.
+:::
 
 ```svelte
 <!-- inside an island -->

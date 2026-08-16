@@ -1,15 +1,17 @@
 ---
 title: Remotes
-summary: The wire layer. remotes(site) mints nav, doc, and search as Kit remotes — prerendered by default, live when you ask. The doc body bakes into a region ticket so the corpus stays server-side.
+summary: The wire layer. remotes(site) mints nav, meta, doc, and search as Kit remotes — prerendered by default, live when you ask. The doc body bakes into a region ticket so the corpus stays server-side.
 related:
-  - ogygia/ogygia
+  - site/site
   - site/search
   - content/collections
 ---
 
-`site` is server-only — it holds the corpus. The page needs data. `remotes()` mints the crossing: the sidebar tree, one page's view, and search, as Kit remotes in a `.remote.ts`. The browser imports only these; the collection never follows.
+`site` is server-only — it holds the corpus. The page needs data. `remotes()` mints the crossing: the sidebar tree, the shell bundle, one page's view, and search, as Kit remotes in a `.remote.ts`. The browser imports only these; the collection never follows.
 
-> **When to use.** Always, for an ogygia site. The remotes are the one sanctioned path from the server-side `site` to a page. Rendering the nav or a body without them means importing the collection into a client module — the exact leak the [server-module rule](/docs/content/collections) exists to prevent.
+::: tip When to use
+Always, for a site-kit site. The remotes are the one sanctioned path from the server-side `site` to a page. Rendering the nav or a body without them means importing the collection into a client module — the exact leak the [server-module rule](/docs/content/collections) exists to prevent.
+:::
 
 ## Mint them
 
@@ -18,14 +20,19 @@ related:
 import { remotes } from 'ogygia/content/server';
 import { site } from './site.server';
 
-export const { nav, doc, search } = remotes(site, { base: '/docs' });
+export const { nav, meta, doc, search } = remotes(site, { base: '/docs' });
 ```
 
-Three remotes, each a plain async function the page awaits:
+Four remotes, each a plain async function the page awaits:
 
-- **`nav(slug?)`** — the sidebar tree, hrefs baked for `base`. On a [dimensioned](/docs/site/dimensions) site, pass the current slug so the tree reflects that coordinate.
+- **`nav(slug?)`** — the sidebar tree, hrefs baked for `base`. On a [dimensioned](/docs/site/dimensions) site, pass the current slug (or a bare coordinate prefix like `'v1/'`) so the tree reflects that coordinate.
+- **`meta(slug?)`** — the whole shell bundle `{ nav, switcher, data }` in **one** prerendered call. Feed it straight to `<DocsShell {meta}>` so the layout never imports the corpus.
 - **`doc(slug)`** — one page's view: `data`, `meta`, `headings`, prev/next, and the **baked body**.
 - **`search(q)`** — ranked hits from the [search](/docs/site/search) brain.
+
+::: tip Prefer `meta` over `nav` for shells
+`nav` exists for custom chrome that wants just the tree. A shell wants the tree *and* the switcher *and* the site facts — `meta` is those three in one prerendered payload, one await, one cache entry.
+:::
 
 ## The body crosses as a ticket
 
@@ -33,10 +40,10 @@ A body is a live [region](/docs/regions/held-regions) — a same-pass SSR render
 
 ```svelte
 <script>
-  import { Doc } from 'ogygia/content';
-  import { doc } from '$lib/site.remote';
+	import { Doc } from 'ogygia/content';
+	import { doc } from '$lib/site.remote';
 
-  const view = (await doc(slug))!;   // view.entry.body is a baked ticket
+	const view = (await doc(slug))!;   // view.entry.body is a baked ticket
 </script>
 
 <Doc {view} />
@@ -46,17 +53,26 @@ That is why the docs corpus can be megabytes yet a page ships only its own baked
 
 ## Prerender or live
 
-By default `nav` and `doc` **prerender** — static pages, computed at build. Some sites want them dynamic (an authenticated preview, per-request content). The `modes` option picks per remote:
+By default `nav`, `meta`, and `doc` **prerender** — static payloads, computed at build. Some sites want them dynamic (an authenticated preview, per-request content). The `modes` option picks per remote:
 
-```ts
-export const { nav, doc, search } = remotes(site, {
-  base: '/docs',
-  modes: { doc: 'query' }   // doc runs per request; nav still prerenders
+::: code-group
+
+```ts [static docs (default)]
+export const { nav, meta, doc, search } = remotes(site, { base: '/docs' });
+// nav/meta/doc are baked at build and served static; search runs per request
+```
+
+```ts [live preview site]
+export const { nav, meta, doc, search } = remotes(site, {
+	base: '/docs',
+	modes: { doc: 'query', nav: 'query' }   // per-request; the site's `context` gates what renders
 });
 ```
 
-- **`'prerender'`** (default for `nav`/`doc`) — baked at build, served static.
-- **`'query'`** — runs on the server per request.
+:::
+
+- **`'prerender'`** (default for `nav` / `meta` / `doc`) — baked at build, served static. Required when the awaiting pages prerender.
+- **`'query'`** — runs on the server per request; pairs with `defineSite({ context })` for previews and roles.
 
 `search` is always a `query` — a search is inherently dynamic. (For a fully static search box, ship the [index](/docs/site/search) instead and query it in a client worker; then you don't mint `search` at all.)
 
@@ -70,8 +86,10 @@ import { site } from '$lib/site.server';
 
 export const prerender = true;
 export const entries = site.entries;
-export const load = site.load;   // the 404 guard + alias redirects
+export const load = site.load;   // the 404 guard + alias redirects + per-page checks
 ```
+
+`site.load` is the piece people forget: it maps an unknown slug to a real 404 (instead of an empty page), serves a **baked 308** for every address an entry declares in `redirect_from`, and runs the per-page [checks](/docs/site/checks) in dev.
 
 ## Do / don't
 

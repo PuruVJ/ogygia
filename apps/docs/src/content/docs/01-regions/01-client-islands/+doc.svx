@@ -9,7 +9,9 @@ related:
 
 A **client island** is a component that becomes interactive. You mark its import with `wake`, and ogygia ships JS for that component on a schedule. The rest of the page stays server HTML with zero client JS.
 
-> **When to use.** Reach for a client island whenever a piece of the page needs to respond to the user — a counter, a menu, a form widget, a chart. If it never needs JS, leave it unmarked (it stays HTML) or make it a [lake](/docs/regions/lakes).
+::: tip When to use
+Reach for a client island whenever a piece of the page needs to respond to the user — a counter, a menu, a form widget, a chart. If it never needs JS, leave it unmarked (it stays HTML) or make it a [lake](/docs/regions/lakes).
+:::
 
 ```svelte
 <script>

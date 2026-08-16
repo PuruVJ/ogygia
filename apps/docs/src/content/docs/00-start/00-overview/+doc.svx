@@ -20,7 +20,9 @@ ogygia is an islands architecture for SvelteKit. A page ships as **server HTML w
 
 That is the whole idea: opt the route out of the Kit client with `csr = false`, then mark the imports you want interactive. The heading ships zero JS. `Cart` ships its own, and only when it is needed.
 
-> **When to use.** Reach for ogygia on content-heavy or mostly-static pages with pockets of interactivity — marketing, docs, blogs, dashboards, storefronts. Anywhere you feel you are shipping a whole framework to run one widget. If your page is a single large interactive app, plain SvelteKit with `csr = true` is the simpler tool — and ogygia [coexists](/docs/start/install) with those pages route by route.
+::: tip When to use
+Reach for ogygia on content-heavy or mostly-static pages with pockets of interactivity — marketing, docs, blogs, dashboards, storefronts. Anywhere you feel you are shipping a whole framework to run one widget. If your page is a single large interactive app, plain SvelteKit with `csr = true` is the simpler tool — and ogygia [coexists](/docs/start/install) with those pages route by route.
+:::
 
 The island below is real — it lives on this page, marked `wake: 'load'`, while the prose around it stays HTML:
 

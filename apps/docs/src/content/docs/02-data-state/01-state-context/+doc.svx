@@ -6,7 +6,9 @@ related:
   - reference/constraints
 ---
 
-> **When to use.** Each island is its own hydration root, so a value handed between islands crosses a **serialization** boundary, not a reference. This page covers the two ways to share anyway: **sharing state** hands one live object to specific islands as a prop, and **context** provides a value to a whole subtree so any island below can read it. For state used *inside* one island, a plain `$state` is enough. For app-wide state, a plain module-level `$state` already shares across islands with no ceremony — the tools here are for when the instance is **born on the server** and must reach other islands.
+::: tip When to use
+Each island is its own hydration root, so a value handed between islands crosses a **serialization** boundary, not a reference. This page covers the two ways to share anyway: **sharing state** hands one live object to specific islands as a prop, and **context** provides a value to a whole subtree so any island below can read it. For state used *inside* one island, a plain `$state` is enough. For app-wide state, a plain module-level `$state` already shares across islands with no ceremony — the tools here are for when the instance is **born on the server** and must reach other islands.
+:::
 
 ## Sharing state
 

@@ -11,7 +11,9 @@ related:
 
 You learn one API and reuse it everywhere. Define a collection once with `content({ loader, schema })`. Point its `loader` at a glob of markdown files, at a REST API or CMS, or at a source that pushes over time — the read surface (`list`, `get`, `ids`) never changes.
 
-> **When to use.** Reach for a collection whenever you have a *set of content* with typed frontmatter — docs, a blog, a changelog, product pages, a CMS feed — and you want a nav or index over the wire *and* full rendered bodies on the page.
+::: tip When to use
+Reach for a collection whenever you have a *set of content* with typed frontmatter — docs, a blog, a changelog, product pages, a CMS feed — and you want a nav or index over the wire *and* full rendered bodies on the page.
+:::
 
 One rule governs the whole surface: **the boundary picks the representation.** Stay on the server and you get the whole entry, body and all. Cross the wire and you get plain data.
 
@@ -43,7 +45,9 @@ export const docs = content({
 
 > `import.meta.og.loader.*` is the blessed way to point a collection at static files — it owns the `import.meta.glob` plumbing so you write only a literal path. It comes in four flavours (`markdown`, `folder`, `json`, `git`); see the **[loader macro](/docs/macros/loaders)** for all four and the rules. The runtime builders it rewrites to (`markdown()`, `json()`, `blocks()`) are still exported for the rare hand-built source.
 
-> **ogygia warns you.** Define a collection outside a server module and the build prints a warning naming the file — because a client component that imports it would drag the entire corpus into its bundle (silently, and often megabytes). Keep the definition server-side and mint the wire crossing in a `.remote.ts`; that split is the whole defense.
+::: warning ogygia warns you
+Define a collection outside a server module and the build prints a warning naming the file — because a client component that imports it would drag the entire corpus into its bundle (silently, and often megabytes). Keep the definition server-side and mint the wire crossing in a `.remote.ts`; that split is the whole defense.
+:::
 
 The collection *handle* is still browser-safe by **type** — `docs.get` and `docs.list` have no `$app/server` in their signatures — but the *module that defines it* is server-only because of the glob. Import the handle's types anywhere; import the module only from the server.
 

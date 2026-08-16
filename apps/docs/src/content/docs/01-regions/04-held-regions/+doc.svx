@@ -9,7 +9,9 @@ related:
 
 A **held region** is a component the server picks at runtime and the client renders — props type-checked, delivered over the wire. It is ogygia's take on RSC: the server decides the UI, the client just paints it.
 
-> **When to use.** Reach for a held region when the *choice of component* belongs to the server — search results that are a card or an empty-state, a feed of mixed item types, a dashboard tile the backend decides. A [server island](/docs/regions/server-islands) fills a *fixed* hole with request-specific HTML; a held region lets the **server choose which component** fills it, and the client never imports the options.
+::: tip When to use
+Reach for a held region when the *choice of component* belongs to the server — search results that are a card or an empty-state, a feed of mixed item types, a dashboard tile the backend decides. A [server island](/docs/regions/server-islands) fills a *fixed* hole with request-specific HTML; a held region lets the **server choose which component** fills it, and the client never imports the options.
+:::
 
 ```svelte
 <script>
@@ -121,7 +123,9 @@ A **re-search** hands `of` a new promise. The region keeps the *previous* card o
 
 Why a held region even has this window: it carries **its own CSS**. The page never imported `PackageCard`, so its styles are on no page stylesheet — they travel with the region. (A held region rendered in the *server* pass — a blocks page, SDUI — has no window at all: its links go into `<head>` during SSR and it arrives styled, no placeholder involved.)
 
-> **Why `placeholder`, not `ogygiaFallback`.** `ogygiaFallback` is the reserved slot for a `render: 'deferred'` server island (a fixed hole). A held region is a *value* you place, so its not-ready UI is a snippet on its `<Region>` — plain Svelte.
+::: warning Why `placeholder`, not `ogygiaFallback`
+`ogygiaFallback` is the reserved slot for a `render: 'deferred'` server island (a fixed hole). A held region is a *value* you place, so its not-ready UI is a snippet on its `<Region>` — plain Svelte.
+:::
 
 ### Don't await it yourself
 

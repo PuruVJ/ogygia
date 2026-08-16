@@ -10,7 +10,9 @@ related:
 
 A dashboard is the worst case for the classic choice. Render it static and it is dead weight; ship it as a SPA and you hydrate a whole app to show twelve mostly-read-only tiles. It is also the best case for ogygia, because a dashboard decomposes *exactly* along island lines — you just have to know which primitive owns which job.
 
-> **When to use.** This page is a recipe, not a new API. Every piece is covered in depth elsewhere; this is the map of how they compose into filters, cross-filtering tiles, live data, and drill-down — with the wiring done by the framework instead of by you.
+::: tip When to use
+This page is a recipe, not a new API. Every piece is covered in depth elsewhere; this is the map of how they compose into filters, cross-filtering tiles, live data, and drill-down — with the wiring done by the framework instead of by you.
+:::
 
 ## The anatomy
 
