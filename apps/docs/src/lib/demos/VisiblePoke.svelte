@@ -3,10 +3,10 @@
 	import VisibleWidget from '$lib/demos/VisibleWidget.svelte';
 	import FrozenVisible from '$lib/demos/FrozenVisible.svelte';
 
-	let { codeHtml }: { codeHtml: string } = $props();
+	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>
 
-<DemoBlock title="poke · visible" {codeHtml} onLabel="hydrated · visible">
+<DemoBlock title="poke · visible" {code} onLabel="hydrated · visible">
 	{#snippet live()}
 		<VisibleWidget />
 	{/snippet}

@@ -3,12 +3,12 @@
 	import IdleLive from '$lib/demos/IdleLive.svelte';
 	import IdleFrozen from '$lib/demos/IdleFrozen.svelte';
 
-	let { codeHtml }: { codeHtml: string } = $props();
+	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>
 
 <DemoBlock
 	title="wake: 'idle'"
-	{codeHtml}
+	{code}
 	onLabel="live"
 	offLabel="static"
 >

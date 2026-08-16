@@ -1,5 +1,11 @@
 <script lang="ts">
 	import Contours from '$lib/Contours.svelte';
+	import { Region } from 'ogygia';
+	import {
+		heroCode, heroCodeHtml, loadCode, visibleCode, lakeCode, serverCode, fragmentCode,
+		livePartialCode, sharedObjectCode, contentCollectionCode, contentMarkdownCode,
+		contentJsonCode, contentCustomCode
+	} from '$lib/code/snippets';
 	// The hero demo hydrates on load; the showcase islands below each hydrate on the exact schedule
 	// their code shows, so `/` is itself a live demo of the library.
 	import HeroDemo from '$lib/demos/HeroDemo.svelte' with { wake: 'load' };
@@ -23,7 +29,6 @@
 	import { Cart } from '$lib/demos/cart-store.svelte.js';
 	import '$lib/styles/widget.css';
 
-	let { data }: { data: import('./$types').PageData } = $props();
 
 	// One instance, handed to both islands below.
 	const cart = new Cart();
@@ -64,7 +69,7 @@
 			</div>
 		</div>
 		<div class="hero-demo">
-			<HeroDemo codeHtml={data.heroCode} />
+			<HeroDemo code={heroCodeHtml} />
 		</div>
 	</div>
 </header>
@@ -91,7 +96,7 @@
 				stops, the page stays.
 			</p>
 		</div>
-		<ShowcaseCard title="Client island" tag="wake: 'load'" codeHtml={data.loadCode}>
+		<ShowcaseCard title="Client island" tag="wake: 'load'" code={loadCode}>
 			{#snippet demo()}
 				<Counter start={10} label="Load island" />
 			{/snippet}
@@ -114,7 +119,7 @@
 			title="Schedules"
 			tag="idle · visible · media"
 			marker="each wakes on its own trigger"
-			codeHtml={data.visibleCode}
+			code={visibleCode}
 			stack
 		>
 			{#snippet demo()}
@@ -136,7 +141,7 @@
 				It renders on the server and its markup never enters the client bundle.
 			</p>
 		</div>
-		<ShowcaseCard title="Lake" tag="wake: 'none'" marker="frozen · 0 KB JS" codeHtml={data.lakeCode}>
+		<ShowcaseCard title="Lake" tag="wake: 'none'" marker="frozen · 0 KB JS" code={lakeCode}>
 			{#snippet demo()}
 				<FrozenCounter start={42} note="SSR HTML, no client JS" />
 			{/snippet}
@@ -156,7 +161,7 @@
 			title="Server island"
 			tag="render: 'deferred'"
 			marker="server HTML, fetched late"
-			codeHtml={data.serverCode}
+			code={serverCode}
 		>
 			{#snippet demo()}
 				<ServerGreeting salutation="Aloha">
@@ -181,7 +186,7 @@
 			title="Held region"
 			tag="server picks the UI"
 			marker="server chooses the component"
-			codeHtml={data.fragmentCode}
+			code={fragmentCode}
 			stack
 		>
 			{#snippet demo()}
@@ -204,7 +209,7 @@
 			title="Live region"
 			tag="query.live"
 			marker="server pushes HTML · morphs in place"
-			codeHtml={data.livePartialCode}
+			code={livePartialCode}
 			stack
 		>
 			{#snippet demo()}
@@ -227,7 +232,7 @@
 			tag="static [ogygia.wire]"
 			marker="one live object · two islands"
 			offMarker="server HTML · 0 KB JS"
-			codeHtml={data.sharedObjectCode}
+			code={sharedObjectCode}
 			stack
 		>
 			{#snippet demo()}
@@ -276,7 +281,7 @@
 			title="Content collection"
 			tag="ogygia/content"
 			marker="live over the wire · no bodies shipped"
-			codeHtml={data.contentCollectionHtml}
+			code={contentCollectionCode}
 			stack
 		>
 			{#snippet demo()}
@@ -295,7 +300,7 @@
 				<h3>Prose with live components in it</h3>
 			</div>
 			<figure class="content-code">
-				<div class="demo-code">{@html data.contentMarkdownHtml}</div>
+				<div class="demo-code"><Region of={contentMarkdownCode} /></div>
 				<a class="content-code-link" href="/docs/content/collections">Markdown &amp; Shiki →</a>
 			</figure>
 		</div>
@@ -307,7 +312,7 @@
 				<h3>JSON through the same API</h3>
 			</div>
 			<figure class="content-code">
-				<div class="demo-code">{@html data.contentJsonHtml}</div>
+				<div class="demo-code"><Region of={contentJsonCode} /></div>
 				<a class="content-code-link" href="/docs/content/collections">Collections →</a>
 			</figure>
 		</div>
@@ -319,7 +324,7 @@
 				<h3>A CMS, a REST API, a push feed</h3>
 			</div>
 			<figure class="content-code">
-				<div class="demo-code">{@html data.contentCustomHtml}</div>
+				<div class="demo-code"><Region of={contentCustomCode} /></div>
 				<a class="content-code-link" href="/docs/content/blocks">Blocks &amp; custom sources →</a>
 			</figure>
 		</div>

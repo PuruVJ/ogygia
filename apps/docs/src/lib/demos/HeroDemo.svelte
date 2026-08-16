@@ -3,10 +3,10 @@
 	import LoadLive from '$lib/demos/LoadLive.svelte';
 	import LoadFrozen from '$lib/demos/LoadFrozen.svelte';
 
-	let { codeHtml }: { codeHtml: string } = $props();
+	let { code }: { code: string } = $props();
 </script>
 
-<DemoBlock title="load" {codeHtml} stack onLabel="live" offLabel="static">
+<DemoBlock title="load" {code} stack onLabel="live" offLabel="static">
 	{#snippet live()}
 		<LoadLive />
 	{/snippet}

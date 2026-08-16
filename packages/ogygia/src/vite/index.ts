@@ -1906,7 +1906,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				(!in_node_modules || has_island_hint(code))
 			) {
 				// Pass Vite's ssr flag through — client csr=false hosts omit wrapper links.
-				const result = run_transform(code, id_n, { ssr });
+				// `out`, NOT `code`: the wire/code/md/bake rewrites above already landed in `out`, and
+				// the island transform's result REPLACES it — feeding it `code` would silently discard
+				// them for any component the host transform touches (import.meta.og.code in a .svelte
+				// stayed un-rewritten and exploded at runtime as `undefined.code`).
+				const result = run_transform(out, id_n, { ssr });
 				if (result) {
 					register(result, id_n);
 					out = result.code;
