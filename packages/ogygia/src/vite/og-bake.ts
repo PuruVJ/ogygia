@@ -300,7 +300,7 @@ export async function rewrite_bake(
 	}
 
 	// Serialize each result; also drop imports that only fed a baked fn (so the computation's
-	// server-only deps don't linger in the graph). Both are span edits, woven in offset order.
+	// server-only deps don't linger in the graph). Both are span edits, interleaved in offset order.
 	const edits: Array<{ start: number; end: number; text: string }> = [];
 	found.calls.forEach((c, i) => {
 		let literal: string;

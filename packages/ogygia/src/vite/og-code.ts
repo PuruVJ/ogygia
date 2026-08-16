@@ -140,7 +140,7 @@ export async function rewrite_code(
 	const import_stmt = `import { og_html_region as ${HELPER} } from 'ogygia/internal';\n`;
 	let out = '';
 	let last = 0;
-	// The import goes at the anchor; a call may sit before or after it, so weave both in offset order.
+	// The import goes at the anchor; a call may sit before or after it, so interleave both in offset order.
 	const edits = calls
 		.map((c, i) => ({ start: c.start, end: c.end, text: `${HELPER}(${JSON.stringify(htmls[i])})` }))
 		.concat([{ start: anchor, end: anchor, text: import_stmt }])

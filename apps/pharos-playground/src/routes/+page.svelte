@@ -6,7 +6,7 @@
 </script>
 
 <h1>ogygia playground</h1>
-<p>Three corpora woven into one nav: markdown <code>guides</code>, JSON <code>api</code>, and a link.</p>
+<p>Three corpora arranged into one nav: markdown <code>guides</code>, JSON <code>api</code>, and a link.</p>
 {#if first && first.kind === 'leaf'}
 	<p><a href={first.href}>Start reading → {first.title}</a></p>
 {/if}

@@ -1,4 +1,4 @@
-// Region parcels for the batch endpoint (route weaving / navigation OOO) — the PURE parcel layer.
+// Region parcels for the batch endpoint (single-flight navigation / navigation OOO) — the PURE parcel layer.
 // The `handle()` batch endpoint uses these to box each rendered region call as a slot-keyed
 // `<template>`; the client frame stream (`frame-nav.ts`) reads them. DOM delivery is covered by the
 // browser suites `verify/frame-batch.ts` / `verify/frame-ooo.ts`. Runs against `../dist`.

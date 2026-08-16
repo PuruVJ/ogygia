@@ -2,8 +2,8 @@
 title: Checks
 summary: Structural verification that fails the build, not the visitor. The link audit resolves every in-prose link against the site's own address space; a broken one is a named error at prerender and on page open in dev.
 related:
-  - content-kit/content-kit
-  - content-kit/outline
+  - site/site
+  - site/outline
   - reference/constraints
 ---
 
@@ -15,10 +15,10 @@ Turn on `links()` for any site with cross-references — which is every docs sit
 
 ## The link audit
 
-Pass `checks` to `contentkit()`. `links()` resolves every markdown link in every body against the site's own address space:
+Pass `checks` to `defineSite()`. `links()` resolves every markdown link in every body against the site's own address space:
 
 ```ts
-export const site = contentkit({ outline: docs, checks: [links()] });
+export const site = defineSite({ outline: docs, checks: [links()] });
 ```
 
 A link to a page that does not exist, or an `#anchor` that no heading emits, is a finding. **This site runs it** — the cross-links you are clicking through this section were verified by exactly this check. When one of these pages linked to a sibling that had not been written yet, the build refused until it existed.
@@ -28,7 +28,7 @@ Where it fires:
 - **At prerender** — a broken link fails the build with the page, the link text, and the target.
 - **In dev** — the same finding surfaces when you open the page, so you catch it as you write.
 
-Because the audit knows the *whole* address space — including [dimension](/docs/content-kit/dimensions) coordinates and declared redirects — it distinguishes a genuinely dead link from one that resolves through an alias.
+Because the audit knows the *whole* address space — including [dimension](/docs/site/dimensions) coordinates and declared redirects — it distinguishes a genuinely dead link from one that resolves through an alias.
 
 ## Findings as data
 
@@ -75,13 +75,13 @@ export function requireSummary(): Check {
 import { links } from 'ogygia/content';
 import { requireSummary } from '$lib/checks';
 
-export const site = contentkit({ outline: docs, checks: [links(), requireSummary()] });
+export const site = defineSite({ outline: docs, checks: [links(), requireSummary()] });
 ```
 
 Severity is the dial: `'error'` throws from `load` (fails the build at prerender, blocks the page in dev); `'warn'` surfaces in `site.check()` findings without ever blocking a render.
 
 ::: details Checks vs. structural build errors
-Two different layers, deliberately. **Structural invariants** — an orphan entry, a slug collision, an inconsistent `NN-` sequence — are always-on [outline](/docs/content-kit/outline) build errors; they cannot be configured off because a site with them is not well-formed. **Checks** are *content policy*: pluggable, per-site, severity-dialed. `links()` is policy — a deliberately-dead link during a migration is your call to allow, tolerate as `warn`, or forbid.
+Two different layers, deliberately. **Structural invariants** — an orphan entry, a slug collision, an inconsistent `NN-` sequence — are always-on [outline](/docs/site/outline) build errors; they cannot be configured off because a site with them is not well-formed. **Checks** are *content policy*: pluggable, per-site, severity-dialed. `links()` is policy — a deliberately-dead link during a migration is your call to allow, tolerate as `warn`, or forbid.
 :::
 
 ## Do / don't

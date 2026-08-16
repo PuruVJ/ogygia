@@ -1,12 +1,12 @@
 /**
- * The ogygia playground site — a rich, multi-category docs weave for stressing the design system.
+ * The ogygia playground site — a rich, multi-category docs arrangement for stressing the design system.
  *
  * Nav is intentionally FLAT (2 levels): each top-level category is one collection, and its pages list
  * directly under it — category → page, no third level. A `dimensions()` wrap adds a version × locale
  * switcher (the default v2 · en corpus is rich; v1 / hi are thin, to demo the header dropdowns).
  */
 import { content, folder } from 'ogygia/content';
-import { dimensions, outline, contentkit } from 'ogygia/content';
+import { dimensions, outline, defineSite } from 'ogygia/content';
 import * as v from 'valibot';
 import { openapi } from './openapi';
 
@@ -80,13 +80,13 @@ const arrange_thin = (g: typeof getting_started) => [
 	github
 ];
 
-export const site = contentkit({
+export const site = defineSite({
 	outline: dimensions({
 		axes: {
 			version: { values: ['v1', 'v2'], default: 'v2', label: 'Version' },
 			locale: { values: ['en', 'hi'], default: 'en', fallback: true, label: 'Language' }
 		},
-		weave: ({ version, locale }) =>
+		resolve: ({ version, locale }) =>
 			version === 'v1'
 				? outline(arrange_thin(v1))
 				: locale === 'hi'

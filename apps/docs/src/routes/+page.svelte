@@ -4,7 +4,7 @@
 	import {
 		heroCode, heroCodeHtml, loadCode, visibleCode, lakeCode, serverCode, fragmentCode,
 		livePartialCode, sharedObjectCode, contentCollectionCode, contentMarkdownCode,
-		contentJsonCode, contentCustomCode, contentkitCode
+		contentJsonCode, contentCustomCode, defineSiteCode
 	} from '$lib/code/snippets';
 	// The hero demo hydrates on load; the showcase islands below each hydrate on the exact schedule
 	// their code shows, so `/` is itself a live demo of the library.
@@ -336,8 +336,8 @@
 		<span class="story-kicker">And then the collection becomes a site</span>
 		<h2 id="site-story">A docs site is one bag of options</h2>
 		<p>
-			This is where the story has been heading. Hand <code>contentkit()</code> a collection and it
-			mints the <em>brains</em>: the nav tree woven from your filenames, prev/next that follows real
+			This is where the story has been heading. Hand <code>defineSite()</code> a collection and it
+			mints the <em>brains</em>: the nav tree built from your filenames, prev/next that follows real
 			links, full-text search, <code>sitemap.xml</code> and <code>llms.txt</code>, and a link audit
 			that fails the build before a reader ever sees a dead end. Mount a shell, and you have what
 			you are looking at — <strong>this site is the demo</strong>.
@@ -347,9 +347,9 @@
 	<div class="content-showcase">
 		<ShowcaseCard
 			title="The whole site"
-			tag="contentkit()"
+			tag="defineSite()"
 			marker="these docs, verbatim"
-			code={contentkitCode}
+			code={defineSiteCode}
 			stack
 		>
 			{#snippet demo()}
@@ -362,12 +362,12 @@
 		<div class="beat">
 			<div class="beat-head">
 				<span class="beat-num">01</span>
-				<span class="content-eyebrow">The weave</span>
+				<span class="content-eyebrow">The arrangement</span>
 				<h3>Filenames become the nav</h3>
 				<p>
 					<code>NN-</code> prefixes order, <code>+meta.json</code> names sections, and every
 					misplaced page is a named build error — never a silent gap.
-					<a href="/docs/content-kit/outline">Outline →</a>
+					<a href="/docs/site/outline">Outline →</a>
 				</p>
 			</div>
 		</div>
@@ -380,7 +380,7 @@
 				<p>
 					<code>DocsShell</code> and <code>BlogShell</code> are compositions of public bricks —
 					replace any region with a snippet, or drop to <code>Frame</code> and bring your own.
-					<a href="/docs/content-kit/shell">Shells →</a>
+					<a href="/docs/site/shell">Shells →</a>
 				</p>
 			</div>
 		</div>
@@ -393,7 +393,7 @@
 				<p>
 					An on-device search worker over a prerendered index, and machine-facing serializations
 					that can never drift — they are views of the same tree.
-					<a href="/docs/content-kit/search">Search →</a>
+					<a href="/docs/site/search">Search →</a>
 				</p>
 			</div>
 		</div>
@@ -408,7 +408,7 @@
 		<h2 id="applayer">And a whole app layer</h2>
 		<p>
 			The islands are the primitive. Around them, ogygia makes the page itself fast — prerender the
-			shell, weave the holes, and navigate like an app, all with no extra client code.
+			shell, batch the holes, and navigate like an app, all with no extra client code.
 		</p>
 	</div>
 
@@ -430,7 +430,7 @@
 			<h3>One request per navigation</h3>
 			<p>
 				The SPA router pulls a whole page's server-island holes down one batch, out of order, with no
-				waterfall. <a href="/docs/app/router#weave">Route weaving →</a>
+				waterfall. <a href="/docs/app/router#single-flight">Single-flight navigation →</a>
 			</p>
 		</div>
 	</div>
@@ -481,9 +481,9 @@
 			<span class="home-docs-kicker">Content</span>
 			<span class="home-docs-title">RF-native collections, markdown, live sources</span>
 		</a>
-		<a class="home-docs-card" href="/docs/content-kit/content-kit">
+		<a class="home-docs-card" href="/docs/site/site">
 			<span class="home-docs-kicker">Site</span>
-			<span class="home-docs-title">contentkit() — outline, shells, search, emissions</span>
+			<span class="home-docs-title">defineSite() — outline, shells, search, emissions</span>
 		</a>
 		<a class="home-docs-card" href="/docs/reference/constraints">
 			<span class="home-docs-kicker">Reference</span>

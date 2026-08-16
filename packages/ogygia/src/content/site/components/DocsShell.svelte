@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * DocsShell — the batteries-included DOCS shell: the VitePress FORM of the content kit. Not a new skin (theme.css owns the
+	 * DocsShell — the batteries-included DOCS shell: the VitePress FORM of the site layer. Not a new skin (theme.css owns the
 	 * design language); an opinionated COMPOSITION of the same public bricks. Desktop: top header
 	 * (brand, links, search, theme) + left sidebar + content (Doc brings its own on-this-page rail).
 	 * Mobile: a bottom bar + slide-up sheet (bottom-first by default), all in one island (`ShellBar`).

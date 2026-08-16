@@ -1,11 +1,11 @@
 /**
- * `contentkit()` — mints a docs site over an outline (or a bare collection, which it auto-wraps). Returns
+ * `defineSite()` — mints a docs site over an outline (or a bare collection, which it auto-wraps). Returns
  * BRAINS ONLY: `load` / `entries` for the mount, `nav()` for the sidebar, `doc()` for the page. Every
  * one returns plain serializable data — no components, nothing global, nothing registered. A weird
  * route can ignore the site entirely; the ceiling is the app.
  *
  * ```ts
- * export const site = contentkit(nav, { prevNext: 'graph' });   // contentkit(docs) wraps a single collection
+ * export const site = defineSite(nav, { prevNext: 'graph' });   // defineSite(docs) wraps a single collection
  *
  * // (docs)/[...slug]/+page.ts
  * export const prerender = true;
@@ -44,7 +44,7 @@ export type SiteMeta = {
 /** A request context the site derives per read (preview, roles) and threads into collection filters. */
 export type ReadContext = Record<string, unknown>;
 
-/** The single-object argument to `contentkit()`. `outline` is the only required key. */
+/** The single-object argument to `defineSite()`. `outline` is the only required key. */
 export type SiteOptions = {
 	/** The arrangement: a collection, an outline node[], or `dimensions()`. Auto-woven into an `Outline`. */
 	outline: Outline | OutlineSpec;
@@ -59,7 +59,7 @@ export type SiteOptions = {
 	context?: (event: { url: URL; request?: Request; cookies?: unknown }) => ReadContext;
 	/** How "keep reading" is chosen. `'graph'` = content relations then order; default `'order'`. */
 	prevNext?: PrevNext;
-	/** Reading-order scope for prev/next: `'weave'` (whole corpus, default) or `'group'` (stop at the
+	/** Reading-order scope for prev/next: `'site'` (whole corpus, default) or `'group'` (stop at the
 	 *  top-level section boundary, so a multi-topic site never links across topics). */
 	trail?: TrailScope;
 	/**
@@ -162,7 +162,7 @@ function is_outline(x: unknown): x is Outline {
 
 /**
  * The site brains as a class — state (outline, prevNext, checks, search) as fields, each brain a
- * method. `contentkit()` mints one; nothing here is global or registered.
+ * method. `defineSite()` mints one; nothing here is global or registered.
  */
 class OgygiaSite implements Site {
 	readonly outline: Outline;
@@ -181,7 +181,7 @@ class OgygiaSite implements Site {
 			? source
 			: outline(source as OutlineSpec, opts.redirects ? { redirects: opts.redirects } : {});
 		this.#prevNext = opts.prevNext ?? 'order';
-		this.#trail = opts.trail ?? 'weave';
+		this.#trail = opts.trail ?? 'site';
 		this.#checks = opts.checks ?? [];
 		this.components = opts.components ?? {};
 		if (opts.data) this.data = opts.data;
@@ -354,8 +354,8 @@ class OgygiaSite implements Site {
 	}
 }
 
-/** Mint the site brains. `contentkit({ outline })` is the only required key; a bare collection auto-weaves. */
-export function contentkit(opts: SiteOptions): Site {
+/** Mint the site brains. `defineSite({ outline })` is the only required key; a bare collection auto-arranges. */
+export function defineSite(opts: SiteOptions): Site {
 	return new OgygiaSite(opts);
 }
 

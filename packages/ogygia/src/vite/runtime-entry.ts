@@ -95,7 +95,7 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 		deps: [],
 		// The client frame store, needed by any region that streams HTML: a deferred region (server
 		// island / held region), a live/morphing region, or a lake. A plain load-hydrated app has
-		// none of these and tree-shakes the store away. (Router weave imports the store separately.)
+		// none of these and tree-shakes the store away. (The router's single-flight nav imports the store separately.)
 		detect: (m) => (m.defer || []).length > 0 || m.live === true || m.morph === true || m.lakes === true
 	}
 };

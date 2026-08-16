@@ -39,7 +39,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['frame-dedupe.ts', true, 'frame store: identical twins share ONE endpoint fetch'],
 	['frame-batch.ts', true, 'batch frame stream: one response, a frame per call (nav OOO)'],
 	['frame-single-flight.ts', true, 'single-flight: command returns the re-rendered region, no extra fetch'],
-	['frame-weave.ts', true, 'route weaving: SPA nav pulls all load regions in ONE batch, no waterfall'],
+	['frame-nav-batch.ts', true, 'single-flight nav: SPA nav pulls all load regions in ONE batch, no waterfall'],
 	['frame-ooo.ts', true, 'out-of-order streaming: staggered regions flush fast-first, not declaration order'],
 	['defer-timing.ts', true, 'server-island fetch timing load/idle/visible/media'],
 	['remote.ts', true, 'client query+args+refresh, command, live'],

@@ -14,7 +14,7 @@
 	<a href="/static">Prerendered</a>
 	<a href="/forms">Forms</a>
 	<a href="/dashboard/orders">Dashboard</a>
-	<a href="/weave" data-weave-link data-ogygia-speculate="off">Weave</a>
+	<a href="/nav-batch" data-nav-batch-link data-ogygia-speculate="off">nav-batch</a>
 	<a href="/ooo" data-ooo-link data-ogygia-speculate="off">OOO</a>
 	<a href="/plain">Plain (no view transitions)</a>
 </nav>

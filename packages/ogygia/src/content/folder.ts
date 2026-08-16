@@ -2,7 +2,7 @@
  * `folder()` — the filesystem-convention preset. One glob of `{+doc.svx,+meta.json}` in, a full
  * {@link Source} out: it splits the map by basename, derives clean ids (shared-prefix strip + `NN-`
  * strip), computes each entry's sibling `order`, exposes `+meta.json` labels through the `groups()`
- * facet, and verifies sibling numbering at first read. The weave then reads `order`/`groups` as DATA
+ * facet, and verifies sibling numbering at first read. The outline then reads `order`/`groups` as DATA
  * and parses no filename.
  *
  * This is the ONLY place `+doc.svx` / `+meta.json` / `NN-` knowledge lives. A CMS never touches it —

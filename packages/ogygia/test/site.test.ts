@@ -5,15 +5,15 @@ import type { Heading, Source, SourceEntry } from '../src/content/index.js';
 // Import from the submodules, not the barrel — the barrel re-exports `.svelte` chrome that vitest
 // (no svelte plugin here) can't parse.
 import { outline, pick } from '../src/content/site/outline.js';
-import { contentkit as contentkitRaw, mountBase } from '../src/content/site/site.js';
+import { defineSite as defineSiteRaw, mountBase } from '../src/content/site/site.js';
 import { links } from '../src/content/site/checks.js';
 import type { NavGroup, NavLeaf, NavTree } from '../src/content/site/types.js';
 
 // Test shim: keep the positional call style in the fixtures; the real API is `mint_site({ outline, …opts })`.
 const mint_site = (
-	outlineArg: Parameters<typeof contentkitRaw>[0]['outline'],
-	opts: Partial<Parameters<typeof contentkitRaw>[0]> = {}
-) => contentkitRaw({ outline: outlineArg, ...opts });
+	outlineArg: Parameters<typeof defineSiteRaw>[0]['outline'],
+	opts: Partial<Parameters<typeof defineSiteRaw>[0]> = {}
+) => defineSiteRaw({ outline: outlineArg, ...opts });
 import { remarkLinks } from '../src/content/markdown/remark-links.js';
 import { rehypeOverrides, SLOT_TAG } from '../src/content/markdown/rehype-overrides.js';
 import { build_docs, orama_engine, split_sections, strip_prose } from '../src/content/site/search.js';
@@ -133,14 +133,14 @@ describe('address seams — group slug + trail scope', () => {
 		expect(svelte.items.some((n) => n.kind === 'group' && n.label === 'Runes')).toBe(true);
 	});
 
-	it("trail: 'group' stops prev/next at the section boundary; 'weave' crosses it", async () => {
+	it("trail: 'group' stops prev/next at the section boundary; 'site' crosses it", async () => {
 		const spec = () => [
 			{ label: 'Svelte', items: svelteDocs(), base: 'svelte' },
 			{ label: 'Kit', items: kitDocs(), base: 'kit' }
 		];
-		// last Svelte page: weave → next is the first Kit page; group → no next.
-		const woven = await mint_site(spec(), { trail: 'weave' }).doc('svelte/runes/derived');
-		expect(woven?.trail.next?.slug).toBe('kit/routing/pages');
+		// last Svelte page: site → next is the first Kit page; group → no next.
+		const across = await mint_site(spec(), { trail: 'site' }).doc('svelte/runes/derived');
+		expect(across?.trail.next?.slug).toBe('kit/routing/pages');
 		const grouped = await mint_site(spec(), { trail: 'group' }).doc('svelte/runes/derived');
 		expect(grouped?.trail.next).toBeUndefined();
 		// within a section, group still links
@@ -203,7 +203,7 @@ describe('site — brains', () => {
 	});
 });
 
-describe('outline — multi-collection weave', () => {
+describe('outline — multi-collection arrangement', () => {
 	function apiFixture() {
 		return content({
 			loader: fromArray([page('button', 'api/00-button.json', { title: 'Button' }), page('input', 'api/01-input.json', { title: 'Input' })]),
@@ -211,7 +211,7 @@ describe('outline — multi-collection weave', () => {
 		});
 	}
 
-	it('weaves two collections with a base prefix and a link', async () => {
+	it('arranges two collections with a base prefix and a link', async () => {
 		const docs = docsFixture();
 		const api = apiFixture();
 		const site = mint_site(
@@ -508,7 +508,7 @@ describe('search — engine + brain (Orama)', () => {
 		expect(hits[0].slug).toBe('start/install');
 		expect(hits[0].href).toBe('/docs/start/install#setup'); // the section that holds "installer"
 
-		// Weave a second collection lacking the term; scoping to it yields nothing (pre-filter).
+		// Add a second collection lacking the term; scoping to it yields nothing (pre-filter).
 		const guides = searchable();
 		const other = content({ loader: fromArray([{ id: 'z', filePath: 'other/00-z/+doc.svx', data: { title: 'Z' }, meta: { headings: [] }, source: async () => '# Z\n\nnothing here' }]), schema: docSchema });
 		const scoped = mint_site(outline([{ label: 'Guides', items: guides, base: 'g' }, { label: 'Other', items: other, base: 'o' }]));

@@ -183,7 +183,7 @@ import * as ogygia from 'ogygia/server';
 export const handle = ogygia.handle();
 ```
 
-`handle(options)` — the SvelteKit server handle. Serves the signed region endpoint (per-hole loads and navigation batch weaving) and injects client seeds.
+`handle(options)` — the SvelteKit server handle. Serves the signed region endpoint (per-hole loads and the single-flight navigation batch) and injects client seeds.
 
 ## `ogygia/app`
 

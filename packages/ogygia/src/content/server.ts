@@ -152,5 +152,5 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 	};
 }
 
-// ── the content kit's server half ── `remotes(site)` minting (Kit query()/prerender wiring).
+// ── the site layer's server half ── `remotes(site)` minting (Kit query()/prerender wiring).
 export * from './site/server.js';

@@ -171,14 +171,14 @@ class OgygiaHandle {
 					this.inject_client_seeds(html, store?.state, event)
 			});
 		}
-		// POST to the endpoint = a BATCH frame stream (client-side navigation / weaving): render a set
+		// POST to the endpoint = a BATCH frame stream (client-side navigation, single-flight): render a set
 		// of signed region calls and flush each as an out-of-order frame in one response.
 		if (event.request.method.toUpperCase() === 'POST') return await this.render_batch(event);
 		return await this.render_region(event);
 	};
 
 	/**
-	 * Batch frame stream (client navigation / route weaving). POST body: a JSON `string[]` of signed
+	 * Batch frame stream (client navigation, single-flight). POST body: a JSON `string[]` of signed
 	 * region endpoints — the calls the client needs. Renders them in parallel and flushes each as a
 	 * `<template data-ogygia-slot="sig">…</template>` frame the moment IT settles (out of order); a
 	 * done sentinel ends it. One response, many frames. Every call carries its own MAC so there's no
@@ -418,7 +418,7 @@ class OgygiaHandle {
 	}
 
 	/**
-	 * Batch (route weaving): verify a hole's OWN signed capability URL and render it in-process. Same
+	 * Batch (single-flight navigation): verify a hole's OWN signed capability URL and render it in-process. Same
 	 * trust boundary as the endpoint (verify the MAC before touching the manifest), but every failure —
 	 * bad/expired MAC, unknown id, non-serializable props, render error, oversize — resolves to
 	 * `null` so the hole silently falls back to a client fetch. Never throws.
@@ -468,7 +468,7 @@ class OgygiaHandle {
 		const body = await this.#render_component(load, props as Record<string, unknown>);
 		if (body === null || body.length > MAX_REGION_BODY) return null;
 		// CSS links ride in the parcel; the client hoists them to <head> (a body/parcel link is inert
-		// inside the `<template>` box), so a weaved server-island still styles a page that never
+		// inside the `<template>` box), so a batched server-island still styles a page that never
 		// imported its component.
 		return { slot: sig, html: region_css_links(id) + body };
 	}

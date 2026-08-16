@@ -1,7 +1,7 @@
 /**
  * `dimensions()` — the i18n / versioning primitive, kept true to the doctrine: a dimension is an
  * AXIS (version, locale), content is the MATRIX of coordinates, and the outline is woven PER
- * coordinate. `class Dimensions` wraps N outlines into ONE `Outline` the same `contentkit()` consumes —
+ * coordinate. `class Dimensions` wraps N outlines into ONE `Outline` the same `defineSite()` consumes —
  * the coordinate is parsed off the FRONT of the slug (no route changes; the default coordinate is bare).
  *
  * Design decisions (see internal/notes/ogygia.md), learned from Starlight / Fumadocs / Docusaurus:
@@ -15,7 +15,7 @@
  *  - `entries()` bakes the UNION across the matrix, so a page that exists only in one coordinate
  *    still prerenders — the "exists only in French" hole Docusaurus has.
  *
- * Versions are just collections: hand `weave` whichever collection sources a coordinate. ogygia does
+ * Versions are just collections: hand `resolve` whichever collection sources a coordinate. ogygia does
  * not copy trees or read git — sourcing a version is the app's concern.
  */
 import { outline, href_of, type Outline, type OutlineSpec, type ReadContext, type TrailScope } from './outline.js';
@@ -39,7 +39,7 @@ export type Coordinate = Record<string, string>;
 export type DimensionsSpec = {
 	axes: Record<string, Axis>;
 	/** Weave the outline for one coordinate. Called once per distinct coordinate (memoized). */
-	weave: (coord: Coordinate) => Outline | OutlineSpec | Promise<Outline | OutlineSpec>;
+	resolve: (coord: Coordinate) => Outline | OutlineSpec | Promise<Outline | OutlineSpec>;
 };
 
 /** One axis of the switcher: where you are on it, and where each value would take you. */
@@ -54,7 +54,7 @@ export type Switcher = SwitcherAxis[];
 /** What fell back for a page (which axis, from → to), or null when the page is native. */
 export type Fallback = { axis: string; from: string; to: string } | null;
 
-/** An `Outline` with the coordinate extras `contentkit()` surfaces (switcher, fallback, coordinate). */
+/** An `Outline` with the coordinate extras `defineSite()` surfaces (switcher, fallback, coordinate). */
 export interface Dimensioned extends Outline {
 	readonly __dimensioned: true;
 	axes: Record<string, Axis>;
@@ -139,7 +139,7 @@ class Dimensions implements Dimensioned {
 		if (!p) {
 			const full: Coordinate = {};
 			for (const n of this.#names) full[n] = coord[n] ?? this.#def(n);
-			p = Promise.resolve(this.#spec.weave(full)).then((r) => (is_outline(r) ? r : outline(r as OutlineSpec)));
+			p = Promise.resolve(this.#spec.resolve(full)).then((r) => (is_outline(r) ? r : outline(r as OutlineSpec)));
 			this.#cache.set(key, p);
 		}
 		return p;
@@ -160,7 +160,7 @@ class Dimensions implements Dimensioned {
 	}
 
 	/** Resolve `rest` in `coord`, then (if enabled) in the fallback coordinate. Returns the hit plus
-	 *  which coordinate actually served it (for the fallback flag). `ctx` threads to each inner weave. */
+	 *  which coordinate actually served it (for the fallback flag). `ctx` threads to each coordinate's outline. */
 	async #resolve_in(coord: Coordinate, rest: string, ctx: ReadContext = {}) {
 		const own = await (await this.#outline_for(coord)).resolve(rest, ctx);
 		if (own) return { hit: own, served: coord };
@@ -263,7 +263,7 @@ class Dimensions implements Dimensioned {
 		return [...new Set(all)];
 	}
 
-	async neighbors(slug: string, base = '', ctx: ReadContext = {}, scope: TrailScope = 'weave') {
+	async neighbors(slug: string, base = '', ctx: ReadContext = {}, scope: TrailScope = 'site') {
 		const { coord, rest } = this.#peel(slug);
 		const inner = await this.#outline_for(coord);
 		const { prev, next } = await inner.neighbors(rest, base_join(base, this.#encode(coord)), ctx, scope);
@@ -301,7 +301,7 @@ class Dimensions implements Dimensioned {
 	}
 }
 
-/** Mint a dimensioned outline — the i18n/versioning wrapper `contentkit()` consumes like any outline. */
+/** Mint a dimensioned outline — the i18n/versioning wrapper `defineSite()` consumes like any outline. */
 export function dimensions(spec: DimensionsSpec): Dimensioned {
 	return new Dimensions(spec);
 }

@@ -463,11 +463,11 @@ class SpaRouter {
 		const use_vt =
 			marker.getAttribute('content') !== 'plain' && !prefer_reduced_motion;
 
-		// ROUTE WEAVING: prescan the incoming page for its load-timed deferred region calls and stream
+		// SINGLE-FLIGHT NAV: prescan the incoming page for its load-timed deferred region calls and stream
 		// them ALL in one batch request, kicked off now (before the swap). Each region binder joins the
 		// batch via the store when it connects — no per-region fetch waterfall on navigation. Fired
 		// synchronously so every reservation is in place before the body swap connects any binder.
-		this.#weave_regions(doc);
+		this.#batch_regions(doc);
 
 		// Cold-cache FOUC guard: get the destination's stylesheets loaded and applied BEFORE the body
 		// swap, so the first post-deploy navigation never flashes unstyled content (a full-width column
@@ -882,30 +882,30 @@ class SpaRouter {
 	}
 
 	/**
-	 * ROUTE WEAVING. Collect the incoming page's deferred, load-timed region calls and stream them as
+	 * SINGLE-FLIGHT NAVIGATION. Collect the incoming page's deferred, load-timed region calls and stream them as
 	 * one batch. Reads the RENDERED holes (`<ogygia-region render="defer" endpoint>`), so it covers
 	 * both placed server islands and held `region()` deferred regions alike — authoring syntax is
-	 * irrelevant. Only `when="load"` (or unset) is woven: a region scheduled `visible`/`idle`/media
+	 * irrelevant. Only `when="load"` (or unset) is batched: a region scheduled `visible`/`idle`/media
 	 * stays lazy and fetches on its own trigger, so dynamic schedules are preserved, not eagerly pulled.
 	 */
-	#weave_regions(doc: Document) {
+	#batch_regions(doc: Document) {
 		const endpoints: string[] = [];
-		const woven = new Set<string>();
+		const batched = new Set<string>();
 		for (const el of Array.from(doc.querySelectorAll('ogygia-region[render="defer"][endpoint]'))) {
 			const when = el.getAttribute('when') || 'load';
 			if (when !== 'load') continue; // lazy schedules keep their own timing — never batch them early
 			const ep = el.getAttribute('endpoint');
 			if (ep) {
 				endpoints.push(ep);
-				woven.add(ep);
+				batched.add(ep);
 			}
 		}
 		if (!endpoints.length) return;
 		// Drop the per-region `<link rel="preload" as="fetch">` hints for these calls before the head is
-		// merged: on initial load they front-run the fetch, but on a woven navigation the batch serves
-		// them — left in, the browser would fire the very GET waterfall weaving exists to remove.
+		// merged: on initial load they front-run the fetch, but on a single-flight navigation the batch serves
+		// them — left in, the browser would fire the very GET waterfall the single-flight batch exists to remove.
 		for (const link of Array.from(doc.querySelectorAll('link[rel="preload"][as="fetch"]'))) {
-			if (woven.has(link.getAttribute('href') || '')) link.remove();
+			if (batched.has(link.getAttribute('href') || '')) link.remove();
 		}
 		// Through the seam, never a static `frame-nav` import: an app with `router` but no
 		// deferred/live/lake region has no `frames` feature (and no `render="defer"` holes — so

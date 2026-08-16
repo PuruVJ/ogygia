@@ -52,7 +52,7 @@ The router honors Kit's full preload grammar, so existing `data-sveltekit-preloa
 
 Values `eager` / `viewport` / `hover` / `tap` warm the page-HTML cache at the matching moment, with Kit's nearest-ancestor inheritance.
 
-## Weaving server islands {#weave}
+## Single-flight navigation {#single-flight}
 
 When you navigate into a page with several [server islands](/docs/regions/server-islands), the router prescans the incoming page and pulls **all** its `render: 'deferred'` load holes down **one** batch request — not a fetch per hole, no waterfall. It is automatic; there is no attribute to set.
 

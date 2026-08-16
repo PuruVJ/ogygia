@@ -1,5 +1,5 @@
 /**
- * Region parcels for the batch endpoint (route weaving / navigation OOO). Each rendered region call
+ * Region parcels for the batch endpoint (single-flight navigation, OOO). Each rendered region call
  * is boxed as a `<template data-ogygia-slot>` parcel keyed by its capability signature; the client
  * frame stream reads them out of order and drops each into the matching region. A done-sentinel ends
  * the batch. `<template>` content is inert (no paint, no scripts, no image loads), so a parcel is

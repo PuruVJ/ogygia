@@ -149,7 +149,7 @@ describe('frame-store: eviction (no leak)', () => {
 	});
 });
 
-describe('frame-store: reservation (route weaving)', () => {
+describe('frame-store: reservation (single-flight navigation)', () => {
 	it('ensure() JOINS a reservation instead of fetching; write() fulfils it', async () => {
 		// A batch reserves the address before the binder connects. The binder's ensure() must NOT fetch.
 		frames.reserve('/r?sig=1');

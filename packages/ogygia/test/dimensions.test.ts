@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as v from 'valibot';
 import { content } from '../src/content/index.js';
 import type { Heading, Source, SourceEntry } from '../src/content/index.js';
-import { contentkit as contentkitRaw } from '../src/content/site/site.js';
+import { defineSite as defineSiteRaw } from '../src/content/site/site.js';
 import { dimensions, is_dimensioned } from '../src/content/site/dimensions.js';
 import type { NavGroup, NavLeaf, NavTree } from '../src/content/site/types.js';
 
@@ -10,9 +10,9 @@ type Meta = { headings: Heading[] };
 
 // Test shim: keep the positional call style; the real API is `mint_site({ outline, …opts })`.
 const mint_site = (
-	outlineArg: Parameters<typeof contentkitRaw>[0]['outline'],
-	opts: Partial<Parameters<typeof contentkitRaw>[0]> = {}
-) => contentkitRaw({ outline: outlineArg, ...opts });
+	outlineArg: Parameters<typeof defineSiteRaw>[0]['outline'],
+	opts: Partial<Parameters<typeof defineSiteRaw>[0]> = {}
+) => defineSiteRaw({ outline: outlineArg, ...opts });
 
 function fromArray(entries: SourceEntry<Meta>[]): Source<Meta> {
 	const map = new Map(entries.map((e) => [e.id, e]));
@@ -56,7 +56,7 @@ const dim = () =>
 			version: { values: ['v1', 'v2'], default: 'v2', label: 'Version' },
 			locale: { values: ['en', 'fr'], default: 'en', fallback: true, label: 'Language' }
 		},
-		weave: ({ version, locale }) => (version === 'v1' ? v1() : locale === 'fr' ? fr() : en())
+		resolve: ({ version, locale }) => (version === 'v1' ? v1() : locale === 'fr' ? fr() : en())
 	});
 
 const site = () => mint_site(dim(), { prevNext: 'order' });

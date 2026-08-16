@@ -1,27 +1,27 @@
 ---
 title: Outline
-summary: The weaver. Take any number of collections and an arrangement, derive one normalized nav tree plus an address map. A bare collection weaves by convention; pick, groups, and links arrange by hand.
+summary: The arranger. Take any number of collections and an arrangement, derive one normalized nav tree plus an address map. A bare collection arranges by convention; pick, groups, and links arrange by hand.
 related:
-  - content-kit/content-kit
-  - content-kit/dimensions
+  - site/site
+  - site/dimensions
   - content/collections
 ---
 
 The outline is the one place a site's structure is decided. It takes your collections and an **arrangement spec**, and derives a single normalized tree — the `NavTree` — plus the address map that every other brain reads. Nav, prev/next, section labels, sitemap, prerender entries: all are views of this one tree.
 
 ::: tip When to use
-You give `contentkit()` an outline whenever a site is more than one flat list — multiple collections, hand-ordered sections, a landing link in the sidebar. For a single convention-ordered collection, pass it bare and skip this entirely.
+You give `defineSite()` an outline whenever a site is more than one flat list — multiple collections, hand-ordered sections, a landing link in the sidebar. For a single convention-ordered collection, pass it bare and skip this entirely.
 :::
 
-## A bare collection weaves itself
+## A bare collection arranges itself
 
 The simplest outline is a collection. When that collection is a [`folder()`](/docs/content/collections), its filenames already carry structure, and the outline reads it as data:
 
 ```ts
-import { contentkit } from 'ogygia/content';
+import { defineSite } from 'ogygia/content';
 import { docs } from './collections.server';
 
-export const site = contentkit({ outline: docs });
+export const site = defineSite({ outline: docs });
 ```
 
 `NN-` prefixes order siblings and are stripped from the URL (`03-routing` → `/routing`, sorted third). A `+meta.json` sidecar names a section. Nothing else to say — the tree is the folder tree.
@@ -31,9 +31,9 @@ export const site = contentkit({ outline: docs });
 When you want to arrange by hand, `outline()` takes a list. Every form composes with every other:
 
 ```ts
-import { outline, pick, contentkit } from 'ogygia/content';
+import { outline, pick, defineSite } from 'ogygia/content';
 
-export const site = contentkit({
+export const site = defineSite({
 	outline: outline([
 		{ label: 'Start', items: pick(docs, 'overview', 'install', 'quickstart') },
 		docs,                                      // a bare collection: the not-yet-placed remainder
@@ -70,7 +70,7 @@ Every entry lands **exactly once**. A bare collection consumes whatever is not y
 Each fails the build with the id and the reason.
 
 ::: tip Move fearlessly
-Because placement is verified, reorganizing is safe by construction: move a file, and either the tree just updates (convention placement) or the build names the `pick` id that no longer matches. Pair it with the [link audit](/docs/content-kit/checks) and inbound links are covered too.
+Because placement is verified, reorganizing is safe by construction: move a file, and either the tree just updates (convention placement) or the build names the `pick` id that no longer matches. Pair it with the [link audit](/docs/site/checks) and inbound links are covered too.
 :::
 
 ## Conventions: order and dates
@@ -107,7 +107,7 @@ export const posts = folder(
 
 ## The address map
 
-Beyond the tree, the outline knows how to **resolve** a slug to its entry and how to enumerate every address. Downstream brains use this directly — `site.entries()` for prerender inputs, `site.doc(slug)` to resolve one page, `switcher()` on a [dimensioned](/docs/content-kit/dimensions) site. When you build custom chrome, `hrefOf(base, slug)` is the one sanctioned way to turn an address into a link — it is what keeps a site correct under any mount prefix:
+Beyond the tree, the outline knows how to **resolve** a slug to its entry and how to enumerate every address. Downstream brains use this directly — `site.entries()` for prerender inputs, `site.doc(slug)` to resolve one page, `switcher()` on a [dimensioned](/docs/site/dimensions) site. When you build custom chrome, `hrefOf(base, slug)` is the one sanctioned way to turn an address into a link — it is what keeps a site correct under any mount prefix:
 
 ```ts
 import { hrefOf } from 'ogygia/content';
@@ -118,15 +118,15 @@ hrefOf('', 'routing');        // '/routing'
 
 ## Prev/next
 
-"Keep reading" comes from two dials on `contentkit()`:
+"Keep reading" comes from two dials on `defineSite()`:
 
 ```ts
-contentkit({ outline: docs, prevNext: 'graph', trail: 'group' });
+defineSite({ outline: docs, prevNext: 'graph', trail: 'group' });
 ```
 
 - **`prevNext: 'order'`** (default) — plain document order, the sidebar read top to bottom.
 - **`prevNext: 'graph'`** — follow the content graph (an entry's declared relations), falling back to order; a page's next is the one it links onward to.
-- **`trail: 'weave'`** (default) — the trail runs through the whole corpus.
+- **`trail: 'site'`** (default) — the trail runs through the whole site.
 - **`trail: 'group'`** — prev/next stops at the top-level section boundary, so a multi-topic site never links across topics.
 
 The `<Pager>` component and `site.doc()`'s `prevNext` field both read whatever you set.

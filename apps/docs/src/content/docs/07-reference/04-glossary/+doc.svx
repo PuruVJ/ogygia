@@ -47,10 +47,10 @@ The whole vocabulary in one place. If a word in the docs is unfamiliar, it is de
 - **Entry** — a single item: `{ id, data, meta, body }`, where `body` is a held region and `meta` is source-derived (e.g. `{ headings }`).
 - **Source / loader** — where a collection's entries come from: a `{ get, list, ids }` object. `markdown()`, `json()`, `blocks()` build one from a glob; write your own to fetch a CMS. See [Content collections](/docs/content/collections).
 
-## PPR & weaving
+## PPR & single-flight
 
 - **PPR (partial prerendering)** — a static shell baked at build with dynamic held regions filled per visitor at request time. `export const prerender = true` + `render: 'deferred'` holes. See [Partial prerendering](/docs/app/router).
-- **Route weaving** — on a SPA navigation, the router pulls all of the incoming page's load holes down **one** batch request instead of a fetch per hole. See [SPA router](/docs/app/router#weave).
+- **Single-flight navigation** — on a SPA navigation, the router pulls all of the incoming page's load holes down **one** batch request instead of a fetch per hole. See [SPA router](/docs/app/router#single-flight).
 - **Parcel** — one hole's rendered HTML in a batch response, delivered as a `<template data-ogygia-slot>`.
 - **Out-of-order flush** — batched holes stream back in settle order, so a fast region lands before a slow one regardless of source order.
 - **Single-flight mutation** — a command that returns a region sends the re-rendered HTML back in its own response, so the mounted region repaints with no follow-up fetch.

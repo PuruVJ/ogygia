@@ -4,7 +4,7 @@
  * {@link Source} (`{ init?, refs, get, live?, groups? }`).
  *
  * The refs/get split is load-bearing here: the catalog is materialized from `source.refs()` — pure
- * metadata — so nav/weave/graph never fetch a body. A body is fetched exactly once, by `get(id)`, on
+ * metadata — so nav/outline/graph never fetch a body. A body is fetched exactly once, by `get(id)`, on
  * the read that renders it. Visibility (`filter`) is applied at READ time with an optional request
  * context, so the catalog stays a single unfiltered instance (no per-request cache to poison).
  */

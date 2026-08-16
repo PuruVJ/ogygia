@@ -5,11 +5,11 @@
  *  - `get(id)` — ONE full entry: a ref plus the two heavy faces (`body`, lazy `source`). The only
  *    read that pays to materialize a renderable.
  *
- * That split is the contract's spine: nav/weave/search-display/graph all consume refs; a page body is
+ * That split is the contract's spine: nav/outline/search-display/graph all consume refs; a page body is
  * fetched exactly once, by `get`, on the read that renders it. A filesystem glob makes both cheap; a
  * CMS maps `refs` to its shallow index endpoint and `get` to its document endpoint.
  *
- * Two more optional facets carry structure a backend knows and the weave can't derive:
+ * Two more optional facets carry structure a backend knows and the outline can't derive:
  *  - `order` (per ref) — sibling order as data (folder() fills it from `NN-`; a CMS from a position field).
  *  - `groups()` — directory/section decoration as a map (folder() from `+meta.json`; a CMS from folders).
  *

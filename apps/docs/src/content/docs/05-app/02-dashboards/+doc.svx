@@ -125,7 +125,7 @@ Not every tile earns hydration. A "recent orders" list nobody interacts with is 
 </script>
 ```
 
-Each `render: 'deferred'` hole fetches its own HTML on load, and on a SPA navigation [route weaving](/docs/app/router#weave) pulls them all down one batch request — no waterfall. `render: 'deferred', wake: 'visible'` tiles below the fold don't even cost the server a render until scrolled to.
+Each `render: 'deferred'` hole fetches its own HTML on load, and on a SPA navigation [single-flight navigation](/docs/app/router#single-flight) pulls them all down one batch request — no waterfall. `render: 'deferred', wake: 'visible'` tiles below the fold don't even cost the server a render until scrolled to.
 
 Two refinements for the tiles you *do* hydrate:
 

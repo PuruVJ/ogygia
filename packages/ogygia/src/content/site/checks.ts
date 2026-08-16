@@ -7,7 +7,7 @@
  *  - `site()` — whole-corpus, for `site.check()` (CI / vitest / dynamic sites) as plain data, never throws.
  *
  * Structural invariants (orphans, slug collisions, `NN-` verification) are NOT checks — they are
- * always-on build errors in the weave/`folder()`. Checks are opt-in POLICY.
+ * always-on build errors in the outline/`folder()`. Checks are opt-in POLICY.
  */
 import type { LinkRef } from '../index.js';
 import { href_of, type Outline } from './outline.js';
@@ -83,8 +83,8 @@ export type LinkOptions = {
  * anchors, and stale redirect links. A blocks/CMS corpus that collects no `meta.links` is warned
  * about once (dev), then passes (any format can fill `meta.links` to opt in).
  *
- *   contentkit({ outline: docs, checks: [links()] })
- *   contentkit({ outline: docs, checks: [links({ anchors: false, redirected: 'error' })] })
+ *   defineSite({ outline: docs, checks: [links()] })
+ *   defineSite({ outline: docs, checks: [links({ anchors: false, redirected: 'error' })] })
  */
 export function links(opts: LinkOptions = {}): Check {
 	const anchors = opts.anchors ?? true;
