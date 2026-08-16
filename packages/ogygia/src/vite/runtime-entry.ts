@@ -17,7 +17,6 @@ export type RuntimeMarks = {
 	live?: boolean;
 	morph?: boolean;
 	lakes?: boolean;
-	speculate?: 'hover' | 'viewport' | false;
 	forms?: boolean;
 	wire?: boolean;
 	remoteSeeds?: boolean;
@@ -34,7 +33,7 @@ export type FeatureId =
 	| 'forms'
 	| 'persist'
 	| 'router'
-	| 'speculate';
+;
 
 export type FeatureDef = {
 	/** Path relative to `runtime/` (no leading ./). */
@@ -79,11 +78,6 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 		deps: [],
 		detect: (m) => m.live === true
 	},
-	speculate: {
-		module: 'speculate.js',
-		deps: [],
-		detect: (m) => m.speculate === 'hover' || m.speculate === 'viewport'
-	},
 	wire: {
 		module: '../live-transport.js',
 		deps: [],
@@ -116,8 +110,7 @@ export const FEATURE_ORDER: FeatureId[] = [
 	'interaction',
 	'forms',
 	'persist',
-	'router',
-	'speculate'
+	'router'
 ];
 
 /** Resolve the closed feature set for a marks manifest. */

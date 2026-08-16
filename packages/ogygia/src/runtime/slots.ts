@@ -107,8 +107,6 @@ export type FrameOps = {
 	stream(endpoints: string[]): Promise<void>;
 };
 
-export type SpeculateOps = { reinstall(): void };
-
 /**
  * Per-document lifecycle, filled by {@link ./core.js core} in `boot()` (not by a feature). The
  * router reads it around a body swap so router modules never import core's Svelte component graph.
@@ -140,7 +138,6 @@ export type Slots = {
 	wire: WireOps | null;
 	remoteSeeds: RemoteSeedOps | null;
 	frames: FrameOps | null;
-	speculate: SpeculateOps | null;
 	spaLifecycle: SpaLifecycle | null;
 	nav: NavOps | null;
 };
@@ -174,7 +171,6 @@ export const slots: Slots = {
 	wire: null,
 	remoteSeeds: null,
 	frames: null,
-	speculate: null,
 	spaLifecycle: null,
 	nav: null
 };

@@ -42,7 +42,7 @@ const PROFILES: Array<{ name: string; blurb: string; marks: RuntimeMarks }> = [
 		marks: {
 			complete: true, hydrate: ['load', 'interaction', 'none'], defer: ['load'], router: true,
 			live: true, morph: true, lakes: true, persist: true, persistKeys: ['x'], forms: true,
-			wire: true, remoteSeeds: true, speculate: 'hover'
+			wire: true, remoteSeeds: true
 		}
 	}
 ];

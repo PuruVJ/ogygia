@@ -33,7 +33,8 @@ import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
 import {
 	enabled as router_enabled,
-	viewTransitions as router_view_transitions
+	viewTransitions as router_view_transitions,
+	speculationRules as mpa_speculation_rules
 } from 'virtual:ogygia/router-config';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
@@ -263,6 +264,16 @@ class OgygiaHandle {
 		// The runtime URL is root-relative (base-correct for `base: ''`); island pages under a base
 		// path get the base-correct URL from Region's `asset()`, so only base-path + island-less pages
 		// are affected — a rare follow-up.
+		// MPA mode (`router: false`): no SPA machinery ships — the browser owns navigation, so the
+		// handle injects static Speculation Rules instead. Chromium prerenders likely next pages,
+		// Firefox prefetches them, everything else ignores the JSON. Presence-checked so a page
+		// authoring its own rules wins; per-link opt-out via `data-ogygia-speculate="off"`.
+		if (!router_enabled && mpa_speculation_rules && !html.includes('type="speculationrules"') && html.includes('</head>')) {
+			html = html.replace(
+				'</head>',
+				`<script type="speculationrules" data-ogygia-speculate>${mpa_speculation_rules}</script></head>`
+			);
+		}
 		if (router_enabled) {
 			const head: string[] = [];
 			if (!html.includes('name="ogygia-router"')) {

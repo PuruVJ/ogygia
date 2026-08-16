@@ -331,6 +331,37 @@ export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.js
 const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;
 
 /**
+ * Static Speculation Rules for MPA mode (`router: false`) — the server handle injects them into
+ * every page head. Document rules covering same-origin links, with a per-link/subtree opt-out
+ * (`data-ogygia-speculate="off"`, re-enable with `"on"`); the region endpoint is never speculated.
+ * BOTH lists ship: a prerender-capable browser prerenders (prefetch is its first stage), a
+ * prefetch-only browser prefetches, an unsupporting one ignores the JSON entirely — graceful by
+ * construction, no JS fallback. In SPA mode no rules exist at all: speculation caches serve real
+ * navigations only, which a body-swap router can never read.
+ *
+ * @internal Exported for unit tests.
+ */
+export function mpaSpeculationRules(): string {
+	const where = {
+		and: [
+			{ href_matches: '/*' },
+			{ not: { href_matches: '/\u{1F3DD}\u{FE0F}*' } },
+			{ not: { selector_matches: '[rel~=nofollow]' } },
+			{
+				or: [
+					{ not: { selector_matches: '[data-ogygia-speculate="off"], [data-ogygia-speculate="off"] *' } },
+					{ selector_matches: '[data-ogygia-speculate="on"], [data-ogygia-speculate="on"] *' }
+				]
+			}
+		]
+	};
+	return JSON.stringify({
+		prerender: [{ where, eagerness: 'moderate' }],
+		prefetch: [{ where, eagerness: 'moderate' }]
+	});
+}
+
+/**
  * From a client `generateBundle` output, collect transitive static `imports` for each
  * `og-region.<id>.js` facade. Keys/values are public URLs (`/_app/immutable/…`).
  * Used so SSR can `modulepreload` hashed dependency chunks for `hydrate: 'load'` islands
@@ -557,13 +588,9 @@ export interface OgygiaOptions {
 	 * - `forms` (default `true`): an island's half-filled form fields survive SPA navigation and
 	 *   back/forward within the tab session. Restored on return, with `bind:` synced. Set `false`
 	 *   to disable.
-	 * - `speculate` (default off): emit native Speculation Rules so the browser prerenders likely
-	 *   next pages. `'hover'` (moderate eagerness) or `'viewport'` (eager). PPR shells make this
-	 *   nearly free. Same-origin only; use only when GET navigations are side-effect-free.
 	 */
 	continuity?: {
 		forms?: boolean;
-		speculate?: 'hover' | 'viewport' | false;
 	};
 
 	/**
@@ -664,18 +691,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				? options.router.viewTransitions !== false
 				: true;
 
-	// CONTINUITY config. Ambient island-form survival across SPA nav is ON by default; speculation
-	// rules (native prerender of likely-next pages) are opt-in ('hover' | 'viewport').
+	// CONTINUITY config. Ambient island-form survival across SPA nav is ON by default.
 	const continuity_forms = options.continuity?.forms !== false;
-	const continuity_speculate: 'hover' | 'viewport' | false =
-		options.continuity?.speculate === 'hover' || options.continuity?.speculate === 'viewport'
-			? options.continuity.speculate
-			: false;
+
 
 	/** Build-time capability marks for the sticky runtime entry. Incomplete → kitchen-sink. */
 	const runtime_marks: RuntimeMarks = {
 		complete: false,
-		speculate: continuity_speculate === false ? false : continuity_speculate,
 		forms: continuity_forms,
 		// The wire runtime (transportable-class + portable-snippet prop revival, ~8kB) is the ONLY
 		// consumer of `slots.wire` (read_region_props). It's off until the prescan proves the app
@@ -1218,8 +1240,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						// CONTINUITY config → compile-time constants the client runtime reads (typeof-guarded,
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
-							__OGYGIA_CONTINUITY_FORMS__: JSON.stringify(continuity_forms),
-							__OGYGIA_CONTINUITY_SPECULATE__: JSON.stringify(continuity_speculate)
+							__OGYGIA_CONTINUITY_FORMS__: JSON.stringify(continuity_forms)
 						},
 						server: {
 							fs: {
@@ -1728,10 +1749,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 			if (id === RESOLVED(V_ROUTER_CONFIG)) {
 				// The handle reads this to inject the runtime + `ogygia-router` meta into every page head
-				// (app-wide SPA router). Just two booleans; safe on either leg.
+				// (app-wide SPA router). With the router OFF (MPA mode) it instead carries the static
+				// Speculation Rules the handle injects: the browser prerenders (Chromium) or prefetches
+				// (Firefox) likely next pages natively — nothing to inject where unsupported (Safari), no
+				// JS fallback to phase out. In SPA mode the rules are EMPTY on purpose: speculation caches
+				// serve real navigations only, which a body-swap router can never read — the router's own
+				// prefetch + module warming is the working equivalent there.
 				return (
 					`export const enabled = ${router_enabled};\n` +
-					`export const viewTransitions = ${router_view_transitions};`
+					`export const viewTransitions = ${router_view_transitions};\n` +
+					`export const speculationRules = ${JSON.stringify(router_enabled ? '' : mpaSpeculationRules())};`
 				);
 			}
 			if (id === RESOLVED(V_SESSION_COOKIE)) {

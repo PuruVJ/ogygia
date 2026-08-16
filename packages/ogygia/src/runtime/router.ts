@@ -12,6 +12,7 @@ import { slots } from './slots.js';
 import type { PersistPair } from './persist.js';
 import { runtime_session } from './session.js';
 import { island_module_url, warm_island_module } from './region-endpoint-url.js';
+import { speculate_url } from './speculate-hint.js';
 
 const WS = /\s+/;
 
@@ -977,18 +978,30 @@ export function invalidate() {
 }
 
 /**
- * Warm the SPA HTML cache for a URL.
- * Note: this fetches the **page**, not Kit `load` data in isolation.
+ * Warm the next page. Router ON (SPA): fetch the page into the swap-readable HTML cache (+ its
+ * island modules) — this is what makes the eventual click instant, and no browser cache can feed a
+ * body swap. Router OFF (MPA, this module reached via the `$app/navigation` shim / `ogygia/app`):
+ * the browser owns navigation, so hint a native Speculation Rules PRERENDER for the URL — Chromium
+ * activates it on the real navigation; unsupporting browsers silently ignore it.
  */
 export function preloadData(url: string | URL) {
+	if (!slots.nav) {
+		speculate_url(url, 'prerender');
+		return Promise.resolve({ type: 'loaded' as const, status: 200, data: {} });
+	}
 	return spa.preloadData(url);
 }
 
 /**
- * No-op under ogygia — page “code” arrives with the HTML body swap (+ island chunks on connect).
- * Kept for Kit `$app/navigation` API parity.
+ * Router ON: no-op — page “code” arrives with the HTML body swap (+ island chunks on connect).
+ * Router OFF: hint a native Speculation Rules PREFETCH for the URL (the code-only speculation leg —
+ * Firefox supports it; a prerender-capable browser treats prefetch as prerender's first stage).
  */
-export function preloadCode() {
+export function preloadCode(url?: string | URL) {
+	if (!slots.nav) {
+		if (url != null) speculate_url(url, 'prefetch');
+		return Promise.resolve();
+	}
 	return spa.preloadCode();
 }
 

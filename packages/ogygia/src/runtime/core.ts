@@ -381,8 +381,6 @@ export function prepare_spa_document() {
  */
 export function finish_spa_document() {
 	slots.remoteSeeds?.clear_remote_instances();
-	// A client-injected speculation script does not survive the SPA head-merge — re-add it.
-	slots.speculate?.reinstall();
 }
 
 class OgygiaRegion extends HTMLElement {

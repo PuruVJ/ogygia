@@ -60,20 +60,13 @@ The flush is out of order: each hole's HTML comes back the moment that region se
 
 ## Speculative prerender {#speculate}
 
-Prefetch warms the *HTML cache*. **Speculation goes further: the browser fully prerenders the next page** — runs its JS, fills its islands, resolves its server-island holes — in a hidden tab, before you click. Click, and it is swapped in instantly, already interactive.
+Prefetch warms the *HTML cache*. **Speculation goes further: the browser fully prerenders the next page** — runs its JS, fills its islands, resolves its server-island holes — in a hidden tab, before you click. Click, and the prerendered page is activated instantly, already interactive.
 
-Turn it on in the plugin config:
+It is **automatic, and it belongs to MPA mode**. With `router: false` the browser owns navigation, so ogygia's server handle injects one native [Speculation Rules](https://developer.mozilla.org/en-US/docs/Web/API/Speculation_Rules_API) script into every page — no config, no client JS. The rules carry both legs: a prerender-capable browser prerenders likely next pages (moderate eagerness — ~hover dwell), a prefetch-only browser prefetches them, and an unsupporting one ignores the JSON entirely. Nothing to feature-detect, nothing to fall back to.
 
-```ts title=vite.config.ts
-ogygia({
-  continuity: {
-    speculate: 'hover'    // prerender on ~200ms hover dwell (moderate eagerness)
-    // speculate: 'viewport'  // prerender as soon as a link scrolls into view (eager)
-  }
-});
-```
+With the router **on**, ogygia deliberately emits no rules. Speculation caches are handed only to *real* navigations — a body-swap router can never read them, so a speculated page would just be downloaded twice (and a prerendered one rendered, then thrown away). The router's own [prefetch](#prefetch) plus island-module warming is the same idea, implemented against a cache the swap can actually use.
 
-It uses the native [Speculation Rules API](https://developer.mozilla.org/en-US/docs/Web/API/Speculation_Rules_API) — no library, no client cost. ogygia injects one rules script that matches same-origin path links, and it is feature-detected: where the browser has no support it does nothing (the router's own prefetch still applies).
+`preloadData` / `preloadCode` follow the mode. Router on: `preloadData(url)` warms the swap cache (and the page's island modules); `preloadCode` is a no-op — code arrives with the swap. Router off: `preloadData(url)` hints a native **prerender** for that URL and `preloadCode(url)` a native **prefetch**, so programmatic warming speaks the platform's language too.
 
 Two things are never speculated: the signed region endpoint, and `rel="nofollow"` links. Beyond that, `data-ogygia-speculate` gives you a cascade — set `off` on a subtree, and `on` back on a single link (or subtree) inside it. `on` wins over `off`.
 

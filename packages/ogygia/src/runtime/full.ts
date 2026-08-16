@@ -17,7 +17,6 @@ import * as interaction from './interaction.js';
 import * as forms from './form-continuity.js';
 import * as persist from './persist.js';
 import * as router from './router.js';
-import * as speculate from './speculate.js';
 
 /** Boot the kitchen-sink runtime (all features). Idempotent via {@link ./core.js boot}. */
 export function bootDev(): void {
@@ -30,7 +29,6 @@ export function bootDev(): void {
 		interaction.install,
 		forms.install,
 		persist.install,
-		router.install,
-		speculate.install
+		router.install
 	]);
 }
