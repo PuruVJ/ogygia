@@ -1,7 +1,7 @@
 /**
  * The ogygia component barrel — every piece of chrome in one place. Each export is perfectly
  * tree-shakeable (import a brick, ship a brick); styling stays an explicit import
- * (`import 'ogygia/content/theme.css'` — skip it for zero CSS). Logic (outline, defineSite, search,
+ * (`import 'ogygia/content/theme.css'` — skip it for zero CSS). Logic (outline, sitekit, search,
  * dimensions, …) lives one level up; this directory is COMPONENTS ONLY.
  */
 export { default as Frame } from './Frame.svelte';

@@ -1,7 +1,7 @@
 /**
  * Server-only remote layer for an ogygia site. The ONLY ogygia module that imports `$app/server`, so
  * it must be used from a `.remote.ts` (Kit guarantees those run on the server). Mirrors
- * `withRemotes()` from `ogygia/content/server`: the browser-safe `defineSite()` defines the site once;
+ * `withRemotes()` from `ogygia/content/server`: the browser-safe `sitekit()` defines the site once;
  * `remotes(site)` mints the wire access.
  *
  * ```ts

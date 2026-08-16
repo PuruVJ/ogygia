@@ -1,7 +1,7 @@
 /**
  * Emissions — machine-facing serializations of the site, the second audience docs have in 2026.
  * Pure functions over a resolved `NavTree`: a sitemap for crawlers, an `llms.txt` index for models.
- * No I/O, no request — `defineSite()` wraps these in GET handlers that supply the origin. Leaf hrefs are
+ * No I/O, no request — `sitekit()` wraps these in GET handlers that supply the origin. Leaf hrefs are
  * already mount-resolved (root-relative), so an absolute URL is just `origin + href`.
  *
  * (Per-page raw `.md` / `llms-full.txt` need the entry SOURCE text, which the content pillar does not

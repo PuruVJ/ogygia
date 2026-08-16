@@ -409,7 +409,7 @@ async function site_init(): Promise<void> {
 	place(
 		'src/lib/docs.ts',
 		`import { content, markdown } from 'ogygia/content';
-import { outline, defineSite } from 'ogygia/content';
+import { outline, sitekit } from 'ogygia/content';
 
 // A docs collection: every file under \`src/content/docs\` becomes a page. Its id is the path below
 // \`content/docs\` without the extension, so \`guides/deploy.svx\` is served at \`/guides/deploy\`.
@@ -417,8 +417,8 @@ const docs = content({
 	loader: markdown(import.meta.glob('../content/docs/**/*.svx', { eager: true }))
 });
 
-// \`defineSite()\` mints the site the shell + routes consume.
-export const site = defineSite(outline([{ label: 'Docs', items: docs }]), { prevNext: 'graph' });
+// \`sitekit()\` mints the site the shell + routes consume.
+export const site = sitekit(outline([{ label: 'Docs', items: docs }]), { prevNext: 'graph' });
 `,
 		force
 	);

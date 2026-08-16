@@ -121,10 +121,10 @@ The body inside `view` is a baked [region](/docs/regions/held-regions) ticket, s
 
 ## Overriding markdown elements
 
-The `components` map on `defineSite()` replaces how markdown elements render, with **real component values in app code** — no import-path config. The compiled markup routes overridable tags through one slot; at render it looks the tag up in the map:
+The `components` map on `sitekit()` replaces how markdown elements render, with **real component values in app code** — no import-path config. The compiled markup routes overridable tags through one slot; at render it looks the tag up in the map:
 
 ```ts
-export const site = defineSite({
+export const site = sitekit({
 	outline: docs,
 	components: { img: OptimizedImage, code: FancyCode }
 });

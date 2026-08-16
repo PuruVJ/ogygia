@@ -15,10 +15,10 @@ Turn on `links()` for any site with cross-references — which is every docs sit
 
 ## The link audit
 
-Pass `checks` to `defineSite()`. `links()` resolves every markdown link in every body against the site's own address space:
+Pass `checks` to `sitekit()`. `links()` resolves every markdown link in every body against the site's own address space:
 
 ```ts
-export const site = defineSite({ outline: docs, checks: [links()] });
+export const site = sitekit({ outline: docs, checks: [links()] });
 ```
 
 A link to a page that does not exist, or an `#anchor` that no heading emits, is a finding. **This site runs it** — the cross-links you are clicking through this section were verified by exactly this check. When one of these pages linked to a sibling that had not been written yet, the build refused until it existed.
@@ -75,7 +75,7 @@ export function requireSummary(): Check {
 import { links } from 'ogygia/content';
 import { requireSummary } from '$lib/checks';
 
-export const site = defineSite({ outline: docs, checks: [links(), requireSummary()] });
+export const site = sitekit({ outline: docs, checks: [links(), requireSummary()] });
 ```
 
 Severity is the dial: `'error'` throws from `load` (fails the build at prerender, blocks the page in dev); `'warn'` surfaces in `site.check()` findings without ever blocking a render.

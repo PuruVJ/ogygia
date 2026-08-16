@@ -67,10 +67,10 @@ export const GET = site.emit.search();
 
 Both are **views of the nav tree** — every leaf, in reading order. That is the property worth having: a new page joins the sitemap and the model index the moment the outline sees it, and neither can drift from the site because neither is a second copy of anything.
 
-`origin` matters when prerendered: at build time there is no request to read an origin from, so absolute URLs come from the option — or from `defineSite({ data: { origin } })`, which every emission defaults to:
+`origin` matters when prerendered: at build time there is no request to read an origin from, so absolute URLs come from the option — or from `sitekit({ data: { origin } })`, which every emission defaults to:
 
 ```ts
-export const site = defineSite({
+export const site = sitekit({
 	outline: docs,
 	data: { title: 'Example', description: 'Docs for Example.', origin: 'https://example.dev' }
 });

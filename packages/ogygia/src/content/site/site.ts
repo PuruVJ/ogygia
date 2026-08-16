@@ -1,11 +1,11 @@
 /**
- * `defineSite()` — mints a docs site over an outline (or a bare collection, which it auto-wraps). Returns
+ * `sitekit()` — mints a docs site over an outline (or a bare collection, which it auto-wraps). Returns
  * BRAINS ONLY: `load` / `entries` for the mount, `nav()` for the sidebar, `doc()` for the page. Every
  * one returns plain serializable data — no components, nothing global, nothing registered. A weird
  * route can ignore the site entirely; the ceiling is the app.
  *
  * ```ts
- * export const site = defineSite(nav, { prevNext: 'graph' });   // defineSite(docs) wraps a single collection
+ * export const site = sitekit(nav, { prevNext: 'graph' });   // sitekit(docs) wraps a single collection
  *
  * // (docs)/[...slug]/+page.ts
  * export const prerender = true;
@@ -44,7 +44,7 @@ export type SiteMeta = {
 /** A request context the site derives per read (preview, roles) and threads into collection filters. */
 export type ReadContext = Record<string, unknown>;
 
-/** The single-object argument to `defineSite()`. `outline` is the only required key. */
+/** The single-object argument to `sitekit()`. `outline` is the only required key. */
 export type SiteOptions = {
 	/** The arrangement: a collection, an outline node[], or `dimensions()`. Auto-woven into an `Outline`. */
 	outline: Outline | OutlineSpec;
@@ -162,7 +162,7 @@ function is_outline(x: unknown): x is Outline {
 
 /**
  * The site brains as a class — state (outline, prevNext, checks, search) as fields, each brain a
- * method. `defineSite()` mints one; nothing here is global or registered.
+ * method. `sitekit()` mints one; nothing here is global or registered.
  */
 class OgygiaSite implements Site {
 	readonly outline: Outline;
@@ -354,8 +354,8 @@ class OgygiaSite implements Site {
 	}
 }
 
-/** Mint the site brains. `defineSite({ outline })` is the only required key; a bare collection auto-weaves. */
-export function defineSite(opts: SiteOptions): Site {
+/** Mint the site brains. `sitekit({ outline })` is the only required key; a bare collection auto-weaves. */
+export function sitekit(opts: SiteOptions): Site {
 	return new OgygiaSite(opts);
 }
 

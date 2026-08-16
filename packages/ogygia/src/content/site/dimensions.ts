@@ -1,7 +1,7 @@
 /**
  * `dimensions()` — the i18n / versioning primitive, kept true to the doctrine: a dimension is an
  * AXIS (version, locale), content is the MATRIX of coordinates, and the outline is woven PER
- * coordinate. `class Dimensions` wraps N outlines into ONE `Outline` the same `defineSite()` consumes —
+ * coordinate. `class Dimensions` wraps N outlines into ONE `Outline` the same `sitekit()` consumes —
  * the coordinate is parsed off the FRONT of the slug (no route changes; the default coordinate is bare).
  *
  * Design decisions (see internal/notes/ogygia.md), learned from Starlight / Fumadocs / Docusaurus:
@@ -54,7 +54,7 @@ export type Switcher = SwitcherAxis[];
 /** What fell back for a page (which axis, from → to), or null when the page is native. */
 export type Fallback = { axis: string; from: string; to: string } | null;
 
-/** An `Outline` with the coordinate extras `defineSite()` surfaces (switcher, fallback, coordinate). */
+/** An `Outline` with the coordinate extras `sitekit()` surfaces (switcher, fallback, coordinate). */
 export interface Dimensioned extends Outline {
 	readonly __dimensioned: true;
 	axes: Record<string, Axis>;
@@ -301,7 +301,7 @@ class Dimensions implements Dimensioned {
 	}
 }
 
-/** Mint a dimensioned outline — the i18n/versioning wrapper `defineSite()` consumes like any outline. */
+/** Mint a dimensioned outline — the i18n/versioning wrapper `sitekit()` consumes like any outline. */
 export function dimensions(spec: DimensionsSpec): Dimensioned {
 	return new Dimensions(spec);
 }

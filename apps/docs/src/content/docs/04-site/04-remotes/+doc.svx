@@ -72,7 +72,7 @@ export const { nav, meta, doc, search } = remotes(site, {
 :::
 
 - **`'prerender'`** (default for `nav` / `meta` / `doc`) — baked at build, served static. Required when the awaiting pages prerender.
-- **`'query'`** — runs on the server per request; pairs with `defineSite({ context })` for previews and roles.
+- **`'query'`** — runs on the server per request; pairs with `sitekit({ context })` for previews and roles.
 
 `search` is always a `query` — a search is inherently dynamic. (For a fully static search box, ship the [index](/docs/site/search) instead and query it in a client worker; then you don't mint `search` at all.)
 

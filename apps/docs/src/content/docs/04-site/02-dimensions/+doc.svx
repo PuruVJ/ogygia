@@ -7,7 +7,7 @@ related:
   - content/collections
 ---
 
-A version is not a second site. A locale is not a second site. They are **coordinates** on the same outline. `dimensions()` wraps N outlines — one per coordinate — into a single `Outline` that `defineSite()` consumes, with the coordinate parsed off the front of the slug.
+A version is not a second site. A locale is not a second site. They are **coordinates** on the same outline. `dimensions()` wraps N outlines — one per coordinate — into a single `Outline` that `sitekit()` consumes, with the coordinate parsed off the front of the slug.
 
 ::: tip When to use
 Reach for dimensions when the *same page* exists in several editions — `v1` / `v2` docs, `en` / `de` locales, a stable/next channel. If your versions are genuinely different content, they are just different collections; dimensions is for one structure read at several coordinates.
@@ -20,10 +20,10 @@ You declare the axes and a `weave` that sources the outline for a coordinate. Ve
 ::: code-group
 
 ```ts [one axis — versions]
-import { defineSite, dimensions } from 'ogygia/content';
+import { sitekit, dimensions } from 'ogygia/content';
 import { v1, v2 } from './collections.server';
 
-export const site = defineSite({
+export const site = sitekit({
 	base: '/docs',
 	outline: dimensions({
 		axes: { version: { values: ['v2', 'v1'], default: 'v2', label: 'Version' } },
@@ -35,7 +35,7 @@ export const site = defineSite({
 ```
 
 ```ts [two axes — version × locale]
-export const site = defineSite({
+export const site = sitekit({
 	base: '/docs',
 	outline: dimensions({
 		axes: {
