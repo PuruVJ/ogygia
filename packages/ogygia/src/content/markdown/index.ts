@@ -80,20 +80,50 @@ type UnifiedEntry = NonNullable<MdsvexOptions['remarkPlugins']>[number];
  * A prose/rehype chain entry, optionally staged Vite-style: a plain entry runs in the default slot;
  * `{ enforce: 'pre', plugin }` runs before the built-in passes (`'post'` = the default, explicit).
  */
-export type StagedPlugin = UnifiedEntry | { enforce: 'pre' | 'post'; plugin: UnifiedEntry };
+export type StagedPlugin =
+	| UnifiedEntry
+	| {
+			enforce: 'pre' | 'post';
+			plugin: UnifiedEntry;
+			/**
+			 * Cache identity for a GENERATOR plugin whose output depends on inputs OUTSIDE the document
+			 * (a `.d.ts` set, a data file). Functions can't be hashed, so without this a doc that expands
+			 * a directive caches on (document, config) alone and goes STALE when the generator's inputs
+			 * change. Return a value that changes when the generated output would — a content/mtime hash
+			 * of the inputs. Read on every compile (memoize inside; keep it cheap). Same contract the
+			 * variant generators' `cache_key` already carries.
+			 */
+			cache_key?: () => string;
+			/**
+			 * Files (absolute paths) whose edits should recompile a document this plugin touched —
+			 * threaded into the preprocessor's returned `dependencies`, which vite-plugin-svelte watches
+			 * in dev. Called with the document's filename after each compile; return `[]` when the doc
+			 * used none. Dependency lists ride the doc cache too, so a warm hit still watches.
+			 */
+			dependencies?: (filename: string) => string[];
+	  };
 
-/** Split a staged chain into its pre/post halves (plain entries and `enforce: 'post'` → post). */
-function split_staged(list: Array<StagedPlugin> | undefined): { pre: UnifiedEntry[]; post: UnifiedEntry[] } {
+/** Split a staged chain into pre/post halves + the generator hooks (cache identity, file deps). */
+function split_staged(list: Array<StagedPlugin> | undefined): {
+	pre: UnifiedEntry[];
+	post: UnifiedEntry[];
+	cache_keys: Array<() => string>;
+	deps: Array<(filename: string) => string[]>;
+} {
 	const pre: UnifiedEntry[] = [];
 	const post: UnifiedEntry[] = [];
+	const cache_keys: Array<() => string> = [];
+	const deps: Array<(filename: string) => string[]> = [];
 	for (const e of list ?? []) {
 		if (e && typeof e === 'object' && !Array.isArray(e) && 'plugin' in e) {
 			(e.enforce === 'pre' ? pre : post).push(e.plugin);
+			if (typeof e.cache_key === 'function') cache_keys.push(e.cache_key);
+			if (typeof e.dependencies === 'function') deps.push(e.dependencies);
 		} else {
 			post.push(e as UnifiedEntry);
 		}
 	}
-	return { pre, post };
+	return { pre, post, cache_keys, deps };
 }
 
 /** Default file extensions handled by {@link markdown}. */
@@ -336,7 +366,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 	// future layers (incremental builds, edge, on-demand baking) consume directly.
 	// Stage identity: functions can't be hashed — plugins/transformers count by NAME/count, and
 	// `code.cacheSalt` is the documented bump for behavior edits (same contract as the fence cache).
-	const doc_cache = new BuildCache<{ code: string }>('markup');
+	const doc_cache = new BuildCache<{ code: string; deps?: string[] }>('markup');
 	// The document REGION rides ogygia's core RegionStore — markdown is one producer harnessing the
 	// shared currency, not the owner of a private format. Same address as the module-code entry.
 	const docs_store = new RegionStore('docs');
@@ -352,6 +382,9 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			String(headingAnchors),
 			String(codeIds),
 			`r${remark_staged.pre.length}.${remark_staged.post.length}`,
+			// generator-plugin cache identities (a directive expander over a .d.ts set, …) — dynamic, so
+			// an input edit re-keys every doc that could have expanded it (read late, like the variants)
+			[...remark_staged.cache_keys, ...rehype_staged.cache_keys].map((k) => k()).join(","),
 			`h${rehype_staged.pre.length}.${rehype_staged.post.length}`,
 			cfg.lightName,
 			cfg.darkName,
@@ -431,7 +464,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 				const base_name = path.replace(/\\/g, '/').split('/').pop() ?? '';
 				doc_key = docs_store.key([doc_sig(), base_name, input.content]);
 				const hit = doc_cache.get(doc_key);
-				if (hit) return { code: hit.code, map: undefined };
+				if (hit) return { code: hit.code, map: undefined, dependencies: hit.deps };
 			}
 			// Tab groups first (they emit `:::`-free `<TabGroup>`/`<Tab>`), then admonition containers.
 			let raw = input.content;
@@ -460,6 +493,10 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			const code = markup_code(out, raw);
 			const islandCode = transform_islands(code, input.filename);
 			const base = islandCode ?? code;
+			// Generator-plugin file deps for THIS document (a directive expander's .d.ts set, …) —
+			// returned as preprocessor `dependencies` (vite-plugin-svelte watches them in dev) and
+			// stored beside the cached output so a warm hit still watches.
+			const gen_deps = [...remark_staged.deps, ...rehype_staged.deps].flatMap((fn) => fn(input.filename));
 			// Content module: carry its raw source, and (when overrides are on) import the slot the
 			// rehype pass rewrote tags into. Both are module-script lines injected once.
 			const lines: string[] = [];
@@ -476,10 +513,10 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 					// serialized region itself — the address future layers (incremental builds, edge,
 					// on-demand baking) fetch without ever seeing a module.
 					if (doc_key) {
-						doc_cache.set(doc_key, { code: emitted.code });
+						doc_cache.set(doc_key, { code: emitted.code, ...(gen_deps.length ? { deps: gen_deps } : {}) });
 						docs_store.set(doc_key, { html: emitted.html });
 					}
-					return { code: emitted.code, map: undefined };
+					return { code: emitted.code, map: undefined, dependencies: gen_deps };
 				}
 			}
 			if (override_tags.length) lines.push(`import ${SLOT_TAG} from 'ogygia/content/slot';`);
@@ -490,8 +527,9 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			// Cache ONLY island-free outputs: transforming an island REGISTERS it (a build-time side
 			// effect the scanner needs) — a cached hit would skip that, so island-carrying files pay
 			// their compile every time. Everything a hit returns is side-effect-free by construction.
-			if (doc_key && islandCode == null) doc_cache.set(doc_key, { code: compiled });
-			return { code: compiled, map: undefined };
+			if (doc_key && islandCode == null)
+				doc_cache.set(doc_key, { code: compiled, ...(gen_deps.length ? { deps: gen_deps } : {}) });
+			return { code: compiled, map: undefined, dependencies: gen_deps };
 		}
 	};
 
