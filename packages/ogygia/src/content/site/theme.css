@@ -715,58 +715,9 @@
 		text-decoration-color: light-dark(rgb(185 28 28 / 0.6), rgb(248 113 113 / 0.6));
 	}
 
-	/* Code-block chrome (added by CodeChrome): a permalink + a copy button, grouped top-right. */
-	/* The default chrome floats its actions as a corner cluster (no header bar), so the filename
-	   label CodeChrome adds has no bar to fill — hide it. A bar-style skin shows it (see the docs skin). */
-	.og-code-name {
-		display: none;
-	}
-	.og-code-actions {
-		position: absolute;
-		top: 0.55rem;
-		right: 0.55rem;
-		display: flex;
-		gap: 0.3rem;
-	}
-	.og-code-actions :is(button, a) {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.9rem;
-		height: 1.9rem;
-		padding: 0;
-		border: 1px solid var(--og-line);
-		border-radius: var(--og-radius-sm);
-		background: color-mix(in srgb, var(--og-bg) 80%, transparent);
-		backdrop-filter: blur(6px);
-		color: var(--og-text-faint);
-		cursor: pointer;
-		text-decoration: none;
-		/* Always present on every snippet (dimmed at rest), brightening on hover/focus. */
-		opacity: 0.75;
-		transition:
-			opacity var(--og-dur) var(--og-ease),
-			color var(--og-dur) var(--og-ease),
-			border-color var(--og-dur) var(--og-ease),
-			background-color var(--og-dur) var(--og-ease);
-	}
-	.og-body pre:hover .og-code-actions :is(button, a),
-	.og-code-actions :is(button, a):focus-visible {
-		opacity: 1;
-		color: var(--og-text-dim);
-	}
-	.og-code-actions :is(button, a):hover {
-		color: var(--og-text);
-		background: var(--og-bg-raised);
-		border-color: var(--og-line);
-	}
-	/* copied / linked → the icon becomes a tick (set by the script); the accent tint is the extra cue. */
-	.og-body pre[data-copied] .og-copy,
-	.og-code-link[data-linked] {
-		opacity: 1;
-		color: var(--og-accent-text);
-		border-color: var(--og-accent-line);
-	}
+	/* Code-block chrome (added by CodeChrome): the HEADER BAR — structure + default token tints live
+	   in shell.css (the FORM), so every language gets the same bar painted by its own tokens. A theme
+	   only adds rules here if it wants to deviate from the token defaults. */
 
 	/* tabs (TabGroup / Tab, a Bits UI island) — site-wide memory via tab-groups.svelte.ts. The bar +
 	 * panels read as ONE card: a header strip of tabs sitting on top of a flush code panel, no gap

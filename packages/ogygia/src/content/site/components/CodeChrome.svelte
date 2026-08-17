@@ -84,11 +84,12 @@
 			const actions = document.createElement('div');
 			actions.className = 'og-code-actions';
 
-			// Filename (or, as a fallback, the language) label — fills the LEFT of a header-style chrome
-			// bar so it's never empty. `data-file` comes from a fence's `/// file:` / `title=` meta (or a
-			// `code()` call's meta); `data-lang` is always present for a real language. Skipped inside a
-			// `::: code-group` or a JS↔TS variant block — those already carry their own header controls
-			// (the tab bar / the variant toggle). A skin that floats its actions can hide `.og-code-name`.
+			// Filename (or, as a fallback, the language) label — fills the LEFT of the header bar so it's
+			// never empty. ONE presentation contract everywhere: `.og-code-actions` IS a header strip
+			// (structure + token tints in shell.css; an unlayered app skin restyles it). `data-file` comes
+			// from a fence's `/// file:` / `title=` meta (or a `code()` call's meta); `data-lang` is always
+			// present for a real language. Skipped inside a `::: code-group` or a JS↔TS variant block —
+			// those already carry their own header controls (the tab bar / the variant toggle).
 			const holder = pre.closest('.og-tabs, .og-code');
 			const label_text = holder ? '' : pre.getAttribute('data-file') || pre.getAttribute('data-lang') || '';
 			if (label_text) {

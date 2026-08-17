@@ -364,3 +364,115 @@
 		}
 	}
 }
+
+/* ── Code-block chrome: the HEADER BAR (form) ─────────────────────────────────────────────────
+   One presentation contract for CodeChrome everywhere: `.og-code-actions` (which already carries
+   the `.og-code-name` label first, then the permalink + copy buttons) IS a full-width header
+   strip on every fence. STRUCTURE lives here in the form; every color reads a theme token, so
+   each of the zen languages tints its own bar with zero per-theme CSS — the old per-theme
+   floating corner clusters (which overlapped the first line of code and scrolled away with it)
+   are gone.
+
+   Anchoring: `pre` is the horizontal SCROLLER, so anything absolute inside it scrolls away with
+   the code. The markdown pipeline's `.code-only` wrapper (default `wrapperClass`) becomes the
+   positioning context instead; the pre reserves the bar's height via padding. Inside a
+   `::: code-group` (.og-tabs) or a JS↔TS variant block (.og-code) the tab/control bar IS the
+   chrome — no second bar, the buttons ride the card's top-right (CodeChrome already skips the
+   label there).
+
+   An unlayered app skin (the docs site) still owns every pixel: these are @layer ogygia rules. */
+@layer ogygia {
+	.og-body :where(.code-only) {
+		position: relative;
+	}
+	/* the wrapper, not the scrolling pre, anchors the bar */
+	.og-body :where(.code-only) > pre {
+		position: static;
+	}
+	/* reserve the strip (SSR-known attrs → no layout shift when the island wakes) */
+	.og-body pre:where([data-lang], [data-file]) {
+		padding-top: calc(var(--og-code-pad-y, 1rem) + var(--og-chrome-h, 2.3rem));
+	}
+	.og-body .og-code-actions {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: var(--og-chrome-h, 2.3rem);
+		display: flex;
+		align-items: center;
+		gap: 0.2rem;
+		padding: 0 0.45rem 0 0.95rem;
+		border-bottom: 1px solid var(--og-line, currentColor);
+		border-radius: calc(var(--og-radius-lg, 12px) - 1px) calc(var(--og-radius-lg, 12px) - 1px) 0 0;
+		/* a few % of ink over the panel — reads as a strip in every language, light or dark */
+		background: color-mix(in srgb, var(--og-text, #808080) 5%, transparent);
+	}
+	.og-code-name {
+		display: block;
+		margin-right: auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-family: var(--og-mono, ui-monospace, monospace);
+		font-size: 0.72rem;
+		color: var(--og-text-dim, inherit);
+	}
+	/* a bare language tag (no authored filename) reads quieter + uppercased, so it doesn't pose as one */
+	.og-code-name:not([data-file]) {
+		font-size: 0.66rem;
+		font-weight: 600;
+		letter-spacing: 0.07em;
+		text-transform: uppercase;
+		color: var(--og-text-faint, inherit);
+	}
+	.og-code-actions :is(button, a) {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.7rem;
+		height: 1.7rem;
+		padding: 0;
+		border: 0;
+		border-radius: var(--og-radius-sm, 6px);
+		background: none;
+		color: var(--og-text-faint, inherit);
+		cursor: pointer;
+		text-decoration: none;
+		transition:
+			color var(--og-dur, 0.15s) var(--og-ease, ease),
+			background-color var(--og-dur, 0.15s) var(--og-ease, ease);
+	}
+	.og-code-actions :is(button, a):hover,
+	.og-code-actions :is(button, a):focus-visible {
+		color: var(--og-text, inherit);
+		background: color-mix(in srgb, var(--og-text, #808080) 9%, transparent);
+	}
+	/* copied / linked → the icon becomes a tick (set by the script); the accent tint is the extra cue */
+	.og-body pre[data-copied] .og-copy,
+	.og-code-link[data-linked] {
+		color: var(--og-accent-text, var(--og-accent, inherit));
+	}
+
+	/* code-group / variant blocks: their own bar is the chrome — buttons ride its right end */
+	.og-body :is(.og-tabs, .og-code) {
+		position: relative;
+	}
+	.og-body :is(.og-tabs, .og-code) :where(.code-only) {
+		position: static; /* the CARD anchors the buttons, not the panel wrapper */
+	}
+	.og-body :is(.og-tabs, .og-code) pre:where([data-lang], [data-file]) {
+		padding-top: var(--og-code-pad-y, 1rem); /* no second strip to reserve */
+	}
+	.og-body :is(.og-tabs, .og-code) .og-code-actions {
+		top: 0.4rem;
+		right: 0.4rem;
+		left: auto;
+		height: auto;
+		padding: 0;
+		border: 0;
+		border-radius: 0;
+		background: none;
+	}
+}

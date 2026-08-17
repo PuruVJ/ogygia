@@ -690,55 +690,7 @@
 		background: transparent !important;
 	}
 
-	.og-code-actions {
-		position: absolute;
-		top: 0.55rem;
-		right: 0.55rem;
-		display: flex;
-		gap: 0.3rem;
-	}
-	.og-code-actions :is(button, a) {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.9rem;
-		height: 1.9rem;
-		padding: 0;
-		border: 1px solid var(--og-line);
-		border-radius: var(--og-radius-sm);
-		background: color-mix(in oklab, var(--og-bg) 78%, transparent);
-		backdrop-filter: blur(6px);
-		color: var(--og-text-faint);
-		cursor: pointer;
-		text-decoration: none;
-		opacity: 0.75;
-		transition:
-			opacity var(--og-dur) var(--og-ease),
-			color var(--og-dur) var(--og-ease),
-			border-color var(--og-dur) var(--og-ease),
-			background-color var(--og-dur) var(--og-ease),
-			scale var(--og-dur) var(--og-spring);
-	}
-	.og-body pre:hover .og-code-actions :is(button, a),
-	.og-code-actions :is(button, a):focus-visible {
-		opacity: 1;
-		color: var(--og-text-dim);
-	}
-	.og-code-actions :is(button, a):hover {
-		color: var(--og-text);
-		background: var(--og-bg-raised);
-		border-color: var(--og-line);
-		scale: 1.07;
-	}
-	.og-code-actions :is(button, a):active {
-		scale: 0.94;
-	}
-	.og-body pre[data-copied] .og-copy,
-	.og-code-link[data-linked] {
-		opacity: 1;
-		color: var(--og-accent-text);
-		border-color: var(--og-accent-line);
-	}
+	/* Code chrome: the header bar lives in shell.css (form); this language tints it via tokens. */
 
 	/* ── tabs: a header of pills over a flush panel, marker slides springily (JS positions it) ── */
 	.og-body .og-tabs {
