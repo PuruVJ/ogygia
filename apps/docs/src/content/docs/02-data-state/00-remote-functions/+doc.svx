@@ -60,10 +60,7 @@ If an island needs a query to update after a mutation, call `.refresh()` on it, 
 
 ## Mutation guards
 
-Writing to a captured host variable from island markup is a mistake — the value is a serialized snapshot, not live state. ogygia catches it two ways:
-
-- A **build error** for captured-variable writes in markup.
-- A **dev-only deep proxy** at runtime that throws when you mutate a snapshot.
+Writing to a captured host variable from island markup is a mistake — the value is a serialized snapshot, not live state. In dev, ogygia wraps every snapshot in a **deep proxy** that `console.warn`s — naming the offending prop path — when you mutate one. The write still applies (it is only a warning), so treat it as the signal to move that state into the island.
 
 ::: warning Dev is not prod
 In dev, SSR query seeding degrades to a refetch, and the mutation proxy only runs in dev. Verify data flows against a production build.

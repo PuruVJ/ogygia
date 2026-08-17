@@ -129,7 +129,7 @@ site({ outline: guides, prevNext: 'graph', trail: 'group' });
 - **`trail: 'site'`** (default) — the trail runs through the whole site.
 - **`trail: 'group'`** — prev/next stops at the top-level section boundary, so a multi-topic site never links across topics.
 
-The `<Pager>` component and `docs.page()`'s `prevNext` field both read whatever you set.
+The `<Pager>` component and `docs.page()`'s `trail` field both read whatever you set.
 
 ## Do / don't
 

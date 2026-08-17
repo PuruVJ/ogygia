@@ -210,6 +210,21 @@ a:hover {
 	color: var(--accent-strong);
 }
 
+/* View transitions: the SPA router wraps each body swap in a View Transition, but with no
+   ::view-transition rules the browser only does its bland default fade. Tune the page cross-fade
+   here (the sliding active-nav chip lives in shell-skin.css). Guarded for reduced-motion. */
+::view-transition-old(root),
+::view-transition-new(root) {
+	animation-duration: 240ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-old(root),
+	::view-transition-new(root) {
+		animation: none;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	html {
 		scroll-behavior: auto;

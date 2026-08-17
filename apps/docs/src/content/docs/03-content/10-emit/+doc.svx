@@ -39,7 +39,7 @@ export const { GET, entries } = docs.emit.raw();   // strips frontmatter by defa
 
 ```ts [rss.xml]
 // src/routes/blog/rss.xml/+server.ts — the blog genre's feed
-import { site, blog } from '$lib/site.server';
+import { docs, blog } from '$lib/site.server';
 export const prerender = true;
 export const GET = docs.emit.rss({
 	title: 'Example blog',

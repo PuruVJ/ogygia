@@ -7,7 +7,7 @@ related:
   - content/collections
 ---
 
-A [collection](/docs/content/collections) answers **what exists** — a set of typed entries. The site layer answers **how they read as a site**: the nav tree, the order, the prev/next, the search index, the sitemap, the shell around the page. It is built directly on the content pillar and lives in the same `ogygia/content` barrel. **This site is one** — every page you are reading is arranged, navigated, and searched by it.
+A [collection](/docs/content/collections) answers **what exists** — a set of typed entries. The site layer answers **how they read as a site**: the nav tree, the order, the prev/next, the search index, the sitemap, the shell around the page. It is built directly on the content pillar and lives in the same `ogygia/content` barrel. **This site is one** — every page you are reading is arranged, navigated, and searched by it. And the **[Playground ↗](/playground)** is a second one, running right next to it: the stock shell, nine swappable themes, a version × locale switcher, a blog genre, and an OpenAPI reference — all minted by one `site()` call.
 
 You hand it collections and an arrangement; it mints the *brains* — small, data-returning, browser-safe functions the routes and the shell consume. The corpus itself never crosses the wire.
 

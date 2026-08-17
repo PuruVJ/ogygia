@@ -192,7 +192,7 @@ export const dashboard = query.live(v.string(), async function* (id) {
 });
 ```
 
-`<Region of={dashboard(id).current} />` swaps the first tick in, then a `'static'` held region **morphs** in place (focus and typed text survive) and an interactive one is **kept alive** (its state survives, no re-hydrate). One slot, always the latest tick.
+`<Region of={dashboard(id).current} />` swaps the first tick in, then a raw (HTML-only, `region: 'raw'`) held region **morphs** in place (focus and typed text survive) and an interactive one is **kept alive** (its state survives, no re-hydrate). One slot, always the latest tick.
 
 ## Single-flight mutations
 
@@ -223,7 +223,7 @@ preload(region(Recommendations, { userId }));
 ## Do / don't
 
 - **Do** use a held region when the server owns the *which-component* decision; use a [server island](/docs/regions/server-islands) when the component is fixed.
-- **Do** choose `'static'` for result UI that never needs interaction — it ships zero JS.
+- **Do** choose a raw held region (`with { region: 'raw' }`) for result UI that never needs interaction — it ships zero JS.
 - **Don't** import the result components on the client — the whole point is that the server sends them; the client only renders `<Region>`.
 
 

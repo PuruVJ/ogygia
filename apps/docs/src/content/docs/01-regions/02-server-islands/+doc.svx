@@ -80,7 +80,7 @@ reload re-renders it. That's the right default for a hole (a per-request clock, 
 data). To let a hole sit in the browser cache, give it a `maxAge` in a [preset](/docs/reference/api#ogygiavite-presets):
 
 ```ts title=vite.config.ts
-ogygia({ presets: { pricing: { render: 'deferred', wake: 'load', maxAge: '1h' } } })
+ogygia({ regions: { presets: { pricing: { render: 'deferred', wake: 'load', maxAge: '1h' } } } })
 ```
 
 ```svelte

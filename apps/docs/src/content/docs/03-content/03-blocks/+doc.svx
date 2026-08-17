@@ -140,19 +140,15 @@ const toTree = (els = []) =>
     children: e.children ? toTree(e.children) : undefined
   }));
 
-// A raw source over Builder's Content API: get() fetches ONE page, list() fetches them all.
+// A raw source over Builder's Content API: refs() lists every page, get() fetches ONE.
 const builderApi: RawSource<any> = {
-  async get(id) {
-    const { results } = await fetch(`${API}&limit=1&url=/${id}`).then((r) => r.json());
-    return results[0] ? { id, value: results[0] } : null;
-  },
-  async list() {
+  async refs() {
     const { results } = await fetch(`${API}&limit=100`).then((r) => r.json());
     return results.map((r) => ({ id: (r.data?.url ?? r.id).replace(/^\//, ''), value: r }));
   },
-  async ids() {
-    const { results } = await fetch(`${API}&limit=100&fields=data.url`).then((r) => r.json());
-    return results.map((r) => (r.data?.url ?? '').replace(/^\//, ''));
+  async get(id) {
+    const { results } = await fetch(`${API}&limit=1&url=/${id}`).then((r) => r.json());
+    return results[0] ? { id, value: results[0] } : null;
   }
 };
 

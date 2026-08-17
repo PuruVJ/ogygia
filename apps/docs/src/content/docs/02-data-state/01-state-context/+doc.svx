@@ -182,7 +182,7 @@ Same `keep` name on the next page → the live node and its mounted app **reloca
 
 ### Half-filled forms
 
-Ambient and on by default: an island form you were filling survives navigation and back within the tab session, restored with `bind:` resynced. Opt one field out with `data-ogygia-no-keep` (a one-time code, a fresh-message box), or turn it all off with `ogygia({ continuity: { forms: false } })`.
+Ambient and on by default: an island form you were filling survives navigation and back within the tab session, restored with `bind:` resynced. Opt one field out with `data-ogygia-no-keep` (a one-time code, a fresh-message box), or turn it all off with `ogygia({ router: { forms: false } })`.
 
 > Two continuity IDs must be unique per class — name two different classes `'cart'` and they clobber each other in the session Keep (dev warns).
 

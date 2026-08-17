@@ -143,6 +143,7 @@
 	color: var(--accent);
 }
 .og-nav-link {
+	position: relative; /* anchors the .og-nav-chip highlight */
 	display: flex;
 	align-items: center;
 	min-height: 1.85rem;
@@ -164,8 +165,42 @@
 .og-nav-link.og-active {
 	color: var(--text);
 	font-weight: 600;
+}
+
+/* ── The gliding active marker. The ogygia Sidebar renders `<span class="og-nav-chip">` on the
+      active row only; we style it as the highlight (a background box behind the label) and give it a
+      shared `view-transition-name`, so the SPA router's View Transition captures it at the OLD active
+      row and the NEW one and physically slides the chip between them across navigation. The link's
+      own background is dropped above so the chip is the sole highlight (no double). ── */
+.og-nav-chip {
+	position: absolute;
+	inset: 0;
+	z-index: -1; /* behind the label text */
+	border-radius: 8px;
 	background: color-mix(in srgb, var(--accent-deep) 78%, transparent);
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent);
+	view-transition-name: og-nav-active;
+	pointer-events: none;
+}
+/* Each nav row is its own VT group (the Sidebar sets a per-row `view-transition-name` inline); tag
+   them all with one class and stack them ABOVE the chip, so the chip glides beneath the labels
+   rather than painting over them mid-slide. */
+.og-nav-link,
+.og-nav-label {
+	view-transition-class: phnav;
+}
+::view-transition-group(*.phnav) {
+	z-index: 10;
+}
+::view-transition-group(og-nav-active) {
+	z-index: 0;
+	animation-duration: 280ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-group(og-nav-active) {
+		animation: none;
+	}
 }
 
 /* ── search trigger — dressed as the old panel's INPUT (`.side-search-input` recipe), so the
@@ -499,6 +534,12 @@
 	position: relative;
 	padding-top: 3.4rem;
 }
+/* shell.css (@layer ogygia) now ships a default header bar that reserves its height as PRE
+   padding — this skin reserves on the wrapper above instead, so zero the pre-side reservation
+   (unlayered wins over the layer). Without this, docs fences get both reservations = double gap. */
+.og-body pre:where([data-lang], [data-file]) {
+	padding-top: 0;
+}
 .og-code-actions {
 	position: absolute;
 	top: 0;
@@ -512,7 +553,9 @@
 	padding: 0 0.5rem;
 	border-bottom: 1px solid var(--line);
 	border-radius: var(--r-md) var(--r-md) 0 0;
-	background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
+	/* a few % of ink over the panel bg — reads as a strip in BOTH themes (a raised-bg mix is
+	   invisible in light mode, where raised is white on a near-white panel) */
+	background: color-mix(in srgb, var(--text) 6%, var(--bg-sunken));
 }
 /* Filename / language label — CodeChrome adds it as the first child of the bar, so the header is
    never empty. `margin-right: auto` takes the left and shoves the action buttons to the right. */
@@ -522,7 +565,7 @@
 	max-width: 62%;
 	padding-left: 0.35rem;
 	font: 400 0.75rem/1 var(--font-mono);
-	color: var(--text-faint);
+	color: var(--text-dim);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -532,7 +575,6 @@
 	text-transform: uppercase;
 	font-size: 0.68rem;
 	letter-spacing: 0.06em;
-	opacity: 0.7;
 }
 .og-code-actions :is(button, a) {
 	display: inline-flex;
@@ -581,7 +623,7 @@
 	min-height: 2.6rem;
 	padding: 0 5.5rem 0 0.35rem; /* right pad keeps a long tab row clear of the actions overlay */
 	border-bottom: 1px solid var(--line);
-	background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
+	background: color-mix(in srgb, var(--text) 6%, var(--bg-sunken)); /* same strip as the code bar */
 }
 .og-tabs-tab {
 	appearance: none;

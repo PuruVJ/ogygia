@@ -73,7 +73,10 @@
 	margin: 0;
 }
 
-.og-body a {
+/* `:not(.og-code-link)` — the code-block permalink is an icon button, not a prose link; without the
+   exclusion this ties (0,1,1) with shell-skin's `.og-code-actions :is(button, a)` and load order
+   (which SPA nav flips) decides whether the link icon is accent-colored while copy stays faint. */
+.og-body a:not(.og-code-link) {
 	color: var(--accent-strong, var(--accent));
 	text-decoration: underline;
 	text-underline-offset: 2px;
@@ -82,7 +85,7 @@
 	transition: text-decoration-color 140ms ease;
 }
 
-.og-body a:hover {
+.og-body a:not(.og-code-link):hover {
 	text-decoration-color: var(--accent);
 }
 

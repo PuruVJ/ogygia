@@ -98,9 +98,8 @@ For `.svx` / `.md` [content collections](/docs/content/collections), add the opt
 pnpm add -D mdsvex shiki
 ```
 
-```ts
+```ts title=vite.config.ts
 import { sveltekit } from '@sveltejs/kit/vite';
-import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { ogygia } from 'ogygia/vite';
 import { defineConfig } from 'vite';
 
@@ -109,12 +108,21 @@ export default defineConfig({
     ogygia({
       content: { markdown: {} } // {} = defaults: Shiki + heading ids + collected headings
     }),
-    sveltekit({
-      extensions: ogygia.extensions(), // includes .svelte, adds .svx / .md
-      preprocess: [vitePreprocess(), ...ogygia.preprocess()]
-    })
+    sveltekit()
   ]
 });
+```
+
+`extensions` / `preprocess` go in **`svelte.config.js`**, not inline on `sveltekit()` — that is the Kit v2 home both `svelte-check` and the editor's Svelte language server read (passing them inline makes Kit ignore `svelte.config.js` and hides them from `svelte-check`):
+
+```js title=svelte.config.js
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { ogygia } from 'ogygia/vite';
+
+export default {
+  extensions: ogygia.extensions(), // includes .svelte, adds .svx / .md
+  preprocess: [vitePreprocess(), ...ogygia.preprocess()]
+};
 ```
 
 `mdsvex` / `shiki` stay optional peers — `ogygia.preprocess()` is synchronous and loads no mdsvex when markdown is off (mdsvex loads lazily on first use, erroring with an install hint if absent), and `ogygia.extensions()` only adds `.svx` / `.md` when it is on. Tune themes and headings under `content: { markdown }` — see [content collections](/docs/content/collections).

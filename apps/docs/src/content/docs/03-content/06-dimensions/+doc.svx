@@ -58,17 +58,17 @@ The **default** coordinate serves at the bare URL; the others are prefixed. `res
 
 The failure mode every versioned-docs site fights is a missing translation. Dimensions turns it into a non-event: an untranslated page **renders the default coordinate's content at its URL** instead of 404ing. The switcher can always link the same slug across coordinates, because the address is guaranteed to resolve.
 
-`docs.page()` reports what happened on its `dimension` field, so the page can show a "not yet translated" note:
+`docs.page()` reports what happened on its `fallback` field, so the page can show a "not yet translated" note:
 
 ```svelte
 <script>
 	const view = await docs.page(page.params.slug);
-	// view.dimension → { coordinate: { locale: 'de' }, fallback: { axis: 'locale', from: 'de', to: 'en' } }
+	// view.coordinate → { locale: 'de' };  view.fallback → { axis: 'locale', from: 'de', to: 'en' }
 	// fallback is null when the page is native to its coordinate
 </script>
 
-{#if view.dimension?.fallback}
-	<aside>This page isn't translated to {view.dimension.fallback.from} yet — showing the {view.dimension.fallback.to} original.</aside>
+{#if view.fallback}
+	<aside>This page isn't translated to {view.fallback.from} yet — showing the {view.fallback.to} original.</aside>
 {/if}
 ```
 

@@ -61,7 +61,7 @@ On a `csr = false` page, the page module never runs on the client. Top-level `on
 </script>
 ```
 
-If you reach for `onMount`, you actually want an island. Move anything that needs to run in the browser inside one.
+If you reach for `onMount`, you actually want an island. Move anything that needs to run in the browser inside one — for init, telemetry, or listeners that render no UI, that is a [boot island](/docs/regions/client-islands#the-boot-island-run-code-not-ui): a headless component whose whole job is its `$effect`.
 
 Inline `<script>` tags in page markup are a related trap: they run **once**, on first load, not per navigation — the router swaps `<body>` without executing them. Per-navigation code belongs in an island. See [the router](/docs/app/router) for why.
 

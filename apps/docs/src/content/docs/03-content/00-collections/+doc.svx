@@ -7,9 +7,13 @@ related:
   - reference/api
 ---
 
+::: tip See it all live
+**[Playground ↗](/playground)** — a complete second site running inside this one, built on everything below: four markdown corpora, an OpenAPI reference rendered from JSON data, a dated blog, a version × locale switcher, and search — every one of them a `content()` collection.
+:::
+
 [Remote functions](/docs/data-state/remote-functions) move data; for most sites the biggest data is the writing itself. `ogygia/content` gives SvelteKit content collections that fit the islands model. **This docs site is built on it** — every page you are reading is a `.svx` entry rendered through it.
 
-You learn one API and reuse it everywhere. Define a collection once with `content({ loader, schema })`. Point its `loader` at a glob of markdown files, at a REST API or CMS, or at a source that pushes over time — the read surface (`list`, `get`, `ids`) never changes.
+You learn one API and reuse it everywhere. Define a collection once with `content({ loader, schema })`. Point its `loader` at a glob of markdown files, at a REST API or CMS, or at a source that pushes over time — the read surface (`refs`, `get`) never changes.
 
 ::: tip When to use
 Reach for a collection whenever you have a *set of content* with typed frontmatter — docs, a blog, a changelog, product pages, a CMS feed — and you want a nav or index over the wire *and* full rendered bodies on the page.
@@ -42,15 +46,15 @@ export const docs = content({
 });
 ```
 
-> `import.meta.og.loader.*` is the blessed way to point a collection at static files — it owns the `import.meta.glob` plumbing so you write only a literal path. It comes in four flavours (`markdown`, `folder`, `json`, `git`); see the **[loader macro](/docs/macros/loaders)** for all four and the rules. The runtime builders it rewrites to (`markdown()`, `json()`, `blocks()`) are still exported for the rare hand-built source.
+> `import.meta.og.loader.*` is the blessed way to point a collection at static files — it owns the `import.meta.glob` plumbing so you write only a literal path. It comes in four flavours (`markdown`, `folder`, `json`, `git`); see the **[loader macro](/docs/macros/loaders)** for all four and the rules. The runtime builders it rewrites to (`markdown()`, `folder()`, `json()`) are still exported for the rare hand-built source.
 
 ::: warning ogygia warns you
 Define a collection outside a server module and the build prints a warning naming the file — because a client component that imports it would drag the entire corpus into its bundle (silently, and often megabytes). Keep the definition server-side and mint the wire crossing in a `.remote.ts`; that split is the whole defense.
 :::
 
-The collection *handle* is still browser-safe by **type** — `docs.get` and `docs.list` have no `$app/server` in their signatures — but the *module that defines it* is server-only because of the glob. Import the handle's types anywhere; import the module only from the server.
+The collection *handle* is still browser-safe by **type** — `docs.refs` and `docs.get` have no `$app/server` in their signatures — but the *module that defines it* is server-only because of the glob. Import the handle's types anywhere; import the module only from the server.
 
-`filter` is honored on every read path — `list`, `get`, `live`, and prerender inputs. A draft is invisible everywhere, including by direct URL. A per-remote filter can only narrow it further, never widen.
+`filter` is honored on every read path — `refs`, `get`, `live`, the wire remotes, and prerender inputs. A draft is invisible everywhere, including by direct URL. A per-remote filter can only narrow it further, never widen.
 
 ### An entry is `{ id, data, meta, body }`
 
@@ -105,7 +109,7 @@ Awaiting `e.body` bakes its SSR HTML into the region ticket — the one represen
 
 ```ts title=src/routes/docs/[...slug]/+page.server.ts
 export const prerender = true;
-export const entries = async () => (await docs.ids()).map((slug) => ({ slug }));
+export const entries = async () => (await docs.refs()).map((e) => ({ slug: e.id }));
 ```
 
 ### Data for the wire: `list`
@@ -132,7 +136,7 @@ export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title:
 
 ## Load markdown (`.svx` / `.md`)
 
-`markdown()` is the built-in source for a glob of `.svx` / `.md` files (it is the renamed `mdsvex()` source builder). It runs an opinionated pipeline: mdsvex for the body, Shiki for fences, pandoc-style heading ids, and a headings collector that fills each entry's `meta.headings`.
+`markdown()` is the built-in source for a glob of `.svx` / `.md` files. It runs an opinionated pipeline: mdsvex for the body, Shiki for fences, pandoc-style heading ids, and a headings collector that fills each entry's `meta.headings`.
 
 Turn the pipeline on under the one plugin surface — no separate preprocessor to register. An empty `markdown: {}` uses the defaults (Shiki `github-light` / `github-dark` via `light-dark()`, pandoc `## Title {#id}` heading ids, collected `h2`–`h4`, wrapper class `code-only`):
 
@@ -178,16 +182,16 @@ That is how the live demos in these docs live right inside the prose.
 
 ## Custom sources (API / CMS)
 
-A `loader` is not limited to a glob. Any object with `get` / `list` / `ids` is a source, so the same collection API covers a REST API or a CMS. Everything else — schema, `filter`, `list`, `get` — is identical to a file-backed collection.
+A `loader` is not limited to a glob. Any object with `refs` / `get` is a source, so the same collection API covers a REST API or a CMS. Everything else — schema, `filter`, the wire remotes — is identical to a file-backed collection.
 
 | Source | Write |
 | --- | --- |
 | Static files in repo | the [`loader` macro](/docs/macros/loaders) — `import.meta.og.loader.markdown` · `.folder` · `.json` · `.git` |
 | Blocks (CMS tree) | [`blocks(source, registry)`](/docs/content/blocks) with a [`regions()`](/docs/macros/regions) registry |
-| A REST API | a `{ get, list, ids }` source that fetches |
+| A REST API | a `{ refs, get }` source that fetches |
 | Something that **pushes** | add `live()` — a change signal — + `live.list` / `live.get` |
 
-A source is three async methods. `get(id)` fetches one entry, `list()` the set, `ids()` the ids:
+A source is two async methods. `refs()` lists the corpus as lightweight metadata; `get(id)` fetches one full entry:
 
 ```ts
 import { content } from 'ogygia/content';
@@ -195,17 +199,13 @@ import { content } from 'ogygia/content';
 const press = content({
   schema,
   loader: {
-    async get(id) {
-      const row = await fetch(`https://cms/posts/${id}`).then((r) => r.json());
-      return row ? { id, data: row } : null;
-    },
-    async list() {
+    async refs() {
       const rows = await fetch('https://cms/posts').then((r) => r.json());
       return rows.map((r) => ({ id: r.slug, data: r }));
     },
-    async ids() {
-      const rows = await fetch('https://cms/posts?fields=slug').then((r) => r.json());
-      return rows.map((r) => r.slug);
+    async get(id) {
+      const row = await fetch(`https://cms/posts/${id}`).then((r) => r.json());
+      return row ? { id, data: row } : null;
     }
   }
 });
@@ -258,9 +258,8 @@ let posts = [];
 const press = content({
   schema,
   loader: {
-    async get(id) { return posts.find((p) => p.id === id) ?? null; },
-    async list() { return posts; },
-    async ids() { return posts.map((p) => p.id); },
+    async refs() { return posts.map((p) => ({ id: p.id, data: p })); },
+    async get(id) { const p = posts.find((p) => p.id === id); return p ? { id: p.id, data: p } : null; },
     async *live() {
       for await (const next of subscribeToCms()) { posts = next; yield 1; }
     }

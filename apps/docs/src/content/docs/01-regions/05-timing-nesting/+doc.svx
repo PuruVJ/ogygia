@@ -92,7 +92,7 @@ import Chart from '$lib/Chart.svelte' with { wake: 'visible', margin: '200px' };
 
 ```ts title=vite.config.ts
 // default margin for every `visible` island
-ogygia({ visible: { margin: '0px' } });
+ogygia({ regions: { visible: { margin: '0px' } } });
 ```
 
 ## Deferred content that is also interactive

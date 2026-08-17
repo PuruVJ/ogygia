@@ -129,6 +129,42 @@ A header badge that reflects a cart, hydrated on `load` so it is live immediatel
 
 To let a *separate* "Add to cart" island update this badge, the two share one live object — see [Shared state](/docs/data-state/state-context#sharing-state).
 
+## The boot island: run code, not UI
+
+On a `csr = false` page the `+page.svelte` / `+layout.svelte` script never runs in the browser — top-level `onMount`, `$effect`, listeners, telemetry, store hydration are all inert (see [Constraints](/docs/reference/constraints)). An island is the *only* place client code runs, so when you need to *run something* rather than render something, make an island that renders nothing. That is a **boot island**: a headless component whose whole job is its `$effect`.
+
+```svelte title=Telemetry.svelte
+<script>
+  let { dsn } = $props();
+
+  $effect(() => {
+    const t = init_telemetry(dsn);
+    return () => t.stop();   // teardown runs when the island unmounts
+  });
+</script>
+<!-- no markup -->
+```
+
+```svelte title=+layout.svelte
+<script>
+  import Telemetry from '$lib/Telemetry.svelte' with { wake: 'load' };
+</script>
+
+<Telemetry dsn={data.dsn} />
+{@render children()}
+```
+
+- **Values are props.** The page script is inert, so hand the island what it needs as serializable props (`dsn={data.dsn}`) — the same boundary rule as any island.
+- **Lifecycle follows the schedule.** A page-level boot island re-runs its `$effect` on each navigation (the page remounts). A layout-level one should usually *persist* across navigation instead of restarting a socket every route — add `keep` so its live self relocates onto the new page rather than remounting:
+
+```svelte
+import Telemetry from '$lib/Telemetry.svelte' with { wake: 'load', keep: 'telemetry' };
+```
+
+::: tip A module store often needs no boot at all
+Top-level code in a `.svelte.ts` module runs the moment the first island imports it. If some island already reads your store, the store initializes itself — you only need a boot island for effects that must run even on pages with **no** islands (site-wide analytics, a global keydown listener).
+:::
+
 ## Do / don't
 
 | Do | Don't |

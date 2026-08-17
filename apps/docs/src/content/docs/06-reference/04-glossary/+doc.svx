@@ -28,7 +28,7 @@ The whole vocabulary in one place. If a word in the docs is unfamiliar, it is de
 ## Mechanics
 
 - **Region** — the DOM element (`<ogygia-region>`) the runtime manages for every island, lake, or server island.
-- **Runtime** — the ~7.6 KB custom element + router that boots on a Page and wakes regions on schedule.
+- **Runtime** — the ~7.6 KB runtime (~11.7 KB with the SPA router) that boots on a Page and wakes regions on schedule.
 - **Portable binding** — a marked import whose *binding* is the island, so you can pass it around like any component. See [Client islands](/docs/regions/client-islands).
 - **Nearest-boundary rule** — nesting is decided by the closest marked parent. See [Timing & nesting](/docs/regions/timing-nesting).
 - **Dedupe** — the same component + strategy produces one client chunk, however many times it is used.
@@ -37,7 +37,7 @@ The whole vocabulary in one place. If a word in the docs is unfamiliar, it is de
 
 - **Remote function** — a Kit `query` / `command` / `form` etc., callable from inside islands. See [Remote functions](/docs/data-state/remote-functions).
 - **Live region** — a held region re-emitted over time by `query.live`, morphed or kept-alive in place. See [Held regions](/docs/regions/held-regions).
-- **Transportable** — a class that can cross an island boundary as a prop by declaring `static [ogygia.wire]`. See [Shared state](/docs/data-state/state-context#sharing-state).
+- **Transportable** — a class that can cross an island boundary as a prop by declaring `static wire = import.meta.og.wire({ encode, decode })`. See [Shared state](/docs/data-state/state-context#sharing-state).
 - **Codec** — the `{ encode, decode }` pair on a transportable class that says how its instances travel.
 - **Wire tag** — the stable identity (`module#Class`) a transportable is registered under on both sides.
 
@@ -45,7 +45,7 @@ The whole vocabulary in one place. If a word in the docs is unfamiliar, it is de
 
 - **Collection** — a set of content entries defined with `content()`. See [Content collections](/docs/content/collections).
 - **Entry** — a single item: `{ id, data, meta, body }`, where `body` is a held region and `meta` is source-derived (e.g. `{ headings }`).
-- **Source / loader** — where a collection's entries come from: a `{ get, list, ids }` object. `markdown()`, `json()`, `blocks()` build one from a glob; write your own to fetch a CMS. See [Content collections](/docs/content/collections).
+- **Source / loader** — where a collection's entries come from: a `{ refs, get }` object (plus optional `init` / `live` / `groups`). `markdown()`, `json()`, `blocks()` build one from a glob; write your own to fetch a CMS. See [Content collections](/docs/content/collections).
 
 ## PPR & single-flight
 

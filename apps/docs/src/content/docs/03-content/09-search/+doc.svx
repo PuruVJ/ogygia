@@ -115,7 +115,8 @@ The engine itself is a **contract, not a dependency**: the default is Orama, and
 | --- | --- |
 | `href` | deep link, baked for `base` — lands on the matched *section's* heading |
 | `title` | the page title |
-| `section` | the heading of the matched section |
+| `section` | the nav group / top-level section label |
+| `heading` | the matched section's heading |
 | `excerpt` | the matched prose, with `<mark>` around matched terms |
 | `score` | the engine's rank, title matches boosted |
 :::

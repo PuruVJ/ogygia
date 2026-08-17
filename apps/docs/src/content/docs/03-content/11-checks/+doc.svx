@@ -58,7 +58,9 @@ export function requireSummary(): Check {
 	return {
 		name: 'require-summary',
 		async page(slug, { outline, ctx }): Promise<Finding[]> {
-			const entry = await outline.resolve(slug, ctx);
+			const resolved = await outline.resolve(slug, ctx);
+			if (!resolved) return [];
+			const entry = await resolved.collection.get(resolved.record.entryId, ctx);
 			if (!entry || typeof entry.data.summary === 'string') return [];
 			return [{
 				check: 'require-summary',

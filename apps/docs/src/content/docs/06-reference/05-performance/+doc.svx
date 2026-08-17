@@ -36,7 +36,7 @@ The method is a port of Stanislav Khromov's
   server islands, held/live/frozen regions, and full SvelteKit integration (see the matrix below).
 - **The runtime is feature-selected.** ogygia ships only the features your app uses; a load-only page
   never pays for the router, lakes, or persistence. We track the per-profile runtime size in
-  [`bench/bundle-size.snapshot.json`](https://github.com/PuruVJ/ogygia/tree/main/verify/bundle-size.snapshot.json)
+  [`e2e/bundle-size.snapshot.json`](https://github.com/PuruVJ/ogygia/tree/main/e2e/bundle-size.snapshot.json)
   so it can only shrink over time.
 
 ## What you can build

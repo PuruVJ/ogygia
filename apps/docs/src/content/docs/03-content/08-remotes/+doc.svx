@@ -1,6 +1,6 @@
 ---
 title: Remotes
-summary: The wire layer. remotes(site) mints nav, meta, doc, and search as Kit remotes — prerendered by default, live when you ask. The doc body bakes into a region ticket so the corpus stays server-side.
+summary: The wire layer. remotes(site) mints nav, meta, page, and search as Kit remotes — prerendered by default, live when you ask. The doc body bakes into a region ticket so the corpus stays server-side.
 related:
   - content/site
   - content/search
@@ -35,7 +35,7 @@ Four remotes, each a plain async function the page awaits:
 
 ## The body crosses as a ticket
 
-A body is a live [region](/docs/regions/held-regions) — a same-pass SSR render. It cannot be serialized as-is. `doc` **awaits** it, which bakes its SSR HTML into the region ticket: HTML-only, no source, no corpus. The page renders that with `<Region>` (via `<Doc>`), and any island the source imported wakes from the baked markup:
+A body is a live [region](/docs/regions/held-regions) — a same-pass SSR render. It cannot be serialized as-is. `page` **awaits** it, which bakes its SSR HTML into the region ticket: HTML-only, no source, no corpus. The page renders that with `<Region>` (via `<Doc>`), and any island the source imported wakes from the baked markup:
 
 ```svelte
 <script>
@@ -52,25 +52,25 @@ That is why the docs corpus can be megabytes yet a page ships only its own baked
 
 ## Prerender or live
 
-By default `nav`, `meta`, and `doc` **prerender** — static payloads, computed at build. Some sites want them dynamic (an authenticated preview, per-request content). The `modes` option picks per remote:
+By default `nav`, `meta`, and `page` **prerender** — static payloads, computed at build. Some sites want them dynamic (an authenticated preview, per-request content). The `modes` option picks per remote:
 
 ::: code-group
 
 ```ts [static docs (default)]
 export const { nav, meta, page, search } = remotes(docs, { base: '/docs' });
-// nav/meta/doc are baked at build and served static; search runs per request
+// nav/meta/page are baked at build and served static; search runs per request
 ```
 
 ```ts [live preview site]
 export const { nav, meta, page, search } = remotes(docs, {
 	base: '/docs',
-	modes: { doc: 'query', nav: 'query' }   // per-request; the site's `context` gates what renders
+	modes: { page: 'query', nav: 'query' }   // per-request; the site's `context` gates what renders
 });
 ```
 
 :::
 
-- **`'prerender'`** (default for `nav` / `meta` / `doc`) — baked at build, served static. Required when the awaiting pages prerender.
+- **`'prerender'`** (default for `nav` / `meta` / `page`) — baked at build, served static. Required when the awaiting pages prerender.
 - **`'query'`** — runs on the server per request; pairs with `site({ context })` for previews and roles.
 
 `search` is always a `query` — a search is inherently dynamic. (For a fully static search box, ship the [index](/docs/content/search) instead and query it in a client worker; then you don't mint `search` at all.)
@@ -92,6 +92,6 @@ export const load = docs.load;   // the 404 guard + alias redirects + per-page c
 ## Do / don't
 
 - **Do** mint remotes in a `.remote.ts` and import only those from pages. That is the whole corpus-safety story.
-- **Do** let `doc` bake the body. Awaiting it is what turns a live region into something that can cross the wire.
+- **Do** let `page` bake the body. Awaiting it is what turns a live region into something that can cross the wire.
 - **Don't** try to return a raw `entry.body` from a remote or a server load — it is a same-pass render, and ogygia stops you with an error saying exactly that.
 - **Don't** reach for `query` mode by default. Prerendered pages are faster and cheaper; switch a remote to `query` only when the content genuinely varies per request.

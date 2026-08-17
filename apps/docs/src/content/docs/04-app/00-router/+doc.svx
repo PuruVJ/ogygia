@@ -100,7 +100,7 @@ export const prerender = true;
 
 At build, Kit emits the page as a **static file** — the shell plus each hole's fallback and a signed endpoint reference. Your CDN serves it like any asset: no server render, no cold start, edge-fast everywhere. When the page loads, each hole fetches its server-rendered HTML — fresh per visitor, cookie-personalized if the island reads cookies. The fastest possible TTFB, zero shell renders ever. See [held regions](/docs/regions/held-regions) and [server islands](/docs/regions/server-islands) for how the holes and signing work.
 
-And because [speculation](#speculate) prerenders the shell from the CDN and fills its holes before the click, navigation between PPR pages feels like it has no cost at all — turn on `continuity: { speculate: 'hover' }` and the whole app moves at that speed.
+And because [speculation](#speculate) prerenders the shell from the CDN and fills its holes before the click, navigation between PPR pages feels like it has no cost at all — in MPA mode (`router: false`) the automatic Speculation Rules move the whole app at that speed.
 
 ### See it
 
@@ -147,7 +147,7 @@ The router does no script processing: `<script>` tags injected by a body swap do
 
 - **Do** wrap persistent chrome (sidebar, player, header) in `data-ogygia-keep` so it keeps state across navigations.
 - **Do** use the `data-sveltekit-preload-*` attributes you already know — they work unchanged.
-- **Do** turn on `continuity: { speculate: 'hover' }` for app-like instant navigation — with PPR shells it is nearly free. Opt risky links out with `data-ogygia-speculate="off"` (and `="on"` to re-enable one inside).
+- **Do** rely on automatic [speculation](#speculate) in MPA mode (`router: false`) for near-free navigation — with PPR shells it is nearly free. Opt risky links out with `data-ogygia-speculate="off"` (and `="on"` to re-enable one inside).
 - **Do** set a stable `OGYGIA_SECRET` before you ship prerendered holes, so redeploys don't orphan them.
 - **Don't** expect injected `<script>` tags to run after a body swap; put per-navigation code in an island.
 - **Don't** bind `sessionCookie` to a prerendered hole — personalize inside the island instead.

@@ -137,4 +137,4 @@ The built-in default is `a → Link` — id-form links (`[Guide](routing)`) reso
 - **Do** reach for `DocsShell` first. It's a working docs site in one import; drop to `Frame` or the bricks only when you need to.
 - **Do** import the CSS in your root layout, once. The shells import none themselves — that's what lets you bring your own.
 - **Don't** thread `site` through every component. A shell sets it on context; the bricks inside read it without props.
-- **Don't** re-implement the on-this-page rail or the pager. `view.headings` and `view.prevNext` already carry the data; `<Doc>` renders both.
+- **Don't** re-implement the on-this-page rail or the pager. `view.headings` and `view.trail` already carry the data; `<Doc>` renders both.
