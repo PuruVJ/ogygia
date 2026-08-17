@@ -33,6 +33,14 @@ type IslandBridge = {
 	 * the svelte config only references a value-free `markdown()`. `null` when not set.
 	 */
 	markdownConfig: Record<string, unknown> | null;
+	/**
+	 * Named content presets from `ogygia({ content: { presets } })` — each a partial content-config
+	 * (`{ markdown: {…} }`) referenced by a LITERAL `preset: 'name'` on a loader macro. The macro
+	 * checks the name here at rewrite time; the preprocessor merges the named bag over
+	 * {@link markdownConfig} (depth-2: per setting key) for each `?og_preset=` module VARIANT the
+	 * referencing collection's glob mints. `null` when none configured.
+	 */
+	contentPresets: Record<string, { markdown?: Record<string, unknown> }> | null;
 };
 
 // The plugin runs in Vite's config context; the preprocessor runs in the app/compile context. A
@@ -44,5 +52,6 @@ const g = globalThis as unknown as Record<symbol, IslandBridge>;
 export const islandBridge: IslandBridge = (g[KEY] ??= {
 	transform: null,
 	scan: null,
-	markdownConfig: null
+	markdownConfig: null,
+	contentPresets: null
 });

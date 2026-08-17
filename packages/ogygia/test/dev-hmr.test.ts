@@ -3,6 +3,7 @@ import {
 	needs_csr_false_full_reload,
 	needs_island_entry_full_reload,
 	dev_hmr_client_source,
+	derive_css_scope_owners,
 	same_module_path,
 	island_vpaths_affected_by_file,
 	rewrite_island_sourcemap_sources
@@ -81,15 +82,75 @@ describe('island_vpaths_affected_by_file', () => {
 });
 
 describe('dev_hmr_client_source', () => {
-	it('wires soft CSS HMR and hard full-reload on vite:error', () => {
+	it('wires scoped soft CSS HMR and hard full-reload on vite:error', () => {
 		const src = dev_hmr_client_source();
 		expect(src).toContain('import "/@vite/client"');
 		expect(src).toContain('import.meta.glob("/src/**/*.{css,scss,sass,less,styl}"');
+		// LAZY, not eager — an eager whole-app join paints every sub-app with every other's skin.
+		expect(src).toContain('{ eager: false }');
+		expect(src).not.toContain('{ eager: true }');
+		// Joins are scope-gated by the handle-stamped meta + the plugin's ogygia:css broadcast.
+		expect(src).toContain('ogygia-dev-scope');
+		expect(src).toContain('ogygia:css');
 		expect(src).toContain('vite:error');
 		expect(src).toContain('location.reload()');
 		// Must NOT strip Kit FOUC — under csr=false that bag is the page CSS.
 		expect(src).not.toContain('data-sveltekit');
 		expect(src).not.toContain('MutationObserver');
+	});
+});
+
+describe('derive_css_scope_owners', () => {
+	type Mod = { file?: string | null; importers?: Mod[] };
+	const graph_of = (roots: Map<string, Mod[]>) => ({
+		getModulesByFile: (f: string) => (roots.has(f) ? new Set(roots.get(f)) : undefined)
+	});
+
+	it('walks importers up to route files and reports their top-level scopes', () => {
+		const docs_layout: Mod = { file: '/app/src/routes/(docs)/+layout.svelte' };
+		const css: Mod = { file: '/app/src/app.css', importers: [docs_layout] };
+		const owners = derive_css_scope_owners('/app/src/app.css', '/app', [graph_of(new Map([['/app/src/app.css', [css]]]))]);
+		expect(owners).toEqual(['(docs)']);
+	});
+
+	it('reaches route files through intermediate lib modules and dedupes scopes', () => {
+		const pg_page: Mod = { file: '/app/src/routes/playground/+page.svelte' };
+		const pg_layout: Mod = { file: '/app/src/routes/playground/+layout.svelte' };
+		const lib: Mod = { file: '/app/src/lib/playground/thing.svelte', importers: [pg_page, pg_layout] };
+		const css: Mod = { file: '/app/src/lib/playground/thing.css', importers: [lib] };
+		const owners = derive_css_scope_owners('/app/src/lib/playground/thing.css', '/app', [
+			graph_of(new Map([['/app/src/lib/playground/thing.css', [css]]]))
+		]);
+		expect(owners).toEqual(['playground']);
+	});
+
+	it('a root-level route file owns the empty scope; shared css lists every owner', () => {
+		const root_layout: Mod = { file: '/app/src/routes/+layout.svelte' };
+		const docs_err: Mod = { file: '/app/src/routes/(docs)/+error.svelte' };
+		const css: Mod = { file: '/app/src/shared.css', importers: [root_layout, docs_err] };
+		const owners = derive_css_scope_owners('/app/src/shared.css', '/app', [
+			graph_of(new Map([['/app/src/shared.css', [css]]]))
+		]);
+		expect(owners).toEqual(['', '(docs)']);
+	});
+
+	it('no route owner found → empty (client treats as shared)', () => {
+		const orphan: Mod = { file: '/app/src/lib/orphan.css', importers: [] };
+		expect(
+			derive_css_scope_owners('/app/src/lib/orphan.css', '/app', [
+				graph_of(new Map([['/app/src/lib/orphan.css', [orphan]]]))
+			])
+		).toEqual([]);
+	});
+
+	it('survives importer cycles', () => {
+		const a: Mod = { file: '/app/src/lib/a.ts' };
+		const b: Mod = { file: '/app/src/lib/b.ts', importers: [a] };
+		a.importers = [b];
+		const css: Mod = { file: '/app/src/x.css', importers: [a] };
+		expect(
+			derive_css_scope_owners('/app/src/x.css', '/app', [graph_of(new Map([['/app/src/x.css', [css]]]))])
+		).toEqual([]);
 	});
 });
 

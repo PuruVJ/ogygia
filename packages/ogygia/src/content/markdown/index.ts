@@ -508,3 +508,55 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 
 ogygiaPreprocess.extensions = extensions;
 
+/**
+ * The end-of-file marker the ogygia plugin appends to a content-preset module VARIANT
+ * (`file.svx?og_preset=name`). vite-plugin-svelte strips the query from the `filename` a
+ * preprocessor sees, so the preset name travels in CONTENT instead: the dispatcher below reads it,
+ * strips it, and routes to the preset's pipeline — mdsvex never sees the marker.
+ */
+const PRESET_MARKER_RE = /\n?<!--og_preset:([\w-]+)-->\s*$/;
+
+/**
+ * The preset-aware preprocessor `ogygia.preprocess()` mounts. Without content presets it IS the
+ * plain {@link ogygiaPreprocess} (zero regression). With presets, it dispatches per file: an
+ * unmarked file compiles through the default pipeline; a `?og_preset=` variant (marker-tagged by
+ * the plugin) compiles through a lazily-built pipeline whose config is the preset's bag merged
+ * over the defaults — depth-2, per setting key. One file under two presets = two variants = two
+ * independent compiles; caches stay distinct because each pipeline's config signature differs.
+ */
+export function ogygiaPresetPreprocess(): PreprocessorGroup {
+	// The default pipeline is built EAGERLY — its island scanner registration must win (the
+	// buildStart scan reads files from disk, where no variant marker exists, so it scans with the
+	// default config by design). Preset pipelines are built lazily and must NOT clobber the scanner.
+	const default_group = ogygiaPreprocess();
+	if (!islandBridge.contentPresets) return default_group;
+	const default_scan = islandBridge.scan;
+
+	const groups = new Map<string, PreprocessorGroup>();
+	const group_for = (preset: string): PreprocessorGroup => {
+		let g = groups.get(preset);
+		if (!g) {
+			const bag = islandBridge.contentPresets?.[preset];
+			if (!bag) {
+				throw new Error(
+					`[ogygia/content] unknown content preset '${preset}' on a module variant. Configured: ${Object.keys(islandBridge.contentPresets ?? {}).join(', ') || '(none)'}.`
+				);
+			}
+			const base = (islandBridge.markdownConfig as MarkdownOptions | null) ?? {};
+			g = ogygiaPreprocess({ ...base, ...(bag.markdown ?? {}) } as MarkdownOptions);
+			islandBridge.scan = default_scan; // the preset pipeline registered itself — undo; default owns scan
+			groups.set(preset, g);
+		}
+		return g;
+	};
+
+	return {
+		name: 'ogygia-markdown',
+		async markup(input: { content: string; filename: string }) {
+			const m = PRESET_MARKER_RE.exec(input.content);
+			if (!m) return default_group.markup?.(input);
+			return group_for(m[1]).markup?.({ ...input, content: input.content.slice(0, m.index) });
+		}
+	};
+}
+

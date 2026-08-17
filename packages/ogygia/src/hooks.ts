@@ -49,6 +49,12 @@ import {
 	REGION_TTL_RE
 } from './server/endpoint.js';
 import { build_parcel, done_parcel } from './server/stream-regions.js';
+import {
+	page_declares_router_meta,
+	page_declares_runtime_script,
+	page_declares_dev_hmr_script,
+	page_declares_speculation_rules
+} from './server/head-presence.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
@@ -264,11 +270,20 @@ class OgygiaHandle {
 		// The runtime URL is root-relative (base-correct for `base: ''`); island pages under a base
 		// path get the base-correct URL from Region's `asset()`, so only base-path + island-less pages
 		// are affected — a rare follow-up.
+		//
+		// Every presence check matches a REAL element, not the tag's name as TEXT — a page that
+		// DOCUMENTS one of these tags in a code block (the changelog does) renders it escaped, which a
+		// bare `html.includes('name="ogygia-router"')` false-matches, suppressing the injection. See
+		// `head-presence.ts` for why that dropped documented pages to full-page navigation.
+		const has_router_meta = page_declares_router_meta(html);
+		const has_runtime_script = page_declares_runtime_script(html);
+		const has_dev_hmr_script = page_declares_dev_hmr_script(html);
+		const has_speculation_rules = page_declares_speculation_rules(html);
 		// MPA mode (`router: false`): no SPA machinery ships — the browser owns navigation, so the
 		// handle injects static Speculation Rules instead. Chromium prerenders likely next pages,
 		// Firefox prefetches them, everything else ignores the JSON. Presence-checked so a page
 		// authoring its own rules wins; per-link opt-out via `data-ogygia-speculate="off"`.
-		if (!router_enabled && mpa_speculation_rules && !html.includes('type="speculationrules"') && html.includes('</head>')) {
+		if (!router_enabled && mpa_speculation_rules && !has_speculation_rules && html.includes('</head>')) {
 			html = html.replace(
 				'</head>',
 				`<script type="speculationrules" data-ogygia-speculate>${mpa_speculation_rules}</script></head>`
@@ -276,14 +291,19 @@ class OgygiaHandle {
 		}
 		if (router_enabled) {
 			const head: string[] = [];
-			if (!html.includes('name="ogygia-router"')) {
+			if (!has_router_meta) {
 				head.push(`<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`);
 			}
-			if (runtime_url && !html.includes('data-ogygia-runtime')) {
+			if (runtime_url && !has_runtime_script) {
 				head.push(`<script type="module" data-ogygia-runtime src="${runtime_url}"></script>`);
 			}
-			if (dev_hmr_url && !html.includes('data-ogygia-dev-hmr')) {
+			if (dev_hmr_url && !has_dev_hmr_script) {
 				head.push(`<script type="module" data-ogygia-dev-hmr src="${dev_hmr_url}"></script>`);
+				// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:
+				// a changed stylesheet joins this page only when the plugin derives the same scope
+				// among its owners — two route-group sub-apps never paint each other in dev.
+				const scope = (event.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
+				head.push(`<meta name="ogygia-dev-scope" content="${scope.replace(/"/g, '')}">`);
 			}
 			if (head.length && html.includes('</head>')) {
 				html = html.replace('</head>', head.join('') + '</head>');

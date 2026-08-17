@@ -30,6 +30,7 @@
 import { find_og_calls, split_first_string, type OgCall } from './og-lexer.js';
 import { parse_git_spec, git_glob_pattern, type GitSpec } from './git.js';
 import { parse_module } from './og-parse.js';
+import { islandBridge } from './island-bridge.js';
 
 const PREFIX = 'import.meta.og.loader.';
 
@@ -101,6 +102,77 @@ function glob_arg_list(patterns: string[]): string {
 
 /** Glob magic that marks an argument as an explicit pattern rather than a directory. */
 const GLOB_MAGIC = /[*?{}[\]]/;
+
+/**
+ * Extract (and STRIP) a `preset: 'name'` property from a loader call's trailing options text.
+ *
+ * The name must be a LITERAL string (the standing macro-argument law) — it selects a
+ * `content.presets` entry at build, so a runtime expression can never carry it. The property is
+ * spliced OUT of the options the runtime builder receives: the preset is fully consumed at compile
+ * (it becomes the emitted glob's `?og_preset=` module-variant query); a copy reaching runtime would
+ * be a silent no-op wearing an option's clothes.
+ *
+ * Parsing rides the same oxc parser as macro detection: the args text is wrapped as a call and
+ * parsed, so a `preset` key nested in some OTHER object (a convention option, a regex) is provably
+ * not the loader's own — only a top-level property of the FIRST ObjectExpression argument counts.
+ */
+export function extract_preset(args: string, context: string): { preset: string | null; args: string } {
+	if (!/\bpreset\b/.test(args)) return { preset: null, args };
+	const wrapped = `__og(${args})`;
+	const { program, ok } = parse_module(wrapped, 'loader-args.ts');
+	if (!ok || !program) {
+		throw new Error(
+			`[ogygia] ${context}: could not parse the options object while looking for \`preset\` — simplify the options, and keep \`preset\` a literal string.`
+		);
+	}
+	// program → ExpressionStatement → CallExpression(args)
+	const call = (program as Node).body?.[0]?.expression;
+	if (call?.type !== 'CallExpression') return { preset: null, args };
+	for (const arg of call.arguments ?? []) {
+		if (arg?.type !== 'ObjectExpression') continue;
+		for (const prop of arg.properties ?? []) {
+			if (prop?.type !== 'Property' && prop?.type !== 'ObjectProperty') continue;
+			const key = prop.key?.name ?? prop.key?.value;
+			if (key !== 'preset') continue;
+			const v = prop.value;
+			const literal =
+				(v?.type === 'Literal' || v?.type === 'StringLiteral') && typeof v.value === 'string' ? v.value : null;
+			if (literal == null) {
+				throw new Error(
+					`[ogygia] ${context}: \`preset\` must be a literal string ('name') — it selects a content preset at build.`
+				);
+			}
+			// Splice the property (and one neighboring comma) out of the ORIGINAL args text. Offsets in
+			// `wrapped` are the args offsets + the `__og(` prefix length.
+			const off = '__og('.length;
+			let from = prop.start - off;
+			let to = prop.end - off;
+			const before = args.slice(0, from);
+			const after = args.slice(to);
+			if (/,\s*$/.test(before)) from = before.lastIndexOf(',');
+			else if (/^\s*,/.test(after)) to += after.indexOf(',') + 1;
+			const remaining = (args.slice(0, from) + args.slice(to)).trim();
+			// `{ preset: 'x' }` was the WHOLE options object → drop it rather than emit `{ }`.
+			return { preset: literal, args: /^\{\s*\}$/.test(remaining) ? '' : remaining };
+		}
+	}
+	return { preset: null, args };
+}
+
+/** Validate a macro's preset name against the configured dictionary — error lists the real names. */
+function check_preset_name(preset: string, context: string): void {
+	const dict = islandBridge.contentPresets;
+	const names = dict ? Object.keys(dict) : [];
+	if (!names.includes(preset)) {
+		throw new Error(
+			`[ogygia] ${context}: unknown content preset '${preset}'. ${
+				names.length
+					? `Configured: ${names.join(', ')}.`
+					: 'No content presets are configured — define it under ogygia({ content: { presets } }).'
+			}`
+		);
+	}
+}
 
 /** The opinionated file set each loader owns, rooted under a directory argument. */
 const OPINIONATED: Record<'markdown' | 'folder' | 'json', string[]> = {
@@ -213,15 +285,24 @@ export function rewrite_loaders(src: string, id = 'module.ts'): { code: string; 
 	return { code: header + out, specs };
 }
 
+/** The emitted `import.meta.glob` options — a preset mints module VARIANTS via a custom query, so
+ *  the same file under two presets is two modules, each compiled with its own merged config. */
+function glob_opts(preset: string | null): string {
+	return preset ? `{ eager: false, query: { og_preset: ${JSON.stringify(preset)} } }` : '{ eager: false }';
+}
+
 /** One loader call → its rewritten expression. Mutates `used`/`specs` with what it needs. */
 function emit(c: LoaderCall, used: Set<'markdown' | 'folder' | 'json'>, specs: GitSpec[]): string {
+	const context = `import.meta.og.loader.${c.method}()`;
 	if (c.method === 'git') {
-		const { value, rest } = split_first_string(c.args, 'import.meta.og.loader.git()');
+		const { value, rest } = split_first_string(c.args, context);
 		const spec = parse_git_spec(value);
 		specs.push(spec);
 		used.add('folder');
-		const opts = rest ? `, ${rest}` : '';
-		return `${ALIAS.folder}(import.meta.glob(${glob_arg(git_glob_pattern(spec))}, { eager: false })${opts})`;
+		const { preset, args: clean } = extract_preset(rest ?? '', context);
+		if (preset) check_preset_name(preset, context);
+		const opts = clean ? `, ${clean}` : '';
+		return `${ALIAS.folder}(import.meta.glob(${glob_arg(git_glob_pattern(spec))}, ${glob_opts(preset)})${opts})`;
 	}
 
 	const builder = BUILDER[c.method];
@@ -230,8 +311,10 @@ function emit(c: LoaderCall, used: Set<'markdown' | 'folder' | 'json'>, specs: G
 			`[ogygia] import.meta.og.loader.${c.method}() is not a loader — expected markdown, folder, json, or git.`
 		);
 	}
-	const { value: glob, rest } = split_first_string(c.args, `import.meta.og.loader.${c.method}()`);
+	const { value: glob, rest } = split_first_string(c.args, context);
 	used.add(builder);
-	const opts = rest ? `, ${rest}` : '';
-	return `${ALIAS[builder]}(import.meta.glob(${glob_arg_list(loader_patterns(builder, glob))}, { eager: false })${opts})`;
+	const { preset, args: clean } = extract_preset(rest ?? '', context);
+	if (preset) check_preset_name(preset, context);
+	const opts = clean ? `, ${clean}` : '';
+	return `${ALIAS[builder]}(import.meta.glob(${glob_arg_list(loader_patterns(builder, glob))}, ${glob_opts(preset)})${opts})`;
 }

@@ -320,3 +320,57 @@ describe('tab component injection (plain barrel)', () => {
 		expect(code).not.toContain('ogygia/content/tab-group');
 	});
 });
+
+describe('content preset dispatch (v3 config surface)', () => {
+	it('routes a marker-tagged variant through the preset pipeline, unmarked through the default', async () => {
+		const { islandBridge } = await import('../src/vite/island-bridge.js');
+		const { ogygiaPresetPreprocess } = await import('../src/content/markdown/index.js');
+		const saved = {
+			markdownConfig: islandBridge.markdownConfig,
+			contentPresets: islandBridge.contentPresets,
+			scan: islandBridge.scan
+		};
+		try {
+			// Distinguishable per-preset setting: the fence wrapper class (depth-2 merge observable).
+			islandBridge.markdownConfig = { wrapperClass: 'default-wrap' };
+			islandBridge.contentPresets = { pg: { markdown: { wrapperClass: 'preset-wrap' } } };
+			const pp = ogygiaPresetPreprocess();
+			const doc = '# Hi\n\n```js\nlet a = 1;\n```\n';
+
+			const plain = (await pp.markup?.({ content: doc, filename: '/x/a.md' })) as { code: string };
+			expect(plain.code).toContain('default-wrap');
+			expect(plain.code).not.toContain('preset-wrap');
+
+			const variant = (await pp.markup?.({
+				content: doc + '\n<!--og_preset:pg-->',
+				filename: '/x/a.md'
+			})) as { code: string };
+			expect(variant.code).toContain('preset-wrap');
+			expect(variant.code).not.toContain('default-wrap');
+			// The marker never leaks into the compiled output.
+			expect(variant.code).not.toContain('og_preset');
+		} finally {
+			islandBridge.markdownConfig = saved.markdownConfig;
+			islandBridge.contentPresets = saved.contentPresets;
+			islandBridge.scan = saved.scan;
+		}
+	});
+
+	it('unknown preset on a variant errors listing the configured names', async () => {
+		const { islandBridge } = await import('../src/vite/island-bridge.js');
+		const { ogygiaPresetPreprocess } = await import('../src/content/markdown/index.js');
+		const saved = { markdownConfig: islandBridge.markdownConfig, contentPresets: islandBridge.contentPresets, scan: islandBridge.scan };
+		try {
+			islandBridge.markdownConfig = {};
+			islandBridge.contentPresets = { pg: { markdown: {} } };
+			const pp = ogygiaPresetPreprocess();
+			await expect(
+				pp.markup?.({ content: 'x\n<!--og_preset:nope-->', filename: '/x/a.md' }) as Promise<unknown>
+			).rejects.toThrow(/unknown content preset 'nope'.*pg/);
+		} finally {
+			islandBridge.markdownConfig = saved.markdownConfig;
+			islandBridge.contentPresets = saved.contentPresets;
+			islandBridge.scan = saved.scan;
+		}
+	});
+});

@@ -17,10 +17,12 @@ const themes = await load_ogygia_themes();
 export default defineConfig({
 	plugins: [
 		ogygia({
-			visible: { margin: '120px' },
-			presets: {
-				demo: { wake: 'visible', margin: '200px' },
-				frozenSwr: { render: 'live', wake: 'load' },
+			regions: {
+				visible: { margin: '120px' },
+				presets: {
+					demo: { wake: 'visible', margin: '200px' },
+					frozenSwr: { render: 'live', wake: 'load' },
+				},
 			},
 			content: {
 				markdown: {
@@ -33,6 +35,25 @@ export default defineConfig({
 					// Reshape the Releases page's `## [x] — date` headings into a clean version + a date
 					// line under it. `enforce: 'pre'` so the heading-id/TOC collectors see "0.5.0".
 					remark: [{ enforce: 'pre', plugin: remarkChangelog }],
+				},
+				// The /playground sub-app's markdown variant: its collections name this preset on their
+				// loader macros. Depth-2 merge means unstated keys INHERIT the docs base above — and the
+				// playground must rely on NOTHING of ours (its own shell, its own themes: the whole
+				// point of the sub-layout split). So the preset restates EVERY key the base sets —
+				// stock Shiki themes, stock defaults, no docs transformers, no changelog remark — making
+				// it byte-equivalent to the standalone playground's pipeline (defaults + overrides). A
+				// future edit to the docs base above can never reach it.
+				presets: {
+					playground: {
+						markdown: {
+							overrides: true,
+							themes: { light: 'github-light', dark: 'github-dark' },
+							defaultColor: 'light-dark()',
+							wrapperClass: 'code-only',
+							code: {},
+							remark: [],
+						},
+					},
 				},
 			},
 		}),

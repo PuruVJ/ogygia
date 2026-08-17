@@ -22,7 +22,7 @@ import { rewrite_bake } from './og-bake.js';
  *  og-extract.ts). JS/TS modules are handled by the constructs themselves, not this list. */
 const CONSTRUCT_MARKUP_EXTS = ['.svelte'] as const;
 import { content as contentHmrPlugin, type ContentPluginOptions } from '../content/vite/plugin.js';
-import { ogygiaPreprocess, type MarkdownOptions } from '../content/markdown/index.js';
+import { ogygiaPresetPreprocess, type MarkdownOptions } from '../content/markdown/index.js';
 import {
 	transformHost,
 	transformTsRegions,
@@ -298,8 +298,17 @@ export function island_vpaths_affected_by_file(
 }
 
 /**
- * Client bridge source for `virtual:ogygia/dev-hmr` (vite serve only): joins app CSS under
- * `/src` into the browser graph via `import.meta.glob`, and full-reloads on `vite:error`.
+ * Client bridge source for `virtual:ogygia/dev-hmr` (vite serve only): a LAZY map of app CSS under
+ * `/src`, joined per-file when the plugin broadcasts a scoped `ogygia:css` event — plus full-reload
+ * on `vite:error`.
+ *
+ * LAZY is load-bearing. The bridge used to join every `/src` stylesheet EAGERLY, which painted the
+ * whole app's CSS onto every page — invisible while one app owned one look, but the moment two
+ * sub-apps share one project (the `(docs)` / `playground` split), each page wore the other's skin
+ * in dev while prod (Kit's per-route CSS) stayed clean. Now a page boots with exactly its SSR CSS,
+ * and joins a stylesheet only when it changes AND this page's route scope owns it (the
+ * `ogygia-dev-scope` meta the handle stamps vs. the owners the plugin derives from the module
+ * graph). Once joined, later edits soft-apply through Vite's normal CSS HMR.
  *
  * Do **not** strip Kit’s `<style data-sveltekit>` FOUC bag. Under `csr = false` that bag is
  * how page + component CSS is delivered (no client module graph for route shells). Removing
@@ -311,8 +320,10 @@ export function island_vpaths_affected_by_file(
 export function dev_hmr_client_source() {
 	return (
 		`import "/@vite/client";\n` +
-		`import.meta.glob("/src/**/*.{css,scss,sass,less,styl}", { eager: true });\n` +
-		`// Soft path: CSS modules via Vite HMR (injected after FOUC; later rules win).\n` +
+		`const css_modules = import.meta.glob("/src/**/*.{css,scss,sass,less,styl}", { eager: false });\n` +
+		`const scope_meta = document.querySelector('meta[name="ogygia-dev-scope"]');\n` +
+		`const scope = scope_meta ? scope_meta.getAttribute("content") || "" : "";\n` +
+		`// Soft path: scoped join on first change, then Vite CSS HMR (injected after FOUC; later rules win).\n` +
 		`// Hard path: anything Vite can't apply.\n` +
 		`function ogygia_full_reload() {\n` +
 		`  location.reload();\n` +
@@ -320,9 +331,63 @@ export function dev_hmr_client_source() {
 		`if (import.meta.hot) {\n` +
 		`  import.meta.hot.accept();\n` +
 		`  import.meta.hot.on("vite:error", ogygia_full_reload);\n` +
+		`  import.meta.hot.on("ogygia:css", (d) => {\n` +
+		`    const p = d && d.path;\n` +
+		`    if (!p || !css_modules[p]) return;\n` +
+		`    const owners = (d && d.owners) || [];\n` +
+		`    // Join only what this page's sub-app owns; ownerless css (shared / undeterminable) joins anywhere.\n` +
+		`    if (owners.length && owners.indexOf(scope) === -1) return;\n` +
+		`    css_modules[p]();\n` +
+		`  });\n` +
 		`}\n`
 	);
 }
+
+/** css-ish file the dev bridge manages (mirrors the bridge's glob). */
+const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
+
+/**
+ * Which top-level route scopes can reach `abs_file` — walked UP the dev module graph until route
+ * files are hit. A scope is a route file's first path segment under `src/routes` (`'(docs)'`,
+ * `'playground'`, `''` for a root-level route file). `[]` = no route owner found; the client treats
+ * that as shared and joins anywhere (the safe default for exotic graphs).
+ *
+ * @internal Exported for unit tests.
+ */
+export function derive_css_scope_owners(
+	abs_file: string,
+	root: string,
+	graphs: Array<
+		| { getModulesByFile?: (f: string) => Set<DevGraphModule> | undefined }
+		| undefined
+		| null
+	>
+): string[] {
+	const routes_dir = path.join(root, 'src', 'routes') + path.sep;
+	const owners = new Set<string>();
+	const seen = new Set<DevGraphModule>();
+	const stack: DevGraphModule[] = [];
+	for (const g of graphs) {
+		for (const m of g?.getModulesByFile?.(abs_file) ?? []) stack.push(m);
+	}
+	let steps = 0;
+	while (stack.length && steps++ < 5000) {
+		const mod = stack.pop()!;
+		if (seen.has(mod)) continue;
+		seen.add(mod);
+		const f = mod.file ? path.normalize(mod.file) : null;
+		if (f && f.startsWith(routes_dir)) {
+			const seg = f.slice(routes_dir.length).split(path.sep)[0] ?? '';
+			owners.add(seg.includes('.') ? '' : seg); // a route FILE at routes root → the '' scope
+			continue; // a route file is an owner — no need to climb past it
+		}
+		for (const imp of mod.importers ?? []) stack.push(imp);
+	}
+	return [...owners].sort();
+}
+
+/** Structural shape of a Vite dev module-graph node (the two fields the owner walk reads). */
+type DevGraphModule = { file?: string | null; importers?: Iterable<DevGraphModule> };
 
 /** Virtual island ENTRY module id — JS re-export of the real component (not a thin .svelte). */
 export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.js`;
@@ -488,6 +553,9 @@ export interface OgygiaPreset {
 	onExpire?: 'empty' | 'fetch';
 	/** `render: 'live'` — the revalidate schedule (`false` disables). Defaults to `wake`. */
 	revalidate?: false | string;
+	/** Continuity name (the `keep` import attribute): the live island relocates across SPA
+	 *  navigation instead of remounting when the next page carries the same name. */
+	keep?: string;
 }
 
 /** Per-IP budget for the signed deferred-region / lake-remount endpoint. */
@@ -499,7 +567,40 @@ export interface OgygiaRateLimit {
 }
 
 /**
- * Options for the {@link ogygia} Vite plugin.
+ * The `regions` subsystem — island defaults + the named preset dictionary. One grammar shared by
+ * every subsystem: defaults at the root, variance in `presets`, referenced from a use site by a
+ * LITERAL `preset: 'name'` (here: `import X from '…' with { preset: 'name' }`).
+ */
+export interface RegionsOptions {
+	/**
+	 * Global defaults for islands that use `wake: 'visible'` / `render`+`wake: 'visible'`
+	 * without their own `margin` (via a preset).
+	 */
+	visible?: {
+		/** Default `IntersectionObserver` `rootMargin` (e.g. `'200px'`). */
+		margin?: string;
+	};
+	/**
+	 * Named strategy bundles. Reference one from an import:
+	 * `import Chart from '$lib/Chart.svelte' with { preset: 'chart' };`
+	 */
+	presets?: Record<string, OgygiaPreset>;
+}
+
+/**
+ * A named CONTENT preset — a partial content-config referenced by a literal `preset: 'name'` on a
+ * loader macro (`import.meta.og.loader.folder('../docs', { preset: 'name' })`). The referencing
+ * collection's files compile as their own module VARIANTS (`?og_preset=name`), so the same file
+ * used by another collection under another preset renders independently — never a conflict.
+ */
+export interface ContentPreset {
+	/** Markdown options merged over `content.markdown` (per setting key — depth-2 replace). */
+	markdown?: MarkdownOptions;
+}
+
+/**
+ * Options for the {@link ogygia} Vite plugin — one top-level key per subsystem, each subsystem
+ * `defaults + its own presets`.
  *
  * @example
  * ```ts
@@ -507,8 +608,10 @@ export interface OgygiaRateLimit {
  * export default defineConfig({
  *   plugins: [
  *     ogygia({
- *       visible: { margin: '200px' },
- *       presets: { chart: { wake: 'visible', margin: '200px' } },
+ *       regions: {
+ *         visible: { margin: '200px' },
+ *         presets: { chart: { wake: 'visible', margin: '200px' } }
+ *       },
  *       regionTtl: 3600
  *     }),
  *     sveltekit()
@@ -517,52 +620,44 @@ export interface OgygiaRateLimit {
  * ```
  */
 export interface OgygiaOptions {
-	/**
-	 * Global defaults for islands that use `hydrate: 'visible'` / `defer: 'visible'`
-	 * without their own `margin` (via a preset).
-	 */
-	visible?: {
-		/** Default `IntersectionObserver` `rootMargin` (e.g. `'200px'`). */
-		margin?: string;
-	};
+	/** The regions subsystem: island defaults (`visible.margin`) + named island presets. */
+	regions?: RegionsOptions;
 
 	/**
 	 * Client-side SPA router — app-wide, on by default. It intercepts same-origin links, swaps
 	 * `<body>`, merges `<head>`, and keeps `data-ogygia-keep` chrome across navigations. No component
 	 * to place: the server handle injects the runtime + the `ogygia-router` meta into every page.
 	 *
-	 * - `true` (default) — router on, View Transitions on.
-	 * - `false` — router off (the whole feature is tree-shaken out; same-origin links do full MPA loads).
+	 * - `true` (default) — router on, View Transitions on, form continuity on.
+	 * - `false` — router off (the whole feature is tree-shaken out; same-origin links do full MPA
+	 *   loads, and form continuity — which rides SPA navigation — goes with it).
 	 * - `{ viewTransitions: false }` — router on, but no View Transitions API on navigation.
+	 * - `{ forms: false }` — router on, but an island's half-filled form fields are NOT carried
+	 *   across SPA navigation (continuity off).
 	 *
 	 * Per-page escape hatch (no second config): a page opts *itself* out of View Transitions by
 	 * emitting `<svelte:head><meta name="ogygia-router" content="plain" /></svelte:head>` — the handle
 	 * injects the app default but a page that sets its own meta wins.
 	 */
-	router?: boolean | { viewTransitions?: boolean };
+	router?: boolean | { viewTransitions?: boolean; forms?: boolean };
 
 	/**
-	 * Content-collection config. `markdown` configures the mdsvex preprocessor (themes, remark
-	 * plugins, heading ids…) so all config lives in one place — the svelte config then references a
-	 * value-free `markdown()`. The rest are dev HMR options. Only relevant when you use content.
+	 * The content subsystem. `markdown` configures the mdsvex preprocessor (themes, remark plugins,
+	 * heading ids…) — the defaults for every markdown file. `presets` are named variants a loader
+	 * macro opts a whole collection into (`{ preset: 'name' }`); requires `markdown` to be set (the
+	 * defaults are the base every preset merges over). The rest are dev HMR options.
 	 */
-	content?: ContentPluginOptions & { markdown?: MarkdownOptions };
+	content?: ContentPluginOptions & { markdown?: MarkdownOptions; presets?: Record<string, ContentPreset> };
 
 	/**
 	 * Rename the import-attribute keys claimed by the transform.
 	 * Defaults stay `hydrate` / `defer` / `preset`. Escape hatch if another tool already
 	 * uses those names on the same imports.
 	 *
-	 * Preset **definitions** ({@link presets}) still use canonical `hydrate` / `defer` /
-	 * `margin` / `remount` — only the `with { … }` spellings in source change.
+	 * Preset **definitions** ({@link RegionsOptions.presets}) still use canonical `hydrate` /
+	 * `defer` / `margin` / `remount` — only the `with { … }` spellings in source change.
 	 */
 	importKeys?: Partial<ImportKeys>;
-
-	/**
-	 * Named strategy bundles. Reference one from an import:
-	 * `import Chart from '$lib/Chart.svelte' with { preset: 'chart' };`
-	 */
-	presets?: Record<string, OgygiaPreset>;
 
 	/**
 	 * Per-IP budget for the signed island endpoint served by `ogygiaHandle()`.
@@ -584,21 +679,23 @@ export interface OgygiaOptions {
 	regionTtl?: number;
 
 	/**
-	 * CONTINUITY — the app forgets less across navigation.
-	 * - `forms` (default `true`): an island's half-filled form fields survive SPA navigation and
-	 *   back/forward within the tab session. Restored on return, with `bind:` synced. Set `false`
-	 *   to disable.
-	 */
-	continuity?: {
-		forms?: boolean;
-	};
-
-	/**
 	 * @internal Recreate this plugin instance inside the standalone client build.
 	 * App authors should not set this.
 	 */
 	standalone?: boolean;
 }
+
+/**
+ * The pre-v3 option spellings, killed by the config-surface collapse. Detected at config load and
+ * answered with the exact new spelling — a rename map, never silent aliasing (a legacy key that
+ * silently did nothing would un-tune real apps).
+ */
+const LEGACY_OPTION_RENAMES: Record<string, string> = {
+	visible: "`visible` moved into the regions subsystem — write `regions: { visible: { … } }`.",
+	presets: "`presets` moved into the regions subsystem — write `regions: { presets: { … } }`.",
+	continuity:
+		"`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it."
+};
 
 /**
  * Rewrite vite-plugin-svelte island sourcemap `sources` so Vite treats them as virtual.
@@ -640,8 +737,31 @@ export function rewrite_island_sourcemap_sources(
  */
 export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const standalone = options.standalone === true;
-	const visibleMargin = options.visible?.margin;
-	const presets = options.presets || {};
+
+	// The v3 rename map: a legacy key errors with its new spelling, never silently no-ops.
+	for (const key of Object.keys(LEGACY_OPTION_RENAMES)) {
+		if (key in (options as Record<string, unknown>)) {
+			throw new Error(`[ogygia] ${LEGACY_OPTION_RENAMES[key]}`);
+		}
+	}
+
+	const visibleMargin = options.regions?.visible?.margin;
+	const presets = options.regions?.presets || {};
+	// Config-time preset validation — the transform re-checks on USE (with file/line context), but a
+	// broken preset nobody references yet should still fail the build, not lurk.
+	const REGION_PRESET_KEYS = new Set(['render', 'wake', 'margin', 'maxAge', 'onExpire', 'revalidate', 'keep']);
+	for (const [name, bag] of Object.entries(presets)) {
+		if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
+			throw new Error(`[ogygia] regions.presets.${name} is empty — a preset with nothing is a mistake.`);
+		}
+		for (const k of Object.keys(bag)) {
+			if (!REGION_PRESET_KEYS.has(k)) {
+				throw new Error(
+					`[ogygia] regions.presets.${name}: unknown key \`${k}\`. A regions preset takes ${[...REGION_PRESET_KEYS].join(', ')}.`
+				);
+			}
+		}
+	}
 	const import_keys = normalize_import_keys(options.importKeys);
 
 	// Cheap content-gate: does a source use an ogygia island hint (`import X from '…' with { wake|… }`)?
@@ -658,6 +778,32 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// its throwaway client build; don't let that clobber the real config with `null`.
 	if (!standalone && options.content?.markdown) {
 		islandBridge.markdownConfig = options.content.markdown as Record<string, unknown>;
+	}
+	// Content presets — validated (closed vocabulary, non-empty, base required) and published for the
+	// loader macros (name check at the use site) + the preprocessor (merged config per variant).
+	if (!standalone && options.content?.presets) {
+		const content_presets = options.content.presets;
+		if (!options.content.markdown) {
+			throw new Error(
+				'[ogygia] content.presets requires content.markdown — the defaults are the base every preset merges over (an empty `markdown: {}` is fine).'
+			);
+		}
+		for (const [name, bag] of Object.entries(content_presets)) {
+			if (!/^[\w-]+$/.test(name)) {
+				throw new Error(`[ogygia] content.presets: '${name}' — preset names are identifiers ([A-Za-z0-9_-]).`);
+			}
+			if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
+				throw new Error(`[ogygia] content.presets.${name} is empty — a preset with nothing is a mistake.`);
+			}
+			for (const k of Object.keys(bag)) {
+				if (k !== 'markdown') {
+					throw new Error(
+						`[ogygia] content.presets.${name}: unknown key \`${k}\`. A content preset takes \`markdown\`.`
+					);
+				}
+			}
+		}
+		islandBridge.contentPresets = content_presets as typeof islandBridge.contentPresets;
 	}
 
 	// Region-endpoint rate limit (baked into SSR only via virtual:ogygia/rate-limit).
@@ -691,8 +837,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				? options.router.viewTransitions !== false
 				: true;
 
-	// CONTINUITY config. Ambient island-form survival across SPA nav is ON by default.
-	const continuity_forms = options.continuity?.forms !== false;
+	// CONTINUITY rides the router (it snapshots on SPA navigation): router on + `forms` not disabled.
+	// `router: false` takes forms with it — there is no SPA nav to survive.
+	const continuity_forms =
+		router_enabled && (typeof options.router === 'object' ? options.router.forms !== false : true);
 
 
 	/** Build-time capability marks for the sticky runtime entry. Incomplete → kitchen-sink. */
@@ -1399,6 +1547,29 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (!is_dev) return;
 			vite_server = server;
 
+			// SCOPED soft CSS HMR. App css joins the browser graph LAZILY (see dev_hmr_client_source):
+			//  - already joined on a client → fall through to Vite's normal CSS update (soft);
+			//  - not joined anywhere → suppress Vite's no-boundary full reload and broadcast a scoped
+			//    join event instead; each open page joins ONLY css its own route scope imports, so the
+			//    `(docs)` and `playground` sub-apps can never paint each other in dev.
+			if (DEV_CSS_FILE_RE.test(file) && !file.includes('/node_modules/')) {
+				const src_prefix = path.join(root, 'src') + path.sep;
+				if (path.normalize(file).startsWith(src_prefix)) {
+					const envs = (server as unknown as {
+						environments?: Record<string, { moduleGraph?: { getModulesByFile?: (f: string) => Set<DevGraphModule> | undefined } }>;
+					}).environments;
+					const client_graph = envs?.client?.moduleGraph;
+					const joined = client_graph?.getModulesByFile?.(file)?.size ?? 0;
+					if (!joined) {
+						const owners = derive_css_scope_owners(file, root, [envs?.ssr?.moduleGraph, client_graph]);
+						const web_path = '/' + path.relative(root, file).split(path.sep).join('/');
+						server.ws.send({ type: 'custom', event: 'ogygia:css', data: { path: web_path, owners } });
+						return [];
+					}
+					return; // client owns the module — Vite's own soft update handles it
+				}
+			}
+
 			// Island ids are hash(componentPath+strategy) — renaming a host keeps the same virtual
 			// id, so Vite's moduleGraph must be cleared or it keeps serving the old import.
 			const deleted = !fs.existsSync(strip_id(file));
@@ -1856,6 +2027,27 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			let map = null;
 			let touched = false;
 
+			// CONTENT-PRESET module variant (`?og_preset=name`, minted by a loader macro's glob query).
+			// vite-plugin-svelte strips the query from the `filename` its preprocessors see, so the id
+			// can't carry the preset that far — instead this pre-transform (which DOES see the full id)
+			// tags the raw markdown with a one-line end-of-file marker; the markdown preprocessor reads
+			// it, strips it, and compiles with the preset's merged config. Appended at the END so
+			// frontmatter stays on line one; mdsvex never sees it (stripped first).
+			if (islandBridge.contentPresets && id.includes('og_preset=')) {
+				const m = /[?&]og_preset=([\w-]+)/.exec(id);
+				const md_exts = (islandBridge.markdownConfig?.extensions as string[] | undefined) ?? ['.svx', '.md'];
+				const file_part = id.slice(0, id.indexOf('?'));
+				if (m && md_exts.some((e) => file_part.endsWith(e))) {
+					if (!islandBridge.contentPresets[m[1]]) {
+						throw new Error(
+							`[ogygia] '${id}': unknown content preset '${m[1]}' in the module query. Configured: ${Object.keys(islandBridge.contentPresets).join(', ')}.`
+						);
+					}
+					out = `${out}\n<!--og_preset:${m[1]}-->`;
+					touched = true;
+				}
+			}
+
 			// `import.meta.og.wire` — the transportable-codec key, rewritten to `Symbol.for('ogygia.wire')`
 			// BEFORE either branch (island transform / svelte compile / ts region minting) sees the code,
 			// so the class body's computed key is a real symbol expression by compile time. Extension-aware
@@ -2251,7 +2443,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
  * registered before this reads it (it does, being before `sveltekit()`).
  */
 ogygia.preprocess = (): PreprocessorGroup[] =>
-	islandBridge.markdownConfig ? [ogygiaPreprocess()] : [];
+	islandBridge.markdownConfig ? [ogygiaPresetPreprocess()] : [];
 
 /**
  * The full svelte `extensions` list — pass it straight through: `extensions: ogygia.extensions()`.

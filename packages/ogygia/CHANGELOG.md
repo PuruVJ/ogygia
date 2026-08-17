@@ -12,12 +12,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The site-layer release. `ogygia/content` grows from collections into one pillar that carries a whole
 site — `site()` mints the brains, `DocsShell` / `BlogShell` render them, and the new
-`import.meta.og.*` compile macros bake content at build. Underneath: region snippets become a
-first-class primitive, markdown compiles to serialized regions, preloading goes render-gated (and
-native in MPA mode), the client bundle gets meaningfully smaller, and the `csr = false` keepalive
-bug finally dies (#1, #4).
+`import.meta.og.*` compile macros bake content at build. The plugin config collapses to one grammar:
+a top-level key per subsystem, each subsystem `defaults + its own presets`. Underneath: region
+snippets become a first-class primitive, markdown compiles to serialized regions, preloading goes
+render-gated (and native in MPA mode), the client bundle gets meaningfully smaller, and the
+`csr = false` keepalive bug finally dies (#1, #4).
 
 ### Added
+
+- **The config surface — one grammar, sovereign subsystems.** Every `ogygia()` subsystem is
+  `defaults + its own presets`, and every use site opts in the same way: a literal
+  `preset: 'name'`, resolved only in its own subsystem's dictionary. An island preset can never
+  hold content config; `router` holds no presets at all.
+  - **BREAKING (vs earlier 0.6 pre-cuts): `visible` → `regions.visible`, `presets` →
+    `regions.presets`, `continuity: { forms }` → `router: { forms }`.** The old spellings are
+    **errors** naming the new one — never silent aliasing, so a stale config can't quietly un-tune
+    an app. `router: false` now turns forms off too: form continuity rides SPA navigation, and
+    with the router gone there is nothing for a form to survive.
+  - **`content.presets` — named markdown variants.** Define once in the plugin
+    (`content: { markdown: {…}, presets: { plain: { markdown: { overrides: false } } } }`), opt a
+    whole collection in on its loader macro:
+    `import.meta.og.loader.folder('../content/blog', { preset: 'plain' })`. The preset's bag
+    merges over `content.markdown` per setting key. Mechanically, each opted-in file compiles as
+    its own **module variant** (`?og_preset=name` via the emitted glob's query), so the same file
+    globbed by two collections under two presets renders independently — different pipelines, zero
+    conflict — and presetless collections share the bare module exactly as before. The name must
+    be a literal; unknown names are build errors listing the configured names; `preset` is
+    consumed at compile and never reaches the runtime builder.
+  - Config-time validation for both preset dictionaries: empty presets and unknown keys fail at
+    config load with the legal vocabulary named — not on first use. (`regions.presets` also
+    accepts `keep`, which the transform always honored; type and validation now agree.)
 
 - **The site layer — `site()` in `ogygia/content`.** Arrange collections into a navigable site:
   `outline()` (spec grammar, `pick()`, single-assignment placement with named build errors),
@@ -128,6 +152,14 @@ bug finally dies (#1, #4).
 
 ### Fixed
 
+- **Dev soft-CSS HMR is now scoped to the page's own sub-app.** The dev bridge eagerly imported
+  every `/src` stylesheet into the browser on every page — invisible while one app owned one look,
+  but a project hosting two style-sovereign sub-apps (route-group layouts with disjoint skins) saw
+  each page painted with the other's CSS in dev while prod stayed clean. The bridge now joins
+  stylesheets lazily: on a CSS edit the plugin walks the module graph up to the owning route files,
+  broadcasts their top-level scopes, and a page joins the module only when its own scope (stamped
+  by the handle as `ogygia-dev-scope`) is among the owners. First edit joins + applies; later edits
+  ride Vite's normal CSS HMR. Kit's FOUC bag is untouched.
 - **`csr = false` apps no longer need a token `csr = true` route (#1, #4).** The keepalive
   predicate read each route node's own `csr` while SvelteKit resolves it through the layout chain —
   a fresh app with `csr = false` only in the root layout skipped the client build and 404'd the

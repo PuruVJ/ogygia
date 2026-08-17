@@ -950,7 +950,7 @@ export function transformHost(source, id, ctx) {
 		}
 
 		// The import block carries a `render` MODE + a `wake` schedule, or a preset. No option keys
-		// inline — all tuning lives in plugin config (ogygia({ presets })). `render` picks the mode
+		// inline — all tuning lives in plugin config (ogygia({ regions: { presets } })). `render` picks the mode
 		// (static | deferred | live); `wake` is hydration for `static`, the fetch schedule for
 		// `deferred`/`live`. Canonical internal slots stay `hydrate`/`defer` (+ a `live` flag).
 		/** @type {Map<string,string>} effective attributes (canonical hydrate/defer + margin + live) */
@@ -966,7 +966,7 @@ export function transformHost(source, id, ctx) {
 			if (inline.size > 1) {
 				throw err(
 					names,
-					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, maxAge, …) in the preset definition (ogygia({ presets })).`
+					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, maxAge, …) in the preset definition (ogygia({ regions: { presets } })).`
 				);
 			}
 			from_preset = inline.get(import_keys.preset);
@@ -998,7 +998,7 @@ export function transformHost(source, id, ctx) {
 				if (k !== import_keys.wake && k !== import_keys.render && k !== 'keep') {
 					throw err(
 						names,
-						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ presets })).`
+						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
 					);
 				}
 			}
@@ -1132,7 +1132,7 @@ export function transformHost(source, id, ctx) {
 				);
 
 			// `margin` applies only to `visible` (tolerantly ignored otherwise). Falls back to the
-			// plugin-level default ogygia({ visible: { margin } }).
+			// plugin-level default ogygia({ regions: { visible: { margin } } }).
 			const options: { margin?: string; keep?: string } = {};
 			if (strategy === "visible") {
 				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
