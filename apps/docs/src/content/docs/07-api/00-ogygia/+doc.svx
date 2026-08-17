@@ -1,0 +1,8 @@
+---
+title: ogygia
+summary: The runtime surface — Region, region(), script, preference, transport, context.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: ogygia

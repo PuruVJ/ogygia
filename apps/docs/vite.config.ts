@@ -4,6 +4,7 @@ import { diff_markers, inline_markers } from 'ogygia/content/markdown';
 import { defineConfig } from 'vite';
 import { load_ogygia_themes } from './src/lib/code/shiki-themes.js';
 import { remarkChangelog } from './src/lib/remark-changelog.js';
+import { expandApi, expandApiCacheKey, expandApiDependencies } from './src/lib/api-ref/expand-api.ts';
 
 // Custom site Shiki themes (forest neutrals + green) — the same ogygia-light / ogygia-dark used by
 // the snippets highlighter, so .svx fences match hand-highlighted code.
@@ -34,7 +35,18 @@ export default defineConfig({
 					code: { transformers: [diff_markers(), inline_markers()] },
 					// Reshape the Releases page's `## [x] — date` headings into a clean version + a date
 					// line under it. `enforce: 'pre'` so the heading-id/TOC collectors see "0.5.0".
-					remark: [{ enforce: 'pre', plugin: remarkChangelog }],
+					// expandApi: `> MODULE: ogygia/…` → the auto-generated API reference, regenerated from
+					// the package's own d.ts on every build — cache_key re-keys the doc cache when the
+					// d.ts set changes; dependencies lets Vite recompile affected pages in dev.
+					remark: [
+						{ enforce: 'pre', plugin: remarkChangelog },
+						{
+							enforce: 'pre',
+							plugin: expandApi,
+							cache_key: expandApiCacheKey,
+							dependencies: expandApiDependencies,
+						},
+					],
 				},
 				// The /playground sub-app's markdown variant: its collections name this preset on their
 				// loader macros. Depth-2 merge means unstated keys INHERIT the docs base above — and the

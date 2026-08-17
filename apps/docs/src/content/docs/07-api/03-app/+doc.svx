@@ -1,0 +1,8 @@
+---
+title: ogygia/app
+summary: Island-safe $app/navigation replacements.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: ogygia/app

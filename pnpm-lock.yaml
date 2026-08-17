@@ -121,6 +121,9 @@ importers:
       '@typescript/native':
         specifier: npm:typescript@^7.0.2
         version: typescript@7.0.2
+      mdast-util-from-markdown:
+        specifier: ^2.0.2
+        version: 2.0.3
       mdsvex:
         specifier: ^0.12.6
         version: 0.12.8(svelte@5.56.8)

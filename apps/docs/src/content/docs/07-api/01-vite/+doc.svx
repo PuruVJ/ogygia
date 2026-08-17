@@ -1,0 +1,8 @@
+---
+title: ogygia/vite
+summary: The Vite plugin and its config surface.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: ogygia/vite

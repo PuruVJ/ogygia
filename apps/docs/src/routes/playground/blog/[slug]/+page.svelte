@@ -8,4 +8,4 @@
 	const view = (await postPage(page.params.slug ?? ''))!;
 </script>
 
-<BlogPost {view} back="/blog" />
+<BlogPost {view} back="/playground/blog" />
