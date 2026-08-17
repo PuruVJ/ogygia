@@ -56,6 +56,78 @@
 	function vt_name(prefix: string, key: string): string {
 		return `${prefix}-${key.replace(/[^a-zA-Z0-9_-]+/g, '-')}`;
 	}
+
+	/**
+	 * SCROLL CONTINUITY + active-in-view. This island is KEPT, so its DOM rides the body swap — but
+	 * the element that actually SCROLLS is usually the surrounding panel (skin-owned, outside the
+	 * kept node), which is a FRESH element on every navigation: the nav survived, its scroll didn't.
+	 * So the component owns the behavior, skin-agnostically: per navigation it re-finds the live
+	 * scroller (itself if scrollable, else the nearest scrollable ancestor), restores the
+	 * session-saved position, keeps saving on scroll, and — the docs-site contract — centers the
+	 * active row whenever it would otherwise sit outside the visible window (deep links land
+	 * centered too, since a fresh load has nothing saved). The hidden mobile clone (the Sheet's
+	 * instance) skips all of it via the `offsetParent` gate.
+	 */
+	let nav_el: HTMLElement | null = $state(null);
+	let scroller: HTMLElement | null = null;
+	const save = () => {
+		if (scroller) {
+			try {
+				sessionStorage.setItem(`og:sidenav:${the_base}`, String(scroller.scrollTop));
+			} catch {
+				/* private mode */
+			}
+		}
+	};
+	function find_scroller(from: HTMLElement): HTMLElement | null {
+		let el: HTMLElement | null = from;
+		while (el && el !== document.body) {
+			const o = getComputedStyle(el).overflowY;
+			if ((o === 'auto' || o === 'scroll') && el.scrollHeight > el.clientHeight) return el;
+			el = el.parentElement;
+		}
+		return null;
+	}
+	let first_sync = true;
+	$effect(() => {
+		void path; // re-run per navigation (props push into the kept app)
+		const el = nav_el;
+		if (!el || el.offsetParent === null) return;
+		// The panel is a new element each nav — rebind the saver to the live one.
+		const s = find_scroller(el);
+		if (s !== scroller) {
+			scroller?.removeEventListener('scroll', save);
+			scroller = s;
+			scroller?.addEventListener('scroll', save, { passive: true });
+		}
+		if (!scroller) return;
+		let saved: number | null = null;
+		try {
+			const raw = sessionStorage.getItem(`og:sidenav:${the_base}`);
+			saved = raw == null ? null : Number(raw);
+		} catch {
+			/* private mode */
+		}
+		if (saved != null && Number.isFinite(saved)) scroller.scrollTop = saved;
+		// Center the active row when it sits outside the window (scroller-relative math — never
+		// scrollIntoView, which would drag the PAGE scroll along with it).
+		const active = el.querySelector<HTMLElement>('[aria-current="page"]');
+		if (active) {
+			const s_rect = scroller.getBoundingClientRect();
+			const a_rect = active.getBoundingClientRect();
+			const outside = a_rect.top < s_rect.top || a_rect.bottom > s_rect.bottom;
+			if (outside || (first_sync && saved == null)) {
+				const target =
+					scroller.scrollTop + (a_rect.top - s_rect.top) - s_rect.height / 2 + a_rect.height / 2;
+				scroller.scrollTo({
+					top: Math.max(0, target),
+					behavior: first_sync ? 'instant' : 'smooth'
+				});
+				save();
+			}
+		}
+		first_sync = false;
+	});
 </script>
 
 {#snippet items(list: NavTree)}
@@ -88,6 +160,11 @@
 
 <!-- Roving tabindex: the sidebar is ONE tab stop; Up/Down move between links (entry lands on the
      active page's link). Focus-only — Enter/click navigate natively. -->
-<nav class="og-sidebar" aria-label="Documentation" {@attach roving({ selector: '.og-nav-link', orientation: 'vertical' })}>
+<nav
+	class="og-sidebar"
+	aria-label="Documentation"
+	bind:this={nav_el}
+	{@attach roving({ selector: '.og-nav-link', orientation: 'vertical' })}
+>
 	{@render items(tree)}
 </nav>
