@@ -27,7 +27,7 @@
 	import { makeRegionEndpoint, mintServerIsland } from 'virtual:ogygia/region-endpoint';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
-	import { isNested, setNested, claimRuntimeEmit, claim_region_css } from './context.js';
+	import { isNested, setNested, isCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { TRANSPORT_WIRE_KEY, reduce_transportable } from './live-transport.js';
 	import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet, prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
@@ -148,6 +148,14 @@
 	// Nested rule (islands/server): a region inside an already-awake region hydrates with its parent,
 	// so it degrades to a plain inline render. Read once at init (a wrapper's mode is fixed per usage).
 	const nested = isNested();
+	// csr=true rule (ISLANDS only): on a Kit-hydrated page an interactive region should render its
+	// component INLINE in the Kit tree — no `<ogygia-region>`, no runtime — because Kit already
+	// hydrates it. Same degradation as `nested`, gated by the csr context the transform injects into
+	// csr=true route hosts. Server/deferred + lake regions are SERVER-DRIVEN UI, orthogonal to a
+	// page's csr, so they are deliberately NOT degraded here (they keep their endpoint + runtime).
+	const is_csr = isCsrTrue();
+	// The island branch renders inline when nested OR on a csr=true page.
+	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();
 	if (nested && (is_island || is_server) && import.meta.env && import.meta.env.DEV) {
 		const entry = untrack(() => (is_server ? __entry : island_entry));
@@ -259,7 +267,7 @@
 
 	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
 	const island_preload = $derived.by(() => {
-		if (nested || !is_island || hydrate_attr !== 'load' || !island_module_url) return '';
+		if (island_inline || !is_island || hydrate_attr !== 'load' || !island_module_url) return '';
 		const hrefs = [island_module_url];
 		const add_with_deps = (entry, url) => {
 			if (url && !hrefs.includes(url)) hrefs.push(url);
@@ -342,7 +350,7 @@
 	// the handle injects the same script on island-less pages — this is the with-islands path, and it
 	// keeps islands hydrating even when the router is off (`ogygia({ router: false })`).
 	const runtime_script =
-		!nested && (is_island || is_server) && claimRuntimeEmit()
+		!nested && ((is_island && !is_csr) || is_server) && claimRuntimeEmit()
 			? LT +
 				'script type="module" data-ogygia-runtime src="' +
 				asset(runtimeUrl) +
@@ -419,7 +427,7 @@
 <svelte:head>{@html head_html}</svelte:head>
 {#if is_island}
 	{@const Component = island_component}
-	{#if nested}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else}<ogygia-region
+	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}

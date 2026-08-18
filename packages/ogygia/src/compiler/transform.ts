@@ -806,12 +806,75 @@ function resolve_component_path(spec, host_id, ctx) {
  * @param {(hostPath:string, index:number)=>string} ctx.virtualPathFor virtual module id for an island
  * @returns {TransformResult|null}
  */
+// Injected into every csr=true route host. Marks the subtree "csr=true" via a BARE svelte
+// `setContext` — no ogygia import — so a region-less csr=true page still ships zero ogygia. Region
+// reads it (isCsrTrue) and renders islands inline. The host renders on both the SSR and Kit-client
+// legs, so the flag is identical on both → the inline/island choice can never desync at hydrate.
+// KEY STRING (CSR-KEY): must equal context.ts `CSR_TRUE_KEY` — `Symbol.for('ogygia.csr-true')`.
+const CSR_CTX_INJECT =
+	`import { setContext as __og_setctx } from 'svelte'; __og_setctx(Symbol.for('ogygia.csr-true'), true);\n`;
+
+/**
+ * csr=true route host: strip marked imports to plain, then inject the csr-context marker.
+ * @param {string} source @param {string} id @param {boolean} has_island_hint @param {ImportKeys} import_keys
+ * @returns {TransformResult|null}
+ */
+function transform_csr_true_host(source, id, has_island_hint, import_keys) {
+	let ast;
+	try {
+		ast = parse(source, { modern: true, filename: id });
+	} catch {
+		return null;
+	}
+	const ms = new MagicString(source);
+
+	// Strip `with { wake|render|preset|region }` off host imports → plain imports (Kit compiles them).
+	if (has_island_hint) {
+		const region_keys = new Set([
+			import_keys.wake,
+			import_keys.render,
+			import_keys.preset,
+			import_keys.region
+		]);
+		for (const node of ast.instance?.content?.body ?? []) {
+			if (node.type !== 'ImportDeclaration') continue;
+			const attrs = (node.attributes ?? []).filter((a) => a.type === 'ImportAttribute');
+			if (!attrs.some((a) => region_keys.has(a.key.name ?? a.key.value))) continue;
+			ms.overwrite(node.start, node.end, clean_import_text(source, node));
+		}
+	}
+
+	// Inject the csr-context marker at the top of the instance <script> (create one if absent —
+	// a `<script module>` runs once per module, not per instance, so it can't carry setContext).
+	if (ast.instance?.content) {
+		ms.appendLeft(ast.instance.content.start, `\n${CSR_CTX_INJECT}`);
+	} else {
+		ms.prepend(`<script>${CSR_CTX_INJECT}</script>\n`);
+	}
+
+	return {
+		code: ms.toString(),
+		map: ms.generateMap({ hires: true, source: id, includeContent: true }),
+		islands: []
+	};
+}
+
 export function transformHost(source, id, ctx) {
 	const import_keys = normalize_import_keys(ctx.importKeys);
+	const has_island_hint = import_keys_hint(import_keys).test(source);
+
+	// csr=true route host: ogygia steps aside — Kit hydrates the page itself. Strip every marked
+	// import to a plain one (so `<C/>` compiles normally, no island, no runtime) AND inject a bare
+	// csr-context marker so a directly-used `<Region>` in this page's subtree renders INLINE in the
+	// Kit tree instead of an `<ogygia-region>` mini-app. This must run even for a MARKER-LESS host (a
+	// page that only uses `<Region>`, no `with { wake }`), so it precedes the island-hint bailout.
+	// (`.ts` held regions and deferred/live/lake regions are server-driven UI, orthogonal to a page's
+	// csr — they are deliberately NOT degraded; see Region.svelte `is_csr`.)
+	if (ctx.csrTrue) return transform_csr_true_host(source, id, has_island_hint, import_keys);
+
 	// cheap bailout — the library only touches region imports (configured key names), PLUS files that
 	// define a `{#snippet}` (a candidate portable snippet forwarded into an island). Files with a
 	// snippet but no island work return `null` unchanged at the end, so behavior is identical for them.
-	const has_island_hint = import_keys_hint(import_keys).test(source);
 	if (!has_island_hint && !source.includes('{#snippet')) return null;
 
 	let ast;
@@ -824,36 +887,6 @@ export function transformHost(source, id, ctx) {
 	const instance_body = ast.instance?.content?.body ?? [];
 	const module_body = ast.module?.content?.body ?? [];
 	const lang = script_lang_attr(ast.instance) || script_lang_attr(ast.module);
-
-	// csr=true route host: ogygia steps aside ENTIRELY. Kit hydrates the page's components itself, so a
-	// region wrapper + runtime would be dead weight (measured: a csr=true page was shipping the whole
-	// runtime for nothing). Strip every region import attribute to a plain import — Kit compiles `<C/>`
-	// normally — and emit NO island, so the runtime chunk isn't pulled either. `wake` schedules become
-	// immediate, which is exactly what csr=true means. (`.ts` held regions are unaffected: they cross
-	// the wire and are a server-driven-UI feature, orthogonal to a page's csr.)
-	if (ctx.csrTrue) {
-		const region_keys = new Set([
-			import_keys.wake,
-			import_keys.render,
-			import_keys.preset,
-			import_keys.region
-		]);
-		const ms = new MagicString(source);
-		let touched = false;
-		for (const node of instance_body) {
-			if (node.type !== 'ImportDeclaration') continue;
-			const attrs = (node.attributes ?? []).filter((a) => a.type === 'ImportAttribute');
-			if (!attrs.some((a) => region_keys.has(a.key.name ?? a.key.value))) continue;
-			ms.overwrite(node.start, node.end, clean_import_text(source, node));
-			touched = true;
-		}
-		if (!touched) return null;
-		return {
-			code: ms.toString(),
-			map: ms.generateMap({ hires: true, source: id, includeContent: true }),
-			islands: []
-		};
-	}
 
 	const path = ctx.pathModule;
 	// Posix-relative host path — island ids must not drift across Windows/POSIX build legs.

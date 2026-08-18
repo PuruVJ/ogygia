@@ -31,6 +31,24 @@ export function isNested(): boolean {
 	return getContext(NESTED_KEY) === true;
 }
 
+// Context key marking "this subtree is on a csr=true page". A csr=true route host is Kit-hydrated,
+// so a `<Region>` there should render its component INLINE in the Kit tree (Kit hydrates it) rather
+// than emit an `<ogygia-region>` + runtime — the same "render as a plain component" degradation the
+// nested rule already does. The transform sets it: it injects a bare `setContext` into every
+// csr=true route host (see compiler/transform.ts `inject_csr_context` — NO ogygia import, so a
+// region-less csr=true page still ships zero ogygia). Because the host renders on BOTH the SSR and
+// the Kit-client leg, the flag is identical on both → the island/inline choice can never desync at
+// hydrate. `Symbol.for` for the same cross-graph reason as NESTED_KEY.
+//
+// KEY STRING (CSR-KEY): the literal below MUST match the string the transform bakes into the
+// injected `Symbol.for(...)` call. Change one, change both; the region-mixed e2e locks it.
+const CSR_TRUE_KEY = Symbol.for('ogygia.csr-true');
+
+/** True when rendered inside a csr=true route host (Kit owns hydration — degrade islands to plain). */
+export function isCsrTrue(): boolean {
+	return getContext(CSR_TRUE_KEY) === true;
+}
+
 /** Per-request: only one `data-ogygia-runtime` script should be emitted (the first island). */
 const runtime_claimed = new WeakMap<object, true>();
 

@@ -152,6 +152,16 @@ render-gated (and native in MPA mode), the client bundle gets meaningfully small
 
 ### Fixed
 
+- **A directly-used `<Region>` on a `csr = true` page now renders inline in the Kit tree instead of
+  its own island.** The `with { wake }` import sugar is stripped to a plain import on a `csr = true`
+  route (the page ships zero ogygia), but a hand-written `<Region of={region(C, props)}>` is a
+  runtime value the transform never saw — so an interactive one still emitted an `<ogygia-region>` +
+  the runtime bootstrap on a page meant to be pure Kit, and in a _pure_ `csr = true` app (no
+  `csr = false` route → no runtime chunk built) that bootstrap `<script>` 404'd. Now a `csr = true`
+  route host carries a bare `setContext` marker (plain Svelte, no ogygia import, so a region-less
+  page still ships nothing), and `Region` renders an interactive region as a normal component there —
+  Kit hydrates it, no `<ogygia-region>`, no runtime, no 404. Server-driven regions (deferred / live /
+  lake) are untouched: they cross the wire and are orthogonal to a page's csr.
 - **An island reading `$app/stores` / `$app/state` could bundle Kit's _real_ client store and
   crash at hydrate** — `TypeError: Cannot read properties of undefined (reading 'pathname')`, the
   island's DOM then torn out of the page. Under `csr = false` Kit's client never boots, so its page
