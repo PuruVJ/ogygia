@@ -1,0 +1,240 @@
+---
+title: API & config
+summary: Every public export by entry point, the import attributes, and every option on the ogygia() Vite plugin.
+related:
+  - reference/glossary
+  - regions/regions
+  - content/collections
+---
+
+Everything ogygia exposes, by import path, plus every option on the `ogygia()` Vite plugin. Deep pages are linked where a symbol has one.
+
+## `ogygia`
+
+The runtime surface. Import the namespace (`import * as ogygia from 'ogygia'`) or named exports.
+
+| Export | Kind | What it is |
+| --- | --- | --- |
+| `Boundary` | component | Error boundary for island subtrees. |
+| `Region` | component | Renders a [held region](/docs/regions/held-regions): `<Region of={x} />`. |
+| `region` | function | Mints a held region: `region(Component, props)`. |
+| `isRegion` | function | Type guard for a held region value. |
+| `transport` | hook value | The Kit `transport` entry that lets a held region cross the wire. |
+| `wire` | macro | Declare a transportable class's codec with `static wire = import.meta.og.wire({ encode, decode })`. It is a compile-time macro, not an importable symbol. See [shared state](/docs/data-state/state-context#sharing-state). |
+| `script` | function | Serialize a self-contained function into a blocking inline `<script>` string. See [Pre-hydration scripts](#ogygia-pre-hydration-scripts). |
+| `preload` | function | Warm a deferred/live region's HTML now, before its binder wakes: `preload(region(…))`. See [held regions](/docs/regions/held-regions). |
+| `preference` | function | A persisted, site-wide client choice that flips a CSS state with no shipped JS beyond one pre-paint script: the theme / code-language / tabs primitive. |
+| `createContext` | function | Mint a typed cross-island context (no string key), paired with `<Context>`. See [Shared state](/docs/data-state/state-context). |
+| `Context` | component | Provide a `createContext()` value to islands below it across the DOM: `<Context of={ctx} value={v}>`. |
+| `hydratedBy` | function | Which schedule woke this hydration root (e.g. `'interaction'`). Call during setup, like `getContext`. |
+
+Types: `RegionValue`, `AwaitableRegion`, `InlineRegion`, `DualRegion`, `DeferredRegion`, `TransportCodec`.
+
+### Import attributes
+
+Authored on a component import, not called:
+
+| Attribute | Makes | Values |
+| --- | --- | --- |
+| `with { wake }` | the schedule: when JS runs (island) or when the HTML fetches (`deferred`/`live`) | `'load'` · `'idle'` · `'visible'` · `'interaction'` · `'(media)'` · `'none'` |
+| `with { render }` | the delivery mode | `'static'` (default) · `'deferred'` (server island) · `'live'` (revalidates) |
+| `with { region }` | a held, server-chosen region marker | `'raw'` |
+| `with { keep }` | keep the live island across SPA navigation | a name |
+| `with { preset }` | a named preset from plugin config | any preset name |
+
+`render` and `wake` are the two dials: the mode and the schedule. See [Regions](/docs/regions/regions) for the concept.
+
+### Pre-hydration scripts
+
+A csr=false page has no client until islands wake, so anything that must run **before first paint** has to be a plain inline `<script>` in the HTML. That covers setting the theme so there's no dark-mode flash, kicking off a deferred font, or reading an early flag. Hand-writing that string is awkward: a literal `</script>` inside a Svelte component closes the component's own script, which is why people reach for `String.fromCharCode(60)` tricks.
+
+`script(fn, ...args)` removes that. Pass a function; get back a `<script>…</script>` string. It's just a string, so `{@html}` it wherever you want the tag, usually `<svelte:head>`.
+
+```svelte
+<script>
+  import * as ogygia from 'ogygia';
+  import fontUrl from './mono.css?url';
+</script>
+
+<svelte:head>
+  <!-- No-flash theme, runs before paint -->
+  {@html ogygia.script(() => {
+    try {
+      const t = localStorage.getItem('theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    } catch {}
+  })}
+
+  <!-- Deferred font — the hashed URL is closed-over data, so pass it as an arg -->
+  {@html ogygia.script((href) => {
+    addEventListener('load', () => {
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = href;
+      document.head.appendChild(l);
+    }, { once: true });
+  }, fontUrl)}
+</svelte:head>
+```
+
+The function is inlined via `Function.prototype.toString`, so it must be **self-contained**: only browser globals, no imports and no closed-over variables (they don't exist at runtime). For values you'd otherwise close over, pass them as trailing `args`; they're JSON-serialized and handed to the function as parameters. Any `</script` in the body is escaped so it can't break out of the tag.
+
+## `ogygia/vite`
+
+```ts
+import { ogygia } from 'ogygia/vite';
+```
+
+`ogygia(options)` is the Vite plugin. It runs before `sveltekit()`. Every option is optional, and the surface has one grammar: **a top-level key per subsystem, each subsystem `defaults + its own presets`**. Whatever a use site can name (`preset: 'name'`) is defined here, in that subsystem's own dictionary. An island preset can never hold content config, and vice versa.
+
+```ts
+ogygia({
+  regions: {
+    visible: { margin: '120px' },
+    presets: {
+      demo: { wake: 'visible', margin: '200px' },
+      frozenLive: { render: 'live', wake: 'load' }
+    }
+  }
+})
+```
+
+### `regions`
+
+The islands subsystem: defaults + named island presets.
+
+**`regions.visible`** sets the default `rootMargin` for `visible` islands and server islands, so they warm slightly before entering the viewport.
+
+```ts
+ogygia({ regions: { visible: { margin: '200px' } } })
+```
+
+### `router`
+
+The SPA router is on by default, app-wide (see [SPA router](/docs/app/router)). This is the one place router config lives. There is no `<Router/>` component.
+
+```ts
+ogygia()                                       // router on, view transitions on, form continuity on
+ogygia({ router: { viewTransitions: false } }) // SPA nav, but no view transitions
+ogygia({ router: { forms: false } })           // SPA nav, but form fields don't survive navigation
+ogygia({ router: false })                      // opt out of the SPA router entirely
+```
+
+`router: false` tree-shakes the router out of the generated runtime, so a load-only app never ships it. It also takes [form continuity](/docs/data-state/state-context#continuity-surviving-navigation) with it (there is no SPA navigation to survive). A single page can opt out of view transitions with `<meta name="ogygia-router" content="plain">` in its head, and the page's tag wins over the global default.
+
+### `regions.presets`
+
+Named bundles of strategy + options, referenced from an import with `preset: 'name'`. A preset uses the same two-dial grammar as an inline import: `render` (the mode) and `wake` (the schedule), plus the tuning options that aren't allowed inline (`margin`, `maxAge`, …):
+
+```ts
+ogygia({
+  regions: {
+    presets: {
+      chart: { render: 'static', wake: 'visible', margin: '200px' },
+      pricing: { render: 'deferred', wake: 'load', maxAge: '1h' },
+      ticker: { render: 'live', wake: 'idle', maxAge: '10m' }
+    }
+  }
+})
+```
+
+```svelte
+<script>
+  import Chart from './Chart.svelte' with { preset: 'chart' };
+</script>
+```
+
+Fields: `render` (`'static'` | `'deferred'` | `'live'`), `wake` (schedule), `margin`, `maxAge`, `onExpire`, `revalidate`, `keep`.
+
+#### `maxAge` — caching a `deferred` hole
+
+A `render: 'deferred'` hole is **dynamic by default**: its endpoint is served `Cache-Control: no-store`, so it re-renders on every request (a per-request clock, a personalized figure). `maxAge` opts a hole into a browser cache instead, as seconds (a number) or a duration string (`'30s'` | `'5m'` | `'1h'`):
+
+```ts
+ogygia({ regions: { presets: { pricing: { render: 'deferred', wake: 'load', maxAge: '1h' } } } })
+```
+
+That hole's endpoint is served `Cache-Control: private, max-age=3600`. The `maxAge` is **signed into the hole's URL**, so a harvested capability can't be re-pointed at a longer cache. `maxAge: 0` (or omitting it) keeps the hole dynamic. With `render: 'live'`, `maxAge` is instead the client revalidate staleness.
+
+::: warning A bare number changes units by context
+On a **deferred hole**, `maxAge: 60` means 60 **seconds**: it becomes an HTTP `max-age`, which is in seconds. On a **live / remount lake**, `maxAge: 60` means 60 **milliseconds**: it is client-side staleness, in ms like every JS timer. Same key, two clocks. Duration strings (`'30s'`, `'5m'`, `'1h'`) mean the same thing everywhere, so prefer them and the trap disappears.
+:::
+
+### `content`
+
+Turn on the markdown pipeline (mdsvex + Shiki + heading collection) for `.svx` / `.md` content collections. See [Content collections](/docs/content/collections).
+
+```ts
+ogygia({ content: { markdown: {} } })
+```
+
+**`content.presets`** are named markdown variants, same grammar as every subsystem's presets. A [loader macro](/docs/macros/loaders) opts a whole collection in with `{ preset: 'name' }`; that collection's files compile through the preset's config merged over `content.markdown` (per setting key). Under the hood each opted-in file is its own module *variant*, so the same file used by another collection (under another preset or none) renders independently; there is nothing to conflict.
+
+```ts
+ogygia({
+  content: {
+    markdown: { overrides: true },                      // the defaults
+    presets: { plain: { markdown: { overrides: false } } }  // a named variant
+  }
+})
+```
+
+```ts
+// blog.server.ts — the blog corpus compiles through the `plain` preset
+loader: import.meta.og.loader.folder('../content/blog', { preset: 'plain' })
+```
+
+`presets` requires `markdown` to be set (the base every preset merges over). The name must be a literal string; an unknown name is a build error listing the configured names.
+
+### `importKeys`
+
+Extra import-attribute keys to treat as ogygia directives, for interop with other tooling that reads import attributes.
+
+### `rateLimit`
+
+Guard the signed island endpoint against abuse: requests per window per client.
+
+### `sessionCookie`
+
+Name / options for the session cookie ogygia uses to scope signed capabilities.
+
+### `regionTtl`
+
+How long a signed region capability URL stays valid.
+
+### `OGYGIA_SECRET`
+
+The HMAC secret for signing `render: 'deferred'` capability URLs. Set it in the environment for stable signatures across a deployment; otherwise a per-build key is generated. Server islands and `render: 'live'` need the [server handle](/docs/start/install) installed to serve the endpoint.
+
+## `ogygia/server`
+
+```ts
+import * as ogygia from 'ogygia/server';
+export const handle = ogygia.handle();
+```
+
+`handle(options)` is the SvelteKit server handle. It serves the signed region endpoint (per-hole loads and the single-flight navigation batch) and injects client seeds.
+
+## `ogygia/app`
+
+Island-safe replacements for `$app/navigation` (a csr=false page has no Kit client):
+
+`goto` · `invalidate` · `invalidateAll` · `preloadData` · `preloadCode` · `beforeNavigate` · `afterNavigate` · `disableScrollHandling`
+
+Prefer these over `$app/navigation` inside islands. See [SPA router](/docs/app/router).
+
+## `ogygia/content`
+
+```ts
+import { content, markdown, json, blocks, glob, mapRaw } from 'ogygia/content';
+```
+
+| Export | What it is |
+| --- | --- |
+| `content({ loader, schema, relations })` | Defines a collection. `Data` is inferred from `schema`, `Meta` from the loader, with no annotations. `refs` / `get` / `groups`; wire remotes (`list`, `live`) via `withRemotes()`. See [Content collections](/docs/content/collections). |
+| `markdown` · `json` · `blocks` | Source builders: `content({ loader: markdown(import.meta.glob(…)) })`. `markdown` provides `meta.headings`. |
+| `blocks.resolve(tree, registry)` | Server-side helper: turns a block tree you hold into region nodes for a no-collection recomposer recipe. See [Blocks](/docs/content/blocks). |
+| `glob` · `mapRaw` · `defineSource` | Source primitives for building custom loaders (a CMS, an API). See [Content collections](/docs/content/collections). |
+| `parseSchema` | Lower-level helper. `parseFrontmatter` lives on `ogygia/content/markdown`. |
+
+An entry is `{ id, data, meta, body, rel, backlinks }`: `data` (schema output), `meta` (source-derived, e.g. `{ headings }`), `body` (a held region). Types: `Entry`, `ContentEntry`, `ContentHandle`, `Source`, `Heading`, `SchemaLike`.

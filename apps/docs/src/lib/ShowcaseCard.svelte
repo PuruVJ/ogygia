@@ -3,6 +3,7 @@
 	// as a snippet so the island tag lives at the page's top level (marked imports can't take host
 	// children) while this plain component just lays it out. Reuses the demo-block styling.
 	import type { Snippet } from 'svelte';
+	import { Region, type RegionValue } from 'ogygia';
 	import '$lib/styles/demo-block.css';
 	import '$lib/styles/widget.css';
 	import '$lib/styles/feel.css';
@@ -12,7 +13,7 @@
 		tag = '',
 		marker = 'live island',
 		offMarker = 'static · 0 KB JS',
-		codeHtml,
+		code,
 		demo,
 		frozen,
 		stack = false
@@ -21,7 +22,7 @@
 		tag?: string;
 		marker?: string;
 		offMarker?: string;
-		codeHtml: string;
+		code: RegionValue;
 		demo: Snippet;
 		/** Optional server-rendered (no-JS) view. When present, a JS toggle appears. */
 		frozen?: Snippet;
@@ -54,7 +55,7 @@
 	</figcaption>
 	<div class="demo-body" class:demo-body--stack={stack}>
 		<div class="demo-code">
-			{@html codeHtml}
+			<Region of={code} />
 		</div>
 		<div class="demo-preview" data-state={on ? 'hydrated' : 'static'}>
 			<span class="preview-marker"><i></i>{on ? marker : offMarker}</span>

@@ -27,10 +27,12 @@
 	import { makeRegionEndpoint, mintServerIsland } from 'virtual:ogygia/region-endpoint';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
-	import { isNested, setNested, claimRuntimeEmit, claim_region_css } from './context.js';
+	import { isNested, setNested, isCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { TRANSPORT_WIRE_KEY, reduce_transportable } from './live-transport.js';
+	import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet, prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
 	import LakeBoundary from './LakeBoundary.svelte';
+	import SlotBoundary from './SlotBoundary.svelte';
 
 	/**
 	 * Every prop is optional: a HELD usage passes only `of`, a PLACEMENT usage (the transform's
@@ -146,6 +148,14 @@
 	// Nested rule (islands/server): a region inside an already-awake region hydrates with its parent,
 	// so it degrades to a plain inline render. Read once at init (a wrapper's mode is fixed per usage).
 	const nested = isNested();
+	// csr=true rule (ISLANDS only): on a Kit-hydrated page an interactive region should render its
+	// component INLINE in the Kit tree — no `<ogygia-region>`, no runtime — because Kit already
+	// hydrates it. Same degradation as `nested`, gated by the csr context the transform injects into
+	// csr=true route hosts. Server/deferred + lake regions are SERVER-DRIVEN UI, orthogonal to a
+	// page's csr, so they are deliberately NOT degraded here (they keep their endpoint + runtime).
+	const is_csr = isCsrTrue();
+	// The island branch renders inline when nested OR on a csr=true page.
+	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();
 	if (nested && (is_island || is_server) && import.meta.env && import.meta.env.DEV) {
 		const entry = untrack(() => (is_server ? __entry : island_entry));
@@ -159,7 +169,10 @@
 	/** @param {unknown} value @param {string} entry */
 	function stringify_props(value, entry) {
 		try {
-			return stringify(value, { [TRANSPORT_WIRE_KEY]: reduce_transportable });
+			return stringify(value, {
+				[TRANSPORT_WIRE_KEY]: reduce_transportable,
+				[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
+			});
 		} catch (e) {
 			const detail = e instanceof Error ? e.message : String(e);
 			throw new Error(
@@ -183,6 +196,42 @@
 	const island_component = $derived(as_dual ? as_dual.component : __component);
 	const island_props = $derived(as_dual ? as_dual.props : __props);
 	const island_children = $derived(children);
+	// Freeze bare snippet PROPS (named-snippet props) to static region snippets (server) so the island
+	// BODY and the serialized PAYLOAD render byte-for-byte identically — hydration then adopts the frozen
+	// HTML with no mismatch. A live (branded) snippet passes through; `nested` islands render inline, no
+	// crossing, so untouched. CHILDREN are not frozen — they cross via the slot marker below.
+	const island_props_ready = $derived(nested ? island_props : prepare_region_props(island_props));
+
+	// ── slot crossing: an island's children render IN-PLACE, the client ADOPTS them ──
+	// The marker id fencing THIS island's children to its payload pointer. Server-assigned; the client
+	// reads it back from the serialized descriptor, never regenerates it.
+	const slot_id = next_slot_id();
+	const has_slot_children = $derived(!nested && island_children != null);
+	// The BODY-side children: a server-convention snippet (`(renderer) => …`) that emits EXACTLY ONE
+	// element — `<ogygia-slot>` wrapping the natural children — with no extra snippet-layer anchors.
+	// That single-element contract is what lets the client's revived slot snippet ADOPT the SSR DOM
+	// (svelte's raw-snippet hydration takes the element at the render position verbatim). SlotBoundary
+	// resets the nested context so an island INSIDE the children renders as a full region (own
+	// `<ogygia-region>` + payload) and wakes independently after adoption. Server-only by construction:
+	// on a csr=false page the client never renders Region, it revives the payload's slot pointer.
+	const slot_children = (renderer) => {
+		renderer.push(slot_marker_open(slot_id));
+		SlotBoundary(renderer, { children: island_children });
+		renderer.push(SLOT_MARKER_CLOSE);
+	};
+	// Body props: children ride as a PROP (the island renders them via its own `{@render children()}`),
+	// never as Region's template slot — a template slot would pass an implicit children snippet that both
+	// OVERRIDES the prop and adds an extra `<!---->` anchor per layer, desyncing hydration.
+	const island_props_body = $derived(
+		has_slot_children && typeof window === 'undefined'
+			? { ...island_props_ready, children: slot_children }
+			: island_props_ready
+	);
+	// Wire props: the same children as a serializable slot POINTER the client revives into an adopting
+	// snippet. Everything else is shared with the body, so both legs agree byte-for-byte.
+	const island_props_wire = $derived(
+		has_slot_children ? { ...island_props_ready, children: slot_pointer(slot_id) } : island_props_ready
+	);
 	// The `wake` value IS the strategy: 'load' | 'idle' | 'visible' | 'interaction' | a media query.
 	const hydrate_attr = $derived(
 		as_dual
@@ -210,7 +259,7 @@
 	);
 
 	const island_payload = $derived(
-		nested ? '' : stringify_props(island_props, island_entry).split(LT).join('\\u003C')
+		nested ? '' : stringify_props(island_props_wire, island_entry).split(LT).join('\\u003C')
 	);
 	const island_props_script = $derived(
 		LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + island_payload + LT + '/script' + GT
@@ -218,11 +267,23 @@
 
 	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
 	const island_preload = $derived.by(() => {
-		if (nested || !is_island || hydrate_attr !== 'load' || !island_module_url) return '';
+		if (island_inline || !is_island || hydrate_attr !== 'load' || !island_module_url) return '';
 		const hrefs = [island_module_url];
-		for (const dep of islandDeps(island_entry)) {
-			const href = dep.startsWith('/@') ? dep : asset(dep);
-			if (href && !hrefs.includes(href)) hrefs.push(href);
+		const add_with_deps = (entry, url) => {
+			if (url && !hrefs.includes(url)) hrefs.push(url);
+			for (const dep of islandDeps(entry)) {
+				const href = dep.startsWith('/@') ? dep : asset(dep);
+				if (href && !hrefs.includes(href)) hrefs.push(href);
+			}
+		};
+		add_with_deps(island_entry, '');
+		// Portable region-snippets riding THIS island's props come alive via `import(desc.e)` at
+		// hydrate — preload their entries (+ deps) in the same breath. RENDER-GATED by construction:
+		// the link exists iff the island that carries the snippet actually rendered (the compiler's
+		// old static-scan emission preloaded every portable candidate in the host, rendered or not).
+		// The payload embeds each descriptor's public entry URL; prod-shaped (dev has no preloads).
+		for (const m of island_payload.match(/\/_app\/immutable\/og-region\.[0-9a-f]+\.js/g) ?? []) {
+			add_with_deps(m, m);
 		}
 		let html = '';
 		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + GT;
@@ -289,7 +350,7 @@
 	// the handle injects the same script on island-less pages — this is the with-islands path, and it
 	// keeps islands hydrating even when the router is off (`ogygia({ router: false })`).
 	const runtime_script =
-		!nested && (is_island || is_server) && claimRuntimeEmit()
+		!nested && ((is_island && !is_csr) || is_server) && claimRuntimeEmit()
 			? LT +
 				'script type="module" data-ogygia-runtime src="' +
 				asset(runtimeUrl) +
@@ -366,12 +427,12 @@
 <svelte:head>{@html head_html}</svelte:head>
 {#if is_island}
 	{@const Component = island_component}
-	{#if nested}{#if Component}<Component {...island_props}>{@render island_children?.()}</Component>{/if}{:else}<ogygia-region
+	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}
 			data-ogygia-keep={__keep || undefined}
-		>{#if Component}<Component {...island_props}>{@render island_children?.()}</Component>{/if}</ogygia-region>{@html island_props_script}{/if}
+		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region>{@html island_props_script}{/if}
 {:else if is_server}
 	{@const Component = __component}
 	{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region

@@ -1,6 +1,6 @@
 {
 	"name": "ogygia",
-	"version": "0.5.1",
+	"version": "0.6.0",
 	"type": "module",
 	"sideEffects": [
 		"**/*.css"
@@ -70,12 +70,29 @@
 			"types": "./dist/content/vite/index.d.ts",
 			"default": "./dist/content/vite/index.js"
 		},
+		"./content/theme.css": "./src/content/site/theme.css",
+		"./content/themes/*": "./src/content/site/themes/*",
+		"./content/slot": {
+			"types": "./dist/content/site/components/SiteSlot.svelte.d.ts",
+			"svelte": "./src/content/site/components/SiteSlot.svelte",
+			"default": "./src/content/site/components/SiteSlot.svelte"
+		},
 		"./server": {
 			"types": "./dist/hooks.d.ts",
 			"default": "./src/hooks.ts"
 		},
+		"./profiler": {
+			"types": "./dist/profiler/index.d.ts",
+			"default": "./src/profiler/index.ts"
+		},
 		"./types": {
 			"types": "./ambient.d.ts"
+		},
+		"./content/shell.css": "./src/content/site/shell.css",
+		"./content/docs-shell": {
+			"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
+			"svelte": "./src/content/site/components/DocsShell.svelte",
+			"default": "./src/content/site/components/DocsShell.svelte"
 		}
 	},
 	"bin": {
@@ -89,25 +106,36 @@
 		"ambient.d.ts"
 	],
 	"scripts": {
-		"build": "tsdown && node scripts/copy-svelte.mjs",
+		"build": "tsdown",
 		"test": "vitest run",
 		"lint": "oxlint -c .oxlintrc.json src",
 		"check": "tsc --noEmit && vitest run && pnpm run lint",
-		"prepublishOnly": "pnpm run build"
+		"prepublishOnly": "pnpm run build && pnpm run verify:package",
+		"verify:package": "node scripts/verify-package.mjs"
 	},
 	"dependencies": {
 		"devalue": "^5.9.0",
+		"esm-env": "^1.2.2",
 		"estree-walker": "^3.0.3",
-		"magic-string": "^1.1.0"
+		"magic-string": "^1.1.0",
+		"rolldown": "^1.0.0"
 	},
 	"peerDependencies": {
+		"@orama/orama": "^3.0.0",
 		"@sveltejs/kit": ">=2.70.2 <3",
-		"svelte": "^5.40.0",
-		"vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0",
+		"bits-ui": "^2.0.0",
 		"mdsvex": "^0.12.0",
-		"shiki": "^3.0.0 || ^4.0.0"
+		"shiki": "^3.0.0 || ^4.0.0",
+		"svelte": "^5.40.0",
+		"vite": "^7.0.0 || ^8.0.0"
 	},
 	"peerDependenciesMeta": {
+		"@orama/orama": {
+			"optional": true
+		},
+		"bits-ui": {
+			"optional": true
+		},
 		"mdsvex": {
 			"optional": true
 		},
@@ -116,16 +144,20 @@
 		}
 	},
 	"devDependencies": {
+		"@orama/orama": "^3.1.18",
 		"@sveltejs/sv-utils": "^0.3.3",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/node": "^26.1.2",
-		"oxlint": "^1.77.0",
-		"tsdown": "^0.22.14",
-		"typescript": "^7.0.2",
-		"vitest": "^4.1.10",
+		"bits-ui": "^2.18.1",
 		"mdsvex": "^0.12.8",
+		"oxlint": "^1.77.0",
 		"shiki": "^4.4.1",
+		"svelte2tsx": "^0.7.60",
+		"tsdown": "^0.22.14",
+		"typescript": "^6.0.3",
 		"valibot": "^1.4.2",
-		"vite": "^8.2.0"
+		"vite": "^8.2.0",
+		"vitest": "^4.1.10"
 	},
 	"publishConfig": {
 		"exports": {
@@ -173,6 +205,13 @@
 				"types": "./dist/content/vite/index.d.ts",
 				"default": "./dist/content/vite/index.js"
 			},
+			"./content/theme.css": "./dist/content/site/theme.css",
+			"./content/themes/*": "./dist/content/site/themes/*",
+			"./content/slot": {
+				"types": "./dist/content/site/components/SiteSlot.svelte.d.ts",
+				"svelte": "./dist/content/site/components/SiteSlot.svelte",
+				"default": "./dist/content/site/components/SiteSlot.svelte"
+			},
 			"./server": {
 				"types": "./dist/hooks.d.ts",
 				"default": "./dist/hooks.js"
@@ -188,6 +227,12 @@
 			},
 			"./types": {
 				"types": "./ambient.d.ts"
+			},
+			"./content/shell.css": "./dist/content/site/shell.css",
+			"./content/docs-shell": {
+				"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
+				"svelte": "./dist/content/site/components/DocsShell.svelte",
+				"default": "./dist/content/site/components/DocsShell.svelte"
 			}
 		}
 	}

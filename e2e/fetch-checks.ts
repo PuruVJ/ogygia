@@ -32,7 +32,7 @@ const count = (s, re) => (s.match(re) || []).length;
 	check('/ devalue Set survives SSR', /set instanceof Set: true/.test(html));
 	check('/ nested object survives SSR', /nested-ok/.test(html));
 	check('/ snippet island sees outer var (y = 42)', /y = 42/.test(html));
-	check('/ runtime module script tag present', /src="[^"]*ogygia-runtime[^"]*"/.test(html));
+	check('/ runtime module script tag present', /src="[^"]*og-runtime[^"]*"/.test(html));
 	check(
 		'/ single data-ogygia-runtime bootstrap (not per-island)',
 		count(html, /data-ogygia-runtime/g) === 1,

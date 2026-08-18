@@ -1,0 +1,19 @@
+---
+title: Installation (v1)
+summary: The legacy v1 install path, kept for archived projects.
+---
+
+This is the **v1** installation page. It exists to prove versioned corpora coexist in one nav —
+switch the Version dropdown in the header to jump between v1 and v2.
+
+## Install v1
+
+```bash
+npm install ogygia@1
+```
+
+v1 pins the older plugin API. New projects should use v2.
+
+## Next
+
+See [quick start](quick-start) for the v1 mounting steps.

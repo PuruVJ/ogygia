@@ -3,12 +3,12 @@
 	import VisibleLive from '$lib/demos/VisibleLive.svelte';
 	import VisibleFrozen from '$lib/demos/VisibleFrozen.svelte';
 
-	let { codeHtml }: { codeHtml: string } = $props();
+	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>
 
 <DemoBlock
 	title="wake: 'visible'"
-	{codeHtml}
+	{code}
 	onLabel="live"
 	offLabel="static"
 >

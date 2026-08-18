@@ -1,9 +1,8 @@
 <script module lang="ts">
-	import * as ogygia from 'ogygia';
-
 	// A transportable class defined in a COMPONENT's `<script module>` (not a .svelte.ts).
 	// The plugin registers it (keyed by this .svelte path) and manifests it, so an island
-	// receiving it as a prop needs no value import.
+	// receiving it as a prop needs no value import. `import.meta.og.wire` is a compile construct
+	// (rewrites to the registry symbol) — no import.
 	export class WidgetStore {
 		label: string;
 		hits = $state(0);
@@ -17,10 +16,10 @@
 			this.hits += 1;
 		}
 
-		static [ogygia.wire] = {
+		static wire = import.meta.og.wire({
 			encode: (s: WidgetStore) => ({ label: s.label, hits: s.hits }),
 			decode: (d: { label: string; hits: number }) => new WidgetStore(d.label, d.hits)
-		};
+		});
 	}
 </script>
 

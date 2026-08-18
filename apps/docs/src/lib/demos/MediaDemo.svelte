@@ -3,12 +3,12 @@
 	import MediaLive from '$lib/demos/MediaLive.svelte';
 	import MediaFrozen from '$lib/demos/MediaFrozen.svelte';
 
-	let { codeHtml }: { codeHtml: string } = $props();
+	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>
 
 <DemoBlock
 	title="wake: media"
-	{codeHtml}
+	{code}
 	onLabel="live"
 	offLabel="static"
 >

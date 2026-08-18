@@ -13,7 +13,7 @@ import fs from 'node:fs';
 // ogygia" runtime gate.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CSR_EXPORT = /export\s+const\s+csr\s*=\s*(true|false)/;
+const CSR_EXPORT = /export\s+const\s+csr(?:\s*:\s*boolean)?\s*=\s*(true|false)/;
 
 /** Read `export const csr = true|false` from a route options file; `undefined` if unset/absent. */
 export function read_csr(file) {
@@ -117,35 +117,49 @@ function own_csr(dir, universal, server) {
 }
 
 /**
- * Collects every route node's OWN csr the way Kit does — a node exists per `+page` and per
- * `+layout` (component OR standalone module). Layout groups like `(ogygia)/+layout.ts` count too.
- * @returns {Array<boolean | undefined>} one entry per node (undefined = csr unset on that node)
+ * Collects every route node's EFFECTIVE csr the way Kit does — a node exists per `+page` and per
+ * `+layout` (component OR standalone module), and Kit's static analysis resolves each node's
+ * `page_options` through the LAYOUT CHAIN (`page_options = { ...parent_options, ...own }`), so a
+ * root-layout `csr = false` makes every option-less descendant node `csr === false` too. Layout
+ * groups like `(ogygia)/+layout.ts` count too.
+ *
+ * Issue #4/#1 root cause lived here: reading each node's OWN csr only, a fresh app with `csr =
+ * false` in nothing but the root layout looked like "client build runs" (pages read `undefined`),
+ * so the keepalive was never injected — while Kit, resolving the chain, skipped the client build
+ * and the runtime `<script src>` 404'd.
+ * @returns {Array<boolean | undefined>} one entry per node (undefined = unset anywhere up-chain)
  */
-function collectNodeOwnCsr(routesDir) {
+function collectNodeEffectiveCsr(routesDir) {
 	/** @type {Array<boolean | undefined>} */
 	const nodes = [];
 	let saw_root_layout = false;
-	const walk = (dir, is_root) => {
+	const walk = (dir, is_root, inherited) => {
 		const entries = fs.readdirSync(dir, { withFileTypes: true });
 		const names = new Set(entries.filter((e) => e.isFile()).map((e) => e.name));
-
 		const has = (list) => list.some((f) => names.has(f));
+
+		// This dir's layout value carries down the chain whether or not a layout NODE exists here
+		// (Kit merges parent options first; a dir with only `+layout.ts` still re-scopes children).
+		const layout_own = own_csr(dir, LAYOUT_UNIVERSAL, LAYOUT_SERVER);
+		const chain = layout_own !== undefined ? layout_own : inherited;
+
 		// layout node: +layout.svelte, +layout.js/ts, or +layout.server.js/ts
 		if (names.has('+layout.svelte') || has(LAYOUT_UNIVERSAL) || has(LAYOUT_SERVER)) {
 			if (is_root) saw_root_layout = true;
-			nodes.push(own_csr(dir, LAYOUT_UNIVERSAL, LAYOUT_SERVER));
+			nodes.push(chain);
 		}
 		// page node: +page.svelte, +page.js/ts, or +page.server.js/ts
 		if (names.has('+page.svelte') || has(PAGE_UNIVERSAL) || has(PAGE_SERVER)) {
-			nodes.push(own_csr(dir, PAGE_UNIVERSAL, PAGE_SERVER));
+			const page_own = own_csr(dir, PAGE_UNIVERSAL, PAGE_SERVER);
+			nodes.push(page_own !== undefined ? page_own : chain);
 		}
 		for (const e of entries) {
 			if (!e.isDirectory()) continue;
 			if (e.name === KEEP_CLIENT_DIR) continue; // ignore our own injected keepalive
-			walk(path.join(dir, e.name), false);
+			walk(path.join(dir, e.name), false, chain);
 		}
 	};
-	walk(routesDir, true);
+	walk(routesDir, true, undefined);
 	// Kit always synthesizes a root layout node; if the app has none, it carries null options
 	// (csr unset) — which alone is enough to keep the client build alive.
 	if (!saw_root_layout) nodes.push(undefined);
@@ -154,13 +168,15 @@ function collectNodeOwnCsr(routesDir) {
 
 /**
  * Replicates Kit's `manifest_data.nodes.every(n => n.page_options?.csr === false)` — the exact
- * condition under which Kit skips the client build. Reads each node's OWN csr (NOT the resolved
- * layout chain), so a single node whose csr is `true` (e.g. an `(ogygia)/+layout.ts` keepalive)
- * or simply unset keeps the build alive. When this is true, ogygia's runtime is never emitted.
+ * condition under which Kit skips the client build — with `page_options` CHAIN-RESOLVED exactly as
+ * Kit's static analysis resolves it. A single node whose effective csr is `true` or simply unset
+ * keeps the build alive. When this is true, ogygia's runtime is never emitted, so index.ts injects
+ * the keepalive. Deviations (a `+page@` reset, a statically-unanalysable option file) can only err
+ * toward injecting a keepalive Kit didn't need — a harmless extra client build, never a 404.
  */
 export function clientBuildWillSkip(routesDir) {
 	if (!fs.existsSync(routesDir)) return false;
-	const nodes = collectNodeOwnCsr(routesDir);
+	const nodes = collectNodeEffectiveCsr(routesDir);
 	if (nodes.length === 0) return false;
 	return nodes.every((csr) => csr === false);
 }

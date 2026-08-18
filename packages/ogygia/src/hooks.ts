@@ -1,7 +1,7 @@
 /**
  * SvelteKit server `handle` for signed region holes (`defer` / remount:`swr`).
  *
- * Serves `GET <base>/🏝️?id=…&props=…&exp=…&sig=…` by verifying the region MAC,
+ * Serves `GET <base>/__ogygia__?id=…&props=…&exp=…&sig=…` by verifying the region MAC,
  * rendering the region component server-side (cookies, remote functions, and `await` work),
  * and returning HTML for the client runtime to swap in.
  *
@@ -27,18 +27,21 @@ import * as devalue from 'devalue';
 import { islands as island_modules, island_url } from 'virtual:ogygia/server-manifest';
 import { islandCss } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
+import { REGION_BRAND } from './region-brand.js';
 import { secret } from 'virtual:ogygia/secret';
 import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
 import {
 	enabled as router_enabled,
-	viewTransitions as router_view_transitions
+	viewTransitions as router_view_transitions,
+	speculationRules as mpa_speculation_rules
 } from 'virtual:ogygia/router-config';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import { verify, region_mac_message } from './server/hmac.js';
 import { B64Url } from './server/payload.js';
 import { TRANSPORT_WIRE_KEY, revive_transportable } from './live-transport.js';
+import { REGION_SNIPPET_WIRE_KEY, revive_region_snippet } from './region-snippet.js';
 import {
 	DEFAULT_ISLANDS_ENDPOINT,
 	MAX_REGION_PROPS_LEN,
@@ -46,6 +49,12 @@ import {
 	REGION_TTL_RE
 } from './server/endpoint.js';
 import { build_parcel, done_parcel } from './server/stream-regions.js';
+import {
+	page_declares_router_meta,
+	page_declares_runtime_script,
+	page_declares_dev_hmr_script,
+	page_declares_speculation_rules
+} from './server/head-presence.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
@@ -53,6 +62,10 @@ import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrenc
 
 /** Hard cap on rendered region HTML (bytes). */
 const MAX_REGION_BODY = 2_000_000;
+
+/** Cap on a batch POST body before `request.json()` buffers it. 32 endpoints × ~8.5kB (props cap
+ *  8192 + URL overhead) ≈ 270kB; 512kB leaves margin. Rejected up front via `content-length`. */
+const MAX_BATCH_BODY = 512 * 1024;
 
 /** Abort waiting on slow region SSR (work may continue — see INVARIANTS · RENDER-TIMEOUT). */
 const RENDER_TIMEOUT_MS = 10_000;
@@ -149,7 +162,7 @@ class OgygiaHandle {
 		// Compare against the DECODED request pathname so the percent-encoded UTF-8 the browser
 		// sends matches our raw-emoji literal regardless of how Kit hands us the URL. Suffix match
 		// (not `===`) so it works under any `paths.base` without needing the base at all: the request
-		// arrives at `<base>/🏝️`, and the endpoint is a leading-slash, clash-safe path.
+		// arrives at `<base>/__ogygia__`, and the endpoint is a leading-slash, clash-safe path.
 		if (!path.endsWith(this.#endpoint)) {
 			// Flicker fix: on csr=false pages Kit resolves top-level `await query()` calls during
 			// SSR (populating the internal request store's `remote.implicit`) but only serializes
@@ -164,14 +177,14 @@ class OgygiaHandle {
 					this.inject_client_seeds(html, store?.state, event)
 			});
 		}
-		// POST to the endpoint = a BATCH frame stream (client-side navigation / weaving): render a set
+		// POST to the endpoint = a BATCH frame stream (client-side navigation, single-flight): render a set
 		// of signed region calls and flush each as an out-of-order frame in one response.
 		if (event.request.method.toUpperCase() === 'POST') return await this.render_batch(event);
 		return await this.render_region(event);
 	};
 
 	/**
-	 * Batch frame stream (client navigation / route weaving). POST body: a JSON `string[]` of signed
+	 * Batch frame stream (client navigation, single-flight). POST body: a JSON `string[]` of signed
 	 * region endpoints — the calls the client needs. Renders them in parallel and flushes each as a
 	 * `<template data-ogygia-slot="sig">…</template>` frame the moment IT settles (out of order); a
 	 * done sentinel ends it. One response, many frames. Every call carries its own MAC so there's no
@@ -186,6 +199,15 @@ class OgygiaHandle {
 		if (!ip) return region_response('Too Many Requests', { status: 429 });
 		if (this.probe_rate.limited(ip) || this.render_rate.limited(ip)) {
 			return region_response('Too Many Requests', { status: 429 });
+		}
+		// A batch is at most MAX_BATCH signed endpoints (~8.5kB each), so a well-formed body is a few
+		// hundred kB. `request.json()` buffers the WHOLE body before we can slice to 32 — reject an
+		// oversized body up front (O(1) header check) so a single padded POST can't force a large
+		// buffer. Platform adapters cap the body too, but this makes the bound explicit and covers
+		// adapters that don't. (Chunked uploads without content-length still rely on the platform cap.)
+		const content_length = Number(event.request.headers.get('content-length'));
+		if (Number.isFinite(content_length) && content_length > MAX_BATCH_BODY) {
+			return region_response('Payload Too Large', { status: 413 });
 		}
 		let parsed: unknown;
 		try {
@@ -248,16 +270,40 @@ class OgygiaHandle {
 		// The runtime URL is root-relative (base-correct for `base: ''`); island pages under a base
 		// path get the base-correct URL from Region's `asset()`, so only base-path + island-less pages
 		// are affected — a rare follow-up.
+		//
+		// Every presence check matches a REAL element, not the tag's name as TEXT — a page that
+		// DOCUMENTS one of these tags in a code block (the changelog does) renders it escaped, which a
+		// bare `html.includes('name="ogygia-router"')` false-matches, suppressing the injection. See
+		// `head-presence.ts` for why that dropped documented pages to full-page navigation.
+		const has_router_meta = page_declares_router_meta(html);
+		const has_runtime_script = page_declares_runtime_script(html);
+		const has_dev_hmr_script = page_declares_dev_hmr_script(html);
+		const has_speculation_rules = page_declares_speculation_rules(html);
+		// MPA mode (`router: false`): no SPA machinery ships — the browser owns navigation, so the
+		// handle injects static Speculation Rules instead. Chromium prerenders likely next pages,
+		// Firefox prefetches them, everything else ignores the JSON. Presence-checked so a page
+		// authoring its own rules wins; per-link opt-out via `data-ogygia-speculate="off"`.
+		if (!router_enabled && mpa_speculation_rules && !has_speculation_rules && html.includes('</head>')) {
+			html = html.replace(
+				'</head>',
+				`<script type="speculationrules" data-ogygia-speculate>${mpa_speculation_rules}</script></head>`
+			);
+		}
 		if (router_enabled) {
 			const head: string[] = [];
-			if (!html.includes('name="ogygia-router"')) {
+			if (!has_router_meta) {
 				head.push(`<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`);
 			}
-			if (runtime_url && !html.includes('data-ogygia-runtime')) {
+			if (runtime_url && !has_runtime_script) {
 				head.push(`<script type="module" data-ogygia-runtime src="${runtime_url}"></script>`);
 			}
-			if (dev_hmr_url && !html.includes('data-ogygia-dev-hmr')) {
+			if (dev_hmr_url && !has_dev_hmr_script) {
 				head.push(`<script type="module" data-ogygia-dev-hmr src="${dev_hmr_url}"></script>`);
+				// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:
+				// a changed stylesheet joins this page only when the plugin derives the same scope
+				// among its owners — two route-group sub-apps never paint each other in dev.
+				const scope = (event.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
+				head.push(`<meta name="ogygia-dev-scope" content="${scope.replace(/"/g, '')}">`);
 			}
 			if (head.length && html.includes('</head>')) {
 				html = html.replace('</head>', head.join('') + '</head>');
@@ -293,6 +339,20 @@ class OgygiaHandle {
 		return html.includes('</body>') ? html.replace('</body>', block + '</body>') : html + block;
 	}
 
+	/**
+	 * True when a remote's resolved value (deep) contains a region carrying baked SSR HTML — a
+	 * page-sized render, not seed data (see the skip in {@link build_remote_seed_script}). Depth-capped:
+	 * a region ticket sits shallow in any sane payload (a DocView's `entry.body` is 2 levels deep).
+	 */
+	has_baked_region(value: unknown, depth = 0): boolean {
+		if (depth > 6 || value === null || typeof value !== 'object') return false;
+		const r = value as Record<PropertyKey, unknown>;
+		if (r[REGION_BRAND] === true && typeof r.html === 'string') return true;
+		if (Array.isArray(value)) return value.some((x) => this.has_baked_region(x, depth + 1));
+		for (const k in r) if (this.has_baked_region(r[k], depth + 1)) return true;
+		return false;
+	}
+
 	async build_remote_seed_script(state: RequestState): Promise<string | null> {
 		const implicit = state.remote?.implicit;
 		if (!implicit) return null;
@@ -324,7 +384,12 @@ class OgygiaHandle {
 				await Promise.race([
 					Promise.resolve(promise).then(
 						(v) => {
-							if (resolved) data[bucket][remote_key] = { v };
+							// A seed is DATA; a value carrying a BAKED region (SSR HTML in the ticket — a
+							// page body from a `doc`-style remote) is a page-sized RENDER, and the page that
+							// awaited it server-side has already rendered it. Seeding it would ship the body
+							// twice (measured ~130kb/page on a docs site); skip it — a client consumer that
+							// ever needs the value just fetches the remote.
+							if (resolved && !this.has_baked_region(v)) data[bucket][remote_key] = { v };
 						},
 						() => {
 							/* errored/pending remotes are omitted → the client fetches them itself */
@@ -373,7 +438,7 @@ class OgygiaHandle {
 	}
 
 	/**
-	 * Batch (route weaving): verify a hole's OWN signed capability URL and render it in-process. Same
+	 * Batch (single-flight navigation): verify a hole's OWN signed capability URL and render it in-process. Same
 	 * trust boundary as the endpoint (verify the MAC before touching the manifest), but every failure —
 	 * bad/expired MAC, unknown id, non-serializable props, render error, oversize — resolves to
 	 * `null` so the hole silently falls back to a client fetch. Never throws.
@@ -412,7 +477,8 @@ class OgygiaHandle {
 			// hit a process where the minting page never rendered).
 			await load();
 			props = devalue.parse(B64Url.decode(payload), {
-				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false)
+				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false),
+				[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
 			});
 		} catch {
 			return null;
@@ -422,7 +488,7 @@ class OgygiaHandle {
 		const body = await this.#render_component(load, props as Record<string, unknown>);
 		if (body === null || body.length > MAX_REGION_BODY) return null;
 		// CSS links ride in the parcel; the client hoists them to <head> (a body/parcel link is inert
-		// inside the `<template>` box), so a weaved server-island still styles a page that never
+		// inside the `<template>` box), so a batched server-island still styles a page that never
 		// imported its component.
 		return { slot: sig, html: region_css_links(id) + body };
 	}
@@ -510,7 +576,8 @@ class OgygiaHandle {
 			// Module eval first — registers transportable codecs the reviver needs (cold start).
 			await load();
 			props = devalue.parse(B64Url.decode(payload), {
-				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false)
+				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false),
+				[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
 			});
 		} catch {
 			// Same status as bad MAC — no decode oracle (STATUS-ORACLE).
@@ -563,7 +630,7 @@ class OgygiaHandle {
 export interface OgygiaHandleOptions {
 	/**
 	 * Path (relative to Kit `base`) the handle serves.
-	 * Default is the clash-safe island-emoji route (`/🏝️`). Must start with `/`.
+	 * Default is the clash-safe island-emoji route (`/__ogygia__`). Must start with `/`.
 	 */
 	endpoint?: string;
 }

@@ -1,0 +1,57 @@
+---
+title: Overview
+summary: A drop-in SSR profiler for SvelteKit. One line in hooks.server.ts, then open /__profiler to see which components, functions, and network calls make a server render slow — with no per-component instrumentation.
+related:
+  - data-state/profiler/recording
+  - data-state/profiler/reading-reports
+  - reference/performance
+---
+
+The profiler answers one question: **why is this server render slow?** It names the slow components, functions, network calls, and allocations — with no per-component instrumentation and nothing to wrap by hand.
+
+It ships as `ogygia/profiler`, a single SvelteKit `handle`. It has no dependency on the rest of ogygia, so it works in any SvelteKit app.
+
+## The idea
+
+When a page takes seconds to render on the server, the cause is rarely obvious from the outside. It could be a heavy component, a `load` function awaiting three services one after another, a markdown pass, or the garbage collector. A CPU profiler alone misses the waiting; a request log alone misses the compute.
+
+So the profiler watches the **whole Node process** during a render and splits the wall clock into everything that happened:
+
+- component SSR and `load` functions,
+- outbound `fetch` / `http` calls, tied to the route that made them,
+- garbage collection and memory growth,
+- and time spent **waiting** rather than computing.
+
+The trick that makes it readable: Svelte compiles every component to a function **named after its file**. So a V8 sample taken inside a render already knows it is in `Cart` or `ProductGrid`. The profiler reads those names straight off the stack — you never wrap a component to measure it.
+
+## Install
+
+One line in `src/hooks.server.ts`, first in the sequence so it times everything below it:
+
+```ts
+import { sequence } from '@sveltejs/kit/hooks';
+import { profiler } from 'ogygia/profiler';
+import * as ogygia from 'ogygia/server';
+
+export const handle = sequence(profiler(), ogygia.handle());
+```
+
+In production, set a secret so the UI is reachable and gated:
+
+```bash
+PROFILER_SECRET=some-long-random-string
+```
+
+Then open **`/__profiler`** — add `?key=<secret>` in production.
+
+## What you get
+
+- **Always on, near zero cost.** Every request is wall-timed and logged, with per-route p50/p95. The CPU is only sampled while you are actively recording.
+- **On demand.** Record the live server for a few seconds, profile one page, or profile a single request. See [Recording](/docs/data-state/profiler/recording).
+- **A readable report.** A wall-clock budget bar (compute vs waiting), an interactive treemap of where the CPU went, sortable component and function tables, a network waterfall, memory and GC, and a flame graph. See [Reading a report](/docs/data-state/profiler/reading-reports).
+
+## What it needs
+
+A **Node.js server** — `adapter-node`, `vite preview`, or most Node hosts. It uses the built-in V8 inspector. On edge runtimes without the inspector (Cloudflare Workers, Deno Deploy) the always-on request log still works, but CPU and heap recording do not; the UI says so plainly.
+
+It is production-safe: the UI 404s without the secret, matching is timing-safe, and recorded profiles live only in memory — never on disk.

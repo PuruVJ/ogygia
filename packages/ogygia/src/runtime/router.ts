@@ -11,7 +11,8 @@ import { PageCache } from './page-cache.js';
 import { slots } from './slots.js';
 import type { PersistPair } from './persist.js';
 import { runtime_session } from './session.js';
-import { streamFrames } from './frame-nav.js';
+import { island_module_url, warm_island_module } from './region-endpoint-url.js';
+import { speculate_url } from './speculate-hint.js';
 
 const WS = /\s+/;
 
@@ -228,6 +229,9 @@ class SpaRouter {
 		maxBytes: PAGE_CACHE_MAX_BYTES
 	});
 	#inflight = new Map<string, Promise<string | null>>();
+	/** Hrefs whose prefetched HTML was already scanned for island entries — parse once. (URL-level
+	 *  import dedupe lives in the shared `warm_island_module`.) */
+	#warmed_pages = new Set<string>();
 	#remote_bust_installed = false;
 	/** Hard SPA navigations only — never shared with soft invalidate. */
 	#nav_gen = 0;
@@ -342,11 +346,34 @@ class SpaRouter {
 			});
 			settled
 				.then((r) => {
-					if (r.html != null && r.cacheable) this.#page_cache.set(href, r.html);
+					if (r.html == null) return;
+					if (r.cacheable) this.#page_cache.set(href, r.html);
+					// Warm the destination's island JS during the hover/idle runway, so the click path is
+					// swap + hydrate with no first-time import() per island — the module graph is already
+					// resolved when load_island() runs. This is the biggest prefetch win: without it, a warm
+					// (HTML-cached) navigation still stalls hydration on cold island chunks.
+					this.#warm_modules(href, r.html);
 				})
 				.catch(() => {});
 		}
 		return html_p;
+	}
+
+	/**
+	 * Kick off import() for every island module the prefetched page will hydrate, so they are in the
+	 * browser's module cache before the click. `import()` is idempotent (the loader dedupes by URL),
+	 * and a warmed-URL guard skips re-parsing / re-importing across repeated hover+viewport triggers.
+	 * A cheap attribute scan avoids building a whole detached Document during the hover window.
+	 */
+	#warm_modules(href: string, html: string) {
+		if (this.#warmed_pages.has(href)) return;
+		this.#warmed_pages.add(href);
+		// Match `entry="…"` on ogygia-region open tags in our own SSR output (module URLs never contain
+		// a double-quote), collecting the distinct client-island module specifiers. URL-level dedupe +
+		// failure-retry live in the shared warmer (one scheme for router/visible/interaction warms).
+		const re = /<ogygia-region\b[^>]*?\bentry="([^"]+)"/g;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(html))) warm_island_module(m[1], href);
 	}
 
 	// NOTE: the library does NO script processing. Scripts inserted via a client-side body swap do
@@ -436,11 +463,11 @@ class SpaRouter {
 		const use_vt =
 			marker.getAttribute('content') !== 'plain' && !prefer_reduced_motion;
 
-		// ROUTE WEAVING: prescan the incoming page for its load-timed deferred region calls and stream
+		// SINGLE-FLIGHT NAV: prescan the incoming page for its load-timed deferred region calls and stream
 		// them ALL in one batch request, kicked off now (before the swap). Each region binder joins the
 		// batch via the store when it connects — no per-region fetch waterfall on navigation. Fired
 		// synchronously so every reservation is in place before the body swap connects any binder.
-		this.#weave_regions(doc);
+		this.#batch_regions(doc);
 
 		// Cold-cache FOUC guard: get the destination's stylesheets loaded and applied BEFORE the body
 		// swap, so the first post-deploy navigation never flashes unstyled content (a full-width column
@@ -480,6 +507,11 @@ class SpaRouter {
 
 		if (use_vt && document.startViewTransition) {
 			const t = document.startViewTransition(swap);
+			// A rapid follow-up navigation skips this transition; the browser then rejects `.ready`
+			// and `.finished` with "Transition was skipped". Nothing awaits those, so without a catch
+			// they surface as unhandled rejections (console noise, no functional effect). Swallow them.
+			t.ready?.catch(() => {});
+			t.finished?.catch(() => {});
 			await t.updateCallbackDone.catch(() => {});
 		} else {
 			swap();
@@ -513,14 +545,14 @@ class SpaRouter {
 	goto(url: string | URL, opts: { replaceState?: boolean; external?: boolean } = {}) {
 		const target = new URL(url, location.href);
 		if (target.protocol !== 'http:' && target.protocol !== 'https:') {
-			throw new Error('ogygia: goto() only supports http(s) URLs');
+			throw new Error('[ogygia] goto() only supports http(s) URLs');
 		}
 		if (target.origin !== location.origin) {
 			if (opts.external) {
 				location.assign(target.href);
 				return Promise.resolve();
 			}
-			throw new Error('ogygia: goto() only supports same-origin URLs (pass { external: true } to leave)');
+			throw new Error('[ogygia] goto() only supports same-origin URLs (pass { external: true } to leave)');
 		}
 		return this.navigate(target, { push: !opts.replaceState, replace: false, type: 'goto' });
 	}
@@ -850,32 +882,35 @@ class SpaRouter {
 	}
 
 	/**
-	 * ROUTE WEAVING. Collect the incoming page's deferred, load-timed region calls and stream them as
+	 * SINGLE-FLIGHT NAVIGATION. Collect the incoming page's deferred, load-timed region calls and stream them as
 	 * one batch. Reads the RENDERED holes (`<ogygia-region render="defer" endpoint>`), so it covers
 	 * both placed server islands and held `region()` deferred regions alike — authoring syntax is
-	 * irrelevant. Only `when="load"` (or unset) is woven: a region scheduled `visible`/`idle`/media
+	 * irrelevant. Only `when="load"` (or unset) is batched: a region scheduled `visible`/`idle`/media
 	 * stays lazy and fetches on its own trigger, so dynamic schedules are preserved, not eagerly pulled.
 	 */
-	#weave_regions(doc: Document) {
+	#batch_regions(doc: Document) {
 		const endpoints: string[] = [];
-		const woven = new Set<string>();
+		const batched = new Set<string>();
 		for (const el of Array.from(doc.querySelectorAll('ogygia-region[render="defer"][endpoint]'))) {
 			const when = el.getAttribute('when') || 'load';
 			if (when !== 'load') continue; // lazy schedules keep their own timing — never batch them early
 			const ep = el.getAttribute('endpoint');
 			if (ep) {
 				endpoints.push(ep);
-				woven.add(ep);
+				batched.add(ep);
 			}
 		}
 		if (!endpoints.length) return;
 		// Drop the per-region `<link rel="preload" as="fetch">` hints for these calls before the head is
-		// merged: on initial load they front-run the fetch, but on a woven navigation the batch serves
-		// them — left in, the browser would fire the very GET waterfall weaving exists to remove.
+		// merged: on initial load they front-run the fetch, but on a single-flight navigation the batch serves
+		// them — left in, the browser would fire the very GET waterfall the single-flight batch exists to remove.
 		for (const link of Array.from(doc.querySelectorAll('link[rel="preload"][as="fetch"]'))) {
-			if (woven.has(link.getAttribute('href') || '')) link.remove();
+			if (batched.has(link.getAttribute('href') || '')) link.remove();
 		}
-		void streamFrames(endpoints);
+		// Through the seam, never a static `frame-nav` import: an app with `router` but no
+		// deferred/live/lake region has no `frames` feature (and no `render="defer"` holes — so
+		// `endpoints` is empty above and we already returned). Optional-chain keeps that honest.
+		void slots.frames?.stream?.(endpoints);
 	}
 }
 
@@ -943,18 +978,30 @@ export function invalidate() {
 }
 
 /**
- * Warm the SPA HTML cache for a URL.
- * Note: this fetches the **page**, not Kit `load` data in isolation.
+ * Warm the next page. Router ON (SPA): fetch the page into the swap-readable HTML cache (+ its
+ * island modules) — this is what makes the eventual click instant, and no browser cache can feed a
+ * body swap. Router OFF (MPA, this module reached via the `$app/navigation` shim / `ogygia/app`):
+ * the browser owns navigation, so hint a native Speculation Rules PRERENDER for the URL — Chromium
+ * activates it on the real navigation; unsupporting browsers silently ignore it.
  */
 export function preloadData(url: string | URL) {
+	if (!slots.nav) {
+		speculate_url(url, 'prerender');
+		return Promise.resolve({ type: 'loaded' as const, status: 200, data: {} });
+	}
 	return spa.preloadData(url);
 }
 
 /**
- * No-op under ogygia — page “code” arrives with the HTML body swap (+ island chunks on connect).
- * Kept for Kit `$app/navigation` API parity.
+ * Router ON: no-op — page “code” arrives with the HTML body swap (+ island chunks on connect).
+ * Router OFF: hint a native Speculation Rules PREFETCH for the URL (the code-only speculation leg —
+ * Firefox supports it; a prerender-capable browser treats prefetch as prerender's first stage).
  */
-export function preloadCode() {
+export function preloadCode(url?: string | URL) {
+	if (!slots.nav) {
+		if (url != null) speculate_url(url, 'prefetch');
+		return Promise.resolve();
+	}
 	return spa.preloadCode();
 }
 

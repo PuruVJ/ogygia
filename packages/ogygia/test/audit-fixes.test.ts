@@ -437,8 +437,8 @@ describe('audit fixes — region endpoint allowlist', () => {
 			'../dist/runtime/region-endpoint-url.js'
 		);
 		const origin = 'https://app.example';
-		expect(is_allowed_region_endpoint('/🏝️?id=abc', origin)).toBe(true);
-		expect(is_allowed_region_endpoint('https://app.example/🏝️?id=1', origin)).toBe(true);
+		expect(is_allowed_region_endpoint('/__ogygia__?id=abc', origin)).toBe(true);
+		expect(is_allowed_region_endpoint('https://app.example/__ogygia__?id=1', origin)).toBe(true);
 		expect(is_allowed_region_endpoint('https://evil.example/x', origin)).toBe(false);
 		expect(is_allowed_region_endpoint('//evil.example/x', origin)).toBe(false);
 		expect(is_allowed_region_endpoint('javascript:alert(1)', origin)).toBe(false);
@@ -453,15 +453,15 @@ describe('audit fixes — region endpoint allowlist', () => {
 	it('resolves relative island entries against the document (not runtime module)', async () => {
 		const { island_module_url } = await import('../dist/runtime/region-endpoint-url.js');
 		const nested = 'https://example.com/playground/strategies';
-		expect(island_module_url('/_app/immutable/ogygia-island.abc.js')).toBe(
-			'/_app/immutable/ogygia-island.abc.js'
+		expect(island_module_url('/_app/immutable/og-region.abc.js')).toBe(
+			'/_app/immutable/og-region.abc.js'
 		);
-		expect(island_module_url('./_app/immutable/ogygia-island.abc.js', 'https://example.com/')).toBe(
-			'/_app/immutable/ogygia-island.abc.js'
+		expect(island_module_url('./_app/immutable/og-region.abc.js', 'https://example.com/')).toBe(
+			'/_app/immutable/og-region.abc.js'
 		);
 		// Regression: ../_app used to become /_app/_app/... via import() vs runtime URL
-		expect(island_module_url('../_app/immutable/ogygia-island.abc.js', nested)).toBe(
-			'/_app/immutable/ogygia-island.abc.js'
+		expect(island_module_url('../_app/immutable/og-region.abc.js', nested)).toBe(
+			'/_app/immutable/og-region.abc.js'
 		);
 	});
 });

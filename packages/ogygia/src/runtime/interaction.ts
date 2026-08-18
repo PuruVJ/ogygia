@@ -30,14 +30,14 @@
  */
 
 import { slots } from './slots.js';
-import { island_module_url } from './region-endpoint-url.js';
+import { warm_island_module } from './region-endpoint-url.js';
 
 /** Feature entry: fill the `interaction` slot — wake a cold island on first use, warm on hover. */
 export function install() {
 	slots.interaction = (el, fire) => {
 		const warm = () => {
 			const entry = el.getAttribute('entry');
-			if (entry) import(/* @vite-ignore */ island_module_url(entry)).catch(() => {});
+			if (entry) warm_island_module(entry);
 		};
 		return arm_interaction(el, warm, () => Promise.resolve(fire()));
 	};

@@ -17,7 +17,6 @@ export type RuntimeMarks = {
 	live?: boolean;
 	morph?: boolean;
 	lakes?: boolean;
-	speculate?: 'hover' | 'viewport' | false;
 	forms?: boolean;
 	wire?: boolean;
 	remoteSeeds?: boolean;
@@ -26,6 +25,7 @@ export type RuntimeMarks = {
 export type FeatureId =
 	| 'remote-seeds'
 	| 'wire'
+	| 'frames'
 	| 'lakes'
 	| 'morph'
 	| 'live'
@@ -33,7 +33,7 @@ export type FeatureId =
 	| 'forms'
 	| 'persist'
 	| 'router'
-	| 'speculate';
+;
 
 export type FeatureDef = {
 	/** Path relative to `runtime/` (no leading ./). */
@@ -78,34 +78,39 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 		deps: [],
 		detect: (m) => m.live === true
 	},
-	speculate: {
-		module: 'speculate.js',
-		deps: [],
-		detect: (m) => m.speculate === 'hover' || m.speculate === 'viewport'
-	},
 	wire: {
 		module: '../live-transport.js',
 		deps: [],
-		detect: (m) => m.wire !== false
+		// Opt-IN: only when the app actually ships a transportable class or a portable snippet (the
+		// build sets `wire: true` on detecting either). A plain-props app never bundles the ~8kB codec.
+		detect: (m) => m.wire === true
 	},
 	'remote-seeds': {
 		module: 'remote-seeds.js',
 		deps: [],
 		detect: (m) => m.remoteSeeds !== false
+	},
+	frames: {
+		module: 'frames.js',
+		deps: [],
+		// The client frame store, needed by any region that streams HTML: a deferred region (server
+		// island / held region), a live/morphing region, or a lake. A plain load-hydrated app has
+		// none of these and tree-shakes the store away. (The router's single-flight nav imports the store separately.)
+		detect: (m) => (m.defer || []).length > 0 || m.live === true || m.morph === true || m.lakes === true
 	}
 };
 
 export const FEATURE_ORDER: FeatureId[] = [
 	'remote-seeds',
 	'wire',
+	'frames',
 	'lakes',
 	'morph',
 	'live',
 	'interaction',
 	'forms',
 	'persist',
-	'router',
-	'speculate'
+	'router'
 ];
 
 /** Resolve the closed feature set for a marks manifest. */

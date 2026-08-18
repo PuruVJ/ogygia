@@ -1,0 +1,105 @@
+---
+title: Emissions
+summary: Machine-facing serializations of the site. sitemap.xml for crawlers, llms.txt for models, RSS for readers, raw markdown per page, each a one-line GET handler off the same outline.
+related:
+  - content/site
+  - content/search
+  - content/outline
+---
+
+Docs have a second audience in 2026: crawlers, language models, feed readers. The site layer emits the formats they expect straight off the outline: no parallel content, no separate build step. Each is a GET handler you mount in a `+server.ts`.
+
+::: tip When to use
+Add the emissions your audience asks for. A public docs site wants `sitemap.xml` and `llms.txt`; a blog wants RSS; an "open in your editor / copy as markdown" feature wants the raw source. They cost one line each.
+:::
+
+## The catalog
+
+::: code-group
+
+```ts [sitemap.xml]
+// src/routes/sitemap.xml/+server.ts — every leaf of the outline
+import { docs } from '$lib/site.server';
+export const prerender = true;
+export const GET = docs.emit.sitemap({ base: '/docs', origin: 'https://example.dev' });
+```
+
+```ts [llms.txt]
+// src/routes/llms.txt/+server.ts — the llmstxt.org model-readable map
+import { docs } from '$lib/site.server';
+export const prerender = true;
+export const GET = docs.emit.llms({ title: 'Example', description: 'Docs for Example.' });
+```
+
+```ts [raw markdown]
+// src/routes/docs/[...slug].md/+server.ts — the pre-compile source, per page
+import { docs } from '$lib/site.server';
+export const { GET, entries } = docs.emit.raw();   // strips frontmatter by default
+```
+
+```ts [rss.xml]
+// src/routes/blog/rss.xml/+server.ts — the blog genre's feed
+import { docs, blog } from '$lib/site.server';
+export const prerender = true;
+export const GET = docs.emit.rss({
+	title: 'Example blog',
+	base: '/blog',
+	items: async () =>
+		(await blog.refs()).map((r) => ({
+			href: `/blog/${r.id}`,
+			title: r.data.title,
+			description: r.data.description,
+			date: r.data.date
+		}))
+});
+```
+
+```ts [search.json]
+// src/routes/docs/search.json/+server.ts — the index the client worker queries
+import { docs } from '$lib/site.server';
+export const prerender = true;
+export const GET = docs.emit.search();
+```
+
+:::
+
+## Sitemap and llms.txt
+
+Both are **views of the nav tree**: every leaf, in reading order. That is the property worth having: a new page joins the sitemap and the model index the moment the outline sees it, and neither can drift from the site because neither is a second copy of anything.
+
+`origin` matters when prerendered: at build time there is no request to read an origin from, so absolute URLs come from the option, or from `site({ data: { origin } })`, which every emission defaults to:
+
+```ts
+export const docs = site({
+	outline: docs,
+	data: { title: 'Example', description: 'Docs for Example.', origin: 'https://example.dev' }
+});
+
+// now emissions need nothing:
+export const GET = docs.emit.sitemap({ base: '/docs' });
+```
+
+## Raw markdown
+
+The pre-compile source of each page, for "copy as markdown" or an LLM that wants the real thing. Mount it at a catch-all `.md` route; it prerenders one file per entry that carries source, and `entries` comes with it:
+
+```ts
+export const { GET, entries } = docs.emit.raw();
+// docs.emit.raw({ frontmatter: 'keep' })   // …keep the frontmatter block instead
+```
+
+Now `/docs/routing.md` serves the source of `/docs/routing`. **This site does exactly that**: append `.md` to any docs URL, including this page's.
+
+::: details Why the source and not the rendered HTML?
+The rendered page already exists at the `.html` address. A second HTML serialization adds nothing. The `.md` emission is the *authored artifact*: stable under restyles, cheap to diff, and the representation models quote most faithfully. The one transformation applied is frontmatter stripping (by default), because YAML metadata is site plumbing, not prose.
+:::
+
+## RSS
+
+A feed over dated items: the blog genre's emission. `items` maps a collection's refs (`RssItem` is `{ href, title, description?, date }`); hrefs are root-relative and absolutized against the origin at emit time, and the emitter re-sorts by date descending so feed order is always right.
+
+## Do / don't
+
+- **Do** emit off the outline, not off a second copy of the content. The sitemap and llms.txt are always in sync because they are views of the same tree.
+- **Do** put `origin` in `docs.data` once, instead of repeating it per emission.
+- **Don't** hand-write these files. A new page joins the sitemap, the llms index, and the raw route the moment it exists. That is the point.

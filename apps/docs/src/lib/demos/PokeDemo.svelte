@@ -3,10 +3,10 @@
 	import Counter from '$lib/demos/Counter.svelte';
 	import FrozenCounter from '$lib/demos/FrozenCounter.svelte';
 
-	let { codeHtml }: { codeHtml: string } = $props();
+	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>
 
-<DemoBlock title="poke · Counter.svelte" {codeHtml} onLabel="hydrated">
+<DemoBlock title="poke · Counter.svelte" {code} onLabel="hydrated">
 	{#snippet live()}
 		<Counter start={7} label="Poke counter" note="Toggle JS in the header" />
 	{/snippet}

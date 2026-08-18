@@ -1,0 +1,43 @@
+{
+	"name": "svelte-dev",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev --port 5283 --strictPort",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"@shikijs/twoslash": "3.23.0",
+		"@sveltejs/adapter-node": "^5.5.7",
+		"@sveltejs/kit": "^2.70.2",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"magic-string": "^1.1.0",
+		"svelte": "^5.56.8",
+		"svelte-check": "^4.7.4",
+		"svelte2tsx": "^0.7.60",
+		"twoslash": "0.3.9",
+		"twoslash-svelte": "0.3.9",
+		"typescript": "^6.0.3",
+		"vite": "^8.2.0",
+		"vite-imagetools": "^12.0.0",
+		"vitest": "^4.1.10"
+	},
+	"dependencies": {
+		"@fontsource/atkinson-hyperlegible": "^5.2.5",
+		"@fontsource/dm-serif-display": "^5.2.5",
+		"@fontsource/eb-garamond": "^5.2.5",
+		"@fontsource/fira-mono": "^5.2.5",
+		"@fontsource/fira-sans": "^5.2.5",
+		"bits-ui": "^2.18.1",
+		"devalue": "^5.9.0",
+		"mdast-util-from-markdown": "^2.0.2",
+		"mdsvex": "^0.12.8",
+		"ogygia": "workspace:*",
+		"shiki": "^3.9.1",
+		"valibot": "^1.4.2"
+	}
+}

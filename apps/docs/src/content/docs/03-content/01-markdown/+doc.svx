@@ -1,0 +1,139 @@
+---
+title: Markdown authoring
+summary: The prose dialect markdown() understands: containers, tab groups, fence meta, and diff markers. Zero imports in your content; the compiler injects what a page uses.
+related:
+  - content/collections
+  - content/shell
+  - macros/code
+---
+
+`markdown()` compiles `.svx` / `.md` with an opinionated dialect on top of CommonMark: admonition containers, markdown-native tabs, a fence pipeline with pluggable stages. Authors write **zero imports**. When a page uses a tab group, the compiler injects the components into that page's module scope. Everything on this page is rendered by the dialect it documents.
+
+::: tip When to use
+This page is for people *writing* content. For wiring `markdown()` into your app, see [Content collections](/docs/content/collections); for the `code()` macro that renders snippets from components, see [code](/docs/macros/code).
+:::
+
+## Containers
+
+VitePress-compatible admonitions: `tip`, `warning`, `danger`, `info`, `note`, `caution`, `important`, and collapsible `details`, each with an optional title on the opening line:
+
+```md
+::: warning Heads up
+Props must be serializable.
+:::
+```
+
+::: warning Heads up
+Props must be serializable. (This box is the example above, rendered.)
+:::
+
+Blank lines inside are optional; VitePress-style tight blocks work. A literal `:::` inside a fenced code block is untouched. `details` renders as a native `<details>` disclosure:
+
+::: details What it expands into
+An `.og-admonition` wrapper the theme styles. Markdown keeps rendering inside: code, links, lists, everything.
+:::
+
+## Tab groups
+
+Two authoring syntaxes, both rewritten to `<TabGroup>` / `<Tab>` with the components auto-injected.
+
+**`::: code-group`**: one fence per tab, with the label in `[brackets]` after the language:
+
+````md
+::: code-group
+
+```bash [npm]
+npm i ogygia
+```
+
+```bash [pnpm]
+pnpm add ogygia
+```
+
+:::
+````
+
+::: code-group
+
+```bash [npm]
+npm i ogygia
+```
+
+```bash [pnpm]
+pnpm add ogygia
+```
+
+:::
+
+**`::: tabs`**: arbitrary markdown per tab, one per `== Label` line:
+
+```md
+::: tabs
+== On the server
+Query the brain in a server load.
+== In a worker
+Ship the static index; the worker filters by scope.
+:::
+```
+
+Same-labeled groups **sync**: pick pnpm once and every install block follows, and the choice persists across pages (localStorage). Try it on the group above.
+
+## Fence meta
+
+The infostring after the language flows through the fence pipeline (line highlighting, filenames, [twoslash](/docs/macros/code)), the same for a markdown fence and a `code()` call:
+
+- ` ```ts title=src/lib/site.server.ts `: a **filename** in the code-block header (left of the copy / permalink actions). This is the common case, and it's what fills the header so it's never empty; when a fence gives no filename, the header falls back to the language name. `title=` reads to end-of-token, so paths with `/`, `.`, and `+page`-style route files work as-is.
+- ` ```ts {2-4} `: highlight lines 2–4, with `transformerMetaHighlight` from `@shikijs/transformers` wired.
+- ` ```ts twoslash `: type-aware hovers, with the twoslash transformer wired.
+- `/// file: app.ts` on the first line: the same filename, but as a magic comment that's stripped from the rendered code (via the `slash_meta()` parser). Prefer `title=` unless you're porting content that already uses the comment form.
+
+## Diff markers
+
+Two dialects for "change this code" prose, shipped as fence-pipeline transformers. **Line-level**: a `+++ ` / `--- ` prefix marks the whole line, and the marker never reaches the reader:
+
+````md
+```js
+--- export let count;
++++ let { count } = $props();
+```
+````
+
+```js
+--- export let count;
++++ let { count } = $props();
+```
+
+**Inline**: `+++added+++` / `---removed---` wraps a span *inside* a line (svelte.dev's dialect, and it composes with twoslash):
+
+````md
+```js
+let +++doubled = $derived(count * 2)+++;
+```
+````
+
+```js
+let +++doubled = $derived(count * 2)+++;
+```
+
+Wire them once in your app config; they're inert on fences that carry no marker:
+
+```ts
+import { diff_markers, inline_markers } from 'ogygia/content/markdown';
+
+ogygia({ content: { markdown: { code: { transformers: [diff_markers(), inline_markers()] } } } })
+```
+
+::: note Where each dialect is off
+Line markers skip languages where a leading `---` is real syntax (`yaml`, `md`, `diff`). Inline markers never treat a `---` alone on its line as a delimiter, so frontmatter shown inside a fence renders untouched. For those cases use `// [!code ++]` comments from `@shikijs/transformers`.
+:::
+
+## Extending the pipeline
+
+Every stage above is a **value you pass**, not a flag you toggle: `transformers` speak Shiki's ecosystem contract (`@shikijs/transformers`, twoslash, the diff markers, your own), `meta` parsers extend the infostring, `variants` turn one authored fence into switchable versions (a JS↔TS converter, package-manager tabs). Defaults are on for the prose features (`containers`, `tabs`, heading ids + anchors, code ids) and each is one key to turn off. The full option list lives in the [API reference](/docs/reference/api).
+
+## Do / don't
+
+- **Do** author with the dialect; tabs and admonitions carry structure that plain prose paragraphs lose.
+- **Do** keep install commands in a `code-group`. Readers pick their package manager once; every block on the page follows.
+- **Don't** hand-import `TabGroup` in a content page. The compiler injects it exactly when the syntax appears; an import of your own just duplicates it.
+- **Don't** fake diffs with `diff` fences when you mean "edit this code": the diff language loses real syntax highlighting. The markers keep Shiki colors and strip themselves.

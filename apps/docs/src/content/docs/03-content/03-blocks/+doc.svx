@@ -1,6 +1,6 @@
 ---
 title: Blocks
-summary: Render a JSON tree of components — a Builder.io-style page builder where only the block types a page names ever ship.
+summary: Render a JSON tree of components. A Builder.io-style page builder where only the block types a page names ever ship.
 related:
   - content/collections
   - regions/client-islands
@@ -10,11 +10,13 @@ related:
   import BlocksDemo from '$lib/demos/BlocksDemo.svelte';
 </script>
 
-A **block** page is data: a tree of nodes, each naming a component `type` plus its `props`. `blocks()` renders that tree the same way `markdown()` renders `.svx` — as an entry `body` you drop in with `<Region of={entry.body} />`. It is the render half of a visual page builder: your CMS (or a JSON file) owns the layout; ogygia owns the rendering.
+A **block** page is data: a tree of nodes, each naming a component `type` plus its `props`. `blocks()` renders that tree the same way `markdown()` renders `.svx`, as an entry `body` you drop in with `<Region of={entry.body} />`. It is the render half of a visual page builder: your CMS (or a JSON file) owns the layout; ogygia owns the rendering.
 
-> **When to use.** Reach for blocks when *content decides layout* — marketing pages assembled in a visual editor, CMS-driven landing pages, anything where a non-developer arranges components. If a developer writes the layout in a `.svelte` file, you do not need this; just write the components.
+::: tip When to use
+Reach for blocks when *content decides layout*: marketing pages assembled in a visual editor, CMS-driven landing pages, anything where a non-developer arranges components. If a developer writes the layout in a `.svelte` file, you do not need this; just write the components.
+:::
 
-The panel below is a block tree — a `Hero`, a `Grid` of two `Feature`s, and one interactive `CounterBlock` — rendered live from the data further down this page.
+The panel below is a block tree (a `Hero`, a `Grid` of two `Feature`s, and one interactive `CounterBlock`) rendered live from the data further down this page.
 
 <div class="doc-demo">
   <BlocksDemo />
@@ -22,10 +24,10 @@ The panel below is a block tree — a `Hero`, a `Grid` of two `Feature`s, and on
 
 ## Register your blocks
 
-The registry maps a block `type` name to a component. A **static** block is a `with { region: 'raw' }` import — it renders inline and ships zero JS, but it is code-split, so a page loads only the CSS (and, for interactive blocks, the JS) of the block types it actually names. An **interactive** block uses `with { wake: … }` instead, which bakes its schedule and makes its JS **load only when a page names it** (`load` · `idle` · `visible` · a media query decides when it hydrates).
+The registry maps a block `type` name to a component. A **static** block is a `with { region: 'raw' }` import: it renders inline and ships zero JS, but it is code-split, so a page loads only the CSS (and, for interactive blocks, the JS) of the block types it actually names. An **interactive** block uses `with { wake: … }` instead, which bakes its schedule and makes its JS **load only when a page names it** (`load` · `idle` · `visible` · a media query decides when it hydrates).
 
-```ts
-// src/lib/blocks.ts — a .ts module: a `region`/`wake` mark here makes a held block
+```ts title=src/lib/blocks.ts
+// a .ts module: a `region`/`wake` mark here makes a held block
 import Hero    from './blocks/Hero.svelte'    with { region: 'raw' };
 import Grid    from './blocks/Grid.svelte'    with { region: 'raw' };
 import Feature from './blocks/Feature.svelte' with { region: 'raw' };
@@ -34,9 +36,11 @@ import Counter from './blocks/Counter.svelte' with { wake: 'load' };
 export const registry = { Hero, Grid, Feature, Counter };
 ```
 
-Both marks make the component a held block — code-split, resolved to a region by the registry. `region: 'raw'` bakes no schedule (static, HTML only); `wake:` bakes one (interactive). A plain import would work too, but its CSS would fold into the page stylesheet — so a large registry pays for every block on every page. The marks are what keep a page's cost to the blocks it renders.
+Both marks make the component a held block: code-split, resolved to a region by the registry. `region: 'raw'` bakes no schedule (static, HTML only); `wake:` bakes one (interactive). A plain import would work too, but its CSS would fold into the page stylesheet, so a large registry pays for every block on every page. The marks are what keep a page's cost to the blocks it renders.
 
-You decide which component a `type` means — no guessing, no auto-discovery. An unregistered `type` is skipped with a dev warning, never rendered as something it is not.
+> The `with { region: 'raw' }` lines are N imports that quietly fall out of sync with the folder. The **[`regions()` macro](/docs/macros/regions)** collapses them into one line, `import.meta.og.regions('./blocks/*.svelte')`, that globs the folder and emits a raw-region import per match, keyed by basename. Blocks that need a `wake:` schedule stay a manual import, spread on top.
+
+You decide which component a `type` means, with no guessing and no auto-discovery. An unregistered `type` is skipped with a dev warning, never rendered as something it is not.
 
 ## A page is JSON
 
@@ -51,9 +55,9 @@ You decide which component a `type` means — no guessing, no auto-discovery. An
 ]
 ```
 
-Nodes nest through `children` — a `Grid` holds `Feature`s, a section holds a grid. That is what makes it a page tree and not a flat stack.
+Nodes nest through `children`: a `Grid` holds `Feature`s, a section holds a grid. That is what makes it a page tree and not a flat stack.
 
-## Render it — a construct of the content API
+## Render it
 
 `blocks()` is a content source. Point a collection at your page JSON and every entry's `body` is the rendered tree:
 
@@ -66,10 +70,10 @@ export const pages = content({
 });
 ```
 
-Then render it exactly like a markdown body — same `get()`, same `<Region>`. Call `get()` in a **universal** `+page.ts` load (or straight in the page component with `await`): its data reaches the render by reference, in the same server pass.
+Then render it exactly like a markdown body: same `get()`, same `<Region>`. Call `get()` in a **universal** `+page.ts` load (or straight in the page component with `await`): its data reaches the render by reference, in the same server pass.
 
-```ts
-// +page.ts — universal, NOT +page.server.ts
+```ts title=+page.ts
+// universal, NOT +page.server.ts
 import { pages } from '$lib/blocks/pages';
 export const load = async () => ({ page: await pages.get('landing') });
 ```
@@ -83,16 +87,18 @@ export const load = async () => ({ page: await pages.get('landing') });
 <Region of={data.page.body} />
 ```
 
-> **Not `+page.server.ts`.** A server load's data crosses a serialization boundary, and a `body` is a same-pass SSR value — a live render, not wire data — so it cannot cross (ogygia stops you with an error saying exactly this). On a `csr = false` page a universal load never runs client-side, so it is server code with none of the boundary.
+::: warning Not `+page.server.ts`
+A server load's data crosses a serialization boundary, and a `body` is a same-pass SSR value (a live render, not wire data), so it cannot cross (ogygia stops you with an error saying exactly this). On a `csr = false` page a universal load never runs client-side, so it is server code with none of the boundary.
+:::
 
-Every block's **CSS travels with the render**: the page never imports `Hero` or `Feature`, so their styles are on no page stylesheet — the region links each rendered block's own hashed stylesheet into `<head>` during the server pass, deduped, only for the block types the page actually uses. A registry of 100 blocks costs a page exactly the sheets for the blocks it renders.
+Every block's **CSS travels with the render**: the page never imports `Hero` or `Feature`, so their styles are on no page stylesheet. The region links each rendered block's own hashed stylesheet into `<head>` during the server pass, deduped, only for the block types the page actually uses. A registry of 100 blocks costs a page exactly the sheets for the blocks it renders.
 
 ## No collection? A ten-line recipe
 
-The content source is the blessed path. But if you already hold a tree — a prop, a literal, a one-off CMS call — you don't need a collection. `blocks.resolve(tree, registry)` turns it into region nodes (it must run **server-side**, where the signing key lives — a `+page.server.ts` load, a remote, or the SSR pass of a `csr = false` page). You render those nodes with a small recomposer you own:
+The content source is the recommended path. But if you already hold a tree (a prop, a literal, a one-off CMS call), you don't need a collection. `blocks.resolve(tree, registry)` turns it into region nodes (it must run **server-side**, where the signing key lives: a `+page.server.ts` load, a remote, or the SSR pass of a `csr = false` page). You render those nodes with a small recomposer you own:
 
-```svelte
-<!-- BlockTree.svelte — yours to keep and tweak -->
+```svelte title=BlockTree.svelte
+<!-- yours to keep and tweak -->
 <script>
   import { Region } from 'ogygia';
   import { blocks } from 'ogygia/content';
@@ -112,14 +118,13 @@ The content source is the blessed path. But if you already hold a tree — a pro
 <BlockTree tree={page} {registry} />
 ```
 
-That's the whole thing — `blocks.resolve` does the `type → region` walk (skipping unknown types), your component does the rendering. It's exactly what the `blocks()` source runs internally; there's no shipped component to import because ten lines you own beat a black box.
+That's the whole thing: `blocks.resolve` does the `type → region` walk (skipping unknown types), and your component does the rendering. It's exactly what the `blocks()` source runs internally; there's no shipped component to import because ten lines you own beat a black box.
 
 ## Data from a CMS (Builder.io)
 
-Builder is headless — it serves your pages as JSON over an HTTP API. Write a **loader** that fetches it and renders through `blocks()`. Copy this, drop in your public key, and you have a Builder-driven site:
+Builder is headless: it serves your pages as JSON over an HTTP API. Write a **loader** that fetches it and renders through `blocks()`. Copy this, drop in your public key, and you have a Builder-driven site:
 
-```ts
-// src/lib/builder.ts
+```ts title=src/lib/builder.ts
 import { content, blocks, mapRaw } from 'ogygia/content';
 import type { RawSource } from 'ogygia/content';
 import { registry } from './blocks';
@@ -135,19 +140,15 @@ const toTree = (els = []) =>
     children: e.children ? toTree(e.children) : undefined
   }));
 
-// A raw source over Builder's Content API: get() fetches ONE page, list() fetches them all.
+// A raw source over Builder's Content API: refs() lists every page, get() fetches ONE.
 const builderApi: RawSource<any> = {
-  async get(id) {
-    const { results } = await fetch(`${API}&limit=1&url=/${id}`).then((r) => r.json());
-    return results[0] ? { id, value: results[0] } : null;
-  },
-  async list() {
+  async refs() {
     const { results } = await fetch(`${API}&limit=100`).then((r) => r.json());
     return results.map((r) => ({ id: (r.data?.url ?? r.id).replace(/^\//, ''), value: r }));
   },
-  async ids() {
-    const { results } = await fetch(`${API}&limit=100&fields=data.url`).then((r) => r.json());
-    return results.map((r) => (r.data?.url ?? '').replace(/^\//, ''));
+  async get(id) {
+    const { results } = await fetch(`${API}&limit=1&url=/${id}`).then((r) => r.json());
+    return results[0] ? { id, value: results[0] } : null;
   }
 };
 
@@ -157,10 +158,10 @@ export const pages = content({
 });
 ```
 
-That is the whole integration. `get(slug)` fetches one page on demand; `list()` / `ids()` drive a nav or prerender. Nothing else in your app changes — it is a content collection like any other.
+That is the whole integration. `get(slug)` fetches one page on demand; `list()` / `ids()` drive a nav or prerender. Nothing else in your app changes; it is a content collection like any other.
 
-The live demo on this site uses local JSON in Builder's exact shape: **[/demo/builder/home](/demo/builder/home)** and **[/demo/builder/pricing](/demo/builder/pricing)**. Whole pages, assembled as data, rendered as islands — only the interactive block ships JS.
+The live demo on this site uses local JSON in Builder's exact shape: **[/demo/builder/home](/demo/builder/home)** and **[/demo/builder/pricing](/demo/builder/pricing)**. Whole pages, assembled as data, rendered as islands; only the interactive block ships JS.
 
 ## Thousands of blocks, only a few shipped
 
-The registry can hold a thousand blocks. A page that names three loads three chunks — the other 997 never ship. That is not special-cased; it falls out of the model. The registry is fixed at build (the vocabulary); the page JSON picks the arrangement at runtime. Each block is a `held region`, and a held region's client chunk loads only when it is actually on the page. So the bundle stays tiny no matter how big the registry grows.
+The registry can hold a thousand blocks. A page that names three loads three chunks; the other 997 never ship. That is not special-cased; it falls out of the model. The registry is fixed at build (the vocabulary); the page JSON picks the arrangement at runtime. Each block is a `held region`, and a held region's client chunk loads only when it is actually on the page. So the bundle stays tiny no matter how big the registry grows.

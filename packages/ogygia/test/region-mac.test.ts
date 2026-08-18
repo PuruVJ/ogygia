@@ -50,8 +50,14 @@ describe('encode_region_props (SWR / defer mint bound)', () => {
 		expect(p!.length).toBeLessThanOrEqual(MAX_REGION_PROPS_LEN);
 	});
 
-	it('returns null for non-serializable props (functions)', () => {
-		expect(encode_region_props({ fn: () => 1 })).toBeNull();
+	it('freezes a bare function prop to a static region snippet (the boundary law) and encodes', () => {
+		// Under the region-snippet boundary law a bare snippet/function FREEZES to server HTML instead
+		// of failing serialization — a snippet prop on a minted region is legal now.
+		expect(encode_region_props({ fn: () => 1 })).not.toBeNull();
+	});
+
+	it('returns null for genuinely non-serializable props (symbols)', () => {
+		expect(encode_region_props({ s: Symbol('nope') })).toBeNull();
 	});
 
 	it('returns null when b64 payload exceeds MAX_REGION_PROPS_LEN', () => {

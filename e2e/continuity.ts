@@ -90,31 +90,18 @@ try {
 	check('form: bind resynced after restore (echo)', (await page.locator('[data-kf-echo]').innerText()) === 'Ada Lovelace ✓', `echo=${await page.locator('[data-kf-echo]').innerText()}`);
 	check('form: data-ogygia-no-keep field NOT restored (starts blank)', (await page.locator('[data-kf-otp]').inputValue()) === '', `otp=${await page.locator('[data-kf-otp]').inputValue()}`);
 
-	// ---------- speculation rules (native next-page prerender), opted in via config ----------
+	// ---------- speculation rules: NEVER in SPA mode ----------
+	// Speculation caches serve real navigations only — a body-swap router can't read them, so with
+	// the router ON ogygia must emit no rules (its own prefetch + module warming is the working
+	// equivalent). Rules are MPA-mode (`router: false`) behavior, injected by the server handle.
 	{
 		const sp = await browser.newPage();
-		const spec = () =>
-			sp.evaluate(() => {
-				const el = document.querySelector('script[type="speculationrules"][data-ogygia-speculate]');
-				return el ? JSON.parse(el.textContent || '{}') : null;
-			});
 		await sp.goto(base + '/cart-a', { waitUntil: 'networkidle' });
 		await sp.waitForTimeout(150);
-		const supported = await sp.evaluate(
-			() => 'supports' in HTMLScriptElement && HTMLScriptElement.supports('speculationrules')
+		const rules = await sp.evaluate(
+			() => document.querySelector('script[type="speculationrules"]') != null
 		);
-		if (supported) {
-			const s = await spec();
-			check('speculate: rules script injected on load', s != null);
-			check('speculate: hover → moderate eagerness', s?.prerender?.[0]?.eagerness === 'moderate');
-			check('speculate: same-origin match, region endpoint excluded', JSON.stringify(s ?? {}).includes('href_matches'));
-			// survives an SPA navigation (re-installed after the head-merge drops it)
-			await sp.locator('[data-to-b]').click();
-			await sp.waitForTimeout(200);
-			check('speculate: still present after SPA nav', (await spec()) != null);
-		} else {
-			results.push('SKIP  speculation (browser lacks HTMLScriptElement.supports(speculationrules))');
-		}
+		check('speculate: NO rules script in SPA (router-on) mode', !rules);
 		await sp.close();
 	}
 

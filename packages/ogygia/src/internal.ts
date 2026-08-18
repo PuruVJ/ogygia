@@ -20,3 +20,9 @@ export { isNested, setNested } from './context.js';
 // component code into its chunk).
 export { __register_transportable } from './live-transport.js';
 export { __tag_context } from './context-bridge.js';
+
+// Compiler-emitted currency — never hand-authored, so they live on the INTERNAL barrel (the public
+// surface carries no snake_case): `og_portable` is the rewrite target for a `{#snippet}` handed to
+// an island; `og_html_region` is what `import.meta.og.code()`/`.md()` inline at build.
+export { og_portable } from './region-snippet.js';
+export { og_html_region } from './region.js';

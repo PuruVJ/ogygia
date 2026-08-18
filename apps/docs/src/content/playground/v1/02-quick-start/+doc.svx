@@ -1,0 +1,14 @@
+---
+title: Quick start (v1)
+summary: Mounting a v1 site.
+---
+
+The v1 mount used a single `+page.js`. v2 splits it into three files — see the v2 docs.
+
+## Mount
+
+```ts
+export const load = docs.load;
+```
+
+That was the whole contract in v1.

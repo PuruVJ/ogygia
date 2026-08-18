@@ -121,7 +121,7 @@ export function write(f: Frame): boolean {
 }
 
 /**
- * Reserve an address whose content is arriving via an EXTERNAL batch stream (route weaving). A region
+ * Reserve an address whose content is arriving via an EXTERNAL batch stream (single-flight navigation). A region
  * binder that mounts before its frame lands calls `ensure()`, sees this reservation, and JOINS it
  * instead of starting its own fetch — so a navigation that pulls N regions makes ONE batch request,
  * not N. `write()` fulfils the reservation when the frame arrives; `release()` fails it if the batch

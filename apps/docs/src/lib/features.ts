@@ -4,7 +4,7 @@ export const FEATURES = [
 	'No Kit patches',
 	'SSR islands',
 	'Server islands',
-	'Route weaving',
+	'Single-flight nav',
 	'Lakes',
 	'Partials',
 	'Live partials',

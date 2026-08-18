@@ -120,13 +120,13 @@ expectError("hydrate 'false' errors and suggests 'none'", wrap(`import C from '.
 	check('lake binding -> placeholder local recorded', !!lake && lake.lakes?.includes('OgygiaLakeInner'));
 	check('lake binding -> host import rewritten to wrapper', /virtual:ogygia\/wrapper\//.test(r!.code));
 }
-// host children on a hydrate island now CROSS: the compiler ships them as a synthesized `.svelte`
-// entry that inlines the snippet and wraps the real component.
+// host children on a hydrate island cross at RUNTIME (slot marker + adopting snippet): the
+// compiler leaves them at the call site and keeps the plain .js re-export entry.
 {
 	const r = run(wrap(`import Host from './Host.svelte' with { wake: 'load' };`, '<Host><p>x</p></Host>'));
 	const entry = r?.islands?.[0]?.virtualPath ?? '';
-	check('host children cross → synthesized .svelte entry', entry.endsWith('.svelte'), `entry=${entry}`);
-	check('host children entry inlines the real component', /OgygiaChildTarget/.test(r?.islands?.[0]?.source ?? ''));
+	check('host children → plain .js entry (runtime slot crossing)', entry.endsWith('.js'), `entry=${entry}`);
+	check('host children stay at the call site', /<Host\s*><p>x<\/p><\/Host>/.test(r?.code ?? ''));
 }
 expectError('unknown key alongside a region key rejected', wrap(`import C from './C.svelte' with { wake: 'load', wat: 'x' };`), /not allowed inline/);
 {

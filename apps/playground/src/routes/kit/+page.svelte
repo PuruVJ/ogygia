@@ -4,6 +4,9 @@
 	// detects Kit and skips its own hydration).
 	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
 	import KitStatus from '$lib/KitStatus.svelte';
+	// PLAIN import of the split-brain fixture (also an island on /split-brain): this page's
+	// copy must keep Kit's REAL `$app/stores` — see e2e/split-brain.ts.
+	import SplitHeader from '$lib/split-brain/SplitHeader.svelte';
 </script>
 
 <nav><a href="/">Home</a> <a href="/kit">Kit page</a></nav>
@@ -15,5 +18,7 @@
 </p>
 
 <Counter start={42} label="Island on a csr=true page" />
+
+<SplitHeader />
 
 <KitStatus />

@@ -1,0 +1,8 @@
+---
+title: ogygia/content/markdown
+summary: The markdown pipeline — fences, transformers, staged plugins.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: ogygia/content/markdown

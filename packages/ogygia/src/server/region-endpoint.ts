@@ -18,6 +18,7 @@ import { encode_region_props } from './region-props.js';
 import { stringify } from 'devalue';
 import { B64Url } from './payload.js';
 import { TRANSPORT_WIRE_KEY, reduce_transportable } from '../live-transport.js';
+import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet } from '../region-snippet.js';
 
 /** Session sealed into the MAC when `ogygia({ sessionCookie })` is set; empty at prerender. */
 function region_session(): string {
@@ -47,7 +48,7 @@ function warn_unstable_secret(): void {
 
 /**
  * Shared minting core for signed region capabilities — the ONE source of truth for the
- * `/🏝️?id&props&exp&sig` URL, its MAC message, TTL policy, and session sealing. Both held regions
+ * `/__ogygia__?id&props&exp&sig` URL, its MAC message, TTL policy, and session sealing. Both held regions
  * (via {@link makeRegionEndpoint}) and server islands (Region.svelte's server branch) sign through this,
  * each deriving/validating its own `payload` first (held regions degrade to `''` on failure, server
  * islands throw). Given a valid encoded `payload`, the emitted URL/MAC/exp is identical to both.
@@ -58,7 +59,7 @@ function warn_unstable_secret(): void {
  *   and echoed as a `ttl` query param so the handle sets `Cache-Control` from it — a harvested URL
  *   can't be re-pointed at a longer browser cache.
  */
-export function mintRegionCapability(entry: string, payload: string, ttl = 0): string {
+export function mint_region_capability(entry: string, payload: string, ttl = 0): string {
 	const session = region_session();
 	// Prerendered (real PPR): the capability lives in a static file that outlives any TTL — mint it
 	// effectively-forever (props are public in the HTML; session sealed empty). Dynamic pages keep
@@ -81,17 +82,22 @@ export function mintRegionCapability(entry: string, payload: string, ttl = 0): s
  * mint on the client — the runtime fetches the endpoint). Mirrors the old `ServerIsland.svelte`.
  */
 export function mintServerIsland(entry: string, props: Record<string, unknown>, ttl = 0): string {
-	const payload = B64Url.encode(stringify(props, { [TRANSPORT_WIRE_KEY]: reduce_transportable }));
+	const payload = B64Url.encode(
+		stringify(props, {
+			[TRANSPORT_WIRE_KEY]: reduce_transportable,
+			[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
+		})
+	);
 	if (payload.length > MAX_REGION_PROPS_LEN) {
 		throw new Error(
 			`[ogygia] server island "${entry}": props payload is ${payload.length} b64 chars (max ${MAX_REGION_PROPS_LEN}). ` +
 				`Shrink what you pass into the deferred region — the handle would reject this capability anyway.`
 		);
 	}
-	return mintRegionCapability(entry, payload, ttl);
+	return mint_region_capability(entry, payload, ttl);
 }
 
-/** HMAC-signed `/🏝️?id&props&exp&sig` for re-rendering `entry` with `props`. */
+/** HMAC-signed `/__ogygia__?id&props&exp&sig` for re-rendering `entry` with `props`. */
 export function makeRegionEndpoint(entry: string, props: Record<string, unknown> = {}): string {
 	const payload = encode_region_props(props);
 	if (payload == null) {
@@ -102,7 +108,7 @@ export function makeRegionEndpoint(entry: string, props: Record<string, unknown>
 		);
 		return '';
 	}
-	return mintRegionCapability(entry, payload);
+	return mint_region_capability(entry, payload);
 }
 
 export { encode_region_props } from './region-props.js';

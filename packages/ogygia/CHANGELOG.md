@@ -1,14 +1,245 @@
-# Changelog
+---
+title: Releases
+summary: Every release of ogygia, newest first.
+---
 
 All notable changes to **ogygia** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-08-16
+
+The site-layer release. `ogygia/content` grows from collections into a layer that can carry a whole
+site: `site()` builds the site model, `DocsShell` / `BlogShell` render it, and the new
+`import.meta.og.*` compile macros bake content at build. The plugin config collapses to one grammar:
+a top-level key per subsystem, each subsystem `defaults + its own presets`. Underneath: region
+snippets become a first-class primitive, markdown compiles to serialized regions, preloading goes
+render-gated (and native in MPA mode), the client bundle gets smaller, and the
+`csr = false` keepalive bug is fixed (#1, #4).
+
+### Added
+
+- **The config surface: one grammar per subsystem.** Every `ogygia()` subsystem is
+  `defaults + its own presets`, and every use site opts in the same way: a literal
+  `preset: 'name'`, resolved only in its own subsystem's dictionary. An island preset can never
+  hold content config; `router` holds no presets at all.
+  - **BREAKING (vs earlier 0.6 pre-cuts): `visible` → `regions.visible`, `presets` →
+    `regions.presets`, `continuity: { forms }` → `router: { forms }`.** The old spellings are
+    **errors** naming the new one — never silent aliasing, so a stale config can't quietly un-tune
+    an app. `router: false` now turns forms off too: form continuity rides SPA navigation, and
+    with the router gone there is nothing for a form to survive.
+  - **`content.presets` — named markdown variants.** Define once in the plugin
+    (`content: { markdown: {…}, presets: { plain: { markdown: { overrides: false } } } }`), opt a
+    whole collection in on its loader macro:
+    `import.meta.og.loader.folder('../content/blog', { preset: 'plain' })`. The preset's bag
+    merges over `content.markdown` per setting key. Mechanically, each opted-in file compiles as
+    its own **module variant** (`?og_preset=name` via the emitted glob's query), so the same file
+    globbed by two collections under two presets renders independently — different pipelines, zero
+    conflict — and presetless collections share the bare module exactly as before. The name must
+    be a literal; unknown names are build errors listing the configured names; `preset` is
+    consumed at compile and never reaches the runtime builder.
+  - Config-time validation for both preset dictionaries: empty presets and unknown keys fail at
+    config load with the legal vocabulary named — not on first use. (`regions.presets` also
+    accepts `keep`, which the transform always honored; type and validation now agree.)
+
+- **The site layer — `site()` in `ogygia/content`.** Arrange collections into a navigable site:
+  `outline()` (spec grammar, `pick()`, single-assignment placement with named build errors),
+  `dimensions()` (versions/locales as coordinates, per-axis fallback instead of 404s, a switcher),
+  full-text search (server brain or a prerendered index queried in an on-device worker, no-JS
+  fallback page included), emissions (`sitemap.xml`, `llms.txt`, RSS, per-page raw markdown,
+  `search.json`), content checks (`links()` — the in-prose link audit that fails the build, plus
+  custom checks), `remotes()` (the wire layer: `nav` / `meta` / `page` / `search`, prerendered or
+  live, bodies crossing as baked region tickets), request-context projections (previews, roles),
+  and the `fields` schema family (`fields.page` / `fields.post` / `fields.change` — Standard
+  Schema, zero validator dependency).
+
+  ```ts title=src/lib/site.server.ts
+  import { site, links } from 'ogygia/content';
+  import { guides } from './collections.server';
+
+  export const docs = site({ outline: guides, prevNext: 'graph', checks: [links()] });
+  ```
+
+- **Shells & bricks.** `Frame` (the headless composition), `DocsShell` (the VitePress form) and
+  `BlogShell` (the blog form) — compositions of public bricks (`Doc`, `Sidebar`, `Pager`,
+  `OnThisPage`, `Search`, `Switcher`, `BlogList`, `BlogPost`), every region a conditional snippet
+  prop: absent → built-in, a snippet → yours, `null` → gone. `site.meta()` (and the `meta` remote)
+  hands a shell `{ nav, switcher, data }` in one prerendered call, so the corpus never enters the
+  layout's module graph. Styling is opt-in (`theme.css` + `shell.css`, everything in
+  `@layer ogygia` so any unlayered rule of yours wins), with Greek-named alternate themes under
+  `ogygia/content/themes/*`. Scaffold a whole site with `npx ogygia site init`.
+
+- **The `import.meta.og.*` compile-macro family.** One namespace of build-time constructs,
+  AST-precise (TS-aware oxc parse), failing loudly with `file:line` build errors:
+  - `loader.markdown` / `.folder` / `.json` take a bare **directory** and derive their opinionated
+    file set under it (globs remain the escape hatch); `loader.git('owner/repo@ref:path')` pulls a
+    corpus straight from another repository via cached sparse checkout — no committed copy.
+  - `code(source, lang, meta?)` renders a snippet at build through the app's own fence pipeline;
+    `md(text)` does the same for markdown — both inline as static regions.
+  - `bake(fn)` bundles and runs a function at build, inlines the result, drops the imports.
+  - `wire(codec)` declares a transportable-class codec (see Changed).
+  - `regions('./*.svelte')` registers raw-region imports by glob.
+
+- **Region snippets: `region.snippet()`.** A snippet is now a region-shaped value that can cross
+  an island boundary and become interactive. One primitive, three modes: **live** (the compiler lifts a
+  `{#snippet}` handed to an island into its own entry — parameters cross, top-level `await` inside
+  the body renders through async SSR), **static** (a parameterless snippet frozen to server HTML,
+  adopted byte-for-byte), and **slot** (an island's children render in place and the client adopts
+  the DOM range — nested islands inside re-wake on their own). `region.snippet()` is the public
+  constructor, mirroring `createRawSnippet`.
+
+- **Awaitable regions.** `await region(Component, props)` bakes the SSR HTML into the ticket — so a
+  content body (or any held region) crosses a remote or a load as HTML-only data, no source and no
+  second render. Markdown leans on this: a pure-static `.md` now compiles to a **serialized
+  region** (one HTML string in the module, the template a single `{@html}` reference), which also
+  retires the whole svelte-template escaping hazard class for prose.
+
+- **`preference()` / `preference.switch()`.** Site-wide, no-flash visitor preferences (the JS↔TS
+  code toggle, package-manager tabs, theme) as one primitive: `preference({ name, values,
+  default })` gives `head()` (a pre-paint inline script), `get`/`set`, and a `data-pref-*`
+  attribute contract on `<html>`; `preference.switch()` is one delegated handler for every
+  `[data-pref][data-pref-set]` control, surviving SPA body swaps with zero islands.
+
+- **Markdown authoring dialect.** VitePress-compatible containers (`::: tip` … `::: details`);
+  markdown-native tab groups (`::: code-group` / `::: tabs`) with synced, persisted selection;
+  diff markers in two dialects — line-level `+++ ` / `--- ` prefixes (`diff_markers()`) and inline
+  `+++added+++` / `---removed---` (`inline_markers()`, twoslash-safe); `title=` fence meta for a
+  filename in the code chrome (falls back to the language — the header is never empty); stable
+  code-block ids with permalink + copy actions that re-attach on reveal (tab switches, `<details>`).
+
+- **MPA-mode native speculation.** With `router: false` the server handle injects one static
+  Speculation Rules script: Chromium prerenders likely next pages, Firefox prefetches them, others
+  ignore the JSON — zero config, zero client JS, per-link opt-out via `data-ogygia-speculate`.
+  `preloadData(url)` hints a native prerender and `preloadCode(url)` a native prefetch in that mode.
+
+- **Dev guards.** Mutating a captured host snapshot inside an island warns with the prop path; a
+  block-level island rendered inline in a `<p>` (parser-hoisted, hydrates twice) is detected and
+  explained.
+
+- **`ogygia/profiler` — a drop-in SSR profiler.** One line in `hooks.server.ts`
+  (`sequence(profiler(), …)`) and a report UI at `/__profiler`. It samples the whole Node process
+  during a render and attributes server time to your components **by name** — Svelte compiles each
+  component to a function named after its file, so there is nothing to instrument by hand — while
+  splitting the wall clock into compute versus waiting.
+  - **Three ways to record:** the live server for a few seconds, one page rendered N times (with an
+    un-profiled warm-up so the median is steady), or a single request via an `x-profile: <secret>`
+    header.
+  - **The report:** a wall-clock budget bar (compute vs idle/waiting), an interactive zoomable
+    treemap of self time, sortable component (self vs total) and function tables, an outbound
+    network waterfall that flags sequential awaits, top memory allocators + RSS + precise GC pauses,
+    a flame graph, and a raw `.cpuprofile` download for Chrome DevTools or speedscope.
+  - **Curated JSON for agents and scripts:** `<base>/report/<id>.json`, or one-shot
+    `<base>/page?p=/x&format=json` — the analyzed result (summary + verdict, findings with stable
+    codes, per-component self/total, network, memory), not the raw V8 profile.
+  - **Production-safe:** the UI is gated behind `PROFILER_SECRET` (timing-safe, 404 without it),
+    idle cost is near zero, profiles live in memory only, and `Server-Timing` headers are off by
+    default in production. Needs a Node server (the V8 inspector); edge runtimes keep the always-on
+    request log only.
+  - Docs: [Profiler](/docs/data-state/profiler/overview).
+
+### Changed
+
+- **BREAKING: transportable codecs are declared with the `wire` macro.** `static [ogygia.wire] =
+  { … }` becomes `static wire = import.meta.og.wire({ … })` — no import, the macro mints the codec
+  key at build, and misuse is a build error instead of a silent non-codec. The runtime `wire`
+  symbol export is removed (the `TransportCodec` type remains).
+- **BREAKING: Vite peer is now `^7 || ^8`** (5 and 6 dropped). New optional peers: `@orama/orama`
+  (search) and `bits-ui` (shell dropdowns/palette) — both load only on their feature paths.
+- **BREAKING: emitted chunk names.** Island facades are `og-region.<hash>.js` (was
+  `ogygia-island.*`), the runtime is `og-runtime.<hash>.js`, the build handoff is
+  `.svelte-kit/og-region-deps.json`. The `<ogygia-region>` element and `data-ogygia-runtime`
+  attribute are unchanged — nothing locates the runtime by filename.
+- **BREAKING: `continuity.speculate` is removed.** SPA mode never emits speculation rules — a
+  speculation cache serves real navigations only, which a body-swap router cannot read; the
+  router's own prefetch + island-module warming is the working equivalent. MPA mode speculates by
+  default (see Added).
+- **Schema layers merge instead of chaining.** Every layer in a schema array validates the
+  original data and the results merge — a later layer no longer loses fields an earlier layer
+  didn't declare (the cause of spurious `fields.post` "a post needs a date" failures).
+- **Preloading is render-gated end to end.** Portable-snippet entries are preloaded by the island
+  whose props actually carry them (the compiler's static scan — which preloaded never-rendered
+  candidates — is gone), joining the island facade + dep-chunk links in one head channel. The three
+  island-module warmers (router prefetch, visible-idle, interaction hover) merged into one deduped
+  `warm_island_module`. Remote seeds skip values carrying a baked region, so a page never ships a
+  body twice.
+- **Bundle granularity.** `svelte/server` and the codec graph no longer reach the client; the
+  frame store is a feature (`defer`/`live`/`morph`/`lakes` apps only); the wire runtime is
+  usage-gated (transportables, portable snippets, or islands with children); conditional shell
+  built-ins load as islands only when the built-in actually renders. Reference-app brotli:
+  static 8.41 → 6.90 kB (−18%), interactive 9.10 → 7.56, forms 8.92 → 7.39.
+- **Router.** Prefetch now also warms the incoming page's island modules (Slow-4G: warm nav 18.7×,
+  visible-hydrate 229×); `visible` islands idle-warm their chunk.
+
+### Fixed
+
+- **A directly-used `<Region>` on a `csr = true` page now renders inline in the Kit tree instead of
+  its own island.** The `with { wake }` import sugar is stripped to a plain import on a `csr = true`
+  route (the page ships zero ogygia), but a hand-written `<Region of={region(C, props)}>` is a
+  runtime value the transform never saw — so an interactive one still emitted an `<ogygia-region>` +
+  the runtime bootstrap on a page meant to be pure Kit, and in a _pure_ `csr = true` app (no
+  `csr = false` route → no runtime chunk built) that bootstrap `<script>` 404'd. Now a `csr = true`
+  route host carries a bare `setContext` marker (plain Svelte, no ogygia import, so a region-less
+  page still ships nothing), and `Region` renders an interactive region as a normal component there —
+  Kit hydrates it, no `<ogygia-region>`, no runtime, no 404. Server-driven regions (deferred / live /
+  lake) are untouched: they cross the wire and are orthogonal to a page's csr.
+- **An island reading `$app/stores` / `$app/state` could bundle Kit's _real_ client store and
+  crash at hydrate** — `TypeError: Cannot read properties of undefined (reading 'pathname')`, the
+  island's DOM then torn out of the page. Under `csr = false` Kit's client never boots, so its page
+  store stays empty; ogygia therefore swaps `$app/*` for shims inside island code. That swap keyed
+  off island-graph membership that _grew during the same resolveId walk that consumed it_ — so a
+  component shared between an island and a non-island route, reached first through the non-island
+  path (or transformed before the island path marked it), kept Kit's real `$app/*` and read
+  `page.url` as `undefined`. **Membership is now settled up front:** the prescan completes
+  `island_graph` transitively — from each island component it walks every module those components
+  import — before the bundler resolves anything, so the shim decision is deterministic regardless of
+  build order. The walk is O(reachable modules) (one shared `seen` set, each file scanned once,
+  never re-descended — no depth multiplier), reads only (membership stays out of the module id, so
+  Svelte's scoped-CSS emission is untouched), and adds no new surface. Seen in production on a
+  deployed 0.5.1 app; covered by `e2e/split-brain.ts` (incl. a shared-transitive-dep race guard) and
+  the wire-delivered-CSS check in `e2e/live-partial.ts`.
+- **Dev soft-CSS HMR is now scoped to the page's own sub-app.** The dev bridge eagerly imported
+  every `/src` stylesheet into the browser on every page — invisible while one app owned one look,
+  but a project hosting two style-sovereign sub-apps (route-group layouts with disjoint skins) saw
+  each page painted with the other's CSS in dev while prod stayed clean. The bridge now joins
+  stylesheets lazily: on a CSS edit the plugin walks the module graph up to the owning route files,
+  broadcasts their top-level scopes, and a page joins the module only when its own scope (stamped
+  by the handle as `ogygia-dev-scope`) is among the owners. First edit joins + applies; later edits
+  ride Vite's normal CSS HMR. Kit's FOUC bag is untouched.
+- **`csr = false` apps no longer need a token `csr = true` route (#1, #4).** The keepalive
+  predicate read each route node's own `csr` while SvelteKit resolves it through the layout chain —
+  a fresh app with `csr = false` only in the root layout skipped the client build and 404'd the
+  runtime script. Now chain-resolved, matching Kit exactly; verified against the issue's repro.
+- **`folder()` collections came up empty on the dev server** (build green, dev broken): Vite's dev
+  glob matcher silently drops `{+doc.svx,+meta.json}` brace groups. Loader globs now emit in array
+  form, so dev and build agree.
+- **Childless islands serialized a phantom `children` slot descriptor** — and on minimal apps
+  (no wire feature) every island then failed to hydrate with `Unknown type OgygiaS`. Childless
+  payloads now carry nothing; islands with real children enable the wire revivers automatically.
+- **Nested islands compiled in O(2^depth)** — the usage walk double-descended component fragments;
+  depth-25 hosts hung the build. Now linear.
+- **`import.meta.og.code()` in a `.svelte` host was silently discarded** when the island transform
+  also touched the file, exploding at runtime. The transforms now compose.
+- **An interrupted navigation no longer logs an unhandled "Transition was skipped" rejection.**
+- **`ogygia/content/slot` resolved to a missing file**, breaking any app with markdown
+  `overrides: true` at prerender.
+- **Shell reactivity + a11y:** the version switcher, element-override slot, and tab groups now
+  track their inputs (were stale after a slug or group change); the on-this-page rail's top link
+  is a real link; deferred-region fetch hints are dropped on single-flight navigations (no double fetch).
+
+### Security
+
+- **Dev-server path traversal** in the FOUC CSS virtual (a crafted `/@id/` request could read
+  files outside the project root through the plugin's own `readFileSync`) — the decoded id is now
+  validated against traversal/absolute/UNC forms. Dev-only; production builds never run the plugin.
+- **Region batch endpoint** now rejects oversized bodies by `Content-Length` (413) before parsing.
+- Full audit: the signed-capability pipeline (HKDF-separated keys, length-prefixed MAC message,
+  probe-rate before HMAC, `Sec-Fetch-Site` gating, response caps) reviewed and unchanged.
+
 ## [0.5.1] — 2026-08-13
 
 A packaging patch. 0.5.0 installed but didn't run: the published manifest pointed at unshipped
-`src/*.ts`, and the browser runtime got tree-shaken away. Both fixed — no API changes.
+`src/*.ts`, and the browser runtime got tree-shaken away. Both fixed. No API changes.
 
 ### Fixed
 
@@ -30,9 +261,9 @@ A packaging patch. 0.5.0 installed but didn't run: the published manifest pointe
 
 ## [0.5.0] — 2026-08-12
 
-The unification release. **Regions** become the one renderable — placed, held, deferred, live —
-content collapses onto them, the `@ogygia/content` package dissolves into ogygia, the SPA router
-becomes a global opt-out plugin feature, and config + exports get a single surface.
+The unification release. **Regions** become the one renderable, whether placed, held, deferred, or
+live. Content collapses onto them, the `@ogygia/content` package folds into ogygia, the SPA router
+becomes a global opt-out plugin feature, and config and exports get a single surface.
 
 ### Added
 
@@ -42,8 +273,7 @@ becomes a global opt-out plugin feature, and config + exports get a single surfa
   ticket, so the client swaps it in with **no fetch**. In an async generator, JavaScript awaits what
   you `yield`, so it is automatic:
 
-  ```ts
-  // stats.remote.ts
+  ```ts title=stats.remote.ts
   export const dashboard = query.live(v.string(), async function* (id) {
     for await (const stats of feed(id)) {
       yield region(StatCard, { stats }); // awaited by the language → HTML rides the ticket
@@ -96,8 +326,7 @@ becomes a global opt-out plugin feature, and config + exports get a single surfa
   `transport`, a SvelteKit `transport` hook entry that signs on serialize and rebuilds on the
   client. Install it once in your **universal** hooks:
 
-  ```ts
-  // src/hooks.ts
+  ```ts title=src/hooks.ts
   import * as ogygia from 'ogygia';
   export const transport = { ...ogygia.transport };
   ```

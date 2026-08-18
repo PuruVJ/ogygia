@@ -1,0 +1,510 @@
+/* Dogfood: the docs page rendered by ogygia `<Doc>` (emits `.og-*`), restyled to the site's look.
+   This is the customization ladder's CSS rung — ogygia owns structure, we own pixels. The rules
+   below are the old `doc-page.css`, ported onto the `.og-*` hooks and painted from the site tokens.
+   We do NOT import `ogygia/content/theme.css`; these are the only styles the ogygia chrome gets. */
+
+/* Crumbs + summary: the bespoke page had neither. `<Doc crumbs={false}>` drops crumbs; hide summary. */
+.og-summary {
+	display: none;
+}
+
+.og-doc {
+	max-width: 74rem;
+	margin-inline: auto;
+	padding-inline: var(--gutter);
+	padding-block: 3rem 5rem;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 12.5rem;
+	gap: 4rem;
+	align-items: start;
+}
+
+.og-article {
+	max-width: 52rem;
+	min-width: 0;
+}
+
+.og-eyebrow {
+	margin: 0 0 0.5rem;
+	font: 600 0.6875rem/1 var(--font-mono);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+
+.og-title {
+	margin: 0 0 1.5rem;
+	font: 600 2.2rem/1.12 var(--font-display);
+	letter-spacing: -0.03em;
+	color: var(--text);
+}
+
+/* Rendered markdown body rhythm. */
+.og-body {
+	color: var(--text-dim);
+}
+
+.og-body h2 {
+	margin: 2.75rem 0 1rem;
+	scroll-margin-top: 1.5rem;
+}
+
+.og-body h3 {
+	margin: 2rem 0 0.75rem;
+	scroll-margin-top: 1.5rem;
+}
+
+.og-body h4 {
+	margin: 1.5rem 0 0.5rem;
+	scroll-margin-top: 1.5rem;
+}
+
+.og-body p,
+.og-body ul,
+.og-body ol {
+	margin: 0 0 1rem;
+}
+
+.og-body li {
+	margin: 0.25rem 0;
+}
+
+.og-body li > p {
+	margin: 0;
+}
+
+/* `:not(.og-code-link)` — the code-block permalink is an icon button, not a prose link; without the
+   exclusion this ties (0,1,1) with shell-skin's `.og-code-actions :is(button, a)` and load order
+   (which SPA nav flips) decides whether the link icon is accent-colored while copy stays faint. */
+.og-body a:not(.og-code-link) {
+	color: var(--accent-strong, var(--accent));
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	text-decoration-thickness: 1px;
+	text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+	transition: text-decoration-color 140ms ease;
+}
+
+.og-body a:not(.og-code-link):hover {
+	text-decoration-color: var(--accent);
+}
+
+.og-body :not(pre) > code {
+	font: 400 0.85em/1.4 var(--font-mono);
+	padding: 0.1em 0.35em;
+	border-radius: 5px;
+	background: color-mix(in srgb, var(--accent-deep) 35%, var(--bg-sunken));
+	color: var(--text);
+}
+
+.og-body blockquote {
+	margin: 1.25rem 0;
+	padding: 0.25rem 0 0.25rem 1rem;
+	border-left: 2px solid color-mix(in srgb, var(--accent) 55%, var(--accent-line));
+	color: var(--text-faint);
+}
+
+/* ── Admonitions (`::: tip` / `::: warning` / `::: details` … → .og-admonition). One hue token per
+      kind (`--adm`) drives the border, tint, title, and dot — so it reads in light and dark alike.
+      (The component ships the markup only; this is the paint.) ── */
+.og-body .og-admonition {
+	--adm: var(--accent);
+	margin: 1.5rem 0;
+	padding: 0.8rem 1.05rem;
+	border: 1px solid color-mix(in srgb, var(--adm) 22%, var(--line));
+	border-left: 3px solid var(--adm);
+	border-radius: var(--r-md);
+	background: color-mix(in srgb, var(--adm) 6%, var(--bg-sunken));
+	color: var(--text-dim);
+	font-size: 0.9375rem;
+}
+.og-body .og-admonition > :first-child {
+	margin-top: 0;
+}
+.og-body .og-admonition > :last-child {
+	margin-bottom: 0;
+}
+.og-body .og-admonition-title {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 0 0 0.4rem;
+	font: 700 0.9375rem/1.4 var(--font-body);
+	color: var(--adm);
+}
+.og-body .og-admonition-title::before {
+	content: '';
+	flex: none;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: var(--adm);
+}
+/* kinds — each just sets the hue */
+.og-body .og-admonition-tip {
+	--adm: #10b981;
+}
+.og-body .og-admonition-info {
+	--adm: #3b82f6;
+}
+.og-body .og-admonition-note {
+	--adm: #64748b;
+}
+.og-body .og-admonition-important {
+	--adm: #8b5cf6;
+}
+.og-body .og-admonition-warning,
+.og-body .og-admonition-caution {
+	--adm: #f59e0b;
+}
+.og-body .og-admonition-danger {
+	--adm: #ef4444;
+}
+/* details: the title IS the clickable summary — a disclosure caret replaces the dot, no color shout */
+.og-body .og-admonition-details {
+	--adm: var(--text-faint);
+	color: var(--text);
+}
+.og-body summary.og-admonition-title {
+	cursor: pointer;
+	user-select: none;
+	margin: 0;
+	list-style: none;
+	color: var(--text);
+}
+.og-body summary.og-admonition-title::-webkit-details-marker {
+	display: none;
+}
+.og-body summary.og-admonition-title::before {
+	width: 0;
+	height: 0;
+	border-radius: 0;
+	background: none;
+	border-left: 5px solid var(--text-faint);
+	border-top: 4px solid transparent;
+	border-bottom: 4px solid transparent;
+	transition: transform 0.15s ease;
+}
+.og-body .og-admonition-details[open] > summary.og-admonition-title {
+	margin-bottom: 0.55rem;
+}
+.og-body .og-admonition-details[open] > summary.og-admonition-title::before {
+	transform: rotate(90deg);
+}
+
+.og-body table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 1.5rem 0;
+	font-size: 0.9375rem;
+}
+
+.og-body thead tr {
+	border-bottom: 1px solid color-mix(in srgb, var(--accent-line) 70%, var(--line));
+}
+
+.og-body th,
+.og-body td {
+	text-align: left;
+	padding: 0.55rem 0.9rem 0.55rem 0;
+	border-bottom: 1px solid var(--line);
+	vertical-align: top;
+}
+
+.og-body th {
+	color: var(--text);
+	font-weight: 600;
+	font-size: 0.8125rem;
+	letter-spacing: 0.01em;
+}
+
+.og-body td:first-child,
+.og-body th:first-child {
+	padding-left: 0;
+}
+
+.og-body tbody tr:last-child td {
+	border-bottom: 0;
+}
+
+/* On-this-page rail. */
+.og-aside {
+	position: sticky;
+	top: 1.5rem;
+	align-self: start;
+	min-width: 0;
+}
+
+.og-toc-label {
+	margin: 0 0 0.75rem;
+	font: 500 0.7rem/1 var(--font-mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.og-toc-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.og-toc-d3 {
+	padding-left: 0.85rem;
+}
+
+.og-toc-d4 {
+	padding-left: 1.7rem;
+}
+
+.og-toc-link {
+	display: block;
+	padding: 0.2rem 0;
+	font-size: 0.8125rem;
+	color: var(--text-dim);
+	text-decoration: none;
+	transition: color 140ms ease;
+}
+
+.og-toc-link:hover {
+	color: var(--text);
+}
+
+.og-toc-link.og-active {
+	color: var(--accent);
+	font-weight: 600;
+}
+
+/* ── Mobile "On this page" — a tidy collapsible block (the desktop rail is hidden ≤900px, where the
+      component reveals this native <details>). Collapsed by default; paint only, no JS. ── */
+.og-mtoc {
+	margin: 0 0 1.75rem;
+	border: 1px solid var(--line);
+	border-radius: var(--r-md);
+	background: var(--bg-sunken);
+	overflow: hidden;
+}
+.og-mtoc-summary {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	padding: 0.7rem 1rem;
+	font: 600 0.7rem/1 var(--font-mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	cursor: pointer;
+	user-select: none;
+	list-style: none;
+}
+.og-mtoc-summary::-webkit-details-marker {
+	display: none;
+}
+.og-mtoc-summary::before {
+	content: '';
+	flex: none;
+	width: 0;
+	height: 0;
+	border-left: 5px solid currentColor;
+	border-top: 4px solid transparent;
+	border-bottom: 4px solid transparent;
+	transition: transform 0.18s ease;
+}
+.og-mtoc[open] .og-mtoc-summary {
+	color: var(--text);
+	border-bottom: 1px solid var(--line);
+}
+.og-mtoc[open] .og-mtoc-summary::before {
+	transform: rotate(90deg);
+}
+.og-mtoc .og-toc-list {
+	padding: 0.3rem 0.55rem 0.4rem;
+}
+.og-mtoc .og-toc-d3,
+.og-mtoc .og-toc-d4 {
+	padding-left: 0; /* the desktop rail indents the <li>; here the link carries the indent */
+}
+.og-mtoc .og-toc-link {
+	display: block;
+	padding: 0.6rem 0.55rem;
+	border-radius: var(--r-sm);
+	font-size: 0.875rem;
+	line-height: 1.35;
+}
+.og-mtoc .og-toc-link:hover {
+	background: var(--bg-raised);
+}
+.og-mtoc .og-toc-d3 .og-toc-link {
+	padding-left: 1.3rem;
+}
+.og-mtoc .og-toc-d4 .og-toc-link {
+	padding-left: 2.1rem;
+}
+
+@media (max-width: 1099px) {
+	.og-doc {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0;
+		padding-block: 2rem 4rem;
+	}
+
+	.og-aside {
+		display: none;
+	}
+
+	.og-body table {
+		display: block;
+		width: 100%;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.og-body th,
+	.og-body td {
+		white-space: nowrap;
+	}
+
+	.og-title {
+		font-size: 1.85rem;
+	}
+}
+
+/* "Keep reading" cards (Doc's `suggested`). */
+.og-suggested {
+	margin-top: 3.5rem;
+	padding-top: 2rem;
+	border-top: 1px solid var(--line);
+}
+
+.og-suggested-label {
+	margin: 0 0 1rem;
+	font: 500 0.7rem/1 var(--font-mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.og-suggested-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+	gap: 0.85rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.og-suggested-card {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	height: 100%;
+	padding: 1rem 1.15rem;
+	border: 1px solid var(--line);
+	border-radius: var(--r-md, 12px);
+	background: var(--bg-sunken);
+	text-decoration: none;
+	transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.og-suggested-card:hover {
+	border-color: var(--accent-line);
+	transform: translateY(-1px);
+}
+
+.og-suggested-title {
+	font: 600 0.95rem/1.3 var(--font-display);
+	color: var(--text);
+}
+
+.og-suggested-card:hover .og-suggested-title {
+	color: var(--accent);
+}
+
+.og-suggested-summary {
+	font-size: 0.8rem;
+	line-height: 1.45;
+	color: var(--text-dim);
+}
+
+/* Sequential prev/next pager. */
+.og-pager {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.85rem;
+	margin-top: 1.5rem;
+}
+
+.og-pager-link {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	padding: 0.9rem 1.15rem;
+	border: 1px solid var(--line);
+	border-radius: var(--r-md, 12px);
+	background: var(--bg-sunken);
+	text-decoration: none;
+	transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.og-pager-prev {
+	align-items: flex-start;
+	text-align: left;
+}
+
+.og-pager-next {
+	grid-column: 2;
+	align-items: flex-end;
+	text-align: right;
+}
+
+.og-pager-link:hover {
+	border-color: var(--accent-line);
+	transform: translateY(-1px);
+}
+
+.og-pager-dir {
+	font: 500 0.7rem/1 var(--font-mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.og-pager-prev .og-pager-dir::before {
+	content: '← ';
+}
+
+.og-pager-next .og-pager-dir::after {
+	content: ' →';
+}
+
+.og-pager-title {
+	font: 600 0.95rem/1.3 var(--font-display);
+	color: var(--text);
+}
+
+.og-pager-link:hover .og-pager-title {
+	color: var(--accent);
+}
+
+@media (max-width: 599px) {
+	.og-pager {
+		grid-template-columns: 1fr;
+	}
+
+	.og-pager-next {
+		grid-column: 1;
+	}
+}
+
+/* ── generated API reference (the `> MODULE:` expansion) — the kind badge under each symbol ── */
+.og-body .api-kind {
+	display: inline-block;
+	padding: 0.1rem 0.45rem;
+	border-radius: 999px;
+	border: 1px solid color-mix(in srgb, var(--accent-line) 60%, transparent);
+	background: color-mix(in srgb, var(--accent-deep) 40%, transparent);
+	color: var(--accent);
+	font: 600 0.66rem/1.4 var(--font-mono);
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+}

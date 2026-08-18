@@ -31,6 +31,8 @@ export { preload } from './preload.js';
 // Serialize a self-contained function into a blocking inline `<script>` string — a theme setter (no
 // dark-mode flash), a deferred font, an early flag. `{@html script(fn)}`, put the tag where you like.
 export { script } from './script.js';
+export { preference } from './preference.js';
+export type { Preference, PreferenceSpec } from './preference.js';
 
 // Builder.io-style pages: the blessed path is the `blocks()` content source (see `ogygia/content`).
 // For a tree in hand without a collection, `blocks.resolve(tree, registry)` turns it into region nodes
@@ -57,10 +59,13 @@ export type Fallback<P = unknown> = P & { ogygiaFallback?: import('svelte').Snip
 export { ogygiaTransport as transport } from './transport.js';
 
 // Transportable state — a class crosses island boundaries as a prop by declaring
-// `static [ogygia.wire] = { encode, decode }`. Same instance across islands stays one live
-// object (identity memo); the server decodes per-request so nothing leaks. See live-transport.ts.
-export { wire } from './live-transport.js';
+// `static wire = import.meta.og.wire({ encode, decode })`. Same instance across islands stays one
+// live object (identity memo); the server decodes per-request so nothing leaks. The wire mark is a
+// compile construct (the plugin consumes the member and mints the symbol key), so there is no
+// runtime `wire` export to import — only the codec TYPE crosses into user code.
 export type { TransportCodec } from './live-transport.js';
+
+// Portable snippets — the compiler rewrites a `{#snippet}` handed to a component into
 
 // Cross-island context — `createContext()` (typed, no string key) + `<Context of={ctx} value={v}>`.
 // Bridges the DOM so a provider's value reaches islands in separate hydration roots below it.

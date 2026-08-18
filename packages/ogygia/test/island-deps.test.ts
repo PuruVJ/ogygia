@@ -5,11 +5,11 @@ import {
 } from '../dist/vite/index.js';
 
 describe('collectIslandDepModulepreloads', () => {
-	test('walks transitive static imports for ogygia-island facades', () => {
+	test('walks transitive static imports for og-region facades', () => {
 		const bundle = {
-			'_app/immutable/ogygia-island.abc123def456.js': {
+			'_app/immutable/og-region.abc123def456.js': {
 				type: 'chunk',
-				fileName: '_app/immutable/ogygia-island.abc123def456.js',
+				fileName: '_app/immutable/og-region.abc123def456.js',
 				imports: ['_app/immutable/chunk-shared-aaaa.js']
 			},
 			'_app/immutable/chunk-shared-aaaa.js': {
@@ -22,9 +22,9 @@ describe('collectIslandDepModulepreloads', () => {
 				fileName: '_app/immutable/chunk-leaf-bbbb.js',
 				imports: []
 			},
-			'_app/immutable/ogygia-island.deadbeef0001.js': {
+			'_app/immutable/og-region.deadbeef0001.js': {
 				type: 'chunk',
-				fileName: '_app/immutable/ogygia-island.deadbeef0001.js',
+				fileName: '_app/immutable/og-region.deadbeef0001.js',
 				imports: ['_app/immutable/chunk-shared-aaaa.js']
 			},
 			'_app/immutable/unrelated-entry.js': {
@@ -35,11 +35,11 @@ describe('collectIslandDepModulepreloads', () => {
 		};
 
 		const { js } = collectIslandDepModulepreloads(bundle);
-		expect(js['/_app/immutable/ogygia-island.abc123def456.js']).toEqual([
+		expect(js['/_app/immutable/og-region.abc123def456.js']).toEqual([
 			'/_app/immutable/chunk-shared-aaaa.js',
 			'/_app/immutable/chunk-leaf-bbbb.js'
 		]);
-		expect(js['/_app/immutable/ogygia-island.deadbeef0001.js']).toEqual([
+		expect(js['/_app/immutable/og-region.deadbeef0001.js']).toEqual([
 			'/_app/immutable/chunk-shared-aaaa.js',
 			'/_app/immutable/chunk-leaf-bbbb.js'
 		]);
@@ -47,7 +47,7 @@ describe('collectIslandDepModulepreloads', () => {
 	});
 
 	test('dedupes cycles and skips the facade itself', () => {
-		const facade = '_app/immutable/ogygia-island.ffffffffffff.js';
+		const facade = '_app/immutable/og-region.ffffffffffff.js';
 		const bundle = {
 			[facade]: {
 				type: 'chunk',
@@ -75,9 +75,9 @@ describe('collectIslandDepModulepreloads', () => {
 		expect(
 			collectIslandDepModulepreloads({
 				'_app/immutable/foo.css': { type: 'asset', fileName: '_app/immutable/foo.css' },
-				'_app/immutable/ogygia-runtime.abcdef123456.js': {
+				'_app/immutable/og-runtime.abcdef123456.js': {
 					type: 'chunk',
-					fileName: '_app/immutable/ogygia-runtime.abcdef123456.js',
+					fileName: '_app/immutable/og-runtime.abcdef123456.js',
 					imports: ['_app/immutable/x.js']
 				}
 			})
@@ -85,7 +85,7 @@ describe('collectIslandDepModulepreloads', () => {
 	});
 
 	test('collects CSS from the facade + dep chunks (viteMetadata.importedCss)', () => {
-		const facade = '_app/immutable/ogygia-island.c55beef00001.js';
+		const facade = '_app/immutable/og-region.c55beef00001.js';
 		const bundle = {
 			[facade]: {
 				type: 'chunk',
@@ -109,6 +109,6 @@ describe('collectIslandDepModulepreloads', () => {
 
 describe('islandDepsHandoffPath', () => {
 	test('is under .svelte-kit at the app root', () => {
-		expect(islandDepsHandoffPath('/app')).toBe('/app/.svelte-kit/ogygia-island-deps.json');
+		expect(islandDepsHandoffPath('/app')).toBe('/app/.svelte-kit/og-region-deps.json');
 	});
 });

@@ -1,15 +1,16 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { Region, type RegionValue } from 'ogygia';
 	import '$lib/styles/demo-block.css';
 	import '$lib/styles/widget.css';
 
 	let {
 		title = "render: 'deferred' · ServerGreeting.svelte",
-		codeHtml,
+		code,
 		live
 	}: {
 		title?: string;
-		codeHtml: string;
+		code: RegionValue;
 		live: Snippet;
 	} = $props();
 </script>
@@ -21,7 +22,7 @@
 	</figcaption>
 	<div class="demo-body demo-body--stack">
 		<div class="demo-code">
-			{@html codeHtml}
+			<Region of={code} />
 		</div>
 		<div class="demo-preview" data-state="hydrated">
 			<span class="preview-marker"><i></i>server HTML swapped in</span>

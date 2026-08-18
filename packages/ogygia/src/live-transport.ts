@@ -1,22 +1,25 @@
 /**
- * Transportable objects — `static [ogygia.wire]` codecs.
+ * Transportable objects — `static [import.meta.og.wire]` codecs.
  *
  * A class instance normally cannot cross an island boundary (devalue rejects it). A class
  * opts in by declaring how it travels:
  *
  * ```ts
- * import * as ogygia from 'ogygia';
- *
  * export class Cart {
  * 	items = $state<Item[]>([]);
  * 	add(item: Item) { this.items.push(item); }
  *
- * 	static [ogygia.wire] = {
+ * 	static wire = import.meta.og.wire({
  * 		encode: (c: Cart) => $state.snapshot(c.items),
  * 		decode: (items: Item[]) => Object.assign(new Cart(), { items })
- * 	};
+ * 	});
  * }
  * ```
+ *
+ * `import.meta.og.wire()` is a COMPILE construct — the plugin consumes the member and mints the
+ * key: `static [Symbol.for('ogygia.wire')] = <codec>`. No import, no value to pass around, and
+ * STRICT: that member shape is the only legal position (build error anywhere else). ONE contract,
+ * always explicit — `{ encode, decode }`, plus optional `id`/`merge` for session continuity.
  *
  * Liveness comes from identity, not the codec: every encode of one instance mints ONE id,
  * and the browser memoizes decode by that id. Five islands receiving the same `cart` prop
@@ -30,16 +33,23 @@
  */
 
 import { slots } from './runtime/slots.js';
+import { REGION_SNIPPET_WIRE_KEY, revive_region_snippet } from './region-snippet.js';
 
 /** Feature entry: fill the `wire` slot so core revives transportables from `data-ogygia-props`. */
 export function install() {
-	slots.wire = { TRANSPORT_WIRE_KEY, revive_transportable };
+	slots.wire = {
+		TRANSPORT_WIRE_KEY,
+		revive_transportable,
+		REGION_SNIPPET_WIRE_KEY,
+		revive_region_snippet
+	};
 }
 
-/** Reserved key for the static codec. `Symbol.for` — identical across every bundle. */
+/** Reserved key for the static codec — what `import.meta.og.wire` rewrites to. `Symbol.for` so it's
+ *  identical across every bundle. Internal: the public opt-in is the construct, not this symbol. */
 export const wire = Symbol.for('ogygia.wire');
 
-/** What `static [ogygia.wire]` holds (or a static method returning it). */
+/** The codec `import.meta.og.wire({ … })` carries (or a static method returning it). */
 export interface TransportCodec<T = unknown, D = unknown> {
 	/** Sending side: turn the live instance into devalue-safe data. */
 	encode: (value: T) => D;
@@ -62,7 +72,8 @@ export interface TransportCodec<T = unknown, D = unknown> {
 	merge?: (live: T, fresh: T) => void;
 }
 
-/** A class carrying a transport codec (static method or static property). */
+/** A class carrying a transport codec (`{ encode, decode, … }`, or a static method returning one).
+ *  ONE contract, always explicit — nothing inferred from class shape. */
 interface TransportableClass {
 	[wire]: (() => TransportCodec) | TransportCodec;
 	name?: string;
@@ -153,7 +164,7 @@ export function reduce_transportable(value: unknown): TransportPayload | undefin
 	const tag = reg.tags.get(cls as unknown as object);
 	if (tag === undefined) {
 		throw new Error(
-			`[ogygia] class "${candidate.name ?? '?'}" has a [ogygia.wire] codec but was never ` +
+			`[ogygia] class "${candidate.name ?? '?'}" has a [import.meta.og.wire] codec but was never ` +
 				`registered. Transportable classes must be declared in a module the ogygia vite plugin ` +
 				`transforms (an \`export class\` in your app source, not node_modules or a dynamic eval).`
 		);

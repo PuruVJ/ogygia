@@ -1,5 +1,3 @@
-import * as ogygia from 'ogygia';
-
 /**
  * CONTINUITY — a NAMED transportable. `id: 'session-cart'` promotes the cart from page lifetime to
  * SESSION lifetime: the same live instance follows the visitor across SPA navigations, tab-scoped,
@@ -23,7 +21,7 @@ export class SessionCart {
 		this.items.push(item);
 	}
 
-	static [ogygia.wire] = {
+	static wire = import.meta.og.wire({
 		id: 'session-cart',
 		encode: (c: SessionCart) => ({ items: $state.snapshot(c.items), serverStamp: c.serverStamp }),
 		decode: (d: { items: string[]; serverStamp: number }) =>
@@ -32,5 +30,5 @@ export class SessionCart {
 		merge: (live: SessionCart, fresh: SessionCart) => {
 			live.serverStamp = fresh.serverStamp;
 		}
-	};
+	});
 }

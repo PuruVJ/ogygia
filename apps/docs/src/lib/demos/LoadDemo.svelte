@@ -3,12 +3,12 @@
 	import LoadLive from '$lib/demos/LoadLive.svelte';
 	import LoadFrozen from '$lib/demos/LoadFrozen.svelte';
 
-	let { codeHtml }: { codeHtml: string } = $props();
+	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>
 
 <DemoBlock
 	title="wake: 'load'"
-	{codeHtml}
+	{code}
 	onLabel="live"
 	offLabel="static"
 >

@@ -1,0 +1,5 @@
+{
+	"title": "Input",
+	"summary": "A single-line text field.",
+	"signature": "<Input bind:value placeholder=\"…\" />"
+}

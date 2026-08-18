@@ -15,7 +15,7 @@ function fakeBinding(overrides: Record<string, unknown> = {}) {
 	const Comp = () => {};
 	return {
 		__ogRegion: 'abc123abc123',
-		__module: '/_app/immutable/ogygia-island.abc123abc123.js',
+		__module: '/_app/immutable/og-region.abc123abc123.js',
 		__hydrate: 'load',
 		__component: Comp,
 		__sign: (id: string) => `SIG(${id})`,

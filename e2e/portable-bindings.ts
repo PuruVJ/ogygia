@@ -154,7 +154,7 @@ try {
 		'_app',
 		'immutable'
 	);
-	const depsPath = path.join(repo, 'apps/playground', '.svelte-kit', 'ogygia-island-deps.json');
+	const depsPath = path.join(repo, 'apps/playground', '.svelte-kit', 'og-region-deps.json');
 	if (!fs.existsSync(clientDir)) {
 		check('build: playground client present (run playground build)', false);
 	} else {
@@ -186,7 +186,7 @@ try {
 		};
 		const facades = fs
 			.readdirSync(clientDir)
-			.filter((f) => f.startsWith('ogygia-island.') && f.endsWith('.js'));
+			.filter((f) => f.startsWith('og-region.') && f.endsWith('.js'));
 		const counterFacades = facades.filter((f) => reaches(f));
 		// Portable page shares one wake:load Counter entry; other routes may add more
 		// strategies for Counter — assert the portable shared URL exists once, and component
@@ -229,7 +229,11 @@ try {
 			`clock=${clockFacades.length} thin=${thinClocks.join(', ') || '0'}`
 		);
 
-		// Docs (when built): SideNav must own its entry + CSS must land in layout stylesheet.
+		// Docs (when built): the whole-site chrome now DOGFOODS the ogygia `Shell` — the bespoke
+		// SideNav was retired ("ONE Shell for the whole site"). Shell is a plain layout component, not
+		// an island, so there is no island facade to assert. What still matters is FOUC: the Shell's
+		// scoped chrome CSS must land in the layout stylesheet, or the nav flashes unstyled on first
+		// paint. `.og-shell` / `.og-cside` are Shell's stable chrome hooks (see ogygia/shell.css).
 		const docsClient = path.join(
 			repo,
 			'apps/docs',
@@ -240,43 +244,21 @@ try {
 			'immutable'
 		);
 		if (fs.existsSync(docsClient)) {
-			const docsFacades = fs
-				.readdirSync(docsClient)
-				.filter((f) => f.startsWith('ogygia-island.') && f.endsWith('.js'));
-			const sideNav = docsFacades.find((f) => {
-				const code = fs.readFileSync(path.join(docsClient, f), 'utf-8');
-				if (code.includes('side-backdrop') || code.includes('1il4ztj')) return true;
-				for (const m of code.matchAll(/from\s*["']\.\/chunks\/([^"']+)["']/g)) {
-					const ch = path.join(docsClient, 'chunks', m[1]);
-					if (
-						fs.existsSync(ch) &&
-						/side-backdrop|1il4ztj/.test(fs.readFileSync(ch, 'utf-8'))
-					) {
-						return true;
-					}
-				}
-				return false;
+			// Since the playground merge the ROOT layout is import-free (node 0 has no css at
+			// all); the docs chrome lives with the `(docs)` group layout, so the Shell rules must
+			// land in SOME numbered layout/node stylesheet Kit links for docs pages.
+			const assetsDir = path.join(docsClient, 'assets');
+			const nodeCss = fs.existsSync(assetsDir)
+				? fs.readdirSync(assetsDir).filter((f) => /^\d+\..*\.css$/.test(f))
+				: [];
+			const shellCss = nodeCss.find((f) => {
+				const code = fs.readFileSync(path.join(assetsDir, f), 'utf-8');
+				return /\.og-shell\b/.test(code) && /\.og-cside\b/.test(code);
 			});
-			const sideNavCode = sideNav
-				? fs.readFileSync(path.join(docsClient, sideNav), 'utf-8')
-				: '';
 			check(
-				'build: docs SideNav island is not a classic thin re-export facade',
-				!!sideNav && !classicThin(sideNavCode.trim()),
-				sideNav || 'missing'
-			);
-			const layoutCss = fs.existsSync(path.join(docsClient, 'assets'))
-				? fs
-						.readdirSync(path.join(docsClient, 'assets'))
-						.find((f) => /^0\..*\.css$/.test(f))
-				: null;
-			const layoutCssCode = layoutCss
-				? fs.readFileSync(path.join(docsClient, 'assets', layoutCss), 'utf-8')
-				: '';
-			check(
-				'build: docs layout CSS includes SideNav scoped rules (FOUC)',
-				!!layoutCss && /side-backdrop|1il4ztj|--side-w/.test(layoutCssCode),
-				layoutCss || 'missing'
+				'build: docs layout CSS carries the ogygia Shell chrome rules (FOUC)',
+				!!shellCss,
+				shellCss || `missing (checked ${nodeCss.length} node css files)`
 			);
 		}
 
@@ -291,10 +273,18 @@ try {
 			}
 		};
 		walk(clientDir);
+		// Two worlds, one copy each (`?og-region` identity): the island world dedupes to ONE chunk
+		// (all islands share it), while a csr=true route node (/kit keeps __component) carries its
+		// own Kit-world copy — same file, real `$app/*`, hydrated by Kit. Under the old shared
+		// identity that node's Counter got whichever `$app/*` flavor won the build-order race.
+		// csr=false nodes never ship island imports (asserted below), so nodes/ copies are only
+		// ever csr=true pages' own.
+		const isleCopies = chunksWithMarker.filter((f) => !f.startsWith('nodes/'));
+		const nodeCopies = chunksWithMarker.filter((f) => f.startsWith('nodes/'));
 		check(
-			'build: Counter marker in exactly one chunk (not N copies)',
-			chunksWithMarker.length === 1,
-			chunksWithMarker.join(', ') || '(none)'
+			'build: Counter marker in exactly one island-world chunk',
+			isleCopies.length === 1,
+			`island: ${isleCopies.join(', ') || '(none)'}${nodeCopies.length ? ` | csr=true nodes: ${nodeCopies.join(', ')}` : ''}`
 		);
 
 		// csr=false scale: hosts under the default layout must not statically import island
@@ -310,12 +300,12 @@ try {
 			for (const m of appCode.matchAll(/"\/kit":\[(\d+)/g)) {
 				csrTrueNodes.add(m[1]);
 			}
-			// A raw-binding client leg is metadata-only: it CONTAINS `__module: "…ogygia-island.x.js"`
+			// A raw-binding client leg is metadata-only: it CONTAINS `__module: "…og-region.x.js"`
 			// as a plain string (a registry node, e.g. /blocks). That's fine — the invariant is no
 			// static/dynamic IMPORT of an island or wrapper module (dual ownership), so match import
 			// syntax, not bare mentions of the filename.
 			const island_import_re =
-				/(?:from\s*|import\s*\(?\s*)["'][^"']*ogygia-island\.|virtual:ogygia\/(?:wrapper|island)\//;
+				/(?:from\s*|import\s*\(?\s*)["'][^"']*og-region\.|virtual:ogygia\/(?:wrapper|island)\//;
 			const bad: string[] = [];
 			for (const f of fs.readdirSync(nodesDir).filter((n) => n.endsWith('.js'))) {
 				const nodeNum = f.split('.')[0];
@@ -351,15 +341,15 @@ try {
 				js: Record<string, string[]>;
 				css: Record<string, string[]>;
 			};
-			const portableEntry = '/_app/immutable/ogygia-island.' +
-				(counterFacades[0]?.match(/ogygia-island\.([0-9a-f]+)\.js/)?.[1] ?? '') +
+			const portableEntry = '/_app/immutable/og-region.' +
+				(counterFacades[0]?.match(/og-region\.([0-9a-f]+)\.js/)?.[1] ?? '') +
 				'.js';
 			// Presence of deps handoff proves generateBundle walked Rolldown OutputChunk.imports.
 			// Shape is `{ js: { entry: [...] }, css: { entry: [...] } }`.
 			const jsKeys = Object.keys(deps.js ?? {});
 			check(
 				'build: island-deps handoff exists (Rolldown generateBundle)',
-				jsKeys.some((k) => k.includes('ogygia-island.')),
+				jsKeys.some((k) => k.includes('og-region.')),
 				`${jsKeys.length} js entries, ${Object.keys(deps.css ?? {}).length} css entries`
 			);
 			void portableEntry;

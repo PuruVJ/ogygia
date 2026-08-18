@@ -20,7 +20,7 @@ try {
 	// Count GET requests to the region endpoint — single-flight must add ZERO of them on mutation.
 	let regionGets = 0;
 	page.on('request', (req) => {
-		if (req.method() === 'GET' && /\/(?:%F0%9F%8F%9D|🏝)/.test(req.url())) regionGets++;
+		if (req.method() === 'GET' && /\/(?:__ogygia__|__ogygia__)/.test(req.url())) regionGets++;
 	});
 
 	await page.goto(base + '/single-flight', { waitUntil: 'load' });

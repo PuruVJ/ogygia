@@ -1,0 +1,128 @@
+---
+title: Quick start
+summary: Build a content collection, mount a catch-all route, and serve your first docs in three files.
+related:
+  - getting-started/installation
+  - concepts/content-collections
+---
+
+This guide assumes you have ogygia installed and the Vite plugin wired up. If not, start with [installation](installation). In the next few minutes you will define a collection, connect it to a route, and watch Markdown turn into a real page.
+
+## What we are building
+
+A tiny documentation site backed by files on disk. Each `.svx` file becomes a page. The collection reads them, validates their frontmatter, and hands typed data to your route. Nothing is stored in a database and nothing is fetched at runtime.
+
+The whole thing is three files:
+
+1. A **collection** that describes where content lives and what shape its metadata has.
+2. A **catch-all route** that resolves a URL to a document.
+3. A **page component** that renders the document and its navigation.
+
+## 1. Create a collection
+
+A collection is a small config object. It points at a folder, picks a format, and declares a schema for the frontmatter. The schema is optional but strongly recommended: it turns a typo in a filename into a build error instead of a broken page.
+
+```ts
+// src/content/config.ts
+import { content, markdown } from 'ogygia/content';
+import { z } from 'zod';
+
+export const guides = content({
+	source: markdown('guides/**/+doc.svx'),
+	schema: z.object({
+		title: z.string(),
+		summary: z.string().optional(),
+		related: z.array(z.string()).default([])
+	})
+});
+```
+
+The `source` is a glob. Every file it matches becomes an entry, and the entry's `id` is derived from its path. A file at `guides/getting-started/01-installation/+doc.svx` gets the id `getting-started/installation` — numeric prefixes are stripped so you can order files without leaking `01-` into the URL.
+
+## 2. Mount the catch-all route
+
+SvelteKit's `[...slug]` route matches any path. We load the matching document in the universal load function so it prerenders cleanly.
+
+```ts
+// src/routes/[...slug]/+page.ts
+import { guides } from '$content/config';
+import { error } from '@sveltejs/kit';
+
+export async function load({ params }) {
+	const doc = await guides.get(params.slug);
+	if (!doc) throw error(404, 'Not found');
+
+	return {
+		doc,
+		nav: await guides.tree()
+	};
+}
+```
+
+`guides.get(slug)` returns the compiled document — its rendered component, frontmatter, and heading list. `guides.tree()` returns the sidebar structure, already grouped and ordered by the numeric prefixes on disk.
+
+## 3. Render the page
+
+The page component pulls the document from `data` and renders its component. Everything else on the page — the sidebar, the on-this-page rail — is plain server HTML.
+
+```svelte
+<script lang="ts">
+	import { Doc, SideNav, OnThisPage } from 'ogygia/content';
+
+	let { data } = $props();
+	const { doc, nav } = data;
+</script>
+
+<div class="layout">
+	<SideNav tree={nav} />
+
+	<article>
+		<h1>{doc.title}</h1>
+		{#if doc.summary}
+			<p class="summary">{doc.summary}</p>
+		{/if}
+
+		<doc.Component />
+	</article>
+
+	<OnThisPage headings={doc.headings} />
+</div>
+```
+
+`doc.Component` is the compiled `.svx` body. Because the title lives in frontmatter, the body itself never carries an `# H1`, which keeps the on-this-page rail clean: it only lists the `##` and `###` headings you actually wrote.
+
+## See it work
+
+Drop a file into the collection folder and it appears in the nav on the next reload.
+
+```bash
+mkdir -p src/content/guides/getting-started/01-installation
+```
+
+```svelte
+---
+title: Installation
+summary: Get set up in five minutes.
+---
+
+## Prerequisites
+
+You need Node 18 or newer.
+```
+
+Run the dev server and visit `/getting-started/installation`.
+
+```bash
+pnpm dev
+```
+
+> **How ids work.** The slug is the file path minus the glob's fixed parts, minus numeric prefixes, minus the `+doc.svx` filename. It is stable: renaming `01-installation` to `02-installation` changes the order in the sidebar but not the URL.
+
+## Where to go next
+
+| You want to | Read |
+| --- | --- |
+| Understand the folder layout | [project structure](project-structure) |
+| Make parts of the page interactive | [islands](../concepts/islands) |
+| Add tabs, callouts, and code tabs | [tabs & code](../guides/tabs-and-code) |
+| Style the whole thing | [theming](../guides/theming) |

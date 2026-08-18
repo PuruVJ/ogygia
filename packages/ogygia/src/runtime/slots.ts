@@ -11,6 +11,7 @@
  */
 import type { Component } from 'svelte';
 import type { PersistPair } from './persist.js';
+import type { Frame } from '../frame.js';
 import { is_frozen } from './region-attrs.js';
 
 // ── lakes ────────────────────────────────────────────────────────────────
@@ -73,6 +74,9 @@ export type MorphFn = (parent: Element, nodes: Node[]) => void;
 export type WireOps = {
 	TRANSPORT_WIRE_KEY: string;
 	revive_transportable: (payload: never, remember: boolean) => unknown;
+	/** Portable-snippet codec key + decode (rebuilds a live snippet from its descriptor). */
+	REGION_SNIPPET_WIRE_KEY: string;
+	revive_region_snippet: (payload: never) => unknown;
 };
 
 export type RemoteSeedOps = {
@@ -81,7 +85,27 @@ export type RemoteSeedOps = {
 	clear_remote_instances(): void;
 };
 
-export type SpeculateOps = { reinstall(): void };
+/**
+ * The client frame store, filled by the `frames` feature. Core reads it ONLY on the deferred /
+ * live / SWR-lake paths (a region with a signed `endpoint`), so a plain load-hydrated app never
+ * bundles the store. Null until the feature installs → core's frame calls are optional-chained.
+ */
+export type FrameOps = {
+	subscribe(a: string, cb: (f: Frame) => void): () => void;
+	ensure(
+		a: string,
+		fetcher: (signal: AbortSignal) => Promise<string>,
+		opts?: { force?: boolean }
+	): Promise<string>;
+	abandon(a: string): void;
+	/**
+	 * SINGLE-FLIGHT NAVIGATION: batch a page's signed deferred endpoints into the store as one streamed response. Lives
+	 * on the seam (not a static router import) so an app with `router` but no deferred/live/lake region
+	 * — hence no `frames` feature — never bundles the frame store. The router optional-chains this: no
+	 * frames feature ⇒ no `render="defer"` holes to batch ⇒ the call never fires anyway.
+	 */
+	stream(endpoints: string[]): Promise<void>;
+};
 
 /**
  * Per-document lifecycle, filled by {@link ./core.js core} in `boot()` (not by a feature). The
@@ -113,7 +137,7 @@ export type Slots = {
 	live: Component<Record<string, unknown>> | null;
 	wire: WireOps | null;
 	remoteSeeds: RemoteSeedOps | null;
-	speculate: SpeculateOps | null;
+	frames: FrameOps | null;
 	spaLifecycle: SpaLifecycle | null;
 	nav: NavOps | null;
 };
@@ -146,7 +170,7 @@ export const slots: Slots = {
 	live: null,
 	wire: null,
 	remoteSeeds: null,
-	speculate: null,
+	frames: null,
 	spaLifecycle: null,
 	nav: null
 };

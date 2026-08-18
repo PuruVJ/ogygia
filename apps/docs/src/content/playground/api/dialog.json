@@ -1,0 +1,5 @@
+{
+	"title": "Dialog",
+	"summary": "A modal overlay.",
+	"signature": "<Dialog bind:open>{content}</Dialog>"
+}

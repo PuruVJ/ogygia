@@ -54,11 +54,11 @@ node verify/portable-bindings.ts http://localhost:3051 # portable bindings: stat
 ```
 
 
-### Route weaving (navigation OOO batch)
+### single-flight navigation (navigation OOO batch)
 
 On a SPA navigation the router pulls all of the incoming page's `defer: 'load'` holes down **one**
-batch POST to `/🏝️`, and each hole's HTML streams back as a `<template data-ogygia-slot>` parcel the
-moment it settles (out of order). This is covered end-to-end by `frame-weave.ts` (no per-hole
+batch POST to `/__ogygia__`, and each hole's HTML streams back as a `<template data-ogygia-slot>` parcel the
+moment it settles (out of order). This is covered end-to-end by `frame-nav-batch.ts` (no per-hole
 waterfall), `frame-ooo.ts` (fast-first flush order), `frame-batch.ts` (one response, a frame per
 call, forged calls dropped), and `frame-single-flight.ts` (a command returns its region). The pure
 parcel builder is covered by unit tests (`packages/ogygia/test/stream-regions.test.ts`).

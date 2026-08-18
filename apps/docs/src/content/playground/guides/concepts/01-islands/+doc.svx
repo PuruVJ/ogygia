@@ -1,0 +1,109 @@
+---
+title: Islands
+summary: An island is an interactive component in a sea of static HTML. Here is how they wake.
+related:
+  - concepts/regions
+  - guides/live-components
+---
+
+<script>
+	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+</script>
+
+Most of a documentation page is text. Text does not need JavaScript. An **island** is the exception: a small, interactive component that hydrates on its own while everything around it stays as server-rendered HTML. ogygia ships JavaScript for the islands and nothing else.
+
+## The idea
+
+A traditional single-page app hydrates the whole page: the server sends HTML, then the client re-runs the entire component tree to attach event handlers. You pay for interactivity everywhere, even on a paragraph that will never change.
+
+The islands model inverts that. The server renders everything, but only the components you mark as islands get a client bundle. The rest is inert HTML that never re-runs.
+
+- **Less JavaScript.** You ship code for the counter, not for the prose around it.
+- **Faster first paint.** Static HTML is on screen before any script parses.
+- **Independent hydration.** Each island wakes by itself, on its own schedule.
+
+Here is a live one. It is a real Svelte component sitting in the middle of this sentence — <Counter /> — and it woke up when it scrolled into view.
+
+## Marking an island
+
+You turn an ordinary import into an island by attaching a `wake` hint with an import attribute. The Vite plugin sees the attribute, splits the component into its own chunk, and inserts the code that wakes it.
+
+```svelte
+<script>
+	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+</script>
+
+<Counter />
+```
+
+Without the `with { wake: '...' }` attribute the same import is server-only: the component renders to HTML but ships no client code and never becomes interactive.
+
+## Wake strategies
+
+The wake hint decides *when* an island's chunk loads and hydrates. Pick the cheapest strategy that still feels instant to the user.
+
+| Strategy | Wakes when | Use for |
+| --- | --- | --- |
+| `load` | Immediately on page load | Above-the-fold widgets the user reaches for at once. |
+| `idle` | The browser is idle (`requestIdleCallback`) | Interactive but non-urgent components. |
+| `visible` | The island scrolls into the viewport | Anything below the fold. The safe default. |
+| `interaction` | The user first hovers, focuses, or taps it | Rarely-used controls, like a settings popover. |
+
+### load
+
+The island hydrates as soon as its chunk arrives. It is the most eager strategy and the most expensive, so reserve it for controls a user will touch immediately.
+
+```svelte
+<script>
+	import Search from '$lib/playground/demos/Search.svelte' with { wake: 'load' };
+</script>
+```
+
+### idle
+
+Hydration waits for the main thread to go quiet. The component still wakes without any user action, but it yields to more important work first.
+
+```svelte
+<script>
+	import Toc from '$lib/playground/demos/Toc.svelte' with { wake: 'idle' };
+</script>
+```
+
+### visible
+
+The chunk loads when the island enters the viewport, via an `IntersectionObserver`. This is the default for a reason: a reader never notices the hydration because it happens just before they can see the component.
+
+```svelte
+<script>
+	import Chart from '$lib/playground/demos/Chart.svelte' with { wake: 'visible' };
+</script>
+```
+
+### interaction
+
+The laziest strategy. The island renders as static HTML and only pulls its chunk when the user first interacts with it. Perfect for controls that are present but seldom used.
+
+```svelte
+<script>
+	import Menu from '$lib/playground/demos/Menu.svelte' with { wake: 'interaction' };
+</script>
+```
+
+## Choosing a strategy
+
+When in doubt, follow this order:
+
+1. Is it below the fold? Use `visible`.
+2. Is it above the fold but not urgent? Use `idle`.
+3. Does the user reach for it the instant the page loads? Use `load`.
+4. Is it a rarely-touched control? Use `interaction`.
+
+> **Note.** Wake strategies are hints about *timing*, not *whether* a component is interactive. Every island listed here is fully interactive once it wakes — the strategy only changes how soon that happens. Choosing a lazier strategy never removes functionality; it just defers the cost.
+
+## Islands are just components
+
+There is no special base class and no island API to learn. An island is an ordinary Svelte 5 component using runes. It can hold `$state`, derive values, run effects, and even call Kit remote functions. The only difference is the `wake` attribute on the import.
+
+That means you can build and test an island in isolation, drop it into any page, and it behaves the same. The framework's job is limited to one thing: deciding when to bring it to life.
+
+Continue to [regions](regions) to see the wider family of server islands, lakes, and held regions that islands belong to.

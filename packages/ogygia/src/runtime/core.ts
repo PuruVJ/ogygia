@@ -1,8 +1,7 @@
 import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
 import { frameAddress } from '../frame.js';
-import * as frames from './frame-store.js';
-import { set_current_region } from '../context-bridge.js';
+import { set_current_region } from '../current-region.js';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import NestedProvider from '../NestedProvider.svelte';
 import { document_has_kit_bootstrap } from './kit-boot.js';
@@ -10,14 +9,16 @@ import { runtime_session } from './session.js';
 import {
 	is_allowed_region_endpoint,
 	is_same_origin_response,
-	island_module_url
+	island_module_url,
+	warm_island_module
 } from './region-endpoint-url.js';
 import {
 	is_awake,
 	is_deferred,
 	phase2_hydrate_schedule,
 	region_hydrate_schedule,
-	region_schedule
+	region_schedule,
+	region_ssr_truncated
 } from './region-attrs.js';
 import { slots, type LiftedLake } from './slots.js';
 
@@ -26,15 +27,29 @@ import { slots, type LiftedLake } from './slots.js';
  * client reviver (`remember: true`) so a named/shared transportable reunites with its live instance.
  * Returns `{}` when there is no props sibling.
  */
+// The devalue revivers only depend on `slots.wire`, which is set once at boot and never changes.
+// Building this object (plus its two closures) fresh for every island was pure per-hydrate GC churn;
+// memoize it against the wire identity so N islands share ONE revivers object.
+let cached_wire: (typeof slots)['wire'] | undefined;
+let cached_revivers: Record<string, (d: never) => unknown> | undefined;
+function region_prop_revivers(): Record<string, (d: never) => unknown> | undefined {
+	const wire = slots.wire;
+	if (wire === cached_wire) return cached_revivers;
+	cached_wire = wire;
+	cached_revivers = wire
+		? {
+				[wire.TRANSPORT_WIRE_KEY]: (d: never) => wire.revive_transportable(d, true),
+				[wire.REGION_SNIPPET_WIRE_KEY]: (d: never) => wire.revive_region_snippet(d)
+			}
+		: undefined;
+	return cached_revivers;
+}
+
 function read_region_props(region: Element): Record<string, unknown> {
 	let sib = region.nextElementSibling;
 	while (sib) {
 		if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]')) {
-			const wire = slots.wire;
-			const revivers = wire
-				? { [wire.TRANSPORT_WIRE_KEY]: (d: never) => wire.revive_transportable(d, true) }
-				: undefined;
-			return parse(sib.textContent, revivers);
+			return parse(sib.textContent, region_prop_revivers());
 		}
 		if (sib.tagName === 'LINK') {
 			sib = sib.nextElementSibling;
@@ -65,7 +80,7 @@ class PropMutationGuard {
 		if (this.#warned.has(key)) return;
 		this.#warned.add(key);
 		console.warn(
-			`ogygia: mutating captured host snapshot '${prop_path}' inside island ${entry} — this updates nothing ` +
+			`[ogygia] mutating captured host snapshot '${prop_path}' inside island ${entry} — this updates nothing ` +
 				`(captured host state is a serialized snapshot; move mutable state inside the island component).`
 		);
 	}
@@ -366,8 +381,6 @@ export function prepare_spa_document() {
  */
 export function finish_spa_document() {
 	slots.remoteSeeds?.clear_remote_instances();
-	// A client-injected speculation script does not survive the SPA head-merge — re-add it.
-	slots.speculate?.reinstall();
 }
 
 class OgygiaRegion extends HTMLElement {
@@ -435,11 +448,14 @@ class OgygiaRegion extends HTMLElement {
 		if (slots.lakes.on_frozen_connect(this, lake_arm)) return;
 		if (this.#scheduled) return;
 		// Region rule (DESIGN.md): a nested region rides its awake ancestor's hydration — its SSR DOM
-		// is already inside that parent, so self-running would double-hydrate. A DEFERRED region is the
-		// exception: its HTML is remote (fetched from `endpoint`), never in the parent's DOM — e.g. a
-		// <Region> rendered inside a hydrated island. It must always self-run.
+		// is already inside that parent, so self-running would double-hydrate. Two exceptions self-run:
+		// a DEFERRED region (its HTML is remote, never in the parent's DOM), and a region inside an
+		// ADOPTED SLOT (`<ogygia-slot>`) — slot children are host-page content the parent island adopts
+		// as opaque DOM; they are NOT part of its hydrated graph, so nothing else will wake them.
 		const boundary = this.parentElement && this.parentElement.closest('ogygia-region');
-		if (boundary && is_awake(boundary) && !is_deferred(this)) {
+		const slot = this.parentElement && this.parentElement.closest('ogygia-slot');
+		const in_adopted_slot = !!(boundary && slot && boundary.contains(slot));
+		if (boundary && is_awake(boundary) && !is_deferred(this) && !in_adopted_slot) {
 			this.setAttribute('data-nested', '');
 			if (import.meta.env.DEV) {
 				console.warn(
@@ -454,7 +470,21 @@ class OgygiaRegion extends HTMLElement {
 		const deferred = is_deferred(this);
 		const when = region_schedule(this);
 		const fire = deferred ? () => this.#server() : () => this.#hydrate();
+		// A `visible` island won't hydrate until it scrolls into view — and only THEN fetches its JS
+		// chunk, stalling hydration on a real network. Warm the module during idle so the scroll-in is
+		// instant. Kept to `visible` on purpose: `idle` fires imminently anyway, while `interaction`
+		// and `media` are "maybe never" schedules where NOT downloading is the whole point.
+		if (!deferred && when === 'visible') this.#warm_module();
 		this.#arm(when, fire);
+	}
+
+	/** Idle-import this island's JS so a later `visible` wake hydrates without a cold chunk fetch. */
+	#warm_module() {
+		const entry = this.getAttribute('entry');
+		if (!entry) return;
+		const warm = () => warm_island_module(entry);
+		if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 2000 });
+		else setTimeout(warm, 200);
 	}
 
 	/** Arm idle / visible / load / interaction / media for a schedule callback. */
@@ -499,7 +529,7 @@ class OgygiaRegion extends HTMLElement {
 		const endpoint = this.getAttribute('endpoint');
 		if (endpoint && !this.#frame_unsub) {
 			const address = (this.#frame_address = frameAddress(endpoint));
-			this.#frame_unsub = frames.subscribe(address, (f) => void (this.#applying = this.#apply(f.html)));
+			this.#frame_unsub = slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ?? null;
 		}
 		await this.#deliver_html();
 		// The subscribe callback fired #apply, but #apply awaits the stylesheet before swapping —
@@ -612,13 +642,13 @@ class OgygiaRegion extends HTMLElement {
 		// Bind if we haven't (SWR/lake remount reaches #fetch_html without going through #server).
 		// Idempotent: #server already subscribed for the normal defer flow.
 		if (!this.#frame_unsub) {
-			this.#frame_unsub = frames.subscribe(address, (f) => void (this.#applying = this.#apply(f.html)));
+			this.#frame_unsub = slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ?? null;
 		}
 		if (opts.revalidate) this.#revalidating = true;
 		try {
 			// Network → STORE (never straight to DOM). N regions with the same address ⇒ one request;
 			// a stale response can't overwrite a newer one (the store tickets at request time).
-			const html = await frames.ensure(
+			const html = await slots.frames?.ensure(
 				address,
 				(signal) =>
 					runtime_session.server_gate.run(async () => {
@@ -723,8 +753,10 @@ class OgygiaRegion extends HTMLElement {
 		this.#hydrating = true;
 		let lifted: Array<LiftedLake> | null = null;
 		try {
-			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page
-			await dom_ready();
+			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page.
+			// On an SPA swap (and any post-load hydrate) the document is already parsed, so skip the
+			// await entirely — no need to burn a microtask turn before every island wakes.
+			if (typeof document !== 'undefined' && document.readyState === 'loading') await dom_ready();
 			// SWR remount (and SPA swaps) can disconnect an island-in-lake while its module load is
 			// in flight — abort rather than hydrate into a detached tree (SWR-ORPHAN-HYDRATE).
 			if (!this.isConnected) return;
@@ -750,6 +782,23 @@ class OgygiaRegion extends HTMLElement {
 					);
 				}
 				return;
+			}
+
+			// INVALID-NESTING GUARD: the browser parser hoists a BLOCK island rendered inline inside a
+			// `<p>` out of its region before any JS runs (see region_ssr_truncated). The region is now
+			// empty, so the hydrate below fresh-mounts a SECOND copy while the server copy lingers as an
+			// orphan sibling of the paragraph. This is invalid HTML the framework cannot un-parse — warn
+			// loudly (dev) instead of silently duplicating; the real fix lives in authoring (render an
+			// inline element, or place the island in block context).
+			if (import.meta.env.DEV && !is_deferred(this) && region_ssr_truncated(this)) {
+				console.warn(
+					`[ogygia] island "${entry}" rendered a BLOCK element inline inside a <p> (or other ` +
+						`phrasing-only context). The browser's HTML parser hoisted that block out of the ` +
+						`paragraph before hydration, so this region is empty and a SECOND copy is about to mount ` +
+						`here — the server-rendered copy is now an orphaned sibling of the paragraph. Fix: make ` +
+						`the component render an inline element (e.g. <span> instead of <div>), or place the ` +
+						`island on its own line (block context) rather than inside a sentence.`
+				);
 			}
 
 			lifted = slots.lakes.lift(this);
@@ -866,7 +915,7 @@ class OgygiaRegion extends HTMLElement {
 		if (!interactive) {
 			if (desc.url && !this.#frame_unsub) {
 				this.#frame_address = frameAddress(desc.url);
-				this.#frame_unsub = frames.subscribe(this.#frame_address, (f) => this.#morph_live(f.html));
+				this.#frame_unsub = slots.frames?.subscribe(this.#frame_address, (f) => this.#morph_live(f.html)) ?? null;
 			}
 			this.#morph_live(desc.html);
 			return;
@@ -953,7 +1002,7 @@ class OgygiaRegion extends HTMLElement {
 		this.#frame_unsub?.();
 		this.#frame_unsub = null;
 		if (this.#frame_address) {
-			frames.abandon(this.#frame_address);
+			slots.frames?.abandon(this.#frame_address);
 			this.#frame_address = null;
 		}
 		if (this.#idle_handle != null) {

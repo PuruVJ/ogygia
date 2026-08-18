@@ -139,12 +139,12 @@ export function islandId(relHostPath: string, index: string | number, salt = '')
 }
 
 /**
- * Deterministic client chunk path for a hydrate island (mirrors `ogygia-runtime.<hash>.js`).
+ * Deterministic client chunk path for a hydrate island (mirrors `og-runtime.<hash>.js`).
  * SSR bakes this into `<ogygia-region entry>` so the sticky runtime can `import(entry)` with no
  * app-wide regions map — Kit builds server before client, so content-hashed Vite names can't hand off.
  */
 export function islandChunkFileName(iid: string) {
-	return `_app/immutable/ogygia-island.${iid}.js`;
+	return `_app/immutable/og-region.${iid}.js`;
 }
 
 /** Public URL for {@link islandChunkFileName} (leading slash, same shape as runtime-url). */
@@ -175,7 +175,7 @@ export function regionBindingVirtualId(iid: string) {
  *
  * Beside the stub the transform emits `import 'virtual:ogygia/fouc-css/<entry>'` so Kit still
  * links stylesheets (FOUC) via CSS-only side effects. Importing the full `.svelte` JS module
- * dual-owns it with the emitFile island entry and Rolldown thin-facades `ogygia-island.*`.
+ * dual-owns it with the emitFile island entry and Rolldown thin-facades `og-region.*`.
  * Omitting CSS entirely orphans rules (scoped class hashes, no stylesheet).
  */
 export const CLIENT_BINDING_STUB = 'virtual:ogygia/client-binding-stub';
@@ -766,16 +766,27 @@ function assert_swr_lake_crossable(node, err) {
 	}
 }
 
-/** Resolve an import specifier to an absolute .svelte path (for SWR server entries). */
+/**
+ * Resolve a marked import specifier to the component path baked into generated modules.
+ *
+ * `$lib` + relative specifiers resolve to ABSOLUTE file paths (build machinery — emitFile prescan,
+ * HMR invalidation, fouc-css — keys on them). Anything else (a PACKAGE specifier like
+ * `'ogygia/content/tab-group'`, or a Vite alias) is kept VERBATIM: every generated virtual module
+ * (island entry, wrapper, child synth, region binding) re-emits the original specifier and Vite's
+ * resolver handles it — exports map, workspace link, or alias — so both a node_modules install and
+ * a monorepo workspace link work without this transform ever touching the filesystem. A marked
+ * specifier Vite cannot resolve fails loudly at resolve time (see the plugin's resolveId hook).
+ */
 function resolve_component_path(spec, host_id, ctx) {
-	if (typeof spec !== 'string') return null;
+	if (typeof spec !== 'string' || !spec.trim()) return null;
 	if (spec === '$lib' || spec.startsWith('$lib/')) {
 		return ctx.pathModule.join(ctx.libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
 	}
 	if (spec.startsWith('.')) {
 		return ctx.pathModule.resolve(ctx.pathModule.dirname(host_id), spec);
 	}
-	return null;
+	// Package / alias / absolute specifier — re-emitted verbatim into generated modules.
+	return spec;
 }
 
 /**
@@ -795,10 +806,76 @@ function resolve_component_path(spec, host_id, ctx) {
  * @param {(hostPath:string, index:number)=>string} ctx.virtualPathFor virtual module id for an island
  * @returns {TransformResult|null}
  */
+// Injected into every csr=true route host. Marks the subtree "csr=true" via a BARE svelte
+// `setContext` — no ogygia import — so a region-less csr=true page still ships zero ogygia. Region
+// reads it (isCsrTrue) and renders islands inline. The host renders on both the SSR and Kit-client
+// legs, so the flag is identical on both → the inline/island choice can never desync at hydrate.
+// KEY STRING (CSR-KEY): must equal context.ts `CSR_TRUE_KEY` — `Symbol.for('ogygia.csr-true')`.
+const CSR_CTX_INJECT =
+	`import { setContext as __og_setctx } from 'svelte'; __og_setctx(Symbol.for('ogygia.csr-true'), true);\n`;
+
+/**
+ * csr=true route host: strip marked imports to plain, then inject the csr-context marker.
+ * @param {string} source @param {string} id @param {boolean} has_island_hint @param {ImportKeys} import_keys
+ * @returns {TransformResult|null}
+ */
+function transform_csr_true_host(source, id, has_island_hint, import_keys) {
+	let ast;
+	try {
+		ast = parse(source, { modern: true, filename: id });
+	} catch {
+		return null;
+	}
+	const ms = new MagicString(source);
+
+	// Strip `with { wake|render|preset|region }` off host imports → plain imports (Kit compiles them).
+	if (has_island_hint) {
+		const region_keys = new Set([
+			import_keys.wake,
+			import_keys.render,
+			import_keys.preset,
+			import_keys.region
+		]);
+		for (const node of ast.instance?.content?.body ?? []) {
+			if (node.type !== 'ImportDeclaration') continue;
+			const attrs = (node.attributes ?? []).filter((a) => a.type === 'ImportAttribute');
+			if (!attrs.some((a) => region_keys.has(a.key.name ?? a.key.value))) continue;
+			ms.overwrite(node.start, node.end, clean_import_text(source, node));
+		}
+	}
+
+	// Inject the csr-context marker at the top of the instance <script> (create one if absent —
+	// a `<script module>` runs once per module, not per instance, so it can't carry setContext).
+	if (ast.instance?.content) {
+		ms.appendLeft(ast.instance.content.start, `\n${CSR_CTX_INJECT}`);
+	} else {
+		ms.prepend(`<script>${CSR_CTX_INJECT}</script>\n`);
+	}
+
+	return {
+		code: ms.toString(),
+		map: ms.generateMap({ hires: true, source: id, includeContent: true }),
+		islands: []
+	};
+}
+
 export function transformHost(source, id, ctx) {
 	const import_keys = normalize_import_keys(ctx.importKeys);
-	// cheap bailout — the library only touches region imports (configured key names)
-	if (!import_keys_hint(import_keys).test(source)) return null;
+	const has_island_hint = import_keys_hint(import_keys).test(source);
+
+	// csr=true route host: ogygia steps aside — Kit hydrates the page itself. Strip every marked
+	// import to a plain one (so `<C/>` compiles normally, no island, no runtime) AND inject a bare
+	// csr-context marker so a directly-used `<Region>` in this page's subtree renders INLINE in the
+	// Kit tree instead of an `<ogygia-region>` mini-app. This must run even for a MARKER-LESS host (a
+	// page that only uses `<Region>`, no `with { wake }`), so it precedes the island-hint bailout.
+	// (`.ts` held regions and deferred/live/lake regions are server-driven UI, orthogonal to a page's
+	// csr — they are deliberately NOT degraded; see Region.svelte `is_csr`.)
+	if (ctx.csrTrue) return transform_csr_true_host(source, id, has_island_hint, import_keys);
+
+	// cheap bailout — the library only touches region imports (configured key names), PLUS files that
+	// define a `{#snippet}` (a candidate portable snippet forwarded into an island). Files with a
+	// snippet but no island work return `null` unchanged at the end, so behavior is identical for them.
+	if (!has_island_hint && !source.includes('{#snippet')) return null;
 
 	let ast;
 	try {
@@ -810,36 +887,6 @@ export function transformHost(source, id, ctx) {
 	const instance_body = ast.instance?.content?.body ?? [];
 	const module_body = ast.module?.content?.body ?? [];
 	const lang = script_lang_attr(ast.instance) || script_lang_attr(ast.module);
-
-	// csr=true route host: ogygia steps aside ENTIRELY. Kit hydrates the page's components itself, so a
-	// region wrapper + runtime would be dead weight (measured: a csr=true page was shipping the whole
-	// runtime for nothing). Strip every region import attribute to a plain import — Kit compiles `<C/>`
-	// normally — and emit NO island, so the runtime chunk isn't pulled either. `wake` schedules become
-	// immediate, which is exactly what csr=true means. (`.ts` held regions are unaffected: they cross
-	// the wire and are a server-driven-UI feature, orthogonal to a page's csr.)
-	if (ctx.csrTrue) {
-		const region_keys = new Set([
-			import_keys.wake,
-			import_keys.render,
-			import_keys.preset,
-			import_keys.region
-		]);
-		const ms = new MagicString(source);
-		let touched = false;
-		for (const node of instance_body) {
-			if (node.type !== 'ImportDeclaration') continue;
-			const attrs = (node.attributes ?? []).filter((a) => a.type === 'ImportAttribute');
-			if (!attrs.some((a) => region_keys.has(a.key.name ?? a.key.value))) continue;
-			ms.overwrite(node.start, node.end, clean_import_text(source, node));
-			touched = true;
-		}
-		if (!touched) return null;
-		return {
-			code: ms.toString(),
-			map: ms.generateMap({ hires: true, source: id, includeContent: true }),
-			islands: []
-		};
-	}
 
 	const path = ctx.pathModule;
 	// Posix-relative host path — island ids must not drift across Windows/POSIX build legs.
@@ -936,7 +983,7 @@ export function transformHost(source, id, ctx) {
 		}
 
 		// The import block carries a `render` MODE + a `wake` schedule, or a preset. No option keys
-		// inline — all tuning lives in plugin config (ogygia({ presets })). `render` picks the mode
+		// inline — all tuning lives in plugin config (ogygia({ regions: { presets } })). `render` picks the mode
 		// (static | deferred | live); `wake` is hydration for `static`, the fetch schedule for
 		// `deferred`/`live`. Canonical internal slots stay `hydrate`/`defer` (+ a `live` flag).
 		/** @type {Map<string,string>} effective attributes (canonical hydrate/defer + margin + live) */
@@ -952,7 +999,7 @@ export function transformHost(source, id, ctx) {
 			if (inline.size > 1) {
 				throw err(
 					names,
-					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, maxAge, …) in the preset definition (ogygia({ presets })).`
+					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, maxAge, …) in the preset definition (ogygia({ regions: { presets } })).`
 				);
 			}
 			from_preset = inline.get(import_keys.preset);
@@ -984,7 +1031,7 @@ export function transformHost(source, id, ctx) {
 				if (k !== import_keys.wake && k !== import_keys.render && k !== 'keep') {
 					throw err(
 						names,
-						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ presets })).`
+						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
 					);
 				}
 			}
@@ -1118,7 +1165,7 @@ export function transformHost(source, id, ctx) {
 				);
 
 			// `margin` applies only to `visible` (tolerantly ignored otherwise). Falls back to the
-			// plugin-level default ogygia({ visible: { margin } }).
+			// plugin-level default ogygia({ regions: { visible: { margin } } }).
 			const options: { margin?: string; keep?: string } = {};
 			if (strategy === "visible") {
 				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
@@ -1138,7 +1185,10 @@ export function transformHost(source, id, ctx) {
 		// otherwise: a normal import that happens to carry other import attributes — leave it.
 	}
 
-	if (marked_components.size === 0) return null;
+	// No islands here, but a `{#snippet}` may still need making portable (forwarded into an island by
+	// the component it's handed to). Keep going for those; the island passes below no-op with an empty
+	// `marked_components`, and the end guard returns `null` unchanged if no portable work happens.
+	if (marked_components.size === 0 && !source.includes('{#snippet')) return null;
 
 	/** Walk AST for Identifier / Component references to `local`. */
 	const ast_refs_local = (root, local) => {
@@ -1200,6 +1250,7 @@ export function transformHost(source, id, ctx) {
 		);
 	};
 
+	let has_island_children = false;
 	const visit_usages = (nodes) => {
 		for (const node of nodes ?? []) {
 			if (node.type === 'Component') {
@@ -1221,26 +1272,28 @@ export function transformHost(source, id, ctx) {
 						// fallback snippet crosses); held regions are minted as data. Snippets can't cross either.
 						assert_portable_children(node, name, mark.strategy === 'server');
 					} else {
-						// Hydrate island: host children/snippets CAN cross — the compiler ships them as a
-						// synthesized entry that inlines the snippet and wraps the real component. Collect
-						// the non-whitespace children for the main loop to build that entry.
+						// A hydrate island WITH real children crosses them as an OgygiaS slot pointer —
+						// the app's runtime must carry the wire revivers. Surfaced for the plugin's
+						// usage-gated `wire` detection (a childless minimal app stays lean).
 						const kids = (node.fragment?.nodes ?? []).filter(
 							(n) => !(n.type === 'Text' && !String(n.data ?? '').trim())
 						);
-						if (kids.length) {
-							const list = hydrate_children_usages.get(name) ?? [];
-							list.push({ node, kids });
-							hydrate_children_usages.set(name, list);
-						}
+						if (kids.length) has_island_children = true;
 					}
+					// Hydrate-island children need NO compile-time handling: the wrapper forwards them to
+					// Region as its slot, the server renders them IN-PLACE inside a `<ogygia-slot>` marker,
+					// and the payload carries a slot POINTER the client revives into an adopting snippet
+					// (see region-snippet.ts). Nested islands inside render as full regions and wake on
+					// their own. This is the single crossing path — the per-usage "child synth" is gone.
 				}
 			}
+			// `CHILD_KEYS` already includes `fragment`, so this one loop covers a Component's children.
+			// A separate explicit `visit_usages(node.fragment.nodes)` for Components re-descended the
+			// SAME subtree a second time — for NESTED island components that doubled the work per level,
+			// i.e. O(2^depth) (measured: depth-18 ≈ 62ms, depth-25 hangs). One traversal, once.
 			for (const k of CHILD_KEYS) if (node[k]?.nodes) visit_usages(node[k].nodes);
-			if (node.type === 'Component' && node.fragment?.nodes) visit_usages(node.fragment.nodes);
 		}
 	};
-	/** local name → hydrate-island usages that carry host children/snippets. */
-	const hydrate_children_usages = new Map();
 	visit_usages(ast.fragment?.nodes ?? []);
 
 	const s = new MagicString(source);
@@ -1253,6 +1306,11 @@ export function transformHost(source, id, ctx) {
 			: (_host, iid) => wrapperVirtualId(iid);
 
 	const posix_rel = (abs) => path.relative(ctx.root, abs).split(PATH_SEP).join('/');
+
+	// Region-identity path for a component: filesystem components key on their root-relative posix
+	// path; a package specifier IS its own identity (already stable + posix, and identical across
+	// hosts — so two hosts marking the same package import share one region id).
+	const component_identity = (p) => (path.isAbsolute(p) ? posix_rel(p) : p);
 
 	// Hydrate `emitFile` / `import(entry)` target — JS re-export of the real component.
 	// Unique per region id so two strategies sharing one Comp keep distinct entry modules
@@ -1279,9 +1337,13 @@ export function transformHost(source, id, ctx) {
 			`\timport __OgygiaCss from ${JSON.stringify(componentPath)};\n` +
 			`\tlet { children, ...__props } = $props();\n` +
 			`</script>\n` +
+			// `children` rides as an EXPLICIT prop, never as template children: wrapping `{@render
+			// children?.()}` in the tags would hand Region a fragment snippet even for a CHILDLESS
+			// call site — Region's `island_children != null` gate would then serialize a pointless
+			// empty slot descriptor (OgygiaS) into every island payload, which also breaks minimal
+			// apps whose usage-gated runtime ships no wire revivers. Absent stays absent.
 			`<OgygiaRegion__Wrapper __mode="island" ${strategy_attrs}${persist_attr} __entry={${JSON.stringify(entry_url)}} ` +
-			`__component={__OgygiaEntry} __css={__OgygiaCss} {__props}>` +
-			`{@render children?.()}</OgygiaRegion__Wrapper>\n`
+			`__component={__OgygiaEntry} __css={__OgygiaCss} {__props} {children} />\n`
 		);
 	};
 
@@ -1356,14 +1418,18 @@ export function transformHost(source, id, ctx) {
 	 * csr=false CLIENT: stub replaces the portable wrapper binding, but Kit only links CSS from
 	 * the *client* page graph. Side-effect-import `virtual:ogygia/fouc-css/<entry>` (CSS graph
 	 * only — not the component JS) so stylesheets still ship without dual-owning the module
-	 * that emitFile registers as `ogygia-island.*`.
+	 * that emitFile registers as `og-region.*`.
 	 */
 	const binding_rewrite = (local, bindingPath, componentPathAbs) => {
 		let text = `import ${local} from ${JSON.stringify(bindingPath)};`;
+		// fouc-css needs a real on-disk path (its virtual id is root-relative); a PACKAGE-specifier
+		// component skips it — its styles are global package CSS (e.g. a theme.css import), not a
+		// root-relative scoped stylesheet the fouc virtual could read.
 		if (
 			!link_virtual &&
 			typeof componentPathAbs === 'string' &&
 			componentPathAbs &&
+			path.isAbsolute(componentPathAbs) &&
 			!fouc_css_specs.has(componentPathAbs)
 		) {
 			fouc_css_specs.add(componentPathAbs);
@@ -1391,178 +1457,11 @@ export function transformHost(source, id, ctx) {
 		}
 	}
 
-	/**
-	 * Cross-island children: a hydrate island that receives host children/snippets ships them as a
-	 * synthesized `.svelte` entry that inlines the snippet and wraps the real component, so the
-	 * `csr=false` client hydrate has real code to render in that slot (the page's closure is gone).
-	 *
-	 * Free identifiers the snippet closes over are classified: a host IMPORT is re-imported into the
-	 * synth (so `<BIsland/>` inside the children renders and hydrates with the parent, the nested-
-	 * island degrade); a host VALUE is captured and serialized as a prop (`__ogFv`); a global is left
-	 * as-is. Named + parameterized snippets need no special handling — they inline verbatim and Svelte
-	 * compiles them. A snippet that ASSIGNS to a host value is rejected (a snapshot can't write back).
-	 * Returns null when the island has no host children.
-	 */
-	const build_child_synth = (local, componentPath, usage) => {
-		const { node, kids } = usage;
-		const { free, mutated } = collectCaptureInfo(kids);
-		if (mutated.size > 0) {
-			throw err(
-				local,
-				`children of <${local}> assign to host value(s) (${[...mutated].join(', ')}) — a captured snapshot can't write back across the island boundary. Move that state inside the island.`
-			);
-		}
-		const cleaned_imports: string[] = [];
-		const captures: string[] = [];
-		for (const name of free) {
-			if (imports.has(name)) cleaned_imports.push(imports.get(name).cleaned.trim());
-			else if (host_declared.has(name)) captures.push(name);
-			// else: a global (Math, console, …) — referenced directly in the synth, needs no wiring.
-		}
-		const markup = source.slice(kids[0].start, kids[kids.length - 1].end);
-		const hash = createHash('md5')
-			.update(`${markup}\0${captures.join(',')}\0${cleaned_imports.join('\n')}`)
-			.digest('hex')
-			.slice(0, 12);
-		const cap_line = captures.length
-			? `\t// svelte-ignore state_referenced_locally\n\tconst { ${captures.join(', ')} } = __ogFv;\n`
-			: '';
-		const synth =
-			`<script${lang}>\n` +
-			`\timport 'virtual:ogygia/transportables';\n` +
-			`\timport OgygiaChildTarget from ${JSON.stringify(componentPath)};\n` +
-			cleaned_imports.map((s) => `\t${s}\n`).join('') +
-			`\tlet { __ogFv = {}, children: __ogSlot, ...__ogp } = $props();\n` +
-			`\t// svelte-ignore state_referenced_locally\n\t__ogSlot;\n` +
-			`\t// svelte-ignore state_referenced_locally\n\t__ogFv;\n` +
-			cap_line +
-			`</script>\n` +
-			`<OgygiaChildTarget {...__ogp}>${markup}</OgygiaChildTarget>\n`;
-		return { hash, source: synth, captures, node, kids };
-	};
-
-	// ── Cross-island children, per call site ────────────────────────────────────────────────────
-	// Each hydrate usage carrying host children becomes its OWN island, keyed by a hash of its
-	// children: a synthesized `.svelte` entry inlines the snippet and wraps the real component. The
-	// usage tag is rewritten to a synthetic per-usage binding (`Card__ogN`), so one component import
-	// can be composed at any number of call sites with different children.
-	let og_synth_counter = 0;
-	const child_islands: Array<{
-		local: string;
-		mark: { strategy: string; options?: Record<string, unknown> | null };
-		componentPath: string;
-		cs: NonNullable<ReturnType<typeof build_child_synth>>;
-		iid: string;
-		entryPath: string;
-		wrapPath: string;
-		bindingPath: string;
-		synthName: string;
-		identity: string;
-	}> = [];
-	for (const [local, mark] of marked_components) {
-		if (mark.strategy === 'lake' || mark.strategy === 'server' || mark.strategy === 'held') continue;
-		const usages = hydrate_children_usages.get(local);
-		if (!usages || usages.length === 0) continue;
-		const info = imports.get(local);
-		if (!info) continue;
-		const componentPath = resolve_component_path(info.node.source?.value, id, ctx);
-		if (!componentPath) {
-			throw new Error(
-				`[ogygia] ${rel_host}: region import '${local}' needs a resolvable module path ($lib/… or relative).`
-			);
-		}
-		const comp_rel_c = posix_rel(componentPath);
-		for (const usage of usages) {
-			const cs = build_child_synth(local, componentPath, usage);
-			const identity = regionIdentity(`${comp_rel_c}\0kids:${cs.hash}`, mark);
-			const iid = regionId(identity, salt);
-			const entryPath = ctx.virtualPathFor(id, iid).replace(JS_EXT, '.svelte');
-			const wrapPath = wrapperPathFor(id, iid);
-			const bindingPath = link_virtual ? wrapPath : binding_stub;
-			const synthName = `${local}__og${og_synth_counter++}`;
-			child_islands.push({ local, mark, componentPath, cs, iid, entryPath, wrapPath, bindingPath, synthName, identity });
-		}
-	}
-
-	// The crossed range is the WHOLE children-usage tag (`<C>…</C>`), so the parent import isn't
-	// counted as "used outside" by its own children usage, and a nested import inside is.
-	const crossed_ranges: Array<[number, number]> = child_islands.map((ci) => [
-		ci.cs.node.start,
-		ci.cs.node.end
-	]);
-	const in_crossed = (pos) =>
-		typeof pos === 'number' && crossed_ranges.some(([a, b]) => pos >= a && pos < b);
-	// True if `local` is referenced OUTSIDE any crossed-children fragment (script or template). Errs
-	// toward `true` (keep the island) — a false positive only leaves an unused chunk, never breaks.
-	const referenced_outside_children = (local) => {
-		for (const n of instance_body) if (n.type !== 'ImportDeclaration' && ast_refs_local(n, local)) return true;
-		for (const n of module_body) if (n.type !== 'ImportDeclaration' && ast_refs_local(n, local)) return true;
-		let found = false;
-		const walk = (node) => {
-			if (found || !node || typeof node !== 'object') return;
-			if (Array.isArray(node)) return node.forEach(walk);
-			if (in_crossed(node.start)) return; // skip the stripped subtree
-			if ((node.type === 'Component' || node.type === 'Identifier') && node.name === local) {
-				found = true;
-				return;
-			}
-			for (const k in node) {
-				if (k === 'type' || k === 'start' || k === 'end') continue;
-				const v = node[k];
-				if (v && typeof v === 'object') walk(v);
-			}
-		};
-		walk(ast.fragment?.nodes ?? []);
-		return found;
-	};
-
-	// Register per-usage islands, emit a synthetic binding import for each, and rewrite each usage
-	// tag: rename its open/close tags to the synthetic name, strip the children, inject captures.
-	const children_only = new Set<string>();
-	const synth_imports_by_local = new Map<string, string[]>();
-	for (const ci of child_islands) {
-		if (!islands_by_id.has(ci.iid)) {
-			islands_by_id.set(ci.iid, {
-				id: ci.iid,
-				virtualPath: ci.entryPath,
-				wrapperPath: ci.wrapPath,
-				wrapperSource: hydrate_wrapper_source(ci.iid, ci.componentPath, ci.entryPath, ci.mark.strategy, ci.mark.options),
-				source: ci.cs.source,
-				hostPath: id,
-				componentPath: ci.componentPath,
-				server: false,
-				kind: 'hydrate',
-				lakes: [],
-				identity: ci.identity,
-				strategy: ci.mark.strategy,
-				keep: ci.mark.options?.keep
-			});
-		}
-		const list = synth_imports_by_local.get(ci.local) ?? [];
-		list.push(binding_rewrite(ci.synthName, ci.bindingPath, ci.componentPath));
-		synth_imports_by_local.set(ci.local, list);
-
-		const node = ci.cs.node;
-		const open = ci.synthName + (ci.cs.captures.length ? ` __ogFv={{ ${ci.cs.captures.join(', ')} }}` : '');
-		s.overwrite(node.start + 1, node.start + 1 + node.name.length, open);
-		const frag = node.fragment?.nodes ?? [];
-		if (frag.length) s.remove(frag[0].start, frag[frag.length - 1].end);
-		const closeIdx = source.lastIndexOf('</' + node.name, node.end);
-		if (closeIdx >= 0) s.overwrite(closeIdx + 2, closeIdx + 2 + node.name.length, ci.synthName);
-	}
-	for (const [local, imps] of synth_imports_by_local) {
-		const info = imports.get(local)!;
-		if (referenced_outside_children(local)) {
-			// Also used as a plain island → keep the original import (the main loop rewrites it) and
-			// append the synthetic bindings after it.
-			s.appendLeft(info.node.end, '\n' + imps.join('\n'));
-		} else {
-			// Only ever composed with children → replace the original import with the synthetic ones.
-			s.overwrite(info.node.start, info.node.end, imps.join('\n'));
-			rewritten_import_nodes.add(info.node);
-			children_only.add(local);
-		}
-	}
+	// Children of a hydrate island need NO compile-time crossing (the old per-usage "child synth"
+	// is gone): the wrapper forwards them to Region as its slot, the server renders them IN-PLACE
+	// inside a `<ogygia-slot>` marker, and the payload carries a slot POINTER the client revives into
+	// an adopting snippet (region-snippet.ts). Nested islands inside render as full regions (see
+	// SlotBoundary.svelte) and wake independently.
 
 	for (const [local, mark] of marked_components) {
 		const info = imports.get(local);
@@ -1576,24 +1475,14 @@ export function transformHost(source, id, ctx) {
 			continue;
 		}
 
-		// Every usage of this import carries children → already emitted as per-call-site islands above.
-		if (children_only.has(local)) continue;
-
-		// Consumed only inside a sibling island's crossed children (the synth re-imports it) → it needs
-		// no island of its own here; strip the host import (it degrades + hydrates inside the parent).
-		if (!hydrate_children_usages.has(local) && !referenced_outside_children(local)) {
-			if (!rewritten_import_nodes.has(info.node)) imports_to_strip.add(info.node);
-			continue;
-		}
-
 		const entry_spec = info.node.source?.value;
 		const componentPath = resolve_component_path(entry_spec, id, ctx);
 		if (!componentPath) {
 			throw new Error(
-				`[ogygia] ${rel_host}: region import '${local}' needs a resolvable module path ($lib/… or relative).`
+				`[ogygia] ${rel_host}: region import '${local}' needs a module specifier ($lib/…, relative, or a package specifier like 'pkg/component').`
 			);
 		}
-		const comp_rel = posix_rel(componentPath);
+		const comp_rel = component_identity(componentPath);
 		const identity = regionIdentity(comp_rel, mark);
 		const iid = regionId(identity, salt);
 		const entryPath = ctx.virtualPathFor(id, iid);
@@ -1747,10 +1636,188 @@ export function transformHost(source, id, ctx) {
 		s.remove(node.start, node.end);
 	}
 
+	// ── Portable snippets — the compiler's ONE snippet job: LIVE-branding ───────────────────────
+	// A named `{#snippet}` handed to a component that may carry it across an island boundary — a
+	// PLAIN component (which may forward it into an island) or a hydrate ISLAND call site directly —
+	// can't cross as a function. Compile its body into a standalone island ENTRY and rewrite it to
+	// `og_portable(Entry, captures, url)` (see region-snippet.ts): it renders inline in the same graph
+	// AND carries a serializable descriptor, so the crossing swaps in the descriptor and the client
+	// side comes ALIVE. Parameterized snippets cross too — call-time args ride the descriptor's
+	// `__ogArgs` prop. Server/held/lake call sites are excluded (their children can't cross at all);
+	// snippets nested inside another portable snippet ship in the outer entry and are re-processed
+	// when THAT entry is transformed. Everything else (default children, bare content) is the
+	// runtime's job: static freeze or slot adoption.
+	const OG_PORTABLE = '__og_portable';
+	const portable_candidates: Array<{ comp: { start: number; name: string }; snip }> = [];
+	// SCOPE (load-bearing): branding a snippet at its definition site makes every render of it an
+	// ISOLATED app — `getContext` inside the body can no longer see the surrounding tree. So brand
+	// ONLY where crossing is genuinely required, never where plain Svelte semantics must hold:
+	//  - a PLAIN component site takes 0-ARG snippets only (the may-be-forwarded-into-an-island case;
+	//    parameterized snippets there are internal wiring — think Bits UI passing `{#snippet x(props)}`
+	//    between its own context-coupled components — and MUST stay native);
+	//  - a hydrate-ISLAND call site takes ANY arity (without branding the snippet would freeze wrong);
+	//  - LIBRARY code (node_modules, swept into the transform by the island-graph seam) is never
+	//    branded at all — its snippets were authored against plain Svelte.
+	const portable_allowed = !id.includes('node_modules');
+	const walk_portable = (nodes) => {
+		for (const node of nodes ?? []) {
+			if (node.type === 'Component') {
+				const base_name = String(node.name || '').split('.')[0];
+				const mark = marked_components.get(base_name);
+				const island_site = !!mark && !['lake', 'server', 'held'].includes(mark.strategy);
+				// GENERATED-OUTPUT GUARD (load-bearing): a component imported from one of ogygia's own
+				// virtuals (the client-binding stub, a wrapper/island/region module) means this source
+				// is ALREADY-TRANSFORMED output — its mark was consumed, so it reads as "plain" here.
+				// Branding its snippets would mint a PHANTOM portable island whose registration wipes
+				// the host's real wrapper entries (the csr=false server-island prerender crash). A
+				// re-transform of generated output must never widen the island set.
+				const import_spec = String(imports.get(base_name)?.node?.source?.value ?? '');
+				const from_generated = import_spec.startsWith('virtual:ogygia/');
+				for (const child of node.fragment?.nodes ?? []) {
+					if (child.type !== 'SnippetBlock' || !child.expression?.name) continue;
+					const zero_arg = (child.parameters?.length ?? 0) === 0;
+					if (island_site || (!mark && zero_arg && !from_generated)) {
+						portable_candidates.push({ comp: node, snip: child });
+					}
+				}
+			}
+			for (const k of CHILD_KEYS) if (node[k]?.nodes) walk_portable(node[k].nodes);
+		}
+	};
+	if (portable_allowed) walk_portable(ast.fragment?.nodes ?? []);
+
+	// Drop snippets nested inside another candidate's body — that content ships in the outer entry and
+	// is re-processed when the entry `.svelte` is transformed, so converting it here would double-edit.
+	const outer_candidates = portable_candidates.filter(
+		(c) =>
+			!portable_candidates.some(
+				(o) => o !== c && c.snip.start >= o.snip.start && c.snip.end <= o.snip.end
+			)
+	);
+
+	let portable_emitted = false;
+	const portable_imports: string[] = [];
+	const portable_seen = new Set<string>();
+	for (const { comp, snip } of outer_candidates) {
+		const name = snip.expression.name;
+		const body = snip.body?.nodes ?? [];
+		if (!body.length) continue;
+		// Snippet PARAMETERS are call-time inputs, not captures: the entry receives them as an
+		// `__ogArgs` prop (region-snippet.ts threads call args into it) and re-binds them verbatim.
+		const snip_params = snip.parameters ?? [];
+		const params_src = snip_params.length
+			? source.slice(snip_params[0].start, snip_params[snip_params.length - 1].end)
+			: '';
+		const param_names = new Set<string>();
+		const collect_param_names = (n) => {
+			if (!n || typeof n !== 'object') return;
+			if (Array.isArray(n)) return n.forEach(collect_param_names);
+			if (n.type === 'Identifier' && n.name) param_names.add(n.name);
+			for (const k in n) {
+				if (k === 'type' || k === 'start' || k === 'end') continue;
+				const v = n[k];
+				if (v && typeof v === 'object') collect_param_names(v);
+			}
+		};
+		collect_param_names(snip_params);
+		const { free, mutated } = collectCaptureInfo(body);
+		if (mutated.size > 0) continue; // writes host state — leave native (a snapshot can't write back)
+		const cleaned_imports: string[] = [];
+		const captures: string[] = [];
+		for (const nm of free) {
+			if (param_names.has(nm)) continue; // a snippet param — rides __ogArgs, never a capture
+			if (imports.has(nm)) {
+				// An ISLAND placement inside the snippet body must stay an island inside the entry: emit
+				// the ORIGINAL import (keeping its `with { wake: … }` attributes) so the entry's own
+				// transform pass re-marks it and rewrites the placement into a region. A cleaned import
+				// here silently demoted the island to a plain component (no region, no JS, and a
+				// top-level await inside it crashed the sync snippet render).
+				const info = imports.get(nm);
+				const text = marked_components.has(nm)
+					? source.slice(info.node.start, info.node.end).trim()
+					: info.cleaned.trim();
+				cleaned_imports.push(text);
+			} else if (host_declared.has(nm)) captures.push(nm);
+			// else: a global — referenced directly in the entry, needs no wiring.
+		}
+		const markup = source.slice(body[0].start, body[body.length - 1].end);
+		const hash = createHash('md5')
+			.update(`${markup}\0${captures.join(',')}\0${cleaned_imports.join('\n')}\0${params_src}`)
+			.digest('hex')
+			.slice(0, 12);
+		const identity = regionIdentity(`${rel_host}\0psnip:${hash}`, { strategy: 'hydrate' });
+		const iid = regionId(identity, salt);
+		const entryPath = ctx.virtualPathFor(id, iid).replace(JS_EXT, '.svelte');
+		if (!islands_by_id.has(iid)) {
+			const prop_names = snip_params.length ? ['__ogArgs = []', ...captures] : captures;
+			const synth =
+				`<script${lang}>\n` +
+				`\timport 'virtual:ogygia/transportables';\n` +
+				cleaned_imports.map((imp) => `\t${imp}\n`).join('') +
+				(prop_names.length
+					? `\t// svelte-ignore state_referenced_locally\n\tlet { ${prop_names.join(', ')} } = $props();\n`
+					: '') +
+				(snip_params.length
+					? `\t// svelte-ignore state_referenced_locally\n\tconst [${params_src}] = __ogArgs;\n`
+					: '') +
+				`</script>\n` +
+				markup +
+				'\n';
+			islands_by_id.set(iid, {
+				id: iid,
+				virtualPath: entryPath,
+				wrapperPath: wrapperPathFor(id, iid),
+				wrapperSource: '',
+				source: synth,
+				hostPath: id,
+				componentPath: entryPath,
+				server: false,
+				kind: 'hydrate',
+				lakes: [],
+				identity,
+				strategy: 'hydrate',
+				portable: true
+			});
+		}
+		const url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid);
+		const cap_obj = captures.length ? `{ ${captures.join(', ')} }` : '{}';
+		// SSR renders the entry inline (static import); the csr=false client loads it by url on wake.
+		// Two identical snippets dedupe to one iid → import/preload each entry ONCE (else a duplicate
+		// `__OgPS_<iid>` declaration).
+		const entry_ref = ctx.ssr ? `__OgPS_${iid}` : 'null';
+		if (!portable_seen.has(iid)) {
+			portable_seen.add(iid);
+			if (ctx.ssr) portable_imports.push(`import __OgPS_${iid} from ${JSON.stringify(entryPath)};`);
+			// (No static <head> modulepreload here — that preloaded every portable CANDIDATE in the
+			// host, rendered or not. The no-waterfall hint is emitted RENDER-GATED by Region.svelte
+			// instead: an island whose props carry a portable descriptor preloads its entry + deps
+			// alongside its own facade, so only snippets that actually cross a rendered boundary
+			// cost a fetch.)
+		}
+		s.remove(snip.start, snip.end);
+		const insert_at = comp.start + 1 + String(comp.name).length;
+		s.appendLeft(
+			insert_at,
+			` ${name}={${OG_PORTABLE}(${entry_ref}, ${cap_obj}, ${JSON.stringify(url)})}`
+		);
+		portable_emitted = true;
+	}
+
+	if (portable_emitted) {
+		const head =
+			`import { og_portable as ${OG_PORTABLE} } from 'ogygia/internal';\n` + portable_imports.join('\n') + '\n';
+		if (ast.instance) s.appendLeft(ast.instance.content.start, `\n${head}`);
+		else s.prepend(`<script${lang}>\n${head}</script>\n`);
+	}
+
+	// Snippet-only files that produced no island or portable work are untouched — behave as bailed.
+	if (!has_island_hint && !portable_emitted && islands_by_id.size === 0) return null;
+
 	return {
 		code: s.toString(),
 		map: s.generateMap({ hires: true, source: id, includeContent: true }),
-		islands: [...islands_by_id.values()]
+		islands: [...islands_by_id.values()],
+		hasIslandChildren: has_island_children
 	};
 }
 
@@ -1802,14 +1869,17 @@ export function transformTsRegions(source, id, ctx) {
 	const rel_host = path.relative(root, id).split(PATH_SEP).join('/');
 	const posix_rel = (abs) => path.relative(root, abs).split(PATH_SEP).join('/');
 
+	// Same policy as transformHost's resolve_component_path: $lib/relative → absolute file path,
+	// anything else (package specifier / alias) is kept verbatim and re-emitted for Vite to resolve.
 	const resolve_spec = (spec) => {
-		if (typeof spec !== 'string') return null;
+		if (typeof spec !== 'string' || !spec.trim()) return null;
 		if (spec === '$lib' || spec.startsWith('$lib/')) {
 			return path.join(ctx.libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
 		}
 		if (spec.startsWith('.')) return path.resolve(path.dirname(id), spec);
-		return null;
+		return spec;
 	};
+	const component_identity = (p) => (path.isAbsolute(p) ? posix_rel(p) : p);
 
 	const s = new MagicString(source);
 	const islands_by_id = new Map();
@@ -1841,7 +1911,7 @@ export function transformTsRegions(source, id, ctx) {
 		const componentPath = resolve_spec(spec);
 		if (!componentPath) {
 			throw new Error(
-				`[ogygia] ${rel_host}: held-region import '${local}' needs a resolvable module path ($lib/… or relative).`
+				`[ogygia] ${rel_host}: held-region import '${local}' needs a module specifier ($lib/…, relative, or a package specifier like 'pkg/component').`
 			);
 		}
 		// `region: 'raw'` bakes no schedule; a `wake:` mark bakes its (validated) schedule.
@@ -1853,7 +1923,7 @@ export function transformTsRegions(source, id, ctx) {
 			options.hydrate = hydrate;
 			if (hydrate === 'visible' && ctx.visibleMargin != null) options.hydrateMargin = ctx.visibleMargin;
 		}
-		const identity = regionIdentity(posix_rel(componentPath), { strategy: 'held', options });
+		const identity = regionIdentity(component_identity(componentPath), { strategy: 'held', options });
 		const iid = regionId(identity, salt);
 		const entryPath = ctx.virtualPathFor(id, iid);
 		if (!islands_by_id.has(iid)) {

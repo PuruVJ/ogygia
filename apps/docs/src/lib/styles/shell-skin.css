@@ -1,0 +1,747 @@
+/* The Shell chrome, painted in the SITE's design — the second rung of the same ladder as
+   doc-skin.css: ogygia owns STRUCTURE (`.og-*` hooks from Shell/Sidebar/Search/ShellBar),
+   we own PIXELS. We do NOT import `ogygia/content/theme.css`; `shell.css` gives layout only,
+   and everything visual here comes from the docs tokens (app.css), so the site looks exactly
+   as it did on the bespoke SideNav — same palette, same fonts, same feel. */
+
+/* ── token bridge: the few --og-* vars shell.css's layout reads ── */
+:root {
+	--og-bg: var(--bg);
+	--og-bg-raised: var(--bg-raised);
+	--og-bg-subtle: var(--bg-sunken);
+	--og-text: var(--text);
+	--og-text-dim: var(--text-dim);
+	--og-text-faint: var(--text-faint);
+	--og-line: var(--line);
+	--og-font: var(--font-body);
+	--og-mono: var(--font-mono);
+	--og-accent: var(--accent);
+	--og-side-w: 17rem;
+	--og-cheader-h: 3.5rem;
+	--og-bar-h: 3.25rem;
+}
+
+/* ── skip link (Shell's own) ── */
+.og-skip {
+	position: fixed;
+	top: 0.75rem;
+	left: 0.75rem;
+	z-index: 200;
+	padding: 0.55rem 0.9rem;
+	border-radius: var(--r-sm);
+	background: var(--accent);
+	color: var(--text-on-invert);
+	font: 600 0.8125rem/1 var(--font-body);
+	text-decoration: none;
+	transform: translateY(-150%);
+	transition: transform 0.18s ease;
+}
+.og-skip:focus-visible {
+	transform: translateY(0);
+	outline: none;
+}
+.og-cmain:focus {
+	outline: none;
+}
+
+/* ── the panel's brand row (headerless form) — the old `.side-brand` recipe ── */
+.og-cside-brand {
+	padding: 0.2rem 0.4rem 0.75rem;
+	border-bottom: 1px solid color-mix(in srgb, var(--accent-line) 40%, var(--line));
+}
+
+/* ── header (unused in the headerless form; kept for pages that opt back in) ── */
+.og-cheader {
+	border-bottom: 1px solid var(--line);
+	background: color-mix(in srgb, var(--bg) 88%, transparent);
+	backdrop-filter: blur(8px);
+}
+.og-cheader-brand {
+	font: 600 1.05rem/1 var(--font-display);
+	letter-spacing: -0.01em;
+	color: var(--text);
+	text-decoration: none;
+}
+.og-cheader-link {
+	font: 500 0.84375rem/1 var(--font-body);
+	color: var(--text-dim);
+	text-decoration: none;
+}
+.og-cheader-link:hover {
+	color: var(--text);
+}
+
+/* ── sidebar nav — the old SideNav's FLOATING PANEL on the ogygia hooks: detached from the
+      viewport edges, curved, glassy, with the site's panel shadow. Same recipe as the old `.side`. ── */
+.og-cside {
+	position: fixed;
+	z-index: 50;
+	top: var(--side-gap, 0.85rem);
+	bottom: var(--side-gap, 0.85rem);
+	left: var(--side-gap, 0.85rem);
+	width: var(--og-side-w);
+	height: auto;
+	padding: 0.85rem 0.55rem 0.9rem 0.7rem;
+	border: 1px solid color-mix(in srgb, var(--accent-line) 55%, var(--line));
+	border-radius: 14px;
+	background:
+		linear-gradient(
+			165deg,
+			color-mix(in srgb, var(--accent-deep) 28%, transparent) 0%,
+			transparent 42%
+		),
+		color-mix(in srgb, var(--bg-raised) 92%, transparent);
+	box-shadow:
+		var(--shadow-panel),
+		inset 0 1px 0 color-mix(in srgb, var(--accent) 8%, transparent);
+	backdrop-filter: blur(16px) saturate(1.15);
+	-webkit-backdrop-filter: blur(16px) saturate(1.15);
+	overflow-y: auto;
+}
+/* The frame no longer reserves a grid column for the sidebar — the panel floats over the page,
+   so the content clears it with padding instead (the old site-chrome.css approach). */
+@media (min-width: 901px) {
+	.og-cframe {
+		display: block;
+		padding-left: calc(var(--og-side-w) + var(--side-gap, 0.85rem) * 2);
+	}
+}
+/* Old `.side-cat` rhythm: sections separated by a hairline, tight link stacks. The OUTER list
+   (groups) breathes 1.15rem — that's the space ABOVE each divider; the 0.85rem padding is the
+   space below it. Inner lists stay tight. */
+.og-nav-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+}
+.og-sidebar > .og-nav-list {
+	gap: 1.15rem;
+}
+.og-nav-group + .og-nav-group {
+	padding-top: 0.85rem;
+	border-top: 1px solid color-mix(in srgb, var(--accent-line) 35%, var(--line));
+}
+/* Roving focus: draw the ring INSIDE the row so the panel's scroll clipping can't cut it off. */
+.og-shell .og-nav-link:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* Old `.side-cat-label`: quiet by default, accent only on the section holding the current page. */
+.og-nav-label {
+	display: block;
+	padding: 0.4rem 0.45rem;
+	font: 600 0.6875rem/1 var(--font-mono);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-dim);
+}
+.og-nav-group:has(.og-active) .og-nav-label {
+	color: var(--accent);
+}
+.og-nav-link {
+	position: relative; /* anchors the .og-nav-chip highlight */
+	display: flex;
+	align-items: center;
+	min-height: 1.85rem;
+	padding: 0.32rem 0.55rem 0.32rem 0.7rem;
+	border-radius: 8px;
+	font: 500 0.84375rem/1.25 var(--font-body);
+	letter-spacing: -0.014em;
+	color: var(--text-dim);
+	text-decoration: none;
+	transition:
+		color 140ms ease,
+		background 140ms ease;
+}
+.og-nav-link:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
+}
+.og-nav-link[aria-current='page'],
+.og-nav-link.og-active {
+	color: var(--text);
+	font-weight: 600;
+}
+
+/* ── The gliding active marker. The ogygia Sidebar renders `<span class="og-nav-chip">` on the
+      active row only; we style it as the highlight (a background box behind the label) and give it a
+      shared `view-transition-name`, so the SPA router's View Transition captures it at the OLD active
+      row and the NEW one and physically slides the chip between them across navigation. The link's
+      own background is dropped above so the chip is the sole highlight (no double). ── */
+.og-nav-chip {
+	position: absolute;
+	inset: 0;
+	z-index: -1; /* behind the label text */
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--accent-deep) 78%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-line) 45%, transparent);
+	view-transition-name: og-nav-active;
+	pointer-events: none;
+}
+/* Each nav row is its own VT group (the Sidebar sets a per-row `view-transition-name` inline); tag
+   them all with one class and stack them ABOVE the chip, so the chip glides beneath the labels
+   rather than painting over them mid-slide. */
+.og-nav-link,
+.og-nav-label {
+	view-transition-class: phnav;
+}
+::view-transition-group(*.phnav) {
+	z-index: 10;
+}
+::view-transition-group(og-nav-active) {
+	z-index: 0;
+	animation-duration: 280ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-group(og-nav-active) {
+		animation: none;
+	}
+}
+
+/* ── search trigger — dressed as the old panel's INPUT (`.side-search-input` recipe), so the
+      floating panel reads the same: full-width bordered field, quiet placeholder, kbd at right. ── */
+.og-search-trigger {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.4rem 0.5rem 0.4rem 0.65rem;
+	border: 1px solid color-mix(in srgb, var(--accent-line) 45%, var(--line));
+	border-radius: 9px;
+	background: color-mix(in srgb, var(--bg-sunken) 60%, transparent);
+	color: var(--text-faint);
+	font: 500 0.84375rem/1.25 var(--font-body);
+	letter-spacing: -0.014em;
+	text-decoration: none;
+	transition:
+		border-color 140ms ease,
+		background 140ms ease;
+}
+.og-search-trigger:hover,
+.og-search-trigger:focus-visible {
+	border-color: var(--accent);
+	background: var(--bg-raised);
+}
+.og-search-trigger-label {
+	color: var(--text-faint);
+}
+.og-search-kbd {
+	margin-left: auto;
+	padding: 0.1rem 0.35rem;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	background: var(--bg-sunken);
+	font: 500 0.6875rem/1 var(--font-mono);
+	color: var(--text-faint);
+}
+
+/* ── the ⌘K palette (the ONE search UX) — portaled to <body>, so it needs its FULL overlay
+      geometry here, not just colors (without theme.css nothing else positions it: unstyled it
+      rendered in normal flow at the page bottom). Structure from the ogygia recipe, docs tokens. ── */
+.og-search-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	background: rgb(0 0 0 / 0.5);
+	backdrop-filter: blur(3px);
+}
+.og-search-panel {
+	position: fixed;
+	top: 12vh;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 101;
+	display: flex;
+	flex-direction: column;
+	width: calc(100% - 2rem);
+	max-width: 37rem;
+	max-height: 70vh;
+	overflow: hidden;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r-md);
+	background: var(--bg-raised);
+	box-shadow: var(--shadow-panel);
+	color: var(--text);
+	font-family: var(--font-body);
+}
+.og-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+.og-search-field {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.85rem 1rem;
+	border-bottom: 1px solid var(--line);
+	color: var(--text-faint);
+}
+.og-search-scene-input {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	background: none;
+	color: var(--text);
+	font: 400 0.95rem/1.4 var(--font-body);
+	outline: none;
+}
+.og-search-scene-input::placeholder {
+	color: var(--text-faint);
+}
+.og-search-scene-body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 0.4rem;
+}
+.og-search-results {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.og-search-hit {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	padding: 0.55rem 0.7rem;
+	border-radius: var(--r-sm);
+	text-decoration: none;
+	color: var(--text-dim);
+	transition: background-color 140ms ease;
+}
+.og-search-hit:hover,
+.og-search-hit[data-selected],
+.og-search-hit[aria-selected='true'] {
+	background: color-mix(in srgb, var(--accent-deep) 55%, transparent);
+	color: var(--text);
+}
+.og-search-hit-title {
+	color: var(--text);
+	font-weight: 600;
+	font-size: 0.84375rem;
+}
+.og-search-hit-heading {
+	font-weight: 400;
+	color: var(--text-dim);
+}
+.og-search-hit-excerpt {
+	font-size: 0.8125rem;
+	color: var(--text-dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.og-search-hit-section {
+	font-size: 0.625rem;
+	color: var(--text-faint);
+}
+.og-search-empty,
+.og-search-hint,
+.og-search-error {
+	padding: 1.75rem 1rem;
+	text-align: center;
+	color: var(--text-faint);
+	font: 400 0.8125rem/1.5 var(--font-body);
+}
+
+/* ── the panel's tools ROW: the search field grows, the theme button rides at its right — the old
+      panel's search-line shape. ── */
+.og-cside-tools {
+	flex-direction: row;
+	align-items: center;
+	gap: 0.4rem;
+	margin-bottom: 0.35rem;
+}
+.og-cside-search {
+	flex: 1;
+	min-width: 0;
+}
+
+/* ── theme toggle: the old `.side-theme` ghost button — borderless, quiet, 2rem square. It lives
+      in the brand row beside the GitHub icon and MUST match its color exactly (`--text-faint`);
+      the triple selector outranks the component's scoped `color: inherit`. ── */
+.og-shell .og-cside .og-theme-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2rem;
+	height: 2rem;
+	padding: 0;
+	border: none;
+	border-radius: 8px;
+	background: none;
+	color: var(--text-faint);
+	cursor: pointer;
+	transition:
+		color 140ms ease,
+		background 140ms ease;
+}
+.og-shell .og-cside .og-theme-toggle:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
+}
+/* All three bar buttons (search / theme / menu) are the SAME quiet 2.25rem square — one color,
+   one alignment. The triple selector outranks ThemeToggle's scoped `color: inherit`. */
+.og-shell .og-bottombar .og-cbar-btn,
+.og-shell .og-bottombar .og-theme-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	padding: 0;
+	border: none;
+	border-radius: 8px;
+	background: none;
+	color: var(--text-dim);
+	cursor: pointer;
+	transition: color 140ms ease;
+}
+.og-shell .og-bottombar .og-cbar-btn:hover,
+.og-shell .og-bottombar .og-theme-toggle:hover {
+	color: var(--text);
+}
+.og-seg {
+	border: 1px solid var(--line);
+	border-radius: var(--r-sm);
+	background: var(--bg-sunken);
+}
+.og-seg-btn {
+	color: var(--text-dim);
+}
+.og-seg-btn[aria-pressed='true'] {
+	background: var(--bg-raised);
+	color: var(--text);
+}
+
+/* ── mobile bottom bar + sheet — the production `.side-bottombar` recipe, verbatim ── */
+.og-bottombar {
+	padding: 0 0.85rem env(safe-area-inset-bottom, 0px);
+	border-top: 1px solid color-mix(in srgb, var(--accent-line) 50%, var(--line));
+	background:
+		linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--accent-deep) 18%, transparent) 0%,
+			transparent 70%
+		),
+		color-mix(in srgb, var(--bg-raised) 94%, transparent);
+	box-shadow: 0 -8px 28px -18px rgb(0 0 0 / 0.55);
+	backdrop-filter: blur(16px) saturate(1.15);
+	-webkit-backdrop-filter: blur(16px) saturate(1.15);
+}
+/* Brand: the ogygia mark (inline data-URI of Logo.svelte's strokes) + the wordmark, accent like
+   production. The bar is an island, so the icon rides CSS rather than markup. */
+.og-cbar-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.55rem;
+	min-width: 0;
+	font: 600 0.95rem/1 var(--font-display);
+	color: var(--accent);
+	text-decoration: none;
+}
+.og-cbar-brand::before {
+	content: '';
+	width: 20px;
+	height: 20px;
+	flex-shrink: 0;
+	background-color: currentColor;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 26 Q16 20 28 26'/%3E%3Cpath d='M16 21.5 Q14.5 14 17 8'/%3E%3Cpath d='M17 8 Q12 5 7.5 7'/%3E%3Cpath d='M17 8 Q17 4 21 3.5'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+}
+.og-sheet {
+	border-top: 1px solid color-mix(in srgb, var(--accent-line) 55%, var(--line));
+	border-radius: 16px 16px 0 0;
+	background: color-mix(in srgb, var(--bg-raised) 96%, transparent);
+	backdrop-filter: blur(16px) saturate(1.15);
+	-webkit-backdrop-filter: blur(16px) saturate(1.15);
+	color: var(--text);
+}
+/* Slide-up riding Bits' data-state. Open takes the NATURAL sheet curve (fast start, long soft
+   settle — the iOS-sheet feel); close stays brisk with the old curve. */
+.og-sheet[data-state='open'] {
+	animation: doc-sheet-in 420ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.og-sheet[data-state='closed'] {
+	animation: doc-sheet-out 260ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.og-sheet-backdrop {
+	background: rgb(0 0 0 / 0.45);
+}
+@keyframes doc-sheet-in {
+	from {
+		transform: translate3d(0, calc(100% + 0.75rem), 0);
+	}
+}
+@keyframes doc-sheet-out {
+	to {
+		transform: translate3d(0, calc(100% + 0.75rem), 0);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.og-sheet[data-state='open'],
+	.og-sheet[data-state='closed'] {
+		animation-duration: 0.01ms;
+	}
+}
+
+/* ── on-this-page rail: FIXED, not sticky — it holds its place while the page scrolls. The
+      `.og-aside` grid column stays in flow as the positioning reference; the inner `.og-toc`
+      goes fixed at its natural x (no left/right → static position), pinned near the top. ── */
+.og-doc .og-aside {
+	position: static;
+}
+.og-doc .og-toc {
+	position: fixed;
+	top: 1.5rem;
+	width: 12.5rem;
+	max-height: calc(100vh - 3rem);
+	overflow-y: auto;
+}
+.og-toc-link {
+	color: var(--text-faint);
+	text-decoration: none;
+	font: 400 0.8125rem/1.6 var(--font-body);
+}
+.og-toc-link:hover {
+	color: var(--text);
+}
+.og-toc-link.og-active {
+	color: var(--accent);
+}
+
+/* On-this-page rail with a sliding active marker. The OnThisPage island's scrollspy feeds
+   --og-thumb-y / --og-thumb-h and toggles .og-has-active as you scroll; this ::before thumb
+   glides between rows to the heading in view. */
+.og-toc-list {
+	position: relative;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	border-left: 1.5px solid var(--line);
+}
+.og-toc-list::before {
+	content: '';
+	position: absolute;
+	left: -1.5px;
+	top: 0;
+	width: 1.5px;
+	height: var(--og-thumb-h, 0px);
+	transform: translateY(var(--og-thumb-y, 0px));
+	background: var(--accent);
+	border-radius: 2px;
+	opacity: 0;
+	transition:
+		transform 340ms cubic-bezier(0.22, 0.7, 0.24, 1),
+		height 340ms cubic-bezier(0.22, 0.7, 0.24, 1),
+		opacity 160ms ease;
+}
+.og-toc-list.og-has-active::before {
+	opacity: 1;
+}
+.og-toc-item {
+	padding-left: 0.85rem;
+}
+.og-toc-d3 {
+	padding-left: 1.7rem;
+}
+.og-toc-d4 {
+	padding-left: 2.55rem;
+}
+@media (prefers-reduced-motion: reduce) {
+	.og-toc-list::before {
+		transition: opacity 160ms ease;
+	}
+}
+
+/* Inline diff marks (the +++added+++ / ---removed--- dialect). theme.css styles these, but this
+   site ships its own skin, so bring the tinted pill here — hero code, showcase snippets, and doc
+   fences all use it to put focus on a line (e.g. the `wake:` attribute). */
+.og-mark {
+	border-radius: 0.3em;
+	padding: 0.1em 0.3em;
+	margin: -0.1em -0.05em;
+}
+.og-mark-add {
+	background: color-mix(in srgb, var(--accent) 17%, transparent);
+}
+.og-mark-remove,
+.og-mark-del {
+	background: color-mix(in srgb, var(--warn, #e5484d) 15%, transparent);
+	text-decoration: line-through;
+	text-decoration-thickness: 0.08em;
+}
+
+/* ── CodeChrome: every snippet gets a TOP BAR — a header strip across the block with the copy +
+      permalink actions at its right. The actions live inside the `<pre>`, so the `.code-only`
+      wrapper is the positioning context and reserves the bar's height with padding.
+      SCOPED to `.og-body` (0,2,0) ON PURPOSE: `code-block.css` sets `.code-only { padding: … }` (a
+      shorthand that resets padding-top) at equal specificity, so a plain `.code-only` selector here
+      would win or lose by CSS load order — which SPA navigation flips, hence the actions overlapping
+      the first line "on nav" but not on a fresh load. The `.og-body` prefix wins by specificity
+      instead, and only reserves the bar where CodeChrome actually adds actions (`.og-body pre`). ── */
+.og-body .code-only {
+	position: relative;
+	padding-top: 3.4rem;
+}
+/* shell.css (@layer ogygia) now ships a default header bar that reserves its height as PRE
+   padding — this skin reserves on the wrapper above instead, so zero the pre-side reservation
+   (unlayered wins over the layer). Without this, docs fences get both reservations = double gap. */
+.og-body pre:where([data-lang], [data-file]) {
+	padding-top: 0;
+}
+.og-code-actions {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 2.35rem;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 0.3rem;
+	padding: 0 0.5rem;
+	border-bottom: 1px solid var(--line);
+	border-radius: var(--r-md) var(--r-md) 0 0;
+	/* a few % of ink over the panel bg — reads as a strip in BOTH themes (a raised-bg mix is
+	   invisible in light mode, where raised is white on a near-white panel) */
+	background: color-mix(in srgb, var(--text) 6%, var(--bg-sunken));
+}
+/* Filename / language label — CodeChrome adds it as the first child of the bar, so the header is
+   never empty. `margin-right: auto` takes the left and shoves the action buttons to the right. */
+.og-code-name {
+	margin-right: auto;
+	min-width: 0;
+	max-width: 62%;
+	padding-left: 0.35rem;
+	font: 400 0.75rem/1 var(--font-mono);
+	color: var(--text-dim);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* a bare language tag (no authored filename) reads quieter + uppercased, so it doesn't pose as one */
+.og-code-name:not([data-file]) {
+	text-transform: uppercase;
+	font-size: 0.68rem;
+	letter-spacing: 0.06em;
+}
+.og-code-actions :is(button, a) {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.75rem;
+	height: 1.75rem;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: none;
+	color: var(--text-faint);
+	cursor: pointer;
+	text-decoration: none;
+	transition:
+		color 0.15s ease,
+		background 0.15s ease;
+}
+.og-code-actions :is(button, a):hover,
+.og-code-actions :is(button, a):focus-visible {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent-deep) 42%, transparent);
+}
+.og-body pre[data-copied] .og-copy,
+.og-code-link[data-linked] {
+	color: var(--accent);
+}
+
+/* ── Code-group (`::: code-group`) — the tab bar IS the code block's top chrome: tab labels on the
+      LEFT, the copy + permalink actions at the RIGHT end of the same strip. The `.og-tabs` wrapper
+      owns the frame; each panel's `.code-only` drops its own border/bar and the visible panel's
+      `.og-code-actions` (absolute, anchored to `.og-tabs`) rides the bar's right end. ── */
+.og-tabs {
+	position: relative;
+	margin: 1.5rem 0;
+	border: 1px solid var(--line);
+	border-radius: var(--r-md);
+	background: var(--bg-sunken);
+	overflow: hidden;
+}
+/* the bar is built on hydration and inserted as the first child (see TabGroupIsland) */
+.og-tabs-bar {
+	position: relative;
+	display: flex;
+	align-items: stretch;
+	min-height: 2.6rem;
+	padding: 0 5.5rem 0 0.35rem; /* right pad keeps a long tab row clear of the actions overlay */
+	border-bottom: 1px solid var(--line);
+	background: color-mix(in srgb, var(--text) 6%, var(--bg-sunken)); /* same strip as the code bar */
+}
+.og-tabs-tab {
+	appearance: none;
+	border: none;
+	background: none;
+	cursor: pointer;
+	padding: 0 0.7rem;
+	font: 500 0.8125rem/1 var(--font-body);
+	color: var(--text-faint);
+	display: inline-flex;
+	align-items: center;
+	transition: color 0.15s ease;
+}
+.og-tabs-tab:hover {
+	color: var(--text);
+}
+.og-tabs-tab[aria-selected='true'] {
+	color: var(--text);
+}
+.og-tabs-tab:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+	border-radius: 4px;
+}
+/* the sliding underline the island positions inline (transform/width/opacity) */
+.og-tabs-marker {
+	position: absolute;
+	bottom: -1px;
+	left: 0;
+	height: 2px;
+	background: var(--accent);
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		transform 0.25s ease,
+		width 0.25s ease;
+}
+/* inside a group the panel's own frame is gone — the group owns it. `.og-body` prefix so this
+   (0,3,0) always beats the `.og-body .code-only` reservation above, order-independent. */
+.og-body .og-tabs .code-only {
+	position: static;
+	margin: 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	padding-top: 1.1rem;
+}
+/* the visible panel's actions ride the tab bar's right end (anchored to `.og-tabs`) */
+.og-tabs .og-code-actions {
+	top: 0;
+	right: 0;
+	left: auto;
+	width: auto;
+	height: 2.6rem;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	padding: 0 0.4rem;
+}

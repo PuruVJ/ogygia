@@ -1,0 +1,149 @@
+---
+title: Theming
+summary: The --og-* token system, light and dark modes, and the live Palette demo.
+related:
+  - guides/tabs-and-code
+  - showcase/kitchen-sink
+---
+
+<script>
+	import Palette from '$lib/playground/demos/Palette.svelte' with { wake: 'visible' };
+</script>
+
+Every color, radius, and surface in the design system comes from a CSS custom property named `--og-*`. Change a token and everything that uses it updates at once. Because they are plain CSS variables, theming works with no JavaScript and adapts to light or dark automatically.
+
+## The token system
+
+Tokens are declared on `:root` and consumed everywhere. Components never hard-code a color; they read a token, so a single override cascades through the whole site.
+
+```css
+:root {
+	/* surfaces */
+	--og-bg: #ffffff;
+	--og-bg-subtle: #f7f7f8;
+	--og-line: #e4e4e8;
+
+	/* text */
+	--og-text: #1c1c21;
+	--og-text-muted: #6b6b76;
+
+	/* brand */
+	--og-accent: #0d9488;
+	--og-accent-hover: #0f766e;
+
+	/* shape */
+	--og-radius: 12px;
+	--og-thumb: #ffffff;
+}
+```
+
+## Key tokens
+
+You rarely touch more than a handful. These are the ones worth knowing.
+
+| Token | Controls |
+| --- | --- |
+| `--og-bg` | The page background. |
+| `--og-bg-subtle` | Cards, code blocks, and inset panels. |
+| `--og-line` | Borders and dividers. |
+| `--og-text` | Body text color. |
+| `--og-text-muted` | Secondary text and captions. |
+| `--og-accent` | Links, active states, and focus rings. |
+| `--og-accent-hover` | The accent's hover shade. |
+| `--og-radius` | The default corner radius. |
+
+> **One accent to rule them all.** Most rebrands are a single line: change `--og-accent`. Links, buttons, active sidebar items, and focus outlines all read it, so they recolor together.
+
+## Light and dark
+
+Dark mode is a second block of tokens, applied when the user (or the OS) asks for it. The components do not change — only the values behind the tokens do.
+
+```css
+@media (prefers-color-scheme: dark) {
+	:root {
+		--og-bg: #101014;
+		--og-bg-subtle: #17171d;
+		--og-line: #26262e;
+		--og-text: #e8e8ee;
+		--og-text-muted: #9a9aa6;
+		--og-thumb: #1c1c22;
+	}
+}
+```
+
+You can also force a mode by stamping an attribute on the root, which is how a theme toggle works:
+
+```css
+:root[data-theme='dark'] {
+	--og-bg: #101014;
+	--og-text: #e8e8ee;
+}
+```
+
+```svelte
+<script lang="ts">
+	let theme = $state<'light' | 'dark'>('light');
+
+	$effect(() => {
+		document.documentElement.dataset.theme = theme;
+	});
+</script>
+
+<button onclick={() => (theme = theme === 'light' ? 'dark' : 'light')}>
+	Toggle theme
+</button>
+```
+
+## Try it live
+
+The Palette below is a live island. Drag the accent slider and watch the demo recolor in real time — it writes straight to `--og-accent`, so the change ripples through everything downstream.
+
+<Palette />
+
+Here is how it is dropped into the page:
+
+```svelte
+<script>
+	import Palette from '$lib/playground/demos/Palette.svelte' with { wake: 'visible' };
+</script>
+
+<Palette />
+```
+
+And the heart of it is just setting a custom property from state:
+
+```svelte
+<script lang="ts">
+	let hue = $state(174);
+	const accent = $derived(`hsl(${hue} 84% 32%)`);
+
+	$effect(() => {
+		document.documentElement.style.setProperty('--og-accent', accent);
+	});
+</script>
+
+<input type="range" min="0" max="360" bind:value={hue} />
+```
+
+## Scoping a theme
+
+You do not have to theme the whole page. Because tokens cascade, you can override them on any container to theme a single section — a callout, a demo, a highlighted card.
+
+```css
+.callout-warning {
+	--og-accent: #d97706;
+	--og-bg-subtle: #fffbeb;
+	border-left: 3px solid var(--og-accent);
+}
+```
+
+Everything inside `.callout-warning` now reads the amber accent while the rest of the page keeps teal. This is the same mechanism the design system uses for its own callout variants.
+
+## Best practices
+
+- **Never hard-code a color in a component.** Read a token so overrides reach it.
+- **Theme with the accent first.** It carries most of the brand.
+- **Style both modes.** Pair every light value with a dark one, or use `prefers-color-scheme`.
+- **Scope locally when you need variety.** Override tokens on a container instead of adding new ones.
+
+See the tokens exercised across every element on the [kitchen sink](../showcase/kitchen-sink) page.

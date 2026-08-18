@@ -1,18 +1,12 @@
 /**
- * Docs navigation as a Kit remote (devalue-safe metadata — no bodies).
- * Section + order are read off each entry's `filePath` (the `NN-` prefixes); the sidebar island
- * awaits `docNav()` and groups it. Bodies come from `docs.get()` in the route.
+ * The docs wire layer — ogygia remotes over the server-only `docs` site. `nav` is the sidebar tree
+ * (`NavTree`, hrefs baked for `/docs`, no bodies). `doc` resolves one page's view and BAKES its body
+ * into a region ticket, so the corpus stays server-side and the page component imports only this —
+ * never the collection. The `.svx` demos inside a body wake from the baked ticket exactly as they
+ * would in-pass. (Search is client-side — a worker over the static `/search.json`; see `SideNav`.)
  */
-import { withRemotes } from 'ogygia/content/server';
-import { docs, type DocData } from './collections';
-import { parseDocPath } from './toc-items';
+import { remotes } from 'ogygia/content/server';
+import { docs } from './docs.server';
 
-// ONE definition (`docs` in collections.ts, browser-safe). `withRemotes` (server-only, imports
-// $app/server) augments it with the Kit remotes — fine here in a .remote.ts. The `<DocData>` is
-// explicit because `withRemotes` takes an opaque handle and can't infer the entry type from it.
-export const docNav = withRemotes<DocData>(docs).list({
-	map: (e) => {
-		const { section, sectionOrder, order } = parseDocPath(e.filePath ?? '');
-		return { slug: e.id, title: e.data.title, section, sectionOrder, order };
-	}
-});
+// `meta` = the leak-free shell bundle (`{ nav, switcher }`) the Shell needs; `doc` = one page view.
+export const { nav, meta, page } = remotes(docs, { base: '/docs' });

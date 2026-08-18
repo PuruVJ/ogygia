@@ -39,7 +39,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['frame-dedupe.ts', true, 'frame store: identical twins share ONE endpoint fetch'],
 	['frame-batch.ts', true, 'batch frame stream: one response, a frame per call (nav OOO)'],
 	['frame-single-flight.ts', true, 'single-flight: command returns the re-rendered region, no extra fetch'],
-	['frame-weave.ts', true, 'route weaving: SPA nav pulls all load regions in ONE batch, no waterfall'],
+	['frame-nav-batch.ts', true, 'single-flight nav: SPA nav pulls all load regions in ONE batch, no waterfall'],
 	['frame-ooo.ts', true, 'out-of-order streaming: staggered regions flush fast-first, not declaration order'],
 	['defer-timing.ts', true, 'server-island fetch timing load/idle/visible/media'],
 	['remote.ts', true, 'client query+args+refresh, command, live'],
@@ -53,12 +53,17 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['router-race.ts', true, 'overlapping SPA navigations / stale-swap guards'],
 	['dashboard.ts', true, 'page shim, island goto, client table, chart'],
 	['page-state.ts', true, 'page.url/params/route/status/data/form/error/state in islands'],
+	['split-brain.ts', true, 'REGRESSION: $app/stores-first island shared with a csr=true page (og-region identity)'],
+	['region-mixed.ts', true, 'direct <Region> in a component: island on csr=false, plain (Kit-hydrated) on csr=true'],
+	['pure-csr.ts', false, 'pure csr=true app: direct interactive <Region> degrades to Kit, no runtime chunk'],
 	['mixed.ts', true, 'csr=true coexistence + opt-in router'],
 	['portable-bindings.ts', true, 'static/dynamic/list bindings + shared-entry dedupe'],
 	['transportables.ts', true, 'static [ogygia.wire] codec: cross-island live object, no leak, alias-proof'],
 	['continuity.ts', true, 'named wire codec: session-lifetime cart survives SPA nav, merge, tab-isolated'],
 	['context.ts', true, 'createContext + <Context>: subtree provide, DOM-bridged, live across roots'],
 	['island-children.ts', true, 'host children/snippets cross into a hydrate island (synth entry)'],
+	['portable-snippet.ts', true, 'a snippet forwarded THROUGH a plain shell into an island crosses + comes alive'],
+	['snippet-islands.ts', true, 'islands in a {#snippet} to a plain shell: marks survive + top-level await SSRs'],
 	['interaction.ts', true, "wake:'interaction' — cold until used, click replay, typing survives"],
 	['presets.ts', false, 'transform-level: region syntax + presets + errors'],
 	['dedup.ts', false, 'same-component-two-strategies → ONE client chunk']
@@ -88,8 +93,8 @@ async function waitForServer(timeoutMs = 30000) {
 // ── 1. build ────────────────────────────────────────────────────────────────
 if (!noBuild) {
 	banner('▸ Building library');
+	// The tsdown config's svelte plugin copies `.svelte` sources into dist — no separate copy step.
 	if (!sh('node', ['node_modules/tsdown/dist/run.mjs'], { cwd: join(repo, 'packages/ogygia') })) process.exit(1);
-	if (!sh('node', ['scripts/copy-svelte.mjs'], { cwd: join(repo, 'packages/ogygia') })) process.exit(1);
 	// ── prerender-secret warning, BOTH directions ─────────────────────────────
 	// Prerendered pages mint ~forever capabilities. With NO stable OGYGIA_SECRET the build must
 	// warn (once — ServerIsland + swr-lake mints share the guard); WITH one it must stay silent.

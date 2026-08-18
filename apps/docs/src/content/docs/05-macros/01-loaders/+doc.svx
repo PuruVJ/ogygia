@@ -1,0 +1,68 @@
+---
+title: loader
+summary: The content loaders: markdown, folder, json, git. Each takes a literal glob (or a repo spec) and becomes a source for content({ loader }). The macro owns the import.meta.glob plumbing, so you never write it.
+related:
+  - content/collections
+  - macros/overview
+  - content/blocks
+---
+
+`import.meta.og.loader.*` is how you point a [content collection](/docs/content/collections) at static files. You give it a **literal glob** (or, for `git`, a repo spec); the macro owns the `import.meta.glob(…)` wrapper and hands `content()` a finished source.
+
+```ts title=docs.server.ts
+import { content } from 'ogygia/content';
+
+export const docs = content({
+  loader: import.meta.og.loader.markdown('./content'),
+  schema
+});
+```
+
+That's the whole loader: **a directory**. No glob, no `import.meta.glob`, no `{ eager }`, no wrapper import. Each loader owns an opinionated pattern under the directory you point it at (markdown: every `.svx` / `.md`, recursively). Compare the old shape, `markdown(import.meta.glob('./content/**/*.svx', { eager: true }))`, and you can see what the macro absorbs.
+
+## The four loaders
+
+Each takes a **directory** and returns a `Source`. They differ only in what they parse. Each derives its own opinionated file set under that directory, so you never author a glob for the conventional case.
+
+```ts
+// markdown / .svx — every *.svx / *.md below the directory; headings free on `meta.headings`
+import.meta.og.loader.markdown('./docs')
+
+// filesystem convention — +doc.svx pages + +meta.json section labels, NN- ordering
+import.meta.og.loader.folder('../content/docs')
+
+// JSON data files — every *.json below the directory
+import.meta.og.loader.json('./authors')
+
+// straight from another git repository — no committed copy, no sync script
+import.meta.og.loader.git('sveltejs/svelte@main:documentation/docs')
+```
+
+An argument with glob magic (`*`, `{}`, `?`), or a single file, is passed through verbatim: `markdown('./docs/**/*.svx')` still means exactly that. This is the escape hatch for a corpus the convention doesn't fit. The directory is the default form.
+
+- **`markdown(glob)`**: a markdown / `.svx` collection. Bodies compile through the markdown pipeline; each entry's `meta.headings` is populated for on-page tables of contents.
+- **`folder(glob)`**: the filesystem-convention preset. Its default glob picks up `+doc.svx` pages and `+meta.json` section files: `NN-` prefixes become order, and each `+meta.json` becomes a section's label. This is what a docs site uses.
+- **`json(glob)`**: a data collection, one entry per JSON file.
+- **`git(spec)`**: sources a collection straight from another repository. The `spec` is `owner/repo[@ref][:path]`; the plugin materializes a shallow checkout at build (cached under `node_modules/.ogygia`, so a warm CI clones nothing) and points the glob at it. This is how you build a docs site on someone else's source without a committed copy or a sync script.
+
+Each accepts the same second `opts` argument the underlying builder takes. `folder` and `git` forward folder options (`page`, `meta`, `convention`), so ordering and labelling are yours to shape.
+
+One option is the macro's own, consumed at compile and never forwarded: **`preset`**, a literal name from [`content.presets`](/docs/reference/api#ogygiavite-content), opting this whole collection into a markdown variant (different `overrides`, themes, transformers) without touching the app default:
+
+```ts
+loader: import.meta.og.loader.folder('../content/blog', { preset: 'plain' })
+```
+
+Each opted-in file compiles as its own module *variant*, so another collection globbing the same file, under another preset or none, renders independently. The name must be literal (it selects config at build); an unknown name is a build error listing the configured names.
+
+## Lazy by default
+
+The macro emits a **lazy** glob. Each matched file becomes its own chunk, loaded when `get(id)` reads it, not inlined into one giant module. For a large corpus on a serverless host, that's the difference between a lean function and one that carries megabytes of compiled markdown. The catalog paths (`list`, the nav, the search index) still read frontmatter across the corpus, and that fan-out is paid once and cached.
+
+## The rules
+
+- **The glob (or spec) is a literal string.** A template literal with `${…}` interpolation is a runtime value the build can't resolve, so it's a build error naming the expression. Anything genuinely dynamic (a CMS, a database) is a hand-written [source](/docs/content/collections), not a loader.
+- **Loaders are server-only.** They build a content corpus, which must never reach a client bundle, so they belong in a `.server.ts` file (or `src/lib/server/`, or a `.remote.ts`). Kit's server-module guard then makes the corpus mechanically un-leakable. A loader called inside a `.svelte` component is a warning, not a silent success.
+- **The runtime builders still exist.** `markdown()`, `folder()`, `json()` are what the macros rewrite to; they're the escape hatch if you ever need to feed a source builder something other than a literal glob. But for static files, the macro is the path.
+
+See [content collections](/docs/content/collections) for the full read surface (`refs`, `get`), schemas, relations, and how a source composes with `withRemotes()` to cross the wire.

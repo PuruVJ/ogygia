@@ -24,7 +24,7 @@ function sigOf(endpoint: string): string | null {
 
 /**
  * Stream a batch of region calls into the frame store. Endpoints must share an endpoint path (they
- * do — all are minted against the same `/🏝️`). Frames apply as they land; the promise resolves when
+ * do — all are minted against the same `/__ogygia__`). Frames apply as they land; the promise resolves when
  * the response ends.
  */
 export async function streamFrames(endpoints: string[]): Promise<void> {

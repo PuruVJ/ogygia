@@ -9,7 +9,8 @@ import {
 	region_max_age_ms,
 	region_on_expire,
 	region_remount,
-	region_schedule
+	region_schedule,
+	region_ssr_truncated
 } from '../src/runtime/region-attrs.js';
 
 /** Minimal Element-like for attribute helpers (no DOM env). */
@@ -138,5 +139,54 @@ describe('region-attrs (two-axis DOM)', () => {
 		expect(phase2_hydrate_schedule('idle', 'idle')).toBe('load');
 		expect(phase2_hydrate_schedule('idle', 'load')).toBe('load');
 		expect(phase2_hydrate_schedule('load', 'visible')).toBe('visible');
+	});
+});
+
+// Comment / element node shims (matching what region_ssr_truncated reads: nodeType, textContent, and
+// childNodes for elements). Node types: 1 = element, 3 = text, 8 = comment.
+const comment = (data: string) => ({ nodeType: 8, textContent: data });
+const text = (data: string) => ({ nodeType: 3, textContent: data });
+const elem = (...childNodes: unknown[]) => ({ nodeType: 1, childNodes });
+const region = (...childNodes: unknown[]) => ({ childNodes } as unknown as ParentNode);
+
+describe('region_ssr_truncated (invalid-nesting hoist guard)', () => {
+	// THE REPRO: a block island (`<div class="demo-counter">`) authored inline inside a markdown `<p>`.
+	// The browser HTML parser closes the paragraph at the `<div>` start tag, popping <ogygia-region>
+	// with it — so the region keeps ONLY its opening Svelte anchors while the rendered nodes are
+	// hoisted out as siblings of the paragraph. Empirically the live region is `<!--[0--><!--[-->`.
+	// Hydrating that empty region fresh-mounts a duplicate → two counters. Unbalanced ⇒ truncated.
+	it('flags the parser-hoisted region (opening anchors, no closing) as truncated', () => {
+		expect(region_ssr_truncated(region(comment('[0'), comment('[')))).toBe(true);
+	});
+
+	it('does NOT flag a validly-parsed inline island (balanced envelope, content intact)', () => {
+		// The `<span>`-rendering fix: `<!--[0--><!--[--><span>…</span><!--]--><!--]-->` stays inside the
+		// paragraph, anchors balanced. This is SSR count == hydrated count — one instance, no orphan.
+		const span = elem(
+			elem(text('−')), // <button>
+			text(' '),
+			elem(text('0')), // <output>
+			text(' '),
+			elem(text('+')) // <button>
+		);
+		expect(
+			region_ssr_truncated(region(comment('[0'), comment('['), span, comment(']'), comment(']')))
+		).toBe(false);
+	});
+
+	it('does NOT flag an island that renders nothing (balanced empty envelope)', () => {
+		expect(region_ssr_truncated(region(comment('[0'), comment('['), comment(']'), comment(']')))).toBe(
+			false
+		);
+	});
+
+	it('does NOT flag a not-yet-swapped deferred/live region (no anchors at all)', () => {
+		expect(region_ssr_truncated(region(text('loading…')))).toBe(false);
+		expect(region_ssr_truncated(region())).toBe(false);
+	});
+
+	it('recurses: balanced anchors nested inside an element child are not a truncation', () => {
+		const inner = elem(comment('['), elem(text('x')), comment(']'));
+		expect(region_ssr_truncated(region(comment('['), inner, comment(']')))).toBe(false);
 	});
 });

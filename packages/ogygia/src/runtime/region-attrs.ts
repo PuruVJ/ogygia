@@ -70,6 +70,44 @@ export function region_is_vacant(el: ParentNode): boolean {
 }
 
 /**
+ * True when the browser's HTML parser tore this placed island's SSR content OUT of the region —
+ * the invalid-nesting hoist.
+ *
+ * A block-rendering island authored INLINE inside a `<p>` (e.g. a `<Counter/>` sitting in a markdown
+ * sentence, where the component renders `<div>…</div>`) is invalid HTML: a `<div>` start tag while a
+ * `<p>` is in button scope makes the parser CLOSE the paragraph, popping this `<ogygia-region>` with
+ * it — the region is left holding only its opening Svelte hydration anchors (`<!--[-->`), while the
+ * rendered nodes (and the closing anchors) become siblings of the paragraph. Hydrating that empty
+ * region then fresh-mounts a SECOND copy, and the hoisted server copy lingers as an orphan → the
+ * page shows the island twice.
+ *
+ * Detected as an UNBALANCED hydration envelope: strictly more `[` open anchors than `]` close anchors
+ * among the region's descendants. A validly-nested region (inline content, or block content in block
+ * context) always balances; a region that renders nothing balances (0 == 0); a not-yet-swapped
+ * deferred/live region carries no anchors at all (0 == 0). So this never false-positives on a
+ * correctly-parsed region — only the parser-truncated envelope reads open > close.
+ */
+export function region_ssr_truncated(el: ParentNode): boolean {
+	let open = 0;
+	let close = 0;
+	const scan = (parent: ParentNode) => {
+		for (const n of parent.childNodes) {
+			if (n.nodeType === 8) {
+				// Comment: Svelte 5 fragment anchors are `<!--[-->` / `<!--[N-->` (open) and `<!--]-->`
+				// (close). Read the first non-space char of the comment data.
+				const d = (n.textContent ?? '').trim();
+				if (d[0] === '[') open++;
+				else if (d[0] === ']') close++;
+			} else if (n.nodeType === 1) {
+				scan(n as unknown as ParentNode);
+			}
+		}
+	};
+	scan(el);
+	return open > close;
+}
+
+/**
  * Schedule string for the shared scheduler.
  * Deferred regions use `when`; waking regions use `wake`; default `load`.
  */

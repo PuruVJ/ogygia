@@ -1,0 +1,737 @@
+/*
+ * svelte.dev content styling, mapped onto ogygia <Doc> markup (.og-doc / .og-article / .og-body / …).
+ * Ported from @sveltejs/site-kit Text.svelte (MIT). This is what makes a docs PAGE look like svelte.dev.
+ */
+
+/* ── page layout: content + "on this page" rail ── */
+.og-doc {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 0 8rem;
+	max-width: 114rem;
+	margin: 0;
+	padding: var(--sk-page-padding-top) var(--sk-page-padding-side) var(--sk-page-padding-bottom);
+}
+@media (min-width: 1024px) {
+	.og-doc {
+		/* wider main column, rail pushed right (svelte.dev proportions) */
+		grid-template-columns: minmax(0, 80rem) 19rem;
+		padding-left: 4.8rem;
+	}
+}
+
+.og-article {
+	min-width: 0;
+	max-width: 80rem;
+}
+
+/* ── page header ── */
+.og-eyebrow {
+	font: var(--sk-font-ui-small);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--sk-fg-3);
+	margin: 0 0 1rem;
+}
+.og-title {
+	font: var(--sk-font-h1);
+	color: var(--sk-fg-1);
+	margin: 0 0 2rem;
+}
+.og-summary {
+	font: var(--sk-font-body);
+	color: var(--sk-fg-3);
+	margin: 0 0 2rem;
+}
+
+/* ── the rendered markdown body ── */
+.og-body :where(h2, h3) {
+	max-width: 100%;
+	padding: 0 2.4rem 0 0;
+}
+@media (min-width: 768px) {
+	.og-body :where(h2, h3) {
+		margin: 0 0 0 -4.8rem;
+		padding: 0 2.4rem 0 4.8rem;
+	}
+}
+.og-body h2 {
+	margin-top: 7rem;
+	font: var(--sk-font-h2);
+}
+.og-body h3 {
+	margin-top: 5rem;
+	font: var(--sk-font-h3);
+}
+.og-body :where(h2, h3) > span {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.og-body [id] {
+	scroll-margin-top: calc(var(--sk-nav-height) + 4rem);
+}
+
+/* inline code */
+.og-body :where(code):not(pre *) {
+	white-space: pre-wrap;
+	padding: 0.2rem 0.4rem;
+	margin: 0 0.2rem;
+	top: -0.1rem;
+	background: var(--sk-bg-4);
+	font-size: 0.7em;
+}
+
+/* prose links (not the permalink icon) */
+.og-body a:not(.og-heading-anchor) {
+	color: inherit;
+	text-decoration: underline;
+	text-decoration-color: var(--sk-fg-4);
+	text-underline-offset: 0.2em;
+	transition: text-decoration-color 0.1s ease-in-out;
+}
+.og-body a:not(.og-heading-anchor):hover {
+	text-decoration-color: var(--sk-fg-accent);
+}
+
+/* code blocks — ogygia emits a bare <pre class="shiki">; dress it like svelte.dev's .code-block */
+.og-body pre {
+	position: relative;
+	margin: var(--sk-line-height-body) 0;
+	padding: 1.2rem 1.6rem;
+	width: 100%;
+	background: var(--sk-bg-2);
+	border: 1px solid var(--sk-border);
+	border-radius: var(--sk-border-radius);
+	color: var(--shiki-color-text);
+	font: var(--sk-font-mono);
+	overflow-x: auto;
+	box-sizing: border-box;
+}
+.og-body pre code {
+	display: block;
+	padding: 0;
+	margin: 0;
+	top: 0;
+	width: 100%;
+	background: transparent;
+	white-space: inherit;
+	font-size: var(--sk-font-size-mono);
+}
+
+/* lists — svelte.dev's custom bullet */
+.og-body :where(ol, ul) {
+	--list-padding: 3rem;
+	margin-left: var(--list-padding);
+}
+.og-body ul {
+	list-style: none;
+}
+.og-body ul li::before {
+	content: '';
+	position: absolute;
+	top: 0.65em;
+	left: -1.8rem;
+	background-color: var(--sk-fg-4);
+	width: 0.3em;
+	height: 0.3em;
+	border-radius: 50%;
+	opacity: 0.7;
+}
+.og-body ul ul {
+	margin-bottom: 0;
+}
+.og-body ol {
+	list-style: decimal;
+}
+.og-body li {
+	position: relative;
+	max-width: calc(var(--sk-page-content-width) - var(--list-padding));
+	margin: 0 0 0.5em 0;
+}
+
+/* blockquotes / admonitions (rehypeAdmonitions produces .note / .deprecated / details.legacy) */
+.og-body blockquote {
+	position: relative;
+	padding: 0 0 0 4.5rem;
+	margin: var(--sk-line-height-body) 0;
+}
+/* default quote → the big serif quote mark */
+.og-body blockquote:not(.note):not(:has(details.legacy))::before {
+	content: '\201C';
+	position: absolute;
+	font-size: 6.4em;
+	line-height: 1;
+	left: 0;
+	top: 0;
+	font-family: var(--sk-font-family-heading);
+	color: var(--sk-fg-4);
+}
+/* .note / legacy → a lightbulb glyph in the accent colour */
+.og-body blockquote.note::before,
+.og-body blockquote:has(details.legacy)::before {
+	content: '';
+	position: absolute;
+	left: 0.4rem;
+	top: 0.1em;
+	width: 2.6rem;
+	height: 2.6rem;
+	background: var(--sk-fg-accent);
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+}
+.og-body blockquote.deprecated p:first-child::before {
+	content: 'Deprecated ';
+	font: var(--sk-font-ui-medium);
+	text-transform: uppercase;
+	color: var(--sk-fg-4);
+}
+.og-body blockquote details.legacy summary,
+.og-body blockquote details > summary {
+	cursor: pointer;
+	color: var(--sk-fg-3);
+	font: var(--sk-font-ui-medium);
+	margin-bottom: 0.5rem;
+}
+
+/* tables */
+.og-body table {
+	border-collapse: collapse;
+	margin: 1em 0;
+}
+.og-body th {
+	font: var(--sk-font-h3);
+	font-size: var(--sk-font-size-body);
+}
+
+/* ── permalink anchor (ogygia .og-heading-anchor) — svelte.dev's hash, hover-reveal ── */
+.og-heading-anchor {
+	position: absolute !important;
+	display: block;
+	width: 2.6rem;
+	height: 2.2rem;
+	top: calc(50% - 1.1rem);
+	color: var(--sk-fg-4);
+}
+.og-heading-anchor::before {
+	content: '#';
+	font: var(--sk-font-h3);
+	color: var(--sk-fg-accent);
+}
+@media (max-width: 767px) {
+	.og-heading-anchor {
+		right: 0;
+		scale: 0.8;
+	}
+}
+@media (min-width: 768px) {
+	.og-heading-anchor {
+		left: 1.6rem;
+		opacity: 0;
+		transition: opacity 0.2s;
+	}
+	:where(h2, h3):hover > .og-heading-anchor,
+	.og-heading-anchor:focus {
+		opacity: 1;
+	}
+}
+
+/* ── "on this page" rail (ogygia .og-aside / OnThisPage) ── */
+/* Narrow: "On this page" stacks at the TOP of the content (order:-1) so it's always visible. */
+.og-aside {
+	display: block;
+	order: -1;
+	margin-bottom: 3rem;
+	padding-bottom: 2rem;
+	border-bottom: 1px solid var(--sk-border);
+	font: var(--sk-font-ui-small);
+}
+/* Wide: it becomes the sticky right rail. */
+@media (min-width: 1024px) {
+	.og-aside {
+		order: 0;
+		position: sticky;
+		top: calc(var(--sk-nav-height) + 2rem);
+		align-self: start;
+		max-height: calc(100vh - var(--sk-nav-height) - 4rem);
+		overflow-y: auto;
+		margin-bottom: 0;
+		padding-bottom: 0;
+		border-bottom: none;
+	}
+}
+/* "On this page" — svelte.dev's design: serif label, serif body-small entries, accent+underline
+   on the ACTIVE entry (scrollspy), plain fg elsewhere. */
+.og-aside .og-toc-label {
+	font: var(--sk-font-h3);
+	font-size: 2rem;
+	color: var(--sk-fg-1);
+	margin: 0 0 1rem;
+}
+.og-aside {
+	font-family: var(--sk-font-family-body);
+}
+.og-aside .og-toc-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.og-aside .og-toc-item {
+	margin: 0;
+}
+.og-aside .og-toc-d3 {
+	padding-left: 1.2rem;
+}
+.og-aside a,
+.og-aside .og-toc-link {
+	display: block;
+	padding: 0.25rem 0;
+	font: var(--sk-font-body-small);
+	color: var(--sk-fg-2);
+	text-decoration: none;
+	line-height: 1.35;
+}
+.og-aside a:hover {
+	color: var(--sk-fg-1);
+	text-decoration: none;
+}
+.og-aside a[aria-current='true'],
+.og-aside .og-toc-link.og-active {
+	color: var(--sk-fg-accent);
+	text-decoration: underline;
+}
+
+/* ── footer meta row ("Edit this page on GitHub" · llms.txt) ── */
+.og-doc-footer {
+	display: flex;
+	gap: 3rem;
+	margin-top: 5rem;
+	padding: 2rem 0;
+	border-top: 1px solid var(--sk-border);
+}
+.og-doc-footer a {
+	display: flex;
+	align-items: center;
+	gap: 0.7rem;
+	font: var(--sk-font-ui-small);
+	color: var(--sk-fg-accent);
+	text-decoration: none;
+}
+.og-doc-footer a:hover {
+	text-decoration: underline;
+}
+
+/* ── pager: PREVIOUS left / NEXT right, uppercase small labels, accent links (svelte.dev) ── */
+.og-pager {
+	display: flex;
+	justify-content: space-between;
+	gap: 2rem;
+	margin-top: 0;
+	border-top: 1px solid var(--sk-border);
+	padding-top: 2rem;
+	font-family: var(--sk-font-family-ui);
+}
+.og-pager a,
+.og-pager a {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	text-decoration: none;
+	color: var(--sk-fg-accent);
+	font: var(--sk-font-ui-medium);
+}
+.og-pager a:hover {
+	text-decoration: underline;
+}
+.og-pager .og-pager-label,
+.og-pager span {
+	font: var(--sk-font-ui-small);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--sk-fg-4);
+}
+.og-pager .og-pager-next,
+.og-pager a:last-child {
+	margin-left: auto;
+	text-align: right;
+}
+
+.og-suggested {
+	margin-top: 6rem;
+	border-top: 1px solid var(--sk-border);
+	padding-top: 2rem;
+}
+
+/* ── raised ("retro") buttons — svelte.dev's beveled control look ── */
+.raised {
+	border-radius: var(--sk-border-radius);
+	border-style: solid;
+	border-color: var(--sk-raised-color);
+	border-width: var(--sk-raised-width);
+}
+.raised:hover {
+	border-color: var(--sk-raised-hover-color);
+}
+.raised:active {
+	border-color: var(--sk-raised-active-color);
+	border-width: var(--sk-raised-active-width);
+}
+.raised:disabled {
+	border-color: var(--sk-raised-border);
+	border-width: 1px;
+}
+
+/* ── search: the nav trigger (input-look + ⌘K) and the palette dialog ── */
+.og-search-trigger {
+	display: flex;
+	align-items: center;
+	gap: 0.8rem;
+	width: 19rem;
+	height: 3.2rem;
+	padding: 0 1rem;
+	border-radius: 2rem;
+	background: var(--sk-bg-4);
+	color: var(--sk-fg-3);
+	font: var(--sk-font-ui-small);
+	text-decoration: none;
+}
+.og-search-trigger:hover {
+	text-decoration: none;
+	color: var(--sk-fg-1);
+}
+.og-search-trigger-label {
+	flex: 1;
+	text-align: left;
+}
+.og-search-kbd,
+kbd.og-search-kbd {
+	font: var(--sk-font-ui-small);
+	background: transparent;
+	color: var(--sk-fg-4);
+	padding: 0;
+	margin: 0;
+	white-space: nowrap;
+}
+.og-search-backdrop,
+[data-dialog-overlay].og-search-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 200;
+	background: rgba(0, 0, 0, 0.45);
+}
+.og-search-panel {
+	position: fixed;
+	z-index: 201;
+	top: 10vh;
+	left: 50%;
+	translate: -50% 0;
+	width: min(64rem, calc(100vw - 3.2rem));
+	max-height: 70vh;
+	display: flex;
+	flex-direction: column;
+	background: var(--sk-bg-1);
+	border: 1px solid var(--sk-border);
+	border-radius: var(--sk-border-radius);
+	box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25);
+	overflow: hidden;
+}
+.og-search-panel .og-search {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+/* field row: icon · input · Esc */
+.og-search-field {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 0 1.6rem;
+	border-bottom: 1px solid var(--sk-border);
+	color: var(--sk-fg-3);
+}
+.og-search-scene-input {
+	flex: 1;
+	padding: 1.5rem 0;
+	border: none;
+	background: transparent;
+	color: var(--sk-fg-1);
+	font: var(--sk-font-ui-medium);
+	outline: none;
+}
+/* results */
+.og-search-scene-body {
+	overflow-y: auto;
+	padding: 0.6rem;
+	min-height: 6rem;
+}
+.og-search-hint,
+.og-search-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 3rem 1rem;
+	font: var(--sk-font-ui-medium);
+	color: var(--sk-fg-4);
+}
+/* the matched term inside an excerpt — svelte.dev's highlight chip */
+.og-search-hit-excerpt mark {
+	background: var(--sk-bg-highlight);
+	color: inherit;
+	border-radius: 2px;
+	padding: 0 0.2rem;
+}
+a.og-search-hit {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 0.1rem 1.2rem;
+	padding: 0.9rem 1rem;
+	border-radius: var(--sk-border-radius-inner);
+	color: var(--sk-fg-2);
+	text-decoration: none;
+	cursor: pointer;
+}
+a.og-search-hit[data-selected] {
+	background: var(--sk-bg-4);
+}
+.og-search-hit-title {
+	font: var(--sk-font-ui-medium);
+	font-weight: 500;
+	color: var(--sk-fg-1);
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.og-search-hit-heading {
+	font-weight: 400;
+	color: var(--sk-fg-3);
+	margin-left: 0.5rem;
+}
+.og-search-hit-section {
+	grid-row: 1;
+	grid-column: 2;
+	align-self: center;
+	font: var(--sk-font-ui-small);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--sk-fg-4);
+}
+.og-search-hit-excerpt {
+	grid-column: 1 / -1;
+	font: var(--sk-font-ui-small);
+	color: var(--sk-fg-3);
+	overflow: hidden;
+	display: -webkit-box;
+	-webkit-line-clamp: 1;
+	-webkit-box-orient: vertical;
+}
+.og-sr-only {
+	border: 0;
+	clip: rect(0 0 0 0);
+	height: 1px;
+	overflow: hidden;
+	position: absolute;
+	width: 1px;
+	white-space: nowrap;
+}
+
+/* ── code chrome ─────────────────────────────────────────────────────────── */
+
+/* Shiki's css-variables theme names → svelte.dev's token names (tokens.css owns the palette). */
+:root {
+	--shiki-foreground: var(--shiki-color-text);
+	--shiki-background: transparent;
+}
+
+/* inline diff markers — add/remove decorations from the inline_markers transformer */
+.og-body .highlight {
+	--color: rgba(220, 220, 0, 0.2);
+	background: var(--color);
+	outline: 2px solid var(--color);
+	border-radius: 2px;
+}
+.og-body .highlight.add {
+	--color: rgba(0, 255, 0, 0.18);
+}
+.og-body .highlight.remove {
+	--color: rgba(255, 0, 0, 0.1);
+}
+:root.dark .og-body .highlight.remove {
+	--color: rgba(255, 0, 0, 0.27);
+}
+:root:not(.light) .og-body .highlight.remove {
+	@media (prefers-color-scheme: dark) {
+		--color: rgba(255, 0, 0, 0.27);
+	}
+}
+
+/* Multi-variant block (JS↔TS): same box as a bare <pre>; panels switch on the <html> pref attr. */
+.og-body .og-code {
+	position: relative;
+	margin: var(--sk-line-height-body) 0;
+	background: var(--sk-bg-2);
+	border: 1px solid var(--sk-border);
+	border-radius: var(--sk-border-radius);
+	overflow: hidden;
+}
+.og-body .og-code pre {
+	margin: 0;
+	border: none;
+	border-radius: 0;
+	/* static, so the pre's .og-code-actions absolutely position against .og-code — landing in the
+	   controls row beside the TS|JS toggle instead of floating over the code below it */
+	position: static;
+}
+
+/* visibility: the saved preference (set on <html> pre-paint) picks the panel; JS-off shows the default */
+:root[data-pref-code-language='ts'] .og-variant[data-pref-value='js'],
+:root[data-pref-code-language='js'] .og-variant[data-pref-value='ts'],
+:root:not([data-pref-code-language]) .og-variant[data-pref-value='js'] {
+	display: none;
+}
+
+/* the switcher — svelte.dev's raised JS/TS toggle, top-right inside the block (retro bevel box) */
+.og-body .og-code-controls {
+	position: absolute;
+	top: 0.5rem;
+	right: 0.5rem;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	background: var(--sk-bg-2);
+	border-radius: var(--sk-border-radius);
+	border-style: solid;
+	border-color: var(--sk-raised-color);
+	border-width: var(--sk-raised-width);
+}
+.og-body .og-code-controls:hover {
+	border-color: var(--sk-raised-hover-color);
+}
+.og-body .og-variant-btn {
+	font: 400 1.2rem/1 var(--sk-font-family-mono);
+	padding: 0.7rem 0.6rem;
+	color: var(--sk-fg-1);
+	opacity: 0.3;
+	cursor: pointer;
+	transition: opacity 0.15s;
+}
+:root[data-pref-code-language='ts'] .og-variant-btn[data-pref-set='ts'],
+:root[data-pref-code-language='js'] .og-variant-btn[data-pref-set='js'],
+:root:not([data-pref-code-language]) .og-variant-btn[data-default] {
+	opacity: 1;
+}
+/* press interaction: the whole control scales down and springs back */
+.og-body .og-code-controls,
+.og-body .og-code-actions :where(a, button) {
+	transition: scale 0.2s var(--quint-out), border-color 0.15s;
+}
+.og-body .og-code-controls:active,
+.og-body .og-code-actions :where(a, button):active {
+	scale: 0.92;
+}
+
+/* CodeChrome (ogygia): copy + permalink on every <pre> — top-right, ALWAYS visible (svelte.dev). */
+.og-body .og-code-actions {
+	position: absolute;
+	top: 0.4rem;
+	right: 0.4rem;
+	z-index: 2;
+	display: flex;
+	gap: 0.4rem;
+}
+/* copy / permalink — raised squares, like the real controls */
+.og-body .og-code-actions :where(a, button) {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.9rem;
+	height: 2.9rem;
+	color: var(--sk-fg-3);
+	background: var(--sk-bg-2);
+	border-radius: var(--sk-border-radius);
+	border-style: solid;
+	border-color: var(--sk-raised-color);
+	border-width: var(--sk-raised-width);
+}
+.og-body .og-code-actions :where(a, button):hover {
+	color: var(--sk-fg-1);
+	border-color: var(--sk-raised-hover-color);
+	text-decoration: none;
+}
+.og-body .og-code-actions :where(a, button):active {
+	border-color: var(--sk-raised-active-color);
+	border-width: var(--sk-raised-active-width);
+}
+/* inside a filename bar, the actions sit IN the bar */
+.og-body pre[data-file] .og-code-actions {
+	top: 0.3rem;
+}
+/* inside a variant block: ONE row — [TS|JS toggle] first, copy/link after it at the far right */
+.og-body .og-code .og-code-actions {
+	top: 0.5rem;
+	right: 0.5rem;
+}
+.og-body .og-code .og-code-controls {
+	right: 7.6rem;
+}
+/* with a filename bar (4.2rem tall): dead-center the whole control row in the bar */
+.og-body .og-code[data-file] .og-code-actions,
+.og-body .og-code[data-file] .og-code-controls,
+.og-body pre[data-file] .og-code-actions {
+	top: 1.8rem;
+	translate: 0 -50%;
+}
+
+/* ── generated type reference (ts-block markup from the > MODULE:/> TYPES: expansion) ── */
+.og-body .ts-block {
+	border: 1px solid var(--sk-border);
+	border-radius: var(--sk-border-radius);
+	background: var(--sk-bg-2);
+	margin: var(--sk-line-height-body) 0;
+	overflow: hidden;
+}
+.og-body .ts-block pre {
+	margin: 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+}
+.og-body .ts-block-property {
+	border-top: 1px solid var(--sk-border);
+	padding: 0;
+}
+.og-body .ts-block-property > pre {
+	padding-left: 1.6rem;
+}
+.og-body .ts-block-property-details {
+	padding: 0 1.6rem 1rem 2.4rem;
+	font: var(--sk-font-body-small);
+	color: var(--sk-fg-3);
+}
+.og-body .ts-block-property-details p {
+	font: var(--sk-font-body-small);
+}
+.og-body blockquote.since {
+	padding: 0 0 0 4.5rem;
+}
+
+/* filename bar — drawn from the data-file attr (slash_meta strips `/// file:` into it) */
+.og-body pre[data-file]::before,
+.og-body .og-code[data-file]::before {
+	content: attr(data-file);
+	display: flex;
+	align-items: center;
+	min-height: 3.6rem;
+	font: var(--sk-font-ui-small);
+	color: var(--sk-fg-3);
+	background: var(--sk-bg-3);
+	border-bottom: 1px solid var(--sk-border);
+	padding: 0 1.6rem;
+}
+.og-body pre[data-file] {
+	padding: 0;
+}
+.og-body pre[data-file] code {
+	display: block;
+	padding: 1.2rem 1.6rem;
+}

@@ -19,7 +19,7 @@
   · <code>load / idle / visible</code>
   · <code>Media queries</code>
   · <code>Server islands</code>
-  · <code>Route weaving</code>
+  · <code>Single-flight nav</code>
   · <code>Live regions</code>
   · <code>Lakes</code>
   · <code>Remote functions</code>
@@ -117,7 +117,7 @@ Static dual regions (`region: 'raw'`, no `wake`) **morph** in place across ticks
 (`region: 'raw'` + `wake`) **keep-alive** (new props pushed into the mounted island, local state
 intact). LiveView, with Svelte components.
 
-## Route weaving
+## Single-flight navigation
 
 Each load-scheduled server-island hole fetches its own signed HTML on load. On a SPA navigation the
 router prescans the incoming page and pulls **all** its holes down **one** batch request — no

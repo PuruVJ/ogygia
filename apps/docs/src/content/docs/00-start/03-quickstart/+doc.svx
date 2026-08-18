@@ -6,23 +6,21 @@ related:
   - regions/client-islands
 ---
 
-This walks the shortest path to something real: a page that ships as pure HTML with a single island that hydrates. If you have not added the package yet, do [Install](/docs/start/install) first.
+This is the shortest path to a working page: pure HTML with a single island that hydrates. If you have not added the package yet, do [Install](/docs/start/install) first.
 
 ## 1. Turn the page into a Page
 
 Opt the route out of the Kit client so it ships no framework JS.
 
-```ts
-// src/routes/+layout.ts
+```ts title=src/routes/+layout.ts
 export const csr = false;
 ```
 
 ## 2. Write a normal Svelte component
 
-Nothing ogygia-specific here — it is just a component.
+Nothing ogygia-specific here. It is just a component.
 
-```svelte
-<!-- src/lib/Counter.svelte -->
+```svelte title=src/lib/Counter.svelte
 <script>
   let { start = 0 } = $props();
   let count = $state(start);
@@ -35,8 +33,7 @@ Nothing ogygia-specific here — it is just a component.
 
 The import attribute is the whole opt-in. The rest of the page stays static HTML.
 
-```svelte
-<!-- src/routes/+page.svelte -->
+```svelte title=src/routes/+page.svelte
 <script>
   import Counter from '$lib/Counter.svelte' with { wake: 'load' };
 </script>
@@ -74,7 +71,7 @@ The counter below is a real island on this very page, hydrated on `load` exactly
 
 ## 5. Change when it wakes
 
-Swap the strategy and the island hydrates later — no other change:
+Swap the strategy and the island hydrates later. Nothing else changes:
 
 ```svelte
 import Counter from '$lib/Counter.svelte' with { wake: 'idle' };     // when the browser is idle
@@ -84,7 +81,7 @@ import Counter from '$lib/Counter.svelte' with { wake: '(max-width: 600px)' }; /
 
 ## Where to go next
 
-- [Client islands](/docs/regions/client-islands) — every hydrate option in depth.
-- [Timing & nesting](/docs/regions/timing-nesting) — schedules and the nesting rule.
-- [Server islands](/docs/regions/server-islands) — HTML from the server, no JS.
-- [Adoption](/docs/start/install) — bring this into an existing Kit app one route at a time.
+- [Client islands](/docs/regions/client-islands): every hydrate option in depth.
+- [Timing & nesting](/docs/regions/timing-nesting): schedules and the nesting rule.
+- [Server islands](/docs/regions/server-islands): HTML from the server, no JS.
+- [Adoption](/docs/start/install): bring this into an existing Kit app one route at a time.

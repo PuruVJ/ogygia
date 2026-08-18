@@ -1,0 +1,194 @@
+/* svelte.dev base reset + element styles — ported from @sveltejs/site-kit (MIT). App-local. */
+
+/* SPA nav stays on the View Transitions API (no reloads, targeted transitions stay possible), but
+ * svelte.dev swaps PLAIN — no cross-fade. Kill the root animation; the swap is instant. */
+::view-transition-old(root),
+::view-transition-new(root) {
+	animation: none;
+}
+
+html {
+	font-size: 62.5%; /* 1rem = 10px — svelte.dev's whole scale assumes this */
+	-webkit-text-size-adjust: 100%;
+	box-sizing: border-box;
+	border-collapse: collapse;
+}
+
+html {
+	height: 100%;
+	width: 100%;
+}
+/* min-height, NOT height: a fixed-height body is only one viewport tall, which ends the sticky
+ * header's containing block at exactly window height — it scrolls away with the content past that. */
+body {
+	min-height: 100%;
+	width: 100%;
+}
+
+/* Mobile: the nav is a FIXED bottom bar (the original svelte.dev bottom nav) — keep the page's
+ * tail readable above it. */
+@media (max-width: 831px) {
+	body {
+		padding-bottom: calc(var(--sk-nav-height) + env(safe-area-inset-bottom));
+	}
+}
+
+body {
+	font-family: var(--sk-font-family-body);
+	line-height: 1.5;
+	color: var(--sk-fg-2);
+	background-color: var(--sk-bg-1);
+	width: 100%;
+	tab-size: 2;
+	-moz-tab-size: 2;
+}
+
+* {
+	box-sizing: inherit;
+	margin: 0;
+	padding: 0;
+	scrollbar-width: thin;
+	scrollbar-color: var(--sk-scrollbar) transparent;
+}
+
+*:focus-visible {
+	outline: 2px solid var(--sk-fg-accent);
+	border-radius: var(--sk-border-radius);
+}
+
+p,
+ul,
+ol {
+	font: var(--sk-font-body);
+	margin: 0.5lh 0;
+	text-wrap: pretty;
+}
+p:first-child,
+ul:first-child,
+ol:first-child {
+	margin-top: 0;
+}
+p:last-child,
+ul:last-child,
+ol:last-child {
+	margin-bottom: 0;
+}
+
+a {
+	position: relative;
+	text-decoration: none;
+	cursor: pointer;
+	color: var(--sk-fg-accent);
+}
+a:hover {
+	text-decoration: underline;
+}
+
+h1 {
+	font: var(--sk-font-h1);
+}
+h2 {
+	font: var(--sk-font-h2);
+}
+h3 {
+	font: var(--sk-font-h3);
+}
+h1,
+h2,
+h3 {
+	position: relative;
+	text-wrap: balance;
+	color: var(--sk-fg-1);
+}
+
+strong {
+	font-weight: 400;
+}
+
+code,
+kbd {
+	font-size: 0.666em;
+	position: relative;
+	border-radius: var(--sk-border-radius);
+	white-space: nowrap;
+	background: var(--sk-bg-4);
+	line-height: 1.7;
+}
+code {
+	font-family: var(--sk-font-family-mono);
+	margin: 0 0.2rem;
+	padding: 0.4rem;
+}
+kbd {
+	font-family: var(--sk-font-family-ui);
+}
+
+pre {
+	overflow-x: auto;
+}
+pre code {
+	top: 0;
+	white-space: inherit;
+	background-color: transparent;
+	padding: 0;
+	margin: 0;
+	font-size: var(--sk-font-size-mono);
+}
+
+::selection {
+	background: var(--sk-bg-selection);
+}
+
+blockquote {
+	position: relative;
+	margin: var(--sk-line-height-body) 0;
+	max-width: var(--sk-page-content-width);
+}
+blockquote :where(p, ul, ol) {
+	font-size: var(--sk-font-size-body-small);
+}
+blockquote :last-child {
+	margin: 0;
+}
+
+input,
+button {
+	font-family: var(--sk-font-family-ui);
+	font-size: inherit;
+}
+button {
+	background-color: transparent;
+	border: none;
+	color: currentColor;
+	cursor: pointer;
+}
+button[disabled] {
+	color: var(--sk-fg-4);
+}
+
+table {
+	width: 100%;
+	font: var(--sk-font-body-small);
+	margin: var(--sk-line-height-body) 0;
+}
+td,
+th {
+	text-align: left;
+	border-bottom: 1px solid var(--sk-border);
+	padding: 0.4rem 0.8rem 0.4rem 0;
+}
+table :where(code, span) {
+	white-space: pre;
+}
+
+.visually-hidden {
+	border: 0;
+	clip: rect(0 0 0 0);
+	height: auto;
+	margin: 0;
+	overflow: hidden;
+	padding: 0;
+	position: absolute;
+	width: 1px;
+	white-space: nowrap;
+}

@@ -1,12 +1,13 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { Region, type RegionValue } from 'ogygia';
 	import '$lib/styles/demo-block.css';
 	import '$lib/styles/widget.css';
 	import '$lib/styles/feel.css';
 
 	let {
 		title,
-		codeHtml,
+		code,
 		live,
 		frozen,
 		stack = false,
@@ -14,7 +15,9 @@
 		offLabel = 'static · 0 KB JS'
 	}: {
 		title: string;
-		codeHtml: string;
+		/** A same-pass region — or the baked html STRING when the caller is an island (a region
+		 *  can't cross a captured-prop boundary; its html can). */
+		code: RegionValue | string;
 		live: Snippet;
 		frozen: Snippet;
 		stack?: boolean;
@@ -45,7 +48,11 @@
 
 	<div class="demo-body" class:demo-body--stack={stack}>
 		<div class="demo-code">
-			{@html codeHtml}
+			{#if typeof code === 'string'}
+				{@html code}
+			{:else}
+				<Region of={code} />
+			{/if}
 		</div>
 		<div class="demo-preview" data-state={jsOn ? 'hydrated' : 'static'}>
 			<span class="preview-marker">
