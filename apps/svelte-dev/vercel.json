@@ -1,0 +1,6 @@
+{
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"framework": "sveltekit",
+	"buildCommand": "pnpm --filter ogygia build && pnpm --filter svelte-dev build",
+	"installCommand": "pnpm install --frozen-lockfile"
+}
