@@ -154,7 +154,7 @@ render-gated (and native in MPA mode), the client bundle gets smaller, and the
     idle cost is near zero, profiles live in memory only, and `Server-Timing` headers are off by
     default in production. Needs a Node server (the V8 inspector); edge runtimes keep the always-on
     request log only.
-  - Docs: [Profiler](/docs/data-state/profiler/overview).
+  - Docs: [Profiler](/docs/profiler/overview).
 
 ### Changed
 

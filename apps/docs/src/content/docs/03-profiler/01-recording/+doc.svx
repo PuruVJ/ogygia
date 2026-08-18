@@ -2,8 +2,8 @@
 title: Recording
 summary: The three ways to capture a profile — record the live server, profile one page, or profile a single request — plus the production secret, sharper names with source maps, platform support, and every option.
 related:
-  - data-state/profiler/overview
-  - data-state/profiler/reading-reports
+  - profiler/overview
+  - profiler/reading-reports
   - start/install
 ---
 

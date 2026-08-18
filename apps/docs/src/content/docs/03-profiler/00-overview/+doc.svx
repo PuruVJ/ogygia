@@ -2,8 +2,8 @@
 title: Overview
 summary: A drop-in SSR profiler for SvelteKit. One line in hooks.server.ts, then open /__profiler to see which components, functions, and network calls make a server render slow — with no per-component instrumentation.
 related:
-  - data-state/profiler/recording
-  - data-state/profiler/reading-reports
+  - profiler/recording
+  - profiler/reading-reports
   - reference/performance
 ---
 
@@ -47,8 +47,8 @@ Then open **`/__profiler`** — add `?key=<secret>` in production.
 ## What you get
 
 - **Always on, near zero cost.** Every request is wall-timed and logged, with per-route p50/p95. The CPU is only sampled while you are actively recording.
-- **On demand.** Record the live server for a few seconds, profile one page, or profile a single request. See [Recording](/docs/data-state/profiler/recording).
-- **A readable report.** A wall-clock budget bar (compute vs waiting), an interactive treemap of where the CPU went, sortable component and function tables, a network waterfall, memory and GC, and a flame graph. See [Reading a report](/docs/data-state/profiler/reading-reports).
+- **On demand.** Record the live server for a few seconds, profile one page, or profile a single request. See [Recording](/docs/profiler/recording).
+- **A readable report.** A wall-clock budget bar (compute vs waiting), an interactive treemap of where the CPU went, sortable component and function tables, a network waterfall, memory and GC, and a flame graph. See [Reading a report](/docs/profiler/reading-reports).
 
 ## What it needs
 

@@ -2,8 +2,8 @@
 title: Reading a report
 summary: How to read a profile — the wall-clock budget bar, the CPU treemap, self vs total for components, the network waterfall, and memory. Plus what the common slow patterns look like.
 related:
-  - data-state/profiler/overview
-  - data-state/profiler/recording
+  - profiler/overview
+  - profiler/recording
   - reference/performance
 ---
 
