@@ -16,6 +16,10 @@ const themes = await load_ogygia_themes();
 // the value-free `ogygia.extensions()` / `ogygia.preprocess()` in svelte.config.js resolve to the
 // full markdown + island pipeline for the build.
 export default defineConfig({
+	// PROFILER_SOURCEMAPS=1 pnpm build → server chunks get .map files, so the SSR profiler
+	// (ogygia/profiler) maps bundled frames back to source files and recovers original
+	// names for anonymous functions. Off by default: unset env keeps Vite's defaults.
+	build: process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : undefined,
 	plugins: [
 		ogygia({
 			regions: {

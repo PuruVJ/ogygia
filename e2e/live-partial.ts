@@ -43,7 +43,7 @@ try {
 	const partialFetches: string[] = [];
 	page.on('request', (r) => {
 		const u = r.url();
-		if (u.includes('/\u{1F3DD}') || /[?&]sig=/.test(u)) partialFetches.push(u);
+		if (u.includes('/__ogygia__') || /[?&]sig=/.test(u)) partialFetches.push(u);
 	});
 
 	await page
@@ -56,6 +56,17 @@ try {
 		'interactive partial swapped in from the live stream',
 		(await page.locator('[data-live-stat]').count()) === 1
 	);
+
+	// REGRESSION: the wire-delivered component's SCOPED CSS must actually load and apply. LiveStat is
+	// server-picked (never in the page's static graph), so its stylesheet rides the region response
+	// as `<link data-ogygia-region-css>` that the runtime hoists — the exact chain the `?og-region`
+	// module-id fork broke by dropping the component's CSS from the build. The distinctive outline
+	// colour proves the CSS is present (unstyled → the browser default, not this rgb).
+	const outline = await page
+		.locator('[data-live-stat]')
+		.evaluate((el) => getComputedStyle(el).outlineColor)
+		.catch(() => '');
+	check('interactive partial: wire-delivered component CSS loaded (scoped style applied)', outline === 'rgb(7, 113, 219)', outline);
 
 	const v1 = (await page.locator('[data-stat-value]').textContent())?.trim() || '';
 	// Click the local counter, then wait for a later tick to arrive.

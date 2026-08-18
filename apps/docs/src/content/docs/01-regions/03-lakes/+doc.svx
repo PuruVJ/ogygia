@@ -1,6 +1,6 @@
 ---
 title: Lakes
-summary: Static HTML inside an island — a frozen region that ships zero client JS even though it lives in an interactive tree.
+summary: Static HTML inside an island. A frozen region that ships zero client JS even though it lives in an interactive tree.
 related:
   - regions/timing-nesting
   - regions/client-islands
@@ -9,7 +9,7 @@ related:
 A **lake** is static HTML *inside* an island. The island around it is interactive, but the lake itself never ships JS. It is marked with `wake: 'none'`, used within an island's own `.svelte` file.
 
 ::: tip When to use
-A lake is for a **big, static subtree that lives inside something interactive** — prose, a pre-rendered chart, a highlighted code block, an image gallery — that you do not want compiled into the island's client bundle. If the static content is *not* inside an island, it is already free (unmarked markup on a Page ships no JS); lakes matter only within a hydrating tree.
+A lake is for a **big, static subtree that lives inside something interactive** (prose, a pre-rendered chart, a highlighted code block, an image gallery) that you do not want compiled into the island's client bundle. If the static content is *not* inside an island, it is already free (unmarked markup on a Page ships no JS); lakes matter only within a hydrating tree.
 :::
 
 ```svelte
@@ -30,7 +30,7 @@ The lake renders on the server, and its DOM is lifted out and preserved when the
 
 Inside a hydrating island, ordinary markup is compiled into the island's client bundle. A lake opts a subtree out of that bundle entirely. Use it for anything expensive to ship but static: prose, a big pre-rendered chart, a syntax-highlighted code block.
 
-The island below is interactive — the counter increments. The snapshot inside it is a lake: server HTML, lifted out and restored around the island's hydration, shipping no JS of its own.
+The island below is interactive: the counter increments. The snapshot inside it is a lake: server HTML, lifted out and restored around the island's hydration, shipping no JS of its own.
 
 <script>
   import LakeDemo from '$lib/demos/LakeDemo.svelte' with { wake: 'load' };
@@ -40,9 +40,9 @@ The island below is interactive — the counter increments. The snapshot inside 
   <LakeDemo />
 </div>
 
-## Keeping a lake fresh — render: live
+## Keeping a lake fresh: render: live
 
-By default a lake is baked once and restored untouched. When its content should refresh in the background, make it `render: 'live'` — baked static content that revalidates:
+By default a lake is baked once and restored untouched. When its content should refresh in the background, make it `render: 'live'`, which serves baked static content that revalidates:
 
 ```svelte
 <script>
@@ -60,6 +60,6 @@ By default a lake is baked once and restored untouched. When its content should 
 
 - **Do** put your heaviest static content (long prose, big charts, code) in a lake when it sits inside an island.
 - **Do** reach for `render: 'live'` when a lake's server HTML should refresh in the background.
-- **Don't** put interactive UI in a lake — it ships no JS, so buttons and inputs are inert. That is a nested [client island](/docs/regions/client-islands) instead.
+- **Don't** put interactive UI in a lake. It ships no JS, so buttons and inputs are inert. That is a nested [client island](/docs/regions/client-islands) instead.
 
 

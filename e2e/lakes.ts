@@ -117,7 +117,7 @@ try {
 		const fetches = [];
 		page.on('request', (req) => {
 			const u = req.url();
-			if (u.includes('ogygia') || decodeURIComponent(u).includes('🏝️')) fetches.push(u);
+			if (u.includes('ogygia') || decodeURIComponent(u).includes('__ogygia__')) fetches.push(u);
 		});
 		const stampBefore = await swrRoot.locator('[data-frozen-stamp]').first().getAttribute('data-frozen-stamp').catch(() => null);
 		await swrRoot.locator('[data-toggle-btn]').click();

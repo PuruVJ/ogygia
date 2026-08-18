@@ -522,6 +522,68 @@
 	color: var(--accent);
 }
 
+/* On-this-page rail with a sliding active marker. The OnThisPage island's scrollspy feeds
+   --og-thumb-y / --og-thumb-h and toggles .og-has-active as you scroll; this ::before thumb
+   glides between rows to the heading in view. */
+.og-toc-list {
+	position: relative;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	border-left: 1.5px solid var(--line);
+}
+.og-toc-list::before {
+	content: '';
+	position: absolute;
+	left: -1.5px;
+	top: 0;
+	width: 1.5px;
+	height: var(--og-thumb-h, 0px);
+	transform: translateY(var(--og-thumb-y, 0px));
+	background: var(--accent);
+	border-radius: 2px;
+	opacity: 0;
+	transition:
+		transform 340ms cubic-bezier(0.22, 0.7, 0.24, 1),
+		height 340ms cubic-bezier(0.22, 0.7, 0.24, 1),
+		opacity 160ms ease;
+}
+.og-toc-list.og-has-active::before {
+	opacity: 1;
+}
+.og-toc-item {
+	padding-left: 0.85rem;
+}
+.og-toc-d3 {
+	padding-left: 1.7rem;
+}
+.og-toc-d4 {
+	padding-left: 2.55rem;
+}
+@media (prefers-reduced-motion: reduce) {
+	.og-toc-list::before {
+		transition: opacity 160ms ease;
+	}
+}
+
+/* Inline diff marks (the +++added+++ / ---removed--- dialect). theme.css styles these, but this
+   site ships its own skin, so bring the tinted pill here — hero code, showcase snippets, and doc
+   fences all use it to put focus on a line (e.g. the `wake:` attribute). */
+.og-mark {
+	border-radius: 0.3em;
+	padding: 0.1em 0.3em;
+	margin: -0.1em -0.05em;
+}
+.og-mark-add {
+	background: color-mix(in srgb, var(--accent) 17%, transparent);
+}
+.og-mark-remove,
+.og-mark-del {
+	background: color-mix(in srgb, var(--warn, #e5484d) 15%, transparent);
+	text-decoration: line-through;
+	text-decoration-thickness: 0.08em;
+}
+
 /* ── CodeChrome: every snippet gets a TOP BAR — a header strip across the block with the copy +
       permalink actions at its right. The actions live inside the `<pre>`, so the `.code-only`
       wrapper is the positioning context and reserves the bar's height with padding.

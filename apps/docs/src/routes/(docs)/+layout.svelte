@@ -12,6 +12,7 @@
 	import 'ogygia/content/shell.css'; // layout FORM only (@layer ogygia — the unlayered skin wins)
 	import '$lib/styles/shell-skin.css'; // the site's LOOK on the .ph-* hooks
 	import Logo from '$lib/Logo.svelte';
+	import MarketingHeader from '$lib/MarketingHeader.svelte';
 	import * as ogygia from 'ogygia';
 	import { page } from '$app/state';
 	import { meta } from '$lib/docs.remote';
@@ -20,11 +21,13 @@
 
 	// `/demo/*` routes are standalone canvases (embedded in docs via <iframe>) — no site chrome.
 	const bare = page.url.pathname.startsWith('/demo/');
+	// The homepage is a marketing page: full-viewport, no docs sidebar — its own slim top-nav instead.
+	const isHome = page.url.pathname === '/';
 
-	// The leak-free shell bundle (nav + switcher) — on the homepage the slug is empty, which resolves
-	// the same docs tree the old SideNav showed there. csr=false → every nav is a fresh SSR pass, so a
-	// top-level await is current per page.
-	const shellMeta = bare ? null : await meta(page.params.slug ?? '');
+	// The leak-free shell bundle (nav + switcher) — docs pages only. Skipped on the homepage (no
+	// sidebar) and bare canvases, which also saves the nav-tree fetch there. csr=false → every nav is
+	// a fresh SSR pass, so a top-level await is current per page.
+	const shellMeta = bare || isHome ? null : await meta(page.params.slug ?? '');
 
 	// No-flash theme: apply a saved forced theme before first paint. `ogygia.script` serializes
 	// the self-contained function into a safe inline <script> (no `String.fromCharCode` gymnastics).
@@ -73,10 +76,16 @@
 
 {#if bare}
 	{@render children()}
+{:else if isHome}
+	<!-- Marketing homepage: slim top-nav + full-width content, no docs sidebar. -->
+	<div data-sveltekit-preload-data="hover">
+		<MarketingHeader />
+		{@render children()}
+	</div>
 {:else}
 	<!-- body is preload=off; the chrome opts hover back in so docs links warm on hover -->
 	<div data-sveltekit-preload-data="hover">
-		<DocsShell meta={shellMeta!} base="/docs" title="ogygia" header={null}>
+		<DocsShell meta={shellMeta!} base="/docs" home="/" title="ogygia" header={null}>
 			{#snippet side()}
 				<a class="doc-brand" href="/" aria-label="ogygia home">
 					<Logo size={22} decorative />

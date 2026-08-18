@@ -10,6 +10,7 @@
 import { boot } from './core.js';
 import * as remoteSeeds from './remote-seeds.js';
 import * as wire from '../live-transport.js';
+import * as frames from './frames.js';
 import * as lakes from './lakes.js';
 import * as morph from './morph.js';
 import * as live from './live.js';
@@ -23,6 +24,7 @@ export function bootDev(): void {
 	boot([
 		remoteSeeds.install,
 		wire.install,
+		frames.install,
 		lakes.install,
 		morph.install,
 		live.install,

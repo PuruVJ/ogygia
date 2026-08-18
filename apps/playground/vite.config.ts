@@ -3,6 +3,9 @@ import { ogygia } from 'ogygia/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+	// PROFILER_SOURCEMAPS=1 emits server .map files so ogygia/profiler maps bundled frames back
+	// to source and recovers anonymous names. Off by default.
+	build: process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : undefined,
 	// ogygia MUST run before sveltekit() (enforce:'pre' also guarantees ordering)
 	plugins: [
 		ogygia({

@@ -9,9 +9,11 @@
 	// island copy always gets the shim and the /kit copy always gets the real store.
 	import { page } from '$app/stores';
 	import SplitChild from './SplitChild.svelte';
+	import SharedUrl from './SharedUrl.svelte';
 </script>
 
 <header class="island" data-split-header data-marker="og-e2e-split-brain">
 	<span data-split-path>{$page.url.pathname}</span>
 	<SplitChild />
+	<SharedUrl />
 </header>

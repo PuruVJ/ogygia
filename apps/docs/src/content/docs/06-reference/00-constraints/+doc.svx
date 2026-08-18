@@ -1,17 +1,17 @@
 ---
 title: Constraints & patterns
-summary: What crosses the island boundary and what does not — each rule paired with the mistake it prevents and the honest fix.
+summary: What crosses the island boundary and what does not. Each rule is paired with the mistake it prevents and the fix.
 related:
   - regions/client-islands
   - data-state/state-context
   - reference/api
 ---
 
-Islands are a real boundary. Knowing what crosses it — and what quietly does not — keeps you out of trouble. Each rule below is the constraint plus the mistake people hit first, with the way around it.
+Islands are a real boundary. Knowing what crosses it, and what quietly does not, keeps you out of trouble. Each rule below is the constraint plus the mistake people hit first, and the way around it.
 
 ## Props cross. Children and snippets do not.
 
-Props are serialized with devalue and cross into the island. Host children, snippets, and callbacks **do not** — they live in the host scope, not the island's. You cannot hand an island a snippet or a function from the page.
+Props are serialized with devalue and cross into the island. Host children, snippets, and callbacks **do not**. They live in the host scope, not the island's. You cannot hand an island a snippet or a function from the page.
 
 ```svelte
 <!-- ✗ the island never sees this snippet or callback -->
@@ -22,7 +22,7 @@ Props are serialized with devalue and cross into the island. Host children, snip
 
 Model the interaction with props and remote functions, or move the UI inside the island's own `.svelte` file.
 
-The one reserved exception is `ogygiaFallback` on a [server island](/docs/regions/server-islands) — see there for its handling.
+The one reserved exception is `ogygiaFallback` on a [server island](/docs/regions/server-islands). See there for its handling.
 
 ## Captured host state is a snapshot
 
@@ -61,9 +61,9 @@ On a `csr = false` page, the page module never runs on the client. Top-level `on
 </script>
 ```
 
-If you reach for `onMount`, you actually want an island. Move anything that needs to run in the browser inside one — for init, telemetry, or listeners that render no UI, that is a [boot island](/docs/regions/client-islands#the-boot-island-run-code-not-ui): a headless component whose whole job is its `$effect`.
+If you reach for `onMount`, you actually want an island. Move anything that needs to run in the browser inside one. For init, telemetry, or listeners that render no UI, that is a [boot island](/docs/regions/client-islands#the-boot-island-run-code-not-ui): a headless component whose whole job is its `$effect`.
 
-Inline `<script>` tags in page markup are a related trap: they run **once**, on first load, not per navigation — the router swaps `<body>` without executing them. Per-navigation code belongs in an island. See [the router](/docs/app/router) for why.
+Inline `<script>` tags in page markup are a related trap: they run **once**, on first load, not per navigation. The router swaps `<body>` without executing them. Per-navigation code belongs in an island. See [the router](/docs/app/router) for why.
 
 ## Reach for an island, not a bare dynamic import
 
@@ -75,11 +75,11 @@ const { default: Chart } = await import('./Chart.svelte');
 mount(Chart, { target, props });
 ```
 
-That is exactly what `wake: 'idle'` and `wake: 'visible'` already do — with SSR HTML first and a signed boundary around it. Use the island.
+That is exactly what `wake: 'idle'` and `wake: 'visible'` already do, with SSR HTML first and a signed boundary around it. Use the island.
 
-## Choose the boundary honestly, before you build
+## Choose the boundary before you build
 
-If a subtree needs interactivity, it is an island. If it does not, it is a [lake](/docs/regions/lakes) or plain page HTML. Do not wrap static content in an island to "be safe" — that just ships JS you did not need.
+If a subtree needs interactivity, it is an island. If it does not, it is a [lake](/docs/regions/lakes) or plain page HTML. Do not wrap static content in an island to "be safe". That just ships JS you did not need.
 
 Decide up front:
 

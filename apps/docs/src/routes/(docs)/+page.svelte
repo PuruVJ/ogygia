@@ -4,13 +4,12 @@
 	import {
 		heroCode, heroCodeHtml, loadCode, visibleCode, lakeCode, serverCode, fragmentCode,
 		livePartialCode, sharedObjectCode, contentCollectionCode, contentMarkdownCode,
-		contentJsonCode, contentCustomCode, siteCode
+		contentJsonCode, contentCustomCode, dimensionsCode, composeCode
 	} from '$lib/code/snippets';
 	// The hero demo hydrates on load; the showcase islands below each hydrate on the exact schedule
 	// their code shows, so `/` is itself a live demo of the library.
 	import HeroDemo from '$lib/demos/HeroDemo.svelte' with { wake: 'load' };
 	import PageHead from '$lib/PageHead.svelte';
-	import Features from '$lib/Features.svelte';
 	import SiteFooter from '$lib/SiteFooter.svelte';
 	import ShowcaseCard from '$lib/ShowcaseCard.svelte';
 	// Each showcase demo IS a real island using the strategy it documents.
@@ -18,6 +17,7 @@
 	import IdleClock from '$lib/demos/IdleClock.svelte' with { wake: 'idle' };
 	import VisibleWidget from '$lib/demos/VisibleWidget.svelte' with { wake: 'visible' };
 	import MediaWidget from '$lib/demos/MediaWidget.svelte' with { wake: '(max-width: 600px)' };
+	import InteractionWidget from '$lib/demos/InteractionWidget.svelte' with { wake: 'interaction' };
 	import ServerGreeting from '$lib/demos/ServerGreeting.svelte' with { render: 'deferred' };
 	import FrozenCounter from '$lib/demos/FrozenCounter.svelte';
 	import PartialSearch from '$lib/demos/PartialSearch.svelte' with { wake: 'load' };
@@ -51,14 +51,12 @@
 				<span class="hero-say" aria-label="pronounced oh-jee-jee-ya">oh-jee-jee-ya</span>
 			</p>
 			<p>
-				No Kit client bootstrap. The shared runtime is a custom element plus an optional router —
-				<strong>lightweight</strong>, and JS ships only for the components you mark. Mark a
-				component with an import attribute and it wakes on a schedule; everything else stays
-				server HTML. Server islands, lakes, held regions, and prerendering are all the same idea,
-				shaped differently.
+				Your pages are HTML. Nothing hydrates until you say so. Mark a component and it wakes:
+				on load, on scroll, on whatever cue you pick. Everything else stays static. No Kit client
+				to boot, so you ship JavaScript only for what you marked.
 			</p>
 			<div class="btn-row">
-				<a class="btn btn--primary" href="/docs/start/install">Adoption</a>
+				<a class="btn btn--primary" href="/docs/start/overview">Getting started</a>
 				<a class="btn btn--ghost" href="/docs/start/install">Install</a>
 				<a
 					class="btn btn--ghost"
@@ -74,15 +72,13 @@
 	</div>
 </header>
 
-<Features />
-
 <section class="shell story" aria-labelledby="story">
 	<div class="story-intro">
-		<span class="story-kicker">The whole idea, in seven moves</span>
-		<h2 id="story">A page is HTML until you say otherwise</h2>
+		<span class="story-kicker">How it works</span>
+		<h2 id="story">Your pages are static HTML. You pick what hydrates.</h2>
 		<p>
-			Every demo below is a real island on this page. Read top to bottom — each move adds exactly one
-			idea, and by the end you have seen the whole library.
+			Every demo below is real, running on this page as you scroll. It starts with one island and
+			keeps building, one idea at a time, until a whole site runs on nothing more than this.
 		</p>
 	</div>
 
@@ -91,9 +87,8 @@
 			<span class="beat-num">01</span>
 			<h3>One attribute wakes a component</h3>
 			<p>
-				The page ships as server HTML with nothing to hydrate. Add <code>wake: 'load'</code> to an
-				import and that component — and only that one — becomes interactive. Flip JS off: the island
-				stops, the page stays.
+				Add <code>wake: 'load'</code> to an import. That one component wakes up. Everything
+				around it is just HTML. Kill the JavaScript and only the island stops.
 			</p>
 		</div>
 		<ShowcaseCard title="Client island" tag="wake: 'load'" code={loadCode}>
@@ -111,13 +106,13 @@
 			<span class="beat-num">02</span>
 			<h3>It wakes when you decide, not all at once</h3>
 			<p>
-				Swap the schedule: <code>load</code>, <code>idle</code>, <code>visible</code>, or a media
-				query. Each island's JS arrives on its own trigger, so a mostly-static page stays cheap.
+				Same attribute, different cue: <code>load</code>, <code>idle</code>, <code>visible</code>, a
+				media query. Each island's JavaScript waits for its own. Mostly-static pages stay cheap.
 			</p>
 		</div>
 		<ShowcaseCard
 			title="Schedules"
-			tag="idle · visible · media"
+			tag="idle · visible · media · interaction"
 			marker="each wakes on its own trigger"
 			code={visibleCode}
 			stack
@@ -127,6 +122,7 @@
 					<IdleClock />
 					<VisibleWidget />
 					<MediaWidget />
+					<InteractionWidget />
 				</div>
 			{/snippet}
 		</ShowcaseCard>
@@ -135,10 +131,10 @@
 	<div class="beat">
 		<div class="beat-head">
 			<span class="beat-num">03</span>
-			<h3>Freeze what never moves — zero JS</h3>
+			<h3>Freeze what never moves</h3>
 			<p>
-				A heavy, static chunk inside an island is a <strong>lake</strong>: <code>wake: 'none'</code>.
-				It renders on the server and its markup never enters the client bundle.
+				Renders once and never moves? Mark it <code>wake: 'none'</code>. Server HTML, and not a
+				byte in the client bundle. That is a <strong>lake</strong>.
 			</p>
 		</div>
 		<ShowcaseCard title="Lake" tag="wake: 'none'" marker="frozen · 0 KB JS" code={lakeCode}>
@@ -148,13 +144,15 @@
 		</ShowcaseCard>
 	</div>
 
+	<p class="story-turn">That is the whole client side. Now hand the work to the server.</p>
+
 	<div class="beat">
 		<div class="beat-head">
 			<span class="beat-num">04</span>
 			<h3>Hand a hole to the server</h3>
 			<p>
-				<code>render: 'deferred'</code> makes a server island: per-request HTML, personalized, with
-				no client bundle at all. It fetches its own markup after the shell paints.
+				<code>render: 'deferred'</code> makes a server island. Rendered per request, personalized,
+				no client bundle. It fetches its own HTML after the shell paints.
 			</p>
 		</div>
 		<ShowcaseCard
@@ -178,8 +176,8 @@
 			<span class="beat-num">05</span>
 			<h3>Let the server choose the component</h3>
 			<p>
-				A <strong>held region</strong> goes further: the server picks <em>which</em> component
-				renders and hands back signed HTML. The client paints it without ever importing the options.
+				A <strong>held region</strong> goes further. The server picks <em>which</em> component,
+				signs the HTML, and sends it. The client paints it and never imports the options.
 			</p>
 		</div>
 		<ShowcaseCard
@@ -200,9 +198,8 @@
 			<span class="beat-num">06</span>
 			<h3>And push it, live</h3>
 			<p>
-				<code>query.live</code> yields a rendered region every tick. The server pushes the HTML down
-				the channel and the client <strong>morphs</strong> it in place — no client data code, no
-				per-tick fetch.
+				<code>query.live</code> re-renders on every tick. The server pushes HTML down the wire; the
+				client <strong>morphs</strong> it in place. No fetch code, no polling.
 			</p>
 		</div>
 		<ShowcaseCard
@@ -218,13 +215,15 @@
 		</ShowcaseCard>
 	</div>
 
+	<p class="story-turn">Every region so far stands on its own. They can also share one live object.</p>
+
 	<div class="beat">
 		<div class="beat-head">
 			<span class="beat-num">07</span>
 			<h3>Share one object across islands</h3>
 			<p>
-				Two separate island bundles, one live object passed as a prop. The add button writes it, the
-				counter reads it — no store, no event bus. That is the wire contract doing the wiring.
+				Two island bundles, one live object passed as a prop. The button writes, the counter
+				reads. No store, no event bus.
 			</p>
 		</div>
 		<ShowcaseCard
@@ -266,13 +265,13 @@
 
 <section class="shell content-story" aria-labelledby="content-story">
 	<div class="content-head">
-		<span class="story-kicker">Content is an island too</span>
+		<span class="story-kicker">Content</span>
 		<h2 id="content-story">Your content is a collection</h2>
 		<p>
-			Define a collection once with <code>content()</code> — markdown, JSON, or a CMS behind a few
-			lines. Query it over the wire like any remote function and the bodies never ship; the entry you
-			render is a region, so a page's content wakes on the same schedule as everything else. These
-			very docs run on it.
+			The same idea covers your writing. Define a collection once with <code>content()</code>,
+			backed by markdown, JSON, or a CMS. You query it over the wire like any other remote
+			function, and the bodies never ship to the client. What you render is a region, so your
+			content wakes on the same schedules as everything else. These docs run on it.
 		</p>
 	</div>
 
@@ -331,94 +330,118 @@
 	</div>
 </section>
 
-<section class="shell content-story" aria-labelledby="site-story">
-	<div class="content-head">
-		<span class="story-kicker">And then the collection becomes a site</span>
-		<h2 id="site-story">A docs site is one bag of options</h2>
-		<p>
-			This is where the story has been heading. Hand <code>site()</code> a collection and it
-			mints the <em>brains</em>: the nav tree built from your filenames, prev/next that follows real
-			links, full-text search, <code>sitemap.xml</code> and <code>llms.txt</code>, and a link audit
-			that fails the build before a reader ever sees a dead end. Mount a shell, and you have what
-			you are looking at — <strong>this site is the demo</strong>.
-		</p>
+<section class="live-shell" aria-labelledby="live-shell-h">
+	<div class="shell">
+		<div class="content-head live-shell-head">
+			<span class="story-kicker">Site kit</span>
+			<h2 id="live-shell-h">Everything above becomes a whole site</h2>
+			<p>
+				This is where it lands. Hand <code>site()</code> a collection and <code>DocsShell</code>
+				gives you the rest: nav built from filenames, prev/next, full-text search, versioning and
+				translations, <code>sitemap.xml</code> and <code>llms.txt</code>. The frame below is live.
+				Search it (hit <kbd>/</kbd>), switch the version or language, restyle it. This whole site
+				runs on it.
+			</p>
+		</div>
 	</div>
 
-	<div class="content-showcase">
-		<ShowcaseCard
-			title="The whole site"
-			tag="site()"
-			marker="these docs, verbatim"
-			code={siteCode}
-			stack
-		>
-			{#snippet demo()}
-				<ContentPeek />
-			{/snippet}
-		</ShowcaseCard>
+	<figure class="live-frame">
+		<div class="live-frame-bar">
+			<span class="live-frame-dots"><i></i><i></i><i></i></span>
+			<span class="live-frame-url">ogygia playground · DocsShell</span>
+			<a class="live-frame-open" href="/playground/getting-started/installation" target="_blank" rel="noreferrer">Open in full ↗</a>
+		</div>
+		<iframe
+			class="live-frame-view"
+			src="/playground/getting-started/installation"
+			title="ogygia playground — DocsShell running live"
+			loading="lazy"
+		></iframe>
+	</figure>
+</section>
+
+<section class="shell content-story" aria-labelledby="blocks-story">
+	<div class="content-head">
+		<span class="story-kicker">Too opinionated?</span>
+		<h2 id="blocks-story">Then take it apart</h2>
+		<p>
+			DocsShell is one composition of public parts. Keep it and swap a single region for a snippet,
+			or drop to <code>Frame</code> and build your own shell from the same bricks. Versioning and
+			translations aren't bolted on either: they're one primitive, <code>dimensions</code>.
+		</p>
 	</div>
 
 	<div class="content-beats">
 		<div class="beat">
 			<div class="beat-head">
 				<span class="beat-num">01</span>
-				<span class="content-eyebrow">The arrangement</span>
-				<h3>Filenames become the nav</h3>
+				<span class="content-eyebrow">Dimensions</span>
+				<h3>Versioning and i18n, one primitive</h3>
 				<p>
-					<code>NN-</code> prefixes order, <code>+meta.json</code> names sections, and every
-					misplaced page is a named build error — never a silent gap.
-					<a href="/docs/content/outline">Outline →</a>
+					The V2 and EN switchers you just used? Declare the axes and hand back one outline per
+					coordinate. The URLs, the switchers, and per-locale fallback come with it.
+					<a href="/docs/content/dimensions">Dimensions →</a>
 				</p>
 			</div>
+			<figure class="content-code">
+				<div class="demo-code"><Region of={dimensionsCode} /></div>
+			</figure>
 		</div>
 
 		<div class="beat">
 			<div class="beat-head">
 				<span class="beat-num">02</span>
-				<span class="content-eyebrow">The chrome</span>
-				<h3>Shells you can keep or shed</h3>
+				<span class="content-eyebrow">Composition</span>
+				<h3>Swap a region, or the whole shell</h3>
 				<p>
-					<code>DocsShell</code> and <code>BlogShell</code> are compositions of public bricks —
-					replace any region with a snippet, or drop to <code>Frame</code> and bring your own.
+					Every region of the shell is a snippet prop: leave it out for the built-in, pass a
+					snippet to replace it, pass <code>null</code> to remove it. Want to start from nothing?
+					<code>Frame</code> is the same shell with none of the decisions made for you.
 					<a href="/docs/content/shell">Shells →</a>
 				</p>
 			</div>
+			<figure class="content-code">
+				<div class="demo-code"><Region of={composeCode} /></div>
+			</figure>
 		</div>
 
 		<div class="beat">
 			<div class="beat-head">
 				<span class="beat-num">03</span>
-				<span class="content-eyebrow">The audience you don't see</span>
-				<h3>Search, sitemap, llms.txt — emitted</h3>
+				<span class="content-eyebrow">The bricks</span>
+				<h3>Every part imports on its own</h3>
 				<p>
-					An on-device search worker over a prerendered index, and machine-facing serializations
-					that can never drift — they are views of the same tree.
-					<a href="/docs/content/search">Search →</a>
+					<code>Sidebar</code>, <code>OnThisPage</code>, <code>Search</code>, <code>Switcher</code>,
+					<code>Pager</code>, <code>ThemeToggle</code>, <code>Doc</code>, <code>TabGroup</code>.
+					Each one is tree-shakeable, and ships zero CSS until you import it.
+					<a href="/docs/content/shell">Components →</a>
 				</p>
 			</div>
 		</div>
 	</div>
 
-	<p class="content-lead">One command scaffolds all of it: <code>npx ogygia site init</code>.</p>
+	<p class="content-lead">Start with everything: <code>npx ogygia site init</code>. Keep only what you use.</p>
 </section>
 
 <section class="shell applayer" aria-labelledby="applayer">
 	<div class="story-intro">
-		<span class="story-kicker">Around the islands</span>
-		<h2 id="applayer">And a whole app layer</h2>
+		<span class="story-kicker">The app layer</span>
+		<h2 id="applayer">And it is still a fast app</h2>
 		<p>
-			The islands are the primitive. Around them, ogygia makes the page itself fast — prerender the
-			shell, batch the holes, and navigate like an app, all with no extra client code.
+			The shell is what you see. Underneath, ogygia makes the page itself fast: prerender the
+			shell, batch the server holes, and navigate like a single-page app, all without writing
+			extra client code.
 		</p>
 	</div>
 
+	<div class="applayer-beats">
 	<div class="beat">
 		<div class="beat-head">
 			<span class="beat-num">01</span>
 			<h3>Bake the shell, fill the holes</h3>
 			<p>
-				Partial prerendering serves a static file from the CDN with dynamic server islands fetched
-				per visitor — a live reload demo shows one page telling two times.
+				Partial prerendering serves a static file from the CDN, with server islands fetched live
+				per visitor. A reload demo shows one page telling two times.
 				<a href="/docs/app/router">Partial prerendering →</a>
 			</p>
 		</div>
@@ -455,6 +478,7 @@
 				instant. <a href="/docs/app/router#speculate">Speculation →</a>
 			</p>
 		</div>
+	</div>
 	</div>
 </section>
 
@@ -592,11 +616,36 @@
 		border-radius: 5px;
 	}
 
-	.beat-tiles {
+	/* The tiles live inside a snippet passed to <ShowcaseCard>, so a scoped selector gets pruned as
+	   "unused" from this component's CSS (the element renders in the child's tree). Global-scope the
+	   layout so it survives; the class name is unique to this page. */
+	/* Grid (not flex): the direct children are island wrappers with min-width:auto, which would keep
+	   flex items from shrinking into one row. minmax(0, 1fr) tracks force four equal columns that
+	   shrink below content, so all four schedule tiles sit on one horizontal row; 2x2 when cramped. */
+	:global(.beat-tiles) {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-		gap: 0.75rem;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 0.5rem;
 		width: 100%;
+	}
+	@media (max-width: 900px) {
+		:global(.beat-tiles) {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	/* Compact tiles: stack each tile's value/button vertically so a narrow column still reads well. */
+	:global(.beat-tiles .widget) {
+		max-width: none;
+		padding: 0.9rem 0.7rem;
+		text-align: center;
+	}
+	:global(.beat-tiles .widget-label) {
+		margin-bottom: 0.7rem;
+	}
+	:global(.beat-tiles .widget-row) {
+		flex-direction: column;
+		align-items: center;
+		gap: 0.55rem;
 	}
 
 	@media (max-width: 640px) {
@@ -614,8 +663,42 @@
 
 	/* App layer: same numbered-beat rhythm as the seven moves (continues 08–11), so the page reads
 	   as one linear sequence instead of dropping into a card grid. */
+	/* Narrator lines between the story's movements (client → server → shared state). Aligned to the
+	   beat column so they read as one voice carrying the page forward. */
+	.story-turn {
+		margin: 0.25rem auto 2.75rem;
+		padding-left: 3.5rem;
+		font: 500 1.2rem/1.45 var(--font-display);
+		letter-spacing: -0.01em;
+		color: var(--text);
+	}
+	@media (max-width: 640px) {
+		.story-turn {
+			padding-left: 0;
+		}
+	}
+
 	.applayer {
 		padding-block: 4rem 1rem;
+	}
+	/* Text-only beats (no demo card) would hug the left under the centred header. A 2-column grid
+	   fills the width so the section reads balanced instead of skewed. */
+	.applayer-beats {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 2.25rem 3rem;
+		margin-top: 1rem;
+	}
+	.applayer .beat {
+		padding-bottom: 0;
+	}
+	.applayer .beat::before {
+		display: none;
+	}
+	@media (max-width: 640px) {
+		.applayer-beats {
+			grid-template-columns: 1fr;
+		}
 	}
 
 	.beat-head p a {
@@ -850,14 +933,111 @@
 		}
 	}
 
-	.showcase-pair {
+	/* Live DocsShell showcase — the flagship. A browser-chrome frame around the real playground,
+	   set apart with a tinted full-bleed band so it reads as the centrepiece, not another card. */
+	.live-shell {
+		margin-block: 3.5rem;
+		padding-block: 3.75rem;
+		background:
+			radial-gradient(
+				120% 100% at 50% 0%,
+				color-mix(in srgb, var(--accent-deep) 12%, transparent),
+				transparent 60%
+			),
+			var(--bg-sunken);
+		border-block: 1px solid var(--line);
+	}
+	.live-shell-head {
+		max-width: 48rem;
+		margin-bottom: 2rem;
+	}
+	.live-shell-head kbd {
+		font: 500 0.8125rem/1 var(--font-mono);
+		padding: 0.15rem 0.4rem;
+		border: 1px solid var(--line-strong);
+		border-radius: 5px;
+		background: var(--bg-raised);
+		color: var(--text);
+	}
+	/* Break out of the .shell max-width to a wide, centred frame — but not full-bleed. Kept ≥ ~1080px
+	   so the iframe still renders DocsShell's DESKTOP layout (sidebar visible), not the mobile one. */
+	.live-frame {
+		width: min(86vw, 1180px);
+		margin-inline: auto;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-md);
+		overflow: clip;
+		background: var(--bg-raised);
+		box-shadow: var(--shadow-panel);
+	}
+	.live-frame-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.6rem 0.9rem;
+		border-bottom: 1px solid var(--line);
+		background: var(--bg);
+	}
+	.live-frame-dots {
+		display: inline-flex;
+		gap: 0.4rem;
+	}
+	.live-frame-dots i {
+		width: 0.7rem;
+		height: 0.7rem;
+		border-radius: 50%;
+		background: var(--line-strong);
+	}
+	.live-frame-url {
+		flex: 1;
+		min-width: 0;
+		font: 400 0.8125rem/1.3 var(--font-mono);
+		color: var(--text-faint);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.live-frame-open {
+		flex-shrink: 0;
+		margin-left: auto;
+		font: 500 0.8125rem/1 var(--font-mono);
+		color: var(--accent);
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	.live-frame-open:hover {
+		text-decoration: underline;
+	}
+	.live-frame-view {
+		display: block;
+		width: 100%;
+		aspect-ratio: 16 / 10;
+		border: 0;
+		background: var(--bg);
+	}
+	@media (max-width: 640px) {
+		.live-frame-view {
+			aspect-ratio: auto;
+			height: 70vh;
+			min-height: 460px;
+		}
+		/* Drop the decorative dots so the title + "Open in full" fit on one line. */
+		.live-frame-dots {
+			display: none;
+		}
+	}
+
+	/* Global-scoped for the same reason as .beat-tiles: this container renders inside a snippet
+	   handed to <ShowcaseCard>, so a component-scoped rule is pruned as "unused". */
+	:global(.showcase-pair) {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 0.75rem;
+		width: 100%;
 	}
 
 	@media (max-width: 520px) {
-		.showcase-pair {
+		:global(.showcase-pair) {
 			grid-template-columns: 1fr;
 		}
 	}

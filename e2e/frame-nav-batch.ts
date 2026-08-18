@@ -14,8 +14,8 @@ const check = (name: string, cond: boolean, extra = '') => {
 	out.push(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? '  — ' + extra : ''}`);
 };
 
-// Any request to the island endpoint (🏝️, raw or percent-encoded).
-const ISLAND = /(?:%F0%9F%8F%9D|🏝)/;
+// Any request to the island endpoint (__ogygia__, raw or percent-encoded).
+const ISLAND = /(?:__ogygia__|__ogygia__)/;
 
 const browser = await chromium.launch();
 try {

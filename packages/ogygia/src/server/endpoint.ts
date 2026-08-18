@@ -1,9 +1,8 @@
-// Default server-island / region endpoint path, in DECODED (literal) form. The single 🏝️
-// island-emoji makes it clash-safe against real application routes. On the wire it rides as
-// percent-encoded UTF-8 (%F0%9F%8F%9D%EF%B8%8F); the browser / URL layer does that encoding when
-// the runtime fetches or preloads it — we never hand-roll it — and the handle compares the DECODED
-// pathname. Overridable via `ogygiaHandle({ endpoint })`.
-export const DEFAULT_ISLANDS_ENDPOINT = '/🏝️';
+// Default server-island / region endpoint path. The double-underscore sentinel makes it clash-safe
+// against real application routes (no app ships a `/__ogygia__` route) while staying plain ASCII —
+// readable in the network panel, no percent-encoding on the wire. Overridable via
+// `ogygiaHandle({ endpoint })`.
+export const DEFAULT_ISLANDS_ENDPOINT = '/__ogygia__';
 
 /** Max b64url props blob accepted by the region handle (and refused at mint time). */
 export const MAX_REGION_PROPS_LEN = 8192;

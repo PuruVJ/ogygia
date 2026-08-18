@@ -20,7 +20,7 @@ describe('mpaSpeculationRules', () => {
 	it('covers same-origin links, never the region endpoint', () => {
 		const s = JSON.stringify(rules);
 		expect(s).toContain('"href_matches":"/*"');
-		expect(s).toContain('\u{1F3DD}'); // the endpoint exclusion
+		expect(s).toContain('__ogygia__'); // the endpoint exclusion
 		expect(s).toContain('nofollow');
 	});
 

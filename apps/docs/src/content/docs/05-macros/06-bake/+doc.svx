@@ -1,13 +1,13 @@
 ---
 title: bake
-summary: Run a function at build, serialize its result, inline it as a constant. Run at build, ship the answer — even in client code. The imports the function used are dropped, so the computation's server-only deps never linger.
+summary: Run a function at build, serialize its result, inline it as a constant. Run at build, ship the answer, even in client code. The imports the function used are dropped, so the computation's server-only deps never linger.
 related:
   - macros/loaders
   - content/collections
   - macros/overview
 ---
 
-`import.meta.og.bake(fn)` runs `fn` **at build**, serializes its result, and rewrites the call to that literal. At runtime there is no function and no work — just the answer.
+`import.meta.og.bake(fn)` runs `fn` **at build**, serializes its result, and rewrites the call to that literal. At runtime there is no function and no work, just the answer.
 
 ```ts
 import { buildNav } from './nav';
@@ -17,26 +17,26 @@ const nav = import.meta.og.bake(() => buildNav());
 // const nav = { items: [ … the whole computed tree … ] };
 ```
 
-This is the "run at build, ship the answer" trick. A nav tree computed from a corpus, a config object assembled from several files, an RSS payload, anything expensive and unchanging — compute it once when you build, not on every request, and not in the browser.
+This is the "run at build, ship the answer" trick. A nav tree computed from a corpus, a config object assembled from several files, an RSS payload, anything expensive and unchanging: compute it once when you build, not on every request, and not in the browser.
 
 ## How it runs
 
-At build the macro bundles `fn` together with the imports it uses, executes the bundle in Node, serializes the result with [devalue](https://github.com/Rich-Harris/devalue), and inlines it. Because devalue is the serializer, the result can be far more than JSON — `Date`, `Map`, `Set`, `RegExp`, `BigInt`, typed arrays, and circular structures all survive.
+At build the macro bundles `fn` together with the imports it uses, executes the bundle in Node, serializes the result with [devalue](https://github.com/Rich-Harris/devalue), and inlines it. Because devalue is the serializer, the result can be far more than JSON: `Date`, `Map`, `Set`, `RegExp`, `BigInt`, typed arrays, and circular structures all survive.
 
 ## Ship the answer, not the computation
 
-When a function is baked, the imports that **only** fed it become dead — so `bake` removes them. If `buildNav` came from a server-only module, that import is gone from the output entirely; the computation's dependencies never linger in the graph, and Kit's server guard has nothing to complain about. Imports still used elsewhere in the module stay.
+When a function is baked, the imports that **only** fed it become dead, so `bake` removes them. If `buildNav` came from a server-only module, that import is gone from the output entirely; the computation's dependencies never linger in the graph, and Kit's server guard has nothing to complain about. Imports still used elsewhere in the module stay.
 
 ## The contract
 
 `fn` is **self-contained**, exactly like a [Bun macro](https://bun.sh/docs/bundler/macros):
 
 - It may use the module's **imports** and literals, and `await` freely (`async` functions and `Promise.all` work).
-- It must **not** close over the module's other local variables — the eval bundle carries the imports, not the surrounding scope. A reference to something that isn't imported is a build error.
-- It must **not** touch runtime-only modules — `$app/*`, the browser, anything that only exists when the app is running.
+- It must **not** close over the module's other local variables. The eval bundle carries the imports, not the surrounding scope. A reference to something that isn't imported is a build error.
+- It must **not** touch runtime-only modules: `$app/*`, the browser, anything that only exists when the app is running.
 - Its result must be **devalue-serializable**. A function, a Promise, or a class instance in the result is a build error that names the fix: bake produces data.
 
-Every violation surfaces at build with an `[ogygia]` message naming the file and line — never a silent no-op.
+Every violation surfaces at build with an `[ogygia]` message naming the file and line. Never a silent no-op.
 
 ## Where it fits
 

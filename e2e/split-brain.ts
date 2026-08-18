@@ -51,10 +51,19 @@ try {
 	check("csr=false: header's own $page.url.pathname via $app/stores (the line that crashed)", regionPath === '/split-brain', regionPath);
 	check('csr=false: level-2 sibling via $app/state (runes) agrees — no split brain', childPath === '/split-brain', childPath);
 	check('csr=false: level-3 leaf via $app/state — mark propagates transitively', grandPath === '/split-brain', grandPath);
+	// The RACE guard: SharedUrl is a PLAIN component (not a marked island) imported by SplitHeader
+	// (island, csr=false) AND directly by /kit (csr=true). prescan never registers it, so without the
+	// eager transitive walk its `$app/*` is marked lazily during Rolldown's walk — order-dependent, the
+	// exact shape that broke in production. The walk marks it up front, so it always reads the shim.
+	const sharedPath = ((await page.locator('[data-shared-url]').textContent()) ?? '').trim();
+	check('csr=false: shared TRANSITIVE dep (also imported by /kit) reads the shim, not the race', sharedPath === '/split-brain', sharedPath);
 	const regionErrs = errs.filter((e) => !/favicon/.test(e));
 	check('csr=false: zero page errors (the bug threw a TypeError here)', regionErrs.length === 0, regionErrs[0] ?? '');
 
-	// ── Kit world: the SAME file plain-imported on the csr=true page keeps the REAL store ─
+	// ── csr=true page: the same header renders and reads its own pathname ─────────────────
+	// No module-id fork: the header is ONE (shimmed) module. On csr=true the shim falls back to
+	// `location`, so it still reads `/kit` correctly (a static read; the accepted trade-off is that a
+	// shared island+route component uses the shim's snapshot rather than Kit's reactive store there).
 	const kit = await browser.newPage();
 	const kitErrs: string[] = [];
 	kit.on('pageerror', (e) => kitErrs.push(e.message));
@@ -62,11 +71,14 @@ try {
 	await kit.waitForSelector('[data-split-header]', { timeout: 8000 }).catch(() => {});
 	await sleep(300);
 	const kitPath = ((await kit.locator('[data-split-path]').textContent()) ?? '').trim();
-	check("csr=true: plain copy renders Kit's real $page.url.pathname", kitPath === '/kit', kitPath);
+	check('csr=true: the same header reads its own pathname (/kit)', kitPath === '/kit', kitPath);
 	const kitFatal = kitErrs.filter((e) => !/favicon/.test(e));
 	check('csr=true: zero page errors', kitFatal.length === 0, kitFatal[0] ?? '');
 
-	// ── Build output: two worlds, and the region world is Kit-store-free ─────────────────
+	// ── Build output: the header never bundles Kit's real (empty-under-csr=false) client store ──
+	// `$app/stores`'s real client reads `getContext('__svelte__')`; on a csr=false island that store
+	// is never populated → `page.url` undefined → the crash. With the eager walk the header (and its
+	// transitive deps) are shimmed in EVERY chunk that carries them, so none bundle `__svelte__`.
 	const clientDir = path.join(repo, 'apps/playground/.svelte-kit/output/client/_app/immutable');
 	if (fs.existsSync(clientDir)) {
 		const MARKER = 'og-e2e-split-brain';
@@ -81,28 +93,18 @@ try {
 			}
 		};
 		walk(clientDir);
-		const regionCopies = withMarker.filter((f) => !f.startsWith('nodes/'));
-		const kitCopies = withMarker.filter((f) => f.startsWith('nodes/'));
-		check('build: exactly one region-world copy of the header', regionCopies.length === 1, regionCopies.join(', ') || '(none)');
-		check('build: the csr=true page owns its own Kit-world copy', kitCopies.length >= 1, kitCopies.join(', ') || '(none)');
-
-		// Kit's real `$app/stores` reads `getContext('__svelte__')` and drags in Kit's client
-		// router — the exact leak seen in production. The region copy's chunk and its DIRECT
-		// static imports must be free of it. (`nodes/` copies legitimately reach it via Kit.)
-		if (regionCopies.length === 1) {
-			const regionChunkPath = path.join(clientDir, regionCopies[0]);
-			const regionCode = fs.readFileSync(regionChunkPath, 'utf-8');
-			const closure = [regionCode];
-			for (const m of regionCode.matchAll(/import[^'"]*['"](\.[^'"]+\.js)['"]/g)) {
-				const dep = path.resolve(path.dirname(regionChunkPath), m[1]);
+		check('build: the header rendered into the client bundle', withMarker.length >= 1, `${withMarker.length} chunk(s)`);
+		const leaks: string[] = [];
+		for (const rel of withMarker) {
+			const chunkPath = path.join(clientDir, rel);
+			const closure = [fs.readFileSync(chunkPath, 'utf-8')];
+			for (const m of closure[0].matchAll(/import[^'"]*['"](\.[^'"]+\.js)['"]/g)) {
+				const dep = path.resolve(path.dirname(chunkPath), m[1]);
 				if (fs.existsSync(dep)) closure.push(fs.readFileSync(dep, 'utf-8'));
 			}
-			check(
-				"build: region world never bundles Kit's real $app/stores",
-				closure.every((code) => !code.includes('__svelte__')),
-				`${closure.length} files checked`
-			);
+			if (closure.some((code) => code.includes('__svelte__'))) leaks.push(rel);
 		}
+		check("build: no copy of the header bundles Kit's real $app/stores (shimmed everywhere)", leaks.length === 0, leaks.join(', ') || 'clean');
 	} else {
 		check('build: client output exists', false, clientDir);
 	}

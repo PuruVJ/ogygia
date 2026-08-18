@@ -31,7 +31,7 @@ let cachedEndpoint;
 		'/server preload uses crossorigin=anonymous (matches fetch credentials: same-origin)',
 		/rel="preload" as="fetch" crossorigin="anonymous"/.test(html)
 	);
-	check('/server preload points at the island endpoint (raw-emoji path)', /href="[^"]*🏝️/.test(html));
+	check('/server preload points at the island endpoint (raw-emoji path)', /href="[^"]*__ogygia__/.test(html));
 	check('/server ships NO Kit bootstrap (csr=false)', !/__sveltekit/.test(html));
 	// The "zero component JS" guarantee is a production-build property. In dev, Vite injects
 	// module URLs for HMR/tooling, so only assert this against a real build.
@@ -142,7 +142,7 @@ let cachedEndpoint;
 	check('tampered props rejected (403)', resP.status === 403, `got ${resP.status}`);
 
 	// unknown region id with forged sig -> 403 (no existence oracle)
-	const resU = await fetch(base + '/🏝️?id=deadbeefdead&props=W3t9XQ&exp=9999999999&sig=' + '0'.repeat(64));
+	const resU = await fetch(base + '/__ogygia__?id=deadbeefdead&props=W3t9XQ&exp=9999999999&sig=' + '0'.repeat(64));
 	check('unknown region id rejected (403, no oracle)', resU.status === 403, `got ${resU.status}`);
 
 	// cross-region replay: valid sig for this endpoint's props, but swapped id
@@ -182,7 +182,7 @@ try {
 		const page = await ctx.newPage();
 		const renderStamps = new Set();
 		page.on('response', async (r) => {
-			if (!r.url().includes('%F0%9F%8F%9D')) return; // percent-encoded island emoji
+			if (!r.url().includes('__ogygia__')) return; // percent-encoded island emoji
 			try {
 				const t = await r.text();
 				const at = (t.match(/at (\S+Z)/) || [])[1];
@@ -246,7 +246,7 @@ try {
 		await page.waitForTimeout(200);
 		const renderStamps = new Set();
 		page.on('response', async (r) => {
-			if (!r.url().includes('%F0%9F%8F%9D')) return; // percent-encoded island emoji
+			if (!r.url().includes('__ogygia__')) return; // percent-encoded island emoji
 			try {
 				const t = await r.text();
 				const at = (t.match(/at (\S+Z)/) || [])[1];

@@ -1,16 +1,16 @@
 ---
 title: Outline
-summary: The arranger. Take any number of collections and an arrangement, derive one normalized nav tree plus an address map. A bare collection arranges by convention; pick, groups, and links arrange by hand.
+summary: Take any number of collections and an arrangement, and derive one normalized nav tree plus an address map. A bare collection arranges by convention; pick, groups, and links arrange by hand.
 related:
   - content/site
   - content/dimensions
   - content/collections
 ---
 
-The outline is the one place a site's structure is decided. It takes your collections and an **arrangement spec**, and derives a single normalized tree — the `NavTree` — plus the address map that every other brain reads. Nav, prev/next, section labels, sitemap, prerender entries: all are views of this one tree.
+The outline is the one place a site's structure is decided. It takes your collections and an **arrangement spec**, and derives a single normalized tree (the `NavTree`) plus the address map every other read function uses. Nav, prev/next, section labels, sitemap, prerender entries: all are views of this one tree.
 
 ::: tip When to use
-You give `site()` an outline whenever a site is more than one flat list — multiple collections, hand-ordered sections, a landing link in the sidebar. For a single convention-ordered collection, pass it bare and skip this entirely.
+You give `site()` an outline whenever a site is more than one flat list: multiple collections, hand-ordered sections, a landing link in the sidebar. For a single convention-ordered collection, pass it bare and skip this entirely.
 :::
 
 ## A bare collection arranges itself
@@ -24,7 +24,7 @@ import { guides } from './collections.server';
 export const docs = site({ outline: guides });
 ```
 
-`NN-` prefixes order siblings and are stripped from the URL (`03-routing` → `/routing`, sorted third). A `+meta.json` sidecar names a section. Nothing else to say — the tree is the folder tree.
+`NN-` prefixes order siblings and are stripped from the URL (`03-routing` → `/routing`, sorted third). A `+meta.json` sidecar names a section. That is all: the tree is the folder tree.
 
 ## The spec grammar
 
@@ -49,7 +49,7 @@ export const docs = site({
 - **`{ label, href }`** → a plain link node, backed by no entry.
 - **`() => items`** → a computed subtree, the escape hatch for anything dynamic.
 
-`pick()` patterns are worth a second look — the **order you write is the order readers get**, and a glob sweeps a subtree in convention order:
+With `pick()`, the **order you write is the order readers get**, and a glob sweeps a subtree in convention order:
 
 ```ts
 pick(docs,
@@ -61,11 +61,11 @@ pick(docs,
 
 ## Placement is single-assignment
 
-Every entry lands **exactly once**. A bare collection consumes whatever is not yet placed, so `pick()` a few pages into a "Start" group and drop the collection later to sweep up the rest. The safety net a stringly sidebar config never had is that mistakes are **named build errors**, not silent gaps:
+Every entry lands **exactly once**. A bare collection consumes whatever is not yet placed, so `pick()` a few pages into a "Start" group and drop the collection later to sweep up the rest. Unlike a stringly sidebar config, mistakes here are **named build errors**, not silent gaps:
 
 - an unknown `pick` id, or a glob that matches nothing
 - an entry placed twice, or a slug collision
-- an **orphan** — an entry no spec ever placed
+- an **orphan**: an entry no spec ever placed
 
 Each fails the build with the id and the reason.
 
@@ -103,11 +103,11 @@ export const posts = folder(
 
 :::
 
-`numbered()` verifies siblings as it reads — mixing prefixed and unprefixed files, or inconsistent padding, is an error unless a `+meta.json` opts the directory out with `"ordered": false`. `dated()` recovers the date from the filename for display via `dateOf(filePath)` while keeping it out of the URL.
+`numbered()` verifies siblings as it reads: mixing prefixed and unprefixed files, or inconsistent padding, is an error unless a `+meta.json` opts the directory out with `"ordered": false`. `dated()` recovers the date from the filename for display via `dateOf(filePath)` while keeping it out of the URL.
 
 ## The address map
 
-Beyond the tree, the outline knows how to **resolve** a slug to its entry and how to enumerate every address. Downstream brains use this directly — `docs.entries()` for prerender inputs, `docs.page(slug)` to resolve one page, `switcher()` on a [dimensioned](/docs/content/dimensions) site. When you build custom chrome, `hrefOf(base, slug)` is the one sanctioned way to turn an address into a link — it is what keeps a site correct under any mount prefix:
+Beyond the tree, the outline knows how to **resolve** a slug to its entry and how to enumerate every address. Downstream read functions use this directly: `docs.entries()` for prerender inputs, `docs.page(slug)` to resolve one page, `switcher()` on a [dimensioned](/docs/content/dimensions) site. When you build custom chrome, `hrefOf(base, slug)` is the one sanctioned way to turn an address into a link; it is what keeps a site correct under any mount prefix:
 
 ```ts
 import { hrefOf } from 'ogygia/content';
@@ -124,16 +124,16 @@ hrefOf('', 'routing');        // '/routing'
 site({ outline: guides, prevNext: 'graph', trail: 'group' });
 ```
 
-- **`prevNext: 'order'`** (default) — plain document order, the sidebar read top to bottom.
-- **`prevNext: 'graph'`** — follow the content graph (an entry's declared relations), falling back to order; a page's next is the one it links onward to.
-- **`trail: 'site'`** (default) — the trail runs through the whole site.
-- **`trail: 'group'`** — prev/next stops at the top-level section boundary, so a multi-topic site never links across topics.
+- **`prevNext: 'order'`** (default): plain document order, the sidebar read top to bottom.
+- **`prevNext: 'graph'`**: follow the content graph (an entry's declared relations), falling back to order; a page's next is the one it links onward to.
+- **`trail: 'site'`** (default): the trail runs through the whole site.
+- **`trail: 'group'`**: prev/next stops at the top-level section boundary, so a multi-topic site never links across topics.
 
 The `<Pager>` component and `docs.page()`'s `trail` field both read whatever you set.
 
 ## Do / don't
 
 - **Do** let a bare collection sweep the remainder. Place the few pages that need a specific home, and let convention handle the rest.
-- **Do** trust the build errors — an orphan or a collision is a real structural mistake, surfaced with its id.
+- **Do** trust the build errors; an orphan or a collision is a real structural mistake, surfaced with its id.
 - **Don't** hand-maintain a parallel list of pages. The outline IS the list; a new file appears in the nav the moment the glob sees it.
 - **Don't** encode order in a `+meta.json`. Order is the `NN-` prefix (one channel); the sidecar is for labels only.

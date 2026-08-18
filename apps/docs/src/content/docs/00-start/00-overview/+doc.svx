@@ -1,6 +1,6 @@
 ---
 title: Overview
-summary: SSR islands for SvelteKit. Pages ship as server HTML with no Kit client bootstrap — JS arrives only for the components you mark, on a ~7.6 KB runtime.
+summary: SSR islands for SvelteKit. Pages ship as server HTML with no Kit client bootstrap. JavaScript arrives only for the components you mark, on a ~7.6 KB runtime.
 related:
   - regions/regions
   - start/quickstart
@@ -21,10 +21,10 @@ ogygia is an islands architecture for SvelteKit. A page ships as **server HTML w
 That is the whole idea: opt the route out of the Kit client with `csr = false`, then mark the imports you want interactive. The heading ships zero JS. `Cart` ships its own, and only when it is needed.
 
 ::: tip When to use
-Reach for ogygia on content-heavy or mostly-static pages with pockets of interactivity — marketing, docs, blogs, dashboards, storefronts. Anywhere you feel you are shipping a whole framework to run one widget. If your page is a single large interactive app, plain SvelteKit with `csr = true` is the simpler tool — and ogygia [coexists](/docs/start/install) with those pages route by route.
+Reach for ogygia on content-heavy or mostly-static pages with pockets of interactivity: marketing, docs, blogs, dashboards, storefronts. Anywhere you feel you are shipping a whole framework to run one widget. If your page is a single large interactive app, plain SvelteKit with `csr = true` is the simpler tool, and ogygia [coexists](/docs/start/install) with those pages route by route.
 :::
 
-The island below is real — it lives on this page, marked `wake: 'load'`, while the prose around it stays HTML:
+The island below is real. It lives on this page, marked `wake: 'load'`, while the prose around it stays HTML:
 
 <script>
   import Counter from '$lib/demos/Counter.svelte' with { wake: 'load' };
@@ -43,14 +43,14 @@ The island below is real — it lives on this page, marked `wake: 'load'`, while
 
 ## How it works
 
-A normal SvelteKit page boots the Kit client: it hydrates the whole tree, so every page carries the framework whether it needs it or not. ogygia flips that. You set `csr = false`, and the page is **just HTML** — no Kit client, no app-wide hydration.
+A normal SvelteKit page boots the Kit client: it hydrates the whole tree, so every page carries the framework whether it needs it or not. ogygia flips that. You set `csr = false`, and the page is **just HTML**: no Kit client, no app-wide hydration.
 
 ```ts title=src/routes/+layout.ts
 // the whole page opts out of the Kit client
 export const csr = false;
 ```
 
-What ships instead is a **~7.6 KB runtime** — a custom element (`<ogygia-region>`) plus an optional router. It sits and waits. JS arrives only for the components you explicitly mark, and it attaches to the HTML that is already there rather than replacing it.
+What ships instead is a **~7.6 KB runtime**: a custom element (`<ogygia-region>`) plus an optional router. It sits and waits. JS arrives only for the components you explicitly mark, and it attaches to the HTML that is already there rather than replacing it.
 
 ## When things happen
 
@@ -67,33 +67,30 @@ On an **island** the word says *when JS runs*. On a **server island** it says *w
 
 ## One primitive, four kinds
 
-Islands, server islands, lakes, and held regions are not four features — they are four settings of one `<Region>` envelope. That canonical table, and the two dials behind it, live on the [Regions](/docs/regions/regions) landing page.
+Islands, server islands, lakes, and held regions are not four features. They are four settings of one `<Region>` envelope. That canonical table, and the two dials behind it, live on the [Regions](/docs/regions/regions) landing page.
 
-## The story these docs tell
+## How the docs are organized
 
-The sections read in order, and each one earns the next. It is one arc, from a page that is just
-HTML to a site that runs itself:
+The sections build on each other. Read them in order:
 
-1. **A page is HTML** — until you mark a component and part of it [comes alive](/docs/regions/regions).
-   Islands, server islands, lakes, held regions: four settings of one primitive.
-2. **Alive things need to talk** — [remote functions](/docs/data-state/remote-functions) give islands
-   a server, and [shared state](/docs/data-state/state-context) lets one live object span them.
-3. **Your words become data — and the data becomes a site.** A
-   [collection](/docs/content/collections) turns markdown, JSON, or a CMS into typed entries;
-   [`site()`](/docs/content/site) arranges collections into a nav tree, search, emissions, and a
-   shell. These docs are that chapter, rendered.
-4. **The site becomes an app** — the [router](/docs/app/router) swaps pages without a reload, batches
-   server islands into one request, and prerenders what you'll click next.
-5. **The build does the heavy lifting** — [`import.meta.og.*`](/docs/macros/overview) settles at
-   compile time everything that never changes between requests.
-6. **And the boundary has rules** — the [constraints](/docs/reference/constraints) that keep all of
-   the above honest.
+1. **[Regions](/docs/regions/regions).** Mark a component and part of the page becomes interactive.
+   Islands, server islands, lakes, and held regions are four settings of one primitive.
+2. **[Data and state](/docs/data-state/remote-functions).** Remote functions give islands a server,
+   and [shared state](/docs/data-state/state-context) lets one live object span them.
+3. **[Content](/docs/content/collections).** A collection turns markdown, JSON, or a CMS into typed
+   entries. [`site()`](/docs/content/site) arranges collections into a nav tree, search, emissions,
+   and a shell. These docs are built with it.
+4. **[The app layer](/docs/app/router).** The router swaps pages without a reload, batches server
+   islands into one request, and prerenders what you will click next.
+5. **[Macros](/docs/macros/overview).** `import.meta.og.*` settles at compile time everything that
+   never changes between requests.
+6. **[Constraints](/docs/reference/constraints).** The rules that keep all of this honest.
 
 ## Start here
 
-- [Install](/docs/start/install) — add the package and wire the plugin.
-- [Quickstart](/docs/start/quickstart) — your first island, end to end.
-- [Regions](/docs/regions/regions) — chapter one: the primitive everything compiles to.
+- [Install](/docs/start/install): add the package and wire the plugin.
+- [Quickstart](/docs/start/quickstart): your first island, end to end.
+- [Regions](/docs/regions/regions): the primitive everything compiles to.
 
 <style>
   .doc-demo {

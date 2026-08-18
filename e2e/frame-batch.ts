@@ -28,7 +28,7 @@ if (endpoints.length === 0) {
 }
 
 const q = endpoints[0].indexOf('?');
-// Endpoints are page-relative ("./🏝️?…"); make an absolute path for node fetch.
+// Endpoints are page-relative ("./__ogygia__?…"); make an absolute path for node fetch.
 const path = '/' + (q === -1 ? endpoints[0] : endpoints[0].slice(0, q)).replace(/^[./]+/, '');
 
 const res = await fetch(base + path, {
@@ -55,7 +55,7 @@ check(
 const mixed = await fetch(base + path, {
 	method: 'POST',
 	headers: { 'content-type': 'application/json' },
-	body: JSON.stringify([endpoints[0], '/🏝️?id=deadbeef0000&props=x&exp=9999999999&sig=forged'])
+	body: JSON.stringify([endpoints[0], '/__ogygia__?id=deadbeef0000&props=x&exp=9999999999&sig=forged'])
 });
 const mixedBody = mixed.status === 200 ? await mixed.text() : '';
 const mixedReal = [...mixedBody.matchAll(/<template data-ogygia-slot="([^"]+)">/g)].map((m) => m[1]).filter((s) => s !== '__ogygia_done__');

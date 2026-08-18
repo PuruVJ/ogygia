@@ -1,23 +1,23 @@
 ---
 title: Site
-summary: A documentation-site layer on top of collections. Arrange collections into a navigable site — nav tree, prev/next, search, sitemap, a shell — with the brains browser-safe and the corpus server-only.
+summary: A documentation-site layer on top of collections. Arrange collections into a navigable site: nav tree, prev/next, search, sitemap, and a shell, with read functions browser-safe and the corpus server-only.
 related:
   - content/outline
   - content/shell
   - content/collections
 ---
 
-A [collection](/docs/content/collections) answers **what exists** — a set of typed entries. The site layer answers **how they read as a site**: the nav tree, the order, the prev/next, the search index, the sitemap, the shell around the page. It is built directly on the content pillar and lives in the same `ogygia/content` barrel. **This site is one** — every page you are reading is arranged, navigated, and searched by it. And the **[Playground ↗](/playground)** is a second one, running right next to it: the stock shell, nine swappable themes, a version × locale switcher, a blog genre, and an OpenAPI reference — all minted by one `site()` call.
+A [collection](/docs/content/collections) answers **what exists**: a set of typed entries. The site layer answers **how they read as a site**: the nav tree, the order, the prev/next, the search index, the sitemap, the shell around the page. It builds directly on collections and lives in the same `ogygia/content` barrel. **This site is one**: every page you are reading is arranged, navigated, and searched by it. The **[Playground ↗](/playground)** is a second one: the stock shell, nine swappable themes, a version × locale switcher, a blog genre, and an OpenAPI reference, all minted by one `site()` call.
 
-You hand it collections and an arrangement; it mints the *brains* — small, data-returning, browser-safe functions the routes and the shell consume. The corpus itself never crosses the wire.
+You hand it collections and an arrangement; it mints small, data-returning, browser-safe functions the routes and the shell consume. The corpus itself never crosses the wire.
 
 ::: tip When to use
-Reach for `site()` when a collection needs to become a *site*: a sidebar, "keep reading", a search box, `llms.txt`, versioned or localized docs. If you only need a list and a body on one page, `content()` alone is enough — the site layer is the layer that turns a corpus into something you navigate.
+Reach for `site()` when a collection needs to become a *site*: a sidebar, "keep reading", a search box, `llms.txt`, versioned or localized docs. If you only need a list and a body on one page, `content()` alone is enough. The site layer is what turns a corpus into something you navigate.
 :::
 
 ## From zero
 
-Scaffold the whole thing — site module, content folder, routes, a `DocsShell` layout — in one command:
+Scaffold the whole thing (site module, content folder, routes, a `DocsShell` layout) in one command:
 
 ::: code-group
 
@@ -31,11 +31,11 @@ pnpm dlx ogygia site init
 
 :::
 
-The scaffold is ordinary app code you own from the first second: a `folder()` collection, a `site()` next to it, a catch-all route, a layout mounting the shell. Everything below explains what those few files do.
+The scaffold is ordinary app code you own: a `folder()` collection, a `site()` next to it, a catch-all route, a layout mounting the shell. Everything below explains what those few files do.
 
 ## The whole thing in one file
 
-`site()` takes **one options bag** — `outline` is the only required key — and returns a `Site`. It lives in a **`.server.ts` module**, next to the collections it arranges:
+`site()` takes a single options object (`outline` is the only required key) and returns a `Site`. It lives in a **`.server.ts` module**, next to the collections it arranges:
 
 ```ts title=src/lib/site.server.ts
 // server-only: the corpus can never reach a client bundle
@@ -54,17 +54,17 @@ export const docs = site({
 });
 ```
 
-That is the entire configuration for this site. `docs` is a `folder()` collection, so its `NN-` filename prefixes already encode order and its `+meta.json` sidecars name the sections — the outline reads that structure as **data** and builds the tree with nothing more to say. Point it at several collections, or a `pick()` selection, or explicit groups when you want to arrange by hand — that is the [outline](/docs/content/outline).
+That is the entire configuration for this site. `docs` is a `folder()` collection, so its `NN-` filename prefixes already encode order and its `+meta.json` sidecars name the sections. The outline reads that structure as **data** and builds the tree with nothing more to say. Point it at several collections, or a `pick()` selection, or explicit groups when you want to arrange by hand; that is the [outline](/docs/content/outline).
 
 ::: warning Collections belong in a server module
-A collection's loader is an *eager glob* — the whole compiled corpus. Define it in a `.server.ts` / `.remote.ts` file (or under `src/lib/server/`) and Kit mechanically prevents any client module from importing it, so the corpus can never leak into a browser bundle. Define one elsewhere and ogygia **warns** you at build time. See [Content collections](/docs/content/collections).
+A collection's loader is an *eager glob*: the whole compiled corpus. Define it in a `.server.ts` / `.remote.ts` file (or under `src/lib/server/`) and Kit mechanically prevents any client module from importing it, so the corpus can never leak into a browser bundle. Define one elsewhere and ogygia **warns** you at build time. See [Content collections](/docs/content/collections).
 :::
 
-## Brains, not a framework
+## What site() returns
 
-The minted site — name it what it is, `docs`, `blog` — is a bag of read functions. Each returns plain data; none pulls the corpus into the browser:
+The minted site (name it what it is: `docs`, `blog`) is a set of read functions. Each returns plain data; none pulls the corpus into the browser:
 
-| brain | returns | used by |
+| function | returns | used by |
 | --- | --- | --- |
 | `docs.nav()` | the sidebar tree, hrefs resolved | the shell / a nav remote |
 | `docs.meta()` | `{ nav, switcher, data }` in one call | `<DocsShell {meta}>` |
@@ -80,7 +80,7 @@ Because they are data, **where** they run is your call. Prerender the nav, or fe
 
 ## The wire layer
 
-The collection holds the compiled corpus — potentially megabytes of markdown. The site layer never serializes it. A page's **body** crosses the wire as a [held region](/docs/regions/held-regions) ticket (baked HTML, not source); everything else is metadata. [`remotes()`](/docs/content/remotes) mints the crossing from `site` in a `.remote.ts` — server-only, so the corpus stays server-side and the browser gets only the ticketed data:
+The collection holds the compiled corpus, potentially megabytes of markdown. The site layer never serializes it. A page's **body** crosses the wire as a [held region](/docs/regions/held-regions) ticket (baked HTML, not source); everything else is metadata. [`remotes()`](/docs/content/remotes) mints the crossing from `site` in a `.remote.ts`, server-only, so the corpus stays server-side and the browser gets only the ticketed data:
 
 ```ts title=src/lib/site.remote.ts
 // the wire layer
@@ -92,7 +92,7 @@ export const { nav, meta, page, search } = remotes(docs, { base: '/docs' });
 
 ## Render it
 
-The page component reads one brain and renders the view. The [`<Doc>`](/docs/content/shell) component lays out the article, the on-this-page rail, and prev/next from a `docs.page()` view; the [shell](/docs/content/shell) wraps it with the sidebar, header, and search:
+The page component reads one function and renders the view. The [`<Doc>`](/docs/content/shell) component lays out the article, the on-this-page rail, and prev/next from a `docs.page()` view; the [shell](/docs/content/shell) wraps it with the sidebar, header, and search:
 
 ```svelte title=src/routes/docs/[...slug]/+page.svelte
 <script>
@@ -126,7 +126,7 @@ And the layout mounts the shell over the `meta` remote, so the corpus never ente
 
 ## Request context: previews and roles
 
-Every brain takes an optional **read context** — a plain object your `context` function derives from the request. Collections thread it into their `filter`, so one site serves a public projection and a preview projection from the same corpus:
+Every read function takes an optional **read context**: a plain object your `context` function derives from the request. Collections thread it into their `filter`, so one site serves a public projection and a preview projection from the same corpus:
 
 ```ts
 export const docs = site({
@@ -162,18 +162,18 @@ Every `site()` key, at a glance. `outline` is the only required one.
 
 The site layer is one surface with a few clear parts. Each has its own page:
 
-- **[Outline](/docs/content/outline)** — arrange collections into a tree. The spec grammar, filename conventions, the address map, prev/next.
-- **[Dimensions](/docs/content/dimensions)** — one site across a matrix of versions or locales, with a switcher and graceful fallback.
-- **[Shell & components](/docs/content/shell)** — `Frame` (headless), `DocsShell` and `BlogShell` (batteries-included), plus `Doc`, `Sidebar`, `Pager`, and the theme.
-- **[Remotes](/docs/content/remotes)** — the wire layer: `nav`, `meta`, `page`, `search`, prerendered or live.
-- **[Search](/docs/content/search)** — the search brain, the static index, the on-device worker, the no-JS fallback.
-- **[Emissions](/docs/content/emit)** — machine-facing serializations: sitemap, `llms.txt`, RSS, raw markdown.
-- **[Checks](/docs/content/checks)** — the link audit and custom checks that fail the build, not the visitor.
+- **[Outline](/docs/content/outline)**: arrange collections into a tree. The spec grammar, filename conventions, the address map, prev/next.
+- **[Dimensions](/docs/content/dimensions)**: one site across a matrix of versions or locales, with a switcher and graceful fallback.
+- **[Shell & components](/docs/content/shell)**: `Frame` (headless), `DocsShell` and `BlogShell` (batteries-included), plus `Doc`, `Sidebar`, `Pager`, and the theme.
+- **[Remotes](/docs/content/remotes)**: the wire layer. `nav`, `meta`, `page`, `search`, prerendered or live.
+- **[Search](/docs/content/search)**: the search function, the static index, the on-device worker, the no-JS fallback.
+- **[Emissions](/docs/content/emit)**: machine-facing serializations. Sitemap, `llms.txt`, RSS, raw markdown.
+- **[Checks](/docs/content/checks)**: the link audit and custom checks that fail the build, not the visitor.
 
 ## Do / don't
 
-- **Do** keep `site()` and its collections in a server module, and mint the wire in a `.remote.ts` — that split is what keeps the corpus out of client bundles.
+- **Do** keep `site()` and its collections in a server module, and mint the wire in a `.remote.ts`; that split is what keeps the corpus out of client bundles.
 - **Do** let filename conventions carry structure (`NN-` order, `+meta.json` labels). The outline reads them as data; you write no arrangement config for the common case.
-- **Don't** pass a collection's bodies over the wire yourself. Let `docs.page()` bake the body into a region ticket — that is the only representation meant to cross.
+- **Don't** pass a collection's bodies over the wire yourself. Let `docs.page()` bake the body into a region ticket; that is the only representation meant to cross.
 - **Don't** reach for the site layer to render a single standalone page. That is `content()` plus `<Region>`; the site layer is the *site* around many.
 

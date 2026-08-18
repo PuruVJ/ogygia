@@ -76,7 +76,8 @@ import {
 	compileFoucScopedCss,
 	foucRelFromId,
 	isFoucCssId,
-	isFoucScopedId
+	isFoucScopedId,
+	resolveFoucImportSpec
 } from '../compiler/fouc-css.js';
 
 /** `packages/ogygia` — Vite must serve absolute shim/runtime resolves from outside the app root. */
@@ -87,51 +88,6 @@ const APP_SHIMS = {
 	'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),
 	'$app/stores': fileURLToPath(new URL('../shims/app-stores.js', import.meta.url)),
 	'$app/navigation': fileURLToPath(new URL('../shims/app-navigation.js', import.meta.url))
-};
-
-// ── Region-graph module identity ─────────────────────────────────────────────────────────────
-// A module in a region's (island's) CLIENT graph carries `?og-region` in its id, and a marked
-// importer's children inherit the mark at resolve time. Membership travels IN the module id — the
-// one channel the bundler dedups, caches, and schedules by — so the `$app/*` shim decision can
-// never race module processing. (The previous design tracked membership in a side-band Set that
-// grew during the same resolveId walk that consumed it: a module reached first from a non-region
-// importer — or whose earliest imports resolved before the module joined the Set — bundled Kit's
-// REAL client `$app/*`, whose page store never populates under csr=false. `$page.url` → undefined
-// at hydrate, island DOM lost. Seen in production: a Header island whose `$app/stores` import on
-// line 2 got Kit's real store while siblings imported on lines 32-34 got the shim — same chunk.)
-//
-// The mark also dissolves the shared-module split brain: a component used by BOTH a csr=true route
-// and a region exists as two modules — the plain copy keeps Kit's real `$app/*` (Kit's client runs
-// there), the `?og-region` copy gets the shims — instead of one module where scheduling picked a
-// side. Under csr=false the plain route-graph copy is dead weight on disk only (route JS is never
-// fetched), so regions cost no extra wire.
-//
-// (The `?og-region` QUERY is distinct from the emitted `og-region.<hash>.js` chunk FILENAME —
-// same vocabulary, different namespace; HAS_REGION_MARK is anchored to `?`/`&` so a bare filename
-// never matches.)
-const REGION_MARK = 'og-region';
-const HAS_REGION_MARK = /[?&]og-region(?:&|$)/;
-const has_region_mark = (id) => !!id && HAS_REGION_MARK.test(id);
-const with_region_mark = (id) => (has_region_mark(id) ? id : id + (id.includes('?') ? '&' : '?') + REGION_MARK);
-/** Modules that stay SHARED between the region world and the Kit world (never marked):
- *  the svelte + Kit + ogygia runtimes (one instance ever — contexts, lifecycles, and the
- *  page-store singleton depend on it), dev-prebundled deps (never `$app/*` importers — esbuild
- *  can't resolve `$app`, so such packages are always excluded from optimizeDeps), virtual ids,
- *  and non-JS assets (styles/images/json — suffixing would double-emit them). */
-const REGION_SHARED_RUNTIME_RE = /\/node_modules\/(svelte|@sveltejs)\//;
-const REGION_JS_RE = /\.(ts|js|mjs|cjs|mts|cts|svelte)$/;
-/** Kit remote functions (`*.remote.ts`): Kit's plugin transforms them into client RPC stubs and
- *  keys their metadata by EXACT module id — a suffixed copy has no metadata row. They are Kit
- *  surface, not island code (their client leg is Kit's own remote runtime, which ogygia already
- *  redirects; see `__sveltekit/remote` above), so they stay in the shared world. */
-const REGION_REMOTE_RE = /\.remote\.(ts|js|mts|mjs|cts|cjs)$/;
-const region_shared = (id) => {
-	const clean = id.split('?')[0];
-	if (clean.startsWith('\0') || clean.startsWith('virtual:')) return true;
-	if (clean.startsWith(PKG_ROOT) || clean.includes('/node_modules/ogygia/')) return true;
-	if (REGION_SHARED_RUNTIME_RE.test(clean) || clean.includes('/.vite/deps/')) return true;
-	if (REGION_REMOTE_RE.test(clean)) return true;
-	return !REGION_JS_RE.test(clean);
 };
 
 // A lake's component code must ship in NO client chunk. In the CLIENT build of an island's virtual
@@ -455,7 +411,7 @@ export function mpaSpeculationRules(): string {
 	const where = {
 		and: [
 			{ href_matches: '/*' },
-			{ not: { href_matches: '/\u{1F3DD}\u{FE0F}*' } },
+			{ not: { href_matches: '/__ogygia__*' } },
 			{ not: { selector_matches: '[rel~=nofollow]' } },
 			{
 				or: [
@@ -939,6 +895,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 	/** @type {Map<string, {source:string, hostPath:string, id:string, componentPath?: string | null, server?: boolean, lakes?: string[], role?: 'entry'|'wrapper'}>} keyed by virtual path */
 	const registry = new Map();
+	/** Absolute module ids in an island's CLIENT dependency graph. `$app/*` resolves to shims
+	 *  for these importers (virtual island module AND its transitive component imports). */
+	const island_graph = new Set();
 	const strip_id = (id) => (id ? id.split('?')[0] : id);
 	/** @type {Map<string, string>} iid -> entry virtual path (hydrate / defer / swr-lake) */
 	const by_id = new Map();
@@ -965,19 +924,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	let content_scanned = false;
 	/** Absolute paths of app modules that define a transportable class (built during prescan). */
 	const transportable_modules = new Set();
-	/** Shared-world test with app context layered on the pure `region_shared` — wire-protocol
-	 *  surface whose identity must stay single across both worlds:
-	 *  - a transportable-class module: the eager-registration manifest imports it, and revived
-	 *    instances must satisfy `instanceof` in island code too;
-	 *  - the app's universal hooks: its `transport` codecs construct instances the island then
-	 *    `instanceof`-checks against its own import of the same file.
-	 *  Deterministic: prescan/configResolved fill both before any island child can resolve.
-	 *  (Known edge: a transportable defined inside node_modules isn't prescanned — a library
-	 *  transportable imported by an island can still dual-instance.) */
-	const is_region_shared = (id) => {
-		const clean = id.split('?')[0];
-		return region_shared(id) || transportable_modules.has(clean) || clean === universal_hooks;
-	};
 	let sourcemap = false;
 	/** @type {import('vite').ViteDevServer | null} */
 	let vite_server = null;
@@ -1041,10 +987,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					const holders = id_hosts.get(entry.id);
 					if (!holders || holders.size === 0) {
 						registry.delete(vpath);
+						island_graph.delete(vpath);
 					}
 				} else {
 					registry.delete(vpath);
-					}
+					island_graph.delete(vpath);
+				}
 			}
 			host_index.delete(key);
 		}
@@ -1202,6 +1150,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					role: 'wrapper'
 				});
 				idx.vpaths.add(isl.wrapperPath);
+				island_graph.add(isl.wrapperPath);
 			}
 			// Region binding: the host imports this JS module; its source is leg-split at load()
 			// (SSR carries the signer, client is metadata-only). Not a svelte wrapper.
@@ -1217,6 +1166,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					role: 'region'
 				});
 				idx.vpaths.add(isl.bindingPath);
+				island_graph.add(isl.bindingPath);
 			}
 			if (isl.virtualPath && isl.source) {
 				registry.set(isl.virtualPath, {
@@ -1233,9 +1183,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				});
 				by_id.set(isl.id, isl.virtualPath);
 				idx.vpaths.add(isl.virtualPath);
+				island_graph.add(isl.virtualPath);
 			} else if (isl.virtualPath) {
 				by_id.set(isl.id, isl.virtualPath);
 			}
+			if (isl.componentPath) island_graph.add(isl.componentPath);
 		}
 		host_index.set(key, idx);
 	};
@@ -1292,6 +1244,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!same_module_path(entry.componentPath, file)) continue;
 				affected.add(vpath);
 				registry.delete(vpath);
+				island_graph.delete(vpath);
 				by_id.delete(entry.id);
 				region_kinds.delete(entry.id);
 				const idx = host_index.get(host_key(entry.hostPath));
@@ -1390,6 +1343,62 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 		};
 		{ const __ps=__P?performance.now():0; walk(src_dir); if(__P)__prof.prescanMs+=performance.now()-__ps; }
+
+		// Complete `island_graph` TRANSITIVELY, before the bundler resolves a single module. `walk`
+		// above registered each island's OWN component; this marks everything those components import
+		// (and what THOSE import, …) as island code too — so the `$app/*` shim decision is DETERMINISTIC
+		// rather than a build-order race. Without it, a component shared between an island and a
+		// non-island route is marked lazily during Rolldown's own walk: if its `$app/*` (or its
+		// transform) resolves before the island path marks it, it keeps Kit's real client store — which
+		// under `csr = false` is never populated → `page.url` undefined → the island crashes at hydrate.
+		// (This is the race the `?og-region` module-id fork tried to fix; that fork broke Svelte's
+		// scoped-CSS emission, so membership rides OUTSIDE the module id here — the walk only READS.)
+		//
+		// PERF: strictly O(reachable modules). A SINGLE shared `seen` set means each file is read and
+		// scanned exactly once and never re-descended — no per-root re-walk, no depth multiplier (cf.
+		// the depth-25 O(2^depth) usage-walk regression this deliberately avoids). A cheap regex lists
+		// specifiers (over-collection is harmless — an unresolvable one is skipped); package/alias
+		// specifiers stop the walk, where the lazy resolveId marking below stays as the backstop.
+		{
+			const __ws = __P ? performance.now() : 0;
+			const seen_dep = new Set<string>();
+			const DEP_EXTS = ['', '.svelte', '.ts', '.js', '.svelte.ts', '.svelte.js', '.mjs'];
+			const resolve_dep = (spec: string, importerAbs: string): string | null => {
+				const base = resolveFoucImportSpec(spec, importerAbs, libDir);
+				if (!base) return null; // package / alias — the lazy resolveId marking is the backstop
+				for (const ext of DEP_EXTS) {
+					try { if (fs.statSync(base + ext).isFile()) return base + ext; } catch { /* not this ext */ }
+				}
+				for (const ext of DEP_EXTS.slice(1)) {
+					const idx = path.join(base, 'index' + ext);
+					try { if (fs.statSync(idx).isFile()) return idx; } catch { /* not an index */ }
+				}
+				return null;
+			};
+			const IMPORT_SPEC = /\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\bimport\s*\(\s*['"]([^'"\n]+)['"]/g;
+			const walk_dep = (abs: string) => {
+				const norm = strip_id(abs);
+				if (seen_dep.has(norm)) return;
+				seen_dep.add(norm);
+				island_graph.add(norm);
+				if (!/\.(svelte|ts|js|mjs|cjs)$/.test(norm)) return;
+				const src = readFile(norm);
+				if (src == null) return;
+				IMPORT_SPEC.lastIndex = 0;
+				let m: RegExpExecArray | null;
+				while ((m = IMPORT_SPEC.exec(src))) {
+					const spec = m[1] || m[2] || m[3];
+					if (!spec || spec[0] === '\0' || spec.startsWith('$app/') || spec.startsWith('$env/') || spec.startsWith('virtual:')) continue;
+					const dep = resolve_dep(spec, norm);
+					if (dep) walk_dep(dep);
+				}
+			};
+			for (const entry of registry.values()) {
+				if (entry.componentPath) walk_dep(strip_id(entry.componentPath));
+			}
+			if (__P) __prof.prescanMs += performance.now() - __ws;
+		}
+
 		// A transportable class (`static wire = import.meta.og.wire(…)`) means island props can carry a
 		// live wired object, revived through the wire codec — so this app needs the wire runtime.
 		if (transportable_modules.size > 0) runtime_marks.wire = true;
@@ -1540,7 +1549,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// islands (defer / deferred regions) and their signed endpoint would 403. `prescan` reads
 			// `.svelte`/`.ts`; `islandBridge.scan` (set by a preprocessor package like ogygia/content)
 			// contributes islands from markdown, which becomes Svelte only after that preprocessor.
-			if (is_build && !content_scanned) {
+			// Discover content (`.svx`/`.md`) islands up front in DEV too, not only build. A server
+			// (`render: deferred`) island in a content file is registered lazily when its page SSRs —
+			// but its signed endpoint is a SEPARATE request that imports the server manifest, and if
+			// the island hasn't registered yet the manifest lacks its id → 403 (NOT_IN_MANIFEST). That
+			// made content deferred holes flaky in dev (they worked only when the page-SSR registration
+			// happened to win the race). `islandBridge.scan` walks the markdown corpus and registers
+			// every island before the first request, so the manifest is complete when any endpoint is
+			// hit. Idempotent via `content_scanned`; a no-op for apps without a content preprocessor.
+			if (!content_scanned) {
 				content_scanned = true;
 				prescan();
 				await islandBridge.scan?.({ root, readFile });
@@ -1696,10 +1713,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// Island CLIENT graph: shim `$app/*` for the virtual module AND every module it
 			// pulls in (e.g. `$lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias
 			// would otherwise give islands the uninitialized Kit page (`new URL('a:')` → empty
-			// pathname). Membership arrives IN the id (`?og-region`, minted below) — deterministic
-			// by construction. enforce:'pre' wins over Kit's resolveId. SSR keeps real Kit modules.
+			// pathname). enforce:'pre' wins over Kit's resolveId. SSR keeps real Kit modules.
 			const importer_id = strip_id(importer);
-			const from_island = (importer && has_region_mark(importer)) || (importer_id && registry.has(importer_id));
+			const from_island =
+				importer_id && (registry.has(importer_id) || island_graph.has(importer_id));
 			if (!ssr && from_island && APP_SHIMS[source]) {
 				return APP_SHIMS[source];
 			}
@@ -1712,23 +1729,25 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (candidate.startsWith('/@id/')) candidate = candidate.slice('/@id/'.length);
 				if (candidate.startsWith('/@fs/')) candidate = candidate.slice('/@fs'.length);
 				if (registry.has(candidate)) {
+					island_graph.add(candidate);
 					return candidate;
 				}
 				const abs = path.isAbsolute(candidate)
 					? candidate
 					: path.join(root, candidate.replace(LEADING_SLASH, ''));
 				if (registry.has(abs)) {
+					island_graph.add(abs);
 					return abs;
 				}
 			}
 
-			// Virtual island/wrapper module: resolve relative imports to the host file. On the
-			// CLIENT leg the resolved child is minted into the region world (`?og-region`) — this
-			// is where the suffix ENTERS the graph; propagation below carries it transitively.
+			// Virtual island/wrapper module: resolve relative imports to the host file, and mark
+			// the resolved id so its own `$app/*` imports hit the shim branch above.
 			// Skip ogygia virtual ids (handled above).
 			if (importer_id && registry.has(importer_id) && !is_island_path(source)) {
 				const host = registry.get(importer_id).hostPath;
 				const resolved = await this.resolve(source, host, { skipSelf: true });
+				if (resolved?.id) island_graph.add(strip_id(resolved.id));
 				// A BARE specifier a generated island module re-emits (a marked package import like
 				// `import TabGroup from 'ogygia/content/tab-group' with { wake: 'load' }`, or a specifier
 				// its child synth re-imports) that Vite cannot resolve must fail HERE, loudly — falling
@@ -1748,21 +1767,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							`"exports" map exposes this subpath (with a "svelte" condition for .svelte components).`
 					);
 				}
-				if (resolved && !ssr && resolved.external !== true && resolved.external !== 'absolute' && !is_region_shared(resolved.id)) {
-					return { ...resolved, id: with_region_mark(resolved.id) };
-				}
 				return resolved;
 			}
-			// REGION-GRAPH PROPAGATION (client only): a `?og-region` importer's children inherit the
-			// suffix. Resolve against the QUERY-STRIPPED path (the real file) with skipSelf, then
-			// re-mint — shared-world leaves (see region_shared) come back plain so runtimes and
-			// singletons stay single-instance. `$app/*` never reaches here (shimmed above).
-			if (!ssr && importer && has_region_mark(importer) && !is_island_path(source)) {
-				const resolved = await this.resolve(source, strip_id(importer), { skipSelf: true });
-				if (!resolved || resolved.external === true || resolved.external === 'absolute' || is_region_shared(resolved.id)) {
-					return resolved;
-				}
-				return { ...resolved, id: with_region_mark(resolved.id) };
+			// Transitive island-graph module (not a virtual entry): mark deps so nested
+			// `$app/*` imports stay shimmed. Do NOT resolve island virtual paths via skipSelf.
+			if (!ssr && importer_id && island_graph.has(importer_id) && !is_island_path(source)) {
+				const resolved = await this.resolve(source, importer, { skipSelf: true });
+				if (resolved?.id) island_graph.add(strip_id(resolved.id));
+				return resolved;
 			}
 			return null;
 		},
@@ -2064,7 +2076,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 		async transform(code, id, options) {
 			const ssr = options?.ssr === true;
-			// Discover islands before any module is transformed so the registry is populated
+			// Discover islands before any module is transformed so island_graph is populated
 			// even when an island entry component is processed before its host page.
 			if (!scanned) prescan();
 
@@ -2288,12 +2300,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				}
 			}
 
-			// CLIENT: rewrite `$app/(state|stores|navigation)` inside region-world components
-			// (`?og-region` ids) to absolute shim paths. Absolute paths bypass Kit's `$app/*` alias
-			// entirely — belt-and-braces alongside the resolveId shim branch, on the same
-			// deterministic key: the suffix in the id. The PLAIN copy of the same file (a csr=true
-			// route importing the component directly) deliberately keeps Kit's real modules.
-			if (!ssr && has_region_mark(id) && id_n.endsWith('.svelte')) {
+			// CLIENT: rewrite `$app/(state|stores|navigation)` inside island entry components
+			// (and any other island_graph .svelte) to absolute shim paths. Absolute paths bypass
+			// Kit's `$app/*` alias entirely — needed when an island's own component graph imports
+			// `$app/*` (csr=true hosts still pass virtual islands as `__component`).
+			if (!ssr && island_graph.has(id_n) && id_n.endsWith('.svelte')) {
 				const rewritten = out.replace(
 					APP_SHIM_IMPORT,
 					(_m, _q, name) => JSON.stringify(APP_SHIMS['$app/' + name])

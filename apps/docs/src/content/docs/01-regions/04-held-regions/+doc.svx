@@ -1,16 +1,16 @@
 ---
 title: Held regions
-summary: A server-chosen island you render like data — the server picks the component, the client paints it.
+summary: A server-chosen island you render like data. The server picks the component, the client paints it.
 related:
   - regions/server-islands
   - content/collections
   - app/router
 ---
 
-A **held region** is a component the server picks at runtime and the client renders — props type-checked, delivered over the wire. It is ogygia's take on RSC: the server decides the UI, the client just paints it.
+A **held region** is a component the server picks at runtime and the client renders: props type-checked, delivered over the wire. It is ogygia's take on RSC: the server decides the UI, the client just paints it.
 
 ::: tip When to use
-Reach for a held region when the *choice of component* belongs to the server — search results that are a card or an empty-state, a feed of mixed item types, a dashboard tile the backend decides. A [server island](/docs/regions/server-islands) fills a *fixed* hole with request-specific HTML; a held region lets the **server choose which component** fills it, and the client never imports the options.
+Reach for a held region when the *choice of component* belongs to the server: search results that are a card or an empty-state, a feed of mixed item types, a dashboard tile the backend decides. A [server island](/docs/regions/server-islands) fills a *fixed* hole with request-specific HTML; a held region lets the **server choose which component** fills it, and the client never imports the options.
 :::
 
 ```svelte
@@ -25,10 +25,10 @@ Reach for a held region when the *choice of component* belongs to the server —
 
 ## Deferred (held) regions
 
-Mark the import and the component becomes a **signed capability** the server mints in a load or remote function. The client fetches it, swaps the HTML in, and hydrates — without ever importing the component itself. Two markers:
+Mark the import and the component becomes a **signed capability** the server mints in a load or remote function. The client fetches it, swaps the HTML in, and hydrates, without ever importing the component itself. Two markers:
 
-- `with { wake: 'load' }` bakes an interactive schedule — `region()` wakes it on that timing.
-- `with { region: 'raw' }` bakes **no** schedule — HTML only, unless the `region()` call sets one.
+- `with { wake: 'load' }` bakes an interactive schedule: `region()` wakes it on that timing.
+- `with { region: 'raw' }` bakes **no** schedule: HTML only, unless the `region()` call sets one.
 
 ```ts title=search.remote.ts
 // server picks the component
@@ -66,11 +66,11 @@ A held region's wake schedule is **baked at the import** with a `wake:` mark, th
 | `wake: 'idle'` | interactive, hydrate when idle |
 | `wake: 'visible'` | interactive, hydrate when scrolled into view |
 | `wake: '(min-width: 60rem)'` | interactive, hydrate when the media query matches |
-| `region: 'raw'` | HTML only — no baked schedule |
+| `region: 'raw'` | HTML only, no baked schedule |
 
 A held region has no `render` mark of its own: you decide *when to fetch* by choosing when to render `<Region>`. A baked `wake:` mark (or the schedule at the `region()` call) decides *when it wakes*.
 
-`region: 'raw'` is the escape hatch: it bakes nothing, so the `region()` call sets the schedule with a `(data) => options` function — handy for a registry of raw components that each decide their timing from their own data:
+`region: 'raw'` is the escape hatch: it bakes nothing, so the `region()` call sets the schedule with a `(data) => options` function. Handy for a registry of raw components that each decide their timing from their own data:
 
 ```ts
 region(block, data, (d) => ({ wake: d.interactive ? 'load' : undefined }));
@@ -78,7 +78,7 @@ region(block, data, (d) => ({ wake: d.interactive ? 'load' : undefined }));
 
 ## Try it
 
-The demo below is a search box. On submit it calls a remote that looks up the query, **picks a component on the server** — an interactive `PackageCard` for a hit, a static `EmptyResult` for a miss — signs it, and returns it. This page never imports either result component. Search `svelte`, `kit`, `vite`, or `ogygia`; anything else returns the static card.
+The demo below is a search box. On submit it calls a remote that looks up the query, **picks a component on the server** (an interactive `PackageCard` for a hit, a static `EmptyResult` for a miss), signs it, and returns it. This page never imports either result component. Search `svelte`, `kit`, `vite`, or `ogygia`; anything else returns the static card.
 
 <script>
   import SearchDemo from './SearchDemo.svelte' with { wake: 'load' };
@@ -89,13 +89,13 @@ The demo below is a search box. On submit it calls a remote that looks up the qu
   <SearchDemo />
 </div>
 
-The card's star button proves it hydrated. The "no match" result ships as pure HTML — view source and you will find no JS chunk for it.
+The card's star button proves it hydrated. The "no match" result ships as pure HTML. View source and you will find no JS chunk for it.
 
 ## The region owns the wait
 
-One rule: **a region's loading UI lives on the region.** Fetching a held region has two async phases that finish at different times — the request (your remote call resolves), then the paint (the HTML lands and its stylesheet loads). Only the region can see both; any `loading` flag, `{#await}`, or boundary you keep next to the call sees only the first, so it declares "done" before the card is on screen.
+One rule: **a region's loading UI lives on the region.** Fetching a held region has two async phases that finish at different times: the request (your remote call resolves), then the paint (the HTML lands and its stylesheet loads). Only the region can see both; any `loading` flag, `{#await}`, or boundary you keep next to the call sees only the first, so it declares "done" before the card is on screen.
 
-So don't track it at all. `of` accepts the **promise** straight from the remote call, so the region owns the whole wait — and its `placeholder` snippet is the single loading indicator, start to finish:
+So don't track it at all. `of` accepts the **promise** straight from the remote call, so the region owns the whole wait. Its `placeholder` snippet is the single loading indicator, start to finish:
 
 ```svelte
 <button type="submit">Search</button>   <!-- no loading state to reconcile -->
@@ -117,29 +117,29 @@ The timeline on a slow link, from submit:
 | request resolves | HTML here; CSS `<link>` hoisted to `<head>`, sheet downloading | still the placeholder |
 | CSS `load` | region paints | the **styled** card, in one step |
 
-No blank gap (the placeholder holds the space until the paint), no unstyled flash (the paint waits for the sheet), and nothing outside the region claims to know when it's ready — so nothing can disagree. ogygia caps the stylesheet wait at a few seconds so a genuinely broken sheet still paints rather than hanging.
+No blank gap (the placeholder holds the space until the paint), no unstyled flash (the paint waits for the sheet), and nothing outside the region claims to know when it's ready, so nothing can disagree. ogygia caps the stylesheet wait at a few seconds so a genuinely broken sheet still paints rather than hanging.
 
-A **re-search** hands `of` a new promise. The region keeps the *previous* card on screen until the next result is styled, then morphs in place — no placeholder flash between results.
+A **re-search** hands `of` a new promise. The region keeps the *previous* card on screen until the next result is styled, then morphs in place: no placeholder flash between results.
 
-Why a held region even has this window: it carries **its own CSS**. The page never imported `PackageCard`, so its styles are on no page stylesheet — they travel with the region. (A held region rendered in the *server* pass — a blocks page, SDUI — has no window at all: its links go into `<head>` during SSR and it arrives styled, no placeholder involved.)
+Why a held region even has this window: it carries **its own CSS**. The page never imported `PackageCard`, so its styles are on no page stylesheet: they travel with the region. (A held region rendered in the *server* pass, a blocks page or SDUI, has no window at all: its links go into `<head>` during SSR and it arrives styled, no placeholder involved.)
 
 ::: warning Why `placeholder`, not `ogygiaFallback`
-`ogygiaFallback` is the reserved slot for a `render: 'deferred'` server island (a fixed hole). A held region is a *value* you place, so its not-ready UI is a snippet on its `<Region>` — plain Svelte.
+`ogygiaFallback` is the reserved slot for a `render: 'deferred'` server island (a fixed hole). A held region is a *value* you place, so its not-ready UI is a snippet on its `<Region>`. Plain Svelte.
 :::
 
 ### Don't await it yourself
 
-With `experimental.async` on you *can* write `of={await search(query)}` inside a `<svelte:boundary>` and let its `pending` snippet drive the wait. Resist it. The boundary un-suspends the moment the fetch resolves — but the region still has a paint to do (swap the HTML, load its stylesheet). You've re-taken ownership of a wait you can't fully see, and your "done" signal fires early.
+With `experimental.async` on you *can* write `of={await search(query)}` inside a `<svelte:boundary>` and let its `pending` snippet drive the wait. Resist it. The boundary un-suspends the moment the fetch resolves. But the region still has a paint to do (swap the HTML, load its stylesheet). You've re-taken ownership of a wait you can't fully see, and your "done" signal fires early.
 
-The runtime still protects you — a region **never paints unstyled** (it holds its previous content, or its `placeholder`, or empty space until the sheet is in) — so the failure mode is a hold with nothing better to show, not a flash. But the fix is to not create the gap: hand the region the promise and put the loading UI where the lifecycle lives. Boundaries, `{#await}`, and loading flags remain great for *your* UI around the region; region readiness just isn't theirs to report.
+The runtime still protects you: a region **never paints unstyled** (it holds its previous content, or its `placeholder`, or empty space until the sheet is in), so the failure mode is a hold with nothing better to show, not a flash. But the fix is to not create the gap: hand the region the promise and put the loading UI where the lifecycle lives. Boundaries, `{#await}`, and loading flags remain great for *your* UI around the region; region readiness just isn't theirs to report.
 
-## Crossing shapes — the wire law
+## Crossing shapes: the wire law
 
 Everything above sends *one* region. The general rule for sending many:
 
 > **A region is the only unit of code that crosses. Everything else is data. Any data shape crosses if its leaves are regions.**
 
-Arrays, records, nesting — the transport doesn't care. It walks the value and mints one signed capability per region leaf it finds, wherever it finds it:
+Arrays, records, nesting: the transport doesn't care. It walks the value and mints one signed capability per region leaf it finds, wherever it finds it:
 
 ```ts
 // a mixed list — each leaf its own ticket
@@ -154,13 +154,13 @@ return await region(FeedCard, { author, media: region(VideoEmbed, { src }) });
 
 ### What `await` does
 
-`await region(…)` renders the component on the server and bakes that HTML into the ticket, so it paints the instant the response lands — no extra request. A **bare** `return region(…)` does the same, because the language awaits any thenable at `return`. So anything you return from a remote crosses with its HTML baked.
+`await region(…)` renders the component on the server and bakes that HTML into the ticket, so it paints the instant the response lands: no extra request. A **bare** `return region(…)` does the same, because the language awaits any thenable at `return`. So anything you return from a remote crosses with its HTML baked.
 
-Leaves nested inside a container are the exception: nothing awaits them, so they cross as a plain address and the client fetches each hole on mount. That's not a knob you reach for — it falls out of where the region sits. (Timing is never this axis's job — that's [`wake`](/docs/regions/client-islands).)
+Leaves nested inside a container are the exception: nothing awaits them, so they cross as a plain address and the client fetches each hole on mount. That's not a knob you reach for. It falls out of where the region sits. (Timing is never this axis's job. That's [`wake`](/docs/regions/client-islands).)
 
 #### Recipe: a lazy top-level return
 
-Occasionally you want a single returned region to stay a plain address — so its endpoint can be **cached across visitors** — instead of baking per-request HTML into the response. There's no library helper for this on purpose; it's one line you own, because a region is just an object and the eager `then` is non-enumerable, so a spread drops it:
+Occasionally you want a single returned region to stay a plain address (so its endpoint can be **cached across visitors**) instead of baking per-request HTML into the response. There's no library helper for this on purpose; it's one line you own, because a region is just an object and the eager `then` is non-enumerable, so a spread drops it:
 
 ```ts
 const lazy = <R>(r: R): R => ({ ...r });   // strips the auto-await; keep it in your codebase
@@ -169,9 +169,9 @@ export const card = query(v.string(), async (id) => lazy(region(Card, { id })));
 // now `card()` ships a reference; the client fetches /🏝️?… which a CDN can cache with a maxAge preset
 ```
 
-Reach for this rarely. For a hole shared across visitors, a placed [server island](/docs/regions/server-islands) is usually the cleaner tool — it's endpoint-fetched and cacheable without touching the eager/lazy seam at all.
+Reach for this rarely. For a hole shared across visitors, a placed [server island](/docs/regions/server-islands) is usually the cleaner tool. It's endpoint-fetched and cacheable without touching the eager/lazy seam at all.
 
-### Composition — the recomposer
+### Composition: the recomposer
 
 When the shape needs interpreting (a tree, a feed, a layout), ship a normal marked component that takes the shape as props and turns it back into markup:
 
@@ -180,11 +180,11 @@ import FeedList from '$lib/FeedList.svelte' with { region: 'raw' };
 return await region(FeedList, { items: hits.map((h) => region(cardFor(h), h)) });
 ```
 
-`FeedList` renders `{#each items as it}<Region of={it} />{/each}` plus its chrome. Awaited, the whole composition renders in one server pass — one HTML payload carrying every leaf's stylesheet, with nested interactive leaves as self-describing islands that wake on their own schedules after landing. This works recursively (trees with `children`), so a whole blocks-style page can cross as one value.
+`FeedList` renders `{#each items as it}<Region of={it} />{/each}` plus its chrome. Awaited, the whole composition renders in one server pass: one HTML payload carrying every leaf's stylesheet, with nested interactive leaves as self-describing islands that wake on their own schedules after landing. This works recursively (trees with `children`), so a whole blocks-style page can cross as one value.
 
 ## Live regions
 
-`query.live` can *re-emit* a held region over time. `yield` a held region each tick and its rendered, signed HTML rides the channel you already have — no per-tick fetch:
+`query.live` can *re-emit* a held region over time. `yield` a held region each tick, and its rendered, signed HTML rides the channel you already have, with no per-tick fetch:
 
 ```ts
 export const dashboard = query.live(v.string(), async function* (id) {
@@ -196,7 +196,7 @@ export const dashboard = query.live(v.string(), async function* (id) {
 
 ## Single-flight mutations
 
-A `command` that returns a held region sends the re-rendered HTML back in its **own** response. Any mounted `<Region>` at that address updates from it — no follow-up fetch. One round trip both mutates and repaints:
+A `command` that returns a held region sends the re-rendered HTML back in its **own** response. Any mounted `<Region>` at that address updates from it: no follow-up fetch. One round trip both mutates and repaints:
 
 ```ts
 export const bump = command(v.string(), async (id) => {
@@ -205,7 +205,7 @@ export const bump = command(v.string(), async (id) => {
 });
 ```
 
-Call `bump(id)` from an island and the on-page region at that address repaints from the command's own response — there is no extra GET to the endpoint.
+Call `bump(id)` from an island and the on-page region at that address repaints from the command's own response. There is no extra GET to the endpoint.
 
 <div class="doc-demo">
   <SingleFlightDemo />
@@ -223,7 +223,7 @@ preload(region(Recommendations, { userId }));
 ## Do / don't
 
 - **Do** use a held region when the server owns the *which-component* decision; use a [server island](/docs/regions/server-islands) when the component is fixed.
-- **Do** choose a raw held region (`with { region: 'raw' }`) for result UI that never needs interaction — it ships zero JS.
-- **Don't** import the result components on the client — the whole point is that the server sends them; the client only renders `<Region>`.
+- **Do** choose a raw held region (`with { region: 'raw' }`) for result UI that never needs interaction. It ships zero JS.
+- **Don't** import the result components on the client. The server sends them; the client only renders `<Region>`.
 
 

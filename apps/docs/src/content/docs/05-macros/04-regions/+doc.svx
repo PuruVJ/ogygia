@@ -1,6 +1,6 @@
 ---
 title: regions
-summary: A block registry from a folder glob. One line replaces the N hand-written `with { region: 'raw' }` imports a CMS block map needs — and it can never drift from the folder.
+summary: A block registry from a folder glob. One line replaces the N hand-written `with { region: 'raw' }` imports a CMS block map needs, and it can never drift from the folder.
 related:
   - content/blocks
   - macros/overview
@@ -23,15 +23,15 @@ The macro collapses that to one line that **cannot** drift:
 export const registry = import.meta.og.regions('./blocks/*.svelte');
 ```
 
-At build, it globs the pattern (relative to the module), emits one `with { region: 'raw' }` import per match, and assembles a registry keyed by each file's **basename** — the name your CMS `type` field references. Every block is a raw held region, so a block's own nested islands still wake.
+At build, it globs the pattern (relative to the module), emits one `with { region: 'raw' }` import per match, and assembles a registry keyed by each file's **basename**, the name your CMS `type` field references. Every block is a raw held region, so a block's own nested islands still wake.
 
 ## Keys are the basename, verbatim
 
-A file `Hero.svelte` becomes the key `"Hero"`; `hero-banner.svelte` becomes `"hero-banner"`. No PascalCasing, no guessing — the key is the basename exactly, because it has to match the `type` string in your content, and you control both the filename and the type. If two files in the glob normalize to the same key, that's a build error naming both.
+A file `Hero.svelte` becomes the key `"Hero"`; `hero-banner.svelte` becomes `"hero-banner"`. No PascalCasing, no guessing. The key is the basename exactly, because it has to match the `type` string in your content, and you control both the filename and the type. If two files in the glob normalize to the same key, that's a build error naming both.
 
 ## Blocks that need a schedule
 
-`regions()` makes every match a **raw** region — SSR'd inline, no client JS unless something inside wakes. A block that needs its own wake schedule (a Counter that hydrates on visibility) stays a manual import, spread over the top:
+`regions()` makes every match a **raw** region: SSR'd inline, no client JS unless something inside wakes. A block that needs its own wake schedule (a Counter that hydrates on visibility) stays a manual import, spread over the top:
 
 ```ts
 import Counter from './blocks/Counter.svelte' with { wake: 'visible' };

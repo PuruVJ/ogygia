@@ -49,6 +49,9 @@
 		links?: { text: string; href: string }[];
 		/** Mount prefix override; default derived by subtraction from the current page. */
 		base?: string;
+		/** Where the brand/logo links. Defaults to `base` (the docs root); set `home="/"` for a site
+		 *  with a separate marketing home. */
+		home?: string;
 		/** ONE pattern, all the way down: every region the Shell renders is a conditional snippet prop —
 		 *  pick and choose the Shell's features. Absent → the built-in renders. A snippet → yours
 		 *  renders instead. Passed NULLISH (`header={null}`, or a computed value that came out
@@ -84,7 +87,7 @@
 	};
 
 	const props: ShellProps = $props();
-	const { site, meta, title = 'Docs', links = [], base, side, actions, children } = props;
+	const { site, meta, title = 'Docs', links = [], base, home, side, actions, children } = props;
 
 	/** Three-state region resolution: the prop ABSENT → `undefined` (built-in renders); the prop
 	 *  passed but NULLISH → `null` (region gone — `header={null}` and a computed `undefined` both
@@ -104,6 +107,8 @@
 
 	// svelte-ignore state_referenced_locally
 	const the_base = base ?? mountBase(page.url, page.params.slug ?? '');
+	// Where the brand links (defaults to the docs root); `home="/"` points it at a marketing home.
+	const the_home = home ?? the_base;
 	// svelte-ignore state_referenced_locally
 	set_shell_context({ site, base: the_base, components: site?.components, title });
 
@@ -141,7 +146,7 @@
 	{:else if header !== null}
 		<header class="og-cheader">
 			{#if brand}{@render brand()}{:else if brand !== null}
-				<a class="og-cheader-brand" href={the_base || '/'}>{title}</a>
+				<a class="og-cheader-brand" href={the_home || '/'}>{title}</a>
 			{/if}
 			<!-- Version sits by the brand (it scopes the whole doc set); locale rides with the tools. -->
 			{#if switcher}<Switcher {switcher} for="version" />{/if}
@@ -197,6 +202,6 @@
 	{#if bar}
 		{@render bar(tree, the_base)}
 	{:else if bar !== null}
-		<ShellBar nav={tree} base={the_base} brand={title} {actions} />
+		<ShellBar nav={tree} base={the_base} home={the_home} brand={title} {actions} />
 	{/if}
 </div>

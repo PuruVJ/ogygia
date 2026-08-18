@@ -21,7 +21,7 @@ describe('region()', () => {
 			__hydrate: 'load',
 			__component: A,
 			__sign: (id: string, props: Record<string, unknown>) =>
-				`/🏝️?id=${id}&props=${JSON.stringify(props)}`
+				`/__ogygia__?id=${id}&props=${JSON.stringify(props)}`
 		} as unknown as Component<{ x: number }>;
 		const f = region(binding, { x: 2 });
 		expect(f.kind).toBe('dual');
@@ -46,7 +46,7 @@ describe('region()', () => {
 
 describe('ogygiaTransport', () => {
 	const sign = (id: string, props: Record<string, unknown>) =>
-		`/🏝️?id=${id}&props=${JSON.stringify(props)}`;
+		`/__ogygia__?id=${id}&props=${JSON.stringify(props)}`;
 
 	it('encodes a dual partial into a signed ticket (drops the component)', () => {
 		const dual = region(
@@ -68,7 +68,7 @@ describe('ogygiaTransport', () => {
 			kind: 'deferred',
 			id: 'abc123',
 			props: { x: 2 },
-			url: '/🏝️?id=abc123&props={"x":2}',
+			url: '/__ogygia__?id=abc123&props={"x":2}',
 			module: '/m.js',
 			hydrate: 'load'
 		});

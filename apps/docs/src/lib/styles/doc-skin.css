@@ -325,7 +325,8 @@
 	padding-left: 0; /* the desktop rail indents the <li>; here the link carries the indent */
 }
 .og-mtoc .og-toc-link {
-	padding: 0.14rem 0.5rem;
+	display: block;
+	padding: 0.6rem 0.55rem;
 	border-radius: var(--r-sm);
 	font-size: 0.875rem;
 	line-height: 1.35;

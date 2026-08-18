@@ -1,12 +1,12 @@
 ---
 title: Snippets
-summary: Snippets cross an island boundary as regions — content freezes to server HTML, and a snippet that needs to wake comes alive on the far side. region.snippet() is the manual form.
+summary: Snippets cross an island boundary as regions. Static content freezes to server HTML; a snippet that needs to wake hydrates on the far side. region.snippet() is the manual form.
 related:
   - regions/client-islands
   - regions/timing-nesting
 ---
 
-A snippet is a function, so it cannot cross an island boundary directly — the props an island ships are serialized, and a function does not serialize. Ogygia handles this for you: **any snippet handed to an island crosses as a region**, the snippet shape of the same primitive behind `<Component/>` regions. You almost never call anything; passing children or a `{#snippet}` into an island just works, including when a plain wrapper forwards them along.
+A snippet is a function, so it cannot cross an island boundary directly: the props an island ships are serialized, and a function does not serialize. Ogygia handles this for you: **any snippet handed to an island crosses as a region**, the snippet shape of the same primitive behind `<Component/>` regions. You almost never call anything; passing children or a `{#snippet}` into an island just works, including when a plain wrapper forwards them along.
 
 ::: tip When to use
 You do not reach for this on purpose. It is what makes `<Tabs>{@render children()}</Tabs>`, a forwarded `{#snippet header()}`, or a wrapper component that passes content into an island work at all. Reach for `region.snippet()` only when you are building a snippet by hand from raw HTML.
@@ -14,10 +14,10 @@ You do not reach for this on purpose. It is what makes `<Tabs>{@render children(
 
 ## The two shapes of a crossing
 
-A snippet crosses in one of two ways, chosen for you by whether it needs to come alive:
+A snippet crosses in one of two ways, chosen for you by whether it needs to wake:
 
-- **Static** — plain content (prose, a code block, markup with no interactivity of its own) renders **once on the server** and freezes to HTML. The client adopts that HTML in place; nothing re-runs, nothing ships. This is the common case for children.
-- **Live** — a named `{#snippet}` whose body must *wake* (it renders an island, or is interactive) compiles to its own entry and **comes alive on the far side**. It renders inline on the server and hydrates on the client, so it is interactive wherever it lands — even after being forwarded through a boundary. Parameters are supported: the arguments you call the snippet with ride across to each render.
+- **Static**: plain content (prose, a code block, markup with no interactivity of its own) renders **once on the server** and freezes to HTML. The client adopts that HTML in place; nothing re-runs, nothing ships. This is the common case for children.
+- **Live**: a named `{#snippet}` whose body must *wake* (it renders an island, or is interactive) compiles to its own entry and **wakes on the far side**. It renders inline on the server and hydrates on the client, so it is interactive wherever it lands, even after being forwarded through a boundary. Parameters are supported: the arguments you call the snippet with ride across to each render.
 
 ```svelte
 <script>
@@ -37,7 +37,7 @@ Nested islands inside crossed content keep working: they render as full regions 
 
 ## Forwarding through a wrapper
 
-The reason this matters is composition. A plain (non-island) component can forward its children straight into an island, and the crossing still happens at the boundary — so wrapping an island is just Svelte, no special API:
+The reason this matters is composition. A plain (non-island) component can forward its children straight into an island, and the crossing still happens at the boundary. Wrapping an island is just Svelte, no special API:
 
 ```svelte title=CardShell.svelte
 <!-- a plain wrapper -->
@@ -51,7 +51,7 @@ The reason this matters is composition. A plain (non-island) component can forwa
 
 ## Building one by hand: `region.snippet()`
 
-When you need a snippet made from raw HTML — the sibling of `region()` for components — use `region.snippet()`. It mirrors Svelte's `createRawSnippet`, but the result is a *region* snippet: renderable in the same graph with `{@render}`, and able to cross a boundary.
+When you need a snippet made from raw HTML (the sibling of `region()` for components), use `region.snippet()`. It mirrors Svelte's `createRawSnippet`, but the result is a *region* snippet: renderable in the same graph with `{@render}`, and able to cross a boundary.
 
 Lift an existing parameterless snippet to freeze it as static content:
 

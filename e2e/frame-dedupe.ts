@@ -20,11 +20,11 @@ const browser = await chromium.launch();
 try {
 	const page = await browser.newPage();
 
-	// Count requests to the region endpoint (the 🏝️ path, encoded or literal).
+	// Count requests to the region endpoint (the __ogygia__ path, encoded or literal).
 	const endpointHits: string[] = [];
 	page.on('request', (req) => {
 		const u = req.url();
-		if (/\/(?:%F0%9F%8F%9D|🏝)/.test(u) || /\/_islands\b/.test(u)) endpointHits.push(u);
+		if (/\/(?:__ogygia__|__ogygia__)/.test(u) || /\/_islands\b/.test(u)) endpointHits.push(u);
 	});
 
 	await page.goto(base + '/defer-twins', { waitUntil: 'load' });

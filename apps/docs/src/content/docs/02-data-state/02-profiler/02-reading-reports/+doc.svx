@@ -1,0 +1,78 @@
+---
+title: Reading a report
+summary: How to read a profile — the wall-clock budget bar, the CPU treemap, self vs total for components, the network waterfall, and memory. Plus what the common slow patterns look like.
+related:
+  - data-state/profiler/overview
+  - data-state/profiler/recording
+  - reference/performance
+---
+
+A report reads top to bottom, from "is this compute or waiting?" down to the exact function. Here is what each part tells you.
+
+## Where the time went
+
+One bar for the whole window, split by what the CPU was doing. Read this first.
+
+- If the biggest segment is **your code**, it is a compute problem — go to the treemap and the component table.
+- If the biggest segment is **idle / waiting**, the server was blocked on I/O, not computing. A CPU profiler would have found nothing here. Go to the network section.
+
+This one split — compute vs waiting — is the whole reason a plain CPU profiler misses "5 second" pages. Those pages are usually waiting.
+
+## CPU by self time
+
+An interactive treemap. Every box is real work, sized by time; the biggest box is the bottleneck. Click a box to zoom in, and use the breadcrumb to zoom out.
+
+It is built from **self** time, so structural parents like `_layout` and `Root` barely show — only code that actually burns CPU. Hover any box for its file and cost.
+
+## Components: self vs total
+
+The two numbers confuse people, so it is worth stating plainly:
+
+- **self** is the time in the component's *own* code — its script and building its own HTML — not counting nested components.
+- **total** is self plus every component and function it calls.
+
+A page's root component always has a huge total and a tiny self, because its total *contains the whole page*. That is expected, not a bug.
+
+So:
+
+- **Sort by self** to find the components that actually burn CPU. This is the default.
+- **Sort by total** to find the most expensive subtree — useful when the cost is spread across many small children (a big list of rows, say).
+
+The inline bar on each row shows self (bright) inside total (dim), so you can see at a glance whether a component is slow itself or slow because of what it renders.
+
+## Hot functions
+
+Every function on the server, sortable by self or total time. This is where the CPU went, below the component level — a formatter constructed per row, a regex pass, a serializer. The file and line point you straight at it.
+
+## Network
+
+Every outbound `fetch` and `http`/`https` call the render made, tied to the route that made it, with a waterfall on a real timeline.
+
+The classic slow-page shape shows up here immediately: several calls stacked **one after another** instead of overlapping. That is sequential `await`s. The report flags it, and the fix is usually to run them together:
+
+```ts
+// slow: ~sum of all three
+const a = await getA();
+const b = await getB();
+const c = await getC();
+
+// fast: ~the slowest one
+const [a, b, c] = await Promise.all([getA(), getB(), getC()]);
+```
+
+A call whose "wait" is large but "body" is small is a slow upstream service; a large "body" is a slow or oversized response.
+
+## Memory
+
+Top allocators (who creates the objects, and therefore the garbage), RSS over the window, and precise GC pauses from the runtime. A long single GC pause freezes every request at once, so if GC is a big slice of busy time, the allocators table tells you who to blame.
+
+## Flame graph and raw profile
+
+A flame graph of the merged call tree for the whole window, and a **download** of the raw `.cpuprofile`. Open that file in Chrome DevTools → Performance, or at speedscope.app, if you want their tooling on the same data.
+
+## What the common slow patterns look like
+
+- **Waiting, not computing** — budget bar mostly idle, low CPU, high wall time. The answer is in the network waterfall (or a database/socket driver the profiler can't see into, which the report will say).
+- **One heavy component** — a single large box in the treemap; that component tops the table sorted by self.
+- **Death by a thousand cuts** — the treemap is a field of small same-colored boxes; sort the component table by total to find the parent that renders them all.
+- **Allocation pressure** — GC is a visible slice of busy time; the allocators table names the culprit.

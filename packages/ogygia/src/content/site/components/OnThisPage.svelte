@@ -67,15 +67,25 @@
 			// At the very bottom, the last section is what you're reading.
 			if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) best = seen[seen.length - 1].id;
 			active = best;
-			// Slide the clerk-style rail thumb to the active link's box.
-			const link = best ? list.querySelector(`a[href="#${CSS.escape(best)}"]`) : null;
-			if (link instanceof HTMLElement) {
-				list.style.setProperty('--og-thumb-y', `${link.offsetTop}px`);
-				list.style.setProperty('--og-thumb-h', `${link.offsetHeight}px`);
-				list.classList.add('og-has-active');
-			} else {
-				list.classList.remove('og-has-active');
-			}
+			// Slide the rail thumb to the active link's box. Drive this island's own list AND the
+			// mobile inline outline — a static `<details class="og-mtoc">` (Doc.svelte) with no
+			// scrollspy of its own, so on mobile it gets the same active row + moving thumb.
+			const move_thumb = (ul: HTMLElement | null, set_active: boolean) => {
+				if (!ul) return;
+				// The island's own list uses Svelte's `class:og-active`; only the static list needs this.
+				if (set_active) ul.querySelectorAll('.og-active').forEach((a) => a.classList.remove('og-active'));
+				const lnk = best ? ul.querySelector<HTMLElement>(`a[href="#${CSS.escape(best)}"]`) : null;
+				if (lnk) {
+					if (set_active) lnk.classList.add('og-active');
+					ul.style.setProperty('--og-thumb-y', `${lnk.offsetTop}px`);
+					ul.style.setProperty('--og-thumb-h', `${lnk.offsetHeight}px`);
+					ul.classList.add('og-has-active');
+				} else {
+					ul.classList.remove('og-has-active');
+				}
+			};
+			move_thumb(list, false);
+			move_thumb(document.querySelector('.og-mtoc .og-toc-list'), true);
 		};
 		const onScroll = () => {
 			if (!raf) raf = requestAnimationFrame(pick);

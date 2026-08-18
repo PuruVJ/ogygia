@@ -9,7 +9,7 @@ function binding(id: string) {
 		__ogRegion: id,
 		__module: `/_app/immutable/og-region.${id}.js`,
 		__component: (() => {}) as unknown as Component<Record<string, unknown>>,
-		__sign: () => `./🏝️?id=${id}&sig=x`,
+		__sign: () => `./__ogygia__?id=${id}&sig=x`,
 		__renderHtml: () => '<div>x</div>'
 	};
 }

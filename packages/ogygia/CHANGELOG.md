@@ -1,6 +1,6 @@
 ---
 title: Releases
-summary: Every cut of ogygia, newest first — the full changelog.
+summary: Every release of ogygia, newest first.
 ---
 
 All notable changes to **ogygia** are documented in this file.
@@ -10,17 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] — 2026-08-16
 
-The site-layer release. `ogygia/content` grows from collections into one pillar that carries a whole
-site — `site()` mints the brains, `DocsShell` / `BlogShell` render them, and the new
+The site-layer release. `ogygia/content` grows from collections into a layer that can carry a whole
+site: `site()` builds the site model, `DocsShell` / `BlogShell` render it, and the new
 `import.meta.og.*` compile macros bake content at build. The plugin config collapses to one grammar:
 a top-level key per subsystem, each subsystem `defaults + its own presets`. Underneath: region
 snippets become a first-class primitive, markdown compiles to serialized regions, preloading goes
-render-gated (and native in MPA mode), the client bundle gets meaningfully smaller, and the
-`csr = false` keepalive bug finally dies (#1, #4).
+render-gated (and native in MPA mode), the client bundle gets smaller, and the
+`csr = false` keepalive bug is fixed (#1, #4).
 
 ### Added
 
-- **The config surface — one grammar, sovereign subsystems.** Every `ogygia()` subsystem is
+- **The config surface: one grammar per subsystem.** Every `ogygia()` subsystem is
   `defaults + its own presets`, and every use site opts in the same way: a literal
   `preset: 'name'`, resolved only in its own subsystem's dictionary. An island preset can never
   hold content config; `router` holds no presets at all.
@@ -81,8 +81,8 @@ render-gated (and native in MPA mode), the client bundle gets meaningfully small
   - `wire(codec)` declares a transportable-class codec (see Changed).
   - `regions('./*.svelte')` registers raw-region imports by glob.
 
-- **Region snippets — `region.snippet()`.** A snippet is now a region-shaped value that can cross
-  an island boundary and come alive. One primitive, three modes: **live** (the compiler lifts a
+- **Region snippets: `region.snippet()`.** A snippet is now a region-shaped value that can cross
+  an island boundary and become interactive. One primitive, three modes: **live** (the compiler lifts a
   `{#snippet}` handed to an island into its own entry — parameters cross, top-level `await` inside
   the body renders through async SSR), **static** (a parameterless snippet frozen to server HTML,
   adopted byte-for-byte), and **slot** (an island's children render in place and the client adopts
@@ -116,6 +116,27 @@ render-gated (and native in MPA mode), the client bundle gets meaningfully small
 - **Dev guards.** Mutating a captured host snapshot inside an island warns with the prop path; a
   block-level island rendered inline in a `<p>` (parser-hoisted, hydrates twice) is detected and
   explained.
+
+- **`ogygia/profiler` — a drop-in SSR profiler.** One line in `hooks.server.ts`
+  (`sequence(profiler(), …)`) and a report UI at `/__profiler`. It samples the whole Node process
+  during a render and attributes server time to your components **by name** — Svelte compiles each
+  component to a function named after its file, so there is nothing to instrument by hand — while
+  splitting the wall clock into compute versus waiting.
+  - **Three ways to record:** the live server for a few seconds, one page rendered N times (with an
+    un-profiled warm-up so the median is steady), or a single request via an `x-profile: <secret>`
+    header.
+  - **The report:** a wall-clock budget bar (compute vs idle/waiting), an interactive zoomable
+    treemap of self time, sortable component (self vs total) and function tables, an outbound
+    network waterfall that flags sequential awaits, top memory allocators + RSS + precise GC pauses,
+    a flame graph, and a raw `.cpuprofile` download for Chrome DevTools or speedscope.
+  - **Curated JSON for agents and scripts:** `<base>/report/<id>.json`, or one-shot
+    `<base>/page?p=/x&format=json` — the analyzed result (summary + verdict, findings with stable
+    codes, per-component self/total, network, memory), not the raw V8 profile.
+  - **Production-safe:** the UI is gated behind `PROFILER_SECRET` (timing-safe, 404 without it),
+    idle cost is near zero, profiles live in memory only, and `Server-Timing` headers are off by
+    default in production. Needs a Node server (the V8 inspector); edge runtimes keep the always-on
+    request log only.
+  - Docs: [Profiler](/docs/data-state/profiler/overview).
 
 ### Changed
 
@@ -166,15 +187,17 @@ render-gated (and native in MPA mode), the client bundle gets meaningfully small
   crash at hydrate** — `TypeError: Cannot read properties of undefined (reading 'pathname')`, the
   island's DOM then torn out of the page. Under `csr = false` Kit's client never boots, so its page
   store stays empty; ogygia therefore swaps `$app/*` for shims inside island code. That swap keyed
-  off island-graph membership tracked in a side-band set that _grew during the same resolveId walk
-  that consumed it_ — so a component reached first through a non-island importer (a `csr = true`
-  route sharing it), or whose earliest imports resolved before it joined the set, kept Kit's real
-  `$app/*` and read `page.url` as `undefined`. Membership now rides in the module id (`?og-region`)
-  and propagates to every child at resolve time — deterministic regardless of build order. A
-  component shared between a `csr = true` route and a region now exists as two modules, each with
-  the correct `$app/*` flavor (the plain route copy is disk-only dead weight under `csr = false`,
-  never shipped). Seen in production on a deployed 0.5.1 app; covered by a browser + build
-  regression suite (`e2e/split-brain.ts`) and an order-independence unit test.
+  off island-graph membership that _grew during the same resolveId walk that consumed it_ — so a
+  component shared between an island and a non-island route, reached first through the non-island
+  path (or transformed before the island path marked it), kept Kit's real `$app/*` and read
+  `page.url` as `undefined`. **Membership is now settled up front:** the prescan completes
+  `island_graph` transitively — from each island component it walks every module those components
+  import — before the bundler resolves anything, so the shim decision is deterministic regardless of
+  build order. The walk is O(reachable modules) (one shared `seen` set, each file scanned once,
+  never re-descended — no depth multiplier), reads only (membership stays out of the module id, so
+  Svelte's scoped-CSS emission is untouched), and adds no new surface. Seen in production on a
+  deployed 0.5.1 app; covered by `e2e/split-brain.ts` (incl. a shared-transitive-dep race guard) and
+  the wire-delivered-CSS check in `e2e/live-partial.ts`.
 - **Dev soft-CSS HMR is now scoped to the page's own sub-app.** The dev bridge eagerly imported
   every `/src` stylesheet into the browser on every page — invisible while one app owned one look,
   but a project hosting two style-sovereign sub-apps (route-group layouts with disjoint skins) saw
@@ -216,7 +239,7 @@ render-gated (and native in MPA mode), the client bundle gets meaningfully small
 ## [0.5.1] — 2026-08-13
 
 A packaging patch. 0.5.0 installed but didn't run: the published manifest pointed at unshipped
-`src/*.ts`, and the browser runtime got tree-shaken away. Both fixed — no API changes.
+`src/*.ts`, and the browser runtime got tree-shaken away. Both fixed. No API changes.
 
 ### Fixed
 
@@ -238,9 +261,9 @@ A packaging patch. 0.5.0 installed but didn't run: the published manifest pointe
 
 ## [0.5.0] — 2026-08-12
 
-The unification release. **Regions** become the one renderable — placed, held, deferred, live —
-content collapses onto them, the `@ogygia/content` package dissolves into ogygia, the SPA router
-becomes a global opt-out plugin feature, and config + exports get a single surface.
+The unification release. **Regions** become the one renderable, whether placed, held, deferred, or
+live. Content collapses onto them, the `@ogygia/content` package folds into ogygia, the SPA router
+becomes a global opt-out plugin feature, and config and exports get a single surface.
 
 ### Added
 

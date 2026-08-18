@@ -1,7 +1,7 @@
 /**
  * SvelteKit server `handle` for signed region holes (`defer` / remount:`swr`).
  *
- * Serves `GET <base>/🏝️?id=…&props=…&exp=…&sig=…` by verifying the region MAC,
+ * Serves `GET <base>/__ogygia__?id=…&props=…&exp=…&sig=…` by verifying the region MAC,
  * rendering the region component server-side (cookies, remote functions, and `await` work),
  * and returning HTML for the client runtime to swap in.
  *
@@ -162,7 +162,7 @@ class OgygiaHandle {
 		// Compare against the DECODED request pathname so the percent-encoded UTF-8 the browser
 		// sends matches our raw-emoji literal regardless of how Kit hands us the URL. Suffix match
 		// (not `===`) so it works under any `paths.base` without needing the base at all: the request
-		// arrives at `<base>/🏝️`, and the endpoint is a leading-slash, clash-safe path.
+		// arrives at `<base>/__ogygia__`, and the endpoint is a leading-slash, clash-safe path.
 		if (!path.endsWith(this.#endpoint)) {
 			// Flicker fix: on csr=false pages Kit resolves top-level `await query()` calls during
 			// SSR (populating the internal request store's `remote.implicit`) but only serializes
@@ -630,7 +630,7 @@ class OgygiaHandle {
 export interface OgygiaHandleOptions {
 	/**
 	 * Path (relative to Kit `base`) the handle serves.
-	 * Default is the clash-safe island-emoji route (`/🏝️`). Must start with `/`.
+	 * Default is the clash-safe island-emoji route (`/__ogygia__`). Must start with `/`.
 	 */
 	endpoint?: string;
 }

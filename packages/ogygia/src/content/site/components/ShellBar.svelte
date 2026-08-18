@@ -21,11 +21,14 @@
 	let {
 		nav,
 		base = '',
+		home,
 		brand = 'Docs',
 		actions
 	}: {
 		nav: NavTree;
 		base?: string;
+		/** Where the brand links. Defaults to `base` (the docs root). */
+		home?: string;
 		brand?: string;
 		/** Header tools (a PORTABLE snippet) — cross the island boundary and come alive in the footer. */
 		actions?: import('svelte').Snippet;
@@ -85,7 +88,7 @@
 
 <BottomBar>
 	{#snippet lead()}
-		<a class="og-cbar-brand" href={base || '/'}>{brand}</a>
+		<a class="og-cbar-brand" href={home || base || '/'}>{brand}</a>
 	{/snippet}
 	{#snippet actions()}
 		<button type="button" class="og-cbar-btn" data-ph-sheet-toggle aria-label={open && view === 'search' ? 'Close search' : 'Search'} aria-expanded={open && view === 'search'} onclick={() => (open && view === 'search' ? (open = false) : openSearch())}>

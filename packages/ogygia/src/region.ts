@@ -84,7 +84,7 @@ export type DeferredRegion = {
 	readonly kind: 'deferred';
 	readonly id: string;
 	readonly props: Record<string, unknown>;
-	/** Signed `/🏝️?id&props&exp&sig` capability the runtime fetches. */
+	/** Signed `/__ogygia__?id&props&exp&sig` capability the runtime fetches. */
 	readonly url: string;
 	/** Client hydrate-module URL, imported after the HTML swaps in; `''` for a static region. */
 	readonly module: string;

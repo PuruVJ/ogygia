@@ -48,7 +48,7 @@ function warn_unstable_secret(): void {
 
 /**
  * Shared minting core for signed region capabilities — the ONE source of truth for the
- * `/🏝️?id&props&exp&sig` URL, its MAC message, TTL policy, and session sealing. Both held regions
+ * `/__ogygia__?id&props&exp&sig` URL, its MAC message, TTL policy, and session sealing. Both held regions
  * (via {@link makeRegionEndpoint}) and server islands (Region.svelte's server branch) sign through this,
  * each deriving/validating its own `payload` first (held regions degrade to `''` on failure, server
  * islands throw). Given a valid encoded `payload`, the emitted URL/MAC/exp is identical to both.
@@ -97,7 +97,7 @@ export function mintServerIsland(entry: string, props: Record<string, unknown>, 
 	return mint_region_capability(entry, payload, ttl);
 }
 
-/** HMAC-signed `/🏝️?id&props&exp&sig` for re-rendering `entry` with `props`. */
+/** HMAC-signed `/__ogygia__?id&props&exp&sig` for re-rendering `entry` with `props`. */
 export function makeRegionEndpoint(entry: string, props: Record<string, unknown> = {}): string {
 	const payload = encode_region_props(props);
 	if (payload == null) {

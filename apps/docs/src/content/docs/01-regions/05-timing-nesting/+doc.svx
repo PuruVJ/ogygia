@@ -21,7 +21,7 @@ One key, `wake`, carries the schedule for both islands (`wake`) and server islan
 | `interaction` | On the first pointer / key / focus inside it (islands only) | Anything most visitors never touch |
 | `'(media query)'` | When the CSS media query matches | Mobile-only or desktop-only UI |
 
-On an **island** (`render` defaults to `static`) `wake` says *when JS runs*. On a **server island** (`render: 'deferred'`) `wake` says *when the HTML is fetched*. Same words, whichever the region comes alive by. (`interaction` is islands-only — fetching HTML on interaction would mean interacting with a fallback.)
+On an **island** (`render` defaults to `static`) `wake` says *when JS runs*. On a **server island** (`render: 'deferred'`) `wake` says *when the HTML is fetched*. Same words either way. (`interaction` is islands-only: fetching HTML on interaction would mean interacting with a fallback.)
 
 ```svelte
 <script>
@@ -51,18 +51,18 @@ Each of the four below is a real island using exactly that schedule:
 ### `interaction`: JS only for what people actually use
 
 `wake: 'interaction'` is the laziest schedule: the island ships **zero JS until someone uses
-it**. A pointer press, a keystroke, or focus landing inside the region wakes it — and the
+it**. A pointer press, a keystroke, or focus landing inside the region wakes it. The
 interaction that woke it is not lost:
 
 - **The first click counts.** It is captured while the island wakes and replayed the moment it is
-  live — a button, checkbox, or link activates exactly once.
+  live. A button, checkbox, or link activates exactly once.
 - **Typing survives.** Characters land in the field natively (it is real HTML); after hydration
   the typed value, selection, and focus are restored and `bind:` syncs up.
 - **Hover warms it.** The pointer entering the region prefetches the chunk, so by the time the
   press lands the wake is usually instant.
 
-One honest caveat: the replayed first event is not a *trusted* browser gesture, so gesture-gated
-APIs — `window.open`, clipboard, fullscreen — will be blocked if called from it. A component can
+One caveat: the replayed first event is not a *trusted* browser gesture, so gesture-gated
+APIs (`window.open`, clipboard, fullscreen) will be blocked if called from it. A component can
 detect this and adapt:
 
 ```svelte
@@ -79,8 +79,8 @@ detect this and adapt:
 {/if}
 ```
 
-Don't put gesture-gated actions behind `interaction`; everything else — counters, carts, menus,
-forms, editors — just works, and costs nothing until it is touched.
+Don't put gesture-gated actions behind `interaction`; everything else (counters, carts, menus,
+forms, editors) just works, and costs nothing until it is touched.
 
 ### Tuning `visible`
 
@@ -97,13 +97,13 @@ ogygia({ regions: { visible: { margin: '0px' } } });
 
 ## Deferred content that is also interactive
 
-A `render: 'deferred'` region is content only — it never ships JS. On it, `wake` is the *fetch* schedule (below, the hole waits until it scrolls into view before it even costs a request):
+A `render: 'deferred'` region is content only: it never ships JS. On it, `wake` is the *fetch* schedule (below, the hole waits until it scrolls into view before it even costs a request):
 
 ```svelte
 import Panel from '$lib/Panel.svelte' with { render: 'deferred', wake: 'visible' };
 ```
 
-When a fetched hole *also* needs interactivity, you do not stack two schedules on one import — you nest a normal `wake` island inside the server island's own component. `render` decides how the HTML arrives; `wake` on the inner island decides when its JS runs. See [Server islands → nesting an island](/docs/regions/server-islands).
+When a fetched hole *also* needs interactivity, you do not stack two schedules on one import. You nest a normal `wake` island inside the server island's own component. `render` decides how the HTML arrives; `wake` on the inner island decides when its JS runs. See [Server islands → nesting an island](/docs/regions/server-islands).
 
 ## Nesting: one rule
 
@@ -112,7 +112,7 @@ Walk up the tree. The **closest marked parent decides**.
 | Nesting | What happens |
 | --- | --- |
 | Island on the page | Gets its own JS |
-| Island inside an island | Shares the parent's JS — one interactive tree, not two |
+| Island inside an island | Shares the parent's JS: one interactive tree, not two |
 | Lake inside an island | Stays static HTML; the lake's JS never ships |
 | Island inside a lake | Gets its own JS again |
 | Server island inside an island | Renders inline with the parent (`render: 'deferred'` ignored) |
@@ -121,13 +121,13 @@ Walk up the tree. The **closest marked parent decides**.
 page → island → lake → island → …
 ```
 
-Because an island-in-an-island shares one tree, a child island's schedule is ignored — it hydrates with its parent. Dev warns when it drops a redundant strategy.
+Because an island-in-an-island shares one tree, a child island's schedule is ignored: it hydrates with its parent. Dev warns when it drops a redundant strategy.
 
 ## Do / don't
 
-- **Do** default below-the-fold islands to `visible` — it is free performance.
+- **Do** default below-the-fold islands to `visible`. It is free performance.
 - **Do** use `idle` for anything the user will not touch immediately.
-- **Don't** try to make a `render: 'deferred'` region interactive on its own — it ships no JS. Nest a `wake` island inside it instead.
+- **Don't** try to make a `render: 'deferred'` region interactive on its own. It ships no JS. Nest a `wake` island inside it instead.
 
 
 <style>

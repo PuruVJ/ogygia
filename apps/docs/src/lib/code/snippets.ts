@@ -6,7 +6,7 @@
  */
 export const heroCode = import.meta.og.code(`<script>
   import Counter from '$lib/Counter.svelte' with {
-    wake: 'load'
+    +++wake: 'load'+++
   };
 </script>
 
@@ -18,7 +18,7 @@ export const heroCodeHtml = String(heroCode.props.html);
 
 export const loadCode = import.meta.og.code(`<script>
   import Panel from '$lib/Panel.svelte' with {
-    wake: 'load'
+    +++wake: 'load'+++
   };
 </script>
 
@@ -26,7 +26,7 @@ export const loadCode = import.meta.og.code(`<script>
 
 export const visibleCode = import.meta.og.code(`<script>
   import Chart from '$lib/Chart.svelte' with {
-    wake: 'visible'
+    +++wake: 'visible'+++
   };
 </script>
 
@@ -35,7 +35,7 @@ export const visibleCode = import.meta.og.code(`<script>
 export const lakeCode = import.meta.og.code(`<script>
   // a frozen subtree inside an island: SSR HTML, ships no client JS
   import Snapshot from '$lib/Snapshot.svelte' with {
-    wake: 'none'
+    +++wake: 'none'+++
   };
 </script>
 
@@ -43,7 +43,7 @@ export const lakeCode = import.meta.og.code(`<script>
 
 export const serverCode = import.meta.og.code(`<script>
   import Greeting from '$lib/Greeting.svelte' with {
-    render: 'deferred'
+    +++render: 'deferred'+++
   };
 </script>
 
@@ -164,3 +164,37 @@ export const docs = site({
   prevNext: 'graph',      // "keep reading" follows real links
   checks: [links()]       // a broken link fails the build
 });`, 'ts');
+
+export const dimensionsCode = import.meta.og.code(`// versioning and translations are the same primitive: dimensions
+import { site, dimensions } from 'ogygia/content';
+
+export const docs = site({
+  outline: dimensions({
+    axes: {
+      version: { values: ['v2', 'v1'], default: 'v2', label: 'Version' },
+      locale:  { values: ['en', 'de'], default: 'en', label: 'Language', fallback: true }
+    },
+    // one outline per coordinate — the axes compose
+    resolve: ({ version, locale }) => corpora[version][locale]
+  })
+});
+
+// /docs/routing        → v2 · en   (defaults serve bare)
+// /docs/de/routing     → v2 · de
+// /docs/v1/de/routing  → v1 · de`, 'ts');
+
+export const composeCode = import.meta.og.code(`<!-- DocsShell is a composition. Keep it, swap one region: -->
+<script>
+  import DocsShell from 'ogygia/content/docs-shell';
+  import { Search, ThemeToggle } from 'ogygia/content';
+</script>
+
+<DocsShell {meta} base="/docs">
+  {#snippet tools()}
+    <Search base="/docs" />
+    <ThemeToggle />
+  {/snippet}
+</DocsShell>
+
+<!-- absent = built-in · snippet = yours · null = removed.
+     Or drop to <Frame> and build the shell from the same bricks. -->`, 'svelte');

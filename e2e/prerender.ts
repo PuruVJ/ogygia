@@ -23,7 +23,7 @@ let isDev = false;
 	check('/static returns 200', res.status === 200);
 	check('/static counter island SSR (count is 7)', /count is 7/.test(html));
 	check('/static server-island fallback present', /loading personalized greeting/.test(html));
-	check('/static server-island endpoint reference present', /endpoint="[^"]*🏝️/.test(html));
+	check('/static server-island endpoint reference present', /endpoint="[^"]*__ogygia__/.test(html));
 	check('/static ships NO Kit bootstrap', !/__sveltekit/.test(html));
 
 	if (!isDev) {
@@ -45,7 +45,7 @@ let isDev = false;
 			// And the baked capability actually verifies against the running server (same build).
 			const endpoint = file.match(/endpoint="([^"]+)"/)?.[1]?.replace(/&amp;/g, '&');
 			if (endpoint) {
-				// endpoint is document-relative (`./🏝️?…`) — resolve like the browser would.
+				// endpoint is document-relative (`./__ogygia__?…`) — resolve like the browser would.
 				const holeRes = await fetch(new URL(endpoint, base + '/'));
 				check('PPR: baked capability verifies (hole endpoint 200)', holeRes.status === 200, `status=${holeRes.status}`);
 			} else {

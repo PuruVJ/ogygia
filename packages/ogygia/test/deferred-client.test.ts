@@ -59,7 +59,7 @@ describe('deferred client island runtime contracts', () => {
 			wake: 'visible',
 			'hydrate-margin': '200px',
 			entry: '/_app/immutable/og-region.abc123.js',
-			endpoint: '/🏝️?id=x'
+			endpoint: '/__ogygia__?id=x'
 		});
 		expect(is_deferred(el)).toBe(true);
 		expect(is_awake(el)).toBe(true);

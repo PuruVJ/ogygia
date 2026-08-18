@@ -6,7 +6,6 @@
 	 * Bits UI `Select` for real listbox semantics (keyboard nav, typeahead, ARIA).
 	 */
 	import { Select } from 'bits-ui';
-	import { ThemeToggle } from 'ogygia/content';
 
 	let { themes }: { themes: Record<string, string> } = $props();
 	const KEY = 'pg-theme';
@@ -20,10 +19,53 @@
 	}
 	// Re-hydration after each SPA nav lands here — re-apply the saved skin over the SSR default.
 	if (typeof window !== 'undefined' && themes[value]) apply(value);
+
+	// Light/dark toggle — playground-only, and DELIBERATELY light/dark ONLY (no `system`) and
+	// NON-persisting: it's a temporary preview inside the frame, so trying a palette here never
+	// touches the visitor's saved theme.
+	function pg_is_dark() {
+		const t = document.documentElement.getAttribute('data-theme');
+		if (t === 'dark') return true;
+		if (t === 'light') return false;
+		return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+	}
+	let dark = $state(typeof window !== 'undefined' ? pg_is_dark() : false);
+	function toggle_dark() {
+		const root = document.documentElement;
+		const flip = () => {
+			dark = !dark;
+			root.setAttribute('data-theme', dark ? 'dark' : 'light'); // no localStorage, on purpose
+		};
+		const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+		const doc = document as unknown as {
+			startViewTransition?: (cb: () => void) => { finished: Promise<void> };
+		};
+		if (doc.startViewTransition && !reduce) {
+			root.setAttribute('data-ph-switching', '');
+			const clear = () => root.removeAttribute('data-ph-switching');
+			doc.startViewTransition(flip).finished.then(clear, clear);
+		} else flip();
+	}
 </script>
 
 <div class="pg-picker">
-	<ThemeToggle />
+	<button
+		type="button"
+		class="pg-tt"
+		aria-label="Preview light or dark"
+		title="Light / dark (preview only)"
+		onclick={toggle_dark}
+	>
+		{#if dark}
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+				><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg
+			>
+		{:else}
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"
+				><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg
+			>
+		{/if}
+	</button>
 	<Select.Root
 		type="single"
 		bind:value
@@ -73,6 +115,22 @@
 		.pg-picker {
 			bottom: 1rem;
 		}
+	}
+	.pg-tt {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		padding: 0;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		background: none;
+		color: var(--og-text, #111);
+		cursor: pointer;
+	}
+	.pg-tt:hover {
+		background: var(--og-bg-sunken, rgba(0, 0, 0, 0.06));
 	}
 	.pg-picker :global(.pg-pick-trigger) {
 		display: inline-flex;
