@@ -53,6 +53,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['router-race.ts', true, 'overlapping SPA navigations / stale-swap guards'],
 	['dashboard.ts', true, 'page shim, island goto, client table, chart'],
 	['page-state.ts', true, 'page.url/params/route/status/data/form/error/state in islands'],
+	['split-brain.ts', true, 'REGRESSION: $app/stores-first island shared with a csr=true page (og-region identity)'],
 	['mixed.ts', true, 'csr=true coexistence + opt-in router'],
 	['portable-bindings.ts', true, 'static/dynamic/list bindings + shared-entry dedupe'],
 	['transportables.ts', true, 'static [ogygia.wire] codec: cross-island live object, no leak, alias-proof'],

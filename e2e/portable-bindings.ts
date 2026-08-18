@@ -244,18 +244,21 @@ try {
 			'immutable'
 		);
 		if (fs.existsSync(docsClient)) {
-			const layoutCss = fs.existsSync(path.join(docsClient, 'assets'))
-				? fs
-						.readdirSync(path.join(docsClient, 'assets'))
-						.find((f) => /^0\..*\.css$/.test(f))
-				: null;
-			const layoutCssCode = layoutCss
-				? fs.readFileSync(path.join(docsClient, 'assets', layoutCss), 'utf-8')
-				: '';
+			// Since the playground merge the ROOT layout is import-free (node 0 has no css at
+			// all); the docs chrome lives with the `(docs)` group layout, so the Shell rules must
+			// land in SOME numbered layout/node stylesheet Kit links for docs pages.
+			const assetsDir = path.join(docsClient, 'assets');
+			const nodeCss = fs.existsSync(assetsDir)
+				? fs.readdirSync(assetsDir).filter((f) => /^\d+\..*\.css$/.test(f))
+				: [];
+			const shellCss = nodeCss.find((f) => {
+				const code = fs.readFileSync(path.join(assetsDir, f), 'utf-8');
+				return /\.og-shell\b/.test(code) && /\.og-cside\b/.test(code);
+			});
 			check(
 				'build: docs layout CSS carries the ogygia Shell chrome rules (FOUC)',
-				!!layoutCss && /\.og-shell\b/.test(layoutCssCode) && /\.og-cside\b/.test(layoutCssCode),
-				layoutCss || 'missing'
+				!!shellCss,
+				shellCss || `missing (checked ${nodeCss.length} node css files)`
 			);
 		}
 
@@ -270,10 +273,18 @@ try {
 			}
 		};
 		walk(clientDir);
+		// Two worlds, one copy each (`?og-region` identity): the island world dedupes to ONE chunk
+		// (all islands share it), while a csr=true route node (/kit keeps __component) carries its
+		// own Kit-world copy — same file, real `$app/*`, hydrated by Kit. Under the old shared
+		// identity that node's Counter got whichever `$app/*` flavor won the build-order race.
+		// csr=false nodes never ship island imports (asserted below), so nodes/ copies are only
+		// ever csr=true pages' own.
+		const isleCopies = chunksWithMarker.filter((f) => !f.startsWith('nodes/'));
+		const nodeCopies = chunksWithMarker.filter((f) => f.startsWith('nodes/'));
 		check(
-			'build: Counter marker in exactly one chunk (not N copies)',
-			chunksWithMarker.length === 1,
-			chunksWithMarker.join(', ') || '(none)'
+			'build: Counter marker in exactly one island-world chunk',
+			isleCopies.length === 1,
+			`island: ${isleCopies.join(', ') || '(none)'}${nodeCopies.length ? ` | csr=true nodes: ${nodeCopies.join(', ')}` : ''}`
 		);
 
 		// csr=false scale: hosts under the default layout must not statically import island
