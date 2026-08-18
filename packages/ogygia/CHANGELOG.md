@@ -8,6 +8,24 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] — 2026-08-19
+
+Patch: a placed client island now ships its own CSS.
+
+### Fixed
+
+- **Placed client-island CSS could vanish in a production build.** Kit links a route's _static_
+  import graph, but Rollup can chunk-split a `wake`-marked component's CSS — notably its `:global()`
+  rules (a Bits UI dropdown trigger/menu, a scoped card rendered by a child component) — into a chunk
+  the page never loads, so the island rendered browser-default on Vercel/Netlify while the container
+  around it stayed styled. The design assumed a plain island's CSS was already in the page's own
+  stylesheet; chunk-splitting violates that. `Region.svelte` now ships each placed island's own CSS
+  as a hoisted `<link data-ogygia-region-css>` — the same channel a held/dual region already uses,
+  claimed per-request so a page rendering the same island many times links its sheet once, and keyed
+  off the raw island entry like the modulepreload path (no per-request HTML scan). Covered by
+  `e2e/placed-island-css.ts`: the SSR emits the link and the `:global()` style applies in a real
+  production build.
+
 ## [0.6.0] — 2026-08-16
 
 The site-layer release. `ogygia/content` grows from collections into a layer that can carry a whole

@@ -382,10 +382,28 @@
 			html += LT + 'link rel="stylesheet" href="' + href + '" data-ogygia-region-css' + GT;
 		return html;
 	});
+	// A PLACED client island's CSS is ASSUMED to already sit in the page's own stylesheet (Kit links
+	// a route's static import graph). But Rollup can chunk-split the marked component's CSS — notably
+	// its `:global()` rules (a Bits UI dropdown trigger/menu, a scoped card) — into a route chunk this
+	// page never loads, so the island renders unstyled in a production build. Link the island's own
+	// CSS here, the SAME channel a held dual uses (`claim_region_css` dedups per-request, the client
+	// hoists `data-ogygia-region-css` into <head>). Keyed by the raw `island_entry`, exactly like
+	// `island_preload`'s `islandDeps` — not the asset URL. Server-only; dev routes through the same
+	// module-import hoist (`islandCss` returns the dev module URL there).
+	const island_css_html = $derived.by(() => {
+		if (island_inline || __mode !== 'island' || !island_entry) return '';
+		let html = '';
+		for (const href of claim_region_css(islandCss(island_entry)))
+			html += LT + 'link rel="stylesheet" href="' + href + '" data-ogygia-region-css' + GT;
+		return html;
+	});
 
 	const head_html = $derived(
-		(is_island ? runtime_script + island_preload : is_server ? runtime_script + server_preload : '') +
-			region_css_html
+		(is_island
+			? runtime_script + island_preload + island_css_html
+			: is_server
+				? runtime_script + server_preload
+				: '') + region_css_html
 	);
 
 	// ────────────────────────────────────────────────────── held: live / deferred ──

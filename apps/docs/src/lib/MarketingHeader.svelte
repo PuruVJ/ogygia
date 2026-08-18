@@ -35,17 +35,24 @@
 </header>
 
 <style>
-	/* A fixed bar at the BOTTOM of the viewport, not the top. */
+	/* Sticky top on desktop; fixed to the bottom on mobile. Kept translucent so the page blurs
+	   through it. */
 	.mkt-nav {
-		position: fixed;
-		bottom: 0;
-		left: 0;
-		right: 0;
+		position: sticky;
+		top: 0;
 		z-index: 50;
-		border-top: 1px solid var(--line);
-		background: color-mix(in srgb, var(--bg) 82%, transparent);
-		backdrop-filter: saturate(1.4) blur(10px);
-		-webkit-backdrop-filter: saturate(1.4) blur(10px);
+		border-bottom: 1px solid var(--line);
+		background: color-mix(in srgb, var(--bg) 68%, transparent);
+		backdrop-filter: saturate(1.6) blur(12px);
+		-webkit-backdrop-filter: saturate(1.6) blur(12px);
+	}
+	@media (max-width: 640px) {
+		.mkt-nav {
+			position: fixed;
+			inset: auto 0 0 0;
+			border-top: 1px solid var(--line);
+			border-bottom: none;
+		}
 	}
 	.mkt-nav-inner {
 		display: flex;
