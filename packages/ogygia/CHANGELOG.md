@@ -152,6 +152,19 @@ render-gated (and native in MPA mode), the client bundle gets meaningfully small
 
 ### Fixed
 
+- **An island reading `$app/stores` / `$app/state` could bundle Kit's _real_ client store and
+  crash at hydrate** — `TypeError: Cannot read properties of undefined (reading 'pathname')`, the
+  island's DOM then torn out of the page. Under `csr = false` Kit's client never boots, so its page
+  store stays empty; ogygia therefore swaps `$app/*` for shims inside island code. That swap keyed
+  off island-graph membership tracked in a side-band set that _grew during the same resolveId walk
+  that consumed it_ — so a component reached first through a non-island importer (a `csr = true`
+  route sharing it), or whose earliest imports resolved before it joined the set, kept Kit's real
+  `$app/*` and read `page.url` as `undefined`. Membership now rides in the module id (`?og-region`)
+  and propagates to every child at resolve time — deterministic regardless of build order. A
+  component shared between a `csr = true` route and a region now exists as two modules, each with
+  the correct `$app/*` flavor (the plain route copy is disk-only dead weight under `csr = false`,
+  never shipped). Seen in production on a deployed 0.5.1 app; covered by a browser + build
+  regression suite (`e2e/split-brain.ts`) and an order-independence unit test.
 - **Dev soft-CSS HMR is now scoped to the page's own sub-app.** The dev bridge eagerly imported
   every `/src` stylesheet into the browser on every page — invisible while one app owned one look,
   but a project hosting two style-sovereign sub-apps (route-group layouts with disjoint skins) saw

@@ -75,6 +75,11 @@ jobs:
         run: pnpm run e2e
         env:
           OGYGIA_E2E_WRANGLER: '1'
+          # Stable CI-only signing key so the warn-path probe's production build is silent (locally
+          # this comes from apps/playground/.env, which is gitignored). Mirrors e2e.yml — without it
+          # the probe's "stable secret → no warning" assertion fails on every scheduled run. NOT a
+          # production secret; the Vercel deploy sets its own OGYGIA_SECRET.
+          OGYGIA_SECRET: 3f9a2b7c1e5d8046af62c93b1d7e4058a6c2f19b3e8d70425c9a1f6b8d3e07c4
 
       # ── Report ─────────────────────────────────────────────────────────────────────────────────
       # On failure, open (or comment on) a single tracking issue so a green upstream never spams and a
