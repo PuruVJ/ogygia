@@ -83,6 +83,17 @@ import {
 /** `packages/ogygia` — Vite must serve absolute shim/runtime resolves from outside the app root. */
 const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
+/**
+ * ogygia's OWN runtime imports that the transform INJECTS into a host component or a generated
+ * wrapper (Region / og_portable, and server-island endpoint minting). They are ours, not something
+ * the author wrote, so they must resolve from the CONSUMER — the app whose vite.config mounts this
+ * plugin — not from the importer's package. Otherwise a host that lives in a monorepo sub-package
+ * which doesn't itself depend on ogygia can't resolve a bare `ogygia/internal`. (A user's OWN marked
+ * package import — `X from 'ogygia/content/…' with { wake }` — is deliberately NOT here: that resolves
+ * from the host file, whose package must expose the subpath.)
+ */
+const OGYGIA_INJECTED_IMPORTS = new Set(['ogygia/internal', 'ogygia/internal/server']);
+
 // Client-side shims aliased for island modules (Kit's client runtime is absent under csr=false).
 const APP_SHIMS = {
 	'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),
@@ -1723,6 +1734,18 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (source === V_KIT_WIRE && kit_wire_path) return kit_wire_path;
 			if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 			if (source === V_TRANSPORTABLES) return RESOLVED(V_TRANSPORTABLES);
+
+			// ogygia's OWN injected runtime imports resolve from the CONSUMER (the app root, where this
+			// plugin is mounted), never from the importer's package — so a host in a sub-package that
+			// doesn't depend on ogygia still resolves them. Resolving from `root` respects the exports map
+			// + conditions (the svelte / dev source, or dist when installed). Null → fall through to the
+			// normal path (and the usual error) rather than mask a genuinely broken install.
+			if (OGYGIA_INJECTED_IMPORTS.has(source)) {
+				const consumer = await this.resolve(source, path.join(root, '__ogygia_consumer__'), {
+					skipSelf: true
+				});
+				if (consumer) return consumer;
+			}
 
 			const ssr = options?.ssr === true;
 

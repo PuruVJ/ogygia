@@ -67,10 +67,13 @@ export type { TransportCodec } from './live-transport.js';
 
 // Portable snippets — the compiler rewrites a `{#snippet}` handed to a component into
 
-// Cross-island context — `createContext()` (typed, no string key) + `<Context of={ctx} value={v}>`.
-// Bridges the DOM so a provider's value reaches islands in separate hydration roots below it.
+// Cross-island context — one bridge, plain `getContext`. `<Provide values={obj | array}>` in a
+// (csr=false) layout writes serialized values into the DOM; child islands keep `getContext('key')`
+// unchanged — ogygia seeds each island's context from the DOM at hydrate, so it crosses the root
+// split. `createContext('key')` is optional TYPED sugar: callable to make a `<Provide>` entry,
+// `.get()` to read. Values must be serializable, like island props.
 export { createContext, __tag_context } from './context-bridge.js';
-export { default as Context } from './Context.svelte';
+export { default as Provide } from './Provide.svelte';
 
 // Which schedule woke this hydration root ('interaction' islands replay their first click, which
 // is not a trusted gesture — components can adapt). Call during setup, like getContext.

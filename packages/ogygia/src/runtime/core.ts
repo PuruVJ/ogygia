@@ -2,6 +2,7 @@ import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
 import { frameAddress } from '../frame.js';
 import { set_current_region } from '../current-region.js';
+import { collect_provided_context } from '../context-bridge.js';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import NestedProvider from '../NestedProvider.svelte';
 import { document_has_kit_bootstrap } from './kit-boot.js';
@@ -819,6 +820,10 @@ class OgygiaRegion extends HTMLElement {
 			set_current_region(this);
 			try {
 				const wrapped = prop_guard.wrap(props, entry || '');
+				// Seed this island's context from any `<Provide>` above it in the DOM, so a child's plain
+				// `getContext('key')` reads a (csr=false) layout's context across the island-root split.
+				// Undefined when there is no provider above — the common case pays only a short DOM walk.
+				const provided_ctx = collect_provided_context(this);
 				// A PERSIST island hydrates through LiveHost (same no-DOM render as NestedProvider) so
 				// that when it relocates onto the next page its props can be pushed in reactively.
 				const LiveHost = slots.live;
@@ -832,7 +837,8 @@ class OgygiaRegion extends HTMLElement {
 					}
 					this.#app = hydrate(LiveHost, {
 						target: this,
-						props: { component: Component, initialProps: wrapped }
+						props: { component: Component, initialProps: wrapped },
+						...(provided_ctx ? { context: provided_ctx } : {})
 					});
 					this.#persist_host = this.#app as unknown as {
 						setProps?: (p: Record<string, unknown>) => void;
@@ -840,7 +846,8 @@ class OgygiaRegion extends HTMLElement {
 				} else {
 					this.#app = hydrate(NestedProvider, {
 						target: this,
-						props: { component: Component, props: wrapped }
+						props: { component: Component, props: wrapped },
+						...(provided_ctx ? { context: provided_ctx } : {})
 					});
 				}
 			} finally {
@@ -972,12 +979,14 @@ class OgygiaRegion extends HTMLElement {
 			}
 			return;
 		}
+		const provided_ctx = collect_provided_context(this);
 		this.#live_app = hydrate(LiveHost, {
 			target: this,
 			props: {
 				component: mod.default,
 				initialProps: prop_guard.wrap(props, entry || '')
-			}
+			},
+			...(provided_ctx ? { context: provided_ctx } : {})
 		}) as { setProps?: (p: Record<string, unknown>) => void };
 		this.setAttribute('data-hydrated', '');
 		this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));

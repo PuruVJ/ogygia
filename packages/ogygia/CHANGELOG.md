@@ -8,6 +8,38 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-08-19
+
+Cross-island context is now one model built on Svelte's own `getContext`. Plus two build fixes.
+
+### Changed (breaking)
+
+- **Unified cross-island context.** `<Context of={ctx} value={v}>` + `ctx.get()` (which walked the
+  DOM) is replaced by ONE provider and plain Svelte reads. `<Provide values={obj | array}>` writes
+  serialized values into the DOM (clsx-style: an object, or an array of objects merged left→right,
+  falsy skipped), and ogygia seeds each island's `hydrate({ context })` from the providers above it —
+  so a child island's own `getContext('key')`, **unchanged**, reads a (csr=false) layout's context
+  across the island-root split. `createContext<T>(key, default?)` is now optional TYPED sugar over
+  the same string key: callable to make a `<Provide>` entry (`theme('dark')` → `{ theme: 'dark' }`)
+  and `.get()` to read typed — a typed context and `getContext('sameKey')` are the same value. The
+  old keyless `createContext()` and the `<Context>` component are gone. Values must be serializable,
+  like island props (a `[ogygia.wire]` value still reunites to one live instance across roots). The
+  `e2e/context.ts` matrix (live reunite, defaults, nested shadowing, lakes, SPA nav, defer/visible)
+  passes on the new API, plus a raw-`getContext` island proving the interop case.
+
+### Fixed
+
+- **ogygia's own injected imports resolve from the consumer, not the importer.** The transform
+  injects `ogygia/internal` (Region / og_portable) and `ogygia/internal/server` into a host or a
+  generated wrapper. For a host that lives in a monorepo sub-package which doesn't itself depend on
+  ogygia, a bare `ogygia/internal` failed to resolve. The plugin now resolves its own injected
+  imports from the app root (where the vite.config mounts it), so a component in any sub-package
+  works without that package declaring ogygia. Guarded by `test/injected-import-consumer-resolve.test.ts`.
+- **A plain function passed as an island prop now errors as a function, not a snippet.** A Svelte
+  snippet is an unbranded function, so ogygia can't tell a real snippet from a callback until it
+  renders it. The boundary error now leads with "function", names the prop, and puts the plain-function
+  case first. Guarded by `test/plain-function-prop.test.ts`.
+
 ## [0.6.6] — 2026-08-19
 
 Patch: a portable snippet that captures several names from one import no longer breaks the build.

@@ -2,8 +2,9 @@
 	// Cross-island context matrix (csr=false page). One live counter is provided to a subtree; many
 	// islands read it via get() with different hydration strategies, at different depths, alongside a
 	// plain-value context, a defaulted context, a shadowing inner provider, and a transportable prop.
-	import { Context } from 'ogygia';
+	import { Provide } from 'ogygia';
 	import CtxWriter from '$lib/CtxWriter.svelte' with { wake: 'load' };
+	import PlainCtxReader from '$lib/PlainCtxReader.svelte' with { wake: 'load' };
 	import CtxReader from '$lib/CtxReader.svelte' with { wake: 'load' };
 	import CtxReaderIdle from '$lib/CtxReader.svelte' with { wake: 'idle' };
 	import CtxReaderVisible from '$lib/CtxReader.svelte' with { wake: 'visible' };
@@ -27,12 +28,13 @@
 <hr />
 <h1 data-static-shell>Cross-island context matrix</h1>
 
-<Context of={roomCtx} value={counter}>
+<Provide values={[ roomCtx(counter), { greeting: "hi-from-provide" } ]}>
 	<section data-live-share>
 		<h2 data-static-shell>Live share across strategies</h2>
 		<!-- One writer, readers hydrating on load / idle / visible / defer — all reunite to one live
 		     instance and repaint when the writer mutates it. -->
 		<CtxWriter />
+		<PlainCtxReader />
 		<CtxReader label="load" />
 		<CtxReaderIdle label="idle" />
 		<!-- defer + hydrate → joins the live instance on the client -->
@@ -57,21 +59,21 @@
 	<section data-shadow>
 		<h2 data-static-shell>Nested provider (nearest wins)</h2>
 		<CtxReader label="outer-scope" />
-		<Context of={roomCtx} value={inner}>
+		<Provide values={[ roomCtx(inner) ]}>
 			<CtxReader label="inner-scope" />
-		</Context>
+		</Provide>
 	</section>
 
 	<!-- Plain-value context: provided 'dark' here; a reader OUTSIDE this provider gets the default -->
 	<section data-theme>
 		<h2 data-static-shell>Plain value + default</h2>
-		<Context of={themeCtx} value={'dark'}>
+		<Provide values={[ themeCtx('dark') ]}>
 			<ThemeReader label="provided" />
-		</Context>
+		</Provide>
 		<ThemeReader label="defaulted" />
 		<OrphanReader />
 	</section>
-</Context>
+</Provide>
 
 <style>
 	/* Each island's <ogygia-region> is inline by default; make them block-level with spacing so

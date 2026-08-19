@@ -1,41 +1,24 @@
 /**
- * Cross-island context — `createContext()`, DOM-bridged.
+ * Cross-island context — one bridge, plain `getContext`.
  *
- * Component trees break at every island boundary; the DOM tree does not. So context is scoped to
- * the DOM: a `<Context of={ctx} value={v}>` writes the value into the DOM at its spot (serialized
- * with the SAME codec as props), and `ctx.get()` in any island below walks up the DOM to the
- * nearest matching provider and decodes it. A `[import.meta.og.wire]` value resolves to the one live
- * instance (shared + reactive); a plain value comes back as a snapshot.
+ * Component trees break at every island boundary; the DOM tree does not. A `<Provide values={…}>`
+ * writes its values into the DOM (serialized with the SAME codec as island props), and ogygia seeds
+ * each island's `hydrate({ context })` from the providers above it — so a child island's own
+ * `getContext('key')`, unchanged, reads a (csr=false) layout's context across the island-root split.
+ * A `[ogygia.wire]` value resolves to the one live instance (shared + reactive); a plain value is a
+ * per-consumer snapshot.
  *
- * On the SERVER, islands render nested in the page's SSR tree, so Svelte's own context works and
- * `get()` uses it. On the CLIENT, islands are separate roots, so `get()` walks the DOM instead.
- *
- * The identity that both the server and every island bundle must agree on is a build-assigned tag
- * (`module#export`, same alias-proof scheme as `wire`) — set via `__tag_context`.
+ * `createContext(key)` is optional TYPED sugar over the same string key — callable to make a
+ * `<Provide>` entry, `.get()` to read (typed). Nothing DOM-specific on the consumer side.
  */
-import { getContext as svelte_get_context } from 'svelte';
+import { getContext } from 'svelte';
 import { parse, stringify } from 'devalue';
-import { current_region } from './current-region.js';
 import { TRANSPORT_WIRE_KEY, reduce_transportable, revive_transportable } from './live-transport.js';
 import {
 	REGION_SNIPPET_WIRE_KEY,
 	reduce_region_snippet,
 	revive_region_snippet
 } from './region-snippet.js';
-
-/** Build-assigned identity (`module#export`) carried on the context handle. */
-const CTX_TAG = Symbol.for('ogygia.context.tag');
-
-interface ContextHandle<T> {
-	[CTX_TAG]: string;
-	/** The value provided above the current island, or the default, or `undefined`. */
-	get(): T | undefined;
-}
-
-/** The context tag for a handle (used by `<Context>` to know which key to write). */
-export function context_tag(handle: unknown): string {
-	return (handle as Record<symbol, unknown>)?.[CTX_TAG] as string;
-}
 
 /** Serialize a context value for the DOM — same codec as island props (transportables included). */
 export function serialize_context(value: unknown): string {
@@ -47,62 +30,74 @@ export function serialize_context(value: unknown): string {
 		.join('\\u003C');
 }
 
-/** Walk up the DOM from `start` to the nearest `<ogygia-context ctx=tag>` and decode its value. */
-function read_from_dom(start: Element | null, tag: string): unknown {
+/**
+ * Walk up from an island being hydrated, collecting every `<ogygia-provide>` above it (nearest wins)
+ * into one Map. ogygia seeds `hydrate(…, { context })` with it, so a child island's own
+ * `getContext('key')` — unchanged — reads a layout's context across the island-root split on a
+ * csr=false page. Undefined when there is no provider above (the common case: nothing to seed, no
+ * cost). Same decode codec as island props (a `[ogygia.wire]` value revives to its one live instance).
+ */
+export function collect_provided_context(start: Element | null): Map<string, unknown> | undefined {
 	let el: Element | null = start;
+	let map: Map<string, unknown> | undefined;
 	while (el) {
-		if (el.tagName === 'OGYGIA-CONTEXT' && el.getAttribute('ctx') === tag) {
-			const script = el.querySelector(':scope > script[data-ogygia-ctx]');
+		if (el.tagName === 'OGYGIA-PROVIDE') {
+			const script = el.querySelector(':scope > script[data-ogygia-provide]');
 			const text = script?.textContent;
 			if (text) {
 				try {
-					return parse(text, {
+					const values = parse(text, {
 						[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, true),
 						[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
-					});
+					}) as Record<string, unknown>;
+					map ??= new Map();
+					// Walking island → up, the nearest provider is seen FIRST; keep it (don't overwrite).
+					for (const k in values) if (!map.has(k)) map.set(k, values[k]);
 				} catch {
-					return undefined;
+					/* a corrupt payload just yields no context — never break hydration */
 				}
 			}
 		}
 		el = el.parentElement;
 	}
-	return undefined;
+	return map;
+}
+
+/** A typed context handle: callable to make a `<Provide>` entry, `.get()` to read (typed). */
+export interface Context<T> {
+	/** `theme('dark')` → `{ theme: 'dark' }` — an entry for `<Provide values={[ … ]}>`. */
+	(value: T): Record<string, unknown>;
+	/** Typed read — plain `getContext(key)` under the hood (seeded across islands), or the default. */
+	get(): T | undefined;
+	/** The underlying string key, for `getContext(theme.key)` interop. */
+	readonly key: string;
 }
 
 /**
- * Define a typed cross-island context. No string key — the build tags it by `module#export`, so
- * the provider and every consumer island agree on identity without a magic string.
+ * Typed sugar over a string context key, shared with plain `getContext`. Callable to produce a
+ * `<Provide>` entry, `.get()` to read (typed). The key is the same string plain `getContext` uses, so
+ * typed and untyped code read the same context. An optional default is returned when nothing is
+ * provided above.
  *
  * ```ts
- * // context.ts
- * export const cart = createContext<Cart>();          // get(): Cart | undefined
- * export const theme = createContext('light');        // get(): string (has a default)
+ * export const theme = createContext<'light' | 'dark'>('theme', 'light');
+ * // provide: <Provide values={[ theme('dark') ]}>…</Provide>
+ * // read:    theme.get()          // typed
+ * //          getContext('theme')  // untyped — same key, same value
  * ```
  */
-export function createContext<T>(defaultValue: T): ContextHandle<T> & { get(): T };
-export function createContext<T>(): ContextHandle<T>;
-export function createContext<T>(defaultValue?: T): ContextHandle<T> {
-	const handle: ContextHandle<T> = {
-		[CTX_TAG]: '',
-		get(): T | undefined {
-			const tag = handle[CTX_TAG];
-			// Server: islands render nested in the page tree, so Svelte's own context reaches them.
-			if (typeof window === 'undefined') {
-				const v = svelte_get_context<T | undefined>(tag);
-				return v !== undefined ? v : defaultValue;
-			}
-			// Client: separate roots — walk the DOM from the island being hydrated.
-			const found = read_from_dom(current_region(), tag) as T | undefined;
-			return found !== undefined ? found : defaultValue;
-		}
+export function createContext<T>(key: string, defaultValue?: T): Context<T> {
+	const ctx = ((value: T): Record<string, unknown> => ({ [key]: value })) as Context<T>;
+	Object.defineProperty(ctx, 'key', { value: key, enumerable: true });
+	ctx.get = (): T | undefined => {
+		const v = getContext<T | undefined>(key);
+		return v !== undefined ? v : defaultValue;
 	};
-	return handle;
+	return ctx;
 }
 
-/** Build-generated: bind a `createContext()` export to its stable `module#export` tag. */
-export function __tag_context(tag: string, handle: unknown): void {
-	if (handle && typeof handle === 'object' && CTX_TAG in handle) {
-		(handle as Record<symbol, unknown>)[CTX_TAG] = tag;
-	}
-}
+/**
+ * Kept for ABI: the build still emits a registration call for each `createContext(...)` export (that
+ * used to tag keyless handles by `module#export`). Keys are explicit now, so this is a no-op.
+ */
+export function __tag_context(): void {}

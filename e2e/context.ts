@@ -25,10 +25,15 @@ try {
 
 	// ---------- SSR of the matrix page ----------
 	const raw = await (await fetch(base + '/context')).text();
-	check('SSR: provider emits <ogygia-context> with tag', /<ogygia-context[^>]*\bctx=/.test(raw));
-	check('SSR: context value serialized into the DOM', raw.includes('data-ogygia-ctx'));
+	check('SSR: provider emits <ogygia-provide> with values', /<ogygia-provide\b/.test(raw));
+	check('SSR: context value serialized into the DOM', raw.includes('data-ogygia-provide'));
 	const ssrLoad = raw.match(/data-ctx-reader="load"[^>]*>[\s\S]*?data-ctx-count[^>]*>(-?\d+)</)?.[1];
 	check('SSR: load reader reads context (5, no prop)', ssrLoad === '5', `count=${ssrLoad}`);
+	// RAW Svelte getContext (no ogygia handle) reads a <Provide> string entry + the live counter.
+	check(
+		'SSR: plain getContext island reads Provide values',
+		/data-plain-greeting="hi-from-provide"/.test(raw) && /data-plain-count="5"/.test(raw)
+	);
 
 	// ---------- Hydrated matrix ----------
 	await page.goto(base + '/context', { waitUntil: 'networkidle' });
@@ -43,6 +48,15 @@ try {
 	check('load reader: real instance', (await isInstance('load')) === 'true');
 	check('idle reader: real instance', (await isInstance('idle')) === 'true');
 	check('load reader count == SSR (no reset)', (await count('load')) === '5', `count=${await count('load')}`);
+
+	// Raw `getContext('key')` island — unchanged Svelte — reads the <Provide> across the island split.
+	const pGreet = await page.locator('[data-plain-reader]').getAttribute('data-plain-greeting');
+	const pCount = await page.locator('[data-plain-reader]').getAttribute('data-plain-count');
+	check(
+		'plain getContext island reads Provide across roots (client)',
+		pGreet === 'hi-from-provide' && pCount === '5',
+		`${pGreet}/${pCount}`
+	);
 
 	// Nested-island inner reader (degraded + hydrated with outer) reads context
 	check('nested-island reader reads context', (await count('nested-inner')) === '5', `count=${await count('nested-inner')}`);
