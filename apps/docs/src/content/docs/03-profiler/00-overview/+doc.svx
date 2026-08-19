@@ -47,11 +47,11 @@ Then open **`/__profiler`** — add `?key=<secret>` in production.
 ## What you get
 
 - **Always on, near zero cost.** Every request is wall-timed and logged, with per-route p50/p95. The CPU is only sampled while you are actively recording.
-- **On demand.** Record the live server for a few seconds, profile one page, or profile a single request. See [Recording](/docs/profiler/recording).
-- **A readable report.** A wall-clock budget bar (compute vs waiting), an interactive treemap of where the CPU went, sortable component and function tables, a network waterfall, memory and GC, and a flame graph. See [Reading a report](/docs/profiler/reading-reports).
+- **On demand.** Profile a page by URL, or profile a single request with a header. See [Recording](/docs/profiler/recording).
+- **A readable report.** A wall-clock budget bar (compute vs waiting), an interactive treemap of where the CPU went, sortable component and function tables (with per-call cost and `×N` repeat counts), a network waterfall, a waiting-by-function breakdown for non-HTTP I/O, memory and GC, and a flame graph. See [Reading a report](/docs/profiler/reading-reports).
 
 ## What it needs
 
-A **Node.js server** — `adapter-node`, `vite preview`, or most Node hosts. It uses the built-in V8 inspector. On edge runtimes without the inspector (Cloudflare Workers, Deno Deploy) the always-on request log still works, but CPU and heap recording do not; the UI says so plainly.
+A **Node.js server** — `adapter-node`, `vite preview`, or most Node hosts. It uses the built-in V8 inspector. On edge runtimes without the inspector (Cloudflare Workers, Deno Deploy) the always-on request log still works, but CPU and heap recording do not; the UI says so plainly. On serverless Node hosts (Lambda, Amplify) recording works, but the instance is ephemeral — download the report as a dump and view it anywhere. See [Serverless and edge](/docs/profiler/recording).
 
 It is production-safe: the UI 404s without the secret, matching is timing-safe, and recorded profiles live only in memory — never on disk.

@@ -290,23 +290,14 @@ export function render_dashboard(opts: {
 		'SSR profiler',
 		`<h1>SSR profiler <small>live since server start · ${rss_mb} MB rss · ${inflight} in flight</small></h1>
 
-${recording ? '<p class="verdict">A recording is running right now. Refresh in a moment.</p>' : ''}
+${recording ? '<p class="verdict">A profile is running right now. Refresh in a moment.</p>' : ''}
 
-<h2>Record</h2>
-<p class="hint">Records everything the server does — every request, component, function, allocation, and outbound call.</p>
-<form class="inline" action="${base}/record" method="get">
-	<label>seconds <input name="sec" value="10" size="3"></label>
-	<label>detail <select name="interval">
-		<option value="1000">normal</option>
-		<option value="500" selected>fine</option>
-		<option value="100">max</option>
-	</select></label>
-	<button>Record the live server</button>
-</form>
+<h2>Profile a page</h2>
+<p class="hint">Enter a path on this site. It renders through your real server a few times and shows exactly where the time went — components, functions, allocations, and outbound calls.</p>
 <form class="inline" action="${base}/page" method="get">
 	<label>path <input name="p" placeholder="/some/slow/page" size="28"></label>
 	<label>renders <input name="runs" value="5" size="3"></label>
-	<button>Profile one page</button>
+	<button>Profile</button>
 </form>
 <p class="hint">Or send any request with the header <code>x-profile: &lt;secret&gt;</code> to profile exactly that request. On a serverless host add <code>?format=dump</code> to download the profile, then <a href="${base}/view">open it here</a>.</p>
 

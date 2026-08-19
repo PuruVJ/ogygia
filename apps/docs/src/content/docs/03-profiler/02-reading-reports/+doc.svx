@@ -1,6 +1,6 @@
 ---
 title: Reading a report
-summary: How to read a profile — the wall-clock budget bar, the CPU treemap, self vs total for components, the network waterfall, and memory. Plus what the common slow patterns look like.
+summary: How to read a profile — the wall-clock budget bar, the CPU treemap, self vs total and per-call cost for components, the network waterfall, waiting by function, and memory. Plus what the common slow patterns look like.
 related:
   - profiler/overview
   - profiler/recording
@@ -40,9 +40,17 @@ So:
 
 The inline bar on each row shows self (bright) inside total (dim), so you can see at a glance whether a component is slow itself or slow because of what it renders.
 
+## Renders and per call
+
+A component's cost is often *repetition*, not one heavy render. A **`×N`** tag next to a name means it ran N times during the window — `HeavyRow ×800` is eight hundred cheap renders, not one slow component. No tag means it ran once.
+
+The **per call** column makes that explicit: it is `total ÷ N`, the cost of a single render. A component can top the table on self and total yet sit near the bottom on per call — that is the "thousand small rows" shape, and the fix is to render fewer, not to make one faster. A component that is high on *per call* is the one that is genuinely heavy to render once.
+
 ## Hot functions
 
-Every function on the server, sortable by self or total time. This is where the CPU went, below the component level — a formatter constructed per row, a regex pass, a serializer. The file and line point you straight at it.
+Every function on the server, sortable by self, total, or **per call**. This is where the CPU went, below the component level — a formatter constructed per row, a regex pass, a serializer. The file and line point you straight at it, and the same `×N` tag flags a hot loop (`escape_html ×7800`) rather than one slow call.
+
+Native runtime built-ins — Node and V8 internals like `existsSync` or the UTF-8 codecs — carry no source file, so their row is labelled **node core** with a `native` location. That is the runtime doing low-level work, not your code.
 
 ## Network
 
@@ -62,6 +70,12 @@ const [a, b, c] = await Promise.all([getA(), getB(), getC()]);
 
 A call whose "wait" is large but "body" is small is a slow upstream service; a large "body" is a slow or oversized response.
 
+## Waiting by function
+
+The waterfall above covers outbound HTTP. But a render also waits on things HTTP never sees — a file read, a `setTimeout`, a DNS lookup, a raw socket. This table times that non-HTTP I/O with `async_hooks` and attributes each wait to the nearest frame in *your* code, so a slow `readManifest` reads as **which function waited** instead of a featureless slice of "idle."
+
+Each row is a function, its kind of wait (timer, fs, dns, tcp), how many times it waited, and the total — sortable, with bars. When the budget bar is mostly idle but the network waterfall looks clean, the missing time is usually here.
+
 ## Memory
 
 Top allocators (who creates the objects, and therefore the garbage), RSS over the window, and precise GC pauses from the runtime. A long single GC pause freezes every request at once, so if GC is a big slice of busy time, the allocators table tells you who to blame.
@@ -72,7 +86,7 @@ A flame graph of the merged call tree for the whole window, and a **download** o
 
 ## What the common slow patterns look like
 
-- **Waiting, not computing** — budget bar mostly idle, low CPU, high wall time. The answer is in the network waterfall (or a database/socket driver the profiler can't see into, which the report will say).
+- **Waiting, not computing** — budget bar mostly idle, low CPU, high wall time. The answer is in the network waterfall, or the waiting-by-function table for non-HTTP I/O like files and timers (or a database/socket driver the profiler can't see into, which the report will say).
 - **One heavy component** — a single large box in the treemap; that component tops the table sorted by self.
 - **Death by a thousand cuts** — the treemap is a field of small same-colored boxes; sort the component table by total to find the parent that renders them all.
 - **Allocation pressure** — GC is a visible slice of busy time; the allocators table names the culprit.

@@ -1,28 +1,22 @@
 ---
 title: Recording
-summary: The three ways to capture a profile — record the live server, profile one page, or profile a single request — plus the production secret, sharper names with source maps, platform support, and every option.
+summary: The two ways to capture a profile — profile a page by URL, or profile a single request with a header — plus curated JSON, viewing a profile on serverless via dump and upload, the production secret, sharper names with source maps, and every option.
 related:
   - profiler/overview
   - profiler/reading-reports
   - start/install
 ---
 
-There are three ways to capture a profile. All of them are on the dashboard at `/__profiler`; the last one is a header you can send from anywhere.
+There are two ways to capture a profile. The main one lives on the dashboard at `/__profiler` — type a path and profile it; the other is a header you can send from anywhere.
 
-## Record the live server
+## Profile a page
 
-Records for a set number of seconds while real traffic flows, then shows what every request did during the window. Reach for this when the site is slow **under load** and you do not yet know which page is at fault.
-
-Pick a duration and a detail level (the CPU sampling interval) and hit record. Keep windows short — a few seconds is enough, and the CPU work of profiling grows with the window.
-
-## Profile one page
-
-Renders a path several times back to back and profiles just those renders. Reach for this when you already know **which page** is slow.
+Type a path, and the profiler renders it several times back to back and profiles just those renders. This is the main way in — reach for it whenever you know **which page** is slow, which is almost always.
 
 It does one un-profiled warm-up render first, so the one-time cost of loading modules and filling caches lands outside the measured window and the median stays steady.
 
 ```
-/__profiler → Profile one page → /some/slow/page
+/__profiler → Profile a page → /some/slow/page
 ```
 
 The page renders through your real server, so anything it needs — a session, cookies, a `load` — runs exactly as in production.
@@ -62,6 +56,22 @@ Sending `Accept: application/json` to `/record` or `/page` does the same. The pa
   // budget, hot_functions, files, requests, links…
 }
 ```
+
+## Serverless and edge
+
+The live dashboard wants a long-lived Node server: the V8 inspector, and memory that survives between requests. Serverless Node platforms (Lambda, Amplify) can *record* — the inspector runs in-process — but the report lives in memory on an instance that may be gone before you can browse to it. True edge runtimes (Workers) have no inspector at all, so there is nothing to record beyond the always-on request log.
+
+For the serverless case, take the report with you. Any report downloads as a **self-contained JSON dump** — everything needed to render it, no inspector required to read it back:
+
+```bash
+# a one-shot page profile, straight to a dump
+GET /__profiler/page?p=/slow/page&runs=6&format=dump&key=<secret>
+
+# or an existing report
+GET /__profiler/report/<id>/dump
+```
+
+Then open **`/__profiler/view`** anywhere — your production route, or the same app on `localhost` — and upload the file. The full HTML report renders from the dump alone, because the renderer is a pure function of it.
 
 ## In production
 

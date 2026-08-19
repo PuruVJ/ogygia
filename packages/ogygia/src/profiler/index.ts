@@ -590,53 +590,45 @@ class Profiler {
 			);
 		}
 
-		if (sub === '/record' || sub === '/page') {
+		if (sub === '/page') {
 			if (this.#recording) {
-				return html(render_message('Busy', 'A recording is already running. Try again in a moment.', this.base), 409);
+				return html(render_message('Busy', 'A profile is already running. Try again in a moment.', this.base), 409);
 			}
 			this.#recording = true;
 			try {
-				let id: string;
-				if (sub === '/record') {
-					const sec = clamp(Number(q.get('sec')) || 10, 1, 120);
-					const interval = clamp(Number(q.get('interval')) || this.sample_interval, 50, 10_000);
-					const cap = await this.#capture_window(interval, () => sleep(sec * 1000));
-					id = await this.#finish_report(cap, { trigger: 'window' });
-				} else {
-					const path = q.get('p') ?? '';
-					if (!path.startsWith('/') || path.startsWith('//')) {
-						return html(render_message('Bad path', 'Give a path on this site, like /docs/overview.', this.base), 400);
-					}
-					const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
-					const interval = clamp(Number(q.get('interval')) || 200, 50, 10_000);
-					const run_ms: number[] = [];
-					// one un-profiled warm-up render: pays the cold module-load / cache-fill
-					// cost outside the window so the measured runs (and the median) are steady
-					try {
-						await (await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } })).text();
-					} catch {
-						// warm-up failures surface on the real runs below
-					}
-					const cap = await this.#capture_window(interval, async () => {
-						for (let i = 0; i < runs; i++) {
-							const t = performance.now();
-							const res = await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } });
-							await res.text();
-							run_ms.push(round2(performance.now() - t));
-							// let the event loop turn once between renders: flushes the GC
-							// PerformanceObserver (its entries arrive on a macrotask) and keeps
-							// each render a clean, separately-attributed unit
-							await new Promise((r) => setImmediate(r));
-						}
-					});
-					// call counts come from ONE extra render under precise coverage — a
-					// SEPARATE pass, because coverage stops V8 inlining and would otherwise
-					// inflate the CPU profile (svelte's hot `child`/`push` would dominate)
-					cap.call_counts = await this.#count_calls(async () => {
-						await (await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } })).text();
-					});
-					id = await this.#finish_report(cap, { trigger: 'page', page: path, runs: run_ms });
+				const path = q.get('p') ?? '';
+				if (!path.startsWith('/') || path.startsWith('//')) {
+					return html(render_message('Bad path', 'Give a path on this site, like /docs/overview.', this.base), 400);
 				}
+				const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
+				const interval = clamp(Number(q.get('interval')) || 200, 50, 10_000);
+				const run_ms: number[] = [];
+				// one un-profiled warm-up render: pays the cold module-load / cache-fill
+				// cost outside the window so the measured runs (and the median) are steady
+				try {
+					await (await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } })).text();
+				} catch {
+					// warm-up failures surface on the real runs below
+				}
+				const cap = await this.#capture_window(interval, async () => {
+					for (let i = 0; i < runs; i++) {
+						const t = performance.now();
+						const res = await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } });
+						await res.text();
+						run_ms.push(round2(performance.now() - t));
+						// let the event loop turn once between renders: flushes the GC
+						// PerformanceObserver (its entries arrive on a macrotask) and keeps
+						// each render a clean, separately-attributed unit
+						await new Promise((r) => setImmediate(r));
+					}
+				});
+				// call counts come from ONE extra render under precise coverage — a
+				// SEPARATE pass, because coverage stops V8 inlining and would otherwise
+				// inflate the CPU profile (svelte's hot `child`/`push` would dominate)
+				cap.call_counts = await this.#count_calls(async () => {
+					await (await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } })).text();
+				});
+				const id = await this.#finish_report(cap, { trigger: 'page', page: path, runs: run_ms });
 				const s = this.#reports.get(id)!;
 				// serverless (Amplify/Vercel/Netlify) can't keep the report in memory across
 				// invocations, so `?format=dump` returns the whole thing as a download the user
@@ -659,7 +651,7 @@ class Profiler {
 						'Profiling unavailable',
 						e instanceof Error && /inspector/.test(e.message)
 							? 'CPU profiling needs a Node.js server (adapter-node or dev). This platform does not expose the V8 inspector.'
-							: `Recording failed: ${e instanceof Error ? e.message : String(e)}`,
+							: `Profiling failed: ${e instanceof Error ? e.message : String(e)}`,
 						this.base
 					),
 					500
@@ -920,10 +912,6 @@ function json_response(obj: unknown, status = 200): Response {
 
 function clamp(n: number, lo: number, hi: number): number {
 	return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
-}
-
-function sleep(ms: number): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
 }
 
 function round2(n: number): number {

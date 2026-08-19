@@ -8,6 +8,25 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.5] — 2026-08-19
+
+Patch: the profiler trades its live-server recording for one "profile a page" flow, and its package
+export is fixed so it can actually be imported.
+
+### Removed
+
+- **Live-server recording.** The dashboard's "record the live server for N seconds" mode is gone.
+  Profiling is now a single action — enter a path, and the profiler renders that page through your
+  real server a few times and profiles just those renders — plus the `x-profile: <secret>` header for
+  a single request. One obvious way in instead of three, and no window/detail knobs to reason about.
+
+### Fixed
+
+- **`ogygia/profiler` is now in the published export map.** The subpath was declared for local
+  development but missing from `publishConfig.exports`, so `import { profiler } from 'ogygia/profiler'`
+  would not resolve when installed from npm, even though the compiled files already shipped in `dist`.
+  Fixed and verified — 19 subpaths now resolve and type-check.
+
 ## [0.6.4] — 2026-08-19
 
 Patch: the profiler now counts how many times each function ran, shows per-call cost, attributes

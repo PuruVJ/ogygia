@@ -1,6 +1,6 @@
 {
 	"name": "ogygia",
-	"version": "0.6.4",
+	"version": "0.6.5",
 	"type": "module",
 	"sideEffects": [
 		"**/*.css"
@@ -215,6 +215,10 @@
 			"./server": {
 				"types": "./dist/hooks.d.ts",
 				"default": "./dist/hooks.js"
+			},
+			"./profiler": {
+				"types": "./dist/profiler/index.d.ts",
+				"default": "./dist/profiler/index.js"
 			},
 			"./internal/compiler": {
 				"types": "./dist/compiler/index.d.ts",
