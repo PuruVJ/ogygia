@@ -60,7 +60,7 @@ import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
 import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrency.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { serialize_context } from './context-bridge.js';
+import { serialize_provided_context } from './context-bridge.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
 
 /** Hard cap on rendered region HTML (bytes). */
@@ -357,11 +357,11 @@ class OgygiaHandle {
 		if (html.includes('</body>')) {
 			const provided = ctx_als.getStore();
 			if (provided?.size) {
-				const obj: Record<string, unknown> = {};
-				for (const [k, v] of provided) obj[k] = v;
-				scripts.push(
-					`<script type="application/ogygia-ctx" ${PAGE_CTX_MARKER}>${serialize_context(obj)}</script>`
-				);
+				// Drops any non-serializable value (function / store / class instance) instead of crashing.
+				const payload = serialize_provided_context(provided);
+				if (payload) {
+					scripts.push(`<script type="application/ogygia-ctx" ${PAGE_CTX_MARKER}>${payload}</script>`);
+				}
 			}
 		}
 

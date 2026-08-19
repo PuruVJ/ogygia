@@ -86,26 +86,37 @@ const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 /**
  * ogygia's OWN runtime imports that the transform INJECTS into a host component or a generated
  * wrapper (Region / og_portable, and server-island endpoint minting). They are ours, not something
- * the author wrote, so they must resolve from the CONSUMER — the app whose vite.config mounts this
- * plugin — not from the importer's package. Otherwise a host that lives in a monorepo sub-package
- * which doesn't itself depend on ogygia can't resolve a bare `ogygia/internal`. (A user's OWN marked
- * package import — `X from 'ogygia/content/…' with { wake }` — is deliberately NOT here: that resolves
- * from the host file, whose package must expose the subpath.)
+ * the author wrote, so they must resolve to ogygia's OWN files (see OGYGIA_INJECTED_FILES) — NOT from
+ * the importer's package. Otherwise a host that lives in a monorepo sub-package which doesn't itself
+ * depend on ogygia can't resolve a bare `ogygia/internal`. (A user's OWN marked package import —
+ * `X from 'ogygia/content/…' with { wake }` — is deliberately NOT here: that resolves from the host
+ * file, whose package must expose the subpath.)
  */
 const OGYGIA_INJECTED_IMPORTS = new Set(['ogygia/internal', 'ogygia/internal/server']);
 
 /**
- * Last-resort DIRECT paths to those injected entries inside THIS ogygia package. The plugin always
- * runs from `dist/vite/index.js` (the `./vite` export is dist even in dev), so `../internal.js` lands
- * on `dist/internal.js` — exactly like the `$app/*` shims above. Used ONLY if BOTH self-reference and
- * consumer-root `this.resolve` return null (an exotic resolver / rolldown-vite quirk). A consumer only
- * ever ships dist, so there is no src↔dist identity fork; in ogygia's own dev the self-reference
- * resolves first (to the svelte-condition src), so this branch is never taken there.
+ * DIRECT paths to ogygia's OWN injected runtime entries, resolved WITHOUT `this.resolve`. The
+ * transform writes `ogygia/internal` / `ogygia/internal/server` into a host or a generated island
+ * module, and a host in a monorepo sub-package that doesn't depend on ogygia must still resolve them.
+ * `this.resolve` off a synthetic importer is NOT portable across bundler versions (returns null in
+ * vite@8, can THROW in rolldown-vite@7 — which aborts the whole hook), and `config.root` can be
+ * undefined on a throwaway Kit plugin instance — so we address ogygia's own files head-on instead.
+ *
+ * PKG_ROOT is this package (the plugin runs from `dist/vite/index.js`, so `../..` is the package
+ * root). A published install ships only `dist` → `dist/internal.js`. ogygia's OWN source checkout has
+ * `src/`, and the rest of the app resolves ogygia through the `svelte` export condition (→ `src`), so
+ * there we point at `src/internal.ts` too — same module, no Region/brand identity fork.
  */
-const OGYGIA_INJECTED_FILES: Record<string, string> = {
-	'ogygia/internal': fileURLToPath(new URL('../internal.js', import.meta.url)),
-	'ogygia/internal/server': fileURLToPath(new URL('../internal-server.js', import.meta.url))
-};
+const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
+const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
+	? {
+			'ogygia/internal': path.join(PKG_ROOT, 'src/internal.ts'),
+			'ogygia/internal/server': path.join(PKG_ROOT, 'src/internal-server.ts')
+		}
+	: {
+			'ogygia/internal': path.join(PKG_ROOT, 'dist/internal.js'),
+			'ogygia/internal/server': path.join(PKG_ROOT, 'dist/internal-server.js')
+		};
 
 // Client-side shims aliased for island modules (Kit's client runtime is absent under csr=false).
 const APP_SHIMS = {
@@ -1748,30 +1759,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 			if (source === V_TRANSPORTABLES) return RESOLVED(V_TRANSPORTABLES);
 
-			// ogygia's OWN injected runtime imports must NOT resolve from the importer's package — a host
-			// in a monorepo sub-package that doesn't itself depend on ogygia can't see a bare
-			// `ogygia/internal`. Re-base the resolution off ogygia's OWN package (self-reference): PKG_ROOT
-			// is where THIS plugin file lives, so it always exists AND is the exact ogygia the app loaded
-			// `ogygia/vite` from — one install, one instance, so Region/brand identity never forks. It is
-			// condition-consistent (the svelte / dev source, or dist when installed) via ogygia's exports
-			// map. The consumer `root` is only a fallback, and is skipped when unset (a throwaway plugin
-			// instance whose `configResolved` never ran — see the bridge-claim note above — leaves `root`
-			// undefined). Null from both → fall through to the usual error rather than mask a broken install.
-			if (OGYGIA_INJECTED_IMPORTS.has(source)) {
-				const self = await this.resolve(source, path.join(PKG_ROOT, '__ogygia__'), {
-					skipSelf: true
-				});
-				if (self) return self;
-				if (root) {
-					const consumer = await this.resolve(source, path.join(root, '__ogygia_consumer__'), {
-						skipSelf: true
-					});
-					if (consumer) return consumer;
-				}
-				// Neither resolver found it (exotic layout / resolver quirk): address ogygia's OWN built
-				// entry directly, so the injected import can NEVER be left unresolved.
-				return OGYGIA_INJECTED_FILES[source];
-			}
+			// ogygia's OWN injected imports (`ogygia/internal` / `…/server`, written by the transform into
+			// a host or a generated island module) resolve to ogygia's own files DIRECTLY (see
+			// OGYGIA_INJECTED_FILES) — never via `this.resolve` (unreliable off a synthetic importer, can
+			// throw in rolldown-vite) or `config.root` (can be undefined on a throwaway plugin instance).
+			// Deterministic, can't throw, can't be left unresolved, works from any sub-package with no
+			// ogygia dependency of its own.
+			if (OGYGIA_INJECTED_IMPORTS.has(source)) return OGYGIA_INJECTED_FILES[source];
 
 			const ssr = options?.ssr === true;
 

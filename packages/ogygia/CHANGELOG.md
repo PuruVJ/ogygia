@@ -44,19 +44,21 @@ so existing layouts adopt with an import swap. Plus two build fixes.
 
 ### Fixed
 
-- **ogygia's own injected imports resolve from ogygia's package, not the importer.** The transform
-  injects `ogygia/internal` (Region / og_portable) and `ogygia/internal/server` into a host or a
-  generated island wrapper. For a host that lives in a monorepo sub-package which doesn't itself
+- **ogygia's own injected imports resolve to ogygia's own files, not the importer's package.** The
+  transform injects `ogygia/internal` (Region / og_portable) and `ogygia/internal/server` into a host
+  or a generated island wrapper. For a host that lives in a monorepo sub-package which doesn't itself
   depend on ogygia, a bare `ogygia/internal` failed to resolve (`Rolldown failed to resolve import
-  "ogygia/internal" from ".../Toolbar.svelte"`). The plugin now re-bases those injected imports off
-  ogygia's OWN package via self-reference (`PKG_ROOT` — where the plugin file lives), which always
-  exists and is the exact ogygia the app loaded `ogygia/vite` from, so a component in any sub-package
-  works without that package declaring ogygia — and it no longer depends on a resolved config `root`
-  (a throwaway Kit plugin instance whose `configResolved` never ran leaves `root` undefined, which
-  defeated the previous app-root attempt). Guarded by `test/injected-import-consumer-resolve.test.ts`
-  AND a real build fixture: `internal/repro-subpkg` (a sub-package with no ogygia dep) imported by the
-  playground at `/subpkg-island`, exercised by `e2e/subpkg-island.ts` — the playground build itself
-  fails if this regresses.
+  "ogygia/internal" from ".../Toolbar.svelte"`). The plugin now resolves those injected imports to
+  ogygia's OWN files **directly** — an absolute path under `PKG_ROOT` (where the plugin lives),
+  `src/internal.ts` in a source checkout or `dist/internal.js` in a published install, chosen so the
+  injected Region is the SAME module the rest of the app gets (no identity fork). It deliberately does
+  NOT use `this.resolve` (off a synthetic importer that is not portable: returns null in vite@8, can
+  THROW in rolldown-vite@7, aborting the hook) and does NOT depend on `config.root` (undefined on a
+  throwaway Kit plugin instance). So the resolution can't throw, can't be left unresolved, and works
+  from any sub-package. Guarded by `test/injected-import-consumer-resolve.test.ts` (with a
+  `this.resolve` that throws if touched) AND a real build fixture: `internal/repro-subpkg` (a
+  sub-package with no ogygia dep) imported by the playground at `/subpkg-island`, exercised by
+  `e2e/subpkg-island.ts` — the playground build itself fails if this regresses.
 - **A plain function passed as an island prop now errors as a function, not a snippet.** A Svelte
   snippet is an unbranded function, so ogygia can't tell a real snippet from a callback until it
   renders it. The boundary error now leads with "function", names the prop, and puts the plain-function

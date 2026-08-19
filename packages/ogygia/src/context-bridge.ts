@@ -31,6 +31,46 @@ export function serialize_context(value: unknown): string {
 		.join('\\u003C');
 }
 
+/**
+ * Serialize for the drop-in `setContext` page marker WITHOUT the region-snippet reducer. That reducer
+ * treats every function as a snippet (snippets are unbranded functions), which would silently turn a
+ * `setContext('trackPageView', fn)` — or a store's `subscribe`/`set` — into a bogus snippet instead of
+ * failing. Here a function must THROW so the offending value gets dropped (see below). Transportables
+ * (`[ogygia.wire]`, e.g. a shared counter) still cross. A snippet in context is a `<Provide>` concern,
+ * not this drop-in path.
+ */
+function stringify_bridgeable(value: unknown): string {
+	return stringify(value, { [TRANSPORT_WIRE_KEY]: reduce_transportable })
+		.split('<')
+		.join('\\u003C');
+}
+
+/**
+ * Serialize the drop-in `setContext` page-root bag for the DOM marker. A layout may `setContext` a
+ * FUNCTION (e.g. `trackPageView`) or a live store (e.g. inside an app-context object) — values that
+ * genuinely can't cross an island boundary. Rather than crash the page (or bridge a broken value),
+ * drop the offenders key-by-key and bridge the rest. Returns null if nothing serializable remains.
+ * The happy path (all serializable) is a single `stringify`.
+ */
+export function serialize_provided_context(map: Map<string, unknown>): string | null {
+	const obj: Record<string, unknown> = {};
+	for (const [k, v] of map) obj[k] = v;
+	try {
+		return stringify_bridgeable(obj);
+	} catch {
+		const safe: Record<string, unknown> = {};
+		for (const k in obj) {
+			try {
+				stringify_bridgeable({ [k]: obj[k] });
+				safe[k] = obj[k];
+			} catch {
+				/* a function / store / class instance — can't bridge; native setContext still served it */
+			}
+		}
+		return Object.keys(safe).length ? stringify_bridgeable(safe) : null;
+	}
+}
+
 /** Decode one serialized provider payload; a corrupt payload yields nothing (never breaks hydration). */
 function parse_ctx(text: string | null | undefined): Record<string, unknown> | undefined {
 	if (!text) return undefined;
@@ -126,7 +166,11 @@ export function createContext<T>(key: string, defaultValue?: T): Context<T> {
  * `<Provide>`, which wraps its subtree and beats the root on the same key.
  */
 export function setContext<T>(key: unknown, value: T): T {
-	if (typeof key === 'string') record_ctx(key, value);
+	// Only string keys can bridge (islands read `getContext('key')`), and a function value can never
+	// serialize — record neither. Native setContext still runs, so same-root reads are unchanged; a
+	// store or class instance is recorded but dropped later by `serialize_provided_context` if it can't
+	// serialize, so it never crashes the page.
+	if (typeof key === 'string' && typeof value !== 'function') record_ctx(key, value);
 	return svelte_set_context(key, value);
 }
 
