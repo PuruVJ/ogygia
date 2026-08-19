@@ -29,4 +29,8 @@ jobs:
       # Build the library to dist (the published preview uses publishConfig.exports → dist).
       - run: pnpm run build:lib
 
-      - run: npx --yes pkg-pr-new publish './packages/ogygia'
+      # `--pnpm` makes pkg.pr.new pack with `pnpm pack` instead of the default `npm pack`. Only pnpm
+      # pack applies `publishConfig` (swapping the dev `exports` that point at `src/` for the `dist/`
+      # map). Without it the preview shipped raw source exports pointing at files not in the tarball,
+      # so `import … from 'ogygia'` failed with ERR_RESOLVE_PACKAGE_ENTRY_FAIL.
+      - run: npx --yes pkg-pr-new publish --pnpm './packages/ogygia'
