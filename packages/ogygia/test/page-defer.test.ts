@@ -39,6 +39,16 @@ describe('page-defer staging (server)', () => {
 		expect((d.staged as { nested: { flags: unknown } }).nested.flags).toBeInstanceOf(DeferRef);
 	});
 
+	it('a promise nested DEEPER than the plain-walk cap is still found + staged (never abandoned)', () => {
+		// 15 levels of plain nesting, promise at the bottom — must be staged, not left raw (which would
+		// drop the field on serialize AND leak an unhandled rejection).
+		let data: unknown = Promise.resolve('DEEP');
+		for (let i = 0; i < 15; i++) data = { nest: data };
+		expect(has_deferred(data)).toBe(true);
+		const { deferred } = stage_deferred(data, 0);
+		expect(deferred).toHaveLength(1);
+	});
+
 	it('has_deferred is a cheap true/false probe; a promise-free tree is false', () => {
 		expect(has_deferred({ a: 1, b: { c: Promise.resolve(1) } })).toBe(true);
 		expect(has_deferred({ a: 1, b: { c: [2, 3] } })).toBe(false);

@@ -9,7 +9,10 @@
 import { stringify } from 'devalue';
 import { PAGE_DEFER_KEY, PAGE_SETTLED_KEY } from '../page-defer.js';
 
-const MAX_DEPTH = 10;
+// Bounds runaway recursion on a pathological/cyclic PLAIN structure only — promises are handled
+// before this cap applies (see the walkers), so a deeply-nested load promise is never abandoned.
+// Generous enough that realistic load data is always fully walked.
+const MAX_DEPTH = 64;
 
 /** A THENABLE, not just a native Promise — Kit wraps streamed load promises, so `instanceof Promise`
  *  would miss them. Anything with a callable `.then` we can await. */
@@ -58,12 +61,14 @@ export function stage_deferred(
 	const deferred: Deferred[] = [];
 	let id = start_id;
 	const walk = (v: unknown, depth: number): unknown => {
-		if (depth > MAX_DEPTH) return v;
+		// Promises handled BEFORE the depth cap — never abandon a thenable (an abandoned one would go
+		// unserialized AND unhandled → dropped field + unhandled server rejection on reject).
 		if (is_thenable(v)) {
 			const ref = new DeferRef(id++);
 			deferred.push({ id: ref.id, promise: v });
 			return ref;
 		}
+		if (depth > MAX_DEPTH) return v;
 		if (Array.isArray(v)) return v.map((x) => walk(x, depth + 1));
 		if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
 			const out: Record<string, unknown> = {};
@@ -83,7 +88,8 @@ export function stage_deferred(
  * this path exactly as on the streaming path, and `{#await …:catch}` works.
  */
 export async function settle_deferred(value: unknown, depth = 0): Promise<unknown> {
-	if (depth > MAX_DEPTH) return value;
+	// Promises handled BEFORE the depth cap — always await a thenable (abandoning it would drop the
+	// field AND leak an unhandled rejection on reject).
 	if (is_thenable(value)) {
 		try {
 			const resolved = await value;
@@ -92,6 +98,7 @@ export async function settle_deferred(value: unknown, depth = 0): Promise<unknow
 			return new SettledRef(false, normalize_error(err));
 		}
 	}
+	if (depth > MAX_DEPTH) return value;
 	if (Array.isArray(value)) return Promise.all(value.map((x) => settle_deferred(x, depth + 1)));
 	if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
 		const out: Record<string, unknown> = {};
@@ -107,8 +114,8 @@ export async function settle_deferred(value: unknown, depth = 0): Promise<unknow
 
 /** Does `value` hold any promise? (cheap probe — the common no-promise seed skips staging entirely.) */
 export function has_deferred(value: unknown, depth = 0): boolean {
-	if (depth > MAX_DEPTH || value === null || typeof value !== 'object') return false;
 	if (is_thenable(value)) return true;
+	if (depth > MAX_DEPTH || value === null || typeof value !== 'object') return false;
 	if (Array.isArray(value)) return value.some((x) => has_deferred(x, depth + 1));
 	if (Object.getPrototypeOf(value) === Object.prototype) {
 		for (const k in value as Record<string, unknown>)

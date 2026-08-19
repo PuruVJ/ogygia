@@ -88,6 +88,8 @@ type RequestBag = {
 	ctx: Map<string, unknown>;
 	page: PageSnapshot | null;
 	deferred: Deferred[] | null;
+	/** Next free defer id after data+form staging — re-staging (nested promises) continues from here. */
+	defer_next_id: number;
 	/** devalue reducers for streamed resolve scripts (app transport encoders + defer marker). */
 	seed_reducers: Record<string, (v: unknown) => unknown> | null;
 };
@@ -213,7 +215,7 @@ class OgygiaHandle {
 			// Per-request capture bag: `setContext` values + the page snapshot are recorded during the
 			// render (inside this `run`, so `getStore()` works) and read back in `inject_client_seeds`
 			// via the SAME bag reference passed through as a closure.
-			const bag: RequestBag = { ctx: new Map(), page: null, deferred: null, seed_reducers: null };
+			const bag: RequestBag = { ctx: new Map(), page: null, deferred: null, defer_next_id: 0, seed_reducers: null };
 			const response = await request_als.run(bag, () =>
 				resolve(event, {
 					transformPageChunk: async ({ html }) =>
@@ -225,7 +227,7 @@ class OgygiaHandle {
 			// ran synchronously inside `resolve`); the tail streams a resolve script per promise as it
 			// settles. Only set when the request could consume a stream (see `inject_client_seeds`).
 			if (bag.deferred && bag.deferred.length) {
-				return this.stream_page_deferred(response, bag.deferred, bag.seed_reducers ?? undefined);
+				return this.stream_page_deferred(response, bag.deferred, bag.defer_next_id, bag.seed_reducers ?? undefined);
 			}
 			return response;
 		}
@@ -405,6 +407,7 @@ class OgygiaHandle {
 			seed_form = staged_form.staged;
 			if (bag) {
 				bag.deferred = [...staged_data.deferred, ...staged_form.deferred];
+				bag.defer_next_id = staged_form.next_id; // real next id — do NOT recompute from array length
 				bag.seed_reducers = seed_reducers; // resolve scripts encode with the same transport + defer
 			}
 			scripts.push(`<script>${PAGE_DEFER_BOOTSTRAP}</script>`);
@@ -460,6 +463,7 @@ class OgygiaHandle {
 	stream_page_deferred(
 		response: Response,
 		deferred: Deferred[],
+		initial_next_id: number,
 		reducers?: Record<string, (v: unknown) => unknown>
 	): Response {
 		const source = response.body;
@@ -469,14 +473,18 @@ class OgygiaHandle {
 		const decoder = new TextDecoder();
 		const stream = new ReadableStream<Uint8Array>({
 			async start(controller) {
-				// 1. Forward Kit's document through `</body></html>` (one enqueue in practice; loop guards a
-				//    split). Kit streams its (dead) resolve scripts only AFTER this, as separate chunks.
+				// 1. Forward Kit's document through `</body></html>` (one enqueue in practice). Kit streams
+				//    its (dead) resolve scripts only AFTER this, as separate chunks. Accumulate the decoded
+				//    text ACROSS reads so a `</body>` split over a chunk boundary is still detected (the
+				//    stateful decoder alone returns only the current chunk).
+				let doc = '';
 				try {
 					for (;;) {
 						const { value, done } = await reader.read();
 						if (done) break;
 						controller.enqueue(value);
-						if (decoder.decode(value, { stream: true }).includes('</body>')) break;
+						doc += decoder.decode(value, { stream: true });
+						if (doc.includes('</body>')) break;
 					}
 				} catch {
 					/* fall through — resolution streaming below still runs */
@@ -500,7 +508,7 @@ class OgygiaHandle {
 				//    the initial set. `pending` grows as nested promises appear, so the stream stays open
 				//    until the whole tree has settled. `next_id` is the initial contiguous count.
 				let pending = deferred.length;
-				let next_id = deferred.length;
+				let next_id = initial_next_id;
 				let closed = false;
 				const maybe_close = () => {
 					if (pending === 0 && !closed) {
