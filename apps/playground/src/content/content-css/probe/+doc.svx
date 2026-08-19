@@ -1,0 +1,15 @@
+---
+title: content css probe
+---
+
+<div class="cssprobe" data-content-css-probe>content body css probe</div>
+
+<style>
+	/* A distinctive, unmistakable value: unstyled would be the browser default `rgb(0, 0, 0)` /
+	   transparent, never this. Its presence proves the content body's OWN scoped CSS reached the
+	   csr=false page (the corpus is server-only, so nothing statically links it). */
+	.cssprobe {
+		outline: 4px solid rgb(11, 197, 141);
+		padding: 0.75rem;
+	}
+</style>

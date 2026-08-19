@@ -57,14 +57,18 @@ const markdown_format: Format<unknown, MarkdownMeta> = (resolved, id) => {
 	// (the default export is the thin `{@html}` shell), but awaiting it is a no-op: no svelte/server
 	// render on the wire path, the ticket carries this HTML directly.
 	const baked = (mod.__ogygia_region as { html?: string } | undefined)?.html;
+	// Content-body CSS key baked by the markdown preprocessor when the module has its own scoped
+	// `<style>` — thread it onto the body region so Region.svelte links the client CSS asset the
+	// plugin emitted (the corpus is server-only, so this CSS is on no page stylesheet). Absent → no link.
+	const css_id = typeof mod.__ogygia_css === 'string' ? mod.__ogygia_css : undefined;
 	return {
 		data,
 		...(mod.default !== undefined
 			? {
 					body:
 						typeof baked === 'string'
-							? prebaked_region(mod.default as Component<Record<string, never>>, baked)
-							: region(mod.default as Component<Record<string, never>>, {})
+							? prebaked_region(mod.default as Component<Record<string, never>>, baked, css_id)
+							: region(mod.default as Component<Record<string, never>>, {}, undefined, css_id)
 				}
 			: {}),
 		...(source ? { source } : {}),

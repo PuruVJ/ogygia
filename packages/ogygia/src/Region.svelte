@@ -23,7 +23,7 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
-	import { islandDeps, islandCss } from 'virtual:ogygia/island-deps';
+	import { islandDeps, islandCss, contentCss } from 'virtual:ogygia/island-deps';
 	import { makeRegionEndpoint, mintServerIsland } from 'virtual:ogygia/region-endpoint';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
@@ -300,9 +300,13 @@
 		return mintServerIsland(__entry, __props || {}, __cacheTtl || 0);
 	});
 
-	// DOM `entry`: importable module URL when a deferred island wakes after swap; opaque id otherwise.
+	// DOM `entry`: the importable module URL a deferred island wakes with AFTER its HTML swaps in.
+	// EMPTY for a static server island (`render: 'deferred'` with no `wake`) — it has no client module,
+	// so there is nothing to import. Must not fall back to the region id: the router's next-page warm
+	// scans `entry="…"` and `import()`s each as a module, so a bare id there fetches `/<id>` → 404 on
+	// nav. The endpoint (which fetches the hole's HTML) is minted from `__entry` above, independently.
 	const server_region_entry = $derived(
-		nested ? '' : __module ? (__module.startsWith('/@') ? __module : asset(__module)) : __entry
+		!nested && __module ? (__module.startsWith('/@') ? __module : asset(__module)) : ''
 	);
 
 	const server_payload = $derived(
@@ -398,12 +402,27 @@
 		return html;
 	});
 
+	// A content BODY (an inline region from a `.svx`/`.md`) carries its own scoped `<style>`, but the
+	// corpus is server-only so that CSS joins no page stylesheet — the same blind spot a held dual has,
+	// one step further (there is no client module at all, just data). The markdown source baked a
+	// `content_id`; resolve it through the handoff (`contentCss`) and link the client CSS asset the
+	// plugin emitted, the SAME `data-ogygia-region-css` channel, deduped per-request by `claim_region_css`.
+	const content_css_html = $derived.by(() => {
+		if (resolved?.kind !== 'inline' || !resolved.content_id) return '';
+		let html = '';
+		for (const href of claim_region_css(contentCss(resolved.content_id)))
+			html += LT + 'link rel="stylesheet" href="' + href + '" data-ogygia-region-css' + GT;
+		return html;
+	});
+
 	const head_html = $derived(
 		(is_island
 			? runtime_script + island_preload + island_css_html
 			: is_server
 				? runtime_script + server_preload
-				: '') + region_css_html
+				: '') +
+			region_css_html +
+			content_css_html
 	);
 
 	// ────────────────────────────────────────────────────── held: live / deferred ──
@@ -491,7 +510,7 @@
 {:else if resolved}
 	{@const d = /** @type {import('./region.js').DeferredRegion} */ (resolved)}
 	{#key identity(d)}
-		<ogygia-region entry={d.module || d.id} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{@html held_props_script}
+		<ogygia-region entry={d.module || ''} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{@html held_props_script}
 	{/key}
 {:else if of}
 	<!-- Promise `of` still in flight (first resolution) — the region owns the whole wait. -->

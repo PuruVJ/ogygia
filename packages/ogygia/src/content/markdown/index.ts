@@ -16,7 +16,7 @@
 
 import type { MdsvexOptions } from 'mdsvex';
 import type { PreprocessorGroup, Processed } from 'svelte/compiler';
-import { islandBridge } from '../../vite/island-bridge.js';
+import { islandBridge, content_css_key } from '../../vite/island-bridge.js';
 import { BuildCache } from '../../build-cache.js';
 import { RegionStore } from '../region-store.js';
 import { remarkHeadingId } from './remark-heading-id.js';
@@ -291,13 +291,22 @@ function register_island_scanner(
 			}
 		};
 		walk(join(root, 'src'));
+		// Fresh each scan (dev re-scan / build) — a stale file must not keep emitting CSS.
+		islandBridge.contentStyleSources.clear();
 		for (const file of files) {
 			const raw = readFile(file);
 			if (raw == null) continue;
 			// The FULL markup pipeline of a real compile — `:::` tab rewrite + island import injection
 			// → mdsvex → island transform (which registers). Running only mdsvex here would miss the
 			// islands the tab pass mints, so their client chunks would never be emitted at build.
-			await run_markup(raw, file);
+			const res = await run_markup(raw, file);
+			// A content module's OWN scoped `<style>` compiles into the SERVER bundle only (the leak-free
+			// corpus never enters the client graph), so record its post-mdsvex source — the plugin's
+			// client leg svelte-compiles it to extract the scoped CSS and emits it as a client asset,
+			// keyed by content_css_key. Same `<style>` detector the compile uses to bake `__ogygia_css`,
+			// so emit side and render side agree on which files carry content CSS.
+			if (raw.includes('<style') && res && typeof (res as { code?: unknown }).code === 'string')
+				islandBridge.contentStyleSources.set(file, (res as { code: string }).code);
 		}
 	};
 }
@@ -502,6 +511,13 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			const lines: string[] = [];
 			const src = source_line(input.filename);
 			if (src) lines.push(src);
+			// Bake the CSS key when the module carries its own scoped `<style>`. markdown_format reads
+			// `__ogygia_css` onto the body region so Region.svelte can link the client CSS chunk the
+			// plugin emits for this file. content_css_key(abs) is the SAME key the emit + handoff use
+			// (derived from the absolute path on both sides), so they match without threading `root`.
+			// `<style>` detector mirrors the scanner's contentStyleFiles filter → emit and render agree.
+			if (input.content.includes('<style'))
+				lines.push(`export const __ogygia_css = ${JSON.stringify(content_css_key(path))};`);
 			// REGION path: a pure-static `.md` re-emits as a serialized region — content as data, one
 			// `{@html}` reference in the template, body pre-baked. Only when nothing dynamic touched the
 			// file: no island transform, no tab injection, no slot overrides; the emitter itself vetoes

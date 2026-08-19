@@ -16,6 +16,48 @@ import { speculate_url } from './speculate-hint.js';
 
 const WS = /\s+/;
 
+/**
+ * Fold ORPHANED `view-transition-name`s into the page-level cross-fade. A name promotes its element
+ * to a standalone transition group, LIFTED OUT of the root snapshot. When the element has no
+ * counterpart on the other page — a sidebar full of named nav rows navigating to a marketing page
+ * that has none — each one runs a solo enter/exit AND leaves a hole in the root cross-fade: a visible
+ * stutter, worst in dev where the destination paints late. Names present on BOTH pages (the docs↔docs
+ * active-highlight slide) are KEPT, so matched animations still play. Only INLINE names are touched
+ * (nav rows carry theirs inline; the single CSS-set highlight chip is left alone). Returns a restore
+ * fn to re-apply the stripped names AFTER the transition, so a page entered across a shell change
+ * still animates on its next same-shell nav.
+ */
+function fold_orphan_vt_names(current: ParentNode, incoming: ParentNode): () => void {
+	const names_in = (root: ParentNode): Map<string, HTMLElement[]> => {
+		const map = new Map<string, HTMLElement[]>();
+		for (const el of root.querySelectorAll<HTMLElement>('[style*="view-transition-name"]')) {
+			const n = el.style.getPropertyValue('view-transition-name').trim();
+			if (!n || n === 'none') continue;
+			let arr = map.get(n);
+			if (!arr) map.set(n, (arr = []));
+			arr.push(el);
+		}
+		return map;
+	};
+	const cur = names_in(current);
+	const inc = names_in(incoming);
+	const stripped: Array<[HTMLElement, string]> = [];
+	const fold = (map: Map<string, HTMLElement[]>, other: Map<string, HTMLElement[]>) => {
+		for (const [name, els] of map) {
+			if (other.has(name)) continue; // matched on both pages — keep (the slide)
+			for (const el of els) {
+				stripped.push([el, name]);
+				el.style.setProperty('view-transition-name', 'none');
+			}
+		}
+	};
+	fold(cur, inc); // current-only (docs→marketing): fold into the root exit
+	fold(inc, cur); // incoming-only (marketing→docs): fold into the root enter
+	return () => {
+		for (const [el, name] of stripped) el.style.setProperty('view-transition-name', name);
+	};
+}
+
 // SvelteKit's remote-function client (which ogygia reuses for query/command) patches
 // `history.pushState`/`replaceState` on the instance and warns whenever they are called directly.
 // On csr=false pages ogygia owns navigation — Kit's router is not running — so we update history via
@@ -506,12 +548,19 @@ class SpaRouter {
 		};
 
 		if (use_vt && document.startViewTransition) {
+			// Fold names with no counterpart on the destination into the page cross-fade, so a shell
+			// change (docs sidebar ↔ marketing page) doesn't fire dozens of solo enter/exits over a
+			// holed-out root snapshot. Matched names (the docs↔docs highlight slide) are untouched.
+			// Captured NOW — before the transition snapshots `before` — and restored after it settles.
+			const restore_vt_names = fold_orphan_vt_names(document.body, doc.body);
 			const t = document.startViewTransition(swap);
 			// A rapid follow-up navigation skips this transition; the browser then rejects `.ready`
 			// and `.finished` with "Transition was skipped". Nothing awaits those, so without a catch
 			// they surface as unhandled rejections (console noise, no functional effect). Swallow them.
 			t.ready?.catch(() => {});
-			t.finished?.catch(() => {});
+			// Restore folded names once the transition settles (resolve OR skip) — the next same-shell
+			// nav needs them back, and this doubles as the `.finished` rejection catch.
+			(t.finished ?? Promise.resolve()).then(restore_vt_names, restore_vt_names);
 			await t.updateCallbackDone.catch(() => {});
 		} else {
 			swap();

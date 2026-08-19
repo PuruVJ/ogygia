@@ -54,6 +54,11 @@ export type InlineRegion = {
 	 *  (a content `body`) travel: the transport ships the markup, the runtime swaps it in and wakes
 	 *  any islands inside it — the same machinery as body-swap navigation. */
 	readonly html?: string;
+	/** Content-body CSS key (`content_css_key`) for a `.svx`/`.md` body whose own scoped `<style>`
+	 *  lives on no page stylesheet — the leak-free corpus is server-only, so its CSS never joins the
+	 *  page's static import graph. Region.svelte resolves it through the handoff (`contentCss`) and
+	 *  links the client CSS asset the plugin emitted. Absent for a body with no scoped `<style>`. */
+	readonly content_id?: string;
 };
 
 /** A marked component: renders inline here, or becomes a signed ticket when it crosses the wire. */
@@ -155,7 +160,9 @@ function isBinding(value: unknown): value is RegionBinding {
 export function region<C extends Component<never>>(
 	component: C,
 	props: ComponentProps<C>,
-	opts?: RegionSchedule<ComponentProps<C>>
+	opts?: RegionSchedule<ComponentProps<C>>,
+	/** Internal: content-body CSS key, set by the markdown source (see {@link InlineRegion.content_id}). */
+	content_id?: string
 ): AwaitableRegion {
 	const p = (props ?? {}) as Record<string, unknown>;
 	// The schedule arg is a `(data) => options` function (or absent) — call it with the props
@@ -191,7 +198,8 @@ export function region<C extends Component<never>>(
 		[REGION_BRAND]: true,
 		kind: 'inline',
 		component: component as AnyComponent,
-		props: p
+		props: p,
+		...(content_id ? { content_id } : {})
 	};
 	return make_inline_awaitable(inline);
 }
@@ -277,14 +285,17 @@ function make_awaitable(dual: DualRegion): AwaitableRegion {
  */
 export function prebaked_region(
 	component: Component<Record<string, never>>,
-	html: string
+	html: string,
+	/** Internal: content-body CSS key, set by the markdown source (see {@link InlineRegion.content_id}). */
+	content_id?: string
 ): AwaitableRegion {
 	const inline: InlineRegion = {
 		[REGION_BRAND]: true,
 		kind: 'inline',
 		component: component as AnyComponent,
 		props: {},
-		html
+		html,
+		...(content_id ? { content_id } : {})
 	};
 	return make_inline_awaitable(inline);
 }

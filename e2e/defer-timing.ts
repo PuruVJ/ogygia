@@ -31,9 +31,13 @@ try {
 	const preloads = await page.$$eval('link[rel="preload"][as="fetch"]', (els) => els.length);
 	check('exactly one preload <link> (only fill:load preloads)', preloads === 1, `count=${preloads}`);
 
-	// island entry ids per section
-	const idOf = async (variant: string) =>
-		(await page.getAttribute(`[data-defer="${variant}"] ogygia-region`, 'entry')) || '';
+	// Server-island hole id per section. A STATIC deferred hole (no client module) carries `entry=""`
+	// — its identity is the signed `endpoint` (`?id=<id>`), never the `entry` attr (which is the
+	// hydrate-module URL, empty here). Reading `entry` would 404-warm the id on nav (see Region.svelte).
+	const idOf = async (variant: string) => {
+		const ep = (await page.getAttribute(`[data-defer="${variant}"] ogygia-region`, 'endpoint')) || '';
+		return ep.match(/[?&]id=([0-9a-f]+)/)?.[1] || '';
+	};
 	const [idLoad, idIdle, idVisible, idMedia] = await Promise.all([idOf('load'), idOf('idle'), idOf('visible'), idOf('media')]);
 	check('four distinct server-island holes present', new Set([idLoad, idIdle, idVisible, idMedia]).size === 4, `${idLoad},${idIdle},${idVisible},${idMedia}`);
 

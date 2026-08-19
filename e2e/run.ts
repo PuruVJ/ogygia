@@ -34,6 +34,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['console.ts', true, 'zero hydration_mismatch across pages (incl. /lakes)'],
 	['hydrate-in-place.ts', true, 'islands adopt SSR root (no discard+recreate / class-less flash)'],
 	['placed-island-css.ts', true, 'REGRESSION: placed client island ships its own CSS (chunk-split :global)'],
+	['content-css.ts', true, 'REGRESSION: content body (.svx) ships + applies its own scoped CSS (server-only corpus)'],
 	['lakes.ts', true, 'frozen region, no client JS, island-in-lake, restore, remount cache/swr'],
 	['nested.ts', true, 'island-in-island single hydration + dev warn'],
 	['server-islands.ts', true, "defer fallback/endpoint/HMAC/cookie/CSS"],

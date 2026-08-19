@@ -4,44 +4,57 @@
  * Dogfood: this replaced a bespoke Shiki remote (snippets.server/remote + highlight.server).
  * Render with `<Region of={…} />`; ships as HTML, no client JS of its own.
  */
-export const heroCode = import.meta.og.code(`<script>
+export const heroCode = import.meta.og.code(
+	`<script>
   import Counter from '$lib/Counter.svelte' with {
     +++wake: 'load'+++
   };
 </script>
 
-<Counter />`, 'svelte');
+<Counter />`,
+	'svelte',
+);
 
 // HeroDemo is an ISLAND: an inline region carries a live component and can't devalue-cross
 // a captured-prop boundary — hand the island the BAKED HTML string instead (strings cross).
 export const heroCodeHtml = String(heroCode.props.html);
 
-export const loadCode = import.meta.og.code(`<script>
+export const loadCode = import.meta.og.code(
+	`<script>
   import Panel from '$lib/Panel.svelte' with {
     +++wake: 'load'+++
   };
 </script>
 
-<Panel />`, 'svelte');
+<Panel />`,
+	'svelte',
+);
 
-export const visibleCode = import.meta.og.code(`<script>
+export const visibleCode = import.meta.og.code(
+	`<script>
   import Chart from '$lib/Chart.svelte' with {
     +++wake: 'visible'+++
   };
 </script>
 
-<Chart />`, 'svelte');
+<Chart />`,
+	'svelte',
+);
 
-export const lakeCode = import.meta.og.code(`<script>
+export const lakeCode = import.meta.og.code(
+	`<script>
   // a frozen subtree inside an island: SSR HTML, ships no client JS
   import Snapshot from '$lib/Snapshot.svelte' with {
     +++wake: 'none'+++
   };
 </script>
 
-<Snapshot value={42} />`, 'svelte');
+<Snapshot value={42} />`,
+	'svelte',
+);
 
-export const serverCode = import.meta.og.code(`<script>
+export const serverCode = import.meta.og.code(
+	`<script>
   import Greeting from '$lib/Greeting.svelte' with {
     +++render: 'deferred'+++
   };
@@ -51,9 +64,12 @@ export const serverCode = import.meta.og.code(`<script>
   {#snippet ogygiaFallback()}
     <p>loading…</p>
   {/snippet}
-</Greeting>`, 'svelte');
+</Greeting>`,
+	'svelte',
+);
 
-export const fragmentCode = import.meta.og.code(`<script>
+export const fragmentCode = import.meta.og.code(
+	`<script>
   // the server picks the component; the client just paints it
   import { Region } from 'ogygia';
   import { search } from './search.remote';
@@ -68,9 +84,12 @@ export const fragmentCode = import.meta.og.code(`<script>
 
 {#if result}
   <Region of={result} />
-{/if}`, 'svelte');
+{/if}`,
+	'svelte',
+);
 
-export const livePartialCode = import.meta.og.code(`// tick.remote.ts — the server pushes rendered HTML each second.
+export const livePartialCode = import.meta.og.code(
+	`// tick.remote.ts — the server pushes rendered HTML each second.
 // \`yield\` awaits the partial, so its HTML rides the ticket (no fetch).
 export const liveTick = query.live(async function* () {
   let n = 1;
@@ -81,9 +100,12 @@ export const liveTick = query.live(async function* () {
 });
 
 // the island just paints the latest tick — static partials morph in place
-<Region of={liveTick().current} />`, 'svelte');
+<Region of={liveTick().current} />`,
+	'ts',
+);
 
-export const sharedObjectCode = import.meta.og.code(`// cart.svelte.ts — a live class that can cross island boundaries
+export const sharedObjectCode = import.meta.og.code(
+	`// cart.svelte.ts — a live class that can cross island boundaries
 export class Cart {
   items = $state([]);
   get count() { return this.items.length; }
@@ -100,9 +122,12 @@ export class Cart {
 const cart = new Cart();
 <CartCount {cart} />   <!-- reads cart.count -->
 <AddButton {cart} />   <!-- calls cart.add() -->
-// click Add → the count island repaints. One live object, two islands.`, 'ts');
+// click Add → the count island repaints. One live object, two islands.`,
+	'ts',
+);
 
-export const contentCollectionCode = import.meta.og.code(`// collections.server.ts — one server-only definition
+export const contentCollectionCode = import.meta.og.code(
+	`// collections.server.ts — one server-only definition
 import { content } from 'ogygia/content';
 
 export const docs = content({
@@ -113,9 +138,12 @@ export const docs = content({
 // docs.remote.ts — expose it over the wire, bodies stripped
 export const docNav = withRemotes(docs).list({
   map: (e) => ({ slug: e.id, title: e.data.title })
-});`, 'ts');
+});`,
+	'ts',
+);
 
-export const contentMarkdownCode = import.meta.og.code(`<!-- posts/hello.svx — markdown, with real islands in the prose -->
+export const contentMarkdownCode = import.meta.og.code(
+	`<!-- posts/hello.svx — markdown, with real islands in the prose -->
 <script>
   import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
 </script>
@@ -125,9 +153,12 @@ export const contentMarkdownCode = import.meta.og.code(`<!-- posts/hello.svx —
 Shiki-highlighted fences, heading ids, and a TOC in \`meta.headings\` —
 and a live island, right in the copy:
 
-<Chart {data} />`, 'svelte');
+<Chart {data} />`,
+	'svelte',
+);
 
-export const contentJsonCode = import.meta.og.code(`// typed data, not just prose — JSON through the same API
+export const contentJsonCode = import.meta.og.code(
+	`// typed data, not just prose — JSON through the same API
 import { content } from 'ogygia/content';
 import * as v from 'valibot';
 
@@ -136,9 +167,12 @@ export const authors = content({
   schema: v.object({ name: v.string(), bio: v.string() })
 });
 
-const ada = await authors.get('ada'); // fully typed { name, bio }`, 'ts');
+const ada = await authors.get('ada'); // fully typed { name, bio }`,
+	'ts',
+);
 
-export const contentCustomCode = import.meta.og.code(`// any source — a CMS, a REST API, or a push feed
+export const contentCustomCode = import.meta.og.code(
+	`// any source — a CMS, a REST API, or a push feed
 export const press = content({
   schema,
   loader: {
@@ -149,9 +183,12 @@ export const press = content({
 });
 
 // pushes? add live() — a change signal; the feed re-emits on every change.
-export const feed = withRemotes(press).live.list({ map: (e) => e.data });`, 'ts');
+export const feed = withRemotes(press).live.list({ map: (e) => e.data });`,
+	'ts',
+);
 
-export const siteCode = import.meta.og.code(`// site.server.ts — the WHOLE site config
+export const siteCode = import.meta.og.code(
+	`// site.server.ts — the WHOLE site config
 import { content, fields, site, links } from 'ogygia/content';
 
 export const guides = content({
@@ -163,9 +200,12 @@ export const docs = site({
   outline: guides,        // filenames become the nav tree
   prevNext: 'graph',      // "keep reading" follows real links
   checks: [links()]       // a broken link fails the build
-});`, 'ts');
+});`,
+	'ts',
+);
 
-export const dimensionsCode = import.meta.og.code(`// versioning and translations are the same primitive: dimensions
+export const dimensionsCode = import.meta.og.code(
+	`// versioning and translations are the same primitive: dimensions
 import { site, dimensions } from 'ogygia/content';
 
 export const docs = site({
@@ -181,9 +221,12 @@ export const docs = site({
 
 // /docs/routing        → v2 · en   (defaults serve bare)
 // /docs/de/routing     → v2 · de
-// /docs/v1/de/routing  → v1 · de`, 'ts');
+// /docs/v1/de/routing  → v1 · de`,
+	'ts',
+);
 
-export const composeCode = import.meta.og.code(`<!-- DocsShell is a composition. Keep it, swap one region: -->
+export const composeCode = import.meta.og.code(
+	`<!-- DocsShell is a composition. Keep it, swap one region: -->
 <script>
   import DocsShell from 'ogygia/content/docs-shell';
   import { Search, ThemeToggle } from 'ogygia/content';
@@ -197,4 +240,6 @@ export const composeCode = import.meta.og.code(`<!-- DocsShell is a composition.
 </DocsShell>
 
 <!-- absent = built-in · snippet = yours · null = removed.
-     Or drop to <Frame> and build the shell from the same bricks. -->`, 'svelte');
+     Or drop to <Frame> and build the shell from the same bricks. -->`,
+	'svelte',
+);

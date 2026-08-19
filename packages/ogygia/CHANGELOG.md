@@ -8,6 +8,45 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] — 2026-08-19
+
+Patch: content bodies ship their own scoped CSS, a static server island no longer 404s on nav, and a
+shell-change page transition no longer stutters.
+
+### Fixed
+
+- **A content body's scoped `<style>` could vanish on a `csr=false` page.** A `.svx`/`.md` body is
+  leak-free content — the corpus is server-only, so it never enters the client graph, and its scoped
+  CSS compiles into the _server_ bundle and joins no page's static stylesheet. On a production build
+  the body rendered browser-default (stacked `.doc-demo-row` cards, unstyled prose) while everything
+  the route statically imported stayed styled. This is the same blind spot a placed island had
+  (fixed in 0.6.1), one step further: a content body has no client module at all, just data. ogygia
+  now extracts each content module's own scoped CSS at build — `svelte`-compiled from the post-mdsvex
+  source, so `:global` is resolved and the scoped hash matches the SSR'd HTML — and emits it as a
+  content-addressed client asset (`og-content.*.css`), one per doc, keyed in the region-deps handoff.
+  `Region.svelte` links a body's own CSS as a hoisted `<link data-ogygia-region-css>` — the same
+  channel a held/dual region uses, deduped per-request — so a page ships only the CSS of the docs it
+  actually renders (not the whole corpus). Survives SPA nav (the router re-renders the body
+  server-side each hop). Covered by `e2e/content-css.ts`: the SSR emits the link and the body's
+  scoped `<style>` applies in a real production build.
+- **A static server island 404'd a bare region id on navigation.** A `render: 'deferred'` island
+  with no `wake` has no client module, but `Region.svelte` still emitted the region id as the DOM
+  `entry` attribute. On the next SPA hop the router's module-warmer scans `entry="…"` and `import()`s
+  each as a client chunk, so that bare id fetched `/<id>` → 404 (only on nav, never on reload — the
+  warmer runs on prefetch). A static server island now carries `entry=""`, so the warmer skips it;
+  its hole still fetches through the signed `endpoint` (minted from the id, unchanged). The same
+  empty-entry rule now covers a held deferred region. `e2e/defer-timing.ts` reads a hole's id from
+  its endpoint, not the (now-empty) `entry`.
+- **A page transition between different shells stuttered.** A `view-transition-name` lifts its element
+  out of the root cross-fade into a standalone group. Navigating between two pages with different
+  chrome — a docs page (a sidebar of ~dozens of named nav rows) and a marketing page (none) — left
+  every one of those names without a counterpart, so each ran a solo enter/exit over a holed-out root
+  snapshot: a visible stutter, worst in dev where the destination paints late. The router now folds
+  orphaned `view-transition-name`s (present on only one of the two pages) back into the page-level
+  cross-fade for that navigation, and restores them after, so the shell change animates as one clean
+  fade. Names present on BOTH pages (a sidebar's active-highlight slide on same-shell nav) are kept
+  untouched.
+
 ## [0.6.1] — 2026-08-19
 
 Patch: a placed client island now ships its own CSS.

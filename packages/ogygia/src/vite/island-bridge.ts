@@ -41,7 +41,31 @@ type IslandBridge = {
 	 * referencing collection's glob mints. `null` when none configured.
 	 */
 	contentPresets: Record<string, { markdown?: Record<string, unknown> }> | null;
+	/**
+	 * Content modules (`.svx`/`.md`) that carry their OWN scoped `<style>`, keyed by absolute path →
+	 * their post-mdsvex Svelte source (the markdown scanner's compile output). The plugin's client leg
+	 * runs `svelte.compile` on this source to extract the scoped CSS and emits it as a client asset
+	 * (Svelte resolves `:global`; the default `cssHash` reproduces the SSR'd HTML's scoped hash).
+	 * Necessary because a content module's scoped CSS otherwise compiles into the SERVER bundle only
+	 * (the leak-free corpus never enters the client graph), so on a csr=false doc page it would ship on
+	 * no stylesheet.
+	 */
+	contentStyleSources: Map<string, string>;
 };
+
+/**
+ * Stable cross-build key for a content module's own scoped CSS. Computed IDENTICALLY from the same
+ * absolute filename by the preprocessor (which bakes `__ogygia_css` into the module) and the plugin
+ * (which emits the CSS chunk + writes the handoff), so the two agree without threading `root`: the
+ * path from the first `/src/` segment, POSIX. `/…/proj/src/content/docs/x.svx` → `content/docs/x.svx`.
+ */
+const BACKSLASHES = /\\/g;
+const LEADING_SLASH = /^\//;
+export function content_css_key(abs: string): string {
+	const p = abs.replace(BACKSLASHES, '/').split('?')[0];
+	const i = p.indexOf('/src/');
+	return i >= 0 ? p.slice(i + 5) : p.replace(LEADING_SLASH, '');
+}
 
 // The plugin runs in Vite's config context; the preprocessor runs in the app/compile context. A
 // plain module singleton can be two instances across that boundary (esbuild may bundle ogygia into
@@ -53,5 +77,6 @@ export const islandBridge: IslandBridge = (g[KEY] ??= {
 	transform: null,
 	scan: null,
 	markdownConfig: null,
-	contentPresets: null
+	contentPresets: null,
+	contentStyleSources: new Map<string, string>()
 });

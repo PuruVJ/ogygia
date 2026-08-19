@@ -7,7 +7,7 @@ import { isMainThread } from 'node:worker_threads';
 import { loadEnv, type Plugin } from 'vite';
 import type { PreprocessorGroup } from 'svelte/compiler';
 import { configure_build_cache } from '../build-cache.js';
-import { islandBridge } from './island-bridge.js';
+import { islandBridge, content_css_key } from './island-bridge.js';
 import { materialize } from './git.js';
 import { rewrite_loaders } from './loaders.js';
 import { rewrite_wire } from './og-wire.js';
@@ -395,6 +395,9 @@ export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.js
 
 /** Deterministic island facade filename (content-hashed Vite deps are separate). */
 const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;
+
+/** A `?…type=style…` / `lang.css` sub-import id — a CSS face, never a corpus JS leak. */
+const CONTENT_STYLE_QUERY_RE = /[?&](?:type=style|lang\.css)/;
 
 /**
  * Static Speculation Rules for MPA mode (`router: false`) — the server handle injects them into
@@ -911,6 +914,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	 *  buildStart prescan emit AND the transform-time emit that catches islands prescan can't see —
 	 *  those declared inside LIBRARY components, where the host lives outside the app's `src`). */
 	const emitted_island_chunks = new Set();
+	/** content_css_key → emitted CSS asset referenceId (client leg). Resolved to hrefs in writeBundle. */
+	const content_css_refs = new Map();
 
 	let root;
 	let base = '';
@@ -1592,6 +1597,38 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						fileName: islandChunkFileName(rid)
 					});
 				}
+				// Content CSS: a content module's OWN scoped `<style>` compiles into the SERVER bundle
+				// only (the leak-free corpus never enters the client graph), so on a csr=false doc page it
+				// ships on no stylesheet. Extract that scoped CSS here and emit it as a client asset.
+				//
+				// Compiled with `svelte.compile` on the post-mdsvex source the scanner captured — so
+				// Svelte resolves `:global` (a raw `:global` would crash the CSS minifier) and mints the
+				// SAME scoped hash the SSR'd HTML carries (default `cssHash` = hash of the CSS; the `.svx`
+				// bodies use plain `<style>`, so vitePreprocess is a no-op and the source matches). No JS,
+				// no chunk, no corpus in the client graph. Region.svelte links it via the handoff
+				// (writeBundle maps content_css_key → the emitted `.css` by referenceId).
+				content_css_refs.clear();
+				if (islandBridge.contentStyleSources.size) {
+					const { compile } = await import('svelte/compiler');
+					for (const [abs, source] of islandBridge.contentStyleSources) {
+						try {
+							const { css } = compile(source, {
+								filename: abs,
+								css: 'external',
+								dev: false,
+								generate: 'client',
+								experimental: { async: true }
+							});
+							if (css?.code) {
+								const ref = this.emitFile({ type: 'asset', name: 'og-content.css', source: css.code });
+								content_css_refs.set(content_css_key(abs), ref);
+							}
+						} catch {
+							/* a content file whose CSS can't be extracted just goes unstyled — the fix must
+							   never break a build. */
+						}
+					}
+				}
 			}
 
 		},
@@ -1857,13 +1894,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// Resolve via import.meta.url walk (not absolute build-machine paths) so adapters
 				// find `output/server/og-region-deps.json` next to the server bundle.
 				if (!ssr)
-					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }`;
+					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }`;
 				// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 				// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 				// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
 				// channel as prod's `<link>`, resolved for dev. `islandDeps` (JS modulepreload) is prod-only.
+				// Content bodies need no dev entry here: a content module is in the SSR module graph, so
+				// Vite dev already injects its scoped CSS (the leak only bites the PROD client build).
 				if (is_dev)
-					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }`;
+					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }`;
 				return (
 					`import fs from 'node:fs';\n` +
 					`import path from 'node:path';\n` +
@@ -1917,6 +1956,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					`}\n` +
 					`export function islandCss(entry) {\n` +
 					`  return entry ? pick('css', entry) : [];\n` +
+					`}\n` +
+					`export function contentCss(id) {\n` +
+					`  return id ? pick('content_css', id) : [];\n` +
 					`}\n`
 				);
 			}
@@ -2342,7 +2384,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					const ids: string[] =
 						(chunk as { moduleIds?: string[] }).moduleIds ??
 						Object.keys((chunk as { modules?: Record<string, unknown> }).modules ?? {});
-					const corpus = ids.filter((id) => CORPUS_RE.test(id) && !is_island_path(id));
+					// A `?…type=style…`/`lang.css` sub-import is the content module's CSS FACE, emitted on
+					// purpose (see the client-leg content-CSS emit) — it carries no corpus JS, so it is not
+					// a leak. Only a real corpus JS module counts.
+					const corpus = ids.filter(
+						(id) => CORPUS_RE.test(id) && !is_island_path(id) && !CONTENT_STYLE_QUERY_RE.test(id)
+					);
 					if (corpus.length) leaks.push({ chunk: (chunk as { fileName?: string }).fileName ?? key, modules: corpus });
 				}
 				if (leaks.length) {
@@ -2371,7 +2418,22 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					}
 				>
 			);
-			const json = JSON.stringify(map);
+			// Content-body CSS handoff: content_css_key → the emitted CSS asset URL, so Region.svelte can
+			// link a content body's own scoped CSS (which lives on no page stylesheet — the corpus is
+			// server-only). The client leg emitted each as an asset and stashed its referenceId; resolve
+			// to the hashed filename now that the bundle is finalized. Same key the preprocessor baked
+			// as `__ogygia_css`, so the body region resolves it at SSR.
+			const content_css: Record<string, string[]> = {};
+			for (const [key, ref] of content_css_refs) {
+				try {
+					const file = this.getFileName(ref);
+					content_css[key] = [file.startsWith('/') ? file : '/' + file];
+				} catch {
+					/* asset dropped — skip; the body just goes unstyled rather than 404 a link */
+				}
+			}
+
+			const json = JSON.stringify({ ...map, content_css });
 			const handoff = islandDepsHandoffPath(root);
 			fs.mkdirSync(path.dirname(handoff), { recursive: true });
 			fs.writeFileSync(handoff, json);
