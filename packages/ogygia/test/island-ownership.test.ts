@@ -100,7 +100,7 @@ describe('server-island host legs (the compiler contract the registry depends on
 		importKeys: {},
 		idSalt: '',
 		clientBindingStub: 'virtual:ogygia/client-binding-stub',
-		csrTrue: false
+		routeCsr: undefined
 	};
 	const id = '/app/src/routes/demo/deferred/+page.svelte';
 

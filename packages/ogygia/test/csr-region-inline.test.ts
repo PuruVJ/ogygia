@@ -13,7 +13,7 @@ const CSR_CTX = /Symbol\.for\(\s*['"]ogygia\.csr-true['"]\s*\)\s*,\s*true\s*\)/;
 describe('csr=true host: csr-context injection', () => {
 	it('injects the csr marker into a MARKER-LESS host that only uses <Region>', () => {
 		const src = `<script>\n\timport RegionInside from '$lib/RegionInside.svelte';\n</script>\n<RegionInside />`;
-		const out = transformHost(src, '/app/src/routes/kit/+page.svelte', { csrTrue: true });
+		const out = transformHost(src, '/app/src/routes/kit/+page.svelte', { routeCsr: true });
 		expect(out).not.toBeNull();
 		expect(out.code).toMatch(CSR_CTX);
 		// bare svelte setContext — NOT an ogygia import (a region-less csr=true page ships zero ogygia)
@@ -24,7 +24,7 @@ describe('csr=true host: csr-context injection', () => {
 
 	it('strips marked imports AND injects the csr marker', () => {
 		const src = `<script>\n\timport Counter from '$lib/Counter.svelte' with { wake: 'load' };\n</script>\n<Counter />`;
-		const out = transformHost(src, '/app/src/routes/kit/+page.svelte', { csrTrue: true });
+		const out = transformHost(src, '/app/src/routes/kit/+page.svelte', { routeCsr: true });
 		expect(out).not.toBeNull();
 		// the `with { wake: 'load' }` attribute is gone → a plain Kit import
 		expect(out.code).not.toContain('wake:');
@@ -34,14 +34,14 @@ describe('csr=true host: csr-context injection', () => {
 	});
 
 	it('creates an instance <script> when the host has none', () => {
-		const out = transformHost(`<h1>no script here</h1>`, '/app/src/routes/kit/+page.svelte', { csrTrue: true });
+		const out = transformHost(`<h1>no script here</h1>`, '/app/src/routes/kit/+page.svelte', { routeCsr: true });
 		expect(out).not.toBeNull();
 		expect(out.code).toMatch(/<script>[\s\S]*setContext[\s\S]*<\/script>/);
 		expect(out.code).toContain('<h1>no script here</h1>');
 	});
 
 	it('does NOT inject on a non-csr host (returns null for a plain component)', () => {
-		const out = transformHost(`<script>\n\tlet x = 1;\n</script>\n<p>{x}</p>`, '/app/src/lib/Plain.svelte', { csrTrue: false });
+		const out = transformHost(`<script>\n\tlet x = 1;\n</script>\n<p>{x}</p>`, '/app/src/lib/Plain.svelte', { routeCsr: undefined });
 		expect(out).toBeNull();
 	});
 });

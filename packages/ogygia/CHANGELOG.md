@@ -44,6 +44,17 @@ so existing layouts adopt with an import swap. Plus two build fixes.
 
 ### Fixed
 
+- **A `csr = false` subtree under a csr=true ancestor layout now islands correctly.** The transform
+  marks csr=true route hosts with a context flag so `<Region>` degrades to inline there — but Svelte
+  context flows to ALL descendants while Kit's csr option is per-node, so an option-less ROOT layout
+  (Kit default csr=true) leaked `true` into a `csr = false` child subtree: every `wake:` island there
+  silently rendered inline — zero `<ogygia-region>`, no hydration, no `onMount` — on a page whose own
+  csr is false. The transform now injects the opposite marker (`false`) into every csr=false route
+  host, RESETTING the inherited flag exactly like Kit resolves options (`{ ...parent, ...own }`); a
+  csr=true host below the reset re-shadows with `true`, so mixed trees work in both directions. The
+  csr state threads plugin → transform as a tri-state (`true` host / `false` host / non-route).
+  Guarded by `test/csr-false-reset.test.ts` and the `/mixed-root` fixture + `e2e/csr-mixed-tree.ts`.
+
 - **ogygia's own injected imports resolve to ogygia's own files, not the importer's package.** The
   transform injects `ogygia/internal` (Region / og_portable) and `ogygia/internal/server` into a host
   or a generated island wrapper. For a host that lives in a monorepo sub-package which doesn't itself

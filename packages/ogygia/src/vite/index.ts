@@ -1053,10 +1053,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		const routesDir = path.join(root, 'src', 'routes');
 		const link_virtual =
 			opts.linkVirtual !== undefined ? opts.linkVirtual : ssr || !routeCsrIsFalse(id, routesDir);
-		// csr=true route host → ogygia steps aside (no island, no runtime). Route-scoped: a shared lib
-		// component keeps its islands (its csr depends on the page). See transformHost's csrTrue branch.
-		const csr_true = routeCsrIsTrue(id, routesDir);
-		const cache_key = `${id}\0${link_virtual ? '1' : '0'}\0${csr_true ? 't' : 'f'}`;
+		// Tri-state route csr, threaded into the transform (see transformHost's routeCsr branch):
+		//   true  → csr=true route host: ogygia steps aside (strip islands, inject `true` marker).
+		//   false → csr=false route host: keep islands, inject the csr-false RESET marker (an
+		//           option-less csr=true ANCESTOR layout would otherwise leak `true` down the context
+		//           and silently degrade every island in the csr=false subtree to inline).
+		//   undefined → not a route host (shared lib component): no marker; its csr depends on the
+		//           page that renders it, so it keeps its islands.
+		const route_csr = routeCsrIsTrue(id, routesDir)
+			? true
+			: routeCsrIsFalse(id, routesDir)
+				? false
+				: undefined;
+		const cache_key = `${id}\0${link_virtual ? '1' : '0'}\0${route_csr === true ? 't' : route_csr === false ? 'f' : 'n'}`;
 		const hit = transform_cache.get(cache_key);
 		if (hit && hit.code === source) { if (__P) __prof.transformHit++; return hit.result; }
 		const __th0 = __P ? performance.now() : 0;
@@ -1075,7 +1084,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			idSalt: id_salt,
 			linkVirtualIsland: link_virtual,
 			clientBindingStub: V_CLIENT_BINDING_STUB,
-			csrTrue: csr_true,
+			routeCsr: route_csr,
 			ssr
 		});
 		if (__P) { __prof.transformMs += performance.now() - __th0; __prof.transformN++; __outHash.set(cache_key, __fnv(JSON.stringify((result as any)?.code ?? result))); }
