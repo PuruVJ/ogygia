@@ -142,6 +142,40 @@ try {
 		await nav.close();
 	}
 
+	// ---------- Drop-in setContext bridge (import swap, no <Provide>) ----------
+	// A csr=false layout imports `setContext` from ogygia (the ONLY change from a plain Svelte layout)
+	// and sets a plain object, a string, and a live transportable. The handle emits ONE page-level
+	// `<script data-ogygia-provide-page>` marker; child islands read it via UNCHANGED raw
+	// getContext('key') across the island-root split. This is the zero-template-change adoption path.
+	{
+		const sraw = await (await fetch(base + '/ctx-setcontext')).text();
+		check('setContext SSR: page-level marker emitted', /data-ogygia-provide-page/.test(sraw));
+		const ssrTheme = sraw.match(/data-setctx-reader="load"[^>]*data-setctx-theme="([^"]*)"/)?.[1];
+		check('setContext SSR: island reads context (midnight)', ssrTheme === 'midnight', ssrTheme);
+
+		const sp = await browser.newPage();
+		const serrs: string[] = [];
+		sp.on('pageerror', (e) => serrs.push(e.message));
+		await sp.goto(base + '/ctx-setcontext', { waitUntil: 'networkidle' });
+		await sp.waitForTimeout(200);
+		const sattr = (a: string) => sp.locator('[data-setctx-reader="load"]').getAttribute(a);
+		check('setContext client: theme = midnight', (await sattr('data-setctx-theme')) === 'midnight');
+		check('setContext client: appName = playground', (await sattr('data-setctx-app')) === 'playground');
+		check('setContext client: live transportable revived', (await sattr('data-setctx-live')) === 'true');
+		check('setContext client: count kept (8)', (await sattr('data-setctx-count')) === '8', `count=${await sattr('data-setctx-count')}`);
+		// Liveness: bumping the shared instance repaints the reader (proves a LIVE bridge, not a snapshot)
+		await sp.locator('[data-setctx-writer]').click();
+		await sp.waitForTimeout(80);
+		check('setContext liveness: writer bump repaints reader (9)', (await sattr('data-setctx-count')) === '9', `count=${await sattr('data-setctx-count')}`);
+		// Visible island below the fold late-hydrates, still reads context AND late-joins the instance
+		await sp.locator('[data-setctx-reader="visible"]').scrollIntoViewIfNeeded();
+		await sp.waitForTimeout(150);
+		const svis = await sp.locator('[data-setctx-reader="visible"]').getAttribute('data-setctx-count');
+		check('setContext visible: reads context + late-joins (9)', svis === '9', `count=${svis}`);
+		check('setContext: no page errors', serrs.length === 0, serrs.join(' | '));
+		await sp.close();
+	}
+
 	check('matrix: no page errors / hydration mismatches', errors.length === 0, errors.join(' | '));
 } finally {
 	await browser.close();

@@ -59,9 +59,23 @@ import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
 import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrency.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { serialize_context } from './context-bridge.js';
+import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
 
 /** Hard cap on rendered region HTML (bytes). */
 const MAX_REGION_BODY = 2_000_000;
+
+// Drop-in `setContext` bridge. A layout that imports `setContext` from `ogygia` records each string
+// key into this per-request bag during SSR; `inject_client_seeds` reads it back and emits ONE
+// `<script data-ogygia-provide-page>` before `</body>` that every island seeds `getContext` from —
+// so a plain `setContext` in a csr=false layout reaches child islands (separate hydration roots).
+// Server-only (this file never ships to the browser), so `node:async_hooks` stays out of the client
+// bundle; on the client the recorder is never installed and `record_ctx` is a no-op.
+const ctx_als = new AsyncLocalStorage<Map<string, unknown>>();
+set_ctx_recorder((key, value) => {
+	ctx_als.getStore()?.set(key, value);
+});
 
 /** Cap on a batch POST body before `request.json()` buffers it. 32 endpoints × ~8.5kB (props cap
  *  8192 + URL overhead) ≈ 270kB; 512kB leaves margin. Rejected up front via `content-length`. */
@@ -172,10 +186,14 @@ class OgygiaHandle {
 			// store is captured synchronously here (active inside Kit's `with_request_store`); it is
 			// the SAME object reference Kit mutates during the render inside `resolve`.
 			const store = try_get_request_store();
-			return await resolve(event, {
-				transformPageChunk: async ({ html }) =>
-					this.inject_client_seeds(html, store?.state, event)
-			});
+			// A per-request bag for the drop-in `setContext` bridge: values recorded during the render
+			// (inside this `run`) are read back in `inject_client_seeds` to emit the page marker.
+			return await ctx_als.run(new Map(), () =>
+				resolve(event, {
+					transformPageChunk: async ({ html }) =>
+						this.inject_client_seeds(html, store?.state, event)
+				})
+			);
 		}
 		// POST to the endpoint = a BATCH frame stream (client-side navigation, single-flight): render a set
 		// of signed region calls and flush each as an out-of-order frame in one response.
@@ -332,6 +350,19 @@ class OgygiaHandle {
 		if (state?.remote?.implicit) {
 			const remote_script = await this.build_remote_seed_script(state);
 			if (remote_script) scripts.push(remote_script);
+		}
+
+		// Drop-in `setContext` page root: gate on `</body>` so under a streamed render (many chunks)
+		// the marker is emitted ONCE, in the final chunk, by which point every `setContext` has run.
+		if (html.includes('</body>')) {
+			const provided = ctx_als.getStore();
+			if (provided?.size) {
+				const obj: Record<string, unknown> = {};
+				for (const [k, v] of provided) obj[k] = v;
+				scripts.push(
+					`<script type="application/ogygia-ctx" ${PAGE_CTX_MARKER}>${serialize_context(obj)}</script>`
+				);
+			}
 		}
 
 		if (scripts.length === 0) return html;

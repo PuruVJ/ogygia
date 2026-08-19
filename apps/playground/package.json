@@ -23,6 +23,7 @@
   "dependencies": {
     "devalue": "^5.9.0",
     "ogygia": "workspace:*",
+    "repro-subpkg": "workspace:*",
     "valibot": "^1.4.2"
   }
 }

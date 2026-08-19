@@ -1,0 +1,9 @@
+{
+	"name": "repro-subpkg",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./Toolbar.svelte": "./src/Toolbar.svelte"
+	}
+}

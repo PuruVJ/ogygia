@@ -148,6 +148,9 @@ importers:
       ogygia:
         specifier: workspace:*
         version: link:../../packages/ogygia
+      repro-subpkg:
+        specifier: workspace:*
+        version: link:../../internal/repro-subpkg
       valibot:
         specifier: ^1.4.2
         version: 1.4.2(typescript@6.0.3)
@@ -310,6 +313,8 @@ importers:
       vite:
         specifier: 6.3.6
         version: 6.3.6(@types/node@26.1.2)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.9.0)
+
+  internal/repro-subpkg: {}
 
   internal/twis-aug:
     dependencies:

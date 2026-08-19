@@ -10,7 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0] — 2026-08-19
 
-Cross-island context is now one model built on Svelte's own `getContext`. Plus two build fixes.
+Cross-island context is now one model built on Svelte's own `getContext` — with a drop-in `setContext`
+so existing layouts adopt with an import swap. Plus two build fixes.
+
+### Added
+
+- **Drop-in `setContext` — adopt with an import swap.** Swap `import { setContext } from 'svelte'`
+  for `from 'ogygia'` and an existing csr=false layout's context reaches child islands with NO other
+  change. It does exactly what Svelte's does (same-root + the SSR-nested tree), and on the server also
+  records each string-keyed value so the handle emits ONE page-level `<script data-ogygia-provide-page>`
+  marker every island seeds its own `getContext('key')` from — closing the gap where a plain
+  `setContext` shows on the server but is gone on the client (child islands are separate hydration
+  roots). This is the FLAT page root: every island on the page inherits it; a live `[ogygia.wire]`
+  value still reunites to one instance, so a writer island bumping it repaints every reader. For
+  scoped/shadowed context use `<Provide>`, which wraps its subtree and beats the root on the same key.
+  `node:async_hooks` stays server-only (out of the client bundle). Guarded by the `/ctx-setcontext`
+  block in `e2e/context.ts`.
 
 ### Changed (breaking)
 
@@ -29,12 +44,19 @@ Cross-island context is now one model built on Svelte's own `getContext`. Plus t
 
 ### Fixed
 
-- **ogygia's own injected imports resolve from the consumer, not the importer.** The transform
+- **ogygia's own injected imports resolve from ogygia's package, not the importer.** The transform
   injects `ogygia/internal` (Region / og_portable) and `ogygia/internal/server` into a host or a
-  generated wrapper. For a host that lives in a monorepo sub-package which doesn't itself depend on
-  ogygia, a bare `ogygia/internal` failed to resolve. The plugin now resolves its own injected
-  imports from the app root (where the vite.config mounts it), so a component in any sub-package
-  works without that package declaring ogygia. Guarded by `test/injected-import-consumer-resolve.test.ts`.
+  generated island wrapper. For a host that lives in a monorepo sub-package which doesn't itself
+  depend on ogygia, a bare `ogygia/internal` failed to resolve (`Rolldown failed to resolve import
+  "ogygia/internal" from ".../Toolbar.svelte"`). The plugin now re-bases those injected imports off
+  ogygia's OWN package via self-reference (`PKG_ROOT` — where the plugin file lives), which always
+  exists and is the exact ogygia the app loaded `ogygia/vite` from, so a component in any sub-package
+  works without that package declaring ogygia — and it no longer depends on a resolved config `root`
+  (a throwaway Kit plugin instance whose `configResolved` never ran leaves `root` undefined, which
+  defeated the previous app-root attempt). Guarded by `test/injected-import-consumer-resolve.test.ts`
+  AND a real build fixture: `internal/repro-subpkg` (a sub-package with no ogygia dep) imported by the
+  playground at `/subpkg-island`, exercised by `e2e/subpkg-island.ts` — the playground build itself
+  fails if this regresses.
 - **A plain function passed as an island prop now errors as a function, not a snippet.** A Svelte
   snippet is an unbranded function, so ogygia can't tell a real snippet from a callback until it
   renders it. The boundary error now leads with "function", names the prop, and puts the plain-function

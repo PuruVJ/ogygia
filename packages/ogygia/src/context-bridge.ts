@@ -11,7 +11,7 @@
  * `createContext(key)` is optional TYPED sugar over the same string key — callable to make a
  * `<Provide>` entry, `.get()` to read (typed). Nothing DOM-specific on the consumer side.
  */
-import { getContext } from 'svelte';
+import { getContext, setContext as svelte_set_context } from 'svelte';
 import { parse, stringify } from 'devalue';
 import { TRANSPORT_WIRE_KEY, reduce_transportable, revive_transportable } from './live-transport.js';
 import {
@@ -19,6 +19,7 @@ import {
 	reduce_region_snippet,
 	revive_region_snippet
 } from './region-snippet.js';
+import { PAGE_CTX_MARKER, record_ctx } from './context-registry.js';
 
 /** Serialize a context value for the DOM — same codec as island props (transportables included). */
 export function serialize_context(value: unknown): string {
@@ -30,35 +31,50 @@ export function serialize_context(value: unknown): string {
 		.join('\\u003C');
 }
 
+/** Decode one serialized provider payload; a corrupt payload yields nothing (never breaks hydration). */
+function parse_ctx(text: string | null | undefined): Record<string, unknown> | undefined {
+	if (!text) return undefined;
+	try {
+		return parse(text, {
+			[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, true),
+			[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
+		}) as Record<string, unknown>;
+	} catch {
+		return undefined;
+	}
+}
+
 /**
  * Walk up from an island being hydrated, collecting every `<ogygia-provide>` above it (nearest wins)
- * into one Map. ogygia seeds `hydrate(…, { context })` with it, so a child island's own
+ * into one Map, then fold in the single page-level `<script data-ogygia-provide-page>` marker as the
+ * ROOT (lowest priority). ogygia seeds `hydrate(…, { context })` with the Map, so a child island's own
  * `getContext('key')` — unchanged — reads a layout's context across the island-root split on a
- * csr=false page. Undefined when there is no provider above (the common case: nothing to seed, no
- * cost). Same decode codec as island props (a `[ogygia.wire]` value revives to its one live instance).
+ * csr=false page.
+ *
+ * Two providers feed it: a `<Provide>` component (scoped, walked up — nesting/shadowing correct), and
+ * the drop-in `setContext` (page marker — one flat root the whole page shares, for existing layouts
+ * that just import `setContext` from `ogygia`). Scoped beats root on the same key. Undefined when
+ * neither exists (the common case: nothing to seed, no cost). Same decode codec as island props (a
+ * `[ogygia.wire]` value revives to its one live instance).
  */
 export function collect_provided_context(start: Element | null): Map<string, unknown> | undefined {
 	let el: Element | null = start;
 	let map: Map<string, unknown> | undefined;
+	const fold = (values: Record<string, unknown> | undefined) => {
+		if (!values) return;
+		map ??= new Map();
+		// Nearest wins: the scoped walk sees the closest provider FIRST, and the page root LAST.
+		for (const k in values) if (!map.has(k)) map.set(k, values[k]);
+	};
 	while (el) {
 		if (el.tagName === 'OGYGIA-PROVIDE') {
-			const script = el.querySelector(':scope > script[data-ogygia-provide]');
-			const text = script?.textContent;
-			if (text) {
-				try {
-					const values = parse(text, {
-						[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, true),
-						[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
-					}) as Record<string, unknown>;
-					map ??= new Map();
-					// Walking island → up, the nearest provider is seen FIRST; keep it (don't overwrite).
-					for (const k in values) if (!map.has(k)) map.set(k, values[k]);
-				} catch {
-					/* a corrupt payload just yields no context — never break hydration */
-				}
-			}
+			fold(parse_ctx(el.querySelector(':scope > script[data-ogygia-provide]')?.textContent));
 		}
 		el = el.parentElement;
+	}
+	// Page-level root from the drop-in `setContext` (emitted once by the handle before `</body>`).
+	if (typeof document !== 'undefined') {
+		fold(parse_ctx(document.querySelector(`script[${PAGE_CTX_MARKER}]`)?.textContent));
 	}
 	return map;
 }
@@ -94,6 +110,24 @@ export function createContext<T>(key: string, defaultValue?: T): Context<T> {
 		return v !== undefined ? v : defaultValue;
 	};
 	return ctx;
+}
+
+/**
+ * Drop-in `setContext` — swap `import { setContext } from 'svelte'` for `from 'ogygia'` and an
+ * existing csr=false layout's context reaches child islands with NO other change.
+ *
+ * It does exactly what Svelte's does (sets context for same-root descendants + the SSR-nested tree),
+ * AND on the server records the value so the handle can emit one page-level marker every island seeds
+ * from — closing the gap where a plain `setContext` shows up on the server but is gone on the client
+ * (child islands are separate hydration roots). Only string keys bridge (they must serialize and be
+ * read by `getContext('key')`); a symbol key is Svelte-only, same-root, no bridge.
+ *
+ * This is the FLAT page root: every island on the page inherits it. For scoped/shadowed context use
+ * `<Provide>`, which wraps its subtree and beats the root on the same key.
+ */
+export function setContext<T>(key: unknown, value: T): T {
+	if (typeof key === 'string') record_ctx(key, value);
+	return svelte_set_context(key, value);
 }
 
 /**

@@ -94,6 +94,19 @@ const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
  */
 const OGYGIA_INJECTED_IMPORTS = new Set(['ogygia/internal', 'ogygia/internal/server']);
 
+/**
+ * Last-resort DIRECT paths to those injected entries inside THIS ogygia package. The plugin always
+ * runs from `dist/vite/index.js` (the `./vite` export is dist even in dev), so `../internal.js` lands
+ * on `dist/internal.js` — exactly like the `$app/*` shims above. Used ONLY if BOTH self-reference and
+ * consumer-root `this.resolve` return null (an exotic resolver / rolldown-vite quirk). A consumer only
+ * ever ships dist, so there is no src↔dist identity fork; in ogygia's own dev the self-reference
+ * resolves first (to the svelte-condition src), so this branch is never taken there.
+ */
+const OGYGIA_INJECTED_FILES: Record<string, string> = {
+	'ogygia/internal': fileURLToPath(new URL('../internal.js', import.meta.url)),
+	'ogygia/internal/server': fileURLToPath(new URL('../internal-server.js', import.meta.url))
+};
+
 // Client-side shims aliased for island modules (Kit's client runtime is absent under csr=false).
 const APP_SHIMS = {
 	'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),
@@ -1735,16 +1748,29 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 			if (source === V_TRANSPORTABLES) return RESOLVED(V_TRANSPORTABLES);
 
-			// ogygia's OWN injected runtime imports resolve from the CONSUMER (the app root, where this
-			// plugin is mounted), never from the importer's package — so a host in a sub-package that
-			// doesn't depend on ogygia still resolves them. Resolving from `root` respects the exports map
-			// + conditions (the svelte / dev source, or dist when installed). Null → fall through to the
-			// normal path (and the usual error) rather than mask a genuinely broken install.
+			// ogygia's OWN injected runtime imports must NOT resolve from the importer's package — a host
+			// in a monorepo sub-package that doesn't itself depend on ogygia can't see a bare
+			// `ogygia/internal`. Re-base the resolution off ogygia's OWN package (self-reference): PKG_ROOT
+			// is where THIS plugin file lives, so it always exists AND is the exact ogygia the app loaded
+			// `ogygia/vite` from — one install, one instance, so Region/brand identity never forks. It is
+			// condition-consistent (the svelte / dev source, or dist when installed) via ogygia's exports
+			// map. The consumer `root` is only a fallback, and is skipped when unset (a throwaway plugin
+			// instance whose `configResolved` never ran — see the bridge-claim note above — leaves `root`
+			// undefined). Null from both → fall through to the usual error rather than mask a broken install.
 			if (OGYGIA_INJECTED_IMPORTS.has(source)) {
-				const consumer = await this.resolve(source, path.join(root, '__ogygia_consumer__'), {
+				const self = await this.resolve(source, path.join(PKG_ROOT, '__ogygia__'), {
 					skipSelf: true
 				});
-				if (consumer) return consumer;
+				if (self) return self;
+				if (root) {
+					const consumer = await this.resolve(source, path.join(root, '__ogygia_consumer__'), {
+						skipSelf: true
+					});
+					if (consumer) return consumer;
+				}
+				// Neither resolver found it (exotic layout / resolver quirk): address ogygia's OWN built
+				// entry directly, so the injected import can NEVER be left unresolved.
+				return OGYGIA_INJECTED_FILES[source];
 			}
 
 			const ssr = options?.ssr === true;

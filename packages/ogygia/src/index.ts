@@ -72,7 +72,11 @@ export type { TransportCodec } from './live-transport.js';
 // unchanged — ogygia seeds each island's context from the DOM at hydrate, so it crosses the root
 // split. `createContext('key')` is optional TYPED sugar: callable to make a `<Provide>` entry,
 // `.get()` to read. Values must be serializable, like island props.
-export { createContext, __tag_context } from './context-bridge.js';
+//
+// `setContext` is the drop-in for existing layouts: swap `from 'svelte'` → `from 'ogygia'` and a
+// plain `setContext('key', value)` bridges to child islands too (one flat page root). `<Provide>` is
+// the scoped/shadowed form; both are read with the same unchanged `getContext('key')`.
+export { createContext, setContext, __tag_context } from './context-bridge.js';
 export { default as Provide } from './Provide.svelte';
 
 // Which schedule woke this hydration root ('interaction' islands replay their first click, which
