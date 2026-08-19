@@ -123,6 +123,34 @@ export const loadCard = query(async (n) => region(Card, { id: n }));`;
 		expect(r!.code).not.toContain('with {');
 	});
 
+	test('a real import AFTER a backtick inside a string is still rewritten (AST guard, not backtick count)', () => {
+		// The old unescaped-backtick parity heuristic counted this in-string backtick and WRONGLY skipped
+		// the real import below it. The AST guard knows the backtick sits inside a string literal.
+		const src = `const x = "a \` b";
+import Card from './Card.svelte' with { region: 'raw' };
+export const f = region(Card, {});`;
+		const r = transformTsRegions(src, id, makeCtx());
+		expect(r).not.toBeNull();
+		expect(r!.islands).toHaveLength(1);
+		expect(r!.code).toContain(`import Card from "${regionBindingVirtualId(heldId('src/lib/Card.svelte'))}"`);
+	});
+
+	test('a held-region import that is only TEXT inside a template literal is left alone', () => {
+		const src = "export const sample = `import Fake from './Fake.svelte' with { region: 'raw' };`;\n";
+		const r = transformTsRegions(src, id, makeCtx());
+		expect(r).toBeNull(); // nothing real to rewrite
+	});
+
+	test('a held-region import inside a JSDoc @example COMMENT is left alone (regression: ogygia src/index.ts)', () => {
+		const src = `/**
+ * @example
+ *   import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
+ */
+export const y = 1;`;
+		const r = transformTsRegions(src, id, makeCtx());
+		expect(r).toBeNull(); // the comment sample must NOT register a phantom island
+	});
+
 	// A `wake:` mark on a `.ts` held import bakes its schedule (same axis + defaults as a placed island).
 	for (const [value, hydrate] of [
 		['load', 'load'],

@@ -3,6 +3,7 @@ import MagicString from 'magic-string';
 import { createHash } from 'node:crypto';
 import { foucCssVirtualId } from './fouc-css.js';
 import { collectCaptureInfo } from './free-vars.js';
+import { parse_module } from '../vite/og-parse.js';
 
 const REGEXP_META = /[.*+?^${}()|[\]\\]/g;
 const PATH_SEP = /[/\\]/;
@@ -219,6 +220,10 @@ export function strategyKey(mark: { strategy: string; options?: Record<string, u
 	}
 	let k = `hydrate:${mark.strategy}`;
 	if (o.margin != null) k += `:margin:${o.margin}`;
+	// `keep` (continuity name) is baked into the wrapper (`__keep=…`), so it MUST split the wrapper —
+	// two same-component+schedule imports with different keep names need distinct wrappers, else the
+	// second inherits the first's relocation slot (like `margin`, above).
+	if (o.keep != null) k += `:keep:${o.keep}`;
 	return k;
 }
 
@@ -1771,7 +1776,11 @@ export function transformHost(source, id, ctx) {
 		};
 		collect_param_names(snip_params);
 		const { free, mutated } = collectCaptureInfo(body);
-		if (mutated.size > 0) continue; // writes host state — leave native (a snapshot can't write back)
+		// Only a HOST-state write disqualifies branding (a captured snapshot can't write back). A snippet
+		// mutating its OWN parameter is fine — params ride `__ogArgs`, not a capture — so exclude them,
+		// exactly as the `free` loop below does. Otherwise a snippet that only reassigns its own param was
+		// wrongly left native and failed to cross as a region.
+		if ([...mutated].some((m) => !param_names.has(m))) continue;
 		const cleaned_imports: string[] = [];
 		const seen_imports = new Set<string>();
 		const captures: string[] = [];
@@ -1925,6 +1934,47 @@ function parse_import_attrs(raw) {
  *   virtualPathFor, importKeys, idSalt, pathModule)
  * @returns {TransformResult|null}
  */
+/** Byte ranges of every template/string literal AND comment in a `.ts`/`.js` source, or `null` if it
+ *  doesn't parse. Used to tell a REAL held-region import from one that is only TEXT inside a code
+ *  sample — whether that sample sits in a template/string literal or a JSDoc `@example` comment. */
+function ts_literal_ranges(source: string, id: string): Array<[number, number]> | null {
+	const { program, ok, comments } = parse_module(source, id);
+	if (!ok || !program) return null;
+	const ranges: Array<[number, number]> = [];
+	const walk = (n: unknown): void => {
+		if (!n || typeof n !== 'object') return;
+		if (Array.isArray(n)) return void n.forEach(walk);
+		const node = n as Record<string, unknown>;
+		const t = node.type;
+		const is_str = (t === 'Literal' || t === 'StringLiteral') && typeof node.value === 'string';
+		if ((t === 'TemplateLiteral' || is_str) && typeof node.start === 'number' && typeof node.end === 'number') {
+			ranges.push([node.start, node.end]);
+		}
+		for (const k in node) {
+			if (k === 'type' || k === 'start' || k === 'end') continue;
+			const v = node[k];
+			if (v && typeof v === 'object') walk(v);
+		}
+	};
+	walk(program);
+	// Comments are trivia (not in the AST body) — a held-region import inside a JSDoc `@example` must be
+	// skipped too, so add their ranges.
+	for (const c of comments) {
+		if (typeof c.start === 'number' && typeof c.end === 'number') ranges.push([c.start, c.end]);
+	}
+	return ranges;
+}
+
+/** Fallback for {@link ts_literal_ranges} when the file doesn't parse: is `pos` preceded by an odd
+ *  number of unescaped backticks (i.e. inside an unterminated template literal)? */
+function odd_unescaped_backticks_before(source: string, pos: number): boolean {
+	let backticks = 0;
+	for (let i = 0; i < pos; i++) {
+		if (source[i] === '`' && source[i - 1] !== '\\') backticks++;
+	}
+	return backticks % 2 === 1;
+}
+
 export function transformTsRegions(source, id, ctx) {
 	const import_keys = normalize_import_keys(ctx.importKeys);
 	const regionKey = import_keys.region;
@@ -1953,6 +2003,16 @@ export function transformTsRegions(source, id, ctx) {
 	const s = new MagicString(source);
 	const islands_by_id = new Map();
 	let matched = false;
+	// The regex below scans RAW source, so it also matches held-region import EXAMPLES that are only
+	// TEXT — a `snippets.ts` template-literal sample, or a JSDoc `@example` in a comment (ogygia's own
+	// `src/index.ts` has one). A real import is a top-level statement, never inside a literal or comment,
+	// so skip any match whose position falls in one. AST-accurate (byte-exact offsets); if the file
+	// doesn't parse (half-typed mid-edit), fall back to the unescaped-backtick-parity heuristic.
+	const literal_ranges = ts_literal_ranges(source, id);
+	const inside_literal = (pos: number): boolean =>
+		literal_ranges
+			? literal_ranges.some(([a, b]) => pos >= a && pos < b)
+			: odd_unescaped_backticks_before(source, pos);
 	// Default import + import-attributes clause: `import X from '…' with { … }` (the only form).
 	const re = /import\s+([A-Za-z_$][\w$]*)\s+from\s+(['"])([^'"]+)\2\s+with\s*\{([^}]*)\}\s*;?/g;
 	let m;
@@ -1962,16 +2022,7 @@ export function transformTsRegions(source, id, ctx) {
 		const has_region = attrs.has(regionKey);
 		const has_wake = attrs.has(wakeKey);
 		if (!has_region && !has_wake) continue;
-		// This is a raw-source regex, so it also matches import EXAMPLES embedded in template-literal
-		// strings (a docs `snippets.ts` full of `import … with { wake: … }` code samples). A real
-		// top-level import is never inside a backtick string — skip a match with an odd number of
-		// (unescaped) backticks before it. Guards both markers, since `wake` is ubiquitous in samples.
-		const before = source.slice(0, m.index);
-		let backticks = 0;
-		for (let i = 0; i < before.length; i++) {
-			if (before[i] === '`' && before[i - 1] !== '\\') backticks++;
-		}
-		if (backticks % 2 === 1) continue;
+		if (inside_literal(m.index)) continue;
 		if (attrs.size > 1) {
 			throw new Error(
 				`[ogygia] ${rel_host}: a held-region import on '${local}' takes exactly one marker — \`${regionKey}: 'raw'\` (schedule set at the \`region()\` call) or \`${wakeKey}: '…'\` (baked schedule).`
