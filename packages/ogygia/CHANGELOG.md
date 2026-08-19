@@ -8,6 +8,23 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] — 2026-08-19
+
+Patch: same-shell page transitions no longer stutter under a large sidebar.
+
+### Fixed
+
+- **A `DocsShell` sidebar drowned its own page cross-fade.** Each nav row carries a per-row
+  `view-transition-name` (so the active-highlight chip glides beneath stable labels). But that
+  promotes every row to its own transition group, and on a same-shell navigation the browser then
+  ran the default group+fade for _all_ of them — dozens of animations per hop (a 30-row sidebar =
+  ~150, a large one ~300) — even though the rows are identical and stationary. That flood starves the
+  actual content cross-fade, which janks or reads as "no transition." The rows already share a
+  `phnav` `view-transition-class`; the framework themes now zero those row animations (`animation:
+  none`), so an identical row snaps invisibly while the `og-nav-active` chip keeps its slide and the
+  root content fade is no longer drowned. Measured on the docs playground: 295 → 10 running
+  animations, slide and fade both intact. Applied across every built-in theme.
+
 ## [0.6.2] — 2026-08-19
 
 Patch: content bodies ship their own scoped CSS, a static server island no longer 404s on nav, and a

@@ -325,6 +325,17 @@
 	::view-transition-group(*.phnav) {
 		z-index: 10;
 	}
+	/* Same-shell nav: the nav rows are identical + stationary, so their per-row groups animate
+	   nothing visible — yet dozens run the default group+fade every nav, starving the content
+	   cross-fade (it janks / reads as "no fade"). Zero the row animations: an identical row snaps
+	   invisibly, the og-nav-active chip keeps its slide, and the root fade is no longer drowned.
+	   On a shell change the router strips these names first, so this only touches same-shell nav. */
+	::view-transition-group(*.phnav),
+	::view-transition-image-pair(*.phnav),
+	::view-transition-old(*.phnav),
+	::view-transition-new(*.phnav) {
+		animation: none !important;
+	}
 	::view-transition-group(og-nav-active) {
 		z-index: 0;
 		animation-duration: var(--og-dur-slow);
