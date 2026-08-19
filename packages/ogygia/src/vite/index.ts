@@ -62,7 +62,7 @@ import {
 	moduleHasTransportable,
 	svelteModuleHasTransportable
 } from './transportables.js';
-import { generateRuntimeEntrySource, type RuntimeMarks } from './runtime-entry.js';
+import { generateRuntimeEntrySource, resolveFeatures, type RuntimeMarks } from './runtime-entry.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import {
 	derive_id_salt,
@@ -209,8 +209,17 @@ function runtime_content_hash() {
 	return h.digest('hex').slice(0, 12);
 }
 const RUNTIME_HASH = runtime_content_hash();
-const RUNTIME_FILENAME = `_app/immutable/og-runtime.${RUNTIME_HASH}.js`;
-const RUNTIME_URL_BUILD = '/' + RUNTIME_FILENAME;
+// The runtime chunk is FEATURE-SELECTED — `generateRuntimeEntrySource` emits DIFFERENT bytes per the
+// app's resolved marks (router / live / lakes / wire / …). So the `_app/immutable/…` filename (served
+// `immutable, 1yr`) must bust when the FEATURE SET changes, not only when ogygia's source does — else
+// the same ogygia version, after an app adds e.g. a `live` region, reuses the cached old runtime and
+// that feature silently never boots for returning visitors. `runtime_feature_hash` is filled after
+// prescan; BOTH build legs run the same deterministic prescan → same features → same name, so the
+// server↔client filename handoff still holds. Empty until prescan (dev serves the package entry).
+let runtime_feature_hash = '';
+const runtime_chunk_filename = () =>
+	`_app/immutable/og-runtime.${RUNTIME_HASH}${runtime_feature_hash ? '-' + runtime_feature_hash : ''}.js`;
+const runtime_chunk_url = () => '/' + runtime_chunk_filename();
 
 const TRAILING_SLASH = /\/$/;
 const KIT_REMOTE_CLIENT = /(^|\/)client\.js$/;
@@ -1454,6 +1463,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		// prescan walked every host — the capability marks are now COMPLETE, so the generated sticky
 		// runtime entry can bundle only the features this app uses (else it stays kitchen-sink).
 		runtime_marks.complete = true;
+		// Fold the resolved feature set into the runtime chunk name so it busts when the emitted bytes
+		// change (see `runtime_chunk_filename`). Deterministic across both build legs (same prescan).
+		runtime_feature_hash = crypto.createHash('sha256').update(resolveFeatures(runtime_marks).join(',')).digest('hex').slice(0, 8);
 	};
 
 	return [
@@ -1588,7 +1600,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// CLIENT build (Kit-driven): emit the runtime chunk. Kit builds the SERVER bundle FIRST,
 			// then the client, so the server can't learn a hash the LATER client build produces — a
 			// forward handoff is impossible. Instead the filename is a deterministic SOURCE-content
-			// hash (RUNTIME_FILENAME, computed at module load from the prebuilt dist inputs), so the
+			// hash of ogygia's runtime SOURCE ⊕ the resolved feature set (`runtime_chunk_filename`), so the
 			// server (baking the `<script src>`) and the client (emitting this chunk) compute the
 			// SAME name independently and agree. (Standalone mode further overrides with the real
 			// output-chunk hash below.)
@@ -1622,7 +1634,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					this.emitFile({
 						type: 'chunk',
 						id: V_RUNTIME_ENTRY,
-						fileName: RUNTIME_FILENAME
+						fileName: runtime_chunk_filename()
 					});
 				}
 				// Hydrate islands: one emitFile per deduped region id (path+strategy), deterministic
@@ -1911,7 +1923,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// dev: the vite dev URL. build: the CONTENT-HASHED runtime URL — from this
 				// instance (standalone) or the handoff file the client build wrote (Kit-driven);
 				// fall back to the fixed name only if the handoff is somehow missing.
-				const url = is_dev ? '/@id/__x00__' + V_RUNTIME : hashed_runtime_url || RUNTIME_URL_BUILD;
+				// Ensure prescan ran so `runtime_feature_hash` matches the client emit's filename (both
+				// legs prescan the same source → same feature set → same name).
+				if (!is_dev && !scanned) prescan();
+				const url = is_dev ? '/@id/__x00__' + V_RUNTIME : hashed_runtime_url || runtime_chunk_url();
 				return `export default ${JSON.stringify(url)};`;
 			}
 			if (id === RESOLVED(V_RUNTIME_ENTRY)) {
