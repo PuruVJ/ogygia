@@ -8,6 +8,21 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.6] — 2026-08-19
+
+Patch: a portable snippet that captures several names from one import no longer breaks the build.
+
+### Fixed
+
+- **A `{#snippet}` forwarded into an island could emit duplicate imports.** When such a snippet's body
+  captures multiple names from ONE `import { a, b, c } from './x'`, ogygia hoists the host import into
+  the synth wrapper it generates for the crossing — but it pushed the whole statement once per
+  captured name, so three names produced three identical import lines and the build failed with
+  `Identifier 'a' has already been declared`. The hoisted imports are now deduped: each statement is
+  emitted once (it already declares all of its names), preserving the original import verbatim (a
+  snippet-nested island's `with { wake: … }` marks, and default / namespace forms, survive untouched).
+  Reproduced and guarded by `test/portable-snippet-imports.test.ts`.
+
 ## [0.6.5] — 2026-08-19
 
 Patch: the profiler trades its live-server recording for one "profile a page" flow, and its package

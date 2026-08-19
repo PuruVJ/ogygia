@@ -1723,6 +1723,7 @@ export function transformHost(source, id, ctx) {
 		const { free, mutated } = collectCaptureInfo(body);
 		if (mutated.size > 0) continue; // writes host state — leave native (a snapshot can't write back)
 		const cleaned_imports: string[] = [];
+		const seen_imports = new Set<string>();
 		const captures: string[] = [];
 		for (const nm of free) {
 			if (param_names.has(nm)) continue; // a snippet param — rides __ogArgs, never a capture
@@ -1736,7 +1737,13 @@ export function transformHost(source, id, ctx) {
 				const text = marked_components.has(nm)
 					? source.slice(info.node.start, info.node.end).trim()
 					: info.cleaned.trim();
-				cleaned_imports.push(text);
+				// Several captured names can resolve to the SAME statement (`{ a, b, c } from './x'`);
+				// that one statement already declares all of them, so emit it ONCE. Pushing it per name
+				// redeclares the identifiers in the synth ("already been declared" build error).
+				if (!seen_imports.has(text)) {
+					seen_imports.add(text);
+					cleaned_imports.push(text);
+				}
 			} else if (host_declared.has(nm)) captures.push(nm);
 			// else: a global — referenced directly in the entry, needs no wiring.
 		}
