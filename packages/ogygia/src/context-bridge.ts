@@ -20,15 +20,16 @@ import {
 	revive_region_snippet
 } from './region-snippet.js';
 import { PAGE_CTX_MARKER, record_ctx } from './context-registry.js';
+import { escape_script_text } from './escape.js';
 
 /** Serialize a context value for the DOM — same codec as island props (transportables included). */
 export function serialize_context(value: unknown): string {
-	return stringify(value, {
-		[TRANSPORT_WIRE_KEY]: reduce_transportable,
-		[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
-	})
-		.split('<')
-		.join('\\u003C');
+	return escape_script_text(
+		stringify(value, {
+			[TRANSPORT_WIRE_KEY]: reduce_transportable,
+			[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
+		})
+	);
 }
 
 /**
@@ -40,9 +41,7 @@ export function serialize_context(value: unknown): string {
  * not this drop-in path.
  */
 function stringify_bridgeable(value: unknown): string {
-	return stringify(value, { [TRANSPORT_WIRE_KEY]: reduce_transportable })
-		.split('<')
-		.join('\\u003C');
+	return escape_script_text(stringify(value, { [TRANSPORT_WIRE_KEY]: reduce_transportable }));
 }
 
 /**

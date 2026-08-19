@@ -8,6 +8,7 @@
  */
 import { stringify } from 'devalue';
 import { PAGE_DEFER_KEY, PAGE_SETTLED_KEY } from '../page-defer.js';
+import { escape_script_text } from '../escape.js';
 
 // Bounds runaway recursion on a pathological/cyclic PLAIN structure only — promises are handled
 // before this cap applies (see the walkers), so a deeply-nested load promise is never abandoned.
@@ -147,7 +148,7 @@ export function resolve_script(
 		encoded = stringify({ message: 'ogygia: streamed value is not serializable' });
 		ok = false;
 	}
-	const json = JSON.stringify(encoded).replaceAll('<', '\\u003C');
+	const json = escape_script_text(JSON.stringify(encoded));
 	return `<script>${global_name}(${id},${ok},${json})</script>`;
 }
 

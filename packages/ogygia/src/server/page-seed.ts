@@ -1,5 +1,6 @@
 /** Serialize a Kit `page` snapshot for a single document-level ogygia side-channel. */
 import { stringify } from 'devalue';
+import { escape_script_text } from '../escape.js';
 
 type PageLike = {
 	url?: { href?: string };
@@ -53,7 +54,7 @@ export class PageSeed {
 				}
 				raw = stringify_fn(safe);
 			}
-			return raw.replaceAll('<', '\\u003C');
+			return escape_script_text(raw);
 		} catch {
 			return null;
 		}

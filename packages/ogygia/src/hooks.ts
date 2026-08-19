@@ -64,6 +64,7 @@ import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrenc
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { stringify } from 'devalue';
 import { serialize_provided_context } from './context-bridge.js';
+import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
 import { set_page_recorder, type PageSnapshot } from './page-seed-registry.js';
 
@@ -169,6 +170,15 @@ function region_css_links(id: string): string {
 		out += `<link rel="stylesheet" href="${href}" data-ogygia-region-css>`;
 	}
 	return out;
+}
+
+/**
+ * Wrap a devalue payload as an `application/ogygia-*` side-channel `<script>` the runtime reads. The
+ * `payload` MUST already be escaped by its serializer (via `escape_script_text`) — every serializer
+ * here does — so this only builds the tag. One spot for the side-channel shape (page / remote / ctx).
+ */
+function emit_ogygia_script(subtype: string, escaped_payload: string, marker = ''): string {
+	return `<script type="application/ogygia-${subtype}"${marker ? ' ' + marker : ''}>${escaped_payload}</script>`;
 }
 
 class OgygiaHandle {
@@ -430,7 +440,7 @@ class OgygiaHandle {
 				)
 			: null;
 		if (page_payload) {
-			scripts.push(`<script type="application/ogygia-page" data-ogygia-page>${page_payload}</script>`);
+			scripts.push(emit_ogygia_script('page', page_payload, 'data-ogygia-page'));
 		}
 
 		if (state?.remote?.implicit) {
@@ -444,7 +454,7 @@ class OgygiaHandle {
 			// Drops any non-serializable value (function / store / class instance) instead of crashing.
 			const payload = serialize_provided_context(provided);
 			if (payload) {
-				scripts.push(`<script type="application/ogygia-ctx" ${PAGE_CTX_MARKER}>${payload}</script>`);
+				scripts.push(emit_ogygia_script('ctx', payload, PAGE_CTX_MARKER));
 			}
 		}
 
@@ -626,8 +636,7 @@ class OgygiaHandle {
 		const reducers = Object.fromEntries(
 			Object.entries(transport).map(([name, codec]) => [name, codec.encode])
 		);
-		const payload = devalue.stringify(data, reducers).replaceAll('<', '\\u003C');
-		return `<script type="application/ogygia-remote">${payload}</script>`;
+		return emit_ogygia_script('remote', escape_script_text(devalue.stringify(data, reducers)));
 	}
 
 	/**
@@ -655,6 +664,44 @@ class OgygiaHandle {
 		}
 	}
 
+	// ── Shared capability core ──────────────────────────────────────────────────────────────────
+	// The endpoint ({@link render_region}) and the batch path ({@link #render_capability}) MUST verify
+	// identically — a one-sided change to the MAC message or the props reviver would weaken auth on one
+	// path only. The three security-critical steps live here, once. Each caller keeps its OWN failure
+	// shaping (403/500 + rate-limit interleaving vs null→client-fetch), which is where they legitimately
+	// differ; only the trust decisions are shared.
+
+	/** Charset/length/expiry gate — cheap, runs BEFORE any HMAC (P5-HMAC-CPU). */
+	#capability_gate_ok(id: string, payload: string, ttl_raw: string, exp_raw: string): boolean {
+		if (!REGION_ID_RE.test(id) || payload.length > MAX_REGION_PROPS_LEN || !REGION_TTL_RE.test(ttl_raw)) return false;
+		const exp = Number(exp_raw);
+		return Number.isFinite(exp) && exp >= Math.floor(Date.now() / 1000);
+	}
+
+	/** THE auth check: session-bound region MAC verify. */
+	#verify_region_mac(id: string, payload: string, exp_raw: string, ttl_raw: string, sig: string, event: RequestEvent): boolean {
+		// The capability seals the session cookie (if any) into the signed message.
+		const session = session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
+		return verify(secret, region_mac_message(id, exp_raw, payload, session, ttl_raw), sig);
+	}
+
+	/** Eval the island module (registers transportable codecs the reviver needs on a cold-start defer),
+	 *  then decode + revive the props payload. Null on parse failure or a non-object/array result. */
+	async #decode_region_props(payload: string, load: () => Promise<unknown>): Promise<Record<string, unknown> | null> {
+		let props: unknown;
+		try {
+			await load();
+			props = devalue.parse(B64Url.decode(payload), {
+				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false),
+				[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
+			});
+		} catch {
+			return null;
+		}
+		if (props === null || typeof props !== 'object' || Array.isArray(props)) return null;
+		return props as Record<string, unknown>;
+	}
+
 	/**
 	 * Batch (single-flight navigation): verify a hole's OWN signed capability URL and render it in-process. Same
 	 * trust boundary as the endpoint (verify the MAC before touching the manifest), but every failure —
@@ -674,36 +721,17 @@ class OgygiaHandle {
 		const ttl_raw = params.get('ttl') ?? '';
 		const sig = params.get('sig') ?? '';
 
-		if (!REGION_ID_RE.test(id) || payload.length > MAX_REGION_PROPS_LEN || !REGION_TTL_RE.test(ttl_raw))
-			return null;
-		const exp = Number(exp_raw);
-		if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return null;
-
-		// The capability was minted this same request, sealing the same session cookie (if any). `ttl`
-		// is part of the signed message even though the batch renders inline (no per-hole HTTP cache).
-		const session = session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
-		if (!verify(secret, region_mac_message(id, exp_raw, payload, session, ttl_raw), sig)) return null;
+		if (!this.#capability_gate_ok(id, payload, ttl_raw, exp_raw)) return null;
+		if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) return null;
 
 		if (!Object.hasOwn(island_modules, id)) return null;
 		const load = island_modules[id];
 		if (typeof load !== 'function') return null;
 
-		let props: unknown;
-		try {
-			// Evaluate the island module BEFORE parsing: transportable classes register their
-			// codecs at module eval, and the reviver needs them (cold-start defer requests may
-			// hit a process where the minting page never rendered).
-			await load();
-			props = devalue.parse(B64Url.decode(payload), {
-				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false),
-				[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
-			});
-		} catch {
-			return null;
-		}
-		if (props === null || typeof props !== 'object' || Array.isArray(props)) return null;
+		const props = await this.#decode_region_props(payload, load);
+		if (!props) return null;
 
-		const body = await this.#render_component(load, props as Record<string, unknown>);
+		const body = await this.#render_component(load, props);
 		if (body === null || body.length > MAX_REGION_BODY) return null;
 		// CSS links ride in the parcel; the client hoists them to <head> (a body/parcel link is inert
 		// inside the `<template>` box), so a batched server-island still styles a page that never
@@ -747,15 +775,10 @@ class OgygiaHandle {
 		const ttl_raw = url.searchParams.get('ttl') ?? '';
 		const sig = url.searchParams.get('sig') ?? '';
 
-		// Length/charset gate BEFORE HMAC (P5-HMAC-CPU). Ids are always 12-hex from the transform;
+		// Length/charset/expiry gate BEFORE HMAC (P5-HMAC-CPU). Ids are always 12-hex from the transform;
 		// `ttl` (cache max-age seconds) is signed, but charset-gate it here so a forged value can't
 		// reach the response header before verify rejects it.
-		if (!REGION_ID_RE.test(id) || payload.length > MAX_REGION_PROPS_LEN || !REGION_TTL_RE.test(ttl_raw)) {
-			return region_response('Forbidden', { status: 403 });
-		}
-
-		const exp = Number(exp_raw);
-		if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) {
+		if (!this.#capability_gate_ok(id, payload, ttl_raw, exp_raw)) {
 			return region_response('Forbidden', { status: 403 });
 		}
 
@@ -764,11 +787,9 @@ class OgygiaHandle {
 			return region_response('Too Many Requests', { status: 429 });
 		}
 
-		// Optional session bind: cookie value must match the session sealed into the MAC.
-		const session = session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
-
-		// Verify before consulting the manifest — bad MAC never distinguishes unknown vs known id.
-		if (!verify(secret, region_mac_message(id, exp_raw, payload, session, ttl_raw), sig)) {
+		// Verify (session-bound) before consulting the manifest — bad MAC never distinguishes unknown
+		// vs known id.
+		if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) {
 			return region_response('Forbidden', { status: 403 });
 		}
 
@@ -789,23 +810,13 @@ class OgygiaHandle {
 			return region_response('Forbidden', { status: 403 });
 		}
 
-		let props: unknown;
-		try {
-			// Module eval first — registers transportable codecs the reviver needs (cold start).
-			await load();
-			props = devalue.parse(B64Url.decode(payload), {
-				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false),
-				[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
-			});
-		} catch {
-			// Same status as bad MAC — no decode oracle (STATUS-ORACLE).
-			return region_response('Forbidden', { status: 403 });
-		}
-		if (props === null || typeof props !== 'object' || Array.isArray(props)) {
+		// Same status as bad MAC on any decode failure — no decode oracle (STATUS-ORACLE).
+		const props = await this.#decode_region_props(payload, load);
+		if (!props) {
 			return region_response('Forbidden', { status: 403 });
 		}
 
-		const body = await this.#render_component(load, props as Record<string, unknown>);
+		const body = await this.#render_component(load, props);
 		if (body === null) {
 			return region_response('Region render failed', { status: 500 });
 		}
