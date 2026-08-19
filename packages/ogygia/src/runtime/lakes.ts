@@ -48,9 +48,17 @@ export function lift(parent: Element): LiftedLake[] {
 }
 
 export function restore(parent: Element, lifted: LiftedLake[]) {
-	for (const { id, frag, endpoint, when, maxAgeMs } of lifted) {
-		const lake = parent.querySelector(`${FROZEN_SELECTOR}[entry="${CSS.escape(id)}"]`);
-		if (!lake) continue;
+	// Pair by POSITION, not by shared `entry`: two same-component lakes share ONE entry id (props/DOM
+	// ride per-instance, but the id is component+schedule), so `querySelector([entry])` returns the
+	// FIRST for both — both frags land in lake #1, leaving lake #2 empty. `lift()` collected `lifted`
+	// in DOM order under this exact direct-child filter, and hydrate-in-place doesn't reorder the frozen
+	// children, so the i-th surviving lake here owns the i-th lifted frag.
+	const lakes = [...parent.querySelectorAll(FROZEN_SELECTOR)].filter(
+		(l) => l.parentElement?.closest('ogygia-region') === parent
+	);
+	for (let i = 0; i < lifted.length && i < lakes.length; i++) {
+		const lake = lakes[i];
+		const { id, frag, endpoint, when, maxAgeMs } = lifted[i];
 		settle_in(lake);
 		settle_in(frag);
 		runtime_session.initialized_lakes.add(id);
