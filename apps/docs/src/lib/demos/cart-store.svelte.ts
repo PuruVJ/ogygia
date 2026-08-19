@@ -18,5 +18,6 @@ export class Cart {
 	});
 }
 
-/** The same live `Cart`, provided to a subtree instead of drilled as a prop through every island. */
-export const cartCtx = createContext<Cart>();
+/** The same live `Cart`, provided to a subtree instead of drilled as a prop through every island.
+ *  `createContext(key)` — the string key is what plain `getContext('cart')` reads under the hood. */
+export const cartCtx = createContext<Cart>('cart');

@@ -46,7 +46,7 @@ export class Filters {
   });
 }
 
-export const filtersCtx = ogygia.createContext<Filters>();
+export const filtersCtx = ogygia.createContext<Filters>('filters');
 ```
 
 Provide it once, above the tiles:
@@ -54,7 +54,7 @@ Provide it once, above the tiles:
 ```svelte title=+page.svelte
 <!-- this page ships no JS of its own -->
 <script>
-  import { Context } from 'ogygia';
+  import { Provide } from 'ogygia';
   import RangePicker from './RangePicker.svelte' with { wake: 'load' };
   import Revenue from './Revenue.svelte' with { wake: 'load' };
   import TopProducts from './TopProducts.svelte' with { wake: 'visible' };
@@ -63,13 +63,13 @@ Provide it once, above the tiles:
   const filters = new Filters();
 </script>
 
-<Context of={filtersCtx} value={filters}>
+<Provide values={[filtersCtx(filters)]}>
   <RangePicker />
   <div class="grid">
     <Revenue />
     <TopProducts />
   </div>
-</Context>
+</Provide>
 ```
 
 Each tile is a separate bundle, but they all hold **one live object**. The picker writes `filters.range`; every tile that read the context sees the change. No store library, no event bus, no prop threading: that is the wire contract doing its job. A `visible` tile that hydrates later joins the *current* instance, selections and all.

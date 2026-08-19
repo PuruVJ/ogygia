@@ -62,4 +62,4 @@ Naming the codec (`id`) makes the instance survive SPA navigations. The same liv
 
 Liveness is **identity**, not the codec. Each instance mints one wire id; the browser rebuilds it once and memoizes by that id, so every copy of the prop reunites into the same object. The **server never memoizes**: each request and each deferred-island render decodes fresh, so one visitor's state can't render into another's HTML.
 
-See [state & context](/docs/data-state/state-context) for the full picture: sharing one instance across islands, and providing it to a subtree with `createContext()`.
+See [state & context](/docs/data-state/state-context) for the full picture: sharing one instance across islands, and providing it to a subtree with `<Provide>` or a drop-in `setContext`.
