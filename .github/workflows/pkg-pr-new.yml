@@ -1,0 +1,32 @@
+name: pkg.pr.new
+
+# Publishes a continuous PREVIEW build of `ogygia` for every push / PR, so a branch can be tested
+# with `npm i https://pkg.pr.new/PuruVJ/ogygia@<sha-or-branch>` before anything hits npm.
+# Requires the pkg.pr.new GitHub App installed on the repo: https://github.com/apps/pkg-pr-new
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build the library to dist (the published preview uses publishConfig.exports → dist).
+      - run: pnpm run build:lib
+
+      - run: npx --yes pkg-pr-new publish './packages/ogygia'
