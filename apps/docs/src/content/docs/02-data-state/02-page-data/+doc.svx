@@ -1,0 +1,78 @@
+---
+title: Page data
+summary: $page.data — your load data, plus url / params / route / status / form / error — reads inside islands, and a load that returns a promise streams into the island live.
+related:
+  - data-state/remote-functions
+  - data-state/state-context
+  - regions/client-islands
+---
+
+An island reads `$page.data` — and the rest of Kit's page object — exactly as a normal Kit component does. Your `load` runs on the server as always; its data reaches every island on the page.
+
+```svelte title=Greeting.svelte
+<script>
+  import { page } from '$app/state';
+</script>
+
+<p>Bonjour, {page.data.user.name} — you are on {page.url.pathname}</p>
+```
+
+Everything on the page object crosses the boundary: `data`, `params`, `url`, `route`, `status`, `form`, and `error`. It is the same data your `load` returns, treated as client-visible — the same contract as a `csr = true` Kit page.
+
+::: tip When to use
+Reach for this whenever an island needs the page's own data — the current user, the route params, a `form` action result — without you threading it down as a prop. For data an island fetches *itself* (on demand, on a click), use a [remote function](/docs/data-state/remote-functions) instead.
+:::
+
+## Streaming promises
+
+Kit lets `load` return a **promise** at any level of `data` — you send the page now and the value follows when it resolves. On a normal Kit page the browser streams it in. A `csr = false` page has no page-level hydration, so Kit's own stream is inert there — but an **island has a client**, so ogygia streams the promise into the island.
+
+```ts title=+page.server.ts
+export const load = () => ({
+  country: 'FR',                                   // sent immediately
+  slow: fetch('/api/recommendations').then((r) => r.json())  // a promise — streamed
+});
+```
+
+```svelte title=Recs.svelte
+<script>
+  import { page } from '$app/state';
+</script>
+
+{#await page.data.slow}
+  <p>Loading recommendations…</p>
+{:then recs}
+  <ul>{#each recs as r}<li>{r.title}</li>{/each}</ul>
+{/await}
+```
+
+The page shell — and the island's `Loading…` branch — **paint immediately**; first paint is never blocked waiting on the slowest promise. Each promise resolves on its own as it settles (fast ones first), and the island's `{#await}` flips to its result live, with no extra request.
+
+A promise that **rejects** streams as an error and shows the `{:catch}` branch. A promise that resolves to a value holding **more promises** streams those too, recursively — the same as Kit.
+
+## Custom types
+
+Types you teach Kit through the [`transport`](https://svelte.dev/docs/kit/hooks#Universal-hooks-transport) hook round-trip into islands as real instances — both in plain data and inside a streamed promise — not just built-in types like `Date` and `Map`.
+
+```ts title=src/hooks.ts
+import * as ogygia from 'ogygia';
+
+export class Money {
+  constructor(public cents: number) {}
+  get pretty() { return `$${(this.cents / 100).toFixed(2)}`; }
+}
+
+export const transport = {
+  ...ogygia.transport,
+  Money: { encode: (v) => v instanceof Money && [v.cents], decode: ([c]) => new Money(c) }
+};
+```
+
+`page.data.price.pretty` then works inside the island — the getter runs because `decode` rebuilt the class, not a plain copy.
+
+## Notes
+
+- **A `form` action result** (`page.form`) and `page.error` reach islands the same way, so an island can render the outcome of a `<form method="POST">` without a prop.
+- **Client navigation** (the [SPA router](/docs/app/router)) can't run streamed scripts mid-swap, so on those loads a promise is awaited on the server and handed to the island already settled — `page.data.x` is still a promise you `{#await}`, so your island code is identical either way.
+- **Treat load data as client-visible**, exactly as on a `csr = true` page: it is serialized into the HTML. Don't put secrets in `load` data you wouldn't ship to the browser.
+- A **server island** (`render: 'deferred'`) renders in isolation on its own endpoint and does not receive the page seed; give it what it needs through its props or a remote function.
