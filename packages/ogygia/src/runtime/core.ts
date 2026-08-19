@@ -4,6 +4,8 @@ import { frameAddress } from '../frame.js';
 import { set_current_region } from '../current-region.js';
 import { collect_provided_context } from '../context-bridge.js';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
+import { install_page_defer, page_defer_revivers } from './page-defer.js';
+import { transport_decoders } from './app-transport.js';
 import NestedProvider from '../NestedProvider.svelte';
 import { document_has_kit_bootstrap } from './kit-boot.js';
 import { runtime_session } from './session.js';
@@ -265,7 +267,12 @@ function apply_remote_seed_text(text: string | null | undefined) {
 function apply_page_seed_text(text: string | null | undefined) {
 	if (!text) return;
 	try {
-		const raw = parse(text) as Partial<{
+		// Install the live resolver (drains any resolve script that raced ahead) BEFORE reviving, so a
+		// defer marker becomes a pending Promise that a queued resolution can settle immediately. Both
+		// the seed and the streamed resolves revive with the app's transport decoders, so a load's
+		// CUSTOM types round-trip into islands.
+		install_page_defer(transport_decoders);
+		const raw = parse(text, page_defer_revivers(transport_decoders)) as Partial<{
 			url: string | URL;
 			params: Record<string, string>;
 			route: { id: string | null };

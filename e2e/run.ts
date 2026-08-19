@@ -65,6 +65,8 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['context.ts', true, 'Provide + drop-in setContext + createContext: DOM-bridged, live across roots'],
 	['subpkg-island.ts', true, 'REGRESSION: island host in a workspace sub-package w/o ogygia dep — injected ogygia/internal resolves (self-ref) + hydrates'],
 	['csr-mixed-tree.ts', true, 'REGRESSION: csr=false subtree under csr=true ancestor layout — reset marker keeps islands islanding'],
+	['page-data.ts', true, '$page.data reaches islands + load promises STREAM in (marker seed, resolve-per-settle, Kit tail drained)'],
+	['page-data-stress.ts', true, 'ADVERSARIAL streaming: rejection/:catch, nested-promise recursion, 12 staggered, non-navigate settle no-crash'],
 	['island-children.ts', true, 'host children/snippets cross into a hydrate island (synth entry)'],
 	['portable-snippet.ts', true, 'a snippet forwarded THROUGH a plain shell into an island crosses + comes alive'],
 	['snippet-islands.ts', true, 'islands in a {#snippet} to a plain shell: marks survive + top-level await SSRs'],

@@ -11,9 +11,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0] — 2026-08-19
 
 Cross-island context is now one model built on Svelte's own `getContext` — with a drop-in `setContext`
-so existing layouts adopt with an import swap. Plus two build fixes.
+so existing layouts adopt with an import swap. `$page.data` now reaches islands, streaming load
+promises included. Plus two build fixes.
 
 ### Added
+
+- **`$page.data` (+ `form` / `error` / `status`) works inside islands — including STREAMED load
+  promises.** An island reads `$page.data` through the `$app/state` shim, but the handle can't reach
+  the resolved load data (Kit merges it locally in `render.js`, never on `RequestState`), so
+  `Region.svelte` reads Kit's REAL page during SSR and records it; the handle seeds
+  `data`/`form`/`error`/`status` into the same `application/ogygia-page` script islands already read
+  (boundary law: page.data crosses). A load may return a Promise at any level (Kit streaming) — dead on
+  csr=false, since Kit never defines its client resolver there. ogygia mirrors the mechanism with its
+  own registry: on a real browser navigation each promise is STAGED to a marker (a real pending Promise
+  on the client) and a `<script>__ogygia_page_resolve(id, ok, value)</script>` streams per promise AS
+  IT SETTLES — so the shell + pending `{#await}` paint immediately (FCP is not blocked on the slowest
+  promise) and each island's `{#await page.data.x}` resolves live, fast-first. Kit's own dead csr=false
+  resolve tail is drained server-side, so there's no `__sveltekit_<hash> is not defined` console error.
+  A REJECTED promise streams as an error and shows `{#await …:catch}`; a promise that resolves to a
+  value holding MORE promises re-defers them recursively (like Kit). A programmatic fetch (SPA/router —
+  no `Sec-Fetch-Mode: navigate`) can't run streamed scripts, so those promises are awaited server-side
+  and revived as already-settled Promises — `page.data.x` stays a Promise on both paths, and a
+  rejection there never crashes the render. The app's universal `transport` hook applies to the seed
+  too, so a load's CUSTOM types round-trip into islands — both plain and inside a streamed promise, not
+  just built-in devalue types. Guarded by `test/page-defer.test.ts` (codec + settle + recursion +
+  rejection races + transport), `e2e/page-data.ts` (stream-level timings + browser hydrate) and
+  `e2e/page-data-stress.ts` (rejection, nested recursion, 12 staggered, non-navigate no-crash, custom
+  transport type plain + streamed).
 
 - **Drop-in `setContext` — adopt with an import swap.** Swap `import { setContext } from 'svelte'`
   for `from 'ogygia'` and an existing csr=false layout's context reaches child islands with NO other
