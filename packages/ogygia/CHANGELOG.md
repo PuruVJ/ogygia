@@ -8,6 +8,38 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] — 2026-08-19
+
+Patch: the profiler now counts how many times each function ran, shows per-call cost, attributes
+waiting to the function that waited, and labels native frames.
+
+### Added
+
+- **`×N` call counts and a `per call` column.** A component's cost is usually repetition, not one
+  heavy render — `HeavyRow` at 170 ms is 800 renders of a 0.2 ms row, not a slow component. The
+  profiler now takes a second, coverage-only pass (V8 `Profiler.startPreciseCoverage`) to count
+  every function's exact call count, and the component and function tables gained a sortable **per
+  call** column (`total ÷ runs`). The pass is kept out of the timed CPU sample on purpose — running
+  coverage inside it disables inlining and would distort the numbers — so the sample stays honest.
+  Counts and `per_call_ms` are in the curated JSON too, so a saved dump reproduces the same result.
+- **Waiting by function.** Beyond the network waterfall, an `async_hooks` tracker times non-HTTP I/O
+  (timers, `fs`, DNS, raw TCP) and attributes each wait to the nearest frame in _your_ code, so a
+  slow `readManifest` or a stray `setTimeout` reads as _which function waited_ rather than a
+  featureless "idle." Shown as its own sortable table with wait bars.
+- **Per-caller network attribution.** Every outbound call in the waterfall now names the source line
+  that made it — structured V8 call-sites, mapped back through server source-maps when they are
+  emitted — so two `fetch`es to the same host are told apart by who called them.
+- **Serverless dump / upload.** On an edge or serverless adapter where the V8 inspector isn't
+  available, a report can be downloaded as a self-contained JSON dump and re-uploaded to the profiler
+  route to view anywhere — the whole report renderer is a pure function of that dump.
+
+### Fixed
+
+- **Native runtime frames rendered as a bare "—".** Node/V8 built-ins — `existsSync`, `writev`,
+  `flushCompileCache`, the UTF-8 codecs — carry no source file, so they fell through to an `unknown`
+  category with an em-dash chip and an empty location. They are now bucketed as **node core** with a
+  `native` location.
+
 ## [0.6.3] — 2026-08-19
 
 Patch: same-shell page transitions no longer stutter under a large sidebar.

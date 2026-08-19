@@ -185,8 +185,11 @@ export function categorize(frame: CallFrame): { category: FrameCategory; pkg?: s
 		if (is_component_name(name)) return { category: 'component' };
 		return { category: 'app' };
 	}
-	// no url = eval'd/native frames — a capitalized name there (e.g. v8's
-	// "Instance") is NOT a component; compiled components always carry a url
+	// no url + a real (non-"(…)") name = a native runtime builtin — writev,
+	// existsSync, cpuUsage, the UTF-8 codecs, flushCompileCache, etc. Bucket
+	// these as `node` so they get a chip + colour instead of a bare "—". A
+	// capitalized name here is NOT a component; compiled components carry a url.
+	if (name && !name.startsWith('(')) return { category: 'node' };
 	return { category: 'unknown' };
 }
 

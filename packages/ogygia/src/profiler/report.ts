@@ -6,6 +6,7 @@
 
 import type { Analysis, FrameCategory, HeapAllocator } from './analyze.js';
 import { sequential_ms, type NetCall } from './net.js';
+import { io_kind, type IoOp } from './async-io.js';
 
 export interface RequestEntry {
 	ts: number;
@@ -14,6 +15,8 @@ export interface RequestEntry {
 	route: string | null;
 	status: number;
 	ms: number;
+	/** CPU ms this request burned (process-wide delta; accurate when requests don't overlap) */
+	cpu_ms: number;
 	/** how many other requests were in flight when this one started */
 	inflight: number;
 	/** total ms this request spent in outbound network calls */
@@ -74,6 +77,10 @@ export interface ReportExtras {
 	measures?: UserTiming[];
 	/** precise GC pauses from PerformanceObserver (more exact than the sampler) */
 	gc?: GcSummary | null;
+	/** I/O primitives timed via async_hooks (timers, fs, dns, sockets) */
+	io?: IoOp[];
+	/** exact call count per function name, from V8 precise coverage */
+	call_counts?: Record<string, number>;
 }
 
 export interface RouteAgg {
@@ -197,6 +204,13 @@ function chip(c: FrameCategory): string {
 	return `<span class="chip" style="background:${CATEGORY_COLOR[c]}">${CATEGORY_LABEL[c]}</span>`;
 }
 
+// the "where" cell: a source path when we have one, else a muted "native"
+// (node/v8 builtins carry no url — they live in compiled C++, not a file)
+function where(url: string, line: number): string {
+	if (!url) return `<span class="hint">native</span>`;
+	return `${esc(url)}${line > 0 ? ':' + line : ''}`;
+}
+
 function page(title: string, body: string): string {
 	return `<!doctype html>
 <html lang="en"><head>
@@ -206,7 +220,7 @@ function page(title: string, body: string): string {
 <title>${esc(title)}</title>
 <style>${STYLE}</style>
 </head><body>${body}
-<div class="footer">ogygia/profiler — samples the whole Node process during SSR. <b>Self</b> = time (or memory) inside the function itself. <b>Total</b> = self plus everything it called.</div>
+<div class="footer">ogygia/profiler — samples the whole Node process during SSR. <b>Self</b> = time (or memory) inside the function itself. <b>Total</b> = self plus everything it called. <b>Per call</b> = total ÷ how many times it ran (a ×N tag means it ran N times; no tag means once).</div>
 </body></html>`;
 }
 
@@ -294,7 +308,7 @@ ${recording ? '<p class="verdict">A recording is running right now. Refresh in a
 	<label>renders <input name="runs" value="5" size="3"></label>
 	<button>Profile one page</button>
 </form>
-<p class="hint">Or send any request with the header <code>x-profile: &lt;secret&gt;</code> to profile exactly that request.</p>
+<p class="hint">Or send any request with the header <code>x-profile: &lt;secret&gt;</code> to profile exactly that request. On a serverless host add <code>?format=dump</code> to download the profile, then <a href="${base}/view">open it here</a>.</p>
 
 ${reports.length ? `<h2>Reports</h2><table><tr><th>report</th><th>when</th><th class="num">window</th><th class="num">requests</th></tr>${report_rows}</table>` : ''}
 
@@ -337,8 +351,6 @@ function render_treemap(a: Analysis): string {
 			leaves.push({ name: 'garbage collection', cat: 'gc', value: b.self_ms, url: '' });
 		if (b.category === 'v8' && b.self_ms > 0)
 			leaves.push({ name: 'v8 internals', cat: 'v8', value: b.self_ms, url: '' });
-		if (b.category === 'profiler' && b.self_ms > 0)
-			leaves.push({ name: 'profiler overhead', cat: 'profiler', value: b.self_ms, url: '' });
 	}
 	if (!leaves.length) return '';
 
@@ -641,25 +653,42 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 		},
 		findings: derive_findings(a, meta, extras),
 		budget,
-		components: [...a.components]
+		components: (() => {
+			const cc = extras.call_counts ?? {};
+			return [...a.components]
 			.sort((x, y) => y.self_ms - x.self_ms)
-			.map((c) => ({
-				name: c.name,
-				file: c.url,
-				line: c.line,
-				self_ms: c.self_ms,
-				total_ms: c.total_ms,
-				pct_busy: round1((c.total_ms / busy) * 100),
-				alloc_bytes: alloc_by_name.get(c.name) ?? null
-			})),
-		hot_functions: a.functions.slice(0, 80).map((f) => ({
-			name: f.name,
-			file: f.url,
-			line: f.line,
-			category: f.category,
-			self_ms: f.self_ms,
-			total_ms: f.total_ms
-		})),
+			.map((c) => {
+				const n = (cc[c.name] ?? 0) || null;
+				return {
+					name: c.name,
+					instances: n,
+					file: c.url,
+					line: c.line,
+					self_ms: c.self_ms,
+					total_ms: c.total_ms,
+					// cost of a single render: total ÷ renders (n falls back to 1)
+					per_call_ms: round1(c.total_ms / (n ?? 1)),
+					pct_busy: round1((c.total_ms / busy) * 100),
+					alloc_bytes: alloc_by_name.get(c.name) ?? null
+				};
+			});
+		})(),
+		hot_functions: (() => {
+			const cc = extras.call_counts ?? {};
+			return a.functions.slice(0, 80).map((f) => {
+				const n = (cc[f.name] ?? 0) || null;
+				return {
+					name: f.name,
+					instances: n,
+					file: f.url,
+					line: f.line,
+					category: f.category,
+					self_ms: f.self_ms,
+					total_ms: f.total_ms,
+					per_call_ms: round1(f.total_ms / (n ?? 1))
+				};
+			});
+		})(),
 		files: a.files
 			.filter((f) => f.category !== 'idle')
 			.slice(0, 40)
@@ -682,6 +711,7 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 					body_ms: c.body_ms ?? null,
 					bytes: c.bytes ?? null,
 					route: c.route ?? c.path ?? null,
+					caller: c.caller ?? null,
 					error: c.error ?? null
 				}))
 		},
@@ -700,6 +730,17 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 			})),
 			samples: extras.mem.map((m) => ({ t_ms: m.t, rss_mb: m.rss, heap_used_mb: m.heap_used }))
 		},
+		waiting: (() => {
+			const m = new Map<string, { caller: string; kind: string; count: number; wait_ms: number }>();
+			const add = (caller: string, kind: string, ms: number) => {
+				const k = caller + '|' + kind;
+				const r = m.get(k) ?? { caller, kind, count: 0, wait_ms: 0 };
+				r.count++; r.wait_ms = round1(r.wait_ms + ms); m.set(k, r);
+			};
+			for (const c of net) if (c.caller) add(c.caller, 'http', c.ms + (c.body_ms ?? 0));
+			for (const o of extras.io ?? []) if (o.caller && !o.open) add(o.caller, io_kind(o.type), o.ms);
+			return [...m.values()].sort((x, y) => y.wait_ms - x.wait_ms).slice(0, 40);
+		})(),
 		user_timings: (extras.measures ?? []).map((m) => ({
 			name: m.name,
 			count: m.count,
@@ -713,6 +754,8 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 			route: r.route,
 			status: r.status,
 			ms: r.ms,
+			cpu_ms: r.cpu_ms,
+			wait_ms: round1(Math.max(0, r.ms - r.cpu_ms)),
 			net_ms: r.net_ms,
 			net_count: r.net_count,
 			inflight: r.inflight,
@@ -724,6 +767,102 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 			cpuprofile: `${base}/report/${meta.id}/raw`
 		}
 	};
+}
+
+/**
+ * A complete, portable dump: everything `render_report` needs to reconstruct the
+ * full interactive report later, on any machine. This is the artifact a user
+ * downloads from a serverless host (where reports can't be stored) and uploads
+ * to the viewer. Rendering needs no inspector, so it works everywhere.
+ */
+export function report_dump(a: Analysis, meta: ReportMeta, extras: ReportExtras) {
+	return { kind: 'ogygia-profiler-dump', version: 1, meta, analysis: a, extras };
+}
+
+/** Narrowing guard for an uploaded dump before we render it. */
+export function is_dump(x: unknown): x is { meta: ReportMeta; analysis: Analysis; extras: ReportExtras } {
+	const d = x as Record<string, unknown> | null;
+	return (
+		!!d &&
+		typeof d === 'object' &&
+		d.kind === 'ogygia-profiler-dump' &&
+		!!d.meta &&
+		!!d.analysis &&
+		!!d.extras
+	);
+}
+
+/** The upload page: pick a downloaded dump file, render it here. */
+export function render_upload_page(base: string): string {
+	return page(
+		'Open a saved profile',
+		`<h1>Open a saved profile</h1>
+<p class="hint">Recorded on a serverless host (Amplify, Vercel, Netlify) where the report can't be kept in memory? Download the profile there, then drop the file here to see the full interactive report. The file is read and rendered by this profiler instance.</p>
+<p><input type="file" id="f" accept=".json,application/json"></p>
+<p class="hint"><a href="${base}">← dashboard</a></p>
+<script>
+var inp = document.getElementById('f');
+inp.addEventListener('change', async function () {
+  var f = inp.files[0]; if (!f) return;
+  var text = await f.text();
+  var res = await fetch(location.pathname + location.search, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: text
+  });
+  var html = await res.text();
+  document.open(); document.write(html); document.close();
+});
+</script>`
+	);
+}
+
+function render_waiting(net: NetCall[], io: IoOp[]): string {
+	const rows = new Map<string, { caller: string; kind: string; count: number; ms: number; open: number }>();
+	const add = (caller: string, kind: string, ms: number, open = false) => {
+		const key = caller + '|' + kind;
+		const r = rows.get(key) ?? { caller, kind, count: 0, ms: 0, open: 0 };
+		r.count++; r.ms += ms; if (open) r.open++;
+		rows.set(key, r);
+	};
+	// only attribute I/O that has a real app caller and actually completed — infra
+	// timers (undici keep-alive, the profiler's own sampler) have no owner and their
+	// open durations are meaningless
+	for (const c of net) if (c.ms >= 0 && c.caller) add(c.caller, 'http', c.ms + (c.body_ms ?? 0));
+	for (const o of io) if (o.caller && !o.open) add(o.caller, io_kind(o.type), o.ms);
+	const list = [...rows.values()].filter((r) => r.ms >= 0.5).sort((a, b) => b.ms - a.ms).slice(0, 30);
+	if (!list.length) return '';
+	const max = list[0].ms || 1;
+	const body = list
+		.map(
+			(r) => `<tr data-ms="${r.ms}" data-count="${r.count}">
+<td class="fn">${esc(r.caller)}</td>
+<td>${esc(r.kind)}</td>
+<td class="split"><div class="split-bar" title="${fmt_ms(r.ms)} ms across ${r.count} call${r.count > 1 ? 's' : ''}"><div class="slf" style="width:${((r.ms / max) * 100).toFixed(1)}%;background:${kind_color(r.kind)}"></div></div></td>
+<td class="num">${r.count}${r.open ? ` <span class="warn">(${r.open} open)</span>` : ''}</td>
+<td class="num"><b>${fmt_ms(r.ms)}</b></td>
+</tr>`
+		)
+		.join('');
+	return `<h2>Waiting by function <span class="hint" style="font-weight:400">(click a column to sort)</span></h2>
+<p class="hint">Where the server WAITED (not computed), attributed to the function that started the I/O — timed from the async primitive (a fetch, a timer, a file read, a database socket), so it catches waits the CPU profiler and the HTTP table both miss. A big number here with idle CPU is your bottleneck. "socket" times can be inflated by connection keep-alive; trust the HTTP table for exact per-call figures.</p>
+<table data-sortable><thead><tr><th>function</th><th>kind</th><th>wait</th><th class="num sort" data-key="count">count<span class="arr"></span></th><th class="num sort active" data-key="ms" data-dir="desc">wait ms<span class="arr"> ▼</span></th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/** Bar color per I/O kind, for the Waiting-by-function bars. */
+function kind_color(kind: string): string {
+	switch (kind) {
+		case 'http':
+			return '#5b8fd6';
+		case 'timer':
+			return '#b58a3d';
+		case 'file':
+			return '#4a9d6e';
+		case 'socket':
+			return '#c1544f';
+		case 'dns':
+			return '#7d6bb0';
+		default:
+			return '#8a8f98';
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -779,6 +918,12 @@ export function render_report(
 	}
 	const has_alloc = alloc_by_name.size > 0;
 
+	// how many times each component rendered — a component's cost is often
+	// repetition (×800), not one heavy render. Per render in page mode.
+	const counts = extras.call_counts ?? {};
+	const has_counts = Object.keys(counts).length > 0;
+	const instances = (name: string): number => counts[name] ?? 0;
+
 	// default order: self desc, so real CPU burners rise and structural
 	// ancestors (Root/_layout/_page, self ≈ 0) sink to the bottom
 	const comp_max_total = Math.max(...a.components.map((c) => c.total_ms), 1);
@@ -788,12 +933,20 @@ export function render_report(
 			const alloc = alloc_by_name.get(f.name);
 			const totW = (f.total_ms / comp_max_total) * 100;
 			const slfW = (f.self_ms / comp_max_total) * 100;
-			return `<tr data-self="${f.self_ms}" data-total="${f.total_ms}" data-name="${esc(f.name)}">
-<td class="fn"><b>${esc(f.name)}</b></td>
-<td class="file">${esc(f.url)}${f.line > 0 ? ':' + f.line : ''}</td>
+			const n = instances(f.name);
+			// per-call = total ÷ renders. n falls back to 1 (no tag ⇒ rendered once).
+			const per = f.total_ms / (n > 0 ? n : 1);
+			const tag =
+				n > 1
+					? ` <span class="hint" title="${n} renders, ${fmt_ms(f.total_ms / n)} ms each (total ÷ ${n})">×${n}</span>`
+					: '';
+			return `<tr data-self="${f.self_ms}" data-total="${f.total_ms}" data-per="${per}" data-name="${esc(f.name)}" data-count="${n}">
+<td class="fn"><b>${esc(f.name)}</b>${tag}</td>
+<td class="file">${where(f.url, f.line)}</td>
 <td class="split"><div class="split-bar" title="self ${fmt_ms(f.self_ms)} ms of total ${fmt_ms(f.total_ms)} ms"><div class="tot" style="width:${totW.toFixed(1)}%"></div><div class="slf" style="width:${slfW.toFixed(1)}%;background:${CATEGORY_COLOR[f.category]}"></div></div></td>
 <td class="num"><b>${fmt_ms(f.self_ms)}</b></td>
 <td class="num">${fmt_ms(f.total_ms)}</td>
+<td class="num" title="total ÷ ${n > 0 ? n : 1} render${n === 1 || n === 0 ? '' : 's'}">${fmt_ms(per)}</td>
 <td class="num">${fmt_pct(f.total_ms, a.busy_ms)}</td>
 ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 </tr>`;
@@ -804,12 +957,17 @@ ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 		.slice(0, 80)
 		.map((f) => {
 			const alloc = alloc_by_name.get(f.name);
-			return `<tr data-self="${f.self_ms}" data-total="${f.total_ms}" data-alloc="${alloc ?? 0}">
-<td class="fn"><b>${esc(f.name)}</b></td>
-<td class="file">${esc(f.url)}${f.line > 0 ? ':' + f.line : ''}</td>
+			const n = instances(f.name);
+			const per = f.total_ms / (n > 0 ? n : 1);
+			const tag =
+				n > 1 ? ` <span class="hint" title="${n} calls, ${fmt_ms(f.total_ms / n)} ms each (total ÷ ${n})">×${n}</span>` : '';
+			return `<tr data-self="${f.self_ms}" data-total="${f.total_ms}" data-per="${per}" data-alloc="${alloc ?? 0}" data-count="${n}">
+<td class="fn"><b>${esc(f.name)}</b>${tag}</td>
+<td class="file">${where(f.url, f.line)}</td>
 <td>${chip(f.category)}</td>
 <td class="num"><b>${fmt_ms(f.self_ms)}</b></td>
 <td class="num">${fmt_ms(f.total_ms)}</td>
+<td class="num" title="total ÷ ${n > 0 ? n : 1} call${n === 1 || n === 0 ? '' : 's'}">${fmt_ms(per)}</td>
 ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 </tr>`;
 		})
@@ -858,6 +1016,7 @@ ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 <td class="num">${c.body_ms !== undefined ? fmt_ms(c.body_ms) : '—'}</td>
 <td class="num">${c.bytes !== undefined ? fmt_bytes(c.bytes) : '—'}</td>
 <td class="file">${esc(c.route ?? c.path ?? '—')}</td>
+<td class="fn">${esc(c.caller ?? '—')}</td>
 </tr>`
 		)
 		.join('');
@@ -892,14 +1051,14 @@ ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 		.map(
 			(e) => `<tr><td>${esc(e.method)}</td><td class="fn">${esc(e.path)}${e.internal ? ' <span class="warn">(profiler)</span>' : ''}</td>
 <td class="file">${esc(e.route ?? '—')}</td><td class="num">${e.status || '—'}</td><td class="num">${e.inflight}</td>
-<td class="num">${e.net_count ? fmt_ms(e.net_ms) : '—'}</td><td class="num"><b>${fmt_ms(e.ms)}</b></td></tr>`
+<td class="num">${e.net_count ? fmt_ms(e.net_ms) : '—'}</td><td class="num">${fmt_ms(e.cpu_ms)}</td><td class="num">${fmt_ms(Math.max(0, e.ms - e.cpu_ms))}</td><td class="num"><b>${fmt_ms(e.ms)}</b></td></tr>`
 		)
 		.join('');
 
 	return page(
 		`SSR profile — ${label_of(meta)}`,
 		`<h1>SSR profile <small>${esc(label_of(meta))} · ${new Date(meta.created).toLocaleString()} · node ${esc(meta.node)}${a.sourcemapped ? ' · sourcemapped' : ''}</small></h1>
-<p class="hint"><a href="${base}">← dashboard</a> · <a href="${base}/report/${meta.id}.json">JSON</a> (for agents &amp; scripts) · <a href="${base}/report/${meta.id}/raw">.cpuprofile</a> (Chrome DevTools → Performance, or speedscope.app)</p>
+<p class="hint"><a href="${base}">← dashboard</a> · <a href="${base}/report/${meta.id}/dump" download>download</a> (re-open later via <a href="${base}/view">upload</a>) · <a href="${base}/report/${meta.id}.json">JSON</a> (agents) · <a href="${base}/report/${meta.id}/raw">.cpuprofile</a> (DevTools / speedscope)</p>
 
 <div class="summary">${stats.join('')}</div>
 
@@ -909,6 +1068,7 @@ ${render_budget_bar(a)}
 
 <h2>CPU by self time</h2>
 <p class="hint">Every box is real work; the biggest box is the bottleneck. This is <b>self</b> time, so parents like Root/_layout barely show — only code that actually burns CPU. Hover for detail.</p>
+${busy_pct < 25 ? `<p class="hint" style="color:#d9a03d">This window barely used the CPU (${busy_pct.toFixed(0)}% busy) — the bottleneck is <b>waiting</b>, not computing. Look at "Waiting by function" below; the treemap here is just the small slice of real CPU work (mostly node\u2019s I/O machinery).</p>` : ''}
 ${render_treemap(a)}
 
 <div class="verdict">${v.join(' ')}</div>
@@ -921,17 +1081,19 @@ ${
 ${waterfall}
 <table><tr><th>host</th><th class="num">calls</th><th class="num">total ms</th><th class="num">p50</th><th class="num">max</th><th class="num">errors</th></tr>${host_rows}</table>
 <br>
-<table><tr><th>method</th><th>url</th><th class="num">status</th><th class="num">wait ms</th><th class="num">body ms</th><th class="num">size</th><th>from route</th></tr>${net_rows}</table>`
+<table><tr><th>method</th><th>url</th><th class="num">status</th><th class="num">wait ms</th><th class="num">body ms</th><th class="num">size</th><th>from route</th><th>caller</th></tr>${net_rows}</table>`
 		: `<h2>Network</h2><p class="hint">No outbound HTTP calls seen in this window. If requests are still slow while the CPU is idle, the wait is inside a database/socket driver or a timer.</p>`
 }
 
+${render_waiting(net, extras.io ?? [])}
+
 <h2>Components <span class="hint" style="font-weight:400">(${a.components.length}, click a column to sort)</span></h2>
-<p class="hint"><b>self</b> = time in the component’s own code (its script + its own HTML), excluding nested components. <b>total</b> = self plus every component and function it calls. Ancestors like Root/_layout/_page have tiny self but huge total because they contain the whole page — <b>sort by self</b> to find who burns CPU, <b>by total</b> for the most expensive subtree. The bright bar is self inside the dim total.${has_alloc ? ' "alloc" is memory allocated by the component’s own code.' : ''}</p>
-${comp_rows ? `<table data-sortable><thead><tr><th>component</th><th>file</th><th>self / total</th><th class="num sort active" data-key="self" data-dir="desc">self ms<span class="arr"> ▼</span></th><th class="num sort" data-key="total">total ms<span class="arr"></span></th><th class="num">% of busy</th>${has_alloc ? '<th class="num sort" data-key="alloc">alloc<span class="arr"></span></th>' : ''}</tr></thead><tbody>${comp_rows}</tbody></table>` : '<p class="hint">No component frames in this recording — was any page rendered during the window?</p>'}
+<p class="hint"><b>self</b> = time in the component’s own code (its script + its own HTML), excluding nested components. <b>total</b> = self plus every component and function it calls. Ancestors like Root/_layout/_page have tiny self but huge total because they contain the whole page — <b>sort by self</b> to find who burns CPU, <b>by total</b> for the most expensive subtree. The bright bar is self inside the dim total.${has_counts ? ' <b>\u00d7N</b> next to a name is how many times it rendered per page (its cost is repetition, not one slow render).' : ''}${has_alloc ? ' "alloc" is memory allocated by the component’s own code.' : ''}</p>
+${comp_rows ? `<table data-sortable><thead><tr><th>component</th><th>file</th><th>self / total</th><th class="num sort active" data-key="self" data-dir="desc">self ms<span class="arr"> ▼</span></th><th class="num sort" data-key="total">total ms<span class="arr"></span></th><th class="num sort" data-key="per" title="total ÷ renders — the cost of a single render">per call<span class="arr"></span></th><th class="num">% of busy</th>${has_alloc ? '<th class="num sort" data-key="alloc">alloc<span class="arr"></span></th>' : ''}</tr></thead><tbody>${comp_rows}</tbody></table>` : '<p class="hint">No component frames in this recording — was any page rendered during the window?</p>'}
 
 <h2>Hot functions <span class="hint" style="font-weight:400">(click a column to sort)</span></h2>
-<p class="hint">Every function on the server, by time spent inside it. This is where the CPU actually went.</p>
-<table data-sortable><thead><tr><th>function</th><th>where</th><th></th><th class="num sort active" data-key="self" data-dir="desc">self ms<span class="arr"> ▼</span></th><th class="num sort" data-key="total">total ms<span class="arr"></span></th>${has_alloc ? '<th class="num sort" data-key="alloc">alloc<span class="arr"></span></th>' : ''}</tr></thead><tbody>${fn_rows}</tbody></table>
+<p class="hint">Every function on the server, by time spent inside it. This is where the CPU actually went.${has_counts ? ' <b>×N</b> is the exact call count (from V8 coverage), so you can see if a function is slow itself or just called a lot.' : ''}</p>
+<table data-sortable><thead><tr><th>function</th><th>where</th><th></th><th class="num sort active" data-key="self" data-dir="desc">self ms<span class="arr"> ▼</span></th><th class="num sort" data-key="total">total ms<span class="arr"></span></th><th class="num sort" data-key="per" title="total ÷ calls — the cost of a single call">per call<span class="arr"></span></th>${has_alloc ? '<th class="num sort" data-key="alloc">alloc<span class="arr"></span></th>' : ''}</tr></thead><tbody>${fn_rows}</tbody></table>
 
 ${
 	heap_rows
@@ -959,7 +1121,7 @@ ${bucket_rows}
 
 <h2>Requests during the window</h2>
 <p class="hint">Wall-clock time. High total with low net and low CPU = waiting on something we can't see (database driver, semaphore). "inflight" = other requests sharing the CPU at the same time.</p>
-${req_rows ? `<table><tr><th>method</th><th>path</th><th>route</th><th class="num">status</th><th class="num">inflight</th><th class="num">net ms</th><th class="num">total ms</th></tr>${req_rows}</table>` : '<p class="hint">No requests completed inside the window.</p>'}
+${req_rows ? `<table><tr><th>method</th><th>path</th><th>route</th><th class="num">status</th><th class="num">inflight</th><th class="num">net ms</th><th class="num">cpu ms</th><th class="num">wait ms</th><th class="num">total ms</th></tr>${req_rows}</table>` : '<p class="hint">No requests completed inside the window.</p>'}
 
 <h2>Flame graph</h2>
 <p class="hint">Width = time. Click a bar to zoom, click it again to zoom back out. Orange bars are your components.</p>
@@ -974,6 +1136,16 @@ ${TABLE_SORT_JS}`
 
 function stat(value: string, label: string): string {
 	return `<div class="stat"><b>${value}</b><span>${label}</span></div>`;
+}
+
+function wf_url(url: string): string {
+	try {
+		const u = new URL(url);
+		const s = u.pathname + u.search;
+		return s.length > 44 ? s.slice(0, 43) + '…' : s;
+	} catch {
+		return url.length > 44 ? url.slice(0, 43) + '…' : url;
+	}
 }
 
 function short_url(url: string): string {
@@ -1023,11 +1195,13 @@ function render_waterfall(net: NetCall[], meta: ReportMeta): string {
 			const dur = c.ms + (c.body_ms ?? 0);
 			const width = Math.min(100 - left, Math.max((dur / span) * 100, 0.3));
 			const body_pct = dur > 0 && c.body_ms ? (c.body_ms / dur) * 100 : 0;
-			const label = `${c.method} ${short_url(c.url)} — ${fmt_ms(dur)} ms`;
-			const label_left = left + width < 55 ? `calc(${left + width}% + 6px)` : `calc(${Math.max(left - 45, 0)}%)`;
+			const label = `${c.method} ${wf_url(c.url)} — ${fmt_ms(dur)} ms`;
+			// label sits just right of the bar; if the bar is in the right third, put it to
+			// the left (right-anchored) so it never runs off the edge or overlaps
+			const style = left + width > 62 ? `right:calc(${(100 - left).toFixed(1)}% + 6px)` : `left:calc(${(left + width).toFixed(1)}% + 6px)`;
 			return `<div class="wf-row">
 <div class="wf-bar${c.error ? ' err' : ''}" style="left:${left}%;width:${width}%" title="${esc(c.url)}">${body_pct > 5 ? `<span class="body" style="width:${body_pct}%"></span>` : ''}</div>
-<span class="wf-label" style="left:${label_left}">${esc(label)}</span>
+<span class="wf-label" style="${style}">${esc(label)}</span>
 </div>`;
 		})
 		.join('');

@@ -34,12 +34,16 @@ import {
 	type HeapNode,
 	type SourceMapResolver
 } from './analyze.js';
-import type { NetCall, NetContext } from './net.js';
+import type { CallerSite, NetCall, NetContext } from './net.js';
+import type { IoOp } from './async-io.js';
 import {
 	render_dashboard,
 	render_message,
 	render_report,
+	render_upload_page,
 	report_json,
+	report_dump,
+	is_dump,
 	type MemSample,
 	type ReportExtras,
 	type ReportMeta,
@@ -101,6 +105,8 @@ interface StoredReport {
 	mem: MemSample[];
 	measures: UserTiming[];
 	gc: GcSummary | null;
+	io: IoOp[];
+	call_counts: Record<string, number>;
 	/** the raw .cpuprofile, gzipped — a 10s profile is multiple MB of JSON, so
 	 * we keep it compressed (~10×) and inflate only on download */
 	raw: Buffer | string;
@@ -132,6 +138,8 @@ interface WindowCapture {
 	mem: MemSample[];
 	net: NetCall[];
 	gc_pauses: number[];
+	io_ops: IoOp[];
+	call_counts: Record<string, number>;
 	measures: UserTiming[];
 	loop?: { p50: number; p99: number; max: number };
 	cpu_percent?: number;
@@ -275,6 +283,12 @@ class Profiler {
 		mem_timer.unref?.();
 
 		this.#window_net = [];
+		// capture the calling stack of each outbound I/O call for the duration of
+		// the window (off otherwise — it costs a stack per call)
+		const netmod = await import('./net.js').catch(() => null);
+		netmod?.set_stack_capture(true);
+		const iomod = await import('./async-io.js').catch(() => null);
+		let io_rec = iomod ? await iomod.record_async_io() : null;
 
 		let heap_head: HeapNode | null = null;
 		try {
@@ -322,6 +336,8 @@ class Profiler {
 				mem,
 				net,
 				gc_pauses,
+				io_ops: io_rec ? io_rec.stop() : [],
+				call_counts: {},
 				measures: summarize_measures(measures),
 				loop: {
 					p50: round2(histogram.percentile(50) / 1e6),
@@ -337,6 +353,8 @@ class Profiler {
 		} finally {
 			clearInterval(mem_timer);
 			histogram.disable();
+			netmod?.set_stack_capture(false);
+			io_rec?.stop();
 			try {
 				observer?.disconnect();
 			} catch {
@@ -349,6 +367,44 @@ class Profiler {
 				// already gone
 			}
 		}
+	}
+
+	/**
+	 * Exact per-function call counts (the ×N), from V8 precise coverage. Run as
+	 * its OWN render, not during the CPU sampling window — coverage disables
+	 * inlining, so mixing it into the sampled profile makes tiny hot functions
+	 * (svelte's `child`, `push`) look like the bottleneck. Counts are per this
+	 * single render.
+	 */
+	async #count_calls(work: () => Promise<void>): Promise<Record<string, number>> {
+		const counts: Record<string, number> = {};
+		try {
+			const { Session } = await import('node:inspector/promises');
+			const session = new Session();
+			session.connect();
+			try {
+				await session.post('Profiler.enable');
+				await session.post('Profiler.startPreciseCoverage', { callCount: true, detailed: false });
+				await work();
+				const cov = (await session.post('Profiler.takePreciseCoverage')) as {
+					result: Array<{ functions: Array<{ functionName: string; ranges: Array<{ count: number }> }> }>;
+				};
+				await session.post('Profiler.stopPreciseCoverage');
+				for (const script of cov.result) {
+					for (const fn of script.functions) {
+						const nm = fn.functionName;
+						if (!nm || nm.startsWith('(')) continue;
+						const c = fn.ranges[0]?.count ?? 0;
+						if (c > 0) counts[nm] = (counts[nm] ?? 0) + c;
+					}
+				}
+			} finally {
+				session.disconnect();
+			}
+		} catch {
+			// no inspector / coverage — counts just won't show
+		}
+		return counts;
 	}
 
 	async #make_resolver(): Promise<SourceMapResolver | undefined> {
@@ -373,6 +429,40 @@ class Profiler {
 		const resolver = await this.#make_resolver();
 		const analysis = analyze(cap.profile, resolver);
 		const heap = cap.heap ? analyze_heap(cap.heap) : null;
+		// resolve each I/O caller's bundled location back to source, using the same
+		// sourcemap resolver the CPU frames use — turns `_page.server.ts.js:8` into
+		// `routes/mixed/+page.server.ts:10`, and drops the bundler's chained names.
+		// Keep the path relative to `src/` (not just the basename) — `+page.server.ts`
+		// alone is ambiguous when many routes have one.
+		const rel_src = (f: string) => {
+			const clean = f.replace(/\?.*$/, '');
+			const m = /(?:^|[/\\])src[/\\](.*)$/.exec(clean);
+			if (m) return m[1].replace(/\\/g, '/');
+			return clean.split(/[/\\]/).slice(-3).join('/');
+		};
+		const resolve_caller = (site?: CallerSite): string | undefined => {
+			if (!site) return undefined;
+			const name = site.fn && site.fn !== '(anonymous)' && !site.fn.includes('.') ? site.fn : undefined;
+			let file = rel_src(site.file);
+			let line = site.line;
+			const m = resolver?.resolve(site.file, Math.max(0, site.line - 1), Math.max(0, site.column - 1));
+			if (m) {
+				file = rel_src(m.source);
+				line = m.line;
+			}
+			// a caller that maps back into the profiler is our own I/O (the mem
+			// sampler's timer) — drop it, it is not the app's wait
+			if (file.startsWith('profiler/') || file.includes('/profiler/')) return undefined;
+			return name ? `${name} (${file}:${line})` : `${file}:${line}`;
+		};
+		for (const c of cap.net) {
+			c.caller = resolve_caller(c.caller_site) ?? c.caller;
+			delete c.caller_site;
+		}
+		for (const o of cap.io_ops) {
+			o.caller = resolve_caller(o.caller_site);
+			delete o.caller_site;
+		}
 		const id = Math.random().toString(36).slice(2, 10);
 		const requests = this.#ring.filter((e) => e.ts + e.ms >= cap.t0 && e.ts <= cap.t1);
 		const meta: ReportMeta = {
@@ -412,6 +502,8 @@ class Profiler {
 			mem: cap.mem,
 			measures: cap.measures,
 			gc,
+			io: cap.io_ops,
+			call_counts: cap.call_counts,
 			raw
 		});
 		while (this.#reports.size > this.max_reports) {
@@ -537,15 +629,25 @@ class Profiler {
 							await new Promise((r) => setImmediate(r));
 						}
 					});
+					// call counts come from ONE extra render under precise coverage — a
+					// SEPARATE pass, because coverage stops V8 inlining and would otherwise
+					// inflate the CPU profile (svelte's hot `child`/`push` would dominate)
+					cap.call_counts = await this.#count_calls(async () => {
+						await (await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } })).text();
+					});
 					id = await this.#finish_report(cap, { trigger: 'page', page: path, runs: run_ms });
 				}
-				// agents: `?format=json` (or Accept: application/json) returns the analyzed
-				// report directly in one shot — no redirect, no HTML to scrape
+				const s = this.#reports.get(id)!;
+				// serverless (Amplify/Vercel/Netlify) can't keep the report in memory across
+				// invocations, so `?format=dump` returns the whole thing as a download the user
+				// re-opens later at `<base>/view`. `?format=json` is the curated agent view.
+				if (q.get('format') === 'dump') {
+					return this.#dump_response(id, s);
+				}
 				const wants_json =
 					q.get('format') === 'json' ||
 					(event.request.headers.get('accept') ?? '').includes('application/json');
 				if (wants_json) {
-					const s = this.#reports.get(id)!;
 					return json_response(report_json(s.analysis, s.meta, this.base, this.#report_extras(s)));
 				}
 				const headers = new Headers({ location: `${this.base}/report/${id}`, 'cache-control': 'no-store' });
@@ -567,11 +669,32 @@ class Profiler {
 			}
 		}
 
-		const report_match = /^\/report\/([a-z0-9]+)(\/raw|\.json|\/json)?$/.exec(sub);
+		// Open a saved profile: GET shows the upload form, POST renders the uploaded dump.
+		// Rendering needs no inspector, so this works on ANY host (edge included) — it is how
+		// a serverless-recorded profile gets viewed.
+		if (sub === '/view') {
+			if (event.request.method === 'POST') {
+				try {
+					const dump: unknown = JSON.parse(await event.request.text());
+					if (!is_dump(dump)) {
+						return html(render_message('Not a profile', 'That file is not an ogygia profiler dump.', this.base), 400);
+					}
+					return html(render_report(dump.analysis, dump.meta, this.base, dump.extras));
+				} catch {
+					return html(render_message('Bad file', 'Could not read that file as a profiler dump.', this.base), 400);
+				}
+			}
+			return html(render_upload_page(this.base));
+		}
+
+		const report_match = /^\/report\/([a-z0-9]+)(\/raw|\.json|\/json|\/dump)?$/.exec(sub);
 		if (report_match) {
 			const stored = this.#reports.get(report_match[1]);
 			if (!stored) return html(render_message('Gone', 'That report has expired (only the last few are kept).', this.base), 404);
 			const suffix = report_match[2];
+			if (suffix === '/dump') {
+				return this.#dump_response(stored.meta.id, stored);
+			}
 			if (suffix === '.json' || suffix === '/json') {
 				return json_response(report_json(stored.analysis, stored.meta, this.base, this.#report_extras(stored)));
 			}
@@ -609,13 +732,26 @@ class Profiler {
 		return html(render_message('Not found', 'Unknown profiler page.', this.base), 404);
 	}
 
+	#dump_response(id: string, stored: StoredReport): Response {
+		const body = JSON.stringify(report_dump(stored.analysis, stored.meta, this.#report_extras(stored)));
+		return new Response(body, {
+			headers: {
+				'content-type': 'application/json',
+				'content-disposition': `attachment; filename="profile-${id}.ogprof.json"`,
+				'cache-control': 'no-store'
+			}
+		});
+	}
+
 	#report_extras(stored: StoredReport): ReportExtras {
 		return {
 			net: stored.net,
 			heap: stored.heap,
 			mem: stored.mem,
 			measures: stored.measures,
-			gc: stored.gc
+			gc: stored.gc,
+			io: stored.io,
+			call_counts: stored.call_counts
 		};
 	}
 
@@ -635,6 +771,7 @@ class Profiler {
 			route: event.route?.id ?? null,
 			status: 0,
 			ms: 0,
+			cpu_ms: 0,
 			inflight: this.#inflight,
 			net_ms: 0,
 			net_count: 0,
@@ -656,6 +793,7 @@ class Profiler {
 			: null;
 
 		const start = performance.now();
+		const cpu0 = process.cpuUsage();
 		this.#inflight++;
 
 		const run = async (): Promise<Response> => {
@@ -688,7 +826,7 @@ class Profiler {
 				const cap = await this.#capture_window(100, async () => {
 					res = await run();
 				});
-				this.#finalize(entry, start, ctx);
+				this.#finalize(entry, start, cpu0, ctx);
 				const id = await this.#finish_report(cap, {
 					trigger: 'request',
 					request: { method: entry.method, path: entry.path, route: entry.route, ms: entry.ms }
@@ -707,13 +845,15 @@ class Profiler {
 		try {
 			return await run();
 		} finally {
-			this.#finalize(entry, start, ctx);
+			this.#finalize(entry, start, cpu0, ctx);
 		}
 	};
 
-	#finalize(entry: RequestEntry, start: number, ctx: Ctx | null): void {
+	#finalize(entry: RequestEntry, start: number, cpu0: NodeJS.CpuUsage, ctx: Ctx | null): void {
 		this.#inflight--;
 		entry.ms = round2(performance.now() - start);
+		const c = process.cpuUsage(cpu0);
+		entry.cpu_ms = round2((c.user + c.system) / 1000);
 		if (ctx) {
 			entry.net_count = ctx.net.length;
 			entry.net_ms = round2(ctx.net.reduce((a, c) => a + Math.max(c.ms, 0) + (c.body_ms ?? 0), 0));

@@ -10,7 +10,8 @@ import {
 } from '../src/profiler/analyze.js';
 import { sequential_ms, type NetCall } from '../src/profiler/net.js';
 import { profiler } from '../src/profiler/index.js';
-import { render_report, report_json, derive_findings } from '../src/profiler/report.js';
+import { io_kind } from '../src/profiler/async-io.js';
+import { render_report, report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.js';
 import type { RequestEvent } from '@sveltejs/kit';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -207,6 +208,31 @@ describe('render_report visuals', () => {
 		expect(() => JSON.parse(JSON.stringify(j))).not.toThrow();
 	});
 
+	it('round-trips a dump through JSON and renders identically (the serverless path)', () => {
+		const profile: CpuProfile = {
+			startTime: 0,
+			endTime: 3000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2] },
+				{ id: 2, callFrame: frame('Header', '/app/src/lib/Header.svelte', 0) }
+			],
+			samples: [2, 2, 2],
+			timeDeltas: [1000, 1000, 1000]
+		};
+		const a = analyze(profile);
+		const extras = { net: [], heap: null, mem: [] };
+		// record here → serialize → (download) → JSON.parse → (upload) → render there
+		const wire = JSON.parse(JSON.stringify(report_dump(a, meta, extras)));
+		expect(is_dump(wire)).toBe(true);
+		expect(is_dump({ meta, analysis: a })).toBe(false); // missing extras → rejected
+		expect(is_dump({ kind: 'nope', meta, analysis: a, extras })).toBe(false);
+		// the uploaded dump renders the same report as the live one
+		const live = render_report(a, meta, '/__profiler', extras);
+		const fromDump = render_report(wire.analysis, wire.meta, '/__profiler', wire.extras);
+		expect(fromDump).toBe(live);
+		expect(fromDump).toContain('Header');
+	});
+
 	it('shares one findings source between HTML and JSON', () => {
 		const profile: CpuProfile = {
 			startTime: 0,
@@ -247,6 +273,85 @@ describe('render_report visuals', () => {
 		expect(first).toBeLessThan(ancestor);
 		// default sort marker is on the self column
 		expect(html).toContain('data-key="self" data-dir="desc"');
+	});
+});
+
+describe('I/O wait attribution', () => {
+	const meta2 = {
+		id: 'io',
+		created: 1_700_000_000_000,
+		trigger: 'window' as const,
+		duration_ms: 5000,
+		sample_interval_us: 500,
+		requests: [],
+		node: 'v26.0.0'
+	};
+	const netcall = (caller: string, ms: number): NetCall => ({
+		start: 0,
+		epoch: 0,
+		ms,
+		method: 'GET',
+		url: 'https://api.example.com/x',
+		host: 'api.example.com',
+		status: 200,
+		kind: 'fetch',
+		route: null,
+		path: null,
+		caller
+	});
+
+	it('buckets async resource types into friendly kinds', () => {
+		expect(io_kind('Timeout')).toBe('timer');
+		expect(io_kind('Immediate')).toBe('timer');
+		expect(io_kind('FSREQCALLBACK')).toBe('file');
+		expect(io_kind('GETADDRINFOREQWRAP')).toBe('dns');
+		expect(io_kind('TCPWRAP')).toBe('socket');
+		expect(io_kind('ZLIB')).toBe('zlib');
+	});
+
+	it('renders "Waiting by function" from network callers + async I/O ops', () => {
+		const a = analyze({
+			startTime: 0,
+			endTime: 5000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1]
+		});
+		const html = render_report(a, meta2, '/__profiler', {
+			net: [netcall('callService (data.ts:8)', 2000)],
+			heap: null,
+			mem: [],
+			io: [
+				{ type: 'Timeout', caller: 'queryDatabase (db.ts:4)', ms: 1500 },
+				{ type: 'FSREQCALLBACK', caller: 'readConfig (config.ts:2)', ms: 12 }
+			]
+		});
+		expect(html).toContain('Waiting by function');
+		expect(html).toContain('callService (data.ts:8)');
+		expect(html).toContain('queryDatabase (db.ts:4)'); // the timer wait, invisible to CPU sampling
+		expect(html).toContain('readConfig (config.ts:2)');
+	});
+
+	it('includes the waiting aggregate and callers in the JSON', () => {
+		const a = analyze({
+			startTime: 0,
+			endTime: 5000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1]
+		});
+		const j = report_json(a, meta2, '/__profiler', {
+			net: [netcall('callService (data.ts:8)', 2000)],
+			heap: null,
+			mem: [],
+			io: [{ type: 'Timeout', caller: 'queryDatabase (db.ts:4)', ms: 1500 }]
+		}) as Record<string, any>;
+		const byWait = j.waiting.sort((x: any, y: any) => y.wait_ms - x.wait_ms);
+		expect(byWait[0]).toMatchObject({ caller: 'callService (data.ts:8)', kind: 'http' });
+		expect(j.waiting.find((w: any) => w.kind === 'timer')).toMatchObject({
+			caller: 'queryDatabase (db.ts:4)'
+		});
+		expect(j.network.calls[0].caller).toBe('callService (data.ts:8)');
 	});
 });
 

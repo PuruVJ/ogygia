@@ -30,7 +30,94 @@ export interface NetCall {
 	route: string | null;
 	/** path of the page render that made this call, when known */
 	path: string | null;
+	/** resolved caller string, filled in at report time from caller_site */
+	caller?: string;
+	/** raw caller location (bundled), resolved to source at report time */
+	caller_site?: CallerSite;
 	error?: string;
+}
+
+// Capturing a stack on every call has a cost, so only do it while recording.
+let capture_stacks = false;
+export function set_stack_capture(on: boolean): void {
+	capture_stacks = on;
+}
+
+// The profiler's own module files, registered at load. Bundlers rename our
+// source (net.ts → chunks/net2.js), so a path substring like '/profiler/' won't
+// match at runtime. Each profiler module calls register_profiler_file() at load;
+// it reads the CALLER's file from a stack trace — same format as the runtime
+// stacks we later match against — so those frames get skipped whatever the
+// bundler named them.
+const profiler_files = new Set<string>();
+
+// Grab the structured call-sites WITHOUT triggering Node's stack-string
+// formatter (`defaultPrepareStackTrace`). Reading `new Error().stack` on every
+// I/O call formatted the whole stack and showed up as node-core CPU in the
+// profile — the profiler measuring itself. This costs a fraction of that.
+function call_sites(below: (...a: never[]) => unknown): NodeJS.CallSite[] {
+	const orig = Error.prepareStackTrace;
+	Error.prepareStackTrace = (_e, sites) => sites;
+	const holder: { stack?: unknown } = {};
+	Error.captureStackTrace(holder, below);
+	// `.stack` is lazy: read it WHILE our override is installed, then restore —
+	// otherwise the default (or source-map-support) formatter runs and returns a string
+	const sites = holder.stack;
+	Error.prepareStackTrace = orig;
+	return Array.isArray(sites) ? (sites as NodeJS.CallSite[]) : [];
+}
+
+export function register_profiler_file(): void {
+	// getFileName() of the caller (the module invoking this) — same format
+	// nearest_app_frame later compares against, so the registry always matches.
+	const f = call_sites(register_profiler_file)[0]?.getFileName();
+	if (f) profiler_files.add(f);
+}
+register_profiler_file();
+
+/** A caller location as the bundler sees it — resolved to source later, at
+ * report time, through the sourcemap resolver (we have no maps here). */
+export interface CallerSite {
+	fn: string;
+	/** generated (bundled) file */
+	file: string;
+	/** 1-based line in the generated file */
+	line: number;
+	/** 1-based column in the generated file */
+	column: number;
+}
+
+/** The nearest first-party frame that issued an I/O call — skips node internals,
+ * node_modules, and the profiler's own frames, so the caller reads like your
+ * code. Shared by the network patch and the async_hooks I/O tracker. */
+export function nearest_app_site(): CallerSite | undefined {
+	for (const site of call_sites(nearest_app_site)) {
+		const file = site.getFileName();
+		if (!file) continue;
+		if (
+			profiler_files.has(file) ||
+			file.includes('/profiler/') ||
+			file.startsWith('node:') ||
+			/node:internal|[/\\]node_modules[/\\]/.test(file)
+		) {
+			continue;
+		}
+		return {
+			fn: site.getFunctionName() || '(anonymous)',
+			file,
+			line: site.getLineNumber() ?? 0,
+			column: site.getColumnNumber() ?? 0
+		};
+	}
+	return undefined;
+}
+
+/** Best-effort caller string with no sourcemap (fallback before resolution). */
+export function nearest_app_frame(): string | undefined {
+	const s = nearest_app_site();
+	if (!s) return undefined;
+	const base = s.file.replace(/^.*[/\\]/, '').replace(/\?.*$/, '');
+	return `${s.fn} (${base}:${s.line})`;
 }
 
 export interface NetContext {
@@ -117,7 +204,8 @@ function patch_fetch(emit: Emit): void {
 			status: 0,
 			kind: 'fetch',
 			route: null,
-			path: null
+			path: null,
+			caller_site: capture_stacks ? nearest_app_site() : undefined
 		};
 		emit(call);
 		try {
@@ -237,7 +325,8 @@ function instrument_client_request(
 		status: 0,
 		kind: 'http',
 		route: null,
-		path: null
+		path: null,
+		caller_site: capture_stacks ? nearest_app_site() : undefined
 	};
 	emit(call);
 
