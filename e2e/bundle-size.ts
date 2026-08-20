@@ -18,8 +18,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rolldown } from 'rolldown';
-import { generateRuntimeEntrySource, resolveFeatures } from '../packages/ogygia/dist/vite/runtime-entry.js';
-import type { RuntimeMarks } from '../packages/ogygia/dist/vite/runtime-entry.js';
+import { generateRuntimeEntrySource, resolveFeatures } from '../packages/ogygia/dist/compiler/link/runtime-entry.js';
+import type { RuntimeMarks } from '../packages/ogygia/dist/compiler/link/runtime-entry.js';
 
 const RUNTIME_DIR = fileURLToPath(new URL('../packages/ogygia/dist/runtime', import.meta.url));
 const SNAPSHOT = fileURLToPath(new URL('./bundle-size.snapshot.json', import.meta.url));

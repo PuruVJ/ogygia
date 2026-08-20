@@ -57,14 +57,14 @@ import {
 	routeCsrIsFalse,
 	routeCsrIsTrue,
 	KEEP_CLIENT_DIR
-} from './standalone.js';
+} from '../compiler/standalone.js';
 import {
 	appendTransportRegistrations,
 	appendSvelteModuleRegistrations,
 	moduleHasTransportable,
 	svelteModuleHasTransportable
 } from '../compiler/content/transportables.js';
-import { generateRuntimeEntrySource, resolveFeatures, type RuntimeMarks } from './runtime-entry.js';
+import { generateRuntimeEntrySource, resolveFeatures, type RuntimeMarks } from '../compiler/link/runtime-entry.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import {
 	derive_id_salt,
@@ -185,7 +185,7 @@ const REGION_ENDPOINT_MODULE = fileURLToPath(new URL('../server/region-endpoint.
 // chunk hash; this is its fallback + the Kit-driven answer.)
 function runtime_content_hash() {
 	const inputs = [
-		fileURLToPath(new URL('./runtime-entry.js', import.meta.url)),
+		fileURLToPath(new URL('../compiler/link/runtime-entry.js', import.meta.url)),
 		fileURLToPath(new URL('../live-transport.js', import.meta.url)),
 		fileURLToPath(new URL('../shims/page-store.svelte.js', import.meta.url)),
 		fileURLToPath(new URL('../shims/kit-remote/client-stub.js', import.meta.url)),
