@@ -1,6 +1,6 @@
 ---
 title: State & Context
-summary: Share one live object across islands. A class with static wire = import.meta.og.wire({…}) crosses island boundaries as a prop; createContext() provides it to a whole subtree without prop drilling.
+summary: Share one live object across islands. A class with static wire = import.meta.og.wire({…}) crosses island boundaries as a prop; a drop-in setContext or <Provide> reaches a whole subtree without prop drilling.
 related:
   - regions/held-regions
   - reference/constraints
@@ -72,29 +72,42 @@ The browser remembers decoded instances; the **server never does**. Each request
 
 ## Context
 
-Passing one object to two known islands is a prop. But when a value must reach **many islands scattered down a subtree** (a cart shared by a header badge and a page-body button, a theme, a current user), threading it through every prop is noise. `createContext()` provides it once; any island below asks for it.
+Passing one object to two known islands is a prop. But when a value must reach **many islands scattered down a subtree** (a cart shared by a header badge and a page-body button, a theme, a current user), threading it through every prop is noise. Provide it once; any island below reads it with plain `getContext`.
 
-Svelte's own `getContext` / `setContext` work down a **component tree**. Islands break that tree: a `setContext` above an island never reaches inside it on the client. Ogygia's `createContext` is the same idea, scoped to the thing that *does* survive the split: the **DOM**.
+Svelte's own `getContext` / `setContext` work down a **component tree**. Islands break that tree: a `setContext` above an island never reaches inside it on the client. Ogygia bridges the **same `getContext('key')`** across the split, through the thing that *does* survive it: the **DOM**. There are two ways to provide — a drop-in `setContext`, or `<Provide>`.
 
-### Define a context
+### Drop-in `setContext`
 
-No string key. You get a typed handle; the build tags it by module path plus export name, so a provider and every consumer agree on identity with nothing to keep in sync:
+The smallest change, for a layout you already have: swap the import.
+
+```ts
+// import { setContext } from 'svelte';
+import { setContext } from 'ogygia';
+
+setContext('user', currentUser);   // now reaches child islands too
+```
+
+It does exactly what Svelte's `setContext` does, and on the server also records each **string-keyed** value so every island can seed its own `getContext('user')` from it — one flat **page root** that every island on the page inherits. Symbol keys and function values stay Svelte-only (they can't serialize, so they don't cross). For a value scoped to only part of the tree, reach for `<Provide>`, which shadows the page root on the same key.
+
+### Define a typed context
+
+`createContext(key)` is optional TYPED sugar over a string key: **callable** to make a provider entry, `.get()` to read (typed). The key is the same string plain `getContext` uses, so typed and untyped code read the same value.
 
 ```ts title=cart.svelte.ts
-import * as ogygia from 'ogygia';
+import { createContext } from 'ogygia';
 import { Cart } from './cart.js';
 
-export const cartCtx = ogygia.createContext<Cart>();   // get(): Cart | undefined
-export const theme = ogygia.createContext('light');    // get(): string (has a default)
+export const cartCtx = createContext<Cart>('cart');                       // get(): Cart | undefined
+export const theme = createContext<'light' | 'dark'>('theme', 'light');   // has a default
 ```
 
 ### Provide it
 
-`<Context of={…} value={…}>` wraps a subtree and provides the value to every island inside it:
+`<Provide values={…}>` wraps a subtree and provides its values to every island inside. Pass a typed handle **called with its value** (`cartCtx(cart)` → `{ cart }`), a plain object, or an array of them merged left→right (falsy entries skipped):
 
 ```svelte
 <script>
-  import { Context } from 'ogygia';
+  import { Provide } from 'ogygia';
   import CartBadge from './CartBadge.svelte' with { wake: 'load' };
   import AddButton from './AddButton.svelte' with { wake: 'visible' };
   import { Cart, cartCtx } from './cart.svelte.js';
@@ -102,30 +115,32 @@ export const theme = ogygia.createContext('light');    // get(): string (has a d
   const cart = new Cart();
 </script>
 
-<Context of={cartCtx} value={cart}>
+<Provide values={[cartCtx(cart)]}>
   <CartBadge />
   <!-- ...any depth of markup and islands... -->
   <AddButton />
-</Context>
+</Provide>
 ```
 
-There is no `.set()`: `<Context>` *is* the "set", because it has to wrap a subtree. To change the value, mutate the live object you provided; every reader sees it.
+There is no `.set()`: `<Provide>` *is* the provider, because it has to wrap a subtree. To change the value, mutate the live object you provided; every reader sees it.
 
 ### Read it
 
-Any island under the provider calls `get()`, no prop needed:
+Any island under the provider reads it during setup — either the typed handle or plain `getContext`, they are the same value:
 
 ```svelte
 <script>
+  import { getContext } from 'svelte';
   import { cartCtx } from './cart.svelte.js';
 
-  const cart = cartCtx.get();     // the provided Cart, or undefined
+  const cart = cartCtx.get();        // typed — the provided Cart, or undefined
+  // const cart = getContext('cart'); // untyped — same key, same value
 </script>
 
 <span>{cart?.count ?? 0}</span>
 ```
 
-Call `get()` during the island's setup, exactly like Svelte's `getContext`. Keep the reference: for a wired value it *is* the one live instance, shared and reactive across every island that read it.
+Read during the island's setup, exactly like Svelte's `getContext`. Keep the reference: for a wired value it *is* the one live instance, shared and reactive across every island that read it.
 
 The two widgets below are separate island bundles. Neither receives a prop: both call `cartCtx.get()` and reach the same live `Cart`. Click Add; the count island repaints:
 
@@ -133,10 +148,10 @@ The two widgets below are separate island bundles. Neither receives a prop: both
 
 ### How it crosses the boundary
 
-`<Context>` does two things at once:
+Both providers do two things at once:
 
-- On the **server**, islands render nested in the page's SSR tree, so it calls Svelte's native `setContext`: nested islands see the value in the server pass, and the first paint is correct.
-- It also writes the value into the DOM as a small `<script>` inside an `<ogygia-context>` element, serialized with the **same codec as island props**. On the **client**, each island, a separate root, walks up the DOM from where it hydrates to the nearest matching `<ogygia-context>` and decodes it.
+- On the **server**, islands render nested in the page's SSR tree, so the provider calls Svelte's native `setContext`: nested islands see the value in the server pass, and the first paint is correct.
+- It also writes the values into the DOM as a small `<script>` (a `<Provide>` wraps its subtree; a drop-in `setContext` emits one page-level marker), serialized with the **same codec as island props**. On the **client**, each island — a separate root — reads the providers standing above where it hydrates and seeds its own `getContext` from them.
 
 ## Live objects vs plain values
 
@@ -188,11 +203,12 @@ Ambient and on by default: an island form you were filling survives navigation a
 
 ## Constraints
 
-- Sharing and context both need a **top-level `export`** in your app source: an `export class` for a wire codec, an `export const … = createContext(…)` for a context. The build tags each by module path plus name; no default exports or class expressions.
+- A **wire codec** needs a **top-level `export class`** in your app source (the build tags it by module path plus name; no default exports or class expressions). A **context** needs an explicit string `key` — `createContext('key')`, or the string you pass `setContext` / `<Provide>` — that the provider and every reader share.
 - A receiving island must import a wire **class** as a value (not `import type`) only if it constructs one; to merely *receive* it (as a prop or via context) nothing extra is needed: the build auto-registers the codec.
 - A default `decode` that calls `new Cls()` needs a zero-argument constructor. Otherwise write `decode` yourself (as above).
-- Read context with `get()` during island **setup** (like `getContext`). Called later (in an event handler), there is no island being hydrated to anchor the walk, so read once and keep the reference.
-- A context provider must sit **above** the consuming islands in the DOM. No provider above → the default (or `undefined`).
+- Read context during island **setup** (like `getContext`). Called later (in an event handler), there is no island being hydrated to anchor the read, so read once and keep the reference.
+- A provider must sit **above** the consuming islands: `<Provide>` above them in the DOM, or a drop-in `setContext` anywhere on the page (the flat page root). No provider above → the default (or `undefined`).
+- Context values must be **serializable**, like island props — plain data, a `[ogygia.wire]` live value, a region snippet; never a function or a live store (those are dropped, never crash the page).
 - A **server island** (`render: 'deferred'`) renders in isolation on the endpoint, so it sees only a context's default, never the page's provider. If it must read the live context, put the reader in a nested `wake` island that hydrates on the client and joins the provider.
 - `import.meta.og.wire` is a compile construct: the macro mints the reserved codec key at build, so there is nothing to import and no runtime symbol to manage.
 

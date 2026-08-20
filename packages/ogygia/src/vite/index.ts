@@ -62,7 +62,7 @@ import {
 	moduleHasTransportable,
 	svelteModuleHasTransportable
 } from './transportables.js';
-import { generateRuntimeEntrySource, type RuntimeMarks } from './runtime-entry.js';
+import { generateRuntimeEntrySource, resolveFeatures, type RuntimeMarks } from './runtime-entry.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import {
 	derive_id_salt,
@@ -82,6 +82,41 @@ import {
 
 /** `packages/ogygia` — Vite must serve absolute shim/runtime resolves from outside the app root. */
 const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
+
+/**
+ * ogygia's OWN runtime imports that the transform INJECTS into a host component or a generated
+ * wrapper (Region / og_portable, and server-island endpoint minting). They are ours, not something
+ * the author wrote, so they must resolve to ogygia's OWN files (see OGYGIA_INJECTED_FILES) — NOT from
+ * the importer's package. Otherwise a host that lives in a monorepo sub-package which doesn't itself
+ * depend on ogygia can't resolve a bare `ogygia/internal`. (A user's OWN marked package import —
+ * `X from 'ogygia/content/…' with { wake }` — is deliberately NOT here: that resolves from the host
+ * file, whose package must expose the subpath.)
+ */
+const OGYGIA_INJECTED_IMPORTS = new Set(['ogygia/internal', 'ogygia/internal/server']);
+
+/**
+ * DIRECT paths to ogygia's OWN injected runtime entries, resolved WITHOUT `this.resolve`. The
+ * transform writes `ogygia/internal` / `ogygia/internal/server` into a host or a generated island
+ * module, and a host in a monorepo sub-package that doesn't depend on ogygia must still resolve them.
+ * `this.resolve` off a synthetic importer is NOT portable across bundler versions (returns null in
+ * vite@8, can THROW in rolldown-vite@7 — which aborts the whole hook), and `config.root` can be
+ * undefined on a throwaway Kit plugin instance — so we address ogygia's own files head-on instead.
+ *
+ * PKG_ROOT is this package (the plugin runs from `dist/vite/index.js`, so `../..` is the package
+ * root). A published install ships only `dist` → `dist/internal.js`. ogygia's OWN source checkout has
+ * `src/`, and the rest of the app resolves ogygia through the `svelte` export condition (→ `src`), so
+ * there we point at `src/internal.ts` too — same module, no Region/brand identity fork.
+ */
+const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
+const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
+	? {
+			'ogygia/internal': path.join(PKG_ROOT, 'src/internal.ts'),
+			'ogygia/internal/server': path.join(PKG_ROOT, 'src/internal-server.ts')
+		}
+	: {
+			'ogygia/internal': path.join(PKG_ROOT, 'dist/internal.js'),
+			'ogygia/internal/server': path.join(PKG_ROOT, 'dist/internal-server.js')
+		};
 
 // Client-side shims aliased for island modules (Kit's client runtime is absent under csr=false).
 const APP_SHIMS = {
@@ -174,8 +209,17 @@ function runtime_content_hash() {
 	return h.digest('hex').slice(0, 12);
 }
 const RUNTIME_HASH = runtime_content_hash();
-const RUNTIME_FILENAME = `_app/immutable/og-runtime.${RUNTIME_HASH}.js`;
-const RUNTIME_URL_BUILD = '/' + RUNTIME_FILENAME;
+// The runtime chunk is FEATURE-SELECTED — `generateRuntimeEntrySource` emits DIFFERENT bytes per the
+// app's resolved marks (router / live / lakes / wire / …). So the `_app/immutable/…` filename (served
+// `immutable, 1yr`) must bust when the FEATURE SET changes, not only when ogygia's source does — else
+// the same ogygia version, after an app adds e.g. a `live` region, reuses the cached old runtime and
+// that feature silently never boots for returning visitors. `runtime_feature_hash` is filled after
+// prescan; BOTH build legs run the same deterministic prescan → same features → same name, so the
+// server↔client filename handoff still holds. Empty until prescan (dev serves the package entry).
+let runtime_feature_hash = '';
+const runtime_chunk_filename = () =>
+	`_app/immutable/og-runtime.${RUNTIME_HASH}${runtime_feature_hash ? '-' + runtime_feature_hash : ''}.js`;
+const runtime_chunk_url = () => '/' + runtime_chunk_filename();
 
 const TRAILING_SLASH = /\/$/;
 const KIT_REMOTE_CLIENT = /(^|\/)client\.js$/;
@@ -1018,10 +1062,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		const routesDir = path.join(root, 'src', 'routes');
 		const link_virtual =
 			opts.linkVirtual !== undefined ? opts.linkVirtual : ssr || !routeCsrIsFalse(id, routesDir);
-		// csr=true route host → ogygia steps aside (no island, no runtime). Route-scoped: a shared lib
-		// component keeps its islands (its csr depends on the page). See transformHost's csrTrue branch.
-		const csr_true = routeCsrIsTrue(id, routesDir);
-		const cache_key = `${id}\0${link_virtual ? '1' : '0'}\0${csr_true ? 't' : 'f'}`;
+		// Tri-state route csr, threaded into the transform (see transformHost's routeCsr branch):
+		//   true  → csr=true route host: ogygia steps aside (strip islands, inject `true` marker).
+		//   false → csr=false route host: keep islands, inject the csr-false RESET marker (an
+		//           option-less csr=true ANCESTOR layout would otherwise leak `true` down the context
+		//           and silently degrade every island in the csr=false subtree to inline).
+		//   undefined → not a route host (shared lib component): no marker; its csr depends on the
+		//           page that renders it, so it keeps its islands.
+		const route_csr = routeCsrIsTrue(id, routesDir)
+			? true
+			: routeCsrIsFalse(id, routesDir)
+				? false
+				: undefined;
+		const cache_key = `${id}\0${link_virtual ? '1' : '0'}\0${route_csr === true ? 't' : route_csr === false ? 'f' : 'n'}`;
 		const hit = transform_cache.get(cache_key);
 		if (hit && hit.code === source) { if (__P) __prof.transformHit++; return hit.result; }
 		const __th0 = __P ? performance.now() : 0;
@@ -1040,7 +1093,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			idSalt: id_salt,
 			linkVirtualIsland: link_virtual,
 			clientBindingStub: V_CLIENT_BINDING_STUB,
-			csrTrue: csr_true,
+			routeCsr: route_csr,
 			ssr
 		});
 		if (__P) { __prof.transformMs += performance.now() - __th0; __prof.transformN++; __outHash.set(cache_key, __fnv(JSON.stringify((result as any)?.code ?? result))); }
@@ -1410,6 +1463,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		// prescan walked every host — the capability marks are now COMPLETE, so the generated sticky
 		// runtime entry can bundle only the features this app uses (else it stays kitchen-sink).
 		runtime_marks.complete = true;
+		// Fold the resolved feature set into the runtime chunk name so it busts when the emitted bytes
+		// change (see `runtime_chunk_filename`). Deterministic across both build legs (same prescan).
+		runtime_feature_hash = crypto.createHash('sha256').update(resolveFeatures(runtime_marks).join(',')).digest('hex').slice(0, 8);
 	};
 
 	return [
@@ -1443,10 +1499,18 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// Match Kit: SSR-inline `esm-env` so its development/production export conditions
 					// resolve per mode (used if anything in our server graph imports it). Do NOT
 					// optimizeDeps.exclude it — that breaks Svelte client prebundles that import DEV.
-					// `server.fs.allow`: kit-remote stubs / runtime resolve to absolute paths under this
-					// package; without it Vite 403s them when the app root is docs/ or playground/.
+					//
+					// SSR-inline OGYGIA ITSELF too. ogygia ships real `.svelte` components (Region,
+					// OgygiaBoundary, …) that the app's server build MUST compile — if ogygia is left
+					// EXTERNAL, Node loads a raw `.svelte` at server runtime and crashes with
+					// `ERR_UNKNOWN_FILE_EXTENSION`. vite-plugin-svelte normally auto-noExternals a svelte
+					// library (ogygia carries the `svelte` export condition), but that detection is fragile
+					// under some installs (adapter-node output, a pkg.pr.new URL dependency, an app that
+					// pins/overrides noExternal), so we force it here — the plugin is always present, so this
+					// can't be missed. `server.fs.allow`: kit-remote stubs / runtime resolve to absolute
+					// paths under this package; without it Vite 403s them when the app root is docs/ or playground/.
 					return {
-						ssr: { noExternal: ['esm-env'] },
+						ssr: { noExternal: ['esm-env', 'ogygia'] },
 						// CONTINUITY config → compile-time constants the client runtime reads (typeof-guarded,
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
@@ -1544,7 +1608,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// CLIENT build (Kit-driven): emit the runtime chunk. Kit builds the SERVER bundle FIRST,
 			// then the client, so the server can't learn a hash the LATER client build produces — a
 			// forward handoff is impossible. Instead the filename is a deterministic SOURCE-content
-			// hash (RUNTIME_FILENAME, computed at module load from the prebuilt dist inputs), so the
+			// hash of ogygia's runtime SOURCE ⊕ the resolved feature set (`runtime_chunk_filename`), so the
 			// server (baking the `<script src>`) and the client (emitting this chunk) compute the
 			// SAME name independently and agree. (Standalone mode further overrides with the real
 			// output-chunk hash below.)
@@ -1578,7 +1642,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					this.emitFile({
 						type: 'chunk',
 						id: V_RUNTIME_ENTRY,
-						fileName: RUNTIME_FILENAME
+						fileName: runtime_chunk_filename()
 					});
 				}
 				// Hydrate islands: one emitFile per deduped region id (path+strategy), deterministic
@@ -1724,6 +1788,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 			if (source === V_TRANSPORTABLES) return RESOLVED(V_TRANSPORTABLES);
 
+			// ogygia's OWN injected imports (`ogygia/internal` / `…/server`, written by the transform into
+			// a host or a generated island module) resolve to ogygia's own files DIRECTLY (see
+			// OGYGIA_INJECTED_FILES) — never via `this.resolve` (unreliable off a synthetic importer, can
+			// throw in rolldown-vite) or `config.root` (can be undefined on a throwaway plugin instance).
+			// Deterministic, can't throw, can't be left unresolved, works from any sub-package with no
+			// ogygia dependency of its own.
+			if (OGYGIA_INJECTED_IMPORTS.has(source)) return OGYGIA_INJECTED_FILES[source];
+
 			const ssr = options?.ssr === true;
 
 			// CLIENT build: Kit's client remote runtime needs `app` (never boots under csr=false).
@@ -1859,7 +1931,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// dev: the vite dev URL. build: the CONTENT-HASHED runtime URL — from this
 				// instance (standalone) or the handoff file the client build wrote (Kit-driven);
 				// fall back to the fixed name only if the handoff is somehow missing.
-				const url = is_dev ? '/@id/__x00__' + V_RUNTIME : hashed_runtime_url || RUNTIME_URL_BUILD;
+				// Ensure prescan ran so `runtime_feature_hash` matches the client emit's filename (both
+				// legs prescan the same source → same feature set → same name).
+				if (!is_dev && !scanned) prescan();
+				const url = is_dev ? '/@id/__x00__' + V_RUNTIME : hashed_runtime_url || runtime_chunk_url();
 				return `export default ${JSON.stringify(url)};`;
 			}
 			if (id === RESOLVED(V_RUNTIME_ENTRY)) {

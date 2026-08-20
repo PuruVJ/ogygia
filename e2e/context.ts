@@ -25,10 +25,15 @@ try {
 
 	// ---------- SSR of the matrix page ----------
 	const raw = await (await fetch(base + '/context')).text();
-	check('SSR: provider emits <ogygia-context> with tag', /<ogygia-context[^>]*\bctx=/.test(raw));
-	check('SSR: context value serialized into the DOM', raw.includes('data-ogygia-ctx'));
+	check('SSR: provider emits <ogygia-provide> with values', /<ogygia-provide\b/.test(raw));
+	check('SSR: context value serialized into the DOM', raw.includes('data-ogygia-provide'));
 	const ssrLoad = raw.match(/data-ctx-reader="load"[^>]*>[\s\S]*?data-ctx-count[^>]*>(-?\d+)</)?.[1];
 	check('SSR: load reader reads context (5, no prop)', ssrLoad === '5', `count=${ssrLoad}`);
+	// RAW Svelte getContext (no ogygia handle) reads a <Provide> string entry + the live counter.
+	check(
+		'SSR: plain getContext island reads Provide values',
+		/data-plain-greeting="hi-from-provide"/.test(raw) && /data-plain-count="5"/.test(raw)
+	);
 
 	// ---------- Hydrated matrix ----------
 	await page.goto(base + '/context', { waitUntil: 'networkidle' });
@@ -43,6 +48,15 @@ try {
 	check('load reader: real instance', (await isInstance('load')) === 'true');
 	check('idle reader: real instance', (await isInstance('idle')) === 'true');
 	check('load reader count == SSR (no reset)', (await count('load')) === '5', `count=${await count('load')}`);
+
+	// Raw `getContext('key')` island — unchanged Svelte — reads the <Provide> across the island split.
+	const pGreet = await page.locator('[data-plain-reader]').getAttribute('data-plain-greeting');
+	const pCount = await page.locator('[data-plain-reader]').getAttribute('data-plain-count');
+	check(
+		'plain getContext island reads Provide across roots (client)',
+		pGreet === 'hi-from-provide' && pCount === '5',
+		`${pGreet}/${pCount}`
+	);
 
 	// Nested-island inner reader (degraded + hydrated with outer) reads context
 	check('nested-island reader reads context', (await count('nested-inner')) === '5', `count=${await count('nested-inner')}`);
@@ -126,6 +140,40 @@ try {
 		check('SPA nav: live update works after nav (4)', (await navCount()) === '4', `count=${await navCount()}`);
 		check('SPA nav: no page errors', nerrs.length === 0, nerrs.join(' | '));
 		await nav.close();
+	}
+
+	// ---------- Drop-in setContext bridge (import swap, no <Provide>) ----------
+	// A csr=false layout imports `setContext` from ogygia (the ONLY change from a plain Svelte layout)
+	// and sets a plain object, a string, and a live transportable. The handle emits ONE page-level
+	// `<script data-ogygia-provide-page>` marker; child islands read it via UNCHANGED raw
+	// getContext('key') across the island-root split. This is the zero-template-change adoption path.
+	{
+		const sraw = await (await fetch(base + '/ctx-setcontext')).text();
+		check('setContext SSR: page-level marker emitted', /data-ogygia-provide-page/.test(sraw));
+		const ssrTheme = sraw.match(/data-setctx-reader="load"[^>]*data-setctx-theme="([^"]*)"/)?.[1];
+		check('setContext SSR: island reads context (midnight)', ssrTheme === 'midnight', ssrTheme);
+
+		const sp = await browser.newPage();
+		const serrs: string[] = [];
+		sp.on('pageerror', (e) => serrs.push(e.message));
+		await sp.goto(base + '/ctx-setcontext', { waitUntil: 'networkidle' });
+		await sp.waitForTimeout(200);
+		const sattr = (a: string) => sp.locator('[data-setctx-reader="load"]').getAttribute(a);
+		check('setContext client: theme = midnight', (await sattr('data-setctx-theme')) === 'midnight');
+		check('setContext client: appName = playground', (await sattr('data-setctx-app')) === 'playground');
+		check('setContext client: live transportable revived', (await sattr('data-setctx-live')) === 'true');
+		check('setContext client: count kept (8)', (await sattr('data-setctx-count')) === '8', `count=${await sattr('data-setctx-count')}`);
+		// Liveness: bumping the shared instance repaints the reader (proves a LIVE bridge, not a snapshot)
+		await sp.locator('[data-setctx-writer]').click();
+		await sp.waitForTimeout(80);
+		check('setContext liveness: writer bump repaints reader (9)', (await sattr('data-setctx-count')) === '9', `count=${await sattr('data-setctx-count')}`);
+		// Visible island below the fold late-hydrates, still reads context AND late-joins the instance
+		await sp.locator('[data-setctx-reader="visible"]').scrollIntoViewIfNeeded();
+		await sp.waitForTimeout(150);
+		const svis = await sp.locator('[data-setctx-reader="visible"]').getAttribute('data-setctx-count');
+		check('setContext visible: reads context + late-joins (9)', svis === '9', `count=${svis}`);
+		check('setContext: no page errors', serrs.length === 0, serrs.join(' | '));
+		await sp.close();
 	}
 
 	check('matrix: no page errors / hydration mismatches', errors.length === 0, errors.join(' | '));

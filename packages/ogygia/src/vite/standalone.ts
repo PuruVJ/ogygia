@@ -18,7 +18,13 @@ const CSR_EXPORT = /export\s+const\s+csr(?:\s*:\s*boolean)?\s*=\s*(true|false)/;
 /** Read `export const csr = true|false` from a route options file; `undefined` if unset/absent. */
 export function read_csr(file) {
 	try {
-		const src = fs.readFileSync(file, 'utf-8');
+		let src = fs.readFileSync(file, 'utf-8');
+		// Strip comments so a COMMENTED-OUT `export const csr = …` never wins the (first-match) regex —
+		// e.g. a stale `// export const csr = true` above a real `export const csr = false` would
+		// otherwise read `true` and make ogygia strip islands from a page Kit renders csr=false. Block
+		// comments, plus WHOLE-LINE `//` comments only (a partial-line `//` is left so it can't eat a
+		// `://` inside a string; a trailing comment can't flip the reading — the real export matches first).
+		src = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 		const m = CSR_EXPORT.exec(src);
 		return m ? m[1] === 'true' : undefined;
 	} catch {

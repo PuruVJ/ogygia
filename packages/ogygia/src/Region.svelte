@@ -27,6 +27,8 @@
 	import { makeRegionEndpoint, mintServerIsland } from 'virtual:ogygia/region-endpoint';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
+	import { page } from '$app/state';
+	import { record_page } from './page-seed-registry.js';
 	import { isNested, setNested, isCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { TRANSPORT_WIRE_KEY, reduce_transportable } from './live-transport.js';
 	import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet, prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
@@ -144,6 +146,23 @@
 	const is_server = __mode === 'server';
 	// svelte-ignore state_referenced_locally
 	const is_lake = __mode === 'lake';
+
+	// Capture the page snapshot for the island seed. On SSR this reads Kit's REAL `$app/state` page —
+	// the only place the resolved load `data` is reachable (Kit merges it locally in render.js, never
+	// on RequestState, and reading page in a hook throws). The handle records it into the
+	// `application/ogygia-page` seed, so a hydrated island's `$page.data` / `.form` / `.error` /
+	// `.status` are populated (boundary law: page.data crosses). No-op on the client (recorder unset;
+	// the client `page` is already the shim seed), and a harmless no-op in an isolated server-island
+	// endpoint render (no recorder installed there either). `untrack` — one snapshot read, no dep.
+	if (typeof window === 'undefined') {
+		untrack(() => {
+			try {
+				record_page({ data: page.data, form: page.form, error: page.error, status: page.status });
+			} catch {
+				/* isolated render without a live page — the recorder is unset there anyway */
+			}
+		});
+	}
 
 	// Nested rule (islands/server): a region inside an already-awake region hydrates with its parent,
 	// so it degrades to a plain inline render. Read once at init (a wrapper's mode is fixed per usage).

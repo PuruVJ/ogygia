@@ -145,6 +145,19 @@ try {
 		out.push('SKIP  remount swr demo (no [data-swr-demo] on page)');
 	}
 
+	// ── REGRESSION: two same-component lakes in one island keep their OWN content ──────────────────
+	// lift/restore pairs lifted frozen DOM back by POSITION; a shared entry id must not funnel both
+	// frags into the first box (which left the second empty before the fix).
+	await page.goto(base + '/two-lakes', { waitUntil: 'load' });
+	await sleep(300);
+	const first = page.locator('[data-tlh-first] [data-frozen-box]');
+	const second = page.locator('[data-tlh-second] [data-frozen-box]');
+	check('two lakes: both frozen boxes present', (await first.count()) === 1 && (await second.count()) === 1);
+	const firstLabel = await page.locator('[data-tlh-first] [data-frozen-label]').textContent().catch(() => null);
+	const secondLabel = await page.locator('[data-tlh-second] [data-frozen-label]').textContent().catch(() => null);
+	check('first lake kept its OWN content', firstLabel?.trim() === 'alpha-lake', `first=${firstLabel}`);
+	check('second lake kept its OWN content (not empty / not the first lake\'s)', secondLabel?.trim() === 'beta-lake', `second=${secondLabel}`);
+
 	await page.close();
 } finally {
 	await browser.close();

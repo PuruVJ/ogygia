@@ -24,8 +24,9 @@ The runtime surface. Import the namespace (`import * as ogygia from 'ogygia'`) o
 | `script` | function | Serialize a self-contained function into a blocking inline `<script>` string. See [Pre-hydration scripts](#ogygia-pre-hydration-scripts). |
 | `preload` | function | Warm a deferred/live region's HTML now, before its binder wakes: `preload(region(…))`. See [held regions](/docs/regions/held-regions). |
 | `preference` | function | A persisted, site-wide client choice that flips a CSS state with no shipped JS beyond one pre-paint script: the theme / code-language / tabs primitive. |
-| `createContext` | function | Mint a typed cross-island context (no string key), paired with `<Context>`. See [Shared state](/docs/data-state/state-context). |
-| `Context` | component | Provide a `createContext()` value to islands below it across the DOM: `<Context of={ctx} value={v}>`. |
+| `createContext` | function | Typed sugar over a string context key: `createContext('key')`, callable for a `<Provide>` entry, `.get()` to read. See [state & context](/docs/data-state/state-context). |
+| `Provide` | component | Provide context values to islands below it across the DOM: `<Provide values={[ctx(v)]}>`. |
+| `setContext` | function | Drop-in for Svelte's `setContext` that also bridges string-keyed values to child islands (the flat page root). |
 | `hydratedBy` | function | Which schedule woke this hydration root (e.g. `'interaction'`). Call during setup, like `getContext`. |
 
 Types: `RegionValue`, `AwaitableRegion`, `InlineRegion`, `DualRegion`, `DeferredRegion`, `TransportCodec`.

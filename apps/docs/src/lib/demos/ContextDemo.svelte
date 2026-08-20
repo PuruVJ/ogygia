@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Context } from 'ogygia';
+	import { Provide } from 'ogygia';
 	import CtxCount from './CtxCount.svelte' with { wake: 'load' };
 	import CtxAdd from './CtxAdd.svelte' with { wake: 'load' };
 	import { Cart, cartCtx } from './cart-store.svelte.js';
@@ -9,12 +9,12 @@
 	const cart = new Cart();
 </script>
 
-<Context of={cartCtx} value={cart}>
+<Provide values={[cartCtx(cart)]}>
 	<div class="ctx-demo-row">
 		<div class="ctx-demo"><CtxCount /></div>
 		<div class="ctx-demo"><CtxAdd /></div>
 	</div>
-</Context>
+</Provide>
 
 <style>
 	.ctx-demo-row {

@@ -46,3 +46,6 @@ dist/
 /talks/*/node_modules/
 /talks/*/dist/
 /talks/*/.slidev/
+
+# Claude Code local (machine-specific) settings
+.claude/settings.local.json

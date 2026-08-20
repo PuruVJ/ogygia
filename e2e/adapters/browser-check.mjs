@@ -40,7 +40,10 @@ try {
 	const html = await (await fetch(base + '/')).text();
 	line(/data-title/.test(html), 'page server-rendered (SSR HTML present)');
 
-	const rt = html.match(/\/_app\/immutable\/og-runtime\.[a-z0-9]+\.js/)?.[0];
+	// Hash charset is Vite/rolldown's: hex plus the `-`/`_` that the feature-set busting adds a second
+	// segment with (e.g. `og-runtime.025962a09ea0-3d150168.js`). Keep it broad so a valid filename never
+	// reads as "none".
+	const rt = html.match(/\/_app\/immutable\/og-runtime\.[\w-]+\.js/)?.[0];
 	line(!!rt, 'runtime script referenced in HTML', rt || 'none');
 	if (rt) line((await status(base + rt)) === 200, 'runtime script serves 200 (the 404 regression)', rt);
 

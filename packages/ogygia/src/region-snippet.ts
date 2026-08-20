@@ -131,18 +131,26 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 }
 
 /** Freeze a plain snippet to a static region snippet by SSR-rendering it once (SERVER only). A snippet
- *  that needs parameters can't be frozen — surface that as the actionable boundary error. */
-function capture_static(snippet: Snippet): RegionSnippet {
+ *  that needs parameters can't be frozen — surface that as the actionable boundary error. `label` names
+ *  the island prop when known, so a plain function passed by mistake points at the right prop. */
+function capture_static(snippet: Snippet, label?: string): RegionSnippet {
 	let body: string;
 	try {
 		body = ssr_render(RenderSnippet, { props: { s: snippet } }).body;
 	} catch (e) {
+		// A Svelte snippet is just a function, so ogygia can't tell a real snippet from a plain
+		// callback until it tries to render it — which is HERE. Lead with "function" (not "snippet"):
+		// the most common cause is a plain function passed as a prop, which never crosses an island.
+		const where = label ? `prop \`${label}\`` : 'a function prop';
 		throw new Error(
-			`[ogygia] a snippet can't cross an island boundary statically — ${e instanceof Error ? e.message : String(e)}. ` +
-				`Two things can't be frozen to HTML: a snippet with PARAMETERS (name it as a {#snippet} so it ` +
-				`crosses LIVE, or pass the data as serializable props), and — for now — children that contain a ` +
-				`NESTED island (freezing re-renders it; keep nested islands out of frozen children until slot ` +
-				`islands land).`
+			`[ogygia] ${where} is a function that can't cross the island boundary — ` +
+				`${e instanceof Error ? e.message : String(e)}. Island props must be SERIALIZABLE; a function ` +
+				`crosses only as a Svelte snippet that freezes to HTML, and this one didn't. Usually one of:\n` +
+				`  • it's a PLAIN function (an event handler / callback) — those can't cross into an island; ` +
+				`pass serializable data as props and keep the behavior inside the island component;\n` +
+				`  • it's a snippet WITH PARAMETERS — declare it as a {#snippet} so it crosses LIVE, or pass ` +
+				`its data as props;\n` +
+				`  • it's children containing a NESTED island — keep those out of frozen children for now.`
 		);
 	}
 	return make({ m: 'static', h: body });
@@ -200,7 +208,7 @@ export function prepare_region_props(props: Record<string, unknown>): Record<str
 	for (const k in props) {
 		const v = props[k];
 		if (typeof v === 'function' && !(v as RegionSnippet).__ogRegion) {
-			(out ??= { ...props })[k] = capture_static(v as Snippet);
+			(out ??= { ...props })[k] = capture_static(v as Snippet, k);
 		}
 	}
 	return out ?? props;

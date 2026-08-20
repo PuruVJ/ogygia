@@ -24,6 +24,8 @@
   · <code>Lakes</code>
   · <code>Remote functions</code>
   · <code>Async Svelte</code>
+  · <code>Streaming $page.data</code>
+  · <code>Cross-island context</code>
   · <code>Form actions</code>
   · <code>SPA router</code>
   · <code>View Transitions</code>
@@ -96,6 +98,39 @@ For a chunk that downloads only after a click, use a host island and plain
 `await import('./Widget.svelte')` (no region attributes) — that mounts a **regular** component, not a second island. Docs: [pesky patterns](https://ogygia.puruvj.dev/#patterns-dynamic-import) · [playground demo](https://ogygia.puruvj.dev/playground/on-demand).
 
 Trust boundaries and design constraints: [`INVARIANTS.md`](../../internal/notes/INVARIANTS.md) in the monorepo root.
+
+## Page data
+
+`$page.data` — your `load` data, plus `url` / `params` / `route` / `status` / `form` / `error` — reads inside an island exactly like a Kit page:
+
+```svelte
+<script>
+	import { page } from '$app/state';
+</script>
+
+<p>Bonjour {page.data.user.name} — {page.url.pathname}</p>
+```
+
+A `load` that returns a **promise** streams into the island: the shell and the island’s `{#await}` pending branch paint immediately (first paint is never blocked on the slowest promise), and each promise resolves live as it settles. Rejections show `{:catch}`; custom `transport` types round-trip. Docs: [page data](https://ogygia.puruvj.dev/docs/data-state/page-data).
+
+## Shared state & context
+
+Each island is its own hydration root, so a value handed between islands crosses a **serialization** boundary. A live class opts in with a `wire` codec, and every island that receives it shares **one live instance** — mutate it in one, the others repaint:
+
+```svelte
+<script>
+	import Count from './Count.svelte' with { wake: 'load' };
+	import Add from './Add.svelte' with { wake: 'visible' };
+	import { Cart } from './cart.svelte.js'; // a class with a static `wire` codec
+
+	const cart = new Cart();
+</script>
+
+<Count {cart} />
+<Add {cart} />
+```
+
+To reach islands scattered down a subtree without prop drilling, provide it once as **context** — or adopt cross-island context in an existing `csr = false` layout by swapping `import { setContext } from 'svelte'` to `from 'ogygia'`. Docs: [state &amp; context](https://ogygia.puruvj.dev/docs/data-state/state-context).
 
 ## Live regions
 

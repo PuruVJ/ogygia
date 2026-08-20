@@ -21,7 +21,7 @@ const ctx = {
 	importKeys: {},
 	idSalt: '',
 	clientBindingStub: 'virtual:ogygia/client-binding-stub',
-	csrTrue: false
+	routeCsr: undefined
 };
 
 // A snippet forwarded into a hydrate island, whose body captures THREE names from one import.

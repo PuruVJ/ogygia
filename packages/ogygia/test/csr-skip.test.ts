@@ -120,4 +120,16 @@ describe('read_csr — export shapes', () => {
 		const dir2 = routes({ '+layout.ts': 'export const csr : boolean = true;\n' });
 		expect(read_csr(join(dir2, '+layout.ts'))).toBe(true);
 	});
+
+	it('a COMMENTED-OUT csr export does not win over the real one (regression)', () => {
+		// Line comment above the real export — the real `false` must win, not the commented `true`.
+		const dir = routes({ '+layout.ts': '// export const csr = true\nexport const csr = false;\n' });
+		expect(read_csr(join(dir, '+layout.ts'))).toBe(false);
+		// Block comment.
+		const dir2 = routes({ '+layout.ts': '/* export const csr = true */\nexport const csr = false;\n' });
+		expect(read_csr(join(dir2, '+layout.ts'))).toBe(false);
+		// A `://` inside a string on another line must not be mistaken for a comment and eat the export.
+		const dir3 = routes({ '+layout.ts': 'const u = "https://x.test";\nexport const csr = false;\n' });
+		expect(read_csr(join(dir3, '+layout.ts'))).toBe(false);
+	});
 });

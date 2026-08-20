@@ -6,6 +6,6 @@ import { SharedCounter } from './counter-object.svelte.js';
  * across islands; `themeCtx` carries a plain string (snapshot) and has a default; `orphanCtx` is
  * never provided anywhere, so every consumer must fall back to its default.
  */
-export const roomCtx = ogygia.createContext<SharedCounter>();
-export const themeCtx = ogygia.createContext('light');
-export const orphanCtx = ogygia.createContext('orphan-default');
+export const roomCtx = ogygia.createContext<SharedCounter>('room');
+export const themeCtx = ogygia.createContext<string>('theme', 'light');
+export const orphanCtx = ogygia.createContext<string>('orphan', 'orphan-default');
