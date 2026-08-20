@@ -267,6 +267,36 @@ class. A fresh instance per file, discarded after — organizes EPHEMERAL state,
   of small helpers); the CROSS-phase state is `#fields`, which is the point.
 - **`ir.ts` MacroCall + `parse/svelte.ts`** are the only unrealized design names — a thin parse wrapper +
   a macro-call type; low value, not blocking.
-- **`driver.emit()` / `driver.invalidate()`.** Only `driver.transform()` was pulled Vite-free; the
-  emit dispatch + HMR invalidation stay in the adapter (they read `options.ssr`, `this.emitFile`,
-  the dev server) — a follow-up if the REPL adapter ever needs them driver-side.
+- **`driver.emit()` / `driver.invalidate()`.** The emit dispatch + HMR invalidation stay in the adapter:
+  the `load` if-chain is already thin (nearly every branch is a one-liner delegating to a pure `link/`
+  emitter) and it reads MUTABLE build state (`hashed_runtime_url` set in buildStart, `universal_hooks` in
+  configResolved, the dev server) — folding it into the driver would thread mutable state through the
+  hottest hook for near-zero gain, against the perf invariant. Correctly adapter-side.
+
+### The whole front-end is now in the driver (2026-08-21)
+
+A second pass pulled the rest of the file-local + discovery front-end Vite-free, and the adapter went
+**2063 → 1518** lines (from 2752 at the very start — 45% off). All byte-identical (digest still
+`e27d5db6·ad66d3f3`; guarded by tsc + 1008 unit + 48 e2e).
+
+- **`Compiler.macros(source, id)`** — the ordered `import.meta.og.*` leg (wire/$/store/auto-brand/code/
+  bake) as one driver call (`compiler/macros/pipeline.ts::run_module_macros`). `dollar_hoists` (the og.$
+  fn-manifest map) moved onto the Compiler; `CompileCtx` grew `resolve_alias` / `markdown_config` /
+  `pkg_root` so the passes read config from the ctx, not the adapter.
+- **`Compiler.ts_regions(source, id)`** — ts/js region minting; DRYs the two identical call sites
+  (prescan + transform hook) that each rebuilt an 8-field opts block from adapter state.
+- **`Compiler.prescan()`** — whole-app island discovery (walk src/, transform + mint + register, complete
+  island_graph transitively, finalize runtime marks). Owns its own once-per-session guard (`#scanned`),
+  so the adapter's `scanned` let is gone and six call sites collapse to `compiler.prescan()`.
+  `runtime_feature_hash` moved onto the `Program` (it is derived from `runtime_marks`, which lives there).
+- **The spine is now reachable + proven standalone.** `compiler/index.ts` (`ogygia/internal/compiler`)
+  re-exports `Compiler` / `Program` / `CompileCtx`; `test/standalone-driver.test.ts` drives transform /
+  ts_regions / macros with ZERO Vite (imports only `../dist/compiler/index.js`). The "a REPL is just a
+  second adapter" thesis is now executable, not aspirational.
+- **Config validation** (`assert_no_legacy_options` / `validate_region_presets` /
+  `validate_content_presets`) moved to `vite/options.ts`, next to the option types it guards.
+
+The adapter's remaining bulk (`config`/`configResolved`/`resolveId`/`load`/`buildStart`/`writeBundle`/
+`renderChunk`/`handleHotUpdate`) is irreducibly-Vite orchestration — the `< 500` line target would only
+be met by pushing `this.emitFile` / `this.resolve` / mutable-state dispatch into the driver, which the
+perf invariant forbids. This is the correct end state, not a stopping-short.
