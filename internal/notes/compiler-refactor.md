@@ -237,19 +237,27 @@ went **2752 → 2063** lines.
 - **The module tree:** `parse/` (oxc + scan = og-lexer⊕og-extract), `macros/` (code/bake/wire/dollar/
   store/dedent), `content/` (regions/loaders/git/transportables), `link/` (manifest/server-manifest/
   island-deps/runtime-entry/transport/caps/router-config/speculation — the whole-program emitters, each
-  a pure `(…) => string`), `dev/` (hmr/dev-hmr/css-scope), `region/` (identity + the fused transform).
+  a pure `(…) => string`), `dev/` (hmr/dev-hmr/css-scope), `region/` (identity + emit + the fused transform).
 - **The adapter split:** `vite/sourcemaps.ts` (the island-sourcemap sub-plugin as a factory). The
   adapter still owns the irreducibly-Vite orchestration (resolveId, the `load` dispatch, buildStart
   prescan/emitFile, generate/writeBundle, handleHotUpdate) — `run_transform` is now an alias for
   `compiler.transform`.
 
-### Deferred (the design's optional finishing move)
+### The region/ split — the SAFE halves landed, the IR seam deferred
 
-- **The analyze/lower/emit IR split** inside `region/`. `transform.ts` stays the FUSED phase module
-  (`region/transform.ts`) — exactly the fallback this note sanctions. Only `region/identity.ts` (the
-  join key) was carved out. Splitting the 2500-line `transformHost` into `analyze.ts` (AST → `FileIR`)
-  + `lower.ts` + `emit.ts` + `ir.ts` (+ `parse/svelte.ts`) is correctness-critical; do it only when it
-  lands byte-identical, per the invariant. `IslandDescriptor` already lives in `program.ts`.
+`region/` now holds three modules: `identity.ts` (the join key — strategyKey/regionIdentity/regionId),
+`emit.ts` (the `descriptor → source` codegen — entry/wrapper/binding-leg emitters, pure leaves), and
+`transform.ts` (still the FUSED analyze+lower pass — `transformHost` / `transformTsRegions`).
+`regionBindingVirtualId` moved to `ids.ts` to keep a one-way flow (no emit↔transform cycle).
+
+- **The analyze/lower IR split is DEFERRED** — assessed against the code and found NOT cleanly
+  separable. `transformHost` is ~1100 lines where analysis (`visit_usages` mark/usage walk), the
+  MagicString, ~12 lowering closures capturing `ctx`/`lang`/the live `ast`, and a lowering loop that
+  interleaves emit + rewrite all share one mutable scope. A two-pass `analyze() → FileIR → lower()`
+  split would thread ~25 values (incl. the AST) across the seam and risks a reorder / capture-timing
+  byte change. Per the invariant ("if a clean split risks a byte, stop"), it stays fused. `ir.ts`
+  (FileIR/RegionMark/MacroCall) + `parse/svelte.ts` land with that split if it is ever done byte-
+  identically. `IslandDescriptor` already lives in `program.ts`.
 - **`driver.emit()` / `driver.invalidate()`.** Only `driver.transform()` was pulled Vite-free; the
   emit dispatch + HMR invalidation stay in the adapter (they read `options.ssr`, `this.emitFile`,
   the dev server) — a follow-up if the REPL adapter ever needs them driver-side.
