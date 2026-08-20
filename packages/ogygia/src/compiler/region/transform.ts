@@ -2054,105 +2054,134 @@ class TsRegionCompilation {
 	#source;
 	#id;
 	#ctx;
+	#import_keys;
+	#regionKey;
+	#wakeKey;
+	#path;
+	#root;
+	#salt;
+	#rel_host;
 
 	constructor(source, id, ctx) {
 		this.#source = source;
 		this.#id = id;
 		this.#ctx = ctx;
+		this.#import_keys = normalize_import_keys(ctx.importKeys);
+		this.#regionKey = this.#import_keys.region;
+		this.#wakeKey = this.#import_keys.wake;
+		this.#path = ctx.pathModule;
+		this.#root = ctx.root;
+		this.#salt = ctx.idSalt || '';
+		this.#rel_host = this.#path.relative(this.#root, id).split(PATH_SEP).join('/');
+	}
+
+	/** Root-relative posix path (see FileCompilation#posix_rel). */
+	#posix_rel(abs) {
+		return this.#path.relative(this.#root, abs).split(PATH_SEP).join('/');
+	}
+
+	/**
+	 * Same policy as transformHost's resolve_component_path: $lib/relative → absolute file path,
+	 * anything else (package specifier / alias) is kept verbatim and re-emitted for Vite to resolve.
+	 */
+	#resolve_spec(spec) {
+		const ctx = this.#ctx;
+		const path = this.#path;
+		if (typeof spec !== 'string' || !spec.trim()) return null;
+		if (spec === '$lib' || spec.startsWith('$lib/')) {
+			return path.join(ctx.libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
+		}
+		if (spec.startsWith('.')) return path.resolve(path.dirname(this.#id), spec);
+		return spec;
+	}
+
+	/** Region-identity path — filesystem components key on their posix path; a package spec is its own. */
+	#component_identity(p) {
+		return this.#path.isAbsolute(p) ? this.#posix_rel(p) : p;
+	}
+
+	#wrapper_path_for(wid: string) {
+		const ctx = this.#ctx;
+		return typeof ctx.wrapperPathFor === 'function' ? ctx.wrapperPathFor(this.#id, wid) : wrapperVirtualId(wid);
+	}
+
+	// The ONE `.ts`/`.js` region emitter — shared by the `with { … }` import form and the
+	// `import.meta.og.asRegion(…)` macro (which additionally resolves a barrel `exportName`). A
+	// `region: 'raw'` marker → a bare held descriptor; a `wake:` marker → a MOUNTABLE held island (the
+	// same `make_wake_island` record the `.svelte` host uses; `held: true` so it also crosses the wire).
+	// Its identity stays `held:*` — distinct from a `.svelte` PLACED island (`hydrate:*`, no endpoint).
+	// Returns `{ iid, record }` for the caller to register + rewrite. `exportName` is undefined for a
+	// default import, the barrel export name for a named one.
+	#emit_ts_region(
+		componentPath: string,
+		marker: { region?: string; wake?: string },
+		exportName?: string
+	): { iid: string; record: object } {
+		const comp_rel = this.#component_identity(componentPath);
+		const id_base = exportName && exportName !== 'default' ? `${comp_rel}#${exportName}` : comp_rel;
+		if (marker.region != null) {
+			normalize_region_value(marker.region, this.#rel_host, this.#regionKey);
+			const identity = regionIdentity(id_base, { strategy: 'held', options: {} });
+			const iid = regionId(identity, this.#salt);
+			const entryPath = this.#ctx.virtualPathFor(this.#id, iid);
+			return {
+				iid,
+				record: make_region_binding({
+					iid,
+					componentPath,
+					entryPath,
+					hostPath: this.#id,
+					moduleUrl: this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+					exportName,
+					identity
+				})
+			};
+		}
+		const strategy = normalize_hydrate_value(marker.wake as string, this.#rel_host, this.#wakeKey);
+		const hydrateMargin =
+			strategy === 'visible' && this.#ctx.visibleMargin != null ? this.#ctx.visibleMargin : undefined;
+		const identity = regionIdentity(id_base, {
+			strategy: 'held',
+			options: hydrateMargin ? { hydrate: strategy, hydrateMargin } : { hydrate: strategy }
+		});
+		const iid = regionId(identity, this.#salt);
+		const entryPath = this.#ctx.virtualPathFor(this.#id, iid);
+		return {
+			iid,
+			record: make_wake_island({
+				iid,
+				componentPath,
+				entryPath,
+				wrapperPath: this.#wrapper_path_for(iid),
+				moduleUrl: this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+				strategy,
+				options: hydrateMargin ? { margin: hydrateMargin } : {},
+				hostPath: this.#id,
+				identity,
+				lang: '',
+				held: true,
+				exportName
+			})
+		};
 	}
 
 	run() {
 		const source = this.#source;
 		const id = this.#id;
 		const ctx = this.#ctx;
-		const import_keys = normalize_import_keys(ctx.importKeys);
-		const regionKey = import_keys.region;
-		const wakeKey = import_keys.wake;
+		const import_keys = this.#import_keys;
+		const regionKey = this.#regionKey;
+		const wakeKey = this.#wakeKey;
 		// cheap bail — a held import (`with { region|wake }`) OR the `import.meta.og.asRegion(…)` macro.
 		const has_as_region = source.includes('asRegion');
 		if (!has_as_region && ((!source.includes(regionKey) && !source.includes(wakeKey)) || !source.includes('with')))
 			return null;
 
-		const path = ctx.pathModule;
-		const root = ctx.root;
-		const salt = ctx.idSalt || '';
-		const rel_host = path.relative(root, id).split(PATH_SEP).join('/');
-		const posix_rel = (abs) => path.relative(root, abs).split(PATH_SEP).join('/');
+		const path = this.#path;
+		const root = this.#root;
+		const salt = this.#salt;
+		const rel_host = this.#rel_host;
 
-		// Same policy as transformHost's resolve_component_path: $lib/relative → absolute file path,
-		// anything else (package specifier / alias) is kept verbatim and re-emitted for Vite to resolve.
-		const resolve_spec = (spec) => {
-			if (typeof spec !== 'string' || !spec.trim()) return null;
-			if (spec === '$lib' || spec.startsWith('$lib/')) {
-				return path.join(ctx.libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
-			}
-			if (spec.startsWith('.')) return path.resolve(path.dirname(id), spec);
-			return spec;
-		};
-		const component_identity = (p) => (path.isAbsolute(p) ? posix_rel(p) : p);
-
-		const wrapper_path_for = (wid: string) =>
-			typeof ctx.wrapperPathFor === 'function' ? ctx.wrapperPathFor(id, wid) : wrapperVirtualId(wid);
-
-		// The ONE `.ts`/`.js` region emitter — shared by the `with { … }` import form and the
-		// `import.meta.og.asRegion(…)` macro (which additionally resolves a barrel `exportName`). A
-		// `region: 'raw'` marker → a bare held descriptor; a `wake:` marker → a MOUNTABLE held island (the
-		// same `make_wake_island` record the `.svelte` host uses; `held: true` so it also crosses the wire).
-		// Its identity stays `held:*` — distinct from a `.svelte` PLACED island (`hydrate:*`, no endpoint).
-		// Returns `{ iid, record }` for the caller to register + rewrite. `exportName` is undefined for a
-		// default import, the barrel export name for a named one.
-		const emit_ts_region = (
-			componentPath: string,
-			marker: { region?: string; wake?: string },
-			exportName?: string
-		): { iid: string; record: object } => {
-			const comp_rel = component_identity(componentPath);
-			const id_base = exportName && exportName !== 'default' ? `${comp_rel}#${exportName}` : comp_rel;
-			if (marker.region != null) {
-				normalize_region_value(marker.region, rel_host, regionKey);
-				const identity = regionIdentity(id_base, { strategy: 'held', options: {} });
-				const iid = regionId(identity, salt);
-				const entryPath = ctx.virtualPathFor(id, iid);
-				return {
-					iid,
-					record: make_region_binding({
-						iid,
-						componentPath,
-						entryPath,
-						hostPath: id,
-						moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
-						exportName,
-						identity
-					})
-				};
-			}
-			const strategy = normalize_hydrate_value(marker.wake as string, rel_host, wakeKey);
-			const hydrateMargin =
-				strategy === 'visible' && ctx.visibleMargin != null ? ctx.visibleMargin : undefined;
-			const identity = regionIdentity(id_base, {
-				strategy: 'held',
-				options: hydrateMargin ? { hydrate: strategy, hydrateMargin } : { hydrate: strategy }
-			});
-			const iid = regionId(identity, salt);
-			const entryPath = ctx.virtualPathFor(id, iid);
-			return {
-				iid,
-				record: make_wake_island({
-					iid,
-					componentPath,
-					entryPath,
-					wrapperPath: wrapper_path_for(iid),
-					moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
-					strategy,
-					options: hydrateMargin ? { margin: hydrateMargin } : {},
-					hostPath: id,
-					identity,
-					lang: '',
-					held: true,
-					exportName
-				})
-			};
-		};
 
 		const s = new MagicString(source);
 		const islands_by_id = new Map();
@@ -2182,13 +2211,13 @@ class TsRegionCompilation {
 					`[ogygia] ${rel_host}: a held-region import on '${local}' takes exactly one marker — \`${regionKey}: 'raw'\` (schedule set at the \`region()\` call) or \`${wakeKey}: '…'\` (baked schedule).`
 				);
 			}
-			const componentPath = resolve_spec(spec);
+			const componentPath = this.#resolve_spec(spec);
 			if (!componentPath) {
 				throw new Error(
 					`[ogygia] ${rel_host}: held-region import '${local}' needs a module specifier ($lib/…, relative, or a package specifier like 'pkg/component').`
 				);
 			}
-			const { iid, record } = emit_ts_region(
+			const { iid, record } = this.#emit_ts_region(
 				componentPath,
 				has_region ? { region: attrs.get(regionKey) } : { wake: attrs.get(wakeKey) }
 			);
@@ -2280,11 +2309,11 @@ class TsRegionCompilation {
 					const binding = import_binding_of(imp, comp_arg.name);
 					if (!binding || 'namespace' in binding)
 						throw as_err(local, `'${comp_arg.name}' must be a default or named import, not a namespace import.`);
-					const componentPath = resolve_spec(binding.source);
+					const componentPath = this.#resolve_spec(binding.source);
 					if (!componentPath) throw as_err(local, `could not resolve '${binding.source}'.`);
 					// Options object: `{ wake: '…' }` or `{ region: 'raw' }` — the same `.ts` surface as `with { … }`.
 					const marker = parse_ts_as_region_options(call_args[1], (msg) => as_err(local, msg), regionKey, wakeKey);
-					const { iid, record } = emit_ts_region(componentPath, marker, binding.exportName);
+					const { iid, record } = this.#emit_ts_region(componentPath, marker, binding.exportName);
 					if (!islands_by_id.has(iid)) islands_by_id.set(iid, record);
 					s.overwrite(node.start, node.end, `import ${local} from ${JSON.stringify(regionBindingVirtualId(iid))};`);
 					matched = true;
