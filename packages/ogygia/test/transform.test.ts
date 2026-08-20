@@ -742,3 +742,123 @@ describe('package-specifier island marks', () => {
 		);
 	});
 });
+
+describe('asRegion macro (import.meta.og.asRegion)', () => {
+	const asr = (script: string, markup: string) => run(wrap(script, markup))!;
+
+	test('named barrel import → island; entry imports the NAMED export; template keeps <H/>', () => {
+		const r = asr(
+			`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'load');`,
+			'<H title="Hi" />'
+		);
+		const iid = idFor('@acme/ui#Header', loadMark);
+		// the const is rewritten to a hoisted binding import; the tag stays <H … />
+		expect(r.code).toMatch(
+			new RegExp(`import H from ["']${wrapperVirtualId(iid).replace(/\./g, '\\.')}["']`)
+		);
+		expect(r.code).toMatch(/<H\s+title="Hi"\s*\/>/);
+		expect(r.code).not.toMatch(/import\.meta\.og\.asRegion/);
+		expect(r.islands).toHaveLength(1);
+		const island = r.islands[0];
+		expect(island.id).toBe(iid);
+		expect(island.source).toMatch(/import \{ Header as __OgygiaComp_[0-9a-f]+ \} from ["']@acme\/ui["']/);
+		expect(island.source).toMatch(/export default __OgygiaComp_/);
+		// wrapper's CSS-linkage import is named too (else a barrel has no default to pull)
+		expect(island.wrapperSource).toMatch(/import \{ Header as __OgygiaCss \} from ["']@acme\/ui["']/);
+	});
+
+	test('identity keys on source#exportName: two named exports of ONE barrel → two islands', () => {
+		const r = asr(
+			`import { Header, Footer } from '@acme/ui';\n` +
+				`const H = import.meta.og.asRegion(Header, 'load');\n` +
+				`const F = import.meta.og.asRegion(Footer, 'visible');`,
+			'<H /><F />'
+		);
+		expect(r.islands).toHaveLength(2);
+		expect(new Set(r.islands.map((i) => i.id)).size).toBe(2);
+		expect(r.islands.map((i) => i.id)).toContain(idFor('@acme/ui#Header', loadMark));
+	});
+
+	test('a default import works via asRegion too (default entry import)', () => {
+		const r = asr(`import Card from './Card.svelte';\nconst C = import.meta.og.asRegion(Card, 'idle');`, '<C />');
+		expect(r.islands).toHaveLength(1);
+		expect(r.islands[0].source).toMatch(/import __OgygiaComp_[0-9a-f]+ from ["'][^"']*Card\.svelte["']/);
+		expect(r.islands[0].source).not.toMatch(/import \{ /);
+	});
+
+	test('a fully-consumed barrel import is stripped from the host (no barrel in host chunk)', () => {
+		const r = asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'load');`, '<H />');
+		expect(r.code).not.toMatch(/from ['"]@acme\/ui['"]/);
+	});
+
+	test('a barrel import with a still-used non-component export is KEPT', () => {
+		const r = asr(
+			`import { Header, brand } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'load');`,
+			'<H />{brand}'
+		);
+		expect(r.code).toMatch(/from ['"]@acme\/ui['"]/); // brand still referenced → import stays
+	});
+
+	// ── misuse: loud build errors ────────────────────────────────────────────────
+	test('first arg not an imported component → error', () => {
+		expectThrows(
+			() => asr(`const H = import.meta.og.asRegion(NotImported, 'load');`, '<H />'),
+			/not an imported component/
+		);
+	});
+	test('namespace import → error', () => {
+		expectThrows(
+			() => asr(`import * as UI from '@acme/ui';\nconst H = import.meta.og.asRegion(UI, 'load');`, '<H />'),
+			/namespace import/
+		);
+	});
+	test('`let` binding → error (must be const)', () => {
+		expectThrows(
+			() => asr(`import { Header } from '@acme/ui';\nlet H = import.meta.og.asRegion(Header, 'load');`, '<H />'),
+			/must be bound with `const`/
+		);
+	});
+	test('double-marked (import attribute AND asRegion) → error', () => {
+		expectThrows(
+			() =>
+				asr(
+					`import Header from './Header.svelte' with { wake: 'load' };\nconst H = import.meta.og.asRegion(Header, 'idle');`,
+					'<H />'
+				),
+			/already marked an island/
+		);
+	});
+	test('unknown timing → error', () => {
+		expectThrows(
+			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'whenever');`, '<H />'),
+			/unknown wake/
+		);
+	});
+	test('mixed declarators in one statement → error', () => {
+		expectThrows(
+			() =>
+				asr(`import { Header } from '@acme/ui';\nconst x = 1, H = import.meta.og.asRegion(Header, 'load');`, '<H />'),
+			/its own `const/
+		);
+	});
+	test('NOT top-level (nested in a function) → error', () => {
+		expectThrows(
+			() =>
+				asr(
+					`import { Header } from '@acme/ui';\nfunction make() { const H = import.meta.og.asRegion(Header, 'load'); return H; }`,
+					'<div />'
+				),
+			/must be a top-level/
+		);
+	});
+	test('NOT top-level (in a for-loop block) → error', () => {
+		expectThrows(
+			() =>
+				asr(
+					`import { Header } from '@acme/ui';\nfor (let i = 0; i < 2; i++) { const H = import.meta.og.asRegion(Header, 'load'); }`,
+					'<div />'
+				),
+			/must be a top-level/
+		);
+	});
+});

@@ -171,5 +171,30 @@ interface ImportMeta {
 		 * client code.
 		 */
 		bake<T>(fn: () => T | Promise<T>): T;
+		/**
+		 * Mark an imported component as a PLACED ISLAND — the macro alternative to
+		 * `import X from '…' with { wake }`. Where the import-attribute form is default-import-only
+		 * (one `.svelte` file per import), `asRegion` marks ANY imported component, including a NAMED
+		 * export from a barrel (`import { Header } from '@design/system'`). `component` must be a bare
+		 * identifier bound to a top-level import; `timing` is the wake schedule — a string
+		 * (`'load' | 'idle' | 'visible' | 'interaction' | a media query`, default `'load'`) or an
+		 * options object. Returns a component with the SAME props, rendered as an island:
+		 * `const Header = import.meta.og.asRegion(HeaderImpl, 'load')`. Compile construct — the plugin
+		 * rewrites it to a hoisted binding import; there is no runtime `asRegion`.
+		 */
+		asRegion<C>(
+			component: C,
+			timing?:
+				| 'load'
+				| 'idle'
+				| 'visible'
+				| 'interaction'
+				| (string & {})
+				| {
+						wake?: 'load' | 'idle' | 'visible' | 'interaction' | (string & {});
+						margin?: string;
+						keep?: string;
+				  }
+		): C;
 	};
 }

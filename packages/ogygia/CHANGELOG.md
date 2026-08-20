@@ -8,6 +8,25 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`import.meta.og.asRegion(Comp, timing)` — mark a NAMED / barrel import as a placed island.** The
+  import-attribute form (`import X from './X.svelte' with { wake }`) only reaches a default import of
+  one file. `asRegion` marks any imported component — including a named re-export from a barrel
+  (`import { Header } from '@design/system'`) — as an island, with the same wake vocabulary
+  (`'load' | 'idle' | 'visible' | 'interaction' | a media query`, or an options object). It feeds the
+  same island pipeline; the entry just imports the component by its export name, and region identity
+  keys on `source#exportName` so two named exports of one barrel are distinct islands. **Tree-shaking
+  is preserved** — an island off a huge mixed barrel ships only its own component, not the barrel.
+  Compile construct — rewritten to a hoisted binding import; there is no runtime `asRegion`.
+
+  It is **top-level only**: `const Local = import.meta.og.asRegion(Comp, timing)` in the instance
+  `<script>`. Misuse is a loud build error — a call nested in a loop / function / block / expression,
+  in `<script module>` or markup; a `let`/`var` binding; a non-imported or namespace-imported first
+  argument; or a component already marked with an import attribute (use one mechanism, not both).
+
 ## [0.7.0] — 2026-08-19
 
 Cross-island context is now one model built on Svelte's own `getContext` — with a drop-in `setContext`

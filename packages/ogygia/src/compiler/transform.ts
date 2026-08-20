@@ -270,6 +270,47 @@ function is_media_query(val: string) {
 }
 
 /**
+ * Is `node` the member expression `import.meta.og.<prop>` (the macro namespace head)? Used to spot an
+ * `import.meta.og.asRegion(…)` call — the macro alternative to a `with { wake }` region import.
+ */
+function is_import_meta_og(node: any, prop: string): boolean {
+	return (
+		node?.type === 'MemberExpression' &&
+		node.property?.type === 'Identifier' &&
+		node.property.name === prop &&
+		node.object?.type === 'MemberExpression' &&
+		node.object.property?.type === 'Identifier' &&
+		node.object.property.name === 'og' &&
+		node.object.object?.type === 'MetaProperty' &&
+		node.object.object.meta?.name === 'import' &&
+		node.object.object.property?.name === 'meta'
+	);
+}
+
+/**
+ * Resolve a local name back to its import binding — the module specifier plus the EXPORT NAME it
+ * imports (`'default'` for `import X`, the imported name for `import { X }` / `import { A as X }`).
+ * Feeds asRegion: the island entry re-imports the component by this export name (barrel-friendly), and
+ * region identity keys on `source#exportName`. Namespace imports (`import * as X`) return `{ namespace }`.
+ */
+function import_binding_of(
+	node: any,
+	localName: string
+): { source: string; exportName: string } | { namespace: true } | null {
+	for (const spec of node.specifiers ?? []) {
+		if (spec.local?.name !== localName) continue;
+		if (spec.type === 'ImportDefaultSpecifier') return { source: node.source.value, exportName: 'default' };
+		if (spec.type === 'ImportSpecifier') {
+			const imported = spec.imported;
+			const name = imported?.type === 'Literal' ? String(imported.value) : imported?.name;
+			return { source: node.source.value, exportName: name };
+		}
+		if (spec.type === 'ImportNamespaceSpecifier') return { namespace: true };
+	}
+	return null;
+}
+
+/**
  * The `with { region: … }` marker has ONE value — `'raw'` (an adjective: "a raw/held region"). It
  * carries NO schedule: the wake timing is set at the `region()` call (`region(C, props, { wake })`)
  * or, in a block tree, per node. This is the only surviving import-attribute marker for a component
@@ -849,6 +890,19 @@ function transform_csr_true_host(source, id, has_island_hint, import_keys) {
 		}
 	}
 
+	// asRegion in a csr=true host degrades to the plain component (Kit renders it inline, no island):
+	// rewrite `const X = import.meta.og.asRegion(Comp, …)` → `const X = Comp`.
+	for (const node of ast.instance?.content?.body ?? []) {
+		if (node.type !== 'VariableDeclaration') continue;
+		for (const decl of node.declarations) {
+			const call = decl.init;
+			if (call?.type === 'CallExpression' && is_import_meta_og(call.callee, 'asRegion')) {
+				const comp = call.arguments?.[0];
+				if (comp?.type === 'Identifier') ms.overwrite(call.start, call.end, comp.name);
+			}
+		}
+	}
+
 	// Inject the csr-context marker at the top of the instance <script> (create one if absent —
 	// a `<script module>` runs once per module, not per instance, so it can't carry setContext).
 	if (ast.instance?.content) {
@@ -922,10 +976,10 @@ export function transformHost(source, id, ctx) {
 	const needs_csr_reset = ctx.routeCsr === false;
 
 	// cheap bailout — the library only touches region imports (configured key names), PLUS files that
-	// define a `{#snippet}` (a candidate portable snippet forwarded into an island). Files with a
-	// snippet but no island work return `null` unchanged at the end, so behavior is identical for them.
+	// define a `{#snippet}` (a candidate portable snippet forwarded into an island) or call the
+	// `import.meta.og.asRegion(…)` macro. Files with none of those return `null` unchanged at the end.
 	// A csr=false route host is never a pure bailout: it always carries the reset marker.
-	if (!has_island_hint && !source.includes('{#snippet')) {
+	if (!has_island_hint && !source.includes('{#snippet') && !source.includes('asRegion')) {
 		return needs_csr_reset ? inject_csr_reset(source, id) : null;
 	}
 
@@ -1237,11 +1291,165 @@ export function transformHost(source, id, ctx) {
 		// otherwise: a normal import that happens to carry other import attributes — leave it.
 	}
 
+	// ── import.meta.og.asRegion(Comp, timing) — barrel / named-import placed islands ─────────────
+	// The macro alternative to `import X from '…' with { wake }`: mark ANY imported component — named
+	// or default, including a barrel re-export the import-attribute form can't reach — as a placed
+	// island. `const Local = import.meta.og.asRegion(Comp, 'load')`. It feeds the SAME island pipeline
+	// as a marked import; the only twist is the entry/wrapper import the component by its EXPORT NAME,
+	// and region identity keys on `source#exportName` (so two named exports of one barrel are distinct
+	// islands, not a collision). Rewritten below to a hoisted `import Local from '<binding>'`.
+	const as_err = (local, msg) =>
+		new Error(`[ogygia] ${rel_host}: import.meta.og.asRegion (${local}) — ${msg}`);
+	/** Parse the timing arg (string shorthand OR `{ wake, margin, keep }`) into a wake mark. */
+	const as_region_mark = (arg, local) => {
+		let wake = 'load';
+		let margin;
+		let keep;
+		if (arg == null) {
+			wake = 'load';
+		} else if (arg.type === 'Literal' && typeof arg.value === 'string') {
+			wake = arg.value;
+		} else if (arg.type === 'ObjectExpression') {
+			for (const p of arg.properties ?? []) {
+				if (p.type !== 'Property' || p.computed) continue;
+				const key = p.key?.name ?? p.key?.value;
+				const val = p.value?.type === 'Literal' ? String(p.value.value) : undefined;
+				if (key === import_keys.wake || key === 'wake') {
+					if (val == null) throw as_err(local, '`wake` must be a string literal.');
+					wake = val;
+				} else if (key === 'margin') margin = val;
+				else if (key === 'keep') keep = val;
+			}
+		} else {
+			throw as_err(
+				local,
+				`timing must be a string ('load' | 'idle' | 'visible' | 'interaction' | a media query) or an options object.`
+			);
+		}
+		let strategy;
+		if (HYDRATE_STRATEGIES.has(wake) || is_media_query(wake)) strategy = wake;
+		else
+			throw as_err(
+				local,
+				`unknown wake '${wake}'. Use 'load' | 'idle' | 'visible' | 'interaction' | a media query. ` +
+					`(For a frozen region use the \`with { wake: 'none' }\` import form.)`
+			);
+		const options: { margin?: string; keep?: string } = {};
+		if (strategy === 'visible') options.margin = margin ?? ctx.visibleMargin ?? undefined;
+		if (keep) options.keep = keep;
+		return { strategy, options };
+	};
+
+	const as_regions: Array<{
+		local: string;
+		compLocal: string;
+		source: string;
+		exportName: string;
+		mark: { strategy: string; options: Record<string, unknown> };
+		node: { start: number; end: number };
+	}> = [];
+	const as_region_nodes = new Set(); // VariableDeclaration nodes overwritten below
+	for (const node of instance_body) {
+		if (node.type !== 'VariableDeclaration') continue;
+		const hits = node.declarations.filter(
+			(d) => d.init?.type === 'CallExpression' && is_import_meta_og(d.init.callee, 'asRegion')
+		);
+		if (hits.length === 0) continue;
+		// It rewrites to a hoisted `import` binding, so the shape is fixed: one `const` per statement.
+		if (node.kind !== 'const') {
+			throw as_err(
+				node.declarations[0]?.id?.name ?? '?',
+				`asRegion must be bound with \`const\` (not \`${node.kind}\`) — it compiles to an import binding.`
+			);
+		}
+		if (hits.length !== node.declarations.length) {
+			throw as_err(
+				node.declarations[0]?.id?.name ?? '?',
+				'keep each asRegion() in its own `const X = import.meta.og.asRegion(…)` statement.'
+			);
+		}
+		for (const decl of node.declarations) {
+			if (decl.id?.type !== 'Identifier') throw as_err('?', 'must bind to a plain `const Name = …`.');
+			const local = decl.id.name;
+			const call_args = decl.init.arguments ?? [];
+			const comp_arg = call_args[0];
+			if (!comp_arg || comp_arg.type !== 'Identifier')
+				throw as_err(local, 'the first argument must be a component you imported (a bare identifier).');
+			// Already an island via an import attribute — one mechanism per component, not both.
+			if (marked_components.has(comp_arg.name)) {
+				throw as_err(
+					local,
+					`'${comp_arg.name}' is already marked an island with an import attribute (\`with { … }\`). Use the import attribute OR asRegion, not both.`
+				);
+			}
+			const info = imports.get(comp_arg.name);
+			if (!info)
+				throw as_err(
+					local,
+					`'${comp_arg.name}' is not an imported component — import it first (e.g. \`import { ${comp_arg.name} } from './…'\`).`
+				);
+			const binding = import_binding_of(info.node, comp_arg.name);
+			if (!binding || 'namespace' in binding)
+				throw as_err(local, `'${comp_arg.name}' must be a default or named import, not a namespace import.`);
+			const mark = as_region_mark(call_args[1], local);
+			as_regions.push({
+				local,
+				compLocal: comp_arg.name,
+				source: binding.source,
+				exportName: binding.exportName,
+				mark,
+				node
+			});
+		}
+		as_region_nodes.add(node);
+	}
+
+	// TOP-LEVEL ONLY. Any other `import.meta.og.asRegion(…)` — nested in a loop / function / block /
+	// larger expression, or in `<script module>`, or in markup — can't become a hoisted import, so
+	// reject it loudly rather than leave the macro to crash at runtime. (Legal calls live inside the
+	// `as_region_nodes` statements, which are skipped here.)
+	const find_stray_as_region = (node) => {
+		if (!node || typeof node !== 'object') return null;
+		if (Array.isArray(node)) {
+			for (const n of node) {
+				const hit = find_stray_as_region(n);
+				if (hit) return hit;
+			}
+			return null;
+		}
+		if (node.type === 'CallExpression' && is_import_meta_og(node.callee, 'asRegion')) return node;
+		for (const k in node) {
+			if (k === 'type' || k === 'start' || k === 'end' || k === 'loc' || k === 'parent') continue;
+			const v = node[k];
+			if (v && typeof v === 'object') {
+				const hit = find_stray_as_region(v);
+				if (hit) return hit;
+			}
+		}
+		return null;
+	};
+	for (const place of [
+		...instance_body.filter((n) => !as_region_nodes.has(n)),
+		...module_body,
+		...(ast.fragment?.nodes ?? [])
+	]) {
+		const stray = find_stray_as_region(place);
+		if (stray) {
+			const arg = stray.arguments?.[0];
+			throw as_err(
+				arg?.type === 'Identifier' ? arg.name : '?',
+				'must be a top-level `const Name = import.meta.og.asRegion(Comp, timing)` in the instance <script> — ' +
+					'it compiles to a hoisted import, so it can never sit inside a loop, function, block, larger ' +
+					'expression, `<script module>`, or markup.'
+			);
+		}
+	}
+
 	// No islands here, but a `{#snippet}` may still need making portable (forwarded into an island by
 	// the component it's handed to). Keep going for those; the island passes below no-op with an empty
 	// `marked_components`, and the end guard returns `null` unchanged if no portable work happens.
 	// A csr=false route host still carries the reset marker even with no island/snippet work.
-	if (marked_components.size === 0 && !source.includes('{#snippet')) {
+	if (marked_components.size === 0 && as_regions.length === 0 && !source.includes('{#snippet')) {
 		return needs_csr_reset ? inject_csr_reset(source, id, ast) : null;
 	}
 
@@ -1372,16 +1580,24 @@ export function transformHost(source, id, ctx) {
 	// (Rolldown must not content-dedupe them into a facade that drops `export default`).
 	// Scale: same path+strategy → one id → one emitFile; N instances share this URL.
 	// Wrappers are NOT this entry — they are SSR/csr=true host bindings only.
-	const entry_source_for = (componentPath, iid) =>
+	// The component-import line for a generated module: a NAMED export (`import { Header as X }` — a
+	// barrel / asRegion component) or a plain default (`import X` — a `.svelte` file, a package default).
+	const component_import = (local, spec, exportName) =>
+		exportName && exportName !== 'default'
+			? `import { ${exportName} as ${local} } from ${JSON.stringify(spec)};`
+			: `import ${local} from ${JSON.stringify(spec)};`;
+
+	const entry_source_for = (componentPath, iid, exportName) =>
 		// The island entry loads on both client hydrate and server render. Importing the
 		// transportables manifest here registers every `[ogygia.wire]` codec before props are
 		// decoded, so an island receiving a transportable prop never needs to import the class
 		// itself (an `import type` that the compiler erases would otherwise leave decode blind).
 		`import 'virtual:ogygia/transportables';\n` +
-		`import __OgygiaComp_${iid} from ${JSON.stringify(componentPath)};\n` +
+		component_import(`__OgygiaComp_${iid}`, componentPath, exportName) +
+		'\n' +
 		`export default __OgygiaComp_${iid};\n`;
 
-	const hydrate_wrapper_source = (iid, componentPath, entryPath, strategy, options) => {
+	const hydrate_wrapper_source = (iid, componentPath, entryPath, strategy, options, exportName) => {
 		const strategy_attrs = strategy_to_attr(strategy, options);
 		const persist_attr = options?.keep ? ` __keep={${JSON.stringify(options.keep)}}` : '';
 		const entry_url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid);
@@ -1389,7 +1605,7 @@ export function transformHost(source, id, ctx) {
 			`<script${lang}>\n` +
 			`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
 			`\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
-			`\timport __OgygiaCss from ${JSON.stringify(componentPath)};\n` +
+			`\t${component_import('__OgygiaCss', componentPath, exportName)}\n` +
 			`\tlet { children, ...__props } = $props();\n` +
 			`</script>\n` +
 			// `children` rides as an EXPLICIT prop, never as template children: wrapping `{@render
@@ -1683,6 +1899,81 @@ export function transformHost(source, id, ctx) {
 				binding_rewrite(local, rewrite_path, componentPath)
 			);
 			rewritten_import_nodes.add(info.node);
+		}
+	}
+
+	// ── asRegion islands — same pipeline, named-export imports, identity by source#exportName ────
+	// Each `const Local = import.meta.og.asRegion(Comp, timing)` becomes a hoisted binding import; the
+	// component's own barrel import is stripped when asRegion is its only use, so the HOST chunk never
+	// pulls the barrel (the island entry imports the component itself, tree-shaken by the barrel).
+	const as_region_lines = new Map<{ start: number; end: number }, string[]>();
+	const as_region_locals = new Set<string>();
+	for (const reg of as_regions) {
+		as_region_locals.add(reg.compLocal);
+		const componentPath = resolve_component_path(reg.source, id, ctx);
+		if (!componentPath) throw as_err(reg.local, `could not resolve '${reg.source}'.`);
+		const comp_rel = component_identity(componentPath);
+		const id_base =
+			reg.exportName && reg.exportName !== 'default' ? `${comp_rel}#${reg.exportName}` : comp_rel;
+		const identity = regionIdentity(id_base, reg.mark);
+		const iid = regionId(identity, salt);
+		const entryPath = ctx.virtualPathFor(id, iid);
+		const wrapPath = wrapperPathFor(id, iid);
+		if (!islands_by_id.has(iid)) {
+			islands_by_id.set(iid, {
+				id: iid,
+				virtualPath: entryPath,
+				wrapperPath: wrapPath,
+				wrapperSource: hydrate_wrapper_source(
+					iid,
+					componentPath,
+					entryPath,
+					reg.mark.strategy,
+					reg.mark.options,
+					reg.exportName
+				),
+				source: entry_source_for(componentPath, iid, reg.exportName),
+				hostPath: id,
+				componentPath,
+				server: false,
+				kind: 'hydrate',
+				lakes: [],
+				identity,
+				strategy: reg.mark.strategy,
+				keep: reg.mark.options?.keep
+			});
+		}
+		const rewrite_path = link_virtual ? wrapPath : binding_stub;
+		const lines = as_region_lines.get(reg.node) ?? [];
+		lines.push(binding_rewrite(reg.local, rewrite_path, componentPath));
+		as_region_lines.set(reg.node, lines);
+	}
+	for (const [node, lines] of as_region_lines) {
+		s.overwrite(node.start, node.end, lines.join('\n'));
+	}
+	// Strip a component's import when EVERY specifier was consumed by asRegion and used nowhere else.
+	if (as_region_locals.size) {
+		const referenced_outside = (local) => {
+			for (const n of instance_body) {
+				if (n.type === 'ImportDeclaration' || as_region_nodes.has(n)) continue;
+				if (ast_refs_local(n, local)) return true;
+			}
+			for (const n of module_body) {
+				if (n.type === 'ImportDeclaration') continue;
+				if (ast_refs_local(n, local)) return true;
+			}
+			return ast_refs_local(ast.fragment?.nodes ?? [], local);
+		};
+		const seen = new Set();
+		for (const compLocal of as_region_locals) {
+			const info = imports.get(compLocal);
+			if (!info || seen.has(info.node)) continue;
+			seen.add(info.node);
+			const specs = info.node.specifiers ?? [];
+			const all_dead = specs.every(
+				(sp) => as_region_locals.has(sp.local.name) && !referenced_outside(sp.local.name)
+			);
+			if (all_dead && !rewritten_import_nodes.has(info.node)) imports_to_strip.add(info.node);
 		}
 	}
 
