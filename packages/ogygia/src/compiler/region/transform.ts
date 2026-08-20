@@ -1108,8 +1108,6 @@ class FileCompilation {
 	/** Walk the markup: enforce region-usage rules + surface whether a hydrate island has real
 	 *  children (the app then needs the wire slot revivers). Mutates #has_island_children. */
 	#visit_usages(nodes) {
-		const err = (specifiers, msg) =>
-			new Error(`[ogygia] ${this.#rel_host}: import { ${specifiers} } — ${msg}`);
 		for (const node of nodes ?? []) {
 			if (node.type === 'Component') {
 				const name = node.name || '';
@@ -1124,7 +1122,7 @@ class FileCompilation {
 				} else if (this.#marked_components.has(name)) {
 					const mark = this.#marked_components.get(name);
 					if (mark.strategy === 'lake') {
-						if (mark.options?.remount === 'swr') assert_swr_lake_crossable(node, err);
+						if (mark.options?.remount === 'swr') assert_swr_lake_crossable(node, (specifiers, msg) => this.#err(specifiers, msg));
 					} else if (mark.strategy === 'server' || mark.strategy === 'held') {
 						// Server islands render in isolation from serialized props (only the reserved
 						// fallback snippet crosses); held regions are minted as data. Snippets can't cross either.
@@ -1165,6 +1163,38 @@ class FileCompilation {
 	 */
 	#component_identity(p) {
 		return this.#ctx.pathModule.isAbsolute(p) ? this.#posix_rel(p) : p;
+	}
+
+	/** `[ogygia] host: import { … } — msg` — the region-import error formatter. */
+	#err(specifiers, msg) {
+		return new Error(`[ogygia] ${this.#rel_host}: import { ${specifiers} } — ${msg}`);
+	}
+
+	/** `[ogygia] host: import.meta.og.asRegion (local) — msg` — the asRegion error formatter. */
+	#as_err(local, msg) {
+		return new Error(`[ogygia] ${this.#rel_host}: import.meta.og.asRegion (${local}) — ${msg}`);
+	}
+
+	/** Read asRegion's options object into the same key→value map an import attribute produces, so the
+	 *  SHARED parser gives asRegion EXACTLY the import-attribute option surface. Object-only and
+	 *  string-valued — the same shape as a `with { … }` clause. */
+	#as_region_inline(arg, local) {
+		if (!arg || arg.type !== 'ObjectExpression') {
+			throw this.#as_err(
+				local,
+				`needs an options object — \`import.meta.og.asRegion(Comp, { wake: 'load' })\`, the same shape as \`with { … }\`.`
+			);
+		}
+		const inline = new Map<string, string>();
+		for (const p of arg.properties ?? []) {
+			if (p.type !== 'Property' || p.computed)
+				throw this.#as_err(local, 'options must be a plain object of string-valued keys.');
+			const key = p.key?.name ?? p.key?.value;
+			if (p.value?.type !== 'Literal' || typeof p.value.value !== 'string')
+				throw this.#as_err(local, `option \`${key}\` must be a string literal (region options are string-valued, exactly like an import attribute).`);
+			inline.set(String(key), String(p.value.value));
+		}
+		return inline;
 	}
 
 	/**
@@ -1260,8 +1290,6 @@ class FileCompilation {
 		const marked_components = (this.#marked_components = new Map());
 		const imports_to_strip = new Set<{ start: number; end: number }>(); // ImportDeclaration nodes to remove from host
 
-		const err = (specifiers, msg) =>
-			new Error(`[ogygia] ${rel_host}: import { ${specifiers} } — ${msg}`);
 
 		for (const node of instance_body) {
 			if (node.type !== 'ImportDeclaration') continue;
@@ -1277,7 +1305,7 @@ class FileCompilation {
 			const names = node.specifiers.map((sp) => sp.local.name).join(', ');
 
 			// One parser for the whole region option surface (shared with asRegion) → the mark.
-			const mark = this.#resolve_region_mark(inline, (m) => err(names, m));
+			const mark = this.#resolve_region_mark(inline, (m) => this.#err(names, m));
 			if (!mark) continue; // a plain import attribute we don’t claim
 			for (const spec of node.specifiers) marked_components.set(spec.local.name, mark);
 		}
@@ -1289,31 +1317,7 @@ class FileCompilation {
 		// as a marked import; the only twist is the entry/wrapper import the component by its EXPORT NAME,
 		// and region identity keys on `source#exportName` (so two named exports of one barrel are distinct
 		// islands, not a collision). Rewritten below to a hoisted `import Local from '<binding>'`.
-		const as_err = (local, msg) =>
-			new Error(`[ogygia] ${rel_host}: import.meta.og.asRegion (${local}) — ${msg}`);
 		const synthetic_export = new Map<string, string | undefined>(); // asRegion local -> export name
-
-		/** Read asRegion's options object into the same key→value map an import attribute produces, so the
-		 *  SHARED parser gives asRegion EXACTLY the import-attribute option surface. Object-only and
-		 *  string-valued — the same shape as a `with { … }` clause. */
-		const as_region_inline = (arg, local) => {
-			if (!arg || arg.type !== 'ObjectExpression') {
-				throw as_err(
-					local,
-					`needs an options object — \`import.meta.og.asRegion(Comp, { wake: 'load' })\`, the same shape as \`with { … }\`.`
-				);
-			}
-			const inline = new Map<string, string>();
-			for (const p of arg.properties ?? []) {
-				if (p.type !== 'Property' || p.computed)
-					throw as_err(local, 'options must be a plain object of string-valued keys.');
-				const key = p.key?.name ?? p.key?.value;
-				if (p.value?.type !== 'Literal' || typeof p.value.value !== 'string')
-					throw as_err(local, `option \`${key}\` must be a string literal (region options are string-valued, exactly like an import attribute).`);
-				inline.set(String(key), String(p.value.value));
-			}
-			return inline;
-		};
 
 		const as_regions: Array<{ local: string; compLocal: string; node: { start: number; end: number } }> = [];
 		const as_region_nodes = new Set(); // the const statements, overwritten via their synthetic import
@@ -1326,40 +1330,40 @@ class FileCompilation {
 			// It rewrites to a hoisted import binding spanning the whole statement, so the shape is fixed:
 			// exactly one `const` binding per asRegion statement.
 			if (node.kind !== 'const')
-				throw as_err(
+				throw this.#as_err(
 					node.declarations[0]?.id?.name ?? '?',
 					`asRegion must be bound with \`const\` (not \`${node.kind}\`) — it compiles to an import binding.`
 				);
 			if (node.declarations.length !== 1)
-				throw as_err(
+				throw this.#as_err(
 					node.declarations[0]?.id?.name ?? '?',
 					'declare one asRegion per `const X = import.meta.og.asRegion(…)` statement.'
 				);
 			const decl = node.declarations[0];
-			if (decl.id?.type !== 'Identifier') throw as_err('?', 'must bind to a plain `const Name = …`.');
+			if (decl.id?.type !== 'Identifier') throw this.#as_err('?', 'must bind to a plain `const Name = …`.');
 			const local = decl.id.name;
 			const call_args = decl.init.arguments ?? [];
 			const comp_arg = call_args[0];
 			if (!comp_arg || comp_arg.type !== 'Identifier')
-				throw as_err(local, 'the first argument must be a component you imported (a bare identifier).');
+				throw this.#as_err(local, 'the first argument must be a component you imported (a bare identifier).');
 			// Already an island via an import attribute — one mechanism per component, not both.
 			if (marked_components.has(comp_arg.name))
-				throw as_err(
+				throw this.#as_err(
 					local,
 					`'${comp_arg.name}' is already marked an island with an import attribute (\`with { … }\`). Use the import attribute OR asRegion, not both.`
 				);
 			const info = imports.get(comp_arg.name);
 			if (!info)
-				throw as_err(
+				throw this.#as_err(
 					local,
 					`'${comp_arg.name}' is not an imported component — import it first (e.g. \`import { ${comp_arg.name} } from './…'\`).`
 				);
 			const binding = import_binding_of(info.node, comp_arg.name);
 			if (!binding || 'namespace' in binding)
-				throw as_err(local, `'${comp_arg.name}' must be a default or named import, not a namespace import.`);
+				throw this.#as_err(local, `'${comp_arg.name}' must be a default or named import, not a namespace import.`);
 			// SAME parser as `with { … }` → exactly the same option surface, no more no less.
-			const mark = this.#resolve_region_mark(as_region_inline(call_args[1], local), (m) => as_err(local, m));
-			if (!mark) throw as_err(local, 'needs a `wake`, `render`, `region`, or `preset` option.');
+			const mark = this.#resolve_region_mark(this.#as_region_inline(call_args[1], local), (m) => this.#as_err(local, m));
+			if (!mark) throw this.#as_err(local, 'needs a `wake`, `render`, `region`, or `preset` option.');
 
 			// Register as a SYNTHETIC default-import: a fake ImportDeclaration spanning the `const` statement
 			// (so the main region loop's rewrite replaces the const with the binding import) whose source is
@@ -1396,7 +1400,7 @@ class FileCompilation {
 			const stray = this.#find_stray_as_region(place);
 			if (stray) {
 				const arg = stray.arguments?.[0];
-				throw as_err(
+				throw this.#as_err(
 					arg?.type === 'Identifier' ? arg.name : '?',
 					'must be a top-level `const Name = import.meta.og.asRegion(Comp, timing)` in the instance <script> — ' +
 						'it compiles to a hoisted import, so it can never sit inside a loop, function, block, larger ' +
@@ -1462,8 +1466,6 @@ class FileCompilation {
 		const has_island_hint = this.#has_island_hint;
 		const needs_csr_reset = this.#needs_csr_reset;
 		const path = ctx.pathModule;
-		const err = (specifiers, msg) =>
-			new Error(`[ogygia] ${rel_host}: import { ${specifiers} } — ${msg}`);
 
 		const s = new MagicString(source);
 		/** @type {Map<string, object>} dedupe by region id within this host */
@@ -1623,7 +1625,7 @@ class FileCompilation {
 				if (!rewritten_import_nodes.has(info.node)) {
 					const specs = info.node.specifiers ?? [];
 					if (specs.length !== 1 || specs[0].type !== 'ImportDefaultSpecifier') {
-						throw err(
+						throw this.#err(
 							local,
 							`held-region imports must be a default import (\`import X from '…' with { ${import_keys.region}: 'raw' } \`).`
 						);
@@ -1698,7 +1700,7 @@ class FileCompilation {
 				// One ImportDeclaration may have multiple specifiers — only default-import style is supported.
 				const specs = info.node.specifiers ?? [];
 				if (specs.length !== 1 || specs[0].type !== 'ImportDefaultSpecifier') {
-					throw err(
+					throw this.#err(
 						local,
 						`region imports must be a default import (\`import X from '…' with { … }\`).`
 					);
@@ -2080,6 +2082,11 @@ class TsRegionCompilation {
 		return this.#path.relative(this.#root, abs).split(PATH_SEP).join('/');
 	}
 
+	/** `[ogygia] host: import.meta.og.asRegion (local) — msg`. */
+	#as_err(local, msg) {
+		return new Error(`[ogygia] ${this.#rel_host}: import.meta.og.asRegion (${local}) — ${msg}`);
+	}
+
 	/**
 	 * Same policy as transformHost's resolve_component_path: $lib/relative → absolute file path,
 	 * anything else (package specifier / alias) is kept verbatim and re-emitted for Vite to resolve.
@@ -2239,8 +2246,6 @@ class TsRegionCompilation {
 			const { program: as_program } = parse_module(source, id);
 			if (as_program) {
 				const body = (as_program.body ?? []) as Array<Record<string, any>>;
-				const as_err = (local: string, msg: string) =>
-					new Error(`[ogygia] ${rel_host}: import.meta.og.asRegion (${local}) — ${msg}`);
 				// Resolve a local name → its import declaration (for source + export name).
 				const import_of = new Map<string, Record<string, any>>();
 				for (const node of body) {
@@ -2279,7 +2284,7 @@ class TsRegionCompilation {
 					const stray = find_stray(node);
 					if (stray) {
 						const a = stray.arguments?.[0];
-						throw as_err(
+						throw this.#as_err(
 							a?.type === 'Identifier' ? a.name : '?',
 							'must be a top-level `const Name = import.meta.og.asRegion(Comp, options)` — it compiles ' +
 								'to a hoisted import, so it can never sit in a loop, function, block, or larger expression.'
@@ -2290,29 +2295,29 @@ class TsRegionCompilation {
 				for (const node of body) {
 					if (!legal_nodes.has(node)) continue;
 					if (node.kind !== 'const')
-						throw as_err(node.declarations[0]?.id?.name ?? '?', `must be bound with \`const\` (not \`${node.kind}\`).`);
+						throw this.#as_err(node.declarations[0]?.id?.name ?? '?', `must be bound with \`const\` (not \`${node.kind}\`).`);
 					if (node.declarations.length !== 1)
-						throw as_err(node.declarations[0]?.id?.name ?? '?', 'declare one asRegion per `const` statement.');
+						throw this.#as_err(node.declarations[0]?.id?.name ?? '?', 'declare one asRegion per `const` statement.');
 					const decl = node.declarations[0];
-					if (decl.id?.type !== 'Identifier') throw as_err('?', 'must bind to a plain `const Name = …`.');
+					if (decl.id?.type !== 'Identifier') throw this.#as_err('?', 'must bind to a plain `const Name = …`.');
 					const local = decl.id.name;
 					const call_args = decl.init.arguments ?? [];
 					const comp_arg = call_args[0];
 					if (!comp_arg || comp_arg.type !== 'Identifier')
-						throw as_err(local, 'the first argument must be a component you imported (a bare identifier).');
+						throw this.#as_err(local, 'the first argument must be a component you imported (a bare identifier).');
 					const imp = import_of.get(comp_arg.name);
 					if (!imp)
-						throw as_err(
+						throw this.#as_err(
 							local,
 							`'${comp_arg.name}' is not an imported component — import it first (e.g. \`import { ${comp_arg.name} } from './…'\`).`
 						);
 					const binding = import_binding_of(imp, comp_arg.name);
 					if (!binding || 'namespace' in binding)
-						throw as_err(local, `'${comp_arg.name}' must be a default or named import, not a namespace import.`);
+						throw this.#as_err(local, `'${comp_arg.name}' must be a default or named import, not a namespace import.`);
 					const componentPath = this.#resolve_spec(binding.source);
-					if (!componentPath) throw as_err(local, `could not resolve '${binding.source}'.`);
+					if (!componentPath) throw this.#as_err(local, `could not resolve '${binding.source}'.`);
 					// Options object: `{ wake: '…' }` or `{ region: 'raw' }` — the same `.ts` surface as `with { … }`.
-					const marker = parse_ts_as_region_options(call_args[1], (msg) => as_err(local, msg), regionKey, wakeKey);
+					const marker = parse_ts_as_region_options(call_args[1], (msg) => this.#as_err(local, msg), regionKey, wakeKey);
 					const { iid, record } = this.#emit_ts_region(componentPath, marker, binding.exportName);
 					if (!islands_by_id.has(iid)) islands_by_id.set(iid, record);
 					s.overwrite(node.start, node.end, `import ${local} from ${JSON.stringify(regionBindingVirtualId(iid))};`);
