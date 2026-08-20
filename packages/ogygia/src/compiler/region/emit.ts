@@ -276,6 +276,81 @@ export function make_wake_island(opts: {
 	};
 }
 
+/**
+ * The SERVER-island wrapper (`.svelte`) — `render: 'deferred'`: a hole whose HTML is fetched on the
+ * `wake` schedule. `__defer` carries the fetch schedule; `__cacheTtl` (when signed) sets the hole's
+ * response cache; a deferred island that ALSO hydrates carries `__hydrate` + `__module` (its client
+ * entry URL). `module_url` is the resolved client/dev entry URL (used only when it hydrates); `lang`
+ * is the wrapper `<script>` lang.
+ */
+export function server_wrapper_source(
+	iid: string,
+	componentPath: string,
+	entryPath: string,
+	options: Record<string, unknown> | undefined,
+	exportName: string | undefined,
+	module_url: string,
+	lang: string
+): string {
+	const deferred_hydrate = !!options?.hydrate;
+	const fetch_when = options?.when || 'load';
+	let server_attrs = `__defer={${JSON.stringify(fetch_when)}}`;
+	if (options?.margin != null) server_attrs += ` __margin={${JSON.stringify(options.margin)}}`;
+	// Signed at mint into the hole's endpoint → the handle answers `private, max-age=cacheTtlSec`.
+	if (options?.cacheTtlSec != null) server_attrs += ` __cacheTtl={${JSON.stringify(options.cacheTtlSec)}}`;
+	if (deferred_hydrate) {
+		server_attrs += ` __hydrate={${JSON.stringify(options.hydrate)}}`;
+		server_attrs += ` __module={${JSON.stringify(module_url)}}`;
+		if (options.hydrateMargin != null) {
+			server_attrs += ` __hydrateMargin={${JSON.stringify(options.hydrateMargin)}}`;
+		}
+	}
+	return (
+		`<script${lang}>\n` +
+		`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
+		`\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
+		`\t${component_import_line('__OgygiaCss', componentPath, exportName)}\n` +
+		`\tlet { ogygiaFallback, ...__props } = $props();\n` +
+		`</script>\n` +
+		`<OgygiaRegion__Wrapper __mode="server" __entry={${JSON.stringify(iid)}} __component={__OgygiaEntry} ` +
+		`__css={__OgygiaCss} {__props} ${server_attrs} {ogygiaFallback} />\n`
+	);
+}
+
+/**
+ * The LAKE wrapper (`.svelte`) — `render: page, wake: none`: a frozen region inside a hydrated island.
+ * A `swr` lake carries an endpoint (`__when` + `__props`) to remount on its schedule; `cache`/`empty`
+ * are wrapper-only. Static `<OgygiaLakeInner>` (not dynamic) preserves the LAKE-ENVELOPE; the client
+ * build swaps that import for the render-nothing stub. `lang` is the wrapper `<script>` lang.
+ */
+export function lake_wrapper_source(
+	iid: string,
+	componentPath: string,
+	options: Record<string, unknown> | undefined,
+	exportName: string | undefined,
+	lang: string
+): string {
+	const remount = options?.remount || 'cache';
+	const needs_endpoint = remount === 'swr';
+	const when = options?.when || (needs_endpoint ? 'load' : undefined);
+	let attrs = `__entry={${JSON.stringify(iid)}} __remount={${JSON.stringify(remount)}}`;
+	if (options?.maxAgeMs != null) attrs += ` __maxAge={${JSON.stringify(options.maxAgeMs)}}`;
+	if (options?.onExpire) attrs += ` __onExpire={${JSON.stringify(options.onExpire)}}`;
+	if (needs_endpoint) {
+		attrs += ` __when={${JSON.stringify(when || 'load')}} __props={__props}`;
+		if (options?.margin != null) attrs += ` __margin={${JSON.stringify(options.margin)}}`;
+	}
+	return (
+		`<script${lang}>\n` +
+		`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
+		`\t${component_import_line('OgygiaLakeInner', componentPath, exportName)}\n` +
+		`\tlet __props = $props();\n` +
+		`</script>\n` +
+		`<OgygiaRegion__Wrapper __mode="lake" ${attrs}>` +
+		`<OgygiaLakeInner {...__props} /></OgygiaRegion__Wrapper>\n`
+	);
+}
+
 /** Map a hydrate strategy (+ options) to the Island wrapper attribute markup. */
 export function strategy_to_attr(strategy: string, options?: Record<string, unknown>): string {
 	if (!strategy || strategy === 'load') return 'load';

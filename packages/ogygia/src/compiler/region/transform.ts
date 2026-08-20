@@ -10,6 +10,8 @@ import {
 	component_import_line,
 	island_entry_source,
 	island_wrapper_source,
+	server_wrapper_source,
+	lake_wrapper_source,
 	make_region_binding,
 	make_wake_island
 } from './emit.js';
@@ -1472,58 +1474,6 @@ class FileCompilation {
 				lang
 			);
 
-		const server_wrapper_source = (iid, componentPath, entryPath, options, exportName) => {
-			const deferred_hydrate = !!options?.hydrate;
-			const fetch_when = options?.when || 'load';
-			let server_attrs = `__defer={${JSON.stringify(fetch_when)}}`;
-			if (options?.margin != null) server_attrs += ` __margin={${JSON.stringify(options.margin)}}`;
-			// Signed at mint into the hole's endpoint → the handle answers `private, max-age=cacheTtlSec`.
-			if (options?.cacheTtlSec != null) server_attrs += ` __cacheTtl={${JSON.stringify(options.cacheTtlSec)}}`;
-			if (deferred_hydrate) {
-				const module_url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid);
-				server_attrs += ` __hydrate={${JSON.stringify(options.hydrate)}}`;
-				server_attrs += ` __module={${JSON.stringify(module_url)}}`;
-				if (options.hydrateMargin != null) {
-					server_attrs += ` __hydrateMargin={${JSON.stringify(options.hydrateMargin)}}`;
-				}
-			}
-			return (
-				`<script${lang}>\n` +
-				`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
-				`\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
-				`\t${component_import_line('__OgygiaCss', componentPath, exportName)}\n` +
-				`\tlet { ogygiaFallback, ...__props } = $props();\n` +
-				`</script>\n` +
-				`<OgygiaRegion__Wrapper __mode="server" __entry={${JSON.stringify(iid)}} __component={__OgygiaEntry} ` +
-				`__css={__OgygiaCss} {__props} ${server_attrs} {ogygiaFallback} />\n`
-			);
-		};
-
-		const lake_wrapper_source = (iid, componentPath, options, exportName) => {
-			const remount = options?.remount || 'cache';
-			const needs_endpoint = remount === 'swr';
-			const when = options?.when || (needs_endpoint ? 'load' : undefined);
-			let attrs =
-				`__entry={${JSON.stringify(iid)}} __remount={${JSON.stringify(remount)}}`;
-			if (options?.maxAgeMs != null) attrs += ` __maxAge={${JSON.stringify(options.maxAgeMs)}}`;
-			if (options?.onExpire) attrs += ` __onExpire={${JSON.stringify(options.onExpire)}}`;
-			if (needs_endpoint) {
-				attrs += ` __when={${JSON.stringify(when || 'load')}} __props={__props}`;
-				if (options?.margin != null) attrs += ` __margin={${JSON.stringify(options.margin)}}`;
-			}
-			// Static `<OgygiaLakeInner>` (not dynamic) preserves LAKE-ENVELOPE. Client build swaps
-			// that import for the render-nothing stub. Region's lake branch degrades in the shell (!isNested).
-			return (
-				`<script${lang}>\n` +
-				`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
-				`\t${component_import_line('OgygiaLakeInner', componentPath, exportName)}\n` +
-				`\tlet __props = $props();\n` +
-				`</script>\n` +
-				`<OgygiaRegion__Wrapper __mode="lake" ${attrs}>` +
-				`<OgygiaLakeInner {...__props} /></OgygiaRegion__Wrapper>\n`
-			);
-		};
-
 		// Portable binding target for this compile:
 		//   - SSR / csr=true client → real wrapper (Island shell + __component link)
 		//   - csr=false client → stub (page node must not pull N wrappers into the client graph;
@@ -1629,7 +1579,7 @@ class FileCompilation {
 						virtualPath: swr ? entryPath : undefined,
 						source: swr ? entry_source_for(componentPath, iid, exportName) : undefined,
 						wrapperPath: wrapPath,
-						wrapperSource: lake_wrapper_source(iid, componentPath, mark.options, exportName),
+						wrapperSource: lake_wrapper_source(iid, componentPath, mark.options, exportName, lang),
 						hostPath: id,
 						componentPath,
 						server: swr,
@@ -1707,7 +1657,15 @@ class FileCompilation {
 								id: iid,
 								virtualPath: entryPath,
 								wrapperPath: wrapPath,
-								wrapperSource: server_wrapper_source(iid, componentPath, entryPath, mark.options, exportName),
+								wrapperSource: server_wrapper_source(
+									iid,
+									componentPath,
+									entryPath,
+									mark.options,
+									exportName,
+									ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+									lang
+								),
 								source: entry_source_for(componentPath, iid, exportName),
 								hostPath: id,
 								componentPath,
