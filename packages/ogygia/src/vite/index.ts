@@ -31,7 +31,6 @@ import {
 	ISLAND_DIR,
 	normalize_import_keys,
 	islandChunkFileName,
-	islandPublicUrl,
 	wrapperVirtualId,
 	CLIENT_BINDING_STUB,
 	type ImportKeys
@@ -89,7 +88,11 @@ import {
 } from '../compiler/dev/hmr.js';
 import { dev_hmr_client_source } from '../compiler/dev/dev-hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
-import { collectIslandDepModulepreloads, islandDepsHandoffPath } from '../compiler/link/island-deps.js';
+import {
+	collectIslandDepModulepreloads,
+	islandDepsHandoffPath,
+	island_deps_module
+} from '../compiler/link/island-deps.js';
 import {
 	secret_module,
 	sign_module,
@@ -98,7 +101,9 @@ import {
 	region_ttl_module
 } from '../compiler/link/caps.js';
 import { router_config_module } from '../compiler/link/router-config.js';
-import { transport_module } from '../compiler/link/transport.js';
+import { transport_module, transportables_module } from '../compiler/link/transport.js';
+import { server_manifest_module } from '../compiler/link/server-manifest.js';
+import { manifest_module } from '../compiler/link/manifest.js';
 import { Program, strip_id, host_key } from '../compiler/program.js';
 import {
 	V_RUNTIME_URL,
@@ -1574,86 +1579,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				return `export default ${JSON.stringify('/@id/__x00__' + V_DEV_HMR)};`;
 			}
 			if (id === RESOLVED(V_ISLAND_DEPS)) {
-				// Client: unused (modulepreload is SSR HTML). SSR: read the handoff JSON at
-				// *render* time — Kit builds the server bundle before the client, so baking at
-				// `load()` would always be empty; prerender/live SSR run after client generateBundle.
-				// Resolve via import.meta.url walk (not absolute build-machine paths) so adapters
-				// find `output/server/og-region-deps.json` next to the server bundle.
-				if (!ssr)
-					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
-				// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
-				// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
-				// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
-				// channel as prod's `<link>`, resolved for dev. `islandDeps` (JS modulepreload) is prod-only.
-				// Content bodies need no dev entry here: a content module is in the SSR module graph, so
-				// Vite dev already injects its scoped CSS (the leak only bites the PROD client build).
-				if (is_dev)
-					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
-				return (
-					`import fs from 'node:fs';\n` +
-					`import path from 'node:path';\n` +
-					`import { fileURLToPath } from 'node:url';\n` +
-					// PRIMARY source: a string slot the client build patches in-place with the manifest JSON
-					// (see writeBundle). Inlining it into the server bundle is what makes it survive serverless
-					// tracing — Vercel/Netlify (@vercel/nft) only bundle *imported* files, not runtime fs reads,
-					// so the co-located JSON below is dropped there. The fs walk stays as the fallback for
-					// adapter-node & dev-preview (whole server dir ships). Unpatched, the token starts with '_'
-					// (char 95), the guard is false, and we fall through to the walk.
-					`const __OG_INLINE = '__OGYGIA_ISLAND_DEPS_INLINE__';\n` +
-					// Defensive: a bad patch must degrade to the fs walk, never crash the server at import.
-					`let cache = null;\n` +
-					`try { if (__OG_INLINE.charCodeAt(0) === 123) cache = JSON.parse(__OG_INLINE); } catch {}\n` +
-					`function candidates() {\n` +
-					`  const out = [];\n` +
-					`  try {\n` +
-					`    let dir = path.dirname(fileURLToPath(import.meta.url));\n` +
-					`    for (let i = 0; i < 8; i++) {\n` +
-					`      out.push(path.join(dir, 'og-region-deps.json'));\n` +
-					`      const parent = path.dirname(dir);\n` +
-					`      if (parent === dir) break;\n` +
-					`      dir = parent;\n` +
-					`    }\n` +
-					`  } catch {}\n` +
-					`  if (typeof process !== 'undefined' && process.cwd) {\n` +
-					`    const cwd = process.cwd();\n` +
-					`    out.push(path.join(cwd, '.svelte-kit', 'og-region-deps.json'));\n` +
-					`    out.push(path.join(cwd, '.svelte-kit', 'output', 'server', 'og-region-deps.json'));\n` +
-					`  }\n` +
-					`  return out;\n` +
-					`}\n` +
-					`function load() {\n` +
-					`  if (cache) return cache;\n` +
-					`  for (const p of candidates()) {\n` +
-					`    try { cache = JSON.parse(fs.readFileSync(p, 'utf8')); return cache; } catch {}\n` +
-					`  }\n` +
-					`  cache = {};\n` +
-					`  return cache;\n` +
-					`}\n` +
-					// Handoff shape: `{ js: { entryUrl: [...] }, css: { entryUrl: [...] } }`. A stale flat
-					`// map (pre-css build) degrades gracefully: js falls back to the root, css to [].\n` +
-					`function pick(kind, entry) {\n` +
-					`  const all = load();\n` +
-					`  const map = all && typeof all[kind] === 'object' ? all[kind] : kind === 'js' ? all : null;\n` +
-					`  const list = map ? map[entry] : null;\n` +
-					`  return Array.isArray(list) ? list : [];\n` +
-					`}\n` +
-					`export function islandDeps(entry) {\n` +
-					`  return entry ? pick('js', entry) : [];\n` +
-					`}\n` +
-					`export function islandCss(entry) {\n` +
-					`  return entry ? pick('css', entry) : [];\n` +
-					`}\n` +
-					`export function contentCss(id) {\n` +
-					`  return id ? pick('content_css', id) : [];\n` +
-					`}\n` +
-					// og.$ factories for the page-inline registration script (CSP-clean prod path):
-					// written by the CLIENT build's writeBundle, read here at SSR render time — the
-					// same ordering-safe channel islandCss uses.
-					`export function fnManifest() {\n` +
-					`  const m = load().fn_manifest;\n` +
-					`  return m && typeof m === 'object' && Object.keys(m).length ? m : null;\n` +
-					`}\n`
-				);
+				return island_deps_module(ssr, is_dev);
 			}
 			if (id === RESOLVED(V_TRANSPORT)) {
 				return transport_module(universal_hooks);
@@ -1701,43 +1627,17 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				return region_ttl_module(ssr, region_ttl);
 			}
 			if (id === RESOLVED(V_SERVER_MANIFEST)) {
-				// Map of SERVER-island id -> dynamic import, used by the `ogygiaHandle()` handle to
-				// render an island server-side. Populated in BOTH dev and build (unlike the
-				// client manifest, which dev fills from URLs). Client build gets an empty map.
-				if (!ssr) return `export const islands = {};\nexport const island_url = {};`;
-				prescan();
-				const entries = [];
-				const urls = [];
-				for (const [iid, virtualPath] of by_id) {
-					if (!registry.get(virtualPath)?.server) continue;
-					entries.push(`  ${JSON.stringify(iid)}: () => import(${JSON.stringify(virtualPath)})`);
-					// id → the URL `islandCss()` is keyed by, so the handle can ship a server-picked hole's
-					// CSS with its response (a page that never imported the component still styles it). In a
-					// build that's the hashed client chunk (→ handoff CSS assets); in dev it's the entry's
-					// dev module URL (→ `islandCss` returns it, the client imports it for CSS). Same channel.
-					urls.push(
-						`  ${JSON.stringify(iid)}: ${JSON.stringify(is_dev ? devUrlFor(virtualPath) : islandPublicUrl(iid))}`
-					);
-				}
-				return (
-					`export const islands = {\n${entries.join(',\n')}\n};\n` +
-					`export const island_url = {\n${urls.join(',\n')}\n};`
-				);
+				// Populated in BOTH dev and build (unlike the client manifest, which dev fills from URLs).
+				if (ssr) prescan();
+				return server_manifest_module(ssr, program, is_dev, devUrlFor);
 			}
 			if (id === RESOLVED(V_MANIFEST)) {
-				// Legacy stub — hydrate modules are loaded via `<ogygia-region entry>` URLs, not this map.
-				return `export const dev = ${is_dev ? 'true' : 'false'};\nexport const regions = {};`;
+				return manifest_module(is_dev);
 			}
 			if (id === RESOLVED(V_TRANSPORTABLES)) {
-				// Eager-registration manifest: side-effect-import every module that defines a
-				// transportable class so their `[ogygia.wire]` codecs register before any island
-				// decodes props. Imported by every island entry (client hydrate AND server render),
-				// so an island receiving a transportable prop never has to import the class itself.
-				// Empty (a no-op, tree-shaken) when the app has no transportables.
+				// Eager-registration manifest of transportable-class modules (prescan-discovered).
 				prescan();
-				const imports = [];
-				for (const abs of transportable_modules) imports.push(`import ${JSON.stringify(abs)};`);
-				return imports.join('\n') + '\n';
+				return transportables_module(transportable_modules);
 			}
 			const srcEntry = registry.get(id);
 			if (srcEntry && srcEntry.role === 'region') {

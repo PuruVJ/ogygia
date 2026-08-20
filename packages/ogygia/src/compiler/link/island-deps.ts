@@ -88,3 +88,88 @@ export function collectIslandDepModulepreloads(
 export function islandDepsHandoffPath(root: string) {
 	return path.join(root, '.svelte-kit', 'og-region-deps.json');
 }
+
+/**
+ * `virtual:ogygia/island-deps` emitter — the SSR-render-time reader of the deps handoff.
+ * Client: unused (modulepreload is SSR HTML). SSR: read the handoff JSON at *render* time — Kit
+ * builds the server bundle before the client, so baking at `load()` would always be empty;
+ * prerender/live SSR run after client generateBundle. Resolve via import.meta.url walk (not absolute
+ * build-machine paths) so adapters find `output/server/og-region-deps.json` next to the server bundle.
+ */
+export function island_deps_module(ssr: boolean, is_dev: boolean): string {
+	if (!ssr)
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
+	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
+	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
+	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
+	// channel as prod's `<link>`, resolved for dev. `islandDeps` (JS modulepreload) is prod-only.
+	// Content bodies need no dev entry here: a content module is in the SSR module graph, so
+	// Vite dev already injects its scoped CSS (the leak only bites the PROD client build).
+	if (is_dev)
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
+	return (
+		`import fs from 'node:fs';\n` +
+		`import path from 'node:path';\n` +
+		`import { fileURLToPath } from 'node:url';\n` +
+		// PRIMARY source: a string slot the client build patches in-place with the manifest JSON
+		// (see writeBundle). Inlining it into the server bundle is what makes it survive serverless
+		// tracing — Vercel/Netlify (@vercel/nft) only bundle *imported* files, not runtime fs reads,
+		// so the co-located JSON below is dropped there. The fs walk stays as the fallback for
+		// adapter-node & dev-preview (whole server dir ships). Unpatched, the token starts with '_'
+		// (char 95), the guard is false, and we fall through to the walk.
+		`const __OG_INLINE = '__OGYGIA_ISLAND_DEPS_INLINE__';\n` +
+		// Defensive: a bad patch must degrade to the fs walk, never crash the server at import.
+		`let cache = null;\n` +
+		`try { if (__OG_INLINE.charCodeAt(0) === 123) cache = JSON.parse(__OG_INLINE); } catch {}\n` +
+		`function candidates() {\n` +
+		`  const out = [];\n` +
+		`  try {\n` +
+		`    let dir = path.dirname(fileURLToPath(import.meta.url));\n` +
+		`    for (let i = 0; i < 8; i++) {\n` +
+		`      out.push(path.join(dir, 'og-region-deps.json'));\n` +
+		`      const parent = path.dirname(dir);\n` +
+		`      if (parent === dir) break;\n` +
+		`      dir = parent;\n` +
+		`    }\n` +
+		`  } catch {}\n` +
+		`  if (typeof process !== 'undefined' && process.cwd) {\n` +
+		`    const cwd = process.cwd();\n` +
+		`    out.push(path.join(cwd, '.svelte-kit', 'og-region-deps.json'));\n` +
+		`    out.push(path.join(cwd, '.svelte-kit', 'output', 'server', 'og-region-deps.json'));\n` +
+		`  }\n` +
+		`  return out;\n` +
+		`}\n` +
+		`function load() {\n` +
+		`  if (cache) return cache;\n` +
+		`  for (const p of candidates()) {\n` +
+		`    try { cache = JSON.parse(fs.readFileSync(p, 'utf8')); return cache; } catch {}\n` +
+		`  }\n` +
+		`  cache = {};\n` +
+		`  return cache;\n` +
+		`}\n` +
+		// Handoff shape: `{ js: { entryUrl: [...] }, css: { entryUrl: [...] } }`. A stale flat
+		`// map (pre-css build) degrades gracefully: js falls back to the root, css to [].\n` +
+		`function pick(kind, entry) {\n` +
+		`  const all = load();\n` +
+		`  const map = all && typeof all[kind] === 'object' ? all[kind] : kind === 'js' ? all : null;\n` +
+		`  const list = map ? map[entry] : null;\n` +
+		`  return Array.isArray(list) ? list : [];\n` +
+		`}\n` +
+		`export function islandDeps(entry) {\n` +
+		`  return entry ? pick('js', entry) : [];\n` +
+		`}\n` +
+		`export function islandCss(entry) {\n` +
+		`  return entry ? pick('css', entry) : [];\n` +
+		`}\n` +
+		`export function contentCss(id) {\n` +
+		`  return id ? pick('content_css', id) : [];\n` +
+		`}\n` +
+		// og.$ factories for the page-inline registration script (CSP-clean prod path):
+		// written by the CLIENT build's writeBundle, read here at SSR render time — the
+		// same ordering-safe channel islandCss uses.
+		`export function fnManifest() {\n` +
+		`  const m = load().fn_manifest;\n` +
+		`  return m && typeof m === 'object' && Object.keys(m).length ? m : null;\n` +
+		`}\n`
+	);
+}
