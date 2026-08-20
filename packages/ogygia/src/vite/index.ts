@@ -27,12 +27,10 @@ const CONSTRUCT_MARKUP_EXTS = ['.svelte'] as const;
 import { content as contentHmrPlugin, type ContentPluginOptions } from '../content/vite/plugin.js';
 import { ogygiaPresetPreprocess, type MarkdownOptions } from '../content/markdown/index.js';
 import {
-	transformHost,
 	transformTsRegions,
 	ISLAND_DIR,
 	normalize_import_keys,
 	islandChunkFileName,
-	wrapperVirtualId,
 	CLIENT_BINDING_STUB,
 	type ImportKeys
 } from '../compiler/transform.js';
@@ -54,8 +52,6 @@ export type { ImportKeys } from '../compiler/transform.js';
 import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,
-	routeCsrIsFalse,
-	routeCsrIsTrue,
 	KEEP_CLIENT_DIR
 } from '../compiler/standalone.js';
 import {
@@ -106,6 +102,8 @@ import { transport_module, transportables_module } from '../compiler/link/transp
 import { server_manifest_module } from '../compiler/link/server-manifest.js';
 import { manifest_module } from '../compiler/link/manifest.js';
 import { Program, strip_id, host_key } from '../compiler/program.js';
+import { Compiler } from '../compiler/driver.js';
+import { CompileCtx } from '../compiler/ctx.js';
 import {
 	V_RUNTIME_URL,
 	V_MANIFEST,
@@ -703,60 +701,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		return prefix + '/@id/' + virtualPath;
 	};
 
-	const transform_cache = new Map();
 	const __prof = { transformMs: 0, transformN: 0, transformHit: 0, prescanMs: 0, bakeMs: 0, bakeN: 0, resolveMs: 0, loadMs: 0 };
 	const __P = !!process.env.OGYGIA_PROFILE;
 	const __outHash = new Map<string, number>();
-	const __fnv = (str: string) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; };
 
-	const run_transform = (source, id, opts: { ssr?: boolean; linkVirtual?: boolean } = {}) => {
-		const ssr = opts.ssr !== false;
-		// Scale: csr=false CLIENT hosts must not statically import portable wrappers (or the
-		// hydrate entries those wrappers pull in). Kit still emits those page nodes; sharing
-		// the emitFile module with the page graph forces Rolldown thin `og-region.*`
-		// facades. SSR keeps real wrappers for HTML; csr=true client keeps them so Kit can
-		// hydrate islands as normal components. Hydration always uses `import(entry)`.
-		const routesDir = path.join(root, 'src', 'routes');
-		const link_virtual =
-			opts.linkVirtual !== undefined ? opts.linkVirtual : ssr || !routeCsrIsFalse(id, routesDir);
-		// Tri-state route csr, threaded into the transform (see transformHost's routeCsr branch):
-		//   true  → csr=true route host: ogygia steps aside (strip islands, inject `true` marker).
-		//   false → csr=false route host: keep islands, inject the csr-false RESET marker (an
-		//           option-less csr=true ANCESTOR layout would otherwise leak `true` down the context
-		//           and silently degrade every island in the csr=false subtree to inline).
-		//   undefined → not a route host (shared lib component): no marker; its csr depends on the
-		//           page that renders it, so it keeps its islands.
-		const route_csr = routeCsrIsTrue(id, routesDir)
-			? true
-			: routeCsrIsFalse(id, routesDir)
-				? false
-				: undefined;
-		const cache_key = `${id}\0${link_virtual ? '1' : '0'}\0${route_csr === true ? 't' : route_csr === false ? 'f' : 'n'}`;
-		const hit = transform_cache.get(cache_key);
-		if (hit && hit.code === source) { if (__P) __prof.transformHit++; return hit.result; }
-		const __th0 = __P ? performance.now() : 0;
-		const result = transformHost(source, id, {
-			root,
-			libDir,
-			readFile,
-			pathModule: path,
-			dev: is_dev,
-			virtualPathFor,
-			wrapperPathFor: (_hostId, iid) => wrapperVirtualId(iid),
-			devUrlFor,
-			visibleMargin,
-			presets,
-			importKeys: import_keys,
-			idSalt: id_salt,
-			linkVirtualIsland: link_virtual,
-			clientBindingStub: V_CLIENT_BINDING_STUB,
-			routeCsr: route_csr,
-			ssr
-		});
-		if (__P) { __prof.transformMs += performance.now() - __th0; __prof.transformN++; __outHash.set(cache_key, __fnv(JSON.stringify((result as any)?.code ?? result))); }
-		transform_cache.set(cache_key, { code: source, result });
-		return result;
-	};
+	// The driver — the bundler-agnostic compile session (Program + transform cache + profiler). Its
+	// CompileCtx is bound in configResolved once the build is resolved (root/dev/id_salt known).
+	// `run_transform` is the adapter-facing alias for `compiler.transform` — the file-local front-end
+	// (parse ▸ analyze ▸ lower ▸ emit, today fused in transformHost), memoized + content-gated.
+	const compiler = new Compiler(program, { prof: __prof, P: __P, outHash: __outHash });
+	const run_transform = compiler.transform.bind(compiler);
 
 	// ── keep-client route injection ──────────────────────────────────────────
 	// All-csr=false apps make Kit skip its ENTIRE client build, so ogygia's runtime is never emitted
@@ -1171,6 +1125,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					break;
 				}
 			}
+
+			// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
+			// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
+			// the snapshot is complete before the driver is first called.
+			compiler.configure(
+				new CompileCtx({ root, base, libDir, is_dev, id_salt, visibleMargin, presets, import_keys })
+			);
 		},
 
 		async buildStart() {
