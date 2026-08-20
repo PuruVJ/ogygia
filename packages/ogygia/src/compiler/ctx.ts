@@ -22,6 +22,12 @@ export interface CompileCtxInit {
 	visibleMargin: string | undefined;
 	presets: Record<string, unknown>;
 	import_keys: ImportKeys;
+	/** Resolved Vite aliases (used by the `bake` macro to bundle the imports a baked fn touches). */
+	resolve_alias: unknown[];
+	/** The app's markdown config (used by the `code`/`md` macros), or `null` when content is off. */
+	markdown_config: unknown;
+	/** ogygia's own package root — the `auto_brand` macro skips ogygia source (it can't self-register). */
+	pkg_root: string;
 }
 
 export class CompileCtx {
@@ -33,6 +39,9 @@ export class CompileCtx {
 	readonly visibleMargin: string | undefined;
 	readonly presets: Record<string, unknown>;
 	readonly import_keys: ImportKeys;
+	readonly resolve_alias: unknown[];
+	readonly markdown_config: unknown;
+	readonly pkg_root: string;
 
 	constructor(init: CompileCtxInit) {
 		this.root = init.root;
@@ -43,6 +52,9 @@ export class CompileCtx {
 		this.visibleMargin = init.visibleMargin;
 		this.presets = init.presets;
 		this.import_keys = init.import_keys;
+		this.resolve_alias = init.resolve_alias;
+		this.markdown_config = init.markdown_config;
+		this.pkg_root = init.pkg_root;
 	}
 
 	/** Read a file as UTF-8, or `null` if it can't be read (the transform tolerates missing deps). */

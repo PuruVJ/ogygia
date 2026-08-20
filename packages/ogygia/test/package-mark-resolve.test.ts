@@ -39,8 +39,9 @@ describe('unresolvable marked package specifier', () => {
 		const plugin = make_plugin();
 		const ctx = { resolve: async () => null, emitFile: () => '' };
 		const src = `<script>\nimport TabGroup from '${SPEC}' with { wake: 'load' };\n</script>\n<TabGroup />`;
-		// Register the host (SSR leg) so the wrapper virtual is in the registry.
-		handler(plugin.transform!).call(ctx as never, src, HOST, { ssr: true });
+		// Register the host (SSR leg) so the wrapper virtual is in the registry. `transform` is async
+		// (the macro leg awaits), so await it before reading the registry it populates.
+		await handler(plugin.transform!).call(ctx as never, src, HOST, { ssr: true });
 		const iid = regionId(regionIdentity(SPEC, { strategy: 'load', options: {} }));
 		await expect(
 			handler(plugin.resolveId!).call(ctx as never, SPEC, wrapperVirtualId(iid), { ssr: true })
@@ -51,7 +52,7 @@ describe('unresolvable marked package specifier', () => {
 		const plugin = make_plugin();
 		const ctx = { resolve: async () => null, emitFile: () => '' };
 		const src = `<script>\nimport TabGroup from '${SPEC}' with { wake: 'load' };\n</script>\n<TabGroup />`;
-		handler(plugin.transform!).call(ctx as never, src, HOST, { ssr: true });
+		await handler(plugin.transform!).call(ctx as never, src, HOST, { ssr: true });
 		const iid = regionId(regionIdentity(SPEC, { strategy: 'load', options: {} }));
 		await expect(
 			handler(plugin.resolveId!).call(ctx as never, './local.js', wrapperVirtualId(iid), { ssr: true })

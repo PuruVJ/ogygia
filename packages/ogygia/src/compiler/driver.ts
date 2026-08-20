@@ -13,6 +13,8 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { transformHost, wrapperVirtualId, CLIENT_BINDING_STUB } from './region/transform.js';
 import { routeCsrIsFalse, routeCsrIsTrue } from './standalone.js';
+import { run_module_macros } from './macros/pipeline.js';
+import type { MarkdownOptions } from '../content/markdown/index.js';
 import type { Program } from './program.js';
 import type { CompileCtx } from './ctx.js';
 
@@ -46,6 +48,9 @@ export class Compiler {
 	readonly program: Program;
 	readonly transform_cache = new Map<string, { code: string; result: unknown }>();
 	readonly profiler: Profiler;
+	/** Every `import.meta.og.$` hoist collected across the build (tag → factory source). Filled by
+	 *  `macros()`; drained by the adapter's fn-manifest emit (dev load leg, renderChunk, writeBundle). */
+	readonly dollar_hoists = new Map<string, string>();
 	#ctx: CompileCtx | null = null;
 
 	constructor(program: Program, profiler: Profiler) {
@@ -56,6 +61,28 @@ export class Compiler {
 	/** Bind the resolved compile context (called once the bundler has resolved the build). */
 	configure(ctx: CompileCtx) {
 		this.#ctx = ctx;
+	}
+
+	/**
+	 * Run the module-macro passes (`wire`/`$`/`store`/auto-brand/`code`/`bake`) over one module —
+	 * the leg that must land before the island transform / svelte compile / ts-region minting sees
+	 * it. `source` is the CURRENT text (a content-preset tag may already have edited it). Returns
+	 * `{ code, touched }`; the caller nulls its own sourcemap when `touched`.
+	 */
+	macros(source: string, id: string): Promise<{ code: string; touched: boolean }> {
+		const ctx = this.#ctx!;
+		return run_module_macros(
+			source,
+			id,
+			{
+				root: ctx.root,
+				resolveAlias: ctx.resolve_alias,
+				markdownConfig: ctx.markdown_config as MarkdownOptions | null,
+				pkgRoot: ctx.pkg_root,
+				dollarHoists: this.dollar_hoists
+			},
+			this.profiler
+		);
 	}
 
 	/**

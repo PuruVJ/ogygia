@@ -11,21 +11,9 @@ import { islandBridge, content_css_key } from './island-bridge.js';
 import { island_sourcemaps_plugin } from './sourcemaps.js';
 import { materialize } from '../compiler/content/git.js';
 import { rewrite_loaders } from '../compiler/content/loaders.js';
-import { rewrite_wire } from '../compiler/macros/wire.js';
-import { rewrite_dollar } from '../compiler/macros/dollar.js';
-import { rewrite_store, auto_brand_stores } from '../compiler/macros/store.js';
 import { rewrite_regions } from '../compiler/content/regions.js';
-import { rewrite_code } from '../compiler/macros/code.js';
-import { render_snippet } from '../content/markdown/snippet.js';
-import { render_markdown } from '../content/markdown/render-md.js';
-import { rewrite_bake } from '../compiler/macros/bake.js';
-
-/** Markup extensions where `import.meta.og.*` constructs are recognized at the VITE-transform layer.
- *  Just `.svelte` — content files (`.svx`/`.md`) are the markdown preprocessor's domain (see
- *  og-extract.ts). JS/TS modules are handled by the constructs themselves, not this list. */
-const CONSTRUCT_MARKUP_EXTS = ['.svelte'] as const;
 import { content as contentHmrPlugin, type ContentPluginOptions } from '../content/vite/plugin.js';
-import { ogygiaPresetPreprocess, type MarkdownOptions } from '../content/markdown/index.js';
+import { ogygiaPresetPreprocess } from '../content/markdown/index.js';
 import {
 	transformTsRegions,
 	ISLAND_DIR,
@@ -455,10 +443,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 	/** content_css_key → emitted CSS asset referenceId (client leg). Resolved to hrefs in writeBundle. */
 	const content_css_refs = new Map();
-	/** tag → self-contained factory source from og.$ rewrites — served by the fn-manifest virtual
-	 *  so client bundles can register factories pre-hydration (the payload-source fallback covers
-	 *  bundles that miss it). */
-	const dollar_hoists = new Map();
+	// tag → self-contained factory source from og.$ rewrites (served by the fn-manifest virtual so
+	// client bundles can register factories pre-hydration; the payload-source fallback covers bundles
+	// that miss it) now lives on the driver as `compiler.dollar_hoists` — the macro leg fills it.
 
 	let root;
 	let base = '';
@@ -895,7 +882,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
 			// the snapshot is complete before the driver is first called.
 			compiler.configure(
-				new CompileCtx({ root, base, libDir, is_dev, id_salt, visibleMargin, presets, import_keys })
+				new CompileCtx({
+					root,
+					base,
+					libDir,
+					is_dev,
+					id_salt,
+					visibleMargin,
+					presets,
+					import_keys,
+					resolve_alias,
+					markdown_config: islandBridge.markdownConfig ?? null,
+					pkg_root: PKG_ROOT
+				})
 			);
 		},
 
@@ -1243,7 +1242,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// immune to bundler identifier renaming). Strict-CSP apps get a real manifest this
 				// way; the payload-source eval fallback becomes the exception, not the path.
 				const regs = () =>
-					[...dollar_hoists.entries()]
+					[...compiler.dollar_hoists.entries()]
 						.map(([tag, src]) => `globalThis.__og_reg_fn(${JSON.stringify(tag)}, (${src}));`)
 						.join('\n');
 				const bridge = `import { __register_fn } from 'ogygia/internal';\nglobalThis.__og_reg_fn = __register_fn;\n`;
@@ -1404,93 +1403,17 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				}
 			}
 
-			// `import.meta.og.wire` — the transportable-codec key, rewritten to `Symbol.for('ogygia.wire')`
-			// BEFORE either branch (island transform / svelte compile / ts region minting) sees the code,
-			// so the class body's computed key is a real symbol expression by compile time. Extension-aware
-			// and AST-precise (see og-wire.ts); a no-op unless the marker is actually present.
-			if (out.includes('import.meta.og.wire')) {
-				const rewritten = rewrite_wire(out, id_n, CONSTRUCT_MARKUP_EXTS);
-				if (rewritten !== out) {
-					out = rewritten;
-					map = null;
-					touched = true;
-				}
-			}
-
-			// `import.meta.og.$(fn)` — hoist a function so its VALUE crosses a boundary as a fn
-			// ref (og-dollar.ts). Exact marker ('.$state' can never match) + AST verification.
-			if (out.includes('import.meta.og.$')) {
-				const rel_dollar = path.relative(root, id_n.split('?')[0]).split(path.sep).join('/');
-				const res = rewrite_dollar(out, id_n, rel_dollar, CONSTRUCT_MARKUP_EXTS);
-				if (res.code !== out) {
-					out = res.code;
-					map = null;
-					touched = true;
-					for (const h of res.hoists) dollar_hoists.set(h.tag, h.factory_src);
-				}
-			}
-
-			// `import.meta.og.store(factory)` — assert a store factory: registered under a build
-			// tag at module load, products branded (og-store.ts).
-			if (out.includes('import.meta.og.store')) {
-				const rel_store = path.relative(root, id_n.split('?')[0]).split(path.sep).join('/');
-				const rewritten = rewrite_store(out, id_n, rel_store, CONSTRUCT_MARKUP_EXTS);
-				if (rewritten !== out) {
-					out = rewritten;
-					map = null;
-					touched = true;
-				}
-			}
-
-			// AUTO-BRAND provable store factories (export const x = (seed) => store-shape) so the
-			// registered-factory tier needs zero authoring for the common shapes. App source only —
-			// never node_modules (their factories can't self-register on the client anyway).
-			if (!id_n.includes('node_modules') && !id_n.startsWith(PKG_ROOT) && /export\s+const/.test(out)) {
-				const rel_auto = path.relative(root, id_n.split('?')[0]).split(path.sep).join('/');
-				const branded = auto_brand_stores(out, id_n, rel_auto, CONSTRUCT_MARKUP_EXTS);
-				if (branded !== out) {
-					out = branded;
-					map = null;
-					touched = true;
-				}
-			}
-
-			// `import.meta.og.code(source, lang, meta?)` — a highlighted snippet, baked to a static
-			// region through the app's own Shiki fence pipeline (same themes/transformers/meta parsers)
-			// and inlined as `og_html_region("…")`. Async (Shiki). Runs before the island transform so
-			// the injected `og_html_region` import + region value flow through normally. The renderer is
-			// dynamically imported so a build without any `code()` call never loads Shiki here.
-			if (out.includes('import.meta.og.code') || out.includes('import.meta.og.md')) {
-				const md_cfg = islandBridge.markdownConfig as MarkdownOptions | null;
-				const rewritten = await rewrite_code(out, id_n, CONSTRUCT_MARKUP_EXTS, async (call) => {
-					if (call.kind === 'md') return render_markdown(md_cfg, call.source);
-					const region = await render_snippet(md_cfg, call.source, call.lang, call.meta);
-					return region.html;
-				});
-				if (rewritten !== out) {
-					out = rewritten;
-					map = null;
-					touched = true;
-				}
-			}
-
-			// `import.meta.og.bake(fn)` — run fn at build (rolldown-bundle the imports it uses +
-			// execute), devalue-serialize the result, inline it as a literal, and drop imports that only
-			// fed a baked fn. Extension-aware (whole file for .ts/.js, `<script>` blocks for .svelte).
-			// Runs before the island transform so downstream sees plain data, not a call.
-			if (out.includes('import.meta.og.bake')) {
-				const __bk=__P?performance.now():0;
-				const rewritten = await rewrite_bake(out, id_n, {
-					alias: resolve_alias,
-					root,
-					markupExts: CONSTRUCT_MARKUP_EXTS
-				});
-				if (rewritten !== out) {
-					out = rewritten;
-					map = null;
-					touched = true;
-				}
-				if (__P) { __prof.bakeMs += performance.now() - __bk; __prof.bakeN++; }
+			// The `import.meta.og.*` module macros — `wire`/`$`/`store`/auto-brand/`code`/`bake`, in
+			// that order — all landing BEFORE either branch (island transform / svelte compile / ts
+			// region minting) sees the code, so a computed codec key is a real symbol, a hoisted fn is
+			// a ref, a baked call is plain data, and an inlined snippet flows through as a region. Each
+			// pass is a no-op unless its exact marker is present. Owned by the driver (`compiler.macros`,
+			// which fills `compiler.dollar_hoists` for the fn-manifest emit and records the bake timing).
+			const macroed = await compiler.macros(out, id_n);
+			if (macroed.touched) {
+				out = macroed.code;
+				map = null; // any macro rewrite invalidates a prior sourcemap
+				touched = true;
 			}
 
 			// App `.svelte` always; a node_modules `.svelte` ONLY if it carries an ogygia hint (so a
@@ -1653,7 +1576,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// is complete. Pre-minify (this plugin is enforce:pre) and rename-proof (registrations
 			// go through the globalThis bridge the placeholder module installed).
 			if (!code.includes('/*__OGYGIA_FN_MANIFEST__*/')) return null;
-			const regs = [...dollar_hoists.entries()]
+			const regs = [...compiler.dollar_hoists.entries()]
 				.map(([tag, src]) => `globalThis.__og_reg_fn(${JSON.stringify(tag)}, (${src}));`)
 				.join('\n');
 			// FUNCTION-form replacement: factory sources legitimately contain `$$` (a literal `$`
@@ -1699,7 +1622,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				}
 			}
 
-			const json = JSON.stringify({ ...map, content_css, fn_manifest: Object.fromEntries(dollar_hoists) });
+			const json = JSON.stringify({ ...map, content_css, fn_manifest: Object.fromEntries(compiler.dollar_hoists) });
 			emit_island_deps_handoff(root, json);
 		}
 		},
