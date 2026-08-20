@@ -13,6 +13,7 @@ import {
 	make_region_binding,
 	make_wake_island
 } from './emit.js';
+import type { FileIR } from './ir.js';
 
 const REGEXP_META = /[.*+?^${}()|[\]\\]/g;
 const PATH_SEP = /[/\\]/;
@@ -793,6 +794,18 @@ function inject_csr_reset(source, id, parsed = null) {
 }
 
 export function transformHost(source, id, ctx) {
+	const a = analyze_host(source, id, ctx);
+	if ('done' in a) return a.done;
+	return lower_host(a.ir, ctx);
+}
+
+/**
+ * Analyze — read a `.svelte` host's AST into a `FileIR`: its imports, region marks (import attributes
+ * + `asRegion` call sites), the usage findings, and the csr tri-state. No MagicString, no rewriting —
+ * a pure "what does this file declare" pass. Returns `{ done }` for the early exits (a csr=true route
+ * host, the cheap island-hint bailout, a snippet-less file with no islands) or `{ ir }` for lowering.
+ */
+function analyze_host(source, id, ctx): { done: ReturnType<typeof transform_csr_true_host> | null } | { ir: FileIR } {
 	const import_keys = normalize_import_keys(ctx.importKeys);
 	const has_island_hint = import_keys_hint(import_keys).test(source);
 
@@ -808,7 +821,7 @@ export function transformHost(source, id, ctx) {
 	// `with { wake }`), so it precedes the island-hint bailout. (`.ts` held regions and
 	// deferred/live/lake regions are server-driven UI, orthogonal to a page's csr — they are
 	// deliberately NOT degraded; see Region.svelte `is_csr`.)
-	if (ctx.routeCsr === true) return transform_csr_true_host(source, id, has_island_hint, import_keys);
+	if (ctx.routeCsr === true) return { done: transform_csr_true_host(source, id, has_island_hint, import_keys) };
 	const needs_csr_reset = ctx.routeCsr === false;
 
 	// cheap bailout — the library only touches region imports (configured key names), PLUS files that
@@ -816,14 +829,14 @@ export function transformHost(source, id, ctx) {
 	// `import.meta.og.asRegion(…)` macro. Files with none of those return `null` unchanged at the end.
 	// A csr=false route host is never a pure bailout: it always carries the reset marker.
 	if (!has_island_hint && !source.includes('{#snippet') && !source.includes('asRegion')) {
-		return needs_csr_reset ? inject_csr_reset(source, id) : null;
+		return { done: needs_csr_reset ? inject_csr_reset(source, id) : null };
 	}
 
 	let ast;
 	try {
 		ast = parse(source, { modern: true, filename: id });
 	} catch {
-		return null;
+		return { done: null };
 	}
 
 	const instance_body = ast.instance?.content?.body ?? [];
@@ -1221,47 +1234,8 @@ export function transformHost(source, id, ctx) {
 	// `marked_components`, and the end guard returns `null` unchanged if no portable work happens.
 	// A csr=false route host still carries the reset marker even with no island/snippet work.
 	if (marked_components.size === 0 && as_regions.length === 0 && !source.includes('{#snippet')) {
-		return needs_csr_reset ? inject_csr_reset(source, id, ast) : null;
+		return { done: needs_csr_reset ? inject_csr_reset(source, id, ast) : null };
 	}
-
-	/** Walk AST for Identifier / Component references to `local`. */
-	const ast_refs_local = (root, local) => {
-		let found = false;
-		const walk = (node) => {
-			if (found || !node || typeof node !== 'object') return;
-			if (node.type === 'Identifier' && node.name === local) {
-				found = true;
-				return;
-			}
-			if (node.type === 'Component') {
-				const n = node.name || '';
-				if (n === local || n.startsWith(local + '.')) {
-					found = true;
-					return;
-				}
-			}
-			for (const k of Object.keys(node)) {
-				if (k === 'start' || k === 'end' || k === 'loc') continue;
-				const v = node[k];
-				if (Array.isArray(v)) for (const c of v) walk(c);
-				else if (v && typeof v === 'object' && typeof v.type === 'string') walk(v);
-			}
-		};
-		if (Array.isArray(root)) for (const n of root) walk(n);
-		else walk(root);
-		return found;
-	};
-	const marked_import_referenced = (local) => {
-		for (const n of instance_body) {
-			if (n.type === 'ImportDeclaration') continue;
-			if (ast_refs_local(n, local)) return true;
-		}
-		for (const n of module_body) {
-			if (n.type === 'ImportDeclaration') continue;
-			if (ast_refs_local(n, local)) return true;
-		}
-		return ast_refs_local(ast.fragment?.nodes ?? [], local);
-	};
 
 	/** Non-fallback children on a hydrate/defer call site cannot cross devalue — reject. */
 	const assert_portable_children = (node, local, is_server) => {
@@ -1329,6 +1303,98 @@ export function transformHost(source, id, ctx) {
 		}
 	};
 	visit_usages(ast.fragment?.nodes ?? []);
+
+	return {
+		ir: {
+			source,
+			id,
+			ast,
+			instance_body,
+			module_body,
+			lang,
+			rel_host,
+			import_keys,
+			imports,
+			marked_components,
+			imports_to_strip,
+			as_regions,
+			as_region_nodes,
+			synthetic_export,
+			has_island_children,
+			has_island_hint,
+			needs_csr_reset
+		}
+	};
+}
+
+/**
+ * Lower — `FileIR` → rewritten source + `IslandDescriptor[]`. Consumes ONLY the analyze pass's data
+ * (it never re-reads the file): creates the MagicString, rewrites each marked import to its wrapper /
+ * binding / stub, mints the island records, and brands portable snippets. `ast_refs_local` /
+ * `marked_import_referenced` / `err` are rebuilt here from the IR — they are pure over the AST + host
+ * path, so they need not (and cannot) ride in the data seam.
+ */
+function lower_host(ir: FileIR, ctx) {
+	const {
+		source,
+		id,
+		ast,
+		instance_body,
+		module_body,
+		lang,
+		rel_host,
+		import_keys,
+		imports,
+		marked_components,
+		imports_to_strip,
+		as_regions,
+		as_region_nodes,
+		synthetic_export,
+		has_island_children,
+		has_island_hint,
+		needs_csr_reset
+	} = ir;
+	const path = ctx.pathModule;
+	const err = (specifiers, msg) =>
+		new Error(`[ogygia] ${rel_host}: import { ${specifiers} } — ${msg}`);
+	/** Walk AST for Identifier / Component references to `local`. */
+	const ast_refs_local = (root, local) => {
+		let found = false;
+		const walk = (node) => {
+			if (found || !node || typeof node !== 'object') return;
+			if (node.type === 'Identifier' && node.name === local) {
+				found = true;
+				return;
+			}
+			if (node.type === 'Component') {
+				const n = node.name || '';
+				if (n === local || n.startsWith(local + '.')) {
+					found = true;
+					return;
+				}
+			}
+			for (const k of Object.keys(node)) {
+				if (k === 'start' || k === 'end' || k === 'loc') continue;
+				const v = node[k];
+				if (Array.isArray(v)) for (const c of v) walk(c);
+				else if (v && typeof v === 'object' && typeof v.type === 'string') walk(v);
+			}
+		};
+		if (Array.isArray(root)) for (const n of root) walk(n);
+		else walk(root);
+		return found;
+	};
+	const marked_import_referenced = (local) => {
+		for (const n of instance_body) {
+			if (n.type === 'ImportDeclaration') continue;
+			if (ast_refs_local(n, local)) return true;
+		}
+		for (const n of module_body) {
+			if (n.type === 'ImportDeclaration') continue;
+			if (ast_refs_local(n, local)) return true;
+		}
+		return ast_refs_local(ast.fragment?.nodes ?? [], local);
+	};
 
 	const s = new MagicString(source);
 	/** @type {Map<string, object>} dedupe by region id within this host */
