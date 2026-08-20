@@ -57,6 +57,11 @@ export type {
 	OgygiaOptions
 } from './options.js';
 import {
+	assert_no_legacy_options,
+	validate_region_presets,
+	validate_content_presets
+} from './options.js';
+import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,
 	keep_client_dir,
@@ -337,18 +342,6 @@ import type {
 
 
 /**
- * The pre-v3 option spellings, killed by the config-surface collapse. Detected at config load and
- * answered with the exact new spelling — a rename map, never silent aliasing (a legacy key that
- * silently did nothing would un-tune real apps).
- */
-const LEGACY_OPTION_RENAMES: Record<string, string> = {
-	visible: "`visible` moved into the regions subsystem — write `regions: { visible: { … } }`.",
-	presets: "`presets` moved into the regions subsystem — write `regions: { presets: { … } }`.",
-	continuity:
-		"`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it."
-};
-
-/**
  * Vite plugin: transforms `with { hydrate | defer | preset }` imports into islands,
  * serves virtual island modules, and wires signed region endpoints for deferred HTML.
  *
@@ -360,30 +353,11 @@ const LEGACY_OPTION_RENAMES: Record<string, string> = {
 export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const standalone = options.standalone === true;
 
-	// The v3 rename map: a legacy key errors with its new spelling, never silently no-ops.
-	for (const key of Object.keys(LEGACY_OPTION_RENAMES)) {
-		if (key in (options as Record<string, unknown>)) {
-			throw new Error(`[ogygia] ${LEGACY_OPTION_RENAMES[key]}`);
-		}
-	}
+	assert_no_legacy_options(options);
 
 	const visibleMargin = options.regions?.visible?.margin;
 	const presets = options.regions?.presets || {};
-	// Config-time preset validation — the transform re-checks on USE (with file/line context), but a
-	// broken preset nobody references yet should still fail the build, not lurk.
-	const REGION_PRESET_KEYS = new Set(['render', 'wake', 'margin', 'maxAge', 'onExpire', 'revalidate', 'keep']);
-	for (const [name, bag] of Object.entries(presets)) {
-		if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
-			throw new Error(`[ogygia] regions.presets.${name} is empty — a preset with nothing is a mistake.`);
-		}
-		for (const k of Object.keys(bag)) {
-			if (!REGION_PRESET_KEYS.has(k)) {
-				throw new Error(
-					`[ogygia] regions.presets.${name}: unknown key \`${k}\`. A regions preset takes ${[...REGION_PRESET_KEYS].join(', ')}.`
-				);
-			}
-		}
-	}
+	validate_region_presets(presets);
 	const import_keys = normalize_import_keys(options.importKeys);
 
 	// Cheap content-gate: does a source use an ogygia island hint (`import X from '…' with { wake|… }`)?
@@ -404,28 +378,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// Content presets — validated (closed vocabulary, non-empty, base required) and published for the
 	// loader macros (name check at the use site) + the preprocessor (merged config per variant).
 	if (!standalone && options.content?.presets) {
-		const content_presets = options.content.presets;
-		if (!options.content.markdown) {
-			throw new Error(
-				'[ogygia] content.presets requires content.markdown — the defaults are the base every preset merges over (an empty `markdown: {}` is fine).'
-			);
-		}
-		for (const [name, bag] of Object.entries(content_presets)) {
-			if (!/^[\w-]+$/.test(name)) {
-				throw new Error(`[ogygia] content.presets: '${name}' — preset names are identifiers ([A-Za-z0-9_-]).`);
-			}
-			if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
-				throw new Error(`[ogygia] content.presets.${name} is empty — a preset with nothing is a mistake.`);
-			}
-			for (const k of Object.keys(bag)) {
-				if (k !== 'markdown') {
-					throw new Error(
-						`[ogygia] content.presets.${name}: unknown key \`${k}\`. A content preset takes \`markdown\`.`
-					);
-				}
-			}
-		}
-		islandBridge.contentPresets = content_presets as typeof islandBridge.contentPresets;
+		validate_content_presets(options.content.presets, !!options.content?.markdown);
+		islandBridge.contentPresets = options.content.presets as typeof islandBridge.contentPresets;
 	}
 
 	// Region-endpoint rate limit (baked into SSR only via virtual:ogygia/rate-limit).

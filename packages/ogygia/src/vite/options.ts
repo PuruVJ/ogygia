@@ -177,3 +177,72 @@ export interface OgygiaOptions {
 	 */
 	standalone?: boolean;
 }
+
+/**
+ * The pre-v3 option spellings, killed by the config-surface collapse. Detected at config load and
+ * answered with the exact new spelling — a rename map, never silent aliasing (a legacy key that
+ * silently did nothing would un-tune real apps).
+ */
+const LEGACY_OPTION_RENAMES: Record<string, string> = {
+	visible: "`visible` moved into the regions subsystem — write `regions: { visible: { … } }`.",
+	presets: "`presets` moved into the regions subsystem — write `regions: { presets: { … } }`.",
+	continuity:
+		"`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it."
+};
+
+/** The v3 rename map: a legacy key errors with its new spelling, never silently no-ops. */
+export function assert_no_legacy_options(options: OgygiaOptions): void {
+	for (const key of Object.keys(LEGACY_OPTION_RENAMES)) {
+		if (key in (options as Record<string, unknown>)) {
+			throw new Error(`[ogygia] ${LEGACY_OPTION_RENAMES[key]}`);
+		}
+	}
+}
+
+const REGION_PRESET_KEYS = new Set(['render', 'wake', 'margin', 'maxAge', 'onExpire', 'revalidate', 'keep']);
+
+/**
+ * Config-time region-preset validation — the transform re-checks on USE (with file/line context), but
+ * a broken preset nobody references yet should still fail the build, not lurk.
+ */
+export function validate_region_presets(presets: Record<string, unknown>): void {
+	for (const [name, bag] of Object.entries(presets)) {
+		if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
+			throw new Error(`[ogygia] regions.presets.${name} is empty — a preset with nothing is a mistake.`);
+		}
+		for (const k of Object.keys(bag)) {
+			if (!REGION_PRESET_KEYS.has(k)) {
+				throw new Error(
+					`[ogygia] regions.presets.${name}: unknown key \`${k}\`. A regions preset takes ${[...REGION_PRESET_KEYS].join(', ')}.`
+				);
+			}
+		}
+	}
+}
+
+/**
+ * Config-time content-preset validation — closed vocabulary (only `markdown`), non-empty, identifier
+ * names, and `content.markdown` required (the defaults are the base every preset merges over).
+ */
+export function validate_content_presets(content_presets: Record<string, unknown>, has_markdown: boolean): void {
+	if (!has_markdown) {
+		throw new Error(
+			'[ogygia] content.presets requires content.markdown — the defaults are the base every preset merges over (an empty `markdown: {}` is fine).'
+		);
+	}
+	for (const [name, bag] of Object.entries(content_presets)) {
+		if (!/^[\w-]+$/.test(name)) {
+			throw new Error(`[ogygia] content.presets: '${name}' — preset names are identifiers ([A-Za-z0-9_-]).`);
+		}
+		if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
+			throw new Error(`[ogygia] content.presets.${name} is empty — a preset with nothing is a mistake.`);
+		}
+		for (const k of Object.keys(bag)) {
+			if (k !== 'markdown') {
+				throw new Error(
+					`[ogygia] content.presets.${name}: unknown key \`${k}\`. A content preset takes \`markdown\`.`
+				);
+			}
+		}
+	}
+}
