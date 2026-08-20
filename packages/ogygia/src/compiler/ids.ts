@@ -34,3 +34,11 @@ export const RESOLVED = (id: string) => '\0' + id;
 
 /** Virtual island ENTRY module id — JS re-export of the real component (not a thin .svelte). */
 export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.js`;
+
+/**
+ * Region-binding module id. A `with { region: 'raw' }` import is rewritten to import this JS
+ * module, whose source is leg-split by the plugin `load` hook: the SSR leg carries the server
+ * signer (so `region()` can mint a capability), the client leg is metadata-only (no server
+ * code crosses into the browser bundle).
+ */
+export const regionBindingVirtualId = (iid: string) => `virtual:ogygia/region/${iid}.js`;
