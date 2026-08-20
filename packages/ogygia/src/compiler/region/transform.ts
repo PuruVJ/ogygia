@@ -1062,6 +1062,97 @@ class FileCompilation {
 		return null; // a render/wake combo that produced nothing actionable
 	}
 
+	/** Depth-first: the first `import.meta.og.asRegion(…)` CallExpression in a subtree (a STRAY use). */
+	#find_stray_as_region(node) {
+		if (!node || typeof node !== 'object') return null;
+		if (Array.isArray(node)) {
+			for (const n of node) {
+				const hit = this.#find_stray_as_region(n);
+				if (hit) return hit;
+			}
+			return null;
+		}
+		if (node.type === 'CallExpression' && is_import_meta_og(node.callee, 'asRegion')) return node;
+		for (const k in node) {
+			if (k === 'type' || k === 'start' || k === 'end' || k === 'loc' || k === 'parent') continue;
+			const v = node[k];
+			if (v && typeof v === 'object') {
+				const hit = this.#find_stray_as_region(v);
+				if (hit) return hit;
+			}
+		}
+		return null;
+	}
+
+	/** Non-fallback children on a hydrate/defer call site cannot cross devalue — reject. */
+	#assert_portable_children(node, local, is_server) {
+		const kids = (node.fragment?.nodes ?? []).filter(
+			(n) => !(n.type === 'Text' && !String(n.data ?? '').trim())
+		);
+		if (kids.length === 0) return;
+		const only_fallback =
+			is_server &&
+			kids.length === 1 &&
+			kids[0].type === 'SnippetBlock' &&
+			kids[0].expression?.name === 'ogygiaFallback';
+		if (only_fallback) return;
+		throw new Error(
+			`[ogygia] ${this.#rel_host}: <${local}> has host children/snippets that cannot cross the island boundary. ` +
+				`Under portable bindings, pass serializable props and put UI inside the island component` +
+				(is_server
+					? ` (only the reserved \`{#snippet ogygiaFallback()}\` may appear at the call site).`
+					: `.`)
+		);
+	}
+
+	/** Walk the markup: enforce region-usage rules + surface whether a hydrate island has real
+	 *  children (the app then needs the wire slot revivers). Mutates #has_island_children. */
+	#visit_usages(nodes) {
+		const err = (specifiers, msg) =>
+			new Error(`[ogygia] ${this.#rel_host}: import { ${specifiers} } — ${msg}`);
+		for (const node of nodes ?? []) {
+			if (node.type === 'Component') {
+				const name = node.name || '';
+				if (name.includes('.')) {
+					const root = name.split('.')[0];
+					if (this.#marked_components.has(root) && this.#marked_components.get(root).strategy !== 'lake') {
+						throw new Error(
+							`[ogygia] ${this.#rel_host}: dotted tag \`<${name}>\` is not supported for region import '${root}'. ` +
+								`Import the leaf component with \`with { hydrate|defer }\` instead.`
+						);
+					}
+				} else if (this.#marked_components.has(name)) {
+					const mark = this.#marked_components.get(name);
+					if (mark.strategy === 'lake') {
+						if (mark.options?.remount === 'swr') assert_swr_lake_crossable(node, err);
+					} else if (mark.strategy === 'server' || mark.strategy === 'held') {
+						// Server islands render in isolation from serialized props (only the reserved
+						// fallback snippet crosses); held regions are minted as data. Snippets can't cross either.
+						this.#assert_portable_children(node, name, mark.strategy === 'server');
+					} else {
+						// A hydrate island WITH real children crosses them as an OgygiaS slot pointer —
+						// the app's runtime must carry the wire revivers. Surfaced for the plugin's
+						// usage-gated `wire` detection (a childless minimal app stays lean).
+						const kids = (node.fragment?.nodes ?? []).filter(
+							(n) => !(n.type === 'Text' && !String(n.data ?? '').trim())
+						);
+						if (kids.length) this.#has_island_children = true;
+					}
+					// Hydrate-island children need NO compile-time handling: the wrapper forwards them to
+					// Region as its slot, the server renders them IN-PLACE inside a `<ogygia-slot>` marker,
+					// and the payload carries a slot POINTER the client revives into an adopting snippet
+					// (see region-snippet.ts). Nested islands inside render as full regions and wake on
+					// their own. This is the single crossing path — the per-usage "child synth" is gone.
+				}
+			}
+			// `CHILD_KEYS` already includes `fragment`, so this one loop covers a Component's children.
+			// A separate explicit `this.#visit_usages(node.fragment.nodes)` for Components re-descended the
+			// SAME subtree a second time — for NESTED island components that doubled the work per level,
+			// i.e. O(2^depth) (measured: depth-18 ≈ 62ms, depth-25 hangs). One traversal, once.
+			for (const k of CHILD_KEYS) if (node[k]?.nodes) this.#visit_usages(node[k].nodes);
+		}
+	}
+
 	/**
 	 * Analyze — read the host's AST into the compilation's fields: its imports, region marks (import
 	 * attributes + `asRegion` call sites), the usage findings, and the csr tri-state. No MagicString,
@@ -1152,7 +1243,7 @@ class FileCompilation {
 		/** localName -> { node, cleaned } */
 		const imports = new Map();
 		/** localName -> { strategy, options } */
-		const marked_components = new Map();
+		const marked_components = (this.#marked_components = new Map());
 		const imports_to_strip = new Set<{ start: number; end: number }>(); // ImportDeclaration nodes to remove from host
 
 		const err = (specifiers, msg) =>
@@ -1283,32 +1374,12 @@ class FileCompilation {
 		// larger expression, or in `<script module>`, or in markup — can't become a hoisted import, so
 		// reject it loudly rather than leave the macro to crash at runtime. (Legal calls live inside the
 		// `as_region_nodes` statements, which are skipped here.)
-		const find_stray_as_region = (node) => {
-			if (!node || typeof node !== 'object') return null;
-			if (Array.isArray(node)) {
-				for (const n of node) {
-					const hit = find_stray_as_region(n);
-					if (hit) return hit;
-				}
-				return null;
-			}
-			if (node.type === 'CallExpression' && is_import_meta_og(node.callee, 'asRegion')) return node;
-			for (const k in node) {
-				if (k === 'type' || k === 'start' || k === 'end' || k === 'loc' || k === 'parent') continue;
-				const v = node[k];
-				if (v && typeof v === 'object') {
-					const hit = find_stray_as_region(v);
-					if (hit) return hit;
-				}
-			}
-			return null;
-		};
 		for (const place of [
 			...instance_body.filter((n) => !as_region_nodes.has(n)),
 			...module_body,
 			...(ast.fragment?.nodes ?? [])
 		]) {
-			const stray = find_stray_as_region(place);
+			const stray = this.#find_stray_as_region(place);
 			if (stray) {
 				const arg = stray.arguments?.[0];
 				throw as_err(
@@ -1329,71 +1400,9 @@ class FileCompilation {
 		}
 
 		/** Non-fallback children on a hydrate/defer call site cannot cross devalue — reject. */
-		const assert_portable_children = (node, local, is_server) => {
-			const kids = (node.fragment?.nodes ?? []).filter(
-				(n) => !(n.type === 'Text' && !String(n.data ?? '').trim())
-			);
-			if (kids.length === 0) return;
-			const only_fallback =
-				is_server &&
-				kids.length === 1 &&
-				kids[0].type === 'SnippetBlock' &&
-				kids[0].expression?.name === 'ogygiaFallback';
-			if (only_fallback) return;
-			throw new Error(
-				`[ogygia] ${rel_host}: <${local}> has host children/snippets that cannot cross the island boundary. ` +
-					`Under portable bindings, pass serializable props and put UI inside the island component` +
-					(is_server
-						? ` (only the reserved \`{#snippet ogygiaFallback()}\` may appear at the call site).`
-						: `.`)
-			);
-		};
 
-		let has_island_children = false;
-		const visit_usages = (nodes) => {
-			for (const node of nodes ?? []) {
-				if (node.type === 'Component') {
-					const name = node.name || '';
-					if (name.includes('.')) {
-						const root = name.split('.')[0];
-						if (marked_components.has(root) && marked_components.get(root).strategy !== 'lake') {
-							throw new Error(
-								`[ogygia] ${rel_host}: dotted tag \`<${name}>\` is not supported for region import '${root}'. ` +
-									`Import the leaf component with \`with { hydrate|defer }\` instead.`
-							);
-						}
-					} else if (marked_components.has(name)) {
-						const mark = marked_components.get(name);
-						if (mark.strategy === 'lake') {
-							if (mark.options?.remount === 'swr') assert_swr_lake_crossable(node, err);
-						} else if (mark.strategy === 'server' || mark.strategy === 'held') {
-							// Server islands render in isolation from serialized props (only the reserved
-							// fallback snippet crosses); held regions are minted as data. Snippets can't cross either.
-							assert_portable_children(node, name, mark.strategy === 'server');
-						} else {
-							// A hydrate island WITH real children crosses them as an OgygiaS slot pointer —
-							// the app's runtime must carry the wire revivers. Surfaced for the plugin's
-							// usage-gated `wire` detection (a childless minimal app stays lean).
-							const kids = (node.fragment?.nodes ?? []).filter(
-								(n) => !(n.type === 'Text' && !String(n.data ?? '').trim())
-							);
-							if (kids.length) has_island_children = true;
-						}
-						// Hydrate-island children need NO compile-time handling: the wrapper forwards them to
-						// Region as its slot, the server renders them IN-PLACE inside a `<ogygia-slot>` marker,
-						// and the payload carries a slot POINTER the client revives into an adopting snippet
-						// (see region-snippet.ts). Nested islands inside render as full regions and wake on
-						// their own. This is the single crossing path — the per-usage "child synth" is gone.
-					}
-				}
-				// `CHILD_KEYS` already includes `fragment`, so this one loop covers a Component's children.
-				// A separate explicit `visit_usages(node.fragment.nodes)` for Components re-descended the
-				// SAME subtree a second time — for NESTED island components that doubled the work per level,
-				// i.e. O(2^depth) (measured: depth-18 ≈ 62ms, depth-25 hangs). One traversal, once.
-				for (const k of CHILD_KEYS) if (node[k]?.nodes) visit_usages(node[k].nodes);
-			}
-		};
-		visit_usages(ast.fragment?.nodes ?? []);
+		this.#has_island_children = false;
+		this.#visit_usages(ast.fragment?.nodes ?? []);
 
 		// analyze products → shared compilation state (the FileIR fields), read by #lower().
 		this.#ast = ast;
@@ -1403,12 +1412,10 @@ class FileCompilation {
 		this.#rel_host = rel_host;
 		this.#import_keys = import_keys;
 		this.#imports = imports;
-		this.#marked_components = marked_components;
 		this.#imports_to_strip = imports_to_strip;
 		this.#as_regions = as_regions;
 		this.#as_region_nodes = as_region_nodes;
 		this.#synthetic_export = synthetic_export;
-		this.#has_island_children = has_island_children;
 		this.#has_island_hint = has_island_hint;
 		this.#needs_csr_reset = needs_csr_reset;
 		return null;
