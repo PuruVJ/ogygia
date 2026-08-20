@@ -250,14 +250,18 @@ went **2752 → 2063** lines.
 `transform.ts` (still the FUSED analyze+lower pass — `transformHost` / `transformTsRegions`).
 `regionBindingVirtualId` moved to `ids.ts` to keep a one-way flow (no emit↔transform cycle).
 
-- **The analyze/lower IR split is DEFERRED** — assessed against the code and found NOT cleanly
-  separable. `transformHost` is ~1100 lines where analysis (`visit_usages` mark/usage walk), the
-  MagicString, ~12 lowering closures capturing `ctx`/`lang`/the live `ast`, and a lowering loop that
-  interleaves emit + rewrite all share one mutable scope. A two-pass `analyze() → FileIR → lower()`
-  split would thread ~25 values (incl. the AST) across the seam and risks a reorder / capture-timing
-  byte change. Per the invariant ("if a clean split risks a byte, stop"), it stays fused. `ir.ts`
-  (FileIR/RegionMark/MacroCall) + `parse/svelte.ts` land with that split if it is ever done byte-
-  identically. `IslandDescriptor` already lives in `program.ts`.
+- **The analyze/lower IR split is DEFERRED** — assessed against the code (read in full) and found
+  STRUCTURALLY not cleanly separable, not merely risky. A clean `analyze() → FileIR → lower()` seam
+  needs FileIR to be DATA, but the lower half (after `new MagicString` at ~line 1333) CALLS closures
+  defined in the analyze half: `marked_import_referenced` (used at ~1489) and `ast_refs_local` (used
+  at ~1667/1671/1673). Closures can't ride in a data bundle, so the seam would have to move those
+  closures across and re-capture `instance_body`/`module_body`/the live `ast` — a semantic restructure
+  of the most correctness-critical code that risks a byte, exactly the "stop and keep fused" case the
+  invariant names. On top of that, ~20 mutable locals (imports / marked_components / as_regions /
+  synthetic_export / has_island_children / …) cross the boundary. `transformHost` +
+  `transformTsRegions` stay FUSED in `region/transform.ts`. `ir.ts` (FileIR/RegionMark/MacroCall) +
+  `parse/svelte.ts` land with that split only if it is ever done byte-identically. `IslandDescriptor`
+  already lives in `program.ts`.
 - **`driver.emit()` / `driver.invalidate()`.** Only `driver.transform()` was pulled Vite-free; the
   emit dispatch + HMR invalidation stay in the adapter (they read `options.ssr`, `this.emitFile`,
   the dev server) — a follow-up if the REPL adapter ever needs them driver-side.
