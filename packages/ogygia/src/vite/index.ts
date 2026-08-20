@@ -8,6 +8,7 @@ import { loadEnv, type Plugin } from 'vite';
 import type { PreprocessorGroup } from 'svelte/compiler';
 import { configure_build_cache } from '../build-cache.js';
 import { islandBridge, content_css_key } from './island-bridge.js';
+import { island_sourcemaps_plugin } from './sourcemaps.js';
 import { materialize } from '../compiler/content/git.js';
 import { rewrite_loaders } from '../compiler/content/loaders.js';
 import { rewrite_wire } from '../compiler/macros/wire.js';
@@ -503,35 +504,6 @@ const LEGACY_OPTION_RENAMES: Record<string, string> = {
 	continuity:
 		"`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it."
 };
-
-/**
- * Rewrite vite-plugin-svelte island sourcemap `sources` so Vite treats them as virtual.
- *
- * Svelte emits the basename of `virtual:ogygia/island/<id>.svelte` (just `<id>.svelte`).
- * That string does not match Vite's `virtualSourceRE`, so `injectSourcesContent` tries a
- * disk read and warns "points to missing source files". Pointing sources back at the
- * full virtual module id silences the warning (and keeps maps coherent).
- *
- * @internal Also covered by unit tests.
- */
-export function rewrite_island_sourcemap_sources(
-	moduleId: string,
-	sources: (string | null)[] | undefined
-) {
-	if (!sources?.length) return null;
-	let changed = false;
-	const next = sources.map((s) => {
-		if (typeof s !== 'string') return s;
-		if (s === moduleId || s.startsWith('virtual:') || s.includes('\0')) return s;
-		// Basename-only (or other relative) .svelte source for this virtual module.
-		if (s.endsWith('.svelte') && !s.includes('/') && !path.isAbsolute(s)) {
-			changed = true;
-			return moduleId;
-		}
-		return s;
-	});
-	return changed ? next : null;
-}
 
 /**
  * Vite plugin: transforms `with { hydrate | defer | preset }` imports into islands,
@@ -2100,59 +2072,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 		}
 		},
-		{
-			name: 'ogygia:island-sourcemaps',
-			enforce: 'post',
-			transform(code, id) {
-				const bare = strip_id(id);
-				if (!is_island_path(bare)) return null;
-				// A generated WRAPPER virtual (`virtual:ogygia/wrapper/<hash>.svelte`) is glue with no source
-				// on disk. vite-plugin-svelte emits a map whose `sources` is the bare `<hash>.svelte` basename
-				// with no `sourcesContent`; Vite then disk-probes it and warns "points to missing source files"
-				// — once per island, on every dev page. Rewriting the sources to the virtual id does NOT stick
-				// (Vite's `combineSourcemaps` re-traces to svelte's basename map) and inlining `sourcesContent`
-				// is lost the same way — so we drop the map for wrappers: Vite skips `injectSourcesContent` when
-				// `mappings` is empty, and a wrapper is generated code no one steps through.
-				if (bare.includes('/wrapper/')) return { code, map: { mappings: '' } };
-				// Other island svelte virtuals (if any): rewrite basename `<hash>.svelte` sources to the full
-				// virtual id and inline the generated source as `sourcesContent`.
-				let map: {
-					version: number;
-					mappings: string;
-					names: string[];
-					sources: (string | null)[];
-					sourcesContent?: (string | null)[];
-					file?: string;
-				};
-				try {
-					map = this.getCombinedSourcemap();
-				} catch {
-					return null;
-				}
-				if (!map?.mappings || !map.sources?.length) return null;
-				const rewritten = rewrite_island_sourcemap_sources(bare, map.sources);
-				const sources = rewritten ?? map.sources;
-				const entry = registry.get(bare);
-				const base_name = bare.slice(bare.lastIndexOf('/') + 1);
-				let injected = false;
-				const sourcesContent = sources.map((s, i) => {
-					const prev = Array.isArray(map.sourcesContent)
-						? (map.sourcesContent as (string | null)[])[i]
-						: null;
-					if (prev != null) return prev;
-					if (entry && (s === bare || s === base_name)) {
-						injected = true;
-						return entry.source;
-					}
-					return null;
-				});
-				if (!rewritten && !injected) return null;
-				return {
-					code,
-					map: { ...map, sources, sourcesContent }
-				};
-			}
-		}
+		island_sourcemaps_plugin({ program, is_island_path })
 	];
 }
 

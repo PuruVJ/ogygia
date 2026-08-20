@@ -7,7 +7,7 @@ import {
 } from '../dist/compiler/dev/hmr.js';
 import { dev_hmr_client_source } from '../dist/compiler/dev/dev-hmr.js';
 import { derive_css_scope_owners } from '../dist/compiler/dev/css-scope.js';
-import { rewrite_island_sourcemap_sources } from '../dist/vite/index.js';
+import { rewrite_island_sourcemap_sources } from '../dist/vite/sourcemaps.js';
 
 describe('needs_csr_false_full_reload', () => {
 	it('reloads host route shells (SSR-only under csr=false)', () => {
