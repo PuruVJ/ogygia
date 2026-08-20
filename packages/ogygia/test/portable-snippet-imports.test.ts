@@ -5,7 +5,7 @@
 //   RollupError: Identifier 'handleClickUrl' has already been declared
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
-import { transformHost } from '../src/compiler/transform.js';
+import { transformHost } from '../src/compiler/region/transform.js';
 
 const ctx = {
 	root: '/app',

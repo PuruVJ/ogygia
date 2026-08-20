@@ -1,9 +1,10 @@
 import { parse } from 'svelte/compiler';
 import MagicString from 'magic-string';
 import { createHash } from 'node:crypto';
-import { foucCssVirtualId } from './fouc-css.js';
-import { collectCaptureInfo } from './free-vars.js';
-import { parse_module } from './parse/oxc.js';
+import { foucCssVirtualId } from '../fouc-css.js';
+import { collectCaptureInfo } from '../free-vars.js';
+import { parse_module } from '../parse/oxc.js';
+import { strategyKey, regionIdentity, regionId } from './identity.js';
 
 const REGEXP_META = /[.*+?^${}()|[\]\\]/g;
 const PATH_SEP = /[/\\]/;
@@ -11,7 +12,7 @@ const DURATION = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i;
 const JS_EXT = /\.js$/;
 const WRAP_QUOTES = /^['"]|['"]$/g;
 
-export { foucCssVirtualId } from './fouc-css.js';
+export { foucCssVirtualId } from '../fouc-css.js';
 
 export const ISLAND_DIR = '.ogygia';
 
@@ -181,68 +182,10 @@ export function regionBindingVirtualId(iid: string) {
  */
 export const CLIENT_BINDING_STUB = 'virtual:ogygia/client-binding-stub';
 
-/**
- * Fingerprint of a region mark for dedupe. Same component path + same key → one wrapper/entry.
- * @param {{ strategy: string, options?: Record<string, unknown> }} mark
- */
-export function strategyKey(mark: { strategy: string; options?: Record<string, unknown> | null }) {
-	const o = mark.options || {};
-	if (mark.strategy === 'server') {
-		let k = `defer:${o.when ?? 'load'}`;
-		if (o.margin != null) k += `:margin:${o.margin}`;
-		// Cache TTL is baked into the wrapper (it signs the endpoint), so it MUST fingerprint the
-		// wrapper — else a cached hole (maxAge) dedupes onto a plain no-store wrapper of the same
-		// component+schedule and silently loses its `ttl`.
-		if (o.cacheTtlSec != null) k += `:ttl:${o.cacheTtlSec}`;
-		if (o.hydrate) {
-			k += `+hydrate:${o.hydrate}`;
-			if (o.hydrateMargin != null) k += `:hmargin:${o.hydrateMargin}`;
-		}
-		return k;
-	}
-	if (mark.strategy === 'lake') {
-		let k = `lake:${o.remount || 'cache'}`;
-		if (o.when) k += `:when:${o.when}`;
-		if (o.maxAgeMs != null) k += `:maxAge:${o.maxAgeMs}`;
-		if (o.onExpire) k += `:onExpire:${o.onExpire}`;
-		if (o.margin != null) k += `:margin:${o.margin}`;
-		return k;
-	}
-	// A held region (a marked import handed to `region()`, not placed) is a server-chosen island minted
-	// on demand. Its baked wake schedule IS part of the key (`region:visible` ≠ `region:raw`), and the
-	// `region:` prefix keeps it distinct from a PLACED wrapper of the same component+schedule
-	// (`hydrate:visible`), so a component both placed and held gets two artifacts, not a collision. It
-	// always ships a client chunk (it MIGHT be woken; `region:raw` bakes no schedule → set at the call).
-	if (mark.strategy === 'held') {
-		let k = `region:${o.hydrate || 'raw'}`;
-		if (o.hydrateMargin != null) k += `:hmargin:${o.hydrateMargin}`;
-		return k;
-	}
-	let k = `hydrate:${mark.strategy}`;
-	if (o.margin != null) k += `:margin:${o.margin}`;
-	// `keep` (continuity name) is baked into the wrapper (`__keep=…`), so it MUST split the wrapper —
-	// two same-component+schedule imports with different keep names need distinct wrappers, else the
-	// second inherits the first's relocation slot (like `margin`, above).
-	if (o.keep != null) k += `:keep:${o.keep}`;
-	return k;
-}
-
-/**
- * Cross-host stable identity: posix component path + {@link strategyKey}.
- * Drives region ids so multiple hosts / import sites / `<A />` usages share one module.
- */
-export function regionIdentity(
-	componentRelPath: string,
-	mark: { strategy: string; options?: Record<string, unknown> | null }
-) {
-	return `${String(componentRelPath).split(PATH_SEP).join('/')}\0${strategyKey(mark)}`;
-}
-
-/** Hash an identity string (optional production salt) → 12-char region id. */
-export function regionId(identityKey: string, salt = '') {
-	const msg = salt ? `${salt}\0${identityKey}` : identityKey;
-	return createHash('md5').update(msg).digest('hex').slice(0, 12);
-}
+// The join key — region identity (strategyKey / regionIdentity / regionId) now lives in ./identity.ts.
+// Imported for the lowering below and re-exported so the public `ogygia/internal/compiler` surface
+// (export * from transform) is unchanged.
+export { strategyKey, regionIdentity, regionId };
 
 /**
  * Source of the generated `__renderHtml(props)` for a binding's SSR leg. The returned HTML must be

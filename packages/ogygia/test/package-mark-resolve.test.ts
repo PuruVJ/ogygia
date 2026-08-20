@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Plugin } from 'vite';
 import { ogygia } from '../dist/vite/index.js';
-import { regionId, regionIdentity, wrapperVirtualId } from '../dist/compiler/transform.js';
+import { regionId, regionIdentity, wrapperVirtualId } from '../dist/compiler/region/transform.js';
 
 const ROOT = '/nonexistent-ogygia-test-app';
 // A shared LIB component, not a route host: `routeCsrIsTrue` treats a `+page.svelte` with no

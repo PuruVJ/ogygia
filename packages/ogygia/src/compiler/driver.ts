@@ -11,7 +11,7 @@
  */
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { transformHost, wrapperVirtualId, CLIENT_BINDING_STUB } from './transform.js';
+import { transformHost, wrapperVirtualId, CLIENT_BINDING_STUB } from './region/transform.js';
 import { routeCsrIsFalse, routeCsrIsTrue } from './standalone.js';
 import type { Program } from './program.js';
 import type { CompileCtx } from './ctx.js';

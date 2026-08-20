@@ -5,7 +5,7 @@
  * build (unlike the client manifest, which dev fills from URLs); the client build gets an empty map.
  * A whole-program emitter: it reads the Program's descriptor registry.
  */
-import { islandPublicUrl } from '../transform.js';
+import { islandPublicUrl } from '../region/transform.js';
 import type { Program } from '../program.js';
 
 export function server_manifest_module(

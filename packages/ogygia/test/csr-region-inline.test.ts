@@ -5,7 +5,7 @@
 // below is that contract, at the compiler layer (the region-mixed e2e proves it end to end).
 
 import { describe, expect, it } from 'vitest';
-import { transformHost } from '../dist/compiler/transform.js';
+import { transformHost } from '../dist/compiler/region/transform.js';
 
 // The injected call aliases setContext; what must be locked is the Symbol key string + `, true`.
 const CSR_CTX = /Symbol\.for\(\s*['"]ogygia\.csr-true['"]\s*\)\s*,\s*true\s*\)/;

@@ -33,7 +33,7 @@ import {
 	islandChunkFileName,
 	CLIENT_BINDING_STUB,
 	type ImportKeys
-} from '../compiler/transform.js';
+} from '../compiler/region/transform.js';
 
 export {
 	normalize_import_keys,
@@ -47,8 +47,8 @@ export {
 	regionId,
 	regionIdentity,
 	strategyKey
-} from '../compiler/transform.js';
-export type { ImportKeys } from '../compiler/transform.js';
+} from '../compiler/region/transform.js';
+export type { ImportKeys } from '../compiler/region/transform.js';
 import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,

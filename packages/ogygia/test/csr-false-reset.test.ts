@@ -8,7 +8,7 @@
 // ancestor exactly like Kit resolves options ({ ...parent, ...own }); a csr=true host BELOW the reset
 // re-shadows with `true`, so mixing works in both directions.
 import { describe, expect, it } from 'vitest';
-import { transformHost } from '../dist/compiler/transform.js';
+import { transformHost } from '../dist/compiler/region/transform.js';
 import path from 'node:path';
 
 const CTX = (routeCsr: boolean | undefined) => ({

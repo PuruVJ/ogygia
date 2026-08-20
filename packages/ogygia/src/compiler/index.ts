@@ -15,6 +15,6 @@
  *
  * Exposed to consumers as `ogygia/internal/compiler` (internal, not a stable public API).
  */
-export * from './transform.js';
+export * from './region/transform.js';
 export * from './fouc-css.js';
 export * from './free-vars.js';

@@ -9,7 +9,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { islandVirtualId } from './ids.js';
-import { wrapperVirtualId, type ImportKeys } from './transform.js';
+import { wrapperVirtualId, type ImportKeys } from './region/transform.js';
 
 const TRAILING_SLASH = /\/$/;
 

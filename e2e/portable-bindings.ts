@@ -11,7 +11,7 @@ import {
 	regionIdentity,
 	regionId,
 	CLIENT_BINDING_STUB
-} from '../packages/ogygia/dist/compiler/transform.js';
+} from '../packages/ogygia/dist/compiler/region/transform.js';
 
 const base = process.argv[2] || 'http://localhost:3051';
 const repo = fileURLToPath(new URL('..', import.meta.url));
