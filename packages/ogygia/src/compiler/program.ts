@@ -96,6 +96,12 @@ export class Program {
 	/** Build-time capability marks for the sticky runtime entry. Incomplete → kitchen-sink. */
 	readonly runtime_marks: RuntimeMarks;
 
+	/** The resolved feature set folded into the runtime chunk name (busts the immutable URL when the
+	 *  app's feature set changes, not only when ogygia's source does). Filled by the driver's prescan;
+	 *  empty until then (dev serves the package entry). Both build legs prescan the same source → same
+	 *  hash → the server↔client filename handoff holds. */
+	runtime_feature_hash = '';
+
 	constructor(init: { forms: boolean; router: boolean }) {
 		this.runtime_marks = {
 			complete: false,

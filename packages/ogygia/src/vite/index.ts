@@ -52,16 +52,13 @@ import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,
 	keep_client_dir,
-	inject_keep_client_route,
-	clean_stale_ogygia_dirs
+	inject_keep_client_route
 } from '../compiler/standalone.js';
 import {
 	appendTransportRegistrations,
-	appendSvelteModuleRegistrations,
-	moduleHasTransportable,
-	svelteModuleHasTransportable
+	appendSvelteModuleRegistrations
 } from '../compiler/content/transportables.js';
-import { generateRuntimeEntrySource, resolveFeatures, type RuntimeMarks } from '../compiler/link/runtime-entry.js';
+import { generateRuntimeEntrySource, type RuntimeMarks } from '../compiler/link/runtime-entry.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import {
 	derive_id_salt,
@@ -75,8 +72,7 @@ import {
 	compileFoucScopedCss,
 	foucRelFromId,
 	isFoucCssId,
-	isFoucScopedId,
-	resolveFoucImportSpec
+	isFoucScopedId
 } from '../compiler/fouc-css.js';
 import {
 	needs_csr_false_full_reload,
@@ -234,17 +230,6 @@ function runtime_content_hash() {
 	return h.digest('hex').slice(0, 12);
 }
 const RUNTIME_HASH = runtime_content_hash();
-// The runtime chunk is FEATURE-SELECTED — `generateRuntimeEntrySource` emits DIFFERENT bytes per the
-// app's resolved marks (router / live / lakes / wire / …). So the `_app/immutable/…` filename (served
-// `immutable, 1yr`) must bust when the FEATURE SET changes, not only when ogygia's source does — else
-// the same ogygia version, after an app adds e.g. a `live` region, reuses the cached old runtime and
-// that feature silently never boots for returning visitors. `runtime_feature_hash` is filled after
-// prescan; BOTH build legs run the same deterministic prescan → same features → same name, so the
-// server↔client filename handoff still holds. Empty until prescan (dev serves the package entry).
-let runtime_feature_hash = '';
-const runtime_chunk_filename = () =>
-	`_app/immutable/og-runtime.${RUNTIME_HASH}${runtime_feature_hash ? '-' + runtime_feature_hash : ''}.js`;
-const runtime_chunk_url = () => '/' + runtime_chunk_filename();
 
 const TRAILING_SLASH = /\/$/;
 const KIT_REMOTE_CLIENT = /(^|\/)client\.js$/;
@@ -430,6 +415,17 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const register = program.register.bind(program);
 	const unregister_host = program.unregister_host.bind(program);
 
+	// The runtime chunk is FEATURE-SELECTED — `generateRuntimeEntrySource` emits DIFFERENT bytes per the
+	// app's resolved marks (router / live / lakes / wire / …). So the `_app/immutable/…` filename (served
+	// `immutable, 1yr`) must bust when the FEATURE SET changes, not only when ogygia's source does — else
+	// the same ogygia version, after an app adds e.g. a `live` region, reuses the cached old runtime and
+	// that feature silently never boots for returning visitors. `program.runtime_feature_hash` is filled
+	// by the driver's prescan; BOTH build legs run the same deterministic prescan → same features → same
+	// name, so the server↔client filename handoff still holds. Empty until prescan (dev serves the entry).
+	const runtime_chunk_filename = () =>
+		`_app/immutable/og-runtime.${RUNTIME_HASH}${program.runtime_feature_hash ? '-' + program.runtime_feature_hash : ''}.js`;
+	const runtime_chunk_url = () => '/' + runtime_chunk_filename();
+
 	// HMAC key for signing region capability URLs (defer / remount:swr). Default: a fresh
 	// per-build random baked into the SERVER bundle only (never a client chunk). Optional
 	// `OGYGIA_SECRET` overrides that so rolling deploys / long-lived cached HTML keep verifying.
@@ -453,7 +449,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	let resolve_alias = [];
 	let is_build = false;
 	let is_ssr = false;
-	let scanned = false;
 	let content_scanned = false;
 	let sourcemap = false;
 	/** @type {import('vite').ViteDevServer | null} */
@@ -616,117 +611,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				`Move it to a \`.server.ts\` file (or \`src/lib/server/\`) and mint remotes for the wire — ` +
 				`Kit then guarantees the corpus can never reach a client bundle.`
 		);
-	};
-
-	/** Pre-scan every app .svelte so the build manifest is complete before it loads. */
-	const prescan = () => {
-		if (scanned) return;
-		scanned = true;
-		const src_dir = path.join(root, 'src');
-		clean_stale_ogygia_dirs(src_dir);
-		const walk = (dir) => {
-			let entries;
-			try {
-				entries = fs.readdirSync(dir, { withFileTypes: true });
-			} catch {
-				return;
-			}
-			for (const entry of entries) {
-				const full = path.join(dir, entry.name);
-				if (entry.isDirectory()) {
-					if (entry.name === 'node_modules' || entry.name === ISLAND_DIR) continue;
-					walk(full);
-				} else if (entry.name.endsWith('.svelte')) {
-					const src = readFile(full);
-					if (src == null) continue;
-					// A `<script module>` transportable class goes in the manifest too (keyed by the
-					// .svelte path — side-effect-importing the component runs its module registration).
-					if (svelteModuleHasTransportable(src, full)) transportable_modules.add(full);
-					const result = run_transform(src, full);
-					if (result) register(result, full);
-				} else if (
-					(entry.name.endsWith('.ts') || entry.name.endsWith('.js') || entry.name.endsWith('.mjs')) &&
-					!entry.name.endsWith('.d.ts')
-				) {
-					// `.ts` / `.js` region mints (load / remote functions). Discover them up front so a
-					// deferred region's server-manifest entry exists before the endpoint is ever hit —
-					// lazy transform order would otherwise leave the id missing (403 on first fetch).
-					const src = readFile(full);
-					if (src == null) continue;
-					// Transportable classes go into the eager-registration manifest so an island
-					// receiving one as a prop never has to import the class itself.
-					if (moduleHasTransportable(src, full)) transportable_modules.add(full);
-					const result = compiler.ts_regions(src, full);
-					if (result) register(result, full);
-				}
-			}
-		};
-		{ const __ps=__P?performance.now():0; walk(src_dir); if(__P)__prof.prescanMs+=performance.now()-__ps; }
-
-		// Complete `island_graph` TRANSITIVELY, before the bundler resolves a single module. `walk`
-		// above registered each island's OWN component; this marks everything those components import
-		// (and what THOSE import, …) as island code too — so the `$app/*` shim decision is DETERMINISTIC
-		// rather than a build-order race. Without it, a component shared between an island and a
-		// non-island route is marked lazily during Rolldown's own walk: if its `$app/*` (or its
-		// transform) resolves before the island path marks it, it keeps Kit's real client store — which
-		// under `csr = false` is never populated → `page.url` undefined → the island crashes at hydrate.
-		// (This is the race the `?og-region` module-id fork tried to fix; that fork broke Svelte's
-		// scoped-CSS emission, so membership rides OUTSIDE the module id here — the walk only READS.)
-		//
-		// PERF: strictly O(reachable modules). A SINGLE shared `seen` set means each file is read and
-		// scanned exactly once and never re-descended — no per-root re-walk, no depth multiplier (cf.
-		// the depth-25 O(2^depth) usage-walk regression this deliberately avoids). A cheap regex lists
-		// specifiers (over-collection is harmless — an unresolvable one is skipped); package/alias
-		// specifiers stop the walk, where the lazy resolveId marking below stays as the backstop.
-		{
-			const __ws = __P ? performance.now() : 0;
-			const seen_dep = new Set<string>();
-			const DEP_EXTS = ['', '.svelte', '.ts', '.js', '.svelte.ts', '.svelte.js', '.mjs'];
-			const resolve_dep = (spec: string, importerAbs: string): string | null => {
-				const base = resolveFoucImportSpec(spec, importerAbs, libDir);
-				if (!base) return null; // package / alias — the lazy resolveId marking is the backstop
-				for (const ext of DEP_EXTS) {
-					try { if (fs.statSync(base + ext).isFile()) return base + ext; } catch { /* not this ext */ }
-				}
-				for (const ext of DEP_EXTS.slice(1)) {
-					const idx = path.join(base, 'index' + ext);
-					try { if (fs.statSync(idx).isFile()) return idx; } catch { /* not an index */ }
-				}
-				return null;
-			};
-			const IMPORT_SPEC = /\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\bimport\s*\(\s*['"]([^'"\n]+)['"]/g;
-			const walk_dep = (abs: string) => {
-				const norm = strip_id(abs);
-				if (seen_dep.has(norm)) return;
-				seen_dep.add(norm);
-				island_graph.add(norm);
-				if (!/\.(svelte|ts|js|mjs|cjs)$/.test(norm)) return;
-				const src = readFile(norm);
-				if (src == null) return;
-				IMPORT_SPEC.lastIndex = 0;
-				let m: RegExpExecArray | null;
-				while ((m = IMPORT_SPEC.exec(src))) {
-					const spec = m[1] || m[2] || m[3];
-					if (!spec || spec[0] === '\0' || spec.startsWith('$app/') || spec.startsWith('$env/') || spec.startsWith('virtual:')) continue;
-					const dep = resolve_dep(spec, norm);
-					if (dep) walk_dep(dep);
-				}
-			};
-			for (const entry of registry.values()) {
-				if (entry.componentPath) walk_dep(strip_id(entry.componentPath));
-			}
-			if (__P) __prof.prescanMs += performance.now() - __ws;
-		}
-
-		// A transportable class (`static wire = import.meta.og.wire(…)`) means island props can carry a
-		// live wired object, revived through the wire codec — so this app needs the wire runtime.
-		if (transportable_modules.size > 0) runtime_marks.wire = true;
-		// prescan walked every host — the capability marks are now COMPLETE, so the generated sticky
-		// runtime entry can bundle only the features this app uses (else it stays kitchen-sink).
-		runtime_marks.complete = true;
-		// Fold the resolved feature set into the runtime chunk name so it busts when the emitted bytes
-		// change (see `runtime_chunk_filename`). Deterministic across both build legs (same prescan).
-		runtime_feature_hash = crypto.createHash('sha256').update(resolveFeatures(runtime_marks).join(',')).digest('hex').slice(0, 8);
 	};
 
 	return [
@@ -909,7 +793,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// hit. Idempotent via `content_scanned`; a no-op for apps without a content preprocessor.
 			if (!content_scanned) {
 				content_scanned = true;
-				prescan();
+				compiler.prescan();
 				await islandBridge.scan?.({ root, readFile });
 			}
 
@@ -1215,7 +1099,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// fall back to the fixed name only if the handoff is somehow missing.
 				// Ensure prescan ran so `runtime_feature_hash` matches the client emit's filename (both
 				// legs prescan the same source → same feature set → same name).
-				if (!is_dev && !scanned) prescan();
+				if (!is_dev) compiler.prescan();
 				const url = is_dev ? '/@id/__x00__' + V_RUNTIME : hashed_runtime_url || runtime_chunk_url();
 				return `export default ${JSON.stringify(url)};`;
 			}
@@ -1238,7 +1122,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 			if (id === RESOLVED(V_RUNTIME_ENTRY)) {
 				// Ensure every host was walked (marks complete) before selecting features.
-				if (!scanned) prescan();
+				compiler.prescan();
 				const { code } = generateRuntimeEntrySource(runtime_marks, RUNTIME_DIR);
 				// og.$ factories register before any island hydrates (sync fn-ref resolution)
 				return `import ${JSON.stringify(V_FN_MANIFEST)};\n` + code;
@@ -1312,7 +1196,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 			if (id === RESOLVED(V_SERVER_MANIFEST)) {
 				// Populated in BOTH dev and build (unlike the client manifest, which dev fills from URLs).
-				if (ssr) prescan();
+				if (ssr) compiler.prescan();
 				return server_manifest_module(ssr, program, is_dev, devUrlFor);
 			}
 			if (id === RESOLVED(V_MANIFEST)) {
@@ -1320,7 +1204,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 			if (id === RESOLVED(V_TRANSPORTABLES)) {
 				// Eager-registration manifest of transportable-class modules (prescan-discovered).
-				prescan();
+				compiler.prescan();
 				return transportables_module(transportable_modules);
 			}
 			const srcEntry = registry.get(id);
@@ -1355,7 +1239,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			const ssr = options?.ssr === true;
 			// Discover islands before any module is transformed so island_graph is populated
 			// even when an island entry component is processed before its host page.
-			if (!scanned) prescan();
+			compiler.prescan();
 
 			const id_n = strip_id(id);
 
