@@ -90,7 +90,15 @@ import {
 import { dev_hmr_client_source } from '../compiler/dev/dev-hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
 import { collectIslandDepModulepreloads, islandDepsHandoffPath } from '../compiler/link/island-deps.js';
-import { mpaSpeculationRules } from '../compiler/link/speculation.js';
+import {
+	secret_module,
+	sign_module,
+	rate_limit_module,
+	session_cookie_module,
+	region_ttl_module
+} from '../compiler/link/caps.js';
+import { router_config_module } from '../compiler/link/router-config.js';
+import { transport_module } from '../compiler/link/transport.js';
 import {
 	V_RUNTIME_URL,
 	V_MANIFEST,
@@ -1820,40 +1828,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				);
 			}
 			if (id === RESOLVED(V_TRANSPORT)) {
-				// re-export the app's universal `transport` hook (or an empty map) for the client
-				// remote wire codec. Universal hooks are isomorphic, so this is client-safe.
-				if (universal_hooks) {
-					const spec = JSON.stringify(universal_hooks);
-					return `import * as hooks from ${spec};\nexport const transport = hooks.transport || {};`;
-				}
-				return `export const transport = {};`;
+				return transport_module(universal_hooks);
 			}
 			if (id === RESOLVED(V_SECRET)) {
-				// SERVER only: signing key. CLIENT build: empty string (never mint in the browser).
-				// Runtime prefers `OGYGIA_SECRET` when the host sets it; otherwise the per-build
-				// key baked below (same artifact → all instances of this deploy agree).
-				if (!ssr) return `export const secret = '';\nexport const secretStable = false;`;
-				// `secretStable`: whether the key survives redeploys (env-provided vs per-build random).
-				// Prerender uses it to warn when minting ~forever capabilities a redeploy would orphan.
-				return (
-					`export const secret = process.env.OGYGIA_SECRET || ${JSON.stringify(build_secret)};\n` +
-					`export const secretStable = !!process.env.OGYGIA_SECRET;`
-				);
+				return secret_module(ssr, build_secret);
 			}
 			if (id === RESOLVED(V_SIGN)) {
-				// Same split as secret: SSR mints with node:crypto; client never mints (secret is '').
-				if (!ssr) {
-					return (
-						`export function sign(_secret, _message) { return ''; }\n` +
-						`export function verify(_secret, _message, _sig) { return false; }\n` +
-						`export function region_mac_message(id, exp, props, session = '', ttl = '') {\n` +
-						`  const enc = new TextEncoder();\n` +
-						`  const lp = (s) => enc.encode(String(s)).byteLength + ':' + String(s);\n` +
-						`  return 'v1|' + lp(id) + '|' + lp(exp) + '|' + lp(props) + '|' + lp(session) + '|' + lp(ttl);\n` +
-						`}\n`
-					);
-				}
-				return `export { sign, verify, region_mac_message } from ${JSON.stringify(HMAC_MODULE)};`;
+				return sign_module(ssr, HMAC_MODULE);
 			}
 			if (id === RESOLVED(V_REQUEST_EVENT)) {
 				// ServerIsland may appear in a transformed page module that Kit's client guard scans.
@@ -1880,33 +1861,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				return `export { makeRegionEndpoint, mintServerIsland, known_region_fps } from ${JSON.stringify(REGION_ENDPOINT_MODULE)};`;
 			}
 			if (id === RESOLVED(V_RATE_LIMIT)) {
-				// SERVER only — the region handle is the only consumer.
-				if (!ssr) return `export const rateLimit = { max: 0, windowMs: 60000 };`;
-				return `export const rateLimit = ${JSON.stringify(rate_limit)};`;
+				return rate_limit_module(ssr, rate_limit);
 			}
 			if (id === RESOLVED(V_ROUTER_CONFIG)) {
-				// The handle reads this to inject the runtime + `ogygia-router` meta into every page head
-				// (app-wide SPA router). With the router OFF (MPA mode) it instead carries the static
-				// Speculation Rules the handle injects: the browser prerenders (Chromium) or prefetches
-				// (Firefox) likely next pages natively — nothing to inject where unsupported (Safari), no
-				// JS fallback to phase out. In SPA mode the rules are EMPTY on purpose: speculation caches
-				// serve real navigations only, which a body-swap router can never read — the router's own
-				// prefetch + module warming is the working equivalent there.
-				return (
-					`export const enabled = ${router_enabled};\n` +
-					`export const viewTransitions = ${router_view_transitions};\n` +
-					`export const speculationRules = ${JSON.stringify(router_enabled ? '' : mpaSpeculationRules())};`
-				);
+				return router_config_module(router_enabled, router_view_transitions);
 			}
 			if (id === RESOLVED(V_SESSION_COOKIE)) {
-				// SERVER only — sealed into the region MAC when non-empty.
-				if (!ssr) return `export const sessionCookie = '';`;
-				return `export const sessionCookie = ${JSON.stringify(session_cookie)};`;
+				return session_cookie_module(ssr, session_cookie);
 			}
 			if (id === RESOLVED(V_REGION_TTL)) {
-				// SERVER only — capability expiry window for mint.
-				if (!ssr) return `export const regionTtl = 3600;`;
-				return `export const regionTtl = ${region_ttl};`;
+				return region_ttl_module(ssr, region_ttl);
 			}
 			if (id === RESOLVED(V_SERVER_MANIFEST)) {
 				// Map of SERVER-island id -> dynamic import, used by the `ogygiaHandle()` handle to
