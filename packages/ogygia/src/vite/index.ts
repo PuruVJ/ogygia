@@ -1499,10 +1499,18 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// Match Kit: SSR-inline `esm-env` so its development/production export conditions
 					// resolve per mode (used if anything in our server graph imports it). Do NOT
 					// optimizeDeps.exclude it — that breaks Svelte client prebundles that import DEV.
-					// `server.fs.allow`: kit-remote stubs / runtime resolve to absolute paths under this
-					// package; without it Vite 403s them when the app root is docs/ or playground/.
+					//
+					// SSR-inline OGYGIA ITSELF too. ogygia ships real `.svelte` components (Region,
+					// OgygiaBoundary, …) that the app's server build MUST compile — if ogygia is left
+					// EXTERNAL, Node loads a raw `.svelte` at server runtime and crashes with
+					// `ERR_UNKNOWN_FILE_EXTENSION`. vite-plugin-svelte normally auto-noExternals a svelte
+					// library (ogygia carries the `svelte` export condition), but that detection is fragile
+					// under some installs (adapter-node output, a pkg.pr.new URL dependency, an app that
+					// pins/overrides noExternal), so we force it here — the plugin is always present, so this
+					// can't be missed. `server.fs.allow`: kit-remote stubs / runtime resolve to absolute
+					// paths under this package; without it Vite 403s them when the app root is docs/ or playground/.
 					return {
-						ssr: { noExternal: ['esm-env'] },
+						ssr: { noExternal: ['esm-env', 'ogygia'] },
 						// CONTINUITY config → compile-time constants the client runtime reads (typeof-guarded,
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
