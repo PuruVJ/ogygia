@@ -99,6 +99,7 @@ import {
 } from '../compiler/link/caps.js';
 import { router_config_module } from '../compiler/link/router-config.js';
 import { transport_module } from '../compiler/link/transport.js';
+import { Program, strip_id, host_key } from '../compiler/program.js';
 import {
 	V_RUNTIME_URL,
 	V_MANIFEST,
@@ -650,45 +651,24 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		router_enabled && typeof options.router === 'object' && options.router.serverDelta === true;
 
 
-	/** Build-time capability marks for the sticky runtime entry. Incomplete → kitchen-sink. */
-	const runtime_marks: RuntimeMarks = {
-		complete: false,
-		forms: continuity_forms,
-		// The wire runtime (transportable-class + portable-snippet prop revival, ~8kB) is the ONLY
-		// consumer of `slots.wire` (read_region_props). It's off until the prescan proves the app
-		// actually ships a transportable class or a portable snippet — so a plain-props app never
-		// pays for a decoder it can't use. Turned on below via note_runtime_mark / the finalize check.
-		wire: false,
-		remoteSeeds: true,
-		hydrate: [],
-		defer: [],
-		persistKeys: [],
-		// Router is app-wide config now (not detected from a `<Router/>` usage): the feature ships
-		// whenever `router` isn't `false`.
-		router: router_enabled,
-		live: false,
-		lakes: false
-	};
-
-	const note_runtime_mark = (patch: Partial<RuntimeMarks>) => {
-		if (patch.hydrate) {
-			runtime_marks.hydrate = [...new Set([...(runtime_marks.hydrate || []), ...patch.hydrate])];
-		}
-		if (patch.defer) {
-			runtime_marks.defer = [...new Set([...(runtime_marks.defer || []), ...patch.defer])];
-		}
-		if (patch.persistKeys) {
-			runtime_marks.persistKeys = [
-				...new Set([...(runtime_marks.persistKeys || []), ...patch.persistKeys])
-			];
-		}
-		if (patch.router) runtime_marks.router = true;
-		if (patch.live) runtime_marks.live = true;
-		if (patch.persist) runtime_marks.persist = true;
-		if (patch.morph) runtime_marks.morph = true;
-		if (patch.lakes) runtime_marks.lakes = true;
-		if (patch.wire) runtime_marks.wire = true;
-	};
+	// The Program — this plugin instance's cross-file linker / island graph. It owns the descriptor
+	// registry + the feature-mark bag (seeded from the two app-wide config flags), and the behavior
+	// over them (register / unregister_host / note_runtime_mark). Per-instance, never module-global,
+	// so Kit's throwaway plugin instance is a different Program and can't leak into the real build.
+	// The adapter binds local aliases to its Maps (same objects) + methods so the hooks read like before.
+	const program = new Program({ forms: continuity_forms, router: router_enabled });
+	const {
+		registry,
+		island_graph,
+		by_id,
+		region_kinds,
+		host_index,
+		emitted_island_chunks,
+		transportable_modules,
+		runtime_marks
+	} = program;
+	const register = program.register.bind(program);
+	const unregister_host = program.unregister_host.bind(program);
 
 	// HMAC key for signing region capability URLs (defer / remount:swr). Default: a fresh
 	// per-build random baked into the SERVER bundle only (never a client chunk). Optional
@@ -699,24 +679,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	 *  builds would disagree). Empty when unset (dev + default per-build signing). */
 	let id_salt = '';
 
-	/** @type {Map<string, {source:string, hostPath:string, id:string, componentPath?: string | null, server?: boolean, lakes?: string[], role?: 'entry'|'wrapper'}>} keyed by virtual path */
-	const registry = new Map();
-	/** Absolute module ids in an island's CLIENT dependency graph. `$app/*` resolves to shims
-	 *  for these importers (virtual island module AND its transitive component imports). */
-	const island_graph = new Set();
-	const strip_id = (id) => (id ? id.split('?')[0] : id);
-	/** @type {Map<string, string>} iid -> entry virtual path (hydrate / defer / swr-lake) */
-	const by_id = new Map();
-	/** @type {Map<string, 'hydrate'|'defer'|'lake'>} every region id -> kind (server manifest / emit) */
-	const region_kinds = new Map();
-	/** host abs path → region ids + virtual paths discovered on last transform of that host */
-	const host_index = new Map();
-	/** region id → hosts still claiming it (cross-host dedupe: don't drop shared wrappers) */
-	const id_hosts = new Map();
-	/** Client-leg: hydrate island ids whose deterministic chunk has been emitFile'd (dedup across the
-	 *  buildStart prescan emit AND the transform-time emit that catches islands prescan can't see —
-	 *  those declared inside LIBRARY components, where the host lives outside the app's `src`). */
-	const emitted_island_chunks = new Set();
 	/** content_css_key → emitted CSS asset referenceId (client leg). Resolved to hrefs in writeBundle. */
 	const content_css_refs = new Map();
 	/** tag → self-contained factory source from og.$ rewrites — served by the fn-manifest virtual
@@ -734,8 +696,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	let is_ssr = false;
 	let scanned = false;
 	let content_scanned = false;
-	/** Absolute paths of app modules that define a transportable class (built during prescan). */
-	const transportable_modules = new Set();
 	let sourcemap = false;
 	/** @type {import('vite').ViteDevServer | null} */
 	let vite_server = null;
@@ -771,49 +731,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const __P = !!process.env.OGYGIA_PROFILE;
 	const __outHash = new Map<string, number>();
 	const __fnv = (str: string) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; };
-
-	const host_key = (hostPath) => path.resolve(strip_id(hostPath));
-
-	/** Drop this host's claims; shared region ids (cross-host dedupe) stay until unused. */
-	const unregister_host = (hostPath) => {
-		const key = host_key(hostPath);
-		const prev = host_index.get(key);
-		if (prev) {
-			for (const id of prev.ids) {
-				const holders = id_hosts.get(id);
-				if (holders) {
-					holders.delete(key);
-					if (holders.size === 0) {
-						id_hosts.delete(id);
-						region_kinds.delete(id);
-						by_id.delete(id);
-					}
-				} else {
-					region_kinds.delete(id);
-					by_id.delete(id);
-				}
-			}
-			for (const vpath of prev.vpaths) {
-				const entry = registry.get(vpath);
-				if (entry) {
-					const holders = id_hosts.get(entry.id);
-					if (!holders || holders.size === 0) {
-						registry.delete(vpath);
-						island_graph.delete(vpath);
-					}
-				} else {
-					registry.delete(vpath);
-					island_graph.delete(vpath);
-				}
-			}
-			host_index.delete(key);
-		}
-		// NB: do NOT clear transform_cache here. `register()` calls this on every leg AFTER
-		// run_transform populated the cache, so clearing evicted the just-written entry (the cache
-		// never hit → every host re-parsed 3× + an O(n) scan per call). The cache is content-keyed
-		// (`hit.code === source`), so a changed source misses and recomputes on its own; a deleted
-		// file's stale entry is harmless (never queried again). HMR correctness is preserved.
-	};
 
 	const run_transform = (source, id, opts: { ssr?: boolean; linkVirtual?: boolean } = {}) => {
 		const ssr = opts.ssr !== false;
@@ -922,95 +839,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 			clean_stale_ogygia_dirs(full);
 		}
-	};
-
-	/** Replace this host's claims; shared ids keep one registry entry (path+strategy dedupe). */
-	const register = (result, hostId) => {
-		unregister_host(hostId);
-		const key = host_key(hostId);
-		const idx = { ids: new Set(), vpaths: new Set() };
-		for (const isl of result.islands ?? []) {
-			region_kinds.set(isl.id, isl.kind ?? (isl.server ? 'defer' : 'hydrate'));
-			idx.ids.add(isl.id);
-			const kind = isl.kind ?? (isl.server ? 'defer' : 'hydrate');
-			// Record the ACTUAL wake schedule (so `interaction` is detected) + the deferred fetch
-			// timing (so streaming is only pulled for `render: 'deferred'` load holes).
-			if (kind === 'defer') note_runtime_mark({ defer: [isl.fetchWhen || 'load'] });
-			if (kind === 'hydrate') note_runtime_mark({ hydrate: [isl.strategy || 'load'] });
-			if (isl.wakeAfter) note_runtime_mark({ hydrate: [isl.wakeAfter] });
-			if (kind === 'lake') note_runtime_mark({ lakes: true, hydrate: ['none'] });
-			// live + client-morph are needed by HELD regions (region() / region:'raw' / live content),
-			// which stream and re-render on the client — NOT by a plain `wake`-marked placed island,
-			// which merely hydrates once. Every wake import now has a `bindingPath` (attach-to-binding
-			// unification), so gating on that over-shipped live+morph to minimal apps; gate on `held`.
-			if (isl.held) note_runtime_mark({ live: true, morph: true });
-			if (isl.lakes?.length) note_runtime_mark({ lakes: true });
-			if (isl.keep) note_runtime_mark({ persist: true, persistKeys: [isl.keep] });
-			// A portable-snippet synth entry crosses a live snippet into an island — it is revived on the
-			// client through the wire codec, so this app needs the wire runtime.
-			if (isl.portable) note_runtime_mark({ wire: true });
-			// Likewise a hydrate island with real HOST CHILDREN: they cross as an OgygiaS slot
-			// pointer the client must revive (adapters regression: a minimal app with children got a
-			// usage-gated runtime without the revivers → "Unknown type OgygiaS" at hydrate).
-			if (result.hasIslandChildren) note_runtime_mark({ wire: true });
-			let holders = id_hosts.get(isl.id);
-			if (!holders) {
-				holders = new Set();
-				id_hosts.set(isl.id, holders);
-			}
-			holders.add(key);
-
-			if (isl.wrapperPath && isl.wrapperSource) {
-				registry.set(isl.wrapperPath, {
-					source: isl.wrapperSource,
-					hostPath: isl.hostPath,
-					id: isl.id,
-					server: false,
-					lakes: isl.lakes ?? [],
-					componentPath: isl.componentPath ?? null,
-					role: 'wrapper'
-				});
-				idx.vpaths.add(isl.wrapperPath);
-				island_graph.add(isl.wrapperPath);
-			}
-			// Region binding: the host imports this JS module; its source is leg-split at load()
-			// (SSR carries the signer, client is metadata-only). Not a svelte wrapper.
-			if (isl.bindingPath && isl.bindingSsrSource) {
-				registry.set(isl.bindingPath, {
-					ssrSource: isl.bindingSsrSource,
-					clientSource: isl.bindingClientSource ?? isl.bindingSsrSource,
-					hostPath: isl.hostPath,
-					id: isl.id,
-					server: false,
-					lakes: [],
-					componentPath: isl.componentPath ?? null,
-					role: 'region'
-				});
-				idx.vpaths.add(isl.bindingPath);
-				island_graph.add(isl.bindingPath);
-			}
-			if (isl.virtualPath && isl.source) {
-				registry.set(isl.virtualPath, {
-					source: isl.source,
-					hostPath: isl.hostPath,
-					id: isl.id,
-					server: !!isl.server,
-					lakes: [],
-					componentPath: isl.componentPath ?? null,
-					role: 'entry',
-					// A portable-snippet synth entry is AUTHORED markup (a slice of user source) — the
-					// transform hook re-processes it (nested island marks, nested snippets), unlike glue.
-					portable: isl.portable === true
-				});
-				by_id.set(isl.id, isl.virtualPath);
-				idx.vpaths.add(isl.virtualPath);
-				island_graph.add(isl.virtualPath);
-			} else if (isl.virtualPath) {
-				by_id.set(isl.id, isl.virtualPath);
-			}
-			if (isl.componentPath) island_graph.add(isl.componentPath);
-		}
-		host_index.set(key, idx);
 	};
 
 	// Preprocessor bridge: `.svx` / `.md` islands are rewritten by a preprocessor (composed into
