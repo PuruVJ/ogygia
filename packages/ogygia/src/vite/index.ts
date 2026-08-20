@@ -91,6 +91,30 @@ import { dev_hmr_client_source } from '../compiler/dev/dev-hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
 import { collectIslandDepModulepreloads, islandDepsHandoffPath } from '../compiler/link/island-deps.js';
 import { mpaSpeculationRules } from '../compiler/link/speculation.js';
+import {
+	V_RUNTIME_URL,
+	V_MANIFEST,
+	V_RUNTIME,
+	V_RUNTIME_ENTRY,
+	V_DEV_HMR,
+	V_DEV_HMR_URL,
+	V_ISLAND_DEPS,
+	V_FN_MANIFEST,
+	V_SECRET,
+	V_SIGN,
+	V_RATE_LIMIT,
+	V_SESSION_COOKIE,
+	V_REGION_TTL,
+	V_ROUTER_CONFIG,
+	V_SERVER_MANIFEST,
+	V_REQUEST_EVENT,
+	V_REGION_ENDPOINT,
+	V_KIT_WIRE,
+	V_TRANSPORT,
+	V_TRANSPORTABLES,
+	RESOLVED,
+	islandVirtualId
+} from '../compiler/ids.js';
 
 /** `packages/ogygia` — Vite must serve absolute shim/runtime resolves from outside the app root. */
 const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -156,34 +180,9 @@ const STUB_PATHS = fileURLToPath(new URL('../shims/kit-remote/paths-internal-stu
 /** Absolute path to real HMAC (SSR-only via `virtual:ogygia/sign`). */
 const HMAC_MODULE = fileURLToPath(new URL('../server/hmac.js', import.meta.url));
 
-const V_RUNTIME_URL = 'virtual:ogygia/runtime-url';
-const V_MANIFEST = 'virtual:ogygia/manifest';
-const V_RUNTIME = 'virtual:ogygia-runtime';
-/** Generated sticky entry — static-imports only the features selected from build marks. */
-const V_RUNTIME_ENTRY = 'virtual:ogygia/runtime-entry';
 const RUNTIME_ENTRY = V_RUNTIME_ENTRY;
 const RUNTIME_DIR = fileURLToPath(new URL('../runtime', import.meta.url));
-const V_DEV_HMR = 'virtual:ogygia/dev-hmr';
-const V_DEV_HMR_URL = 'virtual:ogygia/dev-hmr-url';
-const V_ISLAND_DEPS = 'virtual:ogygia/island-deps';
-const V_FN_MANIFEST = 'virtual:ogygia/fn-manifest';
-const V_SECRET = 'virtual:ogygia/secret';
-const V_SIGN = 'virtual:ogygia/sign';
-const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
-const V_SESSION_COOKIE = 'virtual:ogygia/session-cookie';
-const V_REGION_TTL = 'virtual:ogygia/region-ttl';
-const V_ROUTER_CONFIG = 'virtual:ogygia/router-config';
-const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
-const V_REQUEST_EVENT = 'virtual:ogygia/request-event';
-const V_REGION_ENDPOINT = 'virtual:ogygia/region-endpoint';
 const V_CLIENT_BINDING_STUB = CLIENT_BINDING_STUB;
-// Reuse Kit's OWN wire protocol (transport-aware devalue arg/response codec) instead of
-// reimplementing it. We deep-import Kit's internal `runtime/shared.js` by absolute path
-// (bypassing the exports map) and feed it the app's universal `transport` hook.
-const V_KIT_WIRE = 'virtual:ogygia/kit-wire';
-const V_TRANSPORT = 'virtual:ogygia/transport';
-const V_TRANSPORTABLES = 'virtual:ogygia/transportables';
-const RESOLVED = (id) => '\0' + id;
 
 /** Absolute path to SSR region-endpoint helper (signed capability URLs). */
 const REGION_ENDPOINT_MODULE = fileURLToPath(new URL('../server/region-endpoint.js', import.meta.url));
@@ -295,9 +294,6 @@ const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
 
 /** A `?…type=style…` / `lang.css` sub-import id — a CSS face, never a corpus JS leak. */
 const CONTENT_STYLE_QUERY_RE = /[?&](?:type=style|lang\.css)/;
-
-/** Virtual island ENTRY module id — JS re-export of the real component (not a thin .svelte). */
-export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.js`;
 
 function is_island_path(id: string) {
 	const bare = id.split('?')[0];
