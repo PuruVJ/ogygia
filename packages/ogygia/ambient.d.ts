@@ -172,29 +172,34 @@ interface ImportMeta {
 		 */
 		bake<T>(fn: () => T | Promise<T>): T;
 		/**
-		 * Mark an imported component as a PLACED ISLAND — the macro alternative to
-		 * `import X from '…' with { wake }`. Where the import-attribute form is default-import-only
-		 * (one `.svelte` file per import), `asRegion` marks ANY imported component, including a NAMED
-		 * export from a barrel (`import { Header } from '@design/system'`). `component` must be a bare
-		 * identifier bound to a top-level import; `timing` is the wake schedule — a string
-		 * (`'load' | 'idle' | 'visible' | 'interaction' | a media query`, default `'load'`) or an
-		 * options object. Returns a component with the SAME props, rendered as an island:
-		 * `const Header = import.meta.og.asRegion(HeaderImpl, 'load')`. Compile construct — the plugin
-		 * rewrites it to a hoisted binding import; there is no runtime `asRegion`.
+		 * Mark an imported component as a region — the macro alternative to `import X from '…' with
+		 * { … }`, and the escape hatch for BARRELS. The import-attribute form only reaches a DEFAULT
+		 * import of one file; `asRegion` marks ANY imported component, including a NAMED export from a
+		 * barrel (`import { Header } from '@design/system'`). It is a transparent escape hatch: the
+		 * `options` accept EXACTLY what an import attribute accepts — no more, no less — and the output
+		 * is identical, only importing the component by its export name. Every mode works: a placed
+		 * island (`wake`), a deferred/live server hole (`render`), a lake (`wake: 'none'`), a held
+		 * region (`region: 'raw'`), or a named `preset`.
+		 *
+		 * `component` must be a bare identifier bound to a top-level import, and the call must be a
+		 * TOP-LEVEL `const Name = import.meta.og.asRegion(Comp, …)` in the instance `<script>`. Returns
+		 * a component with the SAME props. Compile construct — rewritten to a hoisted binding import;
+		 * there is no runtime `asRegion`.
 		 */
 		asRegion<C>(
 			component: C,
-			timing?:
-				| 'load'
-				| 'idle'
-				| 'visible'
-				| 'interaction'
-				| (string & {})
-				| {
-						wake?: 'load' | 'idle' | 'visible' | 'interaction' | (string & {});
-						margin?: string;
-						keep?: string;
-				  }
+			options: {
+				/** hydrate schedule (placed island / lake at `'none'`); the fetch schedule for `render`. */
+				wake?: 'load' | 'idle' | 'visible' | 'interaction' | 'none' | (string & {});
+				/** delivery mode: a static island (default), or a `'deferred'` / `'live'` server hole. */
+				render?: 'static' | 'deferred' | 'live';
+				/** a held region handed to `region()` — must be the ONLY option (`'raw'`). */
+				region?: 'raw';
+				/** a named preset from `ogygia({ regions: { presets } })` — must be the ONLY option. */
+				preset?: string;
+				/** keep the live island (DOM + state) across SPA navigations. */
+				keep?: string;
+			}
 		): C;
 	};
 }

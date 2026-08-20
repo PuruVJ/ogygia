@@ -12,20 +12,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`import.meta.og.asRegion(Comp, timing)` — mark a NAMED / barrel import as a placed island.** The
-  import-attribute form (`import X from './X.svelte' with { wake }`) only reaches a default import of
-  one file. `asRegion` marks any imported component — including a named re-export from a barrel
-  (`import { Header } from '@design/system'`) — as an island, with the same wake vocabulary
-  (`'load' | 'idle' | 'visible' | 'interaction' | a media query`, or an options object). It feeds the
-  same island pipeline; the entry just imports the component by its export name, and region identity
-  keys on `source#exportName` so two named exports of one barrel are distinct islands. **Tree-shaking
-  is preserved** — an island off a huge mixed barrel ships only its own component, not the barrel.
-  Compile construct — rewritten to a hoisted binding import; there is no runtime `asRegion`.
+- **`import.meta.og.asRegion(Comp, options)` — the barrel escape hatch for regions.** The
+  import-attribute form (`import X from './X.svelte' with { … }`) only reaches a DEFAULT import of one
+  file, so a component you can only get through a barrel (`import { Header } from '@design/system'`)
+  couldn't be a region. `asRegion` marks ANY imported component — named or default — as a region. It
+  is a **transparent escape hatch**: `options` accept EXACTLY what an import attribute accepts (no
+  more, no less — both funnel through one parser) and the output is identical, only importing the
+  component by its export name. Every mode works — a placed island (`wake`), a deferred/live server
+  hole (`render`), a lake (`wake: 'none'`), a held region (`region: 'raw'`), or a named `preset`:
 
-  It is **top-level only**: `const Local = import.meta.og.asRegion(Comp, timing)` in the instance
+  ```svelte
+  import { Header, Chart, Block } from '@design/system';
+  const HeaderIsland = import.meta.og.asRegion(Header, { wake: 'load' });
+  const ChartHole    = import.meta.og.asRegion(Chart, { render: 'deferred', wake: 'visible' });
+  const BlockRaw     = import.meta.og.asRegion(Block, { region: 'raw' });   // → region(BlockRaw, …)
+  ```
+
+  Region identity keys on `source#exportName`, so two named exports of one barrel are distinct
+  regions. **Tree-shaking is preserved** — a region off a huge mixed barrel ships only its own
+  component, not the barrel. Compile construct — rewritten to a hoisted binding import; there is no
+  runtime `asRegion`.
+
+  It is **top-level only**: `const Local = import.meta.og.asRegion(Comp, options)` in the instance
   `<script>`. Misuse is a loud build error — a call nested in a loop / function / block / expression,
-  in `<script module>` or markup; a `let`/`var` binding; a non-imported or namespace-imported first
-  argument; or a component already marked with an import attribute (use one mechanism, not both).
+  in `<script module>` or markup; a `let`/`var` or multi-declarator binding; a non-imported or
+  namespace-imported first argument; or a component already marked with an import attribute (use one
+  mechanism, not both).
+
+### Internal
+
+- The region option surface (`wake` / `render` / `region` / `preset` / `keep`, presets, lakes,
+  live/deferred) is now parsed by ONE shared function used by both `with { … }` import attributes and
+  `asRegion`, so the two can never drift. The named-export import path is threaded through every
+  region generator (entry, wrappers, held binding, attach binding).
 
 ## [0.7.0] — 2026-08-19
 

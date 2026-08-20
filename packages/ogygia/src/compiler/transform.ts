@@ -342,10 +342,21 @@ export function normalize_hydrate_value(raw: string, where: string, wakeKey = 'w
 	);
 }
 
+/**
+ * The component-import line for a generated module — a NAMED export (`import { Header as X } from
+ * '@barrel'`, the asRegion/barrel escape hatch) or a plain default (`import X from './X.svelte'`, a
+ * `.svelte` file or a package default). `exportName` is undefined/`'default'` for the default case.
+ */
+function component_import_line(local: string, spec: string, exportName?: string): string {
+	return exportName && exportName !== 'default'
+		? `import { ${exportName} as ${local} } from ${JSON.stringify(spec)};`
+		: `import ${local} from ${JSON.stringify(spec)};`;
+}
+
 /** JS re-export of the real component — the held region's entry (SSR render + client hydrate). */
-function region_entry_source(componentPath: string, iid: string) {
+function region_entry_source(componentPath: string, iid: string, exportName?: string) {
 	return (
-		`import __OgygiaComp_${iid} from ${JSON.stringify(componentPath)};\n` +
+		component_import_line(`__OgygiaComp_${iid}`, componentPath, exportName) + '\n' +
 		`export default __OgygiaComp_${iid};\n`
 	);
 }
@@ -370,6 +381,8 @@ function make_region_binding(opts: {
 	hydrate?: string;
 	/** rootMargin baked when `hydrate` is `'visible'` */
 	hydrateMargin?: string;
+	/** named export to pull (asRegion/barrel); undefined → default import */
+	exportName?: string;
 	identity: string;
 }) {
 	// Descriptor metadata `region()` reads. `__hydrate` is baked only for a `wake:` mark; a
@@ -383,7 +396,7 @@ function make_region_binding(opts: {
 	return {
 		id: opts.iid,
 		virtualPath: opts.entryPath,
-		source: region_entry_source(opts.componentPath, opts.iid),
+		source: region_entry_source(opts.componentPath, opts.iid, opts.exportName),
 		bindingPath: regionBindingVirtualId(opts.iid),
 		// SSR leg is DUAL-FACE: it carries the real component (so `region()` can render inline in
 		// the same server pass) AND the signer (so the transport can mint a capability when the
@@ -392,7 +405,7 @@ function make_region_binding(opts: {
 		// `svelte/server` is imported only on this SSR leg; the client leg is metadata-only, so the
 		// component and server render never ship to the browser bundle.
 		bindingSsrSource:
-			`import __ogRegionComp from ${JSON.stringify(opts.componentPath)};\n` +
+			component_import_line('__ogRegionComp', opts.componentPath, opts.exportName) + '\n' +
 			`import { makeRegionEndpoint as __ogRegionSign } from 'ogygia/internal/server';\n` +
 			`import { render as __ogRegionRender } from 'svelte/server';\n` +
 			// The page never imported this server-picked component, so its scoped CSS is on no page
@@ -428,6 +441,8 @@ function wrapper_attach_binding(opts: {
 	moduleUrl: string;
 	hydrate: string;
 	hydrateMargin?: string;
+	/** named export to pull (asRegion/barrel); undefined → default import */
+	exportName?: string;
 }) {
 	let meta = `__ogRegion: ${JSON.stringify(opts.iid)}, __module: ${JSON.stringify(opts.moduleUrl)}`;
 	if (opts.hydrate) meta += `, __hydrate: ${JSON.stringify(opts.hydrate)}`;
@@ -436,7 +451,7 @@ function wrapper_attach_binding(opts: {
 	return {
 		ssr:
 			`import __OgygiaWrap from ${JSON.stringify(opts.wrapperPath)};\n` +
-			`import __ogRegionComp from ${JSON.stringify(opts.componentPath)};\n` +
+			component_import_line('__ogRegionComp', opts.componentPath, opts.exportName) + '\n' +
 			`import { makeRegionEndpoint as __ogRegionSign } from 'ogygia/internal/server';\n` +
 			`import { render as __ogRegionRender } from 'svelte/server';\n` +
 			`import { islandCss as __ogRegionCss } from 'virtual:ogygia/island-deps';\n` +
@@ -1044,6 +1059,180 @@ export function transformHost(source, id, ctx) {
 	const err = (specifiers, msg) =>
 		new Error(`[ogygia] ${rel_host}: import { ${specifiers} } — ${msg}`);
 
+	// The SINGLE source of truth for the region option surface — shared by `with { … }` import
+	// attributes and `import.meta.og.asRegion(…)`. Given the attribute key→value map (import attributes
+	// are always string-valued, and asRegion presents its options object the same way), return the
+	// { strategy, options } mark, or null when no REGION key is present (a plain import attribute we
+	// don't claim). `fail(msg)` throws the caller's contextual error. Because both entry points funnel
+	// through here, asRegion accepts EXACTLY the options an import attribute does — no more, no less.
+	const resolve_region_mark = (
+		inline: Map<string, string>,
+		fail: (msg: string) => Error
+	): { strategy: string; options: Record<string, unknown> } | null => {
+		const err_shim = (_names: string, msg: string) => fail(msg);
+		// Retired `partial:` key → point at its replacement (only when it isn't the configured name).
+		if (inline.has('partial') && !REGION_KEYS.includes('partial')) {
+			throw fail(
+				`the \`partial\` import attribute was retired. Mark a held-across-a-boundary component with \`${import_keys.region}: 'raw'\` (schedule set at the \`region()\` call), or bake a schedule with a \`${import_keys.wake}:\` mark.`
+			);
+		}
+		// Only carriers of a REGION key are ours. A standard import attribute on an UNRELATED import —
+		// `import data from './d.json' with { type: 'json' }` — is left untouched.
+		if (!REGION_KEYS.some((k) => inline.has(k))) return null;
+
+		// `with { region: 'raw' }` — a held region a registry hands to `region()`, minted on demand.
+		if (inline.has(import_keys.region)) {
+			if (inline.size > 1) {
+				throw fail(
+					`\`${import_keys.region}\` must be the only import attribute — it only marks a held region ('raw'); set the wake schedule at the \`region()\` call.`
+				);
+			}
+			normalize_region_value(inline.get(import_keys.region), rel_host, import_keys.region);
+			return { strategy: 'held', options: {} };
+		}
+
+		// The block carries a `render` MODE + a `wake` schedule, or a preset. No option keys inline — all
+		// tuning lives in plugin config (presets). Canonical internal slots stay `hydrate`/`defer` (+live).
+		const attrs = new Map<string, string>();
+		let remount_opt: { policy: string; when?: string; maxAgeMs?: number; onExpire?: string } | undefined;
+		let from_preset: string | null = null;
+		let render_mode: string | undefined;
+		let wake_val: string | undefined;
+		const live_opts: { revalidate?: unknown; maxAge?: unknown; onExpire?: unknown } = {};
+		if (inline.has(import_keys.preset)) {
+			if (inline.size > 1) {
+				throw fail(
+					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, maxAge, …) in the preset definition (ogygia({ regions: { presets } })).`
+				);
+			}
+			from_preset = inline.get(import_keys.preset)!;
+			const preset = ctx.presets && ctx.presets[from_preset];
+			if (!preset) {
+				const avail = Object.keys(ctx.presets || {});
+				throw fail(
+					`unknown ${import_keys.preset} '${from_preset}'. Available: ${avail.length ? avail.join(', ') : '(none)'}.`
+				);
+			}
+			for (const [k, v] of Object.entries(preset)) {
+				if (v == null) continue;
+				if (k === import_keys.render) render_mode = String(v);
+				else if (k === import_keys.wake) wake_val = String(v);
+				else if (k === 'maxAge' || k === 'onExpire' || k === 'revalidate') live_opts[k] = v;
+				else if (k === 'margin' || k === 'keep') attrs.set(k, String(v));
+				else {
+					throw fail(
+						`unknown key \`${k}\` in preset '${from_preset}'. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`margin\`, \`maxAge\`, \`onExpire\`, \`revalidate\`.`
+					);
+				}
+			}
+		} else {
+			for (const k of inline.keys()) {
+				if (k !== import_keys.wake && k !== import_keys.render && k !== 'keep') {
+					throw fail(
+						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
+					);
+				}
+			}
+			if (inline.has(import_keys.render)) render_mode = inline.get(import_keys.render);
+			if (inline.has(import_keys.wake)) wake_val = inline.get(import_keys.wake);
+			if (inline.has('keep')) attrs.set('keep', inline.get('keep')!);
+		}
+
+		if (render_mode != null && !RENDER_MODES.has(render_mode)) {
+			throw fail(
+				`unknown ${import_keys.render} '${render_mode}'. Use 'static' (inline HTML) | 'deferred' (a hole, fetched) | 'live' (a hole that revalidates).`
+			);
+		}
+		if (render_mode === 'live') {
+			attrs.set('hydrate', 'none');
+			remount_opt = parse_remount(
+				{
+					revalidate: wake_val ?? live_opts.revalidate ?? 'load',
+					...(live_opts.maxAge != null ? { maxAge: live_opts.maxAge } : {}),
+					...(live_opts.onExpire != null ? { onExpire: live_opts.onExpire } : {})
+				},
+				err_shim,
+				''
+			);
+		} else if (render_mode === 'deferred') {
+			attrs.set('defer', wake_val ?? 'load');
+		} else if (wake_val != null) {
+			attrs.set('hydrate', wake_val);
+		}
+		if (from_preset && !attrs.has('hydrate') && !attrs.has('defer')) {
+			throw fail(
+				`${import_keys.preset} '${from_preset}' must set \`${import_keys.render}\` or \`${import_keys.wake}\` — a margin-only (or empty) preset is a no-op.`
+			);
+		}
+
+		for (const k of attrs.keys()) {
+			if (!ATTR_SCHEMA.has(k)) {
+				throw fail(from_preset ? `unknown key \`${k}\` in preset '${from_preset}'.` : `unknown import attribute \`${k}\`.`);
+			}
+		}
+		if (remount_opt && attrs.get('hydrate') !== 'none') {
+			throw fail(`\`remount\` is only valid with \`${import_keys.wake}: 'none'\`.`);
+		}
+
+		// `defer` → SERVER island (content-only hole, fetched on the `wake` schedule).
+		if (attrs.has('defer')) {
+			const dval = attrs.get('defer')!;
+			let when: string;
+			if (KNOWN_STRATEGIES.has(dval)) when = dval;
+			else if (is_media_query(dval)) when = dval;
+			else
+				throw fail(
+					`\`${import_keys.render}: 'deferred'\` fetches on the \`${import_keys.wake}\` schedule, but '${dval}' is not one. Use \`${import_keys.wake}: 'load' | 'idle' | 'visible'\` or a media query (not 'none'/'interaction' — a hole must fetch).`
+				);
+			const options: { when: string; margin?: string; cacheTtlSec?: number } = { when };
+			if (when === 'visible') options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
+			if (live_opts.maxAge != null) {
+				const ttl = parse_cache_ttl_sec(live_opts.maxAge, err_shim, '');
+				if (ttl != null && ttl > 0) options.cacheTtlSec = ttl;
+			}
+			return { strategy: 'server', options };
+		}
+
+		if (attrs.has('hydrate')) {
+			const val = attrs.get('hydrate')!;
+			if (val === 'none') {
+				// A LAKE (render: page, hydrate: none) — a frozen region inside a hydrated island.
+				const lake_opts: { remount?: string; when?: string; margin?: string; maxAgeMs?: number; onExpire?: string } = {};
+				if (remount_opt) {
+					lake_opts.remount = remount_opt.policy;
+					if (remount_opt.when) lake_opts.when = remount_opt.when;
+					if (remount_opt.maxAgeMs != null) lake_opts.maxAgeMs = remount_opt.maxAgeMs;
+					if (remount_opt.onExpire) lake_opts.onExpire = remount_opt.onExpire;
+					if (remount_opt.policy === 'swr' && remount_opt.when === 'visible') {
+						lake_opts.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
+					}
+				}
+				return { strategy: 'lake', options: lake_opts };
+			}
+			if (val === 'false') {
+				throw fail(
+					`\`${import_keys.wake}: 'false'\` is not valid — use \`${import_keys.wake}: 'none'\` for a lake (a frozen region inside a hydrated island). See DESIGN.md.`
+				);
+			}
+			let strategy: string;
+			if (HYDRATE_STRATEGIES.has(val)) strategy = val;
+			else if (is_media_query(val)) strategy = val;
+			else
+				throw fail(
+					`unknown ${import_keys.wake} strategy '${val}'. Use 'load' | 'idle' | 'visible' | 'interaction' | a media query.`
+				);
+			const options: { margin?: string; keep?: string } = {};
+			if (strategy === 'visible') options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
+			if (attrs.has('keep')) {
+				const p = String(attrs.get('keep')).trim();
+				if (!p) throw fail(`\`keep\` needs a non-empty name (e.g. keep: 'player').`);
+				options.keep = p;
+			}
+			return { strategy, options };
+		}
+		return null; // a render/wake combo that produced nothing actionable
+	};
+
 	for (const node of instance_body) {
 		if (node.type !== 'ImportDeclaration') continue;
 		const cleaned = clean_import_text(source, node);
@@ -1057,238 +1246,10 @@ export function transformHost(source, id, ctx) {
 		for (const a of attr_list) inline.set(a.key.name ?? a.key.value, String(a.value.value));
 		const names = node.specifiers.map((sp) => sp.local.name).join(', ');
 
-		// Retired `partial:` key → point at its replacement (only when it isn't the configured name).
-		if (inline.has('partial') && !REGION_KEYS.includes('partial')) {
-			throw err(
-				names,
-				`the \`partial\` import attribute was retired. Mark a held-across-a-boundary component with \`${import_keys.region}: 'raw'\` (schedule set at the \`region()\` call), or bake a schedule with a \`${import_keys.wake}:\` mark.`
-			);
-		}
-
-		// Only imports carrying a REGION key are ours. A standard import attribute on an
-		// UNRELATED import — `import data from './d.json' with { type: 'json' }`, an
-		// `with { type: 'macro' }`, etc. — is left completely untouched (its `with{}` preserved),
-		// even in a file that also declares islands. We only validate + strip the imports we claim.
-		if (!REGION_KEYS.some((k) => inline.has(k))) continue;
-
-		// `with { region: 'raw' }` — a held region a registry hands to `region()`, minted on demand.
-		if (inline.has(import_keys.region)) {
-			// The marker takes ONE value, `'raw'`, and carries no schedule (set at the `region()` call).
-			// Must be the only import attribute.
-			if (inline.size > 1) {
-				throw err(
-					names,
-					`\`${import_keys.region}\` must be the only import attribute — it only marks a held region ('raw'); set the wake schedule at the \`region()\` call.`
-				);
-			}
-			normalize_region_value(inline.get(import_keys.region), rel_host, import_keys.region);
-			for (const spec of node.specifiers) {
-				marked_components.set(spec.local.name, { strategy: 'held', options: {} });
-			}
-			continue;
-		}
-
-		// The import block carries a `render` MODE + a `wake` schedule, or a preset. No option keys
-		// inline — all tuning lives in plugin config (ogygia({ regions: { presets } })). `render` picks the mode
-		// (static | deferred | live); `wake` is hydration for `static`, the fetch schedule for
-		// `deferred`/`live`. Canonical internal slots stay `hydrate`/`defer` (+ a `live` flag).
-		/** @type {Map<string,string>} effective attributes (canonical hydrate/defer + margin + live) */
-		let attrs = new Map();
-		/** @type {{ strategy: string, when?: string } | undefined} */
-		let remount_opt;
-		let from_preset = null;
-		let render_mode; // undefined | 'static' | 'deferred' | 'live'
-		let wake_val; // the schedule string (slotted by render mode below)
-		/** render:'live' policy (from preset). */
-		const live_opts: { revalidate?: unknown; maxAge?: unknown; onExpire?: unknown } = {};
-		if (inline.has(import_keys.preset)) {
-			if (inline.size > 1) {
-				throw err(
-					names,
-					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, maxAge, …) in the preset definition (ogygia({ regions: { presets } })).`
-				);
-			}
-			from_preset = inline.get(import_keys.preset);
-			const preset = ctx.presets && ctx.presets[from_preset];
-			if (!preset) {
-				const avail = Object.keys(ctx.presets || {});
-				throw err(
-					names,
-					`unknown ${import_keys.preset} '${from_preset}'. Available: ${avail.length ? avail.join(', ') : '(none)'}.`
-				);
-			}
-			for (const [k, v] of Object.entries(preset)) {
-				if (v == null) continue;
-				if (k === import_keys.render) render_mode = String(v);
-				else if (k === import_keys.wake) wake_val = String(v);
-				// `render: 'deferred'` cache + `render: 'live'` revalidate policy — resolved by mode below.
-				else if (k === 'maxAge' || k === 'onExpire' || k === 'revalidate') live_opts[k] = v;
-				else if (k === 'margin' || k === 'keep') attrs.set(k, String(v));
-				else {
-					throw err(
-						names,
-						`unknown key \`${k}\` in preset '${from_preset}'. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`margin\`, \`maxAge\`, \`onExpire\`, \`revalidate\`.`
-					);
-				}
-			}
-		} else {
-			// inline may carry the configured render + wake keys, and the continuity `keep` key.
-			for (const k of inline.keys()) {
-				if (k !== import_keys.wake && k !== import_keys.render && k !== 'keep') {
-					throw err(
-						names,
-						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
-					);
-				}
-			}
-			if (inline.has(import_keys.render)) render_mode = inline.get(import_keys.render);
-			if (inline.has(import_keys.wake)) wake_val = inline.get(import_keys.wake);
-			if (inline.has('keep')) attrs.set('keep', inline.get('keep'));
-		}
-
-		// Slot `wake` by render mode. `deferred`/`live` → `wake` is the FETCH schedule (defer, defaults
-		// load; content-only, never hydrates — nest a `wake` island for interactivity). `static`/absent
-		// → `wake` is the HYDRATE schedule (island, or lake at `none`).
-		if (render_mode != null && !RENDER_MODES.has(render_mode)) {
-			throw err(
-				names,
-				`unknown ${import_keys.render} '${render_mode}'. Use 'static' (inline HTML) | 'deferred' (a hole, fetched) | 'live' (a hole that revalidates).`
-			);
-		}
-		if (render_mode === 'live') {
-			// `live` = baked static content that revalidates (Option A). Internally a frozen region +
-			// swr revalidate: the first frame renders inline at SSR/build (prerender-friendly, instant),
-			// then re-fetches from its signed endpoint when stale. `wake` is the revalidate schedule;
-			// `maxAge`/`onExpire` come from the preset.
-			attrs.set('hydrate', 'none');
-			remount_opt = parse_remount(
-				{
-					revalidate: wake_val ?? live_opts.revalidate ?? 'load',
-					...(live_opts.maxAge != null ? { maxAge: live_opts.maxAge } : {}),
-					...(live_opts.onExpire != null ? { onExpire: live_opts.onExpire } : {})
-				},
-				err,
-				names
-			);
-		} else if (render_mode === 'deferred') {
-			attrs.set('defer', wake_val ?? 'load');
-		} else if (wake_val != null) {
-			attrs.set('hydrate', wake_val);
-		}
-		if (from_preset && !attrs.has('hydrate') && !attrs.has('defer')) {
-			throw err(
-				names,
-				`${import_keys.preset} '${from_preset}' must set \`${import_keys.render}\` or \`${import_keys.wake}\` — a margin-only (or empty) preset is a no-op.`
-			);
-		}
-
-		// Only UNKNOWN keys are errors. Presets are TOLERANT: a known-but-inapplicable key
-		// (e.g. `margin` with a `load` island) is silently ignored — it applies wherever it's relevant.
-		for (const k of attrs.keys()) {
-			if (!ATTR_SCHEMA.has(k)) {
-				throw err(names, from_preset ? `unknown key \`${k}\` in preset '${from_preset}'.` : `unknown import attribute \`${k}\`.`);
-			}
-		}
-		if (remount_opt && attrs.get('hydrate') !== 'none') {
-			throw err(names, `\`remount\` is only valid with \`${import_keys.wake}: 'none'\`.`);
-		}
-
-		// `defer` -> SERVER island (`render: deferred` or `live`). CONTENT-ONLY: a deferred region
-		// never ships JS (Option A) — for interactivity nest a `wake` island inside its HTML. The value
-		// is the FETCH schedule (from `wake`): 'load' (immediate, preload-hinted) | 'idle' | 'visible'
-		// | a media query. `live` marks a hole that revalidates after its first fetch.
-		if (attrs.has('defer')) {
-			const dval = attrs.get('defer');
-			let when;
-			if (KNOWN_STRATEGIES.has(dval)) when = dval; // load | idle | visible
-			else if (is_media_query(dval)) when = dval; // media query is the value itself
-			else
-				throw err(
-					names,
-					`\`${import_keys.render}: 'deferred'\` fetches on the \`${import_keys.wake}\` schedule, but '${dval}' is not one. Use \`${import_keys.wake}: 'load' | 'idle' | 'visible'\` or a media query (not 'none'/'interaction' — a hole must fetch).`
-				);
-
-			// `margin` applies when the fetch schedule is `visible` (tolerantly ignored otherwise).
-			const options: { when: string; margin?: string; cacheTtlSec?: number } = { when };
-			if (when === 'visible') options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
-			// `maxAge` (preset) → response cache max-age in seconds, signed into the hole's endpoint. A
-			// deferred hole is `no-store` (dynamic) unless it opts in here.
-			if (live_opts.maxAge != null) {
-				const ttl = parse_cache_ttl_sec(live_opts.maxAge, err, names);
-				if (ttl != null && ttl > 0) options.cacheTtlSec = ttl;
-			}
-
-			for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy: 'server', options });
-			continue;
-		}
-
-		if (attrs.has('hydrate')) {
-			const val = attrs.get('hydrate');
-			if (val === 'none') {
-				// hydrate: 'none' is a LAKE (render: page, hydrate: none). A lake INSIDE a hydrated
-				// island freezes its subtree: SSR renders it inline, its JS ships in NO client chunk
-				// (the island's client module swaps the import for a placeholder), and the runtime
-				// lifts/restores its DOM around the parent hydrate. A lake in the dead shell is a
-				// no-op plain component (dev-warned below). See DESIGN.md.
-				// Always strip the `with{}` later (shell keeps cleaned import; unused/island lakes
-				// drop the host binding). Never leave `with { hydrate: 'none' }` in emitted source.
-				const lake_opts: {
-					remount?: string;
-					when?: string;
-					margin?: string;
-					maxAgeMs?: number;
-					onExpire?: string;
-				} = {};
-				if (remount_opt) {
-					lake_opts.remount = remount_opt.policy;
-					if (remount_opt.when) lake_opts.when = remount_opt.when;
-					if (remount_opt.maxAgeMs != null) lake_opts.maxAgeMs = remount_opt.maxAgeMs;
-					if (remount_opt.onExpire) lake_opts.onExpire = remount_opt.onExpire;
-					if (remount_opt.policy === 'swr' && remount_opt.when === 'visible') {
-						lake_opts.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
-					}
-				}
-				for (const spec of node.specifiers) {
-					marked_components.set(spec.local.name, { strategy: 'lake', options: lake_opts });
-				}
-				continue;
-			}
-			if (val === 'false') {
-				// Import-attribute values are strings; the "no hydration" value is the WORD 'none'
-				// (not the boolean-looking 'false'). No silent alias — point the author at 'none'.
-				throw err(
-					names,
-					`\`${import_keys.wake}: 'false'\` is not valid — use \`${import_keys.wake}: 'none'\` for a lake (a frozen region inside a hydrated island). See DESIGN.md.`
-				);
-			}
-			let strategy;
-			if (HYDRATE_STRATEGIES.has(val)) strategy = val;
-			else if (is_media_query(val)) strategy = val; // media query is the value itself
-			else
-				throw err(
-					names,
-					`unknown ${import_keys.wake} strategy '${val}'. Use 'load' | 'idle' | 'visible' | 'interaction' | a media query.`
-				);
-
-			// `margin` applies only to `visible` (tolerantly ignored otherwise). Falls back to the
-			// plugin-level default ogygia({ regions: { visible: { margin } } }).
-			const options: { margin?: string; keep?: string } = {};
-			if (strategy === "visible") {
-				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
-			}
-			// CONTINUITY: `keep: 'name'` keeps the live island (DOM + mounted app + its $state)
-			// across SPA navigations — the same node relocates onto the next page's slot instead of
-			// remounting. A player keeps playing. Rides the data-ogygia-keep relocation.
-			if (attrs.has('keep')) {
-				const p = String(attrs.get('keep')).trim();
-				if (!p) throw err(names, `\`keep\` needs a non-empty name (e.g. keep: 'player').`);
-				options.keep = p;
-			}
-
-			for (const spec of node.specifiers) marked_components.set(spec.local.name, { strategy, options });
-			continue;
-		}
-		// otherwise: a normal import that happens to carry other import attributes — leave it.
+		// One parser for the whole region option surface (shared with asRegion) → the mark.
+		const mark = resolve_region_mark(inline, (m) => err(names, m));
+		if (!mark) continue; // a plain import attribute we don’t claim
+		for (const spec of node.specifiers) marked_components.set(spec.local.name, mark);
 	}
 
 	// ── import.meta.og.asRegion(Comp, timing) — barrel / named-import placed islands ─────────────
@@ -1300,107 +1261,96 @@ export function transformHost(source, id, ctx) {
 	// islands, not a collision). Rewritten below to a hoisted `import Local from '<binding>'`.
 	const as_err = (local, msg) =>
 		new Error(`[ogygia] ${rel_host}: import.meta.og.asRegion (${local}) — ${msg}`);
-	/** Parse the timing arg (string shorthand OR `{ wake, margin, keep }`) into a wake mark. */
-	const as_region_mark = (arg, local) => {
-		let wake = 'load';
-		let margin;
-		let keep;
-		if (arg == null) {
-			wake = 'load';
-		} else if (arg.type === 'Literal' && typeof arg.value === 'string') {
-			wake = arg.value;
-		} else if (arg.type === 'ObjectExpression') {
-			for (const p of arg.properties ?? []) {
-				if (p.type !== 'Property' || p.computed) continue;
-				const key = p.key?.name ?? p.key?.value;
-				const val = p.value?.type === 'Literal' ? String(p.value.value) : undefined;
-				if (key === import_keys.wake || key === 'wake') {
-					if (val == null) throw as_err(local, '`wake` must be a string literal.');
-					wake = val;
-				} else if (key === 'margin') margin = val;
-				else if (key === 'keep') keep = val;
-			}
-		} else {
+	const synthetic_export = new Map<string, string | undefined>(); // asRegion local -> export name
+
+	/** Read asRegion's options object into the same key→value map an import attribute produces, so the
+	 *  SHARED parser gives asRegion EXACTLY the import-attribute option surface. Object-only and
+	 *  string-valued — the same shape as a `with { … }` clause. */
+	const as_region_inline = (arg, local) => {
+		if (!arg || arg.type !== 'ObjectExpression') {
 			throw as_err(
 				local,
-				`timing must be a string ('load' | 'idle' | 'visible' | 'interaction' | a media query) or an options object.`
+				`needs an options object — \`import.meta.og.asRegion(Comp, { wake: 'load' })\`, the same shape as \`with { … }\`.`
 			);
 		}
-		let strategy;
-		if (HYDRATE_STRATEGIES.has(wake) || is_media_query(wake)) strategy = wake;
-		else
-			throw as_err(
-				local,
-				`unknown wake '${wake}'. Use 'load' | 'idle' | 'visible' | 'interaction' | a media query. ` +
-					`(For a frozen region use the \`with { wake: 'none' }\` import form.)`
-			);
-		const options: { margin?: string; keep?: string } = {};
-		if (strategy === 'visible') options.margin = margin ?? ctx.visibleMargin ?? undefined;
-		if (keep) options.keep = keep;
-		return { strategy, options };
+		const inline = new Map<string, string>();
+		for (const p of arg.properties ?? []) {
+			if (p.type !== 'Property' || p.computed)
+				throw as_err(local, 'options must be a plain object of string-valued keys.');
+			const key = p.key?.name ?? p.key?.value;
+			if (p.value?.type !== 'Literal' || typeof p.value.value !== 'string')
+				throw as_err(local, `option \`${key}\` must be a string literal (region options are string-valued, exactly like an import attribute).`);
+			inline.set(String(key), String(p.value.value));
+		}
+		return inline;
 	};
 
-	const as_regions: Array<{
-		local: string;
-		compLocal: string;
-		source: string;
-		exportName: string;
-		mark: { strategy: string; options: Record<string, unknown> };
-		node: { start: number; end: number };
-	}> = [];
-	const as_region_nodes = new Set(); // VariableDeclaration nodes overwritten below
+	const as_regions: Array<{ local: string; compLocal: string; node: { start: number; end: number } }> = [];
+	const as_region_nodes = new Set(); // the const statements, overwritten via their synthetic import
 	for (const node of instance_body) {
 		if (node.type !== 'VariableDeclaration') continue;
 		const hits = node.declarations.filter(
 			(d) => d.init?.type === 'CallExpression' && is_import_meta_og(d.init.callee, 'asRegion')
 		);
 		if (hits.length === 0) continue;
-		// It rewrites to a hoisted `import` binding, so the shape is fixed: one `const` per statement.
-		if (node.kind !== 'const') {
+		// It rewrites to a hoisted import binding spanning the whole statement, so the shape is fixed:
+		// exactly one `const` binding per asRegion statement.
+		if (node.kind !== 'const')
 			throw as_err(
 				node.declarations[0]?.id?.name ?? '?',
 				`asRegion must be bound with \`const\` (not \`${node.kind}\`) — it compiles to an import binding.`
 			);
-		}
-		if (hits.length !== node.declarations.length) {
+		if (node.declarations.length !== 1)
 			throw as_err(
 				node.declarations[0]?.id?.name ?? '?',
-				'keep each asRegion() in its own `const X = import.meta.og.asRegion(…)` statement.'
+				'declare one asRegion per `const X = import.meta.og.asRegion(…)` statement.'
 			);
-		}
-		for (const decl of node.declarations) {
-			if (decl.id?.type !== 'Identifier') throw as_err('?', 'must bind to a plain `const Name = …`.');
-			const local = decl.id.name;
-			const call_args = decl.init.arguments ?? [];
-			const comp_arg = call_args[0];
-			if (!comp_arg || comp_arg.type !== 'Identifier')
-				throw as_err(local, 'the first argument must be a component you imported (a bare identifier).');
-			// Already an island via an import attribute — one mechanism per component, not both.
-			if (marked_components.has(comp_arg.name)) {
-				throw as_err(
-					local,
-					`'${comp_arg.name}' is already marked an island with an import attribute (\`with { … }\`). Use the import attribute OR asRegion, not both.`
-				);
-			}
-			const info = imports.get(comp_arg.name);
-			if (!info)
-				throw as_err(
-					local,
-					`'${comp_arg.name}' is not an imported component — import it first (e.g. \`import { ${comp_arg.name} } from './…'\`).`
-				);
-			const binding = import_binding_of(info.node, comp_arg.name);
-			if (!binding || 'namespace' in binding)
-				throw as_err(local, `'${comp_arg.name}' must be a default or named import, not a namespace import.`);
-			const mark = as_region_mark(call_args[1], local);
-			as_regions.push({
+		const decl = node.declarations[0];
+		if (decl.id?.type !== 'Identifier') throw as_err('?', 'must bind to a plain `const Name = …`.');
+		const local = decl.id.name;
+		const call_args = decl.init.arguments ?? [];
+		const comp_arg = call_args[0];
+		if (!comp_arg || comp_arg.type !== 'Identifier')
+			throw as_err(local, 'the first argument must be a component you imported (a bare identifier).');
+		// Already an island via an import attribute — one mechanism per component, not both.
+		if (marked_components.has(comp_arg.name))
+			throw as_err(
 				local,
-				compLocal: comp_arg.name,
-				source: binding.source,
-				exportName: binding.exportName,
-				mark,
-				node
-			});
-		}
+				`'${comp_arg.name}' is already marked an island with an import attribute (\`with { … }\`). Use the import attribute OR asRegion, not both.`
+			);
+		const info = imports.get(comp_arg.name);
+		if (!info)
+			throw as_err(
+				local,
+				`'${comp_arg.name}' is not an imported component — import it first (e.g. \`import { ${comp_arg.name} } from './…'\`).`
+			);
+		const binding = import_binding_of(info.node, comp_arg.name);
+		if (!binding || 'namespace' in binding)
+			throw as_err(local, `'${comp_arg.name}' must be a default or named import, not a namespace import.`);
+		// SAME parser as `with { … }` → exactly the same option surface, no more no less.
+		const mark = resolve_region_mark(as_region_inline(call_args[1], local), (m) => as_err(local, m));
+		if (!mark) throw as_err(local, 'needs a `wake`, `render`, `region`, or `preset` option.');
+
+		// Register as a SYNTHETIC default-import: a fake ImportDeclaration spanning the `const` statement
+		// (so the main region loop's rewrite replaces the const with the binding import) whose source is
+		// the barrel spec (componentPath resolves normally). The named export rides in `synthetic_export`.
+		// The one region loop then handles EVERY strategy — wake / render / lake / raw — identically to a
+		// real import attribute; only the entry/wrapper import the component by its export name, and
+		// identity keys on `source#exportName`.
+		imports.set(local, {
+			node: {
+				start: node.start,
+				end: node.end,
+				type: 'ImportDeclaration',
+				source: { value: binding.source },
+				specifiers: [{ type: 'ImportDefaultSpecifier', local: { name: local } }],
+				attributes: []
+			},
+			cleaned: ''
+		});
+		marked_components.set(local, mark);
+		synthetic_export.set(local, binding.exportName);
+		as_regions.push({ local, compLocal: comp_arg.name, node });
 		as_region_nodes.add(node);
 	}
 
@@ -1580,20 +1530,13 @@ export function transformHost(source, id, ctx) {
 	// (Rolldown must not content-dedupe them into a facade that drops `export default`).
 	// Scale: same path+strategy → one id → one emitFile; N instances share this URL.
 	// Wrappers are NOT this entry — they are SSR/csr=true host bindings only.
-	// The component-import line for a generated module: a NAMED export (`import { Header as X }` — a
-	// barrel / asRegion component) or a plain default (`import X` — a `.svelte` file, a package default).
-	const component_import = (local, spec, exportName) =>
-		exportName && exportName !== 'default'
-			? `import { ${exportName} as ${local} } from ${JSON.stringify(spec)};`
-			: `import ${local} from ${JSON.stringify(spec)};`;
-
 	const entry_source_for = (componentPath, iid, exportName) =>
 		// The island entry loads on both client hydrate and server render. Importing the
 		// transportables manifest here registers every `[ogygia.wire]` codec before props are
 		// decoded, so an island receiving a transportable prop never needs to import the class
 		// itself (an `import type` that the compiler erases would otherwise leave decode blind).
 		`import 'virtual:ogygia/transportables';\n` +
-		component_import(`__OgygiaComp_${iid}`, componentPath, exportName) +
+		component_import_line(`__OgygiaComp_${iid}`, componentPath, exportName) +
 		'\n' +
 		`export default __OgygiaComp_${iid};\n`;
 
@@ -1605,7 +1548,7 @@ export function transformHost(source, id, ctx) {
 			`<script${lang}>\n` +
 			`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
 			`\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
-			`\t${component_import('__OgygiaCss', componentPath, exportName)}\n` +
+			`\t${component_import_line('__OgygiaCss', componentPath, exportName)}\n` +
 			`\tlet { children, ...__props } = $props();\n` +
 			`</script>\n` +
 			// `children` rides as an EXPLICIT prop, never as template children: wrapping `{@render
@@ -1618,7 +1561,7 @@ export function transformHost(source, id, ctx) {
 		);
 	};
 
-	const server_wrapper_source = (iid, componentPath, entryPath, options) => {
+	const server_wrapper_source = (iid, componentPath, entryPath, options, exportName) => {
 		const deferred_hydrate = !!options?.hydrate;
 		const fetch_when = options?.when || 'load';
 		let server_attrs = `__defer={${JSON.stringify(fetch_when)}}`;
@@ -1637,7 +1580,7 @@ export function transformHost(source, id, ctx) {
 			`<script${lang}>\n` +
 			`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
 			`\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
-			`\timport __OgygiaCss from ${JSON.stringify(componentPath)};\n` +
+			`\t${component_import_line('__OgygiaCss', componentPath, exportName)}\n` +
 			`\tlet { ogygiaFallback, ...__props } = $props();\n` +
 			`</script>\n` +
 			`<OgygiaRegion__Wrapper __mode="server" __entry={${JSON.stringify(iid)}} __component={__OgygiaEntry} ` +
@@ -1645,7 +1588,7 @@ export function transformHost(source, id, ctx) {
 		);
 	};
 
-	const lake_wrapper_source = (iid, componentPath, options) => {
+	const lake_wrapper_source = (iid, componentPath, options, exportName) => {
 		const remount = options?.remount || 'cache';
 		const needs_endpoint = remount === 'swr';
 		const when = options?.when || (needs_endpoint ? 'load' : undefined);
@@ -1662,7 +1605,7 @@ export function transformHost(source, id, ctx) {
 		return (
 			`<script${lang}>\n` +
 			`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
-			`\timport OgygiaLakeInner from ${JSON.stringify(componentPath)};\n` +
+			`\t${component_import_line('OgygiaLakeInner', componentPath, exportName)}\n` +
 			`\tlet __props = $props();\n` +
 			`</script>\n` +
 			`<OgygiaRegion__Wrapper __mode="lake" ${attrs}>` +
@@ -1753,8 +1696,13 @@ export function transformHost(source, id, ctx) {
 				`[ogygia] ${rel_host}: region import '${local}' needs a module specifier ($lib/…, relative, or a package specifier like 'pkg/component').`
 			);
 		}
+		// asRegion regions ride in as a synthetic default-import; `exportName` is the barrel export the
+		// generators pull (entry/wrapper import `{ Name as … }`), and identity keys on `source#exportName`.
+		const exportName = synthetic_export.get(local);
 		const comp_rel = component_identity(componentPath);
-		const identity = regionIdentity(comp_rel, mark);
+		const id_base =
+			exportName && exportName !== 'default' ? `${comp_rel}#${exportName}` : comp_rel;
+		const identity = regionIdentity(id_base, mark);
 		const iid = regionId(identity, salt);
 		const entryPath = ctx.virtualPathFor(id, iid);
 		const wrapPath = wrapperPathFor(id, iid);
@@ -1768,9 +1716,9 @@ export function transformHost(source, id, ctx) {
 					id: iid,
 					// SWR lakes need a server-renderable entry; cache/empty are wrapper-only.
 					virtualPath: swr ? entryPath : undefined,
-					source: swr ? entry_source_for(componentPath, iid) : undefined,
+					source: swr ? entry_source_for(componentPath, iid, exportName) : undefined,
 					wrapperPath: wrapPath,
-					wrapperSource: lake_wrapper_source(iid, componentPath, mark.options),
+					wrapperSource: lake_wrapper_source(iid, componentPath, mark.options, exportName),
 					hostPath: id,
 					componentPath,
 					server: swr,
@@ -1806,6 +1754,7 @@ export function transformHost(source, id, ctx) {
 						entryPath,
 						hostPath: id,
 						moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+						exportName,
 						identity
 					})
 				);
@@ -1842,14 +1791,15 @@ export function transformHost(source, id, ctx) {
 					componentPath,
 					moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
 					hydrate: mark.strategy,
-					hydrateMargin: mark.strategy === 'visible' ? (mark.options?.margin ?? undefined) : undefined
+					hydrateMargin: mark.strategy === 'visible' ? (mark.options?.margin ?? undefined) : undefined,
+					exportName
 				})
 			: null;
 		if (!islands_by_id.has(iid)) {
-			const entry_src = entry_source_for(componentPath, iid);
+			const entry_src = entry_source_for(componentPath, iid, exportName);
 			const wrapper_src = is_server
-				? server_wrapper_source(iid, componentPath, entryPath, mark.options)
-				: hydrate_wrapper_source(iid, componentPath, entryPath, mark.strategy, mark.options);
+				? server_wrapper_source(iid, componentPath, entryPath, mark.options, exportName)
+				: hydrate_wrapper_source(iid, componentPath, entryPath, mark.strategy, mark.options, exportName);
 			islands_by_id.set(iid, {
 				id: iid,
 				virtualPath: entryPath,
@@ -1902,55 +1852,13 @@ export function transformHost(source, id, ctx) {
 		}
 	}
 
-	// ── asRegion islands — same pipeline, named-export imports, identity by source#exportName ────
-	// Each `const Local = import.meta.og.asRegion(Comp, timing)` becomes a hoisted binding import; the
-	// component's own barrel import is stripped when asRegion is its only use, so the HOST chunk never
-	// pulls the barrel (the island entry imports the component itself, tree-shaken by the barrel).
-	const as_region_lines = new Map<{ start: number; end: number }, string[]>();
-	const as_region_locals = new Set<string>();
-	for (const reg of as_regions) {
-		as_region_locals.add(reg.compLocal);
-		const componentPath = resolve_component_path(reg.source, id, ctx);
-		if (!componentPath) throw as_err(reg.local, `could not resolve '${reg.source}'.`);
-		const comp_rel = component_identity(componentPath);
-		const id_base =
-			reg.exportName && reg.exportName !== 'default' ? `${comp_rel}#${reg.exportName}` : comp_rel;
-		const identity = regionIdentity(id_base, reg.mark);
-		const iid = regionId(identity, salt);
-		const entryPath = ctx.virtualPathFor(id, iid);
-		const wrapPath = wrapperPathFor(id, iid);
-		if (!islands_by_id.has(iid)) {
-			islands_by_id.set(iid, {
-				id: iid,
-				virtualPath: entryPath,
-				wrapperPath: wrapPath,
-				wrapperSource: hydrate_wrapper_source(
-					iid,
-					componentPath,
-					entryPath,
-					reg.mark.strategy,
-					reg.mark.options,
-					reg.exportName
-				),
-				source: entry_source_for(componentPath, iid, reg.exportName),
-				hostPath: id,
-				componentPath,
-				server: false,
-				kind: 'hydrate',
-				lakes: [],
-				identity,
-				strategy: reg.mark.strategy,
-				keep: reg.mark.options?.keep
-			});
-		}
-		const rewrite_path = link_virtual ? wrapPath : binding_stub;
-		const lines = as_region_lines.get(reg.node) ?? [];
-		lines.push(binding_rewrite(reg.local, rewrite_path, componentPath));
-		as_region_lines.set(reg.node, lines);
-	}
-	for (const [node, lines] of as_region_lines) {
-		s.overwrite(node.start, node.end, lines.join('\n'));
-	}
+	// ── asRegion barrel-import cleanup ───────────────────────────────────────────────────────────
+	// asRegion regions are emitted by the ONE region loop above (each rode in as a synthetic
+	// default-import, so every strategy — wake / render / lake / raw — is handled identically). Here
+	// we only strip the ORIGINAL barrel import when every specifier it declared was consumed by
+	// asRegion and used nowhere else — so the HOST chunk never pulls the barrel (the island entry
+	// imports the component itself, tree-shaken by the barrel).
+	const as_region_locals = new Set(as_regions.map((r) => r.compLocal));
 	// Strip a component's import when EVERY specifier was consumed by asRegion and used nowhere else.
 	if (as_region_locals.size) {
 		const referenced_outside = (local) => {

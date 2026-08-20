@@ -8,8 +8,8 @@
 	// `brandConfig` is a NON-component barrel export used normally in the shell → this import stays.
 	import { brandConfig } from '$lib/barrel';
 
-	const TickerIsland = import.meta.og.asRegion(Ticker, 'load');
-	const FlagIsland = import.meta.og.asRegion(Flag, 'visible');
+	const TickerIsland = import.meta.og.asRegion(Ticker, { wake: 'load' });
+	const FlagIsland = import.meta.og.asRegion(Flag, { wake: 'visible' });
 </script>
 
 <h1 data-static-shell>asRegion — barrel islands</h1>

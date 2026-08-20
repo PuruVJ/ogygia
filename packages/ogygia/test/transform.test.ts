@@ -744,17 +744,18 @@ describe('package-specifier island marks', () => {
 });
 
 describe('asRegion macro (import.meta.og.asRegion)', () => {
-	const asr = (script: string, markup: string) => run(wrap(script, markup))!;
+	const asr = (script: string, markup: string, ctx = makeCtx()) => run(wrap(script, markup), ctx)!;
 
 	test('named barrel import → island; entry imports the NAMED export; template keeps <H/>', () => {
 		const r = asr(
-			`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'load');`,
+			`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'load' });`,
 			'<H title="Hi" />'
 		);
 		const iid = idFor('@acme/ui#Header', loadMark);
-		// the const is rewritten to a hoisted binding import; the tag stays <H … />
+		// the const is rewritten to a hoisted binding import (the wake attach binding, EXACTLY like a
+		// real `import H from '…' with { wake: 'load' }`); the tag stays <H … />
 		expect(r.code).toMatch(
-			new RegExp(`import H from ["']${wrapperVirtualId(iid).replace(/\./g, '\\.')}["']`)
+			new RegExp(`import H from ["']${regionBindingVirtualId(iid).replace(/\./g, '\\.')}["']`)
 		);
 		expect(r.code).toMatch(/<H\s+title="Hi"\s*\/>/);
 		expect(r.code).not.toMatch(/import\.meta\.og\.asRegion/);
@@ -770,8 +771,8 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 	test('identity keys on source#exportName: two named exports of ONE barrel → two islands', () => {
 		const r = asr(
 			`import { Header, Footer } from '@acme/ui';\n` +
-				`const H = import.meta.og.asRegion(Header, 'load');\n` +
-				`const F = import.meta.og.asRegion(Footer, 'visible');`,
+				`const H = import.meta.og.asRegion(Header, { wake: 'load' });\n` +
+				`const F = import.meta.og.asRegion(Footer, { wake: 'visible' });`,
 			'<H /><F />'
 		);
 		expect(r.islands).toHaveLength(2);
@@ -780,20 +781,20 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 	});
 
 	test('a default import works via asRegion too (default entry import)', () => {
-		const r = asr(`import Card from './Card.svelte';\nconst C = import.meta.og.asRegion(Card, 'idle');`, '<C />');
+		const r = asr(`import Card from './Card.svelte';\nconst C = import.meta.og.asRegion(Card, { wake: 'idle' });`, '<C />');
 		expect(r.islands).toHaveLength(1);
 		expect(r.islands[0].source).toMatch(/import __OgygiaComp_[0-9a-f]+ from ["'][^"']*Card\.svelte["']/);
 		expect(r.islands[0].source).not.toMatch(/import \{ /);
 	});
 
 	test('a fully-consumed barrel import is stripped from the host (no barrel in host chunk)', () => {
-		const r = asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'load');`, '<H />');
+		const r = asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'load' });`, '<H />');
 		expect(r.code).not.toMatch(/from ['"]@acme\/ui['"]/);
 	});
 
 	test('a barrel import with a still-used non-component export is KEPT', () => {
 		const r = asr(
-			`import { Header, brand } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'load');`,
+			`import { Header, brand } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'load' });`,
 			'<H />{brand}'
 		);
 		expect(r.code).toMatch(/from ['"]@acme\/ui['"]/); // brand still referenced → import stays
@@ -802,19 +803,19 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 	// ── misuse: loud build errors ────────────────────────────────────────────────
 	test('first arg not an imported component → error', () => {
 		expectThrows(
-			() => asr(`const H = import.meta.og.asRegion(NotImported, 'load');`, '<H />'),
+			() => asr(`const H = import.meta.og.asRegion(NotImported, { wake: 'load' });`, '<H />'),
 			/not an imported component/
 		);
 	});
 	test('namespace import → error', () => {
 		expectThrows(
-			() => asr(`import * as UI from '@acme/ui';\nconst H = import.meta.og.asRegion(UI, 'load');`, '<H />'),
+			() => asr(`import * as UI from '@acme/ui';\nconst H = import.meta.og.asRegion(UI, { wake: 'load' });`, '<H />'),
 			/namespace import/
 		);
 	});
 	test('`let` binding → error (must be const)', () => {
 		expectThrows(
-			() => asr(`import { Header } from '@acme/ui';\nlet H = import.meta.og.asRegion(Header, 'load');`, '<H />'),
+			() => asr(`import { Header } from '@acme/ui';\nlet H = import.meta.og.asRegion(Header, { wake: 'load' });`, '<H />'),
 			/must be bound with `const`/
 		);
 	});
@@ -822,7 +823,7 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 		expectThrows(
 			() =>
 				asr(
-					`import Header from './Header.svelte' with { wake: 'load' };\nconst H = import.meta.og.asRegion(Header, 'idle');`,
+					`import Header from './Header.svelte' with { wake: 'load' };\nconst H = import.meta.og.asRegion(Header, { wake: 'idle' });`,
 					'<H />'
 				),
 			/already marked an island/
@@ -830,22 +831,34 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 	});
 	test('unknown timing → error', () => {
 		expectThrows(
-			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'whenever');`, '<H />'),
+			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'whenever' });`, '<H />'),
 			/unknown wake/
 		);
 	});
-	test('mixed declarators in one statement → error', () => {
+	test('options must be an OBJECT — a string shorthand is rejected', () => {
+		expectThrows(
+			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'load');`, '<H />'),
+			/needs an options object/
+		);
+	});
+	test('a missing options object → error', () => {
+		expectThrows(
+			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header);`, '<H />'),
+			/needs an options object/
+		);
+	});
+	test('mixed / multiple declarators in one statement → error', () => {
 		expectThrows(
 			() =>
-				asr(`import { Header } from '@acme/ui';\nconst x = 1, H = import.meta.og.asRegion(Header, 'load');`, '<H />'),
-			/its own `const/
+				asr(`import { Header } from '@acme/ui';\nconst x = 1, H = import.meta.og.asRegion(Header, { wake: 'load' });`, '<H />'),
+			/one asRegion per/
 		);
 	});
 	test('NOT top-level (nested in a function) → error', () => {
 		expectThrows(
 			() =>
 				asr(
-					`import { Header } from '@acme/ui';\nfunction make() { const H = import.meta.og.asRegion(Header, 'load'); return H; }`,
+					`import { Header } from '@acme/ui';\nfunction make() { const H = import.meta.og.asRegion(Header, { wake: 'load' }); return H; }`,
 					'<div />'
 				),
 			/must be a top-level/
@@ -855,10 +868,61 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 		expectThrows(
 			() =>
 				asr(
-					`import { Header } from '@acme/ui';\nfor (let i = 0; i < 2; i++) { const H = import.meta.og.asRegion(Header, 'load'); }`,
+					`import { Header } from '@acme/ui';\nfor (let i = 0; i < 2; i++) { const H = import.meta.og.asRegion(Header, { wake: 'load' }); }`,
 					'<div />'
 				),
 			/must be a top-level/
+		);
+	});
+
+	// ── parity: asRegion is a transparent escape hatch — EVERY import-attribute mode works ─────────
+	test('render: deferred → a SERVER island (same output as `with { render: deferred }`)', () => {
+		const r = asr(
+			`import { Chart } from '@acme/ui';\nconst C = import.meta.og.asRegion(Chart, { render: 'deferred', wake: 'load' });`,
+			'<C />'
+		);
+		expect(r.islands).toHaveLength(1);
+		expect(r.islands[0].server).toBe(true);
+		expect(r.islands[0].kind).toBe('defer');
+		expect(r.islands[0].source).toMatch(/import \{ Chart as __OgygiaComp_[0-9a-f]+ \} from ["']@acme\/ui["']/);
+	});
+	test('wake: none → a LAKE (same output as `with { wake: none }`)', () => {
+		const r = asr(
+			`import { Frozen } from '@acme/ui';\nconst F = import.meta.og.asRegion(Frozen, { wake: 'none' });`,
+			'<F />'
+		);
+		expect(r.islands).toHaveLength(1);
+		expect(r.islands[0].kind).toBe('lake');
+	});
+	test('region: raw → a HELD region binding (same output as `with { region: raw }`)', () => {
+		const r = asr(
+			`import { Block } from '@acme/ui';\nconst B = import.meta.og.asRegion(Block, { region: 'raw' });`,
+			'{#if B}ok{/if}'
+		);
+		expect(r.islands).toHaveLength(1);
+		expect(r.islands[0].held).toBe(true);
+		expect(r.islands[0].bindingSsrSource).toMatch(/import \{ Block as __ogRegionComp \} from ["']@acme\/ui["']/);
+	});
+	test('a preset resolves through asRegion too (same parser as import attributes)', () => {
+		const r = asr(
+			`import { Panel } from '@acme/ui';\nconst P = import.meta.og.asRegion(Panel, { preset: 'lazy' });`,
+			'<P />',
+			makeCtx({ presets: { lazy: { wake: 'visible', margin: '300px' } } })
+		);
+		expect(r.islands).toHaveLength(1);
+		expect(r.islands[0].strategy).toBe('visible');
+	});
+	test('an inline option key not allowed on an import attribute is rejected here too', () => {
+		// `margin` is preset-only inline — exactly as with `import X with { wake, margin }`.
+		expectThrows(
+			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'load', margin: '10px' });`, '<H />'),
+			/not allowed inline/
+		);
+	});
+	test('an options object with no region key → needs a region option', () => {
+		expectThrows(
+			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { keep: 'x' });`, '<H />'),
+			/needs a .wake/
 		);
 	});
 });
