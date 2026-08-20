@@ -11,7 +11,12 @@
  */
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { transformHost, wrapperVirtualId, CLIENT_BINDING_STUB } from './region/transform.js';
+import {
+	transformHost,
+	transformTsRegions,
+	wrapperVirtualId,
+	CLIENT_BINDING_STUB
+} from './region/transform.js';
 import { routeCsrIsFalse, routeCsrIsTrue } from './standalone.js';
 import { run_module_macros } from './macros/pipeline.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
@@ -146,5 +151,25 @@ export class Compiler {
 		}
 		this.transform_cache.set(cache_key, { code: source, result });
 		return result;
+	}
+
+	/**
+	 * Mint the `.ts` / `.js` regions in one module — `with { wake: … }` load/remote imports become
+	 * island descriptors. The ts-region half of the front-end, sharing the driver's resolved context
+	 * (so both the prescan and the transform hook mint identically). Not memoized — the caller gates it
+	 * on the id + marker; the returned descriptors are the caller's to `register`.
+	 */
+	ts_regions(source: string, id: string) {
+		const ctx = this.#ctx!;
+		return transformTsRegions(source, id, {
+			root: ctx.root,
+			libDir: ctx.libDir,
+			pathModule: path,
+			dev: ctx.is_dev,
+			virtualPathFor: (_hostId: string, iid: string) => ctx.island_virtual_id(iid),
+			devUrlFor: (virtualPath: string) => ctx.dev_url_for(virtualPath),
+			importKeys: ctx.import_keys,
+			idSalt: ctx.id_salt
+		});
 	}
 }

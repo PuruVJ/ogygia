@@ -15,7 +15,6 @@ import { rewrite_regions } from '../compiler/content/regions.js';
 import { content as contentHmrPlugin, type ContentPluginOptions } from '../content/vite/plugin.js';
 import { ogygiaPresetPreprocess } from '../content/markdown/index.js';
 import {
-	transformTsRegions,
 	ISLAND_DIR,
 	normalize_import_keys,
 	islandChunkFileName,
@@ -127,8 +126,7 @@ import {
 	V_KIT_WIRE,
 	V_TRANSPORT,
 	V_TRANSPORTABLES,
-	RESOLVED,
-	islandVirtualId
+	RESOLVED
 } from '../compiler/ids.js';
 
 /** `packages/ogygia` — Vite must serve absolute shim/runtime resolves from outside the app root. */
@@ -479,8 +477,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		}
 	};
 
-	const virtualPathFor = (_hostId, iid) => islandVirtualId(iid);
-
 	/** Dev URL for dynamic `import(entry)` of a virtual island module. */
 	const devUrlFor = (virtualPath) => {
 		const prefix = base && base !== '/' ? base.replace(TRAILING_SLASH, '') : '';
@@ -660,16 +656,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// Transportable classes go into the eager-registration manifest so an island
 					// receiving one as a prop never has to import the class itself.
 					if (moduleHasTransportable(src, full)) transportable_modules.add(full);
-					const result = transformTsRegions(src, full, {
-						root,
-						libDir,
-						pathModule: path,
-						dev: is_dev,
-						virtualPathFor,
-						devUrlFor,
-						importKeys: import_keys,
-						idSalt: id_salt
-					});
+					const result = compiler.ts_regions(src, full);
 					if (result) register(result, full);
 				}
 			}
@@ -1523,16 +1510,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					}
 				}
 
-				const result = transformTsRegions(out, id_n, {
-					root,
-					libDir,
-					pathModule: path,
-					dev: is_dev,
-					virtualPathFor,
-					devUrlFor,
-					importKeys: import_keys,
-					idSalt: id_salt
-				});
+				const result = compiler.ts_regions(out, id_n);
 				if (result) {
 					register(result, id_n);
 					out = result.code;
