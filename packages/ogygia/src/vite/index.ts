@@ -94,7 +94,6 @@ import { dev_hmr_client_source } from '../compiler/dev/dev-hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
 import {
 	collectIslandDepModulepreloads,
-	islandDepsHandoffPath,
 	island_deps_module
 } from '../compiler/link/island-deps.js';
 import {
@@ -108,6 +107,7 @@ import { router_config_module } from '../compiler/link/router-config.js';
 import { transport_module, transportables_module } from '../compiler/link/transport.js';
 import { server_manifest_module } from '../compiler/link/server-manifest.js';
 import { manifest_module } from '../compiler/link/manifest.js';
+import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.js';
 import { Program, strip_id, host_key } from '../compiler/program.js';
 import { Compiler } from '../compiler/driver.js';
 import { CompileCtx } from '../compiler/ctx.js';
@@ -312,8 +312,6 @@ export function rewrite_lake_import_to_placeholder(src: string, local: string, p
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
 const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
 
-/** A `?…type=style…` / `lang.css` sub-import id — a CSS face, never a corpus JS leak. */
-const CONTENT_STYLE_QUERY_RE = /[?&](?:type=style|lang\.css)/;
 
 function is_island_path(id: string) {
 	const bare = id.split('?')[0];
@@ -1750,41 +1748,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// By `writeBundle` the bundle reflects the files actually on disk.
 			if (!is_build || is_ssr) return;
 
-			// ── Guardrail: a content collection must never reach a CLIENT chunk ──────────────
-			// Ground truth is the finished bundle. A compiled corpus module (.svx/.md) in a client
-			// chunk means a `content()` collection was imported into client-shipped code (usually an
-			// island), which drags its eager `import.meta.glob` — every doc — into the browser. On a
-			// csr=false site the corpus renders server-side and should never appear here, so any hit is
-			// a real leak. A warning, not a throw: the guardrail must never break a build.
-			try {
-				const CORPUS_RE = /\.(svx|md)(\?|$)/;
-				const leaks: Array<{ chunk: string; modules: string[] }> = [];
-				for (const [key, chunk] of Object.entries(bundle)) {
-					if ((chunk as { type?: string }).type !== 'chunk') continue;
-					const ids: string[] =
-						(chunk as { moduleIds?: string[] }).moduleIds ??
-						Object.keys((chunk as { modules?: Record<string, unknown> }).modules ?? {});
-					// A `?…type=style…`/`lang.css` sub-import is the content module's CSS FACE, emitted on
-					// purpose (see the client-leg content-CSS emit) — it carries no corpus JS, so it is not
-					// a leak. Only a real corpus JS module counts.
-					const corpus = ids.filter(
-						(id) => CORPUS_RE.test(id) && !is_island_path(id) && !CONTENT_STYLE_QUERY_RE.test(id)
-					);
-					if (corpus.length) leaks.push({ chunk: (chunk as { fileName?: string }).fileName ?? key, modules: corpus });
-				}
-				if (leaks.length) {
-					const all = [...new Set(leaks.flatMap((l) => l.modules))];
-					const sample = all.slice(0, 5).map((m) => '    ' + path.relative(root, m.split('?')[0])).join('\n');
-					console.warn(
-						`[ogygia] content leaked into the CLIENT bundle: ${all.length} corpus module(s) (.svx/.md) shipped to the browser (in chunk '${leaks[0].chunk}').\n` +
-							`  A content() collection was imported into client-shipped code — usually an island — which drags its eager import.meta.glob (every doc) in.\n` +
-							`  Fix: keep the collection in a server-only module (or a .remote.ts) and feed islands DATA (refs) via props or a remote, never the collection itself.\n` +
-							`${sample}${all.length > 5 ? '\n    …' : ''}`
-					);
-				}
-			} catch {
-				/* a guardrail must never break the build */
-			}
+			warn_content_leaks(bundle as Record<string, unknown>, root, is_island_path);
 
 			const map = collectIslandDepModulepreloads(
 				bundle as Record<
@@ -1814,68 +1778,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 
 			const json = JSON.stringify({ ...map, content_css, fn_manifest: Object.fromEntries(dollar_hoists) });
-			const handoff = islandDepsHandoffPath(root);
-			fs.mkdirSync(path.dirname(handoff), { recursive: true });
-			fs.writeFileSync(handoff, json);
-			// Adapter-friendly copy next to the server bundle (Kit SSR out already exists).
-			const server_copy = path.join(
-				root,
-				'.svelte-kit',
-				'output',
-				'server',
-				'og-region-deps.json'
-			);
-			try {
-				fs.mkdirSync(path.dirname(server_copy), { recursive: true });
-				fs.writeFileSync(server_copy, json);
-			} catch {
-				/* ignore — handoff path is enough for prerender */
-			}
-
-			// Inline the manifest into the SSR bundle so serverless tracing ships it. The co-located JSON
-			// above is dropped by @vercel/nft (it is fs-read, not imported), which is why held/dual regions
-			// that cross the wire rendered unstyled on Vercel/Netlify. Patch the token slot the island-deps
-			// virtual emits (V_ISLAND_DEPS load) in every server chunk that carries it; unpatched builds keep
-			// the fs fallback (adapter-node, dev-preview).
-			try {
-				const server_dir = path.join(root, '.svelte-kit', 'output', 'server');
-				const token = '__OGYGIA_ISLAND_DEPS_INLINE__';
-				// Escape for BOTH quote styles: the SSR bundler may emit the slot in single OR double
-				// quotes, and an escaped quote is valid in either literal \u2014 so this is safe regardless.
-				const inline = json
-					.replace(/\\/g, '\\\\')
-					.replace(/'/g, "\\'")
-					.replace(/"/g, '\\"')
-					.replace(/\u2028/g, '\\u2028')
-					.replace(/\u2029/g, '\\u2029');
-				const patch_server = (dir) => {
-					let entries;
-					try {
-						entries = fs.readdirSync(dir, { withFileTypes: true });
-					} catch {
-						return;
-					}
-					for (const e of entries) {
-						const full = path.join(dir, e.name);
-						if (e.isDirectory()) {
-							patch_server(full);
-							continue;
-						}
-						if (!e.name.endsWith('.js')) continue;
-						let code;
-						try {
-							code = fs.readFileSync(full, 'utf8');
-						} catch {
-							continue;
-						}
-						if (!code.includes(token)) continue;
-						fs.writeFileSync(full, code.split(token).join(inline));
-					}
-				};
-				patch_server(server_dir);
-			} catch {
-				/* ignore — fs fallback still serves adapter-node / preview */
-			}
+			emit_island_deps_handoff(root, json);
 		}
 		},
 		island_sourcemaps_plugin({ program, is_island_path })
