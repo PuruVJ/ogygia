@@ -9,8 +9,8 @@ import {
 	git_checkout_dir,
 	read_sha,
 	write_sha
-} from '../src/vite/git.js';
-import { find_loader_calls, rewrite_loaders, expand_braces, loader_patterns } from '../src/vite/loaders.js';
+} from '../src/compiler/content/git.js';
+import { find_loader_calls, rewrite_loaders, expand_braces, loader_patterns } from '../src/compiler/content/loaders.js';
 import { __set_build_cache_root } from '../src/build-cache.js';
 
 describe('parse_git_spec', () => {

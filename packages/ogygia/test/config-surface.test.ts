@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ogygia } from '../src/vite/index.js';
-import { rewrite_loaders, extract_preset } from '../src/vite/loaders.js';
+import { rewrite_loaders, extract_preset } from '../src/compiler/content/loaders.js';
 import { islandBridge } from '../src/vite/island-bridge.js';
 
 const saved: Partial<typeof islandBridge> = {};

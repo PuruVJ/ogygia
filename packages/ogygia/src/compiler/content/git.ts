@@ -12,7 +12,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { BuildCache, configure_build_cache } from '../build-cache.js';
+import { BuildCache, configure_build_cache } from '../../build-cache.js';
 
 // git's own corners of the shared build cache: resolved shas (kv) + the checkout trees (a dir).
 // Persistence location is the cache's concern — git thinks in get/set and a directory, never paths.

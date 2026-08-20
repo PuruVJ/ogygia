@@ -9,10 +9,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { rewrite_code, type CodeCall } from '../src/compiler/macros/code.js';
-import { rewrite_regions } from '../src/vite/regions.js';
+import { rewrite_regions } from '../src/compiler/content/regions.js';
 import { rewrite_bake } from '../src/compiler/macros/bake.js';
 import { rewrite_wire } from '../src/compiler/macros/wire.js';
-import { rewrite_loaders } from '../src/vite/loaders.js';
+import { rewrite_loaders } from '../src/compiler/content/loaders.js';
 import { __set_build_cache_root } from '../src/build-cache.js';
 
 const MARKUP = ['.svelte'] as const;

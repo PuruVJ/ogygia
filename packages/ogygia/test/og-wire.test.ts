@@ -6,7 +6,7 @@ import {
 	reduce_transportable,
 	revive_transportable
 } from '../src/live-transport.js';
-import { moduleHasTransportable } from '../src/vite/transportables.js';
+import { moduleHasTransportable } from '../src/compiler/content/transportables.js';
 
 const MARKUP = ['.svelte'] as const;
 const CODEC = `{ encode: (c) => c.v, decode: (v) => new C(v) }`;

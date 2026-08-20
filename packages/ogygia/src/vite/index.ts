@@ -8,12 +8,12 @@ import { loadEnv, type Plugin } from 'vite';
 import type { PreprocessorGroup } from 'svelte/compiler';
 import { configure_build_cache } from '../build-cache.js';
 import { islandBridge, content_css_key } from './island-bridge.js';
-import { materialize } from './git.js';
-import { rewrite_loaders } from './loaders.js';
+import { materialize } from '../compiler/content/git.js';
+import { rewrite_loaders } from '../compiler/content/loaders.js';
 import { rewrite_wire } from '../compiler/macros/wire.js';
 import { rewrite_dollar } from '../compiler/macros/dollar.js';
 import { rewrite_store, auto_brand_stores } from '../compiler/macros/store.js';
-import { rewrite_regions } from './regions.js';
+import { rewrite_regions } from '../compiler/content/regions.js';
 import { rewrite_code } from '../compiler/macros/code.js';
 import { render_snippet } from '../content/markdown/snippet.js';
 import { render_markdown } from '../content/markdown/render-md.js';
@@ -63,7 +63,7 @@ import {
 	appendSvelteModuleRegistrations,
 	moduleHasTransportable,
 	svelteModuleHasTransportable
-} from './transportables.js';
+} from '../compiler/content/transportables.js';
 import { generateRuntimeEntrySource, resolveFeatures, type RuntimeMarks } from './runtime-entry.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import {

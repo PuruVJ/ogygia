@@ -27,10 +27,10 @@
  * and suspenders: the false-positive rewrite the scanner alone could (in theory) make is unreachable
  * whenever the module actually parses — which, for the `.server.ts` files loaders live in, is always.
  */
-import { find_og_calls, split_first_string, type OgCall } from '../compiler/parse/scan.js';
+import { find_og_calls, split_first_string, type OgCall } from '../parse/scan.js';
 import { parse_git_spec, git_glob_pattern, type GitSpec } from './git.js';
-import { parse_module } from '../compiler/parse/oxc.js';
-import { islandBridge } from './island-bridge.js';
+import { parse_module } from '../parse/oxc.js';
+import { islandBridge } from '../../vite/island-bridge.js';
 
 const PREFIX = 'import.meta.og.loader.';
 

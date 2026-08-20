@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { rewrite_wire, WIRE_EXPR } from '../src/compiler/macros/wire.js';
-import { rewrite_loaders, find_loader_calls } from '../src/vite/loaders.js';
+import { rewrite_loaders, find_loader_calls } from '../src/compiler/content/loaders.js';
 import { og_js_regions } from '../src/compiler/parse/scan.js';
 
 const MARKUP = ['.svelte'] as const;
