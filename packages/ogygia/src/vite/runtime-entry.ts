@@ -31,7 +31,6 @@ export type FeatureId =
 	| 'live'
 	| 'interaction'
 	| 'forms'
-	| 'persist'
 	| 'router'
 ;
 
@@ -53,11 +52,6 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 		deps: [],
 		detect: (m) => m.forms === true || (m.forms !== false && m.router === true)
 	},
-	persist: {
-		module: 'persist.js',
-		deps: ['live'],
-		detect: (m) => m.persist === true || (m.persistKeys || []).length > 0
-	},
 	router: {
 		module: 'router.js',
 		deps: [],
@@ -71,12 +65,12 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 	morph: {
 		module: 'morph.js',
 		deps: [],
-		detect: (m) => m.live === true || m.morph === true
+		detect: (m) => m.live === true || m.morph === true || m.router === true
 	},
 	live: {
 		module: 'live.js',
 		deps: [],
-		detect: (m) => m.live === true
+		detect: (m) => m.live === true || m.persist === true || (m.persistKeys || []).length > 0
 	},
 	wire: {
 		module: '../live-transport.js',
@@ -109,7 +103,6 @@ export const FEATURE_ORDER: FeatureId[] = [
 	'live',
 	'interaction',
 	'forms',
-	'persist',
 	'router'
 ];
 

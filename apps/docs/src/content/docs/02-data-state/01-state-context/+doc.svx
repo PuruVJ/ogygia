@@ -2,6 +2,7 @@
 title: State & Context
 summary: Share one live object across islands. A class with static wire = import.meta.og.wire({…}) crosses island boundaries as a prop; a drop-in setContext or <Provide> reaches a whole subtree without prop drilling.
 related:
+  - data-state/boundary
   - regions/held-regions
   - reference/constraints
 ---
@@ -74,7 +75,7 @@ The browser remembers decoded instances; the **server never does**. Each request
 
 Passing one object to two known islands is a prop. But when a value must reach **many islands scattered down a subtree** (a cart shared by a header badge and a page-body button, a theme, a current user), threading it through every prop is noise. Provide it once; any island below reads it with plain `getContext`.
 
-Svelte's own `getContext` / `setContext` work down a **component tree**. Islands break that tree: a `setContext` above an island never reaches inside it on the client. Ogygia bridges the **same `getContext('key')`** across the split, through the thing that *does* survive it: the **DOM**. There are two ways to provide — a drop-in `setContext`, or `<Provide>`.
+Svelte's own `getContext` / `setContext` work down a **component tree**. Islands break that tree: a `setContext` above an island never reaches inside it on the client. Ogygia bridges the **same `getContext('key')`** across the split, through the thing that *does* survive it: the **DOM**. There are two ways to provide — a drop-in `setContext`, or `<Provide>`. What may cross, how stores stay live across islands, and how to pass **functions** is the boundary's contract — see **[The Boundary](/docs/data-state/boundary)**.
 
 ### Drop-in `setContext`
 

@@ -25,6 +25,7 @@
 import { createRawSnippet, hydrate, unmount, type Component, type Snippet } from 'svelte';
 import { render as ssr_render } from 'svelte/server';
 import { BROWSER } from 'esm-env';
+import { register_kind, mint } from './ref.js';
 
 /**
  * A hand-written SERVER component that renders a bare snippet: svelte has no public API to
@@ -207,7 +208,11 @@ export function prepare_region_props(props: Record<string, unknown>): Record<str
 	let out: Record<string, unknown> | null = null;
 	for (const k in props) {
 		const v = props[k];
-		if (typeof v === 'function' && !(v as RegionSnippet).__ogRegion) {
+		if (
+			typeof v === 'function' &&
+			!(v as RegionSnippet).__ogRegion &&
+			(v as unknown as Record<symbol, unknown>)[Symbol.for('ogygia.fn')] === undefined // og.$ fn: crosses as a fn ref
+		) {
 			(out ??= { ...props })[k] = capture_static(v as Snippet, k);
 		}
 	}
@@ -239,21 +244,48 @@ export function slot_pointer(id: string): RegionSnippet {
 	return snip;
 }
 
-// ── the boundary law: one reduce, one revive, both modes ──
-/** Codec encode. Branded region snippet → its descriptor; a bare snippet → frozen static; anything
- *  else falls through (devalue handles it, or errors as before). */
-export function reduce_region_snippet(value: unknown): RegionSnippetDescriptor | undefined {
-	if (typeof value !== 'function') return undefined;
-	const branded = (value as RegionSnippet).__ogRegion;
-	if (branded) return branded;
-	// Freezing a bare snippet is an SSR capture (`render` from svelte/server). Encode only ever runs
-	// on the server; guarding here lets the client DCE `capture_static` → `svelte/server` (~13kB) out
-	// entirely. A branded (live) snippet still crosses fine on either side via the `branded` return.
-	if (BROWSER) return undefined;
-	return capture_static(value as Snippet).__ogRegion; // a plain snippet at the boundary freezes
+// ── the boundary law, as the hub's SNIPPET kind: one encode, one decode, both modes ──
+/** The hub kind: a snippet is a renderable Ref ("a snippet is a region", now literal). A branded
+ *  region snippet crosses as its descriptor; a bare snippet FREEZES at the boundary (server-only —
+ *  the BROWSER guard also keeps `capture_static` → `svelte/server` DCE-able out of client bundles);
+ *  a bare function on the CLIENT falls through (never claimed — it can't freeze there). */
+/** Explicit registration — called at module scope AND from live-transport's install():
+ *  a bare side-effect import gets tree-shaken (the package marks JS side-effect-free),
+ *  which silently un-registers the kind in client bundles. A CALLED import cannot be dropped. */
+export function register_snippet_kind(): void {
+	register_kind({
+	k: 'snippet',
+	match(value) {
+		if (typeof value !== 'function') return false;
+		if ((value as RegionSnippet).__ogRegion) return true;
+		// an og.$-branded fn belongs to the FN kind — freezing it as a snippet would be wrong
+		if ((value as unknown as Record<symbol, unknown>)[Symbol.for('ogygia.fn')] !== undefined) return false;
+		return !BROWSER; // a bare snippet is only claimable where it can freeze (SSR capture)
+	},
+	encode(value) {
+		const branded = (value as RegionSnippet).__ogRegion;
+		if (branded) return { d: branded };
+		return { d: capture_static(value as unknown as Snippet).__ogRegion };
+	},
+	decode(ref) {
+		return make(ref.d as RegionSnippetDescriptor);
+	}
+});
 }
 
-/** Codec decode. Rebuild a live snippet from the descriptor (both modes). */
+const SNIPPET_ONLY = new Set(['snippet']);
+
+/** Codec encode (legacy `OgygiaS` wire shape: the bare descriptor). Branded region snippet → its
+ *  descriptor; a bare snippet → frozen static; anything else falls through. */
+export function reduce_region_snippet(value: unknown): RegionSnippetDescriptor | undefined {
+	register_snippet_kind();
+	const ref = mint(value, SNIPPET_ONLY);
+	return ref === undefined ? undefined : (ref.d as RegionSnippetDescriptor);
+}
+
+/** Codec decode. Rebuild a live snippet from the descriptor (both modes). Snippets are functions,
+ *  which the hub deliberately never memoizes — each consumer revives its own (stateless until
+ *  rendered), exactly the pre-hub behavior. */
 export function revive_region_snippet(desc: RegionSnippetDescriptor): RegionSnippet {
 	return make(desc);
 }

@@ -24,14 +24,20 @@
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { islandDeps, islandCss, contentCss } from 'virtual:ogygia/island-deps';
-	import { makeRegionEndpoint, mintServerIsland } from 'virtual:ogygia/region-endpoint';
+	import { makeRegionEndpoint, mintServerIsland, known_region_fps } from 'virtual:ogygia/region-endpoint';
+	import { fingerprint_of } from './runtime/fingerprint.js';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';
 	import { isNested, setNested, isCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
-	import { TRANSPORT_WIRE_KEY, reduce_transportable } from './live-transport.js';
-	import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet, prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
+	import { REF_WIRE_KEY, ref_reducer } from './ref.js';
+	// PULL-registration inside stringify_props (idempotent; no import-time side effects)
+	import { register_wire_kind } from './live-transport.js';
+	import { register_store_kind, register_derived_kind } from './store-transport.js';
+	import { register_snippet_kind } from './region-snippet.js';
+	import { register_fn_kind } from './fn-transport.js';
+	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
 	import LakeBoundary from './LakeBoundary.svelte';
 	import SlotBoundary from './SlotBoundary.svelte';
@@ -185,13 +191,18 @@
 		);
 	}
 
+	/** Island props cross classes, stores, snippets, og.$ fns and resumable deriveds. */
+	const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
+
 	/** @param {unknown} value @param {string} entry */
 	function stringify_props(value, entry) {
+		register_wire_kind();
+		register_store_kind();
+		register_snippet_kind();
+		register_fn_kind();
+		register_derived_kind();
 		try {
-			return stringify(value, {
-				[TRANSPORT_WIRE_KEY]: reduce_transportable,
-				[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
-			});
+			return stringify(value, { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) });
 		} catch (e) {
 			const detail = e instanceof Error ? e.message : String(e);
 			throw new Error(
@@ -282,6 +293,20 @@
 	);
 	const island_props_script = $derived(
 		LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + island_payload + LT + '/script' + GT
+	);
+	// SERVER-DELTA parity: the island's fingerprint, IDENTICAL to the client reconciler's
+	// region_props_fp (entry attr + '' endpoint + props-seed text). Emitted as data-og-fp so the
+	// client can send it back on nav and the server can skip re-rendering an unchanged island.
+	const island_fp = $derived(
+		is_island && !island_inline ? fingerprint_of(island_module_url, '', island_payload) : ''
+	);
+	// SERVER-DELTA (D3): SKIP rendering a NON-cached island the client already has live (its fp is
+	// in the SPA nav's x-ogygia-known set). Emit the region's identifying attrs + props script but NO
+	// component content — the reconciler keeps the live node (same data-key). Safe: known_region_fps()
+	// is empty on a full load / non-SPA request, so this never fires except on an SPA nav.
+	const island_skip = $derived(
+		is_island && !island_inline && !has_slot_children && (__cacheTtl ?? 0) <= 0 && !!island_fp
+			&& known_region_fps().has(island_fp)
 	);
 
 	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
@@ -483,11 +508,19 @@
 <svelte:head>{@html head_html}</svelte:head>
 {#if is_island}
 	{@const Component = island_component}
-	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else}<ogygia-region
+	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else if island_skip}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}
 			data-ogygia-keep={__keep || undefined}
+			data-og-fp={island_fp || undefined}
+			data-og-skipped
+		></ogygia-region>{@html island_props_script}{:else}<ogygia-region
+			entry={island_module_url}
+			wake={hydrate_attr}
+			margin={root_margin || undefined}
+			data-ogygia-keep={__keep || undefined}
+			data-og-fp={island_fp || undefined}
 		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region>{@html island_props_script}{/if}
 {:else if is_server}
 	{@const Component = __component}

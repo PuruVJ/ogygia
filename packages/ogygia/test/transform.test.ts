@@ -154,6 +154,15 @@ describe('portable binding rewrite', () => {
 		);
 	});
 
+	test('maxAge is DEFERRED-ONLY: an island preset maxAge is ignored (no __cacheTtl on the island)', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { preset: 'cachedIsland' };`, '<C />'),
+			makeCtx({ presets: { cachedIsland: { wake: 'load', maxAge: '5m' } } })
+		)!;
+		expect(r.islands[0].wrapperSource).toContain('__mode="island"');
+		expect(r.islands[0].wrapperSource).not.toContain('__cacheTtl'); // inline islands don't cache
+	});
+
 	test('idle / visible / media strategies bake into wrapper', () => {
 		const cases: Array<[string, RegExp]> = [
 			['idle', /OgygiaRegion__Wrapper __mode="island" idle /],

@@ -19,8 +19,30 @@ export function set_ctx_recorder(fn: Recorder | null): void {
 	recorder = fn;
 }
 
-/** The drop-in `setContext` calls this — server records for the page bridge, client is a no-op. */
-export function record_ctx(key: string, value: unknown): void {
+/**
+ * Options a drop-in `setContext` may carry as its third argument. Svelte's own signature is
+ * two-arg, so existing code is untouched — the marker is strictly additive.
+ */
+export interface SetContextOptions {
+	/**
+	 * GRANULARITY MARKER. `false` = this key is host-native: serve it to the same-root tree
+	 * (Svelte context, unchanged) but never serialize it into the island page marker. Use it
+	 * for values islands never read — a DOM-ref bag, a host-only callback, a large config
+	 * object — so they cost nothing on the wire.
+	 *
+	 * DEFAULT is `true` (bridge): the safe direction. A missing key inside an island is a
+	 * broken app; an extra bridged key is just bytes. Ogygia deliberately does NOT infer this
+	 * from `getContext` call-sites — import aliasing (`import { getContext as x }`), wrapper
+	 * modules, and custom context layers make any scan under-inclusive, and under-inclusion
+	 * is the fatal direction. You mark; ogygia never guesses.
+	 */
+	islands?: boolean;
+}
+
+/** The drop-in `setContext` calls this — server records for the page bridge, client is a no-op.
+ *  `opts.islands === false` skips recording: the key stays native-only (never serialized). */
+export function record_ctx(key: string, value: unknown, opts?: SetContextOptions): void {
+	if (opts?.islands === false) return;
 	recorder?.(key, value);
 }
 

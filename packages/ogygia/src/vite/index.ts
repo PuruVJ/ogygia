@@ -11,6 +11,8 @@ import { islandBridge, content_css_key } from './island-bridge.js';
 import { materialize } from './git.js';
 import { rewrite_loaders } from './loaders.js';
 import { rewrite_wire } from './og-wire.js';
+import { rewrite_dollar } from './og-dollar.js';
+import { rewrite_store, auto_brand_stores } from './og-store.js';
 import { rewrite_regions } from './regions.js';
 import { rewrite_code } from './og-code.js';
 import { render_snippet } from '../content/markdown/snippet.js';
@@ -154,6 +156,7 @@ const RUNTIME_DIR = fileURLToPath(new URL('../runtime', import.meta.url));
 const V_DEV_HMR = 'virtual:ogygia/dev-hmr';
 const V_DEV_HMR_URL = 'virtual:ogygia/dev-hmr-url';
 const V_ISLAND_DEPS = 'virtual:ogygia/island-deps';
+const V_FN_MANIFEST = 'virtual:ogygia/fn-manifest';
 const V_SECRET = 'virtual:ogygia/secret';
 const V_SIGN = 'virtual:ogygia/sign';
 const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
@@ -682,12 +685,16 @@ export interface OgygiaOptions {
 	 * - `{ viewTransitions: false }` — router on, but no View Transitions API on navigation.
 	 * - `{ forms: false }` — router on, but an island's half-filled form fields are NOT carried
 	 *   across SPA navigation (continuity off).
+	 * - `{ serverDelta: true }` — opt IN to server-delta nav: an SPA nav tells the server (via an
+	 *   `x-ogygia-known` header) which islands it already has live, so the server SKIPS re-rendering
+	 *   the unchanged ones and the client keeps them running. OFF by default (it is a new client↔server
+	 *   protocol); when off the client never sends the header and the server always full-renders.
 	 *
 	 * Per-page escape hatch (no second config): a page opts *itself* out of View Transitions by
 	 * emitting `<svelte:head><meta name="ogygia-router" content="plain" /></svelte:head>` — the handle
 	 * injects the app default but a page that sets its own meta wins.
 	 */
-	router?: boolean | { viewTransitions?: boolean; forms?: boolean };
+	router?: boolean | { viewTransitions?: boolean; forms?: boolean; serverDelta?: boolean };
 
 	/**
 	 * The content subsystem. `markdown` configures the mdsvex preprocessor (themes, remark plugins,
@@ -890,6 +897,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const continuity_forms =
 		router_enabled && (typeof options.router === 'object' ? options.router.forms !== false : true);
 
+	// SERVER-DELTA NAV is opt-in (a new client↔server protocol). Only when the router is on AND the app
+	// explicitly writes `router: { serverDelta: true }`. Off → the client never sends `x-ogygia-known`,
+	// so the server always full-renders (safe fallback). Server-delta needs SPA nav, so router-off ⇒ off.
+	const server_delta =
+		router_enabled && typeof options.router === 'object' && options.router.serverDelta === true;
+
 
 	/** Build-time capability marks for the sticky runtime entry. Incomplete → kitchen-sink. */
 	const runtime_marks: RuntimeMarks = {
@@ -960,6 +973,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const emitted_island_chunks = new Set();
 	/** content_css_key → emitted CSS asset referenceId (client leg). Resolved to hrefs in writeBundle. */
 	const content_css_refs = new Map();
+	/** tag → self-contained factory source from og.$ rewrites — served by the fn-manifest virtual
+	 *  so client bundles can register factories pre-hydration (the payload-source fallback covers
+	 *  bundles that miss it). */
+	const dollar_hoists = new Map();
 
 	let root;
 	let base = '';
@@ -1514,7 +1531,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						// CONTINUITY config → compile-time constants the client runtime reads (typeof-guarded,
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
-							__OGYGIA_CONTINUITY_FORMS__: JSON.stringify(continuity_forms)
+							__OGYGIA_CONTINUITY_FORMS__: JSON.stringify(continuity_forms),
+							__OGYGIA_SERVER_DELTA__: JSON.stringify(server_delta)
 						},
 						server: {
 							fs: {
@@ -1761,6 +1779,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		},
 
 		async resolveId(source, importer, options) {
+			if (source === V_FN_MANIFEST) return RESOLVED(V_FN_MANIFEST);
 			if (source === V_RUNTIME_URL) return RESOLVED(V_RUNTIME_URL);
 			if (source === V_MANIFEST) return RESOLVED(V_MANIFEST);
 			if (source === V_RUNTIME) return RESOLVED(V_RUNTIME);
@@ -1937,11 +1956,29 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				const url = is_dev ? '/@id/__x00__' + V_RUNTIME : hashed_runtime_url || runtime_chunk_url();
 				return `export default ${JSON.stringify(url)};`;
 			}
+			if (id === RESOLVED(V_FN_MANIFEST)) {
+				// og.$ factories, registered pre-hydration. Self-contained by the capture law, so
+				// emitting source is a pure text move. DEV: `dollar_hoists` is complete by the time
+				// the browser requests this virtual (SSR transformed the hosts first) — emit directly.
+				// BUILD: this module loads BEFORE all client transforms ran (the ordering trap), so
+				// emit a rename-proof PLACEHOLDER — a globalThis bridge + a token that `renderChunk`
+				// patches once every transform has contributed (registrations then use the bridge,
+				// immune to bundler identifier renaming). Strict-CSP apps get a real manifest this
+				// way; the payload-source eval fallback becomes the exception, not the path.
+				const regs = () =>
+					[...dollar_hoists.entries()]
+						.map(([tag, src]) => `globalThis.__og_reg_fn(${JSON.stringify(tag)}, (${src}));`)
+						.join('\n');
+				const bridge = `import { __register_fn } from 'ogygia/internal';\nglobalThis.__og_reg_fn = __register_fn;\n`;
+				if (is_dev) return bridge + regs();
+				return bridge + `/*__OGYGIA_FN_MANIFEST__*/`;
+			}
 			if (id === RESOLVED(V_RUNTIME_ENTRY)) {
 				// Ensure every host was walked (marks complete) before selecting features.
 				if (!scanned) prescan();
 				const { code } = generateRuntimeEntrySource(runtime_marks, RUNTIME_DIR);
-				return code;
+				// og.$ factories register before any island hydrates (sync fn-ref resolution)
+				return `import ${JSON.stringify(V_FN_MANIFEST)};\n` + code;
 			}
 			if (id === RESOLVED(V_RUNTIME)) {
 				// Dev sticky: kitchen-sink package entry. Build uses the hashed emitFile chunk. An EXPLICIT
@@ -1969,7 +2006,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// Resolve via import.meta.url walk (not absolute build-machine paths) so adapters
 				// find `output/server/og-region-deps.json` next to the server bundle.
 				if (!ssr)
-					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }`;
+					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
 				// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 				// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 				// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -1977,7 +2014,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// Content bodies need no dev entry here: a content module is in the SSR module graph, so
 				// Vite dev already injects its scoped CSS (the leak only bites the PROD client build).
 				if (is_dev)
-					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }`;
+					return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
 				return (
 					`import fs from 'node:fs';\n` +
 					`import path from 'node:path';\n` +
@@ -2034,6 +2071,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					`}\n` +
 					`export function contentCss(id) {\n` +
 					`  return id ? pick('content_css', id) : [];\n` +
+					`}\n` +
+					// og.$ factories for the page-inline registration script (CSP-clean prod path):
+					// written by the CLIENT build's writeBundle, read here at SSR render time — the
+					// same ordering-safe channel islandCss uses.
+					`export function fnManifest() {\n` +
+					`  const m = load().fn_manifest;\n` +
+					`  return m && typeof m === 'object' && Object.keys(m).length ? m : null;\n` +
 					`}\n`
 				);
 			}
@@ -2090,10 +2134,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!ssr) {
 					return (
 						`export function makeRegionEndpoint(_entry, _props) { return ''; }\n` +
-						`export function mintServerIsland(_entry, _props, _ttl) { return ''; }`
+						`export function mintServerIsland(_entry, _props, _ttl) { return ''; }\n` +
+						// The known-fingerprints set is a server-only nav signal; the client always sees empty.
+						`export function known_region_fps() { return new Set(); }`
 					);
 				}
-				return `export { makeRegionEndpoint, mintServerIsland } from ${JSON.stringify(REGION_ENDPOINT_MODULE)};`;
+				return `export { makeRegionEndpoint, mintServerIsland, known_region_fps } from ${JSON.stringify(REGION_ENDPOINT_MODULE)};`;
 			}
 			if (id === RESOLVED(V_RATE_LIMIT)) {
 				// SERVER only — the region handle is the only consumer.
@@ -2238,6 +2284,44 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				const rewritten = rewrite_wire(out, id_n, CONSTRUCT_MARKUP_EXTS);
 				if (rewritten !== out) {
 					out = rewritten;
+					map = null;
+					touched = true;
+				}
+			}
+
+			// `import.meta.og.$(fn)` — hoist a function so its VALUE crosses a boundary as a fn
+			// ref (og-dollar.ts). Exact marker ('.$state' can never match) + AST verification.
+			if (out.includes('import.meta.og.$')) {
+				const rel_dollar = path.relative(root, id_n.split('?')[0]).split(path.sep).join('/');
+				const res = rewrite_dollar(out, id_n, rel_dollar, CONSTRUCT_MARKUP_EXTS);
+				if (res.code !== out) {
+					out = res.code;
+					map = null;
+					touched = true;
+					for (const h of res.hoists) dollar_hoists.set(h.tag, h.factory_src);
+				}
+			}
+
+			// `import.meta.og.store(factory)` — assert a store factory: registered under a build
+			// tag at module load, products branded (og-store.ts).
+			if (out.includes('import.meta.og.store')) {
+				const rel_store = path.relative(root, id_n.split('?')[0]).split(path.sep).join('/');
+				const rewritten = rewrite_store(out, id_n, rel_store, CONSTRUCT_MARKUP_EXTS);
+				if (rewritten !== out) {
+					out = rewritten;
+					map = null;
+					touched = true;
+				}
+			}
+
+			// AUTO-BRAND provable store factories (export const x = (seed) => store-shape) so the
+			// registered-factory tier needs zero authoring for the common shapes. App source only —
+			// never node_modules (their factories can't self-register on the client anyway).
+			if (!id_n.includes('node_modules') && !id_n.startsWith(PKG_ROOT) && /export\s+const/.test(out)) {
+				const rel_auto = path.relative(root, id_n.split('?')[0]).split(path.sep).join('/');
+				const branded = auto_brand_stores(out, id_n, rel_auto, CONSTRUCT_MARKUP_EXTS);
+				if (branded !== out) {
+					out = branded;
 					map = null;
 					touched = true;
 				}
@@ -2436,6 +2520,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			return touched ? { code: out, map } : null;
 		},
 
+		renderChunk(code) {
+			// Patch the fn-manifest placeholder now — every transform has run, so `dollar_hoists`
+			// is complete. Pre-minify (this plugin is enforce:pre) and rename-proof (registrations
+			// go through the globalThis bridge the placeholder module installed).
+			if (!code.includes('/*__OGYGIA_FN_MANIFEST__*/')) return null;
+			const regs = [...dollar_hoists.entries()]
+				.map(([tag, src]) => `globalThis.__og_reg_fn(${JSON.stringify(tag)}, (${src}));`)
+				.join('\n');
+			// FUNCTION-form replacement: factory sources legitimately contain `$$` (a literal `$`
+			// before a template hole), which String.replace would collapse in a string replacement.
+			return { code: code.replace('/*__OGYGIA_FN_MANIFEST__*/', () => regs), map: null };
+		},
+
 		writeBundle(_options, bundle) {
 			// Client only — Kit builds SSR first, so Region.svelte reads this JSON at render
 			// (prerender / live SSR), not at SSR-bundle `load()` time.
@@ -2508,7 +2605,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				}
 			}
 
-			const json = JSON.stringify({ ...map, content_css });
+			const json = JSON.stringify({ ...map, content_css, fn_manifest: Object.fromEntries(dollar_hoists) });
 			const handoff = islandDepsHandoffPath(root);
 			fs.mkdirSync(path.dirname(handoff), { recursive: true });
 			fs.writeFileSync(handoff, json);

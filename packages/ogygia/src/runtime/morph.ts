@@ -222,10 +222,16 @@ function same_node(a: Node, b: Node): boolean {
 
 /** A subtree that must be kept intact: user-marked persist, or a hydrated (Svelte-owned) island root. */
 function is_preserved(el: Element): boolean {
-	// `data-persist` is a general user marker (any tag), so it is always probed. `data-hydrated` is
-	// only ever set on hyphenated custom-element roots (`<ogygia-region>` / `<ogygia-island>`), so its
-	// probe is gated behind a cheap `localName` hyphen test — an ordinary `<td>` never pays for it.
-	return el.hasAttribute('data-persist') || (el.localName.includes('-') && el.hasAttribute('data-hydrated'));
+	// `data-persist` and `data-ogygia-keep` are general user markers (any tag) — always probed; a
+	// matched keep-node is kept intact across a nav reconcile (this is what makes the morph path
+	// subsume persist's relocate). `data-hydrated` is only ever set on hyphenated custom-element
+	// roots (`<ogygia-region>` / `<ogygia-island>`), so its probe is gated behind a cheap `localName`
+	// hyphen test — an ordinary `<td>` never pays for it.
+	return (
+		el.hasAttribute('data-persist') ||
+		el.hasAttribute('data-ogygia-keep') ||
+		(el.localName.includes('-') && el.hasAttribute('data-hydrated'))
+	);
 }
 
 /**

@@ -19,6 +19,9 @@ export { isNested, setNested } from './context.js';
 // component exports above, so tagging a plain `.svelte.ts` state file never pulls island
 // component code into its chunk).
 export { __register_transportable } from './live-transport.js';
+export { __og_$, __register_fn } from './fn-transport.js';
+export { __og_store, __register_store_factory, mark_store } from './store-transport.js';
+export { __og_boundary, configure_boundary } from './boundary.js';
 export { __tag_context } from './context-bridge.js';
 
 // Compiler-emitted currency — never hand-authored, so they live on the INTERNAL barrel (the public

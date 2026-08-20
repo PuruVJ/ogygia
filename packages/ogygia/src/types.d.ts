@@ -40,6 +40,9 @@ declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
 	 *  region response so a server-picked component styles a page that never imported it. */
 	export function islandCss(entry: string): string[];
+	/** og.$ hoisted factories (tag → self-contained source) for the page-inline registration
+	 *  script — prod SSR only; null in dev/client (dev uses the fn-manifest virtual). */
+	export function fnManifest(): Record<string, string> | null;
 }
 declare module 'virtual:ogygia/dev-hmr' {
 	/* side-effect only — CSS HMR bridge under csr=false */
@@ -94,6 +97,8 @@ declare module 'virtual:ogygia/region-ttl' {
 }
 /** CONTINUITY compile-time constants (Vite `define`; typeof-guarded so node dist import is safe). */
 declare const __OGYGIA_CONTINUITY_FORMS__: boolean;
+/** SERVER-DELTA NAV opt-in (Vite `define`; default OFF — see `router.serverDelta`). */
+declare const __OGYGIA_SERVER_DELTA__: boolean;
 
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;

@@ -74,7 +74,9 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['snippet-islands.ts', true, 'islands in a {#snippet} to a plain shell: marks survive + top-level await SSRs'],
 	['interaction.ts', true, "wake:'interaction' — cold until used, click replay, typing survives"],
 	['presets.ts', false, 'transform-level: region syntax + presets + errors'],
-	['dedup.ts', false, 'same-component-two-strategies → ONE client chunk']
+	['dedup.ts', false, 'same-component-two-strategies → ONE client chunk'],
+	['dollar-fn.ts', true, 'og.$: a fn ref crosses context into an island and rebinds (bound captures)'],
+	['server-delta.ts', true, 'server-delta nav: shared island skipped server-side on SPA nav, kept live + interactive (no blank hole)']
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -3,6 +3,7 @@ import { parse } from 'devalue';
 import { frameAddress } from '../frame.js';
 import { set_current_region } from '../current-region.js';
 import { collect_provided_context } from '../context-bridge.js';
+import { capture_region_ids } from './reconcile.js';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import { install_page_defer, page_defer_revivers } from './page-defer.js';
 import { transport_decoders } from './app-transport.js';
@@ -40,10 +41,7 @@ function region_prop_revivers(): Record<string, (d: never) => unknown> | undefin
 	if (wire === cached_wire) return cached_revivers;
 	cached_wire = wire;
 	cached_revivers = wire
-		? {
-				[wire.TRANSPORT_WIRE_KEY]: (d: never) => wire.revive_transportable(d, true),
-				[wire.REGION_SNIPPET_WIRE_KEY]: (d: never) => wire.revive_region_snippet(d)
-			}
+		? { [wire.REF_WIRE_KEY]: (d: never) => wire.resolve(d, true) }
 		: undefined;
 	return cached_revivers;
 }
@@ -415,7 +413,7 @@ class OgygiaRegion extends HTMLElement {
 	/** Removes the `wake="interaction"` wake listeners (set while armed, cold). */
 	#disarm_interaction: (() => void) | null = null;
 	/** A persist island's LiveHost app — lets the next page push fresh props into the relocated app. */
-	#persist_host: { setProps?: (p: Record<string, unknown>) => void } | null = null;
+	#keep_host: { setProps?: (p: Record<string, unknown>) => void } | null = null;
 
 	/**
 	 * CONTINUITY: this persisted island is relocating onto `next` (the incoming page's SSR region).
@@ -423,10 +421,10 @@ class OgygiaRegion extends HTMLElement {
 	 * (e.g. a player's `track` changes) instead of freezing at first-mount props. Called by the
 	 * router just before `next` is discarded.
 	 */
-	absorbPersistProps(next: Element): void {
-		if (!this.#persist_host?.setProps) return;
+	absorbKeptProps(next: Element): void {
+		if (!this.#keep_host?.setProps) return;
 		try {
-			this.#persist_host.setProps(read_region_props(next));
+			this.#keep_host.setProps(read_region_props(next));
 		} catch {
 			/* malformed incoming props — keep the current live props */
 		}
@@ -776,7 +774,9 @@ class OgygiaRegion extends HTMLElement {
 			if (!this.isConnected) return;
 			const Component = mod.default;
 
-			const props = read_region_props(this);
+			// R3 ownership: capture which page hub ids this island resolves from its props, so a
+			// reconcile nav can dispose exactly this region's ids if it is later removed.
+			const props = capture_region_ids(this, () => read_region_props(this));
 
 			// Mixed mode: on a csr=true page Kit already hydrates this component — skip. EXCEPT a
 			// deferred region (server island / <Region>): its HTML was FETCHED after load and swapped
@@ -830,7 +830,7 @@ class OgygiaRegion extends HTMLElement {
 				// Seed this island's context from any `<Provide>` above it in the DOM, so a child's plain
 				// `getContext('key')` reads a (csr=false) layout's context across the island-root split.
 				// Undefined when there is no provider above — the common case pays only a short DOM walk.
-				const provided_ctx = collect_provided_context(this);
+				const provided_ctx = capture_region_ids(this, () => collect_provided_context(this));
 				// A PERSIST island hydrates through LiveHost (same no-DOM render as NestedProvider) so
 				// that when it relocates onto the next page its props can be pushed in reactively.
 				const LiveHost = slots.live;
@@ -847,7 +847,7 @@ class OgygiaRegion extends HTMLElement {
 						props: { component: Component, initialProps: wrapped },
 						...(provided_ctx ? { context: provided_ctx } : {})
 					});
-					this.#persist_host = this.#app as unknown as {
+					this.#keep_host = this.#app as unknown as {
 						setProps?: (p: Record<string, unknown>) => void;
 					};
 				} else {
@@ -986,7 +986,7 @@ class OgygiaRegion extends HTMLElement {
 			}
 			return;
 		}
-		const provided_ctx = collect_provided_context(this);
+		const provided_ctx = capture_region_ids(this, () => collect_provided_context(this));
 		this.#live_app = hydrate(LiveHost, {
 			target: this,
 			props: {
@@ -1001,8 +1001,10 @@ class OgygiaRegion extends HTMLElement {
 	}
 
 	disconnectedCallback() {
-		// Persist move: node is relocated into the next document body — keep the island mounted.
-		if (slots.persist.is_persist_preserving(this)) return;
+		// A disconnect now always means the island is gone: the reconcile nav MOVES kept nodes with
+		// insertBefore (no detach, no disconnect), and the fallback is a full swap where old islands
+		// genuinely leave. (The old persist-relocate detached nodes and needed a suppression guard here;
+		// persist is gone.)
 		if (this.#live_app) {
 			try {
 				unmount(this.#live_app);

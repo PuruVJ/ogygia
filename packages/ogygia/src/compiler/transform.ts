@@ -1107,7 +1107,7 @@ const CSR_FALSE_INJECT =
  * @param {ReturnType<typeof parse>} [parsed] already-parsed AST (avoids a re-parse)
  * @returns {TransformResult|null}
  */
-function inject_csr_reset(source, id, parsed) {
+function inject_csr_reset(source, id, parsed = null) {
 	let ast = parsed;
 	if (!ast) {
 		try {

@@ -17,8 +17,11 @@ import {
 import { encode_region_props } from './region-props.js';
 import { stringify } from 'devalue';
 import { B64Url } from './payload.js';
-import { TRANSPORT_WIRE_KEY, reduce_transportable } from '../live-transport.js';
-import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet } from '../region-snippet.js';
+import { REF_WIRE_KEY, ref_reducer } from '../ref.js';
+import { ensure_prop_kinds } from './region-props.js';
+
+/** Same families as encode_region_props — one seam law for island props. */
+const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
 
 /** Session sealed into the MAC when `ogygia({ sessionCookie })` is set; empty at prerender. */
 function region_session(): string {
@@ -28,6 +31,36 @@ function region_session(): string {
 	} catch {
 		return '';
 	}
+}
+
+/**
+ * SERVER-DELTA NAV (D3) — the set of region fingerprints the CLIENT already has live, sent on an
+ * SPA nav via `x-ogygia-known`. Region.svelte consults this to SKIP re-rendering an island the
+ * client is keeping. Honored ONLY on an SPA nav (`x-ogygia-spa`); a full page load has no header →
+ * empty set → everything renders. Memoized per request-event (parsed once). Client-stubbed to empty.
+ * A missing/oversized header is always the SAFE full render — this is a pure optimization signal.
+ */
+const KNOWN_FPS = new WeakMap<object, Set<string>>();
+const EMPTY_FPS: ReadonlySet<string> = new Set();
+export function known_region_fps(): ReadonlySet<string> {
+	let event;
+	try {
+		event = getRequestEvent();
+	} catch {
+		return EMPTY_FPS; // no request scope (prerender / off-request) → render all
+	}
+	const cached = KNOWN_FPS.get(event);
+	if (cached !== undefined) return cached;
+	let set: Set<string>;
+	try {
+		const spa = event.request.headers.get('x-ogygia-spa');
+		const known = spa ? event.request.headers.get('x-ogygia-known') : null;
+		set = known ? new Set(known.split(',')) : new Set();
+	} catch {
+		set = new Set();
+	}
+	KNOWN_FPS.set(event, set);
+	return set;
 }
 
 /**
@@ -82,11 +115,9 @@ export function mint_region_capability(entry: string, payload: string, ttl = 0):
  * mint on the client — the runtime fetches the endpoint). Mirrors the old `ServerIsland.svelte`.
  */
 export function mintServerIsland(entry: string, props: Record<string, unknown>, ttl = 0): string {
+	ensure_prop_kinds();
 	const payload = B64Url.encode(
-		stringify(props, {
-			[TRANSPORT_WIRE_KEY]: reduce_transportable,
-			[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
-		})
+		stringify(props, { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) })
 	);
 	if (payload.length > MAX_REGION_PROPS_LEN) {
 		throw new Error(
