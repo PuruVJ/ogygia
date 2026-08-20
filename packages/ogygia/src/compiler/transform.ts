@@ -362,6 +362,56 @@ function region_entry_source(componentPath: string, iid: string, exportName?: st
 }
 
 /**
+ * The island ENTRY module — a JS re-export of the real component, loaded on both client hydrate and
+ * server render. The transportables import registers every `[ogygia.wire]` codec before props decode,
+ * so an island receiving a transportable prop never needs to import the class itself. Shared by the
+ * `.svelte` host and the `.ts` registry (a `wake:` mark) so a mountable binding is built the same way
+ * from either.
+ */
+function island_entry_source(componentPath: string, iid: string, exportName?: string): string {
+	return (
+		`import 'virtual:ogygia/transportables';\n` +
+		component_import_line(`__OgygiaComp_${iid}`, componentPath, exportName) +
+		'\n' +
+		`export default __OgygiaComp_${iid};\n`
+	);
+}
+
+/**
+ * The island WRAPPER (`.svelte`) — a MOUNTABLE component that renders `<ogygia-region>` on its wake
+ * schedule. Placing it (`<C/>`, `<svelte:component this={C}/>`) emits the shell; the island's JS is
+ * fetched only when the shell wakes (e.g. `wake: 'visible'` → on scroll-into-view). Shared by the
+ * `.svelte` host and the `.ts` registry. `entry_url` is the resolved client/dev module URL the caller
+ * computes (ctx-dependent); `lang` is the `<script>` lang attribute (`''` for plain JS).
+ */
+function island_wrapper_source(
+	iid: string,
+	componentPath: string,
+	entryPath: string,
+	strategy: string,
+	options: Record<string, unknown> | undefined,
+	exportName: string | undefined,
+	entry_url: string,
+	lang: string
+): string {
+	const strategy_attrs = strategy_to_attr(strategy, options);
+	const persist_attr = options?.keep ? ` __keep={${JSON.stringify(options.keep)}}` : '';
+	return (
+		`<script${lang}>\n` +
+		`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
+		`\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
+		`\t${component_import_line('__OgygiaCss', componentPath, exportName)}\n` +
+		`\tlet { children, ...__props } = $props();\n` +
+		`</script>\n` +
+		// `children` rides as an EXPLICIT prop, never as template children: wrapping `{@render
+		// children?.()}` in the tags would hand Region a fragment snippet even for a CHILDLESS call
+		// site — Region's `island_children != null` gate would then serialize a pointless empty slot.
+		`<OgygiaRegion__Wrapper __mode="island" ${strategy_attrs}${persist_attr} __entry={${JSON.stringify(entry_url)}} ` +
+		`__component={__OgygiaEntry} __css={__OgygiaCss} {__props} {children} />\n`
+	);
+}
+
+/**
  * Build the held-region descriptor shared by the `.svelte` and `.ts` paths. It ALWAYS carries a
  * client chunk + `__module` (the region MIGHT be woken); when used statically the chunk is simply
  * never fetched (HTML only at runtime). Two marker flavors feed it:
@@ -462,6 +512,80 @@ function wrapper_attach_binding(opts: {
 			`import __OgygiaWrap from ${JSON.stringify(opts.wrapperPath)};\n` +
 			`Object.assign(__OgygiaWrap, { ${meta} });\n` +
 			`export default __OgygiaWrap;\n`
+	};
+}
+
+/**
+ * The complete island record for a `wake:` mark — the ONE emitter shared by the `.svelte` host (a
+ * placed `import X with { wake }`) and the `.ts` registry (a `wake:` mark handed to a renderer). The
+ * binding it produces is BOTH mountable (placing it, incl. via `<svelte:component>`, renders the
+ * `<ogygia-region>` shell that fetches the island JS only on its schedule) AND holdable (the descriptor
+ * fields ride on the wrapper, so `region(C)` still works). Threading both paths through here is what
+ * keeps `.svelte` and `.ts` `wake:` byte-identical — a `.ts` `wake: 'visible'` is exactly a `.svelte`
+ * `wake: 'visible'`. Callers own the host-specific import rewrite; this owns the record.
+ * `moduleUrl` is the resolved client/dev module URL; `lang` is the wrapper `<script>` lang (`''` = JS).
+ */
+function make_wake_island(opts: {
+	iid: string;
+	componentPath: string;
+	entryPath: string;
+	wrapperPath: string;
+	moduleUrl: string;
+	strategy: string;
+	options?: Record<string, unknown>;
+	exportName?: string;
+	hostPath: string;
+	identity: string;
+	lang: string;
+	/**
+	 * A `.ts` registry / remote binding, which may be handed to `region()` and CROSS the wire (a live
+	 * or remote region): it needs a server-manifest entry (`server`) so its endpoint can render it, and
+	 * the `held` mark that pulls in the live/morph runtime. A `.svelte` placed island never crosses, so
+	 * it stays `server:false`. Either way the binding is the SAME mountable wrapper — only the manifest
+	 * flags differ, which is also why the two carry distinct identities (an endpoint vs none).
+	 */
+	held?: boolean;
+}) {
+	const margin = opts.strategy === 'visible' ? (opts.options?.margin as string | undefined) : undefined;
+	const attach = wrapper_attach_binding({
+		iid: opts.iid,
+		wrapperPath: opts.wrapperPath,
+		componentPath: opts.componentPath,
+		moduleUrl: opts.moduleUrl,
+		hydrate: opts.strategy,
+		hydrateMargin: margin,
+		exportName: opts.exportName
+	});
+	return {
+		id: opts.iid,
+		virtualPath: opts.entryPath,
+		wrapperPath: opts.wrapperPath,
+		wrapperSource: island_wrapper_source(
+			opts.iid,
+			opts.componentPath,
+			opts.entryPath,
+			opts.strategy,
+			opts.options,
+			opts.exportName,
+			opts.moduleUrl,
+			opts.lang
+		),
+		// The host imports THIS attach binding (placeable + holdable), not the bare wrapper.
+		bindingPath: regionBindingVirtualId(opts.iid),
+		bindingSsrSource: attach.ssr,
+		bindingClientSource: attach.client,
+		source: island_entry_source(opts.componentPath, opts.iid, opts.exportName),
+		hostPath: opts.hostPath,
+		componentPath: opts.componentPath,
+		// A `.ts` held binding may cross the wire → it needs a server-manifest entry + the live/morph
+		// mark. A `.svelte` placed island never crosses, so `server:false`, no `held`.
+		server: !!opts.held,
+		...(opts.held ? { held: true } : {}),
+		kind: 'hydrate',
+		lakes: [],
+		identity: opts.identity,
+		strategy: opts.strategy,
+		keep: opts.options?.keep
 	};
 }
 
@@ -1531,35 +1655,19 @@ export function transformHost(source, id, ctx) {
 	// Scale: same path+strategy → one id → one emitFile; N instances share this URL.
 	// Wrappers are NOT this entry — they are SSR/csr=true host bindings only.
 	const entry_source_for = (componentPath, iid, exportName) =>
-		// The island entry loads on both client hydrate and server render. Importing the
-		// transportables manifest here registers every `[ogygia.wire]` codec before props are
-		// decoded, so an island receiving a transportable prop never needs to import the class
-		// itself (an `import type` that the compiler erases would otherwise leave decode blind).
-		`import 'virtual:ogygia/transportables';\n` +
-		component_import_line(`__OgygiaComp_${iid}`, componentPath, exportName) +
-		'\n' +
-		`export default __OgygiaComp_${iid};\n`;
+		island_entry_source(componentPath, iid, exportName);
 
-	const hydrate_wrapper_source = (iid, componentPath, entryPath, strategy, options, exportName) => {
-		const strategy_attrs = strategy_to_attr(strategy, options);
-		const persist_attr = options?.keep ? ` __keep={${JSON.stringify(options.keep)}}` : '';
-		const entry_url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid);
-		return (
-			`<script${lang}>\n` +
-			`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
-			`\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
-			`\t${component_import_line('__OgygiaCss', componentPath, exportName)}\n` +
-			`\tlet { children, ...__props } = $props();\n` +
-			`</script>\n` +
-			// `children` rides as an EXPLICIT prop, never as template children: wrapping `{@render
-			// children?.()}` in the tags would hand Region a fragment snippet even for a CHILDLESS
-			// call site — Region's `island_children != null` gate would then serialize a pointless
-			// empty slot descriptor (OgygiaS) into every island payload, which also breaks minimal
-			// apps whose usage-gated runtime ships no wire revivers. Absent stays absent.
-			`<OgygiaRegion__Wrapper __mode="island" ${strategy_attrs}${persist_attr} __entry={${JSON.stringify(entry_url)}} ` +
-			`__component={__OgygiaEntry} __css={__OgygiaCss} {__props} {children} />\n`
+	const hydrate_wrapper_source = (iid, componentPath, entryPath, strategy, options, exportName) =>
+		island_wrapper_source(
+			iid,
+			componentPath,
+			entryPath,
+			strategy,
+			options,
+			exportName,
+			ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+			lang
 		);
-	};
 
 	const server_wrapper_source = (iid, componentPath, entryPath, options, exportName) => {
 		const deferred_hydrate = !!options?.hydrate;
@@ -1783,51 +1891,46 @@ export function transformHost(source, id, ctx) {
 		// `region(C)` respects the baked wake (and portable/dynamic `<C/>` still renders it). Server
 		// (deferred) and lake islands are placement-only. The attach binding is the leg-split module the
 		// host imports (SSR carries the signer; client is metadata) — see `wrapper_attach_binding`.
+		// A `wake` island is ALSO holdable: its binding attaches the descriptor onto the wrapper so
+		// `region(C)` respects the baked wake AND `<C/>` renders it. Server (deferred) islands are
+		// placement-only. The wake record — mountable + holdable — is minted by the ONE shared emitter
+		// `make_wake_island`, so a `.svelte` and a `.ts` `wake:` are byte-identical.
 		const wants_attach = !is_server;
-		const attach_binding = wants_attach
-			? wrapper_attach_binding({
-					iid,
-					wrapperPath: wrapPath,
-					componentPath,
-					moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
-					hydrate: mark.strategy,
-					hydrateMargin: mark.strategy === 'visible' ? (mark.options?.margin ?? undefined) : undefined,
-					exportName
-				})
-			: null;
 		if (!islands_by_id.has(iid)) {
-			const entry_src = entry_source_for(componentPath, iid, exportName);
-			const wrapper_src = is_server
-				? server_wrapper_source(iid, componentPath, entryPath, mark.options, exportName)
-				: hydrate_wrapper_source(iid, componentPath, entryPath, mark.strategy, mark.options, exportName);
-			islands_by_id.set(iid, {
-				id: iid,
-				virtualPath: entryPath,
-				wrapperPath: wrapPath,
-				wrapperSource: wrapper_src,
-				// Attach binding (wake islands only): the host imports THIS instead of the bare wrapper,
-				// so the same binding both renders (`<C/>`) and holds (`region(C)`).
-				...(attach_binding
+			islands_by_id.set(
+				iid,
+				is_server
 					? {
-							bindingPath: regionBindingVirtualId(iid),
-							bindingSsrSource: attach_binding.ssr,
-							bindingClientSource: attach_binding.client
+							id: iid,
+							virtualPath: entryPath,
+							wrapperPath: wrapPath,
+							wrapperSource: server_wrapper_source(iid, componentPath, entryPath, mark.options, exportName),
+							source: entry_source_for(componentPath, iid, exportName),
+							hostPath: id,
+							componentPath,
+							server: true,
+							kind: deferred_hydrate ? 'hydrate' : 'defer',
+							lakes: [],
+							identity,
+							strategy: mark.strategy,
+							fetchWhen: mark.options?.when,
+							wakeAfter: deferred_hydrate ? mark.options?.hydrate : undefined,
+							keep: mark.options?.keep
 						}
-					: {}),
-				source: entry_src,
-				hostPath: id,
-				componentPath,
-				server: is_server,
-				kind: is_server ? (deferred_hydrate ? 'hydrate' : 'defer') : 'hydrate',
-				lakes: [],
-				identity,
-				// Capability marks for the per-app runtime: the actual wake schedule + defer timing +
-				// persist name, so the generated entry bundles only the features this island needs.
-				strategy: mark.strategy,
-				fetchWhen: is_server ? mark.options?.when : undefined,
-				wakeAfter: deferred_hydrate ? mark.options?.hydrate : undefined,
-				keep: mark.options?.keep
-			});
+					: make_wake_island({
+							iid,
+							componentPath,
+							entryPath,
+							wrapperPath: wrapPath,
+							moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+							strategy: mark.strategy,
+							options: mark.options,
+							exportName,
+							hostPath: id,
+							identity,
+							lang
+						})
+			);
 		}
 
 		if (!rewritten_import_nodes.has(info.node)) {
@@ -1842,7 +1945,7 @@ export function transformHost(source, id, ctx) {
 			// SSR / csr=true client: import the attach binding (wake) or the bare wrapper (server/lake).
 			// csr=false client: the stub (binding_rewrite handles that — link_virtual is false there).
 			const rewrite_path =
-				attach_binding && link_virtual ? regionBindingVirtualId(iid) : bindingPath;
+				wants_attach && link_virtual ? regionBindingVirtualId(iid) : bindingPath;
 			s.overwrite(
 				info.node.start,
 				info.node.end,
@@ -2233,33 +2336,58 @@ export function transformTsRegions(source, id, ctx) {
 				`[ogygia] ${rel_host}: held-region import '${local}' needs a module specifier ($lib/…, relative, or a package specifier like 'pkg/component').`
 			);
 		}
-		// `region: 'raw'` bakes no schedule; a `wake:` mark bakes its (validated) schedule.
-		const options: { hydrate?: string; hydrateMargin?: string } = {};
+		// `region: 'raw'` → a bare HELD descriptor (schedule set at the `region()` call). A `wake:` mark
+		// → a HELD binding that is ALSO MOUNTABLE: a `.ts` registry can hand it to a renderer that PLACES
+		// it (Builder's `<svelte:component>` renders the `<ogygia-region>` shell, JS gated on placement +
+		// schedule) OR to `region()` where it may cross the wire (live/remote) — so it keeps the held
+		// server-manifest entry (`held: true` → server:true). A superset of the old descriptor-only
+		// behavior. Its identity stays `held:*` (distinct from a `.svelte` placed island, which has no
+		// endpoint), so the two never collide on the manifest flags.
+		const wrapper_path_for = (wid: string) =>
+			typeof ctx.wrapperPathFor === 'function' ? ctx.wrapperPathFor(id, wid) : wrapperVirtualId(wid);
+		let iid: string;
+		let entryPath: string;
+		let record: object;
 		if (has_region) {
 			normalize_region_value(attrs.get(regionKey), rel_host, regionKey);
-		} else {
-			const hydrate = normalize_hydrate_value(attrs.get(wakeKey), rel_host, wakeKey);
-			options.hydrate = hydrate;
-			if (hydrate === 'visible' && ctx.visibleMargin != null) options.hydrateMargin = ctx.visibleMargin;
-		}
-		const identity = regionIdentity(component_identity(componentPath), { strategy: 'held', options });
-		const iid = regionId(identity, salt);
-		const entryPath = ctx.virtualPathFor(id, iid);
-		if (!islands_by_id.has(iid)) {
-			islands_by_id.set(
+			const identity = regionIdentity(component_identity(componentPath), { strategy: 'held', options: {} });
+			iid = regionId(identity, salt);
+			entryPath = ctx.virtualPathFor(id, iid);
+			record = make_region_binding({
 				iid,
-				make_region_binding({
-					iid,
-					componentPath,
-					entryPath,
-					hostPath: id,
-					moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
-					hydrate: options.hydrate,
-					hydrateMargin: options.hydrateMargin,
-					identity
-				})
-			);
+				componentPath,
+				entryPath,
+				hostPath: id,
+				moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+				identity
+			});
+		} else {
+			const strategy = normalize_hydrate_value(attrs.get(wakeKey), rel_host, wakeKey);
+			const hydrateMargin =
+				strategy === 'visible' && ctx.visibleMargin != null ? ctx.visibleMargin : undefined;
+			// The HELD identity (`region:<schedule>`) — a `.ts` held+crossable binding, distinct from a
+			// `.svelte` placed island (`hydrate:<schedule>`); the two are genuinely different islands.
+			const identity = regionIdentity(component_identity(componentPath), {
+				strategy: 'held',
+				options: hydrateMargin ? { hydrate: strategy, hydrateMargin } : { hydrate: strategy }
+			});
+			iid = regionId(identity, salt);
+			entryPath = ctx.virtualPathFor(id, iid);
+			record = make_wake_island({
+				iid,
+				componentPath,
+				entryPath,
+				wrapperPath: wrapper_path_for(iid),
+				moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+				strategy,
+				options: hydrateMargin ? { margin: hydrateMargin } : {},
+				hostPath: id,
+				identity,
+				lang: '',
+				held: true
+			});
 		}
+		if (!islands_by_id.has(iid)) islands_by_id.set(iid, record);
 		s.overwrite(
 			m.index,
 			m.index + full.length,

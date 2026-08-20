@@ -136,8 +136,11 @@ type RegionBinding = {
 };
 
 function isBinding(value: unknown): value is RegionBinding {
+	// A binding is either a plain descriptor OBJECT (`region: 'raw'`) or the wrapper COMPONENT (a
+	// function) with the descriptor fields attached (a `wake:` attach binding — placeable AND holdable).
+	// Both carry `__ogRegion`; only a plain component lacks it (→ an inline region).
 	return (
-		typeof value === 'object' &&
+		(typeof value === 'object' || typeof value === 'function') &&
 		value !== null &&
 		typeof (value as RegionBinding).__ogRegion === 'string'
 	);
@@ -170,6 +173,21 @@ export function region<C extends Component<never>>(
 	const o = opts ? opts(props) : undefined;
 	if (isBinding(component)) {
 		if (!component.__component || !component.__sign) {
+			// No signer → this is the CLIENT leg (metadata-only), or a build that never SSR'd the binding.
+			// A `wake:` attach binding is itself a mountable component (the wrapper), so render it INLINE
+			// — the same thing that happened before wake bindings were recognized as bindings at all.
+			// Only a bare `region: 'raw'` descriptor (a plain object) genuinely can't render client-side:
+			// it must be turned into a region on the server, where the signer lives.
+			if (typeof component === 'function') {
+				const inlineWrap: InlineRegion = {
+					[REGION_BRAND]: true,
+					kind: 'inline',
+					component: component as unknown as AnyComponent,
+					props: p,
+					...(content_id ? { content_id } : {})
+				};
+				return make_inline_awaitable(inlineWrap);
+			}
 			throw new Error(
 				'[ogygia] a `with { region: \'raw\' }` component must be turned into a region on the server ' +
 					'(the signer lives server-side). Call region() in a load / remote / render context, ' +

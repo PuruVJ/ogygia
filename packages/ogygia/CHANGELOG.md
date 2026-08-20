@@ -12,6 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A `.ts` registry `with { wake: … }` binding is now MOUNTABLE.** Marking a component `with { wake }`
+  in a `.ts` module (a registry / remote) used to yield a bare held descriptor — a value only `region()`
+  could render. It now yields a real component (the wrapper, with the region metadata attached), so a
+  third-party renderer can PLACE it directly (e.g. Builder.io's `<svelte:component this={component}>`)
+  and get the `<ogygia-region>` shell — while its JS still loads only when the component is placed AND
+  its wake schedule fires. It stays a HELD, crossable island too (`region()` over a live/remote query is
+  unchanged), so this is a pure superset. Mirrors what a `.svelte` `with { wake }` has always produced;
+  a `.svelte` PLACED island and a `.ts` HELD island keep distinct identities (one carries a server
+  endpoint, the other does not). `region: 'raw'` is unchanged. Threaded through one shared emitter so
+  the `.svelte` and `.ts` paths can't drift.
+
 - **`import.meta.og.asRegion(Comp, options)` — the barrel escape hatch for regions.** The
   import-attribute form (`import X from './X.svelte' with { … }`) only reaches a DEFAULT import of one
   file, so a component you can only get through a barrel (`import { Header } from '@design/system'`)

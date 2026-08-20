@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
 	transformHost,
+	transformTsRegions,
 	regionIdentity,
 	regionId,
 	CLIENT_BINDING_STUB
@@ -82,6 +83,92 @@ const list = [{ Comp: A, props: { n: 1 } }, { Comp: B, props: { n: 2 } }];
 		'transform: csr=false omit still emits one island metadata',
 		omit!.islands.length === 1,
 		`count=${omit?.islands.length}`
+	);
+}
+
+// ---------- Transform: `.ts` registry — mixed region:raw + wake:, held vs placed identities ----------
+// A `.ts` registry hands components to `region()` (raw) OR to a renderer that PLACES them (wake).
+// `region: 'raw'` → a bare HELD descriptor (server:true, plain object). `wake:` → a HELD binding that is
+// ALSO MOUNTABLE (server:true + held, the wrapper with metadata Object.assign'd on): placeable via
+// `<svelte:component>` yet still crossable via `region()`. Both mixed in one file, plus dedupe and the
+// held-vs-placed identity distinction from a `.svelte` island.
+{
+	const ROOT = '/app';
+	const ctx = {
+		root: ROOT,
+		libDir: '/app/src/lib',
+		readFile: () => null,
+		pathModule: path,
+		dev: false,
+		virtualPathFor: (_h: string, iid: string) => `virtual:ogygia/island/${iid}.js`,
+		wrapperPathFor: (_h: string, iid: string) => `virtual:ogygia/wrapper/${iid}.svelte`,
+		devUrlFor: (p: string) => '/@id/' + p,
+		visibleMargin: '0px',
+		presets: {}
+	};
+	// `.ts` held ids: strategy 'held', its baked schedule (`region:raw` / `region:visible`).
+	const heldIdOf = (rel: string, hydrate?: string) => {
+		const options: Record<string, unknown> = {};
+		if (hydrate) {
+			options.hydrate = hydrate;
+			if (hydrate === 'visible') options.hydrateMargin = '0px';
+		}
+		return regionId(regionIdentity(rel, { strategy: 'held', options }));
+	};
+
+	const tsSrc = `import RawX from './X.svelte' with { region: 'raw' };
+import WakeX from './X.svelte' with { wake: 'visible' };
+import LoadY from './Y.svelte' with { wake: 'load' };
+import WakeX2 from './X.svelte' with { wake: 'visible' };
+export const registry = [RawX, WakeX, LoadY, WakeX2];
+`;
+	const rt = transformTsRegions(tsSrc, '/app/src/lib/registry.ts', ctx)!;
+	const islands = rt.islands as Array<Record<string, unknown>>;
+	const byId = new Map(islands.map((i) => [i.id as string, i]));
+
+	// WakeX + WakeX2 are the same component+schedule → ONE island. Distinct: RawX, WakeX, LoadY.
+	check('transform(.ts mixed): three distinct islands (duplicate wake deduped)', islands.length === 3, `count=${islands.length}`);
+
+	const rawX = byId.get(heldIdOf('src/lib/X.svelte'));
+	const wakeX = byId.get(heldIdOf('src/lib/X.svelte', 'visible'));
+	const loadY = byId.get(heldIdOf('src/lib/Y.svelte', 'load'));
+
+	check(
+		'transform(.ts mixed): region:raw → bare held descriptor (plain object, no wrapper)',
+		!!rawX &&
+			rawX.server === true &&
+			String(rawX.bindingSsrSource).includes('export default {') &&
+			!String(rawX.bindingSsrSource).includes('Object.assign')
+	);
+	check(
+		'transform(.ts mixed): wake:visible → MOUNTABLE held binding (server:true + held, wrapper)',
+		!!wakeX &&
+			wakeX.server === true &&
+			wakeX.held === true &&
+			String(wakeX.bindingSsrSource).includes('Object.assign(__OgygiaWrap') &&
+			/__hydrate: "visible"/.test(String(wakeX.bindingSsrSource)) &&
+			String(wakeX.wrapperSource).includes('__mode="island"')
+	);
+	check(
+		'transform(.ts mixed): wake:load → mountable held binding (server:true + held)',
+		!!loadY && loadY.server === true && loadY.held === true && /__hydrate: "load"/.test(String(loadY.bindingSsrSource))
+	);
+	// The SAME component marked raw vs wake → two DISTINCT islands, not a collision.
+	check('transform(.ts mixed): same component raw vs wake → distinct islands', !!rawX && !!wakeX && rawX.id !== wakeX.id);
+	// Both raw and wake rewrite their host import to the leg-split binding module.
+	check(
+		'transform(.ts mixed): raw + wake imports both rewritten to region binding modules',
+		/import RawX from "virtual:ogygia\/region\//.test(rt.code) && /import WakeX from "virtual:ogygia\/region\//.test(rt.code)
+	);
+
+	// A `.ts` held+crossable `wake:` island is DISTINCT from a `.svelte` PLACED island of the same
+	// component+schedule — one carries a server endpoint (`held:*`), the other does not (`hydrate:*`).
+	const svelteHost = `<script>\nimport X from '$lib/X.svelte' with { wake: 'visible' };\n</script>\n<X />`;
+	const rh = transformHost(svelteHost, '/app/src/routes/+page.svelte', ctx)!;
+	check(
+		'transform(.ts↔.svelte): a .ts held wake island ≠ a .svelte placed island (endpoint vs none)',
+		!!wakeX && rh.islands[0].id !== wakeX.id && rh.islands[0].server === false,
+		`${rh.islands[0]?.id} vs ${wakeX?.id}`
 	);
 }
 

@@ -1,10 +1,11 @@
-// Held-region transform suite. A held region is a marked import handed to `region()`:
-//   - `.svelte` host: `with { region: 'raw' }` (a `wake:` mark there is a PLACED island, not held).
-//   - `.ts` registry / remote: `with { region: 'raw' }` (no baked schedule) OR `with { wake: '…' }`
-//     (baked schedule) — a `.ts` module has no template, so every marked import there is held.
-// Both register a server island (server:true, kind:'hydrate' — a held region always ships a client
-// chunk; it just isn't fetched unless woken) and rewrite the host import to the leg-split descriptor
-// module. Runs against built `../dist`.
+// Region transform suite for `.ts` registries / remotes. Two markers:
+//   - `with { region: 'raw' }` → a bare HELD descriptor (server:true, no baked schedule) handed to
+//     `region()`. `.svelte` `region: 'raw'` produces the same descriptor.
+//   - `with { wake: '…' }` → a HELD binding that is ALSO MOUNTABLE (server:true + held, kind:'hydrate'):
+//     placeable via `<svelte:component>` (renders the `<ogygia-region>` shell, JS gated on placement +
+//     schedule) yet still crossable over the wire via `region()`. A superset of the old descriptor. It
+//     keeps the `held:*` identity — distinct from a `.svelte` PLACED island (`hydrate:*`, no endpoint).
+// Both rewrite the host import to the leg-split binding module. Runs against built `../dist`.
 
 import { describe, test, expect } from 'vitest';
 import path from 'node:path';
@@ -34,7 +35,9 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
 	};
 }
 
-// A held descriptor's id encodes its baked schedule: `region:raw` (no schedule) vs `region:visible`.
+// A `.ts` held-region id: strategy 'held', its baked schedule → `region:raw` (no schedule) vs
+// `region:visible`. A `.ts` `wake:` mark bakes the schedule but stays a HELD (crossable) island, so it
+// keeps the `held:*` identity — distinct from a `.svelte` PLACED island (`hydrate:*`, no endpoint).
 function heldId(compRel: string, hydrate?: string) {
 	const options: Record<string, unknown> = {};
 	if (hydrate) {
@@ -151,22 +154,36 @@ export const y = 1;`;
 		expect(r).toBeNull(); // the comment sample must NOT register a phantom island
 	});
 
-	// A `wake:` mark on a `.ts` held import bakes its schedule (same axis + defaults as a placed island).
+	// A `wake:` mark on a `.ts` registry bakes its schedule AND makes the binding MOUNTABLE — placeable
+	// (Builder's `<svelte:component>`) yet still a HELD, crossable island (server:true + held) for
+	// `region()` over the wire. A superset of the old descriptor-only shape.
 	for (const [value, hydrate] of [
 		['load', 'load'],
 		['idle', 'idle'],
 		['visible', 'visible'],
 		['(max-width: 500px)', '(max-width: 500px)']
 	] as const) {
-		test(`wake: '${value}' bakes __hydrate ${hydrate}`, () => {
+		test(`wake: '${value}' → a mountable held binding (__hydrate ${hydrate})`, () => {
 			const s = `import C from './C.svelte' with { wake: '${value}' };
 export const f = region(C, {});`;
 			const r = transformTsRegions(s, id, makeCtx());
 			const isl = r!.islands[0] as Record<string, unknown>;
 			expect(isl.kind).toBe('hydrate');
+			expect(isl.strategy).toBe(hydrate);
+			// HELD + crossable: keeps its server-manifest entry + the live/morph mark (so `region()` can
+			// stream it over the wire), exactly like the old descriptor.
 			expect(isl.server).toBe(true);
+			expect(isl.held).toBe(true);
+			// MOUNTABLE (the new bit): the binding is the wrapper component with the descriptor
+			// Object.assign'd on, plus a wrapper `.svelte` that renders the `<ogygia-region>` shell.
+			expect(String(isl.bindingSsrSource)).toContain('Object.assign(__OgygiaWrap');
+			expect(String(isl.bindingSsrSource)).toContain('export default __OgygiaWrap');
+			expect(String(isl.wrapperSource)).toContain('OgygiaRegion__Wrapper __mode="island"');
+			// HOLDABLE: region() still reads the baked schedule + component + signer off the binding.
 			expect(String(isl.bindingSsrSource)).toContain(`__hydrate: ${JSON.stringify(hydrate)}`);
-			// distinct schedules mint distinct ids (and differ from a raw descriptor)
+			expect(String(isl.bindingSsrSource)).toContain('__component');
+			expect(String(isl.bindingSsrSource)).toContain('makeRegionEndpoint');
+			// Distinct schedules mint distinct ids; a `wake:` id differs from a raw descriptor.
 			expect(isl.id).toBe(heldId('src/lib/C.svelte', hydrate));
 			expect(isl.id).not.toBe(heldId('src/lib/C.svelte'));
 		});
