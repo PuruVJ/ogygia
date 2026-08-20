@@ -243,25 +243,30 @@ went **2752 → 2063** lines.
   prescan/emitFile, generate/writeBundle, handleHotUpdate) — `run_transform` is now an alias for
   `compiler.transform`.
 
-### The region/ split — the SAFE halves landed, the IR seam deferred
+### The region/ split — DONE, as compilation CLASSES
 
-`region/` now holds three modules: `identity.ts` (the join key — strategyKey/regionIdentity/regionId),
-`emit.ts` (the `descriptor → source` codegen — entry/wrapper/binding-leg emitters, pure leaves), and
-`transform.ts` (still the FUSED analyze+lower pass — `transformHost` / `transformTsRegions`).
-`regionBindingVirtualId` moved to `ids.ts` to keep a one-way flow (no emit↔transform cycle).
+`region/` holds: `identity.ts` (the join key — strategyKey/regionIdentity/regionId), `emit.ts` (ALL the
+`descriptor → source` codegen — entry / island-wrapper / server-wrapper / lake-wrapper / region + wake
+bindings, pure leaves), `ir.ts` (`FileIR` — the analyze→lower field shape — + `RegionMark`), and
+`transform.ts` (the two compilation classes). `regionBindingVirtualId` moved to `ids.ts` (one-way flow,
+no emit↔transform cycle).
 
-- **The analyze/lower IR split is DEFERRED** — assessed against the code (read in full) and found
-  STRUCTURALLY not cleanly separable, not merely risky. A clean `analyze() → FileIR → lower()` seam
-  needs FileIR to be DATA, but the lower half (after `new MagicString` at ~line 1333) CALLS closures
-  defined in the analyze half: `marked_import_referenced` (used at ~1489) and `ast_refs_local` (used
-  at ~1667/1671/1673). Closures can't ride in a data bundle, so the seam would have to move those
-  closures across and re-capture `instance_body`/`module_body`/the live `ast` — a semantic restructure
-  of the most correctness-critical code that risks a byte, exactly the "stop and keep fused" case the
-  invariant names. On top of that, ~20 mutable locals (imports / marked_components / as_regions /
-  synthetic_export / has_island_children / …) cross the boundary. `transformHost` +
-  `transformTsRegions` stay FUSED in `region/transform.ts`. `ir.ts` (FileIR/RegionMark/MacroCall) +
-  `parse/svelte.ts` land with that split only if it is ever done byte-identically. `IslandDescriptor`
-  already lives in `program.ts`.
+The analyze/lower split WAS achieved, byte-identically — the earlier "structurally not separable" call
+was WRONG. The supposed blocker (the lower half calls analyze-half closures `marked_import_referenced` /
+`ast_refs_local`) dissolves: those are pure over the AST + host path, so they rebuild in the lower phase
+from the shared state. Two steps: (1) split `transformHost` into `analyze_host() → FileIR → lower_host()`
+(the FileIR data seam); (2) fold that into a **`FileCompilation` class** — the design's "biggest win":
+the ephemeral state the fused pass threaded through ~30 nested closures becomes `#fields`, and the phases
+become methods over shared `this` (`#analyze()` reads the AST into the fields; `#lower()` rewrites from
+them; `run()` = analyze ▸ early-out ▸ lower). `transformTsRegions` is likewise a **`TsRegionCompilation`**
+class. A fresh instance per file, discarded after — organizes EPHEMERAL state, never cross-file state.
+
+- **Byte-identity held throughout** — every step kept the digest at `e27d5db6·ad66d3f3` (guarded by tsc +
+  1003 unit + 48 e2e). Re-indentation of the moved method bodies was verified by the same oracle (no
+  in-repo formatter). The classes still keep their phase-local helpers as method-local closures (locality
+  of small helpers); the CROSS-phase state is `#fields`, which is the point.
+- **`ir.ts` MacroCall + `parse/svelte.ts`** are the only unrealized design names — a thin parse wrapper +
+  a macro-call type; low value, not blocking.
 - **`driver.emit()` / `driver.invalidate()`.** Only `driver.transform()` was pulled Vite-free; the
   emit dispatch + HMR invalidation stay in the adapter (they read `options.ssr`, `this.emitFile`,
   the dev server) — a follow-up if the REPL adapter ever needs them driver-side.
