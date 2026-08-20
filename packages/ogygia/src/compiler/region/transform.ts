@@ -794,20 +794,65 @@ function inject_csr_reset(source, id, parsed = null) {
 }
 
 export function transformHost(source, id, ctx) {
-	const a = analyze_host(source, id, ctx);
-	if ('done' in a) return a.done;
-	return lower_host(a.ir, ctx);
+	return new FileCompilation(source, id, ctx).run();
 }
 
 /**
- * Analyze — read a `.svelte` host's AST into a `FileIR`: its imports, region marks (import attributes
- * + `asRegion` call sites), the usage findings, and the csr tri-state. No MagicString, no rewriting —
- * a pure "what does this file declare" pass. Returns `{ done }` for the early exits (a csr=true route
- * host, the cheap island-hint bailout, a snippet-less file with no islands) or `{ ir }` for lowering.
+ * `FileCompilation` — the per-file compilation unit for a `.svelte` host, and the biggest win of the
+ * rewrite. The ephemeral state the fused pass threaded through ~30 nested closures (the AST, the marks
+ * map, the free-var sets, …) lives here as `#fields`; the phases are methods over shared `this`:
+ * `#analyze()` reads the AST into the fields (the {@link FileIR} shape), `#lower()` rewrites from them.
+ * A fresh instance per file, discarded after — it organizes EPHEMERAL state, never cross-file state
+ * (that is the Program's job), so it stays pure per file.
  */
-function analyze_host(source, id, ctx): { done: ReturnType<typeof transform_csr_true_host> | null } | { ir: FileIR } {
-	const import_keys = normalize_import_keys(ctx.importKeys);
-	const has_island_hint = import_keys_hint(import_keys).test(source);
+class FileCompilation {
+	// config (constructor)
+	#source;
+	#id;
+	#ctx;
+	// analyze ▸ lower — the FileIR fields, now shared class state (see ./ir.ts)
+	#ast;
+	#instance_body;
+	#module_body;
+	#lang;
+	#rel_host;
+	#import_keys;
+	#imports;
+	#marked_components;
+	#imports_to_strip;
+	#as_regions;
+	#as_region_nodes;
+	#synthetic_export;
+	#has_island_children;
+	#has_island_hint;
+	#needs_csr_reset;
+
+	constructor(source, id, ctx) {
+		this.#source = source;
+		this.#id = id;
+		this.#ctx = ctx;
+	}
+
+	/** Compile the host: analyze ▸ (early-out) ▸ lower. */
+	run() {
+		const early = this.#analyze();
+		if (early) return early.done;
+		return this.#lower();
+	}
+
+	/**
+	 * Analyze — read the host's AST into the compilation's fields: its imports, region marks (import
+	 * attributes + `asRegion` call sites), the usage findings, and the csr tri-state. No MagicString,
+	 * no rewriting — a pure "what does this file declare" pass. Returns `{ done }` for an early exit (a
+	 * csr=true route host, the cheap island-hint bailout, a snippet-less file with no islands), or
+	 * `null` once the fields are populated and `#lower()` should run.
+	 */
+	#analyze() {
+		const source = this.#source;
+		const id = this.#id;
+		const ctx = this.#ctx;
+		const import_keys = normalize_import_keys(ctx.importKeys);
+		const has_island_hint = import_keys_hint(import_keys).test(source);
 
 	// Route hosts carry Kit's per-node csr option as a Svelte context marker (CSR-KEY), mirroring
 	// Kit's own option resolution (`{ ...parent_options, ...own }`) so nesting shadows correctly:
@@ -1304,56 +1349,51 @@ function analyze_host(source, id, ctx): { done: ReturnType<typeof transform_csr_
 	};
 	visit_usages(ast.fragment?.nodes ?? []);
 
-	return {
-		ir: {
-			source,
-			id,
-			ast,
-			instance_body,
-			module_body,
-			lang,
-			rel_host,
-			import_keys,
-			imports,
-			marked_components,
-			imports_to_strip,
-			as_regions,
-			as_region_nodes,
-			synthetic_export,
-			has_island_children,
-			has_island_hint,
-			needs_csr_reset
-		}
-	};
-}
+	// analyze products → shared compilation state (the FileIR fields), read by #lower().
+	this.#ast = ast;
+	this.#instance_body = instance_body;
+	this.#module_body = module_body;
+	this.#lang = lang;
+	this.#rel_host = rel_host;
+	this.#import_keys = import_keys;
+	this.#imports = imports;
+	this.#marked_components = marked_components;
+	this.#imports_to_strip = imports_to_strip;
+	this.#as_regions = as_regions;
+	this.#as_region_nodes = as_region_nodes;
+	this.#synthetic_export = synthetic_export;
+	this.#has_island_children = has_island_children;
+	this.#has_island_hint = has_island_hint;
+	this.#needs_csr_reset = needs_csr_reset;
+	return null;
+	}
 
-/**
- * Lower — `FileIR` → rewritten source + `IslandDescriptor[]`. Consumes ONLY the analyze pass's data
- * (it never re-reads the file): creates the MagicString, rewrites each marked import to its wrapper /
- * binding / stub, mints the island records, and brands portable snippets. `ast_refs_local` /
- * `marked_import_referenced` / `err` are rebuilt here from the IR — they are pure over the AST + host
- * path, so they need not (and cannot) ride in the data seam.
- */
-function lower_host(ir: FileIR, ctx) {
-	const {
-		source,
-		id,
-		ast,
-		instance_body,
-		module_body,
-		lang,
-		rel_host,
-		import_keys,
-		imports,
-		marked_components,
-		imports_to_strip,
-		as_regions,
-		as_region_nodes,
-		synthetic_export,
-		has_island_children,
-		has_island_hint,
-		needs_csr_reset
-	} = ir;
+	/**
+	 * Lower — the compilation's fields → rewritten source + `IslandDescriptor[]`. Consumes ONLY the
+	 * analyze pass's fields (it never re-reads the file): creates the MagicString, rewrites each marked
+	 * import to its wrapper / binding / stub, mints the island records, and brands portable snippets.
+	 * `err` / `ast_refs_local` / `marked_import_referenced` are rebuilt here from those fields — pure
+	 * over the AST + host path.
+	 */
+	#lower() {
+	const source = this.#source;
+	const id = this.#id;
+	const ctx = this.#ctx;
+	const ast = this.#ast;
+	const instance_body = this.#instance_body;
+	const module_body = this.#module_body;
+	const lang = this.#lang;
+	const rel_host = this.#rel_host;
+	const import_keys = this.#import_keys;
+	const imports = this.#imports;
+	const marked_components = this.#marked_components;
+	const imports_to_strip = this.#imports_to_strip;
+	const as_regions = this.#as_regions;
+	const as_region_nodes = this.#as_region_nodes;
+	const synthetic_export = this.#synthetic_export;
+	const has_island_children = this.#has_island_children;
+	const has_island_hint = this.#has_island_hint;
+	const needs_csr_reset = this.#needs_csr_reset;
 	const path = ctx.pathModule;
 	const err = (specifiers, msg) =>
 		new Error(`[ogygia] ${rel_host}: import { ${specifiers} } — ${msg}`);
@@ -1962,6 +2002,7 @@ function lower_host(ir: FileIR, ctx) {
 		islands: [...islands_by_id.values()],
 		hasIslandChildren: has_island_children
 	};
+	}
 }
 
 /** Parse a flat import-attributes clause body (`a: 'x', b: "y"`) into a key→value map. */
