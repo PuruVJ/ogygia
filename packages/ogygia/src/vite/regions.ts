@@ -21,7 +21,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { find_og_calls, split_first_string } from './og-lexer.js';
+import { find_og_calls, split_first_string } from '../compiler/parse/scan.js';
 
 const PREFIX = 'import.meta.og.regions';
 

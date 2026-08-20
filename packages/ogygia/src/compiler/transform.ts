@@ -3,7 +3,7 @@ import MagicString from 'magic-string';
 import { createHash } from 'node:crypto';
 import { foucCssVirtualId } from './fouc-css.js';
 import { collectCaptureInfo } from './free-vars.js';
-import { parse_module } from '../vite/og-parse.js';
+import { parse_module } from './parse/oxc.js';
 
 const REGEXP_META = /[.*+?^${}()|[\]\\]/g;
 const PATH_SEP = /[/\\]/;

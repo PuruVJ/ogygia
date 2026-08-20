@@ -29,9 +29,9 @@
  * `<script>` block for `.svelte`), with a string scanner as the fallback for source that doesn't
  * parse mid-edit — so the marker in a comment or string is never rewritten.
  */
-import { og_js_regions, type JsRegion } from './og-extract.js';
-import { find_og_calls } from './og-lexer.js';
-import { parse_module } from './og-parse.js';
+import { og_js_regions, type JsRegion } from '../parse/scan.js';
+import { find_og_calls } from '../parse/scan.js';
+import { parse_module } from '../parse/oxc.js';
 
 /** The key expression a wire member rewrites to — the same symbol the runtime registry uses. */
 export const WIRE_EXPR = "Symbol.for('ogygia.wire')";

@@ -5,9 +5,9 @@
  * unbalanced output. "Demented input someone would never dream of" is the target.
  */
 import { describe, expect, it } from 'vitest';
-import { rewrite_wire, WIRE_EXPR } from '../src/vite/og-wire.js';
+import { rewrite_wire, WIRE_EXPR } from '../src/compiler/macros/wire.js';
 import { rewrite_loaders, find_loader_calls } from '../src/vite/loaders.js';
-import { og_js_regions } from '../src/vite/og-extract.js';
+import { og_js_regions } from '../src/compiler/parse/scan.js';
 
 const MARKUP = ['.svelte'] as const;
 const CODEC = `{ encode: (c) => c.v, decode: (v) => new C(v) }`;

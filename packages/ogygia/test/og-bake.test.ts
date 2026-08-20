@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { rewrite_bake } from '../src/vite/og-bake.js';
+import { rewrite_bake } from '../src/compiler/macros/bake.js';
 import { __set_build_cache_root } from '../src/build-cache.js';
 
 __set_build_cache_root(fs.mkdtempSync(path.join(os.tmpdir(), 'og-bake-cache-')));

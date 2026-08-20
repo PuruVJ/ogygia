@@ -18,10 +18,10 @@
  * AST-precise over the module's JS regions (whole file for `.ts`/`.js`, `<script>` blocks for
  * `.svelte`), with the marker in a comment or string never mistaken for a call.
  */
-import { og_js_regions, is_js_module, type JsRegion } from './og-extract.js';
-import { og_member } from './og-wire.js';
+import { og_js_regions, is_js_module, type JsRegion } from '../parse/scan.js';
+import { og_member } from './wire.js';
 import { dedent } from './dedent.js';
-import { parse_module } from './og-parse.js';
+import { parse_module } from '../parse/oxc.js';
 
 // Both snippet constructs share this transform: `code(source, lang, meta?)` and `md(text)` each bake
 // to static html at build and inline as the same `og_html_region(...)`.

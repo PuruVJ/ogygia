@@ -20,9 +20,9 @@
  * the module's JS regions; a mid-edit unparseable file doesn't transform (the marker then
  * fails loudly at runtime — `import.meta.og` is undefined without the transform).
  */
-import { og_js_regions } from './og-extract.js';
-import { parse_module } from './og-parse.js';
-import { og_member } from './og-wire.js';
+import { og_js_regions } from '../parse/scan.js';
+import { parse_module } from '../parse/oxc.js';
+import { og_member } from './wire.js';
 
 const MARKER = 'import.meta.og.store';
 

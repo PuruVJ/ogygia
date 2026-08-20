@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { get, writable, derived } from 'svelte/store';
 import { parse, stringify } from 'devalue';
-import { rewrite_store, auto_brand_stores } from '../src/vite/og-store.js';
+import { rewrite_store, auto_brand_stores } from '../src/compiler/macros/store.js';
 import { __og_store, mark_store, reduce_store, revive_store, STORE_WIRE_KEY, is_store, og_derived, register_derived_kind } from '../src/store-transport.js';
 import { __register_fn, fn_handle } from '../src/fn-transport.js';
 import { REF_WIRE_KEY, ref_reducer, ref_reviver } from '../src/ref.js';

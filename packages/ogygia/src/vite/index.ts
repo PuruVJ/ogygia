@@ -10,14 +10,14 @@ import { configure_build_cache } from '../build-cache.js';
 import { islandBridge, content_css_key } from './island-bridge.js';
 import { materialize } from './git.js';
 import { rewrite_loaders } from './loaders.js';
-import { rewrite_wire } from './og-wire.js';
-import { rewrite_dollar } from './og-dollar.js';
-import { rewrite_store, auto_brand_stores } from './og-store.js';
+import { rewrite_wire } from '../compiler/macros/wire.js';
+import { rewrite_dollar } from '../compiler/macros/dollar.js';
+import { rewrite_store, auto_brand_stores } from '../compiler/macros/store.js';
 import { rewrite_regions } from './regions.js';
-import { rewrite_code } from './og-code.js';
+import { rewrite_code } from '../compiler/macros/code.js';
 import { render_snippet } from '../content/markdown/snippet.js';
 import { render_markdown } from '../content/markdown/render-md.js';
-import { rewrite_bake } from './og-bake.js';
+import { rewrite_bake } from '../compiler/macros/bake.js';
 
 /** Markup extensions where `import.meta.og.*` constructs are recognized at the VITE-transform layer.
  *  Just `.svelte` — content files (`.svx`/`.md`) are the markdown preprocessor's domain (see

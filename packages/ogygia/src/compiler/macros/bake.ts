@@ -19,10 +19,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { uneval } from 'devalue';
-import { og_member } from './og-wire.js';
-import { parse_module } from './og-parse.js';
-import { og_js_regions } from './og-extract.js';
-import { BuildCache } from '../build-cache.js';
+import { og_member } from './wire.js';
+import { parse_module } from '../parse/oxc.js';
+import { og_js_regions } from '../parse/scan.js';
+import { BuildCache } from '../../build-cache.js';
 
 /** bake's corner of the shared build cache — the transient eval bundles live here (never committed;
  *  written and deleted per bake). All writes go through the cache interface, like the git checkouts. */

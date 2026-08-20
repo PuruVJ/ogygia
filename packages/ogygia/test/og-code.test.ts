@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { rewrite_code, type CodeCall } from '../src/vite/og-code.js';
-import { dedent } from '../src/vite/dedent.js';
+import { rewrite_code, type CodeCall } from '../src/compiler/macros/code.js';
+import { dedent } from '../src/compiler/macros/dedent.js';
 
 const MARKUP = ['.svelte'] as const;
 // A fake renderer: echoes its inputs so tests assert what the macro EXTRACTED (dedent, lang, meta),

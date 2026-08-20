@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rewrite_wire, WIRE_EXPR } from '../src/vite/og-wire.js';
+import { rewrite_wire, WIRE_EXPR } from '../src/compiler/macros/wire.js';
 import {
 	wire,
 	__register_transportable,

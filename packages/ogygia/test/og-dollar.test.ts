@@ -4,7 +4,7 @@
  * and the strict-position build errors.
  */
 import { describe, it, expect } from 'vitest';
-import { rewrite_dollar } from '../src/vite/og-dollar.js';
+import { rewrite_dollar } from '../src/compiler/macros/dollar.js';
 import { __register_fn, fn_handle } from '../src/fn-transport.js';
 
 const SVELTE = ['.svelte'];
