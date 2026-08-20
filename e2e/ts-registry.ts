@@ -58,6 +58,19 @@ try {
 		(await widget.textContent())!
 	);
 
+	// ── asRegion() of a NAMED barrel import, in the .ts file, placed via <svelte:component> ──
+	const asr = page.locator('[data-ticker] button').first();
+	await asr.waitFor();
+	check('ts-registry: asRegion(named barrel) SSR prop (start=10)', (await asr.textContent())!.includes('ticks 10'));
+	await asr.scrollIntoViewIfNeeded();
+	await sleep(300);
+	await asr.click();
+	check(
+		'ts-registry: asRegion(named barrel) in a .ts file hydrated + interactive',
+		(await asr.textContent())!.includes('ticks 11'),
+		(await asr.textContent())!
+	);
+
 	check('ts-registry: no console errors', errs.length === 0, errs.join(' | '));
 } finally {
 	await browser.close();

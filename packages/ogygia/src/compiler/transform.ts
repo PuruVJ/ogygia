@@ -311,6 +311,37 @@ function import_binding_of(
 }
 
 /**
+ * Parse an `asRegion` options object in a `.ts`/`.js` file into a `.ts` region marker — `{ wake }` or
+ * `{ region }`, the same option surface a `with { … }` import attribute has there. `fail(msg)` throws
+ * the caller's contextual error.
+ */
+function parse_ts_as_region_options(
+	arg: any,
+	fail: (msg: string) => Error,
+	regionKey: string,
+	wakeKey: string
+): { region?: string; wake?: string } {
+	if (!arg || arg.type !== 'ObjectExpression')
+		throw fail(`needs an options object — e.g. \`import.meta.og.asRegion(Comp, { wake: 'load' })\`.`);
+	let region: string | undefined;
+	let wake: string | undefined;
+	for (const p of arg.properties ?? []) {
+		if (p.type !== 'Property' || p.computed) throw fail('options must be a plain object of string-valued keys.');
+		const key = p.key?.name ?? p.key?.value;
+		if (p.value?.type !== 'Literal' || typeof p.value.value !== 'string')
+			throw fail(`option \`${key}\` must be a string literal.`);
+		const val = String(p.value.value);
+		if (key === regionKey || key === 'region') region = val;
+		else if (key === wakeKey || key === 'wake') wake = val;
+		else throw fail(`unknown option \`${key}\` — a .ts region takes \`wake: '…'\` or \`region: 'raw'\`.`);
+	}
+	if (region != null && wake != null) throw fail('takes exactly one of `wake` or `region`.');
+	if (region != null) return { region };
+	if (wake != null) return { wake };
+	throw fail('needs a `wake` or `region` option.');
+}
+
+/**
  * The `with { region: … }` marker has ONE value — `'raw'` (an adjective: "a raw/held region"). It
  * carries NO schedule: the wake timing is set at the `region()` call (`region(C, props, { wake })`)
  * or, in a block tree, per node. This is the only surviving import-attribute marker for a component
@@ -2281,8 +2312,10 @@ export function transformTsRegions(source, id, ctx) {
 	const import_keys = normalize_import_keys(ctx.importKeys);
 	const regionKey = import_keys.region;
 	const wakeKey = import_keys.wake;
-	// cheap bail — needs an import-attributes clause and either held marker name present
-	if ((!source.includes(regionKey) && !source.includes(wakeKey)) || !source.includes('with')) return null;
+	// cheap bail — a held import (`with { region|wake }`) OR the `import.meta.og.asRegion(…)` macro.
+	const has_as_region = source.includes('asRegion');
+	if (!has_as_region && ((!source.includes(regionKey) && !source.includes(wakeKey)) || !source.includes('with')))
+		return null;
 
 	const path = ctx.pathModule;
 	const root = ctx.root;
@@ -2301,6 +2334,69 @@ export function transformTsRegions(source, id, ctx) {
 		return spec;
 	};
 	const component_identity = (p) => (path.isAbsolute(p) ? posix_rel(p) : p);
+
+	const wrapper_path_for = (wid: string) =>
+		typeof ctx.wrapperPathFor === 'function' ? ctx.wrapperPathFor(id, wid) : wrapperVirtualId(wid);
+
+	// The ONE `.ts`/`.js` region emitter — shared by the `with { … }` import form and the
+	// `import.meta.og.asRegion(…)` macro (which additionally resolves a barrel `exportName`). A
+	// `region: 'raw'` marker → a bare held descriptor; a `wake:` marker → a MOUNTABLE held island (the
+	// same `make_wake_island` record the `.svelte` host uses; `held: true` so it also crosses the wire).
+	// Its identity stays `held:*` — distinct from a `.svelte` PLACED island (`hydrate:*`, no endpoint).
+	// Returns `{ iid, record }` for the caller to register + rewrite. `exportName` is undefined for a
+	// default import, the barrel export name for a named one.
+	const emit_ts_region = (
+		componentPath: string,
+		marker: { region?: string; wake?: string },
+		exportName?: string
+	): { iid: string; record: object } => {
+		const comp_rel = component_identity(componentPath);
+		const id_base = exportName && exportName !== 'default' ? `${comp_rel}#${exportName}` : comp_rel;
+		if (marker.region != null) {
+			normalize_region_value(marker.region, rel_host, regionKey);
+			const identity = regionIdentity(id_base, { strategy: 'held', options: {} });
+			const iid = regionId(identity, salt);
+			const entryPath = ctx.virtualPathFor(id, iid);
+			return {
+				iid,
+				record: make_region_binding({
+					iid,
+					componentPath,
+					entryPath,
+					hostPath: id,
+					moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+					exportName,
+					identity
+				})
+			};
+		}
+		const strategy = normalize_hydrate_value(marker.wake as string, rel_host, wakeKey);
+		const hydrateMargin =
+			strategy === 'visible' && ctx.visibleMargin != null ? ctx.visibleMargin : undefined;
+		const identity = regionIdentity(id_base, {
+			strategy: 'held',
+			options: hydrateMargin ? { hydrate: strategy, hydrateMargin } : { hydrate: strategy }
+		});
+		const iid = regionId(identity, salt);
+		const entryPath = ctx.virtualPathFor(id, iid);
+		return {
+			iid,
+			record: make_wake_island({
+				iid,
+				componentPath,
+				entryPath,
+				wrapperPath: wrapper_path_for(iid),
+				moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+				strategy,
+				options: hydrateMargin ? { margin: hydrateMargin } : {},
+				hostPath: id,
+				identity,
+				lang: '',
+				held: true,
+				exportName
+			})
+		};
+	};
 
 	const s = new MagicString(source);
 	const islands_by_id = new Map();
@@ -2336,57 +2432,10 @@ export function transformTsRegions(source, id, ctx) {
 				`[ogygia] ${rel_host}: held-region import '${local}' needs a module specifier ($lib/…, relative, or a package specifier like 'pkg/component').`
 			);
 		}
-		// `region: 'raw'` → a bare HELD descriptor (schedule set at the `region()` call). A `wake:` mark
-		// → a HELD binding that is ALSO MOUNTABLE: a `.ts` registry can hand it to a renderer that PLACES
-		// it (Builder's `<svelte:component>` renders the `<ogygia-region>` shell, JS gated on placement +
-		// schedule) OR to `region()` where it may cross the wire (live/remote) — so it keeps the held
-		// server-manifest entry (`held: true` → server:true). A superset of the old descriptor-only
-		// behavior. Its identity stays `held:*` (distinct from a `.svelte` placed island, which has no
-		// endpoint), so the two never collide on the manifest flags.
-		const wrapper_path_for = (wid: string) =>
-			typeof ctx.wrapperPathFor === 'function' ? ctx.wrapperPathFor(id, wid) : wrapperVirtualId(wid);
-		let iid: string;
-		let entryPath: string;
-		let record: object;
-		if (has_region) {
-			normalize_region_value(attrs.get(regionKey), rel_host, regionKey);
-			const identity = regionIdentity(component_identity(componentPath), { strategy: 'held', options: {} });
-			iid = regionId(identity, salt);
-			entryPath = ctx.virtualPathFor(id, iid);
-			record = make_region_binding({
-				iid,
-				componentPath,
-				entryPath,
-				hostPath: id,
-				moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
-				identity
-			});
-		} else {
-			const strategy = normalize_hydrate_value(attrs.get(wakeKey), rel_host, wakeKey);
-			const hydrateMargin =
-				strategy === 'visible' && ctx.visibleMargin != null ? ctx.visibleMargin : undefined;
-			// The HELD identity (`region:<schedule>`) — a `.ts` held+crossable binding, distinct from a
-			// `.svelte` placed island (`hydrate:<schedule>`); the two are genuinely different islands.
-			const identity = regionIdentity(component_identity(componentPath), {
-				strategy: 'held',
-				options: hydrateMargin ? { hydrate: strategy, hydrateMargin } : { hydrate: strategy }
-			});
-			iid = regionId(identity, salt);
-			entryPath = ctx.virtualPathFor(id, iid);
-			record = make_wake_island({
-				iid,
-				componentPath,
-				entryPath,
-				wrapperPath: wrapper_path_for(iid),
-				moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
-				strategy,
-				options: hydrateMargin ? { margin: hydrateMargin } : {},
-				hostPath: id,
-				identity,
-				lang: '',
-				held: true
-			});
-		}
+		const { iid, record } = emit_ts_region(
+			componentPath,
+			has_region ? { region: attrs.get(regionKey) } : { wake: attrs.get(wakeKey) }
+		);
 		if (!islands_by_id.has(iid)) islands_by_id.set(iid, record);
 		s.overwrite(
 			m.index,
@@ -2395,6 +2444,98 @@ export function transformTsRegions(source, id, ctx) {
 		);
 		matched = true;
 	}
+
+	// ── import.meta.og.asRegion(Comp, options) — the barrel/named escape hatch in a `.ts`/`.js` file ──
+	// A `.ts` module has no template, so `asRegion` here mints a HELD binding (mountable + crossable),
+	// the SAME record `emit_ts_region` makes for `with { … }` — only the component is resolved by its
+	// EXPORT NAME (barrel-friendly). `const Local = import.meta.og.asRegion(Comp, { wake: 'visible' })`
+	// rewrites to a hoisted `import Local from '<binding>'`. Top-level only, one const per statement.
+	if (has_as_region) {
+		const { program: as_program } = parse_module(source, id);
+		if (as_program) {
+			const body = (as_program.body ?? []) as Array<Record<string, any>>;
+			const as_err = (local: string, msg: string) =>
+				new Error(`[ogygia] ${rel_host}: import.meta.og.asRegion (${local}) — ${msg}`);
+			// Resolve a local name → its import declaration (for source + export name).
+			const import_of = new Map<string, Record<string, any>>();
+			for (const node of body) {
+				if (node.type !== 'ImportDeclaration') continue;
+				for (const spec of node.specifiers ?? []) if (spec.local?.name) import_of.set(spec.local.name, node);
+			}
+			// TOP-LEVEL ONLY: reject any asRegion() not in a top-level `const X = asRegion(…)`.
+			const legal_nodes = new Set<unknown>();
+			for (const node of body) {
+				if (node.type !== 'VariableDeclaration') continue;
+				if (node.declarations.some((d: any) => d.init?.type === 'CallExpression' && is_import_meta_og(d.init.callee, 'asRegion')))
+					legal_nodes.add(node);
+			}
+			const find_stray = (n: any): any => {
+				if (!n || typeof n !== 'object') return null;
+				if (Array.isArray(n)) {
+					for (const x of n) {
+						const hit = find_stray(x);
+						if (hit) return hit;
+					}
+					return null;
+				}
+				if (n.type === 'CallExpression' && is_import_meta_og(n.callee, 'asRegion')) return n;
+				for (const k in n) {
+					if (k === 'type' || k === 'start' || k === 'end' || k === 'loc' || k === 'parent') continue;
+					const v = n[k];
+					if (v && typeof v === 'object') {
+						const hit = find_stray(v);
+						if (hit) return hit;
+					}
+				}
+				return null;
+			};
+			for (const node of body) {
+				if (legal_nodes.has(node)) continue;
+				const stray = find_stray(node);
+				if (stray) {
+					const a = stray.arguments?.[0];
+					throw as_err(
+						a?.type === 'Identifier' ? a.name : '?',
+						'must be a top-level `const Name = import.meta.og.asRegion(Comp, options)` — it compiles ' +
+							'to a hoisted import, so it can never sit in a loop, function, block, or larger expression.'
+					);
+				}
+			}
+
+			for (const node of body) {
+				if (!legal_nodes.has(node)) continue;
+				if (node.kind !== 'const')
+					throw as_err(node.declarations[0]?.id?.name ?? '?', `must be bound with \`const\` (not \`${node.kind}\`).`);
+				if (node.declarations.length !== 1)
+					throw as_err(node.declarations[0]?.id?.name ?? '?', 'declare one asRegion per `const` statement.');
+				const decl = node.declarations[0];
+				if (decl.id?.type !== 'Identifier') throw as_err('?', 'must bind to a plain `const Name = …`.');
+				const local = decl.id.name;
+				const call_args = decl.init.arguments ?? [];
+				const comp_arg = call_args[0];
+				if (!comp_arg || comp_arg.type !== 'Identifier')
+					throw as_err(local, 'the first argument must be a component you imported (a bare identifier).');
+				const imp = import_of.get(comp_arg.name);
+				if (!imp)
+					throw as_err(
+						local,
+						`'${comp_arg.name}' is not an imported component — import it first (e.g. \`import { ${comp_arg.name} } from './…'\`).`
+					);
+				const binding = import_binding_of(imp, comp_arg.name);
+				if (!binding || 'namespace' in binding)
+					throw as_err(local, `'${comp_arg.name}' must be a default or named import, not a namespace import.`);
+				const componentPath = resolve_spec(binding.source);
+				if (!componentPath) throw as_err(local, `could not resolve '${binding.source}'.`);
+				// Options object: `{ wake: '…' }` or `{ region: 'raw' }` — the same `.ts` surface as `with { … }`.
+				const marker = parse_ts_as_region_options(call_args[1], (msg) => as_err(local, msg), regionKey, wakeKey);
+				const { iid, record } = emit_ts_region(componentPath, marker, binding.exportName);
+				if (!islands_by_id.has(iid)) islands_by_id.set(iid, record);
+				s.overwrite(node.start, node.end, `import ${local} from ${JSON.stringify(regionBindingVirtualId(iid))};`);
+				matched = true;
+			}
+		}
+	}
+
 	if (!matched) return null;
 	return {
 		code: s.toString(),

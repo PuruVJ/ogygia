@@ -1,14 +1,17 @@
-// A `.ts` registry with BOTH region shapes, mixed in one file:
-//   - `wake: 'visible'`  → a MOUNTABLE portable binding. A third-party renderer (like Builder.io's SDK)
-//     PLACES it via `<svelte:component>`; it renders the `<ogygia-region>` shell and fetches its JS only
-//     on the `visible` schedule. (Since the mountable-`.ts`-wake change.)
-//   - `region: 'raw'`    → a bare HELD descriptor, handed to ogygia's own `region()` + `<Region>`, its
-//     schedule set at the call. This shape is unchanged.
-// Both `region()` still works on the wake binding too (the metadata rides on the wrapper).
+// A `.ts` registry, three shapes in one file:
+//   - `with { wake: 'visible' }`  → a MOUNTABLE held binding (default import). Placed via
+//     `<svelte:component>` like Builder's SDK does; renders the `<ogygia-region>` shell, JS on `visible`.
+//   - `with { region: 'raw' }`    → a bare HELD descriptor, rendered through `region()` + `<Region>`.
+//   - `import.meta.og.asRegion(Comp, { wake })` → the SAME mountable held binding, but marking a NAMED
+//     barrel import — the pattern that only the macro can reach (`with { … }` is default-import only).
 import TsRegWidget from './TsRegWidget.svelte' with { wake: 'visible' };
 import TsRegRaw from './TsRegRaw.svelte' with { region: 'raw' };
+import { Ticker } from './barrel';
+
+const TickerRegion = import.meta.og.asRegion(Ticker, { wake: 'visible' });
 
 export const registry: Array<{ name: string; component: unknown }> = [
 	{ name: 'tsreg-widget', component: TsRegWidget },
-	{ name: 'tsreg-raw', component: TsRegRaw }
+	{ name: 'tsreg-raw', component: TsRegRaw },
+	{ name: 'tsreg-asregion', component: TickerRegion }
 ];

@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   component, not the barrel. Compile construct — rewritten to a hoisted binding import; there is no
   runtime `asRegion`.
 
+  Works in **`.svelte`, `.ts`, and `.js`** files. In a `.svelte` host it mints a placed island; in a
+  `.ts`/`.js` registry or remote it mints a mountable held binding (`wake`) or a bare descriptor
+  (`region: 'raw'`) — the same records the `with { … }` form makes there, so a barrel component in a
+  `.ts` registry (e.g. handed to Builder.io's `<svelte:component>`) is now a one-line macro.
+
   It is **top-level only**: `const Local = import.meta.og.asRegion(Comp, options)` in the instance
   `<script>`. Misuse is a loud build error — a call nested in a loop / function / block / expression,
   in `<script module>` or markup; a `let`/`var` or multi-declarator binding; a non-imported or
