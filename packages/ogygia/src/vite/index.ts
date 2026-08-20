@@ -81,6 +81,16 @@ import {
 	isFoucScopedId,
 	resolveFoucImportSpec
 } from '../compiler/fouc-css.js';
+import {
+	needs_csr_false_full_reload,
+	needs_island_entry_full_reload,
+	same_module_path,
+	island_vpaths_affected_by_file
+} from '../compiler/dev/hmr.js';
+import { dev_hmr_client_source } from '../compiler/dev/dev-hmr.js';
+import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
+import { collectIslandDepModulepreloads, islandDepsHandoffPath } from '../compiler/link/island-deps.js';
+import { mpaSpeculationRules } from '../compiler/link/speculation.js';
 
 /** `packages/ogygia` — Vite must serve absolute shim/runtime resolves from outside the app root. */
 const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -232,9 +242,6 @@ const LEADING_SLASH = /^\//;
 const APP_SHIM_IMPORT = /(['"])\$app\/(state|stores|navigation)\1/g;
 const REGEXP_META = /[.*+?^${}()|[\]\\]/g;
 const IMPORT_AS_CLAUSE = /^(.+?)(?:\s+as\s+(\w+))?$/;
-const BACKSLASH = /\\/g;
-const STYLE_EXT = /\.(css|scss|sass|less|styl)(?:$|\?)/i;
-const KIT_ROUTE_FILE = /(?:^|\/)\+(?:page|layout|error|server|hooks)(?:\.|$)/;
 
 /**
  * Rewrite a lake binding's import to the render-nothing placeholder (client island modules only).
@@ -283,279 +290,14 @@ export function rewrite_lake_import_to_placeholder(src: string, local: string, p
 	return src;
 }
 
-/**
- * Host route shells (`+page` / `+layout` / …) never join the browser module graph under
- * `csr=false`, so Vite's fine-grained HMR for them has no client importer. Force a full reload.
- * Standalone CSS is soft-updated via `virtual:ogygia/dev-hmr` (Vite inject after Kit FOUC).
- * If that soft path fails, the client bridge listens for `vite:error` and reloads the document.
- *
- * @internal HMR policy helper (also covered by unit tests).
- */
-export function needs_csr_false_full_reload(file: string) {
-	const norm = file.replace(BACKSLASH, '/');
-	if (STYLE_EXT.test(norm)) return false;
-	return KIT_ROUTE_FILE.test(norm);
-}
-
-/**
- * Island entry `.svelte` files (the `import X from '…' with { hydrate }`) sit behind a virtual
- * wrapper; Svelte soft HMR through that edge is unreliable. Shared `.ts` deps still soft-update.
- *
- * @internal HMR policy helper (also covered by unit tests).
- */
-export function needs_island_entry_full_reload(
-	file: string,
-	entries: Iterable<{ componentPath?: string | null }>
-) {
-	const bare = file.split('?')[0];
-	if (!bare.endsWith('.svelte')) return false;
-	if (STYLE_EXT.test(bare.replace(BACKSLASH, '/'))) return false;
-	for (const entry of entries) {
-		if (same_module_path(entry.componentPath, file)) return true;
-	}
-	return false;
-}
-
-/**
- * Absolute path equality with querystrings stripped (host vs component vs Vite watch paths).
- * @internal
- */
-export function same_module_path(a: string | null | undefined, b: string | null | undefined) {
-	if (!a || !b) return false;
-	return path.resolve(a.split('?')[0]) === path.resolve(b.split('?')[0]);
-}
-
-/**
- * Virtual island ids whose generated source must be dropped when `file` changes or is deleted.
- * Island ids are `hash(componentPath\\0strategyKey)` — renaming a host route keeps the same id, so
- * Vite's moduleGraph must be invalidated or it keeps serving the old import.
- *
- * @internal HMR invalidation helper (also covered by unit tests).
- */
-export function island_vpaths_affected_by_file(
-	file: string,
-	entries: Iterable<[string, { hostPath?: string | null; componentPath?: string | null }]>
-) {
-	const out: string[] = [];
-	for (const [vpath, entry] of entries) {
-		if (same_module_path(entry.hostPath, file) || same_module_path(entry.componentPath, file)) {
-			out.push(vpath);
-		}
-	}
-	return out;
-}
-
-/**
- * Client bridge source for `virtual:ogygia/dev-hmr` (vite serve only): a LAZY map of app CSS under
- * `/src`, joined per-file when the plugin broadcasts a scoped `ogygia:css` event — plus full-reload
- * on `vite:error`.
- *
- * LAZY is load-bearing. The bridge used to join every `/src` stylesheet EAGERLY, which painted the
- * whole app's CSS onto every page — invisible while one app owned one look, but the moment two
- * sub-apps share one project (the `(docs)` / `playground` split), each page wore the other's skin
- * in dev while prod (Kit's per-route CSS) stayed clean. Now a page boots with exactly its SSR CSS,
- * and joins a stylesheet only when it changes AND this page's route scope owns it (the
- * `ogygia-dev-scope` meta the handle stamps vs. the owners the plugin derives from the module
- * graph). Once joined, later edits soft-apply through Vite's normal CSS HMR.
- *
- * Do **not** strip Kit’s `<style data-sveltekit>` FOUC bag. Under `csr = false` that bag is
- * how page + component CSS is delivered (no client module graph for route shells). Removing
- * it blanks the page; a MutationObserver would also delete FOUC styles the SPA router merges
- * in on navigation.
- *
- * @internal Emitted by the plugin; exported for unit tests.
- */
-export function dev_hmr_client_source() {
-	return (
-		`import "/@vite/client";\n` +
-		`const css_modules = import.meta.glob("/src/**/*.{css,scss,sass,less,styl}", { eager: false });\n` +
-		`const scope_meta = document.querySelector('meta[name="ogygia-dev-scope"]');\n` +
-		`const scope = scope_meta ? scope_meta.getAttribute("content") || "" : "";\n` +
-		`// Soft path: scoped join on first change, then Vite CSS HMR (injected after FOUC; later rules win).\n` +
-		`// Hard path: anything Vite can't apply.\n` +
-		`function ogygia_full_reload() {\n` +
-		`  location.reload();\n` +
-		`}\n` +
-		`if (import.meta.hot) {\n` +
-		`  import.meta.hot.accept();\n` +
-		`  import.meta.hot.on("vite:error", ogygia_full_reload);\n` +
-		`  import.meta.hot.on("ogygia:css", (d) => {\n` +
-		`    const p = d && d.path;\n` +
-		`    if (!p || !css_modules[p]) return;\n` +
-		`    const owners = (d && d.owners) || [];\n` +
-		`    // Join only what this page's sub-app owns; ownerless css (shared / undeterminable) joins anywhere.\n` +
-		`    if (owners.length && owners.indexOf(scope) === -1) return;\n` +
-		`    css_modules[p]();\n` +
-		`  });\n` +
-		`}\n`
-	);
-}
-
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
 const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
-
-/**
- * Which top-level route scopes can reach `abs_file` — walked UP the dev module graph until route
- * files are hit. A scope is a route file's first path segment under `src/routes` (`'(docs)'`,
- * `'playground'`, `''` for a root-level route file). `[]` = no route owner found; the client treats
- * that as shared and joins anywhere (the safe default for exotic graphs).
- *
- * @internal Exported for unit tests.
- */
-export function derive_css_scope_owners(
-	abs_file: string,
-	root: string,
-	graphs: Array<
-		| { getModulesByFile?: (f: string) => Set<DevGraphModule> | undefined }
-		| undefined
-		| null
-	>
-): string[] {
-	const routes_dir = path.join(root, 'src', 'routes') + path.sep;
-	const owners = new Set<string>();
-	const seen = new Set<DevGraphModule>();
-	const stack: DevGraphModule[] = [];
-	for (const g of graphs) {
-		for (const m of g?.getModulesByFile?.(abs_file) ?? []) stack.push(m);
-	}
-	let steps = 0;
-	while (stack.length && steps++ < 5000) {
-		const mod = stack.pop()!;
-		if (seen.has(mod)) continue;
-		seen.add(mod);
-		const f = mod.file ? path.normalize(mod.file) : null;
-		if (f && f.startsWith(routes_dir)) {
-			const seg = f.slice(routes_dir.length).split(path.sep)[0] ?? '';
-			owners.add(seg.includes('.') ? '' : seg); // a route FILE at routes root → the '' scope
-			continue; // a route file is an owner — no need to climb past it
-		}
-		for (const imp of mod.importers ?? []) stack.push(imp);
-	}
-	return [...owners].sort();
-}
-
-/** Structural shape of a Vite dev module-graph node (the two fields the owner walk reads). */
-type DevGraphModule = { file?: string | null; importers?: Iterable<DevGraphModule> };
-
-/** Virtual island ENTRY module id — JS re-export of the real component (not a thin .svelte). */
-export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.js`;
-
-/** Deterministic island facade filename (content-hashed Vite deps are separate). */
-const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;
 
 /** A `?…type=style…` / `lang.css` sub-import id — a CSS face, never a corpus JS leak. */
 const CONTENT_STYLE_QUERY_RE = /[?&](?:type=style|lang\.css)/;
 
-/**
- * Static Speculation Rules for MPA mode (`router: false`) — the server handle injects them into
- * every page head. Document rules covering same-origin links, with a per-link/subtree opt-out
- * (`data-ogygia-speculate="off"`, re-enable with `"on"`); the region endpoint is never speculated.
- * BOTH lists ship: a prerender-capable browser prerenders (prefetch is its first stage), a
- * prefetch-only browser prefetches, an unsupporting one ignores the JSON entirely — graceful by
- * construction, no JS fallback. In SPA mode no rules exist at all: speculation caches serve real
- * navigations only, which a body-swap router can never read.
- *
- * @internal Exported for unit tests.
- */
-export function mpaSpeculationRules(): string {
-	const where = {
-		and: [
-			{ href_matches: '/*' },
-			{ not: { href_matches: '/__ogygia__*' } },
-			{ not: { selector_matches: '[rel~=nofollow]' } },
-			{
-				or: [
-					{ not: { selector_matches: '[data-ogygia-speculate="off"], [data-ogygia-speculate="off"] *' } },
-					{ selector_matches: '[data-ogygia-speculate="on"], [data-ogygia-speculate="on"] *' }
-				]
-			}
-		]
-	};
-	return JSON.stringify({
-		prerender: [{ where, eagerness: 'moderate' }],
-		prefetch: [{ where, eagerness: 'moderate' }]
-	});
-}
-
-/**
- * From a client `generateBundle` output, collect transitive static `imports` for each
- * `og-region.<id>.js` facade. Keys/values are public URLs (`/_app/immutable/…`).
- * Used so SSR can `modulepreload` hashed dependency chunks for `hydrate: 'load'` islands
- * (Vite’s auto graph does not apply to `@vite-ignore` `import(entry)`).
- *
- * @internal Exported for unit tests.
- */
-export function collectIslandDepModulepreloads(
-	bundle: Record<
-		string,
-		{
-			type: string;
-			fileName?: string;
-			imports?: string[];
-			dynamicImports?: string[];
-			/** Vite/rolldown-vite chunk metadata — `importedCss` lists the CSS assets a chunk owns. */
-			viteMetadata?: { importedCss?: Set<string> | string[] };
-		}
-	>
-): { js: Record<string, string[]>; css: Record<string, string[]> } {
-	const js: Record<string, string[]> = {};
-	const css: Record<string, string[]> = {};
-
-	const css_of = (fileName: string): string[] => {
-		const chunk = bundle[fileName];
-		const imported = chunk?.viteMetadata?.importedCss;
-		if (!imported) return [];
-		return [...imported].map((f) => (f.startsWith('/') ? f : '/' + f));
-	};
-
-	const walk = (fileName: string, seen: Set<string>, css_acc: string[]): string[] => {
-		const chunk = bundle[fileName];
-		if (!chunk || chunk.type !== 'chunk') return [];
-		const deps: string[] = [];
-		for (const imp of chunk.imports ?? []) {
-			if (seen.has(imp)) continue;
-			seen.add(imp);
-			// Only preload chunks that are actually EMITTED. Rolldown can list a phantom import in a
-			// chunk's `imports` (a shared chunk that was merged/tree-shaken away before write) — the
-			// real facade never imports it. Baking a modulepreload for a non-existent chunk 404s the
-			// prerender. A missing preload only costs a waterfall, so skipping phantoms is safe.
-			const dep = bundle[imp];
-			if (!dep || dep.type !== 'chunk') continue;
-			deps.push(imp.startsWith('/') ? imp : '/' + imp);
-			css_acc.push(...css_of(imp));
-			deps.push(...walk(imp, seen, css_acc));
-		}
-		return deps;
-	};
-
-	for (const [key, chunk] of Object.entries(bundle)) {
-		if (chunk.type !== 'chunk') continue;
-		const fileName = chunk.fileName || key;
-		if (!ISLAND_FACADE_RE.test(fileName)) continue;
-		const entryUrl = fileName.startsWith('/') ? fileName : '/' + fileName;
-		const seen = new Set<string>([fileName]);
-		// CSS: the facade's own styles + every dep chunk's — this is how a server-picked (held)
-		// component's scoped CSS reaches a page that never imported it (the page's stylesheet set
-		// can't know; the region response carries these hrefs instead).
-		const css_acc = css_of(fileName);
-		const raw = walk(fileName, seen, css_acc);
-		const uniq: string[] = [];
-		const have = new Set<string>([entryUrl]);
-		for (const d of raw) {
-			if (have.has(d)) continue;
-			have.add(d);
-			uniq.push(d);
-		}
-		js[entryUrl] = uniq;
-		css[entryUrl] = [...new Set(css_acc)];
-	}
-	return { js, css };
-}
-
-/** Stable handoff path: client `generateBundle` writes; SSR reads at render (Kit is SSR-first). */
-export function islandDepsHandoffPath(root: string) {
-	return path.join(root, '.svelte-kit', 'og-region-deps.json');
-}
+/** Virtual island ENTRY module id — JS re-export of the real component (not a thin .svelte). */
+export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.js`;
 
 function is_island_path(id: string) {
 	const bare = id.split('?')[0];
