@@ -55,12 +55,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   namespace-imported first argument; or a component already marked with an import attribute (use one
   mechanism, not both).
 
+### Fixed
+
+- **ogygia's own `.svelte` components compile under SSR even when the app externalizes ogygia.** An SSR
+  build that externalizes ogygia handed Node a raw `.svelte` (Region / OgygiaBoundary / …) at runtime →
+  `ERR_UNKNOWN_FILE_EXTENSION: Unknown file extension ".svelte"`. `vite-plugin-svelte` normally
+  auto-noExternals a svelte library via the `svelte` export condition, but that detection is fragile
+  under some installs (adapter-node server output, a `pkg.pr.new` URL dependency, an app that pins/
+  overrides `noExternal`). The plugin now forces `ssr.noExternal: ['ogygia']`.
+
+- **The immutable runtime chunk URL busts on the FEATURE SET, not just source.** `og-runtime.<hash>.js`
+  is served `immutable, max-age=1yr`, but the hash covered only ogygia's runtime source — while the
+  chunk is feature-selected per the app's marks. Same ogygia version, but after an app added e.g. a
+  `live` region between deploys, the same URL served DIFFERENT content: returning visitors ran the
+  cached old runtime and the new feature silently never booted. The filename now folds in the feature
+  hash.
+
+- **`region()` recognizes a `wake:` attach binding.** A `wake:` binding is the wrapper component with
+  the region descriptor attached (a function). `region()` only recognized a plain-object binding, so
+  handing it a wake binding silently fell through to an inline render. It now builds a crossable dual on
+  the server (so a `.ts` registry / remote wake binding can stream over the wire) and renders the
+  wrapper inline on the client where there is no signer — only a bare `region: 'raw'` object still must
+  be turned into a region server-side.
+
+- **`keep` splits the region dedupe key.** Two same-component + same-`wake` imports with different
+  `keep` names deduped to one wrapper, and the second island inherited the first's relocation slot.
+  `keep` now fingerprints the wrapper like `margin` does.
+
+- **A `csr = false` page next to a commented-out `csr` export islands correctly.** `read_csr` took the
+  first `export const csr` match in raw source, so a stale `// export const csr = true` above a real
+  `export const csr = false` read `true` and stripped islands from a page Kit renders csr=false.
+  Comments are stripped before matching.
+
+- **Two lakes of the same component restore to the right boxes.** Lakes of one component share an entry
+  id; `restore()` re-found each by a first-match selector, so both lifted fragments landed in the first
+  box. They now pair by DOM position.
+
+- **A held-region import that is only TEXT (a `.ts` comment or template literal) is left alone** — the
+  `.ts` region scan is AST-guarded, so a `with { region: 'raw' }` inside a JSDoc `@example` or a string
+  no longer registers a phantom island. Plus a portable-snippet param-branding correctness fix.
+
 ### Internal
 
-- The region option surface (`wake` / `render` / `region` / `preset` / `keep`, presets, lakes,
-  live/deferred) is now parsed by ONE shared function used by both `with { … }` import attributes and
-  `asRegion`, so the two can never drift. The named-export import path is threaded through every
-  region generator (entry, wrappers, held binding, attach binding).
+- **One shared region-option parser.** The whole option surface (`wake` / `render` / `region` /
+  `preset` / `keep`, presets, lakes, live/deferred) is parsed by a single function used by both
+  `with { … }` import attributes and `asRegion` — they can't drift.
+- **One shared emitter per region kind.** A single `make_wake_island` mints the mountable wake record
+  for the `.svelte` host AND the `.ts` registry; a single `emit_ts_region` mints the `.ts` record for
+  both the `with { … }` form and the `asRegion` macro. The named-export import path is threaded through
+  every generator (entry, wrappers, held binding, attach binding).
+- **Side-channel emit centralized.** The `<`→`<` script escape (was copy-pasted in five places)
+  is one `escape_script_text`; the three `application/ogygia-*` tags are built by one
+  `emit_ogygia_script`, so a new emitter can't forget the XSS escape. Shared capability core across the
+  handle's verify / decode paths.
 
 ## [0.7.0] — 2026-08-19
 
