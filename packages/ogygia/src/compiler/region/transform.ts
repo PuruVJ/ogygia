@@ -1153,6 +1153,20 @@ class FileCompilation {
 		}
 	}
 
+	/** Root-relative posix path — island ids must not drift across Windows/POSIX build legs. */
+	#posix_rel(abs) {
+		return this.#ctx.pathModule.relative(this.#ctx.root, abs).split(PATH_SEP).join('/');
+	}
+
+	/**
+	 * Region-identity path for a component: filesystem components key on their root-relative posix
+	 * path; a package specifier IS its own identity (already stable + posix, and identical across
+	 * hosts — so two hosts marking the same package import share one region id).
+	 */
+	#component_identity(p) {
+		return this.#ctx.pathModule.isAbsolute(p) ? this.#posix_rel(p) : p;
+	}
+
 	/**
 	 * Analyze — read the host's AST into the compilation's fields: its imports, region marks (import
 	 * attributes + `asRegion` call sites), the usage findings, and the csr tri-state. No MagicString,
@@ -1460,33 +1474,6 @@ class FileCompilation {
 				? ctx.wrapperPathFor
 				: (_host, iid) => wrapperVirtualId(iid);
 
-		const posix_rel = (abs) => path.relative(ctx.root, abs).split(PATH_SEP).join('/');
-
-		// Region-identity path for a component: filesystem components key on their root-relative posix
-		// path; a package specifier IS its own identity (already stable + posix, and identical across
-		// hosts — so two hosts marking the same package import share one region id).
-		const component_identity = (p) => (path.isAbsolute(p) ? posix_rel(p) : p);
-
-		// Hydrate `emitFile` / `import(entry)` target — JS re-export of the real component.
-		// Unique per region id so two strategies sharing one Comp keep distinct entry modules
-		// (Rolldown must not content-dedupe them into a facade that drops `export default`).
-		// Scale: same path+strategy → one id → one emitFile; N instances share this URL.
-		// Wrappers are NOT this entry — they are SSR/csr=true host bindings only.
-		const entry_source_for = (componentPath, iid, exportName) =>
-			island_entry_source(componentPath, iid, exportName);
-
-		const hydrate_wrapper_source = (iid, componentPath, entryPath, strategy, options, exportName) =>
-			island_wrapper_source(
-				iid,
-				componentPath,
-				entryPath,
-				strategy,
-				options,
-				exportName,
-				ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
-				lang
-			);
-
 		// Portable binding target for this compile:
 		//   - SSR / csr=true client → real wrapper (Island shell + __component link)
 		//   - csr=false client → stub (page node must not pull N wrappers into the client graph;
@@ -1521,7 +1508,7 @@ class FileCompilation {
 				!fouc_css_specs.has(componentPathAbs)
 			) {
 				fouc_css_specs.add(componentPathAbs);
-				const rel = posix_rel(componentPathAbs);
+				const rel = this.#posix_rel(componentPathAbs);
 				text += `\nimport ${JSON.stringify(foucCssVirtualId(rel))};`;
 			}
 			return text;
@@ -1573,7 +1560,7 @@ class FileCompilation {
 			// asRegion regions ride in as a synthetic default-import; `exportName` is the barrel export the
 			// generators pull (entry/wrapper import `{ Name as … }`), and identity keys on `source#exportName`.
 			const exportName = synthetic_export.get(local);
-			const comp_rel = component_identity(componentPath);
+			const comp_rel = this.#component_identity(componentPath);
 			const id_base =
 				exportName && exportName !== 'default' ? `${comp_rel}#${exportName}` : comp_rel;
 			const identity = regionIdentity(id_base, mark);
@@ -1590,7 +1577,7 @@ class FileCompilation {
 						id: iid,
 						// SWR lakes need a server-renderable entry; cache/empty are wrapper-only.
 						virtualPath: swr ? entryPath : undefined,
-						source: swr ? entry_source_for(componentPath, iid, exportName) : undefined,
+						source: swr ? island_entry_source(componentPath, iid, exportName) : undefined,
 						wrapperPath: wrapPath,
 						wrapperSource: lake_wrapper_source(iid, componentPath, mark.options, exportName, lang),
 						hostPath: id,
@@ -1679,7 +1666,7 @@ class FileCompilation {
 									ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
 									lang
 								),
-								source: entry_source_for(componentPath, iid, exportName),
+								source: island_entry_source(componentPath, iid, exportName),
 								hostPath: id,
 								componentPath,
 								server: true,
