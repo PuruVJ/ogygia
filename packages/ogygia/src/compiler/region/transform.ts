@@ -842,6 +842,47 @@ class FileCompilation {
 		return this.#lower();
 	}
 
+	/** Walk an AST subtree for an Identifier / Component reference to `local`. Pure over the AST. */
+	#ast_refs_local(root, local) {
+		let found = false;
+		const walk = (node) => {
+			if (found || !node || typeof node !== 'object') return;
+			if (node.type === 'Identifier' && node.name === local) {
+				found = true;
+				return;
+			}
+			if (node.type === 'Component') {
+				const n = node.name || '';
+				if (n === local || n.startsWith(local + '.')) {
+					found = true;
+					return;
+				}
+			}
+			for (const k of Object.keys(node)) {
+				if (k === 'start' || k === 'end' || k === 'loc') continue;
+				const v = node[k];
+				if (Array.isArray(v)) for (const c of v) walk(c);
+				else if (v && typeof v === 'object' && typeof v.type === 'string') walk(v);
+			}
+		};
+		if (Array.isArray(root)) for (const n of root) walk(n);
+		else walk(root);
+		return found;
+	}
+
+	/** Is a marked import's `local` used anywhere but its own import (else it is dead, strip it)? */
+	#marked_import_referenced(local) {
+		for (const n of this.#instance_body) {
+			if (n.type === 'ImportDeclaration') continue;
+			if (this.#ast_refs_local(n, local)) return true;
+		}
+		for (const n of this.#module_body) {
+			if (n.type === 'ImportDeclaration') continue;
+			if (this.#ast_refs_local(n, local)) return true;
+		}
+		return this.#ast_refs_local(this.#ast.fragment?.nodes ?? [], local);
+	}
+
 	/**
 	 * Analyze — read the host's AST into the compilation's fields: its imports, region marks (import
 	 * attributes + `asRegion` call sites), the usage findings, and the csr tri-state. No MagicString,
@@ -1399,44 +1440,6 @@ class FileCompilation {
 		const path = ctx.pathModule;
 		const err = (specifiers, msg) =>
 			new Error(`[ogygia] ${rel_host}: import { ${specifiers} } — ${msg}`);
-		/** Walk AST for Identifier / Component references to `local`. */
-		const ast_refs_local = (root, local) => {
-			let found = false;
-			const walk = (node) => {
-				if (found || !node || typeof node !== 'object') return;
-				if (node.type === 'Identifier' && node.name === local) {
-					found = true;
-					return;
-				}
-				if (node.type === 'Component') {
-					const n = node.name || '';
-					if (n === local || n.startsWith(local + '.')) {
-						found = true;
-						return;
-					}
-				}
-				for (const k of Object.keys(node)) {
-					if (k === 'start' || k === 'end' || k === 'loc') continue;
-					const v = node[k];
-					if (Array.isArray(v)) for (const c of v) walk(c);
-					else if (v && typeof v === 'object' && typeof v.type === 'string') walk(v);
-				}
-			};
-			if (Array.isArray(root)) for (const n of root) walk(n);
-			else walk(root);
-			return found;
-		};
-		const marked_import_referenced = (local) => {
-			for (const n of instance_body) {
-				if (n.type === 'ImportDeclaration') continue;
-				if (ast_refs_local(n, local)) return true;
-			}
-			for (const n of module_body) {
-				if (n.type === 'ImportDeclaration') continue;
-				if (ast_refs_local(n, local)) return true;
-			}
-			return ast_refs_local(ast.fragment?.nodes ?? [], local);
-		};
 
 		const s = new MagicString(source);
 		/** @type {Map<string, object>} dedupe by region id within this host */
@@ -1542,7 +1545,7 @@ class FileCompilation {
 			const info = imports.get(local);
 			if (!info) continue;
 
-			if (!marked_import_referenced(local)) {
+			if (!this.#marked_import_referenced(local)) {
 				// Unused marked import — strip entirely (dead code).
 				if (!rewritten_import_nodes.has(info.node)) {
 					imports_to_strip.add(info.node);
@@ -1728,13 +1731,13 @@ class FileCompilation {
 			const referenced_outside = (local) => {
 				for (const n of instance_body) {
 					if (n.type === 'ImportDeclaration' || as_region_nodes.has(n)) continue;
-					if (ast_refs_local(n, local)) return true;
+					if (this.#ast_refs_local(n, local)) return true;
 				}
 				for (const n of module_body) {
 					if (n.type === 'ImportDeclaration') continue;
-					if (ast_refs_local(n, local)) return true;
+					if (this.#ast_refs_local(n, local)) return true;
 				}
-				return ast_refs_local(ast.fragment?.nodes ?? [], local);
+				return this.#ast_refs_local(ast.fragment?.nodes ?? [], local);
 			};
 			const seen = new Set();
 			for (const compLocal of as_region_locals) {
