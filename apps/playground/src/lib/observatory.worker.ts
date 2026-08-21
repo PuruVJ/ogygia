@@ -49,6 +49,8 @@ export interface Analysis {
 	realError?: string;
 	/** Proof the SAME oxc parser (rolldown-browser WASM) the full transform uses runs in-browser. */
 	oxc?: { engine: string; ok: boolean; imports: number; error?: string };
+	/** Wall-clock ms for the transform + svelte compile (the whole pipeline). */
+	ms?: number;
 }
 
 /** Illustrative region id (only used for the svelte-fallback map; the real transform uses md5). */
@@ -166,8 +168,11 @@ function analyze_marks(source: string): { islands: Island[]; output: string; ok:
 	return { islands, output, ok: true };
 }
 
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
 async function analyze(source: string): Promise<Analysis> {
 	const marks = analyze_marks(source);
+	const t0 = now();
 
 	// ── run the REAL ogygia transform, in-browser ──
 	let real = false;
@@ -275,7 +280,8 @@ async function analyze(source: string): Promise<Analysis> {
 		realIslands,
 		modules,
 		realError,
-		oxc
+		oxc,
+		ms: now() - t0
 	};
 }
 

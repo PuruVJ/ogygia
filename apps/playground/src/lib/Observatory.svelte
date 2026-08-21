@@ -31,6 +31,33 @@
 <Greeting />
 <Prose>{@html article}</Prose>`;
 
+	// A few example components to explore the compiler with.
+	const PRESETS = {
+		'all strategies': DEFAULT_SOURCE,
+		counter: `<scr${''}ipt>
+  import Counter from './Counter.svelte' with { wake: 'load' };
+</scr${''}ipt>
+
+<h1>Hello</h1>
+<Counter start={0} />`,
+		'server island': `<scr${''}ipt>
+  // fetched from a signed endpoint after load; ships no JS of its own
+  import Greeting from './Greeting.svelte' with { render: 'deferred' };
+</scr${''}ipt>
+
+<Greeting>
+  {#snippet ogygiaFallback()}<p>loading…</p>{/snippet}
+</Greeting>`,
+		'lake in island': `<scr${''}ipt>
+  import Card from './Card.svelte' with { wake: 'visible' };
+  import Prose from './Prose.svelte' with { wake: 'none' };
+</scr${''}ipt>
+
+<Card>
+  <Prose>{@html article}</Prose>
+</Card>`
+	};
+
 	let source = $state(DEFAULT_SOURCE);
 	let analysis = $state({ ok: true, islands: [], output: DEFAULT_SOURCE, real: false, realIslands: null });
 	let busy = $state(false);
@@ -84,12 +111,20 @@
 				{analysis.oxc.engine}: {analysis.oxc.ok ? `parsed ${analysis.oxc.imports} imports ✓` : 'failed'}
 			</span>
 		{/if}
+		{#if analysis.ms != null && analysis.real}<span class="ms" title="transform + svelte compile">{analysis.ms.toFixed(1)} ms</span>{/if}
 		{#if busy}<span class="busy">compiling…</span>{/if}
 	</header>
 
 	<div class="grid">
 		<section class="editor">
-			<div class="cap">component source</div>
+			<div class="cap">
+				component source
+				<span class="presets">
+					{#each Object.entries(PRESETS) as [name, src]}
+						<button onclick={() => (source = src)}>{name}</button>
+					{/each}
+				</span>
+			</div>
 			<textarea bind:value={source} spellcheck="false" data-obs-input></textarea>
 		</section>
 
@@ -202,8 +237,32 @@
 		background: rgba(20, 184, 166, 0.16);
 		color: #5eead4;
 	}
+	.ms {
+		margin-left: auto;
+		color: #5eead4;
+		font-size: 11px;
+	}
 	.busy {
 		color: #fbbf24;
+	}
+	.presets {
+		margin-left: auto;
+		display: inline-flex;
+		gap: 4px;
+	}
+	.presets button {
+		padding: 2px 8px;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		background: #0d1526;
+		color: #94a3b8;
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+		border-radius: 5px;
+	}
+	.presets button:hover {
+		color: #e2e8f0;
+		border-color: rgba(148, 163, 184, 0.5);
 	}
 	.muted {
 		color: #64748b;
