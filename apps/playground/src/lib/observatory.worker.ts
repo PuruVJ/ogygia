@@ -5,14 +5,22 @@
  * and returns the island map + the rewritten host. The main-thread island never blocks on a parse, and
  * this is the same seam the later rungs grow into (the worker becomes the in-browser SERVER realm).
  */
-// MUST be first: shims `process` for rolldown-browser (evaluated before the import below).
+// MUST be first: shims `process` for rolldown-browser (evaluated before it loads below).
 import './rd-process-shim.ts';
 import { parse } from 'svelte/compiler';
+
 // The SAME oxc parser the real ogygia transform uses (rolldown/utils in Node), here from rolldown's
-// BROWSER build — same version, byte-identical AST. We use the ASYNC `parse` (it awaits the WASM
-// instantiation); the sync `parseSync` only works after the WASM is pre-initialized, which the full
-// browser compiler will do once at worker boot.
-import { parse as oxc_parse_async } from '@rolldown/browser/utils';
+// BROWSER build — same version, byte-identical AST. LAZY-loaded via a dynamic import inside init, so
+// the worker module itself has NO top-level await (the "init under a message" pattern): the WASM
+// instantiates inside this promise on first parse, then the resolved fn is reused.
+type OxcParse = (id: string, code: string) => Promise<unknown>;
+let oxc_parse: OxcParse | null = null;
+async function init_oxc(): Promise<OxcParse> {
+	if (oxc_parse) return oxc_parse;
+	const mod = (await import('@rolldown/browser/utils')) as { parse: OxcParse };
+	oxc_parse = mod.parse;
+	return oxc_parse;
+}
 
 export interface Island {
 	local: string;
@@ -115,15 +123,18 @@ async function analyze(source: string): Promise<Analysis> {
 			content && content.start != null && content.end != null
 				? source.slice(content.start, content.end)
 				: '';
-		const res = (await oxc_parse_async('host.ts', script)) as {
+		const parse_oxc = await init_oxc();
+		const res = (await parse_oxc('host.ts', script)) as {
 			program?: { body?: Array<{ type: string }> };
 			errors?: unknown[];
 		};
 		const body = res.program?.body ?? [];
+		const errs = res.errors ?? [];
 		oxc = {
 			engine: 'rolldown-browser (oxc/wasm)',
-			ok: !(res.errors && res.errors.length),
-			imports: body.filter((n) => n.type === 'ImportDeclaration').length
+			ok: errs.length === 0,
+			imports: body.filter((n) => n.type === 'ImportDeclaration').length,
+			error: errs.length ? JSON.stringify(errs[0]).slice(0, 240) : undefined
 		};
 	} catch (err) {
 		oxc = {

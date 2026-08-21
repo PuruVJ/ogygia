@@ -1,13 +1,57 @@
+import { createRequire } from 'node:module';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+import wasm from 'vite-plugin-wasm';
+
+const require = createRequire(import.meta.url);
+
+// rolldown-browser's `./utils` subpath resolves to the NODE wasi binding; force the BROWSER variant
+// (uses @napi-rs/wasm-runtime + memfs + WASI worker-threads). Resolved off package.json (exports-safe).
+const RB_UTILS_BROWSER = require
+	.resolve('@rolldown/browser/package.json')
+	.replace(/package\.json$/, 'dist/utils-index.browser.mjs');
+
+// The rolldown-browser WASM uses SHARED memory + WASI worker-threads → needs cross-origin isolation
+// (SharedArrayBuffer). Send COOP/COEP on dev + preview so the Observatory's worker can instantiate it.
+// (This is the "COOP/COEP hosting" cost internal/notes/devtools.md flags for in-browser stacks.)
+const crossOriginIsolation = (): Plugin => {
+	const headers = (_req: unknown, res: { setHeader(k: string, v: string): void }, next: () => void) => {
+		res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+		res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+		next();
+	};
+	return {
+		name: 'observatory-cross-origin-isolation',
+		configureServer(server) {
+			server.middlewares.use(headers as never);
+		},
+		configurePreviewServer(server) {
+			server.middlewares.use(headers as never);
+		}
+	};
+};
 
 export default defineConfig({
-	// PROFILER_SOURCEMAPS=1 emits server .map files so ogygia/profiler maps bundled frames back
-	// to source and recovers anonymous names,. Off by default.
-	build: process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : undefined,
+	resolve: {
+		alias: { '@rolldown/browser/utils': RB_UTILS_BROWSER }
+	},
+	// The Observatory worker instantiates rolldown-browser's oxc WASM (wasm32-wasi via
+	// @napi-rs/wasm-runtime), which uses TOP-LEVEL AWAIT. Vite 8 supports TLA natively at the `esnext`
+	// target (the vite-plugin-top-level-await shim is incompatible with Vite 8 / rolldown). vite-plugin-wasm
+	// handles the .wasm asset. WORKER bundles have their own pipeline, so wasm() goes there too.
+	build: {
+		target: 'esnext',
+		...(process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : {})
+	},
+	worker: {
+		format: 'es',
+		plugins: () => [wasm()]
+	},
 	// ogygia MUST run before sveltekit() (enforce:'pre' also guarantees ordering)
 	plugins: [
+		crossOriginIsolation(),
+		wasm(),
 		ogygia({
 			// Markdown content pipeline (stock defaults) so the `.svx` fixture behind e2e/content-css
 			// compiles — that check guards content-body scoped CSS shipping to a csr=false page.
