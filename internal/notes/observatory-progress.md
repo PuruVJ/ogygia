@@ -3,12 +3,27 @@
 Built autonomously overnight on the `devtools` branch. Everything below is committed and the **full
 e2e suite is green (51/51 checks)**. Main code is untouched on your backup branch.
 
-## TL;DR — what you can look at
+## GOOD MORNING — read me first
 
-Run `OGYGIA_DEVTOOLS=1 pnpm --filter playground dev`, then:
+A dev server is **already running for you** on **http://localhost:5195/observatory** (started with
+`OGYGIA_DEVTOOLS=1 pnpm --filter playground dev`). Open it and play. The Observatory is now a
+full multi-file REPL that **compiles AND runs** an ogygia app entirely in your browser, with four
+instruments layered over it:
 
-- **`/observatory`** — the ogygia compiler running **in your browser**. Type a component; watch the
-  real transform, the generated modules, and the svelte-compiled JS. This is the big one.
+1. **Live preview** — type an app, it renders AND is interactive (the counter works).
+2. **Byte ledger** — "you ship X, plain Kit ships Y" (the demo: −75% JS).
+3. **Boundary lens** (the `x-ray` toggle) — see which DOM is a live island vs dead server shell, and
+   **watch each island wake on its real schedule** (load now, click Menu, scroll to Chart; the lake
+   stays frozen). Try the **"wake demo"** preset + the **x-ray** toggle.
+4. **Wire inspector** — the exact props that cross to each island.
+
+New tonight beyond the four instruments: the whole thing now also works in **dev** (it previously
+only ran in the prod build — two dev-only module-loading bugs fixed). ~26 commits, suite green.
+
+The one thing deliberately NOT built (too risky to leave half-done overnight): the preview running the
+REAL `<ogygia-region>` runtime/hydration. See "the crown jewel" below — it's the #1 next lift.
+
+- **`/observatory`** — the ogygia compiler + REPL running **in your browser**.
 - **Any page** — bottom-right **og devtools** button (Alt+O): one window, six tabs
   (Lens / Bytes / Wire / Hub / Nav / Timeline).
 
