@@ -58,7 +58,7 @@ export type FormOps = {
 /** Wake a cold island when interaction lands inside it; returns a disarm fn. */
 export type ArmFn = (el: HTMLElement, fire: () => void) => void | (() => void);
 
-export type MorphFn = (parent: Element, nodes: Node[]) => void;
+export type MorphFn = (parent: Element, nodes: ArrayLike<Node>) => void;
 
 export type WireOps = {
 	/** THE hub key (`OgygiaRef`) — every transportable kind crosses under it. */

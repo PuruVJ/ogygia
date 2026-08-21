@@ -429,7 +429,10 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			...remark_staged.post
 		] as MdsvexOptions['remarkPlugins'],
 		highlight: {
-			highlighter: create_mdsvex_highlighter(cfg, pipeline, code?.cacheSalt)
+			highlighter: create_mdsvex_highlighter(cfg, pipeline, code?.cacheSalt) as Extract<
+				MdsvexOptions['highlight'],
+				object
+			>['highlighter']
 		},
 		// Use OUR frontmatter parser, not mdsvex's default js-yaml. It's a frontmatter parser first and
 		// a YAML parser second: a brace-wrapped title like `{@const}` / `{#each}` (Svelte docs source)
@@ -467,10 +470,10 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 	// clean svelte mdsvex produces. No-op if `ogygia` isn't installed (plain content app).
 	const group: PreprocessorGroup = {
 		name: 'ogygia-markdown',
-		async markup(input: { content: string; filename: string }) {
+		async markup(input: { content: string; filename?: string }) {
 			// This hook also runs on every `.svelte` (which must be left untouched). Compute the
 			// content-file check up front so the VitePress `:::` container pass only touches `.svx`/`.md`.
-			const path = input.filename.split('?')[0];
+			const path = (input.filename ?? '').split('?')[0];
 			const isContent = exts.some((x) => path.endsWith(x));
 
 			// Doc-level cache: content files only. The variant generators' `cache_key` includes lazily
@@ -509,18 +512,18 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			const md = await get_md();
 			const out = await md.markup?.(raw === input.content ? input : { ...input, content: raw });
 			const code = markup_code(out, raw);
-			const islandCode = transform_islands(code, input.filename);
+			const islandCode = transform_islands(code, input.filename ?? '');
 			const base = islandCode ?? code;
 			// Generator-plugin file deps for THIS document (a directive expander's .d.ts set, …) —
 			// returned as preprocessor `dependencies` (vite-plugin-svelte watches them in dev) and
 			// stored beside the cached output so a warm hit still watches.
 			const gen_deps = [...remark_staged.deps, ...rehype_staged.deps].flatMap((fn) =>
-				fn(input.filename)
+				fn(input.filename ?? '')
 			);
 			// Content module: carry its raw source, and (when overrides are on) import the slot the
 			// rehype pass rewrote tags into. Both are module-script lines injected once.
 			const lines: string[] = [];
-			const src = source_line(input.filename);
+			const src = source_line(input.filename ?? '');
 			if (src) lines.push(src);
 			// Bake the CSS key when the module carries its own scoped `<style>`. markdown_format reads
 			// `__ogygia_css` onto the body region so Region.svelte can link the client CSS chunk the
@@ -626,7 +629,7 @@ export function ogygiaPresetPreprocess(): PreprocessorGroup {
 
 	return {
 		name: 'ogygia-markdown',
-		async markup(input: { content: string; filename: string }) {
+		async markup(input: { content: string; filename?: string }) {
 			const m = PRESET_MARKER_RE.exec(input.content);
 			if (!m) return default_group.markup?.(input);
 			return group_for(m[1]).markup?.({ ...input, content: input.content.slice(0, m.index) });

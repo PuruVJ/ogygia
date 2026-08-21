@@ -137,7 +137,7 @@ function parse_ctx(text: string | null | undefined): Record<string, unknown> | u
 		// over a store, a wire holding a store) — resolve them as ONE transaction so no watcher
 		// reacts to a half-decoded graph.
 		return batch(() =>
-			parse(text, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown })
+			parse(text, { [REF_WIRE_KEY]: ref_reviver(true) } as Parameters<typeof parse>[1])
 		) as Record<string, unknown>;
 	} catch {
 		return undefined;

@@ -48,7 +48,7 @@ function read_region_props(region: Element): Record<string, unknown> {
 	let sib = region.nextElementSibling;
 	while (sib) {
 		if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]')) {
-			return parse(sib.textContent, region_prop_revivers());
+			return parse(sib.textContent, region_prop_revivers() as Parameters<typeof parse>[1]);
 		}
 		if (sib.tagName === 'LINK') {
 			sib = sib.nextElementSibling;
@@ -272,7 +272,10 @@ function apply_page_seed_text(text: string | null | undefined) {
 		// the seed and the streamed resolves revive with the app's transport decoders, so a load's
 		// CUSTOM types round-trip into islands.
 		install_page_defer(transport_decoders);
-		const raw = parse(text, page_defer_revivers(transport_decoders)) as Partial<{
+		const raw = parse(
+			text,
+			page_defer_revivers(transport_decoders) as Parameters<typeof parse>[1]
+		) as Partial<{
 			url: string | URL;
 			params: Record<string, string>;
 			route: { id: string | null };
@@ -409,7 +412,7 @@ class OgygiaRegion extends HTMLElement {
 	/** Set while an SWR revalidate is in flight, so the next apply marks `data-revalidated`. */
 	#revalidating = false;
 	#hydrating = false;
-	#app: unknown = null;
+	#app: ReturnType<typeof hydrate> | null = null;
 	#io: IntersectionObserver | null = null;
 	/** Removes the `wake="interaction"` wake listeners (set while armed, cold). */
 	#disarm_interaction: (() => void) | null = null;
@@ -748,7 +751,7 @@ class OgygiaRegion extends HTMLElement {
 		if (!q) return fire();
 		const mql = matchMedia(q);
 		if (mql.matches) return fire();
-		const on = (e) => {
+		const on = (e: MediaQueryListEvent) => {
 			if (e.matches) {
 				mql.removeEventListener('change', on);
 				this.#mql = null;
@@ -775,6 +778,7 @@ class OgygiaRegion extends HTMLElement {
 			seed_remote_once();
 			seed_page_once();
 			const entry = this.getAttribute('entry');
+			if (!entry) return;
 			const mod = await load_island(entry);
 			if (!this.isConnected) return;
 			const Component = mod.default;
@@ -876,7 +880,7 @@ class OgygiaRegion extends HTMLElement {
 			// the orphan app; disconnectedCallback may have run before `#app` was assigned.
 			if (!this.isConnected) {
 				try {
-					unmount(this.#app);
+					if (this.#app) unmount(this.#app);
 				} catch {
 					/* noop */
 				}
@@ -980,6 +984,7 @@ class OgygiaRegion extends HTMLElement {
 		seed_remote_once();
 		seed_page_once();
 		const entry = this.getAttribute('entry');
+		if (!entry) return;
 		const mod = await load_island(entry);
 		if (!this.isConnected) return;
 		// A live region's HTML comes from svelte `render()` (both envelope layers) — same as the

@@ -13,7 +13,7 @@ const PATH_SEP = /[/\\]/;
 
 /**
  * Fingerprint of a region mark for dedupe. Same component path + same key → one wrapper/entry.
- * @param {{ strategy: string, options?: Record<string, unknown> }} mark
+ * @param mark
  */
 export function strategyKey(mark: { strategy: string; options?: Record<string, unknown> | null }) {
 	const o = mark.options || {};

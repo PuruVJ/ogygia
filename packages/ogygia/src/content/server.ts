@@ -144,10 +144,10 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 					return map(await c.withGraph(e));
 				};
 
-				return query.live(string_arg, async function* (id: string) {
+				return query.live(string_arg, async function* (id: unknown) {
 					await c.ready();
-					yield await project(id);
-					for await (const _ of c.watchChanges()) yield await project(id);
+					yield await project(id as string);
+					for await (const _ of c.watchChanges()) yield await project(id as string);
 				}) as unknown as GetRemote<Out>;
 			}
 		}

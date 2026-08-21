@@ -14,7 +14,7 @@
  */
 import { error, redirect } from '@sveltejs/kit';
 import type { Component } from 'svelte';
-import type { Entry } from '../index.js';
+import type { Entry, ContentRef } from '../index.js';
 import {
 	format_findings,
 	run_page_checks,
@@ -30,6 +30,7 @@ import {
 	type Collection,
 	type Outline,
 	type OutlineSpec,
+	type OutlineOptions,
 	type TrailScope
 } from './outline.js';
 import { is_dimensioned, type Switcher } from './dimensions.js';
@@ -96,7 +97,7 @@ export type SiteOptions = {
 	/** Full-text search config. The default engine is Orama (optional peer); swap via `engine`. */
 	search?: { engine?: SearchEngine };
 	/** Old addresses an entry declares for itself (redirect history). Default reads `data.redirect_from`. */
-	redirects?: (entry: import('../index.js').ContentRef) => string[] | string | undefined;
+	redirects?: (entry: ContentRef) => string[] | string | undefined;
 };
 
 /** The minimal SvelteKit `load` event shape the guard reads (kept narrow so it stays isomorphic). */
@@ -204,7 +205,10 @@ class OgygiaSite implements Site {
 		const source = opts.outline;
 		this.outline = is_outline(source)
 			? source
-			: outline(source as OutlineSpec, opts.redirects ? { redirects: opts.redirects } : {});
+			: outline(
+					source as OutlineSpec,
+					opts.redirects ? { redirects: opts.redirects as OutlineOptions['redirects'] } : {}
+				);
 		this.#prevNext = opts.prevNext ?? 'order';
 		this.#trail = opts.trail ?? 'site';
 		this.#checks = opts.checks ?? [];
@@ -270,8 +274,9 @@ class OgygiaSite implements Site {
 	nav(o: BaseOption & { slug?: string; context?: ReadContext } = {}) {
 		const ol = this.outline;
 		const ctx = o.context ?? {};
-		if (is_dimensioned(ol) && o.slug !== undefined) {
-			return ol.tree(o.base ?? this.#base, ol.coordinateOf(o.slug), ctx);
+		if (is_dimensioned(ol)) {
+			const coord = o.slug !== undefined ? ol.coordinateOf(o.slug) : undefined;
+			return ol.tree(o.base ?? this.#base, coord, ctx);
 		}
 		return ol.tree(o.base ?? this.#base, ctx);
 	}

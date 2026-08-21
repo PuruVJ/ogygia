@@ -1,4 +1,5 @@
 import { walk } from 'estree-walker';
+import type { SvelteNode } from './region/ir.js';
 
 /**
  * Free-variable analysis over a Svelte 5 template subtree.
@@ -38,7 +39,7 @@ interface Sink {
 }
 
 /** Collect bound names from an estree binding pattern. */
-function collect_pattern_names(node, out) {
+function collect_pattern_names(node: SvelteNode, out: Set<string>) {
 	if (!node) return;
 	switch (node.type) {
 		case 'Identifier':
@@ -63,7 +64,7 @@ function collect_pattern_names(node, out) {
 }
 
 /** The leftmost identifier name of a member chain (`a.b.c` -> `a`), or null. */
-function member_root(node) {
+function member_root(node: SvelteNode): string | null {
 	let cur = node;
 	while (cur && cur.type === 'MemberExpression') cur = cur.object;
 	return cur && cur.type === 'Identifier' ? cur.name : null;
@@ -74,7 +75,7 @@ function member_root(node) {
  * Identifier (`x = …`), a MemberExpression (`x.a = …` -> `x`), or a destructuring
  * pattern (`[x] = …`, `({ x } = …)`, defaults, rests, nested member targets).
  */
-function collect_write_roots(target, roots) {
+function collect_write_roots(target: SvelteNode, roots: Set<string>) {
 	if (!target) return;
 	switch (target.type) {
 		case 'Identifier':
@@ -104,7 +105,11 @@ function collect_write_roots(target, roots) {
 }
 
 /** Is this Identifier node a *reference* (a read) rather than a binding/property name? */
-function is_reference(node, parent, key) {
+function is_reference(
+	node: SvelteNode,
+	parent: SvelteNode,
+	key: string | number | symbol | null | undefined
+) {
 	if (!parent) return true;
 	switch (parent.type) {
 		// obj.prop -> `prop` is not a reference (unless computed)
@@ -145,15 +150,15 @@ function is_reference(node, parent, key) {
  * JS function scopes and not in `svelte_bound`) into `sink.refs`, and any free
  * assignment/update targets into `sink.mutated`.
  */
-function add_expression_refs(expr, svelte_bound, sink: Sink) {
+function add_expression_refs(expr: SvelteNode, svelte_bound: Set<string>, sink: Sink) {
 	if (!expr) return;
-	const scopes = [new Set()];
-	const has = (name) => {
+	const scopes: Set<string>[] = [new Set()];
+	const has = (name: string) => {
 		if (svelte_bound.has(name)) return true;
 		for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].has(name)) return true;
 		return false;
 	};
-	const record_writes = (target) => {
+	const record_writes = (target: SvelteNode) => {
 		const roots = new Set<string>();
 		collect_write_roots(target, roots);
 		for (const r of roots) if (!has(r)) sink.mutated.add(r);
@@ -161,12 +166,12 @@ function add_expression_refs(expr, svelte_bound, sink: Sink) {
 	walk(expr, {
 		enter(node, parent, key) {
 			if (FUNCTION_TYPES.has(node.type)) {
-				const s = new Set();
+				const s = new Set<string>();
 				const fn = node as EsFunction;
 				if (fn.id && node.type !== 'ArrowFunctionExpression') s.add(fn.id.name);
 				for (const p of fn.params) collect_pattern_names(p, s);
 				scopes.push(s);
-			} else if (node.type === 'BlockStatement' && !FUNCTION_TYPES.has(parent?.type)) {
+			} else if (node.type === 'BlockStatement' && !FUNCTION_TYPES.has(parent?.type ?? '')) {
 				scopes.push(new Set());
 			} else if (node.type === 'VariableDeclarator') {
 				collect_pattern_names(node.id, scopes[scopes.length - 1]);
@@ -182,14 +187,15 @@ function add_expression_refs(expr, svelte_bound, sink: Sink) {
 		},
 		leave(node, parent) {
 			if (FUNCTION_TYPES.has(node.type)) scopes.pop();
-			else if (node.type === 'BlockStatement' && !FUNCTION_TYPES.has(parent?.type)) scopes.pop();
+			else if (node.type === 'BlockStatement' && !FUNCTION_TYPES.has(parent?.type ?? ''))
+				scopes.pop();
 		}
 	});
 }
 
 /** Names introduced by `let:` directives on an element/component. */
-function let_directive_names(node) {
-	const names = new Set();
+function let_directive_names(node: SvelteNode): Set<string> {
+	const names = new Set<string>();
 	for (const attr of node.attributes ?? []) {
 		if (attr.type === 'LetDirective') {
 			if (attr.expression) collect_pattern_names(attr.expression, names);
@@ -200,7 +206,7 @@ function let_directive_names(node) {
 }
 
 /** Walk attribute expressions of an element/component (not `let:`, which binds). */
-function add_attribute_refs(node, bound, sink: Sink) {
+function add_attribute_refs(node: SvelteNode, bound: Set<string>, sink: Sink) {
 	for (const attr of node.attributes ?? []) {
 		switch (attr.type) {
 			case 'Attribute':
@@ -239,8 +245,8 @@ function add_attribute_refs(node, bound, sink: Sink) {
 }
 
 /** Collect snippet names + const-declared names defined at this fragment level. */
-function sibling_bindings(nodes) {
-	const names = new Set();
+function sibling_bindings(nodes: SvelteNode[]) {
+	const names = new Set<string>();
 	for (const n of nodes) {
 		if (n.type === 'SnippetBlock' && n.expression) names.add(n.expression.name);
 		else if (n.type === 'ConstTag') {
@@ -250,16 +256,16 @@ function sibling_bindings(nodes) {
 	return names;
 }
 
-function fragment_nodes(fragment) {
+function fragment_nodes(fragment: SvelteNode): SvelteNode[] {
 	return fragment?.nodes ?? [];
 }
 
 /**
- * @param {unknown[]} nodes top-level nodes of the subtree
- * @param {Set<string>} outer_bound names bound outside (usually empty at entry)
- * @param {Sink} sink accumulates free references + mutations
+ * @param nodes top-level nodes of the subtree
+ * @param outer_bound names bound outside (usually empty at entry)
+ * @param sink accumulates free references + mutations
  */
-function walk_template(nodes, outer_bound, sink: Sink) {
+function walk_template(nodes: SvelteNode[], outer_bound: Set<string>, sink: Sink) {
 	const bound = new Set(outer_bound);
 	for (const name of sibling_bindings(nodes)) bound.add(name);
 
@@ -348,9 +354,9 @@ function walk_template(nodes, outer_bound, sink: Sink) {
 }
 
 /** Collect all snippet names defined anywhere in a subtree (for cross-boundary error detection). */
-export function collectSnippetNames(nodes) {
+export function collectSnippetNames(nodes: SvelteNode[]) {
 	const out = new Set();
-	const visit = (list) => {
+	const visit = (list: SvelteNode[]) => {
 		for (const n of list ?? []) {
 			if (n.type === 'SnippetBlock' && n.expression) out.add(n.expression.name);
 			for (const k of [
@@ -372,19 +378,19 @@ export function collectSnippetNames(nodes) {
 }
 
 /**
- * @param {unknown[]} nodes hoisted subtree top-level nodes
- * @returns {{ free: Set<string>, mutated: Set<string> }} free identifier names + free mutation targets
+ * @param nodes hoisted subtree top-level nodes
+ * @returns free identifier names + free mutation targets
  */
-export function collectCaptureInfo(nodes) {
+export function collectCaptureInfo(nodes: SvelteNode[]) {
 	const sink: Sink = { refs: new Set(), mutated: new Set() };
 	walk_template(nodes, new Set(), sink);
 	return { free: sink.refs, mutated: sink.mutated };
 }
 
 /**
- * @param {unknown[]} nodes hoisted subtree top-level nodes
- * @returns {Set<string>} free identifier names
+ * @param nodes hoisted subtree top-level nodes
+ * @returns free identifier names
  */
-export function collectFreeIdentifiers(nodes) {
+export function collectFreeIdentifiers(nodes: SvelteNode[]) {
 	return collectCaptureInfo(nodes).free;
 }

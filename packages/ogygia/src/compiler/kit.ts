@@ -28,7 +28,14 @@ export function resolve_kit_paths(root: string): KitPaths {
 		const kitRoot = path.dirname(require.resolve('@sveltejs/kit/package.json'));
 		const candidate = path.join(kitRoot, 'src', 'runtime', 'shared.js');
 		if (fs.existsSync(candidate)) kit_wire_path = candidate;
-		const remoteIdx = path.join(kitRoot, 'src', 'runtime', 'client', 'remote-functions', 'index.js');
+		const remoteIdx = path.join(
+			kitRoot,
+			'src',
+			'runtime',
+			'client',
+			'remote-functions',
+			'index.js'
+		);
 		if (fs.existsSync(remoteIdx)) kit_remote_index = remoteIdx;
 	} catch {
 		kit_wire_path = null; // fall back to the built-in devalue codec (no transport)
@@ -59,7 +66,7 @@ export function resolve_kit_paths(root: string): KitPaths {
 const CSR_EXPORT = /export\s+const\s+csr(?:\s*:\s*boolean)?\s*=\s*(true|false)/;
 
 /** Read `export const csr = true|false` from a route options file; `undefined` if unset/absent. */
-export function read_csr(file) {
+export function read_csr(file: string) {
 	try {
 		let src = fs.readFileSync(file, 'utf-8');
 		// Strip comments so a COMMENTED-OUT `export const csr = …` never wins the (first-match) regex —
@@ -81,10 +88,10 @@ const OPTION_FILES_LAYOUT = ['+layout.js', '+layout.ts', '+layout.server.js', '+
 /**
  * Kit-effective `csr === false` for a `+page.svelte` / `+layout.svelte` host (layout chain +
  * page options). `undefined` in sources means Kit's default (`true`).
- * @param {string} hostFile abs path to a route `.svelte`
- * @param {string} routesDir abs `src/routes`
+ * @param hostFile abs path to a route `.svelte`
+ * @param routesDir abs `src/routes`
  */
-export function routeCsrIsFalse(hostFile, routesDir) {
+export function routeCsrIsFalse(hostFile: string, routesDir: string) {
 	if (!hostFile.startsWith(routesDir)) return false;
 	const base = path.basename(hostFile);
 	if (base !== '+page.svelte' && base !== '+layout.svelte') return false;
@@ -120,17 +127,16 @@ export function routeCsrIsFalse(hostFile, routesDir) {
  * ogygia steps aside — Kit hydrates the page itself. `false` for non-route files (shared components):
  * their csr depends on which page renders them, so they keep their islands.
  */
-export function routeCsrIsTrue(hostFile, routesDir) {
+export function routeCsrIsTrue(hostFile: string, routesDir: string) {
 	const base = path.basename(hostFile);
 	if (base !== '+page.svelte' && base !== '+layout.svelte') return false;
 	if (!hostFile.startsWith(routesDir)) return false;
 	return !routeCsrIsFalse(hostFile, routesDir);
 }
 
-function pageLeaves(routesDir) {
-	/** @type {string[]} */
-	const leaves = [];
-	const walk = (dir) => {
+function pageLeaves(routesDir: string) {
+	const leaves: string[] = [];
+	const walk = (dir: string) => {
 		for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
 			const full = path.join(dir, e.name);
 			if (e.isDirectory()) walk(full);
@@ -152,7 +158,7 @@ const LAYOUT_UNIVERSAL = ['+layout.js', '+layout.ts'];
 const LAYOUT_SERVER = ['+layout.server.js', '+layout.server.ts'];
 
 /** A node's OWN csr (server module then universal wins), independent of the layout chain. */
-function own_csr(dir, universal, server) {
+function own_csr(dir: string, universal: string[], server: string[]) {
 	let csr; // undefined = not set on this node
 	for (const f of server) {
 		const v = read_csr(path.join(dir, f));
@@ -176,16 +182,15 @@ function own_csr(dir, universal, server) {
  * false` in nothing but the root layout looked like "client build runs" (pages read `undefined`),
  * so the keepalive was never injected — while Kit, resolving the chain, skipped the client build
  * and the runtime `<script src>` 404'd.
- * @returns {Array<boolean | undefined>} one entry per node (undefined = unset anywhere up-chain)
+ * @returns one entry per node (undefined = unset anywhere up-chain)
  */
-function collectNodeEffectiveCsr(routesDir) {
-	/** @type {Array<boolean | undefined>} */
+function collectNodeEffectiveCsr(routesDir: string) {
 	const nodes = [];
 	let saw_root_layout = false;
-	const walk = (dir, is_root, inherited) => {
+	const walk = (dir: string, is_root: boolean, inherited: boolean | undefined) => {
 		const entries = fs.readdirSync(dir, { withFileTypes: true });
 		const names = new Set(entries.filter((e) => e.isFile()).map((e) => e.name));
-		const has = (list) => list.some((f) => names.has(f));
+		const has = (list: string[]) => list.some((f) => names.has(f));
 
 		// This dir's layout value carries down the chain whether or not a layout NODE exists here
 		// (Kit merges parent options first; a dir with only `+layout.ts` still re-scopes children).
@@ -223,7 +228,7 @@ function collectNodeEffectiveCsr(routesDir) {
  * the keepalive. Deviations (a `+page@` reset, a statically-unanalysable option file) can only err
  * toward injecting a keepalive Kit didn't need — a harmless extra client build, never a 404.
  */
-export function clientBuildWillSkip(routesDir) {
+export function clientBuildWillSkip(routesDir: string) {
 	if (!fs.existsSync(routesDir)) return false;
 	const nodes = collectNodeEffectiveCsr(routesDir);
 	if (nodes.length === 0) return false;
@@ -234,7 +239,7 @@ export function clientBuildWillSkip(routesDir) {
  * True when AT LEAST ONE page route is csr=false. A pure csr=true app (this returns false) needs no
  * ogygia runtime at all — Kit hydrates everything itself — so the runtime chunk is skipped entirely.
  */
-export function hasAnyCsrFalseRoute(routesDir) {
+export function hasAnyCsrFalseRoute(routesDir: string) {
 	if (!fs.existsSync(routesDir)) return false;
 	return pageLeaves(routesDir).some((page_file) => routeCsrIsFalse(page_file, routesDir));
 }

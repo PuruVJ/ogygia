@@ -17,7 +17,7 @@ export const app = {
 // The router feature fills `slots.nav` when it loads; if no router is present (no `<Router/>`, no SPA
 // nav — like every app that just seeds a remote query), fall back to a full-page navigation. This is
 // what keeps router out of every app that doesn't route.
-export function goto(url) {
+export function goto(url: string | URL) {
 	if (slots.nav) return slots.nav.goto(url);
 	location.href = String(url);
 	return Promise.resolve();
@@ -36,7 +36,7 @@ export function set_nearest_error_page() {}
  * side-channel because Kit only serializes remote data when csr===true. Parsed with the app's
  * transport decoders so custom types round-trip. Called ONCE by the runtime before the first
  * island hydrates, so every reused `Query` constructor finds its SSR value and never re-fetches.
- * @param {string} text devalue-stringified `{ q?, l?, f? }` payload
+ * @param text devalue-stringified `{ q?, l?, f? }` payload
  */
 export function seed_query_responses(text: string): void {
 	let data: {

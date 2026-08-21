@@ -105,7 +105,7 @@ export function install_page_defer(
 	r.live = (id, ok, encoded) => {
 		let value: unknown = null;
 		try {
-			value = parse(encoded, r.revivers);
+			value = parse(encoded, r.revivers as Parameters<typeof parse>[1]);
 		} catch {
 			/* leave null — a mangled chunk resolves to null, never hangs the `{#await}` */
 		}

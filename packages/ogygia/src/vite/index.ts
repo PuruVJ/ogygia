@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { isMainThread } from 'node:worker_threads';
-import { loadEnv, type Plugin, type Rolldown } from 'vite';
+import { loadEnv, type Plugin, type Rolldown, type ViteDevServer } from 'vite';
 import type { PreprocessorGroup } from 'svelte/compiler';
 import { configure_build_cache } from '../build-cache.js';
 import { islandBridge, content_css_key } from './island-bridge.js';
@@ -87,9 +87,6 @@ import {
 	RUNTIME_HASH
 } from './paths.js';
 
-/** css-ish file the dev bridge manages (mirrors the bridge's glob). */
-const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
-
 import type {
 	OgygiaPreset,
 	OgygiaRateLimit,
@@ -97,6 +94,9 @@ import type {
 	ContentPreset,
 	OgygiaOptions
 } from './options.js';
+
+/** css-ish file the dev bridge manages (mirrors the bridge's glob). */
+const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
 
 /**
  * Vite plugin: transforms `with { hydrate | defer | preset }` imports into islands,
@@ -167,30 +167,29 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// client bundles can register factories pre-hydration; the payload-source fallback covers bundles
 	// that miss it) now lives on the driver as `compiler.dollar_hoists` — the macro leg fills it.
 
-	let root;
+	let root: string;
 	let base = '';
-	let libDir;
+	let libDir: string;
 	let is_dev = false;
 	/** Resolved `resolve.alias` entries — passed to bake()'s rolldown eval so `$lib` etc. resolve. */
-	let resolve_alias = [];
+	let resolve_alias: { find: string | RegExp; replacement: string }[] = [];
 	let is_build = false;
 	let is_ssr = false;
 	let content_scanned = false;
 	let sourcemap = false;
-	/** @type {import('vite').ViteDevServer | null} */
-	let vite_server = null;
+	let vite_server: ViteDevServer | null = null;
 	/** absolute path to Kit's internal wire-protocol module (deep import) */
-	let kit_wire_path = null;
+	let kit_wire_path: string | null = null;
 	/** absolute path to Kit's client remote-functions entry (Plan A reuse) */
-	let kit_remote_index = null;
+	let kit_remote_index: string | null = null;
 	/** absolute path to the app's universal hooks (for `transport`), if present */
-	let universal_hooks = null;
+	let universal_hooks: string | null = null;
 	/** the content-hashed runtime URL, once known (standalone build only; same plugin instance) */
-	let hashed_runtime_url = null;
+	let hashed_runtime_url: string | null = null;
 	/** true once the process-exit cleanup for the injected keep-client route is registered */
 	let keep_client_cleanup_armed = false;
 
-	const readFile = (abs) => {
+	const readFile = (abs: string) => {
 		try {
 			return fs.readFileSync(abs, 'utf-8');
 		} catch {
@@ -231,7 +230,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	//     workers + prerender, however Kit nests them) has finished. No dependency on Kit's hook
 	//     ordering. Worst case (a hard crash) leaves a gitignored dir that self-heals next run.
 	/** Register the one-time process-exit cleanup (main thread only). */
-	const arm_keep_client_cleanup = (r) => {
+	const arm_keep_client_cleanup = (r: string) => {
 		if (keep_client_cleanup_armed) return;
 		keep_client_cleanup_armed = true;
 		process.on('exit', () => {
@@ -257,7 +256,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			compiler.transform_content_island(source, filename);
 	};
 
-	const invalidate_module_id = (server, id) => {
+	const invalidate_module_id = (server: ViteDevServer, id: string) => {
 		const mod = server.moduleGraph.getModuleById(id);
 		if (mod) server.moduleGraph.invalidateModule(mod);
 	};
@@ -265,7 +264,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// Drop the cached virtual island modules + registry rows for `file` when a HOST changes or an ENTRY
 	// is deleted — the driver (`compiler.invalidate_for_file`) owns the island-graph mutations + the
 	// affected-module walk; this binds Vite's module invalidation and the server guard. No server → no-op.
-	const invalidate_islands_for_file = (file, { deleted = false, server = vite_server } = {}) => {
+	const invalidate_islands_for_file = (
+		file: string,
+		{
+			deleted = false,
+			server = vite_server
+		}: { deleted?: boolean; server?: ViteDevServer | null } = {}
+	) => {
 		if (!server) return false;
 		return compiler.invalidate_for_file(file, {
 			deleted,
@@ -345,7 +350,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				const ra = config.resolve?.alias ?? [];
 				resolve_alias = Array.isArray(ra)
 					? ra.map((a) => ({ find: a.find, replacement: a.replacement }))
-					: Object.entries(ra).map(([find, replacement]) => ({ find, replacement }));
+					: Object.entries(ra).map(([find, replacement]) => ({
+							find,
+							replacement: replacement as string
+						}));
 				// The shared build cache (fences, git checkouts, shas) persists under THIS app's
 				// node_modules/.ogygia — point it before anything derives.
 				configure_build_cache(root);

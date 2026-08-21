@@ -658,7 +658,7 @@ export class Compiler {
 		// pulls in (e.g. `$lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias
 		// would otherwise give islands the uninitialized Kit page (`new URL('a:')` → empty
 		// pathname). enforce:'pre' wins over Kit's resolveId. SSR keeps real Kit modules.
-		const importer_id = strip_id(importer);
+		const importer_id = importer ? strip_id(importer) : undefined;
 		const from_island = importer_id && (registry.has(importer_id) || island_graph.has(importer_id));
 		if (!ssr && from_island && ctx.app_shims[source]) {
 			return ctx.app_shims[source];
@@ -688,7 +688,7 @@ export class Compiler {
 		// the resolved id so its own `$app/*` imports hit the shim branch above.
 		// Skip ogygia virtual ids (handled above).
 		if (importer_id && registry.has(importer_id) && !is_island_path(source)) {
-			const host = registry.get(importer_id)!.hostPath;
+			const host = registry.get(importer_id)!.hostPath ?? '';
 			const resolved = await resolve(source, host, { skipSelf: true });
 			if (resolved?.id) island_graph.add(strip_id(resolved.id));
 			// A BARE specifier a generated island module re-emits (a marked package import like
@@ -1025,7 +1025,7 @@ export class Compiler {
 				island_graph.delete(vpath);
 				by_id.delete(entry.id);
 				region_kinds.delete(entry.id);
-				const idx = host_index.get(host_key(entry.hostPath));
+				const idx = host_index.get(host_key(entry.hostPath ?? ''));
 				if (idx) {
 					idx.vpaths.delete(vpath);
 					idx.ids.delete(entry.id);

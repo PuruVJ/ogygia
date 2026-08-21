@@ -70,6 +70,7 @@ declare module 'virtual:ogygia/sign' {
 declare module 'virtual:ogygia/request-event' {
 	export function getRequestEvent(): {
 		cookies: { get: (name: string) => string | undefined };
+		request: Request;
 		[key: string]: unknown;
 	};
 }
@@ -126,6 +127,7 @@ declare module '$app/environment' {
 declare module '$app/server' {
 	export function getRequestEvent(): {
 		cookies: { get: (name: string) => string | undefined };
+		request: Request;
 		[key: string]: unknown;
 	};
 }

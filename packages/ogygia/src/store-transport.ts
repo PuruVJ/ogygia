@@ -164,7 +164,7 @@ export function revive_store(payload: StorePayload, remember: boolean): unknown 
 export function __og_store<F extends (...args: never[]) => object>(tag: string, factory: F): F {
 	// decode side: factory(seed), branded so a revived store can cross a FURTHER boundary
 	__register_store_factory(tag, (seed: unknown) =>
-		mark_store((factory as (...a: unknown[]) => object)(seed), tag)
+		mark_store((factory as unknown as (...a: unknown[]) => object)(seed), tag)
 	);
 	// encode side: every product of the wrapped factory carries its passport
 	return ((...args: never[]) => mark_store(factory(...args), tag)) as F;

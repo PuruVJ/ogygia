@@ -13,7 +13,7 @@
  * - **deferred** — what a dual region becomes across the wire: a signed ticket the runtime fetches
  *   and (if interactive) hydrates. No component.
  */
-import type { Component, ComponentProps } from 'svelte';
+import type { Component } from 'svelte';
 import { region_snippet } from './region-snippet.js';
 import RawHtml from './RawHtml.svelte';
 
@@ -164,10 +164,10 @@ function isBinding(value: unknown): value is RegionBinding {
  * awaited by the language, so the HTML travels automatically — LiveView over the channel you already
  * have. A held region you *don't* await renders inline where it lands (first paint, same SSR pass).
  */
-export function region<C extends Component<never>>(
-	component: C,
-	props: ComponentProps<C>,
-	opts?: RegionSchedule<ComponentProps<C>>,
+export function region<P extends Record<string, unknown>>(
+	component: Component<P>,
+	props: P,
+	opts?: RegionSchedule<P>,
 	/** Internal: content-body CSS key, set by the markdown source (see {@link InlineRegion.content_id}). */
 	content_id?: string
 ): AwaitableRegion {
@@ -219,7 +219,7 @@ export function region<C extends Component<never>>(
 	const inline: InlineRegion = {
 		[REGION_BRAND]: true,
 		kind: 'inline',
-		component: component as AnyComponent,
+		component: component as unknown as AnyComponent,
 		props: p,
 		...(content_id ? { content_id } : {})
 	};
@@ -314,7 +314,7 @@ export function prebaked_region(
 	const inline: InlineRegion = {
 		[REGION_BRAND]: true,
 		kind: 'inline',
-		component: component as AnyComponent,
+		component: component as unknown as AnyComponent,
 		props: {},
 		html,
 		...(content_id ? { content_id } : {})

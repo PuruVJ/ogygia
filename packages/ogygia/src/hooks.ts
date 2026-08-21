@@ -149,7 +149,7 @@ function region_response(
 
 /**
  * Decode a request pathname without throwing on malformed percent-encoding (SEC-05).
- * @returns {string | null} decoded path, or null if the encoding is invalid
+ * @returns decoded path, or null if the encoding is invalid
  */
 function decode_pathname(pathname: string): string | null {
 	try {
@@ -400,7 +400,7 @@ class OgygiaHandle {
 				// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:
 				// a changed stylesheet joins this page only when the plugin derives the same scope
 				// among its owners — two route-group sub-apps never paint each other in dev.
-				const scope = (event.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
+				const scope = (event?.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
 				head.push(`<meta name="ogygia-dev-scope" content="${scope.replace(/"/g, '')}">`);
 			}
 			if (head.length && html.includes('</head>')) {
@@ -787,8 +787,8 @@ class OgygiaHandle {
 			register_fn_kind();
 			register_derived_kind();
 			props = devalue.parse(B64Url.decode(payload), {
-				[REF_WIRE_KEY]: ref_reviver(false) as (d: never) => unknown
-			});
+				[REF_WIRE_KEY]: ref_reviver(false)
+			} as Parameters<typeof devalue.parse>[1]);
 		} catch {
 			return null;
 		}

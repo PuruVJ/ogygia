@@ -51,7 +51,7 @@ function exportedClassNamesFromBody(body: AstNode[]): string[] {
 		if (node.type === 'ClassDeclaration' && node.id) {
 			classNames.add(node.id.name);
 		} else if (node.type === 'ExportNamedDeclaration') {
-			if (node.declaration?.type === 'ClassDeclaration' && node.declaration.id) {
+			if (node.declaration?.type === 'ClassDeclaration' && node.declaration.id?.name) {
 				classNames.add(node.declaration.id.name);
 				exported.add(node.declaration.id.name);
 			}
