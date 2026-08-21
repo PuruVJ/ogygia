@@ -7,21 +7,24 @@ e2e suite is green (51/51 checks)**. Main code is untouched on your backup branc
 
 A dev server is **already running for you** on **http://localhost:5195/observatory** (started with
 `OGYGIA_DEVTOOLS=1 pnpm --filter playground dev`). Open it and play. The Observatory is now a
-full multi-file REPL that **compiles AND runs** an ogygia app entirely in your browser, with four
-instruments layered over it:
+full multi-file REPL that **compiles AND runs** an ogygia app entirely in your browser.
 
-1. **Live preview** — type an app, it renders AND is interactive (the counter works).
-2. **Byte ledger** — "you ship X, plain Kit ships Y" (the demo: −75% JS).
-3. **Boundary lens** (the `x-ray` toggle) — see which DOM is a live island vs dead server shell, and
-   **watch each island wake on its real schedule** (load now, click Menu, scroll to Chart; the lake
-   stays frozen). Try the **"wake demo"** preset + the **x-ray** toggle.
-4. **Wire inspector** — the exact props that cross to each island.
+**The preview has THREE modes (top-right toggle):**
 
-New tonight beyond the four instruments: the whole thing now also works in **dev** (it previously
-only ran in the prod build — two dev-only module-loading bugs fixed). ~26 commits, suite green.
+- **live** — type an app, it renders AND is interactive (a fresh client mount; the counter works).
+- **x-ray** — the boundary lens: see which DOM is a live island vs dead server shell, and **watch
+  each island wake on its real schedule** (load now, click Menu, scroll to Chart; the lake stays
+  frozen). Try the **"wake demo"** preset here.
+- **islands** — 👑 THE CROWN JEWEL: the app renders with genuine `<ogygia-region>` shells and the
+  **page's own real ogygia runtime hydrates them** lazily, on their real schedules. This is the actual
+  framework running in the preview — not a stand-in. Counter (load) hydrates live, Menu (interaction)
+  sleeps until you click it then wakes + replays the click, Chart (visible) wakes on scroll.
 
-The one thing deliberately NOT built (too risky to leave half-done overnight): the preview running the
-REAL `<ogygia-region>` runtime/hydration. See "the crown jewel" below — it's the #1 next lift.
+Plus two read-outs under every preview: the **byte ledger** ("you ship X, plain Kit ships Y" — the
+demo: −75% JS) and the **wire inspector** (the exact props that cross to each island).
+
+Also new tonight: the whole thing now works in **dev** too (it previously only ran in the prod build —
+two dev-only module-loading bugs fixed). ~27 commits, full suite green.
 
 - **`/observatory`** — the ogygia compiler + REPL running **in your browser**.
 - **Any page** — bottom-right **og devtools** button (Alt+O): one window, six tabs
@@ -115,20 +118,36 @@ whole islands value-prop, visible on whatever app you type:
 
 Every instrument has an e2e assertion. Suite is green.
 
-## What's NOT done (the honest remainder — the crown jewel)
+## THE CROWN JEWEL — real island machinery in the preview ✅ (overnight, DONE)
 
-- **Real island MACHINERY in the preview** (Rungs 2–4). The interactive preview runs islands as
-  regular components (a fresh client mount) and the lens/ledger/wire read the compile + render — all
-  truthful, but the preview does not yet run the actual `<ogygia-region>` runtime (lazy scheduling,
-  wake-on-scroll/interaction). Doing that means reproducing the server realm in-tab: the real
-  `Region.svelte` SSR emit (`<ogygia-region entry wake data-og-fp>` + the devalue `<script
-  data-ogygia-props>` sidecar with the right revivers) + hydration-anchor-matching HTML + defeating the
-  runtime's nested-region skip (the preview sits inside the Observatory's own awake island — an
-  `<ogygia-slot>` wrapper is the documented escape). Feasible (the page's own runtime already defines
-  the element, and `island_module_url` passes `blob:` entries through untouched, so a blob entry that
-  re-exports a main-thread-linked component could hydrate against the page's shared svelte instance),
-  but it is genuinely a multi-session Rung-2/3 effort with real hydration-mismatch risk — deliberately
-  NOT attempted overnight so the four shipped instruments stay rock-solid. This is the #1 next lift.
+The "islands" preview mode runs the ACTUAL ogygia runtime, no iframe, no service worker:
+
+- The worker renders the app with genuine `<ogygia-region>` shells — each island's isolated SSR (the
+  hydration-matching HTML) + a devalue `<script data-ogygia-props>` sidecar — wrapped in `<ogygia-slot>`.
+- The main thread rewrites each region's `__ISLAND__:<file>` placeholder entry to a **blob** of the
+  client-linked component (stashed on a global the blob re-exports, so it shares the page's svelte
+  instance), then injects it into the preview.
+- The **page's own ogygia runtime** upgrades the custom elements and hydrates them lazily, on their
+  real schedules. Verified: Counter (load) hydrates interactive, Menu (interaction) sleeps then wakes +
+  replays the click, Chart (visible) wakes on scroll. Zero errors.
+
+**The two unlocks** (both spiked/verified before building):
+1. A bare injected `<ogygia-region>` nested in the Observatory's own awake island is SKIPPED by the
+   runtime's nested-region rule (it rides the parent's hydration). Wrapping it in `<ogygia-slot>` hits
+   the **adopted-slot exception** (`in_adopted_slot`), so it self-runs. (Spike: bare → `data-nested`;
+   slotted → self-runs + imports its entry.)
+2. `island_module_url` passes `blob:`/absolute-scheme entries through untouched, so a blob entry that
+   re-exports a main-thread-linked component hydrates against the shared svelte instance.
+
+This is the endgame vision from the top of this file — "the actual framework, both halves in-tab" —
+realized, and it turned out an iframe/SW was unnecessary because the page already hosts the runtime.
+
+## What's NOT done (smaller remainders)
+
+- The islands-mode preview reuses the page's single runtime; it does not (yet) exercise server islands
+  (`render: 'deferred'`), live regions, or nav/reconcile in-preview — those need the mini-Kit server
+  realm (Rung 3/4). The instruments for those (Nav lab, Hub inspector, Timeline over real events) are
+  still the devtools-panel versions, not wired into the Observatory preview.
 - **Server-realm devtools events beyond the page render** (deferred-hole timing, batch) — schema-defined,
   not yet emitted.
 - The SSR/client leg toggle is wired but the host rewrite is leg-invariant, so it rarely shows; the real
