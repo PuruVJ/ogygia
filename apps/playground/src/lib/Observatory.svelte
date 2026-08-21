@@ -1,5 +1,8 @@
 <script>
 	import { mount, unmount } from 'svelte';
+	// The devtools event bus — in "islands" mode the page's REAL runtime emits hydration events for our
+	// injected regions; we tap the bus to show the true lifecycle story (Rung-0 layer → an instrument).
+	import { add_sink } from 'ogygia/devtools';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
 
 	/**
@@ -163,6 +166,26 @@
 
 	// Byte ledger helpers — the ogygia thesis, weighed live.
 	const fmt_bytes = (n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
+
+	// Pretty-print a real runtime event (islands mode) into a short human line.
+	function fmt_event(e) {
+		switch (e.name) {
+			case 'region.connected':
+				return { icon: '◻', text: 'connected', cls: 'ev-dim' };
+			case 'wake.scheduled':
+				return { icon: '⏱', text: `scheduled · ${e.when || 'load'}`, cls: 'ev-dim' };
+			case 'wake.fired':
+				return { icon: '⚡', text: `woke · ${e.when || 'load'}`, cls: 'ev-wake' };
+			case 'region.hydrate.start':
+				return { icon: '↯', text: 'hydrating…', cls: 'ev-dim' };
+			case 'region.hydrate.done':
+				return { icon: '✓', text: `hydrated${e.ms != null ? ` · ${Math.round(e.ms)}ms` : ''}`, cls: 'ev-done' };
+			case 'region.hydrate.failed':
+				return { icon: '✗', text: 'hydrate failed', cls: 'ev-fail' };
+			default:
+				return { icon: '·', text: e.name.replace(/^region\.|^runtime\./, ''), cls: 'ev-dim' };
+		}
+	}
 	const saved_pct = $derived(
 		analysis.ledger && analysis.ledger.kitBytes > 0
 			? Math.round((1 - analysis.ledger.ogygiaBytes / analysis.ledger.kitBytes) * 100)
@@ -215,9 +238,11 @@
 	let previewEl = $state(/** @type {HTMLElement | null} */ (null));
 	let mounted = null;
 	let svelteClient = $state(/** @type {any} */ (null));
-	let previewMode = $state('live'); // 'live' (interactive mount) | 'xray' (boundary lens)
+	let previewMode = $state('live'); // 'live' (interactive mount) | 'xray' (boundary lens) | 'islands'
 	let wakeNonce = $state(0); // bump to replay the x-ray wake sequence
 	let xrayCleanup = /** @type {null | (() => void)} */ (null);
+	// REAL runtime events for the injected preview islands (islands mode), tapped off the devtools bus.
+	let runtimeEvents = $state(/** @type {Array<{name: string, label: string, t: number, ms?: number, when?: string}>} */ ([]));
 	$effect(() => {
 		import('svelte/internal/client')
 			.then((m) => (svelteClient = m))
@@ -353,6 +378,29 @@
 				return;
 			}
 			try {
+				runtimeEvents = [];
+				const fpNames = {};
+				// Subscribe to the devtools bus BEFORE injecting, so we catch the full lifecycle. Only our
+				// own injected regions (data-og-fp="obsfp_…") are relayed; the page's other islands are not.
+				// The bus emits SYNCHRONOUSLY during hydration (which we trigger from inside this effect);
+				// writing $state synchronously there would form a reactive cycle, so batch + flush on a frame.
+				let pending = [];
+				let flushing = false;
+				const flush = () => {
+					flushing = false;
+					if (pending.length) {
+						runtimeEvents = [...runtimeEvents, ...pending].slice(-60);
+						pending = [];
+					}
+				};
+				const unsubscribe = add_sink((ev) => {
+					if (ev?.domain !== 'runtime' || !ev.fp || !String(ev.fp).startsWith('obsfp_')) return;
+					pending.push({ name: ev.name, label: fpNames[ev.fp] || String(ev.fp), t: ev.t, ms: ev.ms, when: ev.when });
+					if (!flushing) {
+						flushing = true;
+						requestAnimationFrame(flush);
+					}
+				});
 				const store = (globalThis.__OBS_ISLANDS__ ||= {});
 				const blobs = [];
 				const cache = new Map();
@@ -381,6 +429,7 @@
 				for (const region of tpl.querySelectorAll('ogygia-region[entry^="__ISLAND__:"]')) {
 					const file = region.getAttribute('entry').slice('__ISLAND__:'.length);
 					if (client.modules[file] == null) continue;
+					fpNames[region.getAttribute('data-og-fp')] = region.getAttribute('data-name') || file;
 					const Comp = eval_client(client.modules[file], require).default;
 					const key = 'k' + Math.random().toString(36).slice(2);
 					store[key] = Comp;
@@ -392,8 +441,10 @@
 				}
 				while (tpl.firstChild) el.appendChild(tpl.firstChild); // → runtime upgrades + hydrates
 				// cleanup on the next run: removing the nodes (el.innerHTML='') fires the runtime's
-				// disconnectedCallback (unmount); we just revoke blobs + release the stashed components.
+				// disconnectedCallback (unmount); we revoke blobs, release the stashed components, and
+				// stop listening on the bus.
 				xrayCleanup = () => {
+					unsubscribe();
 					for (const { blob, key } of blobs) {
 						URL.revokeObjectURL(blob);
 						delete store[key];
@@ -513,6 +564,21 @@
 					<div class="wakehint muted" data-obs-islands-hint>
 						the page's <b>real ogygia runtime</b> hydrated these — genuine <b>&lt;ogygia-region&gt;</b> shells,
 						blob-linked island chunks, lazy per schedule. Try the <b>wake demo</b> preset: click Menu, scroll to Chart.
+					</div>
+				{/if}
+				{#if previewMode === 'islands' && runtimeEvents.length}
+					<div class="rtev" data-obs-runtime-events>
+						<div class="rtev-cap">runtime events <span class="muted">· live from the devtools bus (Rung 0) as the real runtime hydrates</span></div>
+						<div class="rtev-log">
+							{#each runtimeEvents as e, i (i)}
+								{@const f = fmt_event(e)}
+								<div class="rtev-row {f.cls}">
+									<span class="rtev-island mono">{e.label.replace(/\.svelte$/, '')}</span>
+									<span class="rtev-icon">{f.icon}</span>
+									<span class="rtev-text">{f.text}</span>
+								</div>
+							{/each}
+						</div>
 					</div>
 				{/if}
 				<!-- Interactive mount (live) OR marked SSR HTML tinted by the lens (x-ray). -->
@@ -1040,6 +1106,58 @@
 	}
 	.wakehint b {
 		color: #94a3b8;
+	}
+	.rtev {
+		margin: 4px 14px 8px;
+		border: 1px solid rgba(148, 163, 184, 0.15);
+		border-radius: 6px;
+		overflow: hidden;
+	}
+	.rtev-cap {
+		padding: 5px 10px;
+		background: rgba(148, 163, 184, 0.05);
+		color: #94a3b8;
+		font-weight: 600;
+		font-size: 11px;
+	}
+	.rtev-log {
+		max-height: 140px;
+		overflow: auto;
+		padding: 4px 0;
+	}
+	.rtev-row {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		padding: 1px 12px;
+		font-size: 11px;
+	}
+	.rtev-island {
+		width: 110px;
+		flex: none;
+		color: #5eead4;
+		text-align: right;
+	}
+	.rtev-icon {
+		width: 12px;
+		flex: none;
+		text-align: center;
+	}
+	.rtev-row.ev-dim {
+		color: #64748b;
+	}
+	.rtev-row.ev-wake .rtev-icon,
+	.rtev-row.ev-wake .rtev-text {
+		color: #fbbf24;
+	}
+	.rtev-row.ev-done .rtev-icon,
+	.rtev-row.ev-done .rtev-text {
+		color: #5eead4;
+		font-weight: 600;
+	}
+	.rtev-row.ev-fail .rtev-icon,
+	.rtev-row.ev-fail .rtev-text {
+		color: #fca5a5;
 	}
 	.stubnote {
 		padding: 1px 8px;
