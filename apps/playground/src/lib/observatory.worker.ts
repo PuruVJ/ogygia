@@ -1,6 +1,6 @@
 // MUST be first: shims `process` for rolldown-browser's tsconfig helper (runs before it loads).
 import './rd-process-shim.ts';
-import { parse } from 'svelte/compiler';
+import { parse, compile } from 'svelte/compiler';
 import path from 'path-browserify';
 // The REAL ogygia host transform + id helpers + the parser DI seam, from the minimal browser entry.
 import {
@@ -29,6 +29,9 @@ export interface Analysis {
 	output: string;
 	/** The transformed host on the CLIENT leg (ssr=false) — csr=false ships stubs, not the wrapper. */
 	outputClient?: string;
+	/** The transformed host, COMPILED by svelte to server JS — the last step of the pipeline. */
+	compiledServer?: string;
+	compiledError?: string;
 	/** Whether the output came from the real ogygia transformHost (vs the mark-only fallback). */
 	real: boolean;
 	/** Real island count from transformHost (md5 iids), or null. */
@@ -170,6 +173,8 @@ async function analyze(source: string): Promise<Analysis> {
 	let real = false;
 	let realCode = '';
 	let realClientCode: string | undefined;
+	let compiledServer: string | undefined;
+	let compiledError: string | undefined;
 	let realIslands: number | null = null;
 	let modules: Analysis['modules'];
 	let realError: string | undefined;
@@ -239,6 +244,21 @@ async function analyze(source: string): Promise<Analysis> {
 				/* client leg is best-effort */
 			}
 		}
+
+		// The LAST step: compile the transformed host with svelte itself (server JS) — the full pipeline
+		// source → ogygia transform → svelte compile → shipped code, all in the browser.
+		if (real) {
+			try {
+				const { js } = compile(realCode, {
+					filename: 'App.svelte',
+					generate: 'server',
+					dev: true
+				}) as { js: { code: string } };
+				compiledServer = js.code;
+			} catch (e) {
+				compiledError = e instanceof Error ? e.message : String(e);
+			}
+		}
 	} catch (e) {
 		realError = e instanceof Error ? `${e.message}` : String(e);
 	}
@@ -249,6 +269,8 @@ async function analyze(source: string): Promise<Analysis> {
 		islands: marks.islands,
 		output: real ? realCode : marks.output,
 		outputClient: realClientCode,
+		compiledServer,
+		compiledError,
 		real,
 		realIslands,
 		modules,

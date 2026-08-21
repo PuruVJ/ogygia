@@ -134,6 +134,13 @@
 			</div>
 			<pre data-obs-output>{shownOutput}</pre>
 
+			{#if analysis.compiledServer}
+				<details class="pipe" data-obs-compiled>
+					<summary>▸ svelte-compiled server JS <span class="muted">· source → transform → svelte compile</span></summary>
+					<pre class="msrc">{analysis.compiledServer}</pre>
+				</details>
+			{/if}
+
 			{#if analysis.modules && analysis.modules.length}
 				<div class="cap">generated modules <span class="muted">· what each island compiles to</span></div>
 				<div class="mods" data-obs-modules>
@@ -315,6 +322,19 @@
 		background: #14b8a6;
 		color: #022;
 		border-color: #0d9488;
+	}
+	.pipe {
+		margin: 4px 14px;
+		border: 1px solid rgba(148, 163, 184, 0.15);
+		border-radius: 6px;
+		overflow: hidden;
+	}
+	.pipe summary {
+		cursor: pointer;
+		padding: 6px 10px;
+		background: rgba(148, 163, 184, 0.05);
+		user-select: none;
+		color: #94a3b8;
 	}
 	.mods {
 		padding: 4px 14px 14px;
