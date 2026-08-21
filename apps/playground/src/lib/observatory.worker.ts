@@ -213,27 +213,52 @@ function eval_module(code: string, req: (spec: string) => Record<string, unknown
 	return __exports;
 }
 
-/** Render the component to SSR HTML. Imports we can't provide (the user's `./X.svelte`) become
- *  labelled stubs, so an island app still renders a representative tree. */
-function execute(source: string): Analysis['rendered'] {
+/** Resolve an import specifier to a key in the file map (`./Counter.svelte` → `Counter.svelte`). */
+function resolve_file(spec: string, files: Record<string, string>): string | null {
+	const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
+	if (files[bare] != null) return bare;
+	const base = spec.split('/').pop();
+	if (base && files[base] != null) return base;
+	return null;
+}
+
+/** Render the ENTRY component to SSR HTML, resolving `./X.svelte` imports across the file MAP (they
+ *  render as their real components). Imports not in the map (or `ogygia/internal`) render as labelled
+ *  stubs. The compile→link→render loop, running in the browser. */
+function execute(files: Record<string, string>, entry: string): Analysis['rendered'] {
 	const stubs = new Set<string>();
+	const cache = new Map<string, Record<string, unknown>>();
 	try {
-		const { js } = compile(source, { filename: 'App.svelte', generate: 'server', dev: false }) as {
+		const make_require = (): ((spec: string) => Record<string, unknown>) => {
+			const require = (spec: string): Record<string, unknown> => {
+				if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
+				if (spec === 'svelte/server') return { render } as Record<string, unknown>;
+				const file = resolve_file(spec, files);
+				if (file && file.endsWith('.svelte')) {
+					const hit = cache.get(file);
+					if (hit) return hit;
+					const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as {
+						js: { code: string };
+					};
+					const exports: Record<string, unknown> = {};
+					cache.set(file, exports); // set before eval (tolerate cycles)
+					Object.assign(exports, eval_module(js.code, require));
+					return exports;
+				}
+				// not provided (a component the user hasn't added, or ogygia/internal) → labelled stub
+				const name = (spec.split('/').pop() || spec).replace(/\.svelte$/, '');
+				stubs.add(name);
+				const Stub = ($$renderer: { push: (s: string) => void }) =>
+					$$renderer.push(`<span class="og-stub" data-og-stub="${name}">‹${name}/›</span>`);
+				return { default: Stub };
+			};
+			return require;
+		};
+		if (files[entry] == null) return { ok: false, error: `no entry file '${entry}'` };
+		const { js } = compile(files[entry], { filename: entry, generate: 'server', dev: false }) as {
 			js: { code: string };
 		};
-		const require = (spec: string): Record<string, unknown> => {
-			if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
-			if (spec === 'svelte/server') return { render } as Record<string, unknown>;
-			// Any other import (a `./Component.svelte`, `ogygia/internal`, …) isn't provided in a
-			// single-file REPL — stub it with a labelled placeholder component (server signature).
-			const name = (spec.split('/').pop() || spec).replace(/\.svelte$/, '');
-			stubs.add(name);
-			const Stub = ($$renderer: { push: (s: string) => void }) => {
-				$$renderer.push(`<span class="og-stub" data-og-stub="${name}">‹${name}/›</span>`);
-			};
-			return { default: Stub };
-		};
-		const mod = eval_module(js.code, require);
+		const mod = eval_module(js.code, make_require());
 		const Component = mod.default as unknown;
 		if (typeof Component !== 'function') return { ok: false, error: 'no default component export' };
 		const out = render(Component as never, { props: {} }) as { body?: string; html?: string };
@@ -243,7 +268,8 @@ function execute(source: string): Analysis['rendered'] {
 	}
 }
 
-async function analyze(source: string): Promise<Analysis> {
+async function analyze(files: Record<string, string>, active: string): Promise<Analysis> {
+	const source = files[active] ?? '';
 	const marks = analyze_marks(source);
 	const t0 = now();
 
@@ -354,12 +380,12 @@ async function analyze(source: string): Promise<Analysis> {
 		modules,
 		realError,
 		oxc,
-		rendered: execute(source),
+		rendered: execute(files, 'App.svelte' in files ? 'App.svelte' : active),
 		ms: now() - t0
 	};
 }
 
-self.onmessage = (e: MessageEvent<{ id: number; source: string }>) => {
-	const { id, source } = e.data;
-	analyze(source).then((result) => self.postMessage({ id, result }));
+self.onmessage = (e: MessageEvent<{ id: number; files: Record<string, string>; active: string }>) => {
+	const { id, files, active } = e.data;
+	analyze(files, active).then((result) => self.postMessage({ id, result }));
 };

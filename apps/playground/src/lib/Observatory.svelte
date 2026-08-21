@@ -12,7 +12,9 @@
 	 * (macros, `.ts` registries, free-var capture) additionally needs the oxc parser in-browser (native
 	 * today — WASM / parser injection is the next step); region ids shown are an illustrative hash.
 	 */
-	const DEFAULT_SOURCE = `<scr${''}ipt>
+	// The all-strategies host — every island kind in one file (imports stub on render, but the transform
+	// shows them all). Kept as a preset.
+	const ALL_STRATEGIES = `<scr${''}ipt>
   import Counter from './Counter.svelte' with { wake: 'load' };
   import Menu from './Menu.svelte' with { wake: 'interaction' };
   import Chart from './Chart.svelte' with { wake: 'visible' };
@@ -34,73 +36,83 @@
 <Greeting />
 <Prose>{@html article}</Prose>`;
 
-	// A few example components to explore the compiler with.
-	const PRESETS = {
-		'all strategies': DEFAULT_SOURCE,
-		counter: `<scr${''}ipt>
+	// The default MULTI-FILE app — renders for real (its imported components are provided).
+	const FILES_DEMO = {
+		'App.svelte': `<scr${''}ipt>
+  import Header from './Header.svelte';
   import Counter from './Counter.svelte' with { wake: 'load' };
-</scr${''}ipt>
-
-<h1>Hello</h1>
-<Counter start={0} />`,
-		'server island': `<scr${''}ipt>
-  // fetched from a signed endpoint after load; ships no JS of its own
-  import Greeting from './Greeting.svelte' with { render: 'deferred' };
-</scr${''}ipt>
-
-<Greeting>
-  {#snippet ogygiaFallback()}<p>loading…</p>{/snippet}
-</Greeting>`,
-		'lake in island': `<scr${''}ipt>
-  import Card from './Card.svelte' with { wake: 'visible' };
   import Prose from './Prose.svelte' with { wake: 'none' };
 </scr${''}ipt>
 
-<Card>
-  <Prose>{@html article}</Prose>
-</Card>`,
-		'keep across nav': `<scr${''}ipt>
-  // the player relocates across SPA navigation instead of remounting
-  import Player from './Player.svelte' with { wake: 'load', keep: 'player' };
+<Header title="My ogygia app" />
+<p>An interactive island (ships JS), then a frozen lake (no JS):</p>
+<Counter start={3} />
+<Prose>a server-only prose block</Prose>`,
+		'Header.svelte': `<scr${''}ipt>let { title = 'Hi' } = $props();</scr${''}ipt>
+<h1>{title}</h1>`,
+		'Counter.svelte': `<scr${''}ipt>
+  let { start = 0 } = $props();
+  let n = $state(start);
 </scr${''}ipt>
-
-<Player {track} />`,
-		'live region': `<scr${''}ipt>
-  // baked HTML that revalidates in the background (SWR)
-  import Ticker from './Ticker.svelte' with { render: 'live', wake: 'load' };
-</scr${''}ipt>
-
-<Ticker />`
+<button onclick={() => n++}>count is {n}</button>`,
+		'Prose.svelte': `<scr${''}ipt>let { children } = $props();</scr${''}ipt>
+<div class="prose">{@render children?.()}</div>`
 	};
 
-	// Share via URL (Rung 6): load the source from the hash on mount, and keep the hash in sync so the
-	// current URL always reproduces what you see. `#src=<uri-encoded source>`.
-	function initial_source() {
-		if (typeof location !== 'undefined' && location.hash.startsWith('#src=')) {
+	// Presets are file MAPS (Rung 6 multi-file). Most are single-file (their imports stub on render).
+	const PRESETS = {
+		'demo app': FILES_DEMO,
+		'all strategies': { 'App.svelte': ALL_STRATEGIES },
+		counter: { 'App.svelte': `<scr${''}ipt>\n  import Counter from './Counter.svelte' with { wake: 'load' };\n</scr${''}ipt>\n\n<h1>Hello</h1>\n<Counter start={0} />`, 'Counter.svelte': FILES_DEMO['Counter.svelte'] },
+		'server island': { 'App.svelte': `<scr${''}ipt>\n  import Greeting from './Greeting.svelte' with { render: 'deferred' };\n</scr${''}ipt>\n\n<Greeting />` }
+	};
+
+	// Share via URL (Rung 6): the whole file MAP round-trips through the hash `#files=<json>`.
+	function initial_files() {
+		if (typeof location !== 'undefined' && location.hash.startsWith('#files=')) {
 			try {
-				return decodeURIComponent(location.hash.slice(5));
+				const parsed = JSON.parse(decodeURIComponent(location.hash.slice(7)));
+				if (parsed && typeof parsed === 'object') return parsed;
 			} catch {
-				/* malformed hash — fall back to the default */
+				/* malformed — fall back to the demo */
 			}
 		}
-		return DEFAULT_SOURCE;
+		return { ...FILES_DEMO };
 	}
 
-	let source = $state(initial_source());
-	let analysis = $state({ ok: true, islands: [], output: source, real: false, realIslands: null });
+	let files = $state(initial_files());
+	let active = $state('App.svelte' in initial_files() ? 'App.svelte' : Object.keys(initial_files())[0]);
+	let analysis = $state({ ok: true, islands: [], output: '', real: false, realIslands: null });
 	let busy = $state(false);
 	let shared = $state(false);
 
+	function load_preset(map) {
+		files = structuredClone(map);
+		active = 'App.svelte' in map ? 'App.svelte' : Object.keys(map)[0];
+	}
+	function add_file() {
+		const name = prompt('New file name (e.g. Widget.svelte)');
+		if (name && !files[name]) {
+			files[name] = `<h1>${name.replace(/\\.svelte$/, '')}</h1>`;
+			active = name;
+		}
+	}
+	function remove_file(name) {
+		if (name === 'App.svelte') return; // keep an entry
+		delete files[name];
+		if (active === name) active = 'App.svelte' in files ? 'App.svelte' : Object.keys(files)[0];
+	}
+
 	// Keep the hash in sync (replaceState → no history spam).
 	$effect(() => {
-		const src = source;
+		const snap = $state.snapshot(files);
 		const t = setTimeout(() => {
 			try {
-				history.replaceState(null, '', '#src=' + encodeURIComponent(src));
+				history.replaceState(null, '', '#files=' + encodeURIComponent(JSON.stringify(snap)));
 			} catch {
 				/* noop */
 			}
-		}, 300);
+		}, 400);
 		return () => clearTimeout(t);
 	});
 
@@ -129,9 +141,7 @@
 	let seq = 0;
 	let want = 0;
 
-	// Boot the worker ONCE. This effect reads no reactive state, so it never re-runs (and never spawns
-	// a second worker); the latest request id wins, so stale responses are dropped. Vite's spec-aligned
-	// worker form: `new Worker(new URL(...), { type: 'module' })`.
+	// Boot the worker ONCE (reads no reactive state → never spawns a second worker).
 	$effect(() => {
 		const w = new Worker(new URL('./observatory.worker.ts', import.meta.url), { type: 'module' });
 		w.onmessage = (/** @type {MessageEvent} */ e) => {
@@ -144,16 +154,16 @@
 		return () => w.terminate();
 	});
 
-	// Re-analyze on edit — debounced, off the main thread. Runs when `source` (or the worker) changes;
-	// the initial run fires once the boot effect sets `worker`.
+	// Re-analyze on edit — debounced, off the main thread. Reads the whole file map (deep) + active.
 	$effect(() => {
-		const src = source;
+		const snap = $state.snapshot(files);
+		const a = active;
 		const w = worker;
 		if (!w) return;
 		busy = true;
 		const t = setTimeout(() => {
 			want = ++seq;
-			w.postMessage({ id: want, source: src });
+			w.postMessage({ id: want, files: snap, active: a });
 		}, 140);
 		return () => clearTimeout(t);
 	});
@@ -175,15 +185,33 @@
 	<div class="grid">
 		<section class="editor">
 			<div class="cap">
-				component source
-				<span class="presets">
-					{#each Object.entries(PRESETS) as [name, src]}
-						<button onclick={() => (source = src)}>{name}</button>
+				<span class="presets" data-obs-presets>
+					{#each Object.entries(PRESETS) as [name, map]}
+						<button onclick={() => load_preset(map)}>{name}</button>
 					{/each}
 					<button class="share" data-obs-share onclick={share}>{shared ? 'link copied ✓' : 'share'}</button>
 				</span>
 			</div>
-			<textarea bind:value={source} spellcheck="false" data-obs-input></textarea>
+			<div class="filetabs" data-obs-filetabs>
+				{#each Object.keys(files) as name (name)}
+					<button class="filetab" class:on={active === name} onclick={() => (active = name)}>
+						{name}
+						{#if name !== 'App.svelte'}<span
+								class="rm"
+								role="button"
+								tabindex="-1"
+								title="remove"
+								onclick={(e) => {
+									e.stopPropagation();
+									remove_file(name);
+								}}
+								onkeydown={() => {}}>×</span
+							>{/if}
+					</button>
+				{/each}
+				<button class="filetab add" title="add a file" onclick={add_file}>+</button>
+			</div>
+			<textarea bind:value={files[active]} spellcheck="false" data-obs-input></textarea>
 		</section>
 
 		<section class="out">
@@ -359,6 +387,44 @@
 		border-right: 1px solid rgba(148, 163, 184, 0.18);
 		display: flex;
 		flex-direction: column;
+	}
+	.filetabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 3px;
+		padding: 5px 10px;
+		border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+	}
+	.filetab {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px 9px;
+		border-radius: 6px 6px 0 0;
+		border: 1px solid transparent;
+		background: none;
+		color: #94a3b8;
+		font: inherit;
+		font-size: 11px;
+		cursor: pointer;
+	}
+	.filetab.on {
+		color: #5eead4;
+		background: rgba(20, 184, 166, 0.1);
+		border-color: rgba(148, 163, 184, 0.2);
+		border-bottom-color: transparent;
+	}
+	.filetab .rm {
+		color: #64748b;
+		font-size: 13px;
+		line-height: 1;
+	}
+	.filetab .rm:hover {
+		color: #fca5a5;
+	}
+	.filetab.add {
+		color: #64748b;
+		font-weight: 700;
 	}
 	.cap {
 		display: flex;

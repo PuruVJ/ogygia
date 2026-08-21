@@ -30,6 +30,22 @@ try {
 	// >= 1: our compile worker, plus the WASI helper threads rolldown-browser's WASM spawns for oxc.
 	check('runs its compile in a Web Worker', workers.length >= 1, `${workers.length} worker(s) incl. WASI threads`);
 
+	// ── EXECUTION first: the DEFAULT (multi-file demo) renders its REAL components (no stubs) ──
+	const rendered = await page.evaluate(() => {
+		const el = document.querySelector('[data-obs-preview]');
+		return el ? { text: (el.textContent || '').trim(), stubs: el.querySelectorAll('[data-og-stub]').length } : null;
+	});
+	check('the multi-file app RENDERS its real components in-browser', !!rendered && /count is 3/.test(rendered.text) && rendered.stubs === 0, JSON.stringify(rendered));
+	const fileTabs = await page.evaluate(() => document.querySelectorAll('[data-obs-filetabs] .filetab').length);
+	check('multi-file editor shows file tabs', fileTabs >= 4, `${fileTabs} tabs`);
+
+	// ── switch to the "all strategies" preset to exercise every island kind in the transform ──
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'all strategies');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(600);
+
 	const strategies = await page.evaluate(() =>
 		[...document.querySelectorAll('[data-obs-map] .badge')].map((b) => b.textContent)
 	);
@@ -47,13 +63,6 @@ try {
 	check('the REAL ogygia transform runs in-browser (not the mark-reader)', /real ogygia transform/.test(realBadge), realBadge);
 	const realIds = await page.evaluate(() => document.querySelectorAll('.realdot').length);
 	check('island map shows REAL md5 region ids from the transform', realIds > 0, `${realIds} real ids`);
-
-	// ── EXECUTION: the app renders to SSR HTML in the browser (compile → link → render loop) ──
-	const rendered = await page.evaluate(() => {
-		const el = document.querySelector('[data-obs-preview]');
-		return el ? { text: (el.textContent || '').trim(), stubs: el.querySelectorAll('[data-og-stub]').length } : null;
-	});
-	check('the app RENDERS to HTML in the browser (compile→link→render)', !!rendered && rendered.stubs > 0, JSON.stringify(rendered));
 
 	// ── live edit: add a marked import, expect the map to grow — off the main thread ──
 	const before = strategies.length;
