@@ -182,14 +182,6 @@
 	// The island branch renders inline when nested OR on a csr=true page.
 	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();
-	if (nested && (is_island || is_server) && import.meta.env && import.meta.env.DEV) {
-		const entry = untrack(() => (is_server ? __entry : island_entry));
-		console.warn(
-			is_server
-				? `[ogygia] nested server island "${entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
-				: `[ogygia] nested island "${entry}" is inside another island; it hydrates with its parent (strategy ignored).`
-		);
-	}
 
 	/** Island props cross classes, stores, snippets, og.$ fns and resumable deriveds. */
 	const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
@@ -226,6 +218,18 @@
 	const island_component = $derived(as_dual ? as_dual.component : __component);
 	const island_props = $derived(as_dual ? as_dual.props : __props);
 	const island_children = $derived(children);
+
+	// DEV diagnostic (declared HERE, after `island_entry`, so it never reads it in its temporal dead
+	// zone): a nested island can't wake independently — warn that its strategy is ignored. Dead-code
+	// eliminated in builds via the `import.meta.env.DEV` guard.
+	if (nested && (is_island || is_server) && import.meta.env && import.meta.env.DEV) {
+		const entry = untrack(() => (is_server ? __entry : island_entry));
+		console.warn(
+			is_server
+				? `[ogygia] nested server island "${entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
+				: `[ogygia] nested island "${entry}" is inside another island; it hydrates with its parent (strategy ignored).`
+		);
+	}
 	// Freeze bare snippet PROPS (named-snippet props) to static region snippets (server) so the island
 	// BODY and the serialized PAYLOAD render byte-for-byte identically — hydration then adopts the frozen
 	// HTML with no mismatch. A live (branded) snippet passes through; `nested` islands render inline, no
