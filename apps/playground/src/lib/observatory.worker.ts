@@ -17,6 +17,8 @@ export interface Island {
 	attrs: Record<string, unknown>;
 	strategy: { kind: string; color: string; detail: string };
 	id: string;
+	/** True when `id` is the REAL md5 region id from transformHost (vs the FNV placeholder). */
+	real?: boolean;
 }
 
 export interface Analysis {
@@ -179,13 +181,26 @@ async function analyze(source: string): Promise<Analysis> {
 
 		const result = transformHost(source, '/repl/src/routes/App.svelte', build_ctx(true)) as {
 			code?: string;
-			islands?: unknown[];
+			islands?: Array<{ id?: string; componentPath?: string; kind?: string }>;
 		} | null;
 		if (result && typeof result.code === 'string') {
 			real = true;
 			realCode = result.code;
-			realIslands = result.islands?.length ?? 0;
-			realSample = result.islands?.[0] ? JSON.stringify(result.islands[0]).slice(0, 300) : undefined;
+			const list = result.islands ?? [];
+			realIslands = list.length;
+			realSample = list[0] ? JSON.stringify(list[0]).slice(0, 300) : undefined;
+			// Overlay the REAL md5 region ids onto the (nicely-labelled) mark islands, matched by
+			// component basename — so the map shows the build's actual ids, not the FNV placeholder.
+			const base = (p?: string) => (p ? p.split('?')[0].split('/').pop() || p : '');
+			const realById = new Map<string, string>();
+			for (const isl of list) if (isl.componentPath && isl.id) realById.set(base(isl.componentPath), isl.id);
+			for (const isl of marks.islands) {
+				const rid = realById.get(base(isl.component));
+				if (rid) {
+					isl.id = rid;
+					(isl as Island & { real?: boolean }).real = true;
+				}
+			}
 		}
 	} catch (e) {
 		realError = e instanceof Error ? `${e.message}` : String(e);

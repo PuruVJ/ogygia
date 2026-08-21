@@ -73,7 +73,7 @@
 <div class="obs" data-observatory>
 	<header>
 		<b>ogygia observatory</b>
-		<span class="muted">· browser compiler (v0 · marks + host rewrite, in a worker)</span>
+		<span class="muted">· the real ogygia compiler, in your browser</span>
 		{#if analysis.oxc}
 			<span class="oxc" class:ok={analysis.oxc.ok} data-obs-oxc title={analysis.oxc.error || ''}>
 				{analysis.oxc.engine}: {analysis.oxc.ok ? `parsed ${analysis.oxc.imports} imports ✓` : 'failed'}
@@ -106,7 +106,7 @@
 									<span class="badge" style:--c={i.strategy.color}>{i.strategy.kind}</span>
 									<div class="detail muted">{i.strategy.detail}</div>
 								</td>
-								<td class="muted">{i.id}</td>
+								<td class="muted" title={i.real ? 'real md5 region id' : 'placeholder id (transform not yet run)'}>{i.id}{#if i.real}<span class="realdot" title="real ogygia region id">●</span>{/if}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -227,6 +227,12 @@
 	.detail {
 		margin-top: 2px;
 		font-size: 11px;
+	}
+	.realdot {
+		margin-left: 5px;
+		color: #5eead4;
+		font-size: 9px;
+		vertical-align: 1px;
 	}
 	pre {
 		margin: 0;

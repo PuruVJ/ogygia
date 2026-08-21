@@ -39,7 +39,14 @@ try {
 	}
 
 	const out = await page.evaluate(() => document.querySelector('[data-obs-output]')?.textContent || '');
-	check('host rewrite: marked import → virtual wrapper', /virtual:ogygia\/wrapper\/[0-9a-f]+/.test(out), out.slice(0, 60));
+	// The REAL transform rewrites marked imports to virtual island/wrapper ids (real md5).
+	check('host rewrite: marked import → virtual island/wrapper', /virtual:ogygia\/(island|region|wrapper)\/[0-9a-f]+/.test(out), out.slice(0, 80));
+
+	// ── THE BIG ONE: the real ogygia transformHost ran in the browser ──
+	const realBadge = await page.evaluate(() => document.querySelector('[data-obs-real]')?.textContent || '');
+	check('the REAL ogygia transform runs in-browser (not the mark-reader)', /real ogygia transform/.test(realBadge), realBadge);
+	const realIds = await page.evaluate(() => document.querySelectorAll('.realdot').length);
+	check('island map shows REAL md5 region ids from the transform', realIds > 0, `${realIds} real ids`);
 
 	// ── live edit: add a marked import, expect the map to grow — off the main thread ──
 	const before = strategies.length;
