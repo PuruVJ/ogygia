@@ -82,9 +82,16 @@ try {
 	await page.waitForTimeout(200);
 	const ri1 = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region button')?.textContent?.trim() || '');
 	check('islands mode: the PAGE runtime hydrates the island — it is interactive', ri0 === 'count is 3' && ri1 === 'count is 5', `${ri0} → ${ri1}`);
-	// the real runtime's hydration events flow to the Observatory off the devtools bus (Rung 0 → instrument)
-	const rtEvents = await page.evaluate(() => [...document.querySelectorAll('[data-obs-runtime-events] .rtev-row')].map((r) => r.textContent?.replace(/\s+/g, ' ').trim() || ''));
-	check('islands mode: real runtime events stream to the bus (connected → woke → hydrated)', rtEvents.some((e) => /connected/.test(e)) && rtEvents.some((e) => /woke/.test(e)) && rtEvents.some((e) => /hydrated/.test(e)), JSON.stringify(rtEvents));
+	// the real runtime's hydration events flow to the Observatory off the devtools bus (Rung 0 → instrument).
+	// Only when the served build compiled devtools IN (the runtime emits behind __OGYGIA_DEVTOOLS__); the
+	// default suite builds devtools OFF (tree-shaken), so skip-pass there — exactly like e2e/devtools.ts.
+	const devtoolsOn = await page.evaluate(() => typeof (window as { __ogygia_devtools?: unknown }).__ogygia_devtools !== 'undefined');
+	if (devtoolsOn) {
+		const rtEvents = await page.evaluate(() => [...document.querySelectorAll('[data-obs-runtime-events] .rtev-row')].map((r) => r.textContent?.replace(/\s+/g, ' ').trim() || ''));
+		check('islands mode: real runtime events stream to the bus (connected → woke → hydrated)', rtEvents.some((e) => /connected/.test(e)) && rtEvents.some((e) => /woke/.test(e)) && rtEvents.some((e) => /hydrated/.test(e)), JSON.stringify(rtEvents));
+	} else {
+		results.push('SKIP  islands mode: real runtime events (served build has devtools off — tree-shaken)');
+	}
 
 	// back to the live preview for the remaining checks
 	await page.evaluate(() => {

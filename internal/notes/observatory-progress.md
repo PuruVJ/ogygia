@@ -18,7 +18,9 @@ full multi-file REPL that **compiles AND runs** an ogygia app entirely in your b
 - **islands** — 👑 THE CROWN JEWEL: the app renders with genuine `<ogygia-region>` shells and the
   **page's own real ogygia runtime hydrates them** lazily, on their real schedules. This is the actual
   framework running in the preview — not a stand-in. Counter (load) hydrates live, Menu (interaction)
-  sleeps until you click it then wakes + replays the click, Chart (visible) wakes on scroll.
+  sleeps until you click it then wakes + replays the click, Chart (visible) wakes on scroll. And a
+  **live runtime-events panel** streams the real lifecycle off the devtools bus (Rung 0): per island
+  `connected → scheduled (schedule) → ⚡ woke → hydrating → ✓ hydrated (Nms)`.
 
 Plus two read-outs under every preview: the **byte ledger** ("you ship X, plain Kit ships Y" — the
 demo: −75% JS) and the **wire inspector** (the exact props that cross to each island).
