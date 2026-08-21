@@ -97,6 +97,10 @@
 			"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
 			"svelte": "./src/content/site/components/DocsShell.svelte",
 			"default": "./src/content/site/components/DocsShell.svelte"
+		},
+		"./internal/compiler-browser": {
+			"types": "./dist/compiler/browser.d.ts",
+			"default": "./dist/compiler/browser.js"
 		}
 	},
 	"bin": {
@@ -246,6 +250,10 @@
 				"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
 				"svelte": "./dist/content/site/components/DocsShell.svelte",
 				"default": "./dist/content/site/components/DocsShell.svelte"
+			},
+			"./internal/compiler-browser": {
+				"types": "./dist/compiler/browser.d.ts",
+				"default": "./dist/compiler/browser.js"
 			}
 		}
 	}

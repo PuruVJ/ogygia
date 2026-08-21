@@ -23,6 +23,8 @@
  * Exposed to consumers as `ogygia/internal/compiler` (internal, not a stable public API).
  */
 export * from './region/transform.js';
+// The parser DI seam — a browser build (the Observatory) injects rolldown-browser's oxc here.
+export { set_parser, type RawParse } from './parse/oxc.js';
 export * from './fouc-css.js';
 export * from './free-vars.js';
 export { Compiler, type Profiler } from './driver.js';

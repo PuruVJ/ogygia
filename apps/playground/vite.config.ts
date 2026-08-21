@@ -3,6 +3,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
 import { defineConfig, type Plugin } from 'vite';
 import wasm from 'vite-plugin-wasm';
+import { observatoryNodeShims } from './observatory-node-shims.ts';
 
 const require = createRequire(import.meta.url);
 
@@ -46,10 +47,14 @@ export default defineConfig({
 	},
 	worker: {
 		format: 'es',
-		plugins: () => [wasm()]
+		// The node-shims MUST be here too: rolldown-browser spawns a NESTED WASI worker
+		// (wasi-worker.mjs) that imports `node:module` — nested workers use this pipeline, not the
+		// main `plugins`, so without it `createRequire` throws.
+		plugins: () => [observatoryNodeShims(), wasm()]
 	},
 	// ogygia MUST run before sveltekit() (enforce:'pre' also guarantees ordering)
 	plugins: [
+		observatoryNodeShims(),
 		crossOriginIsolation(),
 		wasm(),
 		ogygia({

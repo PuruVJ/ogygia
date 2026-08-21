@@ -15,6 +15,8 @@
     "@sveltejs/kit": "^2.70.2",
     "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "@typescript/native": "npm:typescript@^7.0.2",
+    "crypto-browserify": "^3.12.1",
+    "path-browserify": "^1.0.1",
     "svelte": "^5.56.8",
     "svelte-check": "^4.7.4",
     "typescript": "^6.0.3",

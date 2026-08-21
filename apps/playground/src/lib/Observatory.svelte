@@ -32,7 +32,7 @@
 <Prose>{@html article}</Prose>`;
 
 	let source = $state(DEFAULT_SOURCE);
-	let analysis = $state({ ok: true, islands: [], output: DEFAULT_SOURCE });
+	let analysis = $state({ ok: true, islands: [], output: DEFAULT_SOURCE, real: false, realIslands: null });
 	let busy = $state(false);
 
 	// `worker` is $state so the debounce effect re-runs (and posts the first analysis) once it's set.
@@ -113,7 +113,14 @@
 				</table>
 			{/if}
 
-			<div class="cap">transformed host</div>
+			<div class="cap">
+				transformed host
+				{#if analysis.real}
+					<span class="real" data-obs-real>real ogygia transform · {analysis.realIslands} islands</span>
+				{:else}
+					<span class="fallback" title={analysis.realError || ''}>mark-preview (real transform: {analysis.realError ? 'error' : 'n/a'})</span>
+				{/if}
+			</div>
 			<pre data-obs-output>{analysis.output}</pre>
 		</section>
 	</div>
@@ -227,6 +234,21 @@
 		white-space: pre-wrap;
 		word-break: break-word;
 		color: #cbd5e1;
+	}
+	.real {
+		margin-left: 8px;
+		padding: 1px 8px;
+		border-radius: 999px;
+		background: rgba(20, 184, 166, 0.16);
+		color: #5eead4;
+		font-weight: 600;
+		font-size: 10px;
+	}
+	.fallback {
+		margin-left: 8px;
+		color: #64748b;
+		font-weight: 400;
+		font-size: 10px;
 	}
 	.err {
 		padding: 12px 14px;
