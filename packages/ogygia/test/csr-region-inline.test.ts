@@ -5,7 +5,7 @@
 // below is that contract, at the compiler layer (the region-mixed e2e proves it end to end).
 
 import { describe, expect, it } from 'vitest';
-import { transformHost } from '../dist/compiler/transform.js';
+import { transformHost } from '../dist/compiler/region/transform.js';
 
 // The injected call aliases setContext; what must be locked is the Symbol key string + `, true`.
 const CSR_CTX = /Symbol\.for\(\s*['"]ogygia\.csr-true['"]\s*\)\s*,\s*true\s*\)/;
@@ -34,14 +34,20 @@ describe('csr=true host: csr-context injection', () => {
 	});
 
 	it('creates an instance <script> when the host has none', () => {
-		const out = transformHost(`<h1>no script here</h1>`, '/app/src/routes/kit/+page.svelte', { routeCsr: true });
+		const out = transformHost(`<h1>no script here</h1>`, '/app/src/routes/kit/+page.svelte', {
+			routeCsr: true
+		});
 		expect(out).not.toBeNull();
 		expect(out.code).toMatch(/<script>[\s\S]*setContext[\s\S]*<\/script>/);
 		expect(out.code).toContain('<h1>no script here</h1>');
 	});
 
 	it('does NOT inject on a non-csr host (returns null for a plain component)', () => {
-		const out = transformHost(`<script>\n\tlet x = 1;\n</script>\n<p>{x}</p>`, '/app/src/lib/Plain.svelte', { routeCsr: undefined });
+		const out = transformHost(
+			`<script>\n\tlet x = 1;\n</script>\n<p>{x}</p>`,
+			'/app/src/lib/Plain.svelte',
+			{ routeCsr: undefined }
+		);
 		expect(out).toBeNull();
 	});
 });

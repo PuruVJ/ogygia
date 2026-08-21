@@ -4,13 +4,12 @@
  * `core` (and `router`) never statically import a feature impl — that would defeat the per-app
  * tree-shaking the generated runtime entry relies on. Instead each feature's `install()` fills its
  * typed slot here, and core reads the slot. Slots that core calls unconditionally (`lakes`,
- * `persist`, `forms`) carry a no-op default so the feature can be absent; the rest are `null` until
+ * `forms`) carry a no-op default so the feature can be absent; the rest are `null` until
  * a feature provides them and are read with optional chaining.
  *
  * This is the single wiring mechanism — there is no service locator and no per-feature setter.
  */
 import type { Component } from 'svelte';
-import type { PersistPair } from './persist.js';
 import type { Frame } from '../frame.js';
 import { is_frozen } from './region-attrs.js';
 
@@ -48,16 +47,6 @@ export type LakeOps = {
 	): void;
 };
 
-// ── persist ──────────────────────────────────────────────────────────────
-export type PersistOps = {
-	/** Read by core (`disconnectedCallback`): keep a relocating persist island mounted. */
-	is_persist_preserving(el: Element): boolean;
-	/** Read by the router around a body swap. */
-	collect(from: ParentNode, to: ParentNode): PersistPair[];
-	relocate(pairs: PersistPair[]): void;
-	end(pairs: PersistPair[]): void;
-};
-
 // ── forms ────────────────────────────────────────────────────────────────
 export type FormOps = {
 	enabled: boolean;
@@ -69,14 +58,13 @@ export type FormOps = {
 /** Wake a cold island when interaction lands inside it; returns a disarm fn. */
 export type ArmFn = (el: HTMLElement, fire: () => void) => void | (() => void);
 
-export type MorphFn = (parent: Element, nodes: Node[]) => void;
+export type MorphFn = (parent: Element, nodes: ArrayLike<Node>) => void;
 
 export type WireOps = {
-	TRANSPORT_WIRE_KEY: string;
-	revive_transportable: (payload: never, remember: boolean) => unknown;
-	/** Portable-snippet codec key + decode (rebuilds a live snippet from its descriptor). */
-	REGION_SNIPPET_WIRE_KEY: string;
-	revive_region_snippet: (payload: never) => unknown;
+	/** THE hub key (`OgygiaRef`) — every transportable kind crosses under it. */
+	REF_WIRE_KEY: string;
+	/** Hub resolve: ref → live value (kind-dispatched; browser remembers, server never). */
+	resolve: (ref: never, remember: boolean) => unknown;
 };
 
 export type RemoteSeedOps = {
@@ -130,7 +118,6 @@ export type NavOps = {
 
 export type Slots = {
 	lakes: LakeOps;
-	persist: PersistOps;
 	forms: FormOps;
 	interaction: ArmFn | null;
 	morph: MorphFn | null;
@@ -153,12 +140,6 @@ export const slots: Slots = {
 		mark_frozen_settled: () => {},
 		after_html_swap: () => {},
 		after_fetch_exhausted: () => {}
-	},
-	persist: {
-		is_persist_preserving: () => false,
-		collect: () => [],
-		relocate: () => {},
-		end: () => {}
 	},
 	forms: {
 		enabled: false,

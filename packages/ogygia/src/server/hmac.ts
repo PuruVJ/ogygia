@@ -22,7 +22,9 @@ export const MIN_SECRET_BYTES = 16;
 
 /** HKDF-SHA256 → 32-byte MAC key (hex for stable logging / tests; Buffer used internally). */
 export function derive_mac_key(secret: string): Buffer {
-	return Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'utf8'), Buffer.alloc(0), MAC_INFO, 32));
+	return Buffer.from(
+		hkdfSync('sha256', Buffer.from(secret, 'utf8'), Buffer.alloc(0), MAC_INFO, 32)
+	);
 }
 
 /** HKDF-SHA256 → 16-byte id salt (hex). Empty input must not be used — caller gates on env. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { rewrite_code, type CodeCall } from '../src/vite/og-code.js';
-import { dedent } from '../src/vite/dedent.js';
+import { rewrite_code, type CodeCall } from '../src/compiler/macros/code.js';
+import { dedent } from '../src/compiler/macros/dedent.js';
 
 const MARKUP = ['.svelte'] as const;
 // A fake renderer: echoes its inputs so tests assert what the macro EXTRACTED (dedent, lang, meta),
@@ -69,12 +69,16 @@ describe('rewrite_code', () => {
 
 	it('rejects a non-literal lang', async () => {
 		const src = 'const ex = import.meta.og.code("x", lang);';
-		await expect(rewrite_code(src, '/app/x.ts', MARKUP, echo)).rejects.toThrow(/lang must be a static string literal/);
+		await expect(rewrite_code(src, '/app/x.ts', MARKUP, echo)).rejects.toThrow(
+			/lang must be a static string literal/
+		);
 	});
 
 	it('rejects wrong arity', async () => {
 		const src = 'const ex = import.meta.og.code("x");';
-		await expect(rewrite_code(src, '/app/x.ts', MARKUP, echo)).rejects.toThrow(/takes 2 or 3 arguments/);
+		await expect(rewrite_code(src, '/app/x.ts', MARKUP, echo)).rejects.toThrow(
+			/takes 2 or 3 arguments/
+		);
 	});
 
 	it('ignores the marker in a comment or string', async () => {
@@ -94,7 +98,8 @@ describe('rewrite_code', () => {
 	});
 
 	it('multiple snippets in one module all bake and the import injects once', async () => {
-		const src = 'const a = import.meta.og.code("a", "ts"); const b = import.meta.og.code("b", "js");';
+		const src =
+			'const a = import.meta.og.code("a", "ts"); const b = import.meta.og.code("b", "js");';
 		const out = await rewrite_code(src, '/app/x.ts', MARKUP, echo);
 		expect((out.match(/__og_html_region\(/g) ?? []).length).toBe(2);
 		expect((out.match(/import \{ og_html_region/g) ?? []).length).toBe(1);
@@ -103,7 +108,12 @@ describe('rewrite_code', () => {
 
 describe('rewrite_code — md()', () => {
 	it('bakes a markdown string (dedented) and inlines og_html_region', async () => {
-		const src = ['const doc = import.meta.og.md(`', '\t# Title', '\tsome **bold** prose', '`);'].join('\n');
+		const src = [
+			'const doc = import.meta.og.md(`',
+			'\t# Title',
+			'\tsome **bold** prose',
+			'`);'
+		].join('\n');
 		const out = await rewrite_code(src, '/app/x.ts', MARKUP, echo);
 		expect(out).toContain(`import { og_html_region as __og_html_region } from 'ogygia/internal';`);
 		expect(out).toContain('__og_html_region(');
@@ -112,15 +122,15 @@ describe('rewrite_code — md()', () => {
 	});
 
 	it('rejects md() with wrong arity', async () => {
-		await expect(rewrite_code('const d = import.meta.og.md("a", "b");', '/app/x.ts', MARKUP, echo)).rejects.toThrow(
-			/md\(text\) takes exactly one argument/
-		);
+		await expect(
+			rewrite_code('const d = import.meta.og.md("a", "b");', '/app/x.ts', MARKUP, echo)
+		).rejects.toThrow(/md\(text\) takes exactly one argument/);
 	});
 
 	it('rejects an interpolated md() template', async () => {
-		await expect(rewrite_code('const d = import.meta.og.md(`# ${title}`);', '/app/x.ts', MARKUP, echo)).rejects.toThrow(
-			/interpolation/
-		);
+		await expect(
+			rewrite_code('const d = import.meta.og.md(`# ${title}`);', '/app/x.ts', MARKUP, echo)
+		).rejects.toThrow(/interpolation/);
 	});
 
 	it('code() and md() coexist in one module; one import injected', async () => {

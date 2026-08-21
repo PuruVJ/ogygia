@@ -17,8 +17,8 @@ function check(name: string, cond: unknown, extra = '') {
 
 // ---------- SSR ----------
 const raw = await (await fetch(base + '/portable-snippet')).text();
-// The snippet crossed into the island as an OgygiaS descriptor (not a serialized function).
-check('SSR: snippet crosses as an OgygiaS portable descriptor', /\["OgygiaS"/.test(raw));
+// The snippet crossed into the island as a hub ref of kind 'snippet' (not a serialized function).
+check('SSR: snippet crosses as a portable snippet ref', /\["OgygiaRef"/.test(raw) && /"snippet"/.test(raw));
 // It rendered inside the island's <ogygia-region>, wrapped in the portable container, with the
 // captured host value (who = Ada) baked in. Unbounded window: the crossed snippet's nested island
 // is now a REAL `<ogygia-region>` (marks survive into the synth entry) + its props script, so the

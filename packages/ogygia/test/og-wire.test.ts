@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { rewrite_wire, WIRE_EXPR } from '../src/vite/og-wire.js';
+import { rewrite_wire, WIRE_EXPR } from '../src/compiler/macros/wire.js';
 import {
 	wire,
 	__register_transportable,
 	reduce_transportable,
 	revive_transportable
 } from '../src/live-transport.js';
-import { moduleHasTransportable } from '../src/vite/transportables.js';
+import { moduleHasTransportable } from '../src/compiler/content/transportables.js';
 
 const MARKUP = ['.svelte'] as const;
 const CODEC = `{ encode: (c) => c.v, decode: (v) => new C(v) }`;
@@ -72,9 +72,9 @@ describe('rewrite_wire — strictness (build errors, file:line)', () => {
 	});
 
 	it('rejects a call outside a static class member', () => {
-		expect(() => rewrite_wire(`const c = import.meta.og.wire(${CODEC});`, '/app/x.ts', MARKUP)).toThrow(
-			/called outside a static class member/
-		);
+		expect(() =>
+			rewrite_wire(`const c = import.meta.og.wire(${CODEC});`, '/app/x.ts', MARKUP)
+		).toThrow(/called outside a static class member/);
 	});
 
 	it('rejects a wrongly-named static member', () => {

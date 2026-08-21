@@ -93,7 +93,8 @@ export function infostring(): MetaParser {
 	};
 }
 
-const SLASH_META = /(?:^|\n)[ \t]*(?:\/\/\/|<!---|###)\s*(file|copy|link|title)\s*:\s*(.*?)\s*(?:--->)?(?=\n|$)/g;
+const SLASH_META =
+	/(?:^|\n)[ \t]*(?:\/\/\/|<!---|###)\s*(file|copy|link|title)\s*:\s*(.*?)\s*(?:--->)?(?=\n|$)/g;
 
 /**
  * svelte.dev's magic-comment fence meta: `/// file: App.svelte`, `/// copy: false`, `/// link: false`

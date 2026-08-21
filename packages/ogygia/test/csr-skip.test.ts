@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { clientBuildWillSkip, read_csr, KEEP_CLIENT_DIR } from '../src/vite/standalone.js';
+import { clientBuildWillSkip, read_csr, KEEP_CLIENT_DIR } from '../src/compiler/kit.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The Kit client-build skip predicate — the issue #4/#1 regression suite.
@@ -126,10 +126,14 @@ describe('read_csr — export shapes', () => {
 		const dir = routes({ '+layout.ts': '// export const csr = true\nexport const csr = false;\n' });
 		expect(read_csr(join(dir, '+layout.ts'))).toBe(false);
 		// Block comment.
-		const dir2 = routes({ '+layout.ts': '/* export const csr = true */\nexport const csr = false;\n' });
+		const dir2 = routes({
+			'+layout.ts': '/* export const csr = true */\nexport const csr = false;\n'
+		});
 		expect(read_csr(join(dir2, '+layout.ts'))).toBe(false);
 		// A `://` inside a string on another line must not be mistaken for a comment and eat the export.
-		const dir3 = routes({ '+layout.ts': 'const u = "https://x.test";\nexport const csr = false;\n' });
+		const dir3 = routes({
+			'+layout.ts': 'const u = "https://x.test";\nexport const csr = false;\n'
+		});
 		expect(read_csr(join(dir3, '+layout.ts'))).toBe(false);
 	});
 });

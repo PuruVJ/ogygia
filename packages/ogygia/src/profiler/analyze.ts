@@ -106,14 +106,22 @@ export interface Analysis {
 const component_name_re = /^[A-Z][A-Za-z0-9_]*$/;
 
 /** SvelteKit endpoint/handler exports — capitalized, but not components. */
-const handler_names = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'fallback']);
+const handler_names = new Set([
+	'GET',
+	'POST',
+	'PUT',
+	'PATCH',
+	'DELETE',
+	'HEAD',
+	'OPTIONS',
+	'fallback'
+]);
 
 /** Svelte derives the SSR function name from the filename: Header.svelte →
  * Header, +page.svelte → _page. Helper closures inside a component keep the
  * file's url but not a component-shaped name. */
 const is_component_name = (name: string): boolean =>
-	!handler_names.has(name) &&
-	(component_name_re.test(name) || /^_(page|layout|error)$/.test(name));
+	!handler_names.has(name) && (component_name_re.test(name) || /^_(page|layout|error)$/.test(name));
 
 /** The component name a `.svelte` source file compiles to — used to name the
  * anonymous inline-code frame that V8 samples inside a component. Returns

@@ -12,6 +12,9 @@ export default defineConfig({
 			// Markdown content pipeline (stock defaults) so the `.svx` fixture behind e2e/content-css
 			// compiles — that check guards content-body scoped CSS shipping to a csr=false page.
 			content: { markdown: {} },
+			// Opt IN to server-delta nav (off by default) so e2e/server-delta.ts exercises the protocol:
+			// an SPA nav sends `x-ogygia-known`, the server skips re-rendering the island the client keeps.
+			router: { serverDelta: true },
 			regions: {
 				// global default rootMargin for every `wake: 'visible'` island (per-import wins)
 				visible: { margin: '0px' },

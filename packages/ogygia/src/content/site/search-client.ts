@@ -51,7 +51,8 @@ export function search(opts: SearchClientOptions = {}): SearchClient {
 		const m = e.data as { type: string; id?: number; hits?: SearchHit[]; message?: string };
 		if (m.type === 'result' && m.id !== undefined) pending.get(m.id)?.(m.hits ?? []);
 		else if (m.type === 'ready') ready_resolve();
-		else if (m.type === 'error') ready_reject(new Error(m.message ?? 'search index failed to load'));
+		else if (m.type === 'error')
+			ready_reject(new Error(m.message ?? 'search index failed to load'));
 	};
 	// A worker-level crash (module failed to load/parse) never sends a message — surface it so the
 	// palette shows *why* instead of hanging on "loading" forever.

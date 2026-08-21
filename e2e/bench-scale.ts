@@ -10,7 +10,7 @@
 //
 // Appends a row to internal/notes/perf-checkpoints.md (## scale).
 // ─────────────────────────────────────────────────────────────────────────────
-import { transformHost } from '../packages/ogygia/dist/compiler/transform.js';
+import { transformHost } from '../packages/ogygia/dist/compiler/region/transform.js';
 import { content } from '../packages/ogygia/dist/content/factory.js';
 
 // The lib no longer ships `fromArray` (write a `{ get, list, ids }` directly); local copy for fixtures.

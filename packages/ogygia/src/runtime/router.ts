@@ -9,12 +9,51 @@
 import { html_has_kit_bootstrap, document_has_kit_bootstrap } from './kit-boot.js';
 import { PageCache } from './page-cache.js';
 import { slots } from './slots.js';
-import type { PersistPair } from './persist.js';
+import { dispose_scope } from '../ref.js';
+import { reconcile_body, region_in_shadow } from './reconcile.js';
+
+/** RECONCILER R1: when on (and morph is installed), a nav diffs the body IN PLACE — matched regions
+ *  keep their live islands, changed regions re-mount, the shell morphs — instead of a full-body
+ *  replaceWith. Flip to `false` to fall back to the legacy full-swap path (the e2e safety net). */
+const RECONCILE_NAV = true;
 import { runtime_session } from './session.js';
 import { island_module_url, warm_island_module } from './region-endpoint-url.js';
 import { speculate_url } from './speculate-hint.js';
 
 const WS = /\s+/;
+
+/** Max bytes for the `x-ogygia-known` header — past this we OMIT it, so the server renders every
+ *  region (the safe full-render fallback). Keeps request headers well under proxy/server limits. */
+const KNOWN_HEADER_CAP = 6144;
+
+/** SERVER-DELTA NAV is OPT-IN for the first release (a new client↔server protocol). Off → the client
+ *  never sends `x-ogygia-known`, so `known_region_fps()` is always empty server-side and every region
+ *  full-renders (the documented safe fallback). Compile-time constant (Vite `define`); typeof-guarded
+ *  so a plain node import of dist/ without the define falls back to OFF. */
+const SERVER_DELTA =
+	typeof __OGYGIA_SERVER_DELTA__ !== 'undefined' ? __OGYGIA_SERVER_DELTA__ : false;
+
+/**
+ * SERVER-DELTA NAV (D2): headers for a nav/prefetch fetch. Always `x-ogygia-spa`. Plus, when the
+ * current document has HYDRATED islands carrying a `data-og-fp`, `x-ogygia-known` lists their
+ * fingerprints so the server can SKIP re-rendering the ones this page already has live. Only
+ * data-hydrated regions are claimed (never assert a region we don't actually have), and the header
+ * is omitted past a size cap → the server renders everything (progressive enhancement: the header
+ * is an optimization the server may ignore, and its absence is always correct).
+ */
+function nav_headers(): Record<string, string> {
+	const headers: Record<string, string> = { 'x-ogygia-spa': '1' };
+	if (!SERVER_DELTA || typeof document === 'undefined') return headers;
+	const seen = new Set<string>();
+	for (const el of document.querySelectorAll('ogygia-region[data-og-fp][data-hydrated]')) {
+		const fp = el.getAttribute('data-og-fp');
+		if (fp) seen.add(fp);
+	}
+	if (seen.size === 0) return headers;
+	const joined = [...seen].join(',');
+	if (joined.length <= KNOWN_HEADER_CAP) headers['x-ogygia-known'] = joined;
+	return headers;
+}
 
 /**
  * Fold ORPHANED `view-transition-name`s into the page-level cross-fade. A name promotes its element
@@ -63,10 +102,8 @@ function fold_orphan_vt_names(current: ParentNode, incoming: ParentNode): () => 
 // On csr=false pages ogygia owns navigation — Kit's router is not running — so we update history via
 // the un-patched `History.prototype` methods. Same effect on the history stack, without the spurious
 // "conflict with SvelteKit's router" warning. Captured lazily so a test/SSR without `History` is safe.
-const native_push =
-	typeof History !== 'undefined' ? History.prototype.pushState : null;
-const native_replace =
-	typeof History !== 'undefined' ? History.prototype.replaceState : null;
+const native_push = typeof History !== 'undefined' ? History.prototype.pushState : null;
+const native_replace = typeof History !== 'undefined' ? History.prototype.replaceState : null;
 const push_state = (state: unknown, url: string) =>
 	(native_push ?? history.pushState).call(history, state, '', url);
 const replace_state = (state: unknown, url?: string) => {
@@ -120,7 +157,14 @@ const REMOTE_MUTATION_PATH = /\/remote(?:\/|$|\?)/;
 // honour Kit's value grammar + nearest-ancestor inheritance: 'eager' | 'viewport' | 'hover' | 'tap'
 // | 'off'/'false'. An anchor's effective trigger is the MOST-EAGER of the two attributes; an empty
 // value means 'hover' (Kit's default). `-data` is normally hover/tap; `-code` adds eager/viewport.
-const PRELOAD_RANK: Record<string, number> = { eager: 0, viewport: 1, hover: 2, tap: 3, off: 4, false: 4 };
+const PRELOAD_RANK: Record<string, number> = {
+	eager: 0,
+	viewport: 1,
+	hover: 2,
+	tap: 3,
+	off: 4,
+	false: 4
+};
 
 /** Stable-ish head node identity without serializing full outerHTML when possible. */
 export function head_node_key(node: Element): string {
@@ -303,7 +347,12 @@ class SpaRouter {
 		this.#after_hooks.add(fn);
 		// $app/navigation's afterNavigate fires immediately on mount too
 		try {
-			fn({ from: null, to: this.#build_nav_target(new URL(location.href)), type: 'enter', willUnload: false });
+			fn({
+				from: null,
+				to: this.#build_nav_target(new URL(location.href)),
+				type: 'enter',
+				willUnload: false
+			});
 		} catch {
 			/* noop */
 		}
@@ -320,7 +369,11 @@ class SpaRouter {
 	}
 
 	install_remote_mutation_cache_bust() {
-		if (this.#remote_bust_installed || typeof window === 'undefined' || typeof window.fetch !== 'function') {
+		if (
+			this.#remote_bust_installed ||
+			typeof window === 'undefined' ||
+			typeof window.fetch !== 'function'
+		) {
 			return;
 		}
 		this.#remote_bust_installed = true;
@@ -361,7 +414,7 @@ class SpaRouter {
 
 		const settled = fetch(href, {
 			signal,
-			headers: { 'x-ogygia-spa': '1' }
+			headers: nav_headers()
 		})
 			.then(async (res) => {
 				const ct = res.headers.get('content-type') || '';
@@ -424,7 +477,12 @@ class SpaRouter {
 	// `data-ogygia-runtime` and is the only module script merge_head retains across swaps.
 	async navigate(
 		url: URL,
-		{ push = true, pop_scroll = null, type = 'link', replace = false }: {
+		{
+			push = true,
+			pop_scroll = null,
+			type = 'link',
+			replace = false
+		}: {
 			push?: boolean;
 			pop_scroll?: { x: number; y: number } | null;
 			type?: string;
@@ -502,8 +560,7 @@ class SpaRouter {
 		// even when the target has a hash (A → B#C); scroll snaps after the transition.
 		const prefer_reduced_motion =
 			typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-		const use_vt =
-			marker.getAttribute('content') !== 'plain' && !prefer_reduced_motion;
+		const use_vt = marker.getAttribute('content') !== 'plain' && !prefer_reduced_motion;
 
 		// SINGLE-FLIGHT NAV: prescan the incoming page for its load-timed deferred region calls and stream
 		// them ALL in one batch request, kicked off now (before the swap). Each region binder joins the
@@ -518,7 +575,6 @@ class SpaRouter {
 		await this.#preload_stylesheets(doc.head);
 		if (gen !== this.#nav_gen) return;
 
-		let persist_pairs: PersistPair[] = [];
 		const swap = () => {
 			// Stale nav: do not mutate the DOM (view-transition can otherwise commit a superseded swap).
 			if (gen !== this.#nav_gen) return;
@@ -532,18 +588,34 @@ class SpaRouter {
 			// Clear session state BEFORE body connect so new regions never see the previous page.
 			slots.spaLifecycle?.prepare();
 			if (gen !== this.#nav_gen) return;
-			// Relocate immediately before replaceWith — never leave live nodes in a discarded parse tree.
-			persist_pairs = slots.persist.collect(document.body, doc.body);
-			slots.persist.relocate(persist_pairs);
-			document.body.replaceWith(doc.body);
-			document.title = doc.title;
-			// Lakes inside persisted chrome survived reset — re-mark settled so island-in-lake can wake.
-			for (const { live } of persist_pairs) runtime_session.settle_lakes_in(live);
-			slots.persist.end(persist_pairs);
+			if (
+				RECONCILE_NAV &&
+				slots.morph &&
+				!region_in_shadow(document.body) &&
+				!region_in_shadow(doc.body)
+			) {
+				// THE nav path: diff the live body toward the parsed one IN PLACE. Matched regions
+				// (same fingerprint) keep their live hydrated node and island state; changed regions
+				// re-mount; shell + keep-chrome (data-ogygia-keep) morph in place. Selective dispose of
+				// only REMOVED regions' hub ids happens inside reconcile_body.
+				reconcile_body(document.body, doc.body, slots.morph);
+				document.title = doc.title;
+				// KEPT islands don't remount, so re-seed the shared page store + remote seeds from the
+				// new doc — `$app/state` page.url/params/data update reactively inside kept islands.
+				slots.spaLifecycle?.softInvalidate(doc);
+				runtime_session.settle_lakes_in(document.body);
+			} else {
+				// FALLBACK (reconcile off, or a region nested in an open shadow root morph can't pierce):
+				// a plain full-body swap. Correct and safe, but keep-continuity does NOT survive here —
+				// islands re-mount like a hard nav. This path is rare; the reconcile path above is the norm.
+				document.body.replaceWith(doc.body);
+				document.title = doc.title;
+				runtime_session.settle_lakes_in(document.body);
+				dispose_scope('page');
+			}
 			// Old islands disconnected; new hydrates are awaiting — sweep stale Kit remotes now.
 			slots.spaLifecycle?.finish();
-			// CONTINUITY: restore fields the visitor left on THIS page in a prior visit (this session),
-			// as each island hydrates.
+			// CONTINUITY: restore fields the visitor left on THIS page in a prior visit (this session).
 			if (slots.forms.enabled) slots.forms.restore(url.pathname);
 		};
 
@@ -601,7 +673,9 @@ class SpaRouter {
 				location.assign(target.href);
 				return Promise.resolve();
 			}
-			throw new Error('[ogygia] goto() only supports same-origin URLs (pass { external: true } to leave)');
+			throw new Error(
+				'[ogygia] goto() only supports same-origin URLs (pass { external: true } to leave)'
+			);
 		}
 		return this.navigate(target, { push: !opts.replaceState, replace: false, type: 'goto' });
 	}
@@ -652,7 +726,8 @@ class SpaRouter {
 
 	preloadData(url: string | URL) {
 		const target = new URL(url, location.href);
-		if (target.origin !== location.origin) return Promise.resolve({ type: 'loaded', status: 200, data: {} });
+		if (target.origin !== location.origin)
+			return Promise.resolve({ type: 'loaded', status: 200, data: {} });
 		this.fetch_page(target.href);
 		return Promise.resolve({ type: 'loaded', status: 200, data: {} });
 	}
@@ -835,7 +910,12 @@ class SpaRouter {
 	#run_after(from: URL, to: URL, type: string) {
 		for (const fn of this.#after_hooks) {
 			try {
-				fn({ from: this.#build_nav_target(from), to: this.#build_nav_target(to), type, willUnload: false });
+				fn({
+					from: this.#build_nav_target(from),
+					to: this.#build_nav_target(to),
+					type,
+					willUnload: false
+				});
 			} catch {
 				/* noop */
 			}

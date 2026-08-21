@@ -8,7 +8,14 @@
  * wraps it) so a plain ` ```ts ` fence is byte-identical to before — the pipeline is inert until a
  * `variants` generator claims a fence.
  */
-import { infostring, run_meta, run_variants, type Fence, type MetaParser, type VariantGenerator } from './code.js';
+import {
+	infostring,
+	run_meta,
+	run_variants,
+	type Fence,
+	type MetaParser,
+	type VariantGenerator
+} from './code.js';
 
 /** The configured fence pipeline (from `markdown({ code })`). */
 export type CodePipeline = {
@@ -31,7 +38,8 @@ export type FenceRender = {
 	file?: string;
 };
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const esc = (s: string) =>
+	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /**
  * Run the pipeline for one fence. `highlight(source, lang, rawMeta)` produces the Shiki HTML for a
@@ -65,7 +73,10 @@ export async function render_fence(
 	// Multi-variant — highlight each, inline them all, switch by the preference attr.
 	const pref = claimed.by.pref;
 	const rendered = await Promise.all(
-		claimed.variants.map(async (v) => ({ v, html: await highlight(v.fence.source, v.fence.lang, v.fence.raw_meta) }))
+		claimed.variants.map(async (v) => ({
+			v,
+			html: await highlight(v.fence.source, v.fence.lang, v.fence.raw_meta)
+		}))
 	);
 	const panels = rendered
 		.map(({ v, html }) => `<div class="og-variant" data-pref-value="${esc(v.value)}">${html}</div>`)
@@ -73,7 +84,10 @@ export async function render_fence(
 	// Inert switcher: one control per value, tagged with the preference name + value. The shell's
 	// delegated handler reads `data-pref`/`data-pref-set` and calls `preference(name).set(value)`.
 	const controls = claimed.variants
-		.map((v) => `<button type="button" class="og-variant-btn" data-pref="${esc(pref.name)}" data-pref-set="${esc(v.value)}"${v.value === pref.default ? ' data-default' : ''}>${esc(v.label)}</button>`)
+		.map(
+			(v) =>
+				`<button type="button" class="og-variant-btn" data-pref="${esc(pref.name)}" data-pref-set="${esc(v.value)}"${v.value === pref.default ? ' data-default' : ''}>${esc(v.label)}</button>`
+		)
 		.join('');
 	const html =
 		`<div class="og-code" data-pref="${esc(pref.name)}"${file ? ` data-file="${esc(file)}"` : ''}>` +

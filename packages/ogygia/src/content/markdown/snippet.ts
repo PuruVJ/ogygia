@@ -15,7 +15,10 @@ import type { SerializedRegion } from '../region-store.js';
  *  the same assembly `ogygiaPreprocess()` does, so snippets and fences share one configuration. */
 function code_env(options: MarkdownOptions | null | undefined) {
 	const { code, ...shiki_opts } = options ?? {};
-	const cfg = configure_shiki({ ...shiki_opts, ...(code?.transformers ? { transformers: code.transformers } : {}) });
+	const cfg = configure_shiki({
+		...shiki_opts,
+		...(code?.transformers ? { transformers: code.transformers } : {})
+	});
 	const pipe: CodePipeline = {
 		meta: code?.meta ?? default_pipeline().meta,
 		variants: code?.variants ?? []

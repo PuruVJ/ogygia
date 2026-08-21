@@ -59,6 +59,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['region-mixed.ts', true, 'direct <Region> in a component: island on csr=false, plain (Kit-hydrated) on csr=true'],
 	['pure-csr.ts', false, 'pure csr=true app: direct interactive <Region> degrades to Kit, no runtime chunk'],
 	['mixed.ts', true, 'csr=true coexistence + opt-in router'],
+	['csr-chrome.ts', true, 'REGRESSION: csr=true page under a csr=false layout w/ wake:load chrome — islands degrade inline (no vanish, zero ogygia)'],
 	['portable-bindings.ts', true, 'static/dynamic/list bindings + shared-entry dedupe + .ts mixed raw/wake'],
 	['ts-registry.ts', true, '.ts registry wake binding placed via <svelte:component> (mountable) + raw via region()'],
 	['transportables.ts', true, 'static [ogygia.wire] codec: cross-island live object, no leak, alias-proof'],
@@ -74,7 +75,9 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['snippet-islands.ts', true, 'islands in a {#snippet} to a plain shell: marks survive + top-level await SSRs'],
 	['interaction.ts', true, "wake:'interaction' — cold until used, click replay, typing survives"],
 	['presets.ts', false, 'transform-level: region syntax + presets + errors'],
-	['dedup.ts', false, 'same-component-two-strategies → ONE client chunk']
+	['dedup.ts', false, 'same-component-two-strategies → ONE client chunk'],
+	['dollar-fn.ts', true, 'og.$: a fn ref crosses context into an island and rebinds (bound captures)'],
+	['server-delta.ts', true, 'server-delta nav: shared island skipped server-side on SPA nav, kept live + interactive (no blank hole)']
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

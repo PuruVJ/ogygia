@@ -24,14 +24,20 @@
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { islandDeps, islandCss, contentCss } from 'virtual:ogygia/island-deps';
-	import { makeRegionEndpoint, mintServerIsland } from 'virtual:ogygia/region-endpoint';
+	import { makeRegionEndpoint, mintServerIsland, known_region_fps } from 'virtual:ogygia/region-endpoint';
+	import { fingerprint_of } from './runtime/fingerprint.js';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';
-	import { isNested, setNested, isCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
-	import { TRANSPORT_WIRE_KEY, reduce_transportable } from './live-transport.js';
-	import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet, prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
+	import { isNested, setNested, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
+	import { REF_WIRE_KEY, ref_reducer } from './ref.js';
+	// PULL-registration inside stringify_props (idempotent; no import-time side effects)
+	import { register_wire_kind } from './live-transport.js';
+	import { register_store_kind, register_derived_kind } from './store-transport.js';
+	import { register_snippet_kind } from './region-snippet.js';
+	import { register_fn_kind } from './fn-transport.js';
+	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
 	import LakeBoundary from './LakeBoundary.svelte';
 	import SlotBoundary from './SlotBoundary.svelte';
@@ -172,26 +178,27 @@
 	// hydrates it. Same degradation as `nested`, gated by the csr context the transform injects into
 	// csr=true route hosts. Server/deferred + lake regions are SERVER-DRIVEN UI, orthogonal to a
 	// page's csr, so they are deliberately NOT degraded here (they keep their endpoint + runtime).
-	const is_csr = isCsrTrue();
+	// Does Kit hydrate this WHOLE document? (the leaf page's effective csr — the one fact that decides
+	// it.) If so, every island degrades to a plain inline component on both legs: no `<ogygia-region>`,
+	// no runtime claim, no FOUC. Server reads the build-time csr=true route map; client reads Kit's
+	// bootstrap. Identical both legs, so the inline/island choice can never desync at hydrate.
+	const is_csr = documentIsCsrTrue();
 	// The island branch renders inline when nested OR on a csr=true page.
 	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();
-	if (nested && (is_island || is_server) && import.meta.env && import.meta.env.DEV) {
-		const entry = untrack(() => (is_server ? __entry : island_entry));
-		console.warn(
-			is_server
-				? `[ogygia] nested server island "${entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
-				: `[ogygia] nested island "${entry}" is inside another island; it hydrates with its parent (strategy ignored).`
-		);
-	}
+
+	/** Island props cross classes, stores, snippets, og.$ fns and resumable deriveds. */
+	const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
 
 	/** @param {unknown} value @param {string} entry */
 	function stringify_props(value, entry) {
+		register_wire_kind();
+		register_store_kind();
+		register_snippet_kind();
+		register_fn_kind();
+		register_derived_kind();
 		try {
-			return stringify(value, {
-				[TRANSPORT_WIRE_KEY]: reduce_transportable,
-				[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
-			});
+			return stringify(value, { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) });
 		} catch (e) {
 			const detail = e instanceof Error ? e.message : String(e);
 			throw new Error(
@@ -215,6 +222,18 @@
 	const island_component = $derived(as_dual ? as_dual.component : __component);
 	const island_props = $derived(as_dual ? as_dual.props : __props);
 	const island_children = $derived(children);
+
+	// DEV diagnostic (declared HERE, after `island_entry`, so it never reads it in its temporal dead
+	// zone): a nested island can't wake independently — warn that its strategy is ignored. Dead-code
+	// eliminated in builds via the `import.meta.env.DEV` guard.
+	if (nested && (is_island || is_server) && import.meta.env && import.meta.env.DEV) {
+		const entry = untrack(() => (is_server ? __entry : island_entry));
+		console.warn(
+			is_server
+				? `[ogygia] nested server island "${entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
+				: `[ogygia] nested island "${entry}" is inside another island; it hydrates with its parent (strategy ignored).`
+		);
+	}
 	// Freeze bare snippet PROPS (named-snippet props) to static region snippets (server) so the island
 	// BODY and the serialized PAYLOAD render byte-for-byte identically — hydration then adopts the frozen
 	// HTML with no mismatch. A live (branded) snippet passes through; `nested` islands render inline, no
@@ -282,6 +301,20 @@
 	);
 	const island_props_script = $derived(
 		LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + island_payload + LT + '/script' + GT
+	);
+	// SERVER-DELTA parity: the island's fingerprint, IDENTICAL to the client reconciler's
+	// region_props_fp (entry attr + '' endpoint + props-seed text). Emitted as data-og-fp so the
+	// client can send it back on nav and the server can skip re-rendering an unchanged island.
+	const island_fp = $derived(
+		is_island && !island_inline ? fingerprint_of(island_module_url, '', island_payload) : ''
+	);
+	// SERVER-DELTA (D3): SKIP rendering a NON-cached island the client already has live (its fp is
+	// in the SPA nav's x-ogygia-known set). Emit the region's identifying attrs + props script but NO
+	// component content — the reconciler keeps the live node (same data-key). Safe: known_region_fps()
+	// is empty on a full load / non-SPA request, so this never fires except on an SPA nav.
+	const island_skip = $derived(
+		is_island && !island_inline && !has_slot_children && (__cacheTtl ?? 0) <= 0 && !!island_fp
+			&& known_region_fps().has(island_fp)
 	);
 
 	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
@@ -483,11 +516,19 @@
 <svelte:head>{@html head_html}</svelte:head>
 {#if is_island}
 	{@const Component = island_component}
-	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else}<ogygia-region
+	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else if island_skip}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}
 			data-ogygia-keep={__keep || undefined}
+			data-og-fp={island_fp || undefined}
+			data-og-skipped
+		></ogygia-region>{@html island_props_script}{:else}<ogygia-region
+			entry={island_module_url}
+			wake={hydrate_attr}
+			margin={root_margin || undefined}
+			data-ogygia-keep={__keep || undefined}
+			data-og-fp={island_fp || undefined}
 		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region>{@html island_props_script}{/if}
 {:else if is_server}
 	{@const Component = __component}

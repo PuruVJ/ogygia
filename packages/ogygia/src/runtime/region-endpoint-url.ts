@@ -8,7 +8,10 @@ const ABSOLUTE_URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
  */
 
 /** True when `endpoint` resolves to same-origin http(s). */
-export function is_allowed_region_endpoint(endpoint: string, page_origin = location.origin): boolean {
+export function is_allowed_region_endpoint(
+	endpoint: string,
+	page_origin = location.origin
+): boolean {
 	if (typeof endpoint !== 'string' || endpoint.length === 0) return false;
 	try {
 		const url = new URL(endpoint, page_origin);

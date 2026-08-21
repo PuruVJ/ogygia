@@ -29,9 +29,14 @@ function group_for(options: MarkdownOptions | null | undefined): PreprocessorGro
 
 /** Render `text` (Markdown) to static HTML using the app's markdown config. Async (mdsvex + Shiki).
  *  Throws build-voice when the content isn't pure-static. */
-export async function render_markdown(options: MarkdownOptions | null | undefined, text: string): Promise<string> {
+export async function render_markdown(
+	options: MarkdownOptions | null | undefined,
+	text: string
+): Promise<string> {
 	const group = group_for(options);
-	const out = (await group.markup?.({ content: text, filename: 'og-md-snippet.md' })) as { code?: string } | undefined;
+	const out = (await group.markup?.({ content: text, filename: 'og-md-snippet.md' })) as
+		| { code?: string }
+		| undefined;
 	const emitted = try_region_emit(out?.code ?? text, []);
 	if (!emitted) {
 		throw new Error(

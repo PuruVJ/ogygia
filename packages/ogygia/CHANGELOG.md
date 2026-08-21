@@ -8,6 +8,129 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] — 2026-08-21
+
+The **passage** release — the runtime and the compiler both rebuilt from the studs, with byte-identical output the whole way. The runtime collapses onto ONE identity primitive: serialization, resumability, cross-island sharing, and navigation reconciliation all become operations on the same `Ref`. A live class, a store, a function, a snippet, a held region cross the island boundary and reunite to a single live instance across every island that reads them; a navigation now MOVES regions instead of resetting them; and the server can be told to re-render only what actually changed. Separately, the Vite plugin is carved into a real, bundler-agnostic compiler you can run without Vite at all.
+
+### Added
+
+- **The Ref hub — one identity layer for everything that crosses a boundary.** Every value that leaves
+  a component and reappears inside an island — a `[import.meta.og.wire]` class, a Svelte store, an
+  `import.meta.og.$` function, a region snippet, a resumable `$derived`, a held region — is now a `Ref`
+  of a KIND: `{ kind, identity, code-tag, data }`. A kind is a plugin that teaches the hub how its
+  values travel (`match` / `encode` / `decode`); the hub owns identity. Three operations fall out of
+  that one design:
+  - **MINT** — every live instance gets ONE id (WeakMap-memoized), however many props or context keys
+    carry it. That shared id is what lets the client REUNITE all the copies.
+  - **RESOLVE** — the browser memoizes `decode` by id, so five islands decoding one handle share ONE
+    live object (mutate it in island A, island B repaints). The server NEVER memoizes: each request and
+    each deferred-island render decodes fresh, so one visitor's state can't leak into another's HTML.
+  - **THE KEEP** — a kind may name a ref for SESSION continuity: the tab then reunites navigations with
+    the same live instance, merging fresh server data through the kind's `merge`. Browser-only; the
+    server never touches it. (This is what makes a session cart follow the visitor across SPA navs while
+    each page's server truth still merges in.)
+  Reunify across islands = same id; survive a navigation = same id in the Keep; dedupe = same id; the
+  region reconciler = diff two id sets. Identity is the spine; kinds are plugins. All registry state
+  lives on `globalThis` under `Symbol.for` keys, because the runtime and each island entry are separate
+  bundles and per-module state would silently fork.
+
+- **Transportable everything — the serialization seam, unified.** Values devalue rejects now cross by
+  declaring how they travel, each as a hub kind:
+  - **`[import.meta.og.wire]` classes** — `encode` ships a snapshot, `decode` rebuilds a live instance
+    on the other side; a `merge` (with a named id) reconciles server truth against live user edits.
+  - **stores** — a subscribe-shaped value crosses the same way: the CURRENT value travels as data, the
+    CODE comes from a module on the far side, and hub identity makes it live — `set` in island A
+    repaints `$store` in island B; provable factory shapes auto-brand with zero authoring.
+  - **functions (`import.meta.og.$`)** — a closure can't serialize, but a QRL-style handle can: the
+    compiler hoists the marked closure to a generated module (WHERE the code lives) and the captures
+    ride as data (WHAT it closed over), rebound on the other side. Registered pre-hydration through a
+    rename-proof `globalThis` bridge so strict-CSP apps get a real fn manifest.
+  - **snippets & resumable `$derived`** — a snippet crosses as a region pointer; a derived crosses as
+    its RECIPE, and each island re-derives against the reunified sources.
+
+- **The boundary classifier — unbridgeable values fail at discovery, not in prod.** A value heading for
+  an island is walked leaf by leaf and each is named: cross free, auto-wire, warn, or REFUSE — with the
+  dot-path to the offender. A live DOM node, a bare function, or a secret-looking key now fails at
+  boundary discovery (`context 'user' @ profile.avatarEl: live DOM node`) instead of an island silently
+  reading `undefined` on a csr=false page. Pure and dependency-light, so it costs nothing server-side.
+
+- **Server-delta navigation (opt-in: `router: { serverDelta: true }`).** On an SPA navigation the client
+  sends the region fingerprints it already holds (`x-ogygia-known`); the server re-renders ONLY the
+  regions whose inputs changed and marks the rest skipped, so an unchanged island keeps its live DOM and
+  interaction state instead of being re-sent and re-hydrated. The skip is safe BY CONSTRUCTION: a pure,
+  dependency-free fingerprint core is shared by both bundles — the server emits `data-og-fp =
+  fingerprint_of(entry, endpoint, props-seed)` on each island and the client computes the identical hash
+  from the same attributes — so the server skips exactly the regions the client says it has. The
+  fingerprint is 64-bit FNV-1a: a skip on a match means a collision would keep stale content silently, so
+  the extra bits buy that away. Off by default (the client never sends the header; the server always
+  full-renders — the safe fallback).
+
+- **State-delta reconciler — a nav MOVES regions, it doesn't reset them.** The client reconcile stamps
+  each `<ogygia-region>` with a key derived purely from compiler-emitted attributes (never from
+  live-mutated innerHTML) — a SIGNATURE (which slot: entry + endpoint) and a props FINGERPRINT (did the
+  inputs change) — then morphs old→new: an unchanged region KEEPS its live hydrated island (interaction
+  state the fresh SSR HTML lacks is the source of truth), a changed one is PATCHED (re-hydrated), a new
+  one MOUNTS, a removed one is torn down and its page-scoped hub ids disposed. Kept regions absorb the
+  incoming page's props (prop-push), so a persisted player reflects the new route without re-mounting.
+  The old separate persist machinery is gone — a `keep: 'name'` island is now just a reconciler keep,
+  relocated live across the nav.
+
+- **`ogygia/internal/compiler` — the compiler as a standalone, bundler-agnostic engine.** `Compiler` /
+  `Program` / `CompileCtx` run the whole file-local + island-discovery front-end — the host-island
+  transform, `.ts`/`.js` region minting, the `import.meta.og.*` macros, whole-app prescan, virtual-module
+  emit, and id resolution — importing zero Vite. A REPL or any non-Vite host is now just a second adapter:
+  build a `CompileCtx`, `configure()` a `Compiler`, feed it source, read back the artifacts.
+
+### Changed
+
+- **The Vite plugin is a compiler now.** The 2,752-line plugin blob became a compiler module tree
+  (`parse` / `macros` / `content` / `link` / `region` / `dev`) driven by a thin Vite adapter that maps
+  bundler lifecycle to driver calls. The irreducibly-Vite primitives — `emitFile`, `resolve`, dev-server
+  module invalidation — are injected into the driver as callbacks, so the driver stays bundler-agnostic;
+  the adapter is left holding only config binding, the dev-server hooks, and bundle output. Output is
+  **byte-identical**, guarded end-to-end by a transform-determinism digest over the fixture corpus.
+
+- **Region rendering is region-granular.** Each region renders and reconciles independently; the former
+  whole-graph render pass is gone. `inject_csr_reset` argument handling was corrected along the way.
+
+### Fixed
+
+- **A csr=true page under a csr=false layout wiped the layout's chrome.** `wake:`-marked chrome (a
+  header/footer) in a csr=false layout, rendered on a child page that opts into `csr = true`, painted
+  on the server and then VANISHED right after Kit hydrated the document — with a redundant-island dev
+  warning. Two causes stacked: the layout's islands were stubbed on the client (so Kit hydrated
+  nothing where they were), and the inline-vs-island choice was decided per HOST, not per document, so
+  the two legs desynced at hydrate. Fixed by deciding it from the one fact that matters — whether Kit
+  hydrates the WHOLE document, i.e. the leaf page's effective csr — via a new `documentIsCsrTrue()`
+  (server: a build-time csr=true route map; client: Kit-bootstrap detection), plus linking a csr=false
+  layout's island wrapper on the client when the app has any csr=true route. Such a page now ships
+  ZERO ogygia (no region tag, no runtime, no FOUC) and the chrome stays, Kit-hydrated and interactive.
+
+- **Nested-island dev warning crashed dev SSR (TDZ).** `Region.svelte`'s "nested island — strategy
+  ignored" dev warning read the `island_entry` `$derived` before it was declared, so an
+  `import.meta.env.DEV` server render of any page with a nested island (e.g. the cross-island context
+  page) threw `Cannot access 'island_entry' before initialization`. Builds masked it (the `DEV` block is
+  dead-code-eliminated), so no e2e caught it. Moved past the declaration.
+
+- **Lakes restore pairs by DOM position, not a shared entry id** — two lakes with the same entry no
+  longer cross-match on restore.
+
+### Internal
+
+- **Full TypeScript `strict` at the library level.** `strict: true`, all resulting errors fixed; every
+  JSDoc `@type`/`@param` annotation converted to real TypeScript; the 10 core runtime components moved to
+  `<script lang="ts">`; `svelte-check` now runs in the library `check` (tsc → svelte-check → vitest →
+  lint); zero explicit `any` (oxlint clean). AST-walking code shares the sanctioned loose `SvelteNode`
+  alias so strictness holds without littering the compiler with `any`.
+- **oxfmt** adopted as the workspace formatter (tabs, single quotes, 100 columns), replacing the
+  homegrown no-`any` script.
+- **Collapsed the per-host csr context cascade into one per-document signal.** Removed `CSR_TRUE_KEY`
+  / `isCsrTrue()` and the compiler's `setContext` marker + `csr=false` reset injection (`CSR_CTX_INJECT`
+  / `CSR_FALSE_INJECT` / `inject_csr_reset`, `#needs_csr_reset`). That marker dance only ever
+  re-derived the leaf page's effective csr indirectly through a downward context cascade + reset;
+  `documentIsCsrTrue()` reads it directly, so the whole mechanism is gone. The compile-time strip of a
+  csr=true page's OWN islands (it ships zero ogygia) stays.
+
 ## [0.7.0] — 2026-08-20
 
 Two arcs land together. **Cross-island context** becomes one model on Svelte's own `getContext` (with a drop-in `setContext`), and **`$page.data`** — streamed load promises and all — reaches islands on csr=false. And **region authoring** grows two ways to reach imports the `import X with { … }` form never could: `import.meta.og.asRegion(Comp, options)` marks any imported component (named / barrel, in `.svelte`, `.ts`, and `.js`), and a `.ts` registry `with { wake }` binding is now mountable — placeable by a third-party renderer (e.g. Builder.io's `<svelte:component>`), not only by `region()`. Plus a batch of correctness and build fixes.

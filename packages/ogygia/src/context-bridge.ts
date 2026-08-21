@@ -13,71 +13,132 @@
  */
 import { getContext, setContext as svelte_set_context } from 'svelte';
 import { parse, stringify } from 'devalue';
-import { TRANSPORT_WIRE_KEY, reduce_transportable, revive_transportable } from './live-transport.js';
-import {
-	REGION_SNIPPET_WIRE_KEY,
-	reduce_region_snippet,
-	revive_region_snippet
-} from './region-snippet.js';
-import { PAGE_CTX_MARKER, record_ctx } from './context-registry.js';
+import { DEV } from 'esm-env';
+import { REF_WIRE_KEY, ref_reducer, ref_reviver, batch } from './ref.js';
+// PULL-registration: kinds register inside the seam functions below (idempotent, tree-shake-proof,
+// and the modules stay free of import-time side effects).
+import { register_wire_kind } from './live-transport.js';
+import { register_store_kind, register_derived_kind } from './store-transport.js';
+import { register_snippet_kind } from './region-snippet.js';
+import { register_fn_kind, is_branded_fn } from './fn-transport.js';
+
+function ensure_ctx_kinds(): void {
+	register_wire_kind();
+	register_store_kind();
+	register_snippet_kind();
+	register_fn_kind();
+	register_derived_kind();
+}
+import { boundary_problems, format_boundary_finding } from './boundary.js';
+import { PAGE_CTX_MARKER, record_ctx, type SetContextOptions } from './context-registry.js';
 import { escape_script_text } from './escape.js';
 
-/** Serialize a context value for the DOM — same codec as island props (transportables included). */
+/** The `<Provide>` seam carries classes, stores AND snippets (a snippet freezes/travels live). */
+const PROVIDE_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
+/** The drop-in page-marker seam deliberately EXCLUDES snippets: there, a bare function must
+ *  THROW (and be dropped with a dev explanation) rather than be silently frozen as one. */
+const BRIDGE_FAMILIES = new Set(['wire', 'store', 'fn', 'derived']);
+
+/** Serialize a context value for the DOM — same codec as island props (one hub key). */
 export function serialize_context(value: unknown): string {
-	return escape_script_text(
-		stringify(value, {
-			[TRANSPORT_WIRE_KEY]: reduce_transportable,
-			[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
-		})
-	);
+	ensure_ctx_kinds();
+	return escape_script_text(stringify(value, { [REF_WIRE_KEY]: ref_reducer(PROVIDE_FAMILIES) }));
 }
 
 /**
  * Serialize for the drop-in `setContext` page marker WITHOUT the region-snippet reducer. That reducer
  * treats every function as a snippet (snippets are unbranded functions), which would silently turn a
- * `setContext('trackPageView', fn)` — or a store's `subscribe`/`set` — into a bogus snippet instead of
- * failing. Here a function must THROW so the offending value gets dropped (see below). Transportables
- * (`[ogygia.wire]`, e.g. a shared counter) still cross. A snippet in context is a `<Provide>` concern,
- * not this drop-in path.
+ * `setContext('trackPageView', fn)` — or a class method — into a bogus snippet instead of failing.
+ * Here a function must THROW so the offending value gets dropped (see below). Transportables
+ * (`[ogygia.wire]`) and stores (auto-wired: value crosses, islands reunite to one live instance)
+ * cross. A snippet in context is a `<Provide>` concern, not this drop-in path.
  */
 function stringify_bridgeable(value: unknown): string {
-	return escape_script_text(stringify(value, { [TRANSPORT_WIRE_KEY]: reduce_transportable }));
+	ensure_ctx_kinds();
+	return escape_script_text(stringify(value, { [REF_WIRE_KEY]: ref_reducer(BRIDGE_FAMILIES) }));
 }
 
 /**
  * Serialize the drop-in `setContext` page-root bag for the DOM marker. A layout may `setContext` a
- * FUNCTION (e.g. `trackPageView`) or a live store (e.g. inside an app-context object) — values that
- * genuinely can't cross an island boundary. Rather than crash the page (or bridge a broken value),
- * drop the offenders key-by-key and bridge the rest. Returns null if nothing serializable remains.
- * The happy path (all serializable) is a single `stringify`.
+ * FUNCTION (e.g. `trackPageView`) or a DOM-holding object — values that genuinely can't cross an
+ * island boundary. Rather than crash the page (or bridge a broken value), drop the offenders
+ * key-by-key and bridge the rest; in DEV each drop is explained by the boundary classifier (key +
+ * path + what to do), so a missing context inside an island is never a mystery. Returns null if
+ * nothing serializable remains. The happy path (all serializable) is a single `stringify`.
  */
+/** DEV threshold for the page-marker payload — islands ship context into every page's HTML. */
+const CTX_SIZE_WARN_BYTES = 32 * 1024;
+
 export function serialize_provided_context(map: Map<string, unknown>): string | null {
 	const obj: Record<string, unknown> = {};
 	for (const [k, v] of map) obj[k] = v;
 	try {
-		return stringify_bridgeable(obj);
+		const payload = stringify_bridgeable(obj);
+		if (DEV && payload.length > CTX_SIZE_WARN_BYTES) warn_ctx_size(map, payload.length);
+		return payload;
 	} catch {
 		const safe: Record<string, unknown> = {};
 		for (const k in obj) {
 			try {
 				stringify_bridgeable({ [k]: obj[k] });
 				safe[k] = obj[k];
+				if (DEV) warn_boundary(k, obj[k], false);
 			} catch {
-				/* a function / store / class instance — can't bridge; native setContext still served it */
+				// Can't bridge (function / DOM / unwired class) — native setContext still served the
+				// same-root tree; islands won't see this key. In DEV, say exactly why.
+				if (DEV) warn_boundary(k, obj[k], true);
 			}
 		}
 		return Object.keys(safe).length ? stringify_bridgeable(safe) : null;
 	}
 }
 
+/** DEV: the page marker is heavy — name the biggest keys so the fix is obvious (mark them
+ *  { islands: false }, or slim the value). Sizes are per-key serialized lengths. */
+function warn_ctx_size(map: Map<string, unknown>, total: number): void {
+	const sizes: Array<[string, number]> = [];
+	for (const [k, v] of map) {
+		try {
+			sizes.push([k, stringify_bridgeable({ [k]: v }).length]);
+		} catch {
+			/* unbridgeable keys are dropped elsewhere */
+		}
+	}
+	sizes.sort((a, b) => b[1] - a[1]);
+	const top = sizes
+		.slice(0, 3)
+		.map(([k, n]) => `'${k}' ~${(n / 1024).toFixed(1)}kB`)
+		.join(', ');
+	console.warn(
+		`[ogygia] the island context marker is ${(total / 1024).toFixed(1)}kB — it ships in every page's HTML. ` +
+			`Biggest keys: ${top}. Slim the values, or mark host-only keys with setContext(key, value, { islands: false }).`
+	);
+}
+
+/** DEV: explain a dropped (or degraded-but-bridged) context key via the classifier. */
+function warn_boundary(key: string, value: unknown, dropped: boolean): void {
+	const problems = boundary_problems(value, key);
+	if (dropped && problems.length === 0) {
+		console.warn(`[ogygia] context '${key}' could not be serialized for islands and was dropped.`);
+		return;
+	}
+	for (const f of problems) {
+		if (dropped || f.kind === 'warn') console.warn(format_boundary_finding(key, f));
+	}
+}
+
 /** Decode one serialized provider payload; a corrupt payload yields nothing (never breaks hydration). */
 function parse_ctx(text: string | null | undefined): Record<string, unknown> | undefined {
 	if (!text) return undefined;
+	ensure_ctx_kinds();
 	try {
-		return parse(text, {
-			[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, true),
-			[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
-		}) as Record<string, unknown>;
+		// decode is universal: whatever kind arrives, the hub resolves it (browser → remember).
+		// BATCH (phase B): a page's context keys often reference each other's instances (a derived
+		// over a store, a wire holding a store) — resolve them as ONE transaction so no watcher
+		// reacts to a half-decoded graph.
+		return batch(() =>
+			parse(text, { [REF_WIRE_KEY]: ref_reviver(true) } as Parameters<typeof parse>[1])
+		) as Record<string, unknown>;
 	} catch {
 		return undefined;
 	}
@@ -161,15 +222,22 @@ export function createContext<T>(key: string, defaultValue?: T): Context<T> {
  * (child islands are separate hydration roots). Only string keys bridge (they must serialize and be
  * read by `getContext('key')`); a symbol key is Svelte-only, same-root, no bridge.
  *
+ * GRANULARITY: the optional third argument is the explicit marker — `{ islands: false }` keeps a key
+ * host-native (same-root context works, nothing serializes). The default bridges: a missing key in an
+ * island is a broken app, extra bytes are not. Ogygia never infers readership from `getContext` call
+ * sites (aliased imports and wrapper modules would make any scan miss reads — the fatal direction).
+ *
  * This is the FLAT page root: every island on the page inherits it. For scoped/shadowed context use
  * `<Provide>`, which wraps its subtree and beats the root on the same key.
  */
-export function setContext<T>(key: unknown, value: T): T {
+export function setContext<T>(key: unknown, value: T, opts?: SetContextOptions): T {
 	// Only string keys can bridge (islands read `getContext('key')`), and a function value can never
 	// serialize — record neither. Native setContext still runs, so same-root reads are unchanged; a
 	// store or class instance is recorded but dropped later by `serialize_provided_context` if it can't
 	// serialize, so it never crashes the page.
-	if (typeof key === 'string' && typeof value !== 'function') record_ctx(key, value);
+	// a BARE function can never serialize — but an og.$-branded one is a transportable fn ref
+	if (typeof key === 'string' && (typeof value !== 'function' || is_branded_fn(value)))
+		record_ctx(key, value, opts);
 	return svelte_set_context(key, value);
 }
 

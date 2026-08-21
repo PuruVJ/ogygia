@@ -179,9 +179,7 @@ export function arm_interaction(
 		const fields = snapshot_fields(region);
 		const active = document.activeElement;
 		const active_addr =
-			active instanceof Element && region.contains(active)
-				? element_address(region, active)
-				: null;
+			active instanceof Element && region.contains(active) ? element_address(region, active) : null;
 
 		Promise.resolve(fire()).then(
 			() => {

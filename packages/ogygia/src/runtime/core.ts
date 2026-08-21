@@ -3,6 +3,7 @@ import { parse } from 'devalue';
 import { frameAddress } from '../frame.js';
 import { set_current_region } from '../current-region.js';
 import { collect_provided_context } from '../context-bridge.js';
+import { capture_region_ids } from './reconcile.js';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import { install_page_defer, page_defer_revivers } from './page-defer.js';
 import { transport_decoders } from './app-transport.js';
@@ -39,12 +40,7 @@ function region_prop_revivers(): Record<string, (d: never) => unknown> | undefin
 	const wire = slots.wire;
 	if (wire === cached_wire) return cached_revivers;
 	cached_wire = wire;
-	cached_revivers = wire
-		? {
-				[wire.TRANSPORT_WIRE_KEY]: (d: never) => wire.revive_transportable(d, true),
-				[wire.REGION_SNIPPET_WIRE_KEY]: (d: never) => wire.revive_region_snippet(d)
-			}
-		: undefined;
+	cached_revivers = wire ? { [wire.REF_WIRE_KEY]: (d: never) => wire.resolve(d, true) } : undefined;
 	return cached_revivers;
 }
 
@@ -52,7 +48,7 @@ function read_region_props(region: Element): Record<string, unknown> {
 	let sib = region.nextElementSibling;
 	while (sib) {
 		if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]')) {
-			return parse(sib.textContent, region_prop_revivers());
+			return parse(sib.textContent, region_prop_revivers() as Parameters<typeof parse>[1]);
 		}
 		if (sib.tagName === 'LINK') {
 			sib = sib.nextElementSibling;
@@ -124,7 +120,8 @@ class PropMutationGuard {
 
 	#guard_value(value: unknown, entry: string, prop_path: string): unknown {
 		if (value === null || typeof value !== 'object') return value;
-		if (value instanceof Map) return this.#guard_map(value as Map<unknown, unknown>, entry, prop_path);
+		if (value instanceof Map)
+			return this.#guard_map(value as Map<unknown, unknown>, entry, prop_path);
 		if (value instanceof Set) return this.#guard_set(value as Set<unknown>, entry, prop_path);
 		if (value instanceof Date || value instanceof RegExp || value instanceof URL) return value;
 		// A class INSTANCE must never be wrapped. A wired live object (e.g. a `Cart` whose `$state`
@@ -176,7 +173,8 @@ class PropMutationGuard {
 const prop_guard = new PropMutationGuard();
 
 function dom_ready() {
-	if (typeof document === 'undefined' || document.readyState !== 'loading') return Promise.resolve();
+	if (typeof document === 'undefined' || document.readyState !== 'loading')
+		return Promise.resolve();
 	return new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
 }
 
@@ -202,10 +200,12 @@ function region_fragment(html: string): { frag: DocumentFragment; ready: Promise
 			link.remove();
 			if (!href || seen.has(href)) continue;
 			seen.add(href);
-			pending.push(import(/* @vite-ignore */ href).then(
-				() => undefined,
-				() => undefined
-			));
+			pending.push(
+				import(/* @vite-ignore */ href).then(
+					() => undefined,
+					() => undefined
+				)
+			);
 		}
 	} else if (links.length) {
 		const existing = new Map(
@@ -272,7 +272,10 @@ function apply_page_seed_text(text: string | null | undefined) {
 		// the seed and the streamed resolves revive with the app's transport decoders, so a load's
 		// CUSTOM types round-trip into islands.
 		install_page_defer(transport_decoders);
-		const raw = parse(text, page_defer_revivers(transport_decoders)) as Partial<{
+		const raw = parse(
+			text,
+			page_defer_revivers(transport_decoders) as Parameters<typeof parse>[1]
+		) as Partial<{
 			url: string | URL;
 			params: Record<string, string>;
 			route: { id: string | null };
@@ -362,8 +365,7 @@ function seed_page_once() {
 // payloads can reflect `__sveltekit_` from the URL). Cached per document; cleared on SPA swap.
 function kit_hydrates_page() {
 	if (runtime_session.kit_page === undefined) {
-		runtime_session.kit_page =
-			typeof document !== 'undefined' && document_has_kit_bootstrap();
+		runtime_session.kit_page = typeof document !== 'undefined' && document_has_kit_bootstrap();
 	}
 	return runtime_session.kit_page;
 }
@@ -410,12 +412,12 @@ class OgygiaRegion extends HTMLElement {
 	/** Set while an SWR revalidate is in flight, so the next apply marks `data-revalidated`. */
 	#revalidating = false;
 	#hydrating = false;
-	#app: unknown = null;
+	#app: ReturnType<typeof hydrate> | null = null;
 	#io: IntersectionObserver | null = null;
 	/** Removes the `wake="interaction"` wake listeners (set while armed, cold). */
 	#disarm_interaction: (() => void) | null = null;
 	/** A persist island's LiveHost app — lets the next page push fresh props into the relocated app. */
-	#persist_host: { setProps?: (p: Record<string, unknown>) => void } | null = null;
+	#keep_host: { setProps?: (p: Record<string, unknown>) => void } | null = null;
 
 	/**
 	 * CONTINUITY: this persisted island is relocating onto `next` (the incoming page's SSR region).
@@ -423,10 +425,10 @@ class OgygiaRegion extends HTMLElement {
 	 * (e.g. a player's `track` changes) instead of freezing at first-mount props. Called by the
 	 * router just before `next` is discarded.
 	 */
-	absorbPersistProps(next: Element): void {
-		if (!this.#persist_host?.setProps) return;
+	absorbKeptProps(next: Element): void {
+		if (!this.#keep_host?.setProps) return;
 		try {
-			this.#persist_host.setProps(read_region_props(next));
+			this.#keep_host.setProps(read_region_props(next));
 		} catch {
 			/* malformed incoming props — keep the current live props */
 		}
@@ -537,7 +539,9 @@ class OgygiaRegion extends HTMLElement {
 		const endpoint = this.getAttribute('endpoint');
 		if (endpoint && !this.#frame_unsub) {
 			const address = (this.#frame_address = frameAddress(endpoint));
-			this.#frame_unsub = slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ?? null;
+			this.#frame_unsub =
+				slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ??
+				null;
 		}
 		await this.#deliver_html();
 		// The subscribe callback fired #apply, but #apply awaits the stylesheet before swapping —
@@ -650,7 +654,9 @@ class OgygiaRegion extends HTMLElement {
 		// Bind if we haven't (SWR/lake remount reaches #fetch_html without going through #server).
 		// Idempotent: #server already subscribed for the normal defer flow.
 		if (!this.#frame_unsub) {
-			this.#frame_unsub = slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ?? null;
+			this.#frame_unsub =
+				slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ??
+				null;
 		}
 		if (opts.revalidate) this.#revalidating = true;
 		try {
@@ -745,7 +751,7 @@ class OgygiaRegion extends HTMLElement {
 		if (!q) return fire();
 		const mql = matchMedia(q);
 		if (mql.matches) return fire();
-		const on = (e) => {
+		const on = (e: MediaQueryListEvent) => {
 			if (e.matches) {
 				mql.removeEventListener('change', on);
 				this.#mql = null;
@@ -772,11 +778,14 @@ class OgygiaRegion extends HTMLElement {
 			seed_remote_once();
 			seed_page_once();
 			const entry = this.getAttribute('entry');
+			if (!entry) return;
 			const mod = await load_island(entry);
 			if (!this.isConnected) return;
 			const Component = mod.default;
 
-			const props = read_region_props(this);
+			// R3 ownership: capture which page hub ids this island resolves from its props, so a
+			// reconcile nav can dispose exactly this region's ids if it is later removed.
+			const props = capture_region_ids(this, () => read_region_props(this));
 
 			// Mixed mode: on a csr=true page Kit already hydrates this component — skip. EXCEPT a
 			// deferred region (server island / <Region>): its HTML was FETCHED after load and swapped
@@ -830,7 +839,7 @@ class OgygiaRegion extends HTMLElement {
 				// Seed this island's context from any `<Provide>` above it in the DOM, so a child's plain
 				// `getContext('key')` reads a (csr=false) layout's context across the island-root split.
 				// Undefined when there is no provider above — the common case pays only a short DOM walk.
-				const provided_ctx = collect_provided_context(this);
+				const provided_ctx = capture_region_ids(this, () => collect_provided_context(this));
 				// A PERSIST island hydrates through LiveHost (same no-DOM render as NestedProvider) so
 				// that when it relocates onto the next page its props can be pushed in reactively.
 				const LiveHost = slots.live;
@@ -847,7 +856,7 @@ class OgygiaRegion extends HTMLElement {
 						props: { component: Component, initialProps: wrapped },
 						...(provided_ctx ? { context: provided_ctx } : {})
 					});
-					this.#persist_host = this.#app as unknown as {
+					this.#keep_host = this.#app as unknown as {
 						setProps?: (p: Record<string, unknown>) => void;
 					};
 				} else {
@@ -871,7 +880,7 @@ class OgygiaRegion extends HTMLElement {
 			// the orphan app; disconnectedCallback may have run before `#app` was assigned.
 			if (!this.isConnected) {
 				try {
-					unmount(this.#app);
+					if (this.#app) unmount(this.#app);
 				} catch {
 					/* noop */
 				}
@@ -889,7 +898,6 @@ class OgygiaRegion extends HTMLElement {
 			this.#hydrating = false;
 		}
 	}
-
 
 	/**
 	 * Apply a live region tick (called by Region.svelte for a deferred region whose ticket
@@ -929,7 +937,8 @@ class OgygiaRegion extends HTMLElement {
 		if (!interactive) {
 			if (desc.url && !this.#frame_unsub) {
 				this.#frame_address = frameAddress(desc.url);
-				this.#frame_unsub = slots.frames?.subscribe(this.#frame_address, (f) => this.#morph_live(f.html)) ?? null;
+				this.#frame_unsub =
+					slots.frames?.subscribe(this.#frame_address, (f) => this.#morph_live(f.html)) ?? null;
 			}
 			this.#morph_live(desc.html);
 			return;
@@ -975,6 +984,7 @@ class OgygiaRegion extends HTMLElement {
 		seed_remote_once();
 		seed_page_once();
 		const entry = this.getAttribute('entry');
+		if (!entry) return;
 		const mod = await load_island(entry);
 		if (!this.isConnected) return;
 		// A live region's HTML comes from svelte `render()` (both envelope layers) — same as the
@@ -986,7 +996,7 @@ class OgygiaRegion extends HTMLElement {
 			}
 			return;
 		}
-		const provided_ctx = collect_provided_context(this);
+		const provided_ctx = capture_region_ids(this, () => collect_provided_context(this));
 		this.#live_app = hydrate(LiveHost, {
 			target: this,
 			props: {
@@ -1001,8 +1011,10 @@ class OgygiaRegion extends HTMLElement {
 	}
 
 	disconnectedCallback() {
-		// Persist move: node is relocated into the next document body — keep the island mounted.
-		if (slots.persist.is_persist_preserving(this)) return;
+		// A disconnect now always means the island is gone: the reconcile nav MOVES kept nodes with
+		// insertBefore (no detach, no disconnect), and the fallback is a full swap where old islands
+		// genuinely leave. (The old persist-relocate detached nodes and needed a suppression guard here;
+		// persist is gone.)
 		if (this.#live_app) {
 			try {
 				unmount(this.#live_app);
@@ -1048,7 +1060,6 @@ class OgygiaRegion extends HTMLElement {
 		this.#scheduled = false;
 	}
 }
-
 
 /**
  * Boot the always-on custom element after each selected feature has filled its {@link slots} entry.

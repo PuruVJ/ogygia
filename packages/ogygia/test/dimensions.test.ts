@@ -25,8 +25,14 @@ function fromArray(entries: SourceEntry<Meta>[]): Source<Meta> {
 const schema = v.object({ title: v.string() });
 const page = (id: string, fp: string, title: string): SourceEntry<Meta> => {
 	const idDepth = id.split('/').filter(Boolean).length;
-	const segs = fp.replace(/\/(\+doc|index)\.[^./]+$/, '').split('/').filter(Boolean).slice(-idDepth);
-	const order = segs.map((s) => (s.match(/^(\d+)-/) ? Number(s.match(/^(\d+)-/)![1]) : Number.MAX_SAFE_INTEGER));
+	const segs = fp
+		.replace(/\/(\+doc|index)\.[^./]+$/, '')
+		.split('/')
+		.filter(Boolean)
+		.slice(-idDepth);
+	const order = segs.map((s) =>
+		s.match(/^(\d+)-/) ? Number(s.match(/^(\d+)-/)![1]) : Number.MAX_SAFE_INTEGER
+	);
 	return { id, filePath: fp, order, data: { title }, meta: { headings: [] } };
 };
 
@@ -48,7 +54,8 @@ const fr = () =>
 		]),
 		schema
 	});
-const v1 = () => content({ loader: fromArray([page('guide/a', 'docs/00-guide/00-a/+doc.svx', 'A v1')]), schema });
+const v1 = () =>
+	content({ loader: fromArray([page('guide/a', 'docs/00-guide/00-a/+doc.svx', 'A v1')]), schema });
 
 const dim = () =>
 	dimensions({

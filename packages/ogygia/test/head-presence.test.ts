@@ -33,7 +33,9 @@ describe('page_declares_router_meta', () => {
 	});
 
 	it('is TRUE for a real author-authored element (page wins — feature preserved)', () => {
-		expect(page_declares_router_meta('<head><meta name="ogygia-router" content="plain"></head>')).toBe(true);
+		expect(
+			page_declares_router_meta('<head><meta name="ogygia-router" content="plain"></head>')
+		).toBe(true);
 	});
 
 	it('is TRUE regardless of attribute order or quote style', () => {
@@ -54,13 +56,17 @@ describe('page_declares_runtime_script', () => {
 
 	it('is FALSE when only the SCRIPT BODY (inline JS) references the attribute', () => {
 		expect(
-			page_declares_runtime_script('<script>document.querySelector("[data-ogygia-runtime]")</script>')
+			page_declares_runtime_script(
+				'<script>document.querySelector("[data-ogygia-runtime]")</script>'
+			)
 		).toBe(false);
 	});
 
 	it('is TRUE for the real bootstrap tag Region emits', () => {
 		expect(
-			page_declares_runtime_script('<script type="module" data-ogygia-runtime src="/x.js"></script>')
+			page_declares_runtime_script(
+				'<script type="module" data-ogygia-runtime src="/x.js"></script>'
+			)
 		).toBe(true);
 	});
 });
@@ -68,13 +74,19 @@ describe('page_declares_runtime_script', () => {
 describe('page_declares_dev_hmr_script', () => {
 	it('distinguishes a real tag from a code mention', () => {
 		expect(page_declares_dev_hmr_script('<code>data-ogygia-dev-hmr</code>')).toBe(false);
-		expect(page_declares_dev_hmr_script('<script type="module" data-ogygia-dev-hmr src="/h.js"></script>')).toBe(true);
+		expect(
+			page_declares_dev_hmr_script(
+				'<script type="module" data-ogygia-dev-hmr src="/h.js"></script>'
+			)
+		).toBe(true);
 	});
 });
 
 describe('page_declares_speculation_rules', () => {
 	it('distinguishes a real tag from a code mention', () => {
 		expect(page_declares_speculation_rules('<code>type="speculationrules"</code>')).toBe(false);
-		expect(page_declares_speculation_rules('<script type="speculationrules">{}</script>')).toBe(true);
+		expect(page_declares_speculation_rules('<script type="speculationrules">{}</script>')).toBe(
+			true
+		);
 	});
 });

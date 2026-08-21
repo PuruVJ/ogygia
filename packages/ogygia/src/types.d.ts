@@ -40,6 +40,9 @@ declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
 	 *  region response so a server-picked component styles a page that never imported it. */
 	export function islandCss(entry: string): string[];
+	/** og.$ hoisted factories (tag → self-contained source) for the page-inline registration
+	 *  script — prod SSR only; null in dev/client (dev uses the fn-manifest virtual). */
+	export function fnManifest(): Record<string, string> | null;
 }
 declare module 'virtual:ogygia/dev-hmr' {
 	/* side-effect only — CSS HMR bridge under csr=false */
@@ -67,6 +70,7 @@ declare module 'virtual:ogygia/sign' {
 declare module 'virtual:ogygia/request-event' {
 	export function getRequestEvent(): {
 		cookies: { get: (name: string) => string | undefined };
+		request: Request;
 		[key: string]: unknown;
 	};
 }
@@ -92,11 +96,21 @@ declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regionTtl })` (default 3600). */
 	export const regionTtl: number;
 }
+declare module 'virtual:ogygia/route-csr' {
+	/** Route ids (Kit `route.id`, group-stripped) whose effective csr is true — SSR leg only; the
+	 *  client leg is an empty set (it reads `kit_hydrates_page()` instead). */
+	export const csr_true_routes: ReadonlySet<string>;
+}
 /** CONTINUITY compile-time constants (Vite `define`; typeof-guarded so node dist import is safe). */
 declare const __OGYGIA_CONTINUITY_FORMS__: boolean;
+/** SERVER-DELTA NAV opt-in (Vite `define`; default OFF — see `router.serverDelta`). */
+declare const __OGYGIA_SERVER_DELTA__: boolean;
 
 declare module 'virtual:ogygia/transport' {
-	export const transport: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;
+	export const transport: Record<
+		string,
+		{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
+	>;
 }
 declare module 'virtual:ogygia/kit-wire' {
 	export function stringify_remote_arg(value: unknown, transport: unknown): string;
@@ -118,6 +132,7 @@ declare module '$app/environment' {
 declare module '$app/server' {
 	export function getRequestEvent(): {
 		cookies: { get: (name: string) => string | undefined };
+		request: Request;
 		[key: string]: unknown;
 	};
 }
@@ -156,7 +171,10 @@ declare module '@sveltejs/kit/internal/server' {
 		data: Map<RemoteInternals, Record<string, Promise<unknown>>> | null;
 	}
 	export interface RequestState {
-		transport?: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;
+		transport?: Record<
+			string,
+			{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
+		>;
 		remote: RequestRemoteState;
 	}
 	export interface RequestStore {

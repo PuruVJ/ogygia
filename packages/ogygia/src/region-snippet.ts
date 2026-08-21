@@ -25,6 +25,7 @@
 import { createRawSnippet, hydrate, unmount, type Component, type Snippet } from 'svelte';
 import { render as ssr_render } from 'svelte/server';
 import { BROWSER } from 'esm-env';
+import { register_kind, mint } from './ref.js';
 
 /**
  * A hand-written SERVER component that renders a bare snippet: svelte has no public API to
@@ -68,7 +69,10 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 	if (desc.m === 'slot') {
 		const el = BROWSER ? document.querySelector(`ogygia-slot[data-og-slot="${desc.id}"]`) : null;
 		const h = el ? (el as HTMLElement).outerHTML : slot_marker_open(desc.id) + SLOT_MARKER_CLOSE;
-		const slot_snip = createRawSnippet(() => ({ render: () => h, setup: () => {} })) as RegionSnippet;
+		const slot_snip = createRawSnippet(() => ({
+			render: () => h,
+			setup: () => {}
+		})) as RegionSnippet;
 		slot_snip.__ogRegion = desc;
 		return slot_snip;
 	}
@@ -81,7 +85,11 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 	// path byte-for-byte. `renderer.global.mode`/`child` are internal svelte APIs; the feature-detect
 	// degrades safely if they move.
 	if (!BROWSER && desc.m === 'live') {
-		type ServerRenderer = { push(html: string): void; child(fn: (r: ServerRenderer) => unknown): unknown; global?: { mode?: string } };
+		type ServerRenderer = {
+			push(html: string): void;
+			child(fn: (r: ServerRenderer) => unknown): unknown;
+			global?: { mode?: string };
+		};
 		const server_snip = ((renderer: ServerRenderer, ...args: unknown[]) => {
 			// Server snippet args arrive as raw values; forward call-time params as `__ogArgs`.
 			const props = args.length ? { ...desc.p, __ogArgs: args } : desc.p;
@@ -93,7 +101,9 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 					r.push(WRAP_OPEN + out.body + WRAP_CLOSE);
 				});
 			} else {
-				renderer.push(WRAP_OPEN + (live_entry ? ssr_render(live_entry, { props }).body : '') + WRAP_CLOSE);
+				renderer.push(
+					WRAP_OPEN + (live_entry ? ssr_render(live_entry, { props }).body : '') + WRAP_CLOSE
+				);
 			}
 		}) as unknown as RegionSnippet;
 		server_snip.__ogRegion = desc;
@@ -103,12 +113,20 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 		// Snippet params arrive as getters (both legs). A live snippet forwards them to its entry as
 		// `__ogArgs`, so a parameterized `{#snippet row(item)}` crosses alive and renders per call.
 		const live_props = () =>
-			desc.m === 'live' ? (params.length ? { ...desc.p, __ogArgs: params.map((g) => g()) } : desc.p) : {};
+			desc.m === 'live'
+				? params.length
+					? { ...desc.p, __ogArgs: params.map((g) => g()) }
+					: desc.p
+				: {};
 		return {
 			render: () => {
 				if (desc.m === 'static') return WRAP_OPEN + desc.h + WRAP_CLOSE;
 				// live: inline the entry's SSR on the server; empty on the client (setup hydrates it).
-				return WRAP_OPEN + (BROWSER || !live_entry ? '' : ssr_render(live_entry, { props: live_props() }).body) + WRAP_CLOSE;
+				return (
+					WRAP_OPEN +
+					(BROWSER || !live_entry ? '' : ssr_render(live_entry, { props: live_props() }).body) +
+					WRAP_CLOSE
+				);
 			},
 			setup: (el: Element) => {
 				if (desc.m === 'static') return; // frozen: adopt the SSR HTML, nothing to boot
@@ -118,7 +136,10 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 					if (!dead) app = hydrate(Comp, { target: el, props: live_props() });
 				};
 				if (live_entry) boot(live_entry);
-				else import(/* @vite-ignore */ (desc as { e: string }).e).then((m) => boot((m as { default: Component }).default));
+				else
+					import(/* @vite-ignore */ (desc as { e: string }).e).then((m) =>
+						boot((m as { default: Component }).default)
+					);
 				return () => {
 					dead = true;
 					if (app) unmount(app as never);
@@ -159,7 +180,11 @@ function capture_static(snippet: Snippet, label?: string): RegionSnippet {
 // ── live constructor: emitted by the compiler at a snippet's definition site (was `og_portable`) ──
 /** Definition-site factory (compiler-emitted). A live region snippet: renders `Entry` inline in the
  *  same graph AND carries the descriptor so it can cross a boundary alive. */
-export function og_portable(Entry: Component, props: Record<string, unknown>, url: string): RegionSnippet {
+export function og_portable(
+	Entry: Component,
+	props: Record<string, unknown>,
+	url: string
+): RegionSnippet {
 	return make({ m: 'live', e: url, p: props }, Entry);
 }
 
@@ -207,7 +232,11 @@ export function prepare_region_props(props: Record<string, unknown>): Record<str
 	let out: Record<string, unknown> | null = null;
 	for (const k in props) {
 		const v = props[k];
-		if (typeof v === 'function' && !(v as RegionSnippet).__ogRegion) {
+		if (
+			typeof v === 'function' &&
+			!(v as RegionSnippet).__ogRegion &&
+			(v as unknown as Record<symbol, unknown>)[Symbol.for('ogygia.fn')] === undefined // og.$ fn: crosses as a fn ref
+		) {
 			(out ??= { ...props })[k] = capture_static(v as Snippet, k);
 		}
 	}
@@ -239,21 +268,49 @@ export function slot_pointer(id: string): RegionSnippet {
 	return snip;
 }
 
-// ── the boundary law: one reduce, one revive, both modes ──
-/** Codec encode. Branded region snippet → its descriptor; a bare snippet → frozen static; anything
- *  else falls through (devalue handles it, or errors as before). */
-export function reduce_region_snippet(value: unknown): RegionSnippetDescriptor | undefined {
-	if (typeof value !== 'function') return undefined;
-	const branded = (value as RegionSnippet).__ogRegion;
-	if (branded) return branded;
-	// Freezing a bare snippet is an SSR capture (`render` from svelte/server). Encode only ever runs
-	// on the server; guarding here lets the client DCE `capture_static` → `svelte/server` (~13kB) out
-	// entirely. A branded (live) snippet still crosses fine on either side via the `branded` return.
-	if (BROWSER) return undefined;
-	return capture_static(value as Snippet).__ogRegion; // a plain snippet at the boundary freezes
+// ── the boundary law, as the hub's SNIPPET kind: one encode, one decode, both modes ──
+/** The hub kind: a snippet is a renderable Ref ("a snippet is a region", now literal). A branded
+ *  region snippet crosses as its descriptor; a bare snippet FREEZES at the boundary (server-only —
+ *  the BROWSER guard also keeps `capture_static` → `svelte/server` DCE-able out of client bundles);
+ *  a bare function on the CLIENT falls through (never claimed — it can't freeze there). */
+/** Explicit registration — called at module scope AND from live-transport's install():
+ *  a bare side-effect import gets tree-shaken (the package marks JS side-effect-free),
+ *  which silently un-registers the kind in client bundles. A CALLED import cannot be dropped. */
+export function register_snippet_kind(): void {
+	register_kind({
+		k: 'snippet',
+		match(value) {
+			if (typeof value !== 'function') return false;
+			if ((value as RegionSnippet).__ogRegion) return true;
+			// an og.$-branded fn belongs to the FN kind — freezing it as a snippet would be wrong
+			if ((value as unknown as Record<symbol, unknown>)[Symbol.for('ogygia.fn')] !== undefined)
+				return false;
+			return !BROWSER; // a bare snippet is only claimable where it can freeze (SSR capture)
+		},
+		encode(value) {
+			const branded = (value as RegionSnippet).__ogRegion;
+			if (branded) return { d: branded };
+			return { d: capture_static(value as unknown as Snippet).__ogRegion };
+		},
+		decode(ref) {
+			return make(ref.d as RegionSnippetDescriptor);
+		}
+	});
 }
 
-/** Codec decode. Rebuild a live snippet from the descriptor (both modes). */
+const SNIPPET_ONLY = new Set(['snippet']);
+
+/** Codec encode (legacy `OgygiaS` wire shape: the bare descriptor). Branded region snippet → its
+ *  descriptor; a bare snippet → frozen static; anything else falls through. */
+export function reduce_region_snippet(value: unknown): RegionSnippetDescriptor | undefined {
+	register_snippet_kind();
+	const ref = mint(value, SNIPPET_ONLY);
+	return ref === undefined ? undefined : (ref.d as RegionSnippetDescriptor);
+}
+
+/** Codec decode. Rebuild a live snippet from the descriptor (both modes). Snippets are functions,
+ *  which the hub deliberately never memoizes — each consumer revives its own (stateless until
+ *  rendered), exactly the pre-hub behavior. */
 export function revive_region_snippet(desc: RegionSnippetDescriptor): RegionSnippet {
 	return make(desc);
 }

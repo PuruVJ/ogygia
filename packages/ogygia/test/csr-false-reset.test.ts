@@ -8,7 +8,7 @@
 // ancestor exactly like Kit resolves options ({ ...parent, ...own }); a csr=true host BELOW the reset
 // re-shadows with `true`, so mixing works in both directions.
 import { describe, expect, it } from 'vitest';
-import { transformHost } from '../dist/compiler/transform.js';
+import { transformHost } from '../dist/compiler/region/transform.js';
 import path from 'node:path';
 
 const CTX = (routeCsr: boolean | undefined) => ({
@@ -52,7 +52,11 @@ describe('csr=false route hosts inject the csr-false reset marker', () => {
 	});
 
 	it('script-less host: synthesizes one <script> carrying the reset', () => {
-		const out = transformHost(`<h1>hi</h1><slot />`, '/app/src/routes/docs/+page.svelte', CTX(false));
+		const out = transformHost(
+			`<h1>hi</h1><slot />`,
+			'/app/src/routes/docs/+page.svelte',
+			CTX(false)
+		);
 		expect(out).toBeTruthy();
 		expect(out!.code).toContain(RESET);
 		expect(out!.code.match(/<script/g)!.length).toBe(1);

@@ -3,7 +3,9 @@ import { preference } from '../src/preference.js';
 
 describe('preference()', () => {
 	it('rejects a default that is not one of the values', () => {
-		expect(() => preference({ name: 'x', values: ['a', 'b'], default: 'c' })).toThrow(/default 'c' is not one of values/);
+		expect(() => preference({ name: 'x', values: ['a', 'b'], default: 'c' })).toThrow(
+			/default 'c' is not one of values/
+		);
 	});
 
 	it('exposes name/values/default/attr', () => {

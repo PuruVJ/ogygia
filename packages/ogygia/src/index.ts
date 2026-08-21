@@ -25,6 +25,9 @@ export { default as Boundary } from './OgygiaBoundary.svelte';
 // Regions held as values — server-chosen renders you place like data. `region()` mints, `<Region>` renders.
 export { default as Region } from './Region.svelte';
 export { region, isRegion } from './region.js';
+// og_derived — a derived that RESUMES across island boundaries: its recipe (sources + an
+// og.$-marked formula) crosses, and islands re-derive against the reunified live sources.
+export { og_derived } from './store-transport.js';
 // Warm a deferred/live region's frame now, before its binder wakes — the "fetch now, activate later" escape hatch.
 export { preload } from './preload.js';
 

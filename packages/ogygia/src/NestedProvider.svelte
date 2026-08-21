@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	// Passthrough the runtime hydrates a top-level island into, so descendants see the
 	// "inside an island" context. Mirrors Region.svelte's island SSR shape EXACTLY
 	// (`{#if Component}<Component {...props} />{/if}`) so Svelte adopts the SSR nodes in place instead
@@ -7,9 +7,9 @@
 	// slot content here would pass an implicit `children` snippet that OVERRIDES the decoded
 	// `props.children` (the revived slot/region snippet) and desyncs hydration with an extra anchor.
 	import { setNested } from './context.js';
+	import type { Component as SvelteComponent } from 'svelte';
 
-	/** @type {{ component: import('svelte').Component<Record<string, unknown>>, props: Record<string, unknown> }} */
-	let { component: Component, props } = $props();
+	let { component: Component, props }: { component: SvelteComponent<Record<string, unknown>>; props: Record<string, unknown> } = $props();
 
 	setNested();
 </script>

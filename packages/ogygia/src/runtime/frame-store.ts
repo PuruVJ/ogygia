@@ -13,11 +13,19 @@
 //   • lifecycle — the shared fetch aborts only when the LAST waiter abandons; entries evict on a
 //     TTL after the last subscriber unbinds.
 //
-// Pure module: no DOM, no Svelte, no globals beyond timers. Unit-tested in test/frame-store.test.ts.
+// Subscription is NOT owned here (hub v2 phase W): binders subscribe/notify through the hub's ONE
+// `watch`/`notify` primitive, keyed `frame:<address>`. This module keeps only fetch orchestration
+// (ticket, inflight, reserve, evict). No DOM, no Svelte. Unit-tested in test/frame-store.test.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Frame } from '../frame.js';
+import { watch, notify, watcher_count } from '../ref.js';
 
 export type FrameFetcher = (signal: AbortSignal) => Promise<string>;
+
+/** Frame addresses live in the hub's watcher space under a namespace, so region binders subscribe
+ *  through the ONE hub `watch`/`notify` primitive (hub v2 phase W) — the frame store no longer owns
+ *  a parallel subscriber set. Fetch orchestration (ticket, inflight, reserve, evict) stays here. */
+const frame_id = (a: string): string => 'frame:' + a;
 
 type Inflight = {
 	ticket: number;
@@ -41,7 +49,6 @@ type Entry = {
 	/** Monotonic ticket source — every fetch START takes the next ticket. */
 	seq: number;
 	inflight: Inflight | null;
-	subs: Set<(f: Frame) => void>;
 	evict: ReturnType<typeof setTimeout> | null;
 };
 
@@ -63,7 +70,7 @@ const entries: Map<string, Entry> = store_host[GLOBAL_KEY] ?? (store_host[GLOBAL
 function entry(a: string): Entry {
 	let e = entries.get(a);
 	if (!e) {
-		e = { v: 0, html: null, seq: 0, inflight: null, subs: new Set(), evict: null };
+		e = { v: 0, html: null, seq: 0, inflight: null, evict: null };
 		entries.set(a, e);
 	}
 	return e;
@@ -79,11 +86,11 @@ function entry(a: string): Entry {
  * to trigger eviction.
  */
 function schedule_evict(a: string, e: Entry): void {
-	if (e.subs.size > 0 || e.inflight) return; // still live — keep it
+	if (watcher_count(frame_id(a)) > 0 || e.inflight) return; // still live — keep it
 	if (e.evict) clearTimeout(e.evict);
 	e.evict = setTimeout(() => {
 		const cur = entries.get(a);
-		if (cur === e && cur.subs.size === 0 && !cur.inflight) entries.delete(a);
+		if (cur === e && watcher_count(frame_id(a)) === 0 && !cur.inflight) entries.delete(a);
 	}, EVICT_TTL);
 }
 
@@ -115,7 +122,7 @@ export function write(f: Frame): boolean {
 		e.inflight = null;
 		held.settle(f.html);
 	}
-	for (const cb of [...e.subs]) cb(f);
+	notify(frame_id(f.a), f); // region binders subscribe through the hub (watch), not a local set
 	schedule_evict(f.a, e); // no-op while subscribed; arms the TTL when the write lands unbound
 	return true;
 }
@@ -142,7 +149,14 @@ export function reserve(a: string): void {
 		fail = rej;
 	});
 	promise.catch(() => {}); // an unclaimed reservation must never surface as an unhandled rejection
-	e.inflight = { ticket: ticket(a), promise, controller: new AbortController(), waiters: 0, settle, fail };
+	e.inflight = {
+		ticket: ticket(a),
+		promise,
+		controller: new AbortController(),
+		waiters: 0,
+		settle,
+		fail
+	};
 }
 
 /**
@@ -170,10 +184,12 @@ export function subscribe(a: string, cb: (f: Frame) => void): () => void {
 		clearTimeout(e.evict);
 		e.evict = null;
 	}
-	e.subs.add(cb);
+	// Ongoing notifications ride the hub's watcher set; immediate replay of already-applied
+	// content stays here (a late binder catching a frame that landed before it mounted).
+	const off = watch(frame_id(a), cb as (v: unknown) => void);
 	if (e.html != null) cb({ a, v: e.v, html: e.html });
 	return () => {
-		e.subs.delete(cb);
+		off();
 		schedule_evict(a, e);
 	};
 }

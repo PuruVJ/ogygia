@@ -7,5 +7,5 @@ import LiveHost from '../LiveHost.svelte';
 
 /** Feature entry: fill the `live` slot with {@link LiveHost}. */
 export function install() {
-	slots.live = LiveHost;
+	slots.live = LiveHost as unknown as NonNullable<typeof slots.live>;
 }

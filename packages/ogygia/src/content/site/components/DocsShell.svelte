@@ -87,6 +87,7 @@
 	};
 
 	const props: ShellProps = $props();
+	// svelte-ignore state_referenced_locally
 	const { site, meta, title = 'Docs', links = [], base, home, side, actions, children } = props;
 
 	/** Three-state region resolution: the prop ABSENT → `undefined` (built-in renders); the prop

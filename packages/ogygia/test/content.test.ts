@@ -63,13 +63,19 @@ describe('glob() source ids', () => {
 			'./content/blog/nested/deep-post.svx': {},
 			'./content/blog/top.svx': {}
 		});
-		expect(((await src.refs()).map((r) => r.id)).sort()).toEqual(['nested/deep-post', 'top']);
+		expect((await src.refs()).map((r) => r.id).sort()).toEqual(['nested/deep-post', 'top']);
 	});
 
 	it('honors a custom id mapper', async () => {
 		const src = glob(
 			{ './pages/00-intro.json': {} },
-			{ id: (k) => k.replace(/.*\//, '').replace(/^\d+-/, '').replace(/\.json$/, '') }
+			{
+				id: (k) =>
+					k
+						.replace(/.*\//, '')
+						.replace(/^\d+-/, '')
+						.replace(/\.json$/, '')
+			}
 		);
 		expect((await src.refs()).map((r) => r.id)).toEqual(['intro']);
 	});
@@ -167,7 +173,9 @@ describe('content() catalog', () => {
 
 	it('get() returns null on a filtered-out / unknown id', async () => {
 		const blog = content({
-			loader: markdown({ './blog/draft.svx': svx({ title: 'D', date: '2026-01-01', draft: true }) }),
+			loader: markdown({
+				'./blog/draft.svx': svx({ title: 'D', date: '2026-01-01', draft: true })
+			}),
 			schema: blogSchema,
 			filter: (e) => !e.data.draft
 		});
@@ -217,7 +225,9 @@ describe('content() catalog', () => {
 		expect(await blog.get('draft')).toBeNull();
 
 		const list = withRemotes(blog).list();
-		expect(await list()).toEqual([{ id: 'live', data: expect.objectContaining({ title: 'Live' }) }]);
+		expect(await list()).toEqual([
+			{ id: 'live', data: expect.objectContaining({ title: 'Live' }) }
+		]);
 
 		expect((await blog.get('live'))!.data.title).toBe('Live');
 		expect(await blog.get('draft')).toBeNull();
@@ -247,7 +257,9 @@ describe('enrich() source middleware', () => {
 			{ id: 'a', data: { title: 'A' }, meta: {} },
 			{ id: 'b', data: { title: 'Bee' }, meta: {} }
 		]);
-		const src = enrich(base, (ref) => ({ title_len: String((ref.data as { title: string }).title).length }));
+		const src = enrich(base, (ref) => ({
+			title_len: String((ref.data as { title: string }).title).length
+		}));
 		const refs = await src.refs();
 		expect(refs.map((r) => (r.meta as { title_len: number }).title_len)).toEqual([1, 3]);
 		expect(((await src.get('b'))!.meta as { title_len: number }).title_len).toBe(3);
@@ -295,7 +307,9 @@ describe('live source + live remotes', () => {
 	it('live.list mints query_live and projects the seeded snapshot', async () => {
 		const { source, push } = liveSource();
 		push({ id: 'a', data: { title: 'A' } });
-		const remote = withRemotes(content({ schema: v.object({ title: v.string() }), loader: source })).live.list({
+		const remote = withRemotes(
+			content({ schema: v.object({ title: v.string() }), loader: source })
+		).live.list({
 			map: (e) => ({ id: e.id, title: e.data.title })
 		});
 		expect((remote as { __: { type: string } }).__.type).toBe('query_live');
@@ -307,7 +321,9 @@ describe('live source + live remotes', () => {
 	it('live.get projects one id from the seeded snapshot', async () => {
 		const { source, push } = liveSource();
 		push({ id: 'a', data: { title: 'one' } });
-		const remote = withRemotes(content({ schema: v.object({ title: v.string() }), loader: source })).live.get({
+		const remote = withRemotes(
+			content({ schema: v.object({ title: v.string() }), loader: source })
+		).live.get({
 			map: (e) => ({ title: e.data.title })
 		});
 		const gen = (await remote('a')) as AsyncGenerator<{ title: string } | null>;

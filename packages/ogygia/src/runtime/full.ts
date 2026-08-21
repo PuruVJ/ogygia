@@ -16,7 +16,6 @@ import * as morph from './morph.js';
 import * as live from './live.js';
 import * as interaction from './interaction.js';
 import * as forms from './form-continuity.js';
-import * as persist from './persist.js';
 import * as router from './router.js';
 
 /** Boot the kitchen-sink runtime (all features). Idempotent via {@link ./core.js boot}. */
@@ -30,7 +29,6 @@ export function bootDev(): void {
 		live.install,
 		interaction.install,
 		forms.install,
-		persist.install,
 		router.install
 	]);
 }

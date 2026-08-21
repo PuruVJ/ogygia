@@ -18,7 +18,14 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
-import { color, fileExists, loadFile, saveFile, svelteConfig, transforms } from '@sveltejs/sv-utils';
+import {
+	color,
+	fileExists,
+	loadFile,
+	saveFile,
+	svelteConfig,
+	transforms
+} from '@sveltejs/sv-utils';
 
 const require = createRequire(import.meta.url);
 // This CLI ships inside `ogygia`, so our own version IS the version to pin the user's dependency to.
@@ -197,8 +204,14 @@ function wireSvelteConfig(asyncCompiler: boolean): void {
 		// experimental.async — site-layer components use top-level `await`; the compiler needs this on.
 		if (asyncCompiler) {
 			const co = property('compilerOptions', { fallback: js.object.create({}) });
-			const experimental = js.object.property(co, { name: 'experimental', fallback: js.object.create({}) });
-			js.object.property(experimental, { name: 'async', fallback: js.common.parseExpression('true') });
+			const experimental = js.object.property(co, {
+				name: 'experimental',
+				fallback: js.object.create({})
+			});
+			js.object.property(experimental, {
+				name: 'async',
+				fallback: js.common.parseExpression('true')
+			});
 		}
 	});
 }
@@ -229,7 +242,9 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 	// 2b. svelte config — `.svx` extensions + preprocessor (and the async compiler for the site layer).
 	if (markdown) {
 		wireSvelteConfig(asyncCompiler);
-		stdout.write(`  ${ok('✓')} svelte config ${dim(asyncCompiler ? '(.svx + async)' : '(.svx)')}\n`);
+		stdout.write(
+			`  ${ok('✓')} svelte config ${dim(asyncCompiler ? '(.svx + async)' : '(.svx)')}\n`
+		);
 	}
 
 	// 3. Universal hooks — the transport codec. Canonical: `export const transport = ogygia.transport`.
@@ -290,7 +305,8 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 	//  in case a build is ever hard-killed before cleanup.)
 	editFile('.gitignore', (c) => {
 		if (c.includes('.ogygia-keep-client')) return c;
-		const line = '# ogygia build-time keep-client route (auto-removed; only survives a crashed build)\n**/.ogygia-keep-client/\n';
+		const line =
+			'# ogygia build-time keep-client route (auto-removed; only survives a crashed build)\n**/.ogygia-keep-client/\n';
 		return c.trim() ? c.replace(/\n*$/, '\n\n') + line : line;
 	});
 
@@ -298,7 +314,9 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 	//    modules the shipped source imports. TS projects only; never clobber an existing file.
 	if (ext === 'ts') {
 		editFile('src/ogygia.d.ts', (c) =>
-			c.includes('ogygia/types') ? c : (c.trim() ? c.replace(/\n*$/, '\n\n') : '') + '/// <reference types="ogygia/types" />\n'
+			c.includes('ogygia/types')
+				? c
+				: (c.trim() ? c.replace(/\n*$/, '\n\n') : '') + '/// <reference types="ogygia/types" />\n'
 		);
 		stdout.write(`  ${ok('✓')} src/ogygia.d.ts ${dim('(types)')}\n`);
 	}
@@ -314,7 +332,11 @@ function installDeps(): void {
 				? 'bun'
 				: 'npm';
 	stdout.write(`\n  Installing with ${accent(pm)}…\n`);
-	const res = spawnSync(pm, ['install'], { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
+	const res = spawnSync(pm, ['install'], {
+		cwd,
+		stdio: 'inherit',
+		shell: process.platform === 'win32'
+	});
 	if (res.status !== 0) {
 		stdout.write(`  ${bad('✗')} install failed — run ${accent(`${pm} install`)} yourself.\n`);
 	}
@@ -324,7 +346,9 @@ function installDeps(): void {
 async function run() {
 	const pf = preflight();
 	// Markdown: flag wins, else prompt (default off), else default off in non-interactive.
-	const markdown = wantMarkdown ?? (yes ? false : await confirm('Add markdown content collections (.md / .svx)?', false));
+	const markdown =
+		wantMarkdown ??
+		(yes ? false : await confirm('Add markdown content collections (.md / .svx)?', false));
 
 	stdout.write(`\n${strong('ogygia')} — wiring your project…\n`);
 	wireOgygia(pf, markdown);

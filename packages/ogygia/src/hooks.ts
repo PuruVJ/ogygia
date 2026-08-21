@@ -25,7 +25,7 @@ import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import type { RequestState } from '@sveltejs/kit/internal/server';
 import * as devalue from 'devalue';
 import { islands as island_modules, island_url } from 'virtual:ogygia/server-manifest';
-import { islandCss } from 'virtual:ogygia/island-deps';
+import { islandCss, fnManifest } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { REGION_BRAND } from './region-brand.js';
 import { secret } from 'virtual:ogygia/secret';
@@ -39,9 +39,14 @@ import {
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import { verify, region_mac_message } from './server/hmac.js';
+import { render_cache_key, cached_render } from './server/render-cache.js';
 import { B64Url } from './server/payload.js';
-import { TRANSPORT_WIRE_KEY, revive_transportable } from './live-transport.js';
-import { REGION_SNIPPET_WIRE_KEY, revive_region_snippet } from './region-snippet.js';
+import { REF_WIRE_KEY, ref_reviver } from './ref.js';
+// PULL-registration at decode time (idempotent; no import-time side effects).
+import { register_wire_kind } from './live-transport.js';
+import { register_store_kind, register_derived_kind } from './store-transport.js';
+import { register_snippet_kind } from './region-snippet.js';
+import { register_fn_kind } from './fn-transport.js';
 import {
 	DEFAULT_ISLANDS_ENDPOINT,
 	MAX_REGION_PROPS_LEN,
@@ -58,7 +63,14 @@ import {
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
-import { has_deferred, stage_deferred, settle_deferred, resolve_script, page_seed_reducers, type Deferred } from './server/page-stream.js';
+import {
+	has_deferred,
+	stage_deferred,
+	settle_deferred,
+	resolve_script,
+	page_seed_reducers,
+	type Deferred
+} from './server/page-stream.js';
 import { PAGE_DEFER_BOOTSTRAP, PAGE_DEFER_GLOBAL } from './page-defer.js';
 import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrency.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -125,7 +137,10 @@ const REGION_FRAME_HEADERS = {
 	'Referrer-Policy': 'no-referrer'
 } as const;
 
-function region_response(body: BodyInit | null, init: { status: number; headers?: Record<string, string> }) {
+function region_response(
+	body: BodyInit | null,
+	init: { status: number; headers?: Record<string, string> }
+) {
 	return new Response(body, {
 		status: init.status,
 		headers: { ...REGION_FRAME_HEADERS, ...init.headers }
@@ -134,7 +149,7 @@ function region_response(body: BodyInit | null, init: { status: number; headers?
 
 /**
  * Decode a request pathname without throwing on malformed percent-encoding (SEC-05).
- * @returns {string | null} decoded path, or null if the encoding is invalid
+ * @returns decoded path, or null if the encoding is invalid
  */
 function decode_pathname(pathname: string): string | null {
 	try {
@@ -225,7 +240,13 @@ class OgygiaHandle {
 			// Per-request capture bag: `setContext` values + the page snapshot are recorded during the
 			// render (inside this `run`, so `getStore()` works) and read back in `inject_client_seeds`
 			// via the SAME bag reference passed through as a closure.
-			const bag: RequestBag = { ctx: new Map(), page: null, deferred: null, defer_next_id: 0, seed_reducers: null };
+			const bag: RequestBag = {
+				ctx: new Map(),
+				page: null,
+				deferred: null,
+				defer_next_id: 0,
+				seed_reducers: null
+			};
 			const response = await request_als.run(bag, () =>
 				resolve(event, {
 					transformPageChunk: async ({ html }) =>
@@ -237,7 +258,12 @@ class OgygiaHandle {
 			// ran synchronously inside `resolve`); the tail streams a resolve script per promise as it
 			// settles. Only set when the request could consume a stream (see `inject_client_seeds`).
 			if (bag.deferred && bag.deferred.length) {
-				return this.stream_page_deferred(response, bag.deferred, bag.defer_next_id, bag.seed_reducers ?? undefined);
+				return this.stream_page_deferred(
+					response,
+					bag.deferred,
+					bag.defer_next_id,
+					bag.seed_reducers ?? undefined
+				);
 			}
 			return response;
 		}
@@ -348,7 +374,12 @@ class OgygiaHandle {
 		// handle injects static Speculation Rules instead. Chromium prerenders likely next pages,
 		// Firefox prefetches them, everything else ignores the JSON. Presence-checked so a page
 		// authoring its own rules wins; per-link opt-out via `data-ogygia-speculate="off"`.
-		if (!router_enabled && mpa_speculation_rules && !has_speculation_rules && html.includes('</head>')) {
+		if (
+			!router_enabled &&
+			mpa_speculation_rules &&
+			!has_speculation_rules &&
+			html.includes('</head>')
+		) {
 			html = html.replace(
 				'</head>',
 				`<script type="speculationrules" data-ogygia-speculate>${mpa_speculation_rules}</script></head>`
@@ -357,7 +388,9 @@ class OgygiaHandle {
 		if (router_enabled) {
 			const head: string[] = [];
 			if (!has_router_meta) {
-				head.push(`<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`);
+				head.push(
+					`<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`
+				);
 			}
 			if (runtime_url && !has_runtime_script) {
 				head.push(`<script type="module" data-ogygia-runtime src="${runtime_url}"></script>`);
@@ -367,7 +400,7 @@ class OgygiaHandle {
 				// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:
 				// a changed stylesheet joins this page only when the plugin derives the same scope
 				// among its owners — two route-group sub-apps never paint each other in dev.
-				const scope = (event.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
+				const scope = (event?.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
 				head.push(`<meta name="ogygia-dev-scope" content="${scope.replace(/"/g, '')}">`);
 			}
 			if (head.length && html.includes('</head>')) {
@@ -408,7 +441,8 @@ class OgygiaHandle {
 		//  • Programmatic fetch (SPA/router, mode ≠ navigate) can't run streamed scripts, so SETTLE the
 		//    promises here and seed resolved values — no hang, same as before.
 		// Gated on `has_deferred` so the common (no-promise) seed pays only a cheap probe walk.
-		const has_pending = !!page_snap && (has_deferred(page_snap.data) || has_deferred(page_snap.form));
+		const has_pending =
+			!!page_snap && (has_deferred(page_snap.data) || has_deferred(page_snap.form));
 		const can_stream = event?.request.headers.get('sec-fetch-mode') === 'navigate';
 		if (has_pending && can_stream) {
 			const staged_data = stage_deferred(page_snap!.data, 0);
@@ -448,6 +482,20 @@ class OgygiaHandle {
 			if (remote_script) scripts.push(remote_script);
 		}
 
+		// og.$ factories (PROD, CSP-clean): one EXECUTING inline script seeds the tag → factory
+		// map before any island hydrates — the fn kind resolves against it with no eval. Emitted
+		// only when the client build's handoff carries hoists (dev: the fn-manifest virtual is
+		// complete; null here). Executing-inline is the same CSP class as the defer bootstrap.
+		const fnm = fnManifest();
+		if (fnm) {
+			const entries = Object.entries(fnm)
+				.map(([tag, src]) => `${JSON.stringify(tag)}:(${src})`)
+				.join(',');
+			scripts.push(
+				`<script data-ogygia-fnm>globalThis.__OG_FNM=Object.assign(globalThis.__OG_FNM||{},{${entries}});</script>`
+			);
+		}
+
 		// Drop-in `setContext` page root — emitted here (final chunk) so every `setContext` has run.
 		const provided = bag?.ctx;
 		if (provided?.size) {
@@ -459,7 +507,11 @@ class OgygiaHandle {
 		}
 
 		if (scripts.length === 0) return html;
-		return html.replace('</body>', scripts.join('') + '</body>');
+		// FUNCTION-form replacement: seed payloads legitimately contain `$$` (e.g. an og.$ factory
+		// source with a literal `$` before a template hole) — a STRING replacement would collapse
+		// it (String.replace's `$$` escape) and silently corrupt the shipped code/data.
+		const injected = scripts.join('') + '</body>';
+		return html.replace('</body>', () => injected);
 	}
 
 	/**
@@ -532,7 +584,9 @@ class OgygiaHandle {
 				};
 				const push = (id: number, ok: boolean, value: unknown) => {
 					try {
-						controller.enqueue(encoder.encode(resolve_script(PAGE_DEFER_GLOBAL, id, { ok, value }, reducers)));
+						controller.enqueue(
+							encoder.encode(resolve_script(PAGE_DEFER_GLOBAL, id, { ok, value }, reducers))
+						);
 					} catch {
 						/* client gone / stream already closed */
 					}
@@ -564,7 +618,11 @@ class OgygiaHandle {
 		});
 		const headers = new Headers(response.headers);
 		headers.delete('content-length');
-		return new Response(stream, { status: response.status, statusText: response.statusText, headers });
+		return new Response(stream, {
+			status: response.status,
+			statusText: response.statusText,
+			headers
+		});
 	}
 
 	/**
@@ -646,22 +704,38 @@ class OgygiaHandle {
 	 */
 	async #render_component(
 		load: () => Promise<{ default: unknown }>,
-		props: Record<string, unknown>
+		props: Record<string, unknown>,
+		cache?: { key: string; ttl: number }
 	): Promise<string | null> {
+		// R6/G2: the ONE cache-fronted render seam. `cached_render` serves a memo when the hole opted
+		// into a positive `maxAge` (key carries the session seal — a per-user render never crosses
+		// users); on a miss it runs the render_body below. The ENDPOINT wraps its render in the
+		// concurrency gate + timeout (the inline-island path, sharing `cached_render`, does not).
 		try {
-			return await render_gate.run(async () => {
-				const mod = await load();
-				const rendered = render(mod.default as Component<Record<string, unknown>>, { props });
-				return await Promise.race([
-					Promise.resolve(rendered).then((out) => out.body as string),
-					new Promise<never>((_, rej) =>
-						setTimeout(() => rej(new Error('region render timeout')), RENDER_TIMEOUT_MS)
-					)
-				]);
-			});
+			return await cached_render(
+				() =>
+					render_gate.run(async () => {
+						const mod = await load();
+						const rendered = render(mod.default as Component<Record<string, unknown>>, { props });
+						return await Promise.race([
+							Promise.resolve(rendered).then((out) => out.body as string),
+							new Promise<never>((_, rej) =>
+								setTimeout(() => rej(new Error('region render timeout')), RENDER_TIMEOUT_MS)
+							)
+						]);
+					}),
+				cache,
+				Date.now()
+			);
 		} catch {
 			return null;
 		}
+	}
+
+	/** The session cookie value sealed into a region capability (empty when no `sessionCookie` is
+	 *  configured) — the same read the MAC verify uses, and the per-user part of the render-cache key. */
+	#region_session(event: RequestEvent): string {
+		return session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
 	}
 
 	// ── Shared capability core ──────────────────────────────────────────────────────────────────
@@ -673,13 +747,25 @@ class OgygiaHandle {
 
 	/** Charset/length/expiry gate — cheap, runs BEFORE any HMAC (P5-HMAC-CPU). */
 	#capability_gate_ok(id: string, payload: string, ttl_raw: string, exp_raw: string): boolean {
-		if (!REGION_ID_RE.test(id) || payload.length > MAX_REGION_PROPS_LEN || !REGION_TTL_RE.test(ttl_raw)) return false;
+		if (
+			!REGION_ID_RE.test(id) ||
+			payload.length > MAX_REGION_PROPS_LEN ||
+			!REGION_TTL_RE.test(ttl_raw)
+		)
+			return false;
 		const exp = Number(exp_raw);
 		return Number.isFinite(exp) && exp >= Math.floor(Date.now() / 1000);
 	}
 
 	/** THE auth check: session-bound region MAC verify. */
-	#verify_region_mac(id: string, payload: string, exp_raw: string, ttl_raw: string, sig: string, event: RequestEvent): boolean {
+	#verify_region_mac(
+		id: string,
+		payload: string,
+		exp_raw: string,
+		ttl_raw: string,
+		sig: string,
+		event: RequestEvent
+	): boolean {
 		// The capability seals the session cookie (if any) into the signed message.
 		const session = session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
 		return verify(secret, region_mac_message(id, exp_raw, payload, session, ttl_raw), sig);
@@ -687,14 +773,22 @@ class OgygiaHandle {
 
 	/** Eval the island module (registers transportable codecs the reviver needs on a cold-start defer),
 	 *  then decode + revive the props payload. Null on parse failure or a non-object/array result. */
-	async #decode_region_props(payload: string, load: () => Promise<unknown>): Promise<Record<string, unknown> | null> {
+	async #decode_region_props(
+		payload: string,
+		load: () => Promise<unknown>
+	): Promise<Record<string, unknown> | null> {
 		let props: unknown;
 		try {
 			await load();
+			// universal decode; remember:false — the SERVER never memoizes (per-request isolation)
+			register_wire_kind();
+			register_store_kind();
+			register_snippet_kind();
+			register_fn_kind();
+			register_derived_kind();
 			props = devalue.parse(B64Url.decode(payload), {
-				[TRANSPORT_WIRE_KEY]: (d: never) => revive_transportable(d, false),
-				[REGION_SNIPPET_WIRE_KEY]: revive_region_snippet
-			});
+				[REF_WIRE_KEY]: ref_reviver(false)
+			} as Parameters<typeof devalue.parse>[1]);
 		} catch {
 			return null;
 		}
@@ -731,7 +825,12 @@ class OgygiaHandle {
 		const props = await this.#decode_region_props(payload, load);
 		if (!props) return null;
 
-		const body = await this.#render_component(load, props);
+		const ttl = Number(ttl_raw) || 0;
+		const cache =
+			ttl > 0
+				? { key: render_cache_key(id, payload, this.#region_session(event)), ttl }
+				: undefined;
+		const body = await this.#render_component(load, props, cache);
 		if (body === null || body.length > MAX_REGION_BODY) return null;
 		// CSS links ride in the parcel; the client hoists them to <head> (a body/parcel link is inert
 		// inside the `<template>` box), so a batched server-island still styles a page that never
@@ -816,7 +915,12 @@ class OgygiaHandle {
 			return region_response('Forbidden', { status: 403 });
 		}
 
-		const body = await this.#render_component(load, props);
+		const ttl = Number(ttl_raw) || 0;
+		const cache =
+			ttl > 0
+				? { key: render_cache_key(id, payload, this.#region_session(event)), ttl }
+				: undefined;
+		const body = await this.#render_component(load, props, cache);
 		if (body === null) {
 			return region_response('Region render failed', { status: 500 });
 		}

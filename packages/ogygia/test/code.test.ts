@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { infostring, slash_meta, run_meta, run_variants, type Fence, type VariantGenerator } from '../src/content/markdown/code.js';
+import {
+	infostring,
+	slash_meta,
+	run_meta,
+	run_variants,
+	type Fence,
+	type VariantGenerator
+} from '../src/content/markdown/code.js';
 
-const fence = (over: Partial<Fence> = {}): Fence => ({ lang: 'js', raw_meta: '', meta: {}, source: 'const a = 1;', ...over });
+const fence = (over: Partial<Fence> = {}): Fence => ({
+	lang: 'js',
+	raw_meta: '',
+	meta: {},
+	source: 'const a = 1;',
+	...over
+});
 
 describe('fence meta parsers', () => {
 	it('infostring() reads chrome meta (title→file, quoted, bare, booleans); ignores line ranges', () => {
@@ -19,7 +32,10 @@ describe('fence meta parsers', () => {
 	});
 
 	it('parsers LAYER (later wins on collision)', () => {
-		const f = run_meta([infostring(), slash_meta()], fence({ raw_meta: 'file="from-info.js"', source: '/// file: from-slash.js\nx;' }));
+		const f = run_meta(
+			[infostring(), slash_meta()],
+			fence({ raw_meta: 'file="from-info.js"', source: '/// file: from-slash.js\nx;' })
+		);
 		expect(f.meta.file).toBe('from-slash.js'); // slash_meta ran after → wins
 		expect(f.source).toBe('x;');
 	});

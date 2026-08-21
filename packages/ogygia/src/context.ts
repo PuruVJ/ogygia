@@ -1,5 +1,8 @@
 import { getContext, setContext } from 'svelte';
+import { BROWSER } from 'esm-env';
 import { getRequestEvent } from 'virtual:ogygia/request-event';
+import { csr_true_routes } from 'virtual:ogygia/route-csr';
+import { document_has_kit_bootstrap } from './runtime/kit-boot.js';
 
 // Context key marking "this subtree is already inside a hydrated island". Nested island wrappers
 // read it and degrade to a plain inline component so an island-within-an-island hydrates exactly
@@ -31,27 +34,34 @@ export function isNested(): boolean {
 	return getContext(NESTED_KEY) === true;
 }
 
-// Context key marking "this subtree is on a csr=true page". A csr=true route host is Kit-hydrated,
-// so a `<Region>` there should render its component INLINE in the Kit tree (Kit hydrates it) rather
-// than emit an `<ogygia-region>` + runtime — the same "render as a plain component" degradation the
-// nested rule already does. The transform sets it: it injects a bare `setContext` into every
-// csr=true route host (see compiler/transform.ts CSR_CTX_INJECT — NO ogygia import, so a
-// region-less csr=true page still ships zero ogygia), and injects the OPPOSITE marker (`false`,
-// CSR_FALSE_INJECT) into every csr=false route host — a RESET, because Svelte context flows to all
-// descendants while Kit's csr option is per-node: without it, an option-less csr=true ANCESTOR
-// layout (Kit default) leaks `true` into a csr=false subtree and silently degrades every island to
-// inline. Nested overrides shadow in both directions, mirroring Kit's own option resolution.
-// Because a host renders on BOTH the SSR and the Kit-client leg, the flag is identical on both →
-// the island/inline choice can never desync at hydrate. `Symbol.for` for the same cross-graph
-// reason as NESTED_KEY.
-//
-// KEY STRING (CSR-KEY): the literal below MUST match the string the transform bakes into BOTH
-// injected `Symbol.for(...)` calls. Change one, change all; the region-mixed e2e locks it.
-const CSR_TRUE_KEY = Symbol.for('ogygia.csr-true');
+/** Kit `route.id`, GROUP segments (`(app)`) stripped — mirrors the compiler's `normalize_route_id`
+ *  so both sides match whether or not Kit keeps groups in `route.id`. Root → `/`. */
+function normalize_route_id(id: string): string {
+	const segs = id
+		.split('/')
+		.filter(Boolean)
+		.filter((s) => !(s.startsWith('(') && s.endsWith(')')));
+	return '/' + segs.join('/');
+}
 
-/** True when rendered inside a csr=true route host (Kit owns hydration — degrade islands to plain). */
-export function isCsrTrue(): boolean {
-	return getContext(CSR_TRUE_KEY) === true;
+/**
+ * Does Kit hydrate THIS WHOLE DOCUMENT? The leaf page's effective csr is the single fact that decides
+ * it, so a `<Region>` reads it directly — no per-host context cascade. When true, every island (a
+ * csr=true page's own, a csr=false layout's chrome, a shared component's) degrades to a plain inline
+ * component that Kit hydrates. Server: the route is in the build-time csr=true set. Client: Kit
+ * shipped its bootstrap. Same fact on both legs → the inline/island choice can never desync at
+ * hydrate. (Replaces the old `CSR_TRUE_KEY` marker + `csr=false` reset, which only re-derived this
+ * number indirectly through the context cascade.)
+ */
+export function documentIsCsrTrue(): boolean {
+	if (BROWSER) return document_has_kit_bootstrap();
+	try {
+		const event = getRequestEvent() as { route?: { id?: string | null } };
+		const id = event.route?.id;
+		return id != null && csr_true_routes.has(normalize_route_id(id));
+	} catch {
+		return false; // off-request (prerender helper, etc.) → not a Kit-hydrated document
+	}
 }
 
 /** Per-request: only one `data-ogygia-runtime` script should be emitted (the first island). */

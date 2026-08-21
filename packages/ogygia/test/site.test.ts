@@ -16,13 +16,21 @@ const mint_site = (
 ) => siteRaw({ outline: outlineArg, ...opts });
 import { remarkLinks } from '../src/content/markdown/remark-links.js';
 import { rehypeOverrides, SLOT_TAG } from '../src/content/markdown/rehype-overrides.js';
-import { build_docs, orama_engine, split_sections, strip_prose } from '../src/content/site/search.js';
+import {
+	build_docs,
+	orama_engine,
+	split_sections,
+	strip_prose
+} from '../src/content/site/search.js';
 
 type Meta = { headings: Heading[] };
 
 /** In-memory source for fixtures (the lib no longer ships `fromArray`). Optional `groups` supplies
  *  the section-decoration facet (folder()/CMS provide it in production). */
-function fromArray(entries: SourceEntry<Meta>[], groupMap?: Map<string, { label?: string }>): Source<Meta> {
+function fromArray(
+	entries: SourceEntry<Meta>[],
+	groupMap?: Map<string, { label?: string }>
+): Source<Meta> {
 	const map = new Map(entries.map((e) => [e.id, e]));
 	return {
 		get: async (id) => map.get(id) ?? null,
@@ -53,7 +61,12 @@ const docSchema = v.object({
 });
 
 /** A page fixture as the source yields it — clean id + NN- filePath + derived `order` (like folder()). */
-function page(id: string, filePath: string, data: Record<string, unknown>, headings: Heading[] = []): SourceEntry<Meta> {
+function page(
+	id: string,
+	filePath: string,
+	data: Record<string, unknown>,
+	headings: Heading[] = []
+): SourceEntry<Meta> {
 	return { id, filePath, order: orderOf(id, filePath), data, meta: { headings } };
 }
 
@@ -61,10 +74,19 @@ function docsFixture() {
 	return content({
 		loader: fromArray([
 			page('start/install', 'content/docs/00-start/00-install/+doc.svx', { title: 'Install' }),
-			page('start/first-island', 'content/docs/00-start/01-first-island/+doc.svx', { title: 'First island' }),
-			page('regions/unified', 'content/docs/01-regions/00-unified/+doc.svx', { title: 'Unified regions', related: ['regions/held'] }, [{ depth: 2, id: 'why', text: 'Why' }]),
+			page('start/first-island', 'content/docs/00-start/01-first-island/+doc.svx', {
+				title: 'First island'
+			}),
+			page(
+				'regions/unified',
+				'content/docs/01-regions/00-unified/+doc.svx',
+				{ title: 'Unified regions', related: ['regions/held'] },
+				[{ depth: 2, id: 'why', text: 'Why' }]
+			),
 			page('regions/held', 'content/docs/01-regions/01-held/+doc.svx', { title: 'Held regions' }),
-			page('data-state/stores', 'content/docs/02-data-state/00-stores/+doc.svx', { title: 'Stores' })
+			page('data-state/stores', 'content/docs/02-data-state/00-stores/+doc.svx', {
+				title: 'Stores'
+			})
 		]),
 		schema: docSchema,
 		relations: (self) => ({ related: self })
@@ -75,8 +97,21 @@ function docsFixture() {
 function searchable() {
 	return content({
 		loader: fromArray([
-			{ id: 'start/install', filePath: 'content/docs/00-start/00-install/+doc.svx', data: { title: 'Install' }, meta: { headings: [{ depth: 2, id: 'setup', text: 'Setup' }] }, source: async () => '# Install\n\nGet started fast.\n\n## Setup\n\nRun the installer with npm.' },
-			{ id: 'regions/held', filePath: 'content/docs/01-regions/00-held/+doc.svx', data: { title: 'Held regions' }, meta: { headings: [] }, source: async () => '# Held\n\nServer chosen islands.' }
+			{
+				id: 'start/install',
+				filePath: 'content/docs/00-start/00-install/+doc.svx',
+				data: { title: 'Install' },
+				meta: { headings: [{ depth: 2, id: 'setup', text: 'Setup' }] },
+				source: async () =>
+					'# Install\n\nGet started fast.\n\n## Setup\n\nRun the installer with npm.'
+			},
+			{
+				id: 'regions/held',
+				filePath: 'content/docs/01-regions/00-held/+doc.svx',
+				data: { title: 'Held regions' },
+				meta: { headings: [] },
+				source: async () => '# Held\n\nServer chosen islands.'
+			}
 		]),
 		schema: docSchema
 	});
@@ -114,13 +149,20 @@ describe('address seams — group slug + trail scope', () => {
 		});
 	const kitDocs = () =>
 		content({
-			loader: fromArray([page('routing/pages', 'kit/00-routing/00-pages/+doc.svx', { title: 'Pages' })]),
+			loader: fromArray([
+				page('routing/pages', 'kit/00-routing/00-pages/+doc.svx', { title: 'Pages' })
+			]),
 			schema: docSchema
 		});
 
 	it('group `slug` drops a segment from the ADDRESS while nav/id keep structure', async () => {
 		const site = mint_site([
-			{ label: 'Svelte', items: svelteDocs(), base: 'docs/svelte', slug: (id) => id.split('/').pop()! }
+			{
+				label: 'Svelte',
+				items: svelteDocs(),
+				base: 'docs/svelte',
+				slug: (id) => id.split('/').pop()!
+			}
 		]);
 		// Addresses (prerender slugs) use the dropped-segment policy…
 		const addresses = (await site.entries()).map((e) => e.slug).sort();
@@ -157,14 +199,18 @@ describe('outline — group label from the source groups() facet', () => {
 			loader: fromArray(
 				[
 					page('start/install', 'content/docs/00-start/00-install/+doc.svx', { title: 'Install' }),
-					page('data-state/stores', 'content/docs/02-data-state/00-stores/+doc.svx', { title: 'Stores' })
+					page('data-state/stores', 'content/docs/02-data-state/00-stores/+doc.svx', {
+						title: 'Stores'
+					})
 				],
 				new Map([['data-state', { label: 'Data & state' }]])
 			),
 			schema: docSchema
 		});
 		const tree = await mint_site(docs).nav();
-		const ds = groups(tree).find((g) => g.items.some((i) => i.kind === 'leaf' && i.slug.startsWith('data-state')));
+		const ds = groups(tree).find((g) =>
+			g.items.some((i) => i.kind === 'leaf' && i.slug.startsWith('data-state'))
+		);
 		expect(ds?.label).toBe('Data & state');
 	});
 });
@@ -172,7 +218,13 @@ describe('outline — group label from the source groups() facet', () => {
 describe('site — brains', () => {
 	it('entries() yields every leaf slug in reading order', async () => {
 		const site = mint_site(docsFixture());
-		expect((await site.entries()).map((e) => e.slug)).toEqual(['start/install', 'start/first-island', 'regions/unified', 'regions/held', 'data-state/stores']);
+		expect((await site.entries()).map((e) => e.slug)).toEqual([
+			'start/install',
+			'start/first-island',
+			'regions/unified',
+			'regions/held',
+			'data-state/stores'
+		]);
 	});
 
 	it('doc() returns section, headings, and order-based trail', async () => {
@@ -206,7 +258,10 @@ describe('site — brains', () => {
 describe('outline — multi-collection arrangement', () => {
 	function apiFixture() {
 		return content({
-			loader: fromArray([page('button', 'api/00-button.json', { title: 'Button' }), page('input', 'api/01-input.json', { title: 'Input' })]),
+			loader: fromArray([
+				page('button', 'api/00-button.json', { title: 'Button' }),
+				page('input', 'api/01-input.json', { title: 'Input' })
+			]),
 			schema: v.object({ title: v.string() })
 		});
 	}
@@ -222,7 +277,9 @@ describe('outline — multi-collection arrangement', () => {
 			])
 		);
 		const tree = await site.nav({ base: '/d' });
-		const labels = tree.map((n) => (n.kind === 'group' ? n.label : n.kind === 'link' ? `link:${n.label}` : n.slug));
+		const labels = tree.map((n) =>
+			n.kind === 'group' ? n.label : n.kind === 'link' ? `link:${n.label}` : n.slug
+		);
 		expect(labels).toEqual(['Guides', 'API', 'link:GitHub']);
 
 		const apiGroup = tree.find((n): n is NavGroup => n.kind === 'group' && n.label === 'API')!;
@@ -273,8 +330,14 @@ describe('outline — build-time safety', () => {
 	});
 
 	it('errors on a slug collision across collections', async () => {
-		const a = content({ loader: fromArray([page('dup', 'a/dup.json', { title: 'A' })]), schema: v.object({ title: v.string() }) });
-		const b = content({ loader: fromArray([page('dup', 'b/dup.json', { title: 'B' })]), schema: v.object({ title: v.string() }) });
+		const a = content({
+			loader: fromArray([page('dup', 'a/dup.json', { title: 'A' })]),
+			schema: v.object({ title: v.string() })
+		});
+		const b = content({
+			loader: fromArray([page('dup', 'b/dup.json', { title: 'B' })]),
+			schema: v.object({ title: v.string() })
+		});
 		const site = mint_site(outline([a, b])); // both mint slug 'dup'
 		await expect(site.nav()).rejects.toThrow(/slug collision/);
 	});
@@ -295,13 +358,17 @@ describe('emissions', () => {
 
 	it('sitemap honors an explicit origin (for prerendered output)', async () => {
 		const site = mint_site(docsFixture());
-		const xml = await site.emit.sitemap({ base: '/docs', origin: 'https://prod.example' })(event('/sitemap.xml')).then((r) => r.text());
+		const xml = await site.emit
+			.sitemap({ base: '/docs', origin: 'https://prod.example' })(event('/sitemap.xml'))
+			.then((r) => r.text());
 		expect(xml).toContain('<loc>https://prod.example/docs/start/install</loc>');
 	});
 
 	it('llms.txt is an llmstxt.org index grouped by section', async () => {
 		const site = mint_site(docsFixture());
-		const txt = await site.emit.llms({ base: '/docs', title: 'Ogygia', description: 'SSR islands.' })(event('/llms.txt')).then((r) => r.text());
+		const txt = await site.emit
+			.llms({ base: '/docs', title: 'Ogygia', description: 'SSR islands.' })(event('/llms.txt'))
+			.then((r) => r.text());
 		expect(txt.startsWith('# Ogygia\n')).toBe(true);
 		expect(txt).toContain('> SSR islands.');
 		expect(txt).toContain('## Start');
@@ -310,9 +377,19 @@ describe('emissions', () => {
 	});
 
 	it('llms.txt renders top-level links under Pages and titles+summaries', async () => {
-		const api = content({ loader: fromArray([page('button', 'api/00-button.json', { title: 'Button' })]), schema: v.object({ title: v.string() }) });
-		const site = mint_site(outline([{ label: 'API', items: api }, { label: 'GitHub', href: 'https://example.com' }]));
-		const txt = await site.emit.llms({})(event('/llms.txt')).then((r) => r.text());
+		const api = content({
+			loader: fromArray([page('button', 'api/00-button.json', { title: 'Button' })]),
+			schema: v.object({ title: v.string() })
+		});
+		const site = mint_site(
+			outline([
+				{ label: 'API', items: api },
+				{ label: 'GitHub', href: 'https://example.com' }
+			])
+		);
+		const txt = await site.emit
+			.llms({})(event('/llms.txt'))
+			.then((r) => r.text());
 		expect(txt).toContain('## Pages');
 		expect(txt).toContain('- [GitHub](https://example.com)');
 		expect(txt).toContain('## API');
@@ -325,8 +402,19 @@ describe('emissions — raw markdown (from entry.source)', () => {
 	const sourced = () =>
 		content({
 			loader: fromArray([
-				{ id: 'start/install', filePath: 'content/docs/00-start/00-install/+doc.svx', data: { title: 'Install' }, meta: { headings: [] }, source: async () => '---\ntitle: Install\n---\n\n# Install\n\nRun the installer.' },
-				{ id: 'data-state/stores', filePath: 'content/docs/02-data-state/00-stores/+doc.svx', data: { title: 'Stores' }, meta: { headings: [] } } // no source
+				{
+					id: 'start/install',
+					filePath: 'content/docs/00-start/00-install/+doc.svx',
+					data: { title: 'Install' },
+					meta: { headings: [] },
+					source: async () => '---\ntitle: Install\n---\n\n# Install\n\nRun the installer.'
+				},
+				{
+					id: 'data-state/stores',
+					filePath: 'content/docs/02-data-state/00-stores/+doc.svx',
+					data: { title: 'Stores' },
+					meta: { headings: [] }
+				} // no source
 			]),
 			schema: docSchema
 		});
@@ -340,7 +428,9 @@ describe('emissions — raw markdown (from entry.source)', () => {
 
 	it('keeps frontmatter when asked', async () => {
 		const emit = mint_site(sourced()).emit.raw({ frontmatter: 'keep' });
-		expect(await emit.GET({ params: { slug: 'start/install' } }).then((r) => r.text())).toMatch(/^---\ntitle: Install/);
+		expect(await emit.GET({ params: { slug: 'start/install' } }).then((r) => r.text())).toMatch(
+			/^---\ntitle: Install/
+		);
 	});
 
 	it('entries() lists only slugs whose entry has source; unknown or source-less → 404', async () => {
@@ -355,7 +445,10 @@ describe('redirect history (redirect_from)', () => {
 	const redirected_docs = () =>
 		content({
 			loader: fromArray([
-				page('start/install', 'content/docs/00-start/00-install/+doc.svx', { title: 'Install', redirect_from: ['start/setup', 'installation'] }),
+				page('start/install', 'content/docs/00-start/00-install/+doc.svx', {
+					title: 'Install',
+					redirect_from: ['start/setup', 'installation']
+				}),
 				page('regions/held', 'content/docs/01-regions/00-held/+doc.svx', { title: 'Held' })
 			]),
 			schema: v.object({ title: v.string(), redirect_from: v.optional(v.array(v.string()), []) })
@@ -372,7 +465,10 @@ describe('redirect history (redirect_from)', () => {
 
 	it('load 308s an alias to the canonical URL (base by subtraction)', async () => {
 		const site = mint_site(redirected_docs());
-		const event = { params: { slug: 'start/setup' }, url: new URL('https://x.dev/docs/start/setup') };
+		const event = {
+			params: { slug: 'start/setup' },
+			url: new URL('https://x.dev/docs/start/setup')
+		};
 		const thrown = await site.load(event).then(
 			() => null,
 			(e: unknown) => e as { status?: number; location?: string }
@@ -409,8 +505,18 @@ describe('link audit', () => {
 	const linked = (links_by_id: Record<string, L[]>, extra?: { redirect_from?: string[] }) =>
 		content({
 			loader: fromArray([
-				page('start/install', 'content/docs/00-start/00-install/+doc.svx', { title: 'Install', ...(extra ?? {}) }, [{ depth: 2, id: 'setup', text: 'Setup' }]),
-				{ id: 'guide', filePath: 'content/docs/01-x/01-guide/+doc.svx', data: { title: 'Guide' }, meta: { headings: [], links: links_by_id['guide'] ?? [] } as unknown as Meta }
+				page(
+					'start/install',
+					'content/docs/00-start/00-install/+doc.svx',
+					{ title: 'Install', ...(extra ?? {}) },
+					[{ depth: 2, id: 'setup', text: 'Setup' }]
+				),
+				{
+					id: 'guide',
+					filePath: 'content/docs/01-x/01-guide/+doc.svx',
+					data: { title: 'Guide' },
+					meta: { headings: [], links: links_by_id['guide'] ?? [] } as unknown as Meta
+				}
 			]),
 			schema: v.object({ title: v.string(), redirect_from: v.optional(v.array(v.string()), []) })
 		});
@@ -430,22 +536,43 @@ describe('link audit', () => {
 			{ checks: [links()] }
 		);
 		const findings = await site.check({ base: '/docs' });
-		expect(findings.map((f) => ({ slug: f.slug, severity: f.severity, message: f.message }))).toEqual([
-			{ slug: 'guide', severity: 'error', message: `'/docs/start/install#nope': missing anchor #nope — link text "bad anchor"` },
-			{ slug: 'guide', severity: 'error', message: `'/docs/gone/page': missing page — link text "dead"` }
+		expect(
+			findings.map((f) => ({ slug: f.slug, severity: f.severity, message: f.message }))
+		).toEqual([
+			{
+				slug: 'guide',
+				severity: 'error',
+				message: `'/docs/start/install#nope': missing anchor #nope — link text "bad anchor"`
+			},
+			{
+				slug: 'guide',
+				severity: 'error',
+				message: `'/docs/gone/page': missing page — link text "dead"`
+			}
 		]);
 	});
 
 	it('a link through redirect history is a warn (stale), not an error', async () => {
-		const site = mint_site(linked({ guide: [{ href: '/docs/start/old-name', text: 'stale' }] }, { redirect_from: ['start/old-name'] }), { checks: [links()] });
+		const site = mint_site(
+			linked(
+				{ guide: [{ href: '/docs/start/old-name', text: 'stale' }] },
+				{ redirect_from: ['start/old-name'] }
+			),
+			{ checks: [links()] }
+		);
 		const findings = await site.check({ base: '/docs' });
 		expect(findings.map((f) => ({ severity: f.severity, message: f.message }))).toEqual([
-			{ severity: 'warn', message: `'/docs/start/old-name' works via redirect_from → update to /docs/start/install` }
+			{
+				severity: 'warn',
+				message: `'/docs/start/old-name' works via redirect_from → update to /docs/start/install`
+			}
 		]);
 	});
 
 	it('checks in load throw on an error finding (build/dev failure)', async () => {
-		const site = mint_site(linked({ guide: [{ href: '/docs/gone', text: 'dead' }] }), { checks: [links()] });
+		const site = mint_site(linked({ guide: [{ href: '/docs/gone', text: 'dead' }] }), {
+			checks: [links()]
+		});
 		const event = { params: { slug: 'guide' }, url: new URL('https://x.dev/docs/guide') };
 		await expect(site.load(event)).rejects.toThrow(/check failure.*'guide'/s);
 	});
@@ -453,23 +580,35 @@ describe('link audit', () => {
 	it('checks in load pass a clean page; self-anchor resolves against own headings', async () => {
 		const clean = content({
 			loader: fromArray([
-				{ id: 'solo', filePath: 'content/docs/00-a/00-solo/+doc.svx', data: { title: 'Solo' }, meta: { headings: [{ depth: 2, id: 'here', text: 'Here' }], links: [{ href: '#here', text: 'self' }] } as unknown as Meta }
+				{
+					id: 'solo',
+					filePath: 'content/docs/00-a/00-solo/+doc.svx',
+					data: { title: 'Solo' },
+					meta: {
+						headings: [{ depth: 2, id: 'here', text: 'Here' }],
+						links: [{ href: '#here', text: 'self' }]
+					} as unknown as Meta
+				}
 			]),
 			schema: v.object({ title: v.string() })
 		});
 		const site = mint_site(clean, { checks: [links()] });
-		await expect(site.load({ params: { slug: 'solo' }, url: new URL('https://x.dev/docs/solo') })).resolves.toBeUndefined();
+		await expect(
+			site.load({ params: { slug: 'solo' }, url: new URL('https://x.dev/docs/solo') })
+		).resolves.toBeUndefined();
 	});
 });
 
 describe('search — projection', () => {
 	it('strip_prose removes frontmatter, code, tags, markdown syntax', () => {
-		const src = '---\ntitle: X\n---\n\n<script>let a=1;</script>\n\n# Heading\n\nSome **bold** and `code` and [a link](/x).\n\n```ts\nconst y = 2;\n```\n';
+		const src =
+			'---\ntitle: X\n---\n\n<script>let a=1;</script>\n\n# Heading\n\nSome **bold** and `code` and [a link](/x).\n\n```ts\nconst y = 2;\n```\n';
 		expect(strip_prose(src)).toBe('Heading Some bold and code and a link.');
 	});
 
 	it('split_sections chunks by heading, aligned to collected headings', () => {
-		const source = '# Install\n\nLead text.\n\n## Setup\n\nRun the installer.\n\n## Usage\n\nUse it well.';
+		const source =
+			'# Install\n\nLead text.\n\n## Setup\n\nRun the installer.\n\n## Usage\n\nUse it well.';
 		const headings = [
 			{ depth: 2 as const, id: 'setup', text: 'Setup' },
 			{ depth: 2 as const, id: 'usage', text: 'Usage' }
@@ -494,8 +633,24 @@ describe('search — engine + brain (Orama)', () => {
 		const engine = orama_engine();
 		await engine.init?.();
 		const index = await engine.build([
-			{ id: 'a', slug: 'a', anchor: '', title: 'Install', section: 'Start', heading: '', text: 'run the installer with npm' },
-			{ id: 'b', slug: 'b', anchor: '', title: 'Regions', section: 'Core', heading: '', text: 'server chosen islands' }
+			{
+				id: 'a',
+				slug: 'a',
+				anchor: '',
+				title: 'Install',
+				section: 'Start',
+				heading: '',
+				text: 'run the installer with npm'
+			},
+			{
+				id: 'b',
+				slug: 'b',
+				anchor: '',
+				title: 'Regions',
+				section: 'Core',
+				heading: '',
+				text: 'server chosen islands'
+			}
 		]);
 		const hits = await index.query('installer', { limit: 5, base: '/docs' });
 		expect(hits[0].slug).toBe('a');
@@ -510,8 +665,24 @@ describe('search — engine + brain (Orama)', () => {
 
 		// Add a second collection lacking the term; scoping to it yields nothing (pre-filter).
 		const guides = searchable();
-		const other = content({ loader: fromArray([{ id: 'z', filePath: 'other/00-z/+doc.svx', data: { title: 'Z' }, meta: { headings: [] }, source: async () => '# Z\n\nnothing here' }]), schema: docSchema });
-		const scoped = mint_site(outline([{ label: 'Guides', items: guides, base: 'g' }, { label: 'Other', items: other, base: 'o' }]));
+		const other = content({
+			loader: fromArray([
+				{
+					id: 'z',
+					filePath: 'other/00-z/+doc.svx',
+					data: { title: 'Z' },
+					meta: { headings: [] },
+					source: async () => '# Z\n\nnothing here'
+				}
+			]),
+			schema: docSchema
+		});
+		const scoped = mint_site(
+			outline([
+				{ label: 'Guides', items: guides, base: 'g' },
+				{ label: 'Other', items: other, base: 'o' }
+			])
+		);
 		expect((await scoped.search('installer', { in: [other] })).length).toBe(0);
 		expect((await scoped.search('installer', { in: [guides] })).length).toBeGreaterThan(0);
 	});
@@ -538,13 +709,27 @@ describe('rehypeOverrides (element → slot rewrite)', () => {
 		const tree = {
 			type: 'root',
 			children: [
-				{ type: 'element', tagName: 'a', properties: { href: '/x' }, children: [{ type: 'text', value: 'link' }] },
-				{ type: 'element', tagName: 'p', properties: {}, children: [{ type: 'element', tagName: 'img', properties: { src: '/i.png' }, children: [] }] }
+				{
+					type: 'element',
+					tagName: 'a',
+					properties: { href: '/x' },
+					children: [{ type: 'text', value: 'link' }]
+				},
+				{
+					type: 'element',
+					tagName: 'p',
+					properties: {},
+					children: [
+						{ type: 'element', tagName: 'img', properties: { src: '/i.png' }, children: [] }
+					]
+				}
 			]
 		};
 		rehypeOverrides(['a', 'img'])(tree);
 		const a = tree.children[0] as { tagName: string; properties: Record<string, unknown> };
-		const img = (tree.children[1] as { children: { tagName: string; properties: Record<string, unknown> }[] }).children[0];
+		const img = (
+			tree.children[1] as { children: { tagName: string; properties: Record<string, unknown> }[] }
+		).children[0];
 		expect(a.tagName).toBe(SLOT_TAG);
 		expect(a.properties).toEqual({ href: '/x', tag: 'a' });
 		expect(img.tagName).toBe(SLOT_TAG);
@@ -561,8 +746,17 @@ describe('remarkLinks collector', () => {
 				{
 					type: 'paragraph',
 					children: [
-						{ type: 'link', url: '/docs/a', position: { start: { line: 4 } }, children: [{ type: 'text', value: 'A page' }] },
-						{ type: 'link', url: 'https://x.dev', children: [{ type: 'inlineCode', value: 'code' }] }
+						{
+							type: 'link',
+							url: '/docs/a',
+							position: { start: { line: 4 } },
+							children: [{ type: 'text', value: 'A page' }]
+						},
+						{
+							type: 'link',
+							url: 'https://x.dev',
+							children: [{ type: 'inlineCode', value: 'code' }]
+						}
 					]
 				}
 			]

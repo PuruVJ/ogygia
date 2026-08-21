@@ -11,7 +11,13 @@ import {
 import { sequential_ms, type NetCall } from '../src/profiler/net.js';
 import { profiler } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
-import { render_report, report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.js';
+import {
+	render_report,
+	report_json,
+	report_dump,
+	is_dump,
+	derive_findings
+} from '../src/profiler/report.js';
 import type { RequestEvent } from '@sveltejs/kit';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,7 +44,10 @@ describe('analyze', () => {
 			{ id: 1, callFrame: frame('(root)'), children: [2, 5, 6] },
 			{ id: 2, callFrame: frame('handle', 'file:///app/src/hooks.server.ts', 9), children: [3] },
 			{ id: 3, callFrame: frame('Header', '/app/src/lib/Header.svelte', 0), children: [4] },
-			{ id: 4, callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/escaping.js', 3) },
+			{
+				id: 4,
+				callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/escaping.js', 3)
+			},
 			{ id: 5, callFrame: frame('(idle)') },
 			{ id: 6, callFrame: frame('(garbage collector)') }
 		],
@@ -184,14 +193,20 @@ describe('render_report visuals', () => {
 				{ id: 1, callFrame: frame('(root)'), children: [2, 5] },
 				{ id: 2, callFrame: frame('handle', '/app/src/hooks.server.ts', 9), children: [3] },
 				{ id: 3, callFrame: frame('Header', '/app/src/lib/Header.svelte', 0), children: [4] },
-				{ id: 4, callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/x.js', 3) },
+				{
+					id: 4,
+					callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/x.js', 3)
+				},
 				{ id: 5, callFrame: frame('(garbage collector)') }
 			],
 			samples: [4, 3, 2, 5],
 			timeDeltas: [1000, 1000, 1000, 1000]
 		};
 		const a = analyze(profile);
-		const j = report_json(a, meta, '/__profiler', { net: [], heap: null, mem: [] }) as Record<string, any>;
+		const j = report_json(a, meta, '/__profiler', { net: [], heap: null, mem: [] }) as Record<
+			string,
+			any
+		>;
 
 		expect(j.schema).toBe('ogygia-profiler-report');
 		expect(j.units.time).toBe('ms');
@@ -366,9 +381,13 @@ describe('categorize', () => {
 		// closures inside a component file are app code, not the component itself
 		expect(categorize(frame('', '/app/src/lib/Header.svelte')).category).toBe('app');
 		expect(categorize(frame('each_item', '/app/src/lib/Header.svelte')).category).toBe('app');
-		expect(categorize(frame('_page', '/out/entries/pages/_page.svelte.js')).category).toBe('component');
+		expect(categorize(frame('_page', '/out/entries/pages/_page.svelte.js')).category).toBe(
+			'component'
+		);
 		// endpoint handlers are capitalized but are app code, not components
-		expect(categorize(frame('GET', '/out/entries/endpoints/api/_server.ts.js')).category).toBe('app');
+		expect(categorize(frame('GET', '/out/entries/endpoints/api/_server.ts.js')).category).toBe(
+			'app'
+		);
 		// prod bundle: chunk url, but the compiled SSR fn keeps the component name
 		expect(categorize(frame('Header', '/out/server/chunks/Header.js')).category).toBe('component');
 		expect(categorize(frame('render_page', '/out/server/index.js')).category).toBe('app');

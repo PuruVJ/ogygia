@@ -8,7 +8,7 @@ import { describe, test, expect } from 'vitest';
 import path from 'node:path';
 import { region, isRegion } from '../dist/region.js';
 import { ogygiaTransport } from '../dist/transport.js';
-import { transformHost } from '../dist/compiler/transform.js';
+import { transformHost } from '../dist/compiler/region/transform.js';
 
 /** A fake SSR partial-binding (what `virtual:ogygia/region/<iid>.js` exports on the server leg). */
 function fakeBinding(overrides: Record<string, unknown> = {}) {
