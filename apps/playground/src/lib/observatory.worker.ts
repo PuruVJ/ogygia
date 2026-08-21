@@ -13,13 +13,21 @@ import { parse } from 'svelte/compiler';
 // BROWSER build — same version, byte-identical AST. LAZY-loaded via a dynamic import inside init, so
 // the worker module itself has NO top-level await (the "init under a message" pattern): the WASM
 // instantiates inside this promise on first parse, then the resolved fn is reused.
-type OxcParse = (id: string, code: string) => Promise<unknown>;
-let oxc_parse: OxcParse | null = null;
-async function init_oxc(): Promise<OxcParse> {
-	if (oxc_parse) return oxc_parse;
-	const mod = (await import('@rolldown/browser/utils')) as { parse: OxcParse };
-	oxc_parse = mod.parse;
-	return oxc_parse;
+type OxcMod = {
+	parse: (id: string, code: string) => Promise<unknown>;
+	parseSync: (id: string, code: string) => unknown;
+};
+let oxc_mod: OxcMod | null = null;
+let oxc_warmed = false;
+/** Load rolldown-browser + WARM the WASM once via the async `parse`, after which the SYNC `parseSync`
+ *  works on the current thread — which is what the real ogygia transform (`parse_module`) needs. */
+async function init_oxc(): Promise<OxcMod> {
+	if (!oxc_mod) oxc_mod = (await import('@rolldown/browser/utils')) as OxcMod;
+	if (!oxc_warmed) {
+		await oxc_mod.parse('warmup.ts', 'const _ = 1;');
+		oxc_warmed = true;
+	}
+	return oxc_mod;
 }
 
 export interface Island {
@@ -123,8 +131,9 @@ async function analyze(source: string): Promise<Analysis> {
 			content && content.start != null && content.end != null
 				? source.slice(content.start, content.end)
 				: '';
-		const parse_oxc = await init_oxc();
-		const res = (await parse_oxc('host.ts', script)) as {
+		const mod = await init_oxc();
+		// SYNC parse — proves parseSync works after the WASM is warmed (the path the real transform uses).
+		const res = mod.parseSync('host.ts', script) as {
 			program?: { body?: Array<{ type: string }> };
 			errors?: unknown[];
 		};
