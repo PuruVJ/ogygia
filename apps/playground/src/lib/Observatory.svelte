@@ -55,7 +55,19 @@
 
 <Card>
   <Prose>{@html article}</Prose>
-</Card>`
+</Card>`,
+		'keep across nav': `<scr${''}ipt>
+  // the player relocates across SPA navigation instead of remounting
+  import Player from './Player.svelte' with { wake: 'load', keep: 'player' };
+</scr${''}ipt>
+
+<Player {track} />`,
+		'live region': `<scr${''}ipt>
+  // baked HTML that revalidates in the background (SWR)
+  import Ticker from './Ticker.svelte' with { render: 'live', wake: 'load' };
+</scr${''}ipt>
+
+<Ticker />`
 	};
 
 	// Share via URL (Rung 6): load the source from the hash on mount, and keep the hash in sync so the
