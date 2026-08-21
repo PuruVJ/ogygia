@@ -59,6 +59,19 @@ export interface Analysis {
 	/** CLIENT bundle for the INTERACTIVE preview: every file compiled to client JS + the entry, so the
 	 *  MAIN thread can link + `mount()` the app (the counter actually works). */
 	client?: { entry: string; modules: Record<string, string>; error?: string };
+	/** BYTE LEDGER (Rung 5.3): the ogygia thesis, weighed live — on a csr=false page ogygia ships only
+	 *  the waking islands' JS; plain Kit (csr=true) ships every component. Same compiler, honest bytes. */
+	ledger?: {
+		/** Per-component compiled client JS bytes, and whether it ships under ogygia (csr=false). */
+		files: Array<{ name: string; bytes: number; ships: boolean; why: string }>;
+		/** Sum of the island JS ogygia actually ships (the components that wake). */
+		ogygiaBytes: number;
+		/** Sum of EVERY component's JS — what csr=true (plain Kit) ships to hydrate the whole tree. */
+		kitBytes: number;
+		/** How many components ship under ogygia vs under kit. */
+		ogygiaCount: number;
+		kitCount: number;
+	};
 }
 
 /** Illustrative region id (only used for the svelte-fallback map; the real transform uses md5). */
@@ -290,6 +303,64 @@ function execute(files: Record<string, string>, entry: string): Analysis['render
 	}
 }
 
+/** BYTE LEDGER — weigh the ogygia thesis live. Compile every component to client JS; ogygia ships only
+ *  the waking islands (csr=false), plain Kit (csr=true) ships them all. Same compiler, honest bytes. */
+function byte_ledger(files: Record<string, string>): Analysis['ledger'] {
+	const svelteFiles = Object.keys(files).filter((n) => n.endsWith('.svelte'));
+	const bytesOf = (name: string): number => {
+		try {
+			const { js } = compile(files[name], { filename: name, generate: 'client', dev: false }) as {
+				js: { code: string };
+			};
+			return new TextEncoder().encode(js.code).length;
+		} catch {
+			return 0;
+		}
+	};
+	// Collect every marked import across ALL files → which target components ship, and why.
+	const reason = new Map<string, { ships: boolean; why: string }>();
+	for (const f of svelteFiles) {
+		const marks = analyze_marks(files[f]);
+		for (const isl of marks.islands) {
+			const k = isl.strategy.kind;
+			const ships = k === 'island' || k === 'preset';
+			const target = resolve_file(isl.component, files);
+			if (!target) continue;
+			const why = ships
+				? `island · wakes on '${(isl.attrs.wake as string) || 'load'}'`
+				: k === 'lake'
+					? 'lake · frozen SSR, no JS'
+					: k === 'server hole'
+						? 'server hole · HTML from endpoint'
+						: k === 'held (raw)'
+							? 'held raw · server HTML, no JS'
+							: k === 'live'
+								? 'live · baked HTML, revalidates'
+								: 'server HTML only';
+			// an island mark wins over a non-shipping mark if the same file is imported both ways
+			if (!reason.has(target) || ships) reason.set(target, { ships, why });
+		}
+	}
+	const filesOut = svelteFiles.map((name) => {
+		const bytes = bytesOf(name);
+		const r = reason.get(name);
+		const ships = r?.ships ?? false;
+		const why =
+			r?.why ??
+			(name === 'App.svelte' ? 'page shell · server HTML only' : 'unmarked · free server HTML');
+		return { name, bytes, ships, why };
+	});
+	const ogygiaBytes = filesOut.filter((f) => f.ships).reduce((s, f) => s + f.bytes, 0);
+	const kitBytes = filesOut.reduce((s, f) => s + f.bytes, 0);
+	return {
+		files: filesOut,
+		ogygiaBytes,
+		kitBytes,
+		ogygiaCount: filesOut.filter((f) => f.ships).length,
+		kitCount: filesOut.length
+	};
+}
+
 async function analyze(files: Record<string, string>, active: string): Promise<Analysis> {
 	const source = files[active] ?? '';
 	const marks = analyze_marks(source);
@@ -404,6 +475,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		oxc,
 		rendered: execute(files, 'App.svelte' in files ? 'App.svelte' : active),
 		client: client_bundle(files, 'App.svelte' in files ? 'App.svelte' : active),
+		ledger: byte_ledger(files),
 		ms: now() - t0
 	};
 }

@@ -131,6 +131,14 @@
 	let leg = $state('ssr'); // 'ssr' | 'client'
 	let everWarmed = $state(false); // the WASM compiler needs ~1-2s to warm on first load
 
+	// Byte ledger helpers — the ogygia thesis, weighed live.
+	const fmt_bytes = (n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
+	const saved_pct = $derived(
+		analysis.ledger && analysis.ledger.kitBytes > 0
+			? Math.round((1 - analysis.ledger.ogygiaBytes / analysis.ledger.kitBytes) * 100)
+			: 0
+	);
+
 	$effect(() => {
 		if (analysis.real || analysis.realError) everWarmed = true;
 	});
@@ -313,6 +321,55 @@
 				{:else if !analysis.client || analysis.client.error}
 					<div class="err" data-obs-render-err>could not render: {analysis.rendered.error}</div>
 				{/if}
+			{/if}
+
+			{#if analysis.ledger && analysis.ledger.kitBytes > 0}
+				<div class="cap">
+					byte ledger <span class="muted">· island JS shipped vs plain Kit (csr=true)</span>
+					{#if saved_pct > 0}<span class="saved" data-obs-saved>−{saved_pct}% JS</span>{/if}
+				</div>
+				<div class="ledger" data-obs-ledger>
+					<div class="bars">
+						<div class="barrow">
+							<span class="blabel">ogygia</span>
+							<div class="btrack">
+								<div
+									class="bfill og"
+									style:width="{Math.max(2, (100 * analysis.ledger.ogygiaBytes) / analysis.ledger.kitBytes)}%"
+								></div>
+							</div>
+							<span class="bnum og" data-obs-og-bytes
+								>{fmt_bytes(analysis.ledger.ogygiaBytes)}
+								<span class="muted">· {analysis.ledger.ogygiaCount} island{analysis.ledger.ogygiaCount === 1 ? '' : 's'}</span></span
+							>
+						</div>
+						<div class="barrow">
+							<span class="blabel">plain Kit</span>
+							<div class="btrack">
+								<div class="bfill kit" style:width="100%"></div>
+							</div>
+							<span class="bnum kit" data-obs-kit-bytes
+								>{fmt_bytes(analysis.ledger.kitBytes)}
+								<span class="muted">· {analysis.ledger.kitCount} component{analysis.ledger.kitCount === 1 ? '' : 's'}</span></span
+							>
+						</div>
+					</div>
+					<table class="ltable">
+						<tbody>
+							{#each analysis.ledger.files as f (f.name)}
+								<tr class:ships={f.ships}>
+									<td class="lname mono">{f.name}</td>
+									<td class="lwhy muted">{f.why}</td>
+									<td class="lbytes">{f.ships ? fmt_bytes(f.bytes) : '0 B'}<span class="lraw muted"> / {fmt_bytes(f.bytes)}</span></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+					<div class="lfoot muted">
+						uncompressed compiled JS · both share the svelte runtime (excluded) · ogygia adds its ~8&nbsp;KB
+						island runtime, plain Kit hydrates the whole tree
+					</div>
+				</div>
 			{/if}
 
 			<div class="cap">island map — {analysis.islands.length} marked {analysis.islands.length === 1 ? 'region' : 'regions'}</div>
@@ -637,6 +694,104 @@
 		background: rgba(148, 163, 184, 0.12);
 		color: #94a3b8;
 		font-size: 10px;
+	}
+	.saved {
+		margin-left: auto;
+		padding: 1px 9px;
+		border-radius: 999px;
+		background: rgba(20, 184, 166, 0.18);
+		color: #5eead4;
+		font-weight: 700;
+		font-size: 11px;
+	}
+	.ledger {
+		padding: 10px 14px 6px;
+	}
+	.bars {
+		display: flex;
+		flex-direction: column;
+		gap: 7px;
+		margin-bottom: 10px;
+	}
+	.barrow {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.blabel {
+		width: 62px;
+		flex: none;
+		color: #94a3b8;
+		text-align: right;
+	}
+	.btrack {
+		flex: 1;
+		height: 14px;
+		border-radius: 4px;
+		background: rgba(148, 163, 184, 0.1);
+		overflow: hidden;
+	}
+	.bfill {
+		height: 100%;
+		border-radius: 4px;
+		transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+	.bfill.og {
+		background: linear-gradient(90deg, #0d9488, #5eead4);
+	}
+	.bfill.kit {
+		background: rgba(148, 163, 184, 0.35);
+	}
+	.bnum {
+		width: 130px;
+		flex: none;
+	}
+	.bnum.og {
+		color: #5eead4;
+		font-weight: 700;
+	}
+	.bnum.kit {
+		color: #94a3b8;
+	}
+	.ltable {
+		width: 100%;
+		border-collapse: collapse;
+	}
+	.ltable td {
+		padding: 3px 0;
+		vertical-align: top;
+	}
+	.ltable tr + tr td {
+		border-top: 1px solid rgba(148, 163, 184, 0.07);
+	}
+	.lname {
+		color: #64748b;
+		width: 130px;
+	}
+	.ltable tr.ships .lname {
+		color: #5eead4;
+	}
+	.lwhy {
+		font-size: 11px;
+	}
+	.lbytes {
+		text-align: right;
+		white-space: nowrap;
+		color: #64748b;
+	}
+	.ltable tr.ships .lbytes {
+		color: #cbd5e1;
+	}
+	.lraw {
+		font-size: 10px;
+	}
+	.ltable tr.ships .lraw {
+		display: none;
+	}
+	.lfoot {
+		margin-top: 8px;
+		font-size: 10px;
+		line-height: 1.5;
 	}
 	.pipe {
 		margin: 4px 14px;

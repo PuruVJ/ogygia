@@ -47,6 +47,23 @@ try {
 	const btnAfter = await page.evaluate(() => document.querySelector('[data-obs-preview] button')?.textContent?.trim() || '');
 	check('the rendered app is INTERACTIVE (mounted, client-hydrated)', btnBefore === 'count is 3' && btnAfter === 'count is 5', `${btnBefore} → ${btnAfter}`);
 
+	// ── BYTE LEDGER: the ogygia thesis, weighed live — ogygia ships only the waking island, plain Kit
+	//    (csr=true) ships every component; the demo saves ~75% of the app JS ──
+	const ledger = await page.evaluate(() => {
+		const led = document.querySelector('[data-obs-ledger]');
+		if (!led) return null;
+		const num = (sel: string) => document.querySelector(sel)?.textContent || '';
+		const rows = [...led.querySelectorAll('.ltable tr')].map((r) => ({
+			name: r.querySelector('.lname')?.textContent?.trim() || '',
+			ships: r.classList.contains('ships')
+		}));
+		return { saved: num('[data-obs-saved]').trim(), og: num('[data-obs-og-bytes]'), kit: num('[data-obs-kit-bytes]'), rows };
+	});
+	check('byte ledger present', !!ledger, JSON.stringify(ledger?.saved));
+	check('byte ledger: ogygia ships FEWER components than plain Kit', !!ledger && ledger.rows.filter((r) => r.ships).length < ledger.rows.length, JSON.stringify(ledger?.rows));
+	check('byte ledger: only the waking island (Counter) ships, the lake/shell do not', !!ledger && ledger.rows.find((r) => r.name === 'Counter.svelte')?.ships === true && ledger.rows.find((r) => r.name === 'Prose.svelte')?.ships === false && ledger.rows.find((r) => r.name === 'App.svelte')?.ships === false, JSON.stringify(ledger?.rows));
+	check('byte ledger: shows a real JS saving (csr=false vs csr=true)', !!ledger && /−\d+% JS/.test(ledger.saved), ledger?.saved);
+
 	// ── switch to the "all strategies" preset to exercise every island kind in the transform ──
 	await page.evaluate(() => {
 		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'all strategies');

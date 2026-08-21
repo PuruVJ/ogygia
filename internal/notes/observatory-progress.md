@@ -60,11 +60,27 @@ Library: `packages/ogygia/src/compiler/{parse/oxc.ts (set_parser), browser.ts}`.
   - **Nav** — per-nav reconcile decisions (keep/patch/mount/remove) + timing.
   - **Timeline** — client wake/hydrate events on a time axis.
 
+## EXECUTION — the app now RUNS in the browser ✅ (overnight, second iteration)
+
+The Observatory is a **multi-file REPL** that compiles AND runs your app, entirely client-side:
+
+- **Multi-file editor** — a file map (App.svelte + Counter.svelte + …) with tabs, add/remove, and
+  share-via-URL of the whole map (`#files=`). The in-worker linker resolves `./X.svelte` imports across
+  the map, so islands render as their REAL components.
+- **Rendered (SSR)** — the worker compiles every file with svelte (server), evals them via a tiny
+  in-worker module linker (ESM→CJS `new Function`), and `render()`s the app to HTML.
+- **INTERACTIVE** — the preview mounts the CLIENT-compiled app on the main thread (a runtime
+  `svelte/internal/client` import + a main-thread linker), so it actually runs: the counter button
+  works. Type an app → see it render AND run.
+
+Full loop: **source → ogygia transform → svelte compile → link → mount**, no bundler, no server.
+
 ## What's NOT done (the honest remainder)
 
-- **Execution** (Rungs 2–4): the pipeline compiles but does not yet EVAL + render. Making the compiled
-  app actually run needs the linker + SW sandbox + a mini-Kit server realm in a worker. That's the next
-  big lift.
+- The interactive preview runs the app with islands as **regular components** (fresh client mount). It
+  does not yet run the ogygia island MACHINERY (lazy `<ogygia-region>` hydration, the real runtime) —
+  that's the SW-sandbox + mini-Kit server realm (Rungs 2–4). The current preview proves "type an app →
+  see it run"; wiring the real island lifecycle is the next lift.
 - **Server-realm devtools events beyond the page render** (deferred-hole timing, batch) — schema-defined,
   not yet emitted.
 - The SSR/client leg toggle is wired but the host rewrite is leg-invariant, so it rarely shows; the real
