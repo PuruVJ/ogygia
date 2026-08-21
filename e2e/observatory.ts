@@ -27,8 +27,8 @@ try {
 	await page.waitForTimeout(400);
 
 	check('observatory island mounted', (await page.locator('[data-observatory]').count()) === 1);
-	check('runs its compile in a Web Worker', workers.length >= 1, `${workers.length} worker(s)`);
-	check('exactly ONE worker (no per-keystroke runaway)', workers.length === 1, `${workers.length}`);
+	// >= 1: our compile worker, plus the WASI helper threads rolldown-browser's WASM spawns for oxc.
+	check('runs its compile in a Web Worker', workers.length >= 1, `${workers.length} worker(s) incl. WASI threads`);
 
 	const strategies = await page.evaluate(() =>
 		[...document.querySelectorAll('[data-obs-map] .badge')].map((b) => b.textContent)
@@ -43,6 +43,7 @@ try {
 
 	// ── live edit: add a marked import, expect the map to grow — off the main thread ──
 	const before = strategies.length;
+	const workersBeforeEdit = workers.length; // WASI threads already spawned; edits must not add more
 	await page.evaluate(() => {
 		const ta = document.querySelector('[data-obs-input]') as HTMLTextAreaElement;
 		const next = ta.value.replace('</scr' + 'ipt>', "  import X from './X.svelte' with { wake: 'idle' };\n</scr" + 'ipt>');
@@ -53,7 +54,11 @@ try {
 	await page.waitForTimeout(500);
 	const after = await page.evaluate(() => document.querySelectorAll('[data-obs-map] .badge').length);
 	check('live edit updates the island map', after === before + 1, `${before} → ${after}`);
-	check('still exactly one worker after edits', workers.length === 1, `${workers.length}`);
+	check('worker count stable across edits (no per-keystroke runaway)', workers.length === workersBeforeEdit, `${workersBeforeEdit} → ${workers.length}`);
+	// The real oxc parser (rolldown-browser WASM) parsed in-browser — the browser-compiler unlock.
+	const oxcOk = await page.evaluate(() => document.querySelector('[data-obs-oxc]')?.classList.contains('ok'));
+	check('real oxc parser (rolldown-browser WASM) parses in-browser', !!oxcOk);
+	check('page is cross-origin isolated (COOP/COEP for the WASM)', await page.evaluate(() => self.crossOriginIsolated));
 	check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 
 	await page.close();
