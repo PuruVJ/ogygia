@@ -393,6 +393,23 @@
 				</div>
 			{/if}
 
+			{#if analysis.rendered?.wire && analysis.rendered.wire.length}
+				<div class="cap">wire <span class="muted">· the props that cross to each island, by value (devalue)</span></div>
+				<div class="wire" data-obs-wire>
+					{#each analysis.rendered.wire as w, i (w.name + i)}
+						<div class="wrow">
+							<span class="wname mono">{w.name}</span>
+							{#if w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]'}
+								<span class="muted wempty">no props cross — nothing to serialize</span>
+							{:else}
+								<code class="wpay">{w.payload}</code>
+								<span class="wbytes muted">{w.bytes} B</span>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{/if}
+
 			<div class="cap">island map — {analysis.islands.length} marked {analysis.islands.length === 1 ? 'region' : 'regions'}</div>
 			{#if !analysis.ok}
 				<div class="err">parse error: {analysis.error}</div>
@@ -900,6 +917,40 @@
 		margin-top: 8px;
 		font-size: 10px;
 		line-height: 1.5;
+	}
+	.wire {
+		padding: 6px 14px 4px;
+	}
+	.wrow {
+		display: flex;
+		align-items: baseline;
+		gap: 10px;
+		padding: 3px 0;
+	}
+	.wrow + .wrow {
+		border-top: 1px solid rgba(148, 163, 184, 0.07);
+	}
+	.wname {
+		width: 120px;
+		flex: none;
+		color: #5eead4;
+	}
+	.wpay {
+		flex: 1;
+		color: #cbd5e1;
+		word-break: break-word;
+		background: rgba(148, 163, 184, 0.08);
+		padding: 1px 7px;
+		border-radius: 4px;
+		font-size: 11px;
+	}
+	.wbytes {
+		flex: none;
+		font-size: 10px;
+	}
+	.wempty {
+		flex: 1;
+		font-size: 11px;
 	}
 	.pipe {
 		margin: 4px 14px;

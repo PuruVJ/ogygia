@@ -88,6 +88,18 @@ try {
 	check('byte ledger: only the waking island (Counter) ships, the lake/shell do not', !!ledger && ledger.rows.find((r) => r.name === 'Counter.svelte')?.ships === true && ledger.rows.find((r) => r.name === 'Prose.svelte')?.ships === false && ledger.rows.find((r) => r.name === 'App.svelte')?.ships === false, JSON.stringify(ledger?.rows));
 	check('byte ledger: shows a real JS saving (csr=false vs csr=true)', !!ledger && /−\d+% JS/.test(ledger.saved), ledger?.saved);
 
+	// ── WIRE INSPECTOR: the real props each island receives, by value (devalue). Counter gets start=3;
+	//    Prose receives only children (a region snippet), so nothing crosses as a prop ──
+	const wire = await page.evaluate(() =>
+		[...document.querySelectorAll('[data-obs-wire] .wrow')].map((r) => ({
+			name: r.querySelector('.wname')?.textContent?.trim() || '',
+			payload: r.querySelector('.wpay')?.textContent?.trim() || '',
+			empty: !!r.querySelector('.wempty')
+		}))
+	);
+	check('wire inspector: Counter receives its start prop by value', wire.some((w) => w.name === 'Counter.svelte' && /start/.test(w.payload) && /3/.test(w.payload)), JSON.stringify(wire));
+	check('wire inspector: Prose receives only children (a snippet) — no props cross', wire.some((w) => w.name === 'Prose.svelte' && w.empty), JSON.stringify(wire));
+
 	// ── switch to the "all strategies" preset to exercise every island kind in the transform ──
 	await page.evaluate(() => {
 		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'all strategies');

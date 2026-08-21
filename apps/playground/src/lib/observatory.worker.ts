@@ -3,6 +3,7 @@ import './rd-process-shim.ts';
 import { parse, compile } from 'svelte/compiler';
 import { render } from 'svelte/server';
 import * as svelteInternalServer from 'svelte/internal/server';
+import { stringify as devalue_stringify } from 'devalue';
 import path from 'path-browserify';
 // The REAL ogygia host transform + id helpers + the parser DI seam, from the minimal browser entry.
 import {
@@ -55,7 +56,15 @@ export interface Analysis {
 	ms?: number;
 	/** EXECUTION: the component actually rendered to SSR HTML in the browser (imports not provided
 	 *  render as labelled stubs). This is the compile→link→render loop running client-side. */
-	rendered?: { ok: boolean; html?: string; error?: string; stubs?: string[] };
+	rendered?: {
+		ok: boolean;
+		html?: string;
+		error?: string;
+		stubs?: string[];
+		/** WIRE INSPECTOR (Rung 5.2): the real props each island receives, devalue-encoded — exactly
+		 *  what crosses the boundary by value (children/functions never cross). Captured at render. */
+		wire?: Array<{ name: string; kind: string; payload: string; bytes: number }>;
+	};
 	/** CLIENT bundle for the INTERACTIVE preview: every file compiled to client JS + the entry, so the
 	 *  MAIN thread can link + `mount()` the app (the counter actually works). */
 	client?: { entry: string; modules: Record<string, string>; error?: string };
@@ -267,12 +276,36 @@ type IslandInfo = Map<string, { kind: string; wake: string; name: string; bytes:
 function execute(files: Record<string, string>, entry: string, islandInfo?: IslandInfo): Analysis['rendered'] {
 	const stubs = new Set<string>();
 	const cache = new Map<string, Record<string, unknown>>();
+	const wire: NonNullable<Analysis['rendered']>['wire'] = [];
 	const esc = (s: string) => s.replace(/"/g, '&quot;');
+	// The props a marked region actually RECEIVES, devalue-encoded — exactly what crosses the boundary
+	// by VALUE. `children` (a snippet) and functions never cross, so strip them (matches the wire law).
+	const wire_payload = (props: unknown): string => {
+		const crossing: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries((props as Record<string, unknown>) || {})) {
+			// `children`/snippets and functions never cross; `$$slots`/`$$events` are svelte's own
+			// slot bookkeeping, not user props — none of them are part of the ogygia wire.
+			if (k === 'children' || k.startsWith('$$') || typeof v === 'function') continue;
+			crossing[k] = v;
+		}
+		try {
+			return devalue_stringify(crossing);
+		} catch {
+			try {
+				return JSON.stringify(crossing);
+			} catch {
+				return '{}';
+			}
+		}
+	};
 	// Wrap a compiled server component so its render is bracketed by a boundary marker (display:contents,
 	// invisible to layout) carrying the region's strategy — the raw material the lens tints + labels.
+	// The same seam captures the WIRE payload (the props that cross to this island).
 	const with_boundary = (exports: Record<string, unknown>, info: NonNullable<ReturnType<IslandInfo['get']>>): Record<string, unknown> => {
 		const Real = exports.default as (r: { push: (s: string) => void }, p: unknown) => void;
 		const Marked = ($$renderer: { push: (s: string) => void }, props: unknown) => {
+			const payload = wire_payload(props);
+			wire.push({ name: info.name, kind: info.kind, payload, bytes: new TextEncoder().encode(payload).length });
 			$$renderer.push(
 				`<ogygia-obs-island data-obs-island data-kind="${esc(info.kind)}" data-name="${esc(info.name)}" data-wake="${esc(info.wake)}" data-bytes="${info.bytes}" data-ships="${info.ships}">`
 			);
@@ -316,9 +349,9 @@ function execute(files: Record<string, string>, entry: string, islandInfo?: Isla
 		const Component = mod.default as unknown;
 		if (typeof Component !== 'function') return { ok: false, error: 'no default component export' };
 		const out = render(Component as never, { props: {} }) as { body?: string; html?: string };
-		return { ok: true, html: out.body ?? out.html ?? '', stubs: [...stubs] };
+		return { ok: true, html: out.body ?? out.html ?? '', stubs: [...stubs], wire };
 	} catch (e) {
-		return { ok: false, error: e instanceof Error ? e.message : String(e), stubs: [...stubs] };
+		return { ok: false, error: e instanceof Error ? e.message : String(e), stubs: [...stubs], wire };
 	}
 }
 
