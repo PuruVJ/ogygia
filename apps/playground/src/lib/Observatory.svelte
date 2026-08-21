@@ -122,6 +122,32 @@
 				{/if}
 			</div>
 			<pre data-obs-output>{analysis.output}</pre>
+
+			{#if analysis.modules && analysis.modules.length}
+				<div class="cap">generated modules <span class="muted">· what each island compiles to</span></div>
+				<div class="mods" data-obs-modules>
+					{#each analysis.modules as m (m.id)}
+						<details>
+							<summary>
+								<span class="mono">{m.component}</span>
+								<span class="mkind">{m.kind}</span>
+								<span class="muted mono">{m.id.slice(0, 12)}</span>
+							</summary>
+							{#if m.wrapperSource}
+								<div class="mpath">{m.wrapperPath}</div>
+								<pre class="msrc">{m.wrapperSource}</pre>
+							{/if}
+							{#if m.entrySource}
+								<div class="mpath">{m.entryPath}</div>
+								<pre class="msrc">{m.entrySource}</pre>
+							{/if}
+							{#if !m.wrapperSource && !m.entrySource}
+								<div class="muted mpath">no standalone module (rendered inline / binding-only)</div>
+							{/if}
+						</details>
+					{/each}
+				</div>
+			{/if}
 		</section>
 	</div>
 </div>
@@ -255,6 +281,49 @@
 		color: #64748b;
 		font-weight: 400;
 		font-size: 10px;
+	}
+	.mods {
+		padding: 4px 14px 14px;
+	}
+	.mods details {
+		border: 1px solid rgba(148, 163, 184, 0.15);
+		border-radius: 6px;
+		margin: 6px 0;
+		overflow: hidden;
+	}
+	.mods summary {
+		cursor: pointer;
+		padding: 6px 10px;
+		display: flex;
+		gap: 10px;
+		align-items: center;
+		background: rgba(148, 163, 184, 0.05);
+		user-select: none;
+	}
+	.mono {
+		font-family: ui-monospace, Menlo, monospace;
+	}
+	.mkind {
+		padding: 0 7px;
+		border-radius: 999px;
+		background: rgba(20, 184, 166, 0.14);
+		color: #5eead4;
+		font-size: 10px;
+	}
+	.mpath {
+		padding: 6px 10px 2px;
+		color: #94a3b8;
+		font-size: 10px;
+	}
+	.msrc {
+		margin: 0;
+		padding: 6px 10px 10px;
+		white-space: pre-wrap;
+		word-break: break-word;
+		color: #cbd5e1;
+		font-size: 11px;
+		max-height: 220px;
+		overflow: auto;
 	}
 	.err {
 		padding: 12px 14px;

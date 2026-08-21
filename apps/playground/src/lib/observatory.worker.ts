@@ -31,8 +31,16 @@ export interface Analysis {
 	real: boolean;
 	/** Real island count from transformHost (md5 iids), or null. */
 	realIslands: number | null;
-	/** First real island descriptor (JSON) — for wiring the map to real ids. */
-	realSample?: string;
+	/** The REAL generated virtual modules per island (the wrapper + entry the driver serves). */
+	modules?: Array<{
+		id: string;
+		component: string;
+		kind: string;
+		wrapperPath?: string;
+		wrapperSource?: string;
+		entryPath?: string;
+		entrySource?: string;
+	}>;
 	realError?: string;
 	/** Proof the SAME oxc parser (rolldown-browser WASM) the full transform uses runs in-browser. */
 	oxc?: { engine: string; ok: boolean; imports: number; error?: string };
@@ -160,7 +168,7 @@ async function analyze(source: string): Promise<Analysis> {
 	let real = false;
 	let realCode = '';
 	let realIslands: number | null = null;
-	let realSample: string | undefined;
+	let modules: Analysis['modules'];
 	let realError: string | undefined;
 	let oxc: Analysis['oxc'];
 	try {
@@ -181,14 +189,31 @@ async function analyze(source: string): Promise<Analysis> {
 
 		const result = transformHost(source, '/repl/src/routes/App.svelte', build_ctx(true)) as {
 			code?: string;
-			islands?: Array<{ id?: string; componentPath?: string; kind?: string }>;
+			islands?: Array<{
+				id?: string;
+				componentPath?: string;
+				kind?: string;
+				wrapperPath?: string;
+				wrapperSource?: string;
+				virtualPath?: string;
+				source?: string;
+			}>;
 		} | null;
 		if (result && typeof result.code === 'string') {
 			real = true;
 			realCode = result.code;
 			const list = result.islands ?? [];
 			realIslands = list.length;
-			realSample = list[0] ? JSON.stringify(list[0]).slice(0, 300) : undefined;
+			const base0 = (p?: string) => (p ? p.split('?')[0].split('/').pop() || p : '');
+			modules = list.map((isl) => ({
+				id: isl.id ?? '',
+				component: base0(isl.componentPath),
+				kind: isl.kind ?? '',
+				wrapperPath: isl.wrapperPath,
+				wrapperSource: isl.wrapperSource,
+				entryPath: isl.virtualPath,
+				entrySource: isl.source
+			}));
 			// Overlay the REAL md5 region ids onto the (nicely-labelled) mark islands, matched by
 			// component basename — so the map shows the build's actual ids, not the FNV placeholder.
 			const base = (p?: string) => (p ? p.split('?')[0].split('/').pop() || p : '');
@@ -213,7 +238,7 @@ async function analyze(source: string): Promise<Analysis> {
 		output: real ? realCode : marks.output,
 		real,
 		realIslands,
-		realSample,
+		modules,
 		realError,
 		oxc
 	};
