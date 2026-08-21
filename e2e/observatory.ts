@@ -39,6 +39,14 @@ try {
 	const fileTabs = await page.evaluate(() => document.querySelectorAll('[data-obs-filetabs] .filetab').length);
 	check('multi-file editor shows file tabs', fileTabs >= 4, `${fileTabs} tabs`);
 
+	// ── INTERACTIVE: the mounted preview actually runs — click the counter, it increments ──
+	const btnBefore = await page.evaluate(() => document.querySelector('[data-obs-preview] button')?.textContent?.trim() || '');
+	await page.click('[data-obs-preview] button').catch(() => {});
+	await page.click('[data-obs-preview] button').catch(() => {});
+	await page.waitForTimeout(150);
+	const btnAfter = await page.evaluate(() => document.querySelector('[data-obs-preview] button')?.textContent?.trim() || '');
+	check('the rendered app is INTERACTIVE (mounted, client-hydrated)', btnBefore === 'count is 3' && btnAfter === 'count is 5', `${btnBefore} → ${btnAfter}`);
+
 	// ── switch to the "all strategies" preset to exercise every island kind in the transform ──
 	await page.evaluate(() => {
 		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'all strategies');

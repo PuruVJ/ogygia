@@ -1,4 +1,7 @@
 <script>
+	import { mount, unmount } from 'svelte';
+	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
+
 	/**
 	 * OBSERVATORY v0 — the browser compiler, first rung (internal/notes/devtools.md, Rung 1: "the
 	 * observatory, no execution"). You type an ogygia component; a Web WORKER parses it with
@@ -167,6 +170,84 @@
 		}, 140);
 		return () => clearTimeout(t);
 	});
+
+	// ── INTERACTIVE preview: link the CLIENT-compiled modules and mount() the app on the MAIN thread,
+	// so the rendered app is actually interactive (the counter button works). Falls back to the SSR
+	// HTML if the mount fails.
+	let previewEl = $state(/** @type {HTMLElement | null} */ (null));
+	let mounted = null;
+	let svelteClient = $state(/** @type {any} */ (null));
+	$effect(() => {
+		import('svelte/internal/client')
+			.then((m) => (svelteClient = m))
+			.catch(() => {});
+	});
+
+	function eval_client(code, req) {
+		const body = code
+			.replace(/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = __require("$2");')
+			.replace(/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const __m_$1 = __require("$3"); const $1 = __m_$1.default; const {$2} = __m_$1;')
+			.replace(/import\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = (__require("$2")).default;')
+			.replace(/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const {$1} = __require("$2");')
+			.replace(/import\s+['"][^'"]+['"]\s*;?/g, '')
+			.replace(/export\s+default\s+/g, '__exports.default = ')
+			.replace(/export\s*\{([^}]+)\}\s*;?/g, (_m, names) =>
+				names.split(',').map((n) => { const p = n.trim().split(/\s+as\s+/); return `__exports[${JSON.stringify((p[1] || p[0]).trim())}] = ${p[0].trim()};`; }).join(' ')
+			)
+			.replace(/export\s+(const|let|var|function|class)\s+/g, '$1 ');
+		const __exports = {};
+		new Function('__require', '__exports', body)(req, __exports);
+		return __exports;
+	}
+
+	$effect(() => {
+		const client = analysis.client;
+		const el = previewEl;
+		const sc = svelteClient;
+		if (!el) return;
+		if (mounted) {
+			try {
+				unmount(mounted);
+			} catch {
+				/* noop */
+			}
+			mounted = null;
+		}
+		el.innerHTML = '';
+		const fallback = () => {
+			if (analysis.rendered?.ok && analysis.rendered.html) el.innerHTML = analysis.rendered.html;
+		};
+		if (!sc || !client || client.error || !client.modules?.[client.entry]) {
+			fallback();
+			return;
+		}
+		try {
+			const cache = new Map();
+			const resolveName = (spec) => {
+				const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
+				if (client.modules[bare] != null) return bare;
+				const base = spec.split('/').pop();
+				return base && client.modules[base] != null ? base : null;
+			};
+			const require = (spec) => {
+				if (spec === 'svelte/internal/client') return sc;
+				const name = resolveName(spec);
+				if (name) {
+					if (cache.has(name)) return cache.get(name);
+					const exports = {};
+					cache.set(name, exports);
+					Object.assign(exports, eval_client(client.modules[name], require));
+					return exports;
+				}
+				return { default: () => {} }; // unprovided component → no-op client stub
+			};
+			const App = eval_client(client.modules[client.entry], require).default;
+			mounted = mount(App, { target: el });
+		} catch (e) {
+			console.error('[observatory] interactive mount failed:', e);
+			fallback();
+		}
+	});
 </script>
 
 <div class="obs" data-observatory>
@@ -222,13 +303,14 @@
 						<span class="stubnote" title="components not provided in this single-file REPL render as placeholders">{analysis.rendered.stubs.length} stubbed</span>
 					{/if}
 				</div>
+				<!-- Interactive: the mount effect fills this (or falls back to SSR HTML). -->
+				<div class="preview" bind:this={previewEl} data-obs-preview></div>
 				{#if analysis.rendered.ok}
-					<div class="preview" data-obs-preview>{@html analysis.rendered.html}</div>
 					<details class="pipe">
-						<summary>▸ rendered HTML source</summary>
+						<summary>▸ rendered HTML source (SSR)</summary>
 						<pre class="msrc" data-obs-html>{analysis.rendered.html}</pre>
 					</details>
-				{:else}
+				{:else if !analysis.client || analysis.client.error}
 					<div class="err" data-obs-render-err>could not render: {analysis.rendered.error}</div>
 				{/if}
 			{/if}

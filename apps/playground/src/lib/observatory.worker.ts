@@ -56,6 +56,9 @@ export interface Analysis {
 	/** EXECUTION: the component actually rendered to SSR HTML in the browser (imports not provided
 	 *  render as labelled stubs). This is the compile→link→render loop running client-side. */
 	rendered?: { ok: boolean; html?: string; error?: string; stubs?: string[] };
+	/** CLIENT bundle for the INTERACTIVE preview: every file compiled to client JS + the entry, so the
+	 *  MAIN thread can link + `mount()` the app (the counter actually works). */
+	client?: { entry: string; modules: Record<string, string>; error?: string };
 }
 
 /** Illustrative region id (only used for the svelte-fallback map; the real transform uses md5). */
@@ -211,6 +214,25 @@ function eval_module(code: string, req: (spec: string) => Record<string, unknown
 	// eslint-disable-next-line no-new-func
 	new Function('__require', '__exports', body)(req, __exports);
 	return __exports;
+}
+
+/** Compile EVERY file to client JS for the interactive (mounted) preview on the main thread. */
+function client_bundle(files: Record<string, string>, entry: string): Analysis['client'] {
+	try {
+		const modules: Record<string, string> = {};
+		for (const [name, code] of Object.entries(files)) {
+			if (!name.endsWith('.svelte')) continue;
+			// dev:false — avoids `App[$.FILENAME] = …` (a module-scope reference to the default export,
+			// which our function-expression eval can't satisfy). Production client is fully interactive.
+			const { js } = compile(code, { filename: name, generate: 'client', dev: false }) as {
+				js: { code: string };
+			};
+			modules[name] = js.code;
+		}
+		return { entry, modules };
+	} catch (e) {
+		return { entry, modules: {}, error: e instanceof Error ? e.message : String(e) };
+	}
 }
 
 /** Resolve an import specifier to a key in the file map (`./Counter.svelte` → `Counter.svelte`). */
@@ -381,6 +403,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		realError,
 		oxc,
 		rendered: execute(files, 'App.svelte' in files ? 'App.svelte' : active),
+		client: client_bundle(files, 'App.svelte' in files ? 'App.svelte' : active),
 		ms: now() - t0
 	};
 }
