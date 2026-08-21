@@ -22,6 +22,9 @@
 
   // unmarked = free server HTML, ships no JS
   import Header from './Header.svelte';
+
+  const points = [3, 1, 4, 1, 5];
+  const article = '<p>rendered prose</p>';
 </scr${''}ipt>
 
 <Header />
@@ -184,6 +187,24 @@
 		</section>
 
 		<section class="out">
+			{#if analysis.rendered}
+				<div class="cap">
+					rendered <span class="muted">· SSR HTML, executed in your browser</span>
+					{#if analysis.rendered.stubs && analysis.rendered.stubs.length}
+						<span class="stubnote" title="components not provided in this single-file REPL render as placeholders">{analysis.rendered.stubs.length} stubbed</span>
+					{/if}
+				</div>
+				{#if analysis.rendered.ok}
+					<div class="preview" data-obs-preview>{@html analysis.rendered.html}</div>
+					<details class="pipe">
+						<summary>▸ rendered HTML source</summary>
+						<pre class="msrc" data-obs-html>{analysis.rendered.html}</pre>
+					</details>
+				{:else}
+					<div class="err" data-obs-render-err>could not render: {analysis.rendered.error}</div>
+				{/if}
+			{/if}
+
 			<div class="cap">island map — {analysis.islands.length} marked {analysis.islands.length === 1 ? 'region' : 'regions'}</div>
 			{#if !analysis.ok}
 				<div class="err">parse error: {analysis.error}</div>
@@ -443,6 +464,31 @@
 		background: #14b8a6;
 		color: #022;
 		border-color: #0d9488;
+	}
+	.preview {
+		margin: 8px 14px;
+		padding: 14px;
+		border: 1px dashed rgba(148, 163, 184, 0.3);
+		border-radius: 8px;
+		background: #fff;
+		color: #111;
+		max-height: 260px;
+		overflow: auto;
+	}
+	.preview :global(.og-stub) {
+		display: inline-block;
+		padding: 0 6px;
+		border-radius: 4px;
+		background: rgba(20, 184, 166, 0.15);
+		color: #0d9488;
+		font: 11px ui-monospace, Menlo, monospace;
+	}
+	.stubnote {
+		padding: 1px 8px;
+		border-radius: 999px;
+		background: rgba(148, 163, 184, 0.12);
+		color: #94a3b8;
+		font-size: 10px;
 	}
 	.pipe {
 		margin: 4px 14px;

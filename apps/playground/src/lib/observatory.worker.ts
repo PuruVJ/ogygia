@@ -1,6 +1,8 @@
 // MUST be first: shims `process` for rolldown-browser's tsconfig helper (runs before it loads).
 import './rd-process-shim.ts';
 import { parse, compile } from 'svelte/compiler';
+import { render } from 'svelte/server';
+import * as svelteInternalServer from 'svelte/internal/server';
 import path from 'path-browserify';
 // The REAL ogygia host transform + id helpers + the parser DI seam, from the minimal browser entry.
 import {
@@ -51,6 +53,9 @@ export interface Analysis {
 	oxc?: { engine: string; ok: boolean; imports: number; error?: string };
 	/** Wall-clock ms for the transform + svelte compile (the whole pipeline). */
 	ms?: number;
+	/** EXECUTION: the component actually rendered to SSR HTML in the browser (imports not provided
+	 *  render as labelled stubs). This is the compile→link→render loop running client-side. */
+	rendered?: { ok: boolean; html?: string; error?: string; stubs?: string[] };
 }
 
 /** Illustrative region id (only used for the svelte-fallback map; the real transform uses md5). */
@@ -170,6 +175,74 @@ function analyze_marks(source: string): { islands: Island[]; output: string; ok:
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
+// ── EXECUTION: a tiny in-worker module linker (compile → eval → svelte/server render) ──
+// Rewrites svelte's compiled ESM to a CJS-style function body (its output is a constrained shape),
+// evals it with a `__require` closure, and renders the default export. This is the real render loop
+// running in the browser — no bundler, no server.
+function eval_module(code: string, req: (spec: string) => Record<string, unknown>): Record<string, unknown> {
+	const body = code
+		// import * as X from 'y' [with {...}]
+		.replace(/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = __require("$2");')
+		// import D, { a, b } from 'y'
+		.replace(/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const __m_$1 = __require("$3"); const $1 = __m_$1.default; const {$2} = __m_$1;')
+		// import D from 'y' [with {...}]
+		.replace(/import\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = (__require("$2")).default;')
+		// import { a, b } from 'y'
+		.replace(/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const {$1} = __require("$2");')
+		// import 'y' (side-effect)
+		.replace(/import\s+['"][^'"]+['"]\s*;?/g, '')
+		// export default X
+		.replace(/export\s+default\s+/g, '__exports.default = ')
+		// export { a, b as c }
+		.replace(/export\s*\{([^}]+)\}\s*;?/g, (_m, names: string) =>
+			names
+				.split(',')
+				.map((n) => {
+					const parts = n.trim().split(/\s+as\s+/);
+					const local = parts[0].trim();
+					const exported = (parts[1] || parts[0]).trim();
+					return local ? `__exports[${JSON.stringify(exported)}] = ${local};` : '';
+				})
+				.join(' ')
+		)
+		// export const/let/var/function/class
+		.replace(/export\s+(const|let|var|function|class)\s+/g, '$1 ');
+	const __exports: Record<string, unknown> = {};
+	// eslint-disable-next-line no-new-func
+	new Function('__require', '__exports', body)(req, __exports);
+	return __exports;
+}
+
+/** Render the component to SSR HTML. Imports we can't provide (the user's `./X.svelte`) become
+ *  labelled stubs, so an island app still renders a representative tree. */
+function execute(source: string): Analysis['rendered'] {
+	const stubs = new Set<string>();
+	try {
+		const { js } = compile(source, { filename: 'App.svelte', generate: 'server', dev: false }) as {
+			js: { code: string };
+		};
+		const require = (spec: string): Record<string, unknown> => {
+			if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
+			if (spec === 'svelte/server') return { render } as Record<string, unknown>;
+			// Any other import (a `./Component.svelte`, `ogygia/internal`, …) isn't provided in a
+			// single-file REPL — stub it with a labelled placeholder component (server signature).
+			const name = (spec.split('/').pop() || spec).replace(/\.svelte$/, '');
+			stubs.add(name);
+			const Stub = ($$renderer: { push: (s: string) => void }) => {
+				$$renderer.push(`<span class="og-stub" data-og-stub="${name}">‹${name}/›</span>`);
+			};
+			return { default: Stub };
+		};
+		const mod = eval_module(js.code, require);
+		const Component = mod.default as unknown;
+		if (typeof Component !== 'function') return { ok: false, error: 'no default component export' };
+		const out = render(Component as never, { props: {} }) as { body?: string; html?: string };
+		return { ok: true, html: out.body ?? out.html ?? '', stubs: [...stubs] };
+	} catch (e) {
+		return { ok: false, error: e instanceof Error ? e.message : String(e), stubs: [...stubs] };
+	}
+}
+
 async function analyze(source: string): Promise<Analysis> {
 	const marks = analyze_marks(source);
 	const t0 = now();
@@ -281,6 +354,7 @@ async function analyze(source: string): Promise<Analysis> {
 		modules,
 		realError,
 		oxc,
+		rendered: execute(source),
 		ms: now() - t0
 	};
 }

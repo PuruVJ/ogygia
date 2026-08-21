@@ -48,6 +48,13 @@ try {
 	const realIds = await page.evaluate(() => document.querySelectorAll('.realdot').length);
 	check('island map shows REAL md5 region ids from the transform', realIds > 0, `${realIds} real ids`);
 
+	// ── EXECUTION: the app renders to SSR HTML in the browser (compile → link → render loop) ──
+	const rendered = await page.evaluate(() => {
+		const el = document.querySelector('[data-obs-preview]');
+		return el ? { text: (el.textContent || '').trim(), stubs: el.querySelectorAll('[data-og-stub]').length } : null;
+	});
+	check('the app RENDERS to HTML in the browser (compile→link→render)', !!rendered && rendered.stubs > 0, JSON.stringify(rendered));
+
 	// ── live edit: add a marked import, expect the map to grow — off the main thread ──
 	const before = strategies.length;
 	const workersBeforeEdit = workers.length; // WASI threads already spawned; edits must not add more
