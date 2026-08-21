@@ -10,6 +10,7 @@
 		<a href="/lab">🧪 Lab home</a>
 		<a href="/lab/a" data-lab-a>Page A</a>
 		<a href="/lab/b" data-lab-b>Page B</a>
+		<a href="/lab/deep/x">Deep persist</a>
 		<a href="/lab/stream">Streaming</a>
 		<a href="/lab/wire">Serialization</a>
 		<a href="/">← playground</a>
