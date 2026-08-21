@@ -1,0 +1,13 @@
+{
+	"useTabs": true,
+	"singleQuote": true,
+	"printWidth": 100,
+	"trailingComma": "none",
+	"ignorePatterns": [
+		"**/dist/**",
+		"**/build/**",
+		"**/.svelte-kit/**",
+		"svelte/**",
+		"kit/**"
+	]
+}
