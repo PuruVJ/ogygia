@@ -12,6 +12,18 @@
 	import HubTab from './HubTab.svelte';
 	import NavTab from './NavTab.svelte';
 	import BoundaryOverlay from './BoundaryOverlay.svelte';
+	import { to_trace } from './sinks.js';
+
+	let copied = $state(false);
+	async function copy_trace() {
+		try {
+			await navigator.clipboard.writeText(JSON.stringify(to_trace()));
+			copied = true;
+			setTimeout(() => (copied = false), 1200);
+		} catch {
+			/* clipboard blocked — no-op */
+		}
+	}
 
 	const TABS = [
 		{ id: 'lens', label: 'Lens' },
@@ -94,6 +106,9 @@
 					{t.label}
 				</button>
 			{/each}
+			<button class="trace" title="copy an event trace to the clipboard" onclick={copy_trace}>
+				{copied ? 'copied ✓' : 'trace'}
+			</button>
 			<button class="x" title="close" onclick={() => (open = false)}>✕</button>
 		</div>
 		<div class="body">
@@ -204,8 +219,21 @@
 		background: rgba(148, 163, 184, 0.14);
 		border-color: rgba(148, 163, 184, 0.25);
 	}
-	.x {
+	.trace {
 		margin-left: auto;
+		padding: 3px 9px;
+		border-radius: 7px;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		background: #0d1526;
+		color: #94a3b8;
+		font: inherit;
+		font-size: 11px;
+		cursor: pointer;
+	}
+	.trace:hover {
+		color: #e2e8f0;
+	}
+	.x {
 		color: #94a3b8;
 		cursor: pointer;
 		background: none;

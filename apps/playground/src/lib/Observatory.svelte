@@ -62,6 +62,11 @@
 	let analysis = $state({ ok: true, islands: [], output: DEFAULT_SOURCE, real: false, realIslands: null });
 	let busy = $state(false);
 	let leg = $state('ssr'); // 'ssr' | 'client'
+	let everWarmed = $state(false); // the WASM compiler needs ~1-2s to warm on first load
+
+	$effect(() => {
+		if (analysis.real || analysis.realError) everWarmed = true;
+	});
 
 	const shownOutput = $derived(
 		leg === 'client' && analysis.outputClient ? analysis.outputClient : analysis.output
@@ -167,6 +172,9 @@
 					</span>
 				{/if}
 			</div>
+			{#if !everWarmed}
+				<div class="warming" data-obs-warming>warming the in-browser compiler (rolldown WASM)…</div>
+			{/if}
 			<pre data-obs-output>{shownOutput}</pre>
 
 			{#if analysis.compiledServer}
@@ -437,6 +445,10 @@
 		font-size: 11px;
 		max-height: 220px;
 		overflow: auto;
+	}
+	.warming {
+		padding: 10px 14px;
+		color: #fbbf24;
 	}
 	.err {
 		padding: 12px 14px;
