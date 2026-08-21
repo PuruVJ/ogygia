@@ -100,6 +100,43 @@ try {
 	check('wire inspector: Counter receives its start prop by value', wire.some((w) => w.name === 'Counter.svelte' && /start/.test(w.payload) && /3/.test(w.payload)), JSON.stringify(wire));
 	check('wire inspector: Prose receives only children (a snippet) — no props cross', wire.some((w) => w.name === 'Prose.svelte' && w.empty), JSON.stringify(wire));
 
+	// ── WAKE VISUALIZER: on the "wake demo" preset, x-ray arms each island's REAL schedule — load
+	//    fires immediately, interaction waits for a click, the lake stays frozen ──
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'wake demo');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(500);
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'x-ray');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(300); // let the load-wake fire
+	const wokeState = () =>
+		page.evaluate(() =>
+			Object.fromEntries(
+				[...document.querySelectorAll('[data-obs-preview] [data-obs-island]')].map((n) => [n.getAttribute('data-name'), n.getAttribute('data-woke')])
+			)
+		);
+	const w1 = await wokeState();
+	check('wake viz: the load island wakes immediately', w1['Counter.svelte'] === 'true', JSON.stringify(w1));
+	check('wake viz: the lake never wakes (frozen)', w1['Prose.svelte'] === 'frozen', JSON.stringify(w1));
+	check('wake viz: the interaction island is still asleep before any input', w1['Menu.svelte'] === 'false', JSON.stringify(w1));
+	// wake the interaction island with a real pointer event inside it
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-preview] [data-obs-island] button')].find((b) => /Menu/.test(b.textContent || ''));
+		btn?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+	});
+	await page.waitForTimeout(150);
+	const w2 = await wokeState();
+	check('wake viz: the interaction island wakes on the first pointer inside it', w2['Menu.svelte'] === 'true', JSON.stringify(w2));
+	// restore the default demo + live preview for any later runs
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'demo app');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(300);
+
 	// ── switch to the "all strategies" preset to exercise every island kind in the transform ──
 	await page.evaluate(() => {
 		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'all strategies');

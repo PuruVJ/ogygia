@@ -62,9 +62,39 @@
 <div class="prose">{@render children?.()}</div>`
 	};
 
+	// A multi-file app with EVERY wake schedule, so the x-ray wake visualizer has something to show:
+	// Counter wakes on load, Menu on interaction (click), Chart on scroll-into-view, Prose is a frozen lake.
+	const FILES_WAKE = {
+		'App.svelte': `<scr${''}ipt>
+  import Header from './Header.svelte';
+  import Counter from './Counter.svelte' with { wake: 'load' };
+  import Menu from './Menu.svelte' with { wake: 'interaction' };
+  import Chart from './Chart.svelte' with { wake: 'visible' };
+  import Prose from './Prose.svelte' with { wake: 'none' };
+</scr${''}ipt>
+
+<Header title="Wake schedules" />
+<p>Each island wakes on its own schedule. In x-ray: watch load fire, click Menu, scroll to Chart.</p>
+<Counter start={0} />
+<Menu />
+<Chart data={[3, 1, 4, 1, 5, 9, 2, 6, 5, 3]} />
+<Prose>a frozen lake — never ships JS, never wakes</Prose>`,
+		'Header.svelte': FILES_DEMO['Header.svelte'],
+		'Counter.svelte': FILES_DEMO['Counter.svelte'],
+		'Prose.svelte': FILES_DEMO['Prose.svelte'],
+		'Menu.svelte': `<scr${''}ipt>let open = $state(false);</scr${''}ipt>
+<button onclick={() => (open = !open)}>Menu {open ? '▲' : '▼'}</button>
+{#if open}<ul><li>Profile</li><li>Settings</li><li>Log out</li></ul>{/if}`,
+		'Chart.svelte': `<scr${''}ipt>let { data = [] } = $props();</scr${''}ipt>
+<div class="chart">{#each data as v}<span style="height: {v * 6}px"></span>{/each}</div>
+<style>.chart { display: flex; gap: 3px; align-items: flex-end; height: 60px; }
+.chart span { width: 12px; background: #14b8a6; border-radius: 2px; }</style>`
+	};
+
 	// Presets are file MAPS (Rung 6 multi-file). Most are single-file (their imports stub on render).
 	const PRESETS = {
 		'demo app': FILES_DEMO,
+		'wake demo': FILES_WAKE,
 		'all strategies': { 'App.svelte': ALL_STRATEGIES },
 		counter: { 'App.svelte': `<scr${''}ipt>\n  import Counter from './Counter.svelte' with { wake: 'load' };\n</scr${''}ipt>\n\n<h1>Hello</h1>\n<Counter start={0} />`, 'Counter.svelte': FILES_DEMO['Counter.svelte'] },
 		'server island': { 'App.svelte': `<scr${''}ipt>\n  import Greeting from './Greeting.svelte' with { render: 'deferred' };\n</scr${''}ipt>\n\n<Greeting />` }
@@ -186,11 +216,84 @@
 	let mounted = null;
 	let svelteClient = $state(/** @type {any} */ (null));
 	let previewMode = $state('live'); // 'live' (interactive mount) | 'xray' (boundary lens)
+	let wakeNonce = $state(0); // bump to replay the x-ray wake sequence
+	let xrayCleanup = /** @type {null | (() => void)} */ (null);
 	$effect(() => {
 		import('svelte/internal/client')
 			.then((m) => (svelteClient = m))
 			.catch(() => {});
 	});
+
+	// WAKE VISUALIZER (x-ray): arm each island's REAL schedule with real browser primitives — `load`
+	// fires now, `idle` on requestIdleCallback, `visible` on a real IntersectionObserver (scroll the
+	// preview), `interaction` on the first pointer/focus inside, a media query on matchMedia; lakes +
+	// held-raw never wake (frozen). Each island lights from cold→hot when it wakes, stamped with +Xms.
+	function arm_wakes(el) {
+		const t0 = performance.now();
+		const cleanups = [];
+		const wake = (node, reason) => {
+			if (node.getAttribute('data-woke') === 'true') return;
+			node.setAttribute('data-woke', 'true');
+			node.setAttribute('data-woke-ms', String(Math.round(performance.now() - t0)));
+			node.setAttribute('data-woke-reason', reason);
+		};
+		for (const node of el.querySelectorAll('[data-obs-island]')) {
+			const w = node.getAttribute('data-wake') || '';
+			const kind = node.getAttribute('data-kind') || '';
+			// lakes + held-raw + server holes never ship JS to wake — mark frozen and leave them.
+			if (!(kind === 'island' || kind === 'preset')) {
+				node.setAttribute('data-woke', 'frozen');
+				continue;
+			}
+			node.setAttribute('data-woke', 'false');
+			if (w === 'load' || w === '') {
+				// load = as soon as the runtime connects; fire next frame so the glow animates in.
+				const id = requestAnimationFrame(() => wake(node, 'load'));
+				cleanups.push(() => cancelAnimationFrame(id));
+			} else if (w === 'idle') {
+				if ('requestIdleCallback' in window) {
+					const id = requestIdleCallback(() => wake(node, 'idle'), { timeout: 1500 });
+					cleanups.push(() => cancelIdleCallback(id));
+				} else {
+					const id = setTimeout(() => wake(node, 'idle'), 500);
+					cleanups.push(() => clearTimeout(id));
+				}
+			} else if (w === 'visible') {
+				const io = new IntersectionObserver(
+					(entries) => {
+						for (const e of entries)
+							if (e.isIntersecting) {
+								wake(node, 'visible');
+								io.disconnect();
+							}
+					},
+					{ root: el }
+				);
+				io.observe(node);
+				cleanups.push(() => io.disconnect());
+			} else if (w === 'interaction') {
+				const onInt = () => wake(node, 'interaction');
+				node.addEventListener('pointerdown', onInt, { once: true });
+				node.addEventListener('focusin', onInt, { once: true });
+				cleanups.push(() => {
+					node.removeEventListener('pointerdown', onInt);
+					node.removeEventListener('focusin', onInt);
+				});
+			} else {
+				// a media query string
+				try {
+					const mql = matchMedia(w);
+					const onC = () => mql.matches && wake(node, 'media');
+					onC();
+					mql.addEventListener('change', onC);
+					cleanups.push(() => mql.removeEventListener('change', onC));
+				} catch {
+					/* invalid query — leave asleep */
+				}
+			}
+		}
+		return () => cleanups.forEach((c) => c());
+	}
 
 	function eval_client(code, req) {
 		const body = code
@@ -214,7 +317,12 @@
 		const el = previewEl;
 		const sc = svelteClient;
 		const mode = previewMode;
+		wakeNonce; // dep: bumping it replays the x-ray wake sequence
 		if (!el) return;
+		if (xrayCleanup) {
+			xrayCleanup();
+			xrayCleanup = null;
+		}
 		if (mounted) {
 			try {
 				unmount(mounted);
@@ -228,8 +336,10 @@
 			if (analysis.rendered?.ok && analysis.rendered.html) el.innerHTML = analysis.rendered.html;
 		};
 		// X-RAY (boundary lens): show the marked SSR HTML, tinted by the .xray class — no live mount.
+		// Then arm the wake visualizer so each island lights up on its real schedule.
 		if (mode === 'xray') {
 			fallback();
+			xrayCleanup = arm_wakes(el);
 			return;
 		}
 		if (!sc || !client || client.error || !client.modules?.[client.entry]) {
@@ -330,7 +440,9 @@
 						<span class="lk hole">server hole</span>
 						<span class="lk raw">held raw</span>
 						<span class="lk shell">the rest · free server HTML</span>
+						<button class="replay" data-obs-replay title="re-arm the wake schedules" onclick={() => wakeNonce++}>⟳ replay wakes</button>
 					</div>
+					<div class="wakehint muted">islands start cold. <b>load</b> wakes now · <b>idle</b> soon · <b>visible</b> on scroll · <b>interaction</b> on click · lakes stay frozen.</div>
 				{/if}
 				<!-- Interactive mount (live) OR marked SSR HTML tinted by the lens (x-ray). -->
 				<div class="preview" class:xray={previewMode === 'xray'} bind:this={previewEl} data-obs-preview></div>
@@ -731,6 +843,7 @@
 		background: #f1f5f9;
 		color: #94a3b8;
 		position: relative;
+		max-height: 360px;
 	}
 	.preview.xray :global(ogygia-obs-island) {
 		display: block;
@@ -755,15 +868,38 @@
 		white-space: nowrap;
 	}
 	.preview.xray :global(ogygia-obs-island[data-ships='true']::after) {
-		content: 'wake ' attr(data-wake) ' · ' attr(data-bytes) ' B JS';
 		position: absolute;
 		top: -18px;
 		right: -2px;
 		padding: 1px 7px;
 		border-radius: 5px 5px 0 0;
+		font: 10px/1.5 ui-monospace, Menlo, monospace;
+	}
+	/* cold: the island hasn't woken yet — dashed, dimmed, waiting for its schedule */
+	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='false']) {
+		outline-style: dashed;
+		outline-color: color-mix(in srgb, var(--lens, #14b8a6) 55%, transparent);
+		background: rgba(148, 163, 184, 0.06);
+	}
+	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='false'] > *) {
+		opacity: 0.45;
+		filter: grayscale(0.5);
+	}
+	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='false']::after) {
+		content: '💤 asleep · wakes on ' attr(data-wake);
+		background: rgba(100, 116, 139, 0.25);
+		color: #94a3b8;
+	}
+	/* hot: it woke — solid, lit, stamped with when + bytes */
+	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='true']) {
+		outline-style: solid;
+		box-shadow: 0 0 0 4px color-mix(in srgb, var(--lens, #14b8a6) 18%, transparent);
+		transition: box-shadow 0.25s ease;
+	}
+	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='true']::after) {
+		content: '⚡ woke +' attr(data-woke-ms) 'ms · ' attr(data-bytes) ' B JS';
 		background: color-mix(in srgb, var(--lens, #14b8a6) 25%, #0b1220);
 		color: var(--lens, #14b8a6);
-		font: 10px/1.5 ui-monospace, Menlo, monospace;
 	}
 	.preview.xray :global(ogygia-obs-island[data-kind='island']) {
 		--lens: #14b8a6;
@@ -811,6 +947,27 @@
 	}
 	.lens-legend .lk.shell {
 		background: rgba(148, 163, 184, 0.14);
+		color: #94a3b8;
+	}
+	.lens-legend .replay {
+		margin-left: auto;
+		padding: 1px 9px;
+		border: 1px solid rgba(20, 184, 166, 0.4);
+		border-radius: 999px;
+		background: #0d1526;
+		color: #5eead4;
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+	}
+	.lens-legend .replay:hover {
+		background: rgba(20, 184, 166, 0.14);
+	}
+	.wakehint {
+		padding: 0 14px 6px;
+		font-size: 10px;
+	}
+	.wakehint b {
 		color: #94a3b8;
 	}
 	.stubnote {
