@@ -91,6 +91,12 @@ whole islands value-prop, visible on whatever app you type:
 - **Wire inspector** (Rung 5.2) — the real props each island RECEIVES, devalue-encoded — exactly what
   crosses by value. children (a region snippet) and functions never cross; `$$slots` is stripped. Demo:
   Counter gets `{start: 3}` (15 B); Prose receives only children → "no props cross".
+- **Wake visualizer** (toward Rung 5.5) — in x-ray, each island starts cold and lights up when it wakes
+  on its REAL schedule, driven by real browser primitives: `load` next frame, `idle` on
+  requestIdleCallback, `visible` on a real IntersectionObserver (scroll the preview), `interaction` on
+  the first pointer/focus inside; lakes never wake (frozen). Stamped "⚡ woke +Xms · N B JS". New "wake
+  demo" preset (load / interaction / visible / lake) + a "replay wakes" button. Zero runtime coupling —
+  the ogygia lazy-hydration thesis, playable.
 
 Every instrument has an e2e assertion. Suite is green.
 
