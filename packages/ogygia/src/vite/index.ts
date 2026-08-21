@@ -13,7 +13,7 @@ import { ogygiaPresetPreprocess } from '../content/markdown/index.js';
 import {
 	is_island_path,
 	normalize_import_keys,
-	type ImportKeys
+	type ImportKeys,
 } from '../compiler/region/transform.js';
 
 export {
@@ -27,7 +27,7 @@ export {
 	CLIENT_BINDING_STUB,
 	regionId,
 	regionIdentity,
-	strategyKey
+	strategyKey,
 } from '../compiler/region/transform.js';
 export { rewrite_lake_import_to_placeholder } from '../compiler/region/emit.js';
 export type { ImportKeys } from '../compiler/region/transform.js';
@@ -36,36 +36,32 @@ export type {
 	OgygiaRateLimit,
 	RegionsOptions,
 	ContentPreset,
-	OgygiaOptions
+	OgygiaOptions,
 } from './options.js';
 import {
 	assert_no_legacy_options,
 	validate_region_presets,
 	validate_content_presets,
-	resolve_options
+	resolve_options,
 } from './options.js';
 import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,
 	keep_client_dir,
-	inject_keep_client_route
+	inject_keep_client_route,
 } from '../compiler/standalone.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
-import {
-	derive_id_salt,
-	secret_has_min_entropy,
-	MIN_SECRET_BYTES
-} from '../server/hmac.js';
+import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.js';
 import {
 	buildFoucCssModuleSource,
 	compileFoucScopedCss,
 	foucRelFromId,
 	isFoucCssId,
-	isFoucScopedId
+	isFoucScopedId,
 } from '../compiler/fouc-css.js';
 import {
 	needs_csr_false_full_reload,
-	needs_island_entry_full_reload
+	needs_island_entry_full_reload,
 } from '../compiler/dev/hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
 import { collectIslandDepModulepreloads } from '../compiler/link/island-deps.js';
@@ -88,7 +84,7 @@ import {
 	HMAC_MODULE,
 	RUNTIME_DIR,
 	REGION_ENDPOINT_MODULE,
-	RUNTIME_HASH
+	RUNTIME_HASH,
 } from './paths.js';
 
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
@@ -99,9 +95,8 @@ import type {
 	OgygiaRateLimit,
 	RegionsOptions,
 	ContentPreset,
-	OgygiaOptions
+	OgygiaOptions,
 } from './options.js';
-
 
 /**
  * Vite plugin: transforms `with { hydrate | defer | preset }` imports into islands,
@@ -143,7 +138,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		router_enabled,
 		router_view_transitions,
 		continuity_forms,
-		server_delta
+		server_delta,
 	} = resolve_options(options, DEFAULT_REGION_TTL_SEC);
 
 	// The Program — this plugin instance's cross-file linker / island graph. It owns the descriptor
@@ -204,7 +199,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		}
 	};
 
-	const __prof = { transformMs: 0, transformN: 0, transformHit: 0, prescanMs: 0, bakeMs: 0, bakeN: 0, resolveMs: 0, loadMs: 0 };
+	const __prof = {
+		transformMs: 0,
+		transformN: 0,
+		transformHit: 0,
+		prescanMs: 0,
+		bakeMs: 0,
+		bakeN: 0,
+		resolveMs: 0,
+		loadMs: 0,
+	};
 	const __P = !!process.env.OGYGIA_PROFILE;
 	const __outHash = new Map<string, number>();
 
@@ -272,7 +276,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		if (!server) return false;
 		return compiler.invalidate_for_file(file, {
 			deleted,
-			invalidate: (id) => invalidate_module_id(server, id)
+			invalidate: (id) => invalidate_module_id(server, id),
 		});
 	};
 
@@ -323,420 +327,463 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
 							__OGYGIA_CONTINUITY_FORMS__: JSON.stringify(continuity_forms),
-							__OGYGIA_SERVER_DELTA__: JSON.stringify(server_delta)
+							__OGYGIA_SERVER_DELTA__: JSON.stringify(server_delta),
 						},
 						server: {
 							fs: {
-								allow: [PKG_ROOT]
-							}
+								allow: [PKG_ROOT],
+							},
 						},
 						// Island emitFile entries re-export shared components; keep facade exports
 						// under Vite 8 / Rolldown (build.rolldownOptions — not deprecated rollupOptions).
 						build: {
 							rolldownOptions: {
-								preserveEntrySignatures: 'exports-only'
+								preserveEntrySignatures: 'exports-only',
+							},
+						},
+					};
+				},
+			},
+
+			configResolved(config) {
+				root = config.root;
+				base = config.base || '';
+				// Normalize resolve.alias (array or object form) to `{ find, replacement }[]` for bake().
+				const ra = config.resolve?.alias ?? [];
+				resolve_alias = Array.isArray(ra)
+					? ra.map((a) => ({ find: a.find, replacement: a.replacement }))
+					: Object.entries(ra).map(([find, replacement]) => ({ find, replacement }));
+				// The shared build cache (fences, git checkouts, shas) persists under THIS app's
+				// node_modules/.ogygia — point it before anything derives.
+				configure_build_cache(root);
+				libDir = path.join(root, 'src', 'lib');
+				// Claim the content-island preprocessor bridge for THIS (configured) instance — root is set.
+				claim_island_bridge();
+				is_dev = config.command === 'serve';
+				is_build = config.command === 'build';
+				is_ssr = !!config.build?.ssr;
+				sourcemap = !!config.build?.sourcemap;
+
+				// Self-heal a keep-client route left behind by a crashed build (harmless — no URL — but
+				// noisy in the routes tree). Dev never injects, so anything here is a stale leftover.
+				if (is_dev) fs.rmSync(keep_client_dir(root), { recursive: true, force: true });
+
+				// Optional stable override. Vite only puts `VITE_*` from `.env` onto import.meta.env —
+				// load plain `OGYGIA_SECRET` ourselves so `.env` / `.env.local` work without a shell export.
+				if (!process.env.OGYGIA_SECRET?.trim()) {
+					const env_dir =
+						config.envDir === false
+							? false
+							: config.envDir
+								? path.resolve(root, config.envDir)
+								: root;
+					if (env_dir !== false) {
+						const from_file = loadEnv(config.mode, env_dir, '').OGYGIA_SECRET?.trim();
+						if (from_file) process.env.OGYGIA_SECRET = from_file;
+					}
+				}
+				const env_secret = process.env.OGYGIA_SECRET?.trim() || '';
+				if (env_secret) {
+					// Production builds: reject weak user secrets (L-HMAC). Dev may use short keys.
+					if (is_build && !secret_has_min_entropy(env_secret)) {
+						throw new Error(
+							`[ogygia] OGYGIA_SECRET is too short for production builds (need ≥${MIN_SECRET_BYTES} UTF-8 bytes).`,
+						);
+					}
+					id_salt = derive_id_salt(env_secret);
+				} else {
+					id_salt = '';
+				}
+
+				// Locate Kit's internal wire-protocol module by resolving its package.json (that IS
+				// exported) and joining the src path — deep-importing the file bypasses the exports map.
+				try {
+					const require = createRequire(path.join(root, 'noop.js'));
+					const kitRoot = path.dirname(require.resolve('@sveltejs/kit/package.json'));
+					const candidate = path.join(kitRoot, 'src', 'runtime', 'shared.js');
+					if (fs.existsSync(candidate)) kit_wire_path = candidate;
+					const remoteIdx = path.join(
+						kitRoot,
+						'src',
+						'runtime',
+						'client',
+						'remote-functions',
+						'index.js',
+					);
+					if (fs.existsSync(remoteIdx)) kit_remote_index = remoteIdx;
+				} catch {
+					kit_wire_path = null; // fall back to the built-in devalue codec (no transport)
+				}
+				// the app's universal hooks (default src/hooks.{ts,js}) for `transport`
+				for (const f of ['hooks.ts', 'hooks.js']) {
+					const abs = path.join(root, 'src', f);
+					if (fs.existsSync(abs)) {
+						universal_hooks = abs;
+						break;
+					}
+				}
+
+				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
+				// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
+				// the snapshot is complete before the driver is first called.
+				compiler.configure(
+					new CompileCtx({
+						root,
+						base,
+						libDir,
+						is_dev,
+						id_salt,
+						visibleMargin,
+						presets,
+						import_keys,
+						resolve_alias,
+						markdown_config: islandBridge.markdownConfig ?? null,
+						pkg_root: PKG_ROOT,
+						build_secret,
+						rate_limit,
+						session_cookie,
+						region_ttl,
+						router_enabled,
+						router_view_transitions,
+						runtime_dir: RUNTIME_DIR,
+						runtime_hash: RUNTIME_HASH,
+						hmac_module: HMAC_MODULE,
+						region_endpoint_module: REGION_ENDPOINT_MODULE,
+						client_binding_stub_file: CLIENT_BINDING_STUB_FILE,
+						app_shims: APP_SHIMS,
+						is_build,
+						content_presets:
+							(islandBridge.contentPresets as Record<string, unknown> | undefined) ?? null,
+					}),
+				);
+			},
+
+			async buildStart() {
+				// CLIENT build (Kit-driven): emit the runtime chunk. Kit builds the SERVER bundle FIRST,
+				// then the client, so the server can't learn a hash the LATER client build produces — a
+				// forward handoff is impossible. Instead the filename is a deterministic SOURCE-content
+				// hash of ogygia's runtime SOURCE ⊕ the resolved feature set (`runtime_chunk_filename`), so the
+				// server (baking the `<script src>`) and the client (emitting this chunk) compute the
+				// SAME name independently and agree. (Standalone mode further overrides with the real
+				// output-chunk hash below.)
+				// Discover islands up front — in BOTH the SSR and client legs. The client build needs them
+				// to emit chunks; the SSR build needs them for the server manifest. Kit builds SSR FIRST,
+				// so if we only scanned in the client leg the SSR manifest would miss `.svx`/`.md` SERVER
+				// islands (defer / deferred regions) and their signed endpoint would 403. `prescan` reads
+				// `.svelte`/`.ts`; `islandBridge.scan` (set by a preprocessor package like ogygia/content)
+				// contributes islands from markdown, which becomes Svelte only after that preprocessor.
+				// Discover content (`.svx`/`.md`) islands up front in DEV too, not only build. A server
+				// (`render: deferred`) island in a content file is registered lazily when its page SSRs —
+				// but its signed endpoint is a SEPARATE request that imports the server manifest, and if
+				// the island hasn't registered yet the manifest lacks its id → 403 (NOT_IN_MANIFEST). That
+				// made content deferred holes flaky in dev (they worked only when the page-SSR registration
+				// happened to win the race). `islandBridge.scan` walks the markdown corpus and registers
+				// every island before the first request, so the manifest is complete when any endpoint is
+				// hit. Idempotent via `content_scanned`; a no-op for apps without a content preprocessor.
+				if (!content_scanned) {
+					content_scanned = true;
+					compiler.prescan();
+					await islandBridge.scan?.({ root, readFile });
+				}
+
+				if (is_build && !is_ssr) {
+					// Pure csr=true app (no csr=false route anywhere) → Kit hydrates everything itself, ogygia
+					// ships nothing. Skip the runtime chunk entirely; every host's islands were stripped to
+					// plain by the csrTrue transform branch, so nothing references it anyway.
+					const emit_runtime = !standalone && hasAnyCsrFalseRoute(path.join(root, 'src', 'routes'));
+					// The runtime entry (feature-selected) + one deterministic chunk per deduped hydrate
+					// region — the driver owns the naming + dedup; `this.emitFile` is the injected primitive.
+					compiler.emit_build_chunks((chunk) => this.emitFile(chunk), {
+						emitRuntime: emit_runtime,
+					});
+					// Content CSS: a content module's OWN scoped `<style>` compiles into the SERVER bundle
+					// only (the leak-free corpus never enters the client graph), so on a csr=false doc page it
+					// ships on no stylesheet. Extract that scoped CSS here and emit it as a client asset.
+					//
+					// Compiled with `svelte.compile` on the post-mdsvex source the scanner captured — so
+					// Svelte resolves `:global` (a raw `:global` would crash the CSS minifier) and mints the
+					// SAME scoped hash the SSR'd HTML carries (default `cssHash` = hash of the CSS; the `.svx`
+					// bodies use plain `<style>`, so vitePreprocess is a no-op and the source matches). No JS,
+					// no chunk, no corpus in the client graph. Region.svelte links it via the handoff
+					// (writeBundle maps content_css_key → the emitted `.css` by referenceId).
+					content_css_refs.clear();
+					if (islandBridge.contentStyleSources.size) {
+						const { compile } = await import('svelte/compiler');
+						for (const [abs, source] of islandBridge.contentStyleSources) {
+							try {
+								const { css } = compile(source, {
+									filename: abs,
+									css: 'external',
+									dev: false,
+									generate: 'client',
+									experimental: { async: true },
+								});
+								if (css?.code) {
+									const ref = this.emitFile({
+										type: 'asset',
+										name: 'og-content.css',
+										source: css.code,
+									});
+									content_css_refs.set(content_css_key(abs), ref);
+								}
+							} catch {
+								/* a content file whose CSS can't be extracted just goes unstyled — the fix must
+							   never break a build. */
 							}
 						}
-					};
+					}
 				}
 			},
 
-		configResolved(config) {
-			root = config.root;
-			base = config.base || '';
-			// Normalize resolve.alias (array or object form) to `{ find, replacement }[]` for bake().
-			const ra = config.resolve?.alias ?? [];
-			resolve_alias = Array.isArray(ra)
-				? ra.map((a) => ({ find: a.find, replacement: a.replacement }))
-				: Object.entries(ra).map(([find, replacement]) => ({ find, replacement }));
-			// The shared build cache (fences, git checkouts, shas) persists under THIS app's
-			// node_modules/.ogygia — point it before anything derives.
-			configure_build_cache(root);
-			libDir = path.join(root, 'src', 'lib');
-			// Claim the content-island preprocessor bridge for THIS (configured) instance — root is set.
-			claim_island_bridge();
-			is_dev = config.command === 'serve';
-			is_build = config.command === 'build';
-			is_ssr = !!config.build?.ssr;
-			sourcemap = !!config.build?.sourcemap;
+			configureServer(server) {
+				vite_server = server;
+			},
 
-			// Self-heal a keep-client route left behind by a crashed build (harmless — no URL — but
-			// noisy in the routes tree). Dev never injects, so anything here is a stale leftover.
-			if (is_dev) fs.rmSync(keep_client_dir(root), { recursive: true, force: true });
+			watchChange(id, change) {
+				// Unlink often skips handleHotUpdate; drop islands that still import the deleted file.
+				if (!is_dev || change.event !== 'delete' || !vite_server) return;
+				if (!invalidate_islands_for_file(id, { deleted: true, server: vite_server })) return;
+				vite_server.ws.send({ type: 'full-reload', path: '*' });
+			},
 
-			// Optional stable override. Vite only puts `VITE_*` from `.env` onto import.meta.env —
-			// load plain `OGYGIA_SECRET` ourselves so `.env` / `.env.local` work without a shell export.
-			if (!process.env.OGYGIA_SECRET?.trim()) {
-				const env_dir =
-					config.envDir === false
-						? false
-						: config.envDir
-							? path.resolve(root, config.envDir)
-							: root;
-				if (env_dir !== false) {
-					const from_file = loadEnv(config.mode, env_dir, '').OGYGIA_SECRET?.trim();
-					if (from_file) process.env.OGYGIA_SECRET = from_file;
-				}
-			}
-			const env_secret = process.env.OGYGIA_SECRET?.trim() || '';
-			if (env_secret) {
-				// Production builds: reject weak user secrets (L-HMAC). Dev may use short keys.
-				if (is_build && !secret_has_min_entropy(env_secret)) {
-					throw new Error(
-						`[ogygia] OGYGIA_SECRET is too short for production builds (need ≥${MIN_SECRET_BYTES} UTF-8 bytes).`
+			buildEnd() {
+				if (__P) {
+					const keys = [...__outHash.keys()].sort();
+					let d = 0x811c9dc5;
+					for (const k of keys) {
+						d ^= __outHash.get(k)!;
+						d = Math.imul(d, 0x01000193) >>> 0;
+					}
+					console.error(
+						'\n[ogygia-prof] ' +
+							JSON.stringify({
+								...__prof,
+								transformDigest: (d >>> 0).toString(16),
+								transformFiles: keys.length,
+							}),
 					);
 				}
-				id_salt = derive_id_salt(env_secret);
-			} else {
-				id_salt = '';
-			}
+			},
+			handleHotUpdate({ file, server }) {
+				if (!is_dev) return;
+				vite_server = server;
 
-			// Locate Kit's internal wire-protocol module by resolving its package.json (that IS
-			// exported) and joining the src path — deep-importing the file bypasses the exports map.
-			try {
-				const require = createRequire(path.join(root, 'noop.js'));
-				const kitRoot = path.dirname(require.resolve('@sveltejs/kit/package.json'));
-				const candidate = path.join(kitRoot, 'src', 'runtime', 'shared.js');
-				if (fs.existsSync(candidate)) kit_wire_path = candidate;
-				const remoteIdx = path.join(kitRoot, 'src', 'runtime', 'client', 'remote-functions', 'index.js');
-				if (fs.existsSync(remoteIdx)) kit_remote_index = remoteIdx;
-			} catch {
-				kit_wire_path = null; // fall back to the built-in devalue codec (no transport)
-			}
-			// the app's universal hooks (default src/hooks.{ts,js}) for `transport`
-			for (const f of ['hooks.ts', 'hooks.js']) {
-				const abs = path.join(root, 'src', f);
-				if (fs.existsSync(abs)) {
-					universal_hooks = abs;
-					break;
-				}
-			}
-
-			// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
-			// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
-			// the snapshot is complete before the driver is first called.
-			compiler.configure(
-				new CompileCtx({
-					root,
-					base,
-					libDir,
-					is_dev,
-					id_salt,
-					visibleMargin,
-					presets,
-					import_keys,
-					resolve_alias,
-					markdown_config: islandBridge.markdownConfig ?? null,
-					pkg_root: PKG_ROOT,
-					build_secret,
-					rate_limit,
-					session_cookie,
-					region_ttl,
-					router_enabled,
-					router_view_transitions,
-					runtime_dir: RUNTIME_DIR,
-					runtime_hash: RUNTIME_HASH,
-					hmac_module: HMAC_MODULE,
-					region_endpoint_module: REGION_ENDPOINT_MODULE,
-					client_binding_stub_file: CLIENT_BINDING_STUB_FILE,
-					app_shims: APP_SHIMS,
-					is_build,
-					content_presets:
-						(islandBridge.contentPresets as Record<string, unknown> | undefined) ?? null
-				})
-			);
-		},
-
-		async buildStart() {
-			// CLIENT build (Kit-driven): emit the runtime chunk. Kit builds the SERVER bundle FIRST,
-			// then the client, so the server can't learn a hash the LATER client build produces — a
-			// forward handoff is impossible. Instead the filename is a deterministic SOURCE-content
-			// hash of ogygia's runtime SOURCE ⊕ the resolved feature set (`runtime_chunk_filename`), so the
-			// server (baking the `<script src>`) and the client (emitting this chunk) compute the
-			// SAME name independently and agree. (Standalone mode further overrides with the real
-			// output-chunk hash below.)
-			// Discover islands up front — in BOTH the SSR and client legs. The client build needs them
-			// to emit chunks; the SSR build needs them for the server manifest. Kit builds SSR FIRST,
-			// so if we only scanned in the client leg the SSR manifest would miss `.svx`/`.md` SERVER
-			// islands (defer / deferred regions) and their signed endpoint would 403. `prescan` reads
-			// `.svelte`/`.ts`; `islandBridge.scan` (set by a preprocessor package like ogygia/content)
-			// contributes islands from markdown, which becomes Svelte only after that preprocessor.
-			// Discover content (`.svx`/`.md`) islands up front in DEV too, not only build. A server
-			// (`render: deferred`) island in a content file is registered lazily when its page SSRs —
-			// but its signed endpoint is a SEPARATE request that imports the server manifest, and if
-			// the island hasn't registered yet the manifest lacks its id → 403 (NOT_IN_MANIFEST). That
-			// made content deferred holes flaky in dev (they worked only when the page-SSR registration
-			// happened to win the race). `islandBridge.scan` walks the markdown corpus and registers
-			// every island before the first request, so the manifest is complete when any endpoint is
-			// hit. Idempotent via `content_scanned`; a no-op for apps without a content preprocessor.
-			if (!content_scanned) {
-				content_scanned = true;
-				compiler.prescan();
-				await islandBridge.scan?.({ root, readFile });
-			}
-
-			if (is_build && !is_ssr) {
-				// Pure csr=true app (no csr=false route anywhere) → Kit hydrates everything itself, ogygia
-				// ships nothing. Skip the runtime chunk entirely; every host's islands were stripped to
-				// plain by the csrTrue transform branch, so nothing references it anyway.
-				const emit_runtime = !standalone && hasAnyCsrFalseRoute(path.join(root, 'src', 'routes'));
-				// The runtime entry (feature-selected) + one deterministic chunk per deduped hydrate
-				// region — the driver owns the naming + dedup; `this.emitFile` is the injected primitive.
-				compiler.emit_build_chunks((chunk) => this.emitFile(chunk), { emitRuntime: emit_runtime });
-				// Content CSS: a content module's OWN scoped `<style>` compiles into the SERVER bundle
-				// only (the leak-free corpus never enters the client graph), so on a csr=false doc page it
-				// ships on no stylesheet. Extract that scoped CSS here and emit it as a client asset.
-				//
-				// Compiled with `svelte.compile` on the post-mdsvex source the scanner captured — so
-				// Svelte resolves `:global` (a raw `:global` would crash the CSS minifier) and mints the
-				// SAME scoped hash the SSR'd HTML carries (default `cssHash` = hash of the CSS; the `.svx`
-				// bodies use plain `<style>`, so vitePreprocess is a no-op and the source matches). No JS,
-				// no chunk, no corpus in the client graph. Region.svelte links it via the handoff
-				// (writeBundle maps content_css_key → the emitted `.css` by referenceId).
-				content_css_refs.clear();
-				if (islandBridge.contentStyleSources.size) {
-					const { compile } = await import('svelte/compiler');
-					for (const [abs, source] of islandBridge.contentStyleSources) {
-						try {
-							const { css } = compile(source, {
-								filename: abs,
-								css: 'external',
-								dev: false,
-								generate: 'client',
-								experimental: { async: true }
-							});
-							if (css?.code) {
-								const ref = this.emitFile({ type: 'asset', name: 'og-content.css', source: css.code });
-								content_css_refs.set(content_css_key(abs), ref);
+				// SCOPED soft CSS HMR. App css joins the browser graph LAZILY (see dev_hmr_client_source):
+				//  - already joined on a client → fall through to Vite's normal CSS update (soft);
+				//  - not joined anywhere → suppress Vite's no-boundary full reload and broadcast a scoped
+				//    join event instead; each open page joins ONLY css its own route scope imports, so the
+				//    `(docs)` and `playground` sub-apps can never paint each other in dev.
+				if (DEV_CSS_FILE_RE.test(file) && !file.includes('/node_modules/')) {
+					const src_prefix = path.join(root, 'src') + path.sep;
+					if (path.normalize(file).startsWith(src_prefix)) {
+						const envs = (
+							server as unknown as {
+								environments?: Record<
+									string,
+									{
+										moduleGraph?: {
+											getModulesByFile?: (f: string) => Set<DevGraphModule> | undefined;
+										};
+									}
+								>;
 							}
-						} catch {
-							/* a content file whose CSS can't be extracted just goes unstyled — the fix must
-							   never break a build. */
+						).environments;
+						const client_graph = envs?.client?.moduleGraph;
+						const joined = client_graph?.getModulesByFile?.(file)?.size ?? 0;
+						if (!joined) {
+							const owners = derive_css_scope_owners(file, root, [
+								envs?.ssr?.moduleGraph,
+								client_graph,
+							]);
+							const web_path = '/' + path.relative(root, file).split(path.sep).join('/');
+							server.ws.send({
+								type: 'custom',
+								event: 'ogygia:css',
+								data: { path: web_path, owners },
+							});
+							return [];
 						}
+						return; // client owns the module — Vite's own soft update handles it
 					}
 				}
-			}
 
-		},
+				// Island ids are hash(componentPath+strategy) — renaming a host keeps the same virtual
+				// id, so Vite's moduleGraph must be cleared or it keeps serving the old import.
+				const deleted = !fs.existsSync(strip_id(file));
+				const host_changed = !deleted && compiler.is_registered_host(file);
+				const entry_changed = !deleted && needs_island_entry_full_reload(file, registry.values());
+				if (host_changed || deleted) {
+					invalidate_islands_for_file(file, { deleted, server });
+				}
 
-		configureServer(server) {
-			vite_server = server;
-		},
+				// Soft CSS HMR via virtual:ogygia/dev-hmr. Route shells + island host rewrites +
+				// island entry component edits + deleted entry components need a document reload.
+				if (!needs_csr_false_full_reload(file) && !deleted && !host_changed && !entry_changed) {
+					return;
+				}
+				server.ws.send({ type: 'full-reload', path: '*' });
+				return [];
+			},
 
-		watchChange(id, change) {
-			// Unlink often skips handleHotUpdate; drop islands that still import the deleted file.
-			if (!is_dev || change.event !== 'delete' || !vite_server) return;
-			if (!invalidate_islands_for_file(id, { deleted: true, server: vite_server })) return;
-			vite_server.ws.send({ type: 'full-reload', path: '*' });
-		},
+			async resolveId(source, importer, options) {
+				// deep-import Kit's own wire helpers by absolute path (bypasses the exports map)
+				if (source === V_KIT_WIRE && kit_wire_path) return kit_wire_path;
 
-		buildEnd() { if (__P) { const keys = [...__outHash.keys()].sort(); let d = 0x811c9dc5; for (const k of keys) { d ^= __outHash.get(k)!; d = Math.imul(d, 0x01000193) >>> 0; } console.error('\n[ogygia-prof] ' + JSON.stringify({ ...__prof, transformDigest: (d >>> 0).toString(16), transformFiles: keys.length })); } },
-		handleHotUpdate({ file, server }) {
-			if (!is_dev) return;
-			vite_server = server;
+				// ogygia's OWN injected imports (`ogygia/internal` / `…/server`, written by the transform into
+				// a host or a generated island module) resolve to ogygia's own files DIRECTLY (see
+				// OGYGIA_INJECTED_FILES) — never via `this.resolve` (unreliable off a synthetic importer, can
+				// throw in rolldown-vite) or `config.root` (can be undefined on a throwaway plugin instance).
+				// Deterministic, can't throw, can't be left unresolved, works from any sub-package with no
+				// ogygia dependency of its own.
+				if (OGYGIA_INJECTED_IMPORTS.has(source)) return OGYGIA_INJECTED_FILES[source];
 
-			// SCOPED soft CSS HMR. App css joins the browser graph LAZILY (see dev_hmr_client_source):
-			//  - already joined on a client → fall through to Vite's normal CSS update (soft);
-			//  - not joined anywhere → suppress Vite's no-boundary full reload and broadcast a scoped
-			//    join event instead; each open page joins ONLY css its own route scope imports, so the
-			//    `(docs)` and `playground` sub-apps can never paint each other in dev.
-			if (DEV_CSS_FILE_RE.test(file) && !file.includes('/node_modules/')) {
-				const src_prefix = path.join(root, 'src') + path.sep;
-				if (path.normalize(file).startsWith(src_prefix)) {
-					const envs = (server as unknown as {
-						environments?: Record<string, { moduleGraph?: { getModulesByFile?: (f: string) => Set<DevGraphModule> | undefined } }>;
-					}).environments;
-					const client_graph = envs?.client?.moduleGraph;
-					const joined = client_graph?.getModulesByFile?.(file)?.size ?? 0;
-					if (!joined) {
-						const owners = derive_css_scope_owners(file, root, [envs?.ssr?.moduleGraph, client_graph]);
-						const web_path = '/' + path.relative(root, file).split(path.sep).join('/');
-						server.ws.send({ type: 'custom', event: 'ogygia:css', data: { path: web_path, owners } });
-						return [];
+				const ssr = options?.ssr === true;
+
+				// CLIENT build: Kit's client remote runtime needs `app` (never boots under csr=false).
+				// Plan A: reuse Kit's OWN remote primitives, redirecting `__sveltekit/remote` at Kit's
+				// real remote-functions entry; the router-coupled modules they import are stubbed just
+				// below. Fallback: our hand-rolled shim. enforce:'pre' wins over Kit's resolveId.
+				if (!ssr && source === '__sveltekit/remote') {
+					if (!kit_remote_index) {
+						throw new Error(
+							"[ogygia] could not locate Kit's client remote-functions (src). Pin @sveltejs/kit with its `src/` published (2.70.x).",
+						);
 					}
-					return; // client owns the module — Vite's own soft update handles it
+					return kit_remote_index;
 				}
-			}
-
-			// Island ids are hash(componentPath+strategy) — renaming a host keeps the same virtual
-			// id, so Vite's moduleGraph must be cleared or it keeps serving the old import.
-			const deleted = !fs.existsSync(strip_id(file));
-			const host_changed = !deleted && compiler.is_registered_host(file);
-			const entry_changed =
-				!deleted && needs_island_entry_full_reload(file, registry.values());
-			if (host_changed || deleted) {
-				invalidate_islands_for_file(file, { deleted, server });
-			}
-
-			// Soft CSS HMR via virtual:ogygia/dev-hmr. Route shells + island host rewrites +
-			// island entry component edits + deleted entry components need a document reload.
-			if (
-				!needs_csr_false_full_reload(file) &&
-				!deleted &&
-				!host_changed &&
-				!entry_changed
-			) {
-				return;
-			}
-			server.ws.send({ type: 'full-reload', path: '*' });
-			return [];
-		},
-
-		async resolveId(source, importer, options) {
-			// deep-import Kit's own wire helpers by absolute path (bypasses the exports map)
-			if (source === V_KIT_WIRE && kit_wire_path) return kit_wire_path;
-
-			// ogygia's OWN injected imports (`ogygia/internal` / `…/server`, written by the transform into
-			// a host or a generated island module) resolve to ogygia's own files DIRECTLY (see
-			// OGYGIA_INJECTED_FILES) — never via `this.resolve` (unreliable off a synthetic importer, can
-			// throw in rolldown-vite) or `config.root` (can be undefined on a throwaway plugin instance).
-			// Deterministic, can't throw, can't be left unresolved, works from any sub-package with no
-			// ogygia dependency of its own.
-			if (OGYGIA_INJECTED_IMPORTS.has(source)) return OGYGIA_INJECTED_FILES[source];
-
-			const ssr = options?.ssr === true;
-
-			// CLIENT build: Kit's client remote runtime needs `app` (never boots under csr=false).
-			// Plan A: reuse Kit's OWN remote primitives, redirecting `__sveltekit/remote` at Kit's
-			// real remote-functions entry; the router-coupled modules they import are stubbed just
-			// below. Fallback: our hand-rolled shim. enforce:'pre' wins over Kit's resolveId.
-			if (!ssr && source === '__sveltekit/remote') {
-				if (!kit_remote_index) {
-					throw new Error(
-						'[ogygia] could not locate Kit\'s client remote-functions (src). Pin @sveltejs/kit with its `src/` published (2.70.x).'
-					);
+				// Scope-alias the two router-coupled modules Kit's remote-functions pull in, ONLY when
+				// imported from within Kit's remote-functions dir (so a csr=true page's real Kit client
+				// still gets the real client.js). Keeps the router graph out of island bundles.
+				if (!ssr && importer && importer.includes('/remote-functions/')) {
+					if (KIT_REMOTE_CLIENT.test(source)) return STUB_CLIENT;
+					if (KIT_REMOTE_STATE.test(source)) return STUB_STATE;
 				}
-				return kit_remote_index;
-			}
-			// Scope-alias the two router-coupled modules Kit's remote-functions pull in, ONLY when
-			// imported from within Kit's remote-functions dir (so a csr=true page's real Kit client
-			// still gets the real client.js). Keeps the router graph out of island bundles.
-			if (!ssr && importer && importer.includes('/remote-functions/')) {
-				if (KIT_REMOTE_CLIENT.test(source)) return STUB_CLIENT;
-				if (KIT_REMOTE_STATE.test(source)) return STUB_STATE;
-			}
-			if (!ssr && source === '$app/paths/internal/client') return STUB_PATHS;
+				if (!ssr && source === '$app/paths/internal/client') return STUB_PATHS;
 
-			// Everything else — the ogygia virtual-module vocabulary + the island CLIENT graph ($app/*
-			// shims, virtual entry ids, relative-to-host + transitive-dep resolution) — is the driver's,
-			// with Vite's own resolver threaded in for the two branches that need it.
-			return compiler.resolve_id(source, importer, {
-				ssr,
-				resolve: (s, i, o) => this.resolve(s, i, o)
-			});
-		},
-
-		load(id, options) {
-			// Per-request only. `config.build.ssr` stays set for Kit apps and must NOT decide
-			// client vs server virtuals — that leaked `$app/server` into the browser guard.
-			const ssr = options?.ssr === true;
-
-			const fouc_bare = id.startsWith('\0') ? id.slice(1) : id;
-			if (isFoucCssId(fouc_bare)) {
-				const rel = foucRelFromId(fouc_bare);
-				if (!rel) {
-					return { code: 'export {}', moduleSideEffects: false };
-				}
-				const abs = path.join(root, rel);
-				const code = buildFoucCssModuleSource(abs, {
-					root,
-					libDir,
-					readFile: (p) => {
-						try {
-							return fs.readFileSync(p, 'utf8');
-						} catch {
-							return null;
-						}
-					}
+				// Everything else — the ogygia virtual-module vocabulary + the island CLIENT graph ($app/*
+				// shims, virtual entry ids, relative-to-host + transitive-dep resolution) — is the driver's,
+				// with Vite's own resolver threaded in for the two branches that need it.
+				return compiler.resolve_id(source, importer, {
+					ssr,
+					resolve: (s, i, o) => this.resolve(s, i, o),
 				});
-				// Must not tree-shake: the only purpose of this module is CSS side effects.
-				return { code, moduleSideEffects: true };
-			}
-			if (isFoucScopedId(fouc_bare)) {
-				const rel = foucRelFromId(fouc_bare);
-				if (!rel) return { code: '', moduleType: 'css' };
-				const abs = path.join(root, rel);
-				let source = '';
-				try {
-					source = fs.readFileSync(abs, 'utf8');
-				} catch {
-					return { code: '', moduleType: 'css' };
-				}
-				return { code: compileFoucScopedCss(abs, source), moduleType: 'css' };
-			}
+			},
 
-			// Every other ogygia virtual is a pure `id → source` emit the driver owns. The two Vite build
-			// values it can't see are threaded in: the client-leg content-hashed runtime URL (handoff) and
-			// the app's universal-hooks path (discovered in configResolved).
-			return compiler.emit(id, {
-				ssr,
-				hashedRuntimeUrl: hashed_runtime_url,
-				universalHooks: universal_hooks
-			});
-		},
+			load(id, options) {
+				// Per-request only. `config.build.ssr` stays set for Kit apps and must NOT decide
+				// client vs server virtuals — that leaked `$app/server` into the browser guard.
+				const ssr = options?.ssr === true;
 
-		async transform(code, id, options) {
-			// The whole per-file pass — content-preset tag ▸ macros ▸ host-island transform ▸ ts-region
-			// mint ▸ $app shim — is the driver's; `this.emitFile` (the one Vite primitive it needs, for
-			// the transform-time deterministic island chunk) is threaded in. The driver's result is
-			// bundler-neutral (`map: unknown`); cast it to Vite's transform shape at this boundary.
-			const result = await compiler.transform_module(code, id, {
-				ssr: options?.ssr === true,
-				emitFile: (chunk) => {
-					this.emitFile(chunk);
-				}
-			});
-			return result as { code: string; map: Rolldown.SourceMapInput | null } | null;
-		},
-
-		renderChunk(code) {
-			// Patch the fn-manifest placeholder (og.$ factory registrations) once every transform has run.
-			return compiler.patch_fn_manifest(code);
-		},
-
-		writeBundle(_options, bundle) {
-			// Client only — Kit builds SSR first, so Region.svelte reads this JSON at render
-			// (prerender / live SSR), not at SSR-bundle `load()` time.
-			//
-			// `writeBundle` (not `generateBundle`): rolldown merges/eliminates shared chunks AFTER
-			// `generateBundle`, so a chunk's `imports` there can name a phantom that's gone by write.
-			// By `writeBundle` the bundle reflects the files actually on disk.
-			if (!is_build || is_ssr) return;
-
-			warn_content_leaks(bundle as Record<string, unknown>, root, is_island_path);
-
-			const map = collectIslandDepModulepreloads(
-				bundle as Record<
-					string,
-					{
-						type: string;
-						fileName?: string;
-						imports?: string[];
-						dynamicImports?: string[];
-						viteMetadata?: { importedCss?: Set<string> | string[] };
+				const fouc_bare = id.startsWith('\0') ? id.slice(1) : id;
+				if (isFoucCssId(fouc_bare)) {
+					const rel = foucRelFromId(fouc_bare);
+					if (!rel) {
+						return { code: 'export {}', moduleSideEffects: false };
 					}
-				>
-			);
-			// Content-body CSS handoff: content_css_key → the emitted CSS asset URL, so Region.svelte can
-			// link a content body's own scoped CSS (which lives on no page stylesheet — the corpus is
-			// server-only). The client leg emitted each as an asset and stashed its referenceId; resolve
-			// to the hashed filename now that the bundle is finalized. Same key the preprocessor baked
-			// as `__ogygia_css`, so the body region resolves it at SSR.
-			const content_css: Record<string, string[]> = {};
-			for (const [key, ref] of content_css_refs) {
-				try {
-					const file = this.getFileName(ref);
-					content_css[key] = [file.startsWith('/') ? file : '/' + file];
-				} catch {
-					/* asset dropped — skip; the body just goes unstyled rather than 404 a link */
+					const abs = path.join(root, rel);
+					const code = buildFoucCssModuleSource(abs, {
+						root,
+						libDir,
+						readFile: (p) => {
+							try {
+								return fs.readFileSync(p, 'utf8');
+							} catch {
+								return null;
+							}
+						},
+					});
+					// Must not tree-shake: the only purpose of this module is CSS side effects.
+					return { code, moduleSideEffects: true };
 				}
-			}
+				if (isFoucScopedId(fouc_bare)) {
+					const rel = foucRelFromId(fouc_bare);
+					if (!rel) return { code: '', moduleType: 'css' };
+					const abs = path.join(root, rel);
+					let source = '';
+					try {
+						source = fs.readFileSync(abs, 'utf8');
+					} catch {
+						return { code: '', moduleType: 'css' };
+					}
+					return { code: compileFoucScopedCss(abs, source), moduleType: 'css' };
+				}
 
-			const json = JSON.stringify({ ...map, content_css, fn_manifest: Object.fromEntries(compiler.dollar_hoists) });
-			emit_island_deps_handoff(root, json);
-		}
+				// Every other ogygia virtual is a pure `id → source` emit the driver owns. The two Vite build
+				// values it can't see are threaded in: the client-leg content-hashed runtime URL (handoff) and
+				// the app's universal-hooks path (discovered in configResolved).
+				return compiler.emit(id, {
+					ssr,
+					hashedRuntimeUrl: hashed_runtime_url,
+					universalHooks: universal_hooks,
+				});
+			},
+
+			async transform(code, id, options) {
+				// The whole per-file pass — content-preset tag ▸ macros ▸ host-island transform ▸ ts-region
+				// mint ▸ $app shim — is the driver's; `this.emitFile` (the one Vite primitive it needs, for
+				// the transform-time deterministic island chunk) is threaded in. The driver's result is
+				// bundler-neutral (`map: unknown`); cast it to Vite's transform shape at this boundary.
+				const result = await compiler.transform_module(code, id, {
+					ssr: options?.ssr === true,
+					emitFile: (chunk) => {
+						this.emitFile(chunk);
+					},
+				});
+				return result as { code: string; map: Rolldown.SourceMapInput | null } | null;
+			},
+
+			renderChunk(code) {
+				// Patch the fn-manifest placeholder (og.$ factory registrations) once every transform has run.
+				return compiler.patch_fn_manifest(code);
+			},
+
+			writeBundle(_options, bundle) {
+				// Client only — Kit builds SSR first, so Region.svelte reads this JSON at render
+				// (prerender / live SSR), not at SSR-bundle `load()` time.
+				//
+				// `writeBundle` (not `generateBundle`): rolldown merges/eliminates shared chunks AFTER
+				// `generateBundle`, so a chunk's `imports` there can name a phantom that's gone by write.
+				// By `writeBundle` the bundle reflects the files actually on disk.
+				if (!is_build || is_ssr) return;
+
+				warn_content_leaks(bundle as Record<string, unknown>, root, is_island_path);
+
+				const map = collectIslandDepModulepreloads(
+					bundle as Record<
+						string,
+						{
+							type: string;
+							fileName?: string;
+							imports?: string[];
+							dynamicImports?: string[];
+							viteMetadata?: { importedCss?: Set<string> | string[] };
+						}
+					>,
+				);
+				// Content-body CSS handoff: content_css_key → the emitted CSS asset URL, so Region.svelte can
+				// link a content body's own scoped CSS (which lives on no page stylesheet — the corpus is
+				// server-only). The client leg emitted each as an asset and stashed its referenceId; resolve
+				// to the hashed filename now that the bundle is finalized. Same key the preprocessor baked
+				// as `__ogygia_css`, so the body region resolves it at SSR.
+				const content_css: Record<string, string[]> = {};
+				for (const [key, ref] of content_css_refs) {
+					try {
+						const file = this.getFileName(ref);
+						content_css[key] = [file.startsWith('/') ? file : '/' + file];
+					} catch {
+						/* asset dropped — skip; the body just goes unstyled rather than 404 a link */
+					}
+				}
+
+				const json = JSON.stringify({
+					...map,
+					content_css,
+					fn_manifest: Object.fromEntries(compiler.dollar_hoists),
+				});
+				emit_island_deps_handoff(root, json);
+			},
 		},
-		island_sourcemaps_plugin({ program, is_island_path })
+		island_sourcemaps_plugin({ program, is_island_path }),
 	];
 }
 
