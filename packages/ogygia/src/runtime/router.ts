@@ -11,6 +11,13 @@ import { PageCache } from './page-cache.js';
 import { slots } from './slots.js';
 import { dispose_scope } from '../ref.js';
 import { reconcile_body, region_in_shadow } from './reconcile.js';
+import { emit as dt_emit } from '../devtools/bus.js';
+
+// DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
+const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
+/** High-res clock for devtools nav timings (guarded — dead when off). */
+const dt_now = () =>
+	typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
 
 /** RECONCILER R1: when on (and morph is installed), a nav diffs the body IN PLACE — matched regions
  *  keep their live islands, changed regions re-mount, the shell morphs — instead of a full-body
@@ -508,6 +515,11 @@ class SpaRouter {
 
 		if (!this.#run_before(from, url, type)) return; // a beforeNavigate hook cancelled
 
+		const dt_t0 = DEVTOOLS ? dt_now() : 0;
+		let dt_reconciled = false;
+		if (DEVTOOLS)
+			dt_emit({ domain: 'nav', name: 'nav.start', from: from.pathname + from.search, to: url.pathname + url.search, type });
+
 		// Cancel any in-flight navigation; only the latest gen may apply a body swap (P2).
 		this.#nav_abort?.abort();
 		this.#nav_abort = new AbortController();
@@ -599,6 +611,7 @@ class SpaRouter {
 				// re-mount; shell + keep-chrome (data-ogygia-keep) morph in place. Selective dispose of
 				// only REMOVED regions' hub ids happens inside reconcile_body.
 				reconcile_body(document.body, doc.body, slots.morph);
+				dt_reconciled = true;
 				document.title = doc.title;
 				// KEPT islands don't remount, so re-seed the shared page store + remote seeds from the
 				// new doc — `$app/state` page.url/params/data update reactively inside kept islands.
@@ -608,6 +621,12 @@ class SpaRouter {
 				// FALLBACK (reconcile off, or a region nested in an open shadow root morph can't pierce):
 				// a plain full-body swap. Correct and safe, but keep-continuity does NOT survive here —
 				// islands re-mount like a hard nav. This path is rare; the reconcile path above is the norm.
+				if (DEVTOOLS)
+					dt_emit({
+						domain: 'nav',
+						name: 'nav.fallback',
+						reason: !slots.morph ? 'no-morph' : 'shadow-region'
+					});
 				document.body.replaceWith(doc.body);
 				document.title = doc.title;
 				runtime_session.settle_lakes_in(document.body);
@@ -641,6 +660,15 @@ class SpaRouter {
 
 		this.#doc_key = document_key(url);
 		this.#current_url = url;
+		if (DEVTOOLS)
+			dt_emit({
+				domain: 'nav',
+				name: 'nav.finish',
+				to: url.pathname + url.search,
+				ms: dt_now() - dt_t0,
+				reconciled: dt_reconciled,
+				vt: !!(use_vt && document.startViewTransition)
+			});
 
 		// Instant after a body swap — CSS smooth must not animate programmatic post-nav scroll.
 		if (replace) {
@@ -1036,6 +1064,7 @@ class SpaRouter {
 		for (const link of Array.from(doc.querySelectorAll('link[rel="preload"][as="fetch"]'))) {
 			if (batched.has(link.getAttribute('href') || '')) link.remove();
 		}
+		if (DEVTOOLS) dt_emit({ domain: 'nav', name: 'nav.batch', count: endpoints.length });
 		// Through the seam, never a static `frame-nav` import: an app with `router` but no
 		// deferred/live/lake region has no `frames` feature (and no `render="defer"` holes — so
 		// `endpoints` is empty above and we already returned). Optional-chain keeps that honest.

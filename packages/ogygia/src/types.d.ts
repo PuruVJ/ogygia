@@ -105,6 +105,9 @@ declare module 'virtual:ogygia/route-csr' {
 declare const __OGYGIA_CONTINUITY_FORMS__: boolean;
 /** SERVER-DELTA NAV opt-in (Vite `define`; default OFF — see `router.serverDelta`). */
 declare const __OGYGIA_SERVER_DELTA__: boolean;
+/** DEVTOOLS event layer gate (Vite `define`; default OFF — see `ogygia({ devtools })`). When off,
+ *  every `if (DEVTOOLS) emit({…})` folds to `if (false)` and the whole bus tree-shakes away. */
+declare const __OGYGIA_DEVTOOLS__: boolean;
 
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<

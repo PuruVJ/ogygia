@@ -21,6 +21,7 @@
     "vite": "^8.2.0"
   },
   "dependencies": {
+    "@rolldown/browser": "1.2.2",
     "devalue": "^5.9.0",
     "ogygia": "workspace:*",
     "repro-subpkg": "workspace:*",

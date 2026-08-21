@@ -156,6 +156,19 @@ export interface OgygiaOptions {
 	importKeys?: Partial<ImportKeys>;
 
 	/**
+	 * The devtools EVENT LAYER (internal/notes/devtools.md). Off by default — user apps never ship it.
+	 * Turn it on and the framework emits typed lifecycle events (island discovery, server render,
+	 * wire crossings, client wake, hub mint/resolve, nav reconcile) keyed on the identities it already
+	 * mints, which any sink (`ogygia/devtools`) can read: the REPL, a boundary-lens overlay, a bug-
+	 * report trace, or our own event-driven e2e.
+	 *
+	 * - `false` (default) — the gate is off; every emit folds to `if (false)` and the bus tree-shakes
+	 *   out of the runtime chunk. Zero cost.
+	 * - `true` — emit on (dev or a prod build that asks for it, e.g. the REPL's prod switch).
+	 */
+	devtools?: boolean;
+
+	/**
 	 * Per-IP budget for the signed island endpoint served by `ogygiaHandle()`.
 	 * Default `{ max: 60, windowMs: 60_000 }`. Pass `false` to disable.
 	 */
@@ -276,6 +289,7 @@ export interface ResolvedOgygiaConfig {
 	router_view_transitions: boolean;
 	continuity_forms: boolean;
 	server_delta: boolean;
+	devtools: boolean;
 }
 
 /**
@@ -329,6 +343,10 @@ export function resolve_options(
 	const server_delta =
 		router_enabled && typeof options.router === 'object' && options.router.serverDelta === true;
 
+	// DEVTOOLS event layer — off unless the app opts in. Independent of the router (client AND server
+	// realms emit); a plain `true` turns the compile gate on for both dev and this build's output.
+	const devtools = options.devtools === true;
+
 	return {
 		rate_limit,
 		session_cookie,
@@ -336,6 +354,7 @@ export function resolve_options(
 		router_enabled,
 		router_view_transitions,
 		continuity_forms,
-		server_delta
+		server_delta,
+		devtools
 	};
 }

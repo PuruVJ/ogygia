@@ -85,6 +85,10 @@
 			"types": "./dist/profiler/index.d.ts",
 			"default": "./src/profiler/index.ts"
 		},
+		"./devtools": {
+			"types": "./dist/devtools/index.d.ts",
+			"default": "./src/devtools/index.ts"
+		},
 		"./types": {
 			"types": "./ambient.d.ts"
 		},
@@ -220,6 +224,10 @@
 			"./profiler": {
 				"types": "./dist/profiler/index.d.ts",
 				"default": "./dist/profiler/index.js"
+			},
+			"./devtools": {
+				"types": "./dist/devtools/index.d.ts",
+				"default": "./dist/devtools/index.js"
 			},
 			"./internal/compiler": {
 				"types": "./dist/compiler/index.d.ts",

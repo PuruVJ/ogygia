@@ -79,9 +79,21 @@ import { serialize_provided_context } from './context-bridge.js';
 import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
 import { set_page_recorder, type PageSnapshot } from './page-seed-registry.js';
+import {
+	set_server_devtools_recorder,
+	record_server_event
+} from './devtools/server-registry.js';
+import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './devtools/schema.js';
 
 /** Hard cap on rendered region HTML (bytes). */
 const MAX_REGION_BODY = 2_000_000;
+
+// DEVTOOLS gate — server realm. The SSR bundle carries the `__OGYGIA_DEVTOOLS__` define; off → the
+// recorder is never installed and every `if (DEVTOOLS)` folds out.
+const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
+/** High-res clock for server-realm devtools timestamps. */
+const dt_now = () =>
+	typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
 
 // Drop-in `setContext` bridge. A layout that imports `setContext` from `ogygia` records each string
 // key into this per-request bag during SSR; `inject_client_seeds` reads it back and emits ONE
@@ -115,6 +127,19 @@ set_page_recorder((snapshot) => {
 	const bag = request_als.getStore();
 	if (bag) bag.page = snapshot;
 });
+// DEVTOOLS: per-request event buffers, keyed off the request bag by a side WeakMap so RequestBag stays
+// pristine (and free) when devtools is off. GC'd with the bag; never a global ring (which would mix
+// concurrent SSR requests). Unreferenced ⇒ tree-shaken when the gate is off.
+const dt_buffers = new WeakMap<RequestBag, { events: DevtoolsEvent[]; seq: number }>();
+// Stamp the envelope with THIS request's own seq/clock and push into its buffer.
+if (DEVTOOLS)
+	set_server_devtools_recorder((input) => {
+		const bag = request_als.getStore();
+		if (!bag) return;
+		const buf = dt_buffers.get(bag);
+		if (!buf) return;
+		buf.events.push({ ...input, v: DEVTOOLS_SCHEMA_VERSION, seq: buf.seq++, t: dt_now(), realm: 'server' });
+	});
 
 /** Cap on a batch POST body before `request.json()` buffers it. 32 endpoints × ~8.5kB (props cap
  *  8192 + URL overhead) ≈ 270kB; 512kB leaves margin. Rejected up front via `content-length`. */
@@ -247,6 +272,9 @@ class OgygiaHandle {
 				defer_next_id: 0,
 				seed_reducers: null
 			};
+			// DEVTOOLS: attach a request-scoped event buffer via a side WeakMap (keeps RequestBag — and
+			// its cost — untouched when devtools is off; the map + this line DCE out then).
+			if (DEVTOOLS) dt_buffers.set(bag, { events: [], seq: 0 });
 			const response = await request_als.run(bag, () =>
 				resolve(event, {
 					transformPageChunk: async ({ html }) =>
@@ -475,11 +503,27 @@ class OgygiaHandle {
 			: null;
 		if (page_payload) {
 			scripts.push(emit_ogygia_script('page', page_payload, 'data-ogygia-page'));
+			if (DEVTOOLS)
+				record_server_event({
+					domain: 'server',
+					name: 'server.seed.injected',
+					kind: 'page',
+					bytes: page_payload.length
+				});
 		}
 
 		if (state?.remote?.implicit) {
 			const remote_script = await this.build_remote_seed_script(state);
-			if (remote_script) scripts.push(remote_script);
+			if (remote_script) {
+				scripts.push(remote_script);
+				if (DEVTOOLS)
+					record_server_event({
+						domain: 'server',
+						name: 'server.seed.injected',
+						kind: 'remote',
+						bytes: remote_script.length
+					});
+			}
 		}
 
 		// og.$ factories (PROD, CSP-clean): one EXECUTING inline script seeds the tag → factory
@@ -504,6 +548,16 @@ class OgygiaHandle {
 			if (payload) {
 				scripts.push(emit_ogygia_script('ctx', payload, PAGE_CTX_MARKER));
 			}
+		}
+
+		// DEVTOOLS: drain this request's server-realm events (region renders, capability mints, seeds)
+		// into an `application/ogygia-devtools` side-channel the client bus ingests — one stream, both
+		// realms, correlated by fingerprint. Built LAST so seed.injected events above are included.
+		const dt_buf = DEVTOOLS && bag ? dt_buffers.get(bag) : undefined;
+		if (DEVTOOLS && dt_buf && dt_buf.events.length) {
+			scripts.push(
+				emit_ogygia_script('devtools', escape_script_text(JSON.stringify(dt_buf.events)))
+			);
 		}
 
 		if (scripts.length === 0) return html;

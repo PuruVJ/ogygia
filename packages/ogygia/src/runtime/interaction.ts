@@ -31,6 +31,10 @@
 
 import { slots } from './slots.js';
 import { warm_island_module } from './region-endpoint-url.js';
+import { emit as dt_emit } from '../devtools/bus.js';
+
+// DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
+const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
 /** Feature entry: fill the `interaction` slot — wake a cold island on first use, warm on hover. */
 export function install() {
@@ -190,12 +194,22 @@ export function arm_interaction(
 					if (el instanceof HTMLElement && document.activeElement !== el) el.focus();
 				}
 				// Replay in arrival order at each click's address (tag-checked against drift).
+				const replayed = queued.length;
 				for (const q of queued) {
 					const t = resolve_address(region, q.addr);
 					if (!t || t.tagName !== q.tag) continue;
 					t.dispatchEvent(new MouseEvent('click', q.init));
 				}
 				queued.length = 0;
+				if (DEVTOOLS)
+					dt_emit({
+						domain: 'runtime',
+						name: 'interaction.replay',
+						entry: region.getAttribute('entry') || undefined,
+						fp: region.getAttribute('data-og-fp') || undefined,
+						clicks: replayed,
+						fields: fields.length
+					});
 			},
 			(err) => {
 				// Hydration FAILED (chunk 404, network drop). Disarm so the region stops canceling

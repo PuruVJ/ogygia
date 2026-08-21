@@ -25,6 +25,26 @@ import {
 	region_ssr_truncated
 } from './region-attrs.js';
 import { slots, type LiftedLake } from './slots.js';
+import { emit as dt_emit } from '../devtools/bus.js';
+import { install_window_sink as dt_install_window_sink, ingest_server_events as dt_ingest_server } from '../devtools/sinks.js';
+import { install_devtools_ui as dt_install_ui } from '../devtools/ui.js';
+
+// DEVTOOLS gate — module-local const from the Vite `define` (the proven DCE pattern): when off, every
+// `if (DEVTOOLS) dt_emit({…})` folds to `if (false)` and the whole devtools graph tree-shakes away.
+const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
+
+/** Read the identity fields devtools events correlate on, off a region element. Cheap — attributes
+ *  already in hand. Only ever called from behind an `if (DEVTOOLS)` guard, so it costs nothing off. */
+function dt_ids(el: Element): { entry?: string; fp?: string } {
+	const entry = el.getAttribute('entry') || undefined;
+	const fp = el.getAttribute('data-og-fp') || undefined;
+	return { entry, fp };
+}
+
+/** High-res clock for devtools timings (guarded — dead when devtools is off). */
+function now_ms(): number {
+	return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+}
 
 /**
  * Parse the `<script data-ogygia-props>` that follows a region (skipping `<link>` hints). Uses the
@@ -467,6 +487,15 @@ class OgygiaRegion extends HTMLElement {
 		const in_adopted_slot = !!(boundary && slot && boundary.contains(slot));
 		if (boundary && is_awake(boundary) && !is_deferred(this) && !in_adopted_slot) {
 			this.setAttribute('data-nested', '');
+			if (DEVTOOLS)
+				dt_emit({
+					domain: 'runtime',
+					name: 'region.connected',
+					...dt_ids(this),
+					wake: this.getAttribute('wake') || undefined,
+					deferred: false,
+					nested: true
+				});
 			if (import.meta.env.DEV) {
 				console.warn(
 					`[ogygia] nested region "${this.getAttribute('entry')}" skipped self-run; the nearest region above it is awake, so it rides that hydration (inner hydrate "${this.getAttribute('wake') || 'load'}" ignored).`
@@ -479,7 +508,26 @@ class OgygiaRegion extends HTMLElement {
 		// Two axes: `render="defer"` + `when` fetches HTML; `wake` wakes JS (possibly after swap).
 		const deferred = is_deferred(this);
 		const when = region_schedule(this);
-		const fire = deferred ? () => this.#server() : () => this.#hydrate();
+		if (DEVTOOLS) {
+			dt_emit({
+				domain: 'runtime',
+				name: 'region.connected',
+				...dt_ids(this),
+				wake: this.getAttribute('wake') || undefined,
+				deferred,
+				nested: false
+			});
+			dt_emit({ domain: 'runtime', name: 'wake.scheduled', ...dt_ids(this), when });
+		}
+		const raw_fire = deferred ? () => this.#server() : () => this.#hydrate();
+		// Wrap so the schedule FIRING is observable (interaction/visible/idle "when did it actually
+		// wake, and why" is the story a timeline instrument tells). Off → `raw_fire` is used directly.
+		const fire = DEVTOOLS
+			? () => {
+					dt_emit({ domain: 'runtime', name: 'wake.fired', ...dt_ids(this), when });
+					return raw_fire();
+				}
+			: raw_fire;
 		// A `visible` island won't hydrate until it scrolls into view — and only THEN fetches its JS
 		// chunk, stalling hydration on a real network. Warm the module during idle so the scroll-in is
 		// instant. Kept to `visible` on purpose: `idle` fires imminently anyway, while `interaction`
@@ -587,6 +635,15 @@ class OgygiaRegion extends HTMLElement {
 		if (revalidate) this.setAttribute('data-revalidated', '');
 		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
 		slots.lakes.after_html_swap(this, { revalidate });
+		if (DEVTOOLS)
+			dt_emit({
+				domain: 'runtime',
+				name: 'region.server.applied',
+				entry: this.getAttribute('entry') || undefined,
+				endpoint: this.getAttribute('endpoint') || undefined,
+				bytes: html.length,
+				revalidate
+			});
 		this.dispatchEvent(new CustomEvent('ogygia:server', { bubbles: true }));
 	}
 
@@ -765,6 +822,8 @@ class OgygiaRegion extends HTMLElement {
 	async #hydrate() {
 		if (this.#app || this.#hydrating) return;
 		this.#hydrating = true;
+		const dt_t0 = DEVTOOLS ? now_ms() : 0;
+		if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.hydrate.start', ...dt_ids(this) });
 		let lifted: Array<LiftedLake> | null = null;
 		try {
 			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page.
@@ -889,8 +948,22 @@ class OgygiaRegion extends HTMLElement {
 			}
 
 			this.setAttribute('data-hydrated', '');
+			if (DEVTOOLS)
+				dt_emit({
+					domain: 'runtime',
+					name: 'region.hydrate.done',
+					...dt_ids(this),
+					ms: now_ms() - dt_t0
+				});
 			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		} catch (err) {
+			if (DEVTOOLS)
+				dt_emit({
+					domain: 'runtime',
+					name: 'region.hydrate.failed',
+					...dt_ids(this),
+					message: (err as { message?: string })?.message ?? String(err)
+				});
 			console.error('[ogygia] hydration failed for', this.getAttribute('entry'), err);
 		} finally {
 			// If hydrate threw after lift, put lake DOM back so the page isn't permanently blank.
@@ -1076,6 +1149,30 @@ export function boot(installers: Array<() => void> = []): void {
 		softInvalidate: apply_soft_invalidate_doc
 	};
 	for (const install of installers) install();
+
+	if (DEVTOOLS) {
+		// Publish `window.__ogygia_devtools` so instruments + our own e2e can read the stream with no
+		// app wiring — the default sink when the build compiled devtools in. (No-op off the browser.)
+		dt_install_window_sink();
+		// Fold the SERVER realm's events (the handle's `application/ogygia-devtools` side-channel) into
+		// the same stream — a region's server render + client wake now share one fingerprint-keyed timeline.
+		dt_ingest_server();
+		// The devtools UI — one mounted Svelte app (launcher + tabbed window: Lens / Bytes / Timeline).
+		// A pure bus/DOM consumer, starting hidden (Alt+O). DCEs with the whole devtools graph when off.
+		dt_install_ui();
+		// Which optional features this per-app runtime shipped — the byte-ledger / boundary-lens read
+		// this to know what's even possible on the page. Names come off each installer's slot presence.
+		const features: string[] = [];
+		if (slots.interaction) features.push('interaction');
+		if (slots.morph) features.push('morph');
+		if (slots.live) features.push('live');
+		if (slots.wire) features.push('wire');
+		if (slots.remoteSeeds) features.push('remoteSeeds');
+		if (slots.frames) features.push('frames');
+		if (slots.nav) features.push('router');
+		if (slots.forms.enabled) features.push('forms');
+		dt_emit({ domain: 'runtime', name: 'runtime.boot', features });
+	}
 
 	if (typeof customElements !== 'undefined' && !customElements.get('ogygia-region')) {
 		customElements.define('ogygia-region', OgygiaRegion);

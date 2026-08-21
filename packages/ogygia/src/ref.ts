@@ -87,6 +87,11 @@ interface HubRegistry {
 	watchers: Map<string, Set<(live: unknown) => void>>;
 }
 
+import { emit as dt_emit } from './devtools/bus.js';
+
+// DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
+const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
+
 const REGISTRY_KEY = Symbol.for('ogygia.hub');
 
 function registry(): HubRegistry {
@@ -142,6 +147,7 @@ export function mint(value: unknown, only?: ReadonlySet<string>): Ref | undefine
 		}
 		const ref: Ref = { k: kind.k, i, d };
 		if (t !== undefined) ref.t = t;
+		if (DEVTOOLS) dt_emit({ domain: 'hub', name: 'hub.mint', kind: kind.k, id: i, tag: t });
 		return ref;
 	}
 	return undefined;
@@ -196,6 +202,8 @@ function remember_in(
 export function dispose_scope(scope: Scope): void {
 	const reg = registry();
 	const b = reg.instances.get(scope);
+	if (DEVTOOLS)
+		dt_emit({ domain: 'hub', name: 'hub.dispose', scope, count: b?.size ?? 0 });
 	if (b !== undefined && b.size > 0) {
 		// instances reachable from a longer-lived bucket must survive this disposal
 		const survivors = new Set<object>();
@@ -234,10 +242,12 @@ export function dispose_ids(ids: Iterable<string>): void {
 	const reg = registry();
 	const page = bucket(reg, 'page');
 	const survivors = new Set<object>(bucket(reg, 'session').values());
+	let dt_disposed = 0;
 	for (const id of ids) {
 		const inst = page.get(id);
 		if (inst === undefined) continue;
 		page.delete(id);
+		if (DEVTOOLS) dt_disposed++;
 		if (survivors.has(inst)) continue; // session-aliased — its resources outlive the nav
 		const kind = reg.kinds.get(reg.instance_kind.get(inst) ?? '');
 		reg.instance_kind.delete(inst);
@@ -247,6 +257,8 @@ export function dispose_ids(ids: Iterable<string>): void {
 			/* one instance's teardown throwing must not strand the rest */
 		}
 	}
+	if (DEVTOOLS && dt_disposed > 0)
+		dt_emit({ domain: 'hub', name: 'hub.dispose', scope: 'ids', count: dt_disposed });
 }
 
 /** Register a side-effect cleanup to run whenever `scope` is disposed. Returns an unregister fn.
@@ -293,6 +305,8 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 					notify(ref.i, existing);
 				}
 			}
+			if (DEVTOOLS)
+				dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, hit: true });
 			return existing;
 		}
 	}
@@ -324,6 +338,8 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 				// The session bucket is the source of truth for the name; this ref's id aliases it in
 				// the page bucket too, so late-hydrating islands on the same page reunite with it.
 				remember_in(reg, 'page', ref.i, kept, ref.k);
+				if (DEVTOOLS)
+					dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, hit: true });
 				return kept;
 			}
 			const instance = kind.decode(ref);
@@ -331,6 +347,8 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 				remember_in(reg, 'session', name, instance as object, ref.k);
 				remember_in(reg, 'page', ref.i, instance as object, ref.k);
 			}
+			if (DEVTOOLS)
+				dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, hit: false });
 			return instance;
 		}
 	}
@@ -339,6 +357,8 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 	if (remember && instance !== null && typeof instance === 'object') {
 		remember_in(reg, 'page', ref.i, instance as object, ref.k);
 	}
+	if (DEVTOOLS)
+		dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, hit: false });
 	return instance;
 }
 

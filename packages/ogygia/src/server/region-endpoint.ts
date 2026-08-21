@@ -16,6 +16,10 @@ import {
 } from './endpoint.js';
 import { encode_region_props } from './region-props.js';
 import { stringify } from 'devalue';
+import { record_server_event } from '../devtools/server-registry.js';
+
+// DEVTOOLS gate — server realm; off → folds out.
+const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 import { B64Url } from './payload.js';
 import { REF_WIRE_KEY, ref_reducer } from '../ref.js';
 import { ensure_prop_kinds } from './region-props.js';
@@ -104,6 +108,8 @@ export function mint_region_capability(entry: string, payload: string, ttl = 0):
 	const ttl_field = ttl > 0 ? String(Math.floor(ttl)) : '';
 	const sig = sign(secret, region_mac_message(entry, exp, payload, session, ttl_field));
 	const ttl_param = ttl_field ? `&ttl=${ttl_field}` : '';
+	if (DEVTOOLS)
+		record_server_event({ domain: 'server', name: 'server.capability.minted', id: entry, ttl });
 	return `${resolve(DEFAULT_ISLANDS_ENDPOINT)}?id=${encodeURIComponent(entry)}&props=${payload}&exp=${exp}${ttl_param}&sig=${sig}`;
 }
 

@@ -41,6 +41,10 @@
 	import { isRegion } from './region.js';
 	import LakeBoundary from './LakeBoundary.svelte';
 	import SlotBoundary from './SlotBoundary.svelte';
+	import { record_server_event } from './devtools/server-registry.js';
+
+	// DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
+	const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
 	/**
 	 * Every prop is optional: a HELD usage passes only `of`, a PLACEMENT usage (the transform's
@@ -510,6 +514,48 @@
 			LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + payload + LT + '/script' + GT
 		);
 	});
+	// DEVTOOLS (server realm): emit ONE `server.region.rendered` per real <ogygia-region> this SSR pass
+	// produces (inline/nested components ship no region, so they are skipped). Reads the already-computed
+	// deriveds via untrack (no reactive dep); the whole block DCEs when devtools is off. Rides the page
+	// side-channel the handle injects — so a region's server render lands in the same client-side stream
+	// as its wake, keyed by the SAME data-og-fp.
+	if (DEVTOOLS && typeof window === 'undefined') {
+		untrack(() => {
+			try {
+				if (is_island && !island_inline) {
+					record_server_event({
+						domain: 'server',
+						name: 'server.region.rendered',
+						fp: island_fp || '',
+						mode: 'island',
+						entry: island_module_url || undefined,
+						propsBytes: island_payload.length
+					});
+					if (island_skip)
+						record_server_event({ domain: 'server', name: 'server.delta.skip', fp: island_fp || '' });
+				} else if (is_server && !nested) {
+					record_server_event({
+						domain: 'server',
+						name: 'server.region.rendered',
+						fp: '',
+						mode: 'server',
+						entry: server_region_entry || undefined,
+						propsBytes: server_payload.length
+					});
+				} else if (is_lake && lake_inside) {
+					record_server_event({
+						domain: 'server',
+						name: 'server.region.rendered',
+						fp: '',
+						mode: 'lake',
+						entry: __entry || undefined
+					});
+				}
+			} catch {
+				/* devtools emit must never break a render */
+			}
+		});
+	}
 </script>
 
 <!-- svelte:head must be top-level (not inside {#if}); non-island/server modes leave it empty. -->

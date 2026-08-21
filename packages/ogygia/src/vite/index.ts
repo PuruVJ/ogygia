@@ -139,7 +139,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		router_enabled,
 		router_view_transitions,
 		continuity_forms,
-		server_delta
+		server_delta,
+		devtools
 	} = resolve_options(options, DEFAULT_REGION_TTL_SEC);
 
 	// The Program — this plugin instance's cross-file linker / island graph. It owns the descriptor
@@ -326,7 +327,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
 							__OGYGIA_CONTINUITY_FORMS__: JSON.stringify(continuity_forms),
-							__OGYGIA_SERVER_DELTA__: JSON.stringify(server_delta)
+							__OGYGIA_SERVER_DELTA__: JSON.stringify(server_delta),
+							// DEVTOOLS event-layer gate — off unless `ogygia({ devtools: true })`. When false,
+							// every `if (DEVTOOLS) emit({…})` folds out and the bus tree-shakes away.
+							__OGYGIA_DEVTOOLS__: JSON.stringify(devtools)
 						},
 						server: {
 							fs: {

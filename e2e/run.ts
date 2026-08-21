@@ -74,10 +74,12 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['portable-snippet.ts', true, 'a snippet forwarded THROUGH a plain shell into an island crosses + comes alive'],
 	['snippet-islands.ts', true, 'islands in a {#snippet} to a plain shell: marks survive + top-level await SSRs'],
 	['interaction.ts', true, "wake:'interaction' — cold until used, click replay, typing survives"],
+	['devtools.ts', true, 'devtools event layer: event-driven interaction/nav/trace (skips if build has devtools off)'],
 	['presets.ts', false, 'transform-level: region syntax + presets + errors'],
 	['dedup.ts', false, 'same-component-two-strategies → ONE client chunk'],
 	['dollar-fn.ts', true, 'og.$: a fn ref crosses context into an island and rebinds (bound captures)'],
-	['server-delta.ts', true, 'server-delta nav: shared island skipped server-side on SPA nav, kept live + interactive (no blank hole)']
+	['server-delta.ts', true, 'server-delta nav: shared island skipped server-side on SPA nav, kept live + interactive (no blank hole)'],
+	['observatory.ts', true, 'browser compiler (Rung 1): mark analysis in a Web Worker, island map + host rewrite, live edit']
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

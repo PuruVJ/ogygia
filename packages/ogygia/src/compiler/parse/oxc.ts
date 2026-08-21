@@ -18,6 +18,27 @@ type Node = Record<string, any>;
 export type Comment = { start: number; end: number };
 export type ParseResult = { program: Node | null; ok: boolean; comments: Comment[] };
 
+/** The raw oxc parse signature (`(id, code) → { program, errors, comments }`). */
+export type RawParse = (
+	id: string,
+	code: string
+) => { program?: Node; errors?: unknown[]; comments?: Comment[] };
+
+/**
+ * The parser is INJECTABLE so the SAME oxc can run in the browser (the Observatory / Rung 1). Node
+ * uses the default `rolldown/utils` (native); a browser build installs `@rolldown/browser/utils`
+ * (WASM, the SAME rolldown version → byte-identical AST) via {@link set_parser}, after awaiting the
+ * WASM init. This is the seam, not a parser swap for Node: the default below is unchanged, so the
+ * production build parses exactly as before. (bake() keeps rolldown too, so this is consistency —
+ * same parser both realms — not a new dependency.)
+ */
+let raw_parse: RawParse = parseSync as RawParse;
+
+/** Install a browser (or test) parser with the same call shape. No-arg reset restores the default. */
+export function set_parser(fn?: RawParse): void {
+	raw_parse = fn ?? (parseSync as RawParse);
+}
+
 /**
  * Parse `code` (named by `id`, whose extension picks the dialect) to an oxc/ESTree program. Never
  * throws: a syntax error (or a half-typed file mid-edit) yields `{ program: null, ok: false }`, and
@@ -26,7 +47,7 @@ export type ParseResult = { program: Node | null; ok: boolean; comments: Comment
  */
 export function parse_module(code: string, id: string): ParseResult {
 	try {
-		const result = parseSync(id, code) as {
+		const result = raw_parse(id, code) as {
 			program?: Node;
 			errors?: unknown[];
 			comments?: Comment[];
