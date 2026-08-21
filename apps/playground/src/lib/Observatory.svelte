@@ -509,6 +509,12 @@
 					</div>
 					<div class="wakehint muted">islands start cold. <b>load</b> wakes now · <b>idle</b> soon · <b>visible</b> on scroll · <b>interaction</b> on click · lakes stay frozen.</div>
 				{/if}
+				{#if previewMode === 'islands'}
+					<div class="wakehint muted" data-obs-islands-hint>
+						the page's <b>real ogygia runtime</b> hydrated these — genuine <b>&lt;ogygia-region&gt;</b> shells,
+						blob-linked island chunks, lazy per schedule. Try the <b>wake demo</b> preset: click Menu, scroll to Chart.
+					</div>
+				{/if}
 				<!-- Interactive mount (live) OR marked SSR HTML tinted by the lens (x-ray). -->
 				<div class="preview" class:xray={previewMode === 'xray'} bind:this={previewEl} data-obs-preview></div>
 				{#if analysis.rendered.ok}
