@@ -930,6 +930,22 @@ export class Compiler {
 		return touched ? { code: out, map } : null;
 	}
 
+	/**
+	 * Patch the fn-manifest placeholder in a finished chunk with the collected `og.$` factory
+	 * registrations — every transform has run by renderChunk, so `dollar_hoists` is complete. Registrations
+	 * go through the globalThis bridge the placeholder module installed (rename-proof under minification).
+	 * Returns the patched chunk, or `null` if this chunk carries no placeholder.
+	 */
+	patch_fn_manifest(code: string): { code: string; map: null } | null {
+		if (!code.includes('/*__OGYGIA_FN_MANIFEST__*/')) return null;
+		const regs = [...this.dollar_hoists.entries()]
+			.map(([tag, src]) => `globalThis.__og_reg_fn(${JSON.stringify(tag)}, (${src}));`)
+			.join('\n');
+		// FUNCTION-form replacement: factory sources legitimately contain `$$` (a literal `$`
+		// before a template hole), which String.replace would collapse in a string replacement.
+		return { code: code.replace('/*__OGYGIA_FN_MANIFEST__*/', () => regs), map: null };
+	}
+
 	/** True when `file` is a registered island HOST (a component that declares islands). */
 	is_registered_host(file: string): boolean {
 		const { host_index, registry } = this.program;

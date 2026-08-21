@@ -782,16 +782,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		},
 
 		renderChunk(code) {
-			// Patch the fn-manifest placeholder now — every transform has run, so `dollar_hoists`
-			// is complete. Pre-minify (this plugin is enforce:pre) and rename-proof (registrations
-			// go through the globalThis bridge the placeholder module installed).
-			if (!code.includes('/*__OGYGIA_FN_MANIFEST__*/')) return null;
-			const regs = [...compiler.dollar_hoists.entries()]
-				.map(([tag, src]) => `globalThis.__og_reg_fn(${JSON.stringify(tag)}, (${src}));`)
-				.join('\n');
-			// FUNCTION-form replacement: factory sources legitimately contain `$$` (a literal `$`
-			// before a template hole), which String.replace would collapse in a string replacement.
-			return { code: code.replace('/*__OGYGIA_FN_MANIFEST__*/', () => regs), map: null };
+			// Patch the fn-manifest placeholder (og.$ factory registrations) once every transform has run.
+			return compiler.patch_fn_manifest(code);
 		},
 
 		writeBundle(_options, bundle) {
