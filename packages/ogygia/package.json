@@ -109,7 +109,7 @@
 		"build": "tsdown",
 		"test": "vitest run",
 		"lint": "oxlint -c .oxlintrc.json src",
-		"check": "tsc --noEmit && vitest run && pnpm run lint",
+		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json && vitest run && pnpm run lint",
 		"prepublishOnly": "pnpm run build && pnpm run verify:package",
 		"verify:package": "node scripts/verify-package.mjs"
 	},
@@ -152,6 +152,7 @@
 		"mdsvex": "^0.12.8",
 		"oxlint": "^1.77.0",
 		"shiki": "^4.4.1",
+		"svelte-check": "^4.7.4",
 		"svelte2tsx": "^0.7.60",
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",
