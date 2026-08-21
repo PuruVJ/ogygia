@@ -18,12 +18,13 @@ import {
 	transformTsRegions,
 	wrapperVirtualId,
 	ISLAND_DIR,
+	is_island_path,
 	CLIENT_BINDING_STUB
 } from './region/transform.js';
 import { routeCsrIsFalse, routeCsrIsTrue, clean_stale_ogygia_dirs } from './standalone.js';
 import { run_module_macros } from './macros/pipeline.js';
 import { generateRuntimeEntrySource, resolveFeatures } from './link/runtime-entry.js';
-import { resolveFoucImportSpec } from './fouc-css.js';
+import { resolveFoucImportSpec, FOUC_CSS_PREFIX, FOUC_SCOPED_PREFIX } from './fouc-css.js';
 import { moduleHasTransportable, svelteModuleHasTransportable } from './content/transportables.js';
 import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT } from './region/emit.js';
 import { island_deps_module } from './link/island-deps.js';
@@ -82,6 +83,8 @@ export interface Profiler {
 	P: boolean;
 	outHash: Map<string, number>;
 }
+
+const LEADING_SLASH = /^\//;
 
 const fnv = (str: string) => {
 	let h = 0x811c9dc5;
@@ -514,6 +517,128 @@ export class Compiler {
 				}
 			}
 			return src;
+		}
+		return null;
+	}
+
+	/**
+	 * Resolve an ogygia-owned import id: the virtual-module vocabulary (config/manifest virtuals + FOUC
+	 * graph + client-binding stub), and the island CLIENT graph — `$app/*` shims for island importers,
+	 * virtual island/wrapper ids, and relative imports of a generated island module resolved against its
+	 * host (marking each resolved dep into `island_graph` so its own `$app/*` stays shimmed). `resolve` is
+	 * the bundler's own resolver (Vite `this.resolve`), threaded in so the driver stays bundler-agnostic.
+	 * Returns a resolved id / result, or `null` to defer to the bundler. The adapter handles the few
+	 * package/Kit-specific ids first (ogygia injected imports, Kit's remote runtime, the kit-wire path).
+	 */
+	async resolve_id(
+		source: string,
+		importer: string | undefined,
+		{
+			ssr,
+			resolve
+		}: {
+			ssr: boolean;
+			resolve: (
+				source: string,
+				importer: string,
+				opts: { skipSelf: boolean }
+			) => Promise<{ id: string } | null>;
+		}
+	): Promise<string | { id: string } | null> {
+		const ctx = this.#ctx!;
+		const { registry, island_graph } = this.program;
+
+		if (source === V_FN_MANIFEST) return RESOLVED(V_FN_MANIFEST);
+		if (source === V_RUNTIME_URL) return RESOLVED(V_RUNTIME_URL);
+		if (source === V_MANIFEST) return RESOLVED(V_MANIFEST);
+		if (source === V_RUNTIME) return RESOLVED(V_RUNTIME);
+		if (source === V_RUNTIME_ENTRY) return RESOLVED(V_RUNTIME_ENTRY);
+		if (source === V_DEV_HMR) return RESOLVED(V_DEV_HMR);
+		if (source === V_DEV_HMR_URL) return RESOLVED(V_DEV_HMR_URL);
+		if (source === V_ISLAND_DEPS) return RESOLVED(V_ISLAND_DEPS);
+		if (source === V_SECRET) return RESOLVED(V_SECRET);
+		if (source === V_SIGN) return RESOLVED(V_SIGN);
+		if (source === V_RATE_LIMIT) return RESOLVED(V_RATE_LIMIT);
+		if (source === V_ROUTER_CONFIG) return RESOLVED(V_ROUTER_CONFIG);
+		if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);
+		if (source === V_REGION_TTL) return RESOLVED(V_REGION_TTL);
+		if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
+		if (source === V_REQUEST_EVENT) return RESOLVED(V_REQUEST_EVENT);
+		if (source === V_REGION_ENDPOINT) return RESOLVED(V_REGION_ENDPOINT);
+		// csr=false client hosts rewrite marked bindings here — not a hydrate entry.
+		if (source === CLIENT_BINDING_STUB) return ctx.client_binding_stub_file;
+		// CSS-only FOUC graph (no component JS) for csr=false client stubs.
+		if (source.startsWith(FOUC_CSS_PREFIX) || source.startsWith(FOUC_SCOPED_PREFIX)) {
+			return RESOLVED(source);
+		}
+		if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
+		if (source === V_TRANSPORTABLES) return RESOLVED(V_TRANSPORTABLES);
+
+		// Island CLIENT graph: shim `$app/*` for the virtual module AND every module it
+		// pulls in (e.g. `$lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias
+		// would otherwise give islands the uninitialized Kit page (`new URL('a:')` → empty
+		// pathname). enforce:'pre' wins over Kit's resolveId. SSR keeps real Kit modules.
+		const importer_id = strip_id(importer);
+		const from_island =
+			importer_id && (registry.has(importer_id) || island_graph.has(importer_id));
+		if (!ssr && from_island && ctx.app_shims[source]) {
+			return ctx.app_shims[source];
+		}
+
+		// Portable wrappers import `virtual:ogygia/island/<id>` (and hosts import wrappers).
+		// Resolve those BEFORE the "relative to hostPath" branch — that branch uses skipSelf
+		// and would bypass this handler, failing to resolve virtual entry ids.
+		if (is_island_path(source)) {
+			let candidate = source.split('?')[0];
+			if (candidate.startsWith('/@id/')) candidate = candidate.slice('/@id/'.length);
+			if (candidate.startsWith('/@fs/')) candidate = candidate.slice('/@fs'.length);
+			if (registry.has(candidate)) {
+				island_graph.add(candidate);
+				return candidate;
+			}
+			const abs = path.isAbsolute(candidate)
+				? candidate
+				: path.join(ctx.root, candidate.replace(LEADING_SLASH, ''));
+			if (registry.has(abs)) {
+				island_graph.add(abs);
+				return abs;
+			}
+		}
+
+		// Virtual island/wrapper module: resolve relative imports to the host file, and mark
+		// the resolved id so its own `$app/*` imports hit the shim branch above.
+		// Skip ogygia virtual ids (handled above).
+		if (importer_id && registry.has(importer_id) && !is_island_path(source)) {
+			const host = registry.get(importer_id)!.hostPath;
+			const resolved = await resolve(source, host, { skipSelf: true });
+			if (resolved?.id) island_graph.add(strip_id(resolved.id));
+			// A BARE specifier a generated island module re-emits (a marked package import like
+			// `import TabGroup from 'ogygia/content/tab-group' with { wake: 'load' }`, or a specifier
+			// its child synth re-imports) that Vite cannot resolve must fail HERE, loudly — falling
+			// through surfaces later as an opaque "Failed to resolve import" with the virtual module
+			// as the only context. Relative/absolute/virtual sources keep Vite's own error path.
+			if (
+				!resolved &&
+				!source.startsWith('.') &&
+				!source.startsWith('\0') &&
+				!source.startsWith('virtual:') &&
+				!path.isAbsolute(source)
+			) {
+				throw new Error(
+					`[ogygia] cannot resolve '${source}' imported by the generated island module for ` +
+						`${path.relative(ctx.root, host)}. That island was marked on a package import, so the ` +
+						`specifier must resolve from the host file: check the package is installed and its ` +
+						`"exports" map exposes this subpath (with a "svelte" condition for .svelte components).`
+				);
+			}
+			return resolved;
+		}
+		// Transitive island-graph module (not a virtual entry): mark deps so nested
+		// `$app/*` imports stay shimmed. Do NOT resolve island virtual paths via skipSelf.
+		if (!ssr && importer_id && island_graph.has(importer_id) && !is_island_path(source)) {
+			const resolved = await resolve(source, importer!, { skipSelf: true });
+			if (resolved?.id) island_graph.add(strip_id(resolved.id));
+			return resolved;
 		}
 		return null;
 	}

@@ -27,6 +27,20 @@ export { foucCssVirtualId } from '../fouc-css.js';
 
 export const ISLAND_DIR = '.ogygia';
 
+/** True for a GENERATED island glue id (virtual island entry / wrapper / region binding, or the legacy
+ *  on-disk `.ogygia/` shape) — the ids that are ogygia's own emit, not authored app/component source. */
+export function is_island_path(id: string): boolean {
+	const bare = id.split('?')[0];
+	return (
+		(bare.startsWith('virtual:ogygia/island/') &&
+			(bare.endsWith('.js') || bare.endsWith('.svelte'))) ||
+		(bare.startsWith('virtual:ogygia/wrapper/') && bare.endsWith('.svelte')) ||
+		(bare.startsWith('virtual:ogygia/region/') && bare.endsWith('.js')) ||
+		// legacy on-disk path shape (pre-virtual ids); still recognize for resolve/HMR edge cases
+		(bare.includes('/' + ISLAND_DIR + '/') && bare.endsWith('.svelte'))
+	);
+}
+
 /**
  * Default import-attribute keys — the two-dial grammar. Internal role names stay `hydrate`/`defer`
  * (the wire format + runtime keep those anchors); the user-facing ATTRIBUTE names are the values.
