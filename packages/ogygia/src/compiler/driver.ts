@@ -375,6 +375,31 @@ export class Compiler {
 	}
 
 	/**
+	 * Client-build chunk emit (via the injected `emitFile`): the feature-selected runtime entry (when
+	 * `emitRuntime`), then one deterministic chunk per deduped HYDRATE region id — a stable filename so
+	 * SSR can bake `entry` without a client→server hash handoff; csr=false hosts omit wrapper imports so
+	 * this emit owns the module. N instances of a region → still one entry URL. Idempotent per id.
+	 */
+	emit_build_chunks(
+		emitFile: (chunk: { type: 'chunk'; id: string; fileName: string }) => void,
+		{ emitRuntime }: { emitRuntime: boolean }
+	): void {
+		if (emitRuntime) {
+			// Unresolved virtual id — resolve_id/emit synthesize the feature-selected entry.
+			emitFile({ type: 'chunk', id: V_RUNTIME_ENTRY, fileName: this.runtime_chunk_filename() });
+		}
+		const { region_kinds, by_id, emitted_island_chunks } = this.program;
+		for (const [rid, kind] of region_kinds) {
+			if (kind !== 'hydrate') continue;
+			const virtualPath = by_id.get(rid);
+			if (!virtualPath) continue;
+			if (emitted_island_chunks.has(rid)) continue;
+			emitted_island_chunks.add(rid);
+			emitFile({ type: 'chunk', id: virtualPath, fileName: islandChunkFileName(rid) });
+		}
+	}
+
+	/**
 	 * Emit one ogygia VIRTUAL module's source: the config/capability virtuals (secret / sign / rate-limit
 	 * / router / session / ttl / manifests / runtime entry+url / transport / dev-hmr / request-event /
 	 * region-endpoint), and the registered island/region sources (with the client leg's `$app/*`-shim +

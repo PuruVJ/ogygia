@@ -14,7 +14,6 @@ import { ogygiaPresetPreprocess } from '../content/markdown/index.js';
 import {
 	is_island_path,
 	normalize_import_keys,
-	islandChunkFileName,
 	type ImportKeys
 } from '../compiler/region/transform.js';
 
@@ -43,7 +42,8 @@ export type {
 import {
 	assert_no_legacy_options,
 	validate_region_presets,
-	validate_content_presets
+	validate_content_presets,
+	resolve_options
 } from './options.js';
 import {
 	clientBuildWillSkip,
@@ -78,7 +78,6 @@ import { Compiler } from '../compiler/driver.js';
 import { CompileCtx } from '../compiler/ctx.js';
 import {
 	V_MANIFEST,
-	V_RUNTIME_ENTRY,
 	V_SERVER_MANIFEST,
 	V_KIT_WIRE,
 	RESOLVED
@@ -235,48 +234,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		islandBridge.contentPresets = options.content.presets as typeof islandBridge.contentPresets;
 	}
 
-	// Region-endpoint rate limit (baked into SSR only via virtual:ogygia/rate-limit).
-	const rate_limit =
-		options.rateLimit === false
-			? { max: 0, windowMs: 60_000 }
-			: {
-					max: Math.max(0, options.rateLimit?.max ?? 60),
-					windowMs: Math.max(1, options.rateLimit?.windowMs ?? 60_000)
-				};
-
-	/** Cookie name sealed into the region MAC, or '' when unbound (default). */
-	const session_cookie =
-		typeof options.sessionCookie === 'string' && options.sessionCookie.length > 0
-			? options.sessionCookie
-			: '';
-
-	/** Capability URL TTL (seconds). Clamped to [60, 86400]. */
-	const region_ttl = Math.min(
-		86400,
-		Math.max(60, Math.floor(options.regionTtl ?? DEFAULT_REGION_TTL_SEC))
-	);
-
-	// ROUTER config (app-wide, one place). On by default; View Transitions on unless disabled. `false`
-	// tree-shakes the whole feature out. Baked into `virtual:ogygia/router-config` for the handle.
-	const router_enabled = options.router !== false;
-	const router_view_transitions =
-		options.router === false
-			? false
-			: typeof options.router === 'object'
-				? options.router.viewTransitions !== false
-				: true;
-
-	// CONTINUITY rides the router (it snapshots on SPA navigation): router on + `forms` not disabled.
-	// `router: false` takes forms with it — there is no SPA nav to survive.
-	const continuity_forms =
-		router_enabled && (typeof options.router === 'object' ? options.router.forms !== false : true);
-
-	// SERVER-DELTA NAV is opt-in (a new client↔server protocol). Only when the router is on AND the app
-	// explicitly writes `router: { serverDelta: true }`. Off → the client never sends `x-ogygia-known`,
-	// so the server always full-renders (safe fallback). Server-delta needs SPA nav, so router-off ⇒ off.
-	const server_delta =
-		router_enabled && typeof options.router === 'object' && options.router.serverDelta === true;
-
+	// Router / rate-limit / session / ttl / continuity / server-delta → the flat config (pure derivation).
+	const {
+		rate_limit,
+		session_cookie,
+		region_ttl,
+		router_enabled,
+		router_view_transitions,
+		continuity_forms,
+		server_delta
+	} = resolve_options(options, DEFAULT_REGION_TTL_SEC);
 
 	// The Program — this plugin instance's cross-file linker / island graph. It owns the descriptor
 	// registry + the feature-mark bag (seeded from the two app-wide config flags), and the behavior
@@ -284,14 +251,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// so Kit's throwaway plugin instance is a different Program and can't leak into the real build.
 	// The adapter binds local aliases to its Maps (same objects) + methods so the hooks read like before.
 	const program = new Program({ forms: continuity_forms, router: router_enabled });
-	const {
-		registry,
-		island_graph,
-		by_id,
-		region_kinds,
-		host_index,
-		emitted_island_chunks
-	} = program;
+	const { registry, island_graph, by_id, region_kinds, host_index } = program;
 	const register = program.register.bind(program);
 	const unregister_host = program.unregister_host.bind(program);
 	// The feature-selected runtime chunk name lives on the driver as `compiler.runtime_chunk_filename()`
@@ -656,30 +616,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// ships nothing. Skip the runtime chunk entirely; every host's islands were stripped to
 				// plain by the csrTrue transform branch, so nothing references it anyway.
 				const emit_runtime = !standalone && hasAnyCsrFalseRoute(path.join(root, 'src', 'routes'));
-				if (emit_runtime) {
-					// Unresolved virtual id — resolveId/load synthesize the feature-selected entry.
-					this.emitFile({
-						type: 'chunk',
-						id: V_RUNTIME_ENTRY,
-						fileName: compiler.runtime_chunk_filename()
-					});
-				}
-				// Hydrate islands: one emitFile per deduped region id (path+strategy), deterministic
-				// filename so SSR can bake `entry` without a client→server hash handoff. csr=false
-				// hosts omit wrapper imports so this emit owns the module (avoids Rolldown thin
-				// facades from page-graph sharing). N instances → still one entry URL.
-				for (const [rid, kind] of region_kinds) {
-					if (kind !== 'hydrate') continue;
-					const virtualPath = by_id.get(rid);
-					if (!virtualPath) continue;
-					if (emitted_island_chunks.has(rid)) continue;
-					emitted_island_chunks.add(rid);
-					this.emitFile({
-						type: 'chunk',
-						id: virtualPath,
-						fileName: islandChunkFileName(rid)
-					});
-				}
+				// The runtime entry (feature-selected) + one deterministic chunk per deduped hydrate
+				// region — the driver owns the naming + dedup; `this.emitFile` is the injected primitive.
+				compiler.emit_build_chunks((chunk) => this.emitFile(chunk), { emitRuntime: emit_runtime });
 				// Content CSS: a content module's OWN scoped `<style>` compiles into the SERVER bundle
 				// only (the leak-free corpus never enters the client graph), so on a csr=false doc page it
 				// ships on no stylesheet. Extract that scoped CSS here and emit it as a client asset.

@@ -246,3 +246,70 @@ export function validate_content_presets(content_presets: Record<string, unknown
 		}
 	}
 }
+
+/** The router/capability config resolved from `OgygiaOptions` — pure derivation the factory reads. */
+export interface ResolvedOgygiaConfig {
+	rate_limit: { max: number; windowMs: number };
+	session_cookie: string;
+	region_ttl: number;
+	router_enabled: boolean;
+	router_view_transitions: boolean;
+	continuity_forms: boolean;
+	server_delta: boolean;
+}
+
+/**
+ * Normalize the router / rate-limit / session / ttl / continuity / server-delta options into the flat
+ * config the factory threads into `CompileCtx` + `Program`. Pure — no defaults leak back into `options`.
+ * `defaultRegionTtl` is passed in (the endpoint's DEFAULT_REGION_TTL_SEC) to keep this Vite-free.
+ */
+export function resolve_options(options: OgygiaOptions, defaultRegionTtl: number): ResolvedOgygiaConfig {
+	// Region-endpoint rate limit (baked into SSR only via virtual:ogygia/rate-limit).
+	const rate_limit =
+		options.rateLimit === false
+			? { max: 0, windowMs: 60_000 }
+			: {
+					max: Math.max(0, options.rateLimit?.max ?? 60),
+					windowMs: Math.max(1, options.rateLimit?.windowMs ?? 60_000)
+				};
+
+	// Cookie name sealed into the region MAC, or '' when unbound (default).
+	const session_cookie =
+		typeof options.sessionCookie === 'string' && options.sessionCookie.length > 0
+			? options.sessionCookie
+			: '';
+
+	// Capability URL TTL (seconds). Clamped to [60, 86400].
+	const region_ttl = Math.min(86400, Math.max(60, Math.floor(options.regionTtl ?? defaultRegionTtl)));
+
+	// ROUTER config (app-wide, one place). On by default; View Transitions on unless disabled. `false`
+	// tree-shakes the whole feature out. Baked into `virtual:ogygia/router-config` for the handle.
+	const router_enabled = options.router !== false;
+	const router_view_transitions =
+		options.router === false
+			? false
+			: typeof options.router === 'object'
+				? options.router.viewTransitions !== false
+				: true;
+
+	// CONTINUITY rides the router (it snapshots on SPA navigation): router on + `forms` not disabled.
+	// `router: false` takes forms with it — there is no SPA nav to survive.
+	const continuity_forms =
+		router_enabled && (typeof options.router === 'object' ? options.router.forms !== false : true);
+
+	// SERVER-DELTA NAV is opt-in (a new client↔server protocol). Only when the router is on AND the app
+	// explicitly writes `router: { serverDelta: true }`. Off → the client never sends `x-ogygia-known`,
+	// so the server always full-renders (safe fallback). Server-delta needs SPA nav, so router-off ⇒ off.
+	const server_delta =
+		router_enabled && typeof options.router === 'object' && options.router.serverDelta === true;
+
+	return {
+		rate_limit,
+		session_cookie,
+		region_ttl,
+		router_enabled,
+		router_view_transitions,
+		continuity_forms,
+		server_delta
+	};
+}
