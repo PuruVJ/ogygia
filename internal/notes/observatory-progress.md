@@ -75,12 +75,39 @@ The Observatory is a **multi-file REPL** that compiles AND runs your app, entire
 
 Full loop: **source → ogygia transform → svelte compile → link → mount**, no bundler, no server.
 
-## What's NOT done (the honest remainder)
+## INSTRUMENTS over the running app (overnight, third iteration) — the ogygia thesis, made legible
 
-- The interactive preview runs the app with islands as **regular components** (fresh client mount). It
-  does not yet run the ogygia island MACHINERY (lazy `<ogygia-region>` hydration, the real runtime) —
-  that's the SW-sandbox + mini-Kit server realm (Rungs 2–4). The current preview proves "type an app →
-  see it run"; wiring the real island lifecycle is the next lift.
+The preview now carries three read-outs, all computed from the same in-browser compile + render — the
+whole islands value-prop, visible on whatever app you type:
+
+- **Byte ledger** (Rung 5.3) — "ogygia ships X, plain Kit ships Y." Compiles every component to client
+  JS; on csr=false ogygia ships ONLY the waking islands, plain Kit (csr=true) ships all of them. Demo:
+  ogygia **518 B (1 island)** vs plain Kit **2.1 KB (4 components)** = **−75% JS**, with a per-file
+  breakdown naming why each ships or stays free server HTML.
+- **Boundary lens** (Rung 5.1) — a **live / x-ray toggle** on the preview. In x-ray every marked region
+  is bracketed by an invisible boundary and tinted by strategy (island teal, lake amber, server hole
+  purple, held-raw orange) with a `wake · bytes` tag; the unmarked shell greys out. You SEE a couple of
+  lit islands floating in dead server HTML.
+- **Wire inspector** (Rung 5.2) — the real props each island RECEIVES, devalue-encoded — exactly what
+  crosses by value. children (a region snippet) and functions never cross; `$$slots` is stripped. Demo:
+  Counter gets `{start: 3}` (15 B); Prose receives only children → "no props cross".
+
+Every instrument has an e2e assertion. Suite is green.
+
+## What's NOT done (the honest remainder — the crown jewel)
+
+- **Real island MACHINERY in the preview** (Rungs 2–4). The interactive preview runs islands as
+  regular components (a fresh client mount) and the lens/ledger/wire read the compile + render — all
+  truthful, but the preview does not yet run the actual `<ogygia-region>` runtime (lazy scheduling,
+  wake-on-scroll/interaction). Doing that means reproducing the server realm in-tab: the real
+  `Region.svelte` SSR emit (`<ogygia-region entry wake data-og-fp>` + the devalue `<script
+  data-ogygia-props>` sidecar with the right revivers) + hydration-anchor-matching HTML + defeating the
+  runtime's nested-region skip (the preview sits inside the Observatory's own awake island — an
+  `<ogygia-slot>` wrapper is the documented escape). Feasible (the page's own runtime already defines
+  the element, and `island_module_url` passes `blob:` entries through untouched, so a blob entry that
+  re-exports a main-thread-linked component could hydrate against the page's shared svelte instance),
+  but it is genuinely a multi-session Rung-2/3 effort with real hydration-mismatch risk — deliberately
+  NOT attempted overnight so the four shipped instruments stay rock-solid. This is the #1 next lift.
 - **Server-realm devtools events beyond the page render** (deferred-hole timing, batch) — schema-defined,
   not yet emitted.
 - The SSR/client leg toggle is wired but the host rewrite is leg-invariant, so it rarely shows; the real
