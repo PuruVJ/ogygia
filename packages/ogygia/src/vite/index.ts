@@ -35,6 +35,8 @@ export {
 	regionIdentity,
 	strategyKey
 } from '../compiler/region/transform.js';
+export { rewrite_lake_import_to_placeholder } from '../compiler/region/emit.js';
+import { APP_SHIM_IMPORT } from '../compiler/region/emit.js';
 export type { ImportKeys } from '../compiler/region/transform.js';
 export type {
 	OgygiaPreset,
@@ -58,7 +60,6 @@ import {
 	appendTransportRegistrations,
 	appendSvelteModuleRegistrations
 } from '../compiler/content/transportables.js';
-import { generateRuntimeEntrySource, type RuntimeMarks } from '../compiler/link/runtime-entry.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import {
 	derive_id_salt,
@@ -80,23 +81,8 @@ import {
 	same_module_path,
 	island_vpaths_affected_by_file
 } from '../compiler/dev/hmr.js';
-import { dev_hmr_client_source } from '../compiler/dev/dev-hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
-import {
-	collectIslandDepModulepreloads,
-	island_deps_module
-} from '../compiler/link/island-deps.js';
-import {
-	secret_module,
-	sign_module,
-	rate_limit_module,
-	session_cookie_module,
-	region_ttl_module
-} from '../compiler/link/caps.js';
-import { router_config_module } from '../compiler/link/router-config.js';
-import { transport_module, transportables_module } from '../compiler/link/transport.js';
-import { server_manifest_module } from '../compiler/link/server-manifest.js';
-import { manifest_module } from '../compiler/link/manifest.js';
+import { collectIslandDepModulepreloads } from '../compiler/link/island-deps.js';
 import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.js';
 import { Program, strip_id, host_key } from '../compiler/program.js';
 import { Compiler } from '../compiler/driver.js';
@@ -231,61 +217,9 @@ function runtime_content_hash() {
 }
 const RUNTIME_HASH = runtime_content_hash();
 
-const TRAILING_SLASH = /\/$/;
 const KIT_REMOTE_CLIENT = /(^|\/)client\.js$/;
 const KIT_REMOTE_STATE = /state\.svelte\.js$/;
 const LEADING_SLASH = /^\//;
-/** Rewrite `$app/{state,stores,navigation}` string literals to absolute shim paths. */
-const APP_SHIM_IMPORT = /(['"])\$app\/(state|stores|navigation)\1/g;
-const REGEXP_META = /[.*+?^${}()|[\]\\]/g;
-const IMPORT_AS_CLAUSE = /^(.+?)(?:\s+as\s+(\w+))?$/;
-
-/**
- * Rewrite a lake binding's import to the render-nothing placeholder (client island modules only).
- * Default imports are repointed; named imports drop that specifier (and keep siblings) then add a
- * default import of the placeholder under the same local name.
- *
- * @internal Used by the plugin client transform and unit tests.
- */
-export function rewrite_lake_import_to_placeholder(src: string, local: string, placeholder: string) {
-	const esc = local.replace(REGEXP_META, '\\$&');
-	const ph = JSON.stringify(placeholder);
-	// default: import Lake from '…'
-	src = src.replace(
-		new RegExp(`import\\s+${esc}\\s+from\\s+(['"])[^'"]+\\1`, 'g'),
-		`import ${local} from ${ph}`
-	);
-	// named: import { Lake } / { Lake as X } / { Foo as Lake } from '…'
-	src = src.replace(
-		new RegExp(`import\\s*\\{([^}]*)\\}\\s*from\\s*(['"])([^'"]+)\\2`, 'g'),
-		(full, specs, _q, from) => {
-			const parts = String(specs)
-				.split(',')
-				.map((s) => s.trim())
-				.filter(Boolean);
-			const kept = [];
-			let hit = false;
-			for (const p of parts) {
-				const m = p.match(IMPORT_AS_CLAUSE);
-				if (!m) {
-					kept.push(p);
-					continue;
-				}
-				const imported = m[1].trim();
-				const alias = (m[2] || imported).trim();
-				if (alias === local) {
-					hit = true;
-					continue;
-				}
-				kept.push(p);
-			}
-			if (!hit) return full;
-			const named = kept.length ? `import { ${kept.join(', ')} } from ${JSON.stringify(from)};` : '';
-			return `import ${local} from ${ph};${named ? '\n\t' + named : ''}`;
-		}
-	);
-	return src;
-}
 
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
 const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
@@ -408,23 +342,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		by_id,
 		region_kinds,
 		host_index,
-		emitted_island_chunks,
-		transportable_modules,
-		runtime_marks
+		emitted_island_chunks
 	} = program;
 	const register = program.register.bind(program);
 	const unregister_host = program.unregister_host.bind(program);
-
-	// The runtime chunk is FEATURE-SELECTED — `generateRuntimeEntrySource` emits DIFFERENT bytes per the
-	// app's resolved marks (router / live / lakes / wire / …). So the `_app/immutable/…` filename (served
-	// `immutable, 1yr`) must bust when the FEATURE SET changes, not only when ogygia's source does — else
-	// the same ogygia version, after an app adds e.g. a `live` region, reuses the cached old runtime and
-	// that feature silently never boots for returning visitors. `program.runtime_feature_hash` is filled
-	// by the driver's prescan; BOTH build legs run the same deterministic prescan → same features → same
-	// name, so the server↔client filename handoff still holds. Empty until prescan (dev serves the entry).
-	const runtime_chunk_filename = () =>
-		`_app/immutable/og-runtime.${RUNTIME_HASH}${program.runtime_feature_hash ? '-' + program.runtime_feature_hash : ''}.js`;
-	const runtime_chunk_url = () => '/' + runtime_chunk_filename();
+	// The feature-selected runtime chunk name lives on the driver as `compiler.runtime_chunk_filename()`
+	// (RUNTIME_HASH ⊕ program.runtime_feature_hash — see CompileCtx.runtime_chunk_filename); buildStart's
+	// emitFile and the runtime-url virtual both read it, so both build legs compute the same immutable name.
 
 	// HMAC key for signing region capability URLs (defer / remount:swr). Default: a fresh
 	// per-build random baked into the SERVER bundle only (never a client chunk). Optional
@@ -470,12 +394,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		} catch {
 			return null;
 		}
-	};
-
-	/** Dev URL for dynamic `import(entry)` of a virtual island module. */
-	const devUrlFor = (virtualPath) => {
-		const prefix = base && base !== '/' ? base.replace(TRAILING_SLASH, '') : '';
-		return prefix + '/@id/' + virtualPath;
 	};
 
 	const __prof = { transformMs: 0, transformN: 0, transformHit: 0, prescanMs: 0, bakeMs: 0, bakeN: 0, resolveMs: 0, loadMs: 0 };
@@ -764,7 +682,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					import_keys,
 					resolve_alias,
 					markdown_config: islandBridge.markdownConfig ?? null,
-					pkg_root: PKG_ROOT
+					pkg_root: PKG_ROOT,
+					build_secret,
+					rate_limit,
+					session_cookie,
+					region_ttl,
+					router_enabled,
+					router_view_transitions,
+					runtime_dir: RUNTIME_DIR,
+					runtime_hash: RUNTIME_HASH,
+					hmac_module: HMAC_MODULE,
+					region_endpoint_module: REGION_ENDPOINT_MODULE,
+					client_binding_stub_file: CLIENT_BINDING_STUB_FILE,
+					app_shims: APP_SHIMS
 				})
 			);
 		},
@@ -807,7 +737,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					this.emitFile({
 						type: 'chunk',
 						id: V_RUNTIME_ENTRY,
-						fileName: runtime_chunk_filename()
+						fileName: compiler.runtime_chunk_filename()
 					});
 				}
 				// Hydrate islands: one emitFile per deduped region id (path+strategy), deterministic
@@ -1093,146 +1023,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				return { code: compileFoucScopedCss(abs, source), moduleType: 'css' };
 			}
 
-			if (id === RESOLVED(V_RUNTIME_URL)) {
-				// dev: the vite dev URL. build: the CONTENT-HASHED runtime URL — from this
-				// instance (standalone) or the handoff file the client build wrote (Kit-driven);
-				// fall back to the fixed name only if the handoff is somehow missing.
-				// Ensure prescan ran so `runtime_feature_hash` matches the client emit's filename (both
-				// legs prescan the same source → same feature set → same name).
-				if (!is_dev) compiler.prescan();
-				const url = is_dev ? '/@id/__x00__' + V_RUNTIME : hashed_runtime_url || runtime_chunk_url();
-				return `export default ${JSON.stringify(url)};`;
-			}
-			if (id === RESOLVED(V_FN_MANIFEST)) {
-				// og.$ factories, registered pre-hydration. Self-contained by the capture law, so
-				// emitting source is a pure text move. DEV: `dollar_hoists` is complete by the time
-				// the browser requests this virtual (SSR transformed the hosts first) — emit directly.
-				// BUILD: this module loads BEFORE all client transforms ran (the ordering trap), so
-				// emit a rename-proof PLACEHOLDER — a globalThis bridge + a token that `renderChunk`
-				// patches once every transform has contributed (registrations then use the bridge,
-				// immune to bundler identifier renaming). Strict-CSP apps get a real manifest this
-				// way; the payload-source eval fallback becomes the exception, not the path.
-				const regs = () =>
-					[...compiler.dollar_hoists.entries()]
-						.map(([tag, src]) => `globalThis.__og_reg_fn(${JSON.stringify(tag)}, (${src}));`)
-						.join('\n');
-				const bridge = `import { __register_fn } from 'ogygia/internal';\nglobalThis.__og_reg_fn = __register_fn;\n`;
-				if (is_dev) return bridge + regs();
-				return bridge + `/*__OGYGIA_FN_MANIFEST__*/`;
-			}
-			if (id === RESOLVED(V_RUNTIME_ENTRY)) {
-				// Ensure every host was walked (marks complete) before selecting features.
-				compiler.prescan();
-				const { code } = generateRuntimeEntrySource(runtime_marks, RUNTIME_DIR);
-				// og.$ factories register before any island hydrates (sync fn-ref resolution)
-				return `import ${JSON.stringify(V_FN_MANIFEST)};\n` + code;
-			}
-			if (id === RESOLVED(V_RUNTIME)) {
-				// Dev sticky: kitchen-sink package entry. Build uses the hashed emitFile chunk. An EXPLICIT
-				// `bootDev()` call (not a bare side-effect import) so Vite's dep prebundler can't tree-shake
-				// the boot away — the bug that left `sideEffects:false` apps with a runtime that never woke.
-				return `import { bootDev } from 'ogygia/runtime'; bootDev();`;
-			}
-			if (id === RESOLVED(V_DEV_HMR)) {
-				// Dev-only soft HMR bridge under csr=false (no Kit client entry):
-				// join /src/**/*.css into the browser graph + strip Kit's FOUC bag.
-				// Failures fall through to a full document reload (see vite:error handler).
-				if (!is_dev) return `export {}`;
-				return dev_hmr_client_source();
-			}
-			if (id === RESOLVED(V_DEV_HMR_URL)) {
-				// Empty in build/preview; vite-dev URL during `vite dev`. Consumed by wrappers
-				// compiled by the app's Vite (not pre-frozen like a package-level import.meta.env).
-				if (!is_dev) return `export default '';`;
-				return `export default ${JSON.stringify('/@id/__x00__' + V_DEV_HMR)};`;
-			}
-			if (id === RESOLVED(V_ISLAND_DEPS)) {
-				return island_deps_module(ssr, is_dev);
-			}
-			if (id === RESOLVED(V_TRANSPORT)) {
-				return transport_module(universal_hooks);
-			}
-			if (id === RESOLVED(V_SECRET)) {
-				return secret_module(ssr, build_secret);
-			}
-			if (id === RESOLVED(V_SIGN)) {
-				return sign_module(ssr, HMAC_MODULE);
-			}
-			if (id === RESOLVED(V_REQUEST_EVENT)) {
-				// ServerIsland may appear in a transformed page module that Kit's client guard scans.
-				// Real getRequestEvent only on SSR; client stub never runs (holes fetch HTML).
-				if (!ssr) {
-					return `export function getRequestEvent() { throw new Error('[ogygia] getRequestEvent is server-only'); }`;
-				}
-				return `export { getRequestEvent } from '$app/server';`;
-			}
-			if (id === RESOLVED(V_REGION_ENDPOINT)) {
-				// Region.svelte imports this for its lake (`makeRegionEndpoint`, swr) and server-island
-				// (`mintServerIsland`) branches. SSR mints signed URLs; client returns '' — lakes reuse the
-				// endpoint cached from the first SSR restore, and server islands never mint on the client
-				// (the runtime fetches the endpoint). Routing minting through this client-stubbed virtual is
-				// what lets one `Region` live in the main `ogygia` graph without leaking `$app/server`.
-				if (!ssr) {
-					return (
-						`export function makeRegionEndpoint(_entry, _props) { return ''; }\n` +
-						`export function mintServerIsland(_entry, _props, _ttl) { return ''; }\n` +
-						// The known-fingerprints set is a server-only nav signal; the client always sees empty.
-						`export function known_region_fps() { return new Set(); }`
-					);
-				}
-				return `export { makeRegionEndpoint, mintServerIsland, known_region_fps } from ${JSON.stringify(REGION_ENDPOINT_MODULE)};`;
-			}
-			if (id === RESOLVED(V_RATE_LIMIT)) {
-				return rate_limit_module(ssr, rate_limit);
-			}
-			if (id === RESOLVED(V_ROUTER_CONFIG)) {
-				return router_config_module(router_enabled, router_view_transitions);
-			}
-			if (id === RESOLVED(V_SESSION_COOKIE)) {
-				return session_cookie_module(ssr, session_cookie);
-			}
-			if (id === RESOLVED(V_REGION_TTL)) {
-				return region_ttl_module(ssr, region_ttl);
-			}
-			if (id === RESOLVED(V_SERVER_MANIFEST)) {
-				// Populated in BOTH dev and build (unlike the client manifest, which dev fills from URLs).
-				if (ssr) compiler.prescan();
-				return server_manifest_module(ssr, program, is_dev, devUrlFor);
-			}
-			if (id === RESOLVED(V_MANIFEST)) {
-				return manifest_module(is_dev);
-			}
-			if (id === RESOLVED(V_TRANSPORTABLES)) {
-				// Eager-registration manifest of transportable-class modules (prescan-discovered).
-				compiler.prescan();
-				return transportables_module(transportable_modules);
-			}
-			const srcEntry = registry.get(id);
-			if (srcEntry && srcEntry.role === 'region') {
-				// Leg-split: SSR gets the signer-carrying descriptor, client gets metadata only.
-				return options?.ssr === true ? srcEntry.ssrSource : srcEntry.clientSource;
-			}
-			if (srcEntry) {
-				let src = srcEntry.source;
-				// CLIENT build: rewrite `$app/*` in the GENERATED virtual source to absolute
-				// shim paths (defense in depth alongside resolveId island-graph shimming).
-				// SSR keeps the real Kit modules (correct server-rendered page.data).
-				const ssr = options?.ssr === true;
-				if (!ssr) {
-					src = src.replace(
-						APP_SHIM_IMPORT,
-						(_m, _q, name) => JSON.stringify(APP_SHIMS['$app/' + name])
-					);
-					// LAKES: swap each lake import for the render-nothing placeholder so the lake
-					// component's JS is excluded from this island's client chunk. Handles default
-					// (`import Lake from '…'`) and named (`import { Lake } from '…'`) forms.
-					for (const local of srcEntry.lakes ?? []) {
-						src = rewrite_lake_import_to_placeholder(src, local, CLIENT_BINDING_STUB_FILE);
-					}
-				}
-				return src;
-			}
-			return null;
+			// Every other ogygia virtual is a pure `id → source` emit the driver owns. The two Vite build
+			// values it can't see are threaded in: the client-leg content-hashed runtime URL (handoff) and
+			// the app's universal-hooks path (discovered in configResolved).
+			return compiler.emit(id, {
+				ssr,
+				hashedRuntimeUrl: hashed_runtime_url,
+				universalHooks: universal_hooks
+			});
 		},
 
 		async transform(code, id, options) {

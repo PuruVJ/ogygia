@@ -363,3 +363,56 @@ export function strategy_to_attr(strategy: string, options?: Record<string, unkn
 	// media query (the strategy IS the query string)
 	return `media=${JSON.stringify(strategy)}`;
 }
+
+/** Rewrite `$app/{state,stores,navigation}` string literals to absolute shim paths. */
+export const APP_SHIM_IMPORT = /(['"])\$app\/(state|stores|navigation)\1/g;
+
+const REGEXP_META = /[.*+?^${}()|[\]\\]/g;
+const IMPORT_AS_CLAUSE = /^(.+?)(?:\s+as\s+(\w+))?$/;
+
+/**
+ * Rewrite a lake binding's import to the render-nothing placeholder (client island modules only).
+ * Default imports are repointed; named imports drop that specifier (and keep siblings) then add a
+ * default import of the placeholder under the same local name.
+ *
+ * @internal Used by the plugin client emit and unit tests.
+ */
+export function rewrite_lake_import_to_placeholder(src: string, local: string, placeholder: string) {
+	const esc = local.replace(REGEXP_META, '\\$&');
+	const ph = JSON.stringify(placeholder);
+	// default: import Lake from '…'
+	src = src.replace(
+		new RegExp(`import\\s+${esc}\\s+from\\s+(['"])[^'"]+\\1`, 'g'),
+		`import ${local} from ${ph}`
+	);
+	// named: import { Lake } / { Lake as X } / { Foo as Lake } from '…'
+	src = src.replace(
+		new RegExp(`import\\s*\\{([^}]*)\\}\\s*from\\s*(['"])([^'"]+)\\2`, 'g'),
+		(full, specs, _q, from) => {
+			const parts = String(specs)
+				.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean);
+			const kept = [];
+			let hit = false;
+			for (const p of parts) {
+				const m = p.match(IMPORT_AS_CLAUSE);
+				if (!m) {
+					kept.push(p);
+					continue;
+				}
+				const imported = m[1].trim();
+				const alias = (m[2] || imported).trim();
+				if (alias === local) {
+					hit = true;
+					continue;
+				}
+				kept.push(p);
+			}
+			if (!hit) return full;
+			const named = kept.length ? `import { ${kept.join(', ')} } from ${JSON.stringify(from)};` : '';
+			return `import ${local} from ${ph};${named ? '\n\t' + named : ''}`;
+		}
+	);
+	return src;
+}

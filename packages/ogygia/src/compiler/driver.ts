@@ -22,9 +22,45 @@ import {
 } from './region/transform.js';
 import { routeCsrIsFalse, routeCsrIsTrue, clean_stale_ogygia_dirs } from './standalone.js';
 import { run_module_macros } from './macros/pipeline.js';
-import { resolveFeatures } from './link/runtime-entry.js';
+import { generateRuntimeEntrySource, resolveFeatures } from './link/runtime-entry.js';
 import { resolveFoucImportSpec } from './fouc-css.js';
 import { moduleHasTransportable, svelteModuleHasTransportable } from './content/transportables.js';
+import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT } from './region/emit.js';
+import { island_deps_module } from './link/island-deps.js';
+import {
+	secret_module,
+	sign_module,
+	rate_limit_module,
+	session_cookie_module,
+	region_ttl_module
+} from './link/caps.js';
+import { router_config_module } from './link/router-config.js';
+import { transport_module, transportables_module } from './link/transport.js';
+import { server_manifest_module } from './link/server-manifest.js';
+import { manifest_module } from './link/manifest.js';
+import { dev_hmr_client_source } from './dev/dev-hmr.js';
+import {
+	RESOLVED,
+	V_RUNTIME_URL,
+	V_RUNTIME,
+	V_FN_MANIFEST,
+	V_RUNTIME_ENTRY,
+	V_DEV_HMR,
+	V_DEV_HMR_URL,
+	V_ISLAND_DEPS,
+	V_TRANSPORT,
+	V_SECRET,
+	V_SIGN,
+	V_REQUEST_EVENT,
+	V_REGION_ENDPOINT,
+	V_RATE_LIMIT,
+	V_ROUTER_CONFIG,
+	V_SESSION_COOKIE,
+	V_REGION_TTL,
+	V_SERVER_MANIFEST,
+	V_MANIFEST,
+	V_TRANSPORTABLES
+} from './ids.js';
 import { strip_id } from './program.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
 import type { Program } from './program.js';
@@ -308,5 +344,177 @@ export class Compiler {
 			.update(resolveFeatures(runtime_marks).join(','))
 			.digest('hex')
 			.slice(0, 8);
+	}
+
+	/** The feature-selected runtime chunk name (immutable-cached). Needs prescan to have run for a
+	 *  non-empty feature hash; both build legs prescan the same source → the same name. */
+	runtime_chunk_filename(): string {
+		return this.#ctx!.runtime_chunk_filename(this.program.runtime_feature_hash);
+	}
+
+	/** Public URL of the runtime chunk (`'/' + runtime_chunk_filename()`). */
+	runtime_chunk_url(): string {
+		return '/' + this.runtime_chunk_filename();
+	}
+
+	/**
+	 * Emit one ogygia VIRTUAL module's source: the config/capability virtuals (secret / sign / rate-limit
+	 * / router / session / ttl / manifests / runtime entry+url / transport / dev-hmr / request-event /
+	 * region-endpoint), and the registered island/region sources (with the client leg's `$app/*`-shim +
+	 * lake-placeholder rewrites). Returns the source string, or `null` if `id` is not an ogygia virtual —
+	 * the adapter owns only the FOUC-css virtuals (they carry a Vite `moduleType`) and the two Vite build
+	 * values threaded in here (`hashedRuntimeUrl` from the client-leg handoff, `universalHooks` path).
+	 */
+	emit(
+		id: string,
+		{
+			ssr,
+			hashedRuntimeUrl,
+			universalHooks
+		}: { ssr: boolean; hashedRuntimeUrl: string | null; universalHooks: string | null }
+	): string | null {
+		const ctx = this.#ctx!;
+		const program = this.program;
+		const is_dev = ctx.is_dev;
+
+		if (id === RESOLVED(V_RUNTIME_URL)) {
+			// dev: the vite dev URL. build: the CONTENT-HASHED runtime URL — from this
+			// instance (standalone) or the handoff file the client build wrote (Kit-driven);
+			// fall back to the fixed name only if the handoff is somehow missing.
+			// Ensure prescan ran so `runtime_feature_hash` matches the client emit's filename (both
+			// legs prescan the same source → same feature set → same name).
+			if (!is_dev) this.prescan();
+			const url = is_dev ? '/@id/__x00__' + V_RUNTIME : hashedRuntimeUrl || this.runtime_chunk_url();
+			return `export default ${JSON.stringify(url)};`;
+		}
+		if (id === RESOLVED(V_FN_MANIFEST)) {
+			// og.$ factories, registered pre-hydration. Self-contained by the capture law, so
+			// emitting source is a pure text move. DEV: `dollar_hoists` is complete by the time
+			// the browser requests this virtual (SSR transformed the hosts first) — emit directly.
+			// BUILD: this module loads BEFORE all client transforms ran (the ordering trap), so
+			// emit a rename-proof PLACEHOLDER — a globalThis bridge + a token that `renderChunk`
+			// patches once every transform has contributed (registrations then use the bridge,
+			// immune to bundler identifier renaming). Strict-CSP apps get a real manifest this
+			// way; the payload-source eval fallback becomes the exception, not the path.
+			const regs = () =>
+				[...this.dollar_hoists.entries()]
+					.map(([tag, src]) => `globalThis.__og_reg_fn(${JSON.stringify(tag)}, (${src}));`)
+					.join('\n');
+			const bridge = `import { __register_fn } from 'ogygia/internal';\nglobalThis.__og_reg_fn = __register_fn;\n`;
+			if (is_dev) return bridge + regs();
+			return bridge + `/*__OGYGIA_FN_MANIFEST__*/`;
+		}
+		if (id === RESOLVED(V_RUNTIME_ENTRY)) {
+			// Ensure every host was walked (marks complete) before selecting features.
+			this.prescan();
+			const { code } = generateRuntimeEntrySource(program.runtime_marks, ctx.runtime_dir);
+			// og.$ factories register before any island hydrates (sync fn-ref resolution)
+			return `import ${JSON.stringify(V_FN_MANIFEST)};\n` + code;
+		}
+		if (id === RESOLVED(V_RUNTIME)) {
+			// Dev sticky: kitchen-sink package entry. Build uses the hashed emitFile chunk. An EXPLICIT
+			// `bootDev()` call (not a bare side-effect import) so Vite's dep prebundler can't tree-shake
+			// the boot away — the bug that left `sideEffects:false` apps with a runtime that never woke.
+			return `import { bootDev } from 'ogygia/runtime'; bootDev();`;
+		}
+		if (id === RESOLVED(V_DEV_HMR)) {
+			// Dev-only soft HMR bridge under csr=false (no Kit client entry):
+			// join /src/**/*.css into the browser graph + strip Kit's FOUC bag.
+			// Failures fall through to a full document reload (see vite:error handler).
+			if (!is_dev) return `export {}`;
+			return dev_hmr_client_source();
+		}
+		if (id === RESOLVED(V_DEV_HMR_URL)) {
+			// Empty in build/preview; vite-dev URL during `vite dev`. Consumed by wrappers
+			// compiled by the app's Vite (not pre-frozen like a package-level import.meta.env).
+			if (!is_dev) return `export default '';`;
+			return `export default ${JSON.stringify('/@id/__x00__' + V_DEV_HMR)};`;
+		}
+		if (id === RESOLVED(V_ISLAND_DEPS)) {
+			return island_deps_module(ssr, is_dev);
+		}
+		if (id === RESOLVED(V_TRANSPORT)) {
+			return transport_module(universalHooks);
+		}
+		if (id === RESOLVED(V_SECRET)) {
+			return secret_module(ssr, ctx.build_secret);
+		}
+		if (id === RESOLVED(V_SIGN)) {
+			return sign_module(ssr, ctx.hmac_module);
+		}
+		if (id === RESOLVED(V_REQUEST_EVENT)) {
+			// ServerIsland may appear in a transformed page module that Kit's client guard scans.
+			// Real getRequestEvent only on SSR; client stub never runs (holes fetch HTML).
+			if (!ssr) {
+				return `export function getRequestEvent() { throw new Error('[ogygia] getRequestEvent is server-only'); }`;
+			}
+			return `export { getRequestEvent } from '$app/server';`;
+		}
+		if (id === RESOLVED(V_REGION_ENDPOINT)) {
+			// Region.svelte imports this for its lake (`makeRegionEndpoint`, swr) and server-island
+			// (`mintServerIsland`) branches. SSR mints signed URLs; client returns '' — lakes reuse the
+			// endpoint cached from the first SSR restore, and server islands never mint on the client
+			// (the runtime fetches the endpoint). Routing minting through this client-stubbed virtual is
+			// what lets one `Region` live in the main `ogygia` graph without leaking `$app/server`.
+			if (!ssr) {
+				return (
+					`export function makeRegionEndpoint(_entry, _props) { return ''; }\n` +
+					`export function mintServerIsland(_entry, _props, _ttl) { return ''; }\n` +
+					// The known-fingerprints set is a server-only nav signal; the client always sees empty.
+					`export function known_region_fps() { return new Set(); }`
+				);
+			}
+			return `export { makeRegionEndpoint, mintServerIsland, known_region_fps } from ${JSON.stringify(ctx.region_endpoint_module)};`;
+		}
+		if (id === RESOLVED(V_RATE_LIMIT)) {
+			return rate_limit_module(ssr, ctx.rate_limit);
+		}
+		if (id === RESOLVED(V_ROUTER_CONFIG)) {
+			return router_config_module(ctx.router_enabled, ctx.router_view_transitions);
+		}
+		if (id === RESOLVED(V_SESSION_COOKIE)) {
+			return session_cookie_module(ssr, ctx.session_cookie);
+		}
+		if (id === RESOLVED(V_REGION_TTL)) {
+			return region_ttl_module(ssr, ctx.region_ttl);
+		}
+		if (id === RESOLVED(V_SERVER_MANIFEST)) {
+			// Populated in BOTH dev and build (unlike the client manifest, which dev fills from URLs).
+			if (ssr) this.prescan();
+			return server_manifest_module(ssr, program, is_dev, (vp: string) => ctx.dev_url_for(vp));
+		}
+		if (id === RESOLVED(V_MANIFEST)) {
+			return manifest_module(is_dev);
+		}
+		if (id === RESOLVED(V_TRANSPORTABLES)) {
+			// Eager-registration manifest of transportable-class modules (prescan-discovered).
+			this.prescan();
+			return transportables_module(program.transportable_modules);
+		}
+		const srcEntry = program.registry.get(id);
+		if (srcEntry && srcEntry.role === 'region') {
+			// Leg-split: SSR gets the signer-carrying descriptor, client gets metadata only.
+			return ssr ? srcEntry.ssrSource! : srcEntry.clientSource!;
+		}
+		if (srcEntry) {
+			let src = srcEntry.source!;
+			// CLIENT build: rewrite `$app/*` in the GENERATED virtual source to absolute
+			// shim paths (defense in depth alongside resolveId island-graph shimming).
+			// SSR keeps the real Kit modules (correct server-rendered page.data).
+			if (!ssr) {
+				src = src.replace(
+					APP_SHIM_IMPORT,
+					(_m: string, _q: string, name: string) => JSON.stringify(ctx.app_shims['$app/' + name])
+				);
+				// LAKES: swap each lake import for the render-nothing placeholder so the lake
+				// component's JS is excluded from this island's client chunk. Handles default
+				// (`import Lake from '…'`) and named (`import { Lake } from '…'`) forms.
+				for (const local of srcEntry.lakes ?? []) {
+					src = rewrite_lake_import_to_placeholder(src, local, ctx.client_binding_stub_file);
+				}
+			}
+			return src;
+		}
+		return null;
 	}
 }
