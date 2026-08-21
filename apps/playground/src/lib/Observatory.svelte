@@ -58,9 +58,46 @@
 </Card>`
 	};
 
-	let source = $state(DEFAULT_SOURCE);
-	let analysis = $state({ ok: true, islands: [], output: DEFAULT_SOURCE, real: false, realIslands: null });
+	// Share via URL (Rung 6): load the source from the hash on mount, and keep the hash in sync so the
+	// current URL always reproduces what you see. `#src=<uri-encoded source>`.
+	function initial_source() {
+		if (typeof location !== 'undefined' && location.hash.startsWith('#src=')) {
+			try {
+				return decodeURIComponent(location.hash.slice(5));
+			} catch {
+				/* malformed hash — fall back to the default */
+			}
+		}
+		return DEFAULT_SOURCE;
+	}
+
+	let source = $state(initial_source());
+	let analysis = $state({ ok: true, islands: [], output: source, real: false, realIslands: null });
 	let busy = $state(false);
+	let shared = $state(false);
+
+	// Keep the hash in sync (replaceState → no history spam).
+	$effect(() => {
+		const src = source;
+		const t = setTimeout(() => {
+			try {
+				history.replaceState(null, '', '#src=' + encodeURIComponent(src));
+			} catch {
+				/* noop */
+			}
+		}, 300);
+		return () => clearTimeout(t);
+	});
+
+	async function share() {
+		try {
+			await navigator.clipboard.writeText(location.href);
+			shared = true;
+			setTimeout(() => (shared = false), 1200);
+		} catch {
+			/* clipboard blocked */
+		}
+	}
 	let leg = $state('ssr'); // 'ssr' | 'client'
 	let everWarmed = $state(false); // the WASM compiler needs ~1-2s to warm on first load
 
@@ -128,6 +165,7 @@
 					{#each Object.entries(PRESETS) as [name, src]}
 						<button onclick={() => (source = src)}>{name}</button>
 					{/each}
+					<button class="share" data-obs-share onclick={share}>{shared ? 'link copied ✓' : 'share'}</button>
 				</span>
 			</div>
 			<textarea bind:value={source} spellcheck="false" data-obs-input></textarea>
@@ -271,6 +309,10 @@
 	.presets button:hover {
 		color: #e2e8f0;
 		border-color: rgba(148, 163, 184, 0.5);
+	}
+	.presets .share {
+		color: #5eead4;
+		border-color: rgba(20, 184, 166, 0.4);
 	}
 	.muted {
 		color: #64748b;
