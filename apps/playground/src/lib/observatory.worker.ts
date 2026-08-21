@@ -68,6 +68,11 @@ export interface Analysis {
 	/** CLIENT bundle for the INTERACTIVE preview: every file compiled to client JS + the entry, so the
 	 *  MAIN thread can link + `mount()` the app (the counter actually works). */
 	client?: { entry: string; modules: Record<string, string>; error?: string };
+	/** REAL ISLANDS (crown jewel): the app SSR with genuine `<ogygia-region>` shells + devalue prop
+	 *  sidecars, wrapped in `<ogygia-slot>` so the page's OWN ogygia runtime hydrates them lazily (the
+	 *  entry is a `__ISLAND__:<file>` placeholder the main thread rewrites to a blob of the linked
+	 *  client component). This is the actual framework running in the preview, not a mount() stand-in. */
+	realDom?: { ok: boolean; html?: string; error?: string; islands?: string[] };
 	/** BYTE LEDGER (Rung 5.3): the ogygia thesis, weighed live — on a csr=false page ogygia ships only
 	 *  the waking islands' JS; plain Kit (csr=true) ships every component. Same compiler, honest bytes. */
 	ledger?: {
@@ -413,6 +418,95 @@ function byte_ledger(files: Record<string, string>): Analysis['ledger'] {
 	};
 }
 
+/** REAL ISLANDS — render the app so each waking island becomes a genuine `<ogygia-region>` shell (with
+ *  its isolated SSR + a devalue prop sidecar), wrapped in `<ogygia-slot>` so the page's own runtime
+ *  self-runs + hydrates it (a bare region nested in the Observatory's awake island would be skipped).
+ *  The `entry` is a `__ISLAND__:<file>` placeholder the MAIN thread rewrites to a blob of the linked
+ *  client component. Only islands (kind island/preset) get a region; everything else renders inline. */
+function real_island_render(files: Record<string, string>, entry: string, islandInfo: IslandInfo): Analysis['realDom'] {
+	const cache = new Map<string, Record<string, unknown>>();
+	const usedIslands = new Set<string>();
+	const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+	const escScript = (s: string) => s.replace(/<\//g, '<\\/');
+	// Islands captured during the app render; rendered in ISOLATION afterwards (no re-entrant render()).
+	const captured: Array<{ info: NonNullable<ReturnType<IslandInfo['get']>>; Comp: unknown; props: Record<string, unknown> }> = [];
+	try {
+		const require = (spec: string): Record<string, unknown> => {
+			if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
+			if (spec === 'svelte/server') return { render } as Record<string, unknown>;
+			const file = resolve_file(spec, files);
+			if (file && file.endsWith('.svelte')) {
+				const info = islandInfo.get(file);
+				const isWakingIsland = info && (info.kind === 'island' || info.kind === 'preset');
+				const built = () => {
+					const hit = cache.get(file);
+					if (hit) return hit;
+					const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as { js: { code: string } };
+					const exports: Record<string, unknown> = {};
+					cache.set(file, exports);
+					Object.assign(exports, eval_module(js.code, require));
+					return exports;
+				};
+				const exports = built();
+				if (!isWakingIsland) return exports;
+				// Waking island → emit a placeholder comment now; capture (Comp, props) to render in
+				// isolation after the app render. Index by captured.length so each placement is distinct.
+				const Real = exports.default;
+				const Marked = ($$renderer: { push: (s: string) => void }, props: Record<string, unknown>) => {
+					const idx = captured.length;
+					captured.push({ info: info!, Comp: Real, props: props || {} });
+					usedIslands.add(file);
+					$$renderer.push(`<!--OBS_ISLAND:${idx}-->`);
+				};
+				return { ...exports, default: Marked };
+			}
+			// unprovided component → inert inline stub (keeps the render alive)
+			const name = (spec.split('/').pop() || spec).replace(/\.svelte$/, '');
+			return { default: ($$r: { push: (s: string) => void }) => $$r.push(`<span data-og-stub="${name}"></span>`) };
+		};
+		if (files[entry] == null) return { ok: false, error: `no entry file '${entry}'` };
+		const { js } = compile(files[entry], { filename: entry, generate: 'server', dev: false }) as { js: { code: string } };
+		const mod = eval_module(js.code, require);
+		const App = mod.default as unknown;
+		if (typeof App !== 'function') return { ok: false, error: 'no default component export' };
+		let html = (render(App as never, { props: {} }) as { body?: string; html?: string }).body ?? '';
+
+		// Replace each placeholder with a real region: <ogygia-slot><ogygia-region …>SSR</…><script props></ogygia-slot>.
+		for (let idx = 0; idx < captured.length; idx++) {
+			const { info, Comp, props } = captured[idx];
+			// isolated SSR of the island (matches what the client component will hydrate against)
+			let ssr = '';
+			try {
+				ssr = (render(Comp as never, { props }) as { body?: string }).body ?? '';
+			} catch {
+				ssr = '';
+			}
+			// the props that cross by value (children/functions/$$ never cross), devalue-encoded
+			const crossing: Record<string, unknown> = {};
+			for (const [k, v] of Object.entries(props)) {
+				if (k === 'children' || k.startsWith('$$') || typeof v === 'function') continue;
+				crossing[k] = v;
+			}
+			let payload = '[{}]';
+			try {
+				payload = devalue_stringify(crossing);
+			} catch {
+				/* leave empty */
+			}
+			const fp = `obsfp_${info.name.replace(/[^\w]/g, '')}_${idx}`;
+			const wake = info.wake || 'load';
+			const region =
+				`<ogygia-slot><ogygia-region entry="${escAttr('__ISLAND__:' + info.name)}" wake="${escAttr(wake)}" ` +
+				`data-og-fp="${fp}" data-obs-real-island data-name="${escAttr(info.name)}">${ssr}</ogygia-region>` +
+				`<script data-ogygia-props>${escScript(payload)}</script></ogygia-slot>`;
+			html = html.replace(`<!--OBS_ISLAND:${idx}-->`, region);
+		}
+		return { ok: true, html, islands: [...usedIslands] };
+	} catch (e) {
+		return { ok: false, error: e instanceof Error ? e.message : String(e) };
+	}
+}
+
 async function analyze(files: Record<string, string>, active: string): Promise<Analysis> {
 	const source = files[active] ?? '';
 	const marks = analyze_marks(source);
@@ -546,6 +640,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		realError,
 		oxc,
 		rendered: execute(files, entryFile, islandInfo),
+		realDom: real_island_render(files, entryFile, islandInfo),
 		client: client_bundle(files, entryFile),
 		ledger,
 		ms: now() - t0

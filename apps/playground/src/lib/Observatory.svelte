@@ -342,6 +342,70 @@
 			xrayCleanup = arm_wakes(el);
 			return;
 		}
+		// ISLANDS (real runtime): inject the app's SSR with genuine <ogygia-region> shells so the PAGE's
+		// own ogygia runtime hydrates them lazily. Each region's __ISLAND__ placeholder entry is rewritten
+		// to a blob of the client-linked component (stashed on a global the blob re-exports). This is the
+		// actual framework running in the preview — real schedules, real hydration — not a mount() stand-in.
+		if (mode === 'islands') {
+			const rd = analysis.realDom;
+			if (!rd?.ok || !rd.html || !sc || !client || client.error) {
+				fallback();
+				return;
+			}
+			try {
+				const store = (globalThis.__OBS_ISLANDS__ ||= {});
+				const blobs = [];
+				const cache = new Map();
+				const resolveName = (spec) => {
+					const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
+					if (client.modules[bare] != null) return bare;
+					const base = spec.split('/').pop();
+					return base && client.modules[base] != null ? base : null;
+				};
+				const require = (spec) => {
+					if (spec === 'svelte/internal/client') return sc;
+					const name = resolveName(spec);
+					if (name) {
+						if (cache.has(name)) return cache.get(name);
+						const ex = {};
+						cache.set(name, ex);
+						Object.assign(ex, eval_client(client.modules[name], require));
+						return ex;
+					}
+					return { default: () => {} };
+				};
+				// build the DOM OFFLINE so we can set the real blob entry BEFORE the element connects
+				// (custom-element upgrade + the runtime's connectedCallback fire on insertion).
+				const tpl = document.createElement('div');
+				tpl.innerHTML = rd.html;
+				for (const region of tpl.querySelectorAll('ogygia-region[entry^="__ISLAND__:"]')) {
+					const file = region.getAttribute('entry').slice('__ISLAND__:'.length);
+					if (client.modules[file] == null) continue;
+					const Comp = eval_client(client.modules[file], require).default;
+					const key = 'k' + Math.random().toString(36).slice(2);
+					store[key] = Comp;
+					const blob = URL.createObjectURL(
+						new Blob([`export default globalThis.__OBS_ISLANDS__[${JSON.stringify(key)}]`], { type: 'text/javascript' })
+					);
+					blobs.push({ blob, key });
+					region.setAttribute('entry', blob);
+				}
+				while (tpl.firstChild) el.appendChild(tpl.firstChild); // → runtime upgrades + hydrates
+				// cleanup on the next run: removing the nodes (el.innerHTML='') fires the runtime's
+				// disconnectedCallback (unmount); we just revoke blobs + release the stashed components.
+				xrayCleanup = () => {
+					for (const { blob, key } of blobs) {
+						URL.revokeObjectURL(blob);
+						delete store[key];
+					}
+				};
+				return;
+			} catch (e) {
+				console.error('[observatory] islands mode failed:', e);
+				fallback();
+				return;
+			}
+		}
 		if (!sc || !client || client.error || !client.modules?.[client.entry]) {
 			fallback();
 			return;
@@ -424,13 +488,14 @@
 			{#if analysis.rendered}
 				<div class="cap">
 					rendered
-					<span class="muted">· {previewMode === 'live' ? 'live, interactive — mounted in your browser' : 'x-ray — every marked region is an island'}</span>
+					<span class="muted">· {previewMode === 'live' ? 'live, interactive — mounted in your browser' : previewMode === 'xray' ? 'x-ray — every marked region is an island' : 'islands — the real ogygia runtime hydrates each region'}</span>
 					{#if analysis.rendered.stubs && analysis.rendered.stubs.length}
 						<span class="stubnote" title="components not provided in this single-file REPL render as placeholders">{analysis.rendered.stubs.length} stubbed</span>
 					{/if}
 					<span class="legs" data-obs-preview-mode>
 						<button class:on={previewMode === 'live'} onclick={() => (previewMode = 'live')}>live</button>
 						<button class:on={previewMode === 'xray'} onclick={() => (previewMode = 'xray')}>x-ray</button>
+						<button class:on={previewMode === 'islands'} onclick={() => (previewMode = 'islands')} title="the page's real ogygia runtime hydrates the islands">islands</button>
 					</span>
 				</div>
 				{#if previewMode === 'xray'}

@@ -64,6 +64,25 @@ try {
 	});
 	check('boundary lens: x-ray mode tints the preview + shows a legend', !!lens.xray && lens.legend, JSON.stringify({ xray: lens.xray, legend: lens.legend }));
 	check('boundary lens: the island (Counter) and the lake (Prose) are marked regions, the shell is not', lens.islands.some((i) => i.name === 'Counter.svelte' && i.kind === 'island' && i.ships === 'true') && lens.islands.some((i) => i.name === 'Prose.svelte' && i.kind === 'lake' && i.ships === 'false') && !lens.islands.some((i) => i.name === 'Header.svelte'), JSON.stringify(lens.islands));
+	// ── ISLANDS MODE (crown jewel): the app renders with REAL <ogygia-region> shells that the PAGE's own
+	//    ogygia runtime hydrates — the actual framework running in the preview, not a mount() stand-in ──
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'islands');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(1200); // let the runtime import the blob entries + hydrate
+	const island = await page.evaluate(() => {
+		const r = document.querySelector('[data-obs-preview] ogygia-region[data-obs-real-island]');
+		return r ? { name: r.getAttribute('data-name'), blobEntry: (r.getAttribute('entry') || '').startsWith('blob:'), nested: r.hasAttribute('data-nested') } : null;
+	});
+	check('islands mode: the app renders a REAL <ogygia-region> (blob entry, not skipped as nested)', !!island && island.name === 'Counter.svelte' && island.blobEntry && !island.nested, JSON.stringify(island));
+	const ri0 = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region button')?.textContent?.trim() || '');
+	await page.click('[data-obs-preview] ogygia-region button').catch(() => {});
+	await page.click('[data-obs-preview] ogygia-region button').catch(() => {});
+	await page.waitForTimeout(200);
+	const ri1 = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region button')?.textContent?.trim() || '');
+	check('islands mode: the PAGE runtime hydrates the island — it is interactive', ri0 === 'count is 3' && ri1 === 'count is 5', `${ri0} → ${ri1}`);
+
 	// back to the live preview for the remaining checks
 	await page.evaluate(() => {
 		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'live');
