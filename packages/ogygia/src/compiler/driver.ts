@@ -49,6 +49,7 @@ import { transport_module, transportables_module } from './link/transport.js';
 import { server_manifest_module } from './link/server-manifest.js';
 import { manifest_module } from './link/manifest.js';
 import { dev_hmr_client_source } from './dev/dev-hmr.js';
+import { same_module_path, island_vpaths_affected_by_file } from './dev/hmr.js';
 import {
 	RESOLVED,
 	V_RUNTIME_URL,
@@ -71,7 +72,7 @@ import {
 	V_MANIFEST,
 	V_TRANSPORTABLES
 } from './ids.js';
-import { strip_id } from './program.js';
+import { strip_id, host_key } from './program.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
 import type { Program, RegisterResult } from './program.js';
 import type { CompileCtx } from './ctx.js';
@@ -927,5 +928,61 @@ export class Compiler {
 		}
 
 		return touched ? { code: out, map } : null;
+	}
+
+	/** True when `file` is a registered island HOST (a component that declares islands). */
+	is_registered_host(file: string): boolean {
+		const { host_index, registry } = this.program;
+		return (
+			host_index.has(host_key(file)) ||
+			[...registry.values()].some((e) => same_module_path(e.hostPath, file))
+		);
+	}
+
+	/**
+	 * Drop the cached virtual island modules + the registry rows for `file` — call when a HOST changes
+	 * (an import-target rename keeps the same island id) or an ENTRY component is deleted (NOT on ordinary
+	 * entry-component content edits — those are soft HMR). Mutates the Program; `invalidate` is the
+	 * bundler's module-invalidation (Vite's moduleGraph), threaded in. Returns whether anything changed.
+	 */
+	invalidate_for_file(
+		file: string,
+		{ deleted = false, invalidate }: { deleted?: boolean; invalidate: (id: string) => void }
+	): boolean {
+		const { registry, island_graph, by_id, region_kinds, host_index } = this.program;
+		const affected = new Set<string>();
+
+		if (this.is_registered_host(file)) {
+			for (const vpath of island_vpaths_affected_by_file(file, registry.entries())) {
+				affected.add(vpath);
+			}
+			const prev = host_index.get(host_key(file));
+			if (prev) for (const vpath of prev.vpaths) affected.add(vpath);
+			// Host re-registers on next transform; clear so emit() can't serve orphans.
+			this.program.unregister_host(file);
+		}
+
+		if (deleted) {
+			for (const [vpath, entry] of [...registry.entries()]) {
+				if (!same_module_path(entry.componentPath, file)) continue;
+				affected.add(vpath);
+				registry.delete(vpath);
+				island_graph.delete(vpath);
+				by_id.delete(entry.id);
+				region_kinds.delete(entry.id);
+				const idx = host_index.get(host_key(entry.hostPath));
+				if (idx) {
+					idx.vpaths.delete(vpath);
+					idx.ids.delete(entry.id);
+				}
+			}
+		}
+
+		if (affected.size === 0) return false;
+
+		for (const vpath of affected) invalidate(vpath);
+		invalidate(RESOLVED(V_SERVER_MANIFEST));
+		invalidate(RESOLVED(V_MANIFEST));
+		return true;
 	}
 }

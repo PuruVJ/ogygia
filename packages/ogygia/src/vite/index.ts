@@ -66,22 +66,15 @@ import {
 } from '../compiler/fouc-css.js';
 import {
 	needs_csr_false_full_reload,
-	needs_island_entry_full_reload,
-	same_module_path,
-	island_vpaths_affected_by_file
+	needs_island_entry_full_reload
 } from '../compiler/dev/hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
 import { collectIslandDepModulepreloads } from '../compiler/link/island-deps.js';
 import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.js';
-import { Program, strip_id, host_key } from '../compiler/program.js';
+import { Program, strip_id } from '../compiler/program.js';
 import { Compiler } from '../compiler/driver.js';
 import { CompileCtx } from '../compiler/ctx.js';
-import {
-	V_MANIFEST,
-	V_SERVER_MANIFEST,
-	V_KIT_WIRE,
-	RESOLVED
-} from '../compiler/ids.js';
+import { V_KIT_WIRE } from '../compiler/ids.js';
 
 /** `packages/ogygia` — Vite must serve absolute shim/runtime resolves from outside the app root. */
 const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -251,9 +244,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// so Kit's throwaway plugin instance is a different Program and can't leak into the real build.
 	// The adapter binds local aliases to its Maps (same objects) + methods so the hooks read like before.
 	const program = new Program({ forms: continuity_forms, router: router_enabled });
-	const { registry, island_graph, by_id, region_kinds, host_index } = program;
+	const { registry } = program;
 	const register = program.register.bind(program);
-	const unregister_host = program.unregister_host.bind(program);
 	// The feature-selected runtime chunk name lives on the driver as `compiler.runtime_chunk_filename()`
 	// (RUNTIME_HASH ⊕ program.runtime_feature_hash — see CompileCtx.runtime_chunk_filename); buildStart's
 	// emitFile and the runtime-url virtual both read it, so both build legs compute the same immutable name.
@@ -365,51 +357,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		if (mod) server.moduleGraph.invalidateModule(mod);
 	};
 
-	const is_registered_host = (file) =>
-		host_index.has(host_key(file)) ||
-		[...registry.values()].some((e) => same_module_path(e.hostPath, file));
-
-	/**
-	 * Drop Vite's cached virtual island modules + our registry rows for `file`.
-	 * Call when a *host* changes (import target rename keeps the same island id) or an
-	 * *entry component* is deleted — not on ordinary entry-component content edits (soft HMR).
-	 */
+	// Drop the cached virtual island modules + registry rows for `file` when a HOST changes or an ENTRY
+	// is deleted — the driver (`compiler.invalidate_for_file`) owns the island-graph mutations + the
+	// affected-module walk; this binds Vite's module invalidation and the server guard. No server → no-op.
 	const invalidate_islands_for_file = (file, { deleted = false, server = vite_server } = {}) => {
 		if (!server) return false;
-		const affected = new Set();
-
-		if (is_registered_host(file)) {
-			for (const vpath of island_vpaths_affected_by_file(file, registry.entries())) {
-				affected.add(vpath);
-			}
-			const prev = host_index.get(host_key(file));
-			if (prev) for (const vpath of prev.vpaths) affected.add(vpath);
-			// Host re-registers on next transform; clear so load() can't serve orphans.
-			unregister_host(file);
-		}
-
-		if (deleted) {
-			for (const [vpath, entry] of [...registry.entries()]) {
-				if (!same_module_path(entry.componentPath, file)) continue;
-				affected.add(vpath);
-				registry.delete(vpath);
-				island_graph.delete(vpath);
-				by_id.delete(entry.id);
-				region_kinds.delete(entry.id);
-				const idx = host_index.get(host_key(entry.hostPath));
-				if (idx) {
-					idx.vpaths.delete(vpath);
-					idx.ids.delete(entry.id);
-				}
-			}
-		}
-
-		if (affected.size === 0) return false;
-
-		for (const vpath of affected) invalidate_module_id(server, vpath);
-		invalidate_module_id(server, RESOLVED(V_SERVER_MANIFEST));
-		invalidate_module_id(server, RESOLVED(V_MANIFEST));
-		return true;
+		return compiler.invalidate_for_file(file, {
+			deleted,
+			invalidate: (id) => invalidate_module_id(server, id)
+		});
 	};
 
 	return [
@@ -697,7 +653,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// Island ids are hash(componentPath+strategy) — renaming a host keeps the same virtual
 			// id, so Vite's moduleGraph must be cleared or it keeps serving the old import.
 			const deleted = !fs.existsSync(strip_id(file));
-			const host_changed = !deleted && is_registered_host(file);
+			const host_changed = !deleted && compiler.is_registered_host(file);
 			const entry_changed =
 				!deleted && needs_island_entry_full_reload(file, registry.values());
 			if (host_changed || deleted) {
