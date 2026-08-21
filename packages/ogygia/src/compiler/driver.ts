@@ -22,7 +22,7 @@ import {
 	islandChunkFileName,
 	CLIENT_BINDING_STUB
 } from './region/transform.js';
-import { routeCsrIsFalse, routeCsrIsTrue, clean_stale_ogygia_dirs } from './kit.js';
+import { routeCsrIsFalse, routeCsrIsTrue, hasAnyCsrTrueRoute, clean_stale_ogygia_dirs } from './kit.js';
 import { run_module_macros } from './macros/pipeline.js';
 import { generateRuntimeEntrySource, resolveFeatures } from './link/runtime-entry.js';
 import { resolveFoucImportSpec, FOUC_CSS_PREFIX, FOUC_SCOPED_PREFIX } from './fouc-css.js';
@@ -42,7 +42,8 @@ import {
 	sign_module,
 	rate_limit_module,
 	session_cookie_module,
-	region_ttl_module
+	region_ttl_module,
+	route_csr_module
 } from './link/caps.js';
 import { router_config_module } from './link/router-config.js';
 import { transport_module, transportables_module } from './link/transport.js';
@@ -63,6 +64,7 @@ import {
 	V_SECRET,
 	V_SIGN,
 	V_REQUEST_EVENT,
+	V_ROUTE_CSR,
 	V_REGION_ENDPOINT,
 	V_RATE_LIMIT,
 	V_ROUTER_CONFIG,
@@ -185,8 +187,17 @@ export class Compiler {
 		// facades. SSR keeps real wrappers for HTML; csr=true client keeps them so Kit can
 		// hydrate islands as normal components. Hydration always uses `import(entry)`.
 		const routesDir = path.join(ctx.root, 'src', 'routes');
+		// A csr=false LAYOUT can wrap a csr=true child page — there Kit hydrates the layout, so its
+		// chrome islands must be REAL wrappers on the client (Region degrades them inline via
+		// `documentIsCsrTrue`), NOT the thin stub. Only when the app actually has a csr=true route,
+		// and only for `+layout.svelte` hosts (bounded chrome, unlike N page islands).
+		const is_layout_host = path.basename(id) === '+layout.svelte';
 		const link_virtual =
-			opts.linkVirtual !== undefined ? opts.linkVirtual : ssr || !routeCsrIsFalse(id, routesDir);
+			opts.linkVirtual !== undefined
+				? opts.linkVirtual
+				: ssr ||
+					!routeCsrIsFalse(id, routesDir) ||
+					(is_layout_host && hasAnyCsrTrueRoute(routesDir));
 		// Tri-state route csr, threaded into the transform (see transformHost's routeCsr branch):
 		//   true  → csr=true route host: ogygia steps aside (strip islands, inject `true` marker).
 		//   false → csr=false route host: keep islands, inject the csr-false RESET marker (an
@@ -562,6 +573,9 @@ export class Compiler {
 		if (id === RESOLVED(V_REGION_TTL)) {
 			return region_ttl_module(ssr, ctx.region_ttl);
 		}
+		if (id === RESOLVED(V_ROUTE_CSR)) {
+			return route_csr_module(ssr, path.join(ctx.root, 'src', 'routes'));
+		}
 		if (id === RESOLVED(V_SERVER_MANIFEST)) {
 			// Populated in BOTH dev and build (unlike the client manifest, which dev fills from URLs).
 			if (ssr) this.prescan();
@@ -642,6 +656,7 @@ export class Compiler {
 		if (source === V_ROUTER_CONFIG) return RESOLVED(V_ROUTER_CONFIG);
 		if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);
 		if (source === V_REGION_TTL) return RESOLVED(V_REGION_TTL);
+		if (source === V_ROUTE_CSR) return RESOLVED(V_ROUTE_CSR);
 		if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
 		if (source === V_REQUEST_EVENT) return RESOLVED(V_REQUEST_EVENT);
 		if (source === V_REGION_ENDPOINT) return RESOLVED(V_REGION_ENDPOINT);

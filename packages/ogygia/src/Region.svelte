@@ -30,7 +30,7 @@
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';
-	import { isNested, setNested, isCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
+	import { isNested, setNested, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { REF_WIRE_KEY, ref_reducer } from './ref.js';
 	// PULL-registration inside stringify_props (idempotent; no import-time side effects)
 	import { register_wire_kind } from './live-transport.js';
@@ -178,7 +178,11 @@
 	// hydrates it. Same degradation as `nested`, gated by the csr context the transform injects into
 	// csr=true route hosts. Server/deferred + lake regions are SERVER-DRIVEN UI, orthogonal to a
 	// page's csr, so they are deliberately NOT degraded here (they keep their endpoint + runtime).
-	const is_csr = isCsrTrue();
+	// Does Kit hydrate this WHOLE document? (the leaf page's effective csr — the one fact that decides
+	// it.) If so, every island degrades to a plain inline component on both legs: no `<ogygia-region>`,
+	// no runtime claim, no FOUC. Server reads the build-time csr=true route map; client reads Kit's
+	// bootstrap. Identical both legs, so the inline/island choice can never desync at hydrate.
+	const is_csr = documentIsCsrTrue();
 	// The island branch renders inline when nested OR on a csr=true page.
 	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();

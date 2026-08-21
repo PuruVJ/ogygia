@@ -24,7 +24,8 @@ export default defineConfig({
 			'virtual:ogygia/dev-hmr-url': fileURLToPath(new URL('./test/_stubs/virtual-dev-hmr-url.ts', import.meta.url)),
 			'virtual:ogygia/island-deps': fileURLToPath(new URL('./test/_stubs/virtual-island-deps.ts', import.meta.url)),
 			'virtual:ogygia/region-endpoint': fileURLToPath(new URL('./test/_stubs/virtual-region-endpoint.ts', import.meta.url)),
-			'virtual:ogygia/request-event': fileURLToPath(new URL('./test/_stubs/virtual-request-event.ts', import.meta.url))
+			'virtual:ogygia/request-event': fileURLToPath(new URL('./test/_stubs/virtual-request-event.ts', import.meta.url)),
+			'virtual:ogygia/route-csr': fileURLToPath(new URL('./test/_stubs/virtual-route-csr.ts', import.meta.url))
 		}
 	},
 	test: {

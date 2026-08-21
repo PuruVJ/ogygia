@@ -21,6 +21,10 @@ export const V_REGION_TTL = 'virtual:ogygia/region-ttl';
 export const V_ROUTER_CONFIG = 'virtual:ogygia/router-config';
 export const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
 export const V_REQUEST_EVENT = 'virtual:ogygia/request-event';
+/** SSR-only map of csr=true route ids — lets Region degrade a csr=false layout's islands to inline
+ *  when the LEAF page is csr=true (Kit hydrates the whole document). Client leg is an empty set;
+ *  the client uses `kit_hydrates_page()` for the identical signal. */
+export const V_ROUTE_CSR = 'virtual:ogygia/route-csr';
 export const V_REGION_ENDPOINT = 'virtual:ogygia/region-endpoint';
 // Reuse Kit's OWN wire protocol (transport-aware devalue arg/response codec) instead of
 // reimplementing it. We deep-import Kit's internal `runtime/shared.js` by absolute path

@@ -96,6 +96,11 @@ declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regionTtl })` (default 3600). */
 	export const regionTtl: number;
 }
+declare module 'virtual:ogygia/route-csr' {
+	/** Route ids (Kit `route.id`, group-stripped) whose effective csr is true — SSR leg only; the
+	 *  client leg is an empty set (it reads `kit_hydrates_page()` instead). */
+	export const csr_true_routes: ReadonlySet<string>;
+}
 /** CONTINUITY compile-time constants (Vite `define`; typeof-guarded so node dist import is safe). */
 declare const __OGYGIA_CONTINUITY_FORMS__: boolean;
 /** SERVER-DELTA NAV opt-in (Vite `define`; default OFF — see `router.serverDelta`). */

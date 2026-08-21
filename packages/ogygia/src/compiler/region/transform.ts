@@ -763,12 +763,6 @@ function resolve_component_path(spec: string, host_id: string, ctx: HostCtx) {
  * @param ctx.virtualPathFor virtual module id for an island
  * @returns
  */
-// Injected into every csr=true route host. Marks the subtree "csr=true" via a BARE svelte
-// `setContext` — no ogygia import — so a region-less csr=true page still ships zero ogygia. Region
-// reads it (isCsrTrue) and renders islands inline. The host renders on both the SSR and Kit-client
-// legs, so the flag is identical on both → the inline/island choice can never desync at hydrate.
-// KEY STRING (CSR-KEY): must equal context.ts `CSR_TRUE_KEY` — `Symbol.for('ogygia.csr-true')`.
-const CSR_CTX_INJECT = `import { setContext as __og_setctx } from 'svelte'; __og_setctx(Symbol.for('ogygia.csr-true'), true);\n`;
 
 /**
  * csr=true route host: strip marked imports to plain, then inject the csr-context marker.
@@ -818,51 +812,6 @@ function transform_csr_true_host(
 		}
 	}
 
-	// Inject the csr-context marker at the top of the instance <script> (create one if absent —
-	// a `<script module>` runs once per module, not per instance, so it can't carry setContext).
-	if (ast.instance?.content) {
-		ms.appendLeft(ast.instance.content.start, `\n${CSR_CTX_INJECT}`);
-	} else {
-		ms.prepend(`<script>${CSR_CTX_INJECT}</script>\n`);
-	}
-
-	return {
-		code: ms.toString(),
-		map: ms.generateMap({ hires: true, source: id, includeContent: true }),
-		islands: []
-	};
-}
-
-// Injected into every csr=FALSE route host to RESET the inherited csr-true flag. Svelte context
-// flows to ALL descendants, and Kit's csr option is per-node: a csr=true ANCESTOR layout (e.g. a
-// root `+layout.svelte` with no `csr` export → Kit default `true`) sets `true` via CSR_CTX_INJECT,
-// and a `csr = false` CHILD layout re-shadows it — exactly like Kit's own option resolution
-// (`{ ...parent_options, ...own }`). Without the reset, every island in a csr=false subtree under a
-// csr=true ancestor reads `true` (isCsrTrue) and degrades to INLINE — no `<ogygia-region>`, no
-// hydration, silently. A csr=true host BELOW the reset injects `true` again, so shadowing works in
-// both directions. Same bare-svelte `setContext` + KEY STRING as CSR_CTX_INJECT (CSR-KEY).
-const CSR_FALSE_INJECT = `import { setContext as __og_setctx } from 'svelte'; __og_setctx(Symbol.for('ogygia.csr-true'), false);\n`;
-
-/**
- * csr=false route host with no island/portable work of its own: inject ONLY the csr-false reset
- * marker (no import stripping — csr=false keeps its islands), so islands rendered BELOW it (shared
- * components in its template, slot content) island correctly even under a csr=true ancestor layout.
- * @param source @param id
- * @param [parsed] already-parsed AST (avoids a re-parse)
- * @returns
- */
-function inject_csr_reset(source: string, id: string, parsed: SvelteNode | null = null) {
-	let ast = parsed;
-	if (!ast) {
-		try {
-			ast = parse(source, { modern: true, filename: id });
-		} catch {
-			return null;
-		}
-	}
-	const ms = new MagicString(source);
-	if (ast.instance?.content) ms.appendLeft(ast.instance.content.start, `\n${CSR_FALSE_INJECT}`);
-	else ms.prepend(`<script>${CSR_FALSE_INJECT}</script>\n`);
 	return {
 		code: ms.toString(),
 		map: ms.generateMap({ hires: true, source: id, includeContent: true }),
@@ -903,7 +852,6 @@ class FileCompilation {
 	#synthetic_export!: Map<string, string | undefined>;
 	#has_island_children!: boolean;
 	#has_island_hint!: boolean;
-	#needs_csr_reset!: boolean;
 
 	constructor(source: string, id: string, ctx: HostCtx) {
 		this.#source = source;
@@ -1315,28 +1263,24 @@ class FileCompilation {
 		const import_keys = this.#import_keys;
 		const has_island_hint = import_keys_hint(import_keys).test(source);
 
-		// Route hosts carry Kit's per-node csr option as a Svelte context marker (CSR-KEY), mirroring
-		// Kit's own option resolution (`{ ...parent_options, ...own }`) so nesting shadows correctly:
-		//   routeCsr === true  → strip islands + inject `true` (Kit hydrates; islands degrade inline).
-		//   routeCsr === false → keep islands + inject the `false` RESET (a csr=true ANCESTOR — e.g. an
-		//                        option-less root layout, Kit default true — would otherwise leak `true`
-		//                        down and silently degrade every island in the csr=false subtree).
-		//   routeCsr undefined → not a route host (shared component): no marker; its csr depends on the
-		//                        page that renders it, so it keeps its islands and reads the context.
-		// csr=true must run even for a MARKER-LESS host (a page that only uses `<Region>`, no
-		// `with { wake }`), so it precedes the island-hint bailout. (`.ts` held regions and
-		// deferred/live/lake regions are server-driven UI, orthogonal to a page's csr — they are
-		// deliberately NOT degraded; see Region.svelte `is_csr`.)
-		if (ctx.routeCsr === true)
-			return { done: transform_csr_true_host(source, id, has_island_hint, import_keys) };
-		const needs_csr_reset = ctx.routeCsr === false;
+		// A csr=true route host: Kit hydrates it, so strip its OWN island directives to plain
+		// components (Kit renders them inline). No context marker — every island reads the
+		// per-document documentIsCsrTrue() directly (Region.svelte is_csr). Held/deferred/live/lake
+		// regions are server-driven UI, orthogonal to a page's csr, and are deliberately NOT degraded.
+		if (ctx.routeCsr === true) {
+			return {
+				done:
+					has_island_hint || source.includes('asRegion')
+						? transform_csr_true_host(source, id, has_island_hint, import_keys)
+						: null
+			};
+		}
 
-		// cheap bailout — the library only touches region imports (configured key names), PLUS files that
-		// define a `{#snippet}` (a candidate portable snippet forwarded into an island) or call the
-		// `import.meta.og.asRegion(…)` macro. Files with none of those return `null` unchanged at the end.
-		// A csr=false route host is never a pure bailout: it always carries the reset marker.
+		// cheap bailout — the library only touches region imports (configured key names), PLUS files
+		// that define a {#snippet} (a candidate portable snippet forwarded into an island) or call the
+		// import.meta.og.asRegion macro. Files with none of those return null unchanged.
 		if (!has_island_hint && !source.includes('{#snippet') && !source.includes('asRegion')) {
-			return { done: needs_csr_reset ? inject_csr_reset(source, id) : null };
+			return { done: null };
 		}
 
 		let ast: SvelteNode;
@@ -1532,9 +1476,8 @@ class FileCompilation {
 		// No islands here, but a `{#snippet}` may still need making portable (forwarded into an island by
 		// the component it's handed to). Keep going for those; the island passes below no-op with an empty
 		// `marked_components`, and the end guard returns `null` unchanged if no portable work happens.
-		// A csr=false route host still carries the reset marker even with no island/snippet work.
 		if (marked_components.size === 0 && as_regions.length === 0 && !source.includes('{#snippet')) {
-			return { done: needs_csr_reset ? inject_csr_reset(source, id, ast) : null };
+			return { done: null };
 		}
 
 		/** Non-fallback children on a hydrate/defer call site cannot cross devalue — reject. */
@@ -1555,7 +1498,6 @@ class FileCompilation {
 		this.#as_region_nodes = as_region_nodes;
 		this.#synthetic_export = synthetic_export;
 		this.#has_island_hint = has_island_hint;
-		this.#needs_csr_reset = needs_csr_reset;
 		return null;
 	}
 
@@ -1584,7 +1526,6 @@ class FileCompilation {
 		const synthetic_export = this.#synthetic_export;
 		const has_island_children = this.#has_island_children;
 		const has_island_hint = this.#has_island_hint;
-		const needs_csr_reset = this.#needs_csr_reset;
 		const path = ctx.pathModule;
 
 		const s = new MagicString(source);
@@ -2059,12 +2000,10 @@ class FileCompilation {
 			portable_emitted = true;
 		}
 
-		// Instance-script head: the portable helper import, and — on a csr=false route host — the
-		// csr-false RESET marker (see CSR_FALSE_INJECT). One combined injection so a script-less host
-		// gains exactly ONE synthesized <script>.
+		// Instance-script head: the portable helper import. One combined injection so a script-less
+		// host gains exactly ONE synthesized <script>.
 		{
 			let head = '';
-			if (needs_csr_reset) head += CSR_FALSE_INJECT;
 			if (portable_emitted) {
 				head +=
 					`import { og_portable as ${OG_PORTABLE} } from 'ogygia/internal';\n` +
@@ -2078,8 +2017,7 @@ class FileCompilation {
 		}
 
 		// Snippet-only files that produced no island or portable work are untouched — behave as bailed.
-		// (Not on a csr=false route host: the reset marker above is itself a change to keep.)
-		if (!needs_csr_reset && !has_island_hint && !portable_emitted && islands_by_id.size === 0)
+		if (!has_island_hint && !portable_emitted && islands_by_id.size === 0)
 			return null;
 
 		return {

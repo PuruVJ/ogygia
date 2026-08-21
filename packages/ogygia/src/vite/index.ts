@@ -46,6 +46,7 @@ import {
 import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,
+	clear_route_csr_cache,
 	keep_client_dir,
 	inject_keep_client_route,
 	resolve_kit_paths
@@ -517,6 +518,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			},
 
 			watchChange(id, change) {
+				// A route add/remove/rename or a `csr` export flip changes the csr topology → drop the
+				// memoized "any csr=true route?" answer that gates layout-wrapper linking (dev only).
+				if (is_dev && /[\\/]\+(page|layout)\.(svelte|js|ts)$/.test(id)) clear_route_csr_cache();
 				// Unlink often skips handleHotUpdate; drop islands that still import the deleted file.
 				if (!is_dev || change.event !== 'delete' || !vite_server) return;
 				if (!invalidate_islands_for_file(id, { deleted: true, server: vite_server })) return;

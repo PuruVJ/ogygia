@@ -5,6 +5,8 @@
  * the client leg gets an inert stub (a browser never mints). The driver's `emit` dispatch calls these.
  */
 
+import { csrTrueRouteIds } from '../kit.js';
+
 /**
  * `virtual:ogygia/secret` — SERVER only: the signing key. CLIENT build: empty string (never mint in
  * the browser). Runtime prefers `OGYGIA_SECRET` when the host sets it; otherwise the per-build key
@@ -59,4 +61,13 @@ export function session_cookie_module(ssr: boolean, session_cookie: string): str
 export function region_ttl_module(ssr: boolean, region_ttl: number): string {
 	if (!ssr) return `export const regionTtl = 3600;`;
 	return `export const regionTtl = ${region_ttl};`;
+}
+
+/** `virtual:ogygia/route-csr` — SERVER only: the csr=true route ids, so a csr=false layout's islands
+ *  degrade to inline when the LEAF page is csr=true (Kit hydrates the whole document). The CLIENT leg
+ *  is an empty set — the client reads the identical signal from `kit_hydrates_page()`, and the route
+ *  list never ships to the browser. */
+export function route_csr_module(ssr: boolean, routesDir: string): string {
+	if (!ssr) return `export const csr_true_routes = new Set();`;
+	return `export const csr_true_routes = new Set(${JSON.stringify(csrTrueRouteIds(routesDir))});`;
 }

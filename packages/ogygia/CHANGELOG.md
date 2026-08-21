@@ -95,6 +95,17 @@ The **passage** release — the runtime and the compiler both rebuilt from the s
 
 ### Fixed
 
+- **A csr=true page under a csr=false layout wiped the layout's chrome.** `wake:`-marked chrome (a
+  header/footer) in a csr=false layout, rendered on a child page that opts into `csr = true`, painted
+  on the server and then VANISHED right after Kit hydrated the document — with a redundant-island dev
+  warning. Two causes stacked: the layout's islands were stubbed on the client (so Kit hydrated
+  nothing where they were), and the inline-vs-island choice was decided per HOST, not per document, so
+  the two legs desynced at hydrate. Fixed by deciding it from the one fact that matters — whether Kit
+  hydrates the WHOLE document, i.e. the leaf page's effective csr — via a new `documentIsCsrTrue()`
+  (server: a build-time csr=true route map; client: Kit-bootstrap detection), plus linking a csr=false
+  layout's island wrapper on the client when the app has any csr=true route. Such a page now ships
+  ZERO ogygia (no region tag, no runtime, no FOUC) and the chrome stays, Kit-hydrated and interactive.
+
 - **Nested-island dev warning crashed dev SSR (TDZ).** `Region.svelte`'s "nested island — strategy
   ignored" dev warning read the `island_entry` `$derived` before it was declared, so an
   `import.meta.env.DEV` server render of any page with a nested island (e.g. the cross-island context
@@ -113,6 +124,12 @@ The **passage** release — the runtime and the compiler both rebuilt from the s
   alias so strictness holds without littering the compiler with `any`.
 - **oxfmt** adopted as the workspace formatter (tabs, single quotes, 100 columns), replacing the
   homegrown no-`any` script.
+- **Collapsed the per-host csr context cascade into one per-document signal.** Removed `CSR_TRUE_KEY`
+  / `isCsrTrue()` and the compiler's `setContext` marker + `csr=false` reset injection (`CSR_CTX_INJECT`
+  / `CSR_FALSE_INJECT` / `inject_csr_reset`, `#needs_csr_reset`). That marker dance only ever
+  re-derived the leaf page's effective csr indirectly through a downward context cascade + reset;
+  `documentIsCsrTrue()` reads it directly, so the whole mechanism is gone. The compile-time strip of a
+  csr=true page's OWN islands (it ships zero ogygia) stays.
 
 ## [0.7.0] — 2026-08-20
 

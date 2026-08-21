@@ -147,6 +147,60 @@ function pageLeaves(routesDir: string) {
 	return leaves;
 }
 
+/** Kit's `route.id` for a page host, with layout GROUP segments (`(app)`) stripped — the same
+ *  normalization {@link csrTrueRouteIds} applies, so the two sides match whether or not Kit keeps
+ *  groups in `route.id`. Root → `/`. */
+export function normalize_route_id(id: string): string {
+	const segs = id
+		.split('/')
+		.filter(Boolean)
+		.filter((s) => !(s.startsWith('(') && s.endsWith(')')));
+	return '/' + segs.join('/');
+}
+
+/**
+ * The set of route ids (Kit `route.id`, group-stripped) whose EFFECTIVE csr is TRUE — i.e. Kit
+ * hydrates the whole document there. A csr=false layout's islands rendered under one of these must
+ * degrade to inline on BOTH legs (Kit owns hydration); Region reads this map on the server, and
+ * `kit_hydrates_page()` is the identical client signal. Empty for a fully csr=false app (the norm);
+ * only the csr=true exceptions land here.
+ */
+export function csrTrueRouteIds(routesDir: string): string[] {
+	const ids = new Set<string>();
+	for (const page of pageLeaves(routesDir)) {
+		if (routeCsrIsFalse(page, routesDir)) continue; // Kit does NOT hydrate → keep islands
+		const rel = path.relative(routesDir, path.dirname(page));
+		const raw = '/' + (rel ? rel.split(path.sep).join('/') : '');
+		ids.add(normalize_route_id(raw));
+	}
+	return [...ids];
+}
+
+// Memoized per routesDir — a build-constant walked once, not per-transform. Dev route-topology
+// changes clear it via `clear_route_csr_cache` (the plugin's route watcher).
+const _has_csr_true = new Map<string, boolean>();
+
+/**
+ * Does the app have ANY csr=true page (Kit hydrates the whole document there)? Drives whether a
+ * csr=false LAYOUT must link its island wrapper on the CLIENT leg: on a csr=true child page Kit
+ * hydrates the layout, so its chrome islands must be REAL wrappers (Region degrades them inline),
+ * not the thin stub the pure-csr=false path uses. A pure-csr=false app keeps the stub (thin client
+ * graph); only mixed apps pay for the layout wrappers.
+ */
+export function hasAnyCsrTrueRoute(routesDir: string): boolean {
+	let v = _has_csr_true.get(routesDir);
+	if (v === undefined) {
+		v = csrTrueRouteIds(routesDir).length > 0;
+		_has_csr_true.set(routesDir, v);
+	}
+	return v;
+}
+
+/** Drop the memoized csr-topology answer (a route/`csr`-export add/remove invalidates it). */
+export function clear_route_csr_cache(): void {
+	_has_csr_true.clear();
+}
+
 // The build-time keepalive route ogygia injects to defeat Kit's skip (see index.ts). It must be
 // invisible to the skip detection itself — otherwise its own csr=true node would mask whether the
 // USER's real routes are all csr=false.

@@ -59,6 +59,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['region-mixed.ts', true, 'direct <Region> in a component: island on csr=false, plain (Kit-hydrated) on csr=true'],
 	['pure-csr.ts', false, 'pure csr=true app: direct interactive <Region> degrades to Kit, no runtime chunk'],
 	['mixed.ts', true, 'csr=true coexistence + opt-in router'],
+	['csr-chrome.ts', true, 'REGRESSION: csr=true page under a csr=false layout w/ wake:load chrome — islands degrade inline (no vanish, zero ogygia)'],
 	['portable-bindings.ts', true, 'static/dynamic/list bindings + shared-entry dedupe + .ts mixed raw/wake'],
 	['ts-registry.ts', true, '.ts registry wake binding placed via <svelte:component> (mountable) + raw via region()'],
 	['transportables.ts', true, 'static [ogygia.wire] codec: cross-island live object, no leak, alias-proof'],
