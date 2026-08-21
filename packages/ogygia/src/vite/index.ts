@@ -1,7 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { createRequire } from 'node:module';
 import { isMainThread } from 'node:worker_threads';
 import { loadEnv, type Plugin, type Rolldown } from 'vite';
 import type { PreprocessorGroup } from 'svelte/compiler';
@@ -48,8 +47,9 @@ import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,
 	keep_client_dir,
-	inject_keep_client_route
-} from '../compiler/standalone.js';
+	inject_keep_client_route,
+	resolve_kit_paths
+} from '../compiler/kit.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.js';
 import {
@@ -148,7 +148,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// The adapter binds local aliases to its Maps (same objects) + methods so the hooks read like before.
 	const program = new Program({ forms: continuity_forms, router: router_enabled });
 	const { registry } = program;
-	const register = program.register.bind(program);
 	// The feature-selected runtime chunk name lives on the driver as `compiler.runtime_chunk_filename()`
 	// (RUNTIME_HASH ⊕ program.runtime_feature_hash — see CompileCtx.runtime_chunk_filename); buildStart's
 	// emitFile and the runtime-url virtual both read it, so both build legs compute the same immutable name.
@@ -212,12 +211,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const __P = !!process.env.OGYGIA_PROFILE;
 	const __outHash = new Map<string, number>();
 
-	// The driver — the bundler-agnostic compile session (Program + transform cache + profiler). Its
-	// CompileCtx is bound in configResolved once the build is resolved (root/dev/id_salt known).
-	// `run_transform` is the adapter-facing alias for `compiler.transform` — the file-local front-end
-	// (parse ▸ analyze ▸ lower ▸ emit, today fused in transformHost), memoized + content-gated.
+	// The driver — the bundler-agnostic compile session (Program + transform cache + profiler). It holds
+	// the whole file-local + discovery front-end (transform / ts_regions / macros / prescan / emit /
+	// resolve_id / transform_module / …). Its CompileCtx is bound in configResolved once the build is
+	// resolved (root/dev/id_salt known); the hooks then call it and inject the Vite primitives they own.
 	const compiler = new Compiler(program, { prof: __prof, P: __P, outHash: __outHash });
-	const run_transform = compiler.transform.bind(compiler);
 
 	// ── keep-client route injection ──────────────────────────────────────────
 	// All-csr=false apps make Kit skip its ENTIRE client build, so ogygia's runtime is never emitted
@@ -246,22 +244,17 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	};
 
 	// Preprocessor bridge: `.svx` / `.md` islands are rewritten by a preprocessor (composed into
-	// `markdown()`) that runs AFTER mdsvex, then handed back to this plugin's registry. Wrapper-always
-	// (linkVirtual: true) because a preprocessor output is shared across the ssr/client legs and can't
-	// make the csr=false stub split; content files aren't routes, so they'd get wrappers anyway.
-	const island_bridge_transform = (source: string, filename: string) => {
-		const result = run_transform(source, filename, { ssr: false, linkVirtual: true });
-		if (!result || !result.islands?.length) return null;
-		register(result, filename);
-		return result.code;
-	};
+	// `markdown()`) that runs AFTER mdsvex, then handed back to this plugin's registry — the driver's
+	// `transform_content_island` does the transform + registration.
+	//
 	// `islandBridge` is a MODULE singleton, but Kit evaluates the Vite config more than once (a second,
 	// throwaway plugin instance for its SSR environment). If the factory body claimed the bridge, the
 	// LAST instance created would win — even one whose `configResolved` never runs, leaving `root`
 	// undefined and every content-island transform crashing on `path.join(root, …)`. So the bridge is
 	// claimed in `configResolved` instead: only an instance Vite actually configures (root set) owns it.
 	const claim_island_bridge = () => {
-		islandBridge.transform = island_bridge_transform;
+		islandBridge.transform = (source: string, filename: string) =>
+			compiler.transform_content_island(source, filename);
 	};
 
 	const invalidate_module_id = (server, id) => {
@@ -395,33 +388,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					id_salt = '';
 				}
 
-				// Locate Kit's internal wire-protocol module by resolving its package.json (that IS
-				// exported) and joining the src path — deep-importing the file bypasses the exports map.
-				try {
-					const require = createRequire(path.join(root, 'noop.js'));
-					const kitRoot = path.dirname(require.resolve('@sveltejs/kit/package.json'));
-					const candidate = path.join(kitRoot, 'src', 'runtime', 'shared.js');
-					if (fs.existsSync(candidate)) kit_wire_path = candidate;
-					const remoteIdx = path.join(
-						kitRoot,
-						'src',
-						'runtime',
-						'client',
-						'remote-functions',
-						'index.js'
-					);
-					if (fs.existsSync(remoteIdx)) kit_remote_index = remoteIdx;
-				} catch {
-					kit_wire_path = null; // fall back to the built-in devalue codec (no transport)
-				}
-				// the app's universal hooks (default src/hooks.{ts,js}) for `transport`
-				for (const f of ['hooks.ts', 'hooks.js']) {
-					const abs = path.join(root, 'src', f);
-					if (fs.existsSync(abs)) {
-						universal_hooks = abs;
-						break;
-					}
-				}
+				// Kit's internal wire-protocol + client remote-functions modules (deep-imported) and the
+				// app's universal hooks — resolved off the app root (see resolve_kit_paths).
+				({ kit_wire_path, kit_remote_index, universal_hooks } = resolve_kit_paths(root));
 
 				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
 				// known. Every run_transform runs after this (buildStart prescan / the transform hook), so

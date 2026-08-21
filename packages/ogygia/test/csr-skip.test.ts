@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { clientBuildWillSkip, read_csr, KEEP_CLIENT_DIR } from '../src/compiler/standalone.js';
+import { clientBuildWillSkip, read_csr, KEEP_CLIENT_DIR } from '../src/compiler/kit.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The Kit client-build skip predicate — the issue #4/#1 regression suite.

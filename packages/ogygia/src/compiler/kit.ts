@@ -1,6 +1,48 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import { ISLAND_DIR } from './region/transform.js';
+
+/** The Kit-internal + app paths ogygia deep-imports (resolved off the APP root, not this package). */
+export interface KitPaths {
+	/** Kit's internal wire-protocol module (deep import), or null → built-in devalue codec fallback. */
+	kit_wire_path: string | null;
+	/** Kit's client remote-functions entry (Plan A reuse), or null. */
+	kit_remote_index: string | null;
+	/** The app's universal hooks (`src/hooks.{ts,js}`) for `transport`, or null when absent. */
+	universal_hooks: string | null;
+}
+
+/**
+ * Locate Kit's internal wire-protocol + client remote-functions modules by resolving `@sveltejs/kit`'s
+ * package.json (that IS exported) and joining the src path — deep-importing the file bypasses the exports
+ * map. Also finds the app's universal hooks. Resolved from the APP root (`createRequire` off a root path),
+ * so a monorepo sub-package still finds Kit. Never throws (a missing Kit → the devalue-codec fallback).
+ */
+export function resolve_kit_paths(root: string): KitPaths {
+	let kit_wire_path: string | null = null;
+	let kit_remote_index: string | null = null;
+	let universal_hooks: string | null = null;
+	try {
+		const require = createRequire(path.join(root, 'noop.js'));
+		const kitRoot = path.dirname(require.resolve('@sveltejs/kit/package.json'));
+		const candidate = path.join(kitRoot, 'src', 'runtime', 'shared.js');
+		if (fs.existsSync(candidate)) kit_wire_path = candidate;
+		const remoteIdx = path.join(kitRoot, 'src', 'runtime', 'client', 'remote-functions', 'index.js');
+		if (fs.existsSync(remoteIdx)) kit_remote_index = remoteIdx;
+	} catch {
+		kit_wire_path = null; // fall back to the built-in devalue codec (no transport)
+	}
+	// the app's universal hooks (default src/hooks.{ts,js}) for `transport`
+	for (const f of ['hooks.ts', 'hooks.js']) {
+		const abs = path.join(root, 'src', f);
+		if (fs.existsSync(abs)) {
+			universal_hooks = abs;
+			break;
+		}
+	}
+	return { kit_wire_path, kit_remote_index, universal_hooks };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // csr detection.

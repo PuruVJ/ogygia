@@ -22,7 +22,7 @@ import {
 	islandChunkFileName,
 	CLIENT_BINDING_STUB
 } from './region/transform.js';
-import { routeCsrIsFalse, routeCsrIsTrue, clean_stale_ogygia_dirs } from './standalone.js';
+import { routeCsrIsFalse, routeCsrIsTrue, clean_stale_ogygia_dirs } from './kit.js';
 import { run_module_macros } from './macros/pipeline.js';
 import { generateRuntimeEntrySource, resolveFeatures } from './link/runtime-entry.js';
 import { resolveFoucImportSpec, FOUC_CSS_PREFIX, FOUC_SCOPED_PREFIX } from './fouc-css.js';
@@ -151,6 +151,23 @@ export class Compiler {
 			},
 			this.profiler
 		);
+	}
+
+	/**
+	 * Transform a content (`.svx`/`.md`) island source the markdown preprocessor hands back — always
+	 * wrapper-linked (`linkVirtual: true`), because a preprocessor output is shared across the ssr/client
+	 * legs and can't take the csr=false stub split; content files aren't routes, so they'd get wrappers
+	 * anyway. Registers the descriptors and returns the rewritten code, or `null` when it has no islands.
+	 * This is the transform the adapter installs on the content-island bridge.
+	 */
+	transform_content_island(source: string, filename: string): string | null {
+		const result = this.transform(source, filename, {
+			ssr: false,
+			linkVirtual: true
+		}) as TransformResult | null;
+		if (!result || !result.islands?.length) return null;
+		this.program.register(result, filename);
+		return result.code;
 	}
 
 	/**
