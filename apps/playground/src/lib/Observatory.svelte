@@ -185,6 +185,7 @@
 	let previewEl = $state(/** @type {HTMLElement | null} */ (null));
 	let mounted = null;
 	let svelteClient = $state(/** @type {any} */ (null));
+	let previewMode = $state('live'); // 'live' (interactive mount) | 'xray' (boundary lens)
 	$effect(() => {
 		import('svelte/internal/client')
 			.then((m) => (svelteClient = m))
@@ -212,6 +213,7 @@
 		const client = analysis.client;
 		const el = previewEl;
 		const sc = svelteClient;
+		const mode = previewMode;
 		if (!el) return;
 		if (mounted) {
 			try {
@@ -225,6 +227,11 @@
 		const fallback = () => {
 			if (analysis.rendered?.ok && analysis.rendered.html) el.innerHTML = analysis.rendered.html;
 		};
+		// X-RAY (boundary lens): show the marked SSR HTML, tinted by the .xray class — no live mount.
+		if (mode === 'xray') {
+			fallback();
+			return;
+		}
 		if (!sc || !client || client.error || !client.modules?.[client.entry]) {
 			fallback();
 			return;
@@ -306,13 +313,27 @@
 		<section class="out">
 			{#if analysis.rendered}
 				<div class="cap">
-					rendered <span class="muted">· SSR HTML, executed in your browser</span>
+					rendered
+					<span class="muted">· {previewMode === 'live' ? 'live, interactive — mounted in your browser' : 'x-ray — every marked region is an island'}</span>
 					{#if analysis.rendered.stubs && analysis.rendered.stubs.length}
 						<span class="stubnote" title="components not provided in this single-file REPL render as placeholders">{analysis.rendered.stubs.length} stubbed</span>
 					{/if}
+					<span class="legs" data-obs-preview-mode>
+						<button class:on={previewMode === 'live'} onclick={() => (previewMode = 'live')}>live</button>
+						<button class:on={previewMode === 'xray'} onclick={() => (previewMode = 'xray')}>x-ray</button>
+					</span>
 				</div>
-				<!-- Interactive: the mount effect fills this (or falls back to SSR HTML). -->
-				<div class="preview" bind:this={previewEl} data-obs-preview></div>
+				{#if previewMode === 'xray'}
+					<div class="lens-legend" data-obs-legend>
+						<span class="lk island">island · ships JS</span>
+						<span class="lk lake">lake · frozen</span>
+						<span class="lk hole">server hole</span>
+						<span class="lk raw">held raw</span>
+						<span class="lk shell">the rest · free server HTML</span>
+					</div>
+				{/if}
+				<!-- Interactive mount (live) OR marked SSR HTML tinted by the lens (x-ray). -->
+				<div class="preview" class:xray={previewMode === 'xray'} bind:this={previewEl} data-obs-preview></div>
 				{#if analysis.rendered.ok}
 					<details class="pipe">
 						<summary>▸ rendered HTML source (SSR)</summary>
@@ -687,6 +708,93 @@
 		background: rgba(20, 184, 166, 0.15);
 		color: #0d9488;
 		font: 11px ui-monospace, Menlo, monospace;
+	}
+	/* ── BOUNDARY LENS (x-ray): dim the dead shell, light up every marked island ── */
+	.preview.xray {
+		background: #f1f5f9;
+		color: #94a3b8;
+		position: relative;
+	}
+	.preview.xray :global(ogygia-obs-island) {
+		display: block;
+		position: relative;
+		margin: 22px 0 10px;
+		padding: 8px 10px;
+		border-radius: 7px;
+		color: #0f172a;
+		outline: 2px solid var(--lens, #14b8a6);
+		background: color-mix(in srgb, var(--lens, #14b8a6) 8%, transparent);
+	}
+	.preview.xray :global(ogygia-obs-island::before) {
+		content: attr(data-name) ' · ' attr(data-kind);
+		position: absolute;
+		top: -18px;
+		left: -2px;
+		padding: 1px 7px;
+		border-radius: 5px 5px 0 0;
+		background: var(--lens, #14b8a6);
+		color: #04121a;
+		font: 700 10px/1.5 ui-monospace, Menlo, monospace;
+		white-space: nowrap;
+	}
+	.preview.xray :global(ogygia-obs-island[data-ships='true']::after) {
+		content: 'wake ' attr(data-wake) ' · ' attr(data-bytes) ' B JS';
+		position: absolute;
+		top: -18px;
+		right: -2px;
+		padding: 1px 7px;
+		border-radius: 5px 5px 0 0;
+		background: color-mix(in srgb, var(--lens, #14b8a6) 25%, #0b1220);
+		color: var(--lens, #14b8a6);
+		font: 10px/1.5 ui-monospace, Menlo, monospace;
+	}
+	.preview.xray :global(ogygia-obs-island[data-kind='island']) {
+		--lens: #14b8a6;
+	}
+	.preview.xray :global(ogygia-obs-island[data-kind='preset']) {
+		--lens: #14b8a6;
+	}
+	.preview.xray :global(ogygia-obs-island[data-kind='lake']) {
+		--lens: #f59e0b;
+	}
+	.preview.xray :global(ogygia-obs-island[data-kind='held (raw)']) {
+		--lens: #fb923c;
+	}
+	.preview.xray :global(ogygia-obs-island[data-kind='server hole']),
+	.preview.xray :global(ogygia-obs-island[data-kind='live']) {
+		--lens: #8b5cf6;
+	}
+	.lens-legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		padding: 8px 14px 2px;
+	}
+	.lens-legend .lk {
+		padding: 1px 8px;
+		border-radius: 999px;
+		font-size: 10px;
+		font-weight: 600;
+	}
+	.lens-legend .lk.island {
+		background: rgba(20, 184, 166, 0.16);
+		color: #5eead4;
+	}
+	.lens-legend .lk.lake {
+		background: rgba(245, 158, 11, 0.16);
+		color: #fbbf24;
+	}
+	.lens-legend .lk.hole {
+		background: rgba(139, 92, 246, 0.18);
+		color: #c4b5fd;
+	}
+	.lens-legend .lk.raw {
+		background: rgba(251, 146, 60, 0.16);
+		color: #fdba74;
+	}
+	.lens-legend .lk.shell {
+		background: rgba(148, 163, 184, 0.14);
+		color: #94a3b8;
 	}
 	.stubnote {
 		padding: 1px 8px;

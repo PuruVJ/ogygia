@@ -257,12 +257,30 @@ function resolve_file(spec: string, files: Record<string, string>): string | nul
 	return null;
 }
 
+/** Boundary-lens metadata per island file — kind/wake/bytes, so the render can mark each region. */
+type IslandInfo = Map<string, { kind: string; wake: string; name: string; bytes: number; ships: boolean }>;
+
 /** Render the ENTRY component to SSR HTML, resolving `./X.svelte` imports across the file MAP (they
  *  render as their real components). Imports not in the map (or `ogygia/internal`) render as labelled
- *  stubs. The compile→link→render loop, running in the browser. */
-function execute(files: Record<string, string>, entry: string): Analysis['rendered'] {
+ *  stubs. Marked regions are wrapped in an invisible `<ogygia-obs-island>` boundary so the BOUNDARY
+ *  LENS can x-ray the output (dead shell vs live island). The compile→link→render loop, in-browser. */
+function execute(files: Record<string, string>, entry: string, islandInfo?: IslandInfo): Analysis['rendered'] {
 	const stubs = new Set<string>();
 	const cache = new Map<string, Record<string, unknown>>();
+	const esc = (s: string) => s.replace(/"/g, '&quot;');
+	// Wrap a compiled server component so its render is bracketed by a boundary marker (display:contents,
+	// invisible to layout) carrying the region's strategy — the raw material the lens tints + labels.
+	const with_boundary = (exports: Record<string, unknown>, info: NonNullable<ReturnType<IslandInfo['get']>>): Record<string, unknown> => {
+		const Real = exports.default as (r: { push: (s: string) => void }, p: unknown) => void;
+		const Marked = ($$renderer: { push: (s: string) => void }, props: unknown) => {
+			$$renderer.push(
+				`<ogygia-obs-island data-obs-island data-kind="${esc(info.kind)}" data-name="${esc(info.name)}" data-wake="${esc(info.wake)}" data-bytes="${info.bytes}" data-ships="${info.ships}">`
+			);
+			Real($$renderer, props);
+			$$renderer.push('</ogygia-obs-island>');
+		};
+		return { ...exports, default: Marked };
+	};
 	try {
 		const make_require = (): ((spec: string) => Record<string, unknown>) => {
 			const require = (spec: string): Record<string, unknown> => {
@@ -270,15 +288,16 @@ function execute(files: Record<string, string>, entry: string): Analysis['render
 				if (spec === 'svelte/server') return { render } as Record<string, unknown>;
 				const file = resolve_file(spec, files);
 				if (file && file.endsWith('.svelte')) {
+					const info = islandInfo?.get(file);
 					const hit = cache.get(file);
-					if (hit) return hit;
+					if (hit) return info ? with_boundary(hit, info) : hit;
 					const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as {
 						js: { code: string };
 					};
 					const exports: Record<string, unknown> = {};
 					cache.set(file, exports); // set before eval (tolerate cycles)
 					Object.assign(exports, eval_module(js.code, require));
-					return exports;
+					return info ? with_boundary(exports, info) : exports;
 				}
 				// not provided (a component the user hasn't added, or ogygia/internal) → labelled stub
 				const name = (spec.split('/').pop() || spec).replace(/\.svelte$/, '');
@@ -460,6 +479,26 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		realError = e instanceof Error ? `${e.message}` : String(e);
 	}
 
+	const entryFile = 'App.svelte' in files ? 'App.svelte' : active;
+	const ledger = byte_ledger(files);
+	// Boundary-lens metadata: for every marked region, its strategy + bytes, keyed by target file.
+	const islandInfo: IslandInfo = new Map();
+	for (const f of Object.keys(files)) {
+		if (!f.endsWith('.svelte')) continue;
+		for (const isl of analyze_marks(files[f]).islands) {
+			const target = resolve_file(isl.component, files);
+			if (!target) continue;
+			const lf = ledger.files.find((x) => x.name === target);
+			islandInfo.set(target, {
+				kind: isl.strategy.kind,
+				wake: (isl.attrs.wake as string) || (isl.strategy.kind === 'island' ? 'load' : ''),
+				name: target,
+				bytes: lf?.bytes ?? 0,
+				ships: lf?.ships ?? false
+			});
+		}
+	}
+
 	return {
 		ok: marks.ok,
 		error: marks.error,
@@ -473,9 +512,9 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		modules,
 		realError,
 		oxc,
-		rendered: execute(files, 'App.svelte' in files ? 'App.svelte' : active),
-		client: client_bundle(files, 'App.svelte' in files ? 'App.svelte' : active),
-		ledger: byte_ledger(files),
+		rendered: execute(files, entryFile, islandInfo),
+		client: client_bundle(files, entryFile),
+		ledger,
 		ms: now() - t0
 	};
 }

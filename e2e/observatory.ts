@@ -47,6 +47,30 @@ try {
 	const btnAfter = await page.evaluate(() => document.querySelector('[data-obs-preview] button')?.textContent?.trim() || '');
 	check('the rendered app is INTERACTIVE (mounted, client-hydrated)', btnBefore === 'count is 3' && btnAfter === 'count is 5', `${btnBefore} → ${btnAfter}`);
 
+	// ── BOUNDARY LENS (x-ray): every marked region is a tinted island; the dead shell stays grey ──
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'x-ray');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(250);
+	const lens = await page.evaluate(() => {
+		const pv = document.querySelector('[data-obs-preview]');
+		const islands = [...document.querySelectorAll('[data-obs-preview] [data-obs-island]')].map((el) => ({
+			name: el.getAttribute('data-name'),
+			kind: el.getAttribute('data-kind'),
+			ships: el.getAttribute('data-ships')
+		}));
+		return { xray: pv?.classList.contains('xray'), legend: !!document.querySelector('[data-obs-legend]'), islands };
+	});
+	check('boundary lens: x-ray mode tints the preview + shows a legend', !!lens.xray && lens.legend, JSON.stringify({ xray: lens.xray, legend: lens.legend }));
+	check('boundary lens: the island (Counter) and the lake (Prose) are marked regions, the shell is not', lens.islands.some((i) => i.name === 'Counter.svelte' && i.kind === 'island' && i.ships === 'true') && lens.islands.some((i) => i.name === 'Prose.svelte' && i.kind === 'lake' && i.ships === 'false') && !lens.islands.some((i) => i.name === 'Header.svelte'), JSON.stringify(lens.islands));
+	// back to the live preview for the remaining checks
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'live');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(150);
+
 	// ── BYTE LEDGER: the ogygia thesis, weighed live — ogygia ships only the waking island, plain Kit
 	//    (csr=true) ships every component; the demo saves ~75% of the app JS ──
 	const ledger = await page.evaluate(() => {
