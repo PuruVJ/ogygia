@@ -10,7 +10,7 @@
  * shaky choice: `rolldown/parseAst` is the rollup-compat parser (throws on TS), and Vite's own
  * `parseSync` is this same oxc parser re-exported. One import, one decision.
  */
-import { parseSync } from 'rolldown/utils';
+import { createRequire } from 'node:module';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Node = Record<string, any>;
@@ -32,11 +32,27 @@ export type RawParse = (
  * production build parses exactly as before. (bake() keeps rolldown too, so this is consistency —
  * same parser both realms — not a new dependency.)
  */
-let raw_parse: RawParse = parseSync as RawParse;
+// Node's default parser is loaded LAZILY (first use), NOT statically imported, so a BROWSER build of
+// this module (the Observatory / Rung 1) never eagerly pulls the native `rolldown/utils` binding: the
+// browser installs the WASM parser via set_parser() before the first parse, so this default is never
+// reached there. Node hits it on the first parse and memoizes parseSync. (A static
+// `import { parseSync } from 'rolldown/utils'` made Vite's dev dep-optimizer load the native binding
+// inside the Observatory's browser worker → an opaque module-load crash; the production build tree-shook
+// past it, so only `dev` was affected. Lazy-loading fixes dev without touching the Node parse path.)
+let node_parse_sync: RawParse | undefined;
+function node_default_parse(id: string, code: string) {
+	if (!node_parse_sync) {
+		const require = createRequire(import.meta.url);
+		node_parse_sync = (require('rolldown/utils') as { parseSync: RawParse }).parseSync;
+	}
+	return node_parse_sync(id, code);
+}
+
+let raw_parse: RawParse = node_default_parse;
 
 /** Install a browser (or test) parser with the same call shape. No-arg reset restores the default. */
 export function set_parser(fn?: RawParse): void {
-	raw_parse = fn ?? (parseSync as RawParse);
+	raw_parse = fn ?? node_default_parse;
 }
 
 /**

@@ -6,7 +6,10 @@ const _require = createRequire(import.meta.url);
 // Absolute paths — the importer is ogygia inside node_modules, so a RELATIVE `this.resolve` would
 // look there, not in the app. Resolve the shims off THIS file / the app's deps instead.
 const CRYPTO_SHIM = fileURLToPath(new URL('./observatory-crypto-shim.ts', import.meta.url));
-const PATH_BROWSERIFY = _require.resolve('path-browserify');
+// A LOCAL ESM wrapper (not path-browserify's raw CJS file): the raw file has no `default` export in
+// dev (Vite serves it un-interop'd → "no export named 'default'"); the wrapper's bare import IS
+// optimized, so default + named members resolve in both dev and build. See the shim file's header.
+const PATH_SHIM = fileURLToPath(new URL('./observatory-path-shim.ts', import.meta.url));
 
 /**
  * Browser shims for the Node builtins the ogygia transform reaches for, so the Observatory worker can
@@ -38,7 +41,7 @@ export function observatoryNodeShims(): Plugin {
 				return CRYPTO_SHIM;
 			}
 			if (source === 'node:path' || source === 'path') {
-				return PATH_BROWSERIFY;
+				return PATH_SHIM;
 			}
 			if (source === 'node:fs' || source === 'fs') {
 				return FS_STUB;
