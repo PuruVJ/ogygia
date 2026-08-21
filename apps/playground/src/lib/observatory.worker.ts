@@ -25,8 +25,10 @@ export interface Analysis {
 	ok: boolean;
 	error?: string;
 	islands: Island[];
-	/** The transformed host — from the REAL transform when it ran, else the svelte-based rewrite. */
+	/** The transformed host (SSR leg) — from the REAL transform when it ran, else the svelte rewrite. */
 	output: string;
+	/** The transformed host on the CLIENT leg (ssr=false) — csr=false ships stubs, not the wrapper. */
+	outputClient?: string;
 	/** Whether the output came from the real ogygia transformHost (vs the mark-only fallback). */
 	real: boolean;
 	/** Real island count from transformHost (md5 iids), or null. */
@@ -167,6 +169,7 @@ async function analyze(source: string): Promise<Analysis> {
 	// ── run the REAL ogygia transform, in-browser ──
 	let real = false;
 	let realCode = '';
+	let realClientCode: string | undefined;
 	let realIslands: number | null = null;
 	let modules: Analysis['modules'];
 	let realError: string | undefined;
@@ -226,6 +229,15 @@ async function analyze(source: string): Promise<Analysis> {
 					(isl as Island & { real?: boolean }).real = true;
 				}
 			}
+			// The CLIENT leg (ssr=false): on a csr=false page the client gets stubs, not the wrapper.
+			try {
+				const clientResult = transformHost(source, '/repl/src/routes/App.svelte', build_ctx(false)) as {
+					code?: string;
+				} | null;
+				if (clientResult && typeof clientResult.code === 'string') realClientCode = clientResult.code;
+			} catch {
+				/* client leg is best-effort */
+			}
 		}
 	} catch (e) {
 		realError = e instanceof Error ? `${e.message}` : String(e);
@@ -236,6 +248,7 @@ async function analyze(source: string): Promise<Analysis> {
 		error: marks.error,
 		islands: marks.islands,
 		output: real ? realCode : marks.output,
+		outputClient: realClientCode,
 		real,
 		realIslands,
 		modules,

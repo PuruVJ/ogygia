@@ -34,6 +34,11 @@
 	let source = $state(DEFAULT_SOURCE);
 	let analysis = $state({ ok: true, islands: [], output: DEFAULT_SOURCE, real: false, realIslands: null });
 	let busy = $state(false);
+	let leg = $state('ssr'); // 'ssr' | 'client'
+
+	const shownOutput = $derived(
+		leg === 'client' && analysis.outputClient ? analysis.outputClient : analysis.output
+	);
 
 	// `worker` is $state so the debounce effect re-runs (and posts the first analysis) once it's set.
 	let worker = $state(/** @type {Worker | null} */ (null));
@@ -120,8 +125,14 @@
 				{:else}
 					<span class="fallback" title={analysis.realError || ''}>mark-preview (real transform: {analysis.realError ? 'error' : 'n/a'})</span>
 				{/if}
+				{#if analysis.outputClient && analysis.outputClient !== analysis.output}
+					<span class="legs" data-obs-legs>
+						<button class:on={leg === 'ssr'} onclick={() => (leg = 'ssr')}>SSR leg</button>
+						<button class:on={leg === 'client'} onclick={() => (leg = 'client')}>client leg</button>
+					</span>
+				{/if}
 			</div>
-			<pre data-obs-output>{analysis.output}</pre>
+			<pre data-obs-output>{shownOutput}</pre>
 
 			{#if analysis.modules && analysis.modules.length}
 				<div class="cap">generated modules <span class="muted">· what each island compiles to</span></div>
@@ -201,6 +212,9 @@
 		flex-direction: column;
 	}
 	.cap {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 		padding: 6px 14px;
 		color: #94a3b8;
 		font-weight: 600;
@@ -281,6 +295,26 @@
 		color: #64748b;
 		font-weight: 400;
 		font-size: 10px;
+	}
+	.legs {
+		margin-left: auto;
+		display: inline-flex;
+		gap: 2px;
+	}
+	.legs button {
+		padding: 2px 8px;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		background: #0d1526;
+		color: #94a3b8;
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+		border-radius: 5px;
+	}
+	.legs button.on {
+		background: #14b8a6;
+		color: #022;
+		border-color: #0d9488;
 	}
 	.mods {
 		padding: 4px 14px 14px;
