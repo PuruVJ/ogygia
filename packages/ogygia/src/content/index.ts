@@ -60,7 +60,10 @@ export type ContentRef<Data = Record<string, unknown>, Meta = Record<string, nev
 };
 
 /** @deprecated Old name for {@link ContentRef}. A ref never carries a body; use `Entry` (from `get()`) for that. */
-export type ContentEntry<Data = Record<string, unknown>, Meta = Record<string, never>> = ContentRef<Data, Meta>;
+export type ContentEntry<Data = Record<string, unknown>, Meta = Record<string, never>> = ContentRef<
+	Data,
+	Meta
+>;
 
 /**
  * A resolved entry from `get()` — `data`, `meta`, `body`, and the graph fields fully populated. `rel`
@@ -126,7 +129,13 @@ export type { Convention, NumberedOptions, MetaDecoration } from './convention.j
 // `blocks()` is the content source; `blocks.resolve(tree, registry)` is the no-collection recipe
 // helper (`type → region`, server-side). Both live on the one `blocks` export.
 export { blocks } from './blocks.js';
-export type { BlockNode, BlockRegistry, BlockSource, ResolvedBlockNode, BlockSchedule } from './blocks.js';
+export type {
+	BlockNode,
+	BlockRegistry,
+	BlockSource,
+	ResolvedBlockNode,
+	BlockSchedule
+} from './blocks.js';
 
 // ── the collection ──
 export { content } from './factory.js';

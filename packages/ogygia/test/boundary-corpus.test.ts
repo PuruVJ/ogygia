@@ -23,9 +23,12 @@ import { set_ctx_recorder, record_ctx } from '../src/context-registry.js';
 import { REF_WIRE_KEY, ref_reviver } from '../src/ref.js';
 
 const enc = (v: unknown) => stringify(v, { [STORE_WIRE_KEY]: reduce_store });
-const dec_client = (s: string) => parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, true) });
-const dec_server = (s: string) => parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, false) });
-const refusals = (v: unknown, key = '') => classify_boundary(v, key).filter((f) => f.kind === 'refuse');
+const dec_client = (s: string) =>
+	parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, true) });
+const dec_server = (s: string) =>
+	parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, false) });
+const refusals = (v: unknown, key = '') =>
+	classify_boundary(v, key).filter((f) => f.kind === 'refuse');
 const warns = (v: unknown, key = '') => classify_boundary(v, key).filter((f) => f.kind === 'warn');
 
 // ─── Group 1 — plain data (crosses free) ────────────────────────────────────────
@@ -91,7 +94,10 @@ describe('Group 2: same-island (the explicit granularity marker: { islands: fals
 	});
 
 	it('C7: default is BRIDGE — an unmarked key always records (missing-key is the fatal direction)', () => {
-		const bag = record([['pageType', writable('standard')], ['closeModal', () => {}, { islands: false }]]);
+		const bag = record([
+			['pageType', writable('standard')],
+			['closeModal', () => {}, { islands: false }]
+		]);
 		expect(bag.has('pageType')).toBe(true);
 		expect(bag.has('closeModal')).toBe(false);
 	});
@@ -172,13 +178,16 @@ describe('Group 4: mixed objects', () => {
 		const found = refusals(ctx);
 		expect(found.map((f) => f.path).sort()).toEqual(['changeSelected', 'fetchProducts']);
 	});
-	it.todo('C12b: network methods migrate to remote functions; the DOM-mutating one stays same-island');
+	it.todo(
+		'C12b: network methods migrate to remote functions; the DOM-mutating one stays same-island'
+	);
 
 	it('C13: getter-grafted methods live in the MODULE — decode + re-graft, nothing lost', () => {
 		// the source idiom: getX() returns {...readonly(store), add(), remove()}
 		const inner = writable<string[]>([]);
 		const payload = enc({ sections: inner });
-		const revived = (dec_client(payload) as { sections: ReturnType<typeof writable<string[]>> }).sections;
+		const revived = (dec_client(payload) as { sections: ReturnType<typeof writable<string[]>> })
+			.sections;
 		// consumer module re-grafts, exactly like the original getter:
 		const grafted = {
 			...readonly(revived),
@@ -233,7 +242,9 @@ describe('Group 5: refusals', () => {
 	});
 
 	it('C18: Map values cross (devalue-native); an opaque runtime handle refuses via the class check', () => {
-		const ok = dec_client(enc({ colors: new Map([['red', '#f00']]) })) as { colors: Map<string, string> };
+		const ok = dec_client(enc({ colors: new Map([['red', '#f00']]) })) as {
+			colors: Map<string, string>;
+		};
 		expect(ok.colors.get('red')).toBe('#f00');
 
 		class TimeoutHandle {} // models a live timer/socket handle in a store value
@@ -269,7 +280,9 @@ describe('Group 6: exposure hazards', () => {
 			['track', () => {}] // D-callback: dropped (og.$ is the future fix)
 		]);
 		const text = serialize_provided_context(map);
-		const out = parse(text!, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown }) as Record<string, unknown>;
+		const out = parse(text!, {
+			[REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown
+		}) as Record<string, unknown>;
 		expect(out.dir).toBe('rtl');
 		expect(is_store(out.pageType)).toBe(true);
 		expect('track' in out).toBe(false);

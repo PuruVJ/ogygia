@@ -146,37 +146,37 @@ function class_for(tag: string | undefined): TransportableClass {
 /** The hub kind: `[og.wire]` class instances. Identity/reunify/Keep live in the hub. */
 export function register_wire_kind(): void {
 	register_kind({
-	k: 'wire',
-	match(value) {
-		const cls = (value as { constructor?: unknown }).constructor;
-		return typeof cls === 'function' && !!(cls as unknown as TransportableClass)[wire];
-	},
-	encode(value) {
-		const cls = value.constructor as unknown as TransportableClass;
-		const tag = wire_registry().tags.get(cls as unknown as object);
-		if (tag === undefined) {
-			throw new Error(
-				`[ogygia] class "${cls.name ?? '?'}" has a [import.meta.og.wire] codec but was never ` +
-					`registered. Transportable classes must be declared in a module the ogygia vite plugin ` +
-					`transforms (an \`export class\` in your app source, not node_modules or a dynamic eval).`
-			);
+		k: 'wire',
+		match(value) {
+			const cls = (value as { constructor?: unknown }).constructor;
+			return typeof cls === 'function' && !!(cls as unknown as TransportableClass)[wire];
+		},
+		encode(value) {
+			const cls = value.constructor as unknown as TransportableClass;
+			const tag = wire_registry().tags.get(cls as unknown as object);
+			if (tag === undefined) {
+				throw new Error(
+					`[ogygia] class "${cls.name ?? '?'}" has a [import.meta.og.wire] codec but was never ` +
+						`registered. Transportable classes must be declared in a module the ogygia vite plugin ` +
+						`transforms (an \`export class\` in your app source, not node_modules or a dynamic eval).`
+				);
+			}
+			return { t: tag, d: codec_of(cls).encode(value) };
+		},
+		decode(ref) {
+			return codec_of(class_for(ref.t)).decode(ref.d);
+		},
+		keep_name(ref) {
+			const codec = codec_of(class_for(ref.t));
+			return typeof codec.id === 'string' ? codec.id : undefined;
+		},
+		merge(kept, ref) {
+			const codec = codec_of(class_for(ref.t));
+			if (typeof codec.merge === 'function') {
+				codec.merge(kept as never, codec.decode(ref.d) as never);
+			}
 		}
-		return { t: tag, d: codec_of(cls).encode(value) };
-	},
-	decode(ref) {
-		return codec_of(class_for(ref.t)).decode(ref.d);
-	},
-	keep_name(ref) {
-		const codec = codec_of(class_for(ref.t));
-		return typeof codec.id === 'string' ? codec.id : undefined;
-	},
-	merge(kept, ref) {
-		const codec = codec_of(class_for(ref.t));
-		if (typeof codec.merge === 'function') {
-			codec.merge(kept as never, codec.decode(ref.d) as never);
-		}
-	}
-});
+	});
 }
 
 const WIRE_ONLY = new Set(['wire']);

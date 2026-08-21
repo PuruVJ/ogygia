@@ -27,8 +27,16 @@ const SPEC_RE = /^([^/\s]+)\/([^@:\s]+)(?:@([^:\s]+))?(?::(.+))?$/;
 /** Parse `owner/repo[@ref][:path]` → its parts. Default ref `HEAD`, default sub `''`. Throws on garbage. */
 export function parse_git_spec(spec: string): GitSpec {
 	const m = SPEC_RE.exec(spec.trim());
-	if (!m) throw new Error(`[ogygia] import.meta.og.loader.git(): bad spec '${spec}' — expected 'owner/repo[@ref][:path]'`);
-	return { owner: m[1]!, repo: m[2]!, ref: m[3] ?? 'HEAD', sub: (m[4] ?? '').replace(/^\/+|\/+$/g, '') };
+	if (!m)
+		throw new Error(
+			`[ogygia] import.meta.og.loader.git(): bad spec '${spec}' — expected 'owner/repo[@ref][:path]'`
+		);
+	return {
+		owner: m[1]!,
+		repo: m[2]!,
+		ref: m[3] ?? 'HEAD',
+		sub: (m[4] ?? '').replace(/^\/+|\/+$/g, '')
+	};
 }
 
 /** Stable cache slug for a spec (ref-agnostic — the checkout is updated in place, lock pins the sha). */
@@ -73,7 +81,10 @@ export function write_sha(slug: string, sha: string): void {
 
 // ── materialization (git ops) ──
 
-const git = (args: string[], cwd?: string) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+const git = (args: string[], cwd?: string) =>
+	execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+		.toString()
+		.trim();
 
 /**
  * Ensure a shallow, sparse checkout of `spec` exists in the cache, and return its dir + resolved sha.
@@ -97,7 +108,9 @@ export function materialize(
 	if (locked && current === locked) return { dir, sha: locked };
 	if (opts.frozen) {
 		if (current) return { dir, sha: current };
-		throw new Error(`[ogygia] git(${spec.owner}/${spec.repo}): frozen build, but no materialized checkout. Restore the node_modules/.ogygia cache, run a non-frozen build first, or pin a sha in the spec.`);
+		throw new Error(
+			`[ogygia] git(${spec.owner}/${spec.repo}): frozen build, but no materialized checkout. Restore the node_modules/.ogygia cache, run a non-frozen build first, or pin a sha in the spec.`
+		);
 	}
 
 	const url = `${opts.base_url ?? 'https://github.com'}/${spec.owner}/${spec.repo}.git`;

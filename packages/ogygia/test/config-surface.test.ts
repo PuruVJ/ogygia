@@ -28,10 +28,14 @@ describe('legacy option renames — errors with the new spelling, never silent a
 		expect(() => ogygia({ visible: { margin: '200px' } } as never)).toThrow(/regions: \{ visible/);
 	});
 	it('rejects top-level presets', () => {
-		expect(() => ogygia({ presets: { a: { wake: 'load' } } } as never)).toThrow(/regions: \{ presets/);
+		expect(() => ogygia({ presets: { a: { wake: 'load' } } } as never)).toThrow(
+			/regions: \{ presets/
+		);
 	});
 	it('rejects continuity', () => {
-		expect(() => ogygia({ continuity: { forms: false } } as never)).toThrow(/router: \{ forms: false \}/);
+		expect(() => ogygia({ continuity: { forms: false } } as never)).toThrow(
+			/router: \{ forms: false \}/
+		);
 	});
 });
 

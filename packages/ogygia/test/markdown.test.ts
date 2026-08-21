@@ -71,7 +71,9 @@ const render = async (src: string): Promise<string> => {
 };
 
 /** Pull the `metadata` object literal the module script exports, parsed back to a value. */
-const metadataOf = (code: string): { headings: Array<{ depth: number; id: string; text: string }> } => {
+const metadataOf = (
+	code: string
+): { headings: Array<{ depth: number; id: string; text: string }> } => {
 	const m = /export const metadata = (\{.*?\});/s.exec(code);
 	if (!m) throw new Error('no metadata export found');
 	return JSON.parse(m[1]!);
@@ -80,7 +82,12 @@ const metadataOf = (code: string): { headings: Array<{ depth: number; id: string
 describe('code dialect — shiki transformers passthrough', () => {
 	it('applies a transformer to every fence (the ecosystem contract)', async () => {
 		// A transformer that stamps the <pre> — proof the shiki decoration contract is wired.
-		const stamp = { name: 'stamp', pre(node: { properties: Record<string, unknown> }) { node.properties['data-tx'] = 'on'; } };
+		const stamp = {
+			name: 'stamp',
+			pre(node: { properties: Record<string, unknown> }) {
+				node.properties['data-tx'] = 'on';
+			}
+		};
 		const pp = ogygiaPreprocess({ code: { transformers: [stamp] } });
 		const out = await pp.markup?.({ content: '```ts\nconst a = 1;\n```', filename: '/x/page.md' });
 		expect((out as { code: string }).code).toContain('data-tx="on"');
@@ -111,7 +118,16 @@ describe('code dialect — shiki transformers passthrough', () => {
 	});
 
 	it('a plain fence (no variant claims it) stays the single-variant path', async () => {
-		const casing = { pref: { name: 'case', values: ['a', 'b'], default: 'a' }, generate: (f: { lang: string }) => (f.lang === 'bash' ? [{ label: 'a', value: 'a', fence: f }, { label: 'b', value: 'b', fence: f }] : null) };
+		const casing = {
+			pref: { name: 'case', values: ['a', 'b'], default: 'a' },
+			generate: (f: { lang: string }) =>
+				f.lang === 'bash'
+					? [
+							{ label: 'a', value: 'a', fence: f },
+							{ label: 'b', value: 'b', fence: f }
+						]
+					: null
+		};
 		const pp = ogygiaPreprocess({ code: { variants: [casing as never] } });
 		const out = await pp.markup?.({ content: '```ts\nconst a = 1;\n```', filename: '/x/page.md' });
 		expect((out as { code: string }).code).not.toContain('og-code');
@@ -122,12 +138,18 @@ describe('code dialect — shiki transformers passthrough', () => {
 		// A transformer that echoes the raw meta it received — proves the __raw passthrough.
 		const echo = {
 			name: 'echo-meta',
-			pre(this: { options: { meta?: { __raw?: string } } }, node: { properties: Record<string, unknown> }) {
+			pre(
+				this: { options: { meta?: { __raw?: string } } },
+				node: { properties: Record<string, unknown> }
+			) {
 				node.properties['data-raw'] = this.options.meta?.__raw ?? '';
 			}
 		};
 		const pp = ogygiaPreprocess({ code: { transformers: [echo] } });
-		const out = await pp.markup?.({ content: '```js {1,3}\nconst a = 1;\n```', filename: '/x/page.md' });
+		const out = await pp.markup?.({
+			content: '```js {1,3}\nconst a = 1;\n```',
+			filename: '/x/page.md'
+		});
 		expect((out as { code: string }).code).toContain('data-raw="{1,3}"');
 	});
 });
@@ -149,8 +171,14 @@ describe('prose dialect — remark/rehype passthrough', () => {
 
 	it('runs a user rehype plugin (adds an attribute to an element)', async () => {
 		const stamp = () => (tree: unknown) => {
-			const walk = (n: { type?: string; tagName?: string; properties?: Record<string, unknown>; children?: unknown[] }) => {
-				if (n.type === 'element' && n.tagName === 'h1') (n.properties ??= {})['data-stamped'] = 'yes';
+			const walk = (n: {
+				type?: string;
+				tagName?: string;
+				properties?: Record<string, unknown>;
+				children?: unknown[];
+			}) => {
+				if (n.type === 'element' && n.tagName === 'h1')
+					(n.properties ??= {})['data-stamped'] = 'yes';
 				(n.children as Array<typeof n> | undefined)?.forEach(walk);
 			};
 			walk(tree as Parameters<typeof walk>[0]);
@@ -301,7 +329,15 @@ describe('tab component injection (plain barrel)', () => {
 
 	it('an import inside a fenced code SAMPLE is not treated as a real import (Shiki escapes it)', async () => {
 		const code = await render(
-			['# T', '', '```svelte', '<script>', "\timport { TabGroup, Tab } from 'ogygia/content';", '</script>', '```'].join('\n')
+			[
+				'# T',
+				'',
+				'```svelte',
+				'<script>',
+				"\timport { TabGroup, Tab } from 'ogygia/content';",
+				'</script>',
+				'```'
+			].join('\n')
 		);
 		expect(code).not.toContain('ogygia/content/tab-group');
 	});
@@ -359,13 +395,20 @@ describe('content preset dispatch (v3 config surface)', () => {
 	it('unknown preset on a variant errors listing the configured names', async () => {
 		const { islandBridge } = await import('../src/vite/island-bridge.js');
 		const { ogygiaPresetPreprocess } = await import('../src/content/markdown/index.js');
-		const saved = { markdownConfig: islandBridge.markdownConfig, contentPresets: islandBridge.contentPresets, scan: islandBridge.scan };
+		const saved = {
+			markdownConfig: islandBridge.markdownConfig,
+			contentPresets: islandBridge.contentPresets,
+			scan: islandBridge.scan
+		};
 		try {
 			islandBridge.markdownConfig = {};
 			islandBridge.contentPresets = { pg: { markdown: {} } };
 			const pp = ogygiaPresetPreprocess();
 			await expect(
-				pp.markup?.({ content: 'x\n<!--og_preset:nope-->', filename: '/x/a.md' }) as Promise<unknown>
+				pp.markup?.({
+					content: 'x\n<!--og_preset:nope-->',
+					filename: '/x/a.md'
+				}) as Promise<unknown>
 			).rejects.toThrow(/unknown content preset 'nope'.*pg/);
 		} finally {
 			islandBridge.markdownConfig = saved.markdownConfig;

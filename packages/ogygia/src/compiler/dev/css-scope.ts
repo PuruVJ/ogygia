@@ -20,9 +20,7 @@ export function derive_css_scope_owners(
 	abs_file: string,
 	root: string,
 	graphs: Array<
-		| { getModulesByFile?: (f: string) => Set<DevGraphModule> | undefined }
-		| undefined
-		| null
+		{ getModulesByFile?: (f: string) => Set<DevGraphModule> | undefined } | undefined | null
 	>
 ): string[] {
 	const routes_dir = path.join(root, 'src', 'routes') + path.sep;

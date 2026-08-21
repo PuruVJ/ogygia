@@ -140,7 +140,10 @@ export interface OgygiaOptions {
 	 * macro opts a whole collection into (`{ preset: 'name' }`); requires `markdown` to be set (the
 	 * defaults are the base every preset merges over). The rest are dev HMR options.
 	 */
-	content?: ContentPluginOptions & { markdown?: MarkdownOptions; presets?: Record<string, ContentPreset> };
+	content?: ContentPluginOptions & {
+		markdown?: MarkdownOptions;
+		presets?: Record<string, ContentPreset>;
+	};
 
 	/**
 	 * Rename the import-attribute keys claimed by the transform.
@@ -184,10 +187,10 @@ export interface OgygiaOptions {
  * silently did nothing would un-tune real apps).
  */
 const LEGACY_OPTION_RENAMES: Record<string, string> = {
-	visible: "`visible` moved into the regions subsystem — write `regions: { visible: { … } }`.",
-	presets: "`presets` moved into the regions subsystem — write `regions: { presets: { … } }`.",
+	visible: '`visible` moved into the regions subsystem — write `regions: { visible: { … } }`.',
+	presets: '`presets` moved into the regions subsystem — write `regions: { presets: { … } }`.',
 	continuity:
-		"`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it."
+		'`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it.'
 };
 
 /** The v3 rename map: a legacy key errors with its new spelling, never silently no-ops. */
@@ -199,7 +202,15 @@ export function assert_no_legacy_options(options: OgygiaOptions): void {
 	}
 }
 
-const REGION_PRESET_KEYS = new Set(['render', 'wake', 'margin', 'maxAge', 'onExpire', 'revalidate', 'keep']);
+const REGION_PRESET_KEYS = new Set([
+	'render',
+	'wake',
+	'margin',
+	'maxAge',
+	'onExpire',
+	'revalidate',
+	'keep'
+]);
 
 /**
  * Config-time region-preset validation — the transform re-checks on USE (with file/line context), but
@@ -208,7 +219,9 @@ const REGION_PRESET_KEYS = new Set(['render', 'wake', 'margin', 'maxAge', 'onExp
 export function validate_region_presets(presets: Record<string, unknown>): void {
 	for (const [name, bag] of Object.entries(presets)) {
 		if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
-			throw new Error(`[ogygia] regions.presets.${name} is empty — a preset with nothing is a mistake.`);
+			throw new Error(
+				`[ogygia] regions.presets.${name} is empty — a preset with nothing is a mistake.`
+			);
 		}
 		for (const k of Object.keys(bag)) {
 			if (!REGION_PRESET_KEYS.has(k)) {
@@ -224,7 +237,10 @@ export function validate_region_presets(presets: Record<string, unknown>): void 
  * Config-time content-preset validation — closed vocabulary (only `markdown`), non-empty, identifier
  * names, and `content.markdown` required (the defaults are the base every preset merges over).
  */
-export function validate_content_presets(content_presets: Record<string, unknown>, has_markdown: boolean): void {
+export function validate_content_presets(
+	content_presets: Record<string, unknown>,
+	has_markdown: boolean
+): void {
 	if (!has_markdown) {
 		throw new Error(
 			'[ogygia] content.presets requires content.markdown — the defaults are the base every preset merges over (an empty `markdown: {}` is fine).'
@@ -232,10 +248,14 @@ export function validate_content_presets(content_presets: Record<string, unknown
 	}
 	for (const [name, bag] of Object.entries(content_presets)) {
 		if (!/^[\w-]+$/.test(name)) {
-			throw new Error(`[ogygia] content.presets: '${name}' — preset names are identifiers ([A-Za-z0-9_-]).`);
+			throw new Error(
+				`[ogygia] content.presets: '${name}' — preset names are identifiers ([A-Za-z0-9_-]).`
+			);
 		}
 		if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
-			throw new Error(`[ogygia] content.presets.${name} is empty — a preset with nothing is a mistake.`);
+			throw new Error(
+				`[ogygia] content.presets.${name} is empty — a preset with nothing is a mistake.`
+			);
 		}
 		for (const k of Object.keys(bag)) {
 			if (k !== 'markdown') {
@@ -263,7 +283,10 @@ export interface ResolvedOgygiaConfig {
  * config the factory threads into `CompileCtx` + `Program`. Pure — no defaults leak back into `options`.
  * `defaultRegionTtl` is passed in (the endpoint's DEFAULT_REGION_TTL_SEC) to keep this Vite-free.
  */
-export function resolve_options(options: OgygiaOptions, defaultRegionTtl: number): ResolvedOgygiaConfig {
+export function resolve_options(
+	options: OgygiaOptions,
+	defaultRegionTtl: number
+): ResolvedOgygiaConfig {
 	// Region-endpoint rate limit (baked into SSR only via virtual:ogygia/rate-limit).
 	const rate_limit =
 		options.rateLimit === false
@@ -280,7 +303,10 @@ export function resolve_options(options: OgygiaOptions, defaultRegionTtl: number
 			: '';
 
 	// Capability URL TTL (seconds). Clamped to [60, 86400].
-	const region_ttl = Math.min(86400, Math.max(60, Math.floor(options.regionTtl ?? defaultRegionTtl)));
+	const region_ttl = Math.min(
+		86400,
+		Math.max(60, Math.floor(options.regionTtl ?? defaultRegionTtl))
+	);
 
 	// ROUTER config (app-wide, one place). On by default; View Transitions on unless disabled. `false`
 	// tree-shakes the whole feature out. Baked into `virtual:ogygia/router-config` for the handle.

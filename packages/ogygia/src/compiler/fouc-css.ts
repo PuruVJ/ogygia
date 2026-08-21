@@ -73,7 +73,12 @@ export function foucRelFromId(id: string) {
 	// `..`. Reject traversal / absolute specifiers — otherwise a crafted request to the dev server
 	// (`…/fouc-scoped/..%2F..%2Fetc%2Fpasswd.css`) would read files outside the project (Vite's
 	// `server.fs.allow` does NOT cover a plugin's own `fs.readFileSync`). Mirrors content/source.ts.
-	if (rel.startsWith('/') || rel.startsWith('\\') || /^[a-zA-Z]:/.test(rel) || /(^|[\\/])\.\.([\\/]|$)/.test(rel)) {
+	if (
+		rel.startsWith('/') ||
+		rel.startsWith('\\') ||
+		/^[a-zA-Z]:/.test(rel) ||
+		/(^|[\\/])\.\.([\\/]|$)/.test(rel)
+	) {
 		return null;
 	}
 	return rel;

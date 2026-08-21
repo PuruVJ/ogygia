@@ -41,7 +41,10 @@ export function sign_module(ssr: boolean, hmac_module: string): string {
 }
 
 /** `virtual:ogygia/rate-limit` — SERVER only; the region handle is the only consumer. */
-export function rate_limit_module(ssr: boolean, rate_limit: { max: number; windowMs: number }): string {
+export function rate_limit_module(
+	ssr: boolean,
+	rate_limit: { max: number; windowMs: number }
+): string {
 	if (!ssr) return `export const rateLimit = { max: 0, windowMs: 60000 };`;
 	return `export const rateLimit = ${JSON.stringify(rate_limit)};`;
 }

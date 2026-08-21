@@ -6,7 +6,16 @@ import { describe, it, expect } from 'vitest';
 import { get, writable, derived } from 'svelte/store';
 import { parse, stringify } from 'devalue';
 import { rewrite_store, auto_brand_stores } from '../src/compiler/macros/store.js';
-import { __og_store, mark_store, reduce_store, revive_store, STORE_WIRE_KEY, is_store, og_derived, register_derived_kind } from '../src/store-transport.js';
+import {
+	__og_store,
+	mark_store,
+	reduce_store,
+	revive_store,
+	STORE_WIRE_KEY,
+	is_store,
+	og_derived,
+	register_derived_kind
+} from '../src/store-transport.js';
 import { __register_fn, fn_handle } from '../src/fn-transport.js';
 import { REF_WIRE_KEY, ref_reducer, ref_reviver } from '../src/ref.js';
 
@@ -20,7 +29,9 @@ describe('og.store transform', () => {
 		const src = `export const createCart = import.meta.og.store((seed = []) => ({ subscribe: () => {}, seed }));`;
 		const code = run(src);
 		expect(code).toContain(`import { __og_store } from 'ogygia/internal';`);
-		expect(code).toContain(`__og_store("src/lib/cart.ts#store0", (seed = []) => ({ subscribe: () => {}, seed }))`);
+		expect(code).toContain(
+			`__og_store("src/lib/cart.ts#store0", (seed = []) => ({ subscribe: () => {}, seed }))`
+		);
 	});
 
 	it('accepts an identifier argument; sequential tags per module', () => {
@@ -32,7 +43,9 @@ describe('og.store transform', () => {
 
 	it('works in a .svelte script block; no marker → same reference', () => {
 		const sv = `<script>\n\tconst s = import.meta.og.store((v) => ({ subscribe: () => {}, v }));\n</script>`;
-		expect(rewrite_store(sv, 'src/X.svelte', 'src/X.svelte', SVELTE)).toContain(`__og_store("src/X.svelte#store0"`);
+		expect(rewrite_store(sv, 'src/X.svelte', 'src/X.svelte', SVELTE)).toContain(
+			`__og_store("src/X.svelte#store0"`
+		);
 		const plain = `export const x = 1;`;
 		expect(run(plain)).toBe(plain);
 	});
@@ -40,7 +53,9 @@ describe('og.store transform', () => {
 	it('BUILD ERRORS: arg count, non-function arg, bare access', () => {
 		expect(() => run(`const f = import.meta.og.store();`)).toThrow(/exactly one argument/);
 		expect(() => run(`const f = import.meta.og.store(a, b);`)).toThrow(/exactly one argument/);
-		expect(() => run(`const f = import.meta.og.store(42);`)).toThrow(/function expression or an identifier/);
+		expect(() => run(`const f = import.meta.og.store(42);`)).toThrow(
+			/function expression or an identifier/
+		);
 		expect(() => run(`const alias = import.meta.og.store;`)).toThrow(/bare import.meta.og.store/);
 	});
 });
@@ -90,7 +105,9 @@ describe('auto-brand tier (zero-authoring provable factories)', () => {
 
 	it('brands: expression body returning an object literal with subscribe', () => {
 		const src = `export const createTabs = (i) => ({ subscribe: () => {}, active: i });`;
-		expect(auto(src)).toContain(`__og_store("src/lib/s.ts#auto:createTabs", (i) => ({ subscribe: () => {}, active: i }))`);
+		expect(auto(src)).toContain(
+			`__og_store("src/lib/s.ts#auto:createTabs", (i) => ({ subscribe: () => {}, active: i }))`
+		);
 	});
 
 	it('brands: direct writable() with the svelte/store import; injects the runtime import', () => {
@@ -107,7 +124,9 @@ describe('auto-brand tier (zero-authoring provable factories)', () => {
 
 	it('SKIPS the ambiguous: call-result returns, mixed returns, local writable, non-export', () => {
 		// returns a call result — unknowable shape
-		expect(auto(`export const a = (s) => build(s);`)).toContain('export const a = (s) => build(s);');
+		expect(auto(`export const a = (s) => build(s);`)).toContain(
+			'export const a = (s) => build(s);'
+		);
 		// a LOCAL function named writable must not count as proof
 		const local = `function writable(n) { return n; }\nexport const b = (n) => writable(n);`;
 		expect(auto(local)).toBe(local);
@@ -130,9 +149,14 @@ describe('auto-brand tier (zero-authoring provable factories)', () => {
 		const src = `import { writable } from 'svelte/store';\nexport const createCtr = (seed = 0) => {\n\tconst { subscribe, set, update } = writable(seed);\n\treturn { subscribe, set, update, bump: () => update((n) => n + 1) };\n};`;
 		const out = auto(src, 'src/lib/ctr.ts');
 		// execute the branded module body against the real runtime
-		const body = out.replace(`import { __og_store } from 'ogygia/internal';`, '').replace(`import { writable } from 'svelte/store';`, '').replace(/export const /g, 'globalThis.__ctr = ');
+		const body = out
+			.replace(`import { __og_store } from 'ogygia/internal';`, '')
+			.replace(`import { writable } from 'svelte/store';`, '')
+			.replace(/export const /g, 'globalThis.__ctr = ');
 		new Function('__og_store', 'writable', body)(__og_store, writable);
-		const createCtr = (globalThis as Record<string, unknown>).__ctr as (s?: number) => { bump: () => void };
+		const createCtr = (globalThis as Record<string, unknown>).__ctr as (s?: number) => {
+			bump: () => void;
+		};
 		const revived = dec(enc(createCtr(4))) as { bump: () => void };
 		revived.bump();
 		expect(get(revived as never)).toBe(5);
@@ -143,9 +167,10 @@ describe('auto-brand tier (zero-authoring provable factories)', () => {
 describe('og_derived — a derived that RESUMES across the boundary', () => {
 	const encR = (v: unknown, fam = new Set(['store', 'fn', 'derived'])) =>
 		stringify(v, { [REF_WIRE_KEY]: ref_reducer(fam) });
-	const decR = (s: string) => parse(s, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown });
+	const decR = (s: string) =>
+		parse(s, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown });
 
-	it('crosses ALIVE: bump the reunified source, every island\'s derived follows', () => {
+	it("crosses ALIVE: bump the reunified source, every island's derived follows", () => {
 		register_derived_kind();
 		__register_fn('test/dd#$0', () => (n: number) => n * 2);
 		const tally = writable(10);
@@ -163,7 +188,8 @@ describe('og_derived — a derived that RESUMES across the boundary', () => {
 	it('multi-source recipe resumes too', () => {
 		register_derived_kind();
 		__register_fn('test/dd#$1', () => (vals: number[]) => vals[0] + vals[1]);
-		const a = writable(1), b = writable(2);
+		const a = writable(1),
+			b = writable(2);
 		const sum = og_derived([a, b], fn_handle('test/dd#$1', []) as (v: never) => number);
 		const out = decR(encR({ a, b, sum })) as { a: typeof a; sum: typeof sum };
 		out.a.set(40);
@@ -178,4 +204,3 @@ describe('og_derived — a derived that RESUMES across the boundary', () => {
 		expect(get(out.frozen as never)).toBe(10); // still the serialize-time snapshot
 	});
 });
-

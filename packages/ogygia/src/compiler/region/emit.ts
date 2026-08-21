@@ -43,7 +43,8 @@ export function component_import_line(local: string, spec: string, exportName?: 
 /** JS re-export of the real component — the held region's entry (SSR render + client hydrate). */
 function region_entry_source(componentPath: string, iid: string, exportName?: string) {
 	return (
-		component_import_line(`__OgygiaComp_${iid}`, componentPath, exportName) + '\n' +
+		component_import_line(`__OgygiaComp_${iid}`, componentPath, exportName) +
+		'\n' +
 		`export default __OgygiaComp_${iid};\n`
 	);
 }
@@ -55,7 +56,11 @@ function region_entry_source(componentPath: string, iid: string, exportName?: st
  * `.svelte` host and the `.ts` registry (a `wake:` mark) so a mountable binding is built the same way
  * from either.
  */
-export function island_entry_source(componentPath: string, iid: string, exportName?: string): string {
+export function island_entry_source(
+	componentPath: string,
+	iid: string,
+	exportName?: string
+): string {
 	return (
 		`import 'virtual:ogygia/transportables';\n` +
 		component_import_line(`__OgygiaComp_${iid}`, componentPath, exportName) +
@@ -142,7 +147,8 @@ export function make_region_binding(opts: {
 		// `svelte/server` is imported only on this SSR leg; the client leg is metadata-only, so the
 		// component and server render never ship to the browser bundle.
 		bindingSsrSource:
-			component_import_line('__ogRegionComp', opts.componentPath, opts.exportName) + '\n' +
+			component_import_line('__ogRegionComp', opts.componentPath, opts.exportName) +
+			'\n' +
 			`import { makeRegionEndpoint as __ogRegionSign } from 'ogygia/internal/server';\n` +
 			`import { render as __ogRegionRender } from 'svelte/server';\n` +
 			// The page never imported this server-picked component, so its scoped CSS is on no page
@@ -188,7 +194,8 @@ function wrapper_attach_binding(opts: {
 	return {
 		ssr:
 			`import __OgygiaWrap from ${JSON.stringify(opts.wrapperPath)};\n` +
-			component_import_line('__ogRegionComp', opts.componentPath, opts.exportName) + '\n' +
+			component_import_line('__ogRegionComp', opts.componentPath, opts.exportName) +
+			'\n' +
 			`import { makeRegionEndpoint as __ogRegionSign } from 'ogygia/internal/server';\n` +
 			`import { render as __ogRegionRender } from 'svelte/server';\n` +
 			`import { islandCss as __ogRegionCss } from 'virtual:ogygia/island-deps';\n` +
@@ -233,7 +240,8 @@ export function make_wake_island(opts: {
 	 */
 	held?: boolean;
 }) {
-	const margin = opts.strategy === 'visible' ? (opts.options?.margin as string | undefined) : undefined;
+	const margin =
+		opts.strategy === 'visible' ? (opts.options?.margin as string | undefined) : undefined;
 	const attach = wrapper_attach_binding({
 		iid: opts.iid,
 		wrapperPath: opts.wrapperPath,
@@ -297,7 +305,8 @@ export function server_wrapper_source(
 	let server_attrs = `__defer={${JSON.stringify(fetch_when)}}`;
 	if (options?.margin != null) server_attrs += ` __margin={${JSON.stringify(options.margin)}}`;
 	// Signed at mint into the hole's endpoint → the handle answers `private, max-age=cacheTtlSec`.
-	if (options?.cacheTtlSec != null) server_attrs += ` __cacheTtl={${JSON.stringify(options.cacheTtlSec)}}`;
+	if (options?.cacheTtlSec != null)
+		server_attrs += ` __cacheTtl={${JSON.stringify(options.cacheTtlSec)}}`;
 	if (deferred_hydrate) {
 		server_attrs += ` __hydrate={${JSON.stringify(options.hydrate)}}`;
 		server_attrs += ` __module={${JSON.stringify(module_url)}}`;
@@ -358,7 +367,9 @@ export function strategy_to_attr(strategy: string, options?: Record<string, unkn
 	if (strategy === 'interaction') return 'interaction';
 	if (strategy === 'visible') {
 		// `margin` (IntersectionObserver rootMargin) rides as the string form of `visible`.
-		return options && options.margin != null ? `visible=${JSON.stringify(options.margin)}` : 'visible';
+		return options && options.margin != null
+			? `visible=${JSON.stringify(options.margin)}`
+			: 'visible';
 	}
 	// media query (the strategy IS the query string)
 	return `media=${JSON.stringify(strategy)}`;
@@ -377,7 +388,11 @@ const IMPORT_AS_CLAUSE = /^(.+?)(?:\s+as\s+(\w+))?$/;
  *
  * @internal Used by the plugin client emit and unit tests.
  */
-export function rewrite_lake_import_to_placeholder(src: string, local: string, placeholder: string) {
+export function rewrite_lake_import_to_placeholder(
+	src: string,
+	local: string,
+	placeholder: string
+) {
 	const esc = local.replace(REGEXP_META, '\\$&');
 	const ph = JSON.stringify(placeholder);
 	// default: import Lake from '…'
@@ -410,7 +425,9 @@ export function rewrite_lake_import_to_placeholder(src: string, local: string, p
 				kept.push(p);
 			}
 			if (!hit) return full;
-			const named = kept.length ? `import { ${kept.join(', ')} } from ${JSON.stringify(from)};` : '';
+			const named = kept.length
+				? `import { ${kept.join(', ')} } from ${JSON.stringify(from)};`
+				: '';
 			return `import ${local} from ${ph};${named ? '\n\t' + named : ''}`;
 		}
 	);

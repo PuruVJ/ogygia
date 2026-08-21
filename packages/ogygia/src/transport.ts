@@ -18,7 +18,15 @@
 import { REGION_BRAND } from './region-brand.js';
 import { frameAddress } from './frame.js';
 import { ticket, write } from './runtime/frame-store.js';
-import { register_kind, mint, resolve, ref_reducer, ref_reviver, REF_WIRE_KEY, type Ref } from './ref.js';
+import {
+	register_kind,
+	mint,
+	resolve,
+	ref_reducer,
+	ref_reviver,
+	REF_WIRE_KEY,
+	type Ref
+} from './ref.js';
 import { register_wire_kind } from './live-transport.js';
 import { register_store_kind, register_derived_kind } from './store-transport.js';
 import { register_snippet_kind } from './region-snippet.js';
@@ -42,37 +50,61 @@ type EncodedRegion = {
  *  inline-unawaited throws), byte-for-byte the pre-hub behavior. */
 function encode_region(value: unknown): false | EncodedRegion {
 	{
-			if (typeof value !== 'object' || value === null) return false;
-			const f = value as Record<PropertyKey, unknown>;
-			if (f[REGION_BRAND] !== true) return false;
+		if (typeof value !== 'object' || value === null) return false;
+		const f = value as Record<PropertyKey, unknown>;
+		if (f[REGION_BRAND] !== true) return false;
 
-			// Already a ticket (a re-serialized deferred region) — pass its fields through.
-			if (f.kind === 'deferred') {
-				return pack(f.id as string, f.props as Record<string, unknown>, f.url as string, f.module as string, f.hydrate as string, f.hydrateMargin as string, f.html as string);
-			}
-			// Dual region — sign now (this IS the moment of crossing) and drop the component. If it
-			// was awaited, `html` is present and rides along so the client swaps with no fetch.
-			if (f.kind === 'dual') {
-				const sign = f.sign as (id: string, props: Record<string, unknown>) => string;
-				const props = (f.props ?? {}) as Record<string, unknown>;
-				return pack(f.id as string, props, sign(f.id as string, props), f.module as string, f.hydrate as string, f.hydrateMargin as string, f.html as string);
-			}
-			// Inline region that was AWAITED — its SSR HTML is baked, so it crosses as an HTML-only
-			// ticket: no chunk, no signer, nothing to fetch. The client swaps the markup in and the
-			// runtime wakes any `<ogygia-region>` islands inside it (body-swap machinery). This is how
-			// a content `body` (markdown/blocks) rides a remote: `await` it (ogygia's `doc` remote does).
-			if (typeof f.html === 'string') {
-				return pack('', (f.props ?? {}) as Record<string, unknown>, '', '', undefined, undefined, f.html);
-			}
-			// Inline and NOT awaited — nothing prepared it to travel: no chunk, no signer, no HTML.
-			throw new Error(
-				'[ogygia] a held region reached the wire but its component is a plain import, so nothing ' +
-					'built a chunk for it. `await` the region before returning it from a remote/load — an ' +
-					'awaited region bakes its SSR HTML and crosses as an HTML-only ticket. Or import the ' +
-					"component `with { region: 'raw' }` (or a `wake:` mark) to make it a signed, fetchable " +
-					'capability. On a csr=false page you can also skip the wire entirely: call `get()` in a ' +
-					'universal `+page.ts` load / the component — its data reaches the render by reference.'
+		// Already a ticket (a re-serialized deferred region) — pass its fields through.
+		if (f.kind === 'deferred') {
+			return pack(
+				f.id as string,
+				f.props as Record<string, unknown>,
+				f.url as string,
+				f.module as string,
+				f.hydrate as string,
+				f.hydrateMargin as string,
+				f.html as string
 			);
+		}
+		// Dual region — sign now (this IS the moment of crossing) and drop the component. If it
+		// was awaited, `html` is present and rides along so the client swaps with no fetch.
+		if (f.kind === 'dual') {
+			const sign = f.sign as (id: string, props: Record<string, unknown>) => string;
+			const props = (f.props ?? {}) as Record<string, unknown>;
+			return pack(
+				f.id as string,
+				props,
+				sign(f.id as string, props),
+				f.module as string,
+				f.hydrate as string,
+				f.hydrateMargin as string,
+				f.html as string
+			);
+		}
+		// Inline region that was AWAITED — its SSR HTML is baked, so it crosses as an HTML-only
+		// ticket: no chunk, no signer, nothing to fetch. The client swaps the markup in and the
+		// runtime wakes any `<ogygia-region>` islands inside it (body-swap machinery). This is how
+		// a content `body` (markdown/blocks) rides a remote: `await` it (ogygia's `doc` remote does).
+		if (typeof f.html === 'string') {
+			return pack(
+				'',
+				(f.props ?? {}) as Record<string, unknown>,
+				'',
+				'',
+				undefined,
+				undefined,
+				f.html
+			);
+		}
+		// Inline and NOT awaited — nothing prepared it to travel: no chunk, no signer, no HTML.
+		throw new Error(
+			'[ogygia] a held region reached the wire but its component is a plain import, so nothing ' +
+				'built a chunk for it. `await` the region before returning it from a remote/load — an ' +
+				'awaited region bakes its SSR HTML and crosses as an HTML-only ticket. Or import the ' +
+				"component `with { region: 'raw' }` (or a `wake:` mark) to make it a signed, fetchable " +
+				'capability. On a csr=false page you can also skip the wire entirely: call `get()` in a ' +
+				'universal `+page.ts` load / the component — its data reaches the render by reference.'
+		);
 	}
 }
 
@@ -80,28 +112,28 @@ function encode_region(value: unknown): false | EncodedRegion {
  *  byte-for-byte the pre-hub behavior. */
 function decode_region(raw: EncodedRegion) {
 	{
-			// SINGLE-FLIGHT: an awaited region carries baked HTML (`x`). Writing it to the frame store
-			// at its CALL address updates any region already mounted for that call — in place, no
-			// fetch. So a command that returns `await region(C, props)` settles the write AND refreshes
-			// every matching region in one response. Client-only (decode revives the wire value in the
-			// browser); on the server the store is inert. An HTML-ONLY ticket (awaited inline region —
-			// no capability url) has no frame address, so there is nothing to write; it renders where
-			// it's placed instead.
-			if (raw.x != null && raw.u && typeof document !== 'undefined') {
-				const a = frameAddress(raw.u);
-				write({ a, v: ticket(a), html: raw.x });
-			}
-			return {
-				[REGION_BRAND]: true,
-				kind: 'deferred' as const,
-				id: raw.i,
-				props: raw.p,
-				url: raw.u,
-				module: raw.m,
-				...(raw.h ? { hydrate: raw.h } : {}),
-				...(raw.g ? { hydrateMargin: raw.g } : {}),
-				...(raw.x != null ? { html: raw.x } : {})
-			};
+		// SINGLE-FLIGHT: an awaited region carries baked HTML (`x`). Writing it to the frame store
+		// at its CALL address updates any region already mounted for that call — in place, no
+		// fetch. So a command that returns `await region(C, props)` settles the write AND refreshes
+		// every matching region in one response. Client-only (decode revives the wire value in the
+		// browser); on the server the store is inert. An HTML-ONLY ticket (awaited inline region —
+		// no capability url) has no frame address, so there is nothing to write; it renders where
+		// it's placed instead.
+		if (raw.x != null && raw.u && typeof document !== 'undefined') {
+			const a = frameAddress(raw.u);
+			write({ a, v: ticket(a), html: raw.x });
+		}
+		return {
+			[REGION_BRAND]: true,
+			kind: 'deferred' as const,
+			id: raw.i,
+			props: raw.p,
+			url: raw.u,
+			module: raw.m,
+			...(raw.h ? { hydrate: raw.h } : {}),
+			...(raw.g ? { hydrateMargin: raw.g } : {}),
+			...(raw.x != null ? { html: raw.x } : {})
+		};
 	}
 }
 
@@ -111,22 +143,22 @@ function decode_region(raw: EncodedRegion) {
  *  foundation for persistent regions (the reconciler resolves by id). */
 export function register_region_kind(): void {
 	register_kind({
-	k: 'region',
-	match(value) {
-		return (value as Record<PropertyKey, unknown>)[REGION_BRAND] === true;
-	},
-	encode(value) {
-		const packed = encode_region(value);
-		if (packed === false) {
-			// unreachable through mint (match gates), kept as a hard guard
-			throw new Error('[ogygia] region kind claimed a non-region value');
+		k: 'region',
+		match(value) {
+			return (value as Record<PropertyKey, unknown>)[REGION_BRAND] === true;
+		},
+		encode(value) {
+			const packed = encode_region(value);
+			if (packed === false) {
+				// unreachable through mint (match gates), kept as a hard guard
+				throw new Error('[ogygia] region kind claimed a non-region value');
+			}
+			return { d: packed };
+		},
+		decode(ref: Ref) {
+			return decode_region(ref.d as EncodedRegion);
 		}
-		return { d: packed };
-	},
-	decode(ref: Ref) {
-		return decode_region(ref.d as EncodedRegion);
-	}
-});
+	});
 }
 
 const REGION_ONLY = new Set(['region']);

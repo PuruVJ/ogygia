@@ -63,7 +63,14 @@ import {
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
-import { has_deferred, stage_deferred, settle_deferred, resolve_script, page_seed_reducers, type Deferred } from './server/page-stream.js';
+import {
+	has_deferred,
+	stage_deferred,
+	settle_deferred,
+	resolve_script,
+	page_seed_reducers,
+	type Deferred
+} from './server/page-stream.js';
 import { PAGE_DEFER_BOOTSTRAP, PAGE_DEFER_GLOBAL } from './page-defer.js';
 import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrency.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -130,7 +137,10 @@ const REGION_FRAME_HEADERS = {
 	'Referrer-Policy': 'no-referrer'
 } as const;
 
-function region_response(body: BodyInit | null, init: { status: number; headers?: Record<string, string> }) {
+function region_response(
+	body: BodyInit | null,
+	init: { status: number; headers?: Record<string, string> }
+) {
 	return new Response(body, {
 		status: init.status,
 		headers: { ...REGION_FRAME_HEADERS, ...init.headers }
@@ -230,7 +240,13 @@ class OgygiaHandle {
 			// Per-request capture bag: `setContext` values + the page snapshot are recorded during the
 			// render (inside this `run`, so `getStore()` works) and read back in `inject_client_seeds`
 			// via the SAME bag reference passed through as a closure.
-			const bag: RequestBag = { ctx: new Map(), page: null, deferred: null, defer_next_id: 0, seed_reducers: null };
+			const bag: RequestBag = {
+				ctx: new Map(),
+				page: null,
+				deferred: null,
+				defer_next_id: 0,
+				seed_reducers: null
+			};
 			const response = await request_als.run(bag, () =>
 				resolve(event, {
 					transformPageChunk: async ({ html }) =>
@@ -242,7 +258,12 @@ class OgygiaHandle {
 			// ran synchronously inside `resolve`); the tail streams a resolve script per promise as it
 			// settles. Only set when the request could consume a stream (see `inject_client_seeds`).
 			if (bag.deferred && bag.deferred.length) {
-				return this.stream_page_deferred(response, bag.deferred, bag.defer_next_id, bag.seed_reducers ?? undefined);
+				return this.stream_page_deferred(
+					response,
+					bag.deferred,
+					bag.defer_next_id,
+					bag.seed_reducers ?? undefined
+				);
 			}
 			return response;
 		}
@@ -353,7 +374,12 @@ class OgygiaHandle {
 		// handle injects static Speculation Rules instead. Chromium prerenders likely next pages,
 		// Firefox prefetches them, everything else ignores the JSON. Presence-checked so a page
 		// authoring its own rules wins; per-link opt-out via `data-ogygia-speculate="off"`.
-		if (!router_enabled && mpa_speculation_rules && !has_speculation_rules && html.includes('</head>')) {
+		if (
+			!router_enabled &&
+			mpa_speculation_rules &&
+			!has_speculation_rules &&
+			html.includes('</head>')
+		) {
 			html = html.replace(
 				'</head>',
 				`<script type="speculationrules" data-ogygia-speculate>${mpa_speculation_rules}</script></head>`
@@ -362,7 +388,9 @@ class OgygiaHandle {
 		if (router_enabled) {
 			const head: string[] = [];
 			if (!has_router_meta) {
-				head.push(`<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`);
+				head.push(
+					`<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`
+				);
 			}
 			if (runtime_url && !has_runtime_script) {
 				head.push(`<script type="module" data-ogygia-runtime src="${runtime_url}"></script>`);
@@ -413,7 +441,8 @@ class OgygiaHandle {
 		//  • Programmatic fetch (SPA/router, mode ≠ navigate) can't run streamed scripts, so SETTLE the
 		//    promises here and seed resolved values — no hang, same as before.
 		// Gated on `has_deferred` so the common (no-promise) seed pays only a cheap probe walk.
-		const has_pending = !!page_snap && (has_deferred(page_snap.data) || has_deferred(page_snap.form));
+		const has_pending =
+			!!page_snap && (has_deferred(page_snap.data) || has_deferred(page_snap.form));
 		const can_stream = event?.request.headers.get('sec-fetch-mode') === 'navigate';
 		if (has_pending && can_stream) {
 			const staged_data = stage_deferred(page_snap!.data, 0);
@@ -555,7 +584,9 @@ class OgygiaHandle {
 				};
 				const push = (id: number, ok: boolean, value: unknown) => {
 					try {
-						controller.enqueue(encoder.encode(resolve_script(PAGE_DEFER_GLOBAL, id, { ok, value }, reducers)));
+						controller.enqueue(
+							encoder.encode(resolve_script(PAGE_DEFER_GLOBAL, id, { ok, value }, reducers))
+						);
 					} catch {
 						/* client gone / stream already closed */
 					}
@@ -587,7 +618,11 @@ class OgygiaHandle {
 		});
 		const headers = new Headers(response.headers);
 		headers.delete('content-length');
-		return new Response(stream, { status: response.status, statusText: response.statusText, headers });
+		return new Response(stream, {
+			status: response.status,
+			statusText: response.statusText,
+			headers
+		});
 	}
 
 	/**
@@ -712,13 +747,25 @@ class OgygiaHandle {
 
 	/** Charset/length/expiry gate — cheap, runs BEFORE any HMAC (P5-HMAC-CPU). */
 	#capability_gate_ok(id: string, payload: string, ttl_raw: string, exp_raw: string): boolean {
-		if (!REGION_ID_RE.test(id) || payload.length > MAX_REGION_PROPS_LEN || !REGION_TTL_RE.test(ttl_raw)) return false;
+		if (
+			!REGION_ID_RE.test(id) ||
+			payload.length > MAX_REGION_PROPS_LEN ||
+			!REGION_TTL_RE.test(ttl_raw)
+		)
+			return false;
 		const exp = Number(exp_raw);
 		return Number.isFinite(exp) && exp >= Math.floor(Date.now() / 1000);
 	}
 
 	/** THE auth check: session-bound region MAC verify. */
-	#verify_region_mac(id: string, payload: string, exp_raw: string, ttl_raw: string, sig: string, event: RequestEvent): boolean {
+	#verify_region_mac(
+		id: string,
+		payload: string,
+		exp_raw: string,
+		ttl_raw: string,
+		sig: string,
+		event: RequestEvent
+	): boolean {
 		// The capability seals the session cookie (if any) into the signed message.
 		const session = session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
 		return verify(secret, region_mac_message(id, exp_raw, payload, session, ttl_raw), sig);
@@ -726,7 +773,10 @@ class OgygiaHandle {
 
 	/** Eval the island module (registers transportable codecs the reviver needs on a cold-start defer),
 	 *  then decode + revive the props payload. Null on parse failure or a non-object/array result. */
-	async #decode_region_props(payload: string, load: () => Promise<unknown>): Promise<Record<string, unknown> | null> {
+	async #decode_region_props(
+		payload: string,
+		load: () => Promise<unknown>
+	): Promise<Record<string, unknown> | null> {
 		let props: unknown;
 		try {
 			await load();

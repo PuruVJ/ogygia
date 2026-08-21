@@ -102,31 +102,31 @@ export function mark_store<T extends object>(store: T, tag: string): T {
 /** The hub kind: subscribe-shaped values. The moment of crossing is the value snapshot. */
 export function register_store_kind(): void {
 	register_kind({
-	k: 'store',
-	match: is_store,
-	encode(value) {
-		return { t: (value as StoreLike)[STORE_TAG] ?? GENERIC_TAG, d: get(value as never) };
-	},
-	decode(ref) {
-		const t = ref.t ?? GENERIC_TAG;
-		const factory = t === GENERIC_TAG ? undefined : store_registry().factories.get(t);
-		if (t !== GENERIC_TAG && factory === undefined) {
-			// GRACEFUL FLOOR: a branded store whose factory module isn't in this bundle degrades to
-			// the generic tier — the VALUE still crosses and set/update/subscribe work; only the
-			// factory's grafted methods are missing. This keeps auto-branding strictly additive
-			// (before branding, this store crossed generic anyway). Warn so the fix is one import.
-			if (typeof console !== 'undefined') {
-				console.warn(
-					`[ogygia] store "${t}": factory not loaded in this bundle — degraded to a plain writable ` +
-						`(custom methods unavailable). Import the factory's module in the island (or its graph) ` +
-						`so \`__register_store_factory\` runs there.`
-				);
+		k: 'store',
+		match: is_store,
+		encode(value) {
+			return { t: (value as StoreLike)[STORE_TAG] ?? GENERIC_TAG, d: get(value as never) };
+		},
+		decode(ref) {
+			const t = ref.t ?? GENERIC_TAG;
+			const factory = t === GENERIC_TAG ? undefined : store_registry().factories.get(t);
+			if (t !== GENERIC_TAG && factory === undefined) {
+				// GRACEFUL FLOOR: a branded store whose factory module isn't in this bundle degrades to
+				// the generic tier — the VALUE still crosses and set/update/subscribe work; only the
+				// factory's grafted methods are missing. This keeps auto-branding strictly additive
+				// (before branding, this store crossed generic anyway). Warn so the fix is one import.
+				if (typeof console !== 'undefined') {
+					console.warn(
+						`[ogygia] store "${t}": factory not loaded in this bundle — degraded to a plain writable ` +
+							`(custom methods unavailable). Import the factory's module in the island (or its graph) ` +
+							`so \`__register_store_factory\` runs there.`
+					);
+				}
+				return writable(ref.d) as object;
 			}
-			return writable(ref.d) as object;
+			return factory ? factory(ref.d) : (writable(ref.d) as object);
 		}
-		return factory ? factory(ref.d) : (writable(ref.d) as object);
-	}
-});
+	});
 }
 
 const STORE_ONLY = new Set(['store']);
@@ -163,7 +163,9 @@ export function revive_store(payload: StorePayload, remember: boolean): unknown 
  */
 export function __og_store<F extends (...args: never[]) => object>(tag: string, factory: F): F {
 	// decode side: factory(seed), branded so a revived store can cross a FURTHER boundary
-	__register_store_factory(tag, (seed: unknown) => mark_store((factory as (...a: unknown[]) => object)(seed), tag));
+	__register_store_factory(tag, (seed: unknown) =>
+		mark_store((factory as (...a: unknown[]) => object)(seed), tag)
+	);
 	// encode side: every product of the wrapped factory carries its passport
 	return ((...args: never[]) => mark_store(factory(...args), tag)) as F;
 }
@@ -203,7 +205,11 @@ export function og_derived<T>(
 	const store = derived(sources as never, fn as never, initial as never) as unknown as {
 		subscribe: (run: (v: T) => void) => () => void;
 	};
-	const recipe: DerivedRecipe = { s: single ? [sources as AnyStore] : (sources as AnyStore[]), f: fn, single };
+	const recipe: DerivedRecipe = {
+		s: single ? [sources as AnyStore] : (sources as AnyStore[]),
+		f: fn,
+		single
+	};
 	Object.defineProperty(store, DERIVED_BRAND, { value: recipe, enumerable: false });
 	return store;
 }
@@ -229,7 +235,12 @@ export function register_derived_kind(): void {
 			return { d: { s: r.s, f: r.f, single: r.single, seed: get(value as never) } };
 		},
 		decode(ref) {
-			const d = ref.d as { s: AnyStore[]; f: (...vals: never[]) => unknown; single: boolean; seed: unknown };
+			const d = ref.d as {
+				s: AnyStore[];
+				f: (...vals: never[]) => unknown;
+				single: boolean;
+				seed: unknown;
+			};
 			if (typeof d.f !== 'function') {
 				throw new Error(
 					`[ogygia] cannot resume og_derived: its formula did not cross — mark it with ` +

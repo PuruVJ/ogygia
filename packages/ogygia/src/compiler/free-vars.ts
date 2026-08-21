@@ -353,7 +353,16 @@ export function collectSnippetNames(nodes) {
 	const visit = (list) => {
 		for (const n of list ?? []) {
 			if (n.type === 'SnippetBlock' && n.expression) out.add(n.expression.name);
-			for (const k of ['consequent', 'alternate', 'body', 'fallback', 'pending', 'then', 'catch', 'fragment']) {
+			for (const k of [
+				'consequent',
+				'alternate',
+				'body',
+				'fallback',
+				'pending',
+				'then',
+				'catch',
+				'fragment'
+			]) {
 				if (n[k]?.nodes) visit(n[k].nodes);
 			}
 		}

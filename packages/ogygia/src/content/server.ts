@@ -132,7 +132,9 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 				}) as unknown as ListRemote<Out>;
 			},
 
-			get<Out = { id: string; data: T } | null>(options: LiveGetOptions<T, Out> = {}): GetRemote<Out> {
+			get<Out = { id: string; data: T } | null>(
+				options: LiveGetOptions<T, Out> = {}
+			): GetRemote<Out> {
 				const filter = c.compose(options.filter);
 				const notFound = ('notFound' in options ? options.notFound : null) as Out;
 				const map = options.map ?? ((e: ContentRef<T>) => ({ id: e.id, data: e.data }) as Out);

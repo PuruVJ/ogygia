@@ -112,7 +112,9 @@ export class CompileCtx {
 		this.app_shims = init.app_shims;
 		this.is_build = init.is_build;
 		this.content_presets = init.content_presets;
-		const hint_keys = Object.values(init.import_keys).filter((v) => typeof v === 'string') as string[];
+		const hint_keys = Object.values(init.import_keys).filter(
+			(v) => typeof v === 'string'
+		) as string[];
 		this.#island_hint_re = hint_keys.length
 			? new RegExp(`\\bwith\\s*\\{[^}]*\\b(?:${hint_keys.join('|')})\\b`)
 			: /$^/;

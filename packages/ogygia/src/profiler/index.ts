@@ -252,7 +252,9 @@ class Profiler {
 		// experimental tracing) — collected for free, shown only when present.
 		const gc_pauses: number[] = [];
 		const measures: { name: string; ms: number }[] = [];
-		const ingest = (entries: ReadonlyArray<{ entryType: string; name: string; duration: number }>) => {
+		const ingest = (
+			entries: ReadonlyArray<{ entryType: string; name: string; duration: number }>
+		) => {
 			for (const e of entries) {
 				if (e.entryType === 'gc') gc_pauses.push(e.duration);
 				else if (e.entryType === 'measure' && measures.length < 5000) {
@@ -344,7 +346,10 @@ class Profiler {
 					p99: round2(histogram.percentile(99) / 1e6),
 					max: round2(histogram.max / 1e6)
 				},
-				cpu_percent: duration_ms > 0 ? round2(((cpu.user + cpu.system) / 1000 / duration_ms) * 100) : undefined,
+				cpu_percent:
+					duration_ms > 0
+						? round2(((cpu.user + cpu.system) / 1000 / duration_ms) * 100)
+						: undefined,
 				elu_percent: round2(elu.utilization * 100),
 				t0,
 				t1,
@@ -387,7 +392,9 @@ class Profiler {
 				await session.post('Profiler.startPreciseCoverage', { callCount: true, detailed: false });
 				await work();
 				const cov = (await session.post('Profiler.takePreciseCoverage')) as {
-					result: Array<{ functions: Array<{ functionName: string; ranges: Array<{ count: number }> }> }>;
+					result: Array<{
+						functions: Array<{ functionName: string; ranges: Array<{ count: number }> }>;
+					}>;
 				};
 				await session.post('Profiler.stopPreciseCoverage');
 				for (const script of cov.result) {
@@ -442,10 +449,15 @@ class Profiler {
 		};
 		const resolve_caller = (site?: CallerSite): string | undefined => {
 			if (!site) return undefined;
-			const name = site.fn && site.fn !== '(anonymous)' && !site.fn.includes('.') ? site.fn : undefined;
+			const name =
+				site.fn && site.fn !== '(anonymous)' && !site.fn.includes('.') ? site.fn : undefined;
 			let file = rel_src(site.file);
 			let line = site.line;
-			const m = resolver?.resolve(site.file, Math.max(0, site.line - 1), Math.max(0, site.column - 1));
+			const m = resolver?.resolve(
+				site.file,
+				Math.max(0, site.line - 1),
+				Math.max(0, site.column - 1)
+			);
 			if (m) {
 				file = rel_src(m.source);
 				line = m.line;
@@ -531,7 +543,9 @@ class Profiler {
 	}
 
 	#cookie_token(createHash: HashFn): string {
-		return createHash('sha256').update('og-profiler:' + this.secret).digest('hex');
+		return createHash('sha256')
+			.update('og-profiler:' + this.secret)
+			.digest('hex');
 	}
 
 	/** false = denied; true = authed; string = authed AND set this cookie */
@@ -592,13 +606,19 @@ class Profiler {
 
 		if (sub === '/page') {
 			if (this.#recording) {
-				return html(render_message('Busy', 'A profile is already running. Try again in a moment.', this.base), 409);
+				return html(
+					render_message('Busy', 'A profile is already running. Try again in a moment.', this.base),
+					409
+				);
 			}
 			this.#recording = true;
 			try {
 				const path = q.get('p') ?? '';
 				if (!path.startsWith('/') || path.startsWith('//')) {
-					return html(render_message('Bad path', 'Give a path on this site, like /docs/overview.', this.base), 400);
+					return html(
+						render_message('Bad path', 'Give a path on this site, like /docs/overview.', this.base),
+						400
+					);
 				}
 				const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
 				const interval = clamp(Number(q.get('interval')) || 200, 50, 10_000);
@@ -642,7 +662,10 @@ class Profiler {
 				if (wants_json) {
 					return json_response(report_json(s.analysis, s.meta, this.base, this.#report_extras(s)));
 				}
-				const headers = new Headers({ location: `${this.base}/report/${id}`, 'cache-control': 'no-store' });
+				const headers = new Headers({
+					location: `${this.base}/report/${id}`,
+					'cache-control': 'no-store'
+				});
 				if (set_cookie) headers.append('set-cookie', set_cookie);
 				return new Response(null, { status: 303, headers });
 			} catch (e) {
@@ -669,11 +692,21 @@ class Profiler {
 				try {
 					const dump: unknown = JSON.parse(await event.request.text());
 					if (!is_dump(dump)) {
-						return html(render_message('Not a profile', 'That file is not an ogygia profiler dump.', this.base), 400);
+						return html(
+							render_message(
+								'Not a profile',
+								'That file is not an ogygia profiler dump.',
+								this.base
+							),
+							400
+						);
 					}
 					return html(render_report(dump.analysis, dump.meta, this.base, dump.extras));
 				} catch {
-					return html(render_message('Bad file', 'Could not read that file as a profiler dump.', this.base), 400);
+					return html(
+						render_message('Bad file', 'Could not read that file as a profiler dump.', this.base),
+						400
+					);
 				}
 			}
 			return html(render_upload_page(this.base));
@@ -682,13 +715,23 @@ class Profiler {
 		const report_match = /^\/report\/([a-z0-9]+)(\/raw|\.json|\/json|\/dump)?$/.exec(sub);
 		if (report_match) {
 			const stored = this.#reports.get(report_match[1]);
-			if (!stored) return html(render_message('Gone', 'That report has expired (only the last few are kept).', this.base), 404);
+			if (!stored)
+				return html(
+					render_message(
+						'Gone',
+						'That report has expired (only the last few are kept).',
+						this.base
+					),
+					404
+				);
 			const suffix = report_match[2];
 			if (suffix === '/dump') {
 				return this.#dump_response(stored.meta.id, stored);
 			}
 			if (suffix === '.json' || suffix === '/json') {
-				return json_response(report_json(stored.analysis, stored.meta, this.base, this.#report_extras(stored)));
+				return json_response(
+					report_json(stored.analysis, stored.meta, this.base, this.#report_extras(stored))
+				);
 			}
 			if (suffix === '/raw') {
 				let body: string;
@@ -718,14 +761,18 @@ class Profiler {
 					}
 				});
 			}
-			return html(render_report(stored.analysis, stored.meta, this.base, this.#report_extras(stored)));
+			return html(
+				render_report(stored.analysis, stored.meta, this.base, this.#report_extras(stored))
+			);
 		}
 
 		return html(render_message('Not found', 'Unknown profiler page.', this.base), 404);
 	}
 
 	#dump_response(id: string, stored: StoredReport): Response {
-		const body = JSON.stringify(report_dump(stored.analysis, stored.meta, this.#report_extras(stored)));
+		const body = JSON.stringify(
+			report_dump(stored.analysis, stored.meta, this.#report_extras(stored))
+		);
 		return new Response(body, {
 			headers: {
 				'content-type': 'application/json',
@@ -752,7 +799,10 @@ class Profiler {
 		if (this.#disabled) return resolve(event);
 		await this.#init();
 
-		if (this.ui_enabled && (event.url.pathname === this.base || event.url.pathname.startsWith(this.base + '/'))) {
+		if (
+			this.ui_enabled &&
+			(event.url.pathname === this.base || event.url.pathname.startsWith(this.base + '/'))
+		) {
 			return this.#ui(event);
 		}
 
@@ -789,7 +839,8 @@ class Profiler {
 		this.#inflight++;
 
 		const run = async (): Promise<Response> => {
-			const res = ctx && this.#als ? await this.#als.run(ctx, () => resolve(event)) : await resolve(event);
+			const res =
+				ctx && this.#als ? await this.#als.run(ctx, () => resolve(event)) : await resolve(event);
 			entry.status = res.status;
 			if (this.want_server_timing) {
 				try {
@@ -811,7 +862,12 @@ class Profiler {
 
 		// header-triggered single-request profile
 		const profile_header = event.request.headers.get('x-profile');
-		if (profile_header && !this.#recording && (await this.#key_matches(profile_header)) && this.ui_enabled) {
+		if (
+			profile_header &&
+			!this.#recording &&
+			(await this.#key_matches(profile_header)) &&
+			this.ui_enabled
+		) {
 			this.#recording = true;
 			try {
 				let res: Response | undefined;

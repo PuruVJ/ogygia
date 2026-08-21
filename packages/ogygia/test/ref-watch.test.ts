@@ -7,7 +7,17 @@
  * old reunification-by-identity behavior byte-for-byte.
  */
 import { describe, it, expect } from 'vitest';
-import { register_kind, resolve, watch, notify, dispose_scope, dispose_ids, register_scope_disposer, batch, resolve_batch } from '../src/ref.js';
+import {
+	register_kind,
+	resolve,
+	watch,
+	notify,
+	dispose_scope,
+	dispose_ids,
+	register_scope_disposer,
+	batch,
+	resolve_batch
+} from '../src/ref.js';
 
 // a tiny "counter" kind with a merge: decode makes {v}; merge folds fresh v into the live object
 let registered = false;

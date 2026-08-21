@@ -26,9 +26,18 @@ export type ParseResult = { program: Node | null; ok: boolean; comments: Comment
  */
 export function parse_module(code: string, id: string): ParseResult {
 	try {
-		const result = parseSync(id, code) as { program?: Node; errors?: unknown[]; comments?: Comment[] };
-		if (result.errors && result.errors.length > 0) return { program: null, ok: false, comments: [] };
-		return { program: result.program ?? null, ok: !!result.program, comments: result.comments ?? [] };
+		const result = parseSync(id, code) as {
+			program?: Node;
+			errors?: unknown[];
+			comments?: Comment[];
+		};
+		if (result.errors && result.errors.length > 0)
+			return { program: null, ok: false, comments: [] };
+		return {
+			program: result.program ?? null,
+			ok: !!result.program,
+			comments: result.comments ?? []
+		};
 	} catch {
 		return { program: null, ok: false, comments: [] };
 	}

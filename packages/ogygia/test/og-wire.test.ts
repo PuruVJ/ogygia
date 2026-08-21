@@ -72,9 +72,9 @@ describe('rewrite_wire — strictness (build errors, file:line)', () => {
 	});
 
 	it('rejects a call outside a static class member', () => {
-		expect(() => rewrite_wire(`const c = import.meta.og.wire(${CODEC});`, '/app/x.ts', MARKUP)).toThrow(
-			/called outside a static class member/
-		);
+		expect(() =>
+			rewrite_wire(`const c = import.meta.og.wire(${CODEC});`, '/app/x.ts', MARKUP)
+		).toThrow(/called outside a static class member/);
 	});
 
 	it('rejects a wrongly-named static member', () => {

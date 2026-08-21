@@ -99,18 +99,24 @@ export function numbered(opts: NumberedOptions = {}): Convention {
 			const issues: string[] = [];
 			const bare = segments.filter((s) => !/^\d+-/.test(s));
 			if (bare.length) {
-				issues.push(`ordering in ${at}: mixed prefixed and unprefixed siblings — prefix ${bare.slice(0, 4).join(', ')}${bare.length > 4 ? ', …' : ''} (or opt out with "ordered": false in +meta.json)`);
+				issues.push(
+					`ordering in ${at}: mixed prefixed and unprefixed siblings — prefix ${bare.slice(0, 4).join(', ')}${bare.length > 4 ? ', …' : ''} (or opt out with "ordered": false in +meta.json)`
+				);
 			}
 			const digits = prefixed.map((s) => s.match(/^(\d+)-/)![1]);
 			const widths = new Set(digits.map((d) => d.length));
 			if (opts.pad !== undefined ? [...widths].some((w) => w !== opts.pad) : widths.size > 1) {
 				const seen = [...new Set(prefixed.map((s) => s.match(/^\d+-/)![0]))].slice(0, 6).join(', ');
-				issues.push(`ordering in ${at}: inconsistent prefix padding (${seen})${opts.pad !== undefined ? ` — expected ${opts.pad} digits` : ''}`);
+				issues.push(
+					`ordering in ${at}: inconsistent prefix padding (${seen})${opts.pad !== undefined ? ` — expected ${opts.pad} digits` : ''}`
+				);
 			}
 			const nums = digits.map(Number).sort((a, b) => a - b);
 			const dupes = [...new Set(nums.filter((n, i) => i > 0 && nums[i - 1] === n))];
 			if (dupes.length && opts.duplicates !== 'allow') {
-				issues.push(`ordering in ${at}: duplicate prefix number${dupes.length > 1 ? 's' : ''} ${dupes.join(', ')} — siblings: ${[...prefixed].sort().join(', ')} (intentional? pass numbered({ duplicates: 'allow' }))`);
+				issues.push(
+					`ordering in ${at}: duplicate prefix number${dupes.length > 1 ? 's' : ''} ${dupes.join(', ')} — siblings: ${[...prefixed].sort().join(', ')} (intentional? pass numbered({ duplicates: 'allow' }))`
+				);
 			}
 			if (opts.contiguous && bare.length === 0 && dupes.length === 0) {
 				const gaps = nums.some((n, i) => i > 0 && n !== nums[i - 1] + 1);
@@ -140,7 +146,7 @@ function compile_format(format: string): CompiledFormat {
 	if (hit) return hit;
 	let re = '';
 	const order: Array<'Y' | 'M' | 'D'> = [];
-	for (let i = 0; i < format.length; ) {
+	for (let i = 0; i < format.length;) {
 		if (format.startsWith('YYYY', i)) {
 			re += String.raw`(\d{4})`;
 			order.push('Y');
@@ -172,7 +178,10 @@ function compile_format(format: string): CompiledFormat {
 	return out;
 }
 
-function parts_of(segment: string, format: string): { y: number; m: number; d: number; slug: string } | null {
+function parts_of(
+	segment: string,
+	format: string
+): { y: number; m: number; d: number; slug: string } | null {
 	const { re, order } = compile_format(format);
 	const match = re.exec(segment);
 	if (!match) return null;

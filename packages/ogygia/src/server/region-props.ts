@@ -32,9 +32,7 @@ export function encode_region_props(props: Record<string, unknown>): string | nu
 	ensure_prop_kinds();
 	let payload: string;
 	try {
-		payload = B64Url.encode(
-			stringify(props, { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) })
-		);
+		payload = B64Url.encode(stringify(props, { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) }));
 	} catch {
 		return null;
 	}

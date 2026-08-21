@@ -13,7 +13,16 @@ const ROOT = '/standalone-app';
 function make_compiler() {
 	const program = new Program({ forms: true, router: true });
 	const profiler = {
-		prof: { transformMs: 0, transformN: 0, transformHit: 0, prescanMs: 0, bakeMs: 0, bakeN: 0, resolveMs: 0, loadMs: 0 },
+		prof: {
+			transformMs: 0,
+			transformN: 0,
+			transformHit: 0,
+			prescanMs: 0,
+			bakeMs: 0,
+			bakeN: 0,
+			resolveMs: 0,
+			loadMs: 0
+		},
 		P: false,
 		outHash: new Map<string, number>()
 	};

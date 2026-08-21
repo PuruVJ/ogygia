@@ -22,12 +22,17 @@ import { REF_WIRE_KEY, ref_reviver } from '../src/ref.js';
 
 /** The seams now emit ONE hub key — parse their output the way an island does. */
 const parse_seam = (text: string) =>
-	parse(text, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown }) as Record<string, unknown>;
+	parse(text, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown }) as Record<
+		string,
+		unknown
+	>;
 
 /** Round-trip helpers: server encode → client decode (remember) / server decode (fresh). */
 const enc = (v: unknown) => stringify(v, { [STORE_WIRE_KEY]: reduce_store });
-const dec_client = (s: string) => parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, true) });
-const dec_server = (s: string) => parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, false) });
+const dec_client = (s: string) =>
+	parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, true) });
+const dec_server = (s: string) =>
+	parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, false) });
 
 /** The registries live on globalThis — flush the live map between tests via fresh ids
  *  (each test creates fresh stores, so ids never collide; nothing to reset). */
@@ -134,7 +139,9 @@ describe('boundary classifier', () => {
 		const base = writable(2);
 		const doubled = derived(base, (n) => n * 2);
 		const findings = classify_boundary({ doubled });
-		expect(findings.some((f) => f.kind === 'warn' && f.path === 'doubled' && /derivation/.test(f.detail))).toBe(true);
+		expect(
+			findings.some((f) => f.kind === 'warn' && f.path === 'doubled' && /derivation/.test(f.detail))
+		).toBe(true);
 	});
 
 	it('readonly() wrapper → warn like derived (builder-tc getter pattern, C8 consumer)', () => {
@@ -144,7 +151,9 @@ describe('boundary classifier', () => {
 
 	it('store with custom methods but no factory → warn NAMING the methods (C9/C13)', () => {
 		const { subscribe, set, update } = writable(0);
-		const findings = classify_boundary({ counter: { subscribe, set, update, increment() {}, reset() {} } });
+		const findings = classify_boundary({
+			counter: { subscribe, set, update, increment() {}, reset() {} }
+		});
 		const warn = findings.find((f) => f.kind === 'warn' && f.path === 'counter');
 		expect(warn?.detail).toMatch(/increment/);
 		expect(warn?.detail).toMatch(/reset/);

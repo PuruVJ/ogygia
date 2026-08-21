@@ -103,7 +103,10 @@ describe('RuntimeSession lake_cache (SPA reset)', () => {
 
 describe('islandId salt (P1-ID)', () => {
 	it('matches unsalted legacy when salt is empty', () => {
-		const legacy = createHash('md5').update('src/routes/+page.svelte::0').digest('hex').slice(0, 12);
+		const legacy = createHash('md5')
+			.update('src/routes/+page.svelte::0')
+			.digest('hex')
+			.slice(0, 12);
 		expect(islandId('src/routes/+page.svelte', 0)).toBe(legacy);
 	});
 

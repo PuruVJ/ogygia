@@ -45,7 +45,8 @@ const TAB_MARK = /^\s*==[ \t]+(.+?)[ \t]*$/;
 // A fence opener: optional indent, 3+ of ` or ~, then an info string (may be empty).
 const FENCE = /^(\s*)(`{3,}|~{3,})(.*)$/;
 
-const attr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const attr = (s: string) =>
+	s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** An open fence's identity: its char (` or ~) and length, so we only close on a matching-or-longer run. */
 type Fence = { char: string; len: number };
@@ -188,7 +189,10 @@ function parse_code_group(body: string[]): ParsedTab[] {
 		if (opener) {
 			fence = opener.fence;
 			const { label, lang } = split_label(opener.info);
-			cur = { label: label ?? `Tab ${n + 1}`, body: [`${opener.indent}${opener.fence.char.repeat(opener.fence.len)}${lang}`] };
+			cur = {
+				label: label ?? `Tab ${n + 1}`,
+				body: [`${opener.indent}${opener.fence.char.repeat(opener.fence.len)}${lang}`]
+			};
 			tabs.push(cur);
 			n += 1;
 			continue;

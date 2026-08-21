@@ -37,7 +37,8 @@ function walk(node: Node, visit: (n: Node) => void): void {
 		if (key === 'type' || key === 'start' || key === 'end') continue;
 		const child = node[key];
 		if (Array.isArray(child)) {
-			for (const c of child) if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
+			for (const c of child)
+				if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
 		} else if (child && typeof child === 'object' && typeof child.type === 'string') {
 			walk(child, visit);
 		}
@@ -53,11 +54,24 @@ function line_of(src: string, offset: number): number {
 
 /** A located snippet call: the span to replace, plus its resolved static arguments. `code` carries
  *  `lang`/`meta`; `md` carries only `source` (the markdown text). */
-export type CodeCall = { kind: 'code' | 'md'; start: number; end: number; source: string; lang: string; meta: string };
+export type CodeCall = {
+	kind: 'code' | 'md';
+	start: number;
+	end: number;
+	source: string;
+	lang: string;
+	meta: string;
+};
 
 /** Read a STATIC string from an arg node: a string literal, or a no-interpolation template literal.
  *  Throws (build voice) on anything else. `label` names the arg for the error. */
-function static_string(node: Node | undefined, src: string, id: string, offset: number, label: string): string {
+function static_string(
+	node: Node | undefined,
+	src: string,
+	id: string,
+	offset: number,
+	label: string
+): string {
 	if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
 	if (node?.type === 'TemplateLiteral') {
 		if ((node.expressions?.length ?? 0) > 0) {
@@ -86,10 +100,19 @@ function find_calls(src: string, region: JsRegion, id: string): CodeCall[] | nul
 		const args = (n.arguments as Node[] | undefined) ?? [];
 		if (method === 'md') {
 			if (args.length !== 1) {
-				throw new Error(`[ogygia] ${id}:${line_of(src, abs)} — import.meta.og.md(text) takes exactly one argument.`);
+				throw new Error(
+					`[ogygia] ${id}:${line_of(src, abs)} — import.meta.og.md(text) takes exactly one argument.`
+				);
 			}
 			const source = dedent(static_string(args[0], src, id, abs, 'text'));
-			calls.push({ kind: 'md', start: abs, end: region.offset + n.end, source, lang: '', meta: '' });
+			calls.push({
+				kind: 'md',
+				start: abs,
+				end: region.offset + n.end,
+				source,
+				lang: '',
+				meta: ''
+			});
 			return;
 		}
 		if (args.length < 2 || args.length > 3) {

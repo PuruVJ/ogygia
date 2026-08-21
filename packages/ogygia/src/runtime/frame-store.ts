@@ -149,7 +149,14 @@ export function reserve(a: string): void {
 		fail = rej;
 	});
 	promise.catch(() => {}); // an unclaimed reservation must never surface as an unhandled rejection
-	e.inflight = { ticket: ticket(a), promise, controller: new AbortController(), waiters: 0, settle, fail };
+	e.inflight = {
+		ticket: ticket(a),
+		promise,
+		controller: new AbortController(),
+		waiters: 0,
+		settle,
+		fail
+	};
 }
 
 /**

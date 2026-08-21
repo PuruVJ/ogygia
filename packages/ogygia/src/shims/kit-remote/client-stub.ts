@@ -3,19 +3,9 @@
 import { parse } from 'devalue';
 import { transport } from 'virtual:ogygia/transport';
 import { slots } from '../../runtime/slots.js';
-import {
-	query_responses,
-	prerender_responses,
-	query_map,
-	live_query_map
-} from './remote-cache.js';
+import { query_responses, prerender_responses, query_map, live_query_map } from './remote-cache.js';
 
-export {
-	query_responses,
-	prerender_responses,
-	query_map,
-	live_query_map
-};
+export { query_responses, prerender_responses, query_map, live_query_map };
 
 const t = transport || {};
 export const app = {

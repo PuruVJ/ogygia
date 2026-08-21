@@ -12,11 +12,20 @@
  * runtime twice — a module-local map would split; PAGE-STATE-SINGLETON).
  */
 import { parse } from 'devalue';
-import { PAGE_DEFER_KEY, PAGE_SETTLED_KEY, PAGE_DEFER_GLOBAL, PAGE_DEFER_REGISTRY_KEY } from '../page-defer.js';
+import {
+	PAGE_DEFER_KEY,
+	PAGE_SETTLED_KEY,
+	PAGE_DEFER_GLOBAL,
+	PAGE_DEFER_REGISTRY_KEY
+} from '../page-defer.js';
 
 export { PAGE_DEFER_BOOTSTRAP } from '../page-defer.js';
 
-type Deferred = { promise: Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void };
+type Deferred = {
+	promise: Promise<unknown>;
+	resolve: (v: unknown) => void;
+	reject: (e: unknown) => void;
+};
 interface Registry {
 	/** Raw resolves the inline bootstrap queued before the runtime installed `live`. */
 	q?: Array<[id: number, ok: boolean, encoded: string]>;
@@ -84,7 +93,9 @@ function settle(id: number, ok: boolean, value: unknown): void {
 /** Install the live resolver (which parses the encoded value) and drain anything the inline bootstrap
  *  queued before the runtime loaded. `extra_revivers` are the app's transport decoders (custom types in
  *  a streamed value). Idempotent — safe to call on every boot; the first call's revivers win. */
-export function install_page_defer(extra_revivers?: Record<string, (payload: never) => unknown>): void {
+export function install_page_defer(
+	extra_revivers?: Record<string, (payload: never) => unknown>
+): void {
 	const r = reg();
 	if (r.live) return;
 	// A resolved value may carry NESTED defer markers (a promise that resolved to a value holding more
@@ -112,7 +123,9 @@ export function install_page_defer(extra_revivers?: Record<string, (payload: nev
  *  SETTLED marker becomes an already resolved/rejected Promise (non-navigate path). Both keep
  *  `page.data.x` a Promise, so `{#await}` works identically regardless of how the page was requested.
  *  `extra` merges the app's transport decoders; ogygia's own keys always win on any name clash. */
-export function page_defer_revivers(extra?: Record<string, (payload: never) => unknown>): Record<string, (payload: never) => unknown> {
+export function page_defer_revivers(
+	extra?: Record<string, (payload: never) => unknown>
+): Record<string, (payload: never) => unknown> {
 	return {
 		...extra,
 		[PAGE_DEFER_KEY]: (payload: never) => create_deferred((payload as [number])[0]),

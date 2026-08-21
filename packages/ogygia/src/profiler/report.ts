@@ -96,7 +96,11 @@ export interface RouteAgg {
 // ---------------------------------------------------------------------------
 
 const esc = (s: unknown): string =>
-	String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	String(s)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
 
 const CATEGORY_LABEL: Record<FrameCategory, string> = {
 	component: 'component',
@@ -224,11 +228,16 @@ function page(title: string, body: string): string {
 </body></html>`;
 }
 
-const fmt_ms = (n: number): string => (n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2));
+const fmt_ms = (n: number): string =>
+	n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
 const fmt_pct = (part: number, whole: number): string =>
 	whole > 0 ? ((part / whole) * 100).toFixed(1) + '%' : '—';
 const fmt_bytes = (n: number): string =>
-	n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? (n / 1024).toFixed(0) + ' kB' : n + ' B';
+	n >= 1048576
+		? (n / 1048576).toFixed(1) + ' MB'
+		: n >= 1024
+			? (n / 1024).toFixed(0) + ' kB'
+			: n + ' B';
 
 // ---------------------------------------------------------------------------
 // dashboard
@@ -387,7 +396,9 @@ function render_treemap(a: Analysis): string {
 		}))
 	};
 	const legend = [...new Set(cat_cells.map((c) => c.cat))]
-		.map((c) => `<span><i style="background:${CATEGORY_COLOR[c]}"></i>${esc(CATEGORY_LABEL[c])}</span>`)
+		.map(
+			(c) => `<span><i style="background:${CATEGORY_COLOR[c]}"></i>${esc(CATEGORY_LABEL[c])}</span>`
+		)
 		.join('');
 	return `<div class="crumb" id="tree-crumb"></div>
 <canvas id="tree"></canvas>
@@ -541,7 +552,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	info(
 		'summary',
 		`Over ${fmt_ms(meta.duration_ms)} ms the CPU was busy ${busy_pct.toFixed(0)}%` +
-			(net.length ? ` and ${net.length} outbound network calls took ${fmt_ms(net_total)} ms combined.` : '.')
+			(net.length
+				? ` and ${net.length} outbound network calls took ${fmt_ms(net_total)} ms combined.`
+				: '.')
 	);
 
 	if (net.length >= 2 && seq > meta.duration_ms * 0.5 && busy_pct < 60) {
@@ -560,35 +573,61 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 
 	const th = top_hosts(net)[0];
 	if (th && th.total > meta.duration_ms * 0.2) {
-		info('slow-upstream', `Slowest upstream: ${th.host || '(unknown)'} — ${th.count} calls, ${fmt_ms(th.total)} ms.`);
+		info(
+			'slow-upstream',
+			`Slowest upstream: ${th.host || '(unknown)'} — ${th.count} calls, ${fmt_ms(th.total)} ms.`
+		);
 	}
-	if (net_errors) warn('network-errors', `${net_errors} network call${net_errors > 1 ? 's' : ''} failed.`);
+	if (net_errors)
+		warn('network-errors', `${net_errors} network call${net_errors > 1 ? 's' : ''} failed.`);
 
 	const tb = a.buckets.find((b) => b.category !== 'idle' && b.category !== 'profiler');
 	if (tb) {
-		info('top-cpu', `Biggest CPU consumer: ${tb.key} (${fmt_ms(tb.self_ms)} ms, ${fmt_pct(tb.self_ms, a.busy_ms)} of busy time).`);
+		info(
+			'top-cpu',
+			`Biggest CPU consumer: ${tb.key} (${fmt_ms(tb.self_ms)} ms, ${fmt_pct(tb.self_ms, a.busy_ms)} of busy time).`
+		);
 	}
 	const tc = a.components[0];
-	if (tc) info('top-component', `Most expensive component: ${tc.name} at ${fmt_ms(tc.total_ms)} ms total.`);
+	if (tc)
+		info(
+			'top-component',
+			`Most expensive component: ${tc.name} at ${fmt_ms(tc.total_ms)} ms total.`
+		);
 
 	if (a.gc_ms > a.busy_ms * 0.15 && a.gc_ms > 5) {
-		warn('gc-heavy', `Garbage collection took ${fmt_pct(a.gc_ms, a.busy_ms)} of busy time — see the allocators for who creates the garbage.`);
+		warn(
+			'gc-heavy',
+			`Garbage collection took ${fmt_pct(a.gc_ms, a.busy_ms)} of busy time — see the allocators for who creates the garbage.`
+		);
 	}
 	if (extras.gc && extras.gc.max_ms > 20) {
-		warn('gc-pause', `Longest single GC pause: ${fmt_ms(extras.gc.max_ms)} ms (${extras.gc.count} pauses, ${fmt_ms(extras.gc.total_ms)} ms total). A long pause freezes every request at once.`);
+		warn(
+			'gc-pause',
+			`Longest single GC pause: ${fmt_ms(extras.gc.max_ms)} ms (${extras.gc.count} pauses, ${fmt_ms(extras.gc.total_ms)} ms total). A long pause freezes every request at once.`
+		);
 	}
 	if (meta.loop_delay && meta.loop_delay.p99 > 50) {
-		warn('loop-stall', `The event loop stalled up to ${fmt_ms(meta.loop_delay.p99)} ms (p99) — long synchronous work blocks every other request.`);
+		warn(
+			'loop-stall',
+			`The event loop stalled up to ${fmt_ms(meta.loop_delay.p99)} ms (p99) — long synchronous work blocks every other request.`
+		);
 	}
 	const mem_delta = extras.mem.length >= 2 ? extras.mem.at(-1)!.rss - extras.mem[0].rss : 0;
 	if (mem_delta > 50) warn('mem-growth', `Memory grew ${mem_delta} MB during the window.`);
 
 	const profiler_ms = a.buckets.find((b) => b.key === 'profiler overhead')?.self_ms ?? 0;
 	if (profiler_ms > a.busy_ms * 0.05 && profiler_ms > 5) {
-		info('profiler-overhead', `${fmt_ms(profiler_ms)} ms of busy time is the profiler itself — a one-time cost when recording starts. Your app did not pay this outside the recording.`);
+		info(
+			'profiler-overhead',
+			`${fmt_ms(profiler_ms)} ms of busy time is the profiler itself — a one-time cost when recording starts. Your app did not pay this outside the recording.`
+		);
 	}
 	if (meta.dev) {
-		info('dev-mode', 'Recorded on the dev server — Vite module loading and transforms are included. Build and run production for exact figures.');
+		info(
+			'dev-mode',
+			'Recorded on the dev server — Vite module loading and transforms are included. Build and run production for exact figures.'
+		);
 	}
 	return out;
 }
@@ -607,15 +646,27 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 
 	const budget = a.buckets
 		.filter((b) => b.self_ms > 0 && b.category !== 'idle')
-		.map((b) => ({ label: b.key, category: b.category, ms: b.self_ms, pct: round1((b.self_ms / dur) * 100) }));
+		.map((b) => ({
+			label: b.key,
+			category: b.category,
+			ms: b.self_ms,
+			pct: round1((b.self_ms / dur) * 100)
+		}));
 	if (a.idle_ms > 0)
-		budget.push({ label: 'idle / waiting', category: 'idle', ms: a.idle_ms, pct: round1((a.idle_ms / dur) * 100) });
+		budget.push({
+			label: 'idle / waiting',
+			category: 'idle',
+			ms: a.idle_ms,
+			pct: round1((a.idle_ms / dur) * 100)
+		});
 	budget.sort((x, y) => y.ms - x.ms);
 
 	const alloc_by_name = new Map<string, number>();
-	for (const h of extras.heap ?? []) alloc_by_name.set(h.name, (alloc_by_name.get(h.name) ?? 0) + h.self_bytes);
+	for (const h of extras.heap ?? [])
+		alloc_by_name.set(h.name, (alloc_by_name.get(h.name) ?? 0) + h.self_bytes);
 
-	const verdict = a.idle_ms > dur * 0.5 ? 'waiting' : (a.busy_ms / dur) * 100 > 60 ? 'compute-bound' : 'mixed';
+	const verdict =
+		a.idle_ms > dur * 0.5 ? 'waiting' : (a.busy_ms / dur) * 100 > 60 ? 'compute-bound' : 'mixed';
 	const hosts = top_hosts(net);
 
 	return {
@@ -647,22 +698,22 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 		components: (() => {
 			const cc = extras.call_counts ?? {};
 			return [...a.components]
-			.sort((x, y) => y.self_ms - x.self_ms)
-			.map((c) => {
-				const n = (cc[c.name] ?? 0) || null;
-				return {
-					name: c.name,
-					instances: n,
-					file: c.url,
-					line: c.line,
-					self_ms: c.self_ms,
-					total_ms: c.total_ms,
-					// cost of a single render: total ÷ renders (n falls back to 1)
-					per_call_ms: round1(c.total_ms / (n ?? 1)),
-					pct_busy: round1((c.total_ms / busy) * 100),
-					alloc_bytes: alloc_by_name.get(c.name) ?? null
-				};
-			});
+				.sort((x, y) => y.self_ms - x.self_ms)
+				.map((c) => {
+					const n = (cc[c.name] ?? 0) || null;
+					return {
+						name: c.name,
+						instances: n,
+						file: c.url,
+						line: c.line,
+						self_ms: c.self_ms,
+						total_ms: c.total_ms,
+						// cost of a single render: total ÷ renders (n falls back to 1)
+						per_call_ms: round1(c.total_ms / (n ?? 1)),
+						pct_busy: round1((c.total_ms / busy) * 100),
+						alloc_bytes: alloc_by_name.get(c.name) ?? null
+					};
+				});
 		})(),
 		hot_functions: (() => {
 			const cc = extras.call_counts ?? {};
@@ -683,13 +734,25 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 		files: a.files
 			.filter((f) => f.category !== 'idle')
 			.slice(0, 40)
-			.map((f) => ({ file: f.key, category: f.category, self_ms: f.self_ms, pct_busy: round1((f.self_ms / busy) * 100) })),
+			.map((f) => ({
+				file: f.key,
+				category: f.category,
+				self_ms: f.self_ms,
+				pct_busy: round1((f.self_ms / busy) * 100)
+			})),
 		network: {
 			count: net.length,
 			total_ms: net_total,
 			sequential_ms: sequential_ms(extras.net),
 			errors: extras.net.filter((c) => c.error).length,
-			hosts: hosts.map((h) => ({ host: h.host, calls: h.count, total_ms: h.total, p50_ms: h.p50, max_ms: h.max, errors: h.errors })),
+			hosts: hosts.map((h) => ({
+				host: h.host,
+				calls: h.count,
+				total_ms: h.total,
+				p50_ms: h.p50,
+				max_ms: h.max,
+				errors: h.errors
+			})),
 			calls: [...net]
 				.sort((x, y) => y.ms + (y.body_ms ?? 0) - (x.ms + (x.body_ms ?? 0)))
 				.slice(0, 200)
@@ -726,10 +789,13 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 			const add = (caller: string, kind: string, ms: number) => {
 				const k = caller + '|' + kind;
 				const r = m.get(k) ?? { caller, kind, count: 0, wait_ms: 0 };
-				r.count++; r.wait_ms = round1(r.wait_ms + ms); m.set(k, r);
+				r.count++;
+				r.wait_ms = round1(r.wait_ms + ms);
+				m.set(k, r);
 			};
 			for (const c of net) if (c.caller) add(c.caller, 'http', c.ms + (c.body_ms ?? 0));
-			for (const o of extras.io ?? []) if (o.caller && !o.open) add(o.caller, io_kind(o.type), o.ms);
+			for (const o of extras.io ?? [])
+				if (o.caller && !o.open) add(o.caller, io_kind(o.type), o.ms);
 			return [...m.values()].sort((x, y) => y.wait_ms - x.wait_ms).slice(0, 40);
 		})(),
 		user_timings: (extras.measures ?? []).map((m) => ({
@@ -771,7 +837,9 @@ export function report_dump(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 }
 
 /** Narrowing guard for an uploaded dump before we render it. */
-export function is_dump(x: unknown): x is { meta: ReportMeta; analysis: Analysis; extras: ReportExtras } {
+export function is_dump(
+	x: unknown
+): x is { meta: ReportMeta; analysis: Analysis; extras: ReportExtras } {
 	const d = x as Record<string, unknown> | null;
 	return (
 		!!d &&
@@ -807,11 +875,16 @@ inp.addEventListener('change', async function () {
 }
 
 function render_waiting(net: NetCall[], io: IoOp[]): string {
-	const rows = new Map<string, { caller: string; kind: string; count: number; ms: number; open: number }>();
+	const rows = new Map<
+		string,
+		{ caller: string; kind: string; count: number; ms: number; open: number }
+	>();
 	const add = (caller: string, kind: string, ms: number, open = false) => {
 		const key = caller + '|' + kind;
 		const r = rows.get(key) ?? { caller, kind, count: 0, ms: 0, open: 0 };
-		r.count++; r.ms += ms; if (open) r.open++;
+		r.count++;
+		r.ms += ms;
+		if (open) r.open++;
 		rows.set(key, r);
 	};
 	// only attribute I/O that has a real app caller and actually completed — infra
@@ -819,7 +892,10 @@ function render_waiting(net: NetCall[], io: IoOp[]): string {
 	// open durations are meaningless
 	for (const c of net) if (c.ms >= 0 && c.caller) add(c.caller, 'http', c.ms + (c.body_ms ?? 0));
 	for (const o of io) if (o.caller && !o.open) add(o.caller, io_kind(o.type), o.ms);
-	const list = [...rows.values()].filter((r) => r.ms >= 0.5).sort((a, b) => b.ms - a.ms).slice(0, 30);
+	const list = [...rows.values()]
+		.filter((r) => r.ms >= 0.5)
+		.sort((a, b) => b.ms - a.ms)
+		.slice(0, 30);
 	if (!list.length) return '';
 	const max = list[0].ms || 1;
 	const body = list
@@ -882,9 +958,11 @@ export function render_report(
 		stat(fmt_ms(a.gc_ms) + ' ms', 'garbage collection'),
 		stat(String(meta.requests.length), 'requests in window')
 	];
-	if (extras.gc) stats.push(stat(fmt_ms(extras.gc.max_ms) + ' ms', `GC pause max (${extras.gc.count})`));
+	if (extras.gc)
+		stats.push(stat(fmt_ms(extras.gc.max_ms) + ' ms', `GC pause max (${extras.gc.count})`));
 	if (meta.loop_delay) stats.push(stat(fmt_ms(meta.loop_delay.p99) + ' ms', 'loop delay p99'));
-	if (meta.elu_percent !== undefined) stats.push(stat(meta.elu_percent.toFixed(0) + '%', 'event loop use'));
+	if (meta.elu_percent !== undefined)
+		stats.push(stat(meta.elu_percent.toFixed(0) + '%', 'event loop use'));
 	if (meta.rss_mb !== undefined) stats.push(stat(meta.rss_mb + ' MB', 'memory (rss)'));
 	stats.push(stat(String(a.sample_count), 'samples'));
 
@@ -951,7 +1029,9 @@ ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 			const n = instances(f.name);
 			const per = f.total_ms / (n > 0 ? n : 1);
 			const tag =
-				n > 1 ? ` <span class="hint" title="${n} calls, ${fmt_ms(f.total_ms / n)} ms each (total ÷ ${n})">×${n}</span>` : '';
+				n > 1
+					? ` <span class="hint" title="${n} calls, ${fmt_ms(f.total_ms / n)} ms each (total ÷ ${n})">×${n}</span>`
+					: '';
 			return `<tr data-self="${f.self_ms}" data-total="${f.total_ms}" data-per="${per}" data-alloc="${alloc ?? 0}" data-count="${n}">
 <td class="fn"><b>${esc(f.name)}</b>${tag}</td>
 <td class="file">${where(f.url, f.line)}</td>
@@ -989,7 +1069,9 @@ ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 	const host_rows = hosts
 		.slice(0, 12)
 		.map(
-			(h) => `<tr><td class="fn">${esc(h.host || '(same process)')}</td><td class="num">${h.count}</td>
+			(
+				h
+			) => `<tr><td class="fn">${esc(h.host || '(same process)')}</td><td class="num">${h.count}</td>
 <td class="num"><b>${fmt_ms(h.total)}</b></td><td class="num">${fmt_ms(h.p50)}</td><td class="num">${fmt_ms(h.max)}</td>
 <td class="num">${h.errors || '—'}</td></tr>`
 		)
@@ -1040,7 +1122,9 @@ ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 	const req_rows = meta.requests
 		.slice(0, 60)
 		.map(
-			(e) => `<tr><td>${esc(e.method)}</td><td class="fn">${esc(e.path)}${e.internal ? ' <span class="warn">(profiler)</span>' : ''}</td>
+			(
+				e
+			) => `<tr><td>${esc(e.method)}</td><td class="fn">${esc(e.path)}${e.internal ? ' <span class="warn">(profiler)</span>' : ''}</td>
 <td class="file">${esc(e.route ?? '—')}</td><td class="num">${e.status || '—'}</td><td class="num">${e.inflight}</td>
 <td class="num">${e.net_count ? fmt_ms(e.net_ms) : '—'}</td><td class="num">${fmt_ms(e.cpu_ms)}</td><td class="num">${fmt_ms(Math.max(0, e.ms - e.cpu_ms))}</td><td class="num"><b>${fmt_ms(e.ms)}</b></td></tr>`
 		)
@@ -1149,7 +1233,9 @@ function short_url(url: string): string {
 	}
 }
 
-function top_hosts(net: NetCall[]): { host: string; count: number; total: number; p50: number; max: number; errors: number }[] {
+function top_hosts(
+	net: NetCall[]
+): { host: string; count: number; total: number; p50: number; max: number; errors: number }[] {
 	const by_host = new Map<string, number[]>();
 	const errors = new Map<string, number>();
 	for (const c of net) {
@@ -1189,7 +1275,10 @@ function render_waterfall(net: NetCall[], meta: ReportMeta): string {
 			const label = `${c.method} ${wf_url(c.url)} — ${fmt_ms(dur)} ms`;
 			// label sits just right of the bar; if the bar is in the right third, put it to
 			// the left (right-anchored) so it never runs off the edge or overlaps
-			const style = left + width > 62 ? `right:calc(${(100 - left).toFixed(1)}% + 6px)` : `left:calc(${(left + width).toFixed(1)}% + 6px)`;
+			const style =
+				left + width > 62
+					? `right:calc(${(100 - left).toFixed(1)}% + 6px)`
+					: `left:calc(${(left + width).toFixed(1)}% + 6px)`;
 			return `<div class="wf-row">
 <div class="wf-bar${c.error ? ' err' : ''}" style="left:${left}%;width:${width}%" title="${esc(c.url)}">${body_pct > 5 ? `<span class="body" style="width:${body_pct}%"></span>` : ''}</div>
 <span class="wf-label" style="${style}">${esc(label)}</span>
@@ -1211,7 +1300,10 @@ function render_spark(mem: MemSample[]): string {
 	const max = Math.max(...values);
 	const range = Math.max(max - min, 1);
 	const pts = mem
-		.map((m) => `${pad + (m.t / t_max) * (w - 2 * pad)},${h - pad - ((m.rss - min) / range) * (h - 2 * pad)}`)
+		.map(
+			(m) =>
+				`${pad + (m.t / t_max) * (w - 2 * pad)},${h - pad - ((m.rss - min) / range) * (h - 2 * pad)}`
+		)
 		.join(' ');
 	return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
 <polyline points="${pts}" fill="none" stroke="#5b8fd6" stroke-width="1.5"/>
@@ -1325,5 +1417,8 @@ const FLAME_JS = `
 `;
 
 export function render_message(title: string, msg: string, base: string): string {
-	return page(title, `<h1>${esc(title)}</h1><p>${esc(msg)}</p><p><a href="${base}">← dashboard</a></p>`);
+	return page(
+		title,
+		`<h1>${esc(title)}</h1><p>${esc(msg)}</p><p><a href="${base}">← dashboard</a></p>`
+	);
 }

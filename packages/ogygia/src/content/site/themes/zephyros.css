@@ -70,8 +70,10 @@
 
 		/* soft indigo air — big blur, no hard edges */
 		--og-shadow-sm: 0 2px 10px rgba(74, 62, 150, 0.08), 0 1px 3px rgba(74, 62, 150, 0.05);
-		--og-shadow-md: 0 10px 34px -8px rgba(74, 62, 150, 0.16), 0 4px 12px -4px rgba(74, 62, 150, 0.08);
-		--og-shadow-lg: 0 32px 70px -18px rgba(74, 62, 150, 0.28), 0 12px 28px -12px rgba(74, 62, 150, 0.14);
+		--og-shadow-md:
+			0 10px 34px -8px rgba(74, 62, 150, 0.16), 0 4px 12px -4px rgba(74, 62, 150, 0.08);
+		--og-shadow-lg:
+			0 32px 70px -18px rgba(74, 62, 150, 0.28), 0 12px 28px -12px rgba(74, 62, 150, 0.14);
 		--og-ring: 0 0 0 3px color-mix(in oklab, var(--og-accent) 28%, transparent);
 
 		/* no washes — shadow and shape carry all depth */
@@ -139,8 +141,10 @@
 		--og-line: #e5e4f3;
 		--og-line-soft: #efeef8;
 		--og-shadow-sm: 0 2px 10px rgba(74, 62, 150, 0.08), 0 1px 3px rgba(74, 62, 150, 0.05);
-		--og-shadow-md: 0 10px 34px -8px rgba(74, 62, 150, 0.16), 0 4px 12px -4px rgba(74, 62, 150, 0.08);
-		--og-shadow-lg: 0 32px 70px -18px rgba(74, 62, 150, 0.28), 0 12px 28px -12px rgba(74, 62, 150, 0.14);
+		--og-shadow-md:
+			0 10px 34px -8px rgba(74, 62, 150, 0.16), 0 4px 12px -4px rgba(74, 62, 150, 0.08);
+		--og-shadow-lg:
+			0 32px 70px -18px rgba(74, 62, 150, 0.28), 0 12px 28px -12px rgba(74, 62, 150, 0.14);
 		--og-aurora: linear-gradient(transparent, transparent);
 		--og-depth: linear-gradient(transparent, transparent);
 		--og-code-bg: #f2f2fb;
@@ -1217,7 +1221,16 @@
 	}
 
 	:is(.og-shell, .og-shell, [class*='og-search'], [class*='og-sw-'], .og-sheet)
-		:is(a, button, [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='option'], input, summary):focus-visible {
+		:is(
+			a,
+			button,
+			[role='menuitem'],
+			[role='menuitemradio'],
+			[role='tab'],
+			[role='option'],
+			input,
+			summary
+		):focus-visible {
 		outline: 2px solid var(--og-accent);
 		outline-offset: 2px;
 		border-radius: var(--og-radius-sm);

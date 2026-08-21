@@ -35,7 +35,8 @@ function walk(node: Node, visit: (n: Node) => void): void {
 		if (key === 'type' || key === 'start' || key === 'end') continue;
 		const child = node[key];
 		if (Array.isArray(child)) {
-			for (const c of child) if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
+			for (const c of child)
+				if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
 		} else if (child && typeof child === 'object' && typeof child.type === 'string') {
 			walk(child, visit);
 		}
@@ -82,10 +83,20 @@ export function rewrite_store(
 			if (n.type === 'CallExpression' && og_member(n.callee as Node) === 'store') {
 				const abs = region.offset + n.start;
 				const args = n.arguments as Node[] | undefined;
-				if (!args || args.length !== 1) misuse(id, src, abs, `store() takes exactly one argument — the factory`);
+				if (!args || args.length !== 1)
+					misuse(id, src, abs, `store() takes exactly one argument — the factory`);
 				const fn = args[0]!;
-				if (fn.type !== 'ArrowFunctionExpression' && fn.type !== 'FunctionExpression' && fn.type !== 'Identifier') {
-					misuse(id, src, abs, `store()'s argument must be a function expression or an identifier (got ${fn.type})`);
+				if (
+					fn.type !== 'ArrowFunctionExpression' &&
+					fn.type !== 'FunctionExpression' &&
+					fn.type !== 'Identifier'
+				) {
+					misuse(
+						id,
+						src,
+						abs,
+						`store()'s argument must be a function expression or an identifier (got ${fn.type})`
+					);
 				}
 				claimed.add(n);
 				claimed.add(n.callee as Node);
@@ -145,7 +156,8 @@ export function auto_brand_stores(
 	rel_id: string,
 	markup_exts: readonly string[]
 ): string {
-	if (!src.includes('subscribe') && !src.includes('writable') && !src.includes('readable')) return src;
+	if (!src.includes('subscribe') && !src.includes('writable') && !src.includes('readable'))
+		return src;
 	const regions = og_js_regions(src, id, markup_exts);
 	if (!regions) return src;
 
@@ -158,9 +170,11 @@ export function auto_brand_stores(
 		(obj.properties ?? []).some((p: Node) => {
 			if (p.type !== 'Property' && p.type !== 'ObjectProperty') return false;
 			const k = p.key as Node | undefined;
-			return (!p.computed && k?.type === 'Identifier' && k.name === 'subscribe') ||
+			return (
+				(!p.computed && k?.type === 'Identifier' && k.name === 'subscribe') ||
 				(k?.type === 'StringLiteral' && k.value === 'subscribe') ||
-				(p.shorthand === true && k?.type === 'Identifier' && k.name === 'subscribe');
+				(p.shorthand === true && k?.type === 'Identifier' && k.name === 'subscribe')
+			);
 		});
 
 	for (const region of regions) {
@@ -172,7 +186,10 @@ export function auto_brand_stores(
 		for (const node of (program.body ?? []) as Node[]) {
 			if (node.type !== 'ImportDeclaration' || node.source?.value !== 'svelte/store') continue;
 			for (const sp of node.specifiers ?? []) {
-				if (sp.type === 'ImportSpecifier' && (sp.imported?.name === 'writable' || sp.imported?.name === 'readable')) {
+				if (
+					sp.type === 'ImportSpecifier' &&
+					(sp.imported?.name === 'writable' || sp.imported?.name === 'readable')
+				) {
 					store_fns.add(sp.local?.name ?? sp.imported.name);
 				}
 			}
@@ -183,7 +200,8 @@ export function auto_brand_stores(
 			while (v && v.type === 'ParenthesizedExpression') v = v.expression as Node;
 			if (!v) return false;
 			if (v.type === 'ObjectExpression') return has_subscribe_prop(v);
-			if (v.type === 'CallExpression' && v.callee?.type === 'Identifier') return store_fns.has(v.callee.name);
+			if (v.type === 'CallExpression' && v.callee?.type === 'Identifier')
+				return store_fns.has(v.callee.name);
 			return false;
 		};
 
@@ -198,9 +216,18 @@ export function auto_brand_stores(
 				for (const key in n) {
 					if (key === 'type' || key === 'start' || key === 'end') continue;
 					const child = n[key];
-					const kids = Array.isArray(child) ? child : child && typeof child === 'object' && typeof child.type === 'string' ? [child] : [];
+					const kids = Array.isArray(child)
+						? child
+						: child && typeof child === 'object' && typeof child.type === 'string'
+							? [child]
+							: [];
 					for (const c of kids as Node[]) {
-						if (c.type === 'ArrowFunctionExpression' || c.type === 'FunctionExpression' || c.type === 'FunctionDeclaration') continue;
+						if (
+							c.type === 'ArrowFunctionExpression' ||
+							c.type === 'FunctionExpression' ||
+							c.type === 'FunctionDeclaration'
+						)
+							continue;
 						if (c.type === 'ReturnStatement') returns.push(c);
 						collect(c);
 					}
@@ -220,12 +247,20 @@ export function auto_brand_stores(
 				const tag = `${rel_id}#auto:${name}${seq ? seq : ''}`;
 				seq++;
 				needs_import = true;
-				edits.push({ start: region.offset + init.start, end: region.offset + init.start, text: `__og_store(${JSON.stringify(tag)}, ` });
+				edits.push({
+					start: region.offset + init.start,
+					end: region.offset + init.start,
+					text: `__og_store(${JSON.stringify(tag)}, `
+				});
 				edits.push({ start: region.offset + init.end, end: region.offset + init.end, text: `)` });
 			}
 		}
 		if (needs_import && !edits.some((e) => e.text.startsWith('import'))) {
-			edits.push({ start: region.offset, end: region.offset, text: `import { __og_store } from 'ogygia/internal';` });
+			edits.push({
+				start: region.offset,
+				end: region.offset,
+				text: `import { __og_store } from 'ogygia/internal';`
+			});
 			needs_import = false;
 		}
 	}

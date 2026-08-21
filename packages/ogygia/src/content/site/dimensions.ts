@@ -18,7 +18,14 @@
  * Versions are just collections: hand `resolve` whichever collection sources a coordinate. ogygia does
  * not copy trees or read git — sourcing a version is the app's concern.
  */
-import { outline, href_of, type Outline, type OutlineSpec, type ReadContext, type TrailScope } from './outline.js';
+import {
+	outline,
+	href_of,
+	type Outline,
+	type OutlineSpec,
+	type ReadContext,
+	type TrailScope
+} from './outline.js';
 import type { NavRef, NavTree } from './types.js';
 
 /** One axis of the content matrix. */
@@ -91,10 +98,13 @@ class Dimensions implements Dimensioned {
 	constructor(spec: DimensionsSpec) {
 		this.#spec = spec;
 		this.#names = Object.keys(spec.axes);
-		if (this.#names.length === 0) throw new Error('[ogygia/content] dimensions() needs at least one axis.');
+		if (this.#names.length === 0)
+			throw new Error('[ogygia/content] dimensions() needs at least one axis.');
 		for (const name of this.#names) {
 			if (!spec.axes[name].values.includes(this.#def(name))) {
-				throw new Error(`[ogygia/content] axis "${name}": default "${this.#def(name)}" is not in values.`);
+				throw new Error(
+					`[ogygia/content] axis "${name}": default "${this.#def(name)}" is not in values.`
+				);
 			}
 		}
 		this.axes = spec.axes;
@@ -139,7 +149,9 @@ class Dimensions implements Dimensioned {
 		if (!p) {
 			const full: Coordinate = {};
 			for (const n of this.#names) full[n] = coord[n] ?? this.#def(n);
-			p = Promise.resolve(this.#spec.resolve(full)).then((r) => (is_outline(r) ? r : outline(r as OutlineSpec)));
+			p = Promise.resolve(this.#spec.resolve(full)).then((r) =>
+				is_outline(r) ? r : outline(r as OutlineSpec)
+			);
 			this.#cache.set(key, p);
 		}
 		return p;
@@ -235,7 +247,12 @@ class Dimensions implements Dimensioned {
 					missing: !r
 				});
 			}
-			out.push({ axis: n, label: this.#spec.axes[n].label ?? title(n), current: coord[n] ?? this.#def(n), options });
+			out.push({
+				axis: n,
+				label: this.#spec.axes[n].label ?? title(n),
+				current: coord[n] ?? this.#def(n),
+				options
+			});
 		}
 		return out;
 	}
@@ -258,7 +275,8 @@ class Dimensions implements Dimensioned {
 	async addresses(ctx: ReadContext = {}): Promise<string[]> {
 		const all: string[] = [];
 		for (const coord of this.#matrix()) {
-			for (const bare of await this.#reachable(coord, ctx)) all.push(this.#prefix_slug(coord, bare));
+			for (const bare of await this.#reachable(coord, ctx))
+				all.push(this.#prefix_slug(coord, bare));
 		}
 		return [...new Set(all)];
 	}
@@ -266,12 +284,22 @@ class Dimensions implements Dimensioned {
 	async neighbors(slug: string, base = '', ctx: ReadContext = {}, scope: TrailScope = 'site') {
 		const { coord, rest } = this.#peel(slug);
 		const inner = await this.#outline_for(coord);
-		const { prev, next } = await inner.neighbors(rest, base_join(base, this.#encode(coord)), ctx, scope);
-		const reslug = (ref?: NavRef) => (ref ? { ...ref, slug: this.#prefix_slug(coord, ref.slug) } : undefined);
+		const { prev, next } = await inner.neighbors(
+			rest,
+			base_join(base, this.#encode(coord)),
+			ctx,
+			scope
+		);
+		const reslug = (ref?: NavRef) =>
+			ref ? { ...ref, slug: this.#prefix_slug(coord, ref.slug) } : undefined;
 		return { ...(prev ? { prev: reslug(prev)! } : {}), ...(next ? { next: reslug(next)! } : {}) };
 	}
 
-	async slug_for(collection: Parameters<Outline['slug_for']>[0], entryId: string, ctx: ReadContext = {}) {
+	async slug_for(
+		collection: Parameters<Outline['slug_for']>[0],
+		entryId: string,
+		ctx: ReadContext = {}
+	) {
 		// Graph relations resolve within the entry's own coordinate; we don't know it here, so try
 		// each coordinate's outline and prefix the first hit. Bare slug returned unprefixed is fine
 		// for same-coordinate relations (the common case).

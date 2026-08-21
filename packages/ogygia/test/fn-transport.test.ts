@@ -18,7 +18,10 @@ const dec = (s: string) => parse(s, { [REF_WIRE_KEY]: ref_reviver(true) as (d: n
 describe('fn kind (og.$ runtime half)', () => {
 	it('round-trip: handle crosses, client rebinds captures, call works', () => {
 		// what the COMPILER will generate from: og.$((n) => `€${(n * (1 + tax)).toFixed(2)}`)
-		__register_fn('test/layout#$fmt', (tax: number) => (n: number) => `€${(n * (1 + tax)).toFixed(2)}`);
+		__register_fn(
+			'test/layout#$fmt',
+			(tax: number) => (n: number) => `€${(n * (1 + tax)).toFixed(2)}`
+		);
 		const live = fn_handle('test/layout#$fmt', [0.19]); // the call-site rewrite
 		expect((live as (n: number) => string)(100)).toBe('€119.00'); // SERVER leg: real fn immediately
 
@@ -69,7 +72,7 @@ describe('fn kind (og.$ runtime half)', () => {
 });
 
 describe('og.$ boundary assertion runtime (__og_boundary) + fn as island prop', () => {
-	it('legal values pass through untouched (mark-don\'t-wrap)', async () => {
+	it("legal values pass through untouched (mark-don't-wrap)", async () => {
 		const { __og_boundary } = await import('../src/boundary.js');
 		const store = writable(1);
 		expect(__og_boundary(store, 'x.ts:1')).toBe(store);
@@ -78,8 +81,9 @@ describe('og.$ boundary assertion runtime (__og_boundary) + fn as island prop', 
 
 	it('a refusal throws AT THE MARK with the site', async () => {
 		const { __og_boundary } = await import('../src/boundary.js');
-		expect(() => __og_boundary({ el: { nodeType: 1, nodeName: 'DIV' } }, 'src/routes/p.svelte:9'))
-			.toThrow(/src\/routes\/p\.svelte:9.*DOM node/s);
+		expect(() =>
+			__og_boundary({ el: { nodeType: 1, nodeName: 'DIV' } }, 'src/routes/p.svelte:9')
+		).toThrow(/src\/routes\/p\.svelte:9.*DOM node/s);
 		expect(() => __og_boundary({ cb: () => {} }, 'x.ts:3')).toThrow(/bare function/);
 	});
 
@@ -91,7 +95,9 @@ describe('og.$ boundary assertion runtime (__og_boundary) + fn as island prop', 
 		expect(payload).not.toBeNull(); // crossed — not frozen, not rejected
 		const { B64Url } = await import('../src/server/payload.js');
 		const { REF_WIRE_KEY, ref_reviver } = await import('../src/ref.js');
-		const props = parse(B64Url.decode(payload!), { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown }) as {
+		const props = parse(B64Url.decode(payload!), {
+			[REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown
+		}) as {
 			adder: (n: number) => number;
 			label: string;
 		};

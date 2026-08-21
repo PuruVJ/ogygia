@@ -116,7 +116,11 @@ export type AwaitableRegion = RegionValue & PromiseLike<RegionValue>;
 
 /** True for any value produced by {@link region} (or decoded from the wire). */
 export function isRegion(value: unknown): value is RegionValue {
-	return typeof value === 'object' && value !== null && (value as Record<symbol, unknown>)[REGION_BRAND] === true;
+	return (
+		typeof value === 'object' &&
+		value !== null &&
+		(value as Record<symbol, unknown>)[REGION_BRAND] === true
+	);
 }
 
 /**
@@ -189,7 +193,7 @@ export function region<C extends Component<never>>(
 				return make_inline_awaitable(inlineWrap);
 			}
 			throw new Error(
-				'[ogygia] a `with { region: \'raw\' }` component must be turned into a region on the server ' +
+				"[ogygia] a `with { region: 'raw' }` component must be turned into a region on the server " +
 					'(the signer lives server-side). Call region() in a load / remote / render context, ' +
 					'not in client code.'
 			);
@@ -332,5 +336,10 @@ export namespace region {
  * its own. Rendered like any region: `<Region of={…} />`.
  */
 export function og_html_region(html: string): InlineRegion {
-	return { [REGION_BRAND]: true, kind: 'inline', component: RawHtml as AnyComponent, props: { html } };
+	return {
+		[REGION_BRAND]: true,
+		kind: 'inline',
+		component: RawHtml as AnyComponent,
+		props: { html }
+	};
 }

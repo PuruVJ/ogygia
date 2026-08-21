@@ -116,9 +116,7 @@ export function mint_region_capability(entry: string, payload: string, ttl = 0):
  */
 export function mintServerIsland(entry: string, props: Record<string, unknown>, ttl = 0): string {
 	ensure_prop_kinds();
-	const payload = B64Url.encode(
-		stringify(props, { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) })
-	);
+	const payload = B64Url.encode(stringify(props, { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) }));
 	if (payload.length > MAX_REGION_PROPS_LEN) {
 		throw new Error(
 			`[ogygia] server island "${entry}": props payload is ${payload.length} b64 chars (max ${MAX_REGION_PROPS_LEN}). ` +

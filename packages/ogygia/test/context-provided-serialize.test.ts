@@ -8,19 +8,32 @@ import { serialize_provided_context } from '../dist/context-bridge.js';
 import { REF_WIRE_KEY, ref_reviver } from '../dist/ref.js';
 
 const parse_marker = (payload: string) =>
-	parse(payload, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown }) as Record<string, unknown>;
+	parse(payload, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown }) as Record<
+		string,
+		unknown
+	>;
 
 const map = (entries: [string, unknown][]) => new Map<string, unknown>(entries);
 
 describe('serialize_provided_context drops non-serializable, never crashes', () => {
 	it('serializes plain values', () => {
-		const payload = serialize_provided_context(map([['a', 1], ['b', { x: 'y' }]]));
+		const payload = serialize_provided_context(
+			map([
+				['a', 1],
+				['b', { x: 'y' }]
+			])
+		);
 		expect(payload).toBeTruthy();
 		expect(parse(payload!)).toEqual({ a: 1, b: { x: 'y' } });
 	});
 
 	it('drops a function, keeps the rest', () => {
-		const payload = serialize_provided_context(map([['fn', () => {}], ['keep', 'yes']]));
+		const payload = serialize_provided_context(
+			map([
+				['fn', () => {}],
+				['keep', 'yes']
+			])
+		);
 		const obj = parse(payload!) as Record<string, unknown>;
 		expect(obj.keep).toBe('yes');
 		expect('fn' in obj).toBe(false);
@@ -28,8 +41,21 @@ describe('serialize_provided_context drops non-serializable, never crashes', () 
 
 	it('BRIDGES a store (the transportable seam), keeps the rest', () => {
 		let current: unknown = 'seed';
-		const store = { subscribe: (fn: (v: unknown) => void) => { fn(current); return () => {}; }, set: (v: unknown) => { current = v; } };
-		const payload = serialize_provided_context(map([['store', store], ['keep', 42]]));
+		const store = {
+			subscribe: (fn: (v: unknown) => void) => {
+				fn(current);
+				return () => {};
+			},
+			set: (v: unknown) => {
+				current = v;
+			}
+		};
+		const payload = serialize_provided_context(
+			map([
+				['store', store],
+				['keep', 42]
+			])
+		);
 		const obj = parse_marker(payload!);
 		expect(obj.keep).toBe(42);
 		// the store crossed: it revives subscribe-shaped, seeded with its serialize-time value

@@ -142,7 +142,10 @@ export function reduce_fn(value: unknown): { t: string; i: string; d: unknown } 
 }
 
 /** Devalue reviver. Functions never memoize; `remember` rides through for capture resolution. */
-export function revive_fn(payload: { t: string; i: string; d: unknown }, remember: boolean): unknown {
+export function revive_fn(
+	payload: { t: string; i: string; d: unknown },
+	remember: boolean
+): unknown {
 	register_fn_kind();
 	return resolve({ k: 'fn', i: payload.i, t: payload.t, d: payload.d }, remember);
 }
@@ -152,7 +155,11 @@ export function revive_fn(payload: { t: string; i: string; d: unknown }, remembe
  * the call site IS the moment the code exists) and return the LIVE bound function, branded
  * with its travel handle. One expression, no import-time side effects.
  */
-export function __og_$(tag: string, bound: unknown[], factory: (...b: unknown[]) => unknown): (...args: unknown[]) => unknown {
+export function __og_$(
+	tag: string,
+	bound: unknown[],
+	factory: (...b: unknown[]) => unknown
+): (...args: unknown[]) => unknown {
 	__register_fn(tag, factory);
 	return fn_handle(tag, bound);
 }

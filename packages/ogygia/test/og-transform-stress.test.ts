@@ -60,7 +60,11 @@ describe('wire — byte-offset integrity (multi-byte unicode / CRLF / BOM before
 
 describe('wire — demented shapes that must still WORK', () => {
 	it('no trailing semicolon (ASI)', () => {
-		const out = rewrite_wire(`class C { static wire = import.meta.og.wire(${CODEC}) }`, '/x.ts', MARKUP);
+		const out = rewrite_wire(
+			`class C { static wire = import.meta.og.wire(${CODEC}) }`,
+			'/x.ts',
+			MARKUP
+		);
 		expect(out).toContain(`static [${WIRE_EXPR}] = ${CODEC}`);
 		expect(out).not.toContain('import.meta.og.wire(');
 	});
@@ -75,7 +79,9 @@ describe('wire — demented shapes that must still WORK', () => {
 		const out = rewrite_wire(src, '/x.ts', MARKUP);
 		// both members rewrite; no marker survives; braces stay balanced
 		expect(out).not.toContain('import.meta.og.wire(');
-		expect((out.match(new RegExp(WIRE_EXPR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) ?? []).length).toBe(2);
+		expect(
+			(out.match(new RegExp(WIRE_EXPR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) ?? []).length
+		).toBe(2);
 		expect(balanced(out)).toBe(true);
 	});
 
@@ -95,20 +101,32 @@ describe('wire — demented shapes that must still WORK', () => {
 
 	it('unicode / non-ASCII inside the codec strings', () => {
 		const codec = `{ encode: (c) => '🔥' + c.v, decode: (v) => new C(v.replace('café', '')) }`;
-		const out = rewrite_wire(`class C { static wire = import.meta.og.wire(${codec}); }`, '/x.ts', MARKUP);
+		const out = rewrite_wire(
+			`class C { static wire = import.meta.og.wire(${codec}); }`,
+			'/x.ts',
+			MARKUP
+		);
 		expect(out).toContain(codec);
 		expect(balanced(out)).toBe(true);
 	});
 
 	it('a template literal with `${}` interpolation inside the codec', () => {
 		const codec = '{ encode: (c) => `id:${c.v}`, decode: (v) => new C(v) }';
-		const out = rewrite_wire(`class C { static wire = import.meta.og.wire(${codec}); }`, '/x.ts', MARKUP);
+		const out = rewrite_wire(
+			`class C { static wire = import.meta.og.wire(${codec}); }`,
+			'/x.ts',
+			MARKUP
+		);
 		expect(out).toContain(codec);
 	});
 
 	it('the codec spans many lines with nested braces and a trailing comma', () => {
 		const codec = `{\n\tencode: (c) => ({ a: c.a, b: { deep: c.b } }),\n\tdecode: (d) => new C(d),\n}`;
-		const out = rewrite_wire(`class C { static wire = import.meta.og.wire(${codec}); }`, '/x.ts', MARKUP);
+		const out = rewrite_wire(
+			`class C { static wire = import.meta.og.wire(${codec}); }`,
+			'/x.ts',
+			MARKUP
+		);
 		expect(out).toContain(`static [${WIRE_EXPR}] = ${codec}`);
 		expect(balanced(out)).toBe(true);
 	});
@@ -148,14 +166,20 @@ describe('scanner fallback — when the AST bails on an unparseable tail', () =>
 	});
 
 	it('wire: a marker inside a REGEX literal is not rewritten by the fallback', () => {
-		const src = `const re = /static wire = import.meta.og.wire/g;\nclass C { static wire = import.meta.og.wire(${CODEC}); }` + BROKEN;
+		const src =
+			`const re = /static wire = import.meta.og.wire/g;\nclass C { static wire = import.meta.og.wire(${CODEC}); }` +
+			BROKEN;
 		const out = rewrite_wire(src, '/x.ts', MARKUP);
 		expect(out).toContain(`const re = /static wire = import.meta.og.wire/g;`); // regex untouched
 		expect(out).toContain(`static [${WIRE_EXPR}] = ${CODEC}`);
 	});
 
 	it('wire: a marker at a template-literal boundary is not rewritten by the fallback', () => {
-		const src = 'const t = `x static wire = import.meta.og.wire() y`;\nclass C { static wire = import.meta.og.wire(' + CODEC + '); }' + BROKEN;
+		const src =
+			'const t = `x static wire = import.meta.og.wire() y`;\nclass C { static wire = import.meta.og.wire(' +
+			CODEC +
+			'); }' +
+			BROKEN;
 		const out = rewrite_wire(src, '/x.ts', MARKUP);
 		expect(out).toContain('const t = `x static wire = import.meta.og.wire() y`;');
 		expect(out).toContain(`static [${WIRE_EXPR}] = ${CODEC}`);
@@ -196,7 +220,9 @@ describe('wire — demented shapes that must FAIL LOUDLY', () => {
 	it('used as a computed KEY directly (the impossible TS form) is caught as misuse', () => {
 		// `static [import.meta.og.wire]` — bare access in key position → misuse error.
 		const src = `class C { static [import.meta.og.wire] = ${CODEC}; }`;
-		expect(() => rewrite_wire(src, '/x.ts', MARKUP)).toThrow(/bare import\.meta\.og\.wire used as a value/);
+		expect(() => rewrite_wire(src, '/x.ts', MARKUP)).toThrow(
+			/bare import\.meta\.og\.wire used as a value/
+		);
 	});
 
 	it('spread into a call', () => {
@@ -206,21 +232,21 @@ describe('wire — demented shapes that must FAIL LOUDLY', () => {
 	});
 
 	it('assigned to an object property', () => {
-		expect(() => rewrite_wire(`const o = { w: import.meta.og.wire(${CODEC}) };`, '/x.ts', MARKUP)).toThrow(
-			/called outside a static class member/
-		);
+		expect(() =>
+			rewrite_wire(`const o = { w: import.meta.og.wire(${CODEC}) };`, '/x.ts', MARKUP)
+		).toThrow(/called outside a static class member/);
 	});
 
 	it('a NON-static member named wire', () => {
-		expect(() => rewrite_wire(`class C { wire = import.meta.og.wire(${CODEC}); }`, '/x.ts', MARKUP)).toThrow(
-			/called outside a static class member/
-		);
+		expect(() =>
+			rewrite_wire(`class C { wire = import.meta.og.wire(${CODEC}); }`, '/x.ts', MARKUP)
+		).toThrow(/called outside a static class member/);
 	});
 
 	it('two arguments', () => {
-		expect(() => rewrite_wire(`class C { static wire = import.meta.og.wire(${CODEC}, 1); }`, '/x.ts', MARKUP)).toThrow(
-			/exactly one argument/
-		);
+		expect(() =>
+			rewrite_wire(`class C { static wire = import.meta.og.wire(${CODEC}, 1); }`, '/x.ts', MARKUP)
+		).toThrow(/exactly one argument/);
 	});
 });
 
@@ -293,9 +319,9 @@ describe('loaders — demented shapes', () => {
 	});
 
 	it('an unknown loader method is rejected with a helpful message', () => {
-		expect(() => rewrite_loaders(`const c = import.meta.og.loader.yaml('./x/*.yaml');`, '/x.ts')).toThrow(
-			/is not a loader — expected markdown, folder, json, or git/
-		);
+		expect(() =>
+			rewrite_loaders(`const c = import.meta.og.loader.yaml('./x/*.yaml');`, '/x.ts')
+		).toThrow(/is not a loader — expected markdown, folder, json, or git/);
 	});
 
 	it('empty input, whitespace-only input, and marker-free input are no-ops', () => {

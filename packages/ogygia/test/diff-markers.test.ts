@@ -12,7 +12,7 @@ const OPTS = { transformers: [diff_markers()] };
 describe('diff_markers', () => {
 	it('strips the markers and classes the lines', async () => {
 		const html = await highlight(
-			['let a = 1;', '--- export let count;', "+++ let { count } = $props();", 'a++;'].join('\n'),
+			['let a = 1;', '--- export let count;', '+++ let { count } = $props();', 'a++;'].join('\n'),
 			'js',
 			OPTS
 		);

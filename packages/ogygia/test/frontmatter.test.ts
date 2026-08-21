@@ -65,7 +65,7 @@ describe('parse_yaml — flat mappings & scalar types', () => {
 });
 
 describe('parse_yaml — quoting', () => {
-	it('single-quoted is literal; `\'\'` escapes a quote', () => {
+	it("single-quoted is literal; `''` escapes a quote", () => {
 		expect(parse_yaml("a: 'it''s here'")).toEqual({ a: "it's here" });
 		expect(parse_yaml("a: '123'")).toEqual({ a: '123' });
 	});
@@ -154,7 +154,12 @@ describe('parse_yaml — block sequences', () => {
 
 	it('nested sequences (- - x)', () => {
 		const src = 'grid:\n  - - 1\n    - 2\n  - - 3\n    - 4';
-		expect(parse_yaml(src)).toEqual({ grid: [[1, 2], [3, 4]] });
+		expect(parse_yaml(src)).toEqual({
+			grid: [
+				[1, 2],
+				[3, 4]
+			]
+		});
 	});
 
 	it('empty sequence item → null', () => {
@@ -180,7 +185,12 @@ describe('parse_yaml — flow collections', () => {
 	});
 
 	it('nested flow collections', () => {
-		expect(parse_yaml('a: [[1, 2], [3, 4]]')).toEqual({ a: [[1, 2], [3, 4]] });
+		expect(parse_yaml('a: [[1, 2], [3, 4]]')).toEqual({
+			a: [
+				[1, 2],
+				[3, 4]
+			]
+		});
 		expect(parse_yaml('a: { b: [1, { c: 2 }] }')).toEqual({ a: { b: [1, { c: 2 }] } });
 	});
 

@@ -43,7 +43,10 @@ const secret_like = (name: string): boolean =>
 const STORE_BUILTINS = new Set(['subscribe', 'set', 'update']);
 
 function is_dom(v: object): boolean {
-	return typeof (v as { nodeType?: unknown }).nodeType === 'number' && typeof (v as { nodeName?: unknown }).nodeName === 'string';
+	return (
+		typeof (v as { nodeType?: unknown }).nodeType === 'number' &&
+		typeof (v as { nodeName?: unknown }).nodeName === 'string'
+	);
 }
 
 function is_plain_object(v: object): boolean {
@@ -63,7 +66,11 @@ export function classify_boundary(value: unknown, key = ''): BoundaryFinding[] {
 		findings.push({ kind, path, detail });
 
 	if (secret_like(key) && typeof value === 'string') {
-		add('refuse', '', `key "${key}" looks like a secret — refusing to ship it into client-island HTML`);
+		add(
+			'refuse',
+			'',
+			`key "${key}" looks like a secret — refusing to ship it into client-island HTML`
+		);
 	}
 
 	(function walk(v: unknown, path: string): void {
@@ -75,12 +82,20 @@ export function classify_boundary(value: unknown, key = ''): BoundaryFinding[] {
 					'a bare function cannot cross an island boundary — make it a method on a [og.wire] class, a remote function, or provide it from an island'
 				);
 			} else if (typeof v === 'string' && path && secret_like(path.split('.').pop() ?? path)) {
-				add('warn', path, 'secret-looking field crossing into client HTML — check this is not a credential');
+				add(
+					'warn',
+					path,
+					'secret-looking field crossing into client HTML — check this is not a credential'
+				);
 			}
 			return;
 		}
 		if (is_dom(v)) {
-			add('refuse', path, 'live DOM node — it only exists in this document; provide it from an island (same-heap) instead');
+			add(
+				'refuse',
+				path,
+				'live DOM node — it only exists in this document; provide it from an island (same-heap) instead'
+			);
 			return;
 		}
 		// Revisit = cycle. Devalue serializes plain-object cycles natively, so a cycle is only a
@@ -94,17 +109,31 @@ export function classify_boundary(value: unknown, key = ''): BoundaryFinding[] {
 			return;
 		}
 		if ((v as Record<symbol, unknown>)[Symbol.for('ogygia.derived')] !== undefined) {
-			add('store', path, 'resumable derived (og_derived) — its recipe crosses; islands re-derive against the reunified sources');
+			add(
+				'store',
+				path,
+				'resumable derived (og_derived) — its recipe crosses; islands re-derive against the reunified sources'
+			);
 			return;
 		}
 		if (is_store(v)) {
 			if (is_derived_like(v)) {
-				add('warn', path, 'derived/readable store — the VALUE crosses but the derivation does not; islands see a frozen seed. Re-derive client-side or wire the sources');
+				add(
+					'warn',
+					path,
+					'derived/readable store — the VALUE crosses but the derivation does not; islands see a frozen seed. Re-derive client-side or wire the sources'
+				);
 			} else {
-				add('store', path, 'store — auto-wires (current value crosses, islands share one live instance)');
+				add(
+					'store',
+					path,
+					'store — auto-wires (current value crosses, islands share one live instance)'
+				);
 			}
 			const extra = Object.keys(v).filter(
-				(k) => !STORE_BUILTINS.has(k) && typeof (v as unknown as Record<string, unknown>)[k] === 'function'
+				(k) =>
+					!STORE_BUILTINS.has(k) &&
+					typeof (v as unknown as Record<string, unknown>)[k] === 'function'
 			);
 			if (extra.length) {
 				add(
@@ -116,7 +145,8 @@ export function classify_boundary(value: unknown, key = ''): BoundaryFinding[] {
 			return;
 		}
 		if (v instanceof Map) {
-			for (const [k, entry] of v) walk(entry, path ? `${path}.get(${String(k)})` : `get(${String(k)})`);
+			for (const [k, entry] of v)
+				walk(entry, path ? `${path}.get(${String(k)})` : `get(${String(k)})`);
 			return;
 		}
 		if (v instanceof Set) {

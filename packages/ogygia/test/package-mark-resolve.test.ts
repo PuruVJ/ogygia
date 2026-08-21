@@ -16,21 +16,24 @@ const SPEC = 'not-installed-pkg/tabs';
 
 type Hook<T> = T | { handler: T };
 const handler = <T>(hook: Hook<T>): T =>
-	(typeof hook === 'object' && hook !== null && 'handler' in (hook as object)
+	typeof hook === 'object' && hook !== null && 'handler' in (hook as object)
 		? (hook as { handler: T }).handler
-		: (hook as T));
+		: (hook as T);
 
 function make_plugin(): Plugin {
 	const plugin = ogygia().find((p) => p.name === 'ogygia')!;
 	delete process.env.OGYGIA_SECRET; // keep region ids salt-free for the id computed below
-	handler(plugin.configResolved!).call(null as never, {
-		root: ROOT,
-		base: '/',
-		command: 'serve',
-		mode: 'development',
-		envDir: false,
-		build: {}
-	} as never);
+	handler(plugin.configResolved!).call(
+		null as never,
+		{
+			root: ROOT,
+			base: '/',
+			command: 'serve',
+			mode: 'development',
+			envDir: false,
+			build: {}
+		} as never
+	);
 	return plugin;
 }
 
@@ -55,7 +58,9 @@ describe('unresolvable marked package specifier', () => {
 		await handler(plugin.transform!).call(ctx as never, src, HOST, { ssr: true });
 		const iid = regionId(regionIdentity(SPEC, { strategy: 'load', options: {} }));
 		await expect(
-			handler(plugin.resolveId!).call(ctx as never, './local.js', wrapperVirtualId(iid), { ssr: true })
+			handler(plugin.resolveId!).call(ctx as never, './local.js', wrapperVirtualId(iid), {
+				ssr: true
+			})
 		).resolves.toBeNull();
 	});
 });

@@ -30,7 +30,8 @@ const KNOWN_HEADER_CAP = 6144;
  *  never sends `x-ogygia-known`, so `known_region_fps()` is always empty server-side and every region
  *  full-renders (the documented safe fallback). Compile-time constant (Vite `define`); typeof-guarded
  *  so a plain node import of dist/ without the define falls back to OFF. */
-const SERVER_DELTA = typeof __OGYGIA_SERVER_DELTA__ !== 'undefined' ? __OGYGIA_SERVER_DELTA__ : false;
+const SERVER_DELTA =
+	typeof __OGYGIA_SERVER_DELTA__ !== 'undefined' ? __OGYGIA_SERVER_DELTA__ : false;
 
 /**
  * SERVER-DELTA NAV (D2): headers for a nav/prefetch fetch. Always `x-ogygia-spa`. Plus, when the
@@ -101,10 +102,8 @@ function fold_orphan_vt_names(current: ParentNode, incoming: ParentNode): () => 
 // On csr=false pages ogygia owns navigation — Kit's router is not running — so we update history via
 // the un-patched `History.prototype` methods. Same effect on the history stack, without the spurious
 // "conflict with SvelteKit's router" warning. Captured lazily so a test/SSR without `History` is safe.
-const native_push =
-	typeof History !== 'undefined' ? History.prototype.pushState : null;
-const native_replace =
-	typeof History !== 'undefined' ? History.prototype.replaceState : null;
+const native_push = typeof History !== 'undefined' ? History.prototype.pushState : null;
+const native_replace = typeof History !== 'undefined' ? History.prototype.replaceState : null;
 const push_state = (state: unknown, url: string) =>
 	(native_push ?? history.pushState).call(history, state, '', url);
 const replace_state = (state: unknown, url?: string) => {
@@ -158,7 +157,14 @@ const REMOTE_MUTATION_PATH = /\/remote(?:\/|$|\?)/;
 // honour Kit's value grammar + nearest-ancestor inheritance: 'eager' | 'viewport' | 'hover' | 'tap'
 // | 'off'/'false'. An anchor's effective trigger is the MOST-EAGER of the two attributes; an empty
 // value means 'hover' (Kit's default). `-data` is normally hover/tap; `-code` adds eager/viewport.
-const PRELOAD_RANK: Record<string, number> = { eager: 0, viewport: 1, hover: 2, tap: 3, off: 4, false: 4 };
+const PRELOAD_RANK: Record<string, number> = {
+	eager: 0,
+	viewport: 1,
+	hover: 2,
+	tap: 3,
+	off: 4,
+	false: 4
+};
 
 /** Stable-ish head node identity without serializing full outerHTML when possible. */
 export function head_node_key(node: Element): string {
@@ -341,7 +347,12 @@ class SpaRouter {
 		this.#after_hooks.add(fn);
 		// $app/navigation's afterNavigate fires immediately on mount too
 		try {
-			fn({ from: null, to: this.#build_nav_target(new URL(location.href)), type: 'enter', willUnload: false });
+			fn({
+				from: null,
+				to: this.#build_nav_target(new URL(location.href)),
+				type: 'enter',
+				willUnload: false
+			});
 		} catch {
 			/* noop */
 		}
@@ -358,7 +369,11 @@ class SpaRouter {
 	}
 
 	install_remote_mutation_cache_bust() {
-		if (this.#remote_bust_installed || typeof window === 'undefined' || typeof window.fetch !== 'function') {
+		if (
+			this.#remote_bust_installed ||
+			typeof window === 'undefined' ||
+			typeof window.fetch !== 'function'
+		) {
 			return;
 		}
 		this.#remote_bust_installed = true;
@@ -462,7 +477,12 @@ class SpaRouter {
 	// `data-ogygia-runtime` and is the only module script merge_head retains across swaps.
 	async navigate(
 		url: URL,
-		{ push = true, pop_scroll = null, type = 'link', replace = false }: {
+		{
+			push = true,
+			pop_scroll = null,
+			type = 'link',
+			replace = false
+		}: {
 			push?: boolean;
 			pop_scroll?: { x: number; y: number } | null;
 			type?: string;
@@ -540,8 +560,7 @@ class SpaRouter {
 		// even when the target has a hash (A → B#C); scroll snaps after the transition.
 		const prefer_reduced_motion =
 			typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-		const use_vt =
-			marker.getAttribute('content') !== 'plain' && !prefer_reduced_motion;
+		const use_vt = marker.getAttribute('content') !== 'plain' && !prefer_reduced_motion;
 
 		// SINGLE-FLIGHT NAV: prescan the incoming page for its load-timed deferred region calls and stream
 		// them ALL in one batch request, kicked off now (before the swap). Each region binder joins the
@@ -569,7 +588,12 @@ class SpaRouter {
 			// Clear session state BEFORE body connect so new regions never see the previous page.
 			slots.spaLifecycle?.prepare();
 			if (gen !== this.#nav_gen) return;
-			if (RECONCILE_NAV && slots.morph && !region_in_shadow(document.body) && !region_in_shadow(doc.body)) {
+			if (
+				RECONCILE_NAV &&
+				slots.morph &&
+				!region_in_shadow(document.body) &&
+				!region_in_shadow(doc.body)
+			) {
 				// THE nav path: diff the live body toward the parsed one IN PLACE. Matched regions
 				// (same fingerprint) keep their live hydrated node and island state; changed regions
 				// re-mount; shell + keep-chrome (data-ogygia-keep) morph in place. Selective dispose of
@@ -649,7 +673,9 @@ class SpaRouter {
 				location.assign(target.href);
 				return Promise.resolve();
 			}
-			throw new Error('[ogygia] goto() only supports same-origin URLs (pass { external: true } to leave)');
+			throw new Error(
+				'[ogygia] goto() only supports same-origin URLs (pass { external: true } to leave)'
+			);
 		}
 		return this.navigate(target, { push: !opts.replaceState, replace: false, type: 'goto' });
 	}
@@ -700,7 +726,8 @@ class SpaRouter {
 
 	preloadData(url: string | URL) {
 		const target = new URL(url, location.href);
-		if (target.origin !== location.origin) return Promise.resolve({ type: 'loaded', status: 200, data: {} });
+		if (target.origin !== location.origin)
+			return Promise.resolve({ type: 'loaded', status: 200, data: {} });
 		this.fetch_page(target.href);
 		return Promise.resolve({ type: 'loaded', status: 200, data: {} });
 	}
@@ -883,7 +910,12 @@ class SpaRouter {
 	#run_after(from: URL, to: URL, type: string) {
 		for (const fn of this.#after_hooks) {
 			try {
-				fn({ from: this.#build_nav_target(from), to: this.#build_nav_target(to), type, willUnload: false });
+				fn({
+					from: this.#build_nav_target(from),
+					to: this.#build_nav_target(to),
+					type,
+					willUnload: false
+				});
 			} catch {
 				/* noop */
 			}

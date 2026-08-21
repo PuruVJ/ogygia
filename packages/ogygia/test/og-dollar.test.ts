@@ -47,7 +47,12 @@ describe('og.$ transform', () => {
 
 	it('works inside a .svelte script block', () => {
 		const src = `<script>\n\tconst site = 'x';\n\tconst track = import.meta.og.$((e) => [site, e]);\n</script>\n<button onclick={() => track('hi')}>go</button>`;
-		const { code, hoists } = rewrite_dollar(src, 'src/routes/+layout.svelte', 'src/routes/+layout.svelte', SVELTE);
+		const { code, hoists } = rewrite_dollar(
+			src,
+			'src/routes/+layout.svelte',
+			'src/routes/+layout.svelte',
+			SVELTE
+		);
 		expect(hoists[0].tag).toBe('src/routes/+layout.svelte#$0');
 		expect(code).toContain('__og_$(');
 	});
@@ -87,10 +92,12 @@ describe('og.$ end-to-end (transform output executed against the real runtime)',
 		const { code } = run(src, 'src/lib/pricing.ts');
 		// execute the transformed module body with the real runtime in scope
 		const body = code.replace(`import { __og_$ } from 'ogygia/internal';`, '');
-		new Function('__og_$', body)((tag: string, bound: unknown[], factory: (...b: unknown[]) => unknown) => {
-			__register_fn(tag, factory);
-			return fn_handle(tag, bound);
-		});
+		new Function('__og_$', body)(
+			(tag: string, bound: unknown[], factory: (...b: unknown[]) => unknown) => {
+				__register_fn(tag, factory);
+				return fn_handle(tag, bound);
+			}
+		);
 		const live = (globalThis as Record<string, unknown>).__dollar_out as (n: number) => number;
 		expect(live(100)).toBe(119);
 		delete (globalThis as Record<string, unknown>).__dollar_out;
@@ -134,8 +141,15 @@ describe('og.$ as the UNIVERSAL boundary mark (non-function values)', () => {
 describe('og.$ in TEMPLATE expressions (props in markup)', () => {
 	it('an inline fn prop hoists with captures from the component scope', () => {
 		const src = `<script>\n\tconst rate = 2;\n</script>\n<Island fmt={import.meta.og.$((n) => n * rate)} />`;
-		const { code, hoists } = rewrite_dollar(src, 'src/routes/p.svelte', 'src/routes/p.svelte', SVELTE);
-		expect(code).toContain(`fmt={__og_$("src/routes/p.svelte#$0", [rate], (rate) => ((n) => n * rate))}`);
+		const { code, hoists } = rewrite_dollar(
+			src,
+			'src/routes/p.svelte',
+			'src/routes/p.svelte',
+			SVELTE
+		);
+		expect(code).toContain(
+			`fmt={__og_$("src/routes/p.svelte#$0", [rate], (rate) => ((n) => n * rate))}`
+		);
 		expect(code).toContain(`import { __og_$ } from 'ogygia/internal';`);
 		expect(hoists).toHaveLength(1);
 	});

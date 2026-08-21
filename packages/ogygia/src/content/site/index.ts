@@ -17,15 +17,41 @@
  * ```
  */
 export { outline, pick, href_of as hrefOf } from './outline.js';
-export type { Outline, OutlineSpec, OutlineOptions, OutlineNode, OutlineThunk, GroupSpec, LinkSpec, Selection, Collection, TrailScope } from './outline.js';
+export type {
+	Outline,
+	OutlineSpec,
+	OutlineOptions,
+	OutlineNode,
+	OutlineThunk,
+	GroupSpec,
+	LinkSpec,
+	Selection,
+	Collection,
+	TrailScope
+} from './outline.js';
 
 export { site, mountBase } from './site.js';
 export type { SiteData, SiteMeta, ReadContext } from './site.js';
 export { fields } from './fields.js';
 export type { PageFields, PostFields, ChangeFields, BlogPostRef } from './fields.js';
 export { dimensions, is_dimensioned as isDimensioned } from './dimensions.js';
-export type { Axis, Coordinate, DimensionsSpec, Dimensioned, Switcher, SwitcherAxis, Fallback } from './dimensions.js';
-export type { Site, SiteOptions, EmitHandler, EmitOptions, LlmsEmitOptions, RawEmit } from './site.js';
+export type {
+	Axis,
+	Coordinate,
+	DimensionsSpec,
+	Dimensioned,
+	Switcher,
+	SwitcherAxis,
+	Fallback
+} from './dimensions.js';
+export type {
+	Site,
+	SiteOptions,
+	EmitHandler,
+	EmitOptions,
+	LlmsEmitOptions,
+	RawEmit
+} from './site.js';
 export { links } from './checks.js';
 export type { Check, Finding, Severity, CheckContext, LinkOptions } from './checks.js';
 
@@ -36,7 +62,14 @@ export {
 	strip_prose as stripProse,
 	create_search as createSearch
 } from './search.js';
-export type { SearchDoc, SearchHit, SearchEngine, SearchIndex, SearchOptions, SearchBrain } from './search.js';
+export type {
+	SearchDoc,
+	SearchHit,
+	SearchEngine,
+	SearchIndex,
+	SearchOptions,
+	SearchBrain
+} from './search.js';
 export { search } from './search-client.js';
 export type { SearchClient, SearchClientOptions } from './search-client.js';
 
@@ -47,4 +80,16 @@ export * from './components/index.js';
 export { get_shell_context as getShellContext } from './context.js';
 export type { ShellContext } from './context.js';
 
-export type { NavTree, NavItem, NavGroup, NavLeaf, NavLink, NavRef, Crumb, PageView, PrevNext, BaseOption, Resolved } from './types.js';
+export type {
+	NavTree,
+	NavItem,
+	NavGroup,
+	NavLeaf,
+	NavLink,
+	NavRef,
+	Crumb,
+	PageView,
+	PrevNext,
+	BaseOption,
+	Resolved
+} from './types.js';

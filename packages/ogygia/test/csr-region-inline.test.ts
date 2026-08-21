@@ -34,14 +34,20 @@ describe('csr=true host: csr-context injection', () => {
 	});
 
 	it('creates an instance <script> when the host has none', () => {
-		const out = transformHost(`<h1>no script here</h1>`, '/app/src/routes/kit/+page.svelte', { routeCsr: true });
+		const out = transformHost(`<h1>no script here</h1>`, '/app/src/routes/kit/+page.svelte', {
+			routeCsr: true
+		});
 		expect(out).not.toBeNull();
 		expect(out.code).toMatch(/<script>[\s\S]*setContext[\s\S]*<\/script>/);
 		expect(out.code).toContain('<h1>no script here</h1>');
 	});
 
 	it('does NOT inject on a non-csr host (returns null for a plain component)', () => {
-		const out = transformHost(`<script>\n\tlet x = 1;\n</script>\n<p>{x}</p>`, '/app/src/lib/Plain.svelte', { routeCsr: undefined });
+		const out = transformHost(
+			`<script>\n\tlet x = 1;\n</script>\n<p>{x}</p>`,
+			'/app/src/lib/Plain.svelte',
+			{ routeCsr: undefined }
+		);
 		expect(out).toBeNull();
 	});
 });

@@ -22,8 +22,13 @@ describe('unescape_svelte', () => {
 
 describe('try_region_emit', () => {
 	it('emits a serialized region for pure prose + fences', () => {
-		const fence = fence_embed(`<pre class="shiki"><code>function load() { return { user }; }</code></pre>`);
-		const out = try_region_emit(mod(`<h2 id="a">Title</h2>\n<p>prose</p>\n${fence}\n<p>after</p>`), []);
+		const fence = fence_embed(
+			`<pre class="shiki"><code>function load() { return { user }; }</code></pre>`
+		);
+		const out = try_region_emit(
+			mod(`<h2 id="a">Title</h2>\n<p>prose</p>\n${fence}\n<p>after</p>`),
+			[]
+		);
 		expect(out).not.toBeNull();
 		// The document HTML is plain — fences unwrapped, braces intact INSIDE code.
 		expect(out!.html).toContain('function load() { return { user }; }');

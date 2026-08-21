@@ -116,7 +116,10 @@ const GLOB_MAGIC = /[*?{}[\]]/;
  * parsed, so a `preset` key nested in some OTHER object (a convention option, a regex) is provably
  * not the loader's own — only a top-level property of the FIRST ObjectExpression argument counts.
  */
-export function extract_preset(args: string, context: string): { preset: string | null; args: string } {
+export function extract_preset(
+	args: string,
+	context: string
+): { preset: string | null; args: string } {
 	if (!/\bpreset\b/.test(args)) return { preset: null, args };
 	const wrapped = `__og(${args})`;
 	const { program, ok } = parse_module(wrapped, 'loader-args.ts');
@@ -136,7 +139,9 @@ export function extract_preset(args: string, context: string): { preset: string 
 			if (key !== 'preset') continue;
 			const v = prop.value;
 			const literal =
-				(v?.type === 'Literal' || v?.type === 'StringLiteral') && typeof v.value === 'string' ? v.value : null;
+				(v?.type === 'Literal' || v?.type === 'StringLiteral') && typeof v.value === 'string'
+					? v.value
+					: null;
 			if (literal == null) {
 				throw new Error(
 					`[ogygia] ${context}: \`preset\` must be a literal string ('name') — it selects a content preset at build.`
@@ -205,12 +210,18 @@ function loader_method(callee: Node | undefined): string | null {
 	if (typeof method !== 'string') return null;
 	// walk down: .loader → .og → import.meta
 	const loader = callee.object;
-	if (loader?.type !== 'MemberExpression' || loader.computed || loader.property?.name !== 'loader') return null;
+	if (loader?.type !== 'MemberExpression' || loader.computed || loader.property?.name !== 'loader')
+		return null;
 	const og = loader.object;
 	if (og?.type !== 'MemberExpression' || og.computed || og.property?.name !== 'og') return null;
 	const meta = og.object;
 	// oxc/estree: `import.meta` is a MetaProperty { meta: {name:'import'}, property: {name:'meta'} }
-	if (meta?.type !== 'MetaProperty' || meta.meta?.name !== 'import' || meta.property?.name !== 'meta') return null;
+	if (
+		meta?.type !== 'MetaProperty' ||
+		meta.meta?.name !== 'import' ||
+		meta.property?.name !== 'meta'
+	)
+		return null;
 	return method;
 }
 
@@ -221,7 +232,8 @@ function walk(node: Node, visit: (n: Node) => void): void {
 		if (key === 'type' || key === 'start' || key === 'end') continue;
 		const child = node[key];
 		if (Array.isArray(child)) {
-			for (const c of child) if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
+			for (const c of child)
+				if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
 		} else if (child && typeof child === 'object' && typeof child.type === 'string') {
 			walk(child, visit);
 		}
@@ -280,7 +292,10 @@ export function rewrite_loaders(src: string, id = 'module.ts'): { code: string; 
 	}
 	out += src.slice(last);
 
-	const imports = [...used].sort().map((b) => `${b} as ${ALIAS[b]}`).join(', ');
+	const imports = [...used]
+		.sort()
+		.map((b) => `${b} as ${ALIAS[b]}`)
+		.join(', ');
 	const header = imports ? `import { ${imports} } from 'ogygia/content';\n` : '';
 	return { code: header + out, specs };
 }
@@ -288,7 +303,9 @@ export function rewrite_loaders(src: string, id = 'module.ts'): { code: string; 
 /** The emitted `import.meta.glob` options — a preset mints module VARIANTS via a custom query, so
  *  the same file under two presets is two modules, each compiled with its own merged config. */
 function glob_opts(preset: string | null): string {
-	return preset ? `{ eager: false, query: { og_preset: ${JSON.stringify(preset)} } }` : '{ eager: false }';
+	return preset
+		? `{ eager: false, query: { og_preset: ${JSON.stringify(preset)} } }`
+		: '{ eager: false }';
 }
 
 /** One loader call → its rewritten expression. Mutates `used`/`specs` with what it needs. */

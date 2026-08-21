@@ -23,7 +23,11 @@ export function mpaSpeculationRules(): string {
 			{ not: { selector_matches: '[rel~=nofollow]' } },
 			{
 				or: [
-					{ not: { selector_matches: '[data-ogygia-speculate="off"], [data-ogygia-speculate="off"] *' } },
+					{
+						not: {
+							selector_matches: '[data-ogygia-speculate="off"], [data-ogygia-speculate="off"] *'
+						}
+					},
 					{ selector_matches: '[data-ogygia-speculate="on"], [data-ogygia-speculate="on"] *' }
 				]
 			}

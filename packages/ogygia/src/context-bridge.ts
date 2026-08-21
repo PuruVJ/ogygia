@@ -105,7 +105,10 @@ function warn_ctx_size(map: Map<string, unknown>, total: number): void {
 		}
 	}
 	sizes.sort((a, b) => b[1] - a[1]);
-	const top = sizes.slice(0, 3).map(([k, n]) => `'${k}' ~${(n / 1024).toFixed(1)}kB`).join(', ');
+	const top = sizes
+		.slice(0, 3)
+		.map(([k, n]) => `'${k}' ~${(n / 1024).toFixed(1)}kB`)
+		.join(', ');
 	console.warn(
 		`[ogygia] the island context marker is ${(total / 1024).toFixed(1)}kB — it ships in every page's HTML. ` +
 			`Biggest keys: ${top}. Slim the values, or mark host-only keys with setContext(key, value, { islands: false }).`
@@ -233,7 +236,8 @@ export function setContext<T>(key: unknown, value: T, opts?: SetContextOptions):
 	// store or class instance is recorded but dropped later by `serialize_provided_context` if it can't
 	// serialize, so it never crashes the page.
 	// a BARE function can never serialize — but an og.$-branded one is a transportable fn ref
-	if (typeof key === 'string' && (typeof value !== 'function' || is_branded_fn(value))) record_ctx(key, value, opts);
+	if (typeof key === 'string' && (typeof value !== 'function' || is_branded_fn(value)))
+		record_ctx(key, value, opts);
 	return svelte_set_context(key, value);
 }
 

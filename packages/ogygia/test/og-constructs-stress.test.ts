@@ -16,12 +16,17 @@ import { rewrite_loaders } from '../src/compiler/content/loaders.js';
 import { __set_build_cache_root } from '../src/build-cache.js';
 
 const MARKUP = ['.svelte'] as const;
-const echo = async (c: CodeCall) => (c.kind === 'md' ? `<md>${c.source}</md>` : `<pre>${c.lang}:${c.source}</pre>`);
+const echo = async (c: CodeCall) =>
+	c.kind === 'md' ? `<md>${c.source}</md>` : `<pre>${c.lang}:${c.source}</pre>`;
 
 function balanced(s: string): boolean {
-	let r = 0, c = 0;
+	let r = 0,
+		c = 0;
 	for (const ch of s) {
-		if (ch === '(') r++; else if (ch === ')') r--; else if (ch === '{') c++; else if (ch === '}') c--;
+		if (ch === '(') r++;
+		else if (ch === ')') r--;
+		else if (ch === '{') c++;
+		else if (ch === '}') c--;
 	}
 	return r === 0 && c === 0;
 }
@@ -52,7 +57,12 @@ describe('code/md — demented shapes that must WORK', () => {
 	});
 
 	it('empty source string', async () => {
-		const out = await rewrite_code('const x = import.meta.og.code("", "ts");', '/x.ts', MARKUP, echo);
+		const out = await rewrite_code(
+			'const x = import.meta.og.code("", "ts");',
+			'/x.ts',
+			MARKUP,
+			echo
+		);
 		expect(out).toContain('__og_html_region(');
 	});
 
@@ -66,7 +76,7 @@ describe('code/md — demented shapes that must WORK', () => {
 		const src = [
 			'const a = import.meta.og.code("x", "ts");',
 			'const b = import.meta.og.md("# hi");',
-			'const c = import.meta.og.wire;', // not ours to touch in rewrite_code
+			'const c = import.meta.og.wire;' // not ours to touch in rewrite_code
 		].join('\n');
 		const out = await rewrite_code(src, '/x.ts', MARKUP, echo);
 		expect((out.match(/__og_html_region\(/g) ?? []).length).toBe(2);
@@ -97,7 +107,8 @@ describe('code/bake — byte-offset integrity under multi-byte unicode', () => {
 	});
 
 	it('code + md interleaved on ONE line both rewrite, offsets independent', async () => {
-		const src = 'const p = import.meta.og.code("a", "ts"); const q = import.meta.og.md("# b"); const r = 3;';
+		const src =
+			'const p = import.meta.og.code("a", "ts"); const q = import.meta.og.md("# b"); const r = 3;';
 		const out = await rewrite_code(src, '/x.ts', MARKUP, echo);
 		expect((out.match(/__og_html_region\(/g) ?? []).length).toBe(2);
 		expect(out).toContain('const r = 3;');
@@ -120,69 +131,108 @@ describe('misuse-error QUALITY — build-voice, file:line, explains the fix', ()
 		}
 	});
 	it('wire as an object property → build-voice', () => {
-		expect(() => rewrite_wire(`const o = { w: import.meta.og.wire(${CODEC}) };`, '/w.ts', MARKUP)).toThrow(/\[ogygia\].*static class member/);
+		expect(() =>
+			rewrite_wire(`const o = { w: import.meta.og.wire(${CODEC}) };`, '/w.ts', MARKUP)
+		).toThrow(/\[ogygia\].*static class member/);
 	});
 	it('wire spread into a call → build-voice', () => {
-		expect(() => rewrite_wire(`f(...import.meta.og.wire(${CODEC}))`, '/w.ts', MARKUP)).toThrow(/\[ogygia\].*static class member/);
+		expect(() => rewrite_wire(`f(...import.meta.og.wire(${CODEC}))`, '/w.ts', MARKUP)).toThrow(
+			/\[ogygia\].*static class member/
+		);
 	});
 	it('non-static member named wire → build-voice', () => {
-		expect(() => rewrite_wire(`class C { wire = import.meta.og.wire(${CODEC}); }`, '/w.ts', MARKUP)).toThrow(/\[ogygia\]/);
+		expect(() =>
+			rewrite_wire(`class C { wire = import.meta.og.wire(${CODEC}); }`, '/w.ts', MARKUP)
+		).toThrow(/\[ogygia\]/);
 	});
 	it('static member with the WRONG name → names the required `wire`', () => {
-		expect(() => rewrite_wire(`class C { static codec = import.meta.og.wire(${CODEC}); }`, '/w.ts', MARKUP)).toThrow(/must be named exactly `wire`/);
+		expect(() =>
+			rewrite_wire(`class C { static codec = import.meta.og.wire(${CODEC}); }`, '/w.ts', MARKUP)
+		).toThrow(/must be named exactly `wire`/);
 	});
 	it('arg-less wire() → codec required', () => {
-		expect(() => rewrite_wire(`class C { static wire = import.meta.og.wire(); }`, '/w.ts', MARKUP)).toThrow(/exactly one argument/);
+		expect(() =>
+			rewrite_wire(`class C { static wire = import.meta.og.wire(); }`, '/w.ts', MARKUP)
+		).toThrow(/exactly one argument/);
 	});
 	it('2-arg wire(a,b) → exactly one argument', () => {
-		expect(() => rewrite_wire(`class C { static wire = import.meta.og.wire(${CODEC}, 1); }`, '/w.ts', MARKUP)).toThrow(/exactly one argument/);
+		expect(() =>
+			rewrite_wire(`class C { static wire = import.meta.og.wire(${CODEC}, 1); }`, '/w.ts', MARKUP)
+		).toThrow(/exactly one argument/);
 	});
 
 	// loaders: non-literal first arg + unknown method
 	it('loader with an identifier first arg → static string literal', () => {
-		expect(() => rewrite_loaders(`const a = import.meta.og.loader.markdown(pattern);`, '/l.ts')).toThrow(/static string literal/);
+		expect(() =>
+			rewrite_loaders(`const a = import.meta.og.loader.markdown(pattern);`, '/l.ts')
+		).toThrow(/static string literal/);
 	});
 	it('loader with a concatenation first arg → static string literal', () => {
-		expect(() => rewrite_loaders('const a = import.meta.og.loader.json("./" + dir);', '/l.ts')).toThrow(/static string literal/);
+		expect(() =>
+			rewrite_loaders('const a = import.meta.og.loader.json("./" + dir);', '/l.ts')
+		).toThrow(/static string literal/);
 	});
 	it('unknown loader method → lists the valid loaders', () => {
-		expect(() => rewrite_loaders(`const a = import.meta.og.loader.toml('./x');`, '/l.ts')).toThrow(/markdown, folder, json, or git/);
+		expect(() => rewrite_loaders(`const a = import.meta.og.loader.toml('./x');`, '/l.ts')).toThrow(
+			/markdown, folder, json, or git/
+		);
 	});
 
 	// regions: non-literal glob
 	it('regions with a non-literal glob → static string literal', () => {
-		expect(() => rewrite_regions('const r = import.meta.og.regions(`./${d}/*.svelte`);', '/r.ts')).toThrow(/static string literal/);
+		expect(() =>
+			rewrite_regions('const r = import.meta.og.regions(`./${d}/*.svelte`);', '/r.ts')
+		).toThrow(/static string literal/);
 	});
 
 	// code/md: arity + non-literal
 	it('code with an identifier source → static string literal + line', () => {
-		expect(rewrite_code('const c = import.meta.og.code(src, "ts");', '/c.ts', MARKUP, echo)).rejects.toThrow(/c\.ts:1.*static string literal/);
+		expect(
+			rewrite_code('const c = import.meta.og.code(src, "ts");', '/c.ts', MARKUP, echo)
+		).rejects.toThrow(/c\.ts:1.*static string literal/);
 	});
 	it('md with wrong arity → takes exactly one argument', () => {
-		expect(rewrite_code('const d = import.meta.og.md("a", "b");', '/c.ts', MARKUP, echo)).rejects.toThrow(/md\(text\) takes exactly one argument/);
+		expect(
+			rewrite_code('const d = import.meta.og.md("a", "b");', '/c.ts', MARKUP, echo)
+		).rejects.toThrow(/md\(text\) takes exactly one argument/);
 	});
 
 	// bake: non-function + arity
 	it('bake with a non-function arg → must be a function + line', async () => {
-		await expect(rewrite_bake('\nconst v = import.meta.og.bake({});', '/b.ts', { alias: [], root: '/app' })).rejects.toThrow(/b\.ts:2.*must be a function/);
+		await expect(
+			rewrite_bake('\nconst v = import.meta.og.bake({});', '/b.ts', { alias: [], root: '/app' })
+		).rejects.toThrow(/b\.ts:2.*must be a function/);
 	});
 	it('bake with wrong arity → takes exactly one argument', async () => {
-		await expect(rewrite_bake('const v = import.meta.og.bake(() => 1, 2);', '/b.ts', { alias: [], root: '/app' })).rejects.toThrow(/takes exactly one argument/);
+		await expect(
+			rewrite_bake('const v = import.meta.og.bake(() => 1, 2);', '/b.ts', {
+				alias: [],
+				root: '/app'
+			})
+		).rejects.toThrow(/takes exactly one argument/);
 	});
 });
 
 describe('code/md — must FAIL LOUDLY', () => {
 	it('interpolated code source', async () => {
-		await expect(rewrite_code('const x = import.meta.og.code(`${y}`, "ts");', '/x.ts', MARKUP, echo)).rejects.toThrow(/interpolation/);
+		await expect(
+			rewrite_code('const x = import.meta.og.code(`${y}`, "ts");', '/x.ts', MARKUP, echo)
+		).rejects.toThrow(/interpolation/);
 	});
 	it('interpolated md source', async () => {
-		await expect(rewrite_code('const x = import.meta.og.md(`${y}`);', '/x.ts', MARKUP, echo)).rejects.toThrow(/interpolation/);
+		await expect(
+			rewrite_code('const x = import.meta.og.md(`${y}`);', '/x.ts', MARKUP, echo)
+		).rejects.toThrow(/interpolation/);
 	});
 	it('code with a computed/non-literal lang', async () => {
-		await expect(rewrite_code('const x = import.meta.og.code("a", `t${s}`);', '/x.ts', MARKUP, echo)).rejects.toThrow(/lang.*static|interpolation/);
+		await expect(
+			rewrite_code('const x = import.meta.og.code("a", `t${s}`);', '/x.ts', MARKUP, echo)
+		).rejects.toThrow(/lang.*static|interpolation/);
 	});
 	it('code with zero args', async () => {
-		await expect(rewrite_code('const x = import.meta.og.code();', '/x.ts', MARKUP, echo)).rejects.toThrow(/2 or 3 arguments/);
+		await expect(
+			rewrite_code('const x = import.meta.og.code();', '/x.ts', MARKUP, echo)
+		).rejects.toThrow(/2 or 3 arguments/);
 	});
 });
 
@@ -235,7 +285,10 @@ describe('bake in .svelte — component import excluded from the eval bundle', (
 	beforeAll(() => {
 		__set_build_cache_root(fs.mkdtempSync(path.join(os.tmpdir(), 'og-sv-bake-cache-')));
 		dir = fs.mkdtempSync(path.join(os.tmpdir(), 'og-sv-bake-'));
-		fs.writeFileSync(path.join(dir, 'Widget.svelte'), `<script>let { n } = $props();</script><b>{n}</b>`);
+		fs.writeFileSync(
+			path.join(dir, 'Widget.svelte'),
+			`<script>let { n } = $props();</script><b>{n}</b>`
+		);
 		fs.writeFileSync(path.join(dir, 'nums.ts'), `export const NUMS = [1, 2, 3];`);
 	});
 	afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -268,7 +321,10 @@ describe('regions — demented shapes', () => {
 	afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 	it('filenames with spaces and special chars become string-keyed, importable specifiers', () => {
-		const out = rewrite_regions(`export const r = import.meta.og.regions('./b/*.svelte');`, path.join(dir, 'r.ts'));
+		const out = rewrite_regions(
+			`export const r = import.meta.og.regions('./b/*.svelte');`,
+			path.join(dir, 'r.ts')
+		);
 		expect(out).toContain('"Weird Name":');
 		expect(out).toContain('"$special":');
 		expect(out).toContain('"normal":');
@@ -277,16 +333,26 @@ describe('regions — demented shapes', () => {
 	});
 
 	it('a glob matching NOTHING yields an empty registry, not a crash', () => {
-		const out = rewrite_regions(`export const r = import.meta.og.regions('./b/*.nope');`, path.join(dir, 'r.ts'));
+		const out = rewrite_regions(
+			`export const r = import.meta.og.regions('./b/*.nope');`,
+			path.join(dir, 'r.ts')
+		);
 		expect(out).toContain('export const r = {  }');
 		expect(out).not.toContain('import.meta.og.regions');
 	});
 });
 
 describe('bake — devalue serialization torture (real execution)', () => {
-	beforeAll(() => __set_build_cache_root(fs.mkdtempSync(path.join(os.tmpdir(), 'og-bake-stress-'))));
+	beforeAll(() =>
+		__set_build_cache_root(fs.mkdtempSync(path.join(os.tmpdir(), 'og-bake-stress-')))
+	);
 	const opts = { alias: [], root: '/app' };
-	const bake = (expr: string) => rewrite_bake(`const v = import.meta.og.bake(() => (${expr}));\nexport { v };`, '/app/x.ts', opts);
+	const bake = (expr: string) =>
+		rewrite_bake(
+			`const v = import.meta.og.bake(() => (${expr}));\nexport { v };`,
+			'/app/x.ts',
+			opts
+		);
 
 	it('exotic primitives: undefined, NaN, Infinity, -0, BigInt', async () => {
 		expect(await bake('undefined')).toContain('const v = (void 0)');
@@ -310,7 +376,9 @@ describe('bake — devalue serialization torture (real execution)', () => {
 	});
 
 	it('nested + sparse arrays and unicode strings', async () => {
-		const out = await bake('({ a: [1, , 3], s: "caf\\u00e9 \\ud83d\\udd25", deep: { x: [{ y: 1 }] } })');
+		const out = await bake(
+			'({ a: [1, , 3], s: "caf\\u00e9 \\ud83d\\udd25", deep: { x: [{ y: 1 }] } })'
+		);
 		expect(out).not.toContain('import.meta.og.bake');
 		expect(balanced(out)).toBe(true);
 	});
@@ -324,11 +392,15 @@ describe('bake — devalue serialization torture (real execution)', () => {
 	});
 
 	it('a fn that THROWS at build surfaces as a build error', async () => {
-		await expect(bake('(() => { throw new Error("boom"); })()')).rejects.toThrow(/boom|evaluating the function failed/);
+		await expect(bake('(() => { throw new Error("boom"); })()')).rejects.toThrow(
+			/boom|evaluating the function failed/
+		);
 	});
 
 	it('referencing an undeclared/non-imported name FAILS LOUDLY', async () => {
-		await expect(bake('someUndeclaredGlobalThing')).rejects.toThrow(/evaluating the function failed/);
+		await expect(bake('someUndeclaredGlobalThing')).rejects.toThrow(
+			/evaluating the function failed/
+		);
 	});
 
 	it('typed array (Uint8Array) and ArrayBuffer serialize', async () => {
@@ -337,8 +409,12 @@ describe('bake — devalue serialization torture (real execution)', () => {
 	});
 
 	it('nested Map-of-Sets and a getter (evaluated) serialize', async () => {
-		expect(await bake('new Map([["a", new Set([1,2])]])')).toContain('new Map([["a",new Set([1,2])]])');
-		const g = await bake('(() => { const o = {}; Object.defineProperty(o, "x", { get: () => 5, enumerable: true }); return o; })()');
+		expect(await bake('new Map([["a", new Set([1,2])]])')).toContain(
+			'new Map([["a",new Set([1,2])]])'
+		);
+		const g = await bake(
+			'(() => { const o = {}; Object.defineProperty(o, "x", { get: () => 5, enumerable: true }); return o; })()'
+		);
 		expect(g).toContain('{x:5}'); // getter value inlined, not the accessor
 	});
 
@@ -366,7 +442,10 @@ describe('bake — resolution depth (real execution, real files)', () => {
 		// c imports b imports a — transitive resolution through the eval bundle.
 		fs.writeFileSync(path.join(dir, 'a.ts'), `export const A = 10;`);
 		fs.writeFileSync(path.join(dir, 'b.ts'), `import { A } from './a'; export const B = A * 2;`);
-		fs.writeFileSync(path.join(dir, 'c.ts'), `import { B } from './b'; export function chain() { return B + 1; }`);
+		fs.writeFileSync(
+			path.join(dir, 'c.ts'),
+			`import { B } from './b'; export function chain() { return B + 1; }`
+		);
 	});
 	afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 	const opts = () => ({ alias: [], root: dir });

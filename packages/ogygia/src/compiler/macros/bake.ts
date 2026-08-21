@@ -41,7 +41,8 @@ function walk(node: Node, visit: (n: Node) => void): void {
 		if (key === 'type' || key === 'start' || key === 'end') continue;
 		const child = node[key];
 		if (Array.isArray(child)) {
-			for (const c of child) if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
+			for (const c of child)
+				if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
 		} else if (child && typeof child === 'object' && typeof child.type === 'string') {
 			walk(child, visit);
 		}
@@ -66,7 +67,11 @@ type ImportDecl = { start: number; end: number; text: string; names: string[] };
  * (offset-mapped from each region into `src`), so an edit splices straight into `src`. Returns null
  * when no region parses (a half-typed file waits). `markup_exts` is the construct-host set.
  */
-function scan(src: string, id: string, markup_exts: readonly string[]): { imports: ImportDecl[]; calls: BakeCall[] } | null {
+function scan(
+	src: string,
+	id: string,
+	markup_exts: readonly string[]
+): { imports: ImportDecl[]; calls: BakeCall[] } | null {
 	const regions = og_js_regions(src, id, markup_exts);
 	if (!regions) return null;
 	const imports: ImportDecl[] = [];
@@ -83,18 +88,27 @@ function scan(src: string, id: string, markup_exts: readonly string[]): { import
 			for (const s of (n.specifiers as Node[] | undefined) ?? []) {
 				if (s.local?.name) names.push(s.local.name as string);
 			}
-			imports.push({ start: off + n.start, end: off + n.end, text: region.code.slice(n.start, n.end), names });
+			imports.push({
+				start: off + n.start,
+				end: off + n.end,
+				text: region.code.slice(n.start, n.end),
+				names
+			});
 		}
 		walk(program, (n) => {
 			if (n.type !== 'CallExpression' || og_member(n.callee as Node) !== 'bake') return;
 			const abs = off + n.start;
 			const args = (n.arguments as Node[] | undefined) ?? [];
 			if (args.length !== 1) {
-				throw new Error(`[ogygia] ${id}:${line_of(src, abs)} — import.meta.og.bake(fn) takes exactly one argument (a function).`);
+				throw new Error(
+					`[ogygia] ${id}:${line_of(src, abs)} — import.meta.og.bake(fn) takes exactly one argument (a function).`
+				);
 			}
 			const a = args[0]!;
 			if (a.type !== 'ArrowFunctionExpression' && a.type !== 'FunctionExpression') {
-				throw new Error(`[ogygia] ${id}:${line_of(src, abs)} — import.meta.og.bake(fn): the argument must be a function (\`() => …\`).`);
+				throw new Error(
+					`[ogygia] ${id}:${line_of(src, abs)} — import.meta.og.bake(fn): the argument must be a function (\`() => …\`).`
+				);
 			}
 			calls.push({ start: abs, end: off + n.end, fn: region.code.slice(a.start, a.end) });
 		});
@@ -108,7 +122,9 @@ function scan(src: string, id: string, markup_exts: readonly string[]): { import
 function eval_imports(imports: ImportDecl[], calls: BakeCall[]): ImportDecl[] {
 	const fnText = calls.map((c) => c.fn).join('\n');
 	return imports.filter((imp) =>
-		imp.names.some((name) => new RegExp(`(?<![\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`).test(fnText))
+		imp.names.some((name) =>
+			new RegExp(`(?<![\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`).test(fnText)
+		)
 	);
 }
 
@@ -135,14 +151,27 @@ function dead_imports(src: string, imports: ImportDecl[], calls: BakeCall[]): Im
 	}
 	remainder += src.slice(last);
 
-	return imports.filter((imp) => imp.names.length > 0 && imp.names.every((name) => {
-		const re = new RegExp(`(?<![\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`);
-		return !re.test(remainder);
-	}));
+	return imports.filter(
+		(imp) =>
+			imp.names.length > 0 &&
+			imp.names.every((name) => {
+				const re = new RegExp(
+					`(?<![\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`
+				);
+				return !re.test(remainder);
+			})
+	);
 }
 
 const RESOLVE_EXTS = ['', '.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs', '.jsx', '.json'];
-const INDEX_EXTS = ['/index.ts', '/index.mts', '/index.js', '/index.mjs', '/index.jsx', '/index.tsx'];
+const INDEX_EXTS = [
+	'/index.ts',
+	'/index.mts',
+	'/index.js',
+	'/index.mjs',
+	'/index.jsx',
+	'/index.tsx'
+];
 
 /** Resolve a relative specifier against `dir` to an existing absolute FILE path (extension/`index`
  *  probing), or null. */
@@ -157,7 +186,13 @@ function resolve_relative(dir: string, source: string): string | null {
  * (the SvelteKit convention, robust even if the config alias isn't populated yet), and any configured
  * alias. Anything a resolved module then pulls in has a real path and resolves normally.
  */
-function bake_plugin(entry_id: string, entry_code: string, module_dir: string, root: string, aliases: AliasEntry[]) {
+function bake_plugin(
+	entry_id: string,
+	entry_code: string,
+	module_dir: string,
+	root: string,
+	aliases: AliasEntry[]
+) {
 	return {
 		name: 'ogygia-bake-entry',
 		resolveId(source: string, importer: string | undefined) {
@@ -168,7 +203,8 @@ function bake_plugin(entry_id: string, entry_code: string, module_dir: string, r
 				let mapped: string | null = null;
 				if (typeof find === 'string') {
 					if (source === find) mapped = replacement;
-					else if (source.startsWith(find + '/')) mapped = path.join(replacement, source.slice(find.length + 1));
+					else if (source.startsWith(find + '/'))
+						mapped = path.join(replacement, source.slice(find.length + 1));
 				} else if (find.test(source)) {
 					mapped = source.replace(find, replacement);
 				}
@@ -176,7 +212,9 @@ function bake_plugin(entry_id: string, entry_code: string, module_dir: string, r
 			}
 			// SvelteKit conventions, as a fallback (config aliases may be unset this early).
 			if (source === '$lib' || source.startsWith('$lib/')) {
-				return resolve_file(path.join(root, 'src', 'lib', source.slice('$lib'.length).replace(/^\//, '')));
+				return resolve_file(
+					path.join(root, 'src', 'lib', source.slice('$lib'.length).replace(/^\//, ''))
+				);
 			}
 			// The entry's relative imports resolve against the real module's directory.
 			if (from_entry && (source.startsWith('./') || source.startsWith('../'))) {
@@ -238,12 +276,18 @@ async function evaluate(entry_code: string, id: string, opts: BakeOptions): Prom
 		// The eval bundle is written through the cache interface (`BuildCache('bake').dir()`) — the
 		// same managed directory the git checkouts use — then imported and deleted.
 		const dir = bake_cache.dir();
-		if (!dir) throw new Error('the build cache (node_modules/.ogygia) is unavailable — cannot stage the bake bundle');
+		if (!dir)
+			throw new Error(
+				'the build cache (node_modules/.ogygia) is unavailable — cannot stage the bake bundle'
+			);
 		const file = path.join(dir, `${opts.hash}.mjs`);
 		fs.writeFileSync(file, code);
 		try {
-			const mod = (await import(pathToFileURL(file).href + `?t=${opts.hash}`)) as { __run?: () => Promise<unknown[]> };
-			if (typeof mod.__run !== 'function') throw new Error('bake eval module produced no __run export');
+			const mod = (await import(pathToFileURL(file).href + `?t=${opts.hash}`)) as {
+				__run?: () => Promise<unknown[]>;
+			};
+			if (typeof mod.__run !== 'function')
+				throw new Error('bake eval module produced no __run export');
 			return await mod.__run();
 		} finally {
 			fs.rmSync(file, { force: true });
@@ -280,7 +324,9 @@ export async function rewrite_bake(
 	// never enter the Node bundle), then a `__run` that awaits every bake fn in order.
 	const runners = found.calls.map((c, i) => `		r[${i}] = await (${c.fn})();`).join('\n');
 	const entry_code =
-		eval_imports(found.imports, found.calls).map((i) => i.text).join('\n') +
+		eval_imports(found.imports, found.calls)
+			.map((i) => i.text)
+			.join('\n') +
 		`\nexport async function __run() {\n\tconst r = [];\n${runners}\n\treturn r;\n}\n`;
 
 	// Content hash: module id + the exact eval entry (imports + fns) → address the bundle & re-bake

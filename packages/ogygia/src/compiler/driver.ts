@@ -276,7 +276,9 @@ export class Compiler {
 					const result = this.transform(src, full);
 					if (result) program.register(result, full);
 				} else if (
-					(entry.name.endsWith('.ts') || entry.name.endsWith('.js') || entry.name.endsWith('.mjs')) &&
+					(entry.name.endsWith('.ts') ||
+						entry.name.endsWith('.js') ||
+						entry.name.endsWith('.mjs')) &&
 					!entry.name.endsWith('.d.ts')
 				) {
 					// `.ts` / `.js` region mints (load / remote functions). Discover them up front so a
@@ -292,7 +294,11 @@ export class Compiler {
 				}
 			}
 		};
-		{ const __ps = P ? performance.now() : 0; walk(src_dir); if (P) prof.prescanMs += performance.now() - __ps; }
+		{
+			const __ps = P ? performance.now() : 0;
+			walk(src_dir);
+			if (P) prof.prescanMs += performance.now() - __ps;
+		}
 
 		// Complete `island_graph` TRANSITIVELY, before the bundler resolves a single module. `walk`
 		// above registered each island's OWN component; this marks everything those components import
@@ -317,15 +323,24 @@ export class Compiler {
 				const base = resolveFoucImportSpec(spec, importerAbs, libDir);
 				if (!base) return null; // package / alias — the lazy resolveId marking is the backstop
 				for (const ext of DEP_EXTS) {
-					try { if (fs.statSync(base + ext).isFile()) return base + ext; } catch { /* not this ext */ }
+					try {
+						if (fs.statSync(base + ext).isFile()) return base + ext;
+					} catch {
+						/* not this ext */
+					}
 				}
 				for (const ext of DEP_EXTS.slice(1)) {
 					const idx = path.join(base, 'index' + ext);
-					try { if (fs.statSync(idx).isFile()) return idx; } catch { /* not an index */ }
+					try {
+						if (fs.statSync(idx).isFile()) return idx;
+					} catch {
+						/* not an index */
+					}
 				}
 				return null;
 			};
-			const IMPORT_SPEC = /\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\bimport\s*\(\s*['"]([^'"\n]+)['"]/g;
+			const IMPORT_SPEC =
+				/\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\bimport\s*\(\s*['"]([^'"\n]+)['"]/g;
 			const walk_dep = (abs: string) => {
 				const norm = strip_id(abs);
 				if (seen_dep.has(norm)) return;
@@ -338,7 +353,14 @@ export class Compiler {
 				let m: RegExpExecArray | null;
 				while ((m = IMPORT_SPEC.exec(src))) {
 					const spec = m[1] || m[2] || m[3];
-					if (!spec || spec[0] === '\0' || spec.startsWith('$app/') || spec.startsWith('$env/') || spec.startsWith('virtual:')) continue;
+					if (
+						!spec ||
+						spec[0] === '\0' ||
+						spec.startsWith('$app/') ||
+						spec.startsWith('$env/') ||
+						spec.startsWith('virtual:')
+					)
+						continue;
 					const dep = resolve_dep(spec, norm);
 					if (dep) walk_dep(dep);
 				}
@@ -427,7 +449,9 @@ export class Compiler {
 			// Ensure prescan ran so `runtime_feature_hash` matches the client emit's filename (both
 			// legs prescan the same source → same feature set → same name).
 			if (!is_dev) this.prescan();
-			const url = is_dev ? '/@id/__x00__' + V_RUNTIME : hashedRuntimeUrl || this.runtime_chunk_url();
+			const url = is_dev
+				? '/@id/__x00__' + V_RUNTIME
+				: hashedRuntimeUrl || this.runtime_chunk_url();
 			return `export default ${JSON.stringify(url)};`;
 		}
 		if (id === RESOLVED(V_FN_MANIFEST)) {
@@ -545,9 +569,8 @@ export class Compiler {
 			// shim paths (defense in depth alongside resolveId island-graph shimming).
 			// SSR keeps the real Kit modules (correct server-rendered page.data).
 			if (!ssr) {
-				src = src.replace(
-					APP_SHIM_IMPORT,
-					(_m: string, _q: string, name: string) => JSON.stringify(ctx.app_shims['$app/' + name])
+				src = src.replace(APP_SHIM_IMPORT, (_m: string, _q: string, name: string) =>
+					JSON.stringify(ctx.app_shims['$app/' + name])
 				);
 				// LAKES: swap each lake import for the render-nothing placeholder so the lake
 				// component's JS is excluded from this island's client chunk. Handles default
@@ -619,8 +642,7 @@ export class Compiler {
 		// would otherwise give islands the uninitialized Kit page (`new URL('a:')` → empty
 		// pathname). enforce:'pre' wins over Kit's resolveId. SSR keeps real Kit modules.
 		const importer_id = strip_id(importer);
-		const from_island =
-			importer_id && (registry.has(importer_id) || island_graph.has(importer_id));
+		const from_island = importer_id && (registry.has(importer_id) || island_graph.has(importer_id));
 		if (!ssr && from_island && ctx.app_shims[source]) {
 			return ctx.app_shims[source];
 		}
@@ -757,9 +779,9 @@ export class Compiler {
 		// frontmatter stays on line one; mdsvex never sees it (stripped first).
 		if (ctx.content_presets && id.includes('og_preset=')) {
 			const m = /[?&]og_preset=([\w-]+)/.exec(id);
-			const md_exts =
-				((ctx.markdown_config as MarkdownOptions | null)?.extensions as string[] | undefined) ??
-				['.svx', '.md'];
+			const md_exts = ((ctx.markdown_config as MarkdownOptions | null)?.extensions as
+				| string[]
+				| undefined) ?? ['.svx', '.md'];
 			const file_part = id.slice(0, id.indexOf('?'));
 			if (m && md_exts.some((e) => file_part.endsWith(e))) {
 				if (!ctx.content_presets[m[1]]) {
@@ -832,7 +854,8 @@ export class Compiler {
 				if (ctx.is_build && !ssr) {
 					for (const isl of result.islands ?? []) {
 						const kind = isl.kind ?? (isl.server ? 'defer' : 'hydrate');
-						if (kind !== 'hydrate' || !isl.virtualPath || emitted_island_chunks.has(isl.id)) continue;
+						if (kind !== 'hydrate' || !isl.virtualPath || emitted_island_chunks.has(isl.id))
+							continue;
 						emitted_island_chunks.add(isl.id);
 						emitFile({ type: 'chunk', id: isl.virtualPath, fileName: islandChunkFileName(isl.id) });
 					}
@@ -916,9 +939,8 @@ export class Compiler {
 		// Kit's `$app/*` alias entirely — needed when an island's own component graph imports
 		// `$app/*` (csr=true hosts still pass virtual islands as `__component`).
 		if (!ssr && island_graph.has(id_n) && id_n.endsWith('.svelte')) {
-			const rewritten = out.replace(
-				APP_SHIM_IMPORT,
-				(_m: string, _q: string, name: string) => JSON.stringify(ctx.app_shims['$app/' + name])
+			const rewritten = out.replace(APP_SHIM_IMPORT, (_m: string, _q: string, name: string) =>
+				JSON.stringify(ctx.app_shims['$app/' + name])
 			);
 			if (rewritten !== out) {
 				out = rewritten;

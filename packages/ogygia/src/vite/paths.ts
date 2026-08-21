@@ -58,9 +58,15 @@ export const CLIENT_BINDING_STUB_FILE = fileURLToPath(
 // `__sveltekit/remote` at Kit's real remote-functions and scope-alias the two router-coupled
 // modules those pull in (`client.js`, `state.svelte.js`) to tiny stubs, so the router graph
 // never loads. The old hand-rolled wire client is gone; these stubs are the only glue.
-export const STUB_CLIENT = fileURLToPath(new URL('../shims/kit-remote/client-stub.js', import.meta.url));
-export const STUB_STATE = fileURLToPath(new URL('../shims/kit-remote/state-stub.js', import.meta.url));
-export const STUB_PATHS = fileURLToPath(new URL('../shims/kit-remote/paths-internal-stub.js', import.meta.url));
+export const STUB_CLIENT = fileURLToPath(
+	new URL('../shims/kit-remote/client-stub.js', import.meta.url)
+);
+export const STUB_STATE = fileURLToPath(
+	new URL('../shims/kit-remote/state-stub.js', import.meta.url)
+);
+export const STUB_PATHS = fileURLToPath(
+	new URL('../shims/kit-remote/paths-internal-stub.js', import.meta.url)
+);
 export const KIT_REMOTE_CLIENT = /(^|\/)client\.js$/;
 export const KIT_REMOTE_STATE = /state\.svelte\.js$/;
 

@@ -61,11 +61,16 @@ describe('region() inline awaitability', () => {
 });
 
 describe('ogygiaTransport OgygiaRef entry — symmetry (hub v2 phase Y)', () => {
-	it('a store crosses Kit\'s transport by identity (page.data / remote can carry one)', async () => {
+	it("a store crosses Kit's transport by identity (page.data / remote can carry one)", async () => {
 		const { writable, get } = await import('svelte/store');
 		const { register_store_kind } = await import('../src/store-transport.js');
 		register_store_kind();
-		const entry = (ogygiaTransport as Record<string, { encode: (v: unknown) => unknown; decode: (d: never) => unknown }>)['OgygiaRef'];
+		const entry = (
+			ogygiaTransport as Record<
+				string,
+				{ encode: (v: unknown) => unknown; decode: (d: never) => unknown }
+			>
+		)['OgygiaRef'];
 		expect(entry).toBeDefined();
 
 		const s = writable(7);
@@ -78,7 +83,9 @@ describe('ogygiaTransport OgygiaRef entry — symmetry (hub v2 phase Y)', () => 
 	});
 
 	it('plain data is DECLINED (false) so Kit serializes it natively', () => {
-		const entry = (ogygiaTransport as Record<string, { encode: (v: unknown) => unknown }>)['OgygiaRef'];
+		const entry = (ogygiaTransport as Record<string, { encode: (v: unknown) => unknown }>)[
+			'OgygiaRef'
+		];
 		expect(entry.encode({ plain: 1 })).toBe(false);
 		expect(entry.encode(42)).toBe(false);
 		expect(entry.encode('x')).toBe(false);

@@ -162,7 +162,9 @@ export function split_first_string(args: string, who: string): { value: string; 
 	while (i < args.length && /\s/.test(args[i]!)) i++;
 	const q = args[i];
 	if (q !== "'" && q !== '"' && q !== '`') {
-		throw new Error(`[ogygia] ${who}: the first argument must be a static string literal, got '${args.slice(0, 24)}…'`);
+		throw new Error(
+			`[ogygia] ${who}: the first argument must be a static string literal, got '${args.slice(0, 24)}…'`
+		);
 	}
 	let j = i + 1;
 	for (; j < args.length; j++) {
@@ -229,7 +231,11 @@ export function is_markup_module(id: string, markup_exts: readonly string[]): bo
  * region; a markup file is its `<script>` blocks. `.svelte.ts`/`.svelte.js` hit the JS branch first
  * (they end in `.ts`/`.js`), so a `.svelte`-suffixed markup ext never shadows them.
  */
-export function og_js_regions(src: string, id: string, markup_exts: readonly string[]): JsRegion[] | null {
+export function og_js_regions(
+	src: string,
+	id: string,
+	markup_exts: readonly string[]
+): JsRegion[] | null {
 	if (is_js_module(id)) return [{ code: src, offset: 0 }];
 	if (is_markup_module(id, markup_exts)) return script_blocks(src);
 	return null;

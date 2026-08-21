@@ -346,10 +346,17 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 	} = options ?? (islandBridge.markdownConfig as MarkdownOptions | null) ?? {};
 
 	// Element overrides: which tags get wrapped in the ogygia slot (values live in `site()`).
-	const override_tags = overrides ? (overrides === true ? [...DEFAULT_OVERRIDE_TAGS] : (overrides.tags ?? [...DEFAULT_OVERRIDE_TAGS])) : [];
+	const override_tags = overrides
+		? overrides === true
+			? [...DEFAULT_OVERRIDE_TAGS]
+			: (overrides.tags ?? [...DEFAULT_OVERRIDE_TAGS])
+		: [];
 
 	// The fence pipeline's transformers ride the shiki config (applied at codeToHtml).
-	const cfg = configure_shiki({ ...shiki_opts, ...(code?.transformers ? { transformers: code.transformers } : {}) });
+	const cfg = configure_shiki({
+		...shiki_opts,
+		...(code?.transformers ? { transformers: code.transformers } : {})
+	});
 	// meta parsers (default infostring) + variant generators — the meta/variants stages.
 	const pipeline = {
 		meta: code?.meta ?? default_pipeline().meta,
@@ -393,7 +400,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			`r${remark_staged.pre.length}.${remark_staged.post.length}`,
 			// generator-plugin cache identities (a directive expander over a .d.ts set, …) — dynamic, so
 			// an input edit re-keys every doc that could have expanded it (read late, like the variants)
-			[...remark_staged.cache_keys, ...rehype_staged.cache_keys].map((k) => k()).join(","),
+			[...remark_staged.cache_keys, ...rehype_staged.cache_keys].map((k) => k()).join(','),
 			`h${rehype_staged.pre.length}.${rehype_staged.post.length}`,
 			cfg.lightName,
 			cfg.darkName,
@@ -433,7 +440,9 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			marker: '-',
 			parse: (fm: string) => {
 				const data = parse_yaml(fm);
-				return data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+				return data && typeof data === 'object' && !Array.isArray(data)
+					? (data as Record<string, unknown>)
+					: {};
 			}
 		}
 	};
@@ -505,7 +514,9 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			// Generator-plugin file deps for THIS document (a directive expander's .d.ts set, …) —
 			// returned as preprocessor `dependencies` (vite-plugin-svelte watches them in dev) and
 			// stored beside the cached output so a warm hit still watches.
-			const gen_deps = [...remark_staged.deps, ...rehype_staged.deps].flatMap((fn) => fn(input.filename));
+			const gen_deps = [...remark_staged.deps, ...rehype_staged.deps].flatMap((fn) =>
+				fn(input.filename)
+			);
 			// Content module: carry its raw source, and (when overrides are on) import the slot the
 			// rehype pass rewrote tags into. Both are module-script lines injected once.
 			const lines: string[] = [];
@@ -522,14 +533,23 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			// `{@html}` reference in the template, body pre-baked. Only when nothing dynamic touched the
 			// file: no island transform, no tab injection, no slot overrides; the emitter itself vetoes
 			// scripts / component tags / svelte expressions and falls back to the component path.
-			if (region_mode && path.endsWith('.md') && islandCode == null && !inject_tabs && !override_tags.length) {
+			if (
+				region_mode &&
+				path.endsWith('.md') &&
+				islandCode == null &&
+				!inject_tabs &&
+				!override_tags.length
+			) {
 				const emitted = try_region_emit(base, lines);
 				if (emitted) {
 					// Store BOTH artifacts: the compiled module (next compile is a read), and the
 					// serialized region itself — the address future layers (incremental builds, edge,
 					// on-demand baking) fetch without ever seeing a module.
 					if (doc_key) {
-						doc_cache.set(doc_key, { code: emitted.code, ...(gen_deps.length ? { deps: gen_deps } : {}) });
+						doc_cache.set(doc_key, {
+							code: emitted.code,
+							...(gen_deps.length ? { deps: gen_deps } : {})
+						});
 						docs_store.set(doc_key, { html: emitted.html });
 					}
 					return { code: emitted.code, map: undefined, dependencies: gen_deps };
@@ -613,4 +633,3 @@ export function ogygiaPresetPreprocess(): PreprocessorGroup {
 		}
 	};
 }
-

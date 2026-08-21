@@ -128,7 +128,8 @@ function mint_id(): string {
  * silently mis-read as one). Same instance → same id, always.
  */
 export function mint(value: unknown, only?: ReadonlySet<string>): Ref | undefined {
-	if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
+	if (value === null || (typeof value !== 'object' && typeof value !== 'function'))
+		return undefined;
 	const reg = registry();
 	for (const kind of reg.order) {
 		if (only && !only.has(kind.k)) continue;
@@ -168,7 +169,13 @@ function bucket(reg: HubRegistry, scope: Scope): Map<string, object> {
 /** Memoize an instance in a scope's bucket, recording its kind for later disposal. No MAX_LIVE
  *  cap since phase D — the 'page' bucket is emptied by `dispose_scope('page')` on every nav, so
  *  it can't creep across the tab's lifetime the way the old unbounded map could. */
-function remember_in(reg: HubRegistry, scope: Scope, key: string, instance: object, kind_k: string): void {
+function remember_in(
+	reg: HubRegistry,
+	scope: Scope,
+	key: string,
+	instance: object,
+	kind_k: string
+): void {
 	bucket(reg, scope).set(key, instance);
 	reg.instance_kind.set(instance, kind_k);
 	// R3 ownership: tell the sink (if an island is hydrating) which page id it just resolved, so the
@@ -205,13 +212,14 @@ export function dispose_scope(scope: Scope): void {
 		b.clear();
 	}
 	const ds = reg.scope_disposers.get(scope);
-	if (ds !== undefined) for (const fn of [...ds]) {
-		try {
-			fn();
-		} catch {
-			/* a disposer throwing must not block the others */
+	if (ds !== undefined)
+		for (const fn of [...ds]) {
+			try {
+				fn();
+			} catch {
+				/* a disposer throwing must not block the others */
+			}
 		}
-	}
 }
 
 /**
@@ -263,7 +271,11 @@ export function register_scope_disposer(scope: Scope, fn: () => void): () => voi
  */
 export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 	const scope: Scope =
-		typeof scope_or_remember === 'boolean' ? (scope_or_remember ? 'page' : 'request') : scope_or_remember;
+		typeof scope_or_remember === 'boolean'
+			? scope_or_remember
+				? 'page'
+				: 'request'
+			: scope_or_remember;
 	const remember = scope !== 'request';
 	const reg = registry();
 	if (remember) {

@@ -10,21 +10,22 @@ const NO_ALIAS = { alias: [], root: '/app' };
 
 describe('rewrite_bake — validation (no execution)', () => {
 	it('rejects a non-function argument', async () => {
-		await expect(rewrite_bake('const x = import.meta.og.bake(42);', '/app/x.ts', NO_ALIAS)).rejects.toThrow(
-			/the argument must be a function/
-		);
+		await expect(
+			rewrite_bake('const x = import.meta.og.bake(42);', '/app/x.ts', NO_ALIAS)
+		).rejects.toThrow(/the argument must be a function/);
 	});
 	it('rejects wrong arity', async () => {
-		await expect(rewrite_bake('const x = import.meta.og.bake(() => 1, 2);', '/app/x.ts', NO_ALIAS)).rejects.toThrow(
-			/takes exactly one argument/
-		);
+		await expect(
+			rewrite_bake('const x = import.meta.og.bake(() => 1, 2);', '/app/x.ts', NO_ALIAS)
+		).rejects.toThrow(/takes exactly one argument/);
 	});
 	it('returns the same reference when there is no bake call', async () => {
 		const src = 'export const x = 1;';
 		expect(await rewrite_bake(src, '/app/x.ts', NO_ALIAS)).toBe(src);
 	});
 	it('ignores the marker inside a comment or string', async () => {
-		const src = '// import.meta.og.bake(() => 1)\nconst s = "import.meta.og.bake(x)";\nexport const y = 2;';
+		const src =
+			'// import.meta.og.bake(() => 1)\nconst s = "import.meta.og.bake(x)";\nexport const y = 2;';
 		expect(await rewrite_bake(src, '/app/x.ts', NO_ALIAS)).toBe(src);
 	});
 });
@@ -88,6 +89,8 @@ describe('rewrite_bake — real build-time evaluation', () => {
 
 	it('a non-serializable result is a build error naming the fix', async () => {
 		const src = `const bad = import.meta.og.bake(() => () => 1);\nexport { bad };`;
-		await expect(rewrite_bake(src, path.join(dir, 'mod.ts'), opts())).rejects.toThrow(/not serializable/);
+		await expect(rewrite_bake(src, path.join(dir, 'mod.ts'), opts())).rejects.toThrow(
+			/not serializable/
+		);
 	});
 });

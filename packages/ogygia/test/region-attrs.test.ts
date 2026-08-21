@@ -60,7 +60,10 @@ describe('region-attrs (two-axis DOM)', () => {
 		expect(region_is_vacant(new FakeParent([]) as unknown as ParentNode)).toBe(true);
 		expect(
 			region_is_vacant(
-				new FakeParent([{ nodeType: 8 }, { nodeType: 3, textContent: '  \n' }]) as unknown as ParentNode
+				new FakeParent([
+					{ nodeType: 8 },
+					{ nodeType: 3, textContent: '  \n' }
+				]) as unknown as ParentNode
 			)
 		).toBe(true);
 		expect(
@@ -68,7 +71,9 @@ describe('region-attrs (two-axis DOM)', () => {
 				new FakeParent([{ nodeType: 3, textContent: 'frozen text' }]) as unknown as ParentNode
 			)
 		).toBe(false);
-		expect(region_is_vacant(new FakeParent([{ nodeType: 1 }]) as unknown as ParentNode)).toBe(false);
+		expect(region_is_vacant(new FakeParent([{ nodeType: 1 }]) as unknown as ParentNode)).toBe(
+			false
+		);
 	});
 
 	it('is_deferred / region_schedule use render+when', () => {
@@ -127,8 +132,7 @@ describe('region-attrs (two-axis DOM)', () => {
 
 	it('phase2: modulepreload eligibility mirrors coalesce (hydrate load OR match)', () => {
 		// ServerIsland wants_modulepreload ≡ hydrate==='load' || hydrate===defer
-		const wants = (defer: string, hydrate: string) =>
-			hydrate === 'load' || hydrate === defer;
+		const wants = (defer: string, hydrate: string) => hydrate === 'load' || hydrate === defer;
 		expect(wants('load', 'load')).toBe(true);
 		expect(wants('idle', 'idle')).toBe(true);
 		expect(wants('visible', 'visible')).toBe(true);
@@ -147,7 +151,7 @@ describe('region-attrs (two-axis DOM)', () => {
 const comment = (data: string) => ({ nodeType: 8, textContent: data });
 const text = (data: string) => ({ nodeType: 3, textContent: data });
 const elem = (...childNodes: unknown[]) => ({ nodeType: 1, childNodes });
-const region = (...childNodes: unknown[]) => ({ childNodes } as unknown as ParentNode);
+const region = (...childNodes: unknown[]) => ({ childNodes }) as unknown as ParentNode;
 
 describe('region_ssr_truncated (invalid-nesting hoist guard)', () => {
 	// THE REPRO: a block island (`<div class="demo-counter">`) authored inline inside a markdown `<p>`.
@@ -175,9 +179,9 @@ describe('region_ssr_truncated (invalid-nesting hoist guard)', () => {
 	});
 
 	it('does NOT flag an island that renders nothing (balanced empty envelope)', () => {
-		expect(region_ssr_truncated(region(comment('[0'), comment('['), comment(']'), comment(']')))).toBe(
-			false
-		);
+		expect(
+			region_ssr_truncated(region(comment('[0'), comment('['), comment(']'), comment(']')))
+		).toBe(false);
 	});
 
 	it('does NOT flag a not-yet-swapped deferred/live region (no anchors at all)', () => {

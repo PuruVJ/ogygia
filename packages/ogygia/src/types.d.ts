@@ -101,7 +101,10 @@ declare const __OGYGIA_CONTINUITY_FORMS__: boolean;
 declare const __OGYGIA_SERVER_DELTA__: boolean;
 
 declare module 'virtual:ogygia/transport' {
-	export const transport: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;
+	export const transport: Record<
+		string,
+		{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
+	>;
 }
 declare module 'virtual:ogygia/kit-wire' {
 	export function stringify_remote_arg(value: unknown, transport: unknown): string;
@@ -161,7 +164,10 @@ declare module '@sveltejs/kit/internal/server' {
 		data: Map<RemoteInternals, Record<string, Promise<unknown>>> | null;
 	}
 	export interface RequestState {
-		transport?: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;
+		transport?: Record<
+			string,
+			{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
+		>;
 		remote: RequestRemoteState;
 	}
 	export interface RequestStore {

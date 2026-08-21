@@ -38,11 +38,15 @@ export function warn_content_leaks(
 			const corpus = ids.filter(
 				(id) => CORPUS_RE.test(id) && !is_island_path(id) && !CONTENT_STYLE_QUERY_RE.test(id)
 			);
-			if (corpus.length) leaks.push({ chunk: (chunk as { fileName?: string }).fileName ?? key, modules: corpus });
+			if (corpus.length)
+				leaks.push({ chunk: (chunk as { fileName?: string }).fileName ?? key, modules: corpus });
 		}
 		if (leaks.length) {
 			const all = [...new Set(leaks.flatMap((l) => l.modules))];
-			const sample = all.slice(0, 5).map((m) => '    ' + path.relative(root, m.split('?')[0])).join('\n');
+			const sample = all
+				.slice(0, 5)
+				.map((m) => '    ' + path.relative(root, m.split('?')[0]))
+				.join('\n');
 			console.warn(
 				`[ogygia] content leaked into the CLIENT bundle: ${all.length} corpus module(s) (.svx/.md) shipped to the browser (in chunk '${leaks[0].chunk}').\n` +
 					`  A content() collection was imported into client-shipped code — usually an island — which drags its eager import.meta.glob (every doc) in.\n` +

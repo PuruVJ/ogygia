@@ -17,7 +17,14 @@
  */
 import type { Component } from 'svelte';
 import { region, type RegionSchedule, type RegionValue } from '../region.js';
-import { defineSource, toRawSource, type Format, type GlobMap, type RawSource, type Source } from './source.js';
+import {
+	defineSource,
+	toRawSource,
+	type Format,
+	type GlobMap,
+	type RawSource,
+	type Source
+} from './source.js';
 
 /** One node in a block tree: a `type` naming a registered block, its `props`, and nested `children`.
  * A block's wake schedule is baked into its registry import (`with { wake: 'load' }`) or decided by a
@@ -97,7 +104,10 @@ function normalize(value: unknown): { tree: BlockNode[]; data: Record<string, un
 	if (value && typeof value === 'object') {
 		const o = value as Record<string, unknown>;
 		if (Array.isArray(o.blocks)) {
-			return { tree: o.blocks as BlockNode[], data: ((o.meta ?? o.data ?? {}) as Record<string, unknown>) };
+			return {
+				tree: o.blocks as BlockNode[],
+				data: (o.meta ?? o.data ?? {}) as Record<string, unknown>
+			};
 		}
 		if (typeof o.type === 'string') return { tree: [o as unknown as BlockNode], data: {} };
 	}

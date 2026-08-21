@@ -107,7 +107,10 @@ describe('strategyKey / regionIdentity dedupe', () => {
 	});
 	test('strategyKey fingerprints cache ttl (a cached hole never dedupes onto a no-store one)', () => {
 		const plain = strategyKey({ strategy: 'server', options: { when: 'load' } });
-		const cached = strategyKey({ strategy: 'server', options: { when: 'load', cacheTtlSec: 3600 } });
+		const cached = strategyKey({
+			strategy: 'server',
+			options: { when: 'load', cacheTtlSec: 3600 }
+		});
 		expect(plain).toBe('defer:load');
 		expect(cached).toBe('defer:load:ttl:3600');
 		expect(cached).not.toBe(plain);
@@ -150,7 +153,9 @@ describe('portable binding rewrite', () => {
 		expect(r.islands[0].source).toMatch(/export default __OgygiaComp_/);
 		expect(r.islands[0].wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="island" load/);
 		expect(r.islands[0].wrapperSource).toMatch(
-			new RegExp(`__entry=\\{${JSON.stringify(islandPublicUrl(iid)).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}`)
+			new RegExp(
+				`__entry=\\{${JSON.stringify(islandPublicUrl(iid)).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}`
+			)
 		);
 	});
 
@@ -209,8 +214,9 @@ describe('portable binding rewrite', () => {
 	});
 
 	test('csr=false client omit: many marked imports → stub bindings, still one emit metadata', () => {
-		const imports = Array.from({ length: 20 }, (_, i) =>
-			`import C${i} from './A.svelte' with { wake: 'load' };`
+		const imports = Array.from(
+			{ length: 20 },
+			(_, i) => `import C${i} from './A.svelte' with { wake: 'load' };`
 		).join('\n');
 		const markup = Array.from({ length: 20 }, (_, i) => `<C${i} n={${i}} />`).join('');
 		const r = run(wrap(imports, markup), makeCtx({ linkVirtualIsland: false }))!;
@@ -231,9 +237,7 @@ describe('portable binding rewrite', () => {
 		).toBe(1);
 		expect(r.code).not.toMatch(/import __OgygiaFouc_/);
 		expect(r.code).not.toMatch(/from ["']\.\/A\.svelte["']/);
-		expect(r.islands[0].wrapperPath).toBe(
-			wrapperVirtualId(idFor('src/routes/A.svelte', loadMark))
-		);
+		expect(r.islands[0].wrapperPath).toBe(wrapperVirtualId(idFor('src/routes/A.svelte', loadMark)));
 		expect(r.islands[0].virtualPath).toMatch(/^virtual:ogygia\/island\//);
 	});
 
@@ -289,8 +293,7 @@ describe('portable binding rewrite', () => {
 
 	test('dotted Menu.Item on marked import is a build error', () => {
 		expectThrows(
-			() =>
-				run(wrap(`import Menu from './Menu.svelte' with { wake: 'load' };`, '<Menu.Item />')),
+			() => run(wrap(`import Menu from './Menu.svelte' with { wake: 'load' };`, '<Menu.Item />')),
 			/dotted tag/
 		);
 	});
@@ -298,7 +301,9 @@ describe('portable binding rewrite', () => {
 
 describe('defer / server islands', () => {
 	test('defer:load → ServerIsland wrapper + defer entry', () => {
-		const r = run(wrap(`import G from './G.svelte' with { render: 'deferred' };`, '<G name="w" />'))!;
+		const r = run(
+			wrap(`import G from './G.svelte' with { render: 'deferred' };`, '<G name="w" />')
+		)!;
 		const iid = idFor('src/routes/G.svelte', {
 			strategy: 'server',
 			options: { when: 'load' }
@@ -342,7 +347,8 @@ describe('defer / server islands', () => {
 
 	test('a deferred hole must fetch (wake: none is rejected)', () => {
 		expectThrows(
-			() => run(wrap(`import G from './G.svelte' with { render: 'deferred', wake: 'none' };`, '<G />')),
+			() =>
+				run(wrap(`import G from './G.svelte' with { render: 'deferred', wake: 'none' };`, '<G />')),
 			/a hole must fetch/
 		);
 	});
@@ -402,10 +408,7 @@ describe('lakes', () => {
 
 	test('render: live with children is an error (revalidate endpoint re-renders from props)', () => {
 		expectThrows(
-			() =>
-				run(
-					wrap(`import L from './L.svelte' with { render: 'live' };`, '<L><p>x</p></L>')
-				),
+			() => run(wrap(`import L from './L.svelte' with { render: 'live' };`, '<L><p>x</p></L>')),
 			/cannot have children/
 		);
 	});
@@ -531,7 +534,9 @@ describe('interaction schedule', () => {
 		const r = run(wrap(`import C from './C.svelte' with { wake: 'interaction' };`, '<C />'))!;
 		expect(r.islands).toHaveLength(1);
 		expect(r.islands[0].kind).toBe('hydrate');
-		expect(r.islands[0].wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="island" interaction /);
+		expect(r.islands[0].wrapperSource).toMatch(
+			/OgygiaRegion__Wrapper __mode="island" interaction /
+		);
 	});
 
 	test('interaction dedupes by path+strategy like any schedule', () => {
@@ -545,12 +550,20 @@ describe('interaction schedule', () => {
 	test('preset with hydrate: interaction works', () => {
 		const ctx = makeCtx({ presets: { lazy: { wake: 'interaction' } } });
 		const r = run(wrap(`import C from './C.svelte' with { preset: 'lazy' };`, '<C />'), ctx)!;
-		expect(r.islands[0].wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="island" interaction /);
+		expect(r.islands[0].wrapperSource).toMatch(
+			/OgygiaRegion__Wrapper __mode="island" interaction /
+		);
 	});
 
 	test("render: deferred + wake: 'interaction' is rejected (a hole can't fetch on interaction)", () => {
 		expectThrows(
-			() => run(wrap(`import G from './G.svelte' with { render: 'deferred', wake: 'interaction' };`, '<G />')),
+			() =>
+				run(
+					wrap(
+						`import G from './G.svelte' with { render: 'deferred', wake: 'interaction' };`,
+						'<G />'
+					)
+				),
 			/fetches on the .*wake.* schedule/
 		);
 	});
@@ -560,7 +573,9 @@ describe('interaction schedule', () => {
 			wrap(`import C from './C.svelte' with { wake: 'interaction' };`, '<C><p>x</p></C>')
 		)!;
 		expect(r.islands[0].virtualPath).toMatch(/\.js$/);
-		expect(r.islands[0].wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="island" interaction /);
+		expect(r.islands[0].wrapperSource).toMatch(
+			/OgygiaRegion__Wrapper __mode="island" interaction /
+		);
 	});
 });
 
@@ -568,15 +583,19 @@ describe('interaction schedule', () => {
 // continuity: keep — `with { keep: 'name' }` keeps the live island across SPA nav.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('keep attribute', () => {
-	test("hydrate + keep → wrapper passes __keep", () => {
-		const r = run(wrap(`import P from './P.svelte' with { wake: 'load', keep: 'player' };`, '<P />'))!;
+	test('hydrate + keep → wrapper passes __keep', () => {
+		const r = run(
+			wrap(`import P from './P.svelte' with { wake: 'load', keep: 'player' };`, '<P />')
+		)!;
 		expect(r.islands[0].wrapperSource).toMatch(/__keep=\{"player"\}/);
 		// keep rides on the hydrate strategy (still a load island)
 		expect(r.islands[0].wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="island" load/);
 	});
 
 	test('keep alone (default load schedule) is allowed', () => {
-		const r = run(wrap(`import P from './P.svelte' with { wake: 'visible', keep: 'x' };`, '<P />'))!;
+		const r = run(
+			wrap(`import P from './P.svelte' with { wake: 'visible', keep: 'x' };`, '<P />')
+		)!;
 		expect(r.islands[0].wrapperSource).toMatch(/__keep=\{"x"\}/);
 		expect(r.islands[0].wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="island" visible/);
 	});
@@ -593,34 +612,51 @@ describe('keep attribute', () => {
 		const r = run(wrap(`import P from './P.svelte' with { preset: 'pl' };`, '<P />'), ctx)!;
 		expect(r.islands[0].wrapperSource).toMatch(/__keep=\{"player"\}/);
 	});
-})
+});
 
 describe('portable snippets — a named snippet handed to a non-island component', () => {
-	const portableIslands = (r: Result) => r.islands.filter((i) => (i as { portable?: boolean }).portable);
+	const portableIslands = (r: Result) =>
+		r.islands.filter((i) => (i as { portable?: boolean }).portable);
 
 	test('is rewritten to og_portable + emits a hydrate entry', () => {
-		const r = run(wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet actions()}<a href="#">GH</a>{/snippet}</Shell>`))!;
+		const r = run(
+			wrap(
+				`import Shell from './Shell.svelte';`,
+				`<Shell>{#snippet actions()}<a href="#">GH</a>{/snippet}</Shell>`
+			)
+		)!;
 		expect(r.code).toMatch(/og_portable/);
 		expect(r.code).toMatch(/actions=\{__og_portable\(/);
 		expect(portableIslands(r).length).toBe(1);
 	});
 
 	test('captured host value is passed to the entry as a prop', () => {
-		const r = run(wrap(`import Shell from './Shell.svelte';\nconst who = 'Ada';`, `<Shell>{#snippet actions()}<a>{who}</a>{/snippet}</Shell>`))!;
+		const r = run(
+			wrap(
+				`import Shell from './Shell.svelte';\nconst who = 'Ada';`,
+				`<Shell>{#snippet actions()}<a>{who}</a>{/snippet}</Shell>`
+			)
+		)!;
 		// og_portable receives { who } and the entry destructures it.
 		expect(r.code).toMatch(/__og_portable\(\s*[^,]+,\s*\{ who \}/);
 		expect(portableIslands(r)[0].source).toMatch(/let \{ who \} = \$props\(\)/);
 	});
 
 	test('two identical snippets dedupe to ONE entry + ONE import', () => {
-		const src = wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet a()}<a>x</a>{/snippet}</Shell>\n<Shell>{#snippet b()}<a>x</a>{/snippet}</Shell>`);
+		const src = wrap(
+			`import Shell from './Shell.svelte';`,
+			`<Shell>{#snippet a()}<a>x</a>{/snippet}</Shell>\n<Shell>{#snippet b()}<a>x</a>{/snippet}</Shell>`
+		);
 		const r = run(src, makeCtx({ ssr: true }))!;
 		expect(portableIslands(r).length).toBe(1);
 		expect((r.code.match(/import __OgPS_/g) || []).length).toBe(1);
 	});
 
 	test('SSR emits a static entry import; the csr=false client loads by url', () => {
-		const src = wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`);
+		const src = wrap(
+			`import Shell from './Shell.svelte';`,
+			`<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`
+		);
 		const ssr = run(src, makeCtx({ ssr: true }))!;
 		expect(ssr.code).toMatch(/import __OgPS_[a-f0-9]+ from/);
 		expect(ssr.code).toMatch(/__og_portable\(__OgPS_/);
@@ -632,7 +668,12 @@ describe('portable snippets — a named snippet handed to a non-island component
 	test('a parameterized snippet on a PLAIN component stays native (library-internal wiring)', () => {
 		// Branding isolates the snippet body from the surrounding tree (getContext breaks) — think
 		// Bits UI passing `{#snippet x(props)}` between its own context-coupled components.
-		const r = run(wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet row(item)}<li>{item}</li>{/snippet}</Shell>`));
+		const r = run(
+			wrap(
+				`import Shell from './Shell.svelte';`,
+				`<Shell>{#snippet row(item)}<li>{item}</li>{/snippet}</Shell>`
+			)
+		);
 		expect(r?.code ?? '').not.toMatch(/og_portable/);
 	});
 
@@ -646,13 +687,21 @@ describe('portable snippets — a named snippet handed to a non-island component
 	});
 
 	test('node_modules-swept sources are never portable-branded (bits-ui safety)', () => {
-		const src = wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet header()}<em>x</em>{/snippet}</Shell>`);
+		const src = wrap(
+			`import Shell from './Shell.svelte';`,
+			`<Shell>{#snippet header()}<em>x</em>{/snippet}</Shell>`
+		);
 		const r = transformHost(src, '/app/node_modules/some-lib/dist/Widget.svelte', makeCtx());
 		expect(r?.code ?? '').not.toMatch(/og_portable/);
 	});
 
 	test('a snippet that writes host state is left native (a snapshot can’t write back)', () => {
-		const r = run(wrap(`import Shell from './Shell.svelte';\nlet count = $state(0);`, `<Shell>{#snippet actions()}<button onclick={() => count++}>{count}</button>{/snippet}</Shell>`));
+		const r = run(
+			wrap(
+				`import Shell from './Shell.svelte';\nlet count = $state(0);`,
+				`<Shell>{#snippet actions()}<button onclick={() => count++}>{count}</button>{/snippet}</Shell>`
+			)
+		);
 		expect(r?.code ?? '').not.toMatch(/og_portable/);
 	});
 
@@ -668,17 +717,27 @@ describe('portable snippets — a named snippet handed to a non-island component
 		// opted-out snippet still cost a head link + fetch). The no-waterfall hint now comes from
 		// Region.svelte when an island's props actually carry the descriptor. The transform's job
 		// is only to thread the public entry url through og_portable for that render-time emission.
-		const r = run(wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`), makeCtx({ ssr: true }))!;
+		const r = run(
+			wrap(
+				`import Shell from './Shell.svelte';`,
+				`<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`
+			),
+			makeCtx({ ssr: true })
+		)!;
 		expect(r.code).not.toMatch(/<svelte:head><link rel="modulepreload"/);
 		expect(r.code).toMatch(/__og_portable\([^)]*"\/_app\/immutable\/og-region\.[a-f0-9]+\.js"\)/);
 	});
 
 	test('a snippet-only file with no islands still transforms (relaxed bailout)', () => {
-		const r = run(wrap(`import Shell from './Shell.svelte';`, `<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`));
+		const r = run(
+			wrap(
+				`import Shell from './Shell.svelte';`,
+				`<Shell>{#snippet actions()}<a>x</a>{/snippet}</Shell>`
+			)
+		);
 		expect(r).not.toBeNull();
 	});
-})
-;
+});
 
 describe('package-specifier island marks', () => {
 	const PKG = `import TabGroup from 'ogygia/content/tab-group' with { wake: 'load' };`;
@@ -708,15 +767,25 @@ describe('package-specifier island marks', () => {
 		expect(isl.virtualPath).toMatch(/\.js$/);
 		expect(isl.source).toContain(`from "${PKG_SPEC}"`);
 		// host tag untouched: real import name, children in place (they flow through the wrapper's slot)
-		expect(r.code).toMatch(/<TabGroup group="install"><Tab label="npm"><p>x<\/p><\/Tab><\/TabGroup>/);
+		expect(r.code).toMatch(
+			/<TabGroup group="install"><Tab label="npm"><p>x<\/p><\/Tab><\/TabGroup>/
+		);
 		expect(r.code).not.toMatch(/__og\d/);
 		// the plain named package import (Tab) rides along untouched
 		expect(r.code).toContain(`import { Tab } from 'ogygia/content';`);
 	});
 
 	test('two hosts marking the same package specifier share one region id', () => {
-		const a = transformHost(wrap(PKG, '<TabGroup />'), '/app/src/routes/a/+page.svelte', makeCtx())!;
-		const b = transformHost(wrap(PKG, '<TabGroup />'), '/app/src/routes/deep/b/+page.svelte', makeCtx())!;
+		const a = transformHost(
+			wrap(PKG, '<TabGroup />'),
+			'/app/src/routes/a/+page.svelte',
+			makeCtx()
+		)!;
+		const b = transformHost(
+			wrap(PKG, '<TabGroup />'),
+			'/app/src/routes/deep/b/+page.svelte',
+			makeCtx()
+		)!;
 		expect(a.islands[0].id).toBe(b.islands[0].id);
 	});
 
@@ -736,7 +805,11 @@ describe('package-specifier island marks', () => {
 	});
 
 	test('csr=false client host: package island skips the fouc-css side-effect import (needs a real path)', () => {
-		const r = transformHost(wrap(PKG, '<TabGroup />'), HOST, makeCtx({ linkVirtualIsland: false }))!;
+		const r = transformHost(
+			wrap(PKG, '<TabGroup />'),
+			HOST,
+			makeCtx({ linkVirtualIsland: false })
+		)!;
 		expect(r.code).toContain(CLIENT_BINDING_STUB);
 		expect(r.code).not.toContain('virtual:ogygia/fouc-css');
 		// a relative island on the same host still gets its fouc-css import
@@ -771,10 +844,14 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 		expect(r.islands).toHaveLength(1);
 		const island = r.islands[0];
 		expect(island.id).toBe(iid);
-		expect(island.source).toMatch(/import \{ Header as __OgygiaComp_[0-9a-f]+ \} from ["']@acme\/ui["']/);
+		expect(island.source).toMatch(
+			/import \{ Header as __OgygiaComp_[0-9a-f]+ \} from ["']@acme\/ui["']/
+		);
 		expect(island.source).toMatch(/export default __OgygiaComp_/);
 		// wrapper's CSS-linkage import is named too (else a barrel has no default to pull)
-		expect(island.wrapperSource).toMatch(/import \{ Header as __OgygiaCss \} from ["']@acme\/ui["']/);
+		expect(island.wrapperSource).toMatch(
+			/import \{ Header as __OgygiaCss \} from ["']@acme\/ui["']/
+		);
 	});
 
 	test('identity keys on source#exportName: two named exports of ONE barrel → two islands', () => {
@@ -790,14 +867,22 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 	});
 
 	test('a default import works via asRegion too (default entry import)', () => {
-		const r = asr(`import Card from './Card.svelte';\nconst C = import.meta.og.asRegion(Card, { wake: 'idle' });`, '<C />');
+		const r = asr(
+			`import Card from './Card.svelte';\nconst C = import.meta.og.asRegion(Card, { wake: 'idle' });`,
+			'<C />'
+		);
 		expect(r.islands).toHaveLength(1);
-		expect(r.islands[0].source).toMatch(/import __OgygiaComp_[0-9a-f]+ from ["'][^"']*Card\.svelte["']/);
+		expect(r.islands[0].source).toMatch(
+			/import __OgygiaComp_[0-9a-f]+ from ["'][^"']*Card\.svelte["']/
+		);
 		expect(r.islands[0].source).not.toMatch(/import \{ /);
 	});
 
 	test('a fully-consumed barrel import is stripped from the host (no barrel in host chunk)', () => {
-		const r = asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'load' });`, '<H />');
+		const r = asr(
+			`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'load' });`,
+			'<H />'
+		);
 		expect(r.code).not.toMatch(/from ['"]@acme\/ui['"]/);
 	});
 
@@ -818,13 +903,21 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 	});
 	test('namespace import → error', () => {
 		expectThrows(
-			() => asr(`import * as UI from '@acme/ui';\nconst H = import.meta.og.asRegion(UI, { wake: 'load' });`, '<H />'),
+			() =>
+				asr(
+					`import * as UI from '@acme/ui';\nconst H = import.meta.og.asRegion(UI, { wake: 'load' });`,
+					'<H />'
+				),
 			/namespace import/
 		);
 	});
 	test('`let` binding → error (must be const)', () => {
 		expectThrows(
-			() => asr(`import { Header } from '@acme/ui';\nlet H = import.meta.og.asRegion(Header, { wake: 'load' });`, '<H />'),
+			() =>
+				asr(
+					`import { Header } from '@acme/ui';\nlet H = import.meta.og.asRegion(Header, { wake: 'load' });`,
+					'<H />'
+				),
 			/must be bound with `const`/
 		);
 	});
@@ -840,26 +933,41 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 	});
 	test('unknown timing → error', () => {
 		expectThrows(
-			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'whenever' });`, '<H />'),
+			() =>
+				asr(
+					`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'whenever' });`,
+					'<H />'
+				),
 			/unknown wake/
 		);
 	});
 	test('options must be an OBJECT — a string shorthand is rejected', () => {
 		expectThrows(
-			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'load');`, '<H />'),
+			() =>
+				asr(
+					`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, 'load');`,
+					'<H />'
+				),
 			/needs an options object/
 		);
 	});
 	test('a missing options object → error', () => {
 		expectThrows(
-			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header);`, '<H />'),
+			() =>
+				asr(
+					`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header);`,
+					'<H />'
+				),
 			/needs an options object/
 		);
 	});
 	test('mixed / multiple declarators in one statement → error', () => {
 		expectThrows(
 			() =>
-				asr(`import { Header } from '@acme/ui';\nconst x = 1, H = import.meta.og.asRegion(Header, { wake: 'load' });`, '<H />'),
+				asr(
+					`import { Header } from '@acme/ui';\nconst x = 1, H = import.meta.og.asRegion(Header, { wake: 'load' });`,
+					'<H />'
+				),
 			/one asRegion per/
 		);
 	});
@@ -893,7 +1001,9 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 		expect(r.islands).toHaveLength(1);
 		expect(r.islands[0].server).toBe(true);
 		expect(r.islands[0].kind).toBe('defer');
-		expect(r.islands[0].source).toMatch(/import \{ Chart as __OgygiaComp_[0-9a-f]+ \} from ["']@acme\/ui["']/);
+		expect(r.islands[0].source).toMatch(
+			/import \{ Chart as __OgygiaComp_[0-9a-f]+ \} from ["']@acme\/ui["']/
+		);
 	});
 	test('wake: none → a LAKE (same output as `with { wake: none }`)', () => {
 		const r = asr(
@@ -910,7 +1020,9 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 		);
 		expect(r.islands).toHaveLength(1);
 		expect(r.islands[0].held).toBe(true);
-		expect(r.islands[0].bindingSsrSource).toMatch(/import \{ Block as __ogRegionComp \} from ["']@acme\/ui["']/);
+		expect(r.islands[0].bindingSsrSource).toMatch(
+			/import \{ Block as __ogRegionComp \} from ["']@acme\/ui["']/
+		);
 	});
 	test('a preset resolves through asRegion too (same parser as import attributes)', () => {
 		const r = asr(
@@ -924,13 +1036,21 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 	test('an inline option key not allowed on an import attribute is rejected here too', () => {
 		// `margin` is preset-only inline — exactly as with `import X with { wake, margin }`.
 		expectThrows(
-			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'load', margin: '10px' });`, '<H />'),
+			() =>
+				asr(
+					`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { wake: 'load', margin: '10px' });`,
+					'<H />'
+				),
 			/not allowed inline/
 		);
 	});
 	test('an options object with no region key → needs a region option', () => {
 		expectThrows(
-			() => asr(`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { keep: 'x' });`, '<H />'),
+			() =>
+				asr(
+					`import { Header } from '@acme/ui';\nconst H = import.meta.og.asRegion(Header, { keep: 'x' });`,
+					'<H />'
+				),
 			/needs a .wake/
 		);
 	});

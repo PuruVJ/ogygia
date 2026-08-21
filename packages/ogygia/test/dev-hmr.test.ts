@@ -109,14 +109,19 @@ describe('derive_css_scope_owners', () => {
 	it('walks importers up to route files and reports their top-level scopes', () => {
 		const docs_layout: Mod = { file: '/app/src/routes/(docs)/+layout.svelte' };
 		const css: Mod = { file: '/app/src/app.css', importers: [docs_layout] };
-		const owners = derive_css_scope_owners('/app/src/app.css', '/app', [graph_of(new Map([['/app/src/app.css', [css]]]))]);
+		const owners = derive_css_scope_owners('/app/src/app.css', '/app', [
+			graph_of(new Map([['/app/src/app.css', [css]]]))
+		]);
 		expect(owners).toEqual(['(docs)']);
 	});
 
 	it('reaches route files through intermediate lib modules and dedupes scopes', () => {
 		const pg_page: Mod = { file: '/app/src/routes/playground/+page.svelte' };
 		const pg_layout: Mod = { file: '/app/src/routes/playground/+layout.svelte' };
-		const lib: Mod = { file: '/app/src/lib/playground/thing.svelte', importers: [pg_page, pg_layout] };
+		const lib: Mod = {
+			file: '/app/src/lib/playground/thing.svelte',
+			importers: [pg_page, pg_layout]
+		};
 		const css: Mod = { file: '/app/src/lib/playground/thing.css', importers: [lib] };
 		const owners = derive_css_scope_owners('/app/src/lib/playground/thing.css', '/app', [
 			graph_of(new Map([['/app/src/lib/playground/thing.css', [css]]]))
@@ -149,7 +154,9 @@ describe('derive_css_scope_owners', () => {
 		a.importers = [b];
 		const css: Mod = { file: '/app/src/x.css', importers: [a] };
 		expect(
-			derive_css_scope_owners('/app/src/x.css', '/app', [graph_of(new Map([['/app/src/x.css', [css]]]))])
+			derive_css_scope_owners('/app/src/x.css', '/app', [
+				graph_of(new Map([['/app/src/x.css', [css]]]))
+			])
 		).toEqual([]);
 	});
 });

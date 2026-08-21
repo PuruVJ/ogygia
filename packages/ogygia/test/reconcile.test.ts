@@ -41,10 +41,14 @@ describe('signature_of — the match key (which slot)', () => {
 
 describe('fingerprint_of — the change key (did inputs change)', () => {
 	it('equal when entry+endpoint+props seed are equal (→ KEEP)', () => {
-		expect(fingerprint_of('./a.js', '', '["seed",1]')).toBe(fingerprint_of('./a.js', '', '["seed",1]'));
+		expect(fingerprint_of('./a.js', '', '["seed",1]')).toBe(
+			fingerprint_of('./a.js', '', '["seed",1]')
+		);
 	});
 	it('changes when the props seed changes (→ PATCH)', () => {
-		expect(fingerprint_of('./a.js', '', '["seed",1]')).not.toBe(fingerprint_of('./a.js', '', '["seed",2]'));
+		expect(fingerprint_of('./a.js', '', '["seed",1]')).not.toBe(
+			fingerprint_of('./a.js', '', '["seed",2]')
+		);
 	});
 	it('ignores exp/sig rotation in the endpoint (not an input change)', () => {
 		const fp1 = fingerprint_of('', '/__ogygia__?id=1&props=X&exp=1&sig=a', '');

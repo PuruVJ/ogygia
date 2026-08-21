@@ -15,12 +15,31 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { Component } from 'svelte';
 import type { Entry } from '../index.js';
-import { format_findings, run_page_checks, run_site_checks, type Check, type Finding } from './checks.js';
+import {
+	format_findings,
+	run_page_checks,
+	run_site_checks,
+	type Check,
+	type Finding
+} from './checks.js';
 import { build_llms, build_rss, build_sitemap, strip_frontmatter } from './emit.js';
 import type { RssItem } from './emit.js';
-import { href_of, outline, type Collection, type Outline, type OutlineSpec, type TrailScope } from './outline.js';
+import {
+	href_of,
+	outline,
+	type Collection,
+	type Outline,
+	type OutlineSpec,
+	type TrailScope
+} from './outline.js';
 import { is_dimensioned, type Switcher } from './dimensions.js';
-import { build_docs, create_search, orama_engine, type SearchBrain, type SearchEngine } from './search.js';
+import {
+	build_docs,
+	create_search,
+	orama_engine,
+	type SearchBrain,
+	type SearchEngine
+} from './search.js';
 import type { BaseOption, PageView, Heading, NavRef, NavTree, PrevNext } from './types.js';
 
 /** Site-level facts, surfaced as `site.data` and used as the default for every emission. */
@@ -120,13 +139,19 @@ export interface Site {
 	nav: (opts?: BaseOption & { slug?: string; context?: ReadContext }) => Promise<NavTree>;
 	/** On a `dimensions()` site: the version/locale switcher for the coordinate in `slug` (hrefs baked
 	 *  for `base`). `null` on a plain site. Serializable — the shell renders a `<select>`. */
-	switcher: (slug: string, opts?: BaseOption & { context?: ReadContext }) => Promise<Switcher | null>;
+	switcher: (
+		slug: string,
+		opts?: BaseOption & { context?: ReadContext }
+	) => Promise<Switcher | null>;
 	/** The whole SHELL bundle in one browser-safe call: `{ nav, switcher, data }` for a slug. Feed it
 	 *  to `<Shell {meta}>` so the corpus stays server-only — this is what a `meta` remote returns. */
 	meta: (opts?: BaseOption & { slug?: string; context?: ReadContext }) => Promise<SiteMeta>;
 	/** Everything one page position needs, or `null` for an unknown slug. Call in the page component.
 	 *  Pass `context` (e.g. `{ preview: true }`) to see the same projection the load guard used. */
-	page: <Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(slug: string, opts?: BaseOption & { context?: ReadContext }) => Promise<PageView<Data, Meta> | null>;
+	page: <Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(
+		slug: string,
+		opts?: BaseOption & { context?: ReadContext }
+	) => Promise<PageView<Data, Meta> | null>;
 	/** Run all `checks` over the whole corpus as plain data (never throws) — for vitest/CI, and for
 	 *  dynamic sites where the prerender crawler never runs. */
 	check: (opts?: { base?: string; context?: ReadContext }) => Promise<Finding[]>;
@@ -235,7 +260,11 @@ class OgygiaSite implements Site {
 	};
 
 	async check(o: { base?: string; context?: ReadContext } = {}) {
-		return run_site_checks(this.#checks, { outline: this.outline, base: o.base ?? this.#base, ctx: o.context ?? {} });
+		return run_site_checks(this.#checks, {
+			outline: this.outline,
+			base: o.base ?? this.#base,
+			ctx: o.context ?? {}
+		});
 	}
 
 	nav(o: BaseOption & { slug?: string; context?: ReadContext } = {}) {
@@ -261,7 +290,10 @@ class OgygiaSite implements Site {
 		};
 	}
 
-	async page<Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(slug: string, o: BaseOption & { context?: ReadContext } = {}): Promise<PageView<Data, Meta> | null> {
+	async page<Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown>(
+		slug: string,
+		o: BaseOption & { context?: ReadContext } = {}
+	): Promise<PageView<Data, Meta> | null> {
 		const ol = this.outline;
 		const base = o.base ?? this.#base;
 		const ctx = o.context ?? {};
@@ -301,21 +333,32 @@ class OgygiaSite implements Site {
 		const data = this.data;
 		const base0 = this.#base;
 		return {
-			sitemap: (o: EmitOptions = {}) => async (event) => {
-				const origin = o.origin ?? data?.origin ?? event.url.origin;
-				const tree = await ol.tree(o.base ?? base0);
-				return new Response(build_sitemap(tree, origin), { headers: { 'content-type': 'application/xml' } });
-			},
-			llms: (o: LlmsEmitOptions = {}) => async (event) => {
-				const origin = o.origin ?? data?.origin ?? event.url.origin;
-				const tree = await ol.tree(o.base ?? base0);
-				const body = build_llms(tree, origin, { title: o.title ?? data?.title, description: o.description ?? data?.description });
-				return new Response(body, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
-			},
+			sitemap:
+				(o: EmitOptions = {}) =>
+				async (event) => {
+					const origin = o.origin ?? data?.origin ?? event.url.origin;
+					const tree = await ol.tree(o.base ?? base0);
+					return new Response(build_sitemap(tree, origin), {
+						headers: { 'content-type': 'application/xml' }
+					});
+				},
+			llms:
+				(o: LlmsEmitOptions = {}) =>
+				async (event) => {
+					const origin = o.origin ?? data?.origin ?? event.url.origin;
+					const tree = await ol.tree(o.base ?? base0);
+					const body = build_llms(tree, origin, {
+						title: o.title ?? data?.title,
+						description: o.description ?? data?.description
+					});
+					return new Response(body, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+				},
 			search: () => async () => {
 				// Mount-independent section documents; the client worker applies base + indexes them.
 				const docs = await build_docs(ol);
-				return new Response(JSON.stringify(docs), { headers: { 'content-type': 'application/json' } });
+				return new Response(JSON.stringify(docs), {
+					headers: { 'content-type': 'application/json' }
+				});
 			},
 			rss: (o: RssEmitOptions) => async (event) => {
 				const origin = o.origin ?? data?.origin ?? event.url.origin;
@@ -340,13 +383,16 @@ class OgygiaSite implements Site {
 					// into the same site has no `.md`, and must not be crawled into a 404.
 					entries: async () => {
 						const out: Array<{ slug: string }> = [];
-						for (const slug of await ol.addresses()) if ((await source_of(slug)) != null) out.push({ slug });
+						for (const slug of await ol.addresses())
+							if ((await source_of(slug)) != null) out.push({ slug });
 						return out;
 					},
 					GET: async ({ params }) => {
 						const raw = await source_of(params.slug ?? '');
 						if (raw == null) return new Response('Not found', { status: 404 });
-						return new Response(strip ? strip_frontmatter(raw) : raw, { headers: { 'content-type': 'text/markdown; charset=utf-8' } });
+						return new Response(strip ? strip_frontmatter(raw) : raw, {
+							headers: { 'content-type': 'text/markdown; charset=utf-8' }
+						});
 					}
 				};
 			}
@@ -369,7 +415,13 @@ function extract_headings(meta: unknown): Heading[] {
 }
 
 /** Resolve an entry's content-graph `related` refs to nav refs (address + display fields). */
-async function resolve_related(entry: Entry<Record<string, unknown>, unknown>, collection: Collection, ol: Outline, base: string, ctx: ReadContext = {}): Promise<NavRef[]> {
+async function resolve_related(
+	entry: Entry<Record<string, unknown>, unknown>,
+	collection: Collection,
+	ol: Outline,
+	base: string,
+	ctx: ReadContext = {}
+): Promise<NavRef[]> {
 	const rel = entry.rel?.related;
 	if (!rel) return [];
 	const refs = Array.isArray(rel) ? rel : [rel];

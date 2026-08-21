@@ -15,7 +15,10 @@ export function strip_frontmatter(src: string): string {
 }
 
 function xml_escape(s: string): string {
-	return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!);
+	return s.replace(
+		/[&<>"']/g,
+		(c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!
+	);
 }
 
 /** Depth-first list of every leaf under a set of items (nested groups flattened). */
@@ -38,7 +41,8 @@ export function build_sitemap(tree: NavTree, origin: string): string {
 
 /** One `- [title](url): summary` line for a leaf or link. */
 function bullet(item: NavItem, origin: string): string | null {
-	if (item.kind === 'leaf') return `- [${item.title}](${origin + item.href})${item.summary ? `: ${item.summary}` : ''}`;
+	if (item.kind === 'leaf')
+		return `- [${item.title}](${origin + item.href})${item.summary ? `: ${item.summary}` : ''}`;
 	if (item.kind === 'link') return `- [${item.label}](${item.href})`;
 	return null;
 }
@@ -83,7 +87,12 @@ export function build_llms(tree: NavTree, origin: string, opts: LlmsOptions = {}
 		lines.push('');
 	}
 
-	return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+	return (
+		lines
+			.join('\n')
+			.replace(/\n{3,}/g, '\n\n')
+			.trimEnd() + '\n'
+	);
 }
 
 // ── RSS — the blog genre's emission ──────────────────────────────────────────────

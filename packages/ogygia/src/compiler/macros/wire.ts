@@ -48,7 +48,12 @@ export function og_member(node: Node | undefined): string | null {
 	const og = node.object;
 	if (og?.type !== 'MemberExpression' || og.computed || og.property?.name !== 'og') return null;
 	const meta = og.object;
-	if (meta?.type !== 'MetaProperty' || meta.meta?.name !== 'import' || meta.property?.name !== 'meta') return null;
+	if (
+		meta?.type !== 'MetaProperty' ||
+		meta.meta?.name !== 'import' ||
+		meta.property?.name !== 'meta'
+	)
+		return null;
 	return name;
 }
 
@@ -59,7 +64,8 @@ function walk(node: Node, visit: (n: Node) => void): void {
 		if (key === 'type' || key === 'start' || key === 'end') continue;
 		const child = node[key];
 		if (Array.isArray(child)) {
-			for (const c of child) if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
+			for (const c of child)
+				if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
 		} else if (child && typeof child === 'object' && typeof child.type === 'string') {
 			walk(child, visit);
 		}
@@ -105,10 +111,21 @@ function ast_edits(src: string, region: JsRegion, id: string): Edit[] | null {
 				// Name lock: the member must be literally `wire` (non-computed).
 				const key = n.key as Node | undefined;
 				const name = !n.computed && key?.type === 'Identifier' ? key.name : null;
-				if (name !== 'wire') misuse(id, src, abs, `the wire member must be named exactly \`wire\` (got \`${name ?? '<computed>'}\`)`);
+				if (name !== 'wire')
+					misuse(
+						id,
+						src,
+						abs,
+						`the wire member must be named exactly \`wire\` (got \`${name ?? '<computed>'}\`)`
+					);
 				const args = v.arguments as Node[] | undefined;
 				if (!args || args.length !== 1) {
-					misuse(id, src, abs, `wire() takes exactly one argument — the codec ({ encode, decode })`);
+					misuse(
+						id,
+						src,
+						abs,
+						`wire() takes exactly one argument — the codec ({ encode, decode })`
+					);
 				}
 				claimed.add(v);
 				claimed.add(v.callee as Node);
@@ -174,7 +191,8 @@ export function rewrite_wire(src: string, id: string, markup_exts: readonly stri
 	if (!regions) return src;
 
 	const edits: Edit[] = [];
-	for (const region of regions) edits.push(...(ast_edits(src, region, id) ?? scan_edits(src, region)));
+	for (const region of regions)
+		edits.push(...(ast_edits(src, region, id) ?? scan_edits(src, region)));
 	if (!edits.length) return src;
 
 	edits.sort((a, b) => a.start - b.start);

@@ -44,24 +44,82 @@ type Node = Record<string, any>;
 
 /** Globals a hoisted factory may reference without binding (never captured). */
 const KNOWN_GLOBALS = new Set([
-	'undefined', 'null', 'true', 'false', 'NaN', 'Infinity', 'globalThis', 'console', 'Math',
-	'JSON', 'Date', 'RegExp', 'Error', 'TypeError', 'RangeError', 'Object', 'Array', 'String',
-	'Number', 'Boolean', 'Symbol', 'BigInt', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Promise',
-	'Proxy', 'Reflect', 'ArrayBuffer', 'Uint8Array', 'TextEncoder', 'TextDecoder', 'URL',
-	'URLSearchParams', 'fetch', 'Request', 'Response', 'Headers', 'FormData', 'AbortController',
-	'structuredClone', 'queueMicrotask', 'setTimeout', 'clearTimeout', 'setInterval',
-	'clearInterval', 'crypto', 'performance', 'atob', 'btoa', 'isNaN', 'isFinite', 'parseInt',
-	'parseFloat', 'encodeURIComponent', 'decodeURIComponent', 'window', 'document', 'navigator',
-	'location', 'arguments'
+	'undefined',
+	'null',
+	'true',
+	'false',
+	'NaN',
+	'Infinity',
+	'globalThis',
+	'console',
+	'Math',
+	'JSON',
+	'Date',
+	'RegExp',
+	'Error',
+	'TypeError',
+	'RangeError',
+	'Object',
+	'Array',
+	'String',
+	'Number',
+	'Boolean',
+	'Symbol',
+	'BigInt',
+	'Map',
+	'Set',
+	'WeakMap',
+	'WeakSet',
+	'Promise',
+	'Proxy',
+	'Reflect',
+	'ArrayBuffer',
+	'Uint8Array',
+	'TextEncoder',
+	'TextDecoder',
+	'URL',
+	'URLSearchParams',
+	'fetch',
+	'Request',
+	'Response',
+	'Headers',
+	'FormData',
+	'AbortController',
+	'structuredClone',
+	'queueMicrotask',
+	'setTimeout',
+	'clearTimeout',
+	'setInterval',
+	'clearInterval',
+	'crypto',
+	'performance',
+	'atob',
+	'btoa',
+	'isNaN',
+	'isFinite',
+	'parseInt',
+	'parseFloat',
+	'encodeURIComponent',
+	'decodeURIComponent',
+	'window',
+	'document',
+	'navigator',
+	'location',
+	'arguments'
 ]);
 
-function walk(node: Node, visit: (n: Node, parent: Node | null) => void, parent: Node | null = null): void {
+function walk(
+	node: Node,
+	visit: (n: Node, parent: Node | null) => void,
+	parent: Node | null = null
+): void {
 	visit(node, parent);
 	for (const key in node) {
 		if (key === 'type' || key === 'start' || key === 'end') continue;
 		const child = node[key];
 		if (Array.isArray(child)) {
-			for (const c of child) if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit, node);
+			for (const c of child)
+				if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit, node);
 		} else if (child && typeof child === 'object' && typeof child.type === 'string') {
 			walk(child, visit, node);
 		}
@@ -88,18 +146,33 @@ function declared_names(fn: Node): Set<string> {
 	const collect_pattern = (p: Node | null | undefined): void => {
 		if (!p) return;
 		switch (p.type) {
-			case 'Identifier': out.add(p.name); break;
-			case 'ObjectPattern': for (const prop of p.properties ?? []) collect_pattern(prop.value ?? prop.argument); break;
-			case 'ArrayPattern': for (const el of p.elements ?? []) collect_pattern(el); break;
-			case 'AssignmentPattern': collect_pattern(p.left); break;
-			case 'RestElement': collect_pattern(p.argument); break;
+			case 'Identifier':
+				out.add(p.name);
+				break;
+			case 'ObjectPattern':
+				for (const prop of p.properties ?? []) collect_pattern(prop.value ?? prop.argument);
+				break;
+			case 'ArrayPattern':
+				for (const el of p.elements ?? []) collect_pattern(el);
+				break;
+			case 'AssignmentPattern':
+				collect_pattern(p.left);
+				break;
+			case 'RestElement':
+				collect_pattern(p.argument);
+				break;
 		}
 	};
 	walk(fn, (n) => {
 		if (n.type === 'VariableDeclarator') collect_pattern(n.id);
-		else if (n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration') { if (n.id?.name) out.add(n.id.name); }
-		else if (n.type === 'CatchClause') collect_pattern(n.param);
-		else if (n.type === 'FunctionExpression' || n.type === 'ArrowFunctionExpression' || n.type === 'FunctionDeclaration') {
+		else if (n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration') {
+			if (n.id?.name) out.add(n.id.name);
+		} else if (n.type === 'CatchClause') collect_pattern(n.param);
+		else if (
+			n.type === 'FunctionExpression' ||
+			n.type === 'ArrowFunctionExpression' ||
+			n.type === 'FunctionDeclaration'
+		) {
 			for (const p of n.params ?? []) collect_pattern(p);
 			if (n.id?.name) out.add(n.id.name);
 		}
@@ -122,8 +195,10 @@ function free_names(fn: Node): string[] {
 			// non-reference positions: member property (a.b), non-shorthand object key, labels,
 			// import/export names, TS type positions (oxc strips types before us anyway)
 			if (pt === 'MemberExpression' && parent.property === n && !parent.computed) return;
-			if ((pt === 'Property' || pt === 'ObjectProperty') && parent.key === n && !parent.shorthand) return;
-			if (pt === 'LabeledStatement' || pt === 'BreakStatement' || pt === 'ContinueStatement') return;
+			if ((pt === 'Property' || pt === 'ObjectProperty') && parent.key === n && !parent.shorthand)
+				return;
+			if (pt === 'LabeledStatement' || pt === 'BreakStatement' || pt === 'ContinueStatement')
+				return;
 		}
 		seen.add(name);
 		out.push(name);
@@ -192,7 +267,8 @@ export function rewrite_dollar(
 			if (n.type === 'CallExpression' && og_member(n.callee as Node) === '$') {
 				const abs = region.offset + n.start;
 				const args = n.arguments as Node[] | undefined;
-				if (!args || args.length !== 1) misuse(id, src, abs, `$() takes exactly one argument — the function to hoist`);
+				if (!args || args.length !== 1)
+					misuse(id, src, abs, `$() takes exactly one argument — the function to hoist`);
 				const fn = args[0]!;
 				if (fn.type !== 'ArrowFunctionExpression' && fn.type !== 'FunctionExpression') {
 					// THE UNIVERSAL BOUNDARY MARK: a non-function value isn't hoisted — it's ASSERTED.
@@ -218,7 +294,9 @@ export function rewrite_dollar(
 					const from = server_only.get(c);
 					if (from) {
 						misuse(
-							id, src, abs,
+							id,
+							src,
+							abs,
 							`$() captures \`${c}\` from the server-only module '${from}' — its value would ship ` +
 								`into client HTML. Do the server work in a remote function and capture ITS result, ` +
 								`or pass a derived, non-secret value instead`
@@ -247,7 +325,10 @@ export function rewrite_dollar(
 		// SAME-LINE (no trailing newline) on purpose: every rewrite in this file is a same-line
 		// splice, so keeping the import on line 1 preserves EVERY line number — breakpoints and
 		// stack traces in marked files stay exact even without a composed sourcemap.
-		if ((needs_import || needs_boundary_import) && !edits.some((e) => e.text.startsWith('import'))) {
+		if (
+			(needs_import || needs_boundary_import) &&
+			!edits.some((e) => e.text.startsWith('import'))
+		) {
 			const names = [needs_import ? '__og_$' : '', needs_boundary_import ? '__og_boundary' : '']
 				.filter(Boolean)
 				.join(', ');
@@ -271,7 +352,8 @@ export function rewrite_dollar(
 	// found by literal marker + a context guard: the marker must open a svelte EXPRESSION (the
 	// previous non-space char is `{` or `(`), and its parens are matched by the quote-aware
 	// match_close (the ARGS are JS, so string-awareness matters there).
-	const in_region = (pos: number) => regions.some((r) => pos >= r.offset && pos < r.offset + r.code.length);
+	const in_region = (pos: number) =>
+		regions.some((r) => pos >= r.offset && pos < r.offset + r.code.length);
 	type TplCall = { start: number; end: number; args: string };
 	const template_calls: TplCall[] = [];
 	{
@@ -297,8 +379,12 @@ export function rewrite_dollar(
 	for (const call of template_calls) {
 		const arg_text = call.args.trim();
 		if (!arg_text) misuse(id, src, call.start, `$() takes exactly one argument`);
-		const { program, ok } = parse_module(`(${arg_text})`, id.endsWith('.svelte') ? id + '.expr.ts' : id);
-		if (!ok || !program) misuse(id, src, call.start, `$()'s argument does not parse as an expression`);
+		const { program, ok } = parse_module(
+			`(${arg_text})`,
+			id.endsWith('.svelte') ? id + '.expr.ts' : id
+		);
+		if (!ok || !program)
+			misuse(id, src, call.start, `$()'s argument does not parse as an expression`);
 		const stmt = (program.body?.[0] ?? {}) as Node;
 		let expr = (stmt.expression ?? {}) as Node;
 		while (expr.type === 'ParenthesizedExpression') expr = expr.expression as Node;
@@ -325,18 +411,28 @@ export function rewrite_dollar(
 	}
 	if (template_needs) {
 		const first = regions[0];
-		if (!first) misuse(id, src, 0, `og.$ in markup needs a <script> block to receive its runtime import`);
-		const names = [template_needs.fn ? '__og_$' : '', template_needs.boundary ? '__og_boundary' : '']
+		if (!first)
+			misuse(id, src, 0, `og.$ in markup needs a <script> block to receive its runtime import`);
+		const names = [
+			template_needs.fn ? '__og_$' : '',
+			template_needs.boundary ? '__og_boundary' : ''
+		]
 			.filter(Boolean)
 			.join(', ');
 		// merge with a script-pass injection if one already exists; else inject same-line
 		const existing = edits.find((e) => e.start === first.offset && e.text.startsWith('import { '));
 		if (existing) {
 			const have = existing.text.slice('import { '.length, existing.text.indexOf(' }'));
-			const merged = [...new Set([...have.split(', '), ...names.split(', ')])].filter(Boolean).join(', ');
+			const merged = [...new Set([...have.split(', '), ...names.split(', ')])]
+				.filter(Boolean)
+				.join(', ');
 			existing.text = `import { ${merged} } from 'ogygia/internal';`;
 		} else {
-			edits.push({ start: first.offset, end: first.offset, text: `import { ${names} } from 'ogygia/internal';` });
+			edits.push({
+				start: first.offset,
+				end: first.offset,
+				text: `import { ${names} } from 'ogygia/internal';`
+			});
 		}
 	}
 

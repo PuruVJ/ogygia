@@ -7,9 +7,26 @@
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { parse, stringify } from 'devalue';
-import { stage_deferred, settle_deferred, has_deferred, defer_reducer, page_seed_reducers, DeferRef, SettledRef, resolve_script } from '../src/server/page-stream.js';
-import { create_deferred, install_page_defer, page_defer_revivers } from '../src/runtime/page-defer.js';
-import { PAGE_DEFER_GLOBAL, PAGE_DEFER_REGISTRY_KEY, PAGE_DEFER_BOOTSTRAP } from '../src/page-defer.js';
+import {
+	stage_deferred,
+	settle_deferred,
+	has_deferred,
+	defer_reducer,
+	page_seed_reducers,
+	DeferRef,
+	SettledRef,
+	resolve_script
+} from '../src/server/page-stream.js';
+import {
+	create_deferred,
+	install_page_defer,
+	page_defer_revivers
+} from '../src/runtime/page-defer.js';
+import {
+	PAGE_DEFER_GLOBAL,
+	PAGE_DEFER_REGISTRY_KEY,
+	PAGE_DEFER_BOOTSTRAP
+} from '../src/page-defer.js';
 
 const g = globalThis as unknown as Record<PropertyKey, unknown>;
 
@@ -27,7 +44,11 @@ function fire_resolve(id: number, ok: boolean, value: unknown) {
 
 describe('page-defer staging (server)', () => {
 	it('replaces every promise with a DeferRef and collects them (data + form share one id space)', () => {
-		const data = { locale: 'fr', slow: Promise.resolve('X'), nested: { flags: Promise.resolve(true) } };
+		const data = {
+			locale: 'fr',
+			slow: Promise.resolve('X'),
+			nested: { flags: Promise.resolve(true) }
+		};
 		const form = { pending: Promise.resolve('F') };
 		const d = stage_deferred(data, 0);
 		const f = stage_deferred(form, d.next_id);
@@ -66,9 +87,15 @@ describe('page-defer staging (server)', () => {
 describe('page-defer codec round-trip', () => {
 	it('a staged promise survives serialize→parse as a pending Promise, then resolves live', async () => {
 		install_page_defer();
-		const { staged, deferred } = stage_deferred({ locale: 'fr', slow: Promise.resolve('STREAMED') }, 0);
+		const { staged, deferred } = stage_deferred(
+			{ locale: 'fr', slow: Promise.resolve('STREAMED') },
+			0
+		);
 		const text = stringify(staged, defer_reducer);
-		const revived = parse(text, page_defer_revivers()) as { locale: string; slow: Promise<unknown> };
+		const revived = parse(text, page_defer_revivers()) as {
+			locale: string;
+			slow: Promise<unknown>;
+		};
 		expect(revived.locale).toBe('fr');
 		expect(revived.slow).toBeInstanceOf(Promise);
 		// Not settled until the resolve arrives.
@@ -84,7 +111,9 @@ describe('page-defer codec round-trip', () => {
 	it('id 0 is not dropped by the reducer (the falsy-id trap)', () => {
 		// A single promise gets id 0; a bare-id reducer would read 0 as "not handled" and lose the marker.
 		const { staged } = stage_deferred({ only: Promise.resolve(1) }, 0);
-		const revived = parse(stringify(staged, defer_reducer), page_defer_revivers()) as { only: unknown };
+		const revived = parse(stringify(staged, defer_reducer), page_defer_revivers()) as {
+			only: unknown;
+		};
 		expect(revived.only).toBeInstanceOf(Promise);
 	});
 
@@ -107,7 +136,11 @@ describe('page-defer codec round-trip', () => {
 		install_page_defer();
 		let unhandled = '';
 		const on = (e: PromiseRejectionEvent | { reason?: unknown }) => {
-			unhandled = String((e as { reason?: { message?: string } }).reason?.message ?? (e as PromiseRejectionEvent).reason ?? '');
+			unhandled = String(
+				(e as { reason?: { message?: string } }).reason?.message ??
+					(e as PromiseRejectionEvent).reason ??
+					''
+			);
 		};
 		process.on('unhandledRejection', on as (r: unknown) => void);
 		// Reject arrives BEFORE the deferred exists → buffered; create_deferred returns a rejected Promise.
@@ -127,7 +160,11 @@ describe('page-defer codec round-trip', () => {
 		const restage = stage_deferred(resolved_value, 1); // ids continue past the initial set
 		expect(restage.deferred.map((d) => d.id)).toEqual([1]);
 		// Stream the outer resolution carrying the nested marker (encoded with defer_reducer inside).
-		(g[PAGE_DEFER_GLOBAL] as (i: number, o: boolean, e: string) => void)(0, true, stringify(restage.staged, defer_reducer));
+		(g[PAGE_DEFER_GLOBAL] as (i: number, o: boolean, e: string) => void)(
+			0,
+			true,
+			stringify(restage.staged, defer_reducer)
+		);
 		const v = (await outer) as { label: string; profile: Promise<unknown> };
 		expect(v.label).toBe('user');
 		expect(v.profile).toBeInstanceOf(Promise);
@@ -148,7 +185,11 @@ describe('page-defer codec round-trip', () => {
 		install_page_defer(decoders); // app transport decoders injected, like core.ts does
 		const p = create_deferred(0);
 		// The server would encode the streamed value with { ...transport_encoders, ...defer_reducer }.
-		(g[PAGE_DEFER_GLOBAL] as (i: number, o: boolean, e: string) => void)(0, true, stringify(new Temp(100), { ...encoders, ...defer_reducer }));
+		(g[PAGE_DEFER_GLOBAL] as (i: number, o: boolean, e: string) => void)(
+			0,
+			true,
+			stringify(new Temp(100), { ...encoders, ...defer_reducer })
+		);
 		const v = (await p) as { f: number };
 		expect(v.f).toBe(212); // getter works → the class was rebuilt, not a plain object
 	});
@@ -168,29 +209,42 @@ describe('page-defer codec round-trip', () => {
 describe('page-defer settle path (non-navigate / SPA fallback)', () => {
 	it('settle_deferred awaits each promise into a SettledRef; the client revives a resolved Promise', async () => {
 		install_page_defer();
-		const settled = (await settle_deferred({ locale: 'fr', slow: Promise.resolve('OK') })) as { slow: SettledRef };
+		const settled = (await settle_deferred({ locale: 'fr', slow: Promise.resolve('OK') })) as {
+			slow: SettledRef;
+		};
 		expect(settled.slow).toBeInstanceOf(SettledRef);
-		const revived = parse(stringify(settled, page_seed_reducers), page_defer_revivers()) as { locale: string; slow: Promise<unknown> };
+		const revived = parse(stringify(settled, page_seed_reducers), page_defer_revivers()) as {
+			locale: string;
+			slow: Promise<unknown>;
+		};
 		expect(revived.locale).toBe('fr');
 		expect(revived.slow).toBeInstanceOf(Promise); // still a Promise on this path — matches streaming + Kit
 		await expect(revived.slow).resolves.toBe('OK');
 	});
 
 	it('a REJECTED promise never crashes the render; it revives as a rejected Promise (`:catch`)', async () => {
-		const settled = (await settle_deferred({ boom: Promise.reject(new Error('DENIED')) })) as { boom: SettledRef };
+		const settled = (await settle_deferred({ boom: Promise.reject(new Error('DENIED')) })) as {
+			boom: SettledRef;
+		};
 		expect(settled.boom).toBeInstanceOf(SettledRef);
 		expect(settled.boom.ok).toBe(false);
-		const revived = parse(stringify(settled, page_seed_reducers), page_defer_revivers()) as { boom: Promise<unknown> };
+		const revived = parse(stringify(settled, page_seed_reducers), page_defer_revivers()) as {
+			boom: Promise<unknown>;
+		};
 		await expect(revived.boom).rejects.toThrow('DENIED');
 	});
 
 	it('settle_deferred recurses into a resolved value that holds more promises', async () => {
-		const settled = (await settle_deferred({ user: Promise.resolve({ profile: Promise.resolve('P') }) })) as {
+		const settled = (await settle_deferred({
+			user: Promise.resolve({ profile: Promise.resolve('P') })
+		})) as {
 			user: SettledRef;
 		};
 		expect(settled.user).toBeInstanceOf(SettledRef);
 		expect((settled.user.value as { profile: SettledRef }).profile).toBeInstanceOf(SettledRef);
-		const revived = parse(stringify(settled, page_seed_reducers), page_defer_revivers()) as { user: Promise<{ profile: Promise<unknown> }> };
+		const revived = parse(stringify(settled, page_seed_reducers), page_defer_revivers()) as {
+			user: Promise<{ profile: Promise<unknown> }>;
+		};
 		const u = await revived.user;
 		await expect(u.profile).resolves.toBe('P');
 	});
@@ -218,7 +272,9 @@ describe('page-defer script safety', () => {
 		(0, eval)(PAGE_DEFER_BOOTSTRAP);
 		expect(typeof g[PAGE_DEFER_GLOBAL]).toBe('function');
 		// Before install, a call is queued (no throw).
-		expect(() => (g[PAGE_DEFER_GLOBAL] as (i: number, o: boolean, e: string) => void)(0, true, stringify('q'))).not.toThrow();
+		expect(() =>
+			(g[PAGE_DEFER_GLOBAL] as (i: number, o: boolean, e: string) => void)(0, true, stringify('q'))
+		).not.toThrow();
 		// install drains the queue into a pending deferred created afterwards.
 		install_page_defer();
 	});

@@ -13,7 +13,7 @@ import { ogygiaPresetPreprocess } from '../content/markdown/index.js';
 import {
 	is_island_path,
 	normalize_import_keys,
-	type ImportKeys,
+	type ImportKeys
 } from '../compiler/region/transform.js';
 
 export {
@@ -27,7 +27,7 @@ export {
 	CLIENT_BINDING_STUB,
 	regionId,
 	regionIdentity,
-	strategyKey,
+	strategyKey
 } from '../compiler/region/transform.js';
 export { rewrite_lake_import_to_placeholder } from '../compiler/region/emit.js';
 export type { ImportKeys } from '../compiler/region/transform.js';
@@ -36,19 +36,19 @@ export type {
 	OgygiaRateLimit,
 	RegionsOptions,
 	ContentPreset,
-	OgygiaOptions,
+	OgygiaOptions
 } from './options.js';
 import {
 	assert_no_legacy_options,
 	validate_region_presets,
 	validate_content_presets,
-	resolve_options,
+	resolve_options
 } from './options.js';
 import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,
 	keep_client_dir,
-	inject_keep_client_route,
+	inject_keep_client_route
 } from '../compiler/standalone.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.js';
@@ -57,11 +57,11 @@ import {
 	compileFoucScopedCss,
 	foucRelFromId,
 	isFoucCssId,
-	isFoucScopedId,
+	isFoucScopedId
 } from '../compiler/fouc-css.js';
 import {
 	needs_csr_false_full_reload,
-	needs_island_entry_full_reload,
+	needs_island_entry_full_reload
 } from '../compiler/dev/hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
 import { collectIslandDepModulepreloads } from '../compiler/link/island-deps.js';
@@ -84,7 +84,7 @@ import {
 	HMAC_MODULE,
 	RUNTIME_DIR,
 	REGION_ENDPOINT_MODULE,
-	RUNTIME_HASH,
+	RUNTIME_HASH
 } from './paths.js';
 
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
@@ -95,7 +95,7 @@ import type {
 	OgygiaRateLimit,
 	RegionsOptions,
 	ContentPreset,
-	OgygiaOptions,
+	OgygiaOptions
 } from './options.js';
 
 /**
@@ -138,7 +138,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		router_enabled,
 		router_view_transitions,
 		continuity_forms,
-		server_delta,
+		server_delta
 	} = resolve_options(options, DEFAULT_REGION_TTL_SEC);
 
 	// The Program — this plugin instance's cross-file linker / island graph. It owns the descriptor
@@ -207,7 +207,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		bakeMs: 0,
 		bakeN: 0,
 		resolveMs: 0,
-		loadMs: 0,
+		loadMs: 0
 	};
 	const __P = !!process.env.OGYGIA_PROFILE;
 	const __outHash = new Map<string, number>();
@@ -276,7 +276,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		if (!server) return false;
 		return compiler.invalidate_for_file(file, {
 			deleted,
-			invalidate: (id) => invalidate_module_id(server, id),
+			invalidate: (id) => invalidate_module_id(server, id)
 		});
 	};
 
@@ -327,22 +327,22 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
 							__OGYGIA_CONTINUITY_FORMS__: JSON.stringify(continuity_forms),
-							__OGYGIA_SERVER_DELTA__: JSON.stringify(server_delta),
+							__OGYGIA_SERVER_DELTA__: JSON.stringify(server_delta)
 						},
 						server: {
 							fs: {
-								allow: [PKG_ROOT],
-							},
+								allow: [PKG_ROOT]
+							}
 						},
 						// Island emitFile entries re-export shared components; keep facade exports
 						// under Vite 8 / Rolldown (build.rolldownOptions — not deprecated rollupOptions).
 						build: {
 							rolldownOptions: {
-								preserveEntrySignatures: 'exports-only',
-							},
-						},
+								preserveEntrySignatures: 'exports-only'
+							}
+						}
 					};
-				},
+				}
 			},
 
 			configResolved(config) {
@@ -387,7 +387,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// Production builds: reject weak user secrets (L-HMAC). Dev may use short keys.
 					if (is_build && !secret_has_min_entropy(env_secret)) {
 						throw new Error(
-							`[ogygia] OGYGIA_SECRET is too short for production builds (need ≥${MIN_SECRET_BYTES} UTF-8 bytes).`,
+							`[ogygia] OGYGIA_SECRET is too short for production builds (need ≥${MIN_SECRET_BYTES} UTF-8 bytes).`
 						);
 					}
 					id_salt = derive_id_salt(env_secret);
@@ -408,7 +408,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						'runtime',
 						'client',
 						'remote-functions',
-						'index.js',
+						'index.js'
 					);
 					if (fs.existsSync(remoteIdx)) kit_remote_index = remoteIdx;
 				} catch {
@@ -453,8 +453,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						app_shims: APP_SHIMS,
 						is_build,
 						content_presets:
-							(islandBridge.contentPresets as Record<string, unknown> | undefined) ?? null,
-					}),
+							(islandBridge.contentPresets as Record<string, unknown> | undefined) ?? null
+					})
 				);
 			},
 
@@ -494,7 +494,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// The runtime entry (feature-selected) + one deterministic chunk per deduped hydrate
 					// region — the driver owns the naming + dedup; `this.emitFile` is the injected primitive.
 					compiler.emit_build_chunks((chunk) => this.emitFile(chunk), {
-						emitRuntime: emit_runtime,
+						emitRuntime: emit_runtime
 					});
 					// Content CSS: a content module's OWN scoped `<style>` compiles into the SERVER bundle
 					// only (the leak-free corpus never enters the client graph), so on a csr=false doc page it
@@ -516,13 +516,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 									css: 'external',
 									dev: false,
 									generate: 'client',
-									experimental: { async: true },
+									experimental: { async: true }
 								});
 								if (css?.code) {
 									const ref = this.emitFile({
 										type: 'asset',
 										name: 'og-content.css',
-										source: css.code,
+										source: css.code
 									});
 									content_css_refs.set(content_css_key(abs), ref);
 								}
@@ -559,8 +559,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							JSON.stringify({
 								...__prof,
 								transformDigest: (d >>> 0).toString(16),
-								transformFiles: keys.length,
-							}),
+								transformFiles: keys.length
+							})
 					);
 				}
 			},
@@ -593,13 +593,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						if (!joined) {
 							const owners = derive_css_scope_owners(file, root, [
 								envs?.ssr?.moduleGraph,
-								client_graph,
+								client_graph
 							]);
 							const web_path = '/' + path.relative(root, file).split(path.sep).join('/');
 							server.ws.send({
 								type: 'custom',
 								event: 'ogygia:css',
-								data: { path: web_path, owners },
+								data: { path: web_path, owners }
 							});
 							return [];
 						}
@@ -646,7 +646,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!ssr && source === '__sveltekit/remote') {
 					if (!kit_remote_index) {
 						throw new Error(
-							"[ogygia] could not locate Kit's client remote-functions (src). Pin @sveltejs/kit with its `src/` published (2.70.x).",
+							"[ogygia] could not locate Kit's client remote-functions (src). Pin @sveltejs/kit with its `src/` published (2.70.x)."
 						);
 					}
 					return kit_remote_index;
@@ -665,7 +665,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// with Vite's own resolver threaded in for the two branches that need it.
 				return compiler.resolve_id(source, importer, {
 					ssr,
-					resolve: (s, i, o) => this.resolve(s, i, o),
+					resolve: (s, i, o) => this.resolve(s, i, o)
 				});
 			},
 
@@ -690,7 +690,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							} catch {
 								return null;
 							}
-						},
+						}
 					});
 					// Must not tree-shake: the only purpose of this module is CSS side effects.
 					return { code, moduleSideEffects: true };
@@ -714,7 +714,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				return compiler.emit(id, {
 					ssr,
 					hashedRuntimeUrl: hashed_runtime_url,
-					universalHooks: universal_hooks,
+					universalHooks: universal_hooks
 				});
 			},
 
@@ -727,7 +727,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					ssr: options?.ssr === true,
 					emitFile: (chunk) => {
 						this.emitFile(chunk);
-					},
+					}
 				});
 				return result as { code: string; map: Rolldown.SourceMapInput | null } | null;
 			},
@@ -758,7 +758,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							dynamicImports?: string[];
 							viteMetadata?: { importedCss?: Set<string> | string[] };
 						}
-					>,
+					>
 				);
 				// Content-body CSS handoff: content_css_key → the emitted CSS asset URL, so Region.svelte can
 				// link a content body's own scoped CSS (which lives on no page stylesheet — the corpus is
@@ -778,12 +778,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				const json = JSON.stringify({
 					...map,
 					content_css,
-					fn_manifest: Object.fromEntries(compiler.dollar_hoists),
+					fn_manifest: Object.fromEntries(compiler.dollar_hoists)
 				});
 				emit_island_deps_handoff(root, json);
-			},
+			}
 		},
-		island_sourcemaps_plugin({ program, is_island_path }),
+		island_sourcemaps_plugin({ program, is_island_path })
 	];
 }
 

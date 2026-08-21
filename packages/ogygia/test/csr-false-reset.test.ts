@@ -52,7 +52,11 @@ describe('csr=false route hosts inject the csr-false reset marker', () => {
 	});
 
 	it('script-less host: synthesizes one <script> carrying the reset', () => {
-		const out = transformHost(`<h1>hi</h1><slot />`, '/app/src/routes/docs/+page.svelte', CTX(false));
+		const out = transformHost(
+			`<h1>hi</h1><slot />`,
+			'/app/src/routes/docs/+page.svelte',
+			CTX(false)
+		);
 		expect(out).toBeTruthy();
 		expect(out!.code).toContain(RESET);
 		expect(out!.code.match(/<script/g)!.length).toBe(1);

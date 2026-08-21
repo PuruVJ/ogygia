@@ -40,9 +40,7 @@ function region_prop_revivers(): Record<string, (d: never) => unknown> | undefin
 	const wire = slots.wire;
 	if (wire === cached_wire) return cached_revivers;
 	cached_wire = wire;
-	cached_revivers = wire
-		? { [wire.REF_WIRE_KEY]: (d: never) => wire.resolve(d, true) }
-		: undefined;
+	cached_revivers = wire ? { [wire.REF_WIRE_KEY]: (d: never) => wire.resolve(d, true) } : undefined;
 	return cached_revivers;
 }
 
@@ -122,7 +120,8 @@ class PropMutationGuard {
 
 	#guard_value(value: unknown, entry: string, prop_path: string): unknown {
 		if (value === null || typeof value !== 'object') return value;
-		if (value instanceof Map) return this.#guard_map(value as Map<unknown, unknown>, entry, prop_path);
+		if (value instanceof Map)
+			return this.#guard_map(value as Map<unknown, unknown>, entry, prop_path);
 		if (value instanceof Set) return this.#guard_set(value as Set<unknown>, entry, prop_path);
 		if (value instanceof Date || value instanceof RegExp || value instanceof URL) return value;
 		// A class INSTANCE must never be wrapped. A wired live object (e.g. a `Cart` whose `$state`
@@ -174,7 +173,8 @@ class PropMutationGuard {
 const prop_guard = new PropMutationGuard();
 
 function dom_ready() {
-	if (typeof document === 'undefined' || document.readyState !== 'loading') return Promise.resolve();
+	if (typeof document === 'undefined' || document.readyState !== 'loading')
+		return Promise.resolve();
 	return new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
 }
 
@@ -200,10 +200,12 @@ function region_fragment(html: string): { frag: DocumentFragment; ready: Promise
 			link.remove();
 			if (!href || seen.has(href)) continue;
 			seen.add(href);
-			pending.push(import(/* @vite-ignore */ href).then(
-				() => undefined,
-				() => undefined
-			));
+			pending.push(
+				import(/* @vite-ignore */ href).then(
+					() => undefined,
+					() => undefined
+				)
+			);
 		}
 	} else if (links.length) {
 		const existing = new Map(
@@ -360,8 +362,7 @@ function seed_page_once() {
 // payloads can reflect `__sveltekit_` from the URL). Cached per document; cleared on SPA swap.
 function kit_hydrates_page() {
 	if (runtime_session.kit_page === undefined) {
-		runtime_session.kit_page =
-			typeof document !== 'undefined' && document_has_kit_bootstrap();
+		runtime_session.kit_page = typeof document !== 'undefined' && document_has_kit_bootstrap();
 	}
 	return runtime_session.kit_page;
 }
@@ -535,7 +536,9 @@ class OgygiaRegion extends HTMLElement {
 		const endpoint = this.getAttribute('endpoint');
 		if (endpoint && !this.#frame_unsub) {
 			const address = (this.#frame_address = frameAddress(endpoint));
-			this.#frame_unsub = slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ?? null;
+			this.#frame_unsub =
+				slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ??
+				null;
 		}
 		await this.#deliver_html();
 		// The subscribe callback fired #apply, but #apply awaits the stylesheet before swapping —
@@ -648,7 +651,9 @@ class OgygiaRegion extends HTMLElement {
 		// Bind if we haven't (SWR/lake remount reaches #fetch_html without going through #server).
 		// Idempotent: #server already subscribed for the normal defer flow.
 		if (!this.#frame_unsub) {
-			this.#frame_unsub = slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ?? null;
+			this.#frame_unsub =
+				slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ??
+				null;
 		}
 		if (opts.revalidate) this.#revalidating = true;
 		try {
@@ -890,7 +895,6 @@ class OgygiaRegion extends HTMLElement {
 		}
 	}
 
-
 	/**
 	 * Apply a live region tick (called by Region.svelte for a deferred region whose ticket
 	 * carries server-rendered HTML). No fetch — the HTML is already here.
@@ -929,7 +933,8 @@ class OgygiaRegion extends HTMLElement {
 		if (!interactive) {
 			if (desc.url && !this.#frame_unsub) {
 				this.#frame_address = frameAddress(desc.url);
-				this.#frame_unsub = slots.frames?.subscribe(this.#frame_address, (f) => this.#morph_live(f.html)) ?? null;
+				this.#frame_unsub =
+					slots.frames?.subscribe(this.#frame_address, (f) => this.#morph_live(f.html)) ?? null;
 			}
 			this.#morph_live(desc.html);
 			return;
@@ -1050,7 +1055,6 @@ class OgygiaRegion extends HTMLElement {
 		this.#scheduled = false;
 	}
 }
-
 
 /**
  * Boot the always-on custom element after each selected feature has filled its {@link slots} entry.

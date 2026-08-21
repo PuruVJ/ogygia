@@ -107,7 +107,8 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 export function io_kind(type: string): 'timer' | 'file' | 'dns' | 'socket' | 'zlib' | 'other' {
 	if (type === 'Timeout' || type === 'Immediate') return 'timer';
 	if (type.startsWith('FS') || type === 'STATWATCHER') return 'file';
-	if (type.startsWith('GETADDR') || type.startsWith('GETNAME') || type === 'QUERYWRAP') return 'dns';
+	if (type.startsWith('GETADDR') || type.startsWith('GETNAME') || type === 'QUERYWRAP')
+		return 'dns';
 	if (type.includes('TCP') || type.includes('PIPE') || type === 'UDPWRAP') return 'socket';
 	if (type === 'ZLIB') return 'zlib';
 	return 'other';

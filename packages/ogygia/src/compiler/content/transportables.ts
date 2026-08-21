@@ -23,7 +23,8 @@ const CONTEXT_MODULE_ATTR = /context\s*=\s*["']module["']/;
 const SVELTE_EXT = /\.svelte$/;
 
 /** Marker that a module already carries generated registrations (idempotence). */
-const GENERATED_MARK = '// ogygia: generated registration (transportable codecs + createContext tags)';
+const GENERATED_MARK =
+	'// ogygia: generated registration (transportable codecs + createContext tags)';
 
 /** Parse a module to its top-level statements once (TS/JS inferred from `id_n`); null on error. */
 function parse_body(code: string, id_n: string): AstNode[] | null {
@@ -211,9 +212,7 @@ function registrationBlock(rel: string, classes: string[], contexts: string[]): 
  * closing tag. The class is tagged by the `.svelte` path, and the manifest side-effect-imports
  * the component to run that registration on the client.
  */
-function moduleScriptOf(
-	code: string
-): { body: string; injectAt: number } | null {
+function moduleScriptOf(code: string): { body: string; injectAt: number } | null {
 	const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/g;
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(code)) !== null) {

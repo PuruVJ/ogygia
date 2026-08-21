@@ -23,11 +23,7 @@ export interface FragmentLike {
 /** Relocate trailing empty comments from `frag` into `lake`. Returns how many moved. */
 export function relocate_trailing_empty_comments(frag: FragmentLike, lake: ParentLike): number {
 	const moved: NodeLike[] = [];
-	while (
-		frag.lastChild &&
-		frag.lastChild.nodeType === COMMENT_NODE &&
-		frag.lastChild.data === ''
-	) {
+	while (frag.lastChild && frag.lastChild.nodeType === COMMENT_NODE && frag.lastChild.data === '') {
 		const node = frag.lastChild;
 		frag.removeChild(node);
 		moved.unshift(node);
