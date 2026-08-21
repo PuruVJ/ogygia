@@ -50,6 +50,10 @@ export interface CompileCtxInit {
 	client_binding_stub_file: string;
 	/** `$app/*` → on-disk client-shim path map (island modules under csr=false). */
 	app_shims: Record<string, string>;
+	/** `command === 'build'` — gates the transform-time deterministic island-chunk emit. */
+	is_build: boolean;
+	/** Configured content presets (name → merged config), or `null` when content is off. */
+	content_presets: Record<string, unknown> | null;
 }
 
 export class CompileCtx {
@@ -76,6 +80,11 @@ export class CompileCtx {
 	readonly region_endpoint_module: string;
 	readonly client_binding_stub_file: string;
 	readonly app_shims: Record<string, string>;
+	readonly is_build: boolean;
+	readonly content_presets: Record<string, unknown> | null;
+	/** `with { … }` hint matcher — a node_modules `.svelte` is only transformed when it carries one
+	 *  (so a library can declare its own islands). Built once from the resolved import keys. */
+	readonly #island_hint_re: RegExp;
 
 	constructor(init: CompileCtxInit) {
 		this.root = init.root;
@@ -101,6 +110,17 @@ export class CompileCtx {
 		this.region_endpoint_module = init.region_endpoint_module;
 		this.client_binding_stub_file = init.client_binding_stub_file;
 		this.app_shims = init.app_shims;
+		this.is_build = init.is_build;
+		this.content_presets = init.content_presets;
+		const hint_keys = Object.values(init.import_keys).filter((v) => typeof v === 'string') as string[];
+		this.#island_hint_re = hint_keys.length
+			? new RegExp(`\\bwith\\s*\\{[^}]*\\b(?:${hint_keys.join('|')})\\b`)
+			: /$^/;
+	}
+
+	/** True when `code` carries an ogygia `with { … }` island hint (gates node_modules `.svelte`). */
+	has_island_hint(code: string): boolean {
+		return this.#island_hint_re.test(code);
 	}
 
 	/** The feature-selected runtime chunk name (`RUNTIME_HASH` ⊕ the prescan's feature hash). Immutable-
