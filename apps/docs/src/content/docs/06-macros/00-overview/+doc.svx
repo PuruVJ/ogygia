@@ -19,6 +19,7 @@ Everything under `import.meta.og` is a **compile construct**. It reads like a no
 | [`code(source, lang, meta?)`](/docs/macros/code) | a highlighted snippet, baked to a static **region** |
 | [`md(text)`](/docs/macros/md) | a Markdown string, rendered to a static **region** |
 | [`regions(glob)`](/docs/macros/regions) | a block **registry** from a folder |
+| [`asRegion(Comp, options)`](/docs/macros/asregion) | any imported component (named / barrel) marked a **region** |
 | [`wire({ encode, decode })`](/docs/macros/wire) | the transportable-codec key on a class |
 | [`bake(fn)`](/docs/macros/bake) | the **result** of running `fn` at build, inlined |
 

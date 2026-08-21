@@ -8,9 +8,152 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] — 2026-08-21
+
+The **passage** release — the runtime and the compiler both rebuilt from the studs, with byte-identical output the whole way. The runtime collapses onto ONE identity primitive: serialization, resumability, cross-island sharing, and navigation reconciliation all become operations on the same `Ref`. A live class, a store, a function, a snippet, a held region cross the island boundary and reunite to a single live instance across every island that reads them; a navigation now MOVES regions instead of resetting them; and the server can be told to re-render only what actually changed. Separately, the Vite plugin is carved into a real, bundler-agnostic compiler you can run without Vite at all.
 
 ### Added
+
+- **The Ref hub — one identity layer for everything that crosses a boundary.** Every value that leaves
+  a component and reappears inside an island — a `[import.meta.og.wire]` class, a Svelte store, an
+  `import.meta.og.$` function, a region snippet, a resumable `$derived`, a held region — is now a `Ref`
+  of a KIND: `{ kind, identity, code-tag, data }`. A kind is a plugin that teaches the hub how its
+  values travel (`match` / `encode` / `decode`); the hub owns identity. Three operations fall out of
+  that one design:
+  - **MINT** — every live instance gets ONE id (WeakMap-memoized), however many props or context keys
+    carry it. That shared id is what lets the client REUNITE all the copies.
+  - **RESOLVE** — the browser memoizes `decode` by id, so five islands decoding one handle share ONE
+    live object (mutate it in island A, island B repaints). The server NEVER memoizes: each request and
+    each deferred-island render decodes fresh, so one visitor's state can't leak into another's HTML.
+  - **THE KEEP** — a kind may name a ref for SESSION continuity: the tab then reunites navigations with
+    the same live instance, merging fresh server data through the kind's `merge`. Browser-only; the
+    server never touches it. (This is what makes a session cart follow the visitor across SPA navs while
+    each page's server truth still merges in.)
+  Reunify across islands = same id; survive a navigation = same id in the Keep; dedupe = same id; the
+  region reconciler = diff two id sets. Identity is the spine; kinds are plugins. All registry state
+  lives on `globalThis` under `Symbol.for` keys, because the runtime and each island entry are separate
+  bundles and per-module state would silently fork.
+
+- **Transportable everything — the serialization seam, unified.** Values devalue rejects now cross by
+  declaring how they travel, each as a hub kind:
+  - **`[import.meta.og.wire]` classes** — `encode` ships a snapshot, `decode` rebuilds a live instance
+    on the other side; a `merge` (with a named id) reconciles server truth against live user edits.
+  - **stores** — a subscribe-shaped value crosses the same way: the CURRENT value travels as data, the
+    CODE comes from a module on the far side, and hub identity makes it live — `set` in island A
+    repaints `$store` in island B; provable factory shapes auto-brand with zero authoring.
+  - **functions (`import.meta.og.$`)** — a closure can't serialize, but a QRL-style handle can: the
+    compiler hoists the marked closure to a generated module (WHERE the code lives) and the captures
+    ride as data (WHAT it closed over), rebound on the other side. Registered pre-hydration through a
+    rename-proof `globalThis` bridge so strict-CSP apps get a real fn manifest.
+  - **snippets & resumable `$derived`** — a snippet crosses as a region pointer; a derived crosses as
+    its RECIPE, and each island re-derives against the reunified sources.
+
+- **The boundary classifier — unbridgeable values fail at discovery, not in prod.** A value heading for
+  an island is walked leaf by leaf and each is named: cross free, auto-wire, warn, or REFUSE — with the
+  dot-path to the offender. A live DOM node, a bare function, or a secret-looking key now fails at
+  boundary discovery (`context 'user' @ profile.avatarEl: live DOM node`) instead of an island silently
+  reading `undefined` on a csr=false page. Pure and dependency-light, so it costs nothing server-side.
+
+- **Server-delta navigation (opt-in: `router: { serverDelta: true }`).** On an SPA navigation the client
+  sends the region fingerprints it already holds (`x-ogygia-known`); the server re-renders ONLY the
+  regions whose inputs changed and marks the rest skipped, so an unchanged island keeps its live DOM and
+  interaction state instead of being re-sent and re-hydrated. The skip is safe BY CONSTRUCTION: a pure,
+  dependency-free fingerprint core is shared by both bundles — the server emits `data-og-fp =
+  fingerprint_of(entry, endpoint, props-seed)` on each island and the client computes the identical hash
+  from the same attributes — so the server skips exactly the regions the client says it has. The
+  fingerprint is 64-bit FNV-1a: a skip on a match means a collision would keep stale content silently, so
+  the extra bits buy that away. Off by default (the client never sends the header; the server always
+  full-renders — the safe fallback).
+
+- **State-delta reconciler — a nav MOVES regions, it doesn't reset them.** The client reconcile stamps
+  each `<ogygia-region>` with a key derived purely from compiler-emitted attributes (never from
+  live-mutated innerHTML) — a SIGNATURE (which slot: entry + endpoint) and a props FINGERPRINT (did the
+  inputs change) — then morphs old→new: an unchanged region KEEPS its live hydrated island (interaction
+  state the fresh SSR HTML lacks is the source of truth), a changed one is PATCHED (re-hydrated), a new
+  one MOUNTS, a removed one is torn down and its page-scoped hub ids disposed. Kept regions absorb the
+  incoming page's props (prop-push), so a persisted player reflects the new route without re-mounting.
+  The old separate persist machinery is gone — a `keep: 'name'` island is now just a reconciler keep,
+  relocated live across the nav.
+
+- **`ogygia/internal/compiler` — the compiler as a standalone, bundler-agnostic engine.** `Compiler` /
+  `Program` / `CompileCtx` run the whole file-local + island-discovery front-end — the host-island
+  transform, `.ts`/`.js` region minting, the `import.meta.og.*` macros, whole-app prescan, virtual-module
+  emit, and id resolution — importing zero Vite. A REPL or any non-Vite host is now just a second adapter:
+  build a `CompileCtx`, `configure()` a `Compiler`, feed it source, read back the artifacts.
+
+### Changed
+
+- **The Vite plugin is a compiler now.** The 2,752-line plugin blob became a compiler module tree
+  (`parse` / `macros` / `content` / `link` / `region` / `dev`) driven by a thin Vite adapter that maps
+  bundler lifecycle to driver calls. The irreducibly-Vite primitives — `emitFile`, `resolve`, dev-server
+  module invalidation — are injected into the driver as callbacks, so the driver stays bundler-agnostic;
+  the adapter is left holding only config binding, the dev-server hooks, and bundle output. Output is
+  **byte-identical**, guarded end-to-end by a transform-determinism digest over the fixture corpus.
+
+- **Region rendering is region-granular.** Each region renders and reconciles independently; the former
+  whole-graph render pass is gone. `inject_csr_reset` argument handling was corrected along the way.
+
+### Fixed
+
+- **Nested-island dev warning crashed dev SSR (TDZ).** `Region.svelte`'s "nested island — strategy
+  ignored" dev warning read the `island_entry` `$derived` before it was declared, so an
+  `import.meta.env.DEV` server render of any page with a nested island (e.g. the cross-island context
+  page) threw `Cannot access 'island_entry' before initialization`. Builds masked it (the `DEV` block is
+  dead-code-eliminated), so no e2e caught it. Moved past the declaration.
+
+- **Lakes restore pairs by DOM position, not a shared entry id** — two lakes with the same entry no
+  longer cross-match on restore.
+
+### Internal
+
+- **Full TypeScript `strict` at the library level.** `strict: true`, all resulting errors fixed; every
+  JSDoc `@type`/`@param` annotation converted to real TypeScript; the 10 core runtime components moved to
+  `<script lang="ts">`; `svelte-check` now runs in the library `check` (tsc → svelte-check → vitest →
+  lint); zero explicit `any` (oxlint clean). AST-walking code shares the sanctioned loose `SvelteNode`
+  alias so strictness holds without littering the compiler with `any`.
+- **oxfmt** adopted as the workspace formatter (tabs, single quotes, 100 columns), replacing the
+  homegrown no-`any` script.
+
+## [0.7.0] — 2026-08-20
+
+Two arcs land together. **Cross-island context** becomes one model on Svelte's own `getContext` (with a drop-in `setContext`), and **`$page.data`** — streamed load promises and all — reaches islands on csr=false. And **region authoring** grows two ways to reach imports the `import X with { … }` form never could: `import.meta.og.asRegion(Comp, options)` marks any imported component (named / barrel, in `.svelte`, `.ts`, and `.js`), and a `.ts` registry `with { wake }` binding is now mountable — placeable by a third-party renderer (e.g. Builder.io's `<svelte:component>`), not only by `region()`. Plus a batch of correctness and build fixes.
+
+### Added
+
+- **`$page.data` (+ `form` / `error` / `status`) works inside islands — including STREAMED load
+  promises.** An island reads `$page.data` through the `$app/state` shim, but the handle can't reach
+  the resolved load data (Kit merges it locally in `render.js`, never on `RequestState`), so
+  `Region.svelte` reads Kit's REAL page during SSR and records it; the handle seeds
+  `data`/`form`/`error`/`status` into the same `application/ogygia-page` script islands already read
+  (boundary law: page.data crosses). A load may return a Promise at any level (Kit streaming) — dead on
+  csr=false, since Kit never defines its client resolver there. ogygia mirrors the mechanism with its
+  own registry: on a real browser navigation each promise is STAGED to a marker (a real pending Promise
+  on the client) and a `<script>__ogygia_page_resolve(id, ok, value)</script>` streams per promise AS
+  IT SETTLES — so the shell + pending `{#await}` paint immediately (FCP is not blocked on the slowest
+  promise) and each island's `{#await page.data.x}` resolves live, fast-first. Kit's own dead csr=false
+  resolve tail is drained server-side, so there's no `__sveltekit_<hash> is not defined` console error.
+  A REJECTED promise streams as an error and shows `{#await …:catch}`; a promise that resolves to a
+  value holding MORE promises re-defers them recursively (like Kit). A programmatic fetch (SPA/router —
+  no `Sec-Fetch-Mode: navigate`) can't run streamed scripts, so those promises are awaited server-side
+  and revived as already-settled Promises — `page.data.x` stays a Promise on both paths, and a
+  rejection there never crashes the render. The app's universal `transport` hook applies to the seed
+  too, so a load's CUSTOM types round-trip into islands — both plain and inside a streamed promise, not
+  just built-in devalue types. Guarded by `test/page-defer.test.ts` (codec + settle + recursion +
+  rejection races + transport), `e2e/page-data.ts` (stream-level timings + browser hydrate) and
+  `e2e/page-data-stress.ts` (rejection, nested recursion, 12 staggered, non-navigate no-crash, custom
+  transport type plain + streamed).
+
+- **Drop-in `setContext` — adopt with an import swap.** Swap `import { setContext } from 'svelte'`
+  for `from 'ogygia'` and an existing csr=false layout's context reaches child islands with NO other
+  change. It does exactly what Svelte's does (same-root + the SSR-nested tree), and on the server also
+  records each string-keyed value so the handle emits ONE page-level `<script data-ogygia-provide-page>`
+  marker every island seeds its own `getContext('key')` from — closing the gap where a plain
+  `setContext` shows on the server but is gone on the client (child islands are separate hydration
+  roots). This is the FLAT page root: every island on the page inherits it; a live `[ogygia.wire]`
+  value still reunites to one instance, so a writer island bumping it repaints every reader. For
+  scoped/shadowed context use `<Provide>`, which wraps its subtree and beats the root on the same key.
+  `node:async_hooks` stays server-only (out of the client bundle). Guarded by the `/ctx-setcontext`
+  block in `e2e/context.ts`.
 
 - **A `.ts` registry `with { wake: … }` binding is now MOUNTABLE.** Marking a component `with { wake }`
   in a `.ts` module (a registry / remote) used to yield a bare held descriptor — a value only `region()`
@@ -54,56 +197,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in `<script module>` or markup; a `let`/`var` or multi-declarator binding; a non-imported or
   namespace-imported first argument; or a component already marked with an import attribute (use one
   mechanism, not both).
-
-### Internal
-
-- The region option surface (`wake` / `render` / `region` / `preset` / `keep`, presets, lakes,
-  live/deferred) is now parsed by ONE shared function used by both `with { … }` import attributes and
-  `asRegion`, so the two can never drift. The named-export import path is threaded through every
-  region generator (entry, wrappers, held binding, attach binding).
-
-## [0.7.0] — 2026-08-19
-
-Cross-island context is now one model built on Svelte's own `getContext` — with a drop-in `setContext`
-so existing layouts adopt with an import swap. `$page.data` now reaches islands, streaming load
-promises included. Plus two build fixes.
-
-### Added
-
-- **`$page.data` (+ `form` / `error` / `status`) works inside islands — including STREAMED load
-  promises.** An island reads `$page.data` through the `$app/state` shim, but the handle can't reach
-  the resolved load data (Kit merges it locally in `render.js`, never on `RequestState`), so
-  `Region.svelte` reads Kit's REAL page during SSR and records it; the handle seeds
-  `data`/`form`/`error`/`status` into the same `application/ogygia-page` script islands already read
-  (boundary law: page.data crosses). A load may return a Promise at any level (Kit streaming) — dead on
-  csr=false, since Kit never defines its client resolver there. ogygia mirrors the mechanism with its
-  own registry: on a real browser navigation each promise is STAGED to a marker (a real pending Promise
-  on the client) and a `<script>__ogygia_page_resolve(id, ok, value)</script>` streams per promise AS
-  IT SETTLES — so the shell + pending `{#await}` paint immediately (FCP is not blocked on the slowest
-  promise) and each island's `{#await page.data.x}` resolves live, fast-first. Kit's own dead csr=false
-  resolve tail is drained server-side, so there's no `__sveltekit_<hash> is not defined` console error.
-  A REJECTED promise streams as an error and shows `{#await …:catch}`; a promise that resolves to a
-  value holding MORE promises re-defers them recursively (like Kit). A programmatic fetch (SPA/router —
-  no `Sec-Fetch-Mode: navigate`) can't run streamed scripts, so those promises are awaited server-side
-  and revived as already-settled Promises — `page.data.x` stays a Promise on both paths, and a
-  rejection there never crashes the render. The app's universal `transport` hook applies to the seed
-  too, so a load's CUSTOM types round-trip into islands — both plain and inside a streamed promise, not
-  just built-in devalue types. Guarded by `test/page-defer.test.ts` (codec + settle + recursion +
-  rejection races + transport), `e2e/page-data.ts` (stream-level timings + browser hydrate) and
-  `e2e/page-data-stress.ts` (rejection, nested recursion, 12 staggered, non-navigate no-crash, custom
-  transport type plain + streamed).
-
-- **Drop-in `setContext` — adopt with an import swap.** Swap `import { setContext } from 'svelte'`
-  for `from 'ogygia'` and an existing csr=false layout's context reaches child islands with NO other
-  change. It does exactly what Svelte's does (same-root + the SSR-nested tree), and on the server also
-  records each string-keyed value so the handle emits ONE page-level `<script data-ogygia-provide-page>`
-  marker every island seeds its own `getContext('key')` from — closing the gap where a plain
-  `setContext` shows on the server but is gone on the client (child islands are separate hydration
-  roots). This is the FLAT page root: every island on the page inherits it; a live `[ogygia.wire]`
-  value still reunites to one instance, so a writer island bumping it repaints every reader. For
-  scoped/shadowed context use `<Provide>`, which wraps its subtree and beats the root on the same key.
-  `node:async_hooks` stays server-only (out of the client bundle). Guarded by the `/ctx-setcontext`
-  block in `e2e/context.ts`.
 
 ### Changed (breaking)
 
@@ -152,6 +245,58 @@ promises included. Plus two build fixes.
   snippet is an unbranded function, so ogygia can't tell a real snippet from a callback until it
   renders it. The boundary error now leads with "function", names the prop, and puts the plain-function
   case first. Guarded by `test/plain-function-prop.test.ts`.
+
+- **ogygia's own `.svelte` components compile under SSR even when the app externalizes ogygia.** An SSR
+  build that externalizes ogygia handed Node a raw `.svelte` (Region / OgygiaBoundary / …) at runtime →
+  `ERR_UNKNOWN_FILE_EXTENSION: Unknown file extension ".svelte"`. `vite-plugin-svelte` normally
+  auto-noExternals a svelte library via the `svelte` export condition, but that detection is fragile
+  under some installs (adapter-node server output, a `pkg.pr.new` URL dependency, an app that pins/
+  overrides `noExternal`). The plugin now forces `ssr.noExternal: ['ogygia']`.
+
+- **The immutable runtime chunk URL busts on the FEATURE SET, not just source.** `og-runtime.<hash>.js`
+  is served `immutable, max-age=1yr`, but the hash covered only ogygia's runtime source — while the
+  chunk is feature-selected per the app's marks. Same ogygia version, but after an app added e.g. a
+  `live` region between deploys, the same URL served DIFFERENT content: returning visitors ran the
+  cached old runtime and the new feature silently never booted. The filename now folds in the feature
+  hash.
+
+- **`region()` recognizes a `wake:` attach binding.** A `wake:` binding is the wrapper component with
+  the region descriptor attached (a function). `region()` only recognized a plain-object binding, so
+  handing it a wake binding silently fell through to an inline render. It now builds a crossable dual on
+  the server (so a `.ts` registry / remote wake binding can stream over the wire) and renders the
+  wrapper inline on the client where there is no signer — only a bare `region: 'raw'` object still must
+  be turned into a region server-side.
+
+- **`keep` splits the region dedupe key.** Two same-component + same-`wake` imports with different
+  `keep` names deduped to one wrapper, and the second island inherited the first's relocation slot.
+  `keep` now fingerprints the wrapper like `margin` does.
+
+- **A `csr = false` page next to a commented-out `csr` export islands correctly.** `read_csr` took the
+  first `export const csr` match in raw source, so a stale `// export const csr = true` above a real
+  `export const csr = false` read `true` and stripped islands from a page Kit renders csr=false.
+  Comments are stripped before matching.
+
+- **Two lakes of the same component restore to the right boxes.** Lakes of one component share an entry
+  id; `restore()` re-found each by a first-match selector, so both lifted fragments landed in the first
+  box. They now pair by DOM position.
+
+- **A held-region import that is only TEXT (a `.ts` comment or template literal) is left alone** — the
+  `.ts` region scan is AST-guarded, so a `with { region: 'raw' }` inside a JSDoc `@example` or a string
+  no longer registers a phantom island. Plus a portable-snippet param-branding correctness fix.
+
+### Internal
+
+- **One shared region-option parser.** The whole option surface (`wake` / `render` / `region` /
+  `preset` / `keep`, presets, lakes, live/deferred) is parsed by a single function used by both
+  `with { … }` import attributes and `asRegion` — they can't drift.
+- **One shared emitter per region kind.** A single `make_wake_island` mints the mountable wake record
+  for the `.svelte` host AND the `.ts` registry; a single `emit_ts_region` mints the `.ts` record for
+  both the `with { … }` form and the `asRegion` macro. The named-export import path is threaded through
+  every generator (entry, wrappers, held binding, attach binding).
+- **Side-channel emit centralized.** The `<`→`<` script escape (was copy-pasted in five places)
+  is one `escape_script_text`; the three `application/ogygia-*` tags are built by one
+  `emit_ogygia_script`, so a new emitter can't forget the XSS escape. Shared capability core across the
+  handle's verify / decode paths.
 
 ## [0.6.6] — 2026-08-19
 

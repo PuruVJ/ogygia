@@ -76,6 +76,27 @@ A held region has no `render` mark of its own: you decide *when to fetch* by cho
 region(block, data, (d) => ({ wake: d.interactive ? 'load' : undefined }));
 ```
 
+## Mountable `.ts` bindings
+
+A `.ts` `with { wake: … }` binding is a real component, not only a value for `region()`. That means a **third-party renderer** — a page builder like Builder.io that renders a registered component with `<svelte:component this={component}/>` — can place it directly, and get the `<ogygia-region>` shell. Its JS still loads only when the component is actually placed **and** its wake schedule fires, and it stays crossable over the wire through `region()` (the region metadata rides on the binding). One shape, both jobs:
+
+```ts title=registry.ts
+import Widget from './Widget.svelte' with { wake: 'visible' };
+
+export const registry = [
+  { name: 'widget', component: Widget }, // Builder places it via <svelte:component>; wakes on scroll
+];
+```
+
+For a **named or barrel** import — which `with { … }` can't reach — use the [`asRegion`](/docs/macros/asregion) macro, which mints the same mountable binding:
+
+```ts
+import { Header } from '@company/ui';
+const HeaderRegion = import.meta.og.asRegion(Header, { wake: 'visible' });
+```
+
+`with { region: 'raw' }` stays a bare descriptor — it renders only through `region()`, not by direct placement.
+
 ## Try it
 
 The demo below is a search box. On submit it calls a remote that looks up the query, **picks a component on the server** (an interactive `PackageCard` for a hit, a static `EmptyResult` for a miss), signs it, and returns it. This page never imports either result component. Search `svelte`, `kit`, `vite`, or `ogygia`; anything else returns the static card.

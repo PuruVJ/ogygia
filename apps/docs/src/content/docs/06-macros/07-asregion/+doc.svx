@@ -1,0 +1,75 @@
+---
+title: asRegion
+summary: Mark any imported component as a region — named, default, or a barrel re-export. The escape hatch for imports the `with { … }` attribute form can't reach, working the same in .svelte, .ts, and .js.
+related:
+  - regions/held-regions
+  - macros/regions
+  - macros/overview
+---
+
+The import-attribute form is the usual way to mark a region:
+
+```svelte
+import Counter from './Counter.svelte' with { wake: 'visible' };
+```
+
+But an import attribute only rides a **default import of one file**. A component you can only reach through a **barrel** — a design system's `index.ts`, a `@company/ui` package — comes in as a **named** import, and there is nowhere to hang the `with { … }`:
+
+```ts
+import { Header, Footer } from '@company/ui'; // named — no `with { … }` possible
+```
+
+`import.meta.og.asRegion(Comp, options)` is the escape hatch. It marks **any** imported component — named, default, from a barrel — as a region:
+
+```svelte
+<script>
+  import { Header } from '@company/ui';
+  const HeaderIsland = import.meta.og.asRegion(Header, { wake: 'load' });
+</script>
+
+<HeaderIsland {...props} />
+```
+
+## The options are exactly `with { … }`
+
+`options` is an object that accepts **exactly** what an import attribute accepts — no more, no less. Both funnel through one parser, so they can't drift. Every mode works:
+
+```svelte
+const HeaderIsland = import.meta.og.asRegion(Header, { wake: 'load' });                     // placed island
+const ChartHole    = import.meta.og.asRegion(Chart, { render: 'deferred', wake: 'visible' }); // server hole
+const BlockRaw     = import.meta.og.asRegion(Block, { region: 'raw' });                       // held → region(BlockRaw, …)
+```
+
+The output is identical to the `with { … }` form too — the only difference is the generated entry imports the component by its **export name**. So region identity keys on `source#exportName`: two named exports of one barrel are two distinct regions, never a collision.
+
+## Tree-shaking is preserved
+
+A region off a huge mixed barrel ships **only its own component**, not the barrel. The generated entry does `import { Header } from '@company/ui'`, and the bundler tree-shakes it exactly as it would anywhere — so a 100-component barrel with one region marked pulls in one component.
+
+## Works in `.svelte`, `.ts`, and `.js`
+
+The same call, two shapes, depending on where it lives:
+
+- In a **`.svelte`** host it mints a **placed island** — render it inline (`<HeaderIsland/>`, or `<svelte:component this={HeaderIsland}/>`).
+- In a **`.ts` / `.js`** registry or remote it mints a [**held binding**](/docs/regions/held-regions) — a mountable value a third-party renderer can place, or that `region()` can turn into a held region:
+
+```ts title=registry.ts
+import { Header } from '@company/ui';
+
+// a mountable held binding — Builder.io's <svelte:component> places it directly,
+// and region() can still cross it over the wire
+const HeaderRegion = import.meta.og.asRegion(Header, { wake: 'visible' });
+
+export const registry = [{ name: 'header', component: HeaderRegion }];
+```
+
+This is the one line that turns a barrel-imported component into something a CMS or page builder can render. See [held regions](/docs/regions/held-regions#mountable-ts-bindings) for what a `.ts` binding can do.
+
+## The rules
+
+- **Top-level `const` only.** `const Local = import.meta.og.asRegion(Comp, options)` — one binding per statement, at the top level of the module or `<script>`. It compiles to a hoisted import, so it can never sit in a loop, function, block, larger expression, `<script module>`, or markup. Any of those is a build error.
+- **The first argument is a component you imported** — a bare identifier bound to a top-level import (named or default, not `import * as`).
+- **`options` is an object literal.** No string shorthand; a `{ wake: 'load' }` object, exactly like a `with { … }` clause.
+- **One mechanism per component.** A component already marked with an import attribute can't also be passed to `asRegion` — pick one.
+
+Misuse fails at build with an `[ogygia]` message naming the file and the fix. It is a compile construct: rewritten to a hoisted binding import, there is no `asRegion` at runtime.
