@@ -37,6 +37,25 @@ export default defineConfig({
 	resolve: {
 		alias: { '@rolldown/browser/utils': RB_UTILS_BROWSER }
 	},
+	// CodeMirror (the Observatory editor) is imported INSIDE a code-split island, so Vite's cold-start
+	// scan of the entry HTML never sees it — it gets discovered at runtime, triggering a re-optimize +
+	// full page reload (a reload loop while each sub-module is found). Pre-bundle the whole CM6 set
+	// (and the lezer/lang deps it pulls) upfront so the first load is stable.
+	optimizeDeps: {
+		// Only the DIRECT deps — Vite follows their imports and bundles the transitive lezer/lang/lint
+		// packages into the same optimized chunk. Listing the transitive ones by name fails to resolve
+		// (they're not hoisted to the app root) and keeps the re-optimize/reload loop alive.
+		include: [
+			'@codemirror/state',
+			'@codemirror/view',
+			'@codemirror/commands',
+			'@codemirror/language',
+			'@codemirror/lang-javascript',
+			'@codemirror/lang-html',
+			'@replit/codemirror-lang-svelte',
+			'@lezer/highlight'
+		]
+	},
 	// The Observatory worker instantiates rolldown-browser's oxc WASM (wasm32-wasi via
 	// @napi-rs/wasm-runtime), which uses TOP-LEVEL AWAIT. Vite 8 supports TLA natively at the `esnext`
 	// target (the vite-plugin-top-level-await shim is incompatible with Vite 8 / rolldown). vite-plugin-wasm

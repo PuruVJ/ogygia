@@ -3,6 +3,7 @@
 	// The devtools event bus — in "islands" mode the page's REAL runtime emits hydration events for our
 	// injected regions; we tap the bus to show the true lifecycle story (Rung-0 layer → an instrument).
 	import { add_sink } from 'ogygia/devtools';
+	import ObsEditor from './ObsEditor.svelte';
 	import type { Analysis } from './observatory.worker';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
 
@@ -214,6 +215,16 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		delete files[name];
 		if (active === name) active = 'App.svelte' in files ? 'App.svelte' : Object.keys(files)[0];
 	}
+
+	// Test seam: drive the active file's source without depending on the editor widget (the e2e used to
+	// poke the old `<textarea>`; CodeMirror is a contenteditable, so tests get a stable get/set here).
+	$effect(() => {
+		(window as unknown as Record<string, unknown>).__OBS_SOURCE = {
+			get: () => files[active],
+			set: (t: string) => (files[active] = t)
+		};
+		return () => delete (window as unknown as Record<string, unknown>).__OBS_SOURCE;
+	});
 
 	// Keep the hash in sync (replaceState → no history spam).
 	$effect(() => {
@@ -717,7 +728,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{/each}
 				<button class="filetab add" title="add a file" onclick={add_file}>+</button>
 			</div>
-			<textarea bind:value={files[active]} spellcheck="false" data-obs-input></textarea>
+			<ObsEditor doc={files[active]} docKey={active} oninput={(v) => (files[active] = v)} />
 		</section>
 
 		<section class="out">
@@ -1096,17 +1107,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 		background: rgba(148, 163, 184, 0.05);
 	}
-	textarea {
+	.editor :global(.cm-host) {
 		flex: 1;
-		resize: none;
-		border: 0;
-		outline: 0;
-		padding: 12px 14px;
-		background: transparent;
-		color: #e2e8f0;
-		font: inherit;
-		tab-size: 2;
-		min-height: 240px;
 	}
 	.out {
 		display: flex;

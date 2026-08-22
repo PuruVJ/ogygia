@@ -240,11 +240,9 @@ try {
 	const before = strategies.length;
 	const workersBeforeEdit = workers.length; // WASI threads already spawned; edits must not add more
 	await page.evaluate(() => {
-		const ta = document.querySelector('[data-obs-input]') as HTMLTextAreaElement;
-		const next = ta.value.replace('</scr' + 'ipt>', "  import X from './X.svelte' with { wake: 'idle' };\n</scr" + 'ipt>');
-		const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
-		setter.call(ta, next);
-		ta.dispatchEvent(new Event('input', { bubbles: true }));
+		const src = (window as unknown as { __OBS_SOURCE: { get: () => string; set: (t: string) => void } }).__OBS_SOURCE;
+		const next = src.get().replace('</scr' + 'ipt>', "  import X from './X.svelte' with { wake: 'idle' };\n</scr" + 'ipt>');
+		src.set(next);
 	});
 	await page.waitForTimeout(500);
 	const after = await page.evaluate(() => document.querySelectorAll('[data-obs-map] .badge').length);
