@@ -1677,7 +1677,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		margin: 22px 0 10px;
 		padding: 8px 10px;
 		border-radius: 7px;
-		color: #0f172a;
+		/* Theme-aware: the region's tint is a translucent wash over the canvas, so its text must be the
+		   canvas text colour (light on dark, dark on light) — a hardcoded slate went invisible in dark. */
+		color: var(--obs-text);
 		outline: 2px solid var(--lens, #14b8a6);
 		background: color-mix(in srgb, var(--lens, #14b8a6) 8%, transparent);
 	}
