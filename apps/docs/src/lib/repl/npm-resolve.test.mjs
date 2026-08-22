@@ -105,6 +105,16 @@ eq('svelte condition wins over default', resolve_entry({ exports: { '.': { svelt
 // top-level svelte FIELD (no exports) — older svelte libs
 eq('svelte field (no exports)', resolve_entry({ module: './dist/module.js', main: './dist/main.js', svelte: './src/index.js' }, ''), 'src/index.js');
 
+// ── malformed package.json (a CDN pkg can ship anything) → graceful fallback, never throw ──
+group('malformed package.json → graceful fallback');
+eq('exports=number → index.js', resolve_entry({ exports: 42 }, ''), 'index.js');
+eq('main=object → index.js', resolve_entry({ main: { weird: 1 } }, ''), 'index.js');
+eq('svelte=object → index.js', resolve_entry({ svelte: { x: 1 } }, ''), 'index.js');
+eq('module=number → index.js', resolve_entry({ module: 99 }, ''), 'index.js');
+eq('main=array → index.js', resolve_entry({ main: ['a'] }, ''), 'index.js');
+eq('empty pkg → index.js', resolve_entry({}, ''), 'index.js');
+eq('exports=null → index.js', resolve_entry({ exports: null }, ''), 'index.js');
+
 // ── extension_candidates ──
 group('extension_candidates');
 eq('no ext', extension_candidates('./x'), ['./x', './x.mjs', './x.js', './x.cjs', './x.json', './x/index.mjs', './x/index.js', './x/index.cjs', './x/index.json']);

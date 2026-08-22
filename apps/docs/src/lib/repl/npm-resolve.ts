@@ -82,6 +82,9 @@ function resolve_conditions(node: ExportsNode, conditions: readonly string[]): s
 		}
 		return null;
 	}
+	// A malformed package.json can put a NUMBER/boolean where a conditions object belongs — `cond in 42`
+	// throws, so bail on any non-object.
+	if (typeof node !== 'object') return null;
 	for (const cond of conditions) {
 		if (cond in node) {
 			const r = resolve_conditions(node[cond]!, conditions);
@@ -177,15 +180,18 @@ export function resolve_entry(
 	if (has_sub) {
 		return apply_browser_map(pkg.browser as BrowserField, './' + subpath).replace(LEADING_DOTSLASH, '');
 	}
+	// A malformed package.json can put a non-string where an entry path belongs (`main: {}`, `svelte: 42`)
+	// — only accept string fields, else fall through toward `index.js`.
+	const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 	// The top-level `svelte` field — the canonical entry for a Svelte component lib with no `exports`
 	// map (older bits-ui / most svelte-package libs). Preferred over module/main for the REPL.
-	const svelte_field = pkg.svelte as string | undefined;
+	const svelte_field = str(pkg.svelte);
 	if (svelte_field) return svelte_field.replace(LEADING_DOTSLASH, '');
 	const browser = pkg.browser as BrowserField;
 	if (typeof browser === 'string') return browser.replace(LEADING_DOTSLASH, '');
-	const module_field = pkg.module as string | undefined;
+	const module_field = str(pkg.module);
 	if (module_field) return apply_browser_map(browser, module_field).replace(LEADING_DOTSLASH, '') || module_field.replace(LEADING_DOTSLASH, '');
-	const main = (pkg.main as string | undefined) || 'index.js';
+	const main = str(pkg.main) || 'index.js';
 	const mapped = apply_browser_map(browser, main.startsWith('./') ? main : './' + main);
 	return mapped.replace(LEADING_DOTSLASH, '');
 }
