@@ -1,5 +1,4 @@
-import path from 'node:path';
-import fs from 'node:fs';
+import { fs, path } from './host.js';
 import { createRequire } from 'node:module';
 import { ISLAND_DIR } from './region/transform.js';
 

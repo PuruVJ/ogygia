@@ -19,8 +19,7 @@
  * Detection is AST-precise (the shared `import.meta.og.*` scanner); a marker in a comment or string
  * is never a call. Node-only (filesystem glob). Server-only by nature — a block registry drives SSR.
  */
-import fs from 'node:fs';
-import path from 'node:path';
+import { fs, path } from '../host.js';
 import { find_og_calls, split_first_string } from '../parse/scan.js';
 
 const PREFIX = 'import.meta.og.regions';

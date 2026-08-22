@@ -5,8 +5,7 @@
  * over the finished bundle + the app root (fs is the only side effect); the adapter owns only the
  * Vite `this.getFileName` resolution and the trigger.
  */
-import fs from 'node:fs';
-import path from 'node:path';
+import { fs, path } from '../host.js';
 import { islandDepsHandoffPath } from './island-deps.js';
 
 const CORPUS_RE = /\.(svx|md)(\?|$)/;

@@ -10,8 +10,7 @@
  * the (verbatim, forwarded) folder-options object — which may hold regex literals. Node-only.
  */
 import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
-import path from 'node:path';
+import { fs, path } from '../host.js';
 import { BuildCache, configure_build_cache } from '../../build-cache.js';
 
 // git's own corners of the shared build cache: resolved shas (kv) + the checkout trees (a dir).

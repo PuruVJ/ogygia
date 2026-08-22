@@ -1,6 +1,6 @@
 import { parse } from 'svelte/compiler';
 import MagicString from 'magic-string';
-import { createHash } from 'node:crypto';
+import { createHash } from '../host.js';
 import { foucCssVirtualId } from '../fouc-css.js';
 import { collectCaptureInfo } from '../free-vars.js';
 import { parse_module } from '../parse/oxc.js';

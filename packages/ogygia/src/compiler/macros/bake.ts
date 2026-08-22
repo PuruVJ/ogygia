@@ -15,8 +15,7 @@
  * (JSON + Date/Map/Set/RegExp/BigInt/…): a function or Promise in the result is a build error. Both
  * violations surface as build-voice errors naming the file and line. Node-only.
  */
-import fs from 'node:fs';
-import path from 'node:path';
+import { fs, path } from '../host.js';
 import { pathToFileURL } from 'node:url';
 import { uneval } from 'devalue';
 import { og_member } from './wire.js';

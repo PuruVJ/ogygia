@@ -6,8 +6,7 @@
  * back into the Vite adapter — which is what keeps the driver bundler-agnostic (a future REPL feeds
  * a `CompileCtx` + source and gets the same lowering, no Vite in sight).
  */
-import path from 'node:path';
-import fs from 'node:fs';
+import { fs } from './host.js';
 import { islandVirtualId } from './ids.js';
 import { wrapperVirtualId, type ImportKeys } from './region/transform.js';
 

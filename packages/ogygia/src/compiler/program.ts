@@ -12,7 +12,7 @@
  * (`register` / `unregister_host` / `note_runtime_mark`). Config-free by construction — it knows the
  * descriptors, never the resolved build context (that is `CompileCtx`'s job).
  */
-import path from 'node:path';
+import { path } from './host.js';
 import type { RuntimeMarks } from './link/runtime-entry.js';
 
 /** Strip a `?query` off a module id (host vs component vs Vite watch paths). */

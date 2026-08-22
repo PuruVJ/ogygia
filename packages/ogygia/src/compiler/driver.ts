@@ -9,9 +9,7 @@
  * The transform cache is content-keyed (`hit.code === source`), so a changed source misses and
  * recomputes on its own; the linker's `unregister_host` deliberately does NOT clear it.
  */
-import path from 'node:path';
-import fs from 'node:fs';
-import crypto from 'node:crypto';
+import { fs, path, createHash } from './host.js';
 import { performance } from 'node:perf_hooks';
 import {
 	transformHost,
@@ -409,8 +407,7 @@ export class Compiler {
 		runtime_marks.complete = true;
 		// Fold the resolved feature set into the runtime chunk name so it busts when the emitted bytes
 		// change (see `runtime_chunk_filename`). Deterministic across both build legs (same prescan).
-		program.runtime_feature_hash = crypto
-			.createHash('sha256')
+		program.runtime_feature_hash = createHash('sha256')
 			.update(resolveFeatures(runtime_marks).join(','))
 			.digest('hex')
 			.slice(0, 8);

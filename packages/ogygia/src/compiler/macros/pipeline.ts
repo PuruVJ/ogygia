@@ -7,7 +7,7 @@
  * in sight. Pure over `(source, id, ctx)` apart from the `dollarHoists` map it fills and the profiler
  * timing it records; returns `{ code, touched }` (the caller invalidates its own sourcemap on touch).
  */
-import path from 'node:path';
+import { path } from '../host.js';
 import { performance } from 'node:perf_hooks';
 import { rewrite_wire } from './wire.js';
 import { rewrite_dollar } from './dollar.js';
