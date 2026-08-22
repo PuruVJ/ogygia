@@ -13,6 +13,8 @@ import {
 	CLIENT_BINDING_STUB,
 	set_parser
 } from 'ogygia/internal/compiler-browser';
+import { cdnPlugin } from './repl/cdn-plugin.ts';
+import { sveltePlugin } from './repl/svelte-plugin.ts';
 
 export interface Island {
 	local: string;
@@ -801,10 +803,59 @@ function render_live(files: Record<string, string>, file: string, props: Record<
 	}
 }
 
+// Strip ogygia `with { … }` import dials so a `.svelte` compiles as a PLAIN component for the live
+// (whole-app) mount — the marked import becomes a normal one; the workspace resolver links it.
+const WITH_DIAL = /(\bfrom\s*['"][^'"]+['"])\s*with\s*\{[^}]*\}/g;
+const SVELTE_EXTERNAL_ID = /^svelte(\/|$)/;
+
+/** The REAL bundle: run rolldown over the workspace (svelte-compiled) + jsdelivr CDN deps, svelte kept
+ *  external. Returns a CJS module string the main thread evals + mounts, plus the packages it pulled. */
+async function bundle_preview(
+	files: Record<string, string>,
+	entry: string
+): Promise<{ code?: string; packages?: string[]; missing?: string[]; error?: string }> {
+	const rb = (await import('@rolldown/browser')) as {
+		rolldown: (o: unknown) => Promise<{ generate: (o: unknown) => Promise<{ output: Array<{ code: string }> }> }>;
+	};
+	const packages: string[] = [];
+	const missing: string[] = [];
+	const workspace = {
+		name: 'workspace',
+		resolveId(id: string, importer: string | undefined) {
+			if (files[id] != null) return id; // the entry / an exact workspace key
+			return resolve_file(id, files); // relative / $lib / basename → a workspace key, or null
+		},
+		load(id: string) {
+			return files[id] != null ? files[id] : null;
+		}
+	};
+	try {
+		const bundle = await rb.rolldown({
+			input: entry,
+			plugins: [
+				workspace,
+				sveltePlugin({ generate: 'client', preprocess: (c: string) => c.replace(WITH_DIAL, '$1') }),
+				cdnPlugin({
+					onPackage: (n: string, v: string) => packages.push(v ? `${n}@${v}` : n),
+					onMissing: (id: string) => missing.push(id)
+				})
+			],
+			external: (id: string) => SVELTE_EXTERNAL_ID.test(id), // shared with the host mount
+			cwd: '/',
+			onLog() {}
+		});
+		const { output } = await bundle.generate({ format: 'cjs', exports: 'named' });
+		return { code: output[0].code, packages: [...new Set(packages)], missing: [...new Set(missing)] };
+	} catch (e) {
+		return { error: e instanceof Error ? e.message : String(e) };
+	}
+}
+
 type InMsg =
 	| { id: number; type?: 'analyze'; files: Record<string, string>; active: string }
 	| { id: number; type: 'live'; files: Record<string, string>; file: string; props: Record<string, unknown> }
-	| { id: number; type: 'page'; files: Record<string, string>; entry: string };
+	| { id: number; type: 'page'; files: Record<string, string>; entry: string }
+	| { id: number; type: 'bundle'; files: Record<string, string>; entry: string };
 
 self.onmessage = (e: MessageEvent<InMsg>) => {
 	const msg = e.data;
@@ -815,6 +866,11 @@ self.onmessage = (e: MessageEvent<InMsg>) => {
 	if (msg.type === 'page') {
 		// A nav target: render that page to real-island HTML (the mini-router injects + reconciles it).
 		self.postMessage({ id: msg.id, type: 'page', realDom: render_page(msg.files, msg.entry) });
+		return;
+	}
+	if (msg.type === 'bundle') {
+		// The REAL rolldown bundle for the live preview (workspace + jsdelivr CDN deps). Async (network).
+		bundle_preview(msg.files, msg.entry).then((r) => self.postMessage({ id: msg.id, type: 'bundle', ...r }));
 		return;
 	}
 	analyze(msg.files, msg.active).then((result) => self.postMessage({ id: msg.id, result }));

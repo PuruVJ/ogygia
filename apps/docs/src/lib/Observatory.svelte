@@ -13,6 +13,10 @@
 	import type { Analysis } from './observatory.worker';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
 
+	// Regexes at script top level (created once for this singleton island, never per call).
+	const OBS_DEFER_URL = /\/__obs_defer\/([^/?#]+)/;
+	const PAGE_SVELTE = /(^|\/)\+page\.svelte$/;
+
 	/** A REPL project: a map of filename → source. */
 	type FileMap = Record<string, string>;
 	/** A component the linker builds from compiled client JS (raw svelte component fn). */
@@ -467,11 +471,14 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	let cursor = $state(0); // the editor's cursor offset — round-trips in the URL
 	let initial_cursor = $state(0); // applied to the editor once, on load
 
-	// Load the whole workspace from the single hash string on mount (async — gzip decode). Runs once.
-	$effect(() => {
+	// Load the whole workspace from the single hash string on mount (async — gzip decode). Runs ONCE from
+	// the init attachment; kicks a first analysis + bundle once the incoming link is read.
+	function restore_from_hash() {
 		const hash = typeof location !== 'undefined' ? location.hash : '';
 		if (!hash || hash === '#') {
 			hash_loaded = true;
+			request_analysis();
+			request_bundle();
 			return;
 		}
 		decode_hash(hash)
@@ -487,8 +494,12 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				initial_cursor = Number(w.cursor) || 0;
 				cursor = initial_cursor;
 			})
-			.finally(() => (hash_loaded = true));
-	});
+			.finally(() => {
+				hash_loaded = true;
+				request_analysis();
+				request_bundle();
+			});
+	}
 	let analysis = $state<Analysis>({ ok: true, islands: [], output: '', real: false, realIslands: null });
 	let busy = $state(false);
 	let shared = $state(false);
@@ -496,6 +507,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	function load_preset(map: FileMap) {
 		files = structuredClone(map);
 		active = entry_of(files); // open the page the preview renders, not the first file alphabetically
+		request_all();
 	}
 	function add_file() {
 		const name = prompt('New file path (folders allowed, e.g. lib/Widget.svelte)');
@@ -503,12 +515,14 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			const base = name.split('/').pop() || name;
 			files[name] = /\.svelte$/.test(name) ? `<h1>${base.replace(/\.svelte$/, '')}</h1>` : '';
 			active = name;
+			request_all();
 		}
 	}
 	function remove_file(name: string) {
 		if (name === entryFile) return; // never remove the render entry — nothing would render
 		delete files[name];
 		if (active === name) active = entryFile in files ? entryFile : Object.keys(files)[0];
+		request_all();
 	}
 
 	// Prettify the active file (the Format button). The formatter is the shared lazy prettier ($lib/prettier).
@@ -540,61 +554,19 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			.replace(/<!--\]-->/g, '')
 			.replace(/<!---->/g, '');
 	}
-	let ssr_source = $state('');
-	$effect(() => {
-		const raw = analysis.rendered?.html;
-		if (!raw) {
-			ssr_source = '';
-			return;
-		}
-		const cleaned = clean_ssr(raw);
-		ssr_source = cleaned; // show immediately (unformatted) …
-		let cancelled = false;
-		warm_prettier()
-			.then(({ format, plugins }) =>
-				// `htmlWhitespaceSensitivity: 'ignore'` stops prettier dangling the `>` onto its own line to
-				// preserve inline whitespace — gives clean open/close tags for a source view.
-				format(cleaned, { parser: 'html', plugins, printWidth: 80, useTabs: true, htmlWhitespaceSensitivity: 'ignore', bracketSameLine: false })
-			)
-			.then((pretty) => {
-				if (!cancelled && typeof pretty === 'string') ssr_source = pretty;
-			})
-			.catch(() => {
-				/* keep the unformatted clean version */
-			});
-		return () => {
-			cancelled = true;
-		};
-	});
+	let ssr_source = $state(''); // updated by update_ssr_source() when a fresh analysis lands (on_analysis)
 
-	// Test seam: drive the active file's source without depending on the editor widget (the e2e used to
-	// poke the old `<textarea>`; CodeMirror is a contenteditable, so tests get a stable get/set here).
-	$effect(() => {
+	// Test seam: drive the active file's source without the editor widget. Set triggers a recompile
+	// (no effect watches `files` any more). Installed once at init; removed on teardown.
+	function setup_test_seam() {
 		(window as unknown as Record<string, unknown>).__OBS_SOURCE = {
 			get: () => files[active],
-			set: (t: string) => (files[active] = t)
+			set: (t: string) => {
+				files[active] = t;
+				request_all();
+			}
 		};
-		return () => delete (window as unknown as Record<string, unknown>).__OBS_SOURCE;
-	});
-
-	// Keep the hash in sync (replaceState → no history spam): the gzipped files + the UI state. Holds off
-	// until the incoming link has been read, so it can't clobber it.
-	$effect(() => {
-		const snap = $state.snapshot(files);
-		const a = active;
-		const tab = inspectorTab;
-		const m = previewMode;
-		const c = cursor;
-		if (!hash_loaded) return;
-		const t = setTimeout(() => {
-			encode_hash({ files: snap, active: a, tab, mode: m, cursor: c })
-				.then((h) => history.replaceState(null, '', h))
-				.catch(() => {
-					/* noop */
-				});
-		}, 400);
-		return () => clearTimeout(t);
-	});
+	}
 
 	async function share() {
 		try {
@@ -643,10 +615,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		(analysis.islands ?? []).filter((i) => i.strategy.kind === 'server hole' || i.strategy.kind === 'live')
 	);
 
-	$effect(() => {
-		if (analysis.real || analysis.realError) everWarmed = true;
-	});
-
 	// csr switch: false → ogygia islands; true → the app compiled as a csr=true Kit route (islands
 	// stripped to plain, Kit hydrates the whole tree). Flips the transform output, the ledger emphasis,
 	// and the preview (islands vs a single whole-app mount).
@@ -679,10 +647,110 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		});
 	}
 
-	// Boot the worker ONCE (reads no reactive state → never spawns a second worker).
-	$effect(() => {
+	// ── The reactive wiring is CALLBACK-driven (no $effect): an action that changes state calls the
+	// request_* helpers directly, and the worker's replies flow through on_analysis / on_bundle. Each
+	// request is debounced via its own timer (cleared + reset per call). ──
+	let analyze_timer: ReturnType<typeof setTimeout> | undefined;
+	let bundle_timer: ReturnType<typeof setTimeout> | undefined;
+	let hash_timer: ReturnType<typeof setTimeout> | undefined;
+
+	/** Recompile the APP (transform + render the ENTRY) — off the main thread. Called on any content edit. */
+	function request_analysis() {
+		const w = worker;
+		if (!w) return;
+		busy = true;
+		clearTimeout(analyze_timer);
+		analyze_timer = setTimeout(() => {
+			want = ++seq;
+			w.postMessage({ id: want, files: $state.snapshot(files), active: entryFile });
+		}, 140);
+	}
+	/** Rolldown-bundle the workspace + jsdelivr CDN deps for the live mount (only in live mode, csr=false). */
+	function request_bundle() {
+		const w = worker;
+		if (!w || previewMode !== 'live' || csr) return;
+		resolving = true;
+		clearTimeout(bundle_timer);
+		bundle_timer = setTimeout(() => {
+			bundleWant = ++bundleSeq;
+			w.postMessage({ id: bundleWant, type: 'bundle', files: $state.snapshot(files), entry: entryFile });
+		}, 220);
+	}
+	/** Persist the whole workspace + UI state into the URL hash (replaceState → no history spam). */
+	function sync_hash() {
+		if (!hash_loaded) return;
+		clearTimeout(hash_timer);
+		hash_timer = setTimeout(() => {
+			encode_hash({ files: $state.snapshot(files), active, tab: inspectorTab, mode: previewMode, cursor })
+				.then((h) => history.replaceState(null, '', h))
+				.catch(() => {
+					/* noop */
+				});
+		}, 400);
+	}
+	/** A content edit / preset load / file add-remove — recompile, rebundle, and persist. */
+	function request_all() {
+		request_analysis();
+		request_bundle();
+		sync_hash();
+	}
+
+	// A fresh analysis landed from the worker — fan it out to the derived views (was 3 separate effects).
+	function on_analysis(a: Analysis) {
+		analysis = a;
+		busy = false;
+		if (a.real || a.realError) everWarmed = true;
+		update_ssr_source(a.rendered?.html);
+		if (in_frame(previewMode)) {
+			if (frameReady) render_to_frame(); // re-send to the iframe on edit
+		} else {
+			remount_preview(); // live in-page mount (the bundle reply re-mounts again when it lands)
+		}
+	}
+
+	// "rendered HTML source (SSR)" — clean the instrumentation, show immediately, then prettier-format.
+	// A token guards against an older format resolving after a newer edit.
+	let ssr_fmt_token = 0;
+	function update_ssr_source(raw?: string) {
+		if (!raw) {
+			ssr_source = '';
+			return;
+		}
+		const cleaned = clean_ssr(raw);
+		ssr_source = cleaned;
+		const token = ++ssr_fmt_token;
+		warm_prettier()
+			.then(({ format, plugins }) =>
+				format(cleaned, { parser: 'html', plugins, printWidth: 80, useTabs: true, htmlWhitespaceSensitivity: 'ignore', bracketSameLine: false })
+			)
+			.then((pretty) => {
+				if (token === ssr_fmt_token && typeof pretty === 'string') ssr_source = pretty;
+			})
+			.catch(() => {
+				/* keep the unformatted clean version */
+			});
+	}
+
+	// Load the svelte runtime modules the eval'd bundle keeps external (client + the side-effect submods).
+	// Called ONCE at init (a plain async load, not an effect).
+	function load_svelte_runtime() {
+		import('svelte/internal/client')
+			.then((m) => (svelteClient = m))
+			.catch(() => {});
+		const extras = ['svelte', 'svelte/internal/disclose-version', 'svelte/internal/flags/legacy'];
+		Promise.all(
+			extras.map((s) =>
+				import(/* @vite-ignore */ s)
+					.then((m) => [s, m] as const)
+					.catch(() => [s, {}] as const)
+			)
+		).then((pairs) => (svelteExtras = Object.fromEntries(pairs)));
+	}
+
+	// Boot the worker (called ONCE from the init attachment). Replies flow through the callbacks.
+	function boot_worker(): Worker {
 		const w = new Worker(new URL('./observatory.worker.ts', import.meta.url), { type: 'module' });
-		w.onmessage = (e: MessageEvent<{ id: number; type?: string; result?: Analysis; html?: string; realDom?: NonNullable<Analysis['realDom']> }>) => {
+		w.onmessage = (e: MessageEvent<{ id: number; type?: string; result?: Analysis; html?: string; realDom?: NonNullable<Analysis['realDom']>; code?: string; packages?: string[]; missing?: string[]; error?: string }>) => {
 			if (e.data.type === 'live') {
 				liveWaiters.get(e.data.id)?.(e.data.html ?? '');
 				liveWaiters.delete(e.data.id);
@@ -693,36 +761,21 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				pageWaiters.delete(e.data.id);
 				return;
 			}
-			if (e.data.id === want && e.data.result) {
-				analysis = e.data.result;
-				busy = false;
+			if (e.data.type === 'bundle') {
+				if (e.data.id !== bundleWant) return; // a stale bundle (a newer edit superseded it)
+				resolving = false;
+				previewBundle = { code: e.data.code, packages: e.data.packages, missing: e.data.missing, error: e.data.error };
+				if (previewMode === 'live') remount_preview();
+				return;
 			}
+			if (e.data.id === want && e.data.result) on_analysis(e.data.result);
 		};
 		worker = w;
-		return () => w.terminate();
-	});
+		return w;
+	}
 
-	// Re-analyze on EDIT — debounced, off the main thread. The analysis is about the APP: it transforms
-	// + renders the ENTRY page, so it depends on the file CONTENTS (`files`), not which file you're
-	// viewing. Switching files in the tree is pure navigation — it must NOT recompile (no "compiling…").
-	$effect(() => {
-		const snap = $state.snapshot(files);
-		const a = entryFile; // entry, not `active` — so a file-switch (view change) doesn't re-analyze
-		const w = worker;
-		if (!w) return;
-		busy = true;
-		const t = setTimeout(() => {
-			want = ++seq;
-			w.postMessage({ id: want, files: snap, active: a });
-		}, 140);
-		return () => clearTimeout(t);
-	});
-
-	// ── INTERACTIVE preview: link the CLIENT-compiled modules and mount() the app on the MAIN thread,
-	// so the rendered app is actually interactive (the counter button works). Falls back to the SSR
-	// HTML if the mount fails.
-	let previewEl = $state<HTMLElement | null>(null);
-	let mounted: ReturnType<typeof mount> | null = null;
+	// ── INTERACTIVE preview: the mount is a reactive attachment (preview_mount, below) on the live div —
+	// no previewEl/mounted state; the attachment owns the node + the unmount cleanup.
 	let svelteClient = $state<Record<string, unknown> | null>(null);
 	let previewMode = $state<'live' | 'xray' | 'islands'>('live');
 	// The right pane is a tabbed inspector (declutters what used to be 6 stacked sections).
@@ -738,10 +791,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// Mirrors the worker's pick so the tree can protect the same file from removal.
 	function entry_of(map: FileMap): string {
 		const keys = Object.keys(map);
-		return (
-			keys.find((k) => /(^|\/)\+page\.svelte$/.test(k)) ??
-			(keys.includes('App.svelte') ? 'App.svelte' : keys[0])
-		);
+		return keys.find((k) => PAGE_SVELTE.test(k)) ?? (keys.includes('App.svelte') ? 'App.svelte' : keys[0]);
 	}
 	const entryFile = $derived(entry_of(files));
 
@@ -764,18 +814,38 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	// REAL runtime events for the injected preview islands (islands mode), tapped off the devtools bus.
 	let runtimeEvents = $state<RuntimeEvent[]>([]);
-	$effect(() => {
-		import('svelte/internal/client')
-			.then((m) => (svelteClient = m))
-			.catch(() => {});
-	});
 
+	// ── THE REAL BUNDLE (live preview): the worker rolldown-bundles the workspace + jsdelivr CDN deps
+	// into ONE CJS module, keeping svelte external; we eval it here (providing the host's svelte) and
+	// mount its default export. This is what makes `import confetti from 'canvas-confetti'` actually run.
+	let previewBundle = $state<{ code?: string; packages?: string[]; missing?: string[]; error?: string } | null>(null);
+	let resolving = $state(false);
+	let bundleSeq = 0;
+	let bundleWant = 0;
+	// The svelte submodules a compiled component can require (kept external in the bundle). Pre-imported
+	// (load_svelte_runtime, at init) so the eval's `require` is synchronous; unknowns fall back to client.
+	let svelteExtras = $state<Record<string, Record<string, unknown>>>({});
+	function bundle_require(spec: string): Record<string, unknown> {
+		if (spec === 'svelte/internal/client') return (svelteClient as Record<string, unknown>) ?? {};
+		if (svelteExtras[spec]) return svelteExtras[spec];
+		if (spec.startsWith('svelte/internal/')) return (svelteClient as Record<string, unknown>) ?? {};
+		if (spec === 'svelte' || spec.startsWith('svelte/')) return svelteExtras['svelte'] ?? {};
+		return {};
+	}
+	/** Eval a CJS module string with our svelte-providing require; returns its exports. */
+	function eval_cjs(code: string): Record<string, unknown> {
+		const module = { exports: {} as Record<string, unknown> };
+		// eslint-disable-next-line no-new-func
+		new Function('require', 'module', 'exports', code)(bundle_require, module, module.exports);
+		return module.exports;
+	}
 	// The isolated iframe (islands mode) talks to us over postMessage: it's ready (→ send the page),
 	// relays a runtime event (→ the bus panel), requests a nav (→ render the target + post it back), or
 	// reports the reconcile decision (→ the readout). Reconcile + hydration all happen IN the frame.
-	$effect(() => {
-		const iframe = frameEl;
-		if (!iframe) return;
+	// Attachment on the preview iframe (islands/x-ray): it appears only in a frame mode, so this runs when
+	// the iframe mounts + cleans up when it's gone — no $effect watching `frameEl`.
+	function frame_attach(iframe: HTMLIFrameElement) {
+		frameEl = iframe;
 		const onMsg = (e: MessageEvent) => {
 			const d = e.data;
 			if (!d || d.__obs !== true || e.source !== iframe.contentWindow) return;
@@ -796,38 +866,54 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			window.removeEventListener('message', onMsg);
 			frameReady = false;
 			clear_frame_live();
+			frameEl = null;
 		};
-	});
-	// Re-send the page whenever the analysis changes while the frame is live (a debounced edit).
-	$effect(() => {
-		void analysis.realDom;
-		void analysis.client;
-		void csr; // flipping csr re-renders (islands ⇄ whole-app mount)
-		if (in_frame(previewMode) && frameReady) render_to_frame();
-	});
-
+	}
 	// x-ray and islands are the SAME real render in the isolated iframe — x-ray just adds the boundary
 	// lens overlay on top of the live islands (so the counter still increments, wakes fire for real).
 	const in_frame = (m: string) => m === 'islands' || m === 'xray';
-	// Toggle the lens WITHOUT re-rendering (a full render would reset the hydrated islands' state), so
-	// flipping x-ray ⇄ islands is a pure overlay change on the same live DOM.
-	$effect(() => {
-		const xray = previewMode === 'xray';
-		if (frameReady && in_frame(previewMode)) post_to_frame({ obsType: 'lens', on: xray });
-	});
+	// Switch the preview mode (live | xray | islands) — a user action, so it drives its consequences
+	// directly (no $effect): persist to the URL, and either rebundle (live) or drive the iframe. Toggling
+	// x-ray ⇄ islands is a pure lens overlay on the SAME live DOM (no re-render → hydrated state kept).
+	function set_mode(m: 'live' | 'xray' | 'islands') {
+		const was_frame = in_frame(previewMode);
+		previewMode = m;
+		sync_hash();
+		if (m === 'live') {
+			request_bundle();
+		} else if (frameReady) {
+			// entering a frame mode, or flipping x-ray ⇄ islands
+			if (was_frame) post_to_frame({ obsType: 'lens', on: m === 'xray' });
+			else render_to_frame();
+		}
+	}
+	// csr toggle: flips the transform output (islands vs plain-Kit) → re-analyze, and re-drive the preview.
+	function set_csr(v: boolean) {
+		csr = v;
+		request_analysis();
+		if (previewMode === 'live') request_bundle();
+		else if (frameReady) render_to_frame(); // csr=true → whole-app mount in the frame
+		sync_hash();
+	}
+	function set_tab(t: InspectorTab) {
+		inspectorTab = t;
+		sync_hash();
+	}
 
 	// SERVER ISLANDS: the real runtime fetches a deferred region's `endpoint` (same-origin path) and
 	// swaps in the response text. We patch fetch ONCE, scoped to `/__obs_defer/*` — everything else
 	// passes straight through — and serve the worker-rendered HTML (with a small delay so the deferred
 	// nature is visible: the fallback shows, then the content lands). This is the real defer flow.
-	$effect(() => {
+	// Patch fetch ONCE (guarded, process-wide) to serve `/__obs_defer/*` from the worker-rendered map —
+	// the real server-island defer flow. Called at init.
+	function patch_defer_fetch() {
 		if (typeof window === 'undefined' || window.__OBS_FETCH_PATCHED__) return;
 		window.__OBS_FETCH_PATCHED__ = true;
 		window.__OBS_DEFER__ = window.__OBS_DEFER__ || {};
 		const orig = window.fetch.bind(window);
 		window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
 			const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-			const m = /\/__obs_defer\/([^/?#]+)/.exec(url);
+			const m = OBS_DEFER_URL.exec(url);
 			if (m) {
 				const html = (window.__OBS_DEFER__ || {})[m[1]];
 				if (html != null) {
@@ -839,7 +925,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			}
 			return orig(input, init);
 		};
-	});
+	}
 
 	// Nav (keep · nav): the reconcile decision of the last navigation, for the readout.
 	let navInfo = $state<{ to: string; kept: string[]; mounted: string[]; removed: string[] } | null>(null);
@@ -943,12 +1029,39 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		return __exports;
 	}
 
-	$effect(() => {
-		const client = analysis.client;
-		const el = previewEl;
-		const sc = svelteClient;
-		const mode = previewMode;
+	// The live-preview MOUNT. The attachment is DELIBERATELY non-reactive — it just captures the node and
+	// does the first mount — because calling mount() inside a tracked scope loops (the mounted app shares
+	// the host svelte runtime, so its effects feed back). Re-mounts are EXPLICIT callbacks: on_analysis
+	// and the bundle reply call remount_preview(). No $effect, no reactive-attachment loop.
+	let preview_el: HTMLElement | null = null;
+	let mounted: ReturnType<typeof mount> | null = null;
+	function preview_mount(el: HTMLElement) {
+		preview_el = el;
+		// The attachment runs in an effect; mount() there loops (the mounted app shares the host runtime).
+		// Defer the first mount to a microtask so it happens OUTSIDE the reactive flush, and untrack it so
+		// this attachment never tracks analysis/bundle. All re-mounts come from the message callbacks.
+		queueMicrotask(() => untrack(() => remount_preview()));
+		return () => {
+			if (mounted) {
+				try {
+					unmount(mounted);
+				} catch {
+					/* noop */
+				}
+				mounted = null;
+			}
+			if (preview_el === el) preview_el = null;
+		};
+	}
+	// (Re)mount the live preview: prefer the REAL rolldown bundle (workspace + CDN deps, svelte external);
+	// until the first bundle lands (or if it errors) fall back to the per-file client linker, then SSR HTML.
+	function remount_preview() {
+		const el = preview_el;
 		if (!el) return;
+		const bundle = previewBundle;
+		const client = analysis.client;
+		const sc = svelteClient;
+		const rendered = analysis.rendered;
 		if (mounted) {
 			try {
 				unmount(mounted);
@@ -957,55 +1070,74 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			}
 			mounted = null;
 		}
-		el.innerHTML = '';
+		let m: ReturnType<typeof mount> | null = null;
 		const fallback = () => {
-			if (analysis.rendered?.ok && analysis.rendered.html) el.innerHTML = analysis.rendered.html;
+			if (rendered?.ok && rendered.html) el.innerHTML = rendered.html;
 		};
-		// x-ray now shares the ISLANDS render — the real runtime in the iframe, with the boundary lens
-		// overlaid there (below). The old in-page simulated x-ray (arm_wakes) is gone: real islands wake
-		// on their real schedule and stay interactive. Both frame modes skip the in-page mount.
-		// ISLANDS + X-RAY (real runtime) render in an ISOLATED <iframe> (/observatory-frame) — its own
-		// document, its own ogygia runtime + svelte instance. The frame effect above drives it.
-		if (in_frame(mode)) return;
-		if (!sc || !client || client.error || !client.modules?.[client.entry]) {
-			fallback();
-			return;
-		}
+		el.innerHTML = '';
 		try {
-			const cache = new Map<string, Linked>();
-			const resolveName = (spec: string): string | null => {
-				const clean = spec.split('?')[0];
-				const bare = clean.replace(/^\.\//, '').replace(/^\//, '');
-				if (client.modules[bare] != null) return bare;
-				const base = clean.split('/').pop();
-				if (!base) return null;
-				if (client.modules[base] != null) return base;
-				// basename-tolerant: a folder-keyed module reached via alias / different relative path.
-				return Object.keys(client.modules).find((k) => k.split('/').pop() === base) ?? null;
-			};
-			const require: Require = (spec) => {
-				if (spec === 'svelte/internal/client') return sc as Linked;
-				const name = resolveName(spec);
-				if (name) {
-					const hit = cache.get(name);
-					if (hit) return hit;
-					const exports: Linked = {};
-					cache.set(name, exports);
-					Object.assign(exports, eval_client(client.modules[name], require));
-					return exports;
-				}
-				return { default: () => {} }; // unprovided component → no-op client stub
-			};
-			const App = eval_client(client.modules[client.entry], require).default;
-			mounted = mount(App as never, { target: el });
+			if (bundle?.code) {
+				const App = eval_cjs(bundle.code).default;
+				if (typeof App === 'function') m = mount(App as never, { target: el });
+				else fallback();
+			} else if (bundle?.error) {
+				fallback();
+			} else if (sc && client && !client.error && client.modules?.[client.entry]) {
+				const cache = new Map<string, Linked>();
+				const resolveName = (spec: string): string | null => {
+					const clean = spec.split('?')[0];
+					const bare = clean.replace(/^\.\//, '').replace(/^\//, '');
+					if (client.modules[bare] != null) return bare;
+					const base = clean.split('/').pop();
+					if (!base) return null;
+					if (client.modules[base] != null) return base;
+					return Object.keys(client.modules).find((k) => k.split('/').pop() === base) ?? null;
+				};
+				const require: Require = (spec) => {
+					if (spec === 'svelte/internal/client') return sc as Linked;
+					const name = resolveName(spec);
+					if (name) {
+						const hit = cache.get(name);
+						if (hit) return hit;
+						const exports: Linked = {};
+						cache.set(name, exports);
+						Object.assign(exports, eval_client(client.modules[name], require));
+						return exports;
+					}
+					return { default: () => {} };
+				};
+				const App = eval_client(client.modules[client.entry], require).default;
+				m = mount(App as never, { target: el });
+			} else {
+				fallback();
+			}
 		} catch (e) {
 			console.error('[observatory] interactive mount failed:', e);
 			fallback();
 		}
-	});
+		mounted = m;
+	}
+
+	// The whole Observatory's one-time init (was 4 lifecycle effects) — run on the root element's mount,
+	// torn down on unmount. The attachment runs in an effect, and the init both WRITES and READS state
+	// (boot_worker sets `worker`; restore_from_hash → request_* read it) — untrack the whole body so it
+	// never tracks those reads (a self-referential effect loops: update_depth). Runs exactly once.
+	function init_observatory() {
+		return untrack(() => {
+			load_svelte_runtime();
+			patch_defer_fetch();
+			setup_test_seam();
+			const w = boot_worker();
+			restore_from_hash();
+			return () => {
+				w.terminate();
+				delete (window as unknown as Record<string, unknown>).__OBS_SOURCE;
+			};
+		});
+	}
 </script>
 
-<div class="obs" data-observatory>
+<div class="obs" data-observatory {@attach init_observatory}>
 	<header class="obs-bar">
 		<div class="obs-brand">
 			<b>Observatory</b>
@@ -1024,8 +1156,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{#if analysis.ms != null && analysis.real}<span class="ms" title="transform + svelte compile">{analysis.ms.toFixed(1)} ms</span>{/if}
 			</span>
 			<span class="csrswitch" data-obs-csr>
-				<button class:on={!csr} onclick={() => (csr = false)} title="ogygia islands — only marked components ship JS">csr false</button>
-				<button class:on={csr} onclick={() => (csr = true)} title="plain Kit — ogygia steps aside, the whole tree ships + hydrates">csr true</button>
+				<button class:on={!csr} onclick={() => set_csr(false)} title="ogygia islands — only marked components ship JS">csr false</button>
+				<button class:on={csr} onclick={() => set_csr(true)} title="plain Kit — ogygia steps aside, the whole tree ships + hydrates">csr true</button>
 			</span>
 			<button class="share" data-obs-share onclick={share}>{shared ? 'copied ✓' : 'share'}</button>
 		</div>
@@ -1072,18 +1204,18 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					disabled={formatting}>{formatting ? '…' : 'Format'}</button
 				>
 			</div>
-			<CodeMirror doc={files[active]} docKey={active} oninput={(v) => (files[active] = v)} oncursor={(o) => (cursor = o)} initialCursor={initial_cursor} />
+			<CodeMirror doc={files[active]} docKey={active} oninput={(v) => { files[active] = v; request_all(); }} oncursor={(o) => { cursor = o; sync_hash(); }} initialCursor={initial_cursor} />
 		</section>
 
 		<div class="obs-gutter" {...split.gutter(1)} role="separator" aria-orientation="vertical" aria-label="resize editor and inspector"></div>
 
 		<section class="obs-inspector" {...split.pane(2)}>
 			<div class="obs-tabs" role="tablist" aria-label="inspector">
-				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => (inspectorTab = 'preview')}>Preview</button>
-				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => (inspectorTab = 'islands')}>Regions{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
-				<button role="tab" class:on={inspectorTab === 'bytes'} onclick={() => (inspectorTab = 'bytes')}>Bytes</button>
-				<button role="tab" class:on={inspectorTab === 'wire'} onclick={() => (inspectorTab = 'wire')}>Wire</button>
-				<button role="tab" class:on={inspectorTab === 'output'} onclick={() => (inspectorTab = 'output')}>Output</button>
+				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => set_tab('preview')}>Preview</button>
+				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => set_tab('islands')}>Regions{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
+				<button role="tab" class:on={inspectorTab === 'bytes'} onclick={() => set_tab('bytes')}>Bytes</button>
+				<button role="tab" class:on={inspectorTab === 'wire'} onclick={() => set_tab('wire')}>Wire</button>
+				<button role="tab" class:on={inspectorTab === 'output'} onclick={() => set_tab('output')}>Output</button>
 			</div>
 			<div class="obs-tabbody">
 			<div class="tp" class:on={inspectorTab === 'preview'} data-tab="preview">
@@ -1095,9 +1227,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						<span class="stubnote" title="components not provided in this single-file REPL render as placeholders">{analysis.rendered.stubs.length} stubbed</span>
 					{/if}
 					<span class="legs" data-obs-preview-mode>
-						<button class:on={previewMode === 'live'} onclick={() => (previewMode = 'live')}>live</button>
-						<button class:on={previewMode === 'xray'} onclick={() => (previewMode = 'xray')}>x-ray</button>
-						<button class:on={previewMode === 'islands'} onclick={() => (previewMode = 'islands')} title="the page's real ogygia runtime hydrates the islands">islands</button>
+						<button class:on={previewMode === 'live'} onclick={() => set_mode('live')}>live</button>
+						<button class:on={previewMode === 'xray'} onclick={() => set_mode('xray')}>x-ray</button>
+						<button class:on={previewMode === 'islands'} onclick={() => set_mode('islands')} title="the page's real ogygia runtime hydrates the islands">islands</button>
 					</span>
 				</div>
 				{#if previewMode === 'xray'}
@@ -1115,7 +1247,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						<b>{server_regions.map((i) => i.component.replace(/^.*\//, '').replace(/\.svelte$/, '')).join(', ')}</b>
 						render on the <b>server</b> ({server_regions.some((i) => i.strategy.kind === 'live') ? 'live' : 'deferred'}).
 						The in-page <b>live</b> mount can't drive them — a deferred hole never swaps, a live region never ticks.
-						<button class="tolink" onclick={() => (previewMode = 'islands')}>switch to islands →</button>
+						<button class="tolink" onclick={() => set_mode('islands')}>switch to islands →</button>
 						to watch the real runtime fetch and revalidate them.
 					</div>
 				{/if}
@@ -1154,13 +1286,13 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{#if in_frame(previewMode)}
 					<iframe
 						class="preview frame"
-						bind:this={frameEl}
+						{@attach frame_attach}
 						src="/observatory-frame"
 						title="isolated ogygia preview"
 						data-obs-frame
 					></iframe>
 				{:else}
-					<div class="preview og-canvas" bind:this={previewEl} data-obs-preview></div>
+					<div class="preview og-canvas" {@attach preview_mount} data-obs-preview></div>
 				{/if}
 				{#if analysis.rendered.ok}
 					<details class="pipe">
