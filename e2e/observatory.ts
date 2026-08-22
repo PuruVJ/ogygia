@@ -244,13 +244,13 @@ try {
 		(btn as HTMLElement)?.click();
 	});
 	await page.waitForTimeout(500);
-	const tickBefore = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region[data-obs-live]')?.textContent?.match(/update #(\d+)/)?.[1] || '');
+	const tickBefore = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region[data-obs-live]')?.textContent?.match(/re-rendered (\d+)/)?.[1] || '');
 	// type into the live region's input, then let it tick + morph a couple of times
 	await page.click('[data-obs-preview] ogygia-region[data-obs-live] input').catch(() => {});
 	await page.type('[data-obs-preview] ogygia-region[data-obs-live] input', 'KEEPME').catch(() => {});
 	await page.waitForTimeout(3600);
 	const live = await page.evaluate(() => ({
-		tick: document.querySelector('[data-obs-preview] ogygia-region[data-obs-live]')?.textContent?.match(/update #(\d+)/)?.[1] || '',
+		tick: document.querySelector('[data-obs-preview] ogygia-region[data-obs-live]')?.textContent?.match(/re-rendered (\d+)/)?.[1] || '',
 		value: (document.querySelector('[data-obs-preview] ogygia-region[data-obs-live] input') as HTMLInputElement | null)?.value || '',
 		focused: document.activeElement?.tagName === 'INPUT'
 	}));

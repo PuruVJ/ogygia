@@ -138,9 +138,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 <Ticker />`,
 			'Header.svelte': FILES_DEMO['Header.svelte'],
 			'Ticker.svelte': `<scr${''}ipt>let { n = 0 } = $props();</scr${''}ipt>
-<div class="ticker">
-  <span class="dot">🔴</span> LIVE · update #{n}
-  <input placeholder="type here — survives the morph" />
+<div style="display:flex; flex-direction:column; gap:10px; padding:14px; border:1px solid #cbd5e1; border-radius:10px;">
+  <div style="font-weight:600;">🔴 LIVE · re-rendered <b style="color:#8b5cf6;">{n}</b> {n === 1 ? 'time' : 'times'} on the server, morphed in place</div>
+  <label style="display:flex; align-items:center; gap:8px; color:#64748b; font-size:13px;">your text + caret survive every update →
+    <input placeholder="click here and type…" style="padding:5px 9px; border:1px solid #cbd5e1; border-radius:6px;" />
+  </label>
 </div>`
 		}
 	};
