@@ -104,7 +104,29 @@
 		'.cm-activeLineGutter': { backgroundColor: 'var(--cm-active-line)', color: 'var(--cm-fg)' },
 		'.cm-lineNumbers .cm-gutterElement': { padding: '0 6px 0 14px', minWidth: '2ch' },
 		'.cm-matchingBracket': { backgroundColor: 'var(--cm-bracket)', outline: '1px solid var(--cm-bracket-border)' },
-		'&.cm-focused': { outline: 'none' }
+		'&.cm-focused': { outline: 'none' },
+		// Autocomplete popup — themed to the editor (was CodeMirror's default LIGHT popup on a dark editor).
+		'.cm-tooltip': {
+			backgroundColor: 'var(--cm-popup-bg)',
+			border: '1px solid var(--cm-popup-border)',
+			borderRadius: '6px',
+			color: 'var(--cm-fg)',
+			boxShadow: '0 6px 22px rgba(0, 0, 0, 0.18)'
+		},
+		'.cm-tooltip.cm-tooltip-autocomplete > ul': {
+			fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
+			fontSize: '12px',
+			maxHeight: '15em'
+		},
+		'.cm-tooltip-autocomplete > ul > li': { padding: '3px 10px', color: 'var(--cm-fg)' },
+		'.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+			backgroundColor: 'var(--cm-popup-sel)',
+			color: 'var(--cm-popup-sel-fg)'
+		},
+		'.cm-completionDetail': { color: 'var(--cm-comment)', fontStyle: 'italic', marginLeft: '0.6em' },
+		'.cm-completionMatchedText': { color: 'var(--cm-keyword)', textDecoration: 'none', fontWeight: '600' },
+		'.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText': { color: 'inherit' },
+		'.cm-completionIcon': { color: 'var(--cm-comment)', opacity: '0.85' }
 	});
 
 	// Mark OUR OWN syntax — the ogygia dials (import attributes), macros, and virtual ids — with a faint
@@ -341,6 +363,11 @@
 		--cm-invalid: #8b3a2a;
 		--cm-bracket: color-mix(in oklab, var(--accent, #0f7a4f) 22%, transparent);
 		--cm-bracket-border: color-mix(in oklab, var(--accent, #0f7a4f) 45%, transparent);
+		/* autocomplete popup — a solid panel so it never inherits the page/light default */
+		--cm-popup-bg: #ffffff;
+		--cm-popup-border: color-mix(in oklab, #121a16 14%, transparent);
+		--cm-popup-sel: var(--accent, #0f7a4f);
+		--cm-popup-sel-fg: #ffffff;
 	}
 	.cm-host.readonly {
 		min-height: auto;
@@ -362,6 +389,9 @@
 			--cm-attr: #7ec8e0;
 			--cm-punct: #9aaba1;
 			--cm-invalid: #f0c9a0;
+			--cm-popup-bg: #17201c;
+			--cm-popup-border: #2b3a33;
+			--cm-popup-sel-fg: #0a140f;
 		}
 	}
 	:global(:root[data-theme='dark']) .cm-host {
@@ -378,6 +408,9 @@
 		--cm-attr: #7ec8e0;
 		--cm-punct: #9aaba1;
 		--cm-invalid: #f0c9a0;
+		--cm-popup-bg: #17201c;
+		--cm-popup-border: #2b3a33;
+		--cm-popup-sel-fg: #0a140f;
 	}
 
 	.cm-host :global(.cm-editor) {
