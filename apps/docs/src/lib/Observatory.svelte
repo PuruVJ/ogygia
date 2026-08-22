@@ -752,13 +752,13 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		</section>
 
 		<section class="obs-inspector">
-			<nav class="obs-tabs" role="tablist" aria-label="inspector">
+			<div class="obs-tabs" role="tablist" aria-label="inspector">
 				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => (inspectorTab = 'preview')}>Preview</button>
 				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => (inspectorTab = 'islands')}>Islands{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
 				<button role="tab" class:on={inspectorTab === 'bytes'} onclick={() => (inspectorTab = 'bytes')}>Bytes</button>
 				<button role="tab" class:on={inspectorTab === 'wire'} onclick={() => (inspectorTab = 'wire')}>Wire</button>
 				<button role="tab" class:on={inspectorTab === 'output'} onclick={() => (inspectorTab = 'output')}>Output</button>
-			</nav>
+			</div>
 			<div class="obs-tabbody">
 			<div class="tp" class:on={inspectorTab === 'preview'} data-tab="preview">
 			{#if analysis.rendered}
@@ -1130,9 +1130,19 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		color: var(--text);
 		border-color: rgba(148, 163, 184, 0.5);
 	}
-	.presets .share {
+	.share {
+		padding: 3px 11px;
+		border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--line));
+		border-radius: 6px;
+		background: var(--bg);
 		color: var(--accent);
-		border-color: rgba(20, 184, 166, 0.4);
+		font: inherit;
+		font-size: 11px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.share:hover {
+		background: color-mix(in oklab, var(--accent) 12%, transparent);
 	}
 	.muted {
 		color: var(--text-faint);
