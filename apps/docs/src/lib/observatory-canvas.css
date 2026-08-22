@@ -222,3 +222,31 @@
 	font: 500 0.72rem/1 ui-monospace, 'SF Mono', Menlo, monospace;
 	opacity: 0.72;
 }
+
+/* Prose block elements a markdown page relies on — bare browser defaults read as broken. :where() keeps
+   them zero-specificity so a component's own styles still win. */
+.og-canvas :where(blockquote) {
+	margin: 0 0 1.2rem;
+	padding: 0.2rem 0 0.2rem 1rem;
+	border-left: 3px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 85%, transparent);
+	color: var(--obs-muted, #71717a);
+}
+.og-canvas :where(table) {
+	border-collapse: collapse;
+	margin: 0 0 1.2rem;
+	font-size: 0.92em;
+}
+.og-canvas :where(th, td) {
+	border: 1px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 70%, transparent);
+	padding: 0.4rem 0.7rem;
+	text-align: left;
+}
+.og-canvas :where(th) {
+	font-weight: 600;
+	background: color-mix(in srgb, currentColor 4%, transparent);
+}
+.og-canvas :where(hr) {
+	border: 0;
+	border-top: 1px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 70%, transparent);
+	margin: 1.6rem 0;
+}
