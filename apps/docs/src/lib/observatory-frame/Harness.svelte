@@ -44,10 +44,14 @@
 		const blobs: string[] = [];
 		const cache = new Map<string, Linked>();
 		const resolveName = (spec: string): string | null => {
-			const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
+			const clean = spec.split('?')[0];
+			const bare = clean.replace(/^\.\//, '').replace(/^\//, '');
 			if (modules[bare] != null) return bare;
-			const base = spec.split('/').pop();
-			return base && modules[base] != null ? base : null;
+			const base = clean.split('/').pop();
+			if (!base) return null;
+			if (modules[base] != null) return base;
+			// basename-tolerant: a folder-keyed module reached via alias / different relative path.
+			return Object.keys(modules).find((k) => k.split('/').pop() === base) ?? null;
 		};
 		const require: Require = (spec) => {
 			if (spec === 'svelte/internal/client') return sc;

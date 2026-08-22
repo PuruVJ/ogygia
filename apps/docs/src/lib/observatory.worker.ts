@@ -277,13 +277,19 @@ function client_bundle(files: Record<string, string>, entry: string): Analysis['
 	}
 }
 
-/** Resolve an import specifier to a key in the file map (`./Counter.svelte` → `Counter.svelte`). */
+/** Resolve an import specifier to a key in the file map. Exact first (`./Counter.svelte` →
+ *  `Counter.svelte`), then match any key by basename — so a folder-keyed file resolves through an
+ *  alias or a different relative path (`$lib/Counter.svelte` / `../lib/Counter.svelte` →
+ *  `src/lib/Counter.svelte`). Basename-tolerant on purpose: MCP-collected codebases nest in folders,
+ *  and an approximate link that renders beats a hard miss. */
 function resolve_file(spec: string, files: Record<string, string>): string | null {
-	const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
+	const clean = spec.split('?')[0];
+	const bare = clean.replace(/^\.\//, '').replace(/^\//, '');
 	if (files[bare] != null) return bare;
-	const base = spec.split('/').pop();
-	if (base && files[base] != null) return base;
-	return null;
+	const base = clean.split('/').pop();
+	if (!base) return null;
+	if (files[base] != null) return base;
+	return Object.keys(files).find((k) => k.split('/').pop() === base) ?? null;
 }
 
 /** Boundary-lens metadata per island file — kind/wake/bytes, so the render can mark each region. */
@@ -734,7 +740,11 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		realError = e instanceof Error ? `${e.message}` : String(e);
 	}
 
-	const entryFile = 'App.svelte' in files ? 'App.svelte' : active;
+	// The page to render: a Kit route `+page.svelte` (ogygia is SvelteKit-only), else legacy `App.svelte`,
+	// else whatever's open. Mirrors the client's entry_of pick.
+	const entryFile =
+		Object.keys(files).find((k) => /(^|\/)\+page\.svelte$/.test(k)) ??
+		('App.svelte' in files ? 'App.svelte' : active);
 	const ledger = byte_ledger(files);
 	const islandInfo = build_island_info(files);
 

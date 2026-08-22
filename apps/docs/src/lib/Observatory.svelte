@@ -5,6 +5,7 @@
 	import { add_sink } from 'ogygia/devtools';
 	import CodeMirror from './CodeMirror.svelte';
 	import FormattedCode from './FormattedCode.svelte';
+	import FileTree from './observatory/FileTree.svelte';
 	import { SplitPane } from '@neodrag/svelte/splitpane';
 	import { warmPrettier, formatCode } from './prettier';
 	import { parse as devalue_parse } from 'devalue';
@@ -182,6 +183,28 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 <div style="margin-top:8px; padding:8px 12px; background:var(--obs-panel); border:1px solid var(--obs-border); border-radius:8px;">🏠 Home widget (this island remounts per page) · <button onclick={() => n++}>clicked {n}</button></div>`,
 			'AboutWidget.svelte': `<scr${''}ipt>let n = $state(0);</scr${''}ipt>
 <div style="margin-top:8px; padding:8px 12px; background:var(--obs-panel); border:1px solid var(--obs-border); border-radius:8px;">ℹ️ About widget (a different island) · <button onclick={() => n++}>clicked {n}</button></div>`
+		},
+		// A realistic Kit codebase — FOLDERS (the tree earns its keep) — showing a held-raw region next to
+		// an interactive island. `region: 'raw'` renders the component's HTML on the server and ships ZERO
+		// JS for it (a registry the transform can't see into); the Counter beside it is a normal island.
+		'raw region': {
+			'src/routes/+layout.ts': `// ogygia renders pages as server HTML; only islands ship JS.\nexport const csr = false;`,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Badge from '$lib/Badge.svelte' with { region: 'raw' };
+</scr${''}ipt>
+
+<h1>Held-raw region</h1>
+<p>The badge is a <b>held-raw</b> region — its HTML is rendered on the server and it ships
+<b>no client module</b>. The counter next to it is a normal island (ships JS, interactive).</p>
+
+<Counter start={0} />
+<Badge label="raw" note="server HTML · zero JS" />`,
+			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
+			'src/lib/Badge.svelte': `<scr${''}ipt>let { label = '', note = '' } = $props();</scr${''}ipt>
+<span style="display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:6px 12px; border:1px solid var(--obs-border); border-radius:999px; background:var(--obs-panel);">
+  <b>🔒 {label}</b> <small style="color:var(--obs-muted);">{note}</small>
+</span>`
 		}
 	};
 
@@ -274,19 +297,20 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 
 	function load_preset(map: FileMap) {
 		files = structuredClone(map);
-		active = 'App.svelte' in map ? 'App.svelte' : Object.keys(map)[0];
+		active = entry_of(files); // open the page the preview renders, not the first file alphabetically
 	}
 	function add_file() {
-		const name = prompt('New file name (e.g. Widget.svelte)');
+		const name = prompt('New file path (folders allowed, e.g. lib/Widget.svelte)');
 		if (name && !files[name]) {
-			files[name] = `<h1>${name.replace(/\\.svelte$/, '')}</h1>`;
+			const base = name.split('/').pop() || name;
+			files[name] = /\.svelte$/.test(name) ? `<h1>${base.replace(/\.svelte$/, '')}</h1>` : '';
 			active = name;
 		}
 	}
 	function remove_file(name: string) {
-		if (name === 'App.svelte') return; // keep an entry
+		if (name === entryFile) return; // never remove the render entry — nothing would render
 		delete files[name];
-		if (active === name) active = 'App.svelte' in files ? 'App.svelte' : Object.keys(files)[0];
+		if (active === name) active = entryFile in files ? entryFile : Object.keys(files)[0];
 	}
 
 	// Prettify the active file (the Format button). The formatter is the shared lazy prettier ($lib/prettier).
@@ -504,13 +528,27 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// The right pane is a tabbed inspector (declutters what used to be 6 stacked sections).
 	type InspectorTab = 'preview' | 'islands' | 'bytes' | 'wire' | 'output';
 	let inspectorTab = $state<InspectorTab>('preview');
-	// Mobile: a single pane at a time, toggled between the editor and the inspector.
-	let mobilePane = $state<'editor' | 'result'>('editor');
+	// Mobile: a single pane at a time — the file tree, the editor, or the inspector.
+	let mobilePane = $state<'files' | 'editor' | 'result'>('editor');
+	// Desktop: the file tree can collapse to a thin strip to reclaim width for code + preview.
+	let treeCollapsed = $state(false);
 
-	// Resizable panes (neodrag splitpane) — editor | inspector. Drag the gutter to rebalance; on mobile
-	// the CSS overrides the flex layout back to one-pane-at-a-time (data-pane). minSizes keeps a pane
-	// from collapsing to nothing.
-	const split = new SplitPane({ axis: 'x', sizes: [1, 1], minSizes: 0.2 });
+	// The render entry — the page the preview renders. ogygia is SvelteKit-only, so a route `+page.svelte`
+	// is the entry; `App.svelte` stays as a fallback for older shared workspaces, then the first file.
+	// Mirrors the worker's pick so the tree can protect the same file from removal.
+	function entry_of(map: FileMap): string {
+		const keys = Object.keys(map);
+		return (
+			keys.find((k) => /(^|\/)\+page\.svelte$/.test(k)) ??
+			(keys.includes('App.svelte') ? 'App.svelte' : keys[0])
+		);
+	}
+	const entryFile = $derived(entry_of(files));
+
+	// Resizable panes (neodrag splitpane) — file tree | editor | inspector. Drag either gutter to
+	// rebalance; on mobile the CSS overrides the flex layout back to one-pane-at-a-time (data-pane).
+	// minSizes (per pane) keep a pane from collapsing to nothing.
+	const split = new SplitPane({ axis: 'x', sizes: [0.55, 2, 2], minSizes: [0.12, 0.2, 0.2] });
 
 	// Wire tab: show the DECODED props by default (devalue's [{...},ref] wire format is unreadable);
 	// toggle to the raw encoded bytes (what actually crosses). Pretty-printed (indent 2 — often not one
@@ -736,10 +774,14 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		try {
 			const cache = new Map<string, Linked>();
 			const resolveName = (spec: string): string | null => {
-				const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
+				const clean = spec.split('?')[0];
+				const bare = clean.replace(/^\.\//, '').replace(/^\//, '');
 				if (client.modules[bare] != null) return bare;
-				const base = spec.split('/').pop();
-				return base && client.modules[base] != null ? base : null;
+				const base = clean.split('/').pop();
+				if (!base) return null;
+				if (client.modules[base] != null) return base;
+				// basename-tolerant: a folder-keyed module reached via alias / different relative path.
+				return Object.keys(client.modules).find((k) => k.split('/').pop() === base) ?? null;
 			};
 			const require: Require = (spec) => {
 				if (spec === 'svelte/internal/client') return sc as Linked;
@@ -796,30 +838,35 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 
 	<!-- Mobile: one pane at a time -->
 	<div class="obs-mobile-switch" role="tablist" aria-label="pane">
+		<button class:on={mobilePane === 'files'} onclick={() => (mobilePane = 'files')}>Files</button>
 		<button class:on={mobilePane === 'editor'} onclick={() => (mobilePane = 'editor')}>Editor</button>
 		<button class:on={mobilePane === 'result'} onclick={() => (mobilePane = 'result')}>Result</button>
 	</div>
 
-	<div class="obs-main" data-pane={mobilePane} {...split.container}>
-		<section class="obs-editor" {...split.pane(0)}>
-			<div class="filetabs" data-obs-filetabs>
-				{#each Object.keys(files) as name (name)}
-					<button class="filetab" class:on={active === name} onclick={() => (active = name)}>
-						{name}
-						{#if name !== 'App.svelte'}<span
-								class="rm"
-								role="button"
-								tabindex="-1"
-								title="remove"
-								onclick={(e) => {
-									e.stopPropagation();
-									remove_file(name);
-								}}
-								onkeydown={() => {}}>×</span
-							>{/if}
-					</button>
-				{/each}
-				<button class="filetab add" title="add a file" onclick={add_file}>+</button>
+	<div class="obs-main" data-pane={mobilePane} class:tree-collapsed={treeCollapsed} {...split.container}>
+		<aside class="obs-tree-pane" class:collapsed={treeCollapsed} {...split.pane(0)}>
+			{#if treeCollapsed}
+				<button class="tree-reopen" title="show the file tree" onclick={() => (treeCollapsed = false)}>
+					<span class="tr-arrow">»</span><span class="tr-label">files</span>
+				</button>
+			{:else}
+				<FileTree
+					{files}
+					{active}
+					entry={entryFile}
+					onselect={(p) => (active = p)}
+					onremove={remove_file}
+					onadd={add_file}
+					oncollapse={() => (treeCollapsed = true)}
+				/>
+			{/if}
+		</aside>
+
+		<div class="obs-gutter" {...split.gutter(0)} role="separator" aria-orientation="vertical" aria-label="resize file tree and editor"></div>
+
+		<section class="obs-editor" {...split.pane(1)}>
+			<div class="obs-editor-head" data-obs-editor-head>
+				<span class="ehead-path" title={active}>{active}</span>
 				<button
 					class="fmt"
 					data-obs-fmt
@@ -833,9 +880,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			<CodeMirror doc={files[active]} docKey={active} oninput={(v) => (files[active] = v)} oncursor={(o) => (cursor = o)} initialCursor={initial_cursor} />
 		</section>
 
-		<div class="obs-gutter" {...split.gutter(0)} role="separator" aria-orientation="vertical" aria-label="resize editor and inspector"></div>
+		<div class="obs-gutter" {...split.gutter(1)} role="separator" aria-orientation="vertical" aria-label="resize editor and inspector"></div>
 
-		<section class="obs-inspector" {...split.pane(1)}>
+		<section class="obs-inspector" {...split.pane(2)}>
 			<div class="obs-tabs" role="tablist" aria-label="inspector">
 				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => (inspectorTab = 'preview')}>Preview</button>
 				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => (inspectorTab = 'islands')}>Regions{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
@@ -1273,46 +1320,66 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	.obs-mobile-switch {
 		display: none;
 	}
-	.filetabs {
+	/* ── File tree pane (left column) ── */
+	.obs-tree-pane {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 3px;
-		padding: 5px 10px;
+		flex-direction: column;
+		min-width: 0;
+		min-height: 0;
+		border-right: 1px solid rgba(148, 163, 184, 0.1);
+	}
+	.obs-tree-pane.collapsed {
+		/* a thin strip with a reopen button; beats the splitpane's inline flex-grow */
+		flex: 0 0 30px !important;
+	}
+	.tree-reopen {
+		width: 100%;
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 0;
+		border: 0;
+		background: var(--bg-raised);
+		color: var(--text-dim);
+		cursor: pointer;
+		font: inherit;
+	}
+	.tree-reopen:hover {
+		color: var(--accent);
+	}
+	.tree-reopen .tr-arrow {
+		font-size: 13px;
+	}
+	.tree-reopen .tr-label {
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		writing-mode: vertical-rl;
+	}
+	/* ── Editor pane header (active file path + Format) ── */
+	.obs-editor-head {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 5px 10px 5px 12px;
 		border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 	}
-	.filetab {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		padding: 3px 9px;
-		border-radius: 6px 6px 0 0;
-		border: 1px solid transparent;
-		background: none;
-		color: var(--text-dim);
-		font: inherit;
+	.ehead-path {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		direction: rtl; /* keep the filename (right end) visible when the path is long */
+		text-align: left;
+		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
 		font-size: 11px;
-		cursor: pointer;
-	}
-	.filetab.on {
-		color: var(--accent);
-		background: rgba(20, 184, 166, 0.1);
-		border-color: rgba(148, 163, 184, 0.2);
-		border-bottom-color: transparent;
-	}
-	.filetab .rm {
-		color: var(--text-faint);
-		font-size: 13px;
-		line-height: 1;
-	}
-	.filetab .rm:hover {
-		color: #fca5a5;
-	}
-	.filetab.add {
-		color: var(--text-faint);
-		font-weight: 700;
+		color: var(--text-dim);
 	}
 	.fmt {
-		margin-left: auto;
 		align-self: center;
 		padding: 3px 10px;
 		border: 1px solid var(--line);
@@ -1592,10 +1659,21 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		.obs-gutter {
 			display: none !important;
 		}
-		/* Only the selected pane is mounted-visible. */
+		/* The tree pane's collapse strip is a desktop affordance — full tree on mobile. */
+		.obs-tree-pane.collapsed {
+			flex: none !important;
+		}
+		/* Only the selected pane is shown; the tree pane takes the full width on mobile. */
+		.obs-main[data-pane='files'] .obs-editor,
+		.obs-main[data-pane='files'] .obs-inspector,
+		.obs-main[data-pane='editor'] .obs-tree-pane,
 		.obs-main[data-pane='editor'] .obs-inspector,
+		.obs-main[data-pane='result'] .obs-tree-pane,
 		.obs-main[data-pane='result'] .obs-editor {
 			display: none !important;
+		}
+		.obs-tree-pane {
+			border-right: 0;
 		}
 	}
 	.preview :global(.og-stub) {
