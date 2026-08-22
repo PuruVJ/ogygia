@@ -83,7 +83,9 @@
 
 	// Mark OUR OWN syntax — the ogygia dials (import attributes), macros, and virtual ids — with a faint
 	// accent box, so at a glance you see what's ogygia vs plain Svelte/JS.
-	const OG_PATTERNS = [/\bwith\s*\{[^}]*\}/g, /\bimport\.meta\.og\.\w+/g, /virtual:ogygia\/[\w/.-]+/g];
+	// `[^}\n]` so an UNCLOSED `with {` doesn't run to the next `}` anywhere in the file — a dial must close
+	// on its own line to be highlighted.
+	const OG_PATTERNS = [/\bwith\s*\{[^}\n]*\}/g, /\bimport\.meta\.og\.\w+/g, /virtual:ogygia\/[\w/.-]+/g];
 	const og_mark = Decoration.mark({ class: 'cm-og-syntax' });
 	const ogHighlighter = ViewPlugin.fromClass(
 		class {

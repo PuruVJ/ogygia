@@ -1,0 +1,99 @@
+/* Gentle, EASILY-OVERRIDABLE native-element defaults for the Observatory preview canvas — used by both
+ * the in-page live/x-ray preview (.preview.og-canvas) and the islands iframe (#obs-app.og-canvas). Every
+ * rule is wrapped in :where(), so it has ZERO specificity: any style a previewed component sets wins. The
+ * colours come from --obs-* tokens (defined in both contexts, theme-aware). Enough that a bare component
+ * looks intentional; never enough to fight the demo. */
+
+/* The canvas uses a plain SYSTEM font (headings + body) — a bare component reads as an app, not as the
+   docs' display serif. `.og-canvas` (0,1,0) beats a bare `h1`/`p`, so it wins in the in-page preview too. */
+.og-canvas {
+	font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+.og-canvas :where(h1, h2, h3, h4, h5, h6) {
+	font-family: inherit;
+	font-weight: 600;
+}
+.og-canvas :where(h1) {
+	font-size: 20px;
+	line-height: 1.25;
+	margin: 0 0 10px;
+}
+.og-canvas :where(h2) {
+	font-size: 17px;
+	margin: 14px 0 8px;
+}
+.og-canvas :where(h3) {
+	font-size: 15px;
+	margin: 12px 0 6px;
+}
+.og-canvas :where(p) {
+	color: var(--obs-muted);
+	margin: 0 0 10px;
+}
+.og-canvas :where(a) {
+	color: var(--obs-accent);
+	text-decoration: none;
+	font-weight: 600;
+}
+.og-canvas :where(a):hover {
+	text-decoration: underline;
+}
+.og-canvas :where(button) {
+	padding: 6px 12px;
+	border: 1px solid var(--obs-border);
+	border-radius: 7px;
+	background: var(--obs-panel);
+	color: var(--obs-text);
+	font: inherit;
+	cursor: pointer;
+	transition:
+		border-color 0.15s,
+		background 0.15s;
+}
+.og-canvas :where(button):hover {
+	border-color: var(--obs-accent);
+	background: color-mix(in oklab, var(--obs-accent) 8%, var(--obs-panel));
+}
+.og-canvas :where(button):disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+.og-canvas :where(input, textarea, select) {
+	padding: 5px 9px;
+	border: 1px solid var(--obs-border);
+	border-radius: 6px;
+	background: var(--obs-bg);
+	color: var(--obs-text);
+	font: inherit;
+}
+.og-canvas :where(input, textarea, select):focus-visible {
+	outline: 2px solid color-mix(in oklab, var(--obs-accent) 45%, transparent);
+	outline-offset: 1px;
+	border-color: var(--obs-accent);
+}
+.og-canvas :where(ul, ol) {
+	margin: 0 0 10px;
+	padding-left: 20px;
+}
+.og-canvas :where(li) {
+	margin: 2px 0;
+}
+.og-canvas :where(code, kbd) {
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+	background: var(--obs-panel);
+	padding: 1px 5px;
+	border-radius: 4px;
+	font-size: 0.9em;
+}
+.og-canvas :where(label) {
+	font-size: 13px;
+	color: var(--obs-muted);
+}
+.og-canvas :where(hr) {
+	border: 0;
+	border-top: 1px solid var(--obs-border);
+	margin: 12px 0;
+}
+.og-canvas :where(nav) {
+	border-bottom-color: var(--obs-border);
+}

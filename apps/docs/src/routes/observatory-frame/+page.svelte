@@ -3,6 +3,7 @@
 	// over postMessage, links + injects it, and this page's runtime hydrates it in FULL isolation.
 	import { script } from 'ogygia';
 	import Harness from '$lib/observatory-frame/Harness.svelte' with { wake: 'load' };
+	import '$lib/observatory-canvas.css'; // gentle, overridable native-element defaults (shared with the in-page preview)
 
 	// No-flash theme: read the shared `og-theme` (same key + storage the docs ThemeToggle uses) BEFORE
 	// paint. Same-origin → the iframe shares localStorage with the host, so it tracks the docs theme.
@@ -19,7 +20,7 @@
 <svelte:head>{@html noFlash}</svelte:head>
 
 <Harness />
-<div id="obs-app"></div>
+<div id="obs-app" class="og-canvas"></div>
 
 <style>
 	/* Global (this page IS the iframe document): theme tokens + gentle app defaults. Light on bare
@@ -71,46 +72,6 @@
 		#obs-app {
 			padding: 16px 18px;
 		}
-		/* Gentle themed defaults so a bare previewed component still looks intentional in either theme. */
-		#obs-app :where(h1) {
-			font-size: 20px;
-			margin: 0 0 10px;
-		}
-		#obs-app :where(p) {
-			color: var(--obs-muted);
-			margin: 0 0 10px;
-		}
-		#obs-app :where(a) {
-			color: var(--obs-accent);
-			text-decoration: none;
-			font-weight: 600;
-		}
-		#obs-app :where(a):hover {
-			text-decoration: underline;
-		}
-		#obs-app :where(button) {
-			padding: 6px 12px;
-			border: 1px solid var(--obs-border);
-			border-radius: 7px;
-			background: var(--obs-panel);
-			color: var(--obs-text);
-			font: inherit;
-			cursor: pointer;
-			transition: border-color 0.15s;
-		}
-		#obs-app :where(button):hover {
-			border-color: var(--obs-accent);
-		}
-		#obs-app :where(input) {
-			padding: 5px 9px;
-			border: 1px solid var(--obs-border);
-			border-radius: 6px;
-			background: var(--obs-bg);
-			color: var(--obs-text);
-			font: inherit;
-		}
-		#obs-app :where(nav) {
-			border-bottom-color: var(--obs-border) !important;
-		}
+		/* Native-element defaults live in the shared $lib/observatory-canvas.css (.og-canvas), imported above. */
 	}
 </style>

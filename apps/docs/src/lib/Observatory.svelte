@@ -7,6 +7,7 @@
 	import FormattedCode from './FormattedCode.svelte';
 	import { warmPrettier, formatCode } from './prettier';
 	import { parse as devalue_parse } from 'devalue';
+	import './observatory-canvas.css'; // gentle, overridable native-element defaults (.og-canvas), shared with the iframe
 	import type { Analysis } from './observatory.worker';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
 
@@ -498,11 +499,13 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	let wakeNonce = $state(0); // bump to replay the x-ray wake sequence
 
 	// Wire tab: show the DECODED props by default (devalue's [{...},ref] wire format is unreadable);
-	// toggle to the raw encoded bytes (what actually crosses).
+	// toggle to the raw encoded bytes (what actually crosses). Pretty-printed (indent 2 — often not one
+	// line) and rendered in a readonly CodeMirror so it's syntax-highlighted.
 	let wireDecoded = $state(true);
-	function decode_wire(payload: string): string {
+	function wire_display(payload: string): string {
 		try {
-			return JSON.stringify(devalue_parse(payload));
+			const v = wireDecoded ? devalue_parse(payload) : JSON.parse(payload);
+			return JSON.stringify(v, null, 2);
 		} catch {
 			return payload;
 		}
@@ -954,7 +957,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						data-obs-frame
 					></iframe>
 				{:else}
-					<div class="preview" class:xray={previewMode === 'xray'} bind:this={previewEl} data-obs-preview></div>
+					<div class="preview og-canvas" class:xray={previewMode === 'xray'} bind:this={previewEl} data-obs-preview></div>
 				{/if}
 				{#if analysis.rendered.ok}
 					<details class="pipe">
@@ -1030,12 +1033,14 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				<div class="wire" data-obs-wire>
 					{#each analysis.rendered.wire as w, i (w.name + i)}
 						<div class="wrow">
-							<span class="wname mono">{w.name}</span>
+							<div class="wtop">
+								<span class="wname mono">{w.name}</span>
+								{#if !(w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]')}<span class="wbytes muted">{w.bytes} B</span>{/if}
+							</div>
 							{#if w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]'}
 								<span class="muted wempty">no props cross — nothing to serialize</span>
 							{:else}
-								<code class="wpay">{wireDecoded ? decode_wire(w.payload) : w.payload}</code>
-								<span class="wbytes muted">{w.bytes} B</span>
+								<div class="code-out"><CodeMirror doc={wire_display(w.payload)} lang="js" readonly /></div>
 							{/if}
 						</div>
 					{/each}
@@ -1964,17 +1969,19 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		padding: 6px 14px 4px;
 	}
 	.wrow {
-		display: flex;
-		align-items: baseline;
-		gap: 10px;
-		padding: 3px 0;
+		padding: 6px 0;
 	}
 	.wrow + .wrow {
 		border-top: 1px solid rgba(148, 163, 184, 0.07);
 	}
+	.wtop {
+		display: flex;
+		align-items: baseline;
+		gap: 10px;
+		padding: 0 14px 2px;
+	}
 	.wname {
-		width: 120px;
-		flex: none;
+		flex: 1;
 		color: var(--accent);
 	}
 	.wpay {
