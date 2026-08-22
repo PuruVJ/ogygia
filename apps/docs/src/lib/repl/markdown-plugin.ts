@@ -52,10 +52,13 @@ export function markdownPlugin(opts: MarkdownPluginOptions = {}): RolldownPlugin
 			if (!MD_MODULE.test(id)) return null;
 			const filename = id.split('?')[0];
 			const src = await md_to_svelte(code, filename);
+			// css:'injected' — a content page's own scoped `<style>` mounts with it (the REPL has no separate
+			// CSS pipeline), matching the bundle's .svelte handling.
 			const { js } = compile(src, {
 				filename: filename.split('/').pop() || filename,
 				generate,
-				dev: false
+				dev: false,
+				css: 'injected'
 			}) as { js: { code: string; map: unknown } };
 			return { code: js.code, map: js.map ?? null };
 		}

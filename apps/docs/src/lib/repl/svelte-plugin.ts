@@ -32,10 +32,13 @@ export function sveltePlugin(opts: SveltePluginOptions = {}): RolldownPlugin {
 			if (id[0] === '\0' || !SVELTE_MODULE.test(id)) return null;
 			const src = opts.preprocess ? opts.preprocess(code, id) : code;
 			// dev:false — no `$.FILENAME` module-scope self-reference (our eval linker can't satisfy it).
+			// css:'injected' — scoped `<style>` rides IN the component JS + mounts into the DOM (the REPL
+			// bundle has no separate CSS pipeline), so a styled component/CDN lib actually looks styled.
 			const { js } = compile(src, {
 				filename: id.split('/').pop() || id,
 				generate,
-				dev: false
+				dev: false,
+				css: 'injected'
 			}) as { js: { code: string; map: unknown } };
 			return { code: js.code, map: js.map ?? null };
 		}

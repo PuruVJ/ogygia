@@ -142,6 +142,17 @@ async function main() {
 	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'demo app')?.click());
 	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
 
+	// 10. a scoped `<style>` must actually PAINT in the live preview (css:'injected' — the REPL bundle has
+	// no separate CSS pipeline). Distinctive colour so a computed-style check is unambiguous.
+	await setSrc(page, `<div class="obx">STYLED_BOX</div>\n\n<style>\n  .obx { background: rgb(200, 50, 50); padding: 16px; }\n</style>`);
+	await until(page, () => document.querySelector('[data-obs-preview]')?.textContent?.includes('STYLED_BOX'));
+	const paintedBg = await until(page, () => {
+		const el = [...document.querySelectorAll('[data-obs-preview] div')].find((d) => /STYLED_BOX/.test(d.textContent || ''));
+		const bg = el ? getComputedStyle(el).backgroundColor : '';
+		return bg === 'rgb(200, 50, 50)' ? bg : null;
+	});
+	ok('scoped <style> paints in the live preview (css injected)', !!paintedBg, `bg=${paintedBg}`);
+
 	ok('no unexpected page errors', pageErrors.length === 0, JSON.stringify([...new Set(pageErrors)].slice(0, 3)));
 
 	console.log(`\n${'─'.repeat(46)}`);
