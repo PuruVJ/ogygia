@@ -5,6 +5,7 @@
 	import { add_sink } from 'ogygia/devtools';
 	import CodeMirror from './CodeMirror.svelte';
 	import FormattedCode from './FormattedCode.svelte';
+	import { SplitPane } from '@neodrag/svelte/splitpane';
 	import { warmPrettier, formatCode } from './prettier';
 	import { parse as devalue_parse } from 'devalue';
 	import './observatory-canvas.css'; // gentle, overridable native-element defaults (.og-canvas), shared with the iframe
@@ -506,6 +507,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// Mobile: a single pane at a time, toggled between the editor and the inspector.
 	let mobilePane = $state<'editor' | 'result'>('editor');
 
+	// Resizable panes (neodrag splitpane) — editor | inspector. Drag the gutter to rebalance; on mobile
+	// the CSS overrides the flex layout back to one-pane-at-a-time (data-pane). minSizes keeps a pane
+	// from collapsing to nothing.
+	const split = new SplitPane({ axis: 'x', sizes: [1, 1], minSizes: 0.2 });
+
 	// Wire tab: show the DECODED props by default (devalue's [{...},ref] wire format is unreadable);
 	// toggle to the raw encoded bytes (what actually crosses). Pretty-printed (indent 2 — often not one
 	// line) and rendered in a readonly CodeMirror so it's syntax-highlighted.
@@ -794,8 +800,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		<button class:on={mobilePane === 'result'} onclick={() => (mobilePane = 'result')}>Result</button>
 	</div>
 
-	<div class="obs-main" data-pane={mobilePane}>
-		<section class="obs-editor">
+	<div class="obs-main" data-pane={mobilePane} {...split.container}>
+		<section class="obs-editor" {...split.pane(0)}>
 			<div class="filetabs" data-obs-filetabs>
 				{#each Object.keys(files) as name (name)}
 					<button class="filetab" class:on={active === name} onclick={() => (active = name)}>
@@ -827,7 +833,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			<CodeMirror doc={files[active]} docKey={active} oninput={(v) => (files[active] = v)} oncursor={(o) => (cursor = o)} initialCursor={initial_cursor} />
 		</section>
 
-		<section class="obs-inspector">
+		<div class="obs-gutter" {...split.gutter(0)} role="separator" aria-orientation="vertical" aria-label="resize editor and inspector"></div>
+
+		<section class="obs-inspector" {...split.pane(1)}>
 			<div class="obs-tabs" role="tablist" aria-label="inspector">
 				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => (inspectorTab = 'preview')}>Preview</button>
 				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => (inspectorTab = 'islands')}>Regions{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
@@ -1233,17 +1241,33 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	.obs-main {
 		flex: 1;
 		min-height: 0;
-		display: grid;
-		grid-template-columns: 1fr 1fr;
+		/* SplitPane sets display:flex + per-pane flex-grow inline; this is the desktop layout. */
 	}
 	.obs-editor {
-		border-right: 1px solid var(--line);
 		display: flex;
 		flex-direction: column;
-		/* CodeMirror's content has a large min-content width (long lines); without this the grid item's
-		   default min-width:auto lets the editor column blow past 1fr and collapse the preview to ~0. */
+		/* CodeMirror's content has a large min-content width (long lines); the splitpane already sets
+		   min-width:0 on panes, but keep it explicit so the editor never blows past its flex track. */
 		min-width: 0;
 		min-height: 0;
+	}
+	/* The draggable divider between panes. */
+	.obs-gutter {
+		flex: 0 0 7px;
+		cursor: col-resize;
+		background: var(--line);
+		position: relative;
+		transition: background 0.15s;
+	}
+	.obs-gutter::after {
+		/* a wider invisible hit-area so the 7px gutter is easy to grab */
+		content: '';
+		position: absolute;
+		inset: 0 -4px;
+	}
+	.obs-gutter:hover,
+	.obs-gutter:active {
+		background: var(--accent);
 	}
 	/* Mobile pane switch — hidden on desktop, both panes visible. */
 	.obs-mobile-switch {
@@ -1559,18 +1583,19 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			color: var(--text-on-invert, #04121a);
 			border-color: var(--accent);
 		}
+		/* Mobile ignores the splitpane: override its inline display:flex back to a single-pane stack, and
+		   hide the gutter. The panes' inline flex-grow is inert under display:block. !important beats the
+		   inline styles the splitpane sets. */
 		.obs-main {
-			grid-template-columns: 1fr;
+			display: block !important;
 		}
-		.obs-editor {
-			border-right: 0;
+		.obs-gutter {
+			display: none !important;
 		}
 		/* Only the selected pane is mounted-visible. */
-		.obs-main[data-pane='editor'] .obs-inspector {
-			display: none;
-		}
+		.obs-main[data-pane='editor'] .obs-inspector,
 		.obs-main[data-pane='result'] .obs-editor {
-			display: none;
+			display: none !important;
 		}
 	}
 	.preview :global(.og-stub) {

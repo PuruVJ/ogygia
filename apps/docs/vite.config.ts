@@ -55,6 +55,10 @@ export default defineConfig({
 		// Observatory: browser variant of rolldown's ./utils (WASI worker-threads binding).
 		alias: { '@rolldown/browser/utils': RB_UTILS_BROWSER }
 	},
+	// @neodrag/svelte (the Observatory's splitpane / DnD) ships `$state` runes in `.svelte.js` modules.
+	// Vite externalizes node_modules for SSR by default, so Svelte never compiles them → `$state` is
+	// undefined at render → 500. noExternal routes the package through the Svelte SSR transform.
+	ssr: { noExternal: ['@neodrag/svelte'] },
 	// Observatory: CodeMirror is imported inside a code-split island, so Vite's cold scan misses it and
 	// re-optimizes at runtime (a dev reload loop + 504s). Pre-bundle the direct CM6 deps upfront.
 	optimizeDeps: {
@@ -68,6 +72,13 @@ export default defineConfig({
 			'@replit/codemirror-lang-svelte',
 			'@codemirror/autocomplete',
 			'@lezer/highlight',
+			// neodrag splitpane / sortable / drop — imported inside the code-split Observatory island, so
+			// the cold scan misses them and re-optimizes at runtime (a reload that races the Kit runtime
+			// into a TDZ crash). Pre-bundle them upfront; vite-plugin-svelte's esbuild plugin compiles the
+			// `.svelte.js` runes modules during optimize.
+			'@neodrag/svelte/splitpane',
+			'@neodrag/svelte/sortable',
+			'@neodrag/svelte/drop',
 			// Prettier (the Observatory's Format button) is dynamic-imported on hover → a lazy chunk. Pre-
 			// bundle it so dev doesn't re-optimize+reload on first hover; the runtime fetch stays lazy.
 			'prettier/standalone',

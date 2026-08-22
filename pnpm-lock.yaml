@@ -108,6 +108,9 @@ importers:
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
+      '@neodrag/svelte':
+        specifier: 3.0.0-next.12
+        version: 3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)
       '@replit/codemirror-lang-svelte':
         specifier: ^6.0.0
         version: 6.0.0(@codemirror/autocomplete@6.20.3)(@codemirror/lang-css@6.3.1)(@codemirror/lang-html@6.4.12)(@codemirror/lang-javascript@6.2.5)(@codemirror/language@6.12.4)(@codemirror/state@6.7.1)(@codemirror/view@6.43.9)(@lezer/common@1.5.2)(@lezer/highlight@1.2.3)(@lezer/javascript@1.5.4)(@lezer/lr@1.4.10)
@@ -1404,6 +1407,15 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.3
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.3
+
+  '@neodrag/core@3.0.0-next.12':
+    resolution: {integrity: sha512-NInKt94ePpmwFJZveemnoQYLCL0X8QsdTVTXm/d71SPWitnr8af6fErZMFUCGXJFMEI06JWKgPUjNRMOQDx2Sg==}
+
+  '@neodrag/svelte@3.0.0-next.12':
+    resolution: {integrity: sha512-Ie10p/izZntnQ4zoZt3a+JA45UYGL5t9x9Efz+by8osx7uzcaVcF4uu4kiMzE4aFi1qaYhcQaQ8yyfL5K6ZzMg==}
+    peerDependencies:
+      '@neodrag/core': 3.0.0-next.12
+      svelte: ^3 || ^4 || ^5
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -7183,6 +7195,13 @@ snapshots:
       '@emnapi/core': 2.0.0-alpha.3
       '@emnapi/runtime': 2.0.0-alpha.3
       '@tybys/wasm-util': 0.10.3
+
+  '@neodrag/core@3.0.0-next.12': {}
+
+  '@neodrag/svelte@3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)':
+    dependencies:
+      '@neodrag/core': 3.0.0-next.12
+      svelte: 5.56.8
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
