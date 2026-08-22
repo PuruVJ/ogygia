@@ -180,21 +180,70 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		}
 	};
 
-	// Share via URL (Rung 6): the whole file MAP round-trips through the hash `#files=<json>`.
-	function initial_files(): FileMap {
-		if (typeof location !== 'undefined' && location.hash.startsWith('#files=')) {
-			try {
-				const parsed = JSON.parse(decodeURIComponent(location.hash.slice(7)));
-				if (parsed && typeof parsed === 'object') return parsed as FileMap;
-			} catch {
-				/* malformed — fall back to the demo */
+	// Share via URL (Rung 6): the whole file MAP round-trips through the URL HASH — which browsers never
+	// send to a server, so a shared REPL (or one an agent hands the user) stays client-only. Encoded as
+	// `#code=<base64url(gzip(json))>` via the built-in CompressionStream (Chrome 80 / FF 113 / Safari
+	// 16.4). `#files=<uriComponent(json)>` (uncompressed) is still READ for old links + as the fallback
+	// when CompressionStream is missing. The gzip format matches Node's zlib, so `ogygia mcp`'s
+	// ogygia_observatory tool mints the same link.
+	const b64url_encode = (bytes: Uint8Array): string => {
+		let bin = '';
+		for (const b of bytes) bin += String.fromCharCode(b);
+		return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+	};
+	const b64url_decode = (b64: string): Uint8Array => {
+		const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
+		const bytes = new Uint8Array(bin.length);
+		for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+		return bytes;
+	};
+	async function encode_files(map: FileMap): Promise<string> {
+		const json = JSON.stringify(map);
+		if (typeof CompressionStream === 'undefined') return '#files=' + encodeURIComponent(json);
+		const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+		const buf = await new Response(stream).arrayBuffer();
+		return '#code=' + b64url_encode(new Uint8Array(buf));
+	}
+	async function decode_hash(hash: string): Promise<FileMap | null> {
+		try {
+			if (hash.startsWith('#code=') && typeof DecompressionStream !== 'undefined') {
+				const stream = new Blob([b64url_decode(hash.slice(6))]).stream().pipeThrough(new DecompressionStream('gzip'));
+				const json = await new Response(stream).text();
+				const map = JSON.parse(json);
+				return map && typeof map === 'object' ? (map as FileMap) : null;
 			}
+			if (hash.startsWith('#files=')) {
+				const map = JSON.parse(decodeURIComponent(hash.slice(7)));
+				return map && typeof map === 'object' ? (map as FileMap) : null;
+			}
+		} catch {
+			/* malformed — caller falls back to the demo */
 		}
-		return { ...FILES_DEMO };
+		return null;
 	}
 
-	let files = $state<FileMap>(initial_files());
-	let active = $state<string>('App.svelte' in initial_files() ? 'App.svelte' : Object.keys(initial_files())[0]);
+	let files = $state<FileMap>({ ...FILES_DEMO });
+	let active = $state<string>('App.svelte');
+	let hash_loaded = $state(false);
+
+	// Load a shared file map from the hash on mount (async — gzip decode). Runs once (location.hash is
+	// not reactive). Until it settles the demo shows; the sync-out effect holds off so it can't clobber
+	// the incoming link.
+	$effect(() => {
+		const hash = typeof location !== 'undefined' ? location.hash : '';
+		if (!hash.startsWith('#code=') && !hash.startsWith('#files=')) {
+			hash_loaded = true;
+			return;
+		}
+		decode_hash(hash)
+			.then((map) => {
+				if (map && Object.keys(map).length) {
+					files = map;
+					active = 'App.svelte' in map ? 'App.svelte' : Object.keys(map)[0];
+				}
+			})
+			.finally(() => (hash_loaded = true));
+	});
 	let analysis = $state<Analysis>({ ok: true, islands: [], output: '', real: false, realIslands: null });
 	let busy = $state(false);
 	let shared = $state(false);
@@ -226,15 +275,17 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		return () => delete (window as unknown as Record<string, unknown>).__OBS_SOURCE;
 	});
 
-	// Keep the hash in sync (replaceState → no history spam).
+	// Keep the hash in sync (replaceState → no history spam). Compressed via encode_files. Holds off
+	// until the incoming shared link has been read, so it can't clobber it.
 	$effect(() => {
 		const snap = $state.snapshot(files);
+		if (!hash_loaded) return;
 		const t = setTimeout(() => {
-			try {
-				history.replaceState(null, '', '#files=' + encodeURIComponent(JSON.stringify(snap)));
-			} catch {
-				/* noop */
-			}
+			encode_files(snap)
+				.then((hash) => history.replaceState(null, '', hash))
+				.catch(() => {
+					/* noop */
+				});
 		}, 400);
 		return () => clearTimeout(t);
 	});

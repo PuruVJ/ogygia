@@ -14,6 +14,7 @@
  */
 import { createInterface } from 'node:readline';
 import { createRequire } from 'node:module';
+import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import { parse } from 'svelte/compiler';
 import { transformHost, islandVirtualId, wrapperVirtualId, CLIENT_BINDING_STUB } from './compiler/index.js';
@@ -225,6 +226,24 @@ const TOOLS = [
 				base: { type: 'string', description: 'Profiler mount path (default /__profiler).' }
 			},
 			required: ['url']
+		}
+	},
+	{
+		name: 'ogygia_observatory',
+		description:
+			'Bundle one or more files into a shareable, CLIENT-ONLY ogygia Observatory link so the user can see ' +
+			'their code compiled + running live in the browser (island map, byte ledger, wire, hydrating preview). ' +
+			'The files are gzip-packed into the URL # fragment, which browsers never send to a server — nothing ' +
+			'hits any server. Great for showing the user how one of their real pages becomes islands. Pass `files` ' +
+			'(a map of filename → source; App.svelte is the entry) or a single `source`.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				files: { type: 'object', description: 'Map of filename → source. App.svelte is the entry; include the components it imports.', additionalProperties: { type: 'string' } },
+				source: { type: 'string', description: 'Single-file convenience: the component source (paired with `filename`).' },
+				filename: { type: 'string', description: 'Name for `source` (default App.svelte).' },
+				base: { type: 'string', description: 'Observatory base URL (default the public docs Observatory; use a localhost URL to target a dev build).' }
+			}
 		}
 	}
 ];
@@ -615,6 +634,39 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 	return fail(`profiler did not return JSON (HTTP ${res.status}). ${body || '(check the profiler key / route path)'}`);
 }
 
+// ── ogygia_observatory — bundle files into a client-only Observatory link ──────────────────────────
+
+const DEFAULT_OBSERVATORY = 'https://ogygia.puruvj.dev/observatory';
+
+/** gzip(JSON) → base64url — the EXACT format the Observatory's `#code=` decoder reads (browser gunzip). */
+function observatory_link(files: Record<string, string>, base: string): string {
+	const gz = gzipSync(Buffer.from(JSON.stringify(files), 'utf8'));
+	const b64url = gz.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+	return `${base.replace(/#.*$/, '')}#code=${b64url}`;
+}
+
+function tool_observatory(args: Attrs): ToolResult {
+	let files: Record<string, string> = {};
+	if (args.files && typeof args.files === 'object' && !Array.isArray(args.files)) {
+		for (const [k, v] of Object.entries(args.files as Record<string, unknown>)) if (typeof v === 'string') files[k] = v;
+	} else if (typeof args.source === 'string') {
+		files[String(args.filename ?? 'App.svelte')] = args.source;
+	}
+	const names = Object.keys(files);
+	if (!names.length) return fail('Provide `files` (a map of filename → source) or `source` (+ optional `filename`).');
+	if (!names.some((n) => n.endsWith('.svelte')))
+		return text(`⚠️ No .svelte file given — the Observatory renders a Svelte component (App.svelte is the entry). Add one.\n\nFiles: ${names.join(', ')}`);
+
+	const base = String(args.base ?? DEFAULT_OBSERVATORY);
+	const url = observatory_link(files, base);
+	const long = url.length > 8000 ? `\n\n⚠️ The link is ${url.length} chars — some tools truncate very long URLs. Trim to the files that matter if it breaks.` : '';
+	return text(
+		`Open this in the ogygia Observatory to see ${names.length === 1 ? 'this component' : `these ${names.length} files`} compiled live — the island map, byte ledger, wire payloads, and a real hydrating preview:\n\n` +
+			`${url}\n\n` +
+			`🔒 Client-only: the code is packed into the URL's **# fragment**, which browsers NEVER send to a server — nothing here touches ogygia's (or anyone's) servers. It compiles entirely in your browser.${long}`
+	);
+}
+
 async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 	switch (name) {
 		case 'ogygia_compile':
@@ -629,6 +681,8 @@ async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 			return tool_debug(args);
 		case 'ogygia_profile':
 			return tool_profile(args);
+		case 'ogygia_observatory':
+			return tool_observatory(args);
 		default:
 			return fail(`Unknown tool: ${name}`);
 	}
@@ -682,7 +736,7 @@ function handle(msg: Rpc): void {
 
 /** Start the stdio MCP server. Resolves when stdin closes (the client disconnected). */
 export async function runMcp(): Promise<void> {
-	log(`ogygia MCP server v${version} ready — 6 tools (compile, islands, check, explain, debug, profile)`);
+	log(`ogygia MCP server v${version} ready — 7 tools (compile, islands, check, explain, debug, profile, observatory)`);
 	const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 	for await (const line of rl) {
 		const trimmed = line.trim();

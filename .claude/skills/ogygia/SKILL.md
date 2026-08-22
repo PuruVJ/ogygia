@@ -58,7 +58,7 @@ Marked on a component import: `import X from './X.svelte' with { … }`.
 ## AI tooling — the ogygia MCP server (use it)
 
 `npx ogygia mcp` runs a stdio MCP server that runs the REAL `transformHost` in Node. When it is wired
-up (`npx ogygia ai`, or `claude mcp add ogygia -- npx ogygia mcp`), you have five tools — **prefer them
+up (`npx ogygia ai`, or `claude mcp add ogygia -- npx ogygia mcp`), you have seven tools — **prefer them
 over guessing** what the transform (or the running app) does:
 
 - `ogygia_check(source)` — **run this on any ogygia component you write or change before trusting it.** It
@@ -79,6 +79,7 @@ over guessing** what the transform (or the running app) does:
   hottest functions + components, network calls, heap growth (+ links to the full report/.cpuprofile). Use
   it when a route renders slowly. Needs `profiler()` mounted in hooks.server.ts — the tool tells the user
   how if it is missing. Profile a PROD build for real numbers (dev is dominated by Vite + instrument cost).
+- `ogygia_observatory({ files })` — bundle the user's files into a CLIENT-ONLY Observatory link (gzip-packed into the URL # fragment, which browsers never send to a server) so they can SEE their code compiled + running live in the browser. Great for showing how one of their real pages becomes islands.
 
 If the tools are not present, tell the user to run `npx ogygia ai` (or add the server manually).
 
