@@ -100,7 +100,20 @@
 		'wake demo': FILES_WAKE,
 		'all strategies': { 'App.svelte': ALL_STRATEGIES },
 		counter: { 'App.svelte': `<scr${''}ipt>\n  import Counter from './Counter.svelte' with { wake: 'load' };\n</scr${''}ipt>\n\n<h1>Hello</h1>\n<Counter start={0} />`, 'Counter.svelte': FILES_DEMO['Counter.svelte'] },
-		'server island': { 'App.svelte': `<scr${''}ipt>\n  import Greeting from './Greeting.svelte' with { render: 'deferred' };\n</scr${''}ipt>\n\n<Greeting />` }
+		'server island': {
+			'App.svelte': `<scr${''}ipt>
+  import Header from './Header.svelte';
+  import Greeting from './Greeting.svelte' with { render: 'deferred' };
+</scr${''}ipt>
+
+<Header title="Server islands" />
+<p>The greeting is a server island: its HTML is FETCHED from a signed endpoint after load (not
+inlined). In "islands" mode, watch the fallback swap for the real content.</p>
+<Greeting name="Ada" unread={3} />`,
+			'Header.svelte': FILES_DEMO['Header.svelte'],
+			'Greeting.svelte': `<scr${''}ipt>let { name = 'friend', unread = 0 } = $props();</scr${''}ipt>
+<div class="greeting">👋 Welcome back, {name}. You have {unread} unread {unread === 1 ? 'message' : 'messages'}.</div>`
+		}
 	};
 
 	// Share via URL (Rung 6): the whole file MAP round-trips through the hash `#files=<json>`.
@@ -247,6 +260,31 @@
 		import('svelte/internal/client')
 			.then((m) => (svelteClient = m))
 			.catch(() => {});
+	});
+
+	// SERVER ISLANDS: the real runtime fetches a deferred region's `endpoint` (same-origin path) and
+	// swaps in the response text. We patch fetch ONCE, scoped to `/__obs_defer/*` — everything else
+	// passes straight through — and serve the worker-rendered HTML (with a small delay so the deferred
+	// nature is visible: the fallback shows, then the content lands). This is the real defer flow.
+	$effect(() => {
+		if (typeof window === 'undefined' || window.__OBS_FETCH_PATCHED__) return;
+		window.__OBS_FETCH_PATCHED__ = true;
+		window.__OBS_DEFER__ = window.__OBS_DEFER__ || {};
+		const orig = window.fetch.bind(window);
+		window.fetch = (input, init) => {
+			const url = typeof input === 'string' ? input : input?.url || '';
+			const m = /\/__obs_defer\/([^/?#]+)/.exec(url);
+			if (m) {
+				const html = (window.__OBS_DEFER__ || {})[m[1]];
+				if (html != null) {
+					return new Promise((res) =>
+						setTimeout(() => res(new Response(html, { status: 200, headers: { 'content-type': 'text/html' } })), 260)
+					);
+				}
+				return Promise.resolve(new Response('', { status: 404 }));
+			}
+			return orig(input, init);
+		};
 	});
 
 	// WAKE VISUALIZER (x-ray): arm each island's REAL schedule with real browser primitives — `load`
@@ -402,6 +440,8 @@
 					}
 				});
 				const store = (globalThis.__OBS_ISLANDS__ ||= {});
+				// server islands: publish this render's deferred HTML for the fetch intercept to serve.
+				window.__OBS_DEFER__ = rd.deferred || {};
 				const blobs = [];
 				const cache = new Map();
 				const resolveName = (spec) => {
@@ -974,6 +1014,24 @@
 		background: rgba(20, 184, 166, 0.15);
 		color: #0d9488;
 		font: 11px ui-monospace, Menlo, monospace;
+	}
+	.preview :global(.obs-fallback) {
+		display: inline-block;
+		padding: 1px 8px;
+		border-radius: 4px;
+		background: rgba(139, 92, 246, 0.15);
+		color: #8b5cf6;
+		font-size: 11px;
+		animation: obs-pulse 1s ease-in-out infinite;
+	}
+	@keyframes obs-pulse {
+		0%,
+		100% {
+			opacity: 0.5;
+		}
+		50% {
+			opacity: 1;
+		}
 	}
 	/* ── BOUNDARY LENS (x-ray): dim the dead shell, light up every marked island ── */
 	.preview.xray {

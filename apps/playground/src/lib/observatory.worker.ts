@@ -72,7 +72,15 @@ export interface Analysis {
 	 *  sidecars, wrapped in `<ogygia-slot>` so the page's OWN ogygia runtime hydrates them lazily (the
 	 *  entry is a `__ISLAND__:<file>` placeholder the main thread rewrites to a blob of the linked
 	 *  client component). This is the actual framework running in the preview, not a mount() stand-in. */
-	realDom?: { ok: boolean; html?: string; error?: string; islands?: string[] };
+	realDom?: {
+		ok: boolean;
+		html?: string;
+		error?: string;
+		islands?: string[];
+		/** Server islands (`render: 'deferred'`): the rendered HTML per endpoint id, which the main
+		 *  thread serves through a fetch intercept so the runtime fetches it lazily, on schedule. */
+		deferred?: Record<string, string>;
+	};
 	/** BYTE LEDGER (Rung 5.3): the ogygia thesis, weighed live — on a csr=false page ogygia ships only
 	 *  the waking islands' JS; plain Kit (csr=true) ships every component. Same compiler, honest bytes. */
 	ledger?: {
@@ -430,6 +438,9 @@ function real_island_render(files: Record<string, string>, entry: string, island
 	const escScript = (s: string) => s.replace(/<\//g, '<\\/');
 	// Islands captured during the app render; rendered in ISOLATION afterwards (no re-entrant render()).
 	const captured: Array<{ info: NonNullable<ReturnType<IslandInfo['get']>>; Comp: unknown; props: Record<string, unknown> }> = [];
+	// Server islands (render: 'deferred') captured the same way; their HTML is served via a fetch intercept.
+	const deferred: Array<{ info: NonNullable<ReturnType<IslandInfo['get']>>; Comp: unknown; props: Record<string, unknown> }> = [];
+	const deferredHtml: Record<string, string> = {};
 	try {
 		const require = (spec: string): Record<string, unknown> => {
 			if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
@@ -438,6 +449,7 @@ function real_island_render(files: Record<string, string>, entry: string, island
 			if (file && file.endsWith('.svelte')) {
 				const info = islandInfo.get(file);
 				const isWakingIsland = info && (info.kind === 'island' || info.kind === 'preset');
+				const isServerHole = info && info.kind === 'server hole';
 				const built = () => {
 					const hit = cache.get(file);
 					if (hit) return hit;
@@ -448,6 +460,17 @@ function real_island_render(files: Record<string, string>, entry: string, island
 					return exports;
 				};
 				const exports = built();
+				// Server island → placeholder for a DEFERRED region (HTML fetched later on schedule).
+				if (isServerHole) {
+					const Real = exports.default;
+					const Deferred = ($$renderer: { push: (s: string) => void }, props: Record<string, unknown>) => {
+						const idx = deferred.length;
+						deferred.push({ info: info!, Comp: Real, props: props || {} });
+						usedIslands.add(file);
+						$$renderer.push(`<!--OBS_DEFER:${idx}-->`);
+					};
+					return { ...exports, default: Deferred };
+				}
 				if (!isWakingIsland) return exports;
 				// Waking island → emit a placeholder comment now; capture (Comp, props) to render in
 				// isolation after the app render. Index by captured.length so each placement is distinct.
@@ -501,7 +524,30 @@ function real_island_render(files: Record<string, string>, entry: string, island
 				`<script data-ogygia-props>${escScript(payload)}</script></ogygia-slot>`;
 			html = html.replace(`<!--OBS_ISLAND:${idx}-->`, region);
 		}
-		return { ok: true, html, islands: [...usedIslands] };
+
+		// Server islands: render each in isolation, stash the HTML (served via the fetch intercept), and
+		// emit a DEFERRED region whose endpoint the runtime fetches on its schedule — the real defer flow.
+		for (let idx = 0; idx < deferred.length; idx++) {
+			const { info, Comp, props } = deferred[idx];
+			let body = '';
+			try {
+				body = (render(Comp as never, { props }) as { body?: string }).body ?? '';
+			} catch {
+				body = '';
+			}
+			deferredHtml[String(idx)] = body;
+			const fp = `obsfp_defer_${info.name.replace(/[^\w]/g, '')}_${idx}`;
+			const when = info.wake || 'load';
+			// endpoint is a same-origin path (passes is_allowed_region_endpoint); the fetch intercept
+			// serves deferredHtml[idx]. The fallback shows until the fetch lands (real server-island UX).
+			const region =
+				`<ogygia-region render="defer" when="${escAttr(when)}" endpoint="/__obs_defer/${idx}" ` +
+				`data-og-fp="${fp}" data-obs-real-island data-obs-deferred data-name="${escAttr(info.name)}">` +
+				`<span class="obs-fallback">loading ${escAttr(info.name.replace(/\.svelte$/, ''))}…</span></ogygia-region>`;
+			html = html.replace(`<!--OBS_DEFER:${idx}-->`, region);
+		}
+
+		return { ok: true, html, islands: [...usedIslands], deferred: deferredHtml };
 	} catch (e) {
 		return { ok: false, error: e instanceof Error ? e.message : String(e) };
 	}

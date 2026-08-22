@@ -211,6 +211,27 @@ try {
 	check('page is cross-origin isolated (COOP/COEP for the WASM)', await page.evaluate(() => self.crossOriginIsolated));
 	check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 
+	// ── SERVER ISLANDS (deferred): the "server island" preset in islands mode — the deferred region's
+	//    HTML is FETCHED from its endpoint (a fetch intercept plays the server) and swapped in ──
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'server island');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(700);
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'islands');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(120);
+	const deferMeta = await page.evaluate(() => {
+		const r = document.querySelector('[data-obs-preview] ogygia-region[data-obs-deferred]');
+		return r ? { render: r.getAttribute('render'), endpoint: r.getAttribute('endpoint'), fallback: /loading/i.test(r.textContent || '') } : null;
+	});
+	check('server island: a deferred region renders with a fetch endpoint + a loading fallback', !!deferMeta && deferMeta.render === 'defer' && /\/__obs_defer\//.test(deferMeta.endpoint || '') && deferMeta.fallback, JSON.stringify(deferMeta));
+	await page.waitForTimeout(900); // the fetch (with its small delay) lands + swaps
+	const swapped = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region[data-obs-deferred]')?.textContent?.replace(/\s+/g, ' ').trim() || '');
+	check('server island: the endpoint HTML is fetched on schedule + swapped in (fallback → content)', /Welcome back, Ada/.test(swapped) && !/loading/i.test(swapped), swapped.slice(0, 80));
+
 	await page.close();
 } finally {
 	await browser.close();
