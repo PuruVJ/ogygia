@@ -8,7 +8,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"test:repl": "node src/lib/repl/npm-resolve.test.mjs && node src/lib/repl/browser-host.test.mjs && node src/lib/repl/cdn-plugin.test.mjs",
+		"test:repl": "node src/lib/repl/npm-resolve.test.mjs && node src/lib/repl/browser-host.test.mjs && node src/lib/repl/markdown.test.mjs && node src/lib/repl/cdn-plugin.test.mjs",
 		"test:e2e": "node observatory.e2e.mjs"
 	},
 	"devDependencies": {
