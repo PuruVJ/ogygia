@@ -41,6 +41,7 @@ export async function formatCode(src: string, lang: string | undefined, opts: Re
 		plugins,
 		printWidth: 60,
 		useTabs: true,
+		singleQuote: true,
 		svelteStrictMode: false,
 		htmlWhitespaceSensitivity: 'ignore',
 		...opts

@@ -76,15 +76,27 @@
 <p>An interactive island (ships JS), then a frozen lake (no JS):</p>
 <Counter start={3} />
 <Prose>a server-only prose block</Prose>`,
-		'Header.svelte': `<scr${''}ipt>let { title = 'Hi' } = $props();</scr${''}ipt>
-<h1>{title}</h1>`,
-		'Counter.svelte': `<scr${''}ipt>
-  let { start = 0 } = $props();
-  let n = $state(start);
+		'Header.svelte': `<scr${''}ipt>
+	let { title = 'Hi' } = $props();
 </scr${''}ipt>
-<button onclick={() => n++}>count is {n}</button>`,
-		'Prose.svelte': `<scr${''}ipt>let { children } = $props();</scr${''}ipt>
-<div class="prose">{@render children?.()}</div>`
+
+<h1>{title}</h1>
+`,
+		'Counter.svelte': `<scr${''}ipt>
+	let { start = 0 } = $props();
+	let n = $state(start);
+</scr${''}ipt>
+
+<button onclick={() => n++}>count is {n}</button>
+`,
+		'Prose.svelte': `<scr${''}ipt>
+	let { children } = $props();
+</scr${''}ipt>
+
+<div class="prose">
+	{@render children?.()}
+</div>
+`
 	};
 
 	// A multi-file app with EVERY wake schedule, so the x-ray wake visualizer has something to show:
@@ -107,13 +119,46 @@
 		'Header.svelte': FILES_DEMO['Header.svelte'],
 		'Counter.svelte': FILES_DEMO['Counter.svelte'],
 		'Prose.svelte': FILES_DEMO['Prose.svelte'],
-		'Menu.svelte': `<scr${''}ipt>let open = $state(false);</scr${''}ipt>
-<button onclick={() => (open = !open)}>Menu {open ? '▲' : '▼'}</button>
-{#if open}<ul><li>Profile</li><li>Settings</li><li>Log out</li></ul>{/if}`,
-		'Chart.svelte': `<scr${''}ipt>let { data = [] } = $props();</scr${''}ipt>
-<div class="chart">{#each data as v}<span style="height: {v * 6}px"></span>{/each}</div>
-<style>.chart { display: flex; gap: 3px; align-items: flex-end; height: 60px; }
-.chart span { width: 12px; background: #14b8a6; border-radius: 2px; }</style>`
+		'Menu.svelte': `<scr${''}ipt>
+	let open = $state(false);
+</scr${''}ipt>
+
+<button onclick={() => (open = !open)}>
+	Menu {open ? '▲' : '▼'}
+</button>
+
+{#if open}
+	<ul>
+		<li>Profile</li>
+		<li>Settings</li>
+		<li>Log out</li>
+	</ul>
+{/if}
+`,
+		'Chart.svelte': `<scr${''}ipt>
+	let { data = [] } = $props();
+</scr${''}ipt>
+
+<div class="chart">
+	{#each data as v}
+		<span style="height: {v * 6}px"></span>
+	{/each}
+</div>
+
+<style>
+	.chart {
+		display: flex;
+		gap: 3px;
+		align-items: flex-end;
+		height: 60px;
+	}
+	.chart span {
+		width: 12px;
+		background: #14b8a6;
+		border-radius: 2px;
+	}
+</style>
+`
 	};
 
 	// Presets are file MAPS (Rung 6 multi-file). Most are single-file (their imports stub on render).
@@ -174,8 +219,15 @@
 inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 <Greeting name="Ada" unread={3} />`,
 			'src/lib/Header.svelte': FILES_DEMO['Header.svelte'],
-			'src/lib/Greeting.svelte': `<scr${''}ipt>let { name = 'friend', unread = 0 } = $props();</scr${''}ipt>
-<div class="greeting">👋 Welcome back, {name}. You have {unread} unread {unread === 1 ? 'message' : 'messages'}.</div>`
+			'src/lib/Greeting.svelte': `<scr${''}ipt>
+	let { name = 'friend', unread = 0 } = $props();
+</scr${''}ipt>
+
+<div class="greeting">
+	👋 Welcome back, {name}. You have {unread} unread
+	{unread === 1 ? 'message' : 'messages'}.
+</div>
+`
 		},
 		'live region': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
@@ -189,13 +241,51 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 input — your text and focus SURVIVE each update (that's the morph, not a re-mount).</p>
 <Ticker />`,
 			'src/lib/Header.svelte': FILES_DEMO['Header.svelte'],
-			'src/lib/Ticker.svelte': `<scr${''}ipt>let { n = 0 } = $props();</scr${''}ipt>
-<div style="display:flex; flex-direction:column; gap:10px; padding:14px; border:1px solid var(--obs-border); border-radius:10px; background:var(--obs-panel);">
-  <div style="font-weight:600;">🔴 LIVE · re-rendered <b style="color:var(--obs-accent);">{n}</b> {n === 1 ? 'time' : 'times'} on the server, morphed in place</div>
-  <label style="display:flex; align-items:center; gap:8px; color:var(--obs-muted); font-size:13px;">your text + caret survive every update →
-    <input placeholder="click here and type…" style="padding:5px 9px; border:1px solid #cbd5e1; border-radius:6px;" />
-  </label>
-</div>`
+			'src/lib/Ticker.svelte': `<scr${''}ipt>
+	let { n = 0 } = $props();
+</scr${''}ipt>
+
+<div class="ticker">
+	<div class="live">
+		🔴 LIVE · re-rendered <b>{n}</b>
+		{n === 1 ? 'time' : 'times'} on the server, morphed in place
+	</div>
+	<label>
+		your text + caret survive every update →
+		<input placeholder="click here and type…" />
+	</label>
+</div>
+
+<style>
+	.ticker {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 14px;
+		border: 1px solid var(--obs-border);
+		border-radius: 10px;
+		background: var(--obs-panel);
+	}
+	.live {
+		font-weight: 600;
+	}
+	.live b {
+		color: var(--obs-accent);
+	}
+	label {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--obs-muted);
+		font-size: 13px;
+	}
+	input {
+		padding: 5px 9px;
+		border: 1px solid var(--obs-border);
+		border-radius: 6px;
+	}
+</style>
+`
 		},
 		'keep · nav': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
@@ -223,12 +313,53 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 <p>Same kept counter — its count survived the nav (the live island was relocated, not remounted). The widget is a different island now.</p>
 <Counter start={0} />
 <AboutWidget />`,
-			'src/lib/Counter.svelte': `<scr${''}ipt>let { start = 0 } = $props(); let n = $state(start);</scr${''}ipt>
-<button onclick={() => n++} >kept count: {n} — click me, then navigate</button>`,
-			'src/lib/HomeWidget.svelte': `<scr${''}ipt>let n = $state(0);</scr${''}ipt>
-<div style="margin-top:8px; padding:8px 12px; background:var(--obs-panel); border:1px solid var(--obs-border); border-radius:8px;">🏠 Home widget (this island remounts per page) · <button onclick={() => n++}>clicked {n}</button></div>`,
-			'src/lib/AboutWidget.svelte': `<scr${''}ipt>let n = $state(0);</scr${''}ipt>
-<div style="margin-top:8px; padding:8px 12px; background:var(--obs-panel); border:1px solid var(--obs-border); border-radius:8px;">ℹ️ About widget (a different island) · <button onclick={() => n++}>clicked {n}</button></div>`
+			'src/lib/Counter.svelte': `<scr${''}ipt>
+	let { start = 0 } = $props();
+	let n = $state(start);
+</scr${''}ipt>
+
+<button onclick={() => n++}>
+	kept count: {n} — click me, then navigate
+</button>
+`,
+			'src/lib/HomeWidget.svelte': `<scr${''}ipt>
+	let n = $state(0);
+</scr${''}ipt>
+
+<div class="widget">
+	🏠 Home widget (this island remounts per page) ·
+	<button onclick={() => n++}>clicked {n}</button>
+</div>
+
+<style>
+	.widget {
+		margin-top: 8px;
+		padding: 8px 12px;
+		background: var(--obs-panel);
+		border: 1px solid var(--obs-border);
+		border-radius: 8px;
+	}
+</style>
+`,
+			'src/lib/AboutWidget.svelte': `<scr${''}ipt>
+	let n = $state(0);
+</scr${''}ipt>
+
+<div class="widget">
+	ℹ️ About widget (a different island) ·
+	<button onclick={() => n++}>clicked {n}</button>
+</div>
+
+<style>
+	.widget {
+		margin-top: 8px;
+		padding: 8px 12px;
+		background: var(--obs-panel);
+		border: 1px solid var(--obs-border);
+		border-radius: 8px;
+	}
+</style>
+`
 		},
 		// A realistic Kit codebase — FOLDERS (the tree earns its keep) — showing a held-raw region next to
 		// an interactive island. `region: 'raw'` renders the component's HTML on the server and ships ZERO
@@ -247,10 +378,31 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 <Counter start={0} />
 <Badge label="raw" note="server HTML · zero JS" />`,
 			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
-			'src/lib/Badge.svelte': `<scr${''}ipt>let { label = '', note = '' } = $props();</scr${''}ipt>
-<span style="display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:6px 12px; border:1px solid var(--obs-border); border-radius:999px; background:var(--obs-panel);">
-  <b>🔒 {label}</b> <small style="color:var(--obs-muted);">{note}</small>
-</span>`
+			'src/lib/Badge.svelte': `<scr${''}ipt>
+	let { label = '', note = '' } = $props();
+</scr${''}ipt>
+
+<span class="badge">
+	<b>🔒 {label}</b>
+	<small>{note}</small>
+</span>
+
+<style>
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		margin-top: 10px;
+		padding: 6px 12px;
+		border: 1px solid var(--obs-border);
+		border-radius: 999px;
+		background: var(--obs-panel);
+	}
+	small {
+		color: var(--obs-muted);
+	}
+</style>
+`
 		}
 	};
 
@@ -550,10 +702,12 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		return () => w.terminate();
 	});
 
-	// Re-analyze on edit — debounced, off the main thread. Reads the whole file map (deep) + active.
+	// Re-analyze on EDIT — debounced, off the main thread. The analysis is about the APP: it transforms
+	// + renders the ENTRY page, so it depends on the file CONTENTS (`files`), not which file you're
+	// viewing. Switching files in the tree is pure navigation — it must NOT recompile (no "compiling…").
 	$effect(() => {
 		const snap = $state.snapshot(files);
-		const a = active;
+		const a = entryFile; // entry, not `active` — so a file-switch (view change) doesn't re-analyze
 		const w = worker;
 		if (!w) return;
 		busy = true;
@@ -865,11 +1019,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		</span>
 
 		<div class="obs-bar-right">
-			{#if analysis.oxc}
-				<span class="oxc" class:ok={analysis.oxc.ok} data-obs-oxc title={analysis.oxc.error || `${analysis.oxc.engine}`}>
-					{analysis.oxc.ok ? `oxc/wasm ✓` : 'oxc failed'}
-				</span>
-			{/if}
 			<span class="status" data-obs-status>
 				<span class="busy" class:show={busy}>compiling…</span>
 				{#if analysis.ms != null && analysis.real}<span class="ms" title="transform + svelte compile">{analysis.ms.toFixed(1)} ms</span>{/if}
@@ -1260,17 +1409,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		background: #14b8a6;
 		color: #04121a;
 		font-weight: 600;
-	}
-	.oxc {
-		padding: 2px 8px;
-		border-radius: 999px;
-		background: rgba(239, 68, 68, 0.15);
-		color: #fca5a5;
-		font-size: 11px;
-	}
-	.oxc.ok {
-		background: rgba(20, 184, 166, 0.16);
-		color: var(--accent);
 	}
 	/* Reserved, right-aligned status slot — busy toggles via visibility (keeps its box) and the timing
 	   has a fixed min-width, so "compiling…" appearing never reflows the header. */
@@ -1667,9 +1805,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		}
 		.obs-bar-right {
 			gap: 6px;
-		}
-		.oxc {
-			display: none;
 		}
 		.obs-mobile-switch {
 			display: flex;
