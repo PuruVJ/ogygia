@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { mount, unmount, untrack } from 'svelte';
+	// The FULL svelte public API (getContext/setContext/onMount/tick/…) — a bundled CDN component keeps
+	// `import … from 'svelte'` external, so the eval's require hands it THIS shared instance.
+	import * as svelteRuntime from 'svelte';
 	// The devtools event bus — in "islands" mode the page's REAL runtime emits hydration events for our
 	// injected regions; we tap the bus to show the true lifecycle story (Rung-0 layer → an instrument).
 	import { add_sink } from 'ogygia/devtools';
@@ -731,20 +734,25 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			});
 	}
 
-	// Load the svelte runtime modules the eval'd bundle keeps external (client + the side-effect submods).
-	// Called ONCE at init (a plain async load, not an effect).
+	// Load the svelte submodules a CDN component keeps external (beyond the static `svelte` public API and
+	// svelte/internal/client). LITERAL specifiers so Vite resolves them — a variable `import(s)` would
+	// leave a bare specifier the browser can't load at runtime. Called ONCE at init. Each guarded (a
+	// submodule may not exist in this svelte version → an empty stub, never a crash).
 	function load_svelte_runtime() {
 		import('svelte/internal/client')
 			.then((m) => (svelteClient = m))
 			.catch(() => {});
-		const extras = ['svelte', 'svelte/internal/disclose-version', 'svelte/internal/flags/legacy'];
-		Promise.all(
-			extras.map((s) =>
-				import(/* @vite-ignore */ s)
-					.then((m) => [s, m] as const)
-					.catch(() => [s, {}] as const)
-			)
-		).then((pairs) => (svelteExtras = Object.fromEntries(pairs)));
+		const add = (spec: string, load: Promise<unknown>) =>
+			load.then((m) => (svelteExtras = { ...svelteExtras, [spec]: m as Record<string, unknown> })).catch(() => {});
+		// @ts-expect-error internal svelte module, no published d.ts
+		add('svelte/internal/disclose-version', import('svelte/internal/disclose-version'));
+		// @ts-expect-error internal svelte module, no published d.ts
+		add('svelte/internal/flags/legacy', import('svelte/internal/flags/legacy'));
+		add('svelte/store', import('svelte/store'));
+		add('svelte/transition', import('svelte/transition'));
+		add('svelte/easing', import('svelte/easing'));
+		add('svelte/animate', import('svelte/animate'));
+		add('svelte/motion', import('svelte/motion'));
 	}
 
 	// Boot the worker (called ONCE from the init attachment). Replies flow through the callbacks.
@@ -826,10 +834,12 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// (load_svelte_runtime, at init) so the eval's `require` is synchronous; unknowns fall back to client.
 	let svelteExtras = $state<Record<string, Record<string, unknown>>>({});
 	function bundle_require(spec: string): Record<string, unknown> {
+		if (spec === 'svelte') return svelteRuntime as unknown as Record<string, unknown>;
 		if (spec === 'svelte/internal/client') return (svelteClient as Record<string, unknown>) ?? {};
 		if (svelteExtras[spec]) return svelteExtras[spec];
 		if (spec.startsWith('svelte/internal/')) return (svelteClient as Record<string, unknown>) ?? {};
-		if (spec === 'svelte' || spec.startsWith('svelte/')) return svelteExtras['svelte'] ?? {};
+		// svelte/store, svelte/transition, svelte/easing, svelte/motion … → the loaded submodule, else {}.
+		if (spec.startsWith('svelte/')) return svelteExtras[spec] ?? {};
 		return {};
 	}
 	/** Eval a CJS module string with our svelte-providing require; returns its exports. */
