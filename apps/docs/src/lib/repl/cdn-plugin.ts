@@ -24,6 +24,15 @@ const NODE_BUILTINS = new Set([
 	'child_process', 'worker_threads', 'perf_hooks', 'url', 'assert', 'buffer', 'process', 'module',
 	'querystring', 'string_decoder', 'tty', 'v8', 'vm'
 ]);
+/** Builtins with a real, lightweight npm BROWSER POLYFILL that bundles + runs cleanly — resolve the shim
+ *  instead of stubbing, so a package that reaches for `buffer` / `events` / `path` actually works (the way
+ *  Vite/webpack polyfill). Deliberately EXCLUDES `util`/`url`/`assert` (their shims drag in an es-abstract
+ *  graph that doesn't bundle) and the heavy `crypto`/`http`/`zlib`/`os` shims — those stay stubbed. */
+const NODE_POLYFILLS: Record<string, string> = {
+	buffer: 'buffer', events: 'events', process: 'process', punycode: 'punycode',
+	string_decoder: 'string_decoder', path: 'path-browserify', querystring: 'querystring-es3',
+	stream: 'stream-browserify'
+};
 const is_node_builtin = (id: string) => id.startsWith('node:') || NODE_BUILTINS.has(id);
 
 /** Persistent CDN caches — pass the SAME instance across bundles so an edit doesn't re-fetch jsdelivr. */
@@ -201,8 +210,12 @@ export function cdnPlugin(opts: CdnPluginOptions = {}): RolldownPlugin {
 		async resolveId(id: string, importer: string | undefined) {
 			// svelte runtime + configured externals: keep external (shared with the host mount).
 			if (SVELTE_EXTERNAL.test(id) || opts.isExternal?.(id)) return { id, external: true };
-			// node builtins → stub (browser can't run them).
-			if (is_node_builtin(id)) return BROWSER_STUB + ':' + id;
+			// node builtins → a browser POLYFILL package when one exists (buffer/events/path/…), else stub.
+			if (is_node_builtin(id)) {
+				const shim = NODE_POLYFILLS[id.replace(/^node:/, '')];
+				if (!shim) return BROWSER_STUB + ':' + id;
+				id = shim; // fall through to bare-package resolution with the polyfill's name
+			}
 			// native addons (`.node`) + binary media/fonts → inert stub (in ANY specifier form: bare
 			// `pkg/x.node`, relative `./x.png`, or an absolute transitive URL). `.wasm` is NOT here — it's a
 			// real loader (load() inlines the bytes). Never fetched, never crash the build.

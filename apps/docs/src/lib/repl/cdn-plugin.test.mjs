@@ -145,11 +145,13 @@ async function main() {
 		ok('radix-svelte: .svelte compiled, svelte/internal external', compiled && svelteExternal, `compiled=${compiled} external=${svelteExternal}`);
 	} catch (e) { fail += 2; console.log('  ✗ radix-svelte threw —', (e.stack || e.message).split('\n').slice(0, 3).join(' | ')); }
 
-	// 8. Node builtin → stubbed (doesn't crash the build)
+	// 8. Node builtins: unpolyfillable ones (fs) stub; polyfillable ones resolve their browser shim.
 	try {
-		const m = await withNet(run(`import fs from 'fs';\nimport path from 'node:path';\nexport const a = typeof fs;\nexport const b = typeof path;`));
-		ok('node builtins stubbed (fs, node:path)', m.a === 'object' && m.b === 'object');
-	} catch (e) { fail += 1; console.log('  ✗ node-builtin stub threw —', e.message); }
+		const m = await withNet(run(`import fs from 'fs';\nimport path from 'node:path';\nimport { Buffer } from 'buffer';\nexport const fsType = typeof fs;\nexport const joined = path.join('a', 'b');\nexport const enc = Buffer.from('hi').toString('base64');`));
+		ok('unpolyfillable builtin (fs) → inert stub', m.fsType === 'object');
+		ok('node:path → path-browserify polyfill (works)', m.joined === 'a/b', `join=${m.joined}`);
+		ok('buffer → real polyfill (Buffer.from works)', m.enc === 'aGk=', `enc=${m.enc}`);
+	} catch (e) { fail += 3; console.log('  ✗ node-builtin/polyfill threw —', e.message.split('\n')[0]); }
 
 	// 9. Unknown package → stub, build survives
 	try {
