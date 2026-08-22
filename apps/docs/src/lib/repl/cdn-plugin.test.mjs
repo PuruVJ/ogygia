@@ -167,6 +167,19 @@ async function main() {
 		ok('deep transitive graph (d3-scale)', m.t === 'function');
 	} catch (e) { fail += 1; console.log('  ✗ d3-scale threw —', e.message.split('\n')[0]); }
 
+	// 16. a stalled CDN response must not hang the build — the per-request timeout aborts → stub (no net)
+	try {
+		const files = { '/entry.js': `import x from 'never-responds-pkg';\nexport const t = typeof x;` };
+		const ws = { name: 'ws', resolveId(id) { return files[id] ? id : null; }, load(id) { return files[id] ?? null; } };
+		const hang = () => new Promise(() => {}); // never resolves
+		const t0 = Date.now();
+		const b = await rolldown({ input: '/entry.js', plugins: [ws, cdnPlugin({ fetch: hang, fetchTimeout: 150 })], cwd: '/', onLog() {} });
+		const { output } = await b.generate({ format: 'es' });
+		const elapsed = Date.now() - t0;
+		// The guarantee: the build COMPLETES (the package stubbed) well under any hang, not a specific shape.
+		ok('stalled fetch times out → build completes (no hang)', output[0].code.length > 0 && elapsed < 3000, `${elapsed}ms`);
+	} catch (e) { fail += 1; console.log('  ✗ timeout test threw —', e.message.split('\n')[0]); }
+
 	console.log(`\n${'─'.repeat(44)}`);
 	console.log(`${fail === 0 ? '✓ ALL PASS' : '✗ FAILURES'}: ${pass} passed, ${fail} failed`);
 	process.exit(fail === 0 ? 0 : 1);

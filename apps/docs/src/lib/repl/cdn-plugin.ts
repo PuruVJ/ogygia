@@ -31,6 +31,8 @@ export interface CdnPluginOptions {
 	onPackage?: (name: string, version: string, url: string) => void;
 	/** Notified when a bare import can't be resolved (stubbed). */
 	onMissing?: (id: string) => void;
+	/** Per-request timeout (ms) so a stalled CDN response can't hang the bundle. Default 15s. */
+	fetchTimeout?: number;
 }
 
 // ── Regexes hoisted to module scope (compiled once, never per resolveId/load call). ──
@@ -57,20 +59,43 @@ type RolldownPlugin = any;
 
 export function cdnPlugin(opts: CdnPluginOptions = {}): RolldownPlugin {
 	const fetchFn = opts.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
+	const timeout_ms = opts.fetchTimeout ?? 15000;
 	const pkg_cache = new Map<string, Record<string, unknown> | null>();
 	const text_cache = new Map<string, string | null>();
+	// De-dupe concurrent in-flight requests for the same URL (a barrel touches shared files a lot).
+	const inflight = new Map<string, Promise<string | null>>();
 
 	async function fetch_text(url: string): Promise<string | null> {
 		if (text_cache.has(url)) return text_cache.get(url)!;
-		let txt: string | null = null;
-		try {
-			const res = await fetchFn(url);
-			txt = res.ok ? await res.text() : null;
-		} catch {
-			txt = null;
-		}
-		text_cache.set(url, txt);
-		return txt;
+		const pending = inflight.get(url);
+		if (pending) return pending;
+		const job = (async () => {
+			const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+			const fetch_p = (async () => {
+				try {
+					const res = await fetchFn(url, ctrl ? { signal: ctrl.signal } : undefined);
+					return res.ok ? await res.text() : null;
+				} catch {
+					return null;
+				}
+			})();
+			// RACE the fetch against a wall-clock timeout: robust even if the underlying fetch ignores the
+			// abort signal (a slow server, a non-conforming mock) — the timeout always wins.
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			const timeout_p = new Promise<null>((res) => {
+				timer = setTimeout(() => {
+					ctrl?.abort();
+					res(null);
+				}, timeout_ms);
+			});
+			const txt = await Promise.race([fetch_p, timeout_p]);
+			clearTimeout(timer);
+			text_cache.set(url, txt);
+			inflight.delete(url);
+			return txt;
+		})();
+		inflight.set(url, job);
+		return job;
 	}
 	async function fetch_pkg(name: string, version: string): Promise<Record<string, unknown> | null> {
 		const key = name + '@' + (version || 'latest');
