@@ -13,7 +13,7 @@
 // codemods and BUNDLE it into this file at build time — ogygia declares no extra runtime dependency.
 // ─────────────────────────────────────────────────────────────────────────────
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { stdin, stdout } from 'node:process';
@@ -44,13 +44,14 @@ const argv = process.argv.slice(2);
 const command = argv[0];
 const flags = new Set(argv.slice(1).filter((a) => a.startsWith('-')));
 
-if (command !== 'init' && command !== 'site' && command !== 'mcp') {
+if (command !== 'init' && command !== 'site' && command !== 'mcp' && command !== 'ai') {
 	const unknown = command && command !== 'help' && !command.startsWith('-');
 	stdout.write(
 		`${strong('ogygia')} ${dim(`v${version}`)}\n\n` +
 			`Usage:\n` +
 			`  ${accent('npx ogygia init')} ${dim('[--markdown] [--no-install] [-y]')}\n` +
 			`  ${accent('npx ogygia site init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n` +
+			`  ${accent('npx ogygia ai')} ${dim('(install the Claude skill + register the MCP server)')}\n` +
 			`  ${accent('npx ogygia mcp')} ${dim('(stdio MCP server — hand ogygia components to an AI)')}\n\n` +
 			`${strong('init')}  — wires ogygia into the SvelteKit app in the current directory.\n` +
 			`  --markdown / --no-markdown   turn markdown content collections on/off (else you are asked)\n` +
@@ -60,6 +61,8 @@ if (command !== 'init' && command !== 'site' && command !== 'mcp') {
 			`  --layout <path>              layout route to write (default ${dim('src/routes/+layout.svelte')})\n` +
 			`  --force                      overwrite existing route/site files (the layout always asks)\n` +
 			`  -y, --yes                    accept defaults, no prompts\n\n` +
+			`${strong('ai')}  — installs the ogygia Claude skill into ${dim('.claude/skills/ogygia/')} and registers the MCP\n` +
+			`  server in ${dim('.mcp.json')}, so any agent on this repo gets the mental model + live compiler tools.\n\n` +
 			`${strong('mcp')}  — runs a Model Context Protocol server on stdio. Point an MCP client at it to give an\n` +
 			`  AI the real ogygia compiler: compile a component, read its island map, validate it, explain it.\n`
 	);
@@ -388,6 +391,46 @@ function place(rel: string, content: string, overwrite: boolean): boolean {
 	writeFileSync(abs, content);
 	stdout.write(`  ${ok('✓')} ${rel}${existed ? dim(' (overwritten)') : ''}\n`);
 	return true;
+}
+
+/** `ogygia ai` — install the Claude skill + register the MCP server so agents on this repo get both. */
+async function ai_install(): Promise<void> {
+	stdout.write(`\n${strong('ogygia ai')} ${dim('— Claude skill + MCP server')}\n\n`);
+
+	// 1. the skill (bundled at ai/SKILL.md, a sibling of dist/) → .claude/skills/ogygia/
+	let skill: string;
+	try {
+		skill = readFileSync(new URL('../ai/SKILL.md', import.meta.url), 'utf8');
+	} catch {
+		die('could not read the bundled skill — ai/SKILL.md is missing from the ogygia package.');
+	}
+	place('.claude/skills/ogygia/SKILL.md', skill, true);
+
+	// 2. the MCP server → .mcp.json (MERGE — never clobber other servers the project registered)
+	const rel = '.mcp.json';
+	const abs = path.join(cwd, rel);
+	let cfg: { mcpServers?: Record<string, unknown>; [k: string]: unknown } = {};
+	if (existsSync(abs)) {
+		try {
+			cfg = JSON.parse(readFileSync(abs, 'utf8'));
+		} catch {
+			die(`${rel} exists but is not valid JSON — fix or remove it, then re-run.`);
+		}
+	}
+	cfg.mcpServers = cfg.mcpServers ?? {};
+	const already = 'ogygia' in cfg.mcpServers;
+	cfg.mcpServers.ogygia = { command: 'npx', args: ['ogygia', 'mcp'] };
+	writeFileSync(abs, JSON.stringify(cfg, null, '\t') + '\n');
+	stdout.write(`  ${ok('✓')} ${rel} ${dim(already ? '(ogygia server updated)' : '(ogygia server added)')}\n`);
+
+	// 3. next steps
+	stdout.write(
+		`\n${ok('✓')} done — any agent on this repo now has:\n` +
+			`  • the ${accent('ogygia')} skill — the mental model, read before inventing a workaround.\n` +
+			`  • live tools ${accent('ogygia_check / compile / islands / explain')} via the MCP server.\n\n` +
+			`  In Claude Code the ${accent('.mcp.json')} server loads on next start ${dim('(approve it when prompted)')}.\n` +
+			`  Sanity-check the server: ${accent('npx ogygia mcp')} ${dim('→ should log “ready — 4 tools”, then Ctrl-C.')}\n`
+	);
 }
 
 async function site_init(): Promise<void> {
@@ -737,6 +780,8 @@ if (command === 'mcp') {
 	import(new URL('./mcp.js', import.meta.url).href)
 		.then((m) => (m as { runMcp: () => Promise<void> }).runMcp())
 		.catch((err) => die(err?.message ?? String(err)));
+} else if (command === 'ai') {
+	ai_install().catch((err) => die(err?.message ?? String(err)));
 } else if (command === 'site') {
 	site_init().catch((err) => die(err?.message ?? String(err)));
 } else {

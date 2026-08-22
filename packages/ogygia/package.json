@@ -113,6 +113,7 @@
 	},
 	"files": [
 		"dist",
+		"ai",
 		"README.md",
 		"LICENSE",
 		"CHANGELOG.md",
