@@ -74,6 +74,11 @@ over guessing** what the transform (or the running app) does:
   ACTUAL per-island story from the devtools bus: SSR → wire → connected → woke → hydrated (with ms), plus
   anomalies (SSR'd-but-never-connected, hydration failures). Use it to see what really happened when an
   island misbehaves. Requires the app to run with `OGYGIA_DEVTOOLS=1` and Playwright installed.
+- `ogygia_profile({ url })` — **SSR cost.** Runs the ogygia SSR profiler on a route (N renders) and digests
+  its report: verdict (compute/io-bound), render p50, CPU findings, where the time went by category, the
+  hottest functions + components, network calls, heap growth (+ links to the full report/.cpuprofile). Use
+  it when a route renders slowly. Needs `profiler()` mounted in hooks.server.ts — the tool tells the user
+  how if it is missing. Profile a PROD build for real numbers (dev is dominated by Vite + instrument cost).
 
 If the tools are not present, tell the user to run `npx ogygia ai` (or add the server manually).
 

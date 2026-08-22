@@ -142,6 +142,11 @@ The only rung that touches the framework. Everything after is a consumer.
 >   (SSR → wire → connected → woke → hydrated, with ms) + invariant warnings (SSR'd-but-never-connected,
 >   hydrate.failed). Requires the target app to be a devtools build (`OGYGIA_DEVTOOLS=1`). NOTE: server
 >   (SSR) events carry the server process's clock, so relative ms is computed from CLIENT events only.
+> - **SSR cost** (`ogygia_profile({ url })`): records N renders through `ogygia/profiler`'s
+>   `<base>/page?p=<route>&format=json` (the profiler already emits a curated agent report — findings,
+>   hot_functions, components, budget, memory, links) and digests it (verdict, p50, where-time-went minus
+>   the profiler's own overhead, top functions/components). 404 on the base → prints the hooks.server.ts
+>   wiring to add. Dev is dominated by Vite + instrument overhead (flagged); profile a prod build.
 >
 > **Wire it up:** `npx ogygia ai` (installs the skill + registers the server), or
 > `claude mcp add ogygia -- npx ogygia mcp`. In THIS repo (unpublished) use the local path:

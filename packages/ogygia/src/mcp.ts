@@ -207,6 +207,25 @@ const TOOLS = [
 			},
 			required: ['url']
 		}
+	},
+	{
+		name: 'ogygia_profile',
+		description:
+			'Profile the SERVER-SIDE render of a route. Records N renders through ogygia’s SSR profiler and ' +
+			'returns a digest of its analysis: verdict (compute- vs io-bound), render p50, CPU findings, where ' +
+			'the time went by category, the hottest functions + components (Svelte names each component after ' +
+			'its file), network calls, and heap growth. Requires the app to mount profiler() in hooks.server.ts ' +
+			'(the tool tells you how if it is missing). Profile a prod build for real numbers; dev is indicative.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				url: { type: 'string', description: 'The route URL to profile (e.g. http://localhost:5173/blog).' },
+				runs: { type: 'number', description: 'Profiled renders to record (default 5, max 50). More = steadier median.' },
+				key: { type: 'string', description: 'Profiler secret (?key=) — needed only when the app set one (prod).' },
+				base: { type: 'string', description: 'Profiler mount path (default /__profiler).' }
+			},
+			required: ['url']
+		}
 	}
 ];
 
@@ -447,6 +466,146 @@ async function tool_debug(args: Attrs): Promise<ToolResult> {
 	}
 }
 
+// ── ogygia_profile — run the SSR profiler on a route + digest its agent JSON ────────────────────────
+
+const sev_icon: Record<string, string> = { critical: '❌', error: '❌', warn: '⚠️', warning: '⚠️', info: 'ℹ️', good: '✅' };
+const median = (xs: number[]): number => {
+	if (!xs.length) return 0;
+	const s = [...xs].sort((a, b) => a - b);
+	const m = Math.floor(s.length / 2);
+	return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+type ProfileReport = {
+	target?: { page?: string; request?: string; runs?: number[] };
+	dev?: boolean;
+	summary?: { verdict?: string; window_ms?: number; busy_ms?: number; busy_pct?: number; cpu_percent?: number; rss_mb?: number };
+	findings?: Array<{ severity?: string; code?: string; message?: string }>;
+	budget?: Array<{ label?: string; category?: string; ms?: number; pct?: number }>;
+	hot_functions?: Array<{ name?: string; file?: string; line?: number; category?: string; self_ms?: number; per_call_ms?: number }>;
+	components?: Array<{ name?: string; instances?: number; self_ms?: number; total_ms?: number; alloc_bytes?: number | null }>;
+	network?: { count?: number; total_ms?: number; sequential_ms?: number; errors?: number };
+	memory?: { rss_start_mb?: number; rss_end_mb?: number; growth_mb?: number; allocators?: Array<{ name?: string; category?: string; self_bytes?: number }> };
+	links?: { html?: string; json?: string; cpuprofile?: string };
+};
+
+function render_profile(origin: string, r: ProfileReport): string {
+	const target = r.target?.page ?? r.target?.request ?? '(unknown)';
+	const runs = r.target?.runs ?? [];
+	const s = r.summary ?? {};
+	const head =
+		`# SSR profile — ${target}${runs.length ? ` · ${runs.length} run(s)` : ''}\n\n` +
+		`**${s.verdict ?? 'profiled'}** · render p50 ~${median(runs).toFixed(2)}ms` +
+		(runs.length ? ` (runs: ${runs.join(', ')})` : '') +
+		(s.busy_ms != null ? ` · CPU busy ${s.busy_ms}ms/${s.window_ms}ms (${s.busy_pct}%)` : '') +
+		(s.rss_mb != null ? ` · RSS ${s.rss_mb} MB` : '');
+
+	// In dev, profiler instrumentation dominates the window — say so, so the numbers aren't over-read.
+	const prof_overhead = (r.budget ?? []).find((b) => b.category === 'profiler');
+	const dev_note = r.dev
+		? `\n\n> ⚠️ DEV build${prof_overhead ? ` — ${prof_overhead.pct}% of the window is profiler/instrument overhead` : ''}. Timings are indicative; profile a PROD build (\`vite build && vite preview\`) for real cost.`
+		: '';
+
+	const findings = (r.findings ?? [])
+		.map((f) => `- ${sev_icon[f.severity ?? 'info'] ?? '•'} ${f.message ?? f.code ?? ''}`)
+		.join('\n');
+
+	// Where the time went, minus the profiler's own overhead (the real signal).
+	const budget = (r.budget ?? [])
+		.filter((b) => b.category !== 'profiler')
+		.slice(0, 8)
+		.map((b) => `- ${b.label}: ${b.ms}ms (${b.pct}%)`)
+		.join('\n');
+
+	// Hottest functions that aren't profiler noise, by self time.
+	const hot = (r.hot_functions ?? [])
+		.filter((h) => h.category !== 'profiler')
+		.sort((a, b) => (b.self_ms ?? 0) - (a.self_ms ?? 0))
+		.slice(0, 8)
+		.map((h, i) => `${i + 1}. ${h.name} — ${h.self_ms}ms self${h.category ? ` [${h.category}]` : ''}${h.file ? ` · ${base(h.file)}${h.line ? `:${h.line}` : ''}` : ''}`)
+		.join('\n');
+
+	const comps = (r.components ?? [])
+		.sort((a, b) => (b.self_ms ?? 0) - (a.self_ms ?? 0))
+		.slice(0, 10)
+		.map((c) => `- ${c.name} ×${c.instances ?? 1} — ${c.self_ms}ms self${c.alloc_bytes ? `, ${Math.round(c.alloc_bytes / 1024)} KB alloc` : ''}`)
+		.join('\n');
+
+	const net = r.network;
+	const net_line = net ? `${net.count ?? 0} call(s)${net.total_ms ? `, ${net.total_ms}ms total` : ''}${net.errors ? `, ${net.errors} error(s)` : ''}` : 'n/a';
+	const mem = r.memory;
+	const mem_line = mem ? `RSS ${mem.rss_start_mb}→${mem.rss_end_mb} MB (+${mem.growth_mb})` : 'n/a';
+
+	const links = r.links
+		? `\n\nFull report: ${origin}${r.links.html}${r.links.json ? ` · JSON: ${origin}${r.links.json}` : ''}${r.links.cpuprofile ? ` · .cpuprofile: ${origin}${r.links.cpuprofile}` : ''}`
+		: '';
+
+	return (
+		head +
+		dev_note +
+		(findings ? `\n\n## Findings\n${findings}` : '') +
+		(budget ? `\n\n## Where the time went (profiler overhead excluded)\n${budget}` : '') +
+		(hot ? `\n\n## Hottest functions (self ms)\n${hot}` : '') +
+		(comps ? `\n\n## Components\n${comps}` : '') +
+		`\n\n## Network: ${net_line}  ·  Memory: ${mem_line}` +
+		links
+	);
+}
+
+/** Record an SSR profile of a route on the running app + return the digested findings. */
+async function tool_profile(args: Attrs): Promise<ToolResult> {
+	const raw = String(args.url ?? '');
+	if (!raw) return fail('`url` is required — the route to profile, e.g. http://localhost:5173/blog.');
+	let origin: string;
+	let route: string;
+	try {
+		const u = new URL(raw);
+		origin = u.origin;
+		route = u.pathname + u.search;
+	} catch {
+		return fail(`invalid url: ${raw}`);
+	}
+	const profiler_base = String(args.base ?? '/__profiler').replace(/\/$/, '');
+	const runs = typeof args.runs === 'number' ? Math.min(Math.max(Math.round(args.runs), 1), 50) : 5;
+	const key = typeof args.key === 'string' ? args.key : '';
+	const key_q = key ? `?key=${encodeURIComponent(key)}` : '';
+
+	// Precheck: is the profiler mounted? (a clean "add it to hooks" message beats a cryptic failure)
+	let pre: Response;
+	try {
+		pre = await fetch(origin + profiler_base + key_q, { redirect: 'manual' });
+	} catch (e) {
+		return fail(`could not reach ${origin} — is the dev/preview server running? (${e instanceof Error ? e.message : String(e)})`);
+	}
+	if (pre.status === 404) {
+		return fail(
+			`The profiler is not mounted at ${profiler_base} on ${origin}. Add it to src/hooks.server.ts:\n\n` +
+				`  import { sequence } from '@sveltejs/kit/hooks';\n` +
+				`  import { profiler } from 'ogygia/profiler';\n` +
+				`  export const handle = sequence(profiler(), /* …your other handles */);\n\n` +
+				`Put profiler() FIRST so it times the whole chain. Restart the server, then retry.`
+		);
+	}
+
+	const rec = new URL(origin + profiler_base + '/page');
+	rec.searchParams.set('p', route);
+	rec.searchParams.set('format', 'json');
+	rec.searchParams.set('runs', String(runs));
+	if (key) rec.searchParams.set('key', key);
+	let res: Response;
+	try {
+		res = await fetch(rec, { headers: { accept: 'application/json' } });
+	} catch (e) {
+		return fail(`recording failed: ${e instanceof Error ? e.message : String(e)}`);
+	}
+	if ((res.headers.get('content-type') ?? '').includes('application/json')) {
+		return text(render_profile(origin, (await res.json()) as ProfileReport));
+	}
+	const body = (await res.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+	if (res.status === 409) return fail(`A profile is already running on ${origin}. Wait a moment and retry.`);
+	return fail(`profiler did not return JSON (HTTP ${res.status}). ${body || '(check the profiler key / route path)'}`);
+}
+
 async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 	switch (name) {
 		case 'ogygia_compile':
@@ -459,6 +618,8 @@ async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 			return tool_explain(args);
 		case 'ogygia_debug':
 			return tool_debug(args);
+		case 'ogygia_profile':
+			return tool_profile(args);
 		default:
 			return fail(`Unknown tool: ${name}`);
 	}
@@ -512,7 +673,7 @@ function handle(msg: Rpc): void {
 
 /** Start the stdio MCP server. Resolves when stdin closes (the client disconnected). */
 export async function runMcp(): Promise<void> {
-	log(`ogygia MCP server v${version} ready — 5 tools (compile, islands, check, explain, debug)`);
+	log(`ogygia MCP server v${version} ready — 6 tools (compile, islands, check, explain, debug, profile)`);
 	const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 	for await (const line of rl) {
 		const trimmed = line.trim();
