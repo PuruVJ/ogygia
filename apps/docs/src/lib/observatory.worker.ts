@@ -811,6 +811,9 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 	// island authored inside a `.md` (its dial stripped for the compile legs) is invisible and won't wake
 	// in islands mode. Non-content files are identical in both views.
 	const islandInfo = build_island_info(await content_svelte_view(files, true));
+	const rendered = execute(svelte_files, entryFile, islandInfo);
+	const realDom = real_island_render(svelte_files, entryFile, islandInfo);
+	const client = client_bundle(svelte_files, entryFile);
 
 	return {
 		ok: marks.ok,
@@ -828,9 +831,9 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		oxc,
 		// content pages resolved to svelte source above → the sync SSR/island/client legs treat them as
 		// normal components (the entry compile keys on the file, not the extension).
-		rendered: execute(svelte_files, entryFile, islandInfo),
-		realDom: real_island_render(svelte_files, entryFile, islandInfo),
-		client: client_bundle(svelte_files, entryFile),
+		rendered,
+		realDom,
+		client,
 		ledger,
 		ms: now() - t0
 	};

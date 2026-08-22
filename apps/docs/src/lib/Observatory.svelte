@@ -745,6 +745,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	let bundle_timer: ReturnType<typeof setTimeout> | undefined;
 	let hash_timer: ReturnType<typeof setTimeout> | undefined;
 
+	// Debounces tuned SHORT: the worker analyze is <20ms and a warm rolldown bundle ~35ms, so a long
+	// debounce was pure perceived latency. These still batch a fast-typing burst (~100ms/keystroke) while
+	// making edit→preview feel near-instant. The fetch cache + in-flight de-dup absorb any extra CDN churn.
+	const ANALYZE_DEBOUNCE_MS = 55;
+	const BUNDLE_DEBOUNCE_MS = 90;
 	/** Recompile the APP (transform + render the ENTRY) — off the main thread. Called on any content edit. */
 	function request_analysis() {
 		const w = worker;
@@ -754,7 +759,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		analyze_timer = setTimeout(() => {
 			want = ++seq;
 			w.postMessage({ id: want, files: $state.snapshot(files), active: entryFile });
-		}, 140);
+		}, ANALYZE_DEBOUNCE_MS);
 	}
 	/** Rolldown-bundle the workspace + jsdelivr CDN deps for the live mount (only in live mode, csr=false). */
 	function request_bundle() {
@@ -765,7 +770,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		bundle_timer = setTimeout(() => {
 			bundleWant = ++bundleSeq;
 			w.postMessage({ id: bundleWant, type: 'bundle', files: $state.snapshot(files), entry: entryFile });
-		}, 220);
+		}, BUNDLE_DEBOUNCE_MS);
 	}
 	/** Persist the whole workspace + UI state into the URL hash (replaceState → no history spam). */
 	function sync_hash() {
