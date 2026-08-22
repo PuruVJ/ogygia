@@ -10,6 +10,7 @@
 	import { EditorState, Compartment, RangeSetBuilder } from '@codemirror/state';
 	import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 	import { syntaxHighlighting, HighlightStyle, indentOnInput, bracketMatching, indentUnit } from '@codemirror/language';
+	import { autocompletion, completionKeymap, startCompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 	import { javascript } from '@codemirror/lang-javascript';
 	import { html } from '@codemirror/lang-html';
 	import { svelte } from '@replit/codemirror-lang-svelte';
@@ -120,6 +121,85 @@
 		{ decorations: (v) => v.decorations }
 	);
 
+	// ── Autocomplete for OUR syntax: import.meta.og.* macros + the dial import-attributes ──
+	const MACROS: Completion[] = [
+		{ label: 'loader', type: 'method', detail: 'content loaders', info: '.markdown(dir) · .folder(dir) · .json(dir) · .git(spec)' },
+		{ label: 'code', type: 'method', detail: 'highlight a snippet', info: 'import.meta.og.code(src, lang, meta?)' },
+		{ label: 'md', type: 'method', detail: 'inline markdown', info: 'import.meta.og.md(text)' },
+		{ label: 'regions', type: 'method', detail: 'glob region imports', info: "import.meta.og.regions('./blocks/*.svelte')" },
+		{ label: 'wire', type: 'method', detail: 'live-class wire codec', info: 'static wire = import.meta.og.wire({ encode, decode })' },
+		{ label: 'bake', type: 'method', detail: 'run at build, inline the result', info: 'import.meta.og.bake(() => …)' },
+		{ label: 'asRegion', type: 'method', detail: 'named/barrel import → island', info: 'import.meta.og.asRegion(Comp, { wake: "load" })' }
+	];
+	// Picking a dial key drops in `key: ''` with the cursor between the quotes. Enum dials (wake/render)
+	// then pop their value list immediately (startCompletion) — pick key, pick value, done.
+	function dial_apply(key: string, popValues: boolean) {
+		return (view: EditorView, _c: Completion, from: number, to: number) => {
+			const insert = `${key}: ''`;
+			const cursor = from + key.length + 3; // between the two quotes: `key: '|'`
+			view.dispatch({ changes: { from, to, insert }, selection: { anchor: cursor } });
+			if (popValues) startCompletion(view);
+		};
+	}
+	const DIAL_KEYS: Completion[] = [
+		{ label: 'wake', type: 'property', detail: 'when JS runs / HTML fetches', apply: dial_apply('wake', true) },
+		{ label: 'render', type: 'property', detail: 'where the HTML comes from', apply: dial_apply('render', true) },
+		{ label: 'region', type: 'property', detail: 'held marker', apply: "region: 'raw'" },
+		{ label: 'keep', type: 'property', detail: 'keep node + $state across nav', apply: dial_apply('keep', false) },
+		{ label: 'preset', type: 'property', detail: 'named dial bundle', apply: dial_apply('preset', false) },
+		{ label: 'margin', type: 'property', detail: 'IntersectionObserver rootMargin', apply: dial_apply('margin', false) }
+	];
+	const vals = (xs: [string, string][]): Completion[] => xs.map(([label, detail]) => ({ label, type: 'enum', detail }));
+	const WAKE_VALS = vals([
+		['load', 'on hydrate'],
+		['idle', 'requestIdleCallback'],
+		['visible', 'on scroll into view'],
+		['interaction', 'on first pointer/key'],
+		['none', 'frozen — a lake, ships no JS']
+	]);
+	const RENDER_VALS = vals([
+		['static', 'inline in the SSR pass (default)'],
+		['deferred', 'fetched from a signed endpoint'],
+		['live', 'baked, revalidates in background']
+	]);
+
+	// The filter range starts AFTER any opening quote (so the labels — which carry no quote — actually
+	// match what's typed; including the quote made CM filter every option out). Apply supplies the quotes
+	// the text doesn't already have: none typed → `'value'`; opening quote only → `value'`; both quotes
+	// already present (cursor between them) → bare `value`.
+	function quoted_values(ctx: CompletionContext, m: RegExpExecArray, options: Completion[]): CompletionResult {
+		const q = m[1] || "'";
+		const hasQuote = !!m[1];
+		const next = ctx.state.doc.sliceString(ctx.pos, ctx.pos + 1);
+		const closeAhead = next === "'" || next === '"';
+		const wrap = (label: string) =>
+			hasQuote ? (closeAhead ? label : `${label}${q}`) : `${q}${label}${q}`;
+		return {
+			from: ctx.pos - m[2].length,
+			options: options.map((o) => ({ ...o, apply: wrap(o.label) })),
+			validFor: /^\w*$/
+		};
+	}
+
+	function og_complete(context: CompletionContext): CompletionResult | null {
+		const before = context.state.doc.sliceString(Math.max(0, context.pos - 300), context.pos);
+		const macro = /import\.meta\.og\.(\w*)$/.exec(before);
+		if (macro) return { from: context.pos - macro[1].length, options: MACROS, validFor: /^\w*$/ };
+		const withOpen = /\bwith\s*\{[^{}]*$/.exec(before);
+		if (withOpen) {
+			const inner = withOpen[0];
+			const wakeV = /\bwake\s*:\s*(['"]?)(\w*)$/.exec(inner);
+			if (wakeV) return quoted_values(context, wakeV, WAKE_VALS);
+			const renderV = /\brender\s*:\s*(['"]?)(\w*)$/.exec(inner);
+			if (renderV) return quoted_values(context, renderV, RENDER_VALS);
+			const regionV = /\bregion\s*:\s*(['"]?)(\w*)$/.exec(inner);
+			if (regionV) return quoted_values(context, regionV, vals([['raw', 'HTML only — ships no JS']]));
+			const key = /(\w*)$/.exec(inner)![1];
+			return { from: context.pos - key.length, options: DIAL_KEYS, validFor: /^\w*$/ };
+		}
+		return null;
+	}
+
 	function extensions(key: string | undefined, l: typeof lang) {
 		const base = [
 			lineNumbers(),
@@ -143,8 +223,10 @@
 			indentOnInput(),
 			bracketMatching(),
 			indentUnit.of('\t'),
+			autocompletion({ activateOnTyping: true, icons: false }),
+			EditorState.languageData.of(() => [{ autocomplete: og_complete }]),
 			...base.slice(1),
-			keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
+			keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...completionKeymap]),
 			EditorView.updateListener.of((u) => {
 				if (u.docChanged && !syncing) oninput?.(u.state.doc.toString());
 				if ((u.selectionSet || u.docChanged) && !syncing) oncursor?.(u.state.selection.main.head);

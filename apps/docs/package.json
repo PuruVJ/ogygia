@@ -26,6 +26,7 @@
 		"vite-plugin-wasm": "^3.6.0"
 	},
 	"dependencies": {
+		"@codemirror/autocomplete": "^6.20.3",
 		"@codemirror/commands": "^6.11.0",
 		"@codemirror/lang-html": "^6.4.12",
 		"@codemirror/lang-javascript": "^6.2.5",

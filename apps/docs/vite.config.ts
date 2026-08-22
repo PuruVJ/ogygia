@@ -66,6 +66,7 @@ export default defineConfig({
 			'@codemirror/lang-javascript',
 			'@codemirror/lang-html',
 			'@replit/codemirror-lang-svelte',
+			'@codemirror/autocomplete',
 			'@lezer/highlight',
 			// Prettier (the Observatory's Format button) is dynamic-imported on hover → a lazy chunk. Pre-
 			// bundle it so dev doesn't re-optimize+reload on first hover; the runtime fetch stays lazy.
