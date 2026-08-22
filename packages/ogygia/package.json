@@ -106,6 +106,10 @@
 		"./internal/compiler-browser": {
 			"types": "./dist/compiler/browser.d.ts",
 			"default": "./dist/compiler/browser.js"
+		},
+		"./internal/compiler-browser-full": {
+			"types": "./dist/compiler/browser-full.d.ts",
+			"default": "./dist/compiler/browser-full.js"
 		}
 	},
 	"bin": {
@@ -269,6 +273,10 @@
 			"./internal/compiler-browser": {
 				"types": "./dist/compiler/browser.d.ts",
 				"default": "./dist/compiler/browser.js"
+			},
+			"./internal/compiler-browser-full": {
+				"types": "./dist/compiler/browser-full.d.ts",
+				"default": "./dist/compiler/browser-full.js"
 			}
 		}
 	}

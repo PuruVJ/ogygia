@@ -88,7 +88,12 @@ export default defineConfig({
 			'prettier/plugins/typescript',
 			'prettier/plugins/html',
 			'prettier/plugins/postcss'
-		]
+		],
+		// The FULL browser compiler (Observatory rolldown engine) pulls the `bake` macro, which has two
+		// dynamic imports (`import('rolldown')` + the baked-module eval). Dep-optimizing that graph makes
+		// Vite double-inject its `__vite__injectQuery` helper → a "already declared" SyntaxError at load.
+		// Exclude it so the driver is served as source modules (each its own scope).
+		exclude: ['ogygia/internal/compiler-browser-full']
 	},
 	// PROFILER_SOURCEMAPS=1 pnpm build → server chunks get .map files, so the SSR profiler
 	// (ogygia/profiler) maps bundled frames back to source files and recovers original

@@ -16,6 +16,7 @@
  * violations surface as build-voice errors naming the file and line. Node-only.
  */
 import { fs, path } from '../host.js';
+import { pathToFileURL } from 'node:url';
 import { uneval } from 'devalue';
 import { og_member } from './wire.js';
 import { parse_module } from '../parse/oxc.js';
@@ -282,10 +283,10 @@ async function evaluate(entry_code: string, id: string, opts: BakeOptions): Prom
 		fs.writeFileSync(file, code);
 		try {
 			// bake() writes a module and dynamic-imports it — inherently Node-only (a real FS + module
-			// loader). node:url is loaded through a VARIABLE specifier so the browser compiler bundle
-			// (Observatory REPL) never tries to resolve it: bake isn't reachable there.
-			const url_spec = 'node:url';
-			const { pathToFileURL } = (await import(url_spec)) as typeof import('node:url');
+			// loader), unreachable on the REPL compile path. node:url is a plain static import (a browser
+			// build shims it): keeping it static leaves this the module's ONLY dynamic import, so Vite's
+			// dev `__vite__injectQuery` helper isn't injected twice (a second dynamic import here → a
+			// "'__vite__injectQuery' has already been declared" SyntaxError when the graph loads).
 			const mod = (await import(pathToFileURL(file).href + `?t=${opts.hash}`)) as {
 				__run?: () => Promise<unknown[]>;
 			};

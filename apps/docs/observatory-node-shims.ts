@@ -23,6 +23,7 @@ const PATH_SHIM = fileURLToPath(new URL('./observatory-path-shim.ts', import.met
  */
 const FS_STUB = '\0observatory:fs-stub';
 const MODULE_STUB = '\0observatory:module-stub';
+const URL_STUB = '\0observatory:url-stub';
 const EMPTY_STUB = '\0observatory:empty-stub';
 // node builtins that ONLY the transform graph needs and we shim precisely; anything else node:* that
 // leaks into the client (e.g. from a dep's dead branch) gets an inert empty module so it never throws.
@@ -47,6 +48,9 @@ export function observatoryNodeShims(): Plugin {
 				return FS_STUB;
 			}
 			if (source === 'node:module') return MODULE_STUB;
+			// node:url — the full compiler graph (bake macro) statically imports pathToFileURL; it's only
+			// reachable on the Node-only bake path (never in the REPL), so an inert impl is enough.
+			if (source === 'node:url') return URL_STUB;
 			if (KNOWN_EMPTY.has(source)) return EMPTY_STUB;
 			return null;
 		},
@@ -57,6 +61,12 @@ export function observatoryNodeShims(): Plugin {
 				// top-level `require(...)` still evaluates when bundled, so it must not throw.
 				return `export function createRequire() { const r = () => ({}); r.resolve = (x) => x; r.cache = {}; return r; }
 export default { createRequire };`;
+			}
+			if (id === URL_STUB) {
+				// pathToFileURL/fileURLToPath — inert (bake's module eval is Node-only, never run here).
+				return `export const pathToFileURL = (p) => ({ href: 'file://' + String(p) });
+export const fileURLToPath = (u) => String(u).replace(/^file:\\/\\//, '');
+export default { pathToFileURL, fileURLToPath };`;
 			}
 			if (id === EMPTY_STUB) {
 				return `export default {};`;
