@@ -139,6 +139,23 @@ async function main() {
 	await page.waitForTimeout(200);
 	const islAfter = await page.evaluate(() => [...document.querySelectorAll('[data-obs-preview] button')].find((b) => /count is/.test(b.textContent || ''))?.textContent || '');
 	ok('live island inside markdown is interactive (demo in prose)', /count is/.test(islBefore) && islBefore !== islAfter, `${islBefore}→${islAfter}`);
+	// the SAME content island also WAKES in islands mode (the real ogygia runtime hydrates a content
+	// island — build_island_info reads the dial-preserved content view). Poll-click until hydration lands.
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-preview-mode] button')].find((x) => x.textContent.trim() === 'islands')?.click());
+	await until(page, () => !!document.querySelector('iframe[data-obs-frame]'), undefined, 15000);
+	const islandsWoke = await until(page, async () => {
+		const d = document.querySelector('iframe[data-obs-frame]')?.contentDocument;
+		const btn = d && [...d.querySelectorAll('button')].find((b) => /count is/.test(b.textContent || ''));
+		if (!btn) return null;
+		const before = btn.textContent;
+		btn.click();
+		await new Promise((r) => setTimeout(r, 120));
+		const after = [...d.querySelectorAll('button')].find((b) => /count is/.test(b.textContent || ''))?.textContent || '';
+		return before !== after ? true : null;
+	}, undefined, 20000);
+	ok('content island wakes in islands mode (real runtime)', !!islandsWoke);
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-preview-mode] button')].find((x) => x.textContent.trim() === 'live')?.click());
+	await until(page, () => /Markdown, live/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
 	// editing the markdown recompiles live
 	await setSrc(page, S(`# Edited heading RT\n\nplain prose paragraph.\n`));
 	const mdEdited = await until(page, () => /Edited heading RT/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));

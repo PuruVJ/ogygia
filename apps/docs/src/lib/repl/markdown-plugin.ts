@@ -57,12 +57,23 @@ export function content_preprocessor(): ReturnType<typeof ogygiaPreprocess> {
 	return shared!;
 }
 
-/** Run ogygia's markdown pipeline → SVELTE SOURCE (mdsvex + shiki + admonitions + heading ids), with the
- *  REPL-incompatible `?raw` source-export stripped and island dials flattened for the plain live mount.
- *  The intermediate the SSR/analyze legs compile to server JS and the bundle leg compiles to client JS. */
-export async function md_to_svelte(content: string, filename: string): Promise<string> {
+/** Markdown → SVELTE SOURCE (mdsvex + shiki + admonitions + …), with only the REPL-incompatible `?raw`
+ *  source-export stripped. Island `with { … }` dials are PRESERVED — the caller decides. */
+async function markup_to_svelte(content: string, filename: string): Promise<string> {
 	const out = (await content_preprocessor().markup?.({ content, filename })) as { code?: string } | undefined;
-	return (out?.code ?? content).replace(OG_SOURCE_LINE, '').replace(WITH_DIAL, '$1');
+	return (out?.code ?? content).replace(OG_SOURCE_LINE, '');
+}
+
+/** The compile view: island dials flattened to plain imports, so the SSR/client/bundle legs svelte-compile
+ *  content as a normal component (they can't parse `with { … }` import attributes). */
+export async function md_to_svelte(content: string, filename: string): Promise<string> {
+	return (await markup_to_svelte(content, filename)).replace(WITH_DIAL, '$1');
+}
+
+/** The ISLANDS view: dials KEPT, so the real transform's mark scan (build_island_info) can find an island
+ *  authored inside content and the islands-mode runtime actually wakes it. */
+export async function md_to_svelte_islands(content: string, filename: string): Promise<string> {
+	return markup_to_svelte(content, filename);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

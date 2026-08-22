@@ -16,7 +16,7 @@ import {
 } from 'ogygia/internal/compiler-browser';
 import { cdnPlugin, makeCdnCache, CSS_MODULE, css_inject_module } from './repl/cdn-plugin.ts';
 import { sveltePlugin } from './repl/svelte-plugin.ts';
-import { markdownPlugin, md_to_svelte, MD_MODULE, configure_content } from './repl/markdown-plugin.ts';
+import { markdownPlugin, md_to_svelte, md_to_svelte_islands, MD_MODULE, configure_content } from './repl/markdown-plugin.ts';
 import { parse_config_markdown } from './repl/repl-config.ts';
 import { make_browser_host } from './repl/browser-host.ts';
 
@@ -316,7 +316,9 @@ function build_island_info(files: Record<string, string>): IslandInfo {
 	const ledger = byte_ledger(files);
 	const info: IslandInfo = new Map();
 	for (const f of Object.keys(files)) {
-		if (!f.endsWith('.svelte')) continue;
+		// `.svelte` hosts, AND `.md`/`.svx` content pages (their dial-preserved svelte view carries the
+		// island marks) — so an island authored inside prose is detected + wakes in islands mode.
+		if (!f.endsWith('.svelte') && !MD_MODULE.test(f)) continue;
 		for (const isl of analyze_marks(files[f]).islands) {
 			const target = resolve_file(isl.component, files);
 			if (!target) continue;
@@ -669,12 +671,13 @@ function apply_content_config(files: Record<string, string>): void {
 /** A "svelte view" of the workspace: every `.md` / `.svx` file replaced by its markdown-pipeline Svelte
  *  source (same key), so the whole sync analyze/SSR machinery treats a content page as a normal component
  *  (mdsvex is async, so this is resolved ONCE up front). Non-content files pass through untouched. */
-async function content_svelte_view(files: Record<string, string>): Promise<Record<string, string>> {
+async function content_svelte_view(files: Record<string, string>, keepDials = false): Promise<Record<string, string>> {
 	const out: Record<string, string> = { ...files };
+	const to_svelte = keepDials ? md_to_svelte_islands : md_to_svelte;
 	for (const [name, code] of Object.entries(files)) {
 		if (!MD_MODULE.test(name)) continue;
 		try {
-			out[name] = await md_to_svelte(code, '/repl/' + name.replace(/^\/+/, ''));
+			out[name] = await to_svelte(code, '/repl/' + name.replace(/^\/+/, ''));
 		} catch (e) {
 			// A markdown compile error surfaces as a normal svelte-compile error downstream — leave a stub
 			// component so `rendered` still resolves (and the error shows) instead of crashing analyze.
@@ -804,7 +807,10 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		Object.keys(svelte_files).find((k) => /(^|\/)\+page\.(svelte|md|svx)$/.test(k)) ??
 		('App.svelte' in svelte_files ? 'App.svelte' : active);
 	const ledger = byte_ledger(svelte_files);
-	const islandInfo = build_island_info(svelte_files);
+	// Island detection scans for `with { … }` marks, so it needs the DIAL-PRESERVED content view — else an
+	// island authored inside a `.md` (its dial stripped for the compile legs) is invisible and won't wake
+	// in islands mode. Non-content files are identical in both views.
+	const islandInfo = build_island_info(await content_svelte_view(files, true));
 
 	return {
 		ok: marks.ok,
