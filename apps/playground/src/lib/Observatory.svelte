@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { mount, unmount } from 'svelte';
+	import { mount, unmount, untrack } from 'svelte';
 	// The devtools event bus — in "islands" mode the page's REAL runtime emits hydration events for our
 	// injected regions; we tap the bus to show the true lifecycle story (Rung-0 layer → an instrument).
 	import { add_sink } from 'ogygia/devtools';
@@ -125,6 +125,23 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 			'Header.svelte': FILES_DEMO['Header.svelte'],
 			'Greeting.svelte': `<scr${''}ipt>let { name = 'friend', unread = 0 } = $props();</scr${''}ipt>
 <div class="greeting">👋 Welcome back, {name}. You have {unread} unread {unread === 1 ? 'message' : 'messages'}.</div>`
+		},
+		'live region': {
+			'App.svelte': `<scr${''}ipt>
+  import Header from './Header.svelte';
+  import Ticker from './Ticker.svelte' with { render: 'live' };
+</scr${''}ipt>
+
+<Header title="Live regions" />
+<p>The box below is a live region: its HTML re-renders and MORPHS in place (~every 1.5s). Type in the
+input — your text and focus SURVIVE each update (that's the morph, not a re-mount).</p>
+<Ticker />`,
+			'Header.svelte': FILES_DEMO['Header.svelte'],
+			'Ticker.svelte': `<scr${''}ipt>let { n = 0 } = $props();</scr${''}ipt>
+<div class="ticker">
+  <span class="dot">🔴</span> LIVE · update #{n}
+  <input placeholder="type here — survives the morph" />
+</div>`
 		}
 	};
 
@@ -229,12 +246,31 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 	let worker = $state<Worker | null>(null);
 	let seq = 0;
 	let want = 0;
+	// Live-region tick requests: correlate each render-one-component reply back to its awaiter.
+	let liveSeq = 0;
+	const liveWaiters = new Map<number, (html: string) => void>();
+
+	/** Ask the worker to render ONE component (with props) → HTML, for a live tick. */
+	function live_request(fileMap: FileMap, file: string, props: Record<string, unknown>): Promise<string> {
+		const w = worker;
+		if (!w) return Promise.resolve('');
+		const id = --liveSeq; // negative ids: a separate space from the analyze counter
+		return new Promise<string>((resolve) => {
+			liveWaiters.set(id, resolve);
+			w.postMessage({ id, type: 'live', files: fileMap, file, props });
+		});
+	}
 
 	// Boot the worker ONCE (reads no reactive state → never spawns a second worker).
 	$effect(() => {
 		const w = new Worker(new URL('./observatory.worker.ts', import.meta.url), { type: 'module' });
-		w.onmessage = (e: MessageEvent<{ id: number; result: Analysis }>) => {
-			if (e.data.id === want) {
+		w.onmessage = (e: MessageEvent<{ id: number; type?: string; result?: Analysis; html?: string }>) => {
+			if (e.data.type === 'live') {
+				liveWaiters.get(e.data.id)?.(e.data.html ?? '');
+				liveWaiters.delete(e.data.id);
+				return;
+			}
+			if (e.data.id === want && e.data.result) {
 				analysis = e.data.result;
 				busy = false;
 			}
@@ -497,11 +533,44 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 					region.setAttribute('entry', blob);
 				}
 				while (tpl.firstChild) el.appendChild(tpl.firstChild); // → runtime upgrades + hydrates
+
+				// LIVE REGIONS: tick each `<ogygia-region live>` — re-render its component on the worker
+				// with an incrementing `n`, then applyLive() the fresh HTML, which the runtime MORPHS in
+				// place (a live feed that keeps focus + typed text across updates). Real runtime path.
+				const liveFiles = untrack(() => $state.snapshot(files));
+				const liveTimers: ReturnType<typeof setInterval>[] = [];
+				for (const lr of rd.live || []) {
+					const node = el.querySelector(`ogygia-region[data-og-fp="${lr.fp}"]`) as
+						| (Element & { applyLive?: (d: unknown) => void })
+						| null;
+					if (!node || typeof node.applyLive !== 'function') continue;
+					const apply = (liveHtml: string) => {
+						try {
+							node.applyLive!({ id: lr.fp, module: '', props: {}, html: liveHtml, url: '/__obs_live/' + lr.fp });
+						} catch {
+							/* morph failed — the region keeps its last paint */
+						}
+					};
+					// Arm the runtime's live path SYNCHRONOUSLY with the baked first paint (its first
+					// applyLive replaceChildren's + sets #live_ready; only later calls MORPH). Re-applying
+					// the identical baked HTML is invisible but means every real tick below morphs — so a
+					// focused input's caret + typed text survive the updates.
+					apply(node.innerHTML);
+					let n = 0;
+					const t = setInterval(async () => {
+						n++;
+						const liveHtml = await live_request(liveFiles, lr.file, { n });
+						if (liveHtml && node.isConnected) apply(liveHtml);
+					}, 1500);
+					liveTimers.push(t);
+				}
+
 				// cleanup on the next run: removing the nodes (el.innerHTML='') fires the runtime's
-				// disconnectedCallback (unmount); we revoke blobs, release the stashed components, and
-				// stop listening on the bus.
+				// disconnectedCallback (unmount); we revoke blobs, release the stashed components, clear
+				// the live timers, and stop listening on the bus.
 				xrayCleanup = () => {
 					unsubscribe();
+					for (const t of liveTimers) clearInterval(t);
 					for (const { blob, key } of blobs) {
 						URL.revokeObjectURL(blob);
 						delete store[key];

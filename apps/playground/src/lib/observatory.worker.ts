@@ -80,6 +80,9 @@ export interface Analysis {
 		/** Server islands (`render: 'deferred'`): the rendered HTML per endpoint id, which the main
 		 *  thread serves through a fetch intercept so the runtime fetches it lazily, on schedule. */
 		deferred?: Record<string, string>;
+		/** Live regions (`render: 'live'`): the file to re-render each tick, keyed by fingerprint — the
+		 *  main thread ticks them into a `<ogygia-region live>` via applyLive() (morph in place). */
+		live?: Array<{ fp: string; file: string; name: string }>;
 	};
 	/** BYTE LEDGER (Rung 5.3): the ogygia thesis, weighed live — on a csr=false page ogygia ships only
 	 *  the waking islands' JS; plain Kit (csr=true) ships every component. Same compiler, honest bytes. */
@@ -441,6 +444,9 @@ function real_island_render(files: Record<string, string>, entry: string, island
 	// Server islands (render: 'deferred') captured the same way; their HTML is served via a fetch intercept.
 	const deferred: Array<{ info: NonNullable<ReturnType<IslandInfo['get']>>; Comp: unknown; props: Record<string, unknown> }> = [];
 	const deferredHtml: Record<string, string> = {};
+	// Live regions (render: 'live') — first paint baked here; the main thread ticks re-renders in via applyLive.
+	const live: Array<{ info: NonNullable<ReturnType<IslandInfo['get']>>; Comp: unknown; props: Record<string, unknown> }> = [];
+	const liveOut: NonNullable<Analysis['realDom']>['live'] = [];
 	try {
 		const require = (spec: string): Record<string, unknown> => {
 			if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
@@ -450,6 +456,7 @@ function real_island_render(files: Record<string, string>, entry: string, island
 				const info = islandInfo.get(file);
 				const isWakingIsland = info && (info.kind === 'island' || info.kind === 'preset');
 				const isServerHole = info && info.kind === 'server hole';
+				const isLive = info && info.kind === 'live';
 				const built = () => {
 					const hit = cache.get(file);
 					if (hit) return hit;
@@ -460,6 +467,17 @@ function real_island_render(files: Record<string, string>, entry: string, island
 					return exports;
 				};
 				const exports = built();
+				// Live region → placeholder for a `<ogygia-region live>` (morphs in place each tick).
+				if (isLive) {
+					const Real = exports.default;
+					const Live = ($$renderer: { push: (s: string) => void }, props: Record<string, unknown>) => {
+						const idx = live.length;
+						live.push({ info: info!, Comp: Real, props: props || {} });
+						usedIslands.add(file);
+						$$renderer.push(`<!--OBS_LIVE:${idx}-->`);
+					};
+					return { ...exports, default: Live };
+				}
 				// Server island → placeholder for a DEFERRED region (HTML fetched later on schedule).
 				if (isServerHole) {
 					const Real = exports.default;
@@ -547,7 +565,25 @@ function real_island_render(files: Record<string, string>, entry: string, island
 			html = html.replace(`<!--OBS_DEFER:${idx}-->`, region);
 		}
 
-		return { ok: true, html, islands: [...usedIslands], deferred: deferredHtml };
+		// Live regions: bake the first paint into a `<ogygia-region live>`; the main thread ticks
+		// re-renders in via applyLive() (morph in place — a live feed that keeps focus/typed text).
+		for (let idx = 0; idx < live.length; idx++) {
+			const { info, Comp, props } = live[idx];
+			let body = '';
+			try {
+				body = (render(Comp as never, { props: props as never }) as { body?: string }).body ?? '';
+			} catch {
+				body = '';
+			}
+			const fp = `obsfp_live_${info.name.replace(/[^\w]/g, '')}_${idx}`;
+			liveOut.push({ fp, file: info.name, name: info.name });
+			const region =
+				`<ogygia-region live data-og-fp="${fp}" data-obs-real-island data-obs-live data-name="${escAttr(info.name)}">` +
+				`${body}</ogygia-region>`;
+			html = html.replace(`<!--OBS_LIVE:${idx}-->`, region);
+		}
+
+		return { ok: true, html, islands: [...usedIslands], deferred: deferredHtml, live: liveOut };
 	} catch (e) {
 		return { ok: false, error: e instanceof Error ? e.message : String(e) };
 	}
@@ -693,7 +729,46 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 	};
 }
 
-self.onmessage = (e: MessageEvent<{ id: number; files: Record<string, string>; active: string }>) => {
-	const { id, files, active } = e.data;
-	analyze(files, active).then((result) => self.postMessage({ id, result }));
+/** LIVE REGIONS: render ONE component (with props) to HTML — the per-tick body the main thread pushes
+ *  into a `<ogygia-region live>` via applyLive(), which morphs it in place (keeping focus/typed text). */
+function render_live(files: Record<string, string>, file: string, props: Record<string, unknown>): string {
+	const cache = new Map<string, Record<string, unknown>>();
+	const require = (spec: string): Record<string, unknown> => {
+		if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
+		if (spec === 'svelte/server') return { render } as Record<string, unknown>;
+		const f = resolve_file(spec, files);
+		if (f && f.endsWith('.svelte')) {
+			const hit = cache.get(f);
+			if (hit) return hit;
+			const { js } = compile(files[f], { filename: f, generate: 'server', dev: false }) as { js: { code: string } };
+			const ex: Record<string, unknown> = {};
+			cache.set(f, ex);
+			Object.assign(ex, eval_module(js.code, require));
+			return ex;
+		}
+		return { default: () => {} };
+	};
+	try {
+		if (files[file] == null) return '';
+		const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as { js: { code: string } };
+		const mod = eval_module(js.code, require);
+		const Comp = mod.default as unknown;
+		if (typeof Comp !== 'function') return '';
+		return (render(Comp as never, { props: props as never }) as { body?: string }).body ?? '';
+	} catch {
+		return '';
+	}
+}
+
+type InMsg =
+	| { id: number; type?: 'analyze'; files: Record<string, string>; active: string }
+	| { id: number; type: 'live'; files: Record<string, string>; file: string; props: Record<string, unknown> };
+
+self.onmessage = (e: MessageEvent<InMsg>) => {
+	const msg = e.data;
+	if (msg.type === 'live') {
+		self.postMessage({ id: msg.id, type: 'live', html: render_live(msg.files, msg.file, msg.props) });
+		return;
+	}
+	analyze(msg.files, msg.active).then((result) => self.postMessage({ id: msg.id, result }));
 };

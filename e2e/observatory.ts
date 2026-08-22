@@ -232,6 +232,31 @@ try {
 	const swapped = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region[data-obs-deferred]')?.textContent?.replace(/\s+/g, ' ').trim() || '');
 	check('server island: the endpoint HTML is fetched on schedule + swapped in (fallback → content)', /Welcome back, Ada/.test(swapped) && !/loading/i.test(swapped), swapped.slice(0, 80));
 
+	// ── LIVE REGIONS (render: 'live'): the "live region" preset — a <ogygia-region live> re-renders on
+	//    a tick and the runtime MORPHS it in place, so a focused input's text survives the update ──
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'live region');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(700);
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'islands');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(500);
+	const tickBefore = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region[data-obs-live]')?.textContent?.match(/update #(\d+)/)?.[1] || '');
+	// type into the live region's input, then let it tick + morph a couple of times
+	await page.click('[data-obs-preview] ogygia-region[data-obs-live] input').catch(() => {});
+	await page.type('[data-obs-preview] ogygia-region[data-obs-live] input', 'KEEPME').catch(() => {});
+	await page.waitForTimeout(3600);
+	const live = await page.evaluate(() => ({
+		tick: document.querySelector('[data-obs-preview] ogygia-region[data-obs-live]')?.textContent?.match(/update #(\d+)/)?.[1] || '',
+		value: (document.querySelector('[data-obs-preview] ogygia-region[data-obs-live] input') as HTMLInputElement | null)?.value || '',
+		focused: document.activeElement?.tagName === 'INPUT'
+	}));
+	check('live region: the runtime re-renders + MORPHS it in place (the tick advances)', tickBefore === '0' && Number(live.tick) > 0, `${tickBefore} → ${live.tick}`);
+	check('live region: the morph keeps focus + typed text (not a re-mount)', live.value === 'KEEPME' && live.focused, JSON.stringify(live));
+
 	await page.close();
 } finally {
 	await browser.close();
