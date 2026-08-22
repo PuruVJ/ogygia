@@ -238,7 +238,7 @@
 		};
 		window.addEventListener('message', onMsg);
 
-		Promise.all([import('svelte/internal/client'), import('ogygia/internal')])
+		Promise.all([import('svelte/internal/client'), import('ogygia/internal/reconcile')])
 			.then(([sc, om]) => {
 				svelteClient = sc as Linked;
 				reconcileMod = { reconcile_body: (om as Any).reconcile_body, morph_children: (om as Any).morph_children };

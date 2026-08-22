@@ -48,6 +48,11 @@
 			"types": "./dist/internal-server.d.ts",
 			"default": "./src/internal-server.ts"
 		},
+		"./internal/reconcile": {
+			"svelte": "./src/internal-reconcile.ts",
+			"types": "./dist/internal-reconcile.d.ts",
+			"default": "./src/internal-reconcile.ts"
+		},
 		"./internal/compiler": {
 			"types": "./dist/compiler/index.d.ts",
 			"default": "./dist/compiler/index.js"
@@ -200,6 +205,11 @@
 				"types": "./dist/internal-server.d.ts",
 				"svelte": "./dist/internal-server.js",
 				"default": "./dist/internal-server.js"
+			},
+			"./internal/reconcile": {
+				"types": "./dist/internal-reconcile.d.ts",
+				"svelte": "./dist/internal-reconcile.js",
+				"default": "./dist/internal-reconcile.js"
 			},
 			"./content": {
 				"types": "./dist/content/index.d.ts",
