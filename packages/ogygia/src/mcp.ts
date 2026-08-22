@@ -15,6 +15,7 @@
 import { createInterface } from 'node:readline';
 import { createRequire } from 'node:module';
 import { gzipSync } from 'node:zlib';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parse } from 'svelte/compiler';
 import { transformHost, islandVirtualId, wrapperVirtualId, CLIENT_BINDING_STUB } from './compiler/index.js';
