@@ -20,7 +20,8 @@
 	let { children } = $props();
 
 	// `/demo/*` routes are standalone canvases (embedded in docs via <iframe>) — no site chrome.
-	const bare = page.url.pathname.startsWith('/demo/');
+	// `/observatory` is the full-viewport REPL — no sidebar, but it keeps app.css tokens (imported above).
+	const bare = page.url.pathname.startsWith('/demo/') || page.url.pathname.startsWith('/observatory');
 	// The homepage is a marketing page: full-viewport, no docs sidebar — its own slim top-nav instead.
 	const isHome = page.url.pathname === '/';
 
