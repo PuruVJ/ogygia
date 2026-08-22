@@ -192,3 +192,33 @@
 	content: '▸ ';
 	opacity: 0.6;
 }
+
+/* Code fences (Shiki `pre.shiki`) — the shiki inline style sets only the token/background colours, so
+   frame them: padding, radius, and a scroll container so long lines don't spill out of the preview. The
+   1rem inline padding lines up with the diff stripe's -1rem bleed above. */
+.og-canvas pre.shiki {
+	margin: 0 0 1.3rem;
+	padding: 0.9rem 1rem;
+	border-radius: 8px;
+	overflow-x: auto;
+	font-size: 0.85em;
+	line-height: 1.55;
+	border: 1px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 55%, transparent);
+}
+/* A `title="app.js"` / `[label]` fence meta → `data-file`; show it as a header bar (absolute so it
+   doesn't scroll with the code). */
+.og-canvas pre.shiki[data-file] {
+	position: relative;
+	padding-top: 2.5em;
+}
+.og-canvas pre.shiki[data-file]::before {
+	content: attr(data-file);
+	position: absolute;
+	inset: 0 0 auto 0;
+	padding: 0.5em 1rem;
+	border-radius: 8px 8px 0 0;
+	border-bottom: 1px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 45%, transparent);
+	background: color-mix(in srgb, currentColor 5%, transparent);
+	font: 500 0.72rem/1 ui-monospace, 'SF Mono', Menlo, monospace;
+	opacity: 0.72;
+}
