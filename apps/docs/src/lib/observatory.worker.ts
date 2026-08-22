@@ -811,6 +811,17 @@ function render_live(files: Record<string, string>, file: string, props: Record<
 // (whole-app) mount — the marked import becomes a normal one; the workspace resolver links it.
 const WITH_DIAL = /(\bfrom\s*['"][^'"]+['"])\s*with\s*\{[^}]*\}/g;
 const SVELTE_EXTERNAL_ID = /^svelte(\/|$)/;
+// rolldown paints errors with ANSI color + a box-drawing source frame — strip both for the REPL readout.
+const ANSI = /\x1b\[[0-9;]*m/g;
+const BUILD_FAILED = /^Build failed with \d+ errors?:\s*/;
+
+/** Reduce a rolldown build error to a one-line headline the UI can show (no ANSI, no source-frame box). */
+function clean_bundle_error(raw: string): string {
+	const plain = raw.replace(ANSI, '').replace(BUILD_FAILED, '');
+	// Everything before the source-frame box (its top rule starts with `╭`) is the human-readable message.
+	const head = plain.split(/\n\s*╭/)[0].trim();
+	return (head || plain).replace(/\s+/g, ' ').slice(0, 400);
+}
 
 /** The REAL bundle: run rolldown over the workspace (svelte-compiled) + jsdelivr CDN deps, svelte kept
  *  external. Returns a CJS module string the main thread evals + mounts, plus the packages it pulled. */

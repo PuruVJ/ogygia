@@ -57,7 +57,9 @@ async function main() {
 	await setSrc(page, S(`<SCRIPT>\n  import { nanoid } from 'nanoid';\n  let id = $state(nanoid());\n</SCRIPT>\n<button onclick={() => id = nanoid()}>id {id}</button>`));
 	const cdn = await until(page, () => {
 		const t = document.querySelector('[data-obs-preview] button')?.textContent || '';
-		return /id \w{10,}/.test(t) ? t : null;
+		// nanoid's alphabet includes `-`/`_` (not just `\w`), so match its full char class — else a `-` in
+		// the first chars would break a `\w{10,}` run ~14% of the time (a flaky assertion).
+		return /id [\w-]{12,}/.test(t) ? t : null;
 	});
 	ok('CDN import (nanoid) resolves + runs in the preview', !!cdn, `text=${cdn}`);
 	const depReadout = await page.evaluate(() => (document.querySelector('.deps-ok')?.textContent || '').trim());

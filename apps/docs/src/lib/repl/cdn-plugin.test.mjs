@@ -38,9 +38,8 @@ async function bundle(entryCode, { extraExternal, pkgs } = {}) {
 	return output.map((o) => o.code).join('\n');
 }
 
-/** Bundle + actually RUN it (for npm-only cases), returning the module's exports. */
-async function run(entryCode) {
-	const code = await bundle(entryCode);
+/** Write a bundled ES module to a temp file and import it, returning its exports. */
+async function importCode(code) {
 	const dir = await mkdtemp(join(tmpdir(), 'repl-cdn-'));
 	const file = join(dir, 'out.mjs');
 	await writeFile(file, code);
@@ -50,6 +49,34 @@ async function run(entryCode) {
 		await rm(dir, { recursive: true, force: true });
 	}
 }
+
+/** Bundle + actually RUN it (for npm-only cases), returning the module's exports. */
+async function run(entryCode) {
+	return importCode(await bundle(entryCode));
+}
+
+/** Bundle an entry with an INJECTED fetch (deterministic, offline) — for the wasm/asset paths. */
+async function bundleWith(entryCode, fetchFn) {
+	const files = { '/entry.js': entryCode };
+	const ws = { name: 'ws', resolveId(id) { return files[id] ? id : null; }, load(id) { return files[id] ?? null; } };
+	const missing = [];
+	const b = await rolldown({
+		input: '/entry.js',
+		plugins: [ws, cdnPlugin({ fetch: fetchFn, onMissing: (id) => missing.push(id) })],
+		cwd: '/',
+		onLog() {}
+	});
+	const { output } = await b.generate({ format: 'es' });
+	return { code: output.map((o) => o.code).join('\n'), missing };
+}
+
+/** A minimal VALID wasm module (magic `\0asm` + version 1) — instantiable, no imports/exports. */
+const WASM8 = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
+/** A fetch that serves `WASM8` for any `.wasm` URL and 404s everything else. */
+const wasmFetch = async (u) =>
+	/\.wasm/.test(String(u))
+		? { ok: true, arrayBuffer: async () => WASM8.buffer.slice(0) }
+		: { ok: false, arrayBuffer: async () => new ArrayBuffer(0), text: async () => null };
 
 const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
 const withNet = (p) => Promise.race([p, timeout(45000)]);
@@ -179,6 +206,34 @@ async function main() {
 		// The guarantee: the build COMPLETES (the package stubbed) well under any hang, not a specific shape.
 		ok('stalled fetch times out → build completes (no hang)', output[0].code.length > 0 && elapsed < 3000, `${elapsed}ms`);
 	} catch (e) { fail += 1; console.log('  ✗ timeout test threw —', e.message.split('\n')[0]); }
+
+	// 17. a STATIC `.wasm` import → a real loader whose init() instantiates to a WebAssembly.Instance
+	try {
+		const { code } = await bundleWith(`import init from 'https://cdn.jsdelivr.net/npm/fake@1/x.wasm';\nexport const go = () => init();`, wasmFetch);
+		const m = await importCode(code);
+		const inst = await m.go();
+		ok('wasm static import → init() yields a WebAssembly.Instance', inst instanceof WebAssembly.Instance);
+	} catch (e) { fail += 1; console.log('  ✗ wasm init test threw —', e.message.split('\n')[0]); }
+
+	// 18. a `.wasm?url` import → a `data:` URL string (Vite convention)
+	try {
+		const { code } = await bundleWith(`import u from 'https://cdn.jsdelivr.net/npm/fake@1/x.wasm?url';\nexport const url = u;`, wasmFetch);
+		const m = await importCode(code);
+		ok('wasm ?url import → data: URL string', typeof m.url === 'string' && m.url.startsWith('data:application/wasm;base64,'), (m.url || '').slice(0, 40));
+	} catch (e) { fail += 1; console.log('  ✗ wasm ?url test threw —', e.message.split('\n')[0]); }
+
+	// 19. a wasm fetch that FAILS → inert stub, build still completes (no crash)
+	try {
+		const failFetch = async () => ({ ok: false, arrayBuffer: async () => new ArrayBuffer(0), text: async () => null });
+		const { code, missing } = await bundleWith(`import init from 'https://cdn.jsdelivr.net/npm/fake@1/x.wasm';\nexport const t = typeof init;`, failFetch);
+		ok('wasm fetch fails → inert stub, build survives', code.length > 0 && missing.length > 0, `missing=${missing.length}`);
+	} catch (e) { fail += 1; console.log('  ✗ wasm fail test threw —', e.message.split('\n')[0]); }
+
+	// 20. a native `.node` addon anywhere in the graph → stub, never fetched, build survives
+	try {
+		const { code, missing } = await bundleWith(`import x from 'https://cdn.jsdelivr.net/npm/fake@1/build/x.node';\nexport const t = typeof x;`, wasmFetch);
+		ok('native .node addon → stub, build survives', code.length > 0 && missing.some((id) => /\.node/.test(id)), `missing=${missing.join(',')}`);
+	} catch (e) { fail += 1; console.log('  ✗ .node test threw —', e.message.split('\n')[0]); }
 
 	console.log(`\n${'─'.repeat(44)}`);
 	console.log(`${fail === 0 ? '✓ ALL PASS' : '✗ FAILURES'}: ${pass} passed, ${fail} failed`);

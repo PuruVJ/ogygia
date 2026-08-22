@@ -1246,12 +1246,15 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					<div class="cdndeps" data-obs-cdn>
 						{#if resolving}
 							<span class="resolving" data-obs-resolving><span class="spin"></span> resolving dependencies from jsdelivr…</span>
-						{:else if previewBundle?.packages?.length || previewBundle?.missing?.length}
-							{#if previewBundle.packages?.length}
+						{:else}
+							{#if previewBundle?.packages?.length}
 								<span class="deps-ok" title="fetched from jsdelivr, bundled into the preview">📦 {previewBundle.packages.join(', ')}</span>
 							{/if}
-							{#if previewBundle.missing?.length}
+							{#if previewBundle?.missing?.length}
 								<span class="deps-missing" title="couldn't resolve — rendered as an inert stub">⚠ {previewBundle.missing.join(', ')}</span>
+							{/if}
+							{#if previewBundle?.error}
+								<span class="deps-err" data-obs-bundle-err title="the live bundle failed to build — the preview shows the last server render">✗ {previewBundle.error}</span>
 							{/if}
 						{/if}
 					</div>
@@ -2136,6 +2139,14 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.cdndeps .deps-missing {
 		color: #f59e0b;
+	}
+	.cdndeps .deps-err {
+		color: #ef4444;
+		flex-basis: 100%;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.srvhint b {
 		color: var(--text);
