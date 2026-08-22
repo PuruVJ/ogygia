@@ -201,25 +201,38 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
 		return bytes;
 	};
-	async function encode_files(map: FileMap): Promise<string> {
-		const json = JSON.stringify(map);
-		if (typeof CompressionStream === 'undefined') return '#files=' + encodeURIComponent(json);
-		const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
-		const buf = await new Response(stream).arrayBuffer();
-		return '#code=' + b64url_encode(new Uint8Array(buf));
+	// The WHOLE workspace — files + UI state — is ONE opaque string after the hash: `#<base64url(gzip(json))>`.
+	// No visible code=/f=/tab= params. The JSON is `{ f: files, a: active, t: tab, m: mode, c: cursor }`
+	// (short keys). gunzip is auto-detected by the gzip magic bytes, so a CompressionStream-less browser
+	// still round-trips (plain base64 of the utf8 JSON). Same gzip format as `ogygia mcp`'s link tool.
+	type Workspace = { files: FileMap; active?: string; tab?: string; mode?: string; cursor?: number };
+	async function encode_hash(w: Workspace): Promise<string> {
+		const bytes = new TextEncoder().encode(JSON.stringify({ f: w.files, a: w.active, t: w.tab, m: w.mode, c: w.cursor }));
+		if (typeof CompressionStream === 'undefined') return '#' + b64url_encode(bytes);
+		const gz = new Uint8Array(await new Response(new Blob([bytes as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+		return '#' + b64url_encode(gz);
 	}
-	async function decode_hash(hash: string): Promise<FileMap | null> {
+	async function decode_hash(hash: string): Promise<Workspace | null> {
+		const s = hash.replace(/^#/, '');
+		if (!s) return null;
 		try {
-			if (hash.startsWith('#code=') && typeof DecompressionStream !== 'undefined') {
-				const stream = new Blob([b64url_decode(hash.slice(6)) as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'));
-				const json = await new Response(stream).text();
-				const map = JSON.parse(json);
-				return map && typeof map === 'object' ? (map as FileMap) : null;
+			// legacy `#code=`/`#files=` links (files-only)
+			if (s.startsWith('code=') || s.startsWith('files=')) {
+				const map = s.startsWith('code=')
+					? JSON.parse(await new Response(new Blob([b64url_decode(s.slice(5)) as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'))).text())
+					: JSON.parse(decodeURIComponent(s.slice(6)));
+				return map && typeof map === 'object' ? { files: map as FileMap } : null;
 			}
-			if (hash.startsWith('#files=')) {
-				const map = JSON.parse(decodeURIComponent(hash.slice(7)));
-				return map && typeof map === 'object' ? (map as FileMap) : null;
-			}
+			const raw = b64url_decode(s);
+			const json =
+				raw[0] === 0x1f && raw[1] === 0x8b && typeof DecompressionStream !== 'undefined'
+					? await new Response(new Blob([raw as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
+					: new TextDecoder().decode(raw);
+			const obj = JSON.parse(json);
+			if (!obj || typeof obj !== 'object') return null;
+			return obj.f && typeof obj.f === 'object'
+				? { files: obj.f as FileMap, active: obj.a, tab: obj.t, mode: obj.m, cursor: obj.c }
+				: { files: obj as FileMap };
 		} catch {
 			/* malformed — caller falls back to the demo */
 		}
@@ -232,33 +245,25 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	let cursor = $state(0); // the editor's cursor offset — round-trips in the URL
 	let initial_cursor = $state(0); // applied to the editor once, on load
 
-	// Load the whole workspace from the hash on mount (async — gzip decode). Runs once. The file map is
-	// #code=<gzip>; the UI state (active file, inspector tab, preview mode, cursor) rides as plain
-	// &f=&tab=&m=&c= params — so the entire workspace, not just the files, round-trips through the URL.
+	// Load the whole workspace from the single hash string on mount (async — gzip decode). Runs once.
 	$effect(() => {
 		const hash = typeof location !== 'undefined' ? location.hash : '';
-		const amp = hash.indexOf('&');
-		const code_part = amp >= 0 ? hash.slice(0, amp) : hash;
-		const ui = new URLSearchParams(amp >= 0 ? hash.slice(amp + 1) : '');
-		const tab = ui.get('tab');
-		if (tab && ['preview', 'islands', 'bytes', 'wire', 'output'].includes(tab)) inspectorTab = tab as InspectorTab;
-		const m = ui.get('m');
-		if (m === 'live' || m === 'xray' || m === 'islands') previewMode = m;
-		initial_cursor = Number(ui.get('c')) || 0;
-		cursor = initial_cursor;
-		const want_active = ui.get('f') ?? '';
-
-		if (!code_part.startsWith('#code=') && !code_part.startsWith('#files=')) {
-			if (want_active && want_active in files) active = want_active;
+		if (!hash || hash === '#') {
 			hash_loaded = true;
 			return;
 		}
-		decode_hash(code_part)
-			.then((map) => {
+		decode_hash(hash)
+			.then((w) => {
+				if (!w) return;
+				const map = w.files;
 				if (map && Object.keys(map).length) {
 					files = map;
-					active = want_active && want_active in map ? want_active : 'App.svelte' in map ? 'App.svelte' : Object.keys(map)[0];
+					active = w.active && w.active in map ? w.active : 'App.svelte' in map ? 'App.svelte' : Object.keys(map)[0];
 				}
+				if (w.tab && ['preview', 'islands', 'bytes', 'wire', 'output'].includes(w.tab)) inspectorTab = w.tab as InspectorTab;
+				if (w.mode === 'live' || w.mode === 'xray' || w.mode === 'islands') previewMode = w.mode;
+				initial_cursor = Number(w.cursor) || 0;
+				cursor = initial_cursor;
 			})
 			.finally(() => (hash_loaded = true));
 	});
@@ -359,11 +364,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		const c = cursor;
 		if (!hash_loaded) return;
 		const t = setTimeout(() => {
-			encode_files(snap)
-				.then((code) => {
-					const q = `&f=${encodeURIComponent(a)}&tab=${tab}&m=${m}&c=${c}`;
-					history.replaceState(null, '', code + q);
-				})
+			encode_hash({ files: snap, active: a, tab, mode: m, cursor: c })
+				.then((h) => history.replaceState(null, '', h))
 				.catch(() => {
 					/* noop */
 				});

@@ -654,11 +654,12 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 
 const DEFAULT_OBSERVATORY = 'https://ogygia.puruvj.dev/observatory';
 
-/** gzip(JSON) → base64url — the EXACT format the Observatory's `#code=` decoder reads (browser gunzip). */
+/** `#<base64url(gzip(json))>` — the EXACT single-string format the Observatory decodes (browser gunzip).
+ *  The payload is `{ f: files }` (files only; the app fills in default UI state). */
 function observatory_link(files: Record<string, string>, base: string): string {
-	const gz = gzipSync(Buffer.from(JSON.stringify(files), 'utf8'));
+	const gz = gzipSync(Buffer.from(JSON.stringify({ f: files }), 'utf8'));
 	const b64url = gz.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-	return `${base.replace(/#.*$/, '')}#code=${b64url}`;
+	return `${base.replace(/#.*$/, '')}#${b64url}`;
 }
 
 function tool_observatory(args: Attrs): ToolResult {
