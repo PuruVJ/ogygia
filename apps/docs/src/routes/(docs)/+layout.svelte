@@ -20,15 +20,17 @@
 	let { children } = $props();
 
 	// `/demo/*` routes are standalone canvases (embedded in docs via <iframe>) — no site chrome.
-	// `/observatory` is the full-viewport REPL — no sidebar, but it keeps app.css tokens (imported above).
-	const bare = page.url.pathname.startsWith('/demo/') || page.url.pathname.startsWith('/observatory');
+	const bare = page.url.pathname.startsWith('/demo/');
 	// The homepage is a marketing page: full-viewport, no docs sidebar — its own slim top-nav instead.
 	const isHome = page.url.pathname === '/';
+	// The Observatory: the SAME site top-nav (MarketingHeader) as the homepage, then the full-viewport
+	// REPL fills the rest (the REPL carries its own secondary toolbar).
+	const isObservatory = page.url.pathname.startsWith('/observatory');
 
 	// The leak-free shell bundle (nav + switcher) — docs pages only. Skipped on the homepage (no
 	// sidebar) and bare canvases, which also saves the nav-tree fetch there. csr=false → every nav is
 	// a fresh SSR pass, so a top-level await is current per page.
-	const shellMeta = bare || isHome ? null : await meta(page.params.slug ?? '');
+	const shellMeta = bare || isHome || isObservatory ? null : await meta(page.params.slug ?? '');
 
 	// No-flash theme: apply a saved forced theme before first paint. `ogygia.script` serializes
 	// the self-contained function into a safe inline <script> (no `String.fromCharCode` gymnastics).
@@ -77,6 +79,12 @@
 
 {#if bare}
 	{@render children()}
+{:else if isObservatory}
+	<!-- Site top-nav (same as home), then the full-viewport REPL fills the rest. -->
+	<div class="obs-page" data-sveltekit-preload-data="hover">
+		<MarketingHeader />
+		{@render children()}
+	</div>
 {:else if isHome}
 	<!-- Marketing homepage: slim top-nav + full-width content, no docs sidebar. -->
 	<div data-sveltekit-preload-data="hover">
@@ -128,5 +136,22 @@
 	}
 	:global(.doc-gh:hover) {
 		color: var(--text);
+	}
+
+	/* Observatory page: site nav as a top bar (in flow, not sticky/fixed), REPL fills the rest. */
+	:global(.obs-page) {
+		height: 100dvh;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	:global(.obs-page .mkt-nav) {
+		position: static;
+	}
+	:global(.obs-page > ogygia-region) {
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
 	}
 </style>

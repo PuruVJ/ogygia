@@ -2,6 +2,7 @@
 	// The homepage's own chrome: a slim sticky top-nav instead of the docs sidebar, so the landing
 	// page reads as a marketing page with the full viewport to itself. Docs pages keep DocsShell.
 	import Logo from '$lib/Logo.svelte';
+	import ThemeToggle from '$lib/ThemeToggle.svelte' with { wake: 'load' };
 	// ⌘K search over the docs index — an island so its keybinding + palette come alive here too.
 	import HomeSearch from '$lib/HomeSearch.svelte' with { wake: 'load' };
 </script>
@@ -17,6 +18,7 @@
 			<a href="/docs/start/install">Docs</a>
 			<a href="/observatory">Observatory</a>
 			<a href="/playground/getting-started/installation">Playground</a>
+			<ThemeToggle />
 			<a
 				class="mkt-gh"
 				href="https://github.com/PuruVJ/ogygia"

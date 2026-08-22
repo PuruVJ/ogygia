@@ -517,28 +517,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	let frameReady = $state(false);
 	let frameLiveTimers: ReturnType<typeof setInterval>[] = [];
 
-	// PREVIEW THEME: cycle system → light → dark, persisted to `og-theme` (the SAME key the docs
-	// ThemeToggle uses). Same-origin → the iframe picks it up via a storage event; we also post it
-	// directly. When the Observatory is embedded in the docs, the docs' own toggle drives this key.
-	let theme = $state<'system' | 'light' | 'dark'>('system');
-	$effect(() => {
-		try {
-			const t = localStorage.getItem('og-theme');
-			if (t === 'light' || t === 'dark') theme = t;
-		} catch {
-			/* private mode */
-		}
-	});
-	function cycle_theme() {
-		theme = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
-		try {
-			if (theme === 'system') localStorage.removeItem('og-theme');
-			else localStorage.setItem('og-theme', theme);
-		} catch {
-			/* private mode */
-		}
-		post_to_frame({ obsType: 'theme', theme });
-	}
+	// The site ThemeToggle (in the top nav) owns the theme now — it writes `og-theme` + `data-theme`;
+	// the preview iframe re-themes from the same-origin `storage` event (its Harness listens). So the
+	// Observatory carries no theme control of its own.
 	const post_to_frame = (msg: Record<string, unknown>) =>
 		frameEl?.contentWindow?.postMessage({ __obs: true, ...msg }, location.origin);
 
@@ -714,9 +695,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				<button class:on={!csr} onclick={() => (csr = false)} title="ogygia islands — only marked components ship JS">csr false</button>
 				<button class:on={csr} onclick={() => (csr = true)} title="plain Kit — ogygia steps aside, the whole tree ships + hydrates">csr true</button>
 			</span>
-			<button class="themebtn" data-obs-theme onclick={cycle_theme} title="theme (auto → light → dark) — syncs with the docs theme" aria-label="cycle theme">
-				{theme === 'light' ? '☀' : theme === 'dark' ? '☾' : '◐'}
-			</button>
 			<button class="share" data-obs-share onclick={share}>{shared ? 'copied ✓' : 'share'}</button>
 		</div>
 	</header>
@@ -1005,7 +983,10 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		font: 12px/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 		color: var(--text);
 		background: var(--bg);
-		height: 100dvh;
+		/* Fills the layout's .obs-page flex column (under the site nav). 100dvh fallback if used bare. */
+		flex: 1;
+		min-height: 0;
+		height: 100%;
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
@@ -1040,21 +1021,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		display: flex;
 		align-items: center;
 		gap: 8px;
-	}
-	.themebtn {
-		padding: 3px 8px;
-		border: 1px solid var(--line);
-		border-radius: 6px;
-		background: var(--bg);
-		color: var(--text-dim);
-		font: inherit;
-		font-size: 13px;
-		cursor: pointer;
-		line-height: 1;
-	}
-	.themebtn:hover {
-		color: var(--text);
-		border-color: var(--line-strong);
 	}
 	.csrswitch {
 		display: inline-flex;
@@ -1382,21 +1348,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		background: #14b8a6;
 		color: #022;
 		border-color: #0d9488;
-	}
-	.themebtn {
-		margin-left: 8px;
-		padding: 2px 9px;
-		border: 1px solid rgba(148, 163, 184, 0.3);
-		border-radius: 999px;
-		background: var(--bg-raised);
-		color: var(--text-dim);
-		font: inherit;
-		font-size: 10px;
-		cursor: pointer;
-	}
-	.themebtn:hover {
-		color: var(--text);
-		border-color: rgba(148, 163, 184, 0.5);
 	}
 	.preview {
 		flex: 1;
