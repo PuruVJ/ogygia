@@ -39,16 +39,19 @@
 	 */
 	// The all-strategies host — every island kind in one file (imports stub on render, but the transform
 	// shows them all). Kept as a preset.
+	// ogygia is SvelteKit-only, so presets are shaped like real apps: a route `+page.svelte` entry, a
+	// `+layout.ts` that opts the route into server-HTML (csr=false), and components under `$lib`.
+	const LAYOUT_CSR = `// ogygia renders pages as server HTML; only marked islands ship JS.\nexport const csr = false;`;
 	const ALL_STRATEGIES = `<scr${''}ipt>
-  import Counter from './Counter.svelte' with { wake: 'load' };
-  import Menu from './Menu.svelte' with { wake: 'interaction' };
-  import Chart from './Chart.svelte' with { wake: 'visible' };
-  import Greeting from './Greeting.svelte' with { render: 'deferred' };
-  import Prose from './Prose.svelte' with { wake: 'none' };
-  import Row from './Row.svelte' with { region: 'raw' };
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Menu from '$lib/Menu.svelte' with { wake: 'interaction' };
+  import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
+  import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
+  import Prose from '$lib/Prose.svelte' with { wake: 'none' };
+  import Row from '$lib/Row.svelte' with { region: 'raw' };
 
   // unmarked = free server HTML, ships no JS
-  import Header from './Header.svelte';
+  import Header from '$lib/Header.svelte';
 
   const points = [3, 1, 4, 1, 5];
   const article = '<p>rendered prose</p>';
@@ -115,36 +118,78 @@
 
 	// Presets are file MAPS (Rung 6 multi-file). Most are single-file (their imports stub on render).
 	const PRESETS = {
-		'demo app': FILES_DEMO,
-		'wake demo': FILES_WAKE,
-		'all strategies': { 'App.svelte': ALL_STRATEGIES },
-		counter: { 'App.svelte': `<scr${''}ipt>\n  import Counter from './Counter.svelte' with { wake: 'load' };\n</scr${''}ipt>\n\n<h1>Hello</h1>\n<Counter start={0} />`, 'Counter.svelte': FILES_DEMO['Counter.svelte'] },
+		'demo app': {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Header from '$lib/Header.svelte';
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Prose from '$lib/Prose.svelte' with { wake: 'none' };
+</scr${''}ipt>
+
+<Header title="My ogygia app" />
+<p>An interactive island (ships JS), then a frozen lake (no JS):</p>
+<Counter start={3} />
+<Prose>a server-only prose block</Prose>`,
+			'src/lib/Header.svelte': FILES_DEMO['Header.svelte'],
+			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
+			'src/lib/Prose.svelte': FILES_DEMO['Prose.svelte'],
+		},
+		'wake demo': {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Header from '$lib/Header.svelte';
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Menu from '$lib/Menu.svelte' with { wake: 'interaction' };
+  import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
+  import Prose from '$lib/Prose.svelte' with { wake: 'none' };
+</scr${''}ipt>
+
+<Header title="Wake schedules" />
+<p>Each island wakes on its own schedule. In x-ray: watch load fire, click Menu, scroll to Chart.</p>
+<Counter start={0} />
+<Menu />
+<Chart data={[3, 1, 4, 1, 5, 9, 2, 6, 5, 3]} />
+<Prose>a frozen lake — never ships JS, never wakes</Prose>`,
+			'src/lib/Header.svelte': FILES_WAKE['Header.svelte'],
+			'src/lib/Counter.svelte': FILES_WAKE['Counter.svelte'],
+			'src/lib/Menu.svelte': FILES_WAKE['Menu.svelte'],
+			'src/lib/Chart.svelte': FILES_WAKE['Chart.svelte'],
+			'src/lib/Prose.svelte': FILES_WAKE['Prose.svelte'],
+		},
+		'all strategies': { 'src/routes/+layout.ts': LAYOUT_CSR, 'src/routes/+page.svelte': ALL_STRATEGIES },
+		counter: {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>\n  import Counter from '$lib/Counter.svelte' with { wake: 'load' };\n</scr${''}ipt>\n\n<h1>Hello</h1>\n<Counter start={0} />`,
+			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
+		},
 		'server island': {
-			'App.svelte': `<scr${''}ipt>
-  import Header from './Header.svelte';
-  import Greeting from './Greeting.svelte' with { render: 'deferred' };
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Header from '$lib/Header.svelte';
+  import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
 </scr${''}ipt>
 
 <Header title="Server islands" />
 <p>The greeting is a server island: its HTML is FETCHED from a signed endpoint after load (not
 inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 <Greeting name="Ada" unread={3} />`,
-			'Header.svelte': FILES_DEMO['Header.svelte'],
-			'Greeting.svelte': `<scr${''}ipt>let { name = 'friend', unread = 0 } = $props();</scr${''}ipt>
+			'src/lib/Header.svelte': FILES_DEMO['Header.svelte'],
+			'src/lib/Greeting.svelte': `<scr${''}ipt>let { name = 'friend', unread = 0 } = $props();</scr${''}ipt>
 <div class="greeting">👋 Welcome back, {name}. You have {unread} unread {unread === 1 ? 'message' : 'messages'}.</div>`
 		},
 		'live region': {
-			'App.svelte': `<scr${''}ipt>
-  import Header from './Header.svelte';
-  import Ticker from './Ticker.svelte' with { render: 'live' };
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Header from '$lib/Header.svelte';
+  import Ticker from '$lib/Ticker.svelte' with { render: 'live' };
 </scr${''}ipt>
 
 <Header title="Live regions" />
 <p>The box below is a live region: its HTML re-renders and MORPHS in place (~every 1.5s). Type in the
 input — your text and focus SURVIVE each update (that's the morph, not a re-mount).</p>
 <Ticker />`,
-			'Header.svelte': FILES_DEMO['Header.svelte'],
-			'Ticker.svelte': `<scr${''}ipt>let { n = 0 } = $props();</scr${''}ipt>
+			'src/lib/Header.svelte': FILES_DEMO['Header.svelte'],
+			'src/lib/Ticker.svelte': `<scr${''}ipt>let { n = 0 } = $props();</scr${''}ipt>
 <div style="display:flex; flex-direction:column; gap:10px; padding:14px; border:1px solid var(--obs-border); border-radius:10px; background:var(--obs-panel);">
   <div style="font-weight:600;">🔴 LIVE · re-rendered <b style="color:var(--obs-accent);">{n}</b> {n === 1 ? 'time' : 'times'} on the server, morphed in place</div>
   <label style="display:flex; align-items:center; gap:8px; color:var(--obs-muted); font-size:13px;">your text + caret survive every update →
@@ -153,35 +198,36 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 </div>`
 		},
 		'keep · nav': {
-			'App.svelte': `<scr${''}ipt>
-  import Counter from './Counter.svelte' with { wake: 'load', keep: 'counter' };
-  import HomeWidget from './HomeWidget.svelte' with { wake: 'load' };
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load', keep: 'counter' };
+  import HomeWidget from '$lib/HomeWidget.svelte' with { wake: 'load' };
 </scr${''}ipt>
 
 <nav style="display:flex; gap:12px; align-items:center; padding-bottom:8px; border-bottom:1px solid #e2e8f0;">
   <b>🏠 Home</b>
-  <a href="#about" data-obs-nav="About.svelte">Go to About →</a>
+  <a href="/about" data-obs-nav="src/routes/about/+page.svelte">Go to About →</a>
 </nav>
 <p>The counter has <b>keep</b>. Bump it, then navigate — reconcile RELOCATES the live island, so its count survives. The widget below is page-specific (mounts/removes on nav).</p>
 <Counter start={0} />
 <HomeWidget />`,
-			'About.svelte': `<scr${''}ipt>
-  import Counter from './Counter.svelte' with { wake: 'load', keep: 'counter' };
-  import AboutWidget from './AboutWidget.svelte' with { wake: 'load' };
+			'src/routes/about/+page.svelte': `<scr${''}ipt>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load', keep: 'counter' };
+  import AboutWidget from '$lib/AboutWidget.svelte' with { wake: 'load' };
 </scr${''}ipt>
 
 <nav style="display:flex; gap:12px; align-items:center; padding-bottom:8px; border-bottom:1px solid #e2e8f0;">
-  <a href="#home" data-obs-nav="App.svelte">← Back to Home</a>
+  <a href="/" data-obs-nav="src/routes/+page.svelte">← Back to Home</a>
   <b>ℹ️ About</b>
 </nav>
 <p>Same kept counter — its count survived the nav (the live island was relocated, not remounted). The widget is a different island now.</p>
 <Counter start={0} />
 <AboutWidget />`,
-			'Counter.svelte': `<scr${''}ipt>let { start = 0 } = $props(); let n = $state(start);</scr${''}ipt>
+			'src/lib/Counter.svelte': `<scr${''}ipt>let { start = 0 } = $props(); let n = $state(start);</scr${''}ipt>
 <button onclick={() => n++} >kept count: {n} — click me, then navigate</button>`,
-			'HomeWidget.svelte': `<scr${''}ipt>let n = $state(0);</scr${''}ipt>
+			'src/lib/HomeWidget.svelte': `<scr${''}ipt>let n = $state(0);</scr${''}ipt>
 <div style="margin-top:8px; padding:8px 12px; background:var(--obs-panel); border:1px solid var(--obs-border); border-radius:8px;">🏠 Home widget (this island remounts per page) · <button onclick={() => n++}>clicked {n}</button></div>`,
-			'AboutWidget.svelte': `<scr${''}ipt>let n = $state(0);</scr${''}ipt>
+			'src/lib/AboutWidget.svelte': `<scr${''}ipt>let n = $state(0);</scr${''}ipt>
 <div style="margin-top:8px; padding:8px 12px; background:var(--obs-panel); border:1px solid var(--obs-border); border-radius:8px;">ℹ️ About widget (a different island) · <button onclick={() => n++}>clicked {n}</button></div>`
 		},
 		// A realistic Kit codebase — FOLDERS (the tree earns its keep) — showing a held-raw region next to
@@ -263,8 +309,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		return null;
 	}
 
-	let files = $state<FileMap>({ ...FILES_DEMO });
-	let active = $state<string>('App.svelte');
+	let files = $state<FileMap>(structuredClone(PRESETS['demo app']));
+	let active = $state<string>('src/routes/+page.svelte');
 	let hash_loaded = $state(false);
 	let cursor = $state(0); // the editor's cursor offset — round-trips in the URL
 	let initial_cursor = $state(0); // applied to the editor once, on load
