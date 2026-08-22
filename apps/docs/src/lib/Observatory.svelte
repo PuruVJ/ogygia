@@ -348,7 +348,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		ssr_source = cleaned; // show immediately (unformatted) …
 		let cancelled = false;
 		warm_prettier()
-			.then(({ format, plugins }) => format(cleaned, { parser: 'html', plugins, printWidth: 80, useTabs: true }))
+			.then(({ format, plugins }) =>
+				// `htmlWhitespaceSensitivity: 'ignore'` stops prettier dangling the `>` onto its own line to
+				// preserve inline whitespace — gives clean open/close tags for a source view.
+				format(cleaned, { parser: 'html', plugins, printWidth: 80, useTabs: true, htmlWhitespaceSensitivity: 'ignore', bracketSameLine: false })
+			)
 			.then((pretty) => {
 				if (!cancelled && typeof pretty === 'string') ssr_source = pretty;
 			})
