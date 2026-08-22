@@ -8,7 +8,7 @@
  * must be installed first (region ids / fence keys hash through the compiler seam).
  */
 import { compile } from 'svelte/compiler';
-import { ogygiaPreprocess } from 'ogygia/content/markdown';
+import { ogygiaPreprocess, diff_markers, inline_markers } from 'ogygia/content/markdown';
 
 export const MD_MODULE = /\.(md|svx)(\?|$)/;
 // The pipeline injects a `() => import('./self.md?raw')` source-export; that dynamic `?raw` specifier
@@ -22,7 +22,10 @@ const WITH_DIAL = /(\bfrom\s*['"][^'"]+['"])\s*with\s*\{[^}]*\}/g;
 // instance — one shiki highlighter, one config). The browser host must be installed before first use.
 let shared: ReturnType<typeof ogygiaPreprocess> | null = null;
 export function content_preprocessor(): ReturnType<typeof ogygiaPreprocess> {
-	return (shared ??= ogygiaPreprocess());
+	// The fence dialects the docs site ships: line `+++ `/`--- ` diffs + inline `+++x+++`/`---x---`. Keeps
+	// the REPL's fences behaving like a real ogygia content app. (Docs-only remark plugins — changelog,
+	// api expander — are deliberately NOT here; they're app-specific, not framework features.)
+	return (shared ??= ogygiaPreprocess({ code: { transformers: [diff_markers(), inline_markers()] } }));
 }
 
 /** Run ogygia's markdown pipeline → SVELTE SOURCE (mdsvex + shiki + admonitions + heading ids), with the

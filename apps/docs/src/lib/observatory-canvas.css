@@ -97,3 +97,47 @@
 .og-canvas :where(nav) {
 	border-bottom-color: var(--obs-border);
 }
+
+/* Diff-marked fences (the `+++`/`--- ` line dialect + `+++x+++`/`---x---` inline dialect, enabled in the
+   REPL's content pipeline). Mirrors ogygia/content theme.css so a `.md` fence shows real diff colours in
+   the preview — NOT :where()'d: the marks must paint (they're the feature), still only inside .og-canvas. */
+.og-canvas pre.og-has-diff .og-diff {
+	display: inline-block;
+	width: calc(100% + 2rem);
+	margin-inline: -1rem;
+	padding-inline: 0.25rem;
+}
+.og-canvas pre.og-has-diff .og-diff::before {
+	display: inline-block;
+	width: 0.75em;
+	opacity: 0.75;
+	user-select: none;
+}
+.og-canvas .og-diff-add {
+	background: light-dark(rgb(16 185 129 / 0.12), rgb(16 185 129 / 0.16));
+}
+.og-canvas .og-diff-add::before {
+	content: '+';
+	color: light-dark(rgb(4 120 87), rgb(52 211 153));
+}
+.og-canvas .og-diff-remove {
+	background: light-dark(rgb(239 68 68 / 0.1), rgb(239 68 68 / 0.14));
+}
+.og-canvas .og-diff-remove::before {
+	content: '-';
+	color: light-dark(rgb(185 28 28), rgb(248 113 113));
+}
+.og-canvas .og-mark {
+	border-radius: 0.25em;
+	padding: 0.08em 0.25em;
+	margin: -0.08em -0.05em;
+}
+.og-canvas .og-mark-add {
+	background: light-dark(rgb(16 185 129 / 0.16), rgb(16 185 129 / 0.22));
+}
+.og-canvas .og-mark-remove {
+	background: light-dark(rgb(239 68 68 / 0.13), rgb(239 68 68 / 0.2));
+	text-decoration: line-through;
+	text-decoration-thickness: 0.08em;
+	text-decoration-color: light-dark(rgb(185 28 28 / 0.6), rgb(248 113 113 / 0.6));
+}

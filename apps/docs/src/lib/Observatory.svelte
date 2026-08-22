@@ -189,9 +189,12 @@ This is a tip admonition. Try \`::: warning\`, \`::: danger\`, or \`::: details\
 
 ## A highlighted code fence
 
+Fences support the \`+++\`/\`--- \` diff dialect and inline \`+++marks+++\`:
+
 \`\`\`js
 const greet = (name) => \`hello \${name}\`;
-console.log(greet('ogygia'));
+--- console.log('old output');
++++ console.log(greet('ogygia'));
 \`\`\`
 
 ## A table

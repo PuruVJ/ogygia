@@ -85,6 +85,16 @@ async function main() {
 		const src = await svelteFor(`| a | b |\n| - | - |\n| 1 | 2 |\n`);
 		ok('markdown table → <table>', /<table/.test(src));
 	}
+	// diff fences: the `+++ `/`--- ` line dialect (enabled to match the docs site's pipeline)
+	{
+		const src = await svelteFor('```js\nconst keep = 1;\n+++ const added = 2;\n--- const removed = 3;\n```\n');
+		ok('diff fence → og-has-diff + add/remove classes', /og-has-diff/.test(src) && /og-diff-add/.test(src) && /og-diff-remove/.test(src));
+	}
+	// inline diff marks: `+++x+++` / `---x---`
+	{
+		const src = await svelteFor('```js\nconst x = +++added+++ 1;\n```\n');
+		ok('inline diff → og-mark(-add)', /og-mark/.test(src));
+	}
 	// inline: bold, link, inline code
 	{
 		const src = await svelteFor(`**bold** [link](/x) \`code\`\n`);
