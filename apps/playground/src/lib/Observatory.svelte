@@ -695,8 +695,10 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{analysis.oxc.engine}: {analysis.oxc.ok ? `parsed ${analysis.oxc.imports} imports ✓` : 'failed'}
 			</span>
 		{/if}
-		{#if analysis.ms != null && analysis.real}<span class="ms" title="transform + svelte compile">{analysis.ms.toFixed(1)} ms</span>{/if}
-		{#if busy}<span class="busy">compiling…</span>{/if}
+		<span class="status" data-obs-status>
+			<span class="busy" class:show={busy}>compiling…</span>
+			{#if analysis.ms != null && analysis.real}<span class="ms" title="transform + svelte compile">{analysis.ms.toFixed(1)} ms</span>{/if}
+		</span>
 	</header>
 
 	<div class="grid">
@@ -1015,13 +1017,29 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		background: rgba(20, 184, 166, 0.16);
 		color: #5eead4;
 	}
-	.ms {
+	/* Reserved, right-aligned status slot — busy toggles via visibility (keeps its box) and the timing
+	   has a fixed min-width, so "compiling…" appearing never reflows the header. */
+	.status {
 		margin-left: auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 8px;
+		flex: none;
+	}
+	.ms {
 		color: #5eead4;
 		font-size: 11px;
+		min-width: 52px;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
 	}
 	.busy {
 		color: #fbbf24;
+		visibility: hidden;
+	}
+	.busy.show {
+		visibility: visible;
 	}
 	.presets {
 		margin-left: auto;
