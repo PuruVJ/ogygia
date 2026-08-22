@@ -109,16 +109,16 @@ interface ImportMeta {
 			 *  `meta.headings` comes for free. */
 			markdown(
 				glob: string,
-				opts?: { id?: (key: string) => string }
+				opts?: { id?: (key: string) => string } & { preset?: string }
 			): import('ogygia/content').Source<import('ogygia/content').MarkdownMeta>;
 			/** A filesystem-CONVENTION collection from a LITERAL glob (e.g.
 			 *  `'../content/**​/{+doc.svx,+meta.json}'`) — `NN-` ordering, `+meta.json` labels. */
 			folder<Meta = Record<string, never>>(
 				glob: string,
-				opts?: import('ogygia/content').FolderOptions<Meta>
+				opts?: import('ogygia/content').FolderOptions<Meta> & { preset?: string }
 			): import('ogygia/content').Source<Meta>;
 			/** A JSON-data collection from a LITERAL glob (e.g. `'./authors/*.json'`). */
-			json(glob: string, opts?: { id?: (key: string) => string }): import('ogygia/content').Source;
+			json(glob: string, opts?: { id?: (key: string) => string } & { preset?: string }): import('ogygia/content').Source;
 			/**
 			 * Source a collection straight from another git repository — no committed copy, no sync
 			 * script. `spec` is a LITERAL `owner/repo[@ref][:path]`; `opts` forwards to `folder`.
@@ -126,7 +126,7 @@ interface ImportMeta {
 			 */
 			git<Meta = Record<string, never>>(
 				spec: string,
-				opts?: import('ogygia/content').FolderOptions<Meta>
+				opts?: import('ogygia/content').FolderOptions<Meta> & { preset?: string }
 			): import('ogygia/content').Source<Meta>;
 		};
 		/**
