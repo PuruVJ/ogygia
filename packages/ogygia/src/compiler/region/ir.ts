@@ -63,6 +63,4 @@ export interface FileIR {
 	has_island_children: boolean;
 	/** the cheap island-hint gate result (a marker-less snippet-only file is not "hinted"). */
 	has_island_hint: boolean;
-	/** this is a csr=false route host — it always carries the csr-false RESET marker. */
-	needs_csr_reset: boolean;
 }

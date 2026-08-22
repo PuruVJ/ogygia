@@ -199,12 +199,14 @@ export class Compiler {
 					!routeCsrIsFalse(id, routesDir) ||
 					(is_layout_host && hasAnyCsrTrueRoute(routesDir));
 		// Tri-state route csr, threaded into the transform (see transformHost's routeCsr branch):
-		//   true  → csr=true route host: ogygia steps aside (strip islands, inject `true` marker).
-		//   false → csr=false route host: keep islands, inject the csr-false RESET marker (an
-		//           option-less csr=true ANCESTOR layout would otherwise leak `true` down the context
-		//           and silently degrade every island in the csr=false subtree to inline).
-		//   undefined → not a route host (shared lib component): no marker; its csr depends on the
-		//           page that renders it, so it keeps its islands.
+		//   true  → csr=true route host: ogygia steps aside — strip the host's island directives to
+		//           plain so Kit compiles + hydrates them inline.
+		//   false → csr=false route host: keep islands (the normal island transform).
+		//   undefined → not a route host (shared lib component): its csr depends on the page that
+		//           renders it, so it keeps its islands.
+		// The inline-vs-island choice itself is decided at RUNTIME by `documentIsCsrTrue` (context.ts) —
+		// one fact read identically on both legs — which replaced the old per-host CSR_TRUE_KEY marker +
+		// csr=false reset cascade. `route_csr` still drives the compile-time strip/link decisions below.
 		const route_csr = routeCsrIsTrue(id, routesDir)
 			? true
 			: routeCsrIsFalse(id, routesDir)

@@ -765,7 +765,10 @@ function resolve_component_path(spec: string, host_id: string, ctx: HostCtx) {
  */
 
 /**
- * csr=true route host: strip marked imports to plain, then inject the csr-context marker.
+ * csr=true route host: strip its OWN island directives to plain imports (Kit compiles + hydrates them
+ * inline) and degrade any `asRegion` to the plain component. No context marker is emitted — the
+ * inline-vs-island choice is now a single runtime fact (`documentIsCsrTrue`, context.ts), read the same
+ * on both legs, which replaced the old per-host `CSR_TRUE_KEY` marker + `csr=false` reset cascade.
  * @param source @param id @param has_island_hint @param import_keys
  * @returns
  */
