@@ -144,12 +144,29 @@ The "islands" preview mode runs the ACTUAL ogygia runtime, no iframe, no service
 This is the endgame vision from the top of this file — "the actual framework, both halves in-tab" —
 realized, and it turned out an iframe/SW was unnecessary because the page already hosts the runtime.
 
-## What's NOT done (smaller remainders)
+## ALL THREE RENDER DIALS run the real runtime in-preview ✅ (later session)
 
-- The islands-mode preview reuses the page's single runtime; it does not (yet) exercise server islands
-  (`render: 'deferred'`), live regions, or nav/reconcile in-preview — those need the mini-Kit server
-  realm (Rung 3/4). The instruments for those (Nav lab, Hub inspector, Timeline over real events) are
-  still the devtools-panel versions, not wired into the Observatory preview.
+islands mode now exercises the full render axis, each through the page's OWN runtime:
+
+- **static islands** (`wake: load|idle|visible|interaction`) — real lazy hydration (the crown jewel).
+- **server islands** (`render: 'deferred'`) — the worker renders each in isolation and emits a real
+  `<ogygia-region render=defer endpoint=/__obs_defer/N>` with a loading fallback; a scoped
+  `window.fetch` intercept (only `/__obs_defer/*`) plays the server, so the runtime fetches on its
+  schedule and swaps the fallback for the content. Preset: **"server island"**.
+- **live regions** (`render: 'live'`) — a real `<ogygia-region live>` whose first paint is baked, then
+  the main thread re-renders it on the worker each tick and `applyLive()`s the fresh HTML, which the
+  runtime MORPHS in place. Type in the live input → caret + text survive every update. Preset:
+  **"live region"**.
+
+Each has an e2e assertion. A new worker message type (`live`) renders one component per tick.
+
+## What's NOT done (the remaining piece)
+
+- **In-preview navigation** (Nav lab): a multi-page app in the preview + the router body-swap +
+  reconcile (keep/patch/mount/remove islands across a nav). The runtime's router is document-level, so
+  this needs a mini-router driving `reconcile_body` on the preview subtree — the one large primitive
+  still to wire in. The Hub inspector / Nav lab / Timeline-over-real-events instruments are still the
+  devtools-panel versions, not the Observatory preview.
 - **Server-realm devtools events beyond the page render** (deferred-hole timing, batch) — schema-defined,
   not yet emitted.
 - The SSR/client leg toggle is wired but the host rewrite is leg-invariant, so it rarely shows; the real
