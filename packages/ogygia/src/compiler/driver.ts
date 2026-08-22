@@ -10,7 +10,9 @@
  * recomputes on its own; the linker's `unregister_host` deliberately does NOT clear it.
  */
 import { fs, path, createHash } from './host.js';
-import { performance } from 'node:perf_hooks';
+// `performance` is a global in both Node (≥16) and the browser — no import, so the driver graph loads
+// in the browser compiler (Observatory REPL) without pulling node:perf_hooks.
+const performance = globalThis.performance;
 import {
 	transformHost,
 	transformTsRegions,

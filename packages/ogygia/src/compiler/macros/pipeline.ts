@@ -8,7 +8,8 @@
  * timing it records; returns `{ code, touched }` (the caller invalidates its own sourcemap on touch).
  */
 import { path } from '../host.js';
-import { performance } from 'node:perf_hooks';
+// Global in both Node (≥16) and the browser — no import, so this module loads in the browser compiler.
+const performance = globalThis.performance;
 import { rewrite_wire } from './wire.js';
 import { rewrite_dollar } from './dollar.js';
 import { rewrite_store, auto_brand_stores } from './store.js';

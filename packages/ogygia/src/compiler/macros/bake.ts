@@ -16,7 +16,6 @@
  * violations surface as build-voice errors naming the file and line. Node-only.
  */
 import { fs, path } from '../host.js';
-import { pathToFileURL } from 'node:url';
 import { uneval } from 'devalue';
 import { og_member } from './wire.js';
 import { parse_module } from '../parse/oxc.js';
@@ -282,6 +281,11 @@ async function evaluate(entry_code: string, id: string, opts: BakeOptions): Prom
 		const file = path.join(dir, `${opts.hash}.mjs`);
 		fs.writeFileSync(file, code);
 		try {
+			// bake() writes a module and dynamic-imports it — inherently Node-only (a real FS + module
+			// loader). node:url is loaded through a VARIABLE specifier so the browser compiler bundle
+			// (Observatory REPL) never tries to resolve it: bake isn't reachable there.
+			const url_spec = 'node:url';
+			const { pathToFileURL } = (await import(url_spec)) as typeof import('node:url');
 			const mod = (await import(pathToFileURL(file).href + `?t=${opts.hash}`)) as {
 				__run?: () => Promise<unknown[]>;
 			};
