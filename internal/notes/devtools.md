@@ -129,6 +129,19 @@ The only rung that touches the framework. Everything after is a consumer.
 
 ## Rung 8 — AiTools (AI as a first-class devtools consumer)
 
+> **SHIPPED (v1, compile-side):** `npx ogygia mcp` — a hand-rolled stdio JSON-RPC MCP server
+> (`packages/ogygia/src/mcp.ts`, dispatched from the CLI, built to `dist/mcp.js`). The real
+> `transformHost` runs in plain Node (no browser/WASM — the oxc parser auto-loads), so an AI can hand
+> ogygia a `.svelte` source and get the island map back. Four tools: `ogygia_compile` (island map +
+> rewritten host), `ogygia_islands` (the map alone), `ogygia_check` (runs the transform + reports any
+> `[ogygia]` rule violation — the static half of `check_invariants`), `ogygia_explain` (prose runtime
+> story per island — `explain_transform`). Zero runtime deps beyond ogygia's own compiler.
+> **Wire it up:** Claude Code → `claude mcp add ogygia -- npx ogygia mcp`; Claude Desktop →
+> `{ "mcpServers": { "ogygia": { "command": "npx", "args": ["ogygia", "mcp"] } } }`.
+> **Still to add (the runtime half):** `get_events` / `get_region_story` / `get_wire_payloads` need a
+> live app + the bus (the vite devtools plugin, Rung 7); `check_invariants` grows the stream checks
+> below; `mark(label)` segments a trace. The compile-side tools stand alone today.
+
 The bus is already AI-shaped (JSON, identity-keyed). What AI debugging needs on top — ordered by
 "add now vs later":
 

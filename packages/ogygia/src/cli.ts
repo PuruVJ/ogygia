@@ -44,13 +44,14 @@ const argv = process.argv.slice(2);
 const command = argv[0];
 const flags = new Set(argv.slice(1).filter((a) => a.startsWith('-')));
 
-if (command !== 'init' && command !== 'site') {
+if (command !== 'init' && command !== 'site' && command !== 'mcp') {
 	const unknown = command && command !== 'help' && !command.startsWith('-');
 	stdout.write(
 		`${strong('ogygia')} ${dim(`v${version}`)}\n\n` +
 			`Usage:\n` +
 			`  ${accent('npx ogygia init')} ${dim('[--markdown] [--no-install] [-y]')}\n` +
-			`  ${accent('npx ogygia site init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n\n` +
+			`  ${accent('npx ogygia site init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n` +
+			`  ${accent('npx ogygia mcp')} ${dim('(stdio MCP server — hand ogygia components to an AI)')}\n\n` +
 			`${strong('init')}  — wires ogygia into the SvelteKit app in the current directory.\n` +
 			`  --markdown / --no-markdown   turn markdown content collections on/off (else you are asked)\n` +
 			`  -y, --yes                    accept defaults, no prompts\n` +
@@ -58,7 +59,9 @@ if (command !== 'init' && command !== 'site') {
 			`${strong('site init')}  — scaffolds a docs site (site, content, routes, a Shell layout).\n` +
 			`  --layout <path>              layout route to write (default ${dim('src/routes/+layout.svelte')})\n` +
 			`  --force                      overwrite existing route/site files (the layout always asks)\n` +
-			`  -y, --yes                    accept defaults, no prompts\n`
+			`  -y, --yes                    accept defaults, no prompts\n\n` +
+			`${strong('mcp')}  — runs a Model Context Protocol server on stdio. Point an MCP client at it to give an\n` +
+			`  AI the real ogygia compiler: compile a component, read its island map, validate it, explain it.\n`
 	);
 	process.exit(unknown ? 1 : 0);
 }
@@ -727,7 +730,14 @@ function globHasSvx(dir: string): boolean {
 }
 
 // ── dispatch ─────────────────────────────────────────────────────────────────
-if (command === 'site') {
+if (command === 'mcp') {
+	// `./mcp.js` is a sibling in dist (its own library-built module, NOT bundled into this CLI — the
+	// computed URL keeps rolldown from inlining the whole compiler here). It imports the compiler at
+	// runtime and runs the stdio server until stdin closes.
+	import(new URL('./mcp.js', import.meta.url).href)
+		.then((m) => (m as { runMcp: () => Promise<void> }).runMcp())
+		.catch((err) => die(err?.message ?? String(err)));
+} else if (command === 'site') {
 	site_init().catch((err) => die(err?.message ?? String(err)));
 } else {
 	run().catch((err) => die(err?.message ?? String(err)));
