@@ -594,13 +594,20 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		request_all();
 	}
 	function add_file() {
-		const name = prompt('New file path (folders allowed, e.g. lib/Widget.svelte)');
-		if (name && !files[name]) {
-			const base = name.split('/').pop() || name;
-			files[name] = /\.svelte$/.test(name) ? `<h1>${base.replace(/\.svelte$/, '')}</h1>` : '';
-			active = name;
-			request_all();
-		}
+		const raw = prompt('New file path (folders allowed, e.g. lib/Widget.svelte)');
+		if (raw == null) return;
+		// Normalize to a real workspace path: trim each segment, drop empty / `.` / `..` (no path escape,
+		// no whitespace-only name). An empty result or a duplicate is a no-op.
+		const name = raw
+			.split('/')
+			.map((s) => s.trim())
+			.filter((s) => s && s !== '.' && s !== '..')
+			.join('/');
+		if (!name || files[name]) return;
+		const base = name.split('/').pop() || name;
+		files[name] = /\.svelte$/.test(name) ? `<h1>${base.replace(/\.svelte$/, '')}</h1>` : '';
+		active = name;
+		request_all();
 	}
 	function remove_file(name: string) {
 		if (name === entryFile) return; // never remove the render entry — nothing would render

@@ -29,10 +29,16 @@
 	// opened should show itself. Collapsing is opt-in and remembered while the workspace is loaded.
 	let collapsed = $state(new SvelteSet<string>());
 
+	// The row snippet renders RECURSIVELY (one call per folder level), so a pathological key with hundreds
+	// of `/` segments would overflow the call stack. Cap the tree depth: overflow segments collapse into
+	// the leaf's name. No real workspace nests this deep; a hostile/shared one can't crash the tree.
+	const MAX_TREE_DEPTH = 12;
 	function build(map: FileMap): Node {
 		const root: Node = { name: '', path: '', kind: 'folder', children: [] };
 		for (const key of Object.keys(map)) {
-			const parts = key.split('/').filter(Boolean);
+			let parts = key.split('/').filter(Boolean);
+			if (parts.length > MAX_TREE_DEPTH)
+				parts = [...parts.slice(0, MAX_TREE_DEPTH - 1), parts.slice(MAX_TREE_DEPTH - 1).join('/')];
 			let node = root;
 			let sofar = '';
 			for (let i = 0; i < parts.length; i++) {
