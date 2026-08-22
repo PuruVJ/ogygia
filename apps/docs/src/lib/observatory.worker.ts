@@ -13,8 +13,12 @@ import {
 	CLIENT_BINDING_STUB,
 	set_parser
 } from 'ogygia/internal/compiler-browser';
-import { cdnPlugin, CSS_MODULE, css_inject_module } from './repl/cdn-plugin.ts';
+import { cdnPlugin, makeCdnCache, CSS_MODULE, css_inject_module } from './repl/cdn-plugin.ts';
 import { sveltePlugin } from './repl/svelte-plugin.ts';
+
+// A jsdelivr cache that LIVES for the worker session — an edit re-bundles, but package.json + files
+// already fetched are reused (a REPL edits constantly; re-fetching each keystroke would hammer the CDN).
+const cdn_cache = makeCdnCache();
 
 export interface Island {
 	local: string;
@@ -840,6 +844,7 @@ async function bundle_preview(
 				workspace,
 				sveltePlugin({ generate: 'client', preprocess: (c: string) => c.replace(WITH_DIAL, '$1') }),
 				cdnPlugin({
+					cache: cdn_cache, // reused across edits — don't re-fetch jsdelivr every keystroke
 					onPackage: (n: string, v: string) => packages.push(v ? `${n}@${v}` : n),
 					onMissing: (id: string) => missing.push(id)
 				})

@@ -22,6 +22,16 @@ const NODE_BUILTINS = new Set([
 ]);
 const is_node_builtin = (id: string) => id.startsWith('node:') || NODE_BUILTINS.has(id);
 
+/** Persistent CDN caches — pass the SAME instance across bundles so an edit doesn't re-fetch jsdelivr. */
+export interface CdnCache {
+	pkg: Map<string, Record<string, unknown> | null>;
+	text: Map<string, string | null>;
+}
+/** A fresh, empty CDN cache to hold across a REPL session. */
+export function makeCdnCache(): CdnCache {
+	return { pkg: new Map(), text: new Map() };
+}
+
 export interface CdnPluginOptions {
 	/** Injected fetch (tests pass a cached/offline one); defaults to the global. */
 	fetch?: typeof fetch;
@@ -33,6 +43,8 @@ export interface CdnPluginOptions {
 	onMissing?: (id: string) => void;
 	/** Per-request timeout (ms) so a stalled CDN response can't hang the bundle. Default 15s. */
 	fetchTimeout?: number;
+	/** A persistent cache reused across bundles (a REPL edits constantly — don't re-fetch each keystroke). */
+	cache?: CdnCache;
 }
 
 // ── Regexes hoisted to module scope (compiled once, never per resolveId/load call). ──
@@ -60,8 +72,9 @@ type RolldownPlugin = any;
 export function cdnPlugin(opts: CdnPluginOptions = {}): RolldownPlugin {
 	const fetchFn = opts.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
 	const timeout_ms = opts.fetchTimeout ?? 15000;
-	const pkg_cache = new Map<string, Record<string, unknown> | null>();
-	const text_cache = new Map<string, string | null>();
+	const cache = opts.cache ?? makeCdnCache();
+	const pkg_cache = cache.pkg;
+	const text_cache = cache.text;
 	// De-dupe concurrent in-flight requests for the same URL (a barrel touches shared files a lot).
 	const inflight = new Map<string, Promise<string | null>>();
 
