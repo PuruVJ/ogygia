@@ -3,7 +3,7 @@
 	// The devtools event bus — in "islands" mode the page's REAL runtime emits hydration events for our
 	// injected regions; we tap the bus to show the true lifecycle story (Rung-0 layer → an instrument).
 	import { add_sink } from 'ogygia/devtools';
-	import ObsEditor from './ObsEditor.svelte';
+	import CodeMirror from './CodeMirror.svelte';
 	import type { Analysis } from './observatory.worker';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
 
@@ -748,13 +748,13 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{/each}
 				<button class="filetab add" title="add a file" onclick={add_file}>+</button>
 			</div>
-			<ObsEditor doc={files[active]} docKey={active} oninput={(v) => (files[active] = v)} />
+			<CodeMirror doc={files[active]} docKey={active} oninput={(v) => (files[active] = v)} />
 		</section>
 
 		<section class="obs-inspector">
 			<div class="obs-tabs" role="tablist" aria-label="inspector">
 				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => (inspectorTab = 'preview')}>Preview</button>
-				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => (inspectorTab = 'islands')}>Islands{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
+				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => (inspectorTab = 'islands')}>Regions{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
 				<button role="tab" class:on={inspectorTab === 'bytes'} onclick={() => (inspectorTab = 'bytes')}>Bytes</button>
 				<button role="tab" class:on={inspectorTab === 'wire'} onclick={() => (inspectorTab = 'wire')}>Wire</button>
 				<button role="tab" class:on={inspectorTab === 'output'} onclick={() => (inspectorTab = 'output')}>Output</button>
@@ -830,7 +830,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{#if analysis.rendered.ok}
 					<details class="pipe">
 						<summary>▸ rendered HTML source (SSR)</summary>
-						<pre class="msrc" data-obs-html>{analysis.rendered.html}</pre>
+						<div class="code-out" data-obs-html><CodeMirror doc={analysis.rendered.html} lang="html" readonly /></div>
 					</details>
 				{:else if !analysis.client || analysis.client.error}
 					<div class="err" data-obs-render-err>could not render: {analysis.rendered.error}</div>
@@ -954,12 +954,14 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			{#if !everWarmed}
 				<div class="warming" data-obs-warming>warming the in-browser compiler (rolldown WASM)…</div>
 			{/if}
-			<pre data-obs-output>{shownOutput}</pre>
+			<div class="code-out" data-obs-output>
+				<CodeMirror doc={shownOutput} lang="svelte" readonly />
+			</div>
 
 			{#if analysis.compiledServer}
 				<details class="pipe" data-obs-compiled>
 					<summary>▸ svelte-compiled server JS <span class="muted">· source → transform → svelte compile</span></summary>
-					<pre class="msrc">{analysis.compiledServer}</pre>
+					<div class="code-out"><CodeMirror doc={analysis.compiledServer} lang="js" readonly /></div>
 				</details>
 			{/if}
 			</div>
@@ -977,11 +979,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 							</summary>
 							{#if m.wrapperSource}
 								<div class="mpath">{m.wrapperPath}</div>
-								<pre class="msrc">{m.wrapperSource}</pre>
+								<div class="code-out"><CodeMirror doc={m.wrapperSource} lang="svelte" readonly /></div>
 							{/if}
 							{#if m.entrySource}
 								<div class="mpath">{m.entryPath}</div>
-								<pre class="msrc">{m.entrySource}</pre>
+								<div class="code-out"><CodeMirror doc={m.entrySource} lang="js" readonly /></div>
 							{/if}
 							{#if !m.wrapperSource && !m.entrySource}
 								<div class="muted mpath">no standalone module (rendered inline / binding-only)</div>
@@ -1328,7 +1330,19 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		padding: 12px 14px;
 		white-space: pre-wrap;
 		word-break: break-word;
-		color: #cbd5e1;
+		color: var(--text);
+	}
+	/* Code surface for every readonly CodeMirror output (transformed host, compiled JS, modules, HTML). */
+	.code-out {
+		margin: 8px 14px 12px;
+		padding: 4px 6px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--bg-sunken);
+		overflow: auto;
+	}
+	.mods .code-out {
+		margin: 6px 0 0;
 	}
 	.real {
 		margin-left: 8px;
@@ -1341,7 +1355,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.real.csr-true {
 		background: rgba(148, 163, 184, 0.18);
-		color: #cbd5e1;
+		color: var(--text-dim);
 	}
 	.fallback {
 		margin-left: 8px;
@@ -1499,7 +1513,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	/* ── BOUNDARY LENS (x-ray): dim the dead shell, light up every marked island ── */
 	.preview.xray {
-		background: #f1f5f9;
+		background: var(--bg-sunken);
 		color: var(--text-dim);
 		position: relative;
 		max-height: 360px;
@@ -1803,7 +1817,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		color: var(--text-faint);
 	}
 	.ltable tr.ships .lbytes {
-		color: #cbd5e1;
+		color: var(--text-dim);
 	}
 	.lraw {
 		font-size: 10px;
@@ -1835,7 +1849,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.wpay {
 		flex: 1;
-		color: #cbd5e1;
+		color: var(--text-dim);
 		word-break: break-word;
 		background: rgba(148, 163, 184, 0.08);
 		padding: 1px 7px;
@@ -1901,7 +1915,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		padding: 6px 10px 10px;
 		white-space: pre-wrap;
 		word-break: break-word;
-		color: #cbd5e1;
+		color: var(--text-dim);
 		font-size: 11px;
 		max-height: 220px;
 		overflow: auto;
