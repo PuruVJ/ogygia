@@ -316,7 +316,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		formatting = true;
 		try {
 			const { format, plugins } = await warm_prettier();
-			const out = await format(files[name], { parser, plugins, printWidth: 60, useTabs: true, svelteStrictMode: false });
+			const out = await format(files[name], { parser, plugins, printWidth: 60, useTabs: true, svelteStrictMode: false, htmlWhitespaceSensitivity: 'ignore' });
 			if (typeof out === 'string' && out !== files[name]) files[name] = out;
 		} catch {
 			/* a syntax error mid-edit — leave the source untouched */
