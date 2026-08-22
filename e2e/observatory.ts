@@ -257,6 +257,47 @@ try {
 	check('live region: the runtime re-renders + MORPHS it in place (the tick advances)', tickBefore === '0' && Number(live.tick) > 0, `${tickBefore} → ${live.tick}`);
 	check('live region: the morph keeps focus + typed text (not a re-mount)', live.value === 'KEEPME' && live.focused, JSON.stringify(live));
 
+	// ── KEEP · NAV (the real reconcile): bump a keep counter on Home, navigate to About — the live
+	//    island is RELOCATED (its count survives) while page-specific islands mount/remove ──
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'keep · nav');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(800);
+	await page.evaluate(() => {
+		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'islands');
+		(btn as HTMLElement)?.click();
+	});
+	await page.waitForTimeout(1200);
+	// bump the kept counter 3×
+	for (let i = 0; i < 3; i++) {
+		await page.click('[data-obs-preview] ogygia-region[data-ogygia-keep] button').catch(() => {});
+		await page.waitForTimeout(70);
+	}
+	const keptText = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region[data-ogygia-keep] button')?.textContent?.trim() || '');
+	const homeBefore = await page.evaluate(() => /Home widget/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
+	check('keep·nav: on Home, the kept counter shows 3 and the Home-only island is present', /kept count: 3/.test(keptText) && homeBefore, `${keptText} | home=${homeBefore}`);
+	// navigate to About → reconcile relocates the kept island (state survives), swaps the widget
+	await page.click('[data-obs-preview] a[data-obs-nav="About.svelte"]').catch(() => {});
+	await page.waitForTimeout(1200);
+	const nav = await page.evaluate(() => ({
+		counter: document.querySelector('[data-obs-preview] ogygia-region[data-ogygia-keep] button')?.textContent?.trim() || '',
+		home: /Home widget/.test(document.querySelector('[data-obs-preview]')?.textContent || ''),
+		about: /About widget/.test(document.querySelector('[data-obs-preview]')?.textContent || ''),
+		readout: document.querySelector('[data-obs-navinfo]')?.textContent?.replace(/\s+/g, ' ').trim() || ''
+	}));
+	check('keep·nav: the kept island survives the nav with its state (count still 3)', /kept count: 3/.test(nav.counter), nav.counter);
+	check('keep·nav: page islands reconcile — Home widget removed, About widget mounted', !nav.home && nav.about, JSON.stringify({ home: nav.home, about: nav.about }));
+	check('keep·nav: the reconcile readout reports kept/mounted/removed', /kept Counter/.test(nav.readout) && /mounted AboutWidget/.test(nav.readout) && /removed HomeWidget/.test(nav.readout), nav.readout);
+	// navigate back → the kept counter STILL survives
+	await page.click('[data-obs-preview] a[data-obs-nav="App.svelte"]').catch(() => {});
+	await page.waitForTimeout(1200);
+	const back = await page.evaluate(() => ({
+		counter: document.querySelector('[data-obs-preview] ogygia-region[data-ogygia-keep] button')?.textContent?.trim() || '',
+		home: /Home widget/.test(document.querySelector('[data-obs-preview]')?.textContent || '')
+	}));
+	check('keep·nav: navigating BACK still keeps the counter (3) + restores the Home island', /kept count: 3/.test(back.counter) && back.home, JSON.stringify(back));
+
 	await page.close();
 } finally {
 	await browser.close();

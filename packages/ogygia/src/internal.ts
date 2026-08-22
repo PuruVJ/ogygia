@@ -29,3 +29,10 @@ export { __tag_context } from './context-bridge.js';
 // an island; `og_html_region` is what `import.meta.og.code()`/`.md()` inline at build.
 export { og_portable } from './region-snippet.js';
 export { og_html_region } from './region.js';
+
+// The SPA-nav reconciler + its child-morph — the router drives these on `document.body`; exposed here
+// so a harness (the Observatory's in-preview navigation) can drive the SAME reconcile on ANY subtree,
+// getting real keep/patch/mount/remove (a kept island's live state survives the nav). Tree-shakes out
+// of any app that never imports them.
+export { reconcile_body } from './runtime/reconcile.js';
+export { morph_children } from './runtime/morph.js';

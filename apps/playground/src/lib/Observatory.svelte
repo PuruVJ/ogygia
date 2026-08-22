@@ -144,6 +144,38 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
     <input placeholder="click here and type…" style="padding:5px 9px; border:1px solid #cbd5e1; border-radius:6px;" />
   </label>
 </div>`
+		},
+		'keep · nav': {
+			'App.svelte': `<scr${''}ipt>
+  import Counter from './Counter.svelte' with { wake: 'load', keep: 'counter' };
+  import HomeWidget from './HomeWidget.svelte' with { wake: 'load' };
+</scr${''}ipt>
+
+<nav style="display:flex; gap:12px; align-items:center; padding-bottom:8px; border-bottom:1px solid #e2e8f0;">
+  <b>🏠 Home</b>
+  <a href="#about" data-obs-nav="About.svelte" style="color:#0d9488;">Go to About →</a>
+</nav>
+<p>The counter has <b>keep</b>. Bump it, then navigate — reconcile RELOCATES the live island, so its count survives. The widget below is page-specific (mounts/removes on nav).</p>
+<Counter start={0} />
+<HomeWidget />`,
+			'About.svelte': `<scr${''}ipt>
+  import Counter from './Counter.svelte' with { wake: 'load', keep: 'counter' };
+  import AboutWidget from './AboutWidget.svelte' with { wake: 'load' };
+</scr${''}ipt>
+
+<nav style="display:flex; gap:12px; align-items:center; padding-bottom:8px; border-bottom:1px solid #e2e8f0;">
+  <a href="#home" data-obs-nav="App.svelte" style="color:#0d9488;">← Back to Home</a>
+  <b>ℹ️ About</b>
+</nav>
+<p>Same kept counter — its count survived the nav (the live island was relocated, not remounted). The widget is a different island now.</p>
+<Counter start={0} />
+<AboutWidget />`,
+			'Counter.svelte': `<scr${''}ipt>let { start = 0 } = $props(); let n = $state(start);</scr${''}ipt>
+<button onclick={() => n++} style="padding:6px 12px; border-radius:6px; border:1px solid #0d9488; background:#f0fdfa;">kept count: {n} — click me, then navigate</button>`,
+			'HomeWidget.svelte': `<scr${''}ipt>let n = $state(0);</scr${''}ipt>
+<div style="margin-top:8px; padding:8px 12px; background:#f8fafc; border-radius:8px;">🏠 Home widget (this island remounts per page) · <button onclick={() => n++}>clicked {n}</button></div>`,
+			'AboutWidget.svelte': `<scr${''}ipt>let n = $state(0);</scr${''}ipt>
+<div style="margin-top:8px; padding:8px 12px; background:#faf5ff; border-radius:8px;">ℹ️ About widget (a different island) · <button onclick={() => n++}>clicked {n}</button></div>`
 		}
 	};
 
@@ -248,9 +280,10 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	let worker = $state<Worker | null>(null);
 	let seq = 0;
 	let want = 0;
-	// Live-region tick requests: correlate each render-one-component reply back to its awaiter.
+	// Live-region tick requests + nav page-render requests: correlate each reply back to its awaiter.
 	let liveSeq = 0;
 	const liveWaiters = new Map<number, (html: string) => void>();
+	const pageWaiters = new Map<number, (rd: NonNullable<Analysis['realDom']> | null) => void>();
 
 	/** Ask the worker to render ONE component (with props) → HTML, for a live tick. */
 	function live_request(fileMap: FileMap, file: string, props: Record<string, unknown>): Promise<string> {
@@ -266,10 +299,15 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// Boot the worker ONCE (reads no reactive state → never spawns a second worker).
 	$effect(() => {
 		const w = new Worker(new URL('./observatory.worker.ts', import.meta.url), { type: 'module' });
-		w.onmessage = (e: MessageEvent<{ id: number; type?: string; result?: Analysis; html?: string }>) => {
+		w.onmessage = (e: MessageEvent<{ id: number; type?: string; result?: Analysis; html?: string; realDom?: NonNullable<Analysis['realDom']> }>) => {
 			if (e.data.type === 'live') {
 				liveWaiters.get(e.data.id)?.(e.data.html ?? '');
 				liveWaiters.delete(e.data.id);
+				return;
+			}
+			if (e.data.type === 'page') {
+				pageWaiters.get(e.data.id)?.(e.data.realDom ?? null);
+				pageWaiters.delete(e.data.id);
 				return;
 			}
 			if (e.data.id === want && e.data.result) {
@@ -309,6 +347,20 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	$effect(() => {
 		import('svelte/internal/client')
 			.then((m) => (svelteClient = m))
+			.catch(() => {});
+	});
+
+	// The real SPA-nav reconciler (keep/patch/mount/remove) + its morph — loaded at runtime so a nav in
+	// the preview drives the SAME reconcile the router uses, on the preview subtree. A kept island's
+	// live state survives the page change.
+	type Reconcile = {
+		reconcile_body: (live: Element, next: Element, morph: (p: Element, n: ArrayLike<Node>) => void) => void;
+		morph_children: (parent: Element, nodes: ArrayLike<Node>) => void;
+	};
+	let reconcile = $state<Reconcile | null>(null);
+	$effect(() => {
+		import('ogygia/internal')
+			.then((m) => (reconcile = { reconcile_body: m.reconcile_body, morph_children: m.morph_children }))
 			.catch(() => {});
 	});
 
@@ -408,6 +460,92 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		return () => cleanups.forEach((c) => c());
 	}
 
+	// Nav (keep · nav): the reconcile decision of the last navigation, for the readout.
+	let navInfo = $state<{ to: string; kept: string[]; mounted: string[]; removed: string[] } | null>(null);
+	let currentPage = $state('App.svelte');
+
+	/** Build a page's real-island DOM OFFLINE (in a detached container): link each island's blob entry
+	 *  so it's ready to hydrate on insertion. Shared by the initial inject and a nav reconcile. */
+	function link_page_dom(rd: NonNullable<Analysis['realDom']>, client: NonNullable<Analysis['client']>, sc: Record<string, unknown>) {
+		const store: Record<string, unknown> = (globalThis.__OBS_ISLANDS__ ||= {});
+		const blobs: Array<{ blob: string; key: string }> = [];
+		const cache = new Map<string, Linked>();
+		const fpNames: Record<string, string> = {};
+		const resolveName = (spec: string): string | null => {
+			const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
+			if (client.modules[bare] != null) return bare;
+			const base = spec.split('/').pop();
+			return base && client.modules[base] != null ? base : null;
+		};
+		const require: Require = (spec) => {
+			if (spec === 'svelte/internal/client') return sc as Linked;
+			const name = resolveName(spec);
+			if (name) {
+				const hit = cache.get(name);
+				if (hit) return hit;
+				const ex: Linked = {};
+				cache.set(name, ex);
+				Object.assign(ex, eval_client(client.modules[name], require));
+				return ex;
+			}
+			return { default: () => {} };
+		};
+		const container = document.createElement('div');
+		container.innerHTML = rd.html ?? '';
+		for (const region of container.querySelectorAll('ogygia-region[entry^="__ISLAND__:"]')) {
+			const entryAttr = region.getAttribute('entry');
+			if (!entryAttr) continue;
+			const file = entryAttr.slice('__ISLAND__:'.length);
+			if (client.modules[file] == null) continue;
+			const fp = region.getAttribute('data-og-fp');
+			if (fp) fpNames[fp] = region.getAttribute('data-name') || file;
+			const Comp = eval_client(client.modules[file], require).default;
+			const key = 'k' + Math.random().toString(36).slice(2);
+			store[key] = Comp;
+			const blob = URL.createObjectURL(new Blob([`export default globalThis.__OBS_ISLANDS__[${JSON.stringify(key)}]`], { type: 'text/javascript' }));
+			blobs.push({ blob, key });
+			region.setAttribute('entry', blob);
+		}
+		return { container, blobs, fpNames };
+	}
+
+	/** Ask the worker to render a nav TARGET page to real-island HTML. */
+	function page_request(fileMap: FileMap, entry: string): Promise<NonNullable<Analysis['realDom']> | null> {
+		const w = worker;
+		if (!w) return Promise.resolve(null);
+		const id = --liveSeq;
+		return new Promise((resolve) => {
+			pageWaiters.set(id, resolve);
+			w.postMessage({ id, type: 'page', files: fileMap, entry });
+		});
+	}
+
+	/** SPA NAV: render the target page, then drive the REAL reconcile on the preview subtree — keep
+	 *  islands (data-ogygia-keep) are relocated with their live state; others mount/remove. */
+	async function navigate(entry: string) {
+		const el = previewEl;
+		const rc = reconcile;
+		const client = analysis.client;
+		const sc = svelteClient;
+		if (!el || !rc || !client || client.error || !sc || entry === currentPage) return;
+		const rd = await page_request(untrack(() => $state.snapshot(files)), entry);
+		if (!rd?.ok || !rd.html) return;
+		const { container } = link_page_dom(rd, client, sc);
+		window.__OBS_DEFER__ = { ...(window.__OBS_DEFER__ || {}), ...(rd.deferred || {}) };
+		// reconcile decision: match live vs next islands by name (the demo's readout).
+		const liveNames = [...el.querySelectorAll('ogygia-region[data-name]')].map((r) => r.getAttribute('data-name') || '');
+		const nextNames = [...container.querySelectorAll('ogygia-region[data-name]')].map((r) => r.getAttribute('data-name') || '');
+		const keepNames = new Set([...el.querySelectorAll('ogygia-region[data-ogygia-keep]')].map((r) => r.getAttribute('data-name') || ''));
+		rc.reconcile_body(el, container, rc.morph_children);
+		currentPage = entry;
+		navInfo = {
+			to: entry.replace(/\.svelte$/, ''),
+			kept: nextNames.filter((n) => liveNames.includes(n) && keepNames.has(n)),
+			mounted: nextNames.filter((n) => !liveNames.includes(n)),
+			removed: liveNames.filter((n) => !nextNames.includes(n))
+		};
+	}
+
 	function eval_client(code: string, req: Require): Linked {
 		const body = code
 			.replace(/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = __require("$2");')
@@ -493,48 +631,21 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				const store: Record<string, unknown> = (globalThis.__OBS_ISLANDS__ ||= {});
 				// server islands: publish this render's deferred HTML for the fetch intercept to serve.
 				window.__OBS_DEFER__ = rd.deferred || {};
-				const blobs: Array<{ blob: string; key: string }> = [];
-				const cache = new Map<string, Linked>();
-				const resolveName = (spec: string): string | null => {
-					const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
-					if (client.modules[bare] != null) return bare;
-					const base = spec.split('/').pop();
-					return base && client.modules[base] != null ? base : null;
+				// build the DOM OFFLINE (blob entries linked) so the entry is real BEFORE the element
+				// connects — the same builder a nav reuses (so a reconcile matches islands consistently).
+				const { container, blobs, fpNames: linked } = link_page_dom(rd, client, sc);
+				Object.assign(fpNames, linked);
+				currentPage = untrack(() => ('App.svelte' in files ? 'App.svelte' : active));
+				navInfo = null;
+				// SPA-nav: a click on a nav link renders the target + reconciles the preview subtree.
+				const onNavClick = (ev: Event) => {
+					const link = (ev.target as Element | null)?.closest?.('[data-obs-nav]');
+					if (!link) return;
+					ev.preventDefault();
+					void navigate(link.getAttribute('data-obs-nav') || '');
 				};
-				const require: Require = (spec) => {
-					if (spec === 'svelte/internal/client') return sc as Linked;
-					const name = resolveName(spec);
-					if (name) {
-						const hit = cache.get(name);
-						if (hit) return hit;
-						const ex: Linked = {};
-						cache.set(name, ex);
-						Object.assign(ex, eval_client(client.modules[name], require));
-						return ex;
-					}
-					return { default: () => {} };
-				};
-				// build the DOM OFFLINE so we can set the real blob entry BEFORE the element connects
-				// (custom-element upgrade + the runtime's connectedCallback fire on insertion).
-				const tpl = document.createElement('div');
-				tpl.innerHTML = rd.html;
-				for (const region of tpl.querySelectorAll('ogygia-region[entry^="__ISLAND__:"]')) {
-					const entryAttr = region.getAttribute('entry');
-					if (!entryAttr) continue;
-					const file = entryAttr.slice('__ISLAND__:'.length);
-					if (client.modules[file] == null) continue;
-					const fp = region.getAttribute('data-og-fp');
-					if (fp) fpNames[fp] = region.getAttribute('data-name') || file;
-					const Comp = eval_client(client.modules[file], require).default;
-					const key = 'k' + Math.random().toString(36).slice(2);
-					store[key] = Comp;
-					const blob = URL.createObjectURL(
-						new Blob([`export default globalThis.__OBS_ISLANDS__[${JSON.stringify(key)}]`], { type: 'text/javascript' })
-					);
-					blobs.push({ blob, key });
-					region.setAttribute('entry', blob);
-				}
-				while (tpl.firstChild) el.appendChild(tpl.firstChild); // → runtime upgrades + hydrates
+				el.addEventListener('click', onNavClick);
+				while (container.firstChild) el.appendChild(container.firstChild); // → runtime upgrades + hydrates
 
 				// LIVE REGIONS: tick each `<ogygia-region live>` — re-render its component on the worker
 				// with an incrementing `n`, then applyLive() the fresh HTML, which the runtime MORPHS in
@@ -572,6 +683,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				// the live timers, and stop listening on the bus.
 				xrayCleanup = () => {
 					unsubscribe();
+					el.removeEventListener('click', onNavClick);
 					for (const t of liveTimers) clearInterval(t);
 					for (const { blob, key } of blobs) {
 						URL.revokeObjectURL(blob);
@@ -692,7 +804,16 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{#if previewMode === 'islands'}
 					<div class="wakehint muted" data-obs-islands-hint>
 						the page's <b>real ogygia runtime</b> hydrated these — genuine <b>&lt;ogygia-region&gt;</b> shells,
-						blob-linked island chunks, lazy per schedule. Try the <b>wake demo</b> preset: click Menu, scroll to Chart.
+						blob-linked island chunks, lazy per schedule. Try <b>keep · nav</b> (bump the counter, then navigate —
+						its state survives the real reconcile) or <b>wake demo</b> (click Menu, scroll to Chart).
+					</div>
+				{/if}
+				{#if previewMode === 'islands' && navInfo}
+					<div class="navinfo" data-obs-navinfo>
+						<span class="ni-cap">reconcile → <b>{navInfo.to}</b></span>
+						{#if navInfo.kept.length}<span class="ni kept">kept {navInfo.kept.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
+						{#if navInfo.mounted.length}<span class="ni mounted">mounted {navInfo.mounted.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
+						{#if navInfo.removed.length}<span class="ni removed">removed {navInfo.removed.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
 					</div>
 				{/if}
 				{#if previewMode === 'islands' && runtimeEvents.length}
@@ -1253,6 +1374,36 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.wakehint b {
 		color: #94a3b8;
+	}
+	.navinfo {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		margin: 2px 14px 8px;
+		font-size: 11px;
+	}
+	.navinfo .ni-cap {
+		color: #94a3b8;
+		font-weight: 600;
+	}
+	.navinfo .ni {
+		padding: 1px 8px;
+		border-radius: 999px;
+		font-weight: 600;
+	}
+	.navinfo .kept {
+		background: rgba(20, 184, 166, 0.16);
+		color: #5eead4;
+	}
+	.navinfo .mounted {
+		background: rgba(139, 92, 246, 0.18);
+		color: #c4b5fd;
+	}
+	.navinfo .removed {
+		background: rgba(148, 163, 184, 0.14);
+		color: #94a3b8;
+		text-decoration: line-through;
 	}
 	.rtev {
 		margin: 4px 14px 8px;

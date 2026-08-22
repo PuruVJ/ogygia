@@ -283,7 +283,36 @@ function resolve_file(spec: string, files: Record<string, string>): string | nul
 }
 
 /** Boundary-lens metadata per island file — kind/wake/bytes, so the render can mark each region. */
-type IslandInfo = Map<string, { kind: string; wake: string; name: string; bytes: number; ships: boolean }>;
+type IslandInfo = Map<string, { kind: string; wake: string; name: string; bytes: number; ships: boolean; keep?: string }>;
+
+/** Boundary-lens + strategy metadata for every marked region across the file map, keyed by target
+ *  file. Reused by execute (SSR preview) + real_island_render (islands mode) + render_page (nav). */
+function build_island_info(files: Record<string, string>): IslandInfo {
+	const ledger = byte_ledger(files);
+	const info: IslandInfo = new Map();
+	for (const f of Object.keys(files)) {
+		if (!f.endsWith('.svelte')) continue;
+		for (const isl of analyze_marks(files[f]).islands) {
+			const target = resolve_file(isl.component, files);
+			if (!target) continue;
+			const lf = ledger.files.find((x) => x.name === target);
+			info.set(target, {
+				kind: isl.strategy.kind,
+				wake: (isl.attrs.wake as string) || (isl.strategy.kind === 'island' ? 'load' : ''),
+				name: target,
+				bytes: lf?.bytes ?? 0,
+				ships: lf?.ships ?? false,
+				keep: typeof isl.attrs.keep === 'string' ? isl.attrs.keep : undefined
+			});
+		}
+	}
+	return info;
+}
+
+/** Render ONE page (entry) to real-island HTML — used for the initial render AND for a nav target. */
+function render_page(files: Record<string, string>, entry: string): Analysis['realDom'] {
+	return real_island_render(files, entry, build_island_info(files));
+}
 
 /** Render the ENTRY component to SSR HTML, resolving `./X.svelte` imports across the file MAP (they
  *  render as their real components). Imports not in the map (or `ogygia/internal`) render as labelled
@@ -536,9 +565,12 @@ function real_island_render(files: Record<string, string>, entry: string, island
 			}
 			const fp = `obsfp_${info.name.replace(/[^\w]/g, '')}_${idx}`;
 			const wake = info.wake || 'load';
+			// `keep: 'name'` → the REAL data-ogygia-keep, so the runtime sets up the keep-host on hydrate
+			// and reconcile_body matches + relocates the LIVE island across a nav (its state survives).
+			const keepAttr = info.keep ? ` data-ogygia-keep="${escAttr(info.keep)}"` : '';
 			const region =
 				`<ogygia-slot><ogygia-region entry="${escAttr('__ISLAND__:' + info.name)}" wake="${escAttr(wake)}" ` +
-				`data-og-fp="${fp}" data-obs-real-island data-name="${escAttr(info.name)}">${ssr}</ogygia-region>` +
+				`data-og-fp="${fp}" data-obs-real-island data-name="${escAttr(info.name)}"${keepAttr}>${ssr}</ogygia-region>` +
 				`<script data-ogygia-props>${escScript(payload)}</script></ogygia-slot>`;
 			html = html.replace(`<!--OBS_ISLAND:${idx}-->`, region);
 		}
@@ -690,23 +722,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 
 	const entryFile = 'App.svelte' in files ? 'App.svelte' : active;
 	const ledger = byte_ledger(files);
-	// Boundary-lens metadata: for every marked region, its strategy + bytes, keyed by target file.
-	const islandInfo: IslandInfo = new Map();
-	for (const f of Object.keys(files)) {
-		if (!f.endsWith('.svelte')) continue;
-		for (const isl of analyze_marks(files[f]).islands) {
-			const target = resolve_file(isl.component, files);
-			if (!target) continue;
-			const lf = ledger.files.find((x) => x.name === target);
-			islandInfo.set(target, {
-				kind: isl.strategy.kind,
-				wake: (isl.attrs.wake as string) || (isl.strategy.kind === 'island' ? 'load' : ''),
-				name: target,
-				bytes: lf?.bytes ?? 0,
-				ships: lf?.ships ?? false
-			});
-		}
-	}
+	const islandInfo = build_island_info(files);
 
 	return {
 		ok: marks.ok,
@@ -762,12 +778,18 @@ function render_live(files: Record<string, string>, file: string, props: Record<
 
 type InMsg =
 	| { id: number; type?: 'analyze'; files: Record<string, string>; active: string }
-	| { id: number; type: 'live'; files: Record<string, string>; file: string; props: Record<string, unknown> };
+	| { id: number; type: 'live'; files: Record<string, string>; file: string; props: Record<string, unknown> }
+	| { id: number; type: 'page'; files: Record<string, string>; entry: string };
 
 self.onmessage = (e: MessageEvent<InMsg>) => {
 	const msg = e.data;
 	if (msg.type === 'live') {
 		self.postMessage({ id: msg.id, type: 'live', html: render_live(msg.files, msg.file, msg.props) });
+		return;
+	}
+	if (msg.type === 'page') {
+		// A nav target: render that page to real-island HTML (the mini-router injects + reconciles it).
+		self.postMessage({ id: msg.id, type: 'page', realDom: render_page(msg.files, msg.entry) });
 		return;
 	}
 	analyze(msg.files, msg.active).then((result) => self.postMessage({ id: msg.id, result }));
