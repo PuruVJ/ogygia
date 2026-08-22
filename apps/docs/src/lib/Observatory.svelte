@@ -412,6 +412,13 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			? Math.round((1 - analysis.ledger.ogygiaBytes / analysis.ledger.kitBytes) * 100)
 			: 0
 	);
+	// Server-backed regions — `render: 'deferred'` (server hole) and `render: 'live'`. Their HTML comes
+	// from the server, so the in-page LIVE mount can't drive them: a deferred hole never swaps past its
+	// fallback, a live region never ticks. The `islands` mode DOES (worker renders, main thread pushes
+	// ticks / serves the endpoint) — so when live mode holds one, we point the reader there.
+	const server_regions = $derived(
+		(analysis.islands ?? []).filter((i) => i.strategy.kind === 'server hole' || i.strategy.kind === 'live')
+	);
 
 	$effect(() => {
 		if (analysis.real || analysis.realError) everWarmed = true;
@@ -918,6 +925,15 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						<button class="replay" data-obs-replay title="re-arm the wake schedules" onclick={() => wakeNonce++}>⟳ replay wakes</button>
 					</div>
 					<div class="wakehint muted">islands start cold. <b>load</b> wakes now · <b>idle</b> soon · <b>visible</b> on scroll · <b>interaction</b> on click · lakes stay frozen.</div>
+				{/if}
+				{#if previewMode === 'live' && server_regions.length}
+					<div class="wakehint srvhint" data-obs-server-hint>
+						<b>{server_regions.map((i) => i.component.replace(/^.*\//, '').replace(/\.svelte$/, '')).join(', ')}</b>
+						render on the <b>server</b> ({server_regions.some((i) => i.strategy.kind === 'live') ? 'live' : 'deferred'}).
+						The in-page <b>live</b> mount can't drive them — a deferred hole never swaps, a live region never ticks.
+						<button class="tolink" onclick={() => (previewMode = 'islands')}>switch to islands →</button>
+						to watch the real runtime fetch and revalidate them.
+					</div>
 				{/if}
 				{#if previewMode === 'islands'}
 					<div class="wakehint muted" data-obs-islands-hint>
@@ -1779,6 +1795,33 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.wakehint b {
 		color: var(--text-dim);
+	}
+	/* Server/live-region notice in LIVE mode — a warm tint, since it's telling you why nothing moves. */
+	.srvhint {
+		margin: 2px 14px 8px;
+		padding: 7px 10px;
+		font-size: 11px;
+		line-height: 1.5;
+		color: var(--text-dim);
+		background: color-mix(in oklab, #f59e0b 9%, transparent);
+		border: 1px solid color-mix(in oklab, #f59e0b 26%, transparent);
+		border-radius: 8px;
+	}
+	.srvhint b {
+		color: var(--text);
+	}
+	.tolink {
+		border: 0;
+		background: none;
+		padding: 0;
+		font: inherit;
+		font-weight: 600;
+		color: var(--accent);
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.tolink:hover {
+		text-decoration: underline;
 	}
 	.navinfo {
 		display: flex;
