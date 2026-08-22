@@ -12,6 +12,7 @@
 	import { SplitPane } from '@neodrag/svelte/splitpane';
 	import { warmPrettier, formatCode } from './prettier';
 	import { parse as devalue_parse } from 'devalue';
+	import ReplPassthrough from './repl/ReplPassthrough.svelte';
 	import './observatory-canvas.css'; // gentle, overridable native-element defaults (.og-canvas), shared with the iframe
 	import type { Analysis } from './observatory.worker';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
@@ -794,6 +795,15 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		add('svelte/animate', import('svelte/animate'));
 		add('svelte/motion', import('svelte/motion'));
 	}
+	// ogygia's runtime is EXTERNAL in the worker bundle. The content pipeline injects `import { TabGroup,
+	// Tab } from 'ogygia/content'` for `::: tabs` / `::: code-group` — but those are ISLANDS (children cross
+	// via the region bridge), so mounting the host's real ones in the plain live mount fails. Hand the eval
+	// a passthrough (renders children + label) for ANY ogygia named import → content shows stacked instead
+	// of crashing. The real, interactive version lives in the preview's "islands" mode.
+	const ogygia_passthrough: Record<string, unknown> = new Proxy(
+		{ default: ReplPassthrough },
+		{ get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : ReplPassthrough) }
+	);
 
 	// Boot the worker (called ONCE from the init attachment). Replies flow through the callbacks.
 	function boot_worker(): Worker {
@@ -880,6 +890,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		if (spec.startsWith('svelte/internal/')) return (svelteClient as Record<string, unknown>) ?? {};
 		// svelte/store, svelte/transition, svelte/easing, svelte/motion … → the loaded submodule, else {}.
 		if (spec.startsWith('svelte/')) return svelteExtras[spec] ?? {};
+		// ogygia runtime (external): content wrappers (TabGroup/Tab/…) → a children-rendering passthrough so
+		// the live mount shows their content instead of crashing on the island region bridge.
+		if (spec === 'ogygia' || spec.startsWith('ogygia/')) return ogygia_passthrough;
 		return {};
 	}
 	/** Eval a CJS module string with our svelte-providing require; returns its exports. */

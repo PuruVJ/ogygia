@@ -27,7 +27,9 @@ export function sveltePlugin(opts: SveltePluginOptions = {}): RolldownPlugin {
 	return {
 		name: 'svelte-compile',
 		transform(code: string, id: string) {
-			if (!SVELTE_MODULE.test(id)) return null;
+			// Never svelte-compile a rolldown VIRTUAL module (`\0`-prefixed): the CDN plugin's inert stub for
+			// a missing `.svelte` import has a `.svelte`-suffixed id but JS body — compiling it would throw.
+			if (id[0] === '\0' || !SVELTE_MODULE.test(id)) return null;
 			const src = opts.preprocess ? opts.preprocess(code, id) : code;
 			// dev:false — no `$.FILENAME` module-scope self-reference (our eval linker can't satisfy it).
 			const { js } = compile(src, {

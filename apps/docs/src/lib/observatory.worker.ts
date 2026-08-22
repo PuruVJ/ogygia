@@ -388,6 +388,19 @@ function execute(files: Record<string, string>, entry: string, islandInfo?: Isla
 			const require = (spec: string): Record<string, unknown> => {
 				if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
 				if (spec === 'svelte/server') return { render } as Record<string, unknown>;
+				// ogygia content wrappers (TabGroup/Tab/…) are islands — the SSR leg renders them as a
+				// passthrough (children + optional label, stacked), matching the live mount's fallback so a
+				// `::: tabs` / `::: code-group` page shows its content instead of a stub or a crash.
+				if (spec === 'ogygia' || spec.startsWith('ogygia/')) {
+					const Passthrough = ($$renderer: { push: (s: string) => void }, props?: Record<string, unknown>) => {
+						if (props?.label) $$renderer.push(`<div class="repl-passthrough-label">${esc(String(props.label))}</div>`);
+						const kids = props?.children;
+						if (typeof kids === 'function') (kids as (r: unknown) => void)($$renderer);
+					};
+					return new Proxy({ default: Passthrough } as Record<string | symbol, unknown>, {
+						get: (t, k) => (k in t ? t[k] : Passthrough)
+					}) as Record<string, unknown>;
+				}
 				const file = resolve_file(spec, files);
 				if (file && file.endsWith('.svelte')) {
 					const info = islandInfo?.get(file);
@@ -842,6 +855,10 @@ function render_live(files: Record<string, string>, file: string, props: Record<
 // (whole-app) mount — the marked import becomes a normal one; the workspace resolver links it.
 const WITH_DIAL = /(\bfrom\s*['"][^'"]+['"])\s*with\s*\{[^}]*\}/g;
 const SVELTE_EXTERNAL_ID = /^svelte(\/|$)/;
+// ogygia's own runtime (TabGroup/Tab for content tabs, app helpers, …) is EXTERNAL — the host page IS an
+// ogygia app, so the main thread hands the eval its OWN already-compiled ogygia modules (bundle_require).
+// Never CDN-fetch `ogygia` (the published npm build is a different version + won't recompile in the REPL).
+const OGYGIA_EXTERNAL_ID = /^ogygia(\/|$)/;
 // rolldown paints errors with ANSI color + a box-drawing source frame — strip both for the REPL readout.
 const ANSI = /\x1b\[[0-9;]*m/g;
 const BUILD_FAILED = /^Build failed with \d+ errors?:\s*/;
@@ -893,7 +910,7 @@ async function bundle_preview(
 					onMissing: (id: string) => missing.push(id)
 				})
 			],
-			external: (id: string) => SVELTE_EXTERNAL_ID.test(id), // shared with the host mount
+			external: (id: string) => SVELTE_EXTERNAL_ID.test(id) || OGYGIA_EXTERNAL_ID.test(id), // shared w/ host
 			cwd: '/',
 			onLog() {}
 		});

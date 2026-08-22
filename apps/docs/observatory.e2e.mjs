@@ -133,6 +133,11 @@ async function main() {
 	await setSrc(page, S(`# Edited heading RT\n\nplain prose paragraph.\n`));
 	const mdEdited = await until(page, () => /Edited heading RT/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
 	ok('markdown recompiles on edit', !!mdEdited);
+	// `::: tabs` / `::: code-group` inject ogygia island wrappers — the live mount can't run the island
+	// region bridge, so they must degrade to a children passthrough (content shown), NEVER crash to empty.
+	await setSrc(page, `# Tabs\n\n::: tabs\n== One\nTAB ONE BODY\n== Two\nTAB TWO BODY\n:::\n`);
+	const tabsShown = await until(page, () => { const t = document.querySelector('[data-obs-preview]')?.textContent || ''; return /Tabs/.test(t) && /TAB ONE BODY/.test(t); });
+	ok('content tabs degrade to passthrough (content shown, no crash)', !!tabsShown);
 	// back to a svelte preset so later shared-workspace assertions aren't on a .md
 	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'demo app')?.click());
 	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
