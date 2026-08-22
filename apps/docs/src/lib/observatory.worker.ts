@@ -29,6 +29,28 @@ set_host(make_browser_host());
 // already fetched are reused (a REPL edits constantly; re-fetching each keystroke would hammer the CDN).
 const cdn_cache = makeCdnCache();
 
+// PERSISTENT layer: fetched jsdelivr responses survive across page reloads / shared-link opens via the
+// Cache API, so re-opening a workspace with CDN deps is instant instead of re-fetching every package.
+// jsdelivr versioned URLs are immutable (safe to keep forever); a no-version `/npm/<name>/package.json`
+// resolves to LATEST, so it's NOT persisted (else it'd pin a stale latest). Graceful: any Cache API
+// failure falls straight back to the network.
+const CDN_CACHE_NAME = 'observatory-cdn-v1';
+const CDN_NO_VERSION_PKG = /\/npm\/(?:@[^/]+\/)?[^/@]+\/package\.json(\?|$)/;
+async function caching_fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+	if (typeof caches === 'undefined' || CDN_NO_VERSION_PKG.test(url)) return fetch(input as RequestInfo, init);
+	try {
+		const cache = await caches.open(CDN_CACHE_NAME);
+		const hit = await cache.match(url);
+		if (hit) return hit;
+		const res = await fetch(input as RequestInfo, init);
+		if (res.ok) cache.put(url, res.clone()).catch(() => {});
+		return res;
+	} catch {
+		return fetch(input as RequestInfo, init);
+	}
+}
+
 export interface Island {
 	local: string;
 	component: string;
@@ -926,6 +948,7 @@ async function bundle_preview(
 				sveltePlugin({ generate: 'client', preprocess: (c: string) => c.replace(WITH_DIAL, '$1') }),
 				cdnPlugin({
 					cache: cdn_cache, // reused across edits — don't re-fetch jsdelivr every keystroke
+					fetch: caching_fetch, // + persisted across reloads via the Cache API
 					onPackage: (n: string, v: string) => packages.push(v ? `${n}@${v}` : n),
 					onMissing: (id: string) => missing.push(id)
 				})
