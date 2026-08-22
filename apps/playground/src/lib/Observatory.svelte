@@ -1058,6 +1058,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		border-right: 1px solid rgba(148, 163, 184, 0.18);
 		display: flex;
 		flex-direction: column;
+		/* CodeMirror's content has a large min-content width (long lines); without this the grid item's
+		   default min-width:auto lets the editor column blow past 1fr and collapse the preview to ~0. */
+		min-width: 0;
 	}
 	.filetabs {
 		display: flex;
@@ -1114,6 +1117,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		display: flex;
 		flex-direction: column;
 		overflow: auto;
+		min-width: 0;
 	}
 	table {
 		border-collapse: collapse;
