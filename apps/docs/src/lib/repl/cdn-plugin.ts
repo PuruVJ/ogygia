@@ -10,10 +10,14 @@ import {
 	resolve_entry,
 	extension_candidates,
 	is_bare,
+	apply_browser_map,
 	BROWSER_STUB
 } from './npm-resolve.ts';
 
 const CDN = 'https://cdn.jsdelivr.net/npm/';
+/** A jsdelivr package-file URL → [_, name, version, pathWithinPkg]; lets us find a relative import's
+ *  OWNING package so its `browser` map can remap node-only inner files (axios http adapter → xhr). */
+const CDN_PKG_URL = /^https:\/\/cdn\.jsdelivr\.net\/npm\/((?:@[^/]+\/)?[^/@]+)(?:@([^/]+))?\/(.*)$/;
 /** Node builtins can't run in the browser — stub them (covers most `browser: { fs: false }` intents). */
 const NODE_BUILTINS = new Set([
 	'fs', 'path', 'os', 'crypto', 'stream', 'util', 'events', 'http', 'https', 'net', 'tls', 'zlib',
@@ -214,6 +218,27 @@ export function cdnPlugin(opts: CdnPluginOptions = {}): RolldownPlugin {
 				// A `.wasm` has an explicit extension — no need to probe candidates (which would fetch it as
 				// text); hand the URL straight to load(), which fetches the bytes.
 				if (WASM_MODULE.test(id)) return abs;
+				// BROWSER-FIELD REMAP of an inner file: if the importer's package has a `browser` MAP, a
+				// node-only file may be replaced by a browser variant (axios `./lib/adapters/http.js` →
+				// `xhr.js`) or stubbed (`false`). Apply it against the target's package-relative path.
+				const owner = CDN_PKG_URL.exec(importer);
+				if (owner) {
+					const [, oname, over] = owner;
+					const obase = CDN + oname + (over ? '@' + over : '') + '/';
+					if (abs.startsWith(obase)) {
+						const rel = './' + abs.slice(obase.length);
+						const opkg = await fetch_pkg(oname, over || '');
+						const browser = opkg?.browser as string | Record<string, string | false> | undefined;
+						if (browser && typeof browser === 'object') {
+							// Match the target as-written and with a `.js` appended (extensionless imports).
+							for (const cand of rel.endsWith('.js') ? [rel] : [rel, rel + '.js']) {
+								const mapped = apply_browser_map(browser, cand);
+								if (mapped === BROWSER_STUB) return BROWSER_STUB + ':' + id;
+								if (mapped !== cand) return (await resolve_existing(obase, mapped)) ?? new URL(mapped, obase).href;
+							}
+						}
+					}
+				}
 				const found = await resolve_existing(new URL('.', importer).href, id);
 				return found ?? abs;
 			}

@@ -235,6 +235,26 @@ async function main() {
 		ok('native .node addon → stub, build survives', code.length > 0 && missing.some((id) => /\.node/.test(id)), `missing=${missing.join(',')}`);
 	} catch (e) { fail += 1; console.log('  ✗ .node test threw —', e.message.split('\n')[0]); }
 
+	// 21. browser-field MAP on inner files: `./node.js` → `./browser.js`, `./fslib.js` → false (stub).
+	// The node adapter of an axios-class package is dropped for its browser variant (verified on real axios).
+	try {
+		const CDN = 'https://cdn.jsdelivr.net/npm/';
+		const PKG = JSON.stringify({ name: 'bmap-pkg', version: '1.0.0', main: './index.js', browser: { './node.js': './browser.js', './fslib.js': false } });
+		const FILES = {
+			'bmap-pkg/package.json': PKG,
+			'bmap-pkg@1.0.0/package.json': PKG,
+			'bmap-pkg@1.0.0/index.js': `import x from './node.js';\nimport y from './fslib.js';\nexport const v = x;\nexport const stub = y;`,
+			'bmap-pkg@1.0.0/browser.js': `export default 'BROWSER';`,
+			'bmap-pkg@1.0.0/node.js': `export default 'NODE';`,
+			'bmap-pkg@1.0.0/fslib.js': `export default 'REALFS';`
+		};
+		const bmapFetch = async (url) => { const p = String(url).slice(CDN.length); const b = FILES[p]; return b != null ? { ok: true, text: async () => b, arrayBuffer: async () => new ArrayBuffer(0) } : { ok: false, text: async () => null, arrayBuffer: async () => new ArrayBuffer(0) }; };
+		const { code } = await bundleWith(`import { v, stub } from 'bmap-pkg';\nexport const version = v;\nexport const stubType = typeof stub;`, bmapFetch);
+		const m = await importCode(code);
+		ok('browser map remaps inner node→browser file', m.version === 'BROWSER', `got ${m.version}`);
+		ok('browser:false inner file → inert stub', m.stubType === 'object', `got ${m.stubType}`);
+	} catch (e) { fail += 2; console.log('  ✗ browser-map test threw —', e.message.split('\n')[0]); }
+
 	console.log(`\n${'─'.repeat(44)}`);
 	console.log(`${fail === 0 ? '✓ ALL PASS' : '✗ FAILURES'}: ${pass} passed, ${fail} failed`);
 	process.exit(fail === 0 ? 0 : 1);
