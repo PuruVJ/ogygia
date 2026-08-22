@@ -83,9 +83,9 @@
 
 	// Mark OUR OWN syntax — the ogygia dials (import attributes), macros, and virtual ids — with a faint
 	// accent box, so at a glance you see what's ogygia vs plain Svelte/JS.
-	// `[^}\n]` so an UNCLOSED `with {` doesn't run to the next `}` anywhere in the file — a dial must close
-	// on its own line to be highlighted.
-	const OG_PATTERNS = [/\bwith\s*\{[^}\n]*\}/g, /\bimport\.meta\.og\.\w+/g, /virtual:ogygia\/[\w/.-]+/g];
+	// `[^{}]` matches a dial's contents (multi-line after Format included) but NO nested braces — so an
+	// UNCLOSED `with {` stops at the next brace (e.g. markup `start={`) instead of running away.
+	const OG_PATTERNS = [/\bwith\s*\{[^{}]*\}/g, /\bimport\.meta\.og\.\w+/g, /virtual:ogygia\/[\w/.-]+/g];
 	const og_mark = Decoration.mark({ class: 'cm-og-syntax' });
 	const ogHighlighter = ViewPlugin.fromClass(
 		class {
@@ -154,41 +154,56 @@
 
 	let syncing = false;
 
-	$effect(() => {
-		const init_doc = untrack(() => doc);
-		const ic = untrack(() => initialCursor);
-		const v = new EditorView({
-			state: EditorState.create({
-				doc: init_doc,
-				selection: !readonly && ic > 0 && ic <= init_doc.length ? { anchor: ic } : undefined,
-				extensions: extensions(untrack(() => docKey), untrack(() => lang))
-			}),
-			parent: el
+	// Each file keeps its OWN EditorState (doc + undo history + selection), keyed by docKey — so undo
+	// never crosses files. Switching stashes the current state and restores the target's.
+	const doc_states = new Map<string, EditorState>();
+	let prev_key: string | undefined;
+	function make_state(text: string, key: string | undefined, l: typeof lang, cursor: number): EditorState {
+		return EditorState.create({
+			doc: text,
+			selection: !readonly && cursor > 0 && cursor <= text.length ? { anchor: cursor } : undefined,
+			extensions: extensions(key, l)
 		});
+	}
+
+	$effect(() => {
+		const key = untrack(() => docKey);
+		const st = make_state(untrack(() => doc), key, untrack(() => lang), untrack(() => initialCursor));
+		if (key) doc_states.set(key, st);
+		prev_key = key;
+		const v = new EditorView({ state: st, parent: el });
 		view = v;
 		return () => {
 			v.destroy();
 			view = undefined;
+			doc_states.clear();
 		};
 	});
 
-	// External doc changes flow in (file switch, recompiled output, preset load) — skip when CM holds it.
-	$effect(() => {
-		const next = doc;
-		if (!view) return;
-		const cur = view.state.doc.toString();
-		if (cur === next) return;
-		syncing = true;
-		view.dispatch({ changes: { from: 0, to: cur.length, insert: next } });
-		syncing = false;
-	});
-
-	// Grammar swap on file/lang change.
+	// Doc/file sync. On a FILE switch (docKey change) stash the current file's full state and restore the
+	// target's own (its undo stack comes back). A restored state whose content no longer matches — e.g. a
+	// preset reloaded that file — is discarded for a fresh one. On an external change to the SAME file
+	// (recompiled output, __OBS_SOURCE.set), patch the doc in place.
 	$effect(() => {
 		const key = docKey;
+		const text = doc;
 		const l = lang;
 		if (!view) return;
-		view.dispatch({ effects: langComp.reconfigure(grammar(key, l)) });
+		if (key !== prev_key) {
+			if (prev_key) doc_states.set(prev_key, view.state);
+			prev_key = key;
+			let st = key ? doc_states.get(key) : undefined;
+			if (!st || st.doc.toString() !== text) st = make_state(text, key, l, 0);
+			syncing = true;
+			view.setState(st);
+			syncing = false;
+			return;
+		}
+		const cur = view.state.doc.toString();
+		if (cur === text) return;
+		syncing = true;
+		view.dispatch({ changes: { from: 0, to: cur.length, insert: text } });
+		syncing = false;
 	});
 </script>
 
