@@ -26,6 +26,39 @@ try {
 	await page.waitForSelector('[data-obs-map] tbody tr', { timeout: 10000 }).catch(() => {});
 	await page.waitForTimeout(400);
 
+	// "islands" mode renders in an ISOLATED iframe (/observatory-frame); query INSIDE it.
+	const frameEval = async <T>(fn: () => T): Promise<T | null> => {
+		const f = page.frames().find((fr) => fr.url().includes('observatory-frame'));
+		if (!f) return null;
+		try {
+			return await f.evaluate(fn);
+		} catch {
+			return null;
+		}
+	};
+	const frameLoc = (sel: string) => page.frameLocator('[data-obs-frame]').locator(sel);
+	const toIslands = async () => {
+		await page.evaluate(() => {
+			const b = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((x) => x.textContent?.trim() === 'islands');
+			(b as HTMLElement)?.click();
+		});
+		await page.waitForTimeout(2600); // iframe load + harness ready + render + hydrate
+	};
+	const toMode = async (mode: string) => {
+		await page.evaluate((m) => {
+			const b = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((x) => x.textContent?.trim() === m);
+			(b as HTMLElement)?.click();
+		}, mode);
+		await page.waitForTimeout(200);
+	};
+	const preset = async (name: string) => {
+		await page.evaluate((n) => {
+			const b = [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent === n);
+			(b as HTMLElement)?.click();
+		}, name);
+		await page.waitForTimeout(800);
+	};
+
 	check('observatory island mounted', (await page.locator('[data-observatory]').count()) === 1);
 	// >= 1: our compile worker, plus the WASI helper threads rolldown-browser's WASM spawns for oxc.
 	check('runs its compile in a Web Worker', workers.length >= 1, `${workers.length} worker(s) incl. WASI threads`);
@@ -64,24 +97,20 @@ try {
 	});
 	check('boundary lens: x-ray mode tints the preview + shows a legend', !!lens.xray && lens.legend, JSON.stringify({ xray: lens.xray, legend: lens.legend }));
 	check('boundary lens: the island (Counter) and the lake (Prose) are marked regions, the shell is not', lens.islands.some((i) => i.name === 'Counter.svelte' && i.kind === 'island' && i.ships === 'true') && lens.islands.some((i) => i.name === 'Prose.svelte' && i.kind === 'lake' && i.ships === 'false') && !lens.islands.some((i) => i.name === 'Header.svelte'), JSON.stringify(lens.islands));
-	// ── ISLANDS MODE (crown jewel): the app renders with REAL <ogygia-region> shells that the PAGE's own
-	//    ogygia runtime hydrates — the actual framework running in the preview, not a mount() stand-in ──
-	await page.evaluate(() => {
-		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'islands');
-		(btn as HTMLElement)?.click();
-	});
-	await page.waitForTimeout(1200); // let the runtime import the blob entries + hydrate
-	const island = await page.evaluate(() => {
-		const r = document.querySelector('[data-obs-preview] ogygia-region[data-obs-real-island]');
+	// ── ISLANDS MODE (crown jewel): the app renders with REAL <ogygia-region> shells in an ISOLATED
+	//    iframe whose own ogygia runtime hydrates them — the actual framework, fully sandboxed ──
+	await toIslands();
+	const island = await frameEval(() => {
+		const r = document.querySelector('#obs-app ogygia-region[data-obs-real-island]');
 		return r ? { name: r.getAttribute('data-name'), blobEntry: (r.getAttribute('entry') || '').startsWith('blob:'), nested: r.hasAttribute('data-nested') } : null;
 	});
-	check('islands mode: the app renders a REAL <ogygia-region> (blob entry, not skipped as nested)', !!island && island.name === 'Counter.svelte' && island.blobEntry && !island.nested, JSON.stringify(island));
-	const ri0 = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region button')?.textContent?.trim() || '');
-	await page.click('[data-obs-preview] ogygia-region button').catch(() => {});
-	await page.click('[data-obs-preview] ogygia-region button').catch(() => {});
+	check('islands mode: the iframe renders a REAL <ogygia-region> (blob entry, not skipped as nested)', !!island && island.name === 'Counter.svelte' && island.blobEntry && !island.nested, JSON.stringify(island));
+	const ri0 = await frameEval(() => document.querySelector('#obs-app ogygia-region button')?.textContent?.trim() || '');
+	await frameLoc('#obs-app ogygia-region button').click().catch(() => {});
+	await frameLoc('#obs-app ogygia-region button').click().catch(() => {});
 	await page.waitForTimeout(200);
-	const ri1 = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region button')?.textContent?.trim() || '');
-	check('islands mode: the PAGE runtime hydrates the island — it is interactive', ri0 === 'count is 3' && ri1 === 'count is 5', `${ri0} → ${ri1}`);
+	const ri1 = await frameEval(() => document.querySelector('#obs-app ogygia-region button')?.textContent?.trim() || '');
+	check("islands mode: the iframe's own runtime hydrates the island — it is interactive", ri0 === 'count is 3' && ri1 === 'count is 5', `${ri0} → ${ri1}`);
 	// the real runtime's hydration events flow to the Observatory off the devtools bus (Rung 0 → instrument).
 	// Only when the served build compiled devtools IN (the runtime emits behind __OGYGIA_DEVTOOLS__); the
 	// default suite builds devtools OFF (tree-shaken), so skip-pass there — exactly like e2e/devtools.ts.
@@ -211,92 +240,78 @@ try {
 	check('page is cross-origin isolated (COOP/COEP for the WASM)', await page.evaluate(() => self.crossOriginIsolated));
 	check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 
-	// ── SERVER ISLANDS (deferred): the "server island" preset in islands mode — the deferred region's
-	//    HTML is FETCHED from its endpoint (a fetch intercept plays the server) and swapped in ──
-	await page.evaluate(() => {
-		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'server island');
-		(btn as HTMLElement)?.click();
+	// ── SERVER ISLANDS (deferred) in the iframe: the deferred region's HTML is FETCHED from its endpoint
+	//    (a fetch intercept in the frame plays the server) and swapped in ──
+	await toMode('live');
+	await preset('server island');
+	await toIslands();
+	const deferMeta = await frameEval(() => {
+		const r = document.querySelector('#obs-app ogygia-region[data-obs-deferred]');
+		return r ? { render: r.getAttribute('render'), endpoint: r.getAttribute('endpoint') } : null;
 	});
-	await page.waitForTimeout(700);
-	await page.evaluate(() => {
-		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'islands');
-		(btn as HTMLElement)?.click();
-	});
-	await page.waitForTimeout(120);
-	const deferMeta = await page.evaluate(() => {
-		const r = document.querySelector('[data-obs-preview] ogygia-region[data-obs-deferred]');
-		return r ? { render: r.getAttribute('render'), endpoint: r.getAttribute('endpoint'), fallback: /loading/i.test(r.textContent || '') } : null;
-	});
-	check('server island: a deferred region renders with a fetch endpoint + a loading fallback', !!deferMeta && deferMeta.render === 'defer' && /\/__obs_defer\//.test(deferMeta.endpoint || '') && deferMeta.fallback, JSON.stringify(deferMeta));
+	// (the loading fallback is transient — the fetch's 260ms delay lands during the iframe load wait; the
+	//  swap check below proves the fetch → content path.)
+	check('server island: a real deferred region renders with a signed-style fetch endpoint', !!deferMeta && deferMeta.render === 'defer' && /\/__obs_defer\//.test(deferMeta.endpoint || ''), JSON.stringify(deferMeta));
 	await page.waitForTimeout(900); // the fetch (with its small delay) lands + swaps
-	const swapped = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region[data-obs-deferred]')?.textContent?.replace(/\s+/g, ' ').trim() || '');
+	const swapped = (await frameEval(() => document.querySelector('#obs-app ogygia-region[data-obs-deferred]')?.textContent?.replace(/\s+/g, ' ').trim() || '')) || '';
 	check('server island: the endpoint HTML is fetched on schedule + swapped in (fallback → content)', /Welcome back, Ada/.test(swapped) && !/loading/i.test(swapped), swapped.slice(0, 80));
 
-	// ── LIVE REGIONS (render: 'live'): the "live region" preset — a <ogygia-region live> re-renders on
-	//    a tick and the runtime MORPHS it in place, so a focused input's text survives the update ──
-	await page.evaluate(() => {
-		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'live region');
-		(btn as HTMLElement)?.click();
-	});
-	await page.waitForTimeout(700);
-	await page.evaluate(() => {
-		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'islands');
-		(btn as HTMLElement)?.click();
-	});
-	await page.waitForTimeout(500);
-	const tickBefore = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region[data-obs-live]')?.textContent?.match(/re-rendered (\d+)/)?.[1] || '');
-	// type into the live region's input, then let it tick + morph a couple of times
-	await page.click('[data-obs-preview] ogygia-region[data-obs-live] input').catch(() => {});
-	await page.type('[data-obs-preview] ogygia-region[data-obs-live] input', 'KEEPME').catch(() => {});
+	// ── LIVE REGIONS (render: 'live') in the iframe: a <ogygia-region live> re-renders on a tick and the
+	//    frame's runtime MORPHS it in place, so a focused input's text survives the update ──
+	await toMode('live');
+	await preset('live region');
+	await toIslands();
+	const tickBefore = (await frameEval(() => document.querySelector('#obs-app ogygia-region[data-obs-live]')?.textContent?.match(/re-rendered (\d+)/)?.[1] || '')) || '';
+	await frameLoc('#obs-app ogygia-region[data-obs-live] input').click().catch(() => {});
+	await frameLoc('#obs-app ogygia-region[data-obs-live] input').pressSequentially('KEEPME').catch(() => {});
 	await page.waitForTimeout(3600);
-	const live = await page.evaluate(() => ({
-		tick: document.querySelector('[data-obs-preview] ogygia-region[data-obs-live]')?.textContent?.match(/re-rendered (\d+)/)?.[1] || '',
-		value: (document.querySelector('[data-obs-preview] ogygia-region[data-obs-live] input') as HTMLInputElement | null)?.value || '',
+	const live = await frameEval(() => ({
+		tick: document.querySelector('#obs-app ogygia-region[data-obs-live]')?.textContent?.match(/re-rendered (\d+)/)?.[1] || '',
+		value: (document.querySelector('#obs-app ogygia-region[data-obs-live] input') as HTMLInputElement | null)?.value || '',
 		focused: document.activeElement?.tagName === 'INPUT'
 	}));
-	check('live region: the runtime re-renders + MORPHS it in place (the tick advances)', tickBefore === '0' && Number(live.tick) > 0, `${tickBefore} → ${live.tick}`);
-	check('live region: the morph keeps focus + typed text (not a re-mount)', live.value === 'KEEPME' && live.focused, JSON.stringify(live));
+	check('live region: the frame runtime re-renders + MORPHS it in place (the tick advances)', Number(live?.tick) > Number(tickBefore || '0'), `${tickBefore} → ${live?.tick}`);
+	check('live region: the morph keeps focus + typed text (not a re-mount)', live?.value === 'KEEPME' && live?.focused, JSON.stringify(live));
 
-	// ── KEEP · NAV (the real reconcile): bump a keep counter on Home, navigate to About — the live
-	//    island is RELOCATED (its count survives) while page-specific islands mount/remove ──
-	await page.evaluate(() => {
-		const btn = [...document.querySelectorAll('[data-obs-presets] button')].find((b) => b.textContent === 'keep · nav');
-		(btn as HTMLElement)?.click();
-	});
-	await page.waitForTimeout(800);
-	await page.evaluate(() => {
-		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'islands');
-		(btn as HTMLElement)?.click();
-	});
-	await page.waitForTimeout(1200);
-	// bump the kept counter 3×
+	// ── KEEP · NAV (the real reconcile) in the iframe: bump a keep counter on Home, navigate to About —
+	//    the live island is RELOCATED (its count survives) while page-specific islands mount/remove ──
+	await toMode('live');
+	await preset('keep · nav');
+	await toIslands();
 	for (let i = 0; i < 3; i++) {
-		await page.click('[data-obs-preview] ogygia-region[data-ogygia-keep] button').catch(() => {});
+		await frameLoc('#obs-app ogygia-region[data-ogygia-keep] button').click().catch(() => {});
 		await page.waitForTimeout(70);
 	}
-	const keptText = await page.evaluate(() => document.querySelector('[data-obs-preview] ogygia-region[data-ogygia-keep] button')?.textContent?.trim() || '');
-	const homeBefore = await page.evaluate(() => /Home widget/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
-	check('keep·nav: on Home, the kept counter shows 3 and the Home-only island is present', /kept count: 3/.test(keptText) && homeBefore, `${keptText} | home=${homeBefore}`);
-	// navigate to About → reconcile relocates the kept island (state survives), swaps the widget
-	await page.click('[data-obs-preview] a[data-obs-nav="About.svelte"]').catch(() => {});
-	await page.waitForTimeout(1200);
-	const nav = await page.evaluate(() => ({
-		counter: document.querySelector('[data-obs-preview] ogygia-region[data-ogygia-keep] button')?.textContent?.trim() || '',
-		home: /Home widget/.test(document.querySelector('[data-obs-preview]')?.textContent || ''),
-		about: /About widget/.test(document.querySelector('[data-obs-preview]')?.textContent || ''),
-		readout: document.querySelector('[data-obs-navinfo]')?.textContent?.replace(/\s+/g, ' ').trim() || ''
+	const keptText = (await frameEval(() => document.querySelector('#obs-app ogygia-region[data-ogygia-keep] button')?.textContent?.trim() || '')) || '';
+	const homeBefore = await frameEval(() => /Home widget/.test(document.getElementById('obs-app')?.textContent || ''));
+	check('keep·nav: on Home, the kept counter shows 3 and the Home-only island is present', /kept count: 3/.test(keptText) && !!homeBefore, `${keptText} | home=${homeBefore}`);
+	await frameLoc('#obs-app a[data-obs-nav="About.svelte"]').click().catch(() => {});
+	await page.waitForTimeout(1300);
+	const nav = await frameEval(() => ({
+		counter: document.querySelector('#obs-app ogygia-region[data-ogygia-keep] button')?.textContent?.trim() || '',
+		home: /Home widget/.test(document.getElementById('obs-app')?.textContent || ''),
+		about: /About widget/.test(document.getElementById('obs-app')?.textContent || '')
 	}));
-	check('keep·nav: the kept island survives the nav with its state (count still 3)', /kept count: 3/.test(nav.counter), nav.counter);
-	check('keep·nav: page islands reconcile — Home widget removed, About widget mounted', !nav.home && nav.about, JSON.stringify({ home: nav.home, about: nav.about }));
-	check('keep·nav: the reconcile readout reports kept/mounted/removed', /kept Counter/.test(nav.readout) && /mounted AboutWidget/.test(nav.readout) && /removed HomeWidget/.test(nav.readout), nav.readout);
-	// navigate back → the kept counter STILL survives
-	await page.click('[data-obs-preview] a[data-obs-nav="App.svelte"]').catch(() => {});
-	await page.waitForTimeout(1200);
-	const back = await page.evaluate(() => ({
-		counter: document.querySelector('[data-obs-preview] ogygia-region[data-ogygia-keep] button')?.textContent?.trim() || '',
-		home: /Home widget/.test(document.querySelector('[data-obs-preview]')?.textContent || '')
+	const readout = await page.evaluate(() => document.querySelector('[data-obs-navinfo]')?.textContent?.replace(/\s+/g, ' ').trim() || '');
+	check('keep·nav: the kept island survives the nav with its state (count still 3)', /kept count: 3/.test(nav?.counter || ''), nav?.counter);
+	check('keep·nav: page islands reconcile — Home widget removed, About widget mounted', !nav?.home && !!nav?.about, JSON.stringify({ home: nav?.home, about: nav?.about }));
+	check('keep·nav: the reconcile readout reports kept/mounted/removed', /kept Counter/.test(readout) && /mounted AboutWidget/.test(readout) && /removed HomeWidget/.test(readout), readout);
+	await frameLoc('#obs-app a[data-obs-nav="App.svelte"]').click().catch(() => {});
+	await page.waitForTimeout(1300);
+	const back = await frameEval(() => ({
+		counter: document.querySelector('#obs-app ogygia-region[data-ogygia-keep] button')?.textContent?.trim() || '',
+		home: /Home widget/.test(document.getElementById('obs-app')?.textContent || '')
 	}));
-	check('keep·nav: navigating BACK still keeps the counter (3) + restores the Home island', /kept count: 3/.test(back.counter) && back.home, JSON.stringify(back));
+	check('keep·nav: navigating BACK still keeps the counter (3) + restores the Home island', /kept count: 3/.test(back?.counter || '') && !!back?.home, JSON.stringify(back));
+
+	// ── THEME: the preview theme toggle writes `og-theme`; the same-origin iframe re-themes to match
+	//    (the same mechanism the docs ThemeToggle uses, so it'll sync once embedded there) ──
+	await page.click('[data-obs-theme]').catch(() => {}); // system → light
+	await page.waitForTimeout(150);
+	await page.click('[data-obs-theme]').catch(() => {}); // light → dark
+	await page.waitForTimeout(400);
+	const frameTheme = await frameEval(() => document.documentElement.getAttribute('data-theme'));
+	check('theme: the toggle re-themes the isolated iframe (synced via the og-theme key)', frameTheme === 'dark', String(frameTheme));
 
 	await page.close();
 } finally {
