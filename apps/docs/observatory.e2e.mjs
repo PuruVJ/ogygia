@@ -75,6 +75,9 @@ async function main() {
 	await page.waitForTimeout(1500);
 	const alive = await page.evaluate(() => !!document.querySelector('[data-observatory]') && !!window.__OBS_SOURCE);
 	ok('syntax error → island stays alive', alive);
+	// the bundle error is surfaced CLEAN — no rolldown "Build failed" wrapper, no source-frame newlines.
+	const errText = await until(page, () => { const t = document.querySelector('[data-obs-bundle-err]')?.textContent || ''; return t.length > 5 ? t : null; });
+	ok('bundle error shown cleaned (no "Build failed" prefix/newlines)', !!errText && !/Build failed/.test(errText) && !/\n/.test(errText), (errText || '').slice(0, 50));
 	await setSrc(page, S(`<SCRIPT>\n let n = $state(7);\n</SCRIPT>\n<button onclick={() => n++}>n {n}</button>`));
 	const recovered = await until(page, () => /n 7/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
 	ok('recovers after a syntax error', !!recovered);

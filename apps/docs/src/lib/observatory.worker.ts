@@ -917,7 +917,7 @@ async function bundle_preview(
 		const { output } = await bundle.generate({ format: 'cjs', exports: 'named' });
 		return { code: output[0].code, packages: [...new Set(packages)], missing: [...new Set(missing)] };
 	} catch (e) {
-		return { error: e instanceof Error ? e.message : String(e) };
+		return { error: clean_bundle_error(e instanceof Error ? e.message : String(e)) };
 	}
 }
 
