@@ -225,21 +225,35 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	let files = $state<FileMap>({ ...FILES_DEMO });
 	let active = $state<string>('App.svelte');
 	let hash_loaded = $state(false);
+	let cursor = $state(0); // the editor's cursor offset — round-trips in the URL
+	let initial_cursor = $state(0); // applied to the editor once, on load
 
-	// Load a shared file map from the hash on mount (async — gzip decode). Runs once (location.hash is
-	// not reactive). Until it settles the demo shows; the sync-out effect holds off so it can't clobber
-	// the incoming link.
+	// Load the whole workspace from the hash on mount (async — gzip decode). Runs once. The file map is
+	// #code=<gzip>; the UI state (active file, inspector tab, preview mode, cursor) rides as plain
+	// &f=&tab=&m=&c= params — so the entire workspace, not just the files, round-trips through the URL.
 	$effect(() => {
 		const hash = typeof location !== 'undefined' ? location.hash : '';
-		if (!hash.startsWith('#code=') && !hash.startsWith('#files=')) {
+		const amp = hash.indexOf('&');
+		const code_part = amp >= 0 ? hash.slice(0, amp) : hash;
+		const ui = new URLSearchParams(amp >= 0 ? hash.slice(amp + 1) : '');
+		const tab = ui.get('tab');
+		if (tab && ['preview', 'islands', 'bytes', 'wire', 'output'].includes(tab)) inspectorTab = tab as InspectorTab;
+		const m = ui.get('m');
+		if (m === 'live' || m === 'xray' || m === 'islands') previewMode = m;
+		initial_cursor = Number(ui.get('c')) || 0;
+		cursor = initial_cursor;
+		const want_active = ui.get('f') ?? '';
+
+		if (!code_part.startsWith('#code=') && !code_part.startsWith('#files=')) {
+			if (want_active && want_active in files) active = want_active;
 			hash_loaded = true;
 			return;
 		}
-		decode_hash(hash)
+		decode_hash(code_part)
 			.then((map) => {
 				if (map && Object.keys(map).length) {
 					files = map;
-					active = 'App.svelte' in map ? 'App.svelte' : Object.keys(map)[0];
+					active = want_active && want_active in map ? want_active : 'App.svelte' in map ? 'App.svelte' : Object.keys(map)[0];
 				}
 			})
 			.finally(() => (hash_loaded = true));
@@ -321,14 +335,21 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		return () => delete (window as unknown as Record<string, unknown>).__OBS_SOURCE;
 	});
 
-	// Keep the hash in sync (replaceState → no history spam). Compressed via encode_files. Holds off
-	// until the incoming shared link has been read, so it can't clobber it.
+	// Keep the hash in sync (replaceState → no history spam): the gzipped files + the UI state. Holds off
+	// until the incoming link has been read, so it can't clobber it.
 	$effect(() => {
 		const snap = $state.snapshot(files);
+		const a = active;
+		const tab = inspectorTab;
+		const m = previewMode;
+		const c = cursor;
 		if (!hash_loaded) return;
 		const t = setTimeout(() => {
 			encode_files(snap)
-				.then((hash) => history.replaceState(null, '', hash))
+				.then((code) => {
+					const q = `&f=${encodeURIComponent(a)}&tab=${tab}&m=${m}&c=${c}`;
+					history.replaceState(null, '', code + q);
+				})
 				.catch(() => {
 					/* noop */
 				});
@@ -832,7 +853,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					disabled={formatting}>{formatting ? '…' : 'Format'}</button
 				>
 			</div>
-			<CodeMirror doc={files[active]} docKey={active} oninput={(v) => (files[active] = v)} />
+			<CodeMirror doc={files[active]} docKey={active} oninput={(v) => (files[active] = v)} oncursor={(o) => (cursor = o)} initialCursor={initial_cursor} />
 		</section>
 
 		<section class="obs-inspector">
@@ -1477,34 +1498,16 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		border: 1px dashed var(--line-strong);
 		border-radius: 8px;
 		overflow: auto;
-		/* The live/x-ray demos use --obs-* tokens (defined inside the iframe for islands mode); mirror them
-		   here — light default, dark under the site theme — so live/x-ray render styled + theme-aware too. */
-		--obs-bg: #ffffff;
-		--obs-panel: #f8fafc;
-		--obs-text: #0f172a;
-		--obs-muted: #64748b;
-		--obs-border: #e2e8f0;
-		--obs-accent: #0d9488;
+		/* The live/x-ray demos use --obs-* tokens (defined inside the iframe for islands mode); map them to
+		   the SITE tokens here so the canvas is neutral + theme-aware (not a bespoke navy) and matches docs. */
+		--obs-bg: var(--bg-raised);
+		--obs-panel: var(--bg-sunken);
+		--obs-text: var(--text);
+		--obs-muted: var(--text-dim);
+		--obs-border: var(--line);
+		--obs-accent: var(--accent);
 		background: var(--obs-bg);
 		color: var(--obs-text);
-	}
-	:global(:root:not([data-theme='light'])) .preview {
-		@media (prefers-color-scheme: dark) {
-			--obs-bg: #0b1220;
-			--obs-panel: #0f1a2e;
-			--obs-text: #e2e8f0;
-			--obs-muted: #94a3b8;
-			--obs-border: #1e293b;
-			--obs-accent: #5eead4;
-		}
-	}
-	:global(:root[data-theme='dark']) .preview {
-		--obs-bg: #0b1220;
-		--obs-panel: #0f1a2e;
-		--obs-text: #e2e8f0;
-		--obs-muted: #94a3b8;
-		--obs-border: #1e293b;
-		--obs-accent: #5eead4;
 	}
 	.preview.frame {
 		flex: 1;

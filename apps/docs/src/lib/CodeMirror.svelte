@@ -20,7 +20,9 @@
 		docKey,
 		lang,
 		readonly = false,
-		oninput
+		oninput,
+		oncursor,
+		initialCursor = 0
 	}: {
 		doc: string;
 		/** Filename — its extension picks the grammar (App.svelte / x.ts / x.js / x.html). */
@@ -29,6 +31,10 @@
 		lang?: 'svelte' | 'ts' | 'js' | 'html';
 		readonly?: boolean;
 		oninput?: (v: string) => void;
+		/** Report the cursor head offset (for URL state). */
+		oncursor?: (offset: number) => void;
+		/** Restore the cursor to this offset once, on creation. */
+		initialCursor?: number;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -82,6 +88,7 @@
 			syntaxHighlighting(highlight),
 			chrome,
 			EditorView.lineWrapping,
+			EditorState.tabSize.of(2), // render tabs (svelte's compiled output is tab-indented) at 2 cols
 			EditorState.readOnly.of(readonly),
 			EditorView.editable.of(!readonly)
 		];
@@ -96,11 +103,11 @@
 			indentOnInput(),
 			bracketMatching(),
 			indentUnit.of('\t'),
-			EditorState.tabSize.of(2),
 			...base.slice(1),
 			keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
 			EditorView.updateListener.of((u) => {
 				if (u.docChanged && !syncing) oninput?.(u.state.doc.toString());
+				if ((u.selectionSet || u.docChanged) && !syncing) oncursor?.(u.state.selection.main.head);
 			})
 		];
 	}
@@ -108,8 +115,14 @@
 	let syncing = false;
 
 	$effect(() => {
+		const init_doc = untrack(() => doc);
+		const ic = untrack(() => initialCursor);
 		const v = new EditorView({
-			state: EditorState.create({ doc: untrack(() => doc), extensions: extensions(untrack(() => docKey), untrack(() => lang)) }),
+			state: EditorState.create({
+				doc: init_doc,
+				selection: !readonly && ic > 0 && ic <= init_doc.length ? { anchor: ic } : undefined,
+				extensions: extensions(untrack(() => docKey), untrack(() => lang))
+			}),
 			parent: el
 		});
 		view = v;
