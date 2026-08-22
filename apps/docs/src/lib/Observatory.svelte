@@ -176,12 +176,20 @@
 	const CONTENT_MD = `---
 title: Content pages
 ---
+<scr${''}ipt>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+</scr${''}ipt>
 
 # Markdown, live
 
 ogygia's **real** content pipeline runs right here — mdsvex, Shiki-highlighted
 fences, \`::: admonitions\`, heading ids + hover anchors, frontmatter. Edit the
 markdown and watch it recompile.
+
+A **live island** right in the prose — marked imports work in \`.md\`/\`.svx\`, so a
+demo lives next to the words describing it:
+
+<Counter start={3} />
 
 ::: tip
 This is a tip admonition. Try \`::: warning\`, \`::: danger\`, or \`::: details\` too.
@@ -481,7 +489,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		content: {
 			'vite.config.ts': VITE_CONFIG,
 			'src/routes/+layout.ts': LAYOUT_CSR,
-			'src/routes/+page.md': CONTENT_MD
+			'src/routes/+page.md': CONTENT_MD,
+			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte']
 		}
 	};
 

@@ -132,6 +132,13 @@ async function main() {
 		};
 	});
 	ok('markdown: admonition + shiki fence + heading anchor + table all render', mdParts.admonition && mdParts.shiki && mdParts.anchor && mdParts.table, JSON.stringify(mdParts));
+	// a live island authored INSIDE the markdown is interactive (marked imports work in .md — a demo
+	// lives next to the prose describing it).
+	const islBefore = await page.evaluate(() => [...document.querySelectorAll('[data-obs-preview] button')].find((b) => /count is/.test(b.textContent || ''))?.textContent || '');
+	await page.evaluate(() => { const b = [...document.querySelectorAll('[data-obs-preview] button')].find((x) => /count is/.test(x.textContent || '')); b?.click(); });
+	await page.waitForTimeout(200);
+	const islAfter = await page.evaluate(() => [...document.querySelectorAll('[data-obs-preview] button')].find((b) => /count is/.test(b.textContent || ''))?.textContent || '');
+	ok('live island inside markdown is interactive (demo in prose)', /count is/.test(islBefore) && islBefore !== islAfter, `${islBefore}→${islAfter}`);
 	// editing the markdown recompiles live
 	await setSrc(page, S(`# Edited heading RT\n\nplain prose paragraph.\n`));
 	const mdEdited = await until(page, () => /Edited heading RT/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
