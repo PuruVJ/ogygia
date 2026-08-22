@@ -616,6 +616,16 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		if (active === name) active = entryFile in files ? entryFile : Object.keys(files)[0];
 		request_all();
 	}
+	/** Drag-and-drop move: relocate a file's basename into `toDir` ('' = root). No-op on collision. */
+	function move_file(from: string, toDir: string) {
+		const base = from.split('/').pop() || from;
+		const to = toDir ? `${toDir}/${base}` : base;
+		if (to === from || files[to] != null) return; // already there, or a name collision → don't clobber
+		files[to] = files[from];
+		delete files[from];
+		if (active === from) active = to;
+		request_all();
+	}
 
 	// Prettify the active file (the Format button). The formatter is the shared lazy prettier ($lib/prettier).
 	let formatting = $state(false);
@@ -1347,6 +1357,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					onselect={(p) => (active = p)}
 					onremove={remove_file}
 					onadd={add_file}
+					onmove={move_file}
 					oncollapse={() => (treeCollapsed = true)}
 				/>
 			{/if}

@@ -106,6 +106,25 @@ async function main() {
 	}
 	ok('file-switch is navigation, not a recompile', !recompiled);
 
+	// 6b. drag-and-drop: move a file into a folder (native HTML5 drag, dispatched with a DataTransfer).
+	const dndMoved = await page.evaluate(() => {
+		const src = document.querySelector('[data-obs-file="src/lib/Counter.svelte"]');
+		const tgt = [...document.querySelectorAll('.frow.folder')].find((b) => b.getAttribute('title') === 'src/routes');
+		if (!src || !tgt) return false;
+		const dt = new DataTransfer();
+		src.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true }));
+		tgt.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+		tgt.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+		src.dispatchEvent(new DragEvent('dragend', { dataTransfer: dt, bubbles: true }));
+		return true;
+	});
+	await until(page, () => [...document.querySelectorAll('[data-obs-file]')].some((f) => f.getAttribute('data-obs-file') === 'src/routes/Counter.svelte'));
+	const dndFiles = await page.evaluate(() => [...document.querySelectorAll('[data-obs-file]')].map((f) => f.getAttribute('data-obs-file')));
+	ok('drag-and-drop moves a file into a folder', dndMoved && dndFiles.includes('src/routes/Counter.svelte') && !dndFiles.includes('src/lib/Counter.svelte'), JSON.stringify(dndFiles));
+	// reset to a clean demo app so later assertions aren't on the moved layout
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'demo app')?.click());
+	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
+
 	// 7. islands mode → the isolated iframe hydrates
 	await page.evaluate(() => [...document.querySelectorAll('[data-obs-preview-mode] button')].find((x) => x.textContent.trim() === 'islands')?.click());
 	const frameUp = await until(page, () => !!document.querySelector('iframe[data-obs-frame]'), undefined, 15000);

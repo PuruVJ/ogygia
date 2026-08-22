@@ -14,6 +14,7 @@
 		onselect,
 		onremove,
 		onadd,
+		onmove,
 		oncollapse
 	}: {
 		files: FileMap;
@@ -22,8 +23,42 @@
 		onselect: (path: string) => void;
 		onremove: (path: string) => void;
 		onadd: () => void;
+		/** Move a file into a folder (drag-and-drop). `toDir` is '' for the workspace root. */
+		onmove?: (from: string, toDir: string) => void;
 		oncollapse?: () => void;
 	} = $props();
+
+	// ── Drag-and-drop (move a file into a folder, VS Code-style). Drop targets are folders + the root. ──
+	let dragPath = $state<string | null>(null);
+	let dropDir = $state<string | null>(null); // the folder path being hovered ('' = root)
+	const dir_of = (p: string): string => {
+		const i = p.lastIndexOf('/');
+		return i < 0 ? '' : p.slice(0, i);
+	};
+	function start_drag(e: DragEvent, path: string) {
+		dragPath = path;
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData('text/plain', path);
+		}
+	}
+	function over_dir(e: DragEvent, dir: string) {
+		if (!dragPath || dir_of(dragPath) === dir) return; // already there → not a drop target
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		dropDir = dir;
+	}
+	function drop_on(e: DragEvent, dir: string) {
+		e.preventDefault();
+		const from = dragPath;
+		dragPath = null;
+		dropDir = null;
+		if (from && dir_of(from) !== dir) onmove?.(from, dir);
+	}
+	function end_drag() {
+		dragPath = null;
+		dropDir = null;
+	}
 
 	// Which folders are collapsed (by full path). Default: everything expanded — a codebase you just
 	// opened should show itself. Collapsing is opt-in and remembered while the workspace is loaded.
@@ -95,7 +130,16 @@
 			{/if}
 		</span>
 	</div>
-	<div class="ftree-body">
+	<!-- The body is the ROOT drop target: dropping a nested file here moves it to the workspace root.
+	     Drag-to-move is a mouse enhancement; the +/× buttons are the keyboard-accessible file ops. -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="ftree-body"
+		class:drop-root={dropDir === ''}
+		ondragover={(e) => over_dir(e, '')}
+		ondragleave={() => { if (dropDir === '') dropDir = null; }}
+		ondrop={(e) => drop_on(e, '')}
+	>
 		{#each tree.children as node (node.path)}
 			{@render row(node, 0)}
 		{/each}
@@ -106,8 +150,12 @@
 	{#if node.kind === 'folder'}
 		<button
 			class="frow folder"
+			class:drop={dropDir === node.path}
 			style:--depth={depth}
 			onclick={() => toggle(node.path)}
+			ondragover={(e) => over_dir(e, node.path)}
+			ondragleave={() => { if (dropDir === node.path) dropDir = null; }}
+			ondrop={(e) => drop_on(e, node.path)}
 			title={node.path}
 		>
 			<span class="ftw">{collapsed.has(node.path) ? '▸' : '▾'}</span>
@@ -119,11 +167,16 @@
 			{/each}
 		{/if}
 	{:else}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="frow file"
 			class:on={active === node.path}
+			class:dragging={dragPath === node.path}
 			style:--depth={depth}
 			data-obs-file={node.path}
+			draggable="true"
+			ondragstart={(e) => start_drag(e, node.path)}
+			ondragend={end_drag}
 		>
 			<button class="fopen" onclick={() => onselect(node.path)} title={node.path}>
 				<span class="fic">{icon(node.name)}</span>
@@ -224,6 +277,23 @@
 	.frow.file.on .fname {
 		color: var(--text);
 		font-weight: 600;
+	}
+	/* ── drag-and-drop (move a file into a folder) ── */
+	.frow.file {
+		cursor: grab;
+	}
+	.frow.file.dragging {
+		opacity: 0.45;
+	}
+	.frow.folder.drop {
+		background: color-mix(in oklab, var(--accent) 22%, transparent);
+		outline: 1px dashed var(--accent);
+		outline-offset: -2px;
+	}
+	.ftree-body.drop-root {
+		outline: 1px dashed var(--accent);
+		outline-offset: -3px;
+		background: color-mix(in oklab, var(--accent) 5%, transparent);
 	}
 	.frow.file {
 		padding: 0;
