@@ -7,6 +7,7 @@
 	 * runtime/CSS/state with the host. Nav drives the REAL reconcile on the frame body; runtime events
 	 * + nav-link clicks are relayed back to the parent. It's a headless boot island (renders nothing).
 	 */
+	import { mount, unmount } from 'svelte';
 	import { add_sink } from 'ogygia/devtools';
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,6 +82,7 @@
 	$effect(() => {
 		let svelteClient: Linked | null = null;
 		let reconcileMod: { reconcile_body?: Any; morph_children?: Any } = {};
+		let mountedApp: Any = null; // csr=true: the whole-app mount (Kit-style)
 		const liveNodes = new Map<string, Element & { applyLive?: (d: unknown) => void }>();
 		const fpNames: Record<string, string> = {}; // data-og-fp → island name, for the event labels
 
@@ -136,8 +138,50 @@
 		};
 		app().addEventListener('click', onNavClick);
 
+		const unmount_kit = () => {
+			if (mountedApp) {
+				try {
+					unmount(mountedApp);
+				} catch {
+					/* noop */
+				}
+				mountedApp = null;
+			}
+		};
+		/** csr=TRUE: mount the WHOLE app as ONE hydration root (what Kit does) — no islands, everything
+		 *  interactive from load. The counterpoint to islands, so the csr switch shows both realities. */
+		function renderKit(modules: Record<string, string>, entry: string) {
+			if (!svelteClient) return;
+			unmount_kit();
+			liveNodes.clear();
+			const el = app();
+			el.innerHTML = '';
+			const cache = new Map<string, Linked>();
+			const resolveName = (spec: string): string | null => {
+				const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
+				if (modules[bare] != null) return bare;
+				const base = spec.split('/').pop();
+				return base && modules[base] != null ? base : null;
+			};
+			const require: Require = (spec) => {
+				if (spec === 'svelte/internal/client') return svelteClient!;
+				const name = resolveName(spec);
+				if (name) {
+					const hit = cache.get(name);
+					if (hit) return hit;
+					const ex: Linked = {};
+					cache.set(name, ex);
+					Object.assign(ex, eval_client(modules[name], require, svelteClient!));
+					return ex;
+				}
+				return { default: () => {} };
+			};
+			const App = eval_client(modules[entry], require, svelteClient).default;
+			if (typeof App === 'function') mountedApp = mount(App as Any, { target: el });
+		}
 		function render(html: string, modules: Record<string, string>, deferred: Record<string, string>) {
 			if (!svelteClient) return;
+			unmount_kit();
 			(window as Any).__OBS_DEFER__ = deferred || {};
 			liveNodes.clear();
 			const el = app();
@@ -184,6 +228,7 @@
 			const d = e.data;
 			if (!d || d.__obs !== true) return;
 			if (d.obsType === 'render') render(d.html, d.modules, d.deferred);
+			else if (d.obsType === 'renderKit') renderKit(d.modules, d.entry);
 			else if (d.obsType === 'nav') nav(d.html, d.modules, d.deferred);
 			else if (d.obsType === 'theme') apply_theme(); // parent set og-theme; re-read + apply
 			else if (d.obsType === 'liveTick') {

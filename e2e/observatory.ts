@@ -122,6 +122,22 @@ try {
 		results.push('SKIP  islands mode: real runtime events (served build has devtools off — tree-shaken)');
 	}
 
+	// ── CSR SWITCH: flip csr=true → the transform strips islands to plain AND the iframe mounts the
+	//    WHOLE app (Kit-style, no <ogygia-region>), interactive from load; flip back → islands ──
+	const outFalse = await page.evaluate(() => document.querySelector('[data-obs-output]')?.textContent || '');
+	await page.click('[data-obs-csr] button:last-child').catch(() => {}); // csr=true
+	await page.waitForTimeout(1500);
+	const outTrue = await page.evaluate(() => document.querySelector('[data-obs-output]')?.textContent || '');
+	check('csr switch: csr=true strips the transform to plain (no virtual:ogygia wrappers)', /virtual:ogygia/.test(outFalse) && !/virtual:ogygia/.test(outTrue), `false→${/virtual:ogygia/.test(outFalse)} true→${!/virtual:ogygia/.test(outTrue)}`);
+	const kit = await frameEval(() => ({ regions: document.querySelectorAll('#obs-app ogygia-region').length, btn: document.querySelector('#obs-app button')?.textContent?.trim() || '' }));
+	const kb0 = kit?.btn || '';
+	await frameLoc('#obs-app button').first().click().catch(() => {});
+	await page.waitForTimeout(150);
+	const kb1 = await frameEval(() => document.querySelector('#obs-app button')?.textContent?.trim() || '');
+	check('csr switch: csr=true mounts the WHOLE app in the iframe (0 regions) + it is interactive', kit?.regions === 0 && kb0 === 'count is 3' && kb1 === 'count is 4', JSON.stringify({ regions: kit?.regions, k: `${kb0}→${kb1}` }));
+	await page.click('[data-obs-csr] button:first-child').catch(() => {}); // back to csr=false
+	await page.waitForTimeout(1500);
+
 	// back to the live preview for the remaining checks
 	await page.evaluate(() => {
 		const btn = [...document.querySelectorAll('[data-obs-preview-mode] button')].find((b) => b.textContent?.trim() === 'live');

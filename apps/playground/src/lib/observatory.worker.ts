@@ -32,6 +32,9 @@ export interface Analysis {
 	output: string;
 	/** The transformed host on the CLIENT leg (ssr=false) — csr=false ships stubs, not the wrapper. */
 	outputClient?: string;
+	/** The transformed host as a csr=TRUE route would compile: ogygia steps aside — island directives
+	 *  stripped to plain imports, Kit hydrates the whole tree. The csr switch shows this instead. */
+	outputCsrTrue?: string;
 	/** The transformed host, COMPILED by svelte to server JS — the last step of the pipeline. */
 	compiledServer?: string;
 	compiledError?: string;
@@ -150,8 +153,9 @@ async function ensure_oxc(): Promise<OxcMod> {
 	return oxc_mod;
 }
 
-/** The browser HostCtx — mirrors what the driver builds, with fs/path shimmed. */
-function build_ctx(ssr: boolean) {
+/** The browser HostCtx — mirrors what the driver builds, with fs/path shimmed. `routeCsr` is the
+ *  tri-state: false → islands (ogygia); true → csr=true host (strip islands to plain, Kit hydrates). */
+function build_ctx(ssr: boolean, routeCsr: boolean = false) {
 	return {
 		root: '/repl',
 		libDir: '/repl/src/lib',
@@ -167,7 +171,7 @@ function build_ctx(ssr: boolean) {
 		idSalt: '',
 		linkVirtualIsland: true,
 		clientBindingStub: CLIENT_BINDING_STUB,
-		routeCsr: false,
+		routeCsr,
 		ssr
 	};
 }
@@ -630,6 +634,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 	let real = false;
 	let realCode = '';
 	let realClientCode: string | undefined;
+	let realCsrTrueCode: string | undefined;
 	let compiledServer: string | undefined;
 	let compiledError: string | undefined;
 	let realIslands: number | null = null;
@@ -700,6 +705,15 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 			} catch {
 				/* client leg is best-effort */
 			}
+			// The csr=TRUE leg: ogygia steps aside — the transform strips island directives to plain.
+			try {
+				const csrTrue = transformHost(source, '/repl/src/routes/App.svelte', build_ctx(true, true)) as {
+					code?: string;
+				} | null;
+				if (csrTrue && typeof csrTrue.code === 'string') realCsrTrueCode = csrTrue.code;
+			} catch {
+				/* csr=true leg is best-effort */
+			}
 		}
 
 		// The LAST step: compile the transformed host with svelte itself (server JS) — the full pipeline
@@ -730,6 +744,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		islands: marks.islands,
 		output: real ? realCode : marks.output,
 		outputClient: realClientCode,
+		outputCsrTrue: realCsrTrueCode,
 		compiledServer,
 		compiledError,
 		real,

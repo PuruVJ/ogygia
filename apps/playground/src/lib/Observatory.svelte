@@ -272,8 +272,16 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		if (analysis.real || analysis.realError) everWarmed = true;
 	});
 
+	// csr switch: false → ogygia islands; true → the app compiled as a csr=true Kit route (islands
+	// stripped to plain, Kit hydrates the whole tree). Flips the transform output, the ledger emphasis,
+	// and the preview (islands vs a single whole-app mount).
+	let csr = $state(false);
 	const shownOutput = $derived(
-		leg === 'client' && analysis.outputClient ? analysis.outputClient : analysis.output
+		csr && analysis.outputCsrTrue
+			? analysis.outputCsrTrue
+			: leg === 'client' && analysis.outputClient
+				? analysis.outputClient
+				: analysis.output
 	);
 
 	// `worker` is $state so the debounce effect re-runs (and posts the first analysis) once it's set.
@@ -382,6 +390,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	$effect(() => {
 		void analysis.realDom;
 		void analysis.client;
+		void csr; // flipping csr re-renders (islands ⇄ whole-app mount)
 		if (previewMode === 'islands' && frameReady) render_to_frame();
 	});
 
@@ -536,14 +545,20 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	/** Send the CURRENT analysis's page to the frame (a full render). */
 	function render_to_frame() {
-		const rd = analysis.realDom;
 		const client = analysis.client;
-		if (!frameReady || !rd?.ok || !rd.html || !client || client.error) return;
+		if (!frameReady || !client || client.error) return;
 		runtimeEvents = [];
 		navInfo = null;
 		currentPage = untrack(() => ('App.svelte' in files ? 'App.svelte' : active));
 		clear_frame_live();
 		// $state.snapshot → plain objects (postMessage structured-clone can't take a reactive proxy).
+		if (csr) {
+			// csr=true: mount the WHOLE app as one hydration root — Kit steps in, no islands.
+			post_to_frame({ obsType: 'renderKit', modules: $state.snapshot(client.modules), entry: client.entry });
+			return;
+		}
+		const rd = analysis.realDom;
+		if (!rd?.ok || !rd.html) return;
 		post_to_frame({ obsType: 'render', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}) });
 		arm_frame_live(rd);
 	}
@@ -660,6 +675,10 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	<header>
 		<b>ogygia observatory</b>
 		<span class="muted">· the real ogygia compiler, in your browser</span>
+		<span class="csrswitch" data-obs-csr>
+			<button class:on={!csr} onclick={() => (csr = false)} title="ogygia islands — only marked components ship JS">csr=false · islands</button>
+			<button class:on={csr} onclick={() => (csr = true)} title="plain Kit — ogygia steps aside, the whole tree ships + hydrates">csr=true · plain Kit</button>
+		</span>
 		{#if analysis.oxc}
 			<span class="oxc" class:ok={analysis.oxc.ok} data-obs-oxc title={analysis.oxc.error || ''}>
 				{analysis.oxc.engine}: {analysis.oxc.ok ? `parsed ${analysis.oxc.imports} imports ✓` : 'failed'}
@@ -875,12 +894,14 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 
 			<div class="cap">
 				transformed host
-				{#if analysis.real}
+				{#if csr}
+					<span class="real csr-true" data-obs-real>csr=true · plain Kit — islands stripped to plain, Kit hydrates the whole tree</span>
+				{:else if analysis.real}
 					<span class="real" data-obs-real>real ogygia transform · {analysis.realIslands} islands</span>
 				{:else}
 					<span class="fallback" title={analysis.realError || ''}>mark-preview (real transform: {analysis.realError ? 'error' : 'n/a'})</span>
 				{/if}
-				{#if analysis.outputClient && analysis.outputClient !== analysis.output}
+				{#if !csr && analysis.outputClient && analysis.outputClient !== analysis.output}
 					<span class="legs" data-obs-legs>
 						<button class:on={leg === 'ssr'} onclick={() => (leg = 'ssr')}>SSR leg</button>
 						<button class:on={leg === 'client'} onclick={() => (leg = 'client')}>client leg</button>
@@ -947,6 +968,29 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	header b {
 		color: #5eead4;
+	}
+	.csrswitch {
+		display: inline-flex;
+		gap: 2px;
+		margin-left: 6px;
+		padding: 2px;
+		border-radius: 7px;
+		background: rgba(148, 163, 184, 0.1);
+	}
+	.csrswitch button {
+		padding: 2px 9px;
+		border: 0;
+		border-radius: 5px;
+		background: none;
+		color: #94a3b8;
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+	}
+	.csrswitch button.on {
+		background: #14b8a6;
+		color: #04121a;
+		font-weight: 600;
 	}
 	.oxc {
 		margin-left: auto;
@@ -1120,6 +1164,10 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		color: #5eead4;
 		font-weight: 600;
 		font-size: 10px;
+	}
+	.real.csr-true {
+		background: rgba(148, 163, 184, 0.18);
+		color: #cbd5e1;
 	}
 	.fallback {
 		margin-left: 8px;
