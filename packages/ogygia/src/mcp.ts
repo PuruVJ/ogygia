@@ -15,7 +15,7 @@
 import { createInterface } from 'node:readline';
 import { createRequire } from 'node:module';
 import { gzipSync } from 'node:zlib';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, type Dirent } from 'node:fs';
 import path from 'node:path';
 import { parse } from 'svelte/compiler';
 import { transformHost, islandVirtualId, wrapperVirtualId, CLIENT_BINDING_STUB } from './compiler/index.js';
@@ -227,6 +227,21 @@ const TOOLS = [
 				base: { type: 'string', description: 'Profiler mount path (default /__profiler).' }
 			},
 			required: ['url']
+		}
+	},
+	{
+		name: 'ogygia_scan',
+		description:
+			'Scan a WHOLE ogygia project: walks a directory for .svelte files, runs the real transform on each, ' +
+			'and returns the entire island architecture (every island / lake / server island / held region, by ' +
+			'file, with its render+wake dials) PLUS a lint pass — hard [ogygia] errors and soft anti-patterns the ' +
+			'transform allows (island-in-island, wake:none+deferred, interaction+deferred). Use it to understand or ' +
+			'audit a real app, not one snippet.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				dir: { type: 'string', description: 'Directory to scan, relative to the server cwd or absolute (default "src"; try "src/routes").' }
+			}
 		}
 	},
 	{
@@ -668,6 +683,129 @@ function tool_observatory(args: Attrs): ToolResult {
 	);
 }
 
+// ── ogygia_scan — walk a real project, map every island + lint the whole codebase ──────────────────
+
+const SKIP_DIRS = new Set(['node_modules', '.svelte-kit', '.git', 'dist', 'build', '.vercel', '.netlify', 'coverage']);
+
+function walk_svelte(dir: string, out: string[] = [], depth = 0): string[] {
+	if (depth > 12 || out.length > 2000) return out;
+	let entries: Dirent[];
+	try {
+		entries = readdirSync(dir, { withFileTypes: true }) as Dirent[];
+	} catch {
+		return out;
+	}
+	for (const e of entries) {
+		if (e.name.startsWith('.') && e.name !== '.') continue;
+		if (e.isDirectory()) {
+			if (!SKIP_DIRS.has(e.name)) walk_svelte(path.join(dir, e.name), out, depth + 1);
+		} else if (e.name.endsWith('.svelte')) {
+			out.push(path.join(dir, e.name));
+		}
+	}
+	return out;
+}
+
+type ScanIsland = { component: string; local: string; kind: string; strategy: string; attrs: Attrs; file: string };
+type Violation = { file: string; severity: 'error' | 'warn'; msg: string };
+
+function tool_scan(args: Attrs): ToolResult {
+	const dir = String(args.dir ?? 'src');
+	const root = path.isAbsolute(dir) ? dir : path.resolve(process.cwd(), dir);
+	const files = walk_svelte(root);
+	if (!files.length) return fail(`No .svelte files found under ${dir} (cwd: ${process.cwd()}). Pass \`dir\` (e.g. "src" or "src/routes").`);
+
+	const rel = (f: string) => path.relative(root, f) || path.basename(f);
+	const islands: ScanIsland[] = [];
+	const violations: Violation[] = [];
+	const kinds: Record<string, number> = {};
+	let preset_marks = 0;
+	// component basename → the marks that make it an island (for island-in-island detection)
+	const island_components = new Set<string>();
+
+	const per_file: Array<{ marks: Mark[]; file: string }> = [];
+	for (const f of files.slice(0, 1500)) {
+		let source: string;
+		try {
+			source = readFileSync(f, 'utf8');
+		} catch {
+			continue;
+		}
+		const marks = parse_marks(source);
+		if (!marks.length) continue;
+		per_file.push({ marks, file: f });
+
+		// Real kinds + hard errors from the transform. The id is the clean relative path (nice messages).
+		const kind_by_component = new Map<string, string>();
+		try {
+			const r = transformHost(source, '/' + rel(f).replace(/\\/g, '/'), build_ctx(true)) as HostResult;
+			for (const isl of r?.islands ?? []) if (isl.componentPath) kind_by_component.set(base(isl.componentPath), isl.kind ?? '');
+		} catch (e) {
+			const raw = (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').trim();
+			// "unknown preset" is a scan limitation (we don't load the app's ogygia({ regions: { presets } })
+			// config), not a real violation — count it for a footnote instead of flagging it.
+			if (/unknown preset/i.test(raw)) preset_marks++;
+			else violations.push({ file: rel(f), severity: 'error', msg: raw });
+		}
+
+		for (const m of marks) {
+			const kind = kind_by_component.get(base(m.component)) ?? '(mark only)';
+			islands.push({ component: m.component, local: m.local, kind, strategy: strategy_label(m.attrs), attrs: m.attrs, file: rel(f) });
+			kinds[kind] = (kinds[kind] ?? 0) + 1;
+			// a real interactive island (not a lake/raw) — remember its component basename
+			if (m.attrs.wake !== 'none' && m.attrs.region !== 'raw') island_components.add(base(m.component));
+
+			// ── soft lints (per mark) ──
+			if (m.attrs.wake === 'none' && m.attrs.render === 'deferred')
+				violations.push({ file: rel(f), severity: 'warn', msg: `${m.component}: wake:'none' + render:'deferred' is nonsense (HTML later, no JS) — dev treats it as defer-only. Drop one.` });
+			if (m.attrs.wake === 'interaction' && m.attrs.render === 'deferred')
+				violations.push({ file: rel(f), severity: 'warn', msg: `${m.component}: render:'deferred' ignores wake:'interaction' (a server island renders inline in an island). Nest a wake island inside it instead.` });
+		}
+	}
+
+	// ── cross-file lint: island-in-island — a file that IS used as an island AND marks its own islands.
+	for (const { marks, file } of per_file) {
+		const this_base = base(file).replace(/\.svelte$/, '');
+		if (!island_components.has(base(file))) continue; // this component isn't used as an island anywhere
+		for (const m of marks) {
+			if (m.attrs.wake === 'none' || m.attrs.region === 'raw') continue;
+			violations.push({
+				file: rel(file),
+				severity: 'warn',
+				msg: `${m.component} is marked inside ${this_base} — but ${this_base} is itself an island elsewhere, so this is island-in-island: the child shares the parent's JS and its own wake is ignored (dev warns). Only the closest marked parent's schedule wins.`
+			});
+		}
+	}
+
+	if (!islands.length) return text(`Scanned ${files.length} .svelte file(s) under ${dir} — no marked regions. The whole tree is free server HTML.`);
+
+	const by_file = new Map<string, ScanIsland[]>();
+	for (const i of islands) (by_file.get(i.file) ?? by_file.set(i.file, []).get(i.file)!).push(i);
+	const map_lines = [...by_file.entries()]
+		.map(([file, list]) => `### ${file}\n${list.map((i) => `- ${i.component} (as ${i.local}) — ${i.strategy}`).join('\n')}`)
+		.join('\n\n');
+	const kind_summary = Object.entries(kinds)
+		.map(([k, n]) => `${n} ${k}`)
+		.join(' · ');
+	const errs = violations.filter((v) => v.severity === 'error');
+	const warns = violations.filter((v) => v.severity === 'warn');
+	const vio_block = violations.length
+		? `\n\n## ⚠️ Findings (${violations.length})\n` +
+			[...errs, ...warns].map((v) => `- ${v.severity === 'error' ? '❌' : '⚠️'} ${v.file}: ${v.msg}`).join('\n')
+		: `\n\n## ✅ No rule violations across ${files.length} files.`;
+
+	const preset_note = preset_marks
+		? `\n\n> ${preset_marks} import(s) use a \`preset\` — resolved from your \`ogygia({ regions: { presets } })\` config at build, not checked here.`
+		: '';
+	return text(
+		`# ogygia scan — ${dir}\n\n` +
+			`${islands.length} marked region(s) across ${by_file.size} file(s) (${files.length} .svelte scanned) · ${kind_summary}\n\n` +
+			`## Island map\n${map_lines}` +
+			vio_block +
+			preset_note
+	);
+}
+
 async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 	switch (name) {
 		case 'ogygia_compile':
@@ -684,6 +822,8 @@ async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 			return tool_profile(args);
 		case 'ogygia_observatory':
 			return tool_observatory(args);
+		case 'ogygia_scan':
+			return tool_scan(args);
 		default:
 			return fail(`Unknown tool: ${name}`);
 	}
@@ -737,7 +877,7 @@ function handle(msg: Rpc): void {
 
 /** Start the stdio MCP server. Resolves when stdin closes (the client disconnected). */
 export async function runMcp(): Promise<void> {
-	log(`ogygia MCP server v${version} ready — 7 tools (compile, islands, check, explain, debug, profile, observatory)`);
+	log(`ogygia MCP server v${version} ready — 8 tools (compile, islands, check, explain, debug, profile, observatory, scan)`);
 	const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 	for await (const line of rl) {
 		const trimmed = line.trim();
