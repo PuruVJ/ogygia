@@ -942,17 +942,29 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	type ConsoleEntry = { level: 'log' | 'info' | 'debug' | 'warn' | 'error'; text: string; count: number };
 	let consoleLog = $state<ConsoleEntry[]>([]);
 	let consoleOpen = $state(false);
+	// O(1) flags for the header dots — recomputing `.some()` per log would be O(n²) under a logging flood.
+	let consoleHasError = $state(false);
+	let consoleHasWarn = $state(false);
 	const CONSOLE_LEVELS = new Set(['log', 'info', 'debug', 'warn', 'error']);
+	function clear_console() {
+		consoleLog = [];
+		consoleHasError = false;
+		consoleHasWarn = false;
+	}
 	function capture_console(level: ConsoleEntry['level'], args: unknown[]) {
 		const text = format_console_args(args);
 		const last = consoleLog[consoleLog.length - 1];
-		// Collapse consecutive identical lines into a count, like the browser console.
+		// Collapse consecutive identical lines into a count, like the browser console. Both branches are
+		// O(1) (deep-reactive `count++`, or `push` + an amortized trim) so a runaway logging loop can't
+		// spend O(n²) spreading the array on every call.
 		if (last && last.level === level && last.text === text) {
 			last.count++;
-			consoleLog = [...consoleLog];
 		} else {
-			consoleLog = [...consoleLog, { level, text, count: 1 }].slice(-200);
+			consoleLog.push({ level, text, count: 1 });
+			if (consoleLog.length > 260) consoleLog.splice(0, consoleLog.length - 200); // keep the last ~200
 		}
+		if (level === 'error') consoleHasError = true;
+		if (level === 'warn') consoleHasWarn = true;
 		if (level === 'error' || level === 'warn') consoleOpen = true; // surface problems automatically
 	}
 	// A `console` for the eval: capture the 5 levels (+ forward to the real console so devtools still works),
@@ -1208,7 +1220,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	function remount_preview() {
 		const el = preview_el;
 		if (!el) return;
-		consoleLog = []; // fresh run → fresh console (like svelte.dev's REPL)
+		clear_console(); // fresh run → fresh console (like svelte.dev's REPL)
 		const bundle = previewBundle;
 		const client = analysis.client;
 		const sc = svelteClient;
@@ -1472,11 +1484,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						>
 							<span class="oc-tw">{consoleOpen ? '▾' : '▸'}</span>
 							<span class="oc-title">console</span>
-							{#if consoleLog.length}<span class="oc-n">{consoleLog.reduce((a, e) => a + e.count, 0)}</span>{/if}
-							{#if consoleLog.some((e) => e.level === 'error')}<span class="oc-dot error" title="errors"></span>{/if}
-							{#if consoleLog.some((e) => e.level === 'warn')}<span class="oc-dot warn" title="warnings"></span>{/if}
+							{#if consoleLog.length}<span class="oc-n">{consoleLog.length}</span>{/if}
+							{#if consoleHasError}<span class="oc-dot error" title="errors"></span>{/if}
+							{#if consoleHasWarn}<span class="oc-dot warn" title="warnings"></span>{/if}
 							<span class="oc-spacer"></span>
-							{#if consoleLog.length}<button class="oc-clear" onclick={(e) => { e.stopPropagation(); consoleLog = []; }}>clear</button>{/if}
+							{#if consoleLog.length}<button class="oc-clear" onclick={(e) => { e.stopPropagation(); clear_console(); }}>clear</button>{/if}
 						</div>
 						{#if consoleOpen}
 							<div class="oc-body" data-obs-console-body>
