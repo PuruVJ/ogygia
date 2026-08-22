@@ -141,6 +141,17 @@ async function main() {
 	await setSrc(page, `# Tabs\n\n::: tabs\n== One\nTAB ONE BODY\n== Two\nTAB TWO BODY\n:::\n`);
 	const tabsShown = await until(page, () => { const t = document.querySelector('[data-obs-preview]')?.textContent || ''; return /Tabs/.test(t) && /TAB ONE BODY/.test(t); });
 	ok('content tabs degrade to passthrough (content shown, no crash)', !!tabsShown);
+
+	// 9b. the workspace vite.config.ts reconfigures the markdown pipeline live — turn `containers` off and
+	// the `::: tip` stops transforming into an admonition (configure ogygia as a real project does).
+	await setSrc(page, `# Cfg\n\n::: tip\ncallout body\n:::\n`);
+	await until(page, () => !!document.querySelector('[data-obs-preview] .og-admonition'));
+	await page.evaluate(() => { const f = [...document.querySelectorAll('[data-obs-file]')].find((x) => /vite\.config/.test(x.getAttribute('data-obs-file') || '')); (f?.querySelector('.fopen') || f)?.click(); });
+	await until(page, () => (window.__OBS_SOURCE.get() || '').includes('containers'));
+	await setSrc(page, (await page.evaluate(() => window.__OBS_SOURCE.get())).replace('containers: true', 'containers: false'));
+	const admGone = await until(page, () => !document.querySelector('[data-obs-preview] .og-admonition') && /callout body/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
+	ok('vite.config.ts reconfigures the preview (containers:false → no admonition)', !!admGone);
+
 	// back to a svelte preset so later shared-workspace assertions aren't on a .md
 	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'demo app')?.click());
 	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));

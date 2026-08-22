@@ -9,6 +9,7 @@
  */
 import { compile } from 'svelte/compiler';
 import { ogygiaPreprocess, diff_markers, inline_markers } from 'ogygia/content/markdown';
+import type { ReplMarkdownConfig } from './repl-config.ts';
 
 export const MD_MODULE = /\.(md|svx)(\?|$)/;
 // The pipeline injects a `() => import('./self.md?raw')` source-export; that dynamic `?raw` specifier
@@ -20,12 +21,40 @@ const WITH_DIAL = /(\bfrom\s*['"][^'"]+['"])\s*with\s*\{[^}]*\}/g;
 
 // ONE shared content preprocessor (the plugin's bundle leg + the worker's analyze/SSR leg use the same
 // instance — one shiki highlighter, one config). The browser host must be installed before first use.
+// Rebuilt only when the user's config (from a workspace vite.config.ts) actually changes — building it
+// constructs a shiki highlighter, so it's signature-gated.
 let shared: ReturnType<typeof ogygiaPreprocess> | null = null;
+let shared_sig = '\0uninit';
+
+/** The default fence dialects the docs site ships — line `+++ `/`--- ` + inline `+++x+++`/`---x---` —
+ *  used when a config doesn't set its own transformers. */
+const default_transformers = () => [diff_markers(), inline_markers()];
+
+/** A stable signature of a config so we rebuild the preprocessor only on a real change (transformers are
+ *  objects → sign by their `name`). */
+function config_signature(md: ReplMarkdownConfig | null): string {
+	if (!md) return 'default';
+	const { code, ...rest } = md;
+	const names = code?.transformers?.map((t) => (t && typeof t === 'object' ? (t.name ?? '?') : '?')).join(',') ?? '';
+	return JSON.stringify(rest) + '|' + names;
+}
+
+/** Configure the content pipeline from a parsed workspace config (null → REPL defaults). Idempotent per
+ *  signature. Call before {@link md_to_svelte} (the worker does, per analyze/bundle). */
+export function configure_content(md: ReplMarkdownConfig | null): void {
+	const sig = config_signature(md);
+	if (sig === shared_sig && shared) return;
+	shared_sig = sig;
+	const cfg: ReplMarkdownConfig = md ? { ...md } : {};
+	// Default the two diff transformers on when the config didn't set `code.transformers` at all.
+	if (!cfg.code?.transformers?.length) cfg.code = { transformers: default_transformers() };
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	shared = ogygiaPreprocess(cfg as any);
+}
+
 export function content_preprocessor(): ReturnType<typeof ogygiaPreprocess> {
-	// The fence dialects the docs site ships: line `+++ `/`--- ` diffs + inline `+++x+++`/`---x---`. Keeps
-	// the REPL's fences behaving like a real ogygia content app. (Docs-only remark plugins — changelog,
-	// api expander — are deliberately NOT here; they're app-specific, not framework features.)
-	return (shared ??= ogygiaPreprocess({ code: { transformers: [diff_markers(), inline_markers()] } }));
+	if (!shared) configure_content(null);
+	return shared!;
 }
 
 /** Run ogygia's markdown pipeline → SVELTE SOURCE (mdsvex + shiki + admonitions + heading ids), with the

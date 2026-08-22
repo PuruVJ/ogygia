@@ -208,6 +208,32 @@ Prose, [links](/docs), and \`inline code\` all render through the same pipeline
 your shipped site uses — no bespoke REPL markdown.
 `;
 
+	// The workspace's vite.config — configure ogygia exactly as a real project does. The REPL reads the
+	// markdown options that affect the preview (edit `containers`/`tabs`/`themes` and watch it recompile);
+	// a full app also configures loaders/router/regions here, which are build-time and don't affect a
+	// single-page preview, so they're honestly omitted.
+	const VITE_CONFIG = `import { sveltekit } from '@sveltejs/kit/vite';
+import { ogygia } from 'ogygia/vite';
+import { diff_markers, inline_markers } from 'ogygia/content/markdown';
+
+export default {
+	plugins: [
+		ogygia({
+			content: {
+				markdown: {
+					containers: true,      // ::: tip / warning / danger callouts
+					tabs: true,            // ::: tabs and ::: code-group
+					headingAnchors: true,  // hover permalink on each heading
+					themes: { light: 'github-light', dark: 'github-dark' },
+					code: { transformers: [diff_markers(), inline_markers()] },
+				},
+			},
+		}),
+		sveltekit(),
+	],
+};
+`;
+
 	const PRESETS = {
 		'demo app': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
@@ -451,7 +477,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 `
 		},
 		// A CONTENT page — the real ogygia markdown pipeline (mdsvex + Shiki + admonitions), live in-browser.
+		// Includes a vite.config.ts: edit its `content.markdown` options to reconfigure the preview.
 		content: {
+			'vite.config.ts': VITE_CONFIG,
 			'src/routes/+layout.ts': LAYOUT_CSR,
 			'src/routes/+page.md': CONTENT_MD
 		}

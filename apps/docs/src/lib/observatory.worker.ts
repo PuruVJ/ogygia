@@ -16,7 +16,8 @@ import {
 } from 'ogygia/internal/compiler-browser';
 import { cdnPlugin, makeCdnCache, CSS_MODULE, css_inject_module } from './repl/cdn-plugin.ts';
 import { sveltePlugin } from './repl/svelte-plugin.ts';
-import { markdownPlugin, md_to_svelte, MD_MODULE } from './repl/markdown-plugin.ts';
+import { markdownPlugin, md_to_svelte, MD_MODULE, configure_content } from './repl/markdown-plugin.ts';
+import { parse_config_markdown } from './repl/repl-config.ts';
 import { make_browser_host } from './repl/browser-host.ts';
 
 // Install the browser compiler HOST once, synchronously, before any transform/hash runs: region ids
@@ -658,6 +659,13 @@ function real_island_render(files: Record<string, string>, entry: string, island
 	}
 }
 
+/** Configure the content pipeline from a workspace `vite.config.*`'s `ogygia({ content: { markdown } })`
+ *  — the REPL user tunes the preview exactly as a real project does. Idempotent per config signature. */
+function apply_content_config(files: Record<string, string>): void {
+	const src = files['vite.config.ts'] ?? files['vite.config.js'] ?? files['vite.config.mjs'] ?? null;
+	configure_content(src ? parse_config_markdown(src) : null);
+}
+
 /** A "svelte view" of the workspace: every `.md` / `.svx` file replaced by its markdown-pipeline Svelte
  *  source (same key), so the whole sync analyze/SSR machinery treats a content page as a normal component
  *  (mdsvex is async, so this is resolved ONCE up front). Non-content files pass through untouched. */
@@ -677,6 +685,8 @@ async function content_svelte_view(files: Record<string, string>): Promise<Recor
 }
 
 async function analyze(files: Record<string, string>, active: string): Promise<Analysis> {
+	// Apply the workspace's ogygia markdown config (from a vite.config.ts) before compiling any content.
+	apply_content_config(files);
 	// Resolve content pages to Svelte source ONCE (mdsvex is async); the rest of analyze is sync + treats
 	// a `.md`/`.svx` entry exactly like a `.svelte` component.
 	const svelte_files = await content_svelte_view(files);
@@ -877,6 +887,7 @@ async function bundle_preview(
 	files: Record<string, string>,
 	entry: string
 ): Promise<{ code?: string; packages?: string[]; missing?: string[]; error?: string }> {
+	apply_content_config(files); // honour the workspace vite.config's markdown options in the bundle leg too
 	const rb = (await import('@rolldown/browser')) as {
 		rolldown: (o: unknown) => Promise<{ generate: (o: unknown) => Promise<{ output: Array<{ code: string }> }> }>;
 	};
