@@ -86,6 +86,40 @@
 		const liveNodes = new Map<string, Element & { applyLive?: (d: unknown) => void }>();
 		const fpNames: Record<string, string> = {}; // data-og-fp → island name, for the event labels
 
+		// BOUNDARY LENS (x-ray): the parent's x-ray mode is this same real render + a `.lens` class on
+		// #obs-app. The overlay CSS (frame +page.svelte) keys off the REAL region attributes the runtime
+		// already sets — data-obs-real-island / -live / -deferred, `wake`, and data-hydrated (the true
+		// woke signal) — so islands stay interactive and wake on their real schedule. We only stamp the
+		// per-island byte count (from the parent) + a +Xms since render when each region hydrates.
+		let lensOn = false;
+		let lensBytes: Record<string, number> = {};
+		let renderT0 = 0;
+		const apply_lens = () => {
+			const el = app();
+			el.classList.toggle('lens', lensOn);
+			for (const r of el.querySelectorAll('ogygia-region[data-name]')) {
+				// derive the kind from the real attributes the runtime set (colours + the ::before label)
+				const kind = r.hasAttribute('data-obs-live')
+					? 'live'
+					: r.hasAttribute('data-obs-deferred')
+						? 'server hole'
+						: r.hasAttribute('data-obs-real-island')
+							? 'island'
+							: 'region';
+				r.setAttribute('data-kind', kind);
+				const b = lensBytes[r.getAttribute('data-name') || ''];
+				if (b != null) r.setAttribute('data-bytes', String(b));
+			}
+		};
+		// Stamp +Xms (since the render) the moment the runtime marks a region hydrated — the lens label.
+		const woke_obs = new MutationObserver((muts) => {
+			for (const m of muts) {
+				const t = m.target as Element;
+				if (t.matches?.('ogygia-region[data-hydrated]') && !t.hasAttribute('data-woke-ms'))
+					t.setAttribute('data-woke-ms', String(Math.round(performance.now() - renderT0)));
+			}
+		});
+
 		// deferred (server islands): serve /__obs_defer/* from a map the parent sends; pass the rest.
 		if (!(window as Any).__OBS_FETCH_PATCHED__) {
 			(window as Any).__OBS_FETCH_PATCHED__ = true;
@@ -137,6 +171,7 @@
 			post({ obsType: 'navReq', entry: link.getAttribute('data-obs-nav') || '' });
 		};
 		app().addEventListener('click', onNavClick);
+		woke_obs.observe(app(), { attributes: true, attributeFilter: ['data-hydrated'], subtree: true });
 
 		const unmount_kit = () => {
 			if (mountedApp) {
@@ -191,7 +226,9 @@
 				const fp = r.getAttribute('data-og-fp');
 				if (fp) fpNames[fp] = r.getAttribute('data-name') || fp;
 			}
+			renderT0 = performance.now();
 			while (container.firstChild) el.appendChild(container.firstChild);
+			apply_lens();
 			for (const node of el.querySelectorAll('ogygia-region[live][data-og-fp]')) {
 				const fp = node.getAttribute('data-og-fp')!;
 				liveNodes.set(fp, node as Element & { applyLive?: (d: unknown) => void });
@@ -210,7 +247,9 @@
 			const liveNames = [...el.querySelectorAll('ogygia-region[data-name]')].map((r) => r.getAttribute('data-name') || '');
 			const nextNames = [...container.querySelectorAll('ogygia-region[data-name]')].map((r) => r.getAttribute('data-name') || '');
 			const keepNames = new Set([...el.querySelectorAll('ogygia-region[data-ogygia-keep]')].map((r) => r.getAttribute('data-name') || ''));
+			renderT0 = performance.now();
 			reconcileMod.reconcile_body(el, container, reconcileMod.morph_children);
+			apply_lens(); // re-stamp bytes on the reconciled DOM (kept regions keep their +Xms)
 			post({
 				obsType: 'reconciled',
 				kept: nextNames.filter((n) => liveNames.includes(n) && keepNames.has(n)),
@@ -227,10 +266,20 @@
 		const onMsg = (e: MessageEvent) => {
 			const d = e.data;
 			if (!d || d.__obs !== true) return;
-			if (d.obsType === 'render') render(d.html, d.modules, d.deferred);
-			else if (d.obsType === 'renderKit') renderKit(d.modules, d.entry);
-			else if (d.obsType === 'nav') nav(d.html, d.modules, d.deferred);
-			else if (d.obsType === 'theme') apply_theme(); // parent set og-theme; re-read + apply
+			if (d.obsType === 'render') {
+				lensOn = !!d.xray;
+				lensBytes = d.bytes || {};
+				render(d.html, d.modules, d.deferred);
+			} else if (d.obsType === 'renderKit') renderKit(d.modules, d.entry);
+			else if (d.obsType === 'nav') {
+				if (d.bytes) lensBytes = d.bytes;
+				if ('xray' in d) lensOn = !!d.xray;
+				nav(d.html, d.modules, d.deferred);
+			} else if (d.obsType === 'lens') {
+				// pure overlay toggle — no re-render, so the hydrated islands keep their state.
+				lensOn = !!d.on;
+				apply_lens();
+			} else if (d.obsType === 'theme') apply_theme(); // parent set og-theme; re-read + apply
 			else if (d.obsType === 'liveTick') {
 				const node = liveNodes.get(d.fp);
 				if (node && d.html) (node as Any).applyLive?.({ id: d.fp, module: '', props: {}, html: d.html, url: '/__obs_live/' + d.fp });
@@ -250,6 +299,7 @@
 			window.removeEventListener('message', onMsg);
 			window.removeEventListener('storage', onStorage);
 			app().removeEventListener('click', onNavClick);
+			woke_obs.disconnect();
 			unsub();
 		};
 	});

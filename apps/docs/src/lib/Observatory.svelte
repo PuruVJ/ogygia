@@ -505,7 +505,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	let inspectorTab = $state<InspectorTab>('preview');
 	// Mobile: a single pane at a time, toggled between the editor and the inspector.
 	let mobilePane = $state<'editor' | 'result'>('editor');
-	let wakeNonce = $state(0); // bump to replay the x-ray wake sequence
 
 	// Wire tab: show the DECODED props by default (devalue's [{...},ref] wire format is unreadable);
 	// toggle to the raw encoded bytes (what actually crosses). Pretty-printed (indent 2 — often not one
@@ -519,7 +518,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			return payload;
 		}
 	}
-	let xrayCleanup: (() => void) | null = null;
 	// REAL runtime events for the injected preview islands (islands mode), tapped off the devtools bus.
 	let runtimeEvents = $state<RuntimeEvent[]>([]);
 	$effect(() => {
@@ -561,7 +559,17 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		void analysis.realDom;
 		void analysis.client;
 		void csr; // flipping csr re-renders (islands ⇄ whole-app mount)
-		if (previewMode === 'islands' && frameReady) render_to_frame();
+		if (in_frame(previewMode) && frameReady) render_to_frame();
+	});
+
+	// x-ray and islands are the SAME real render in the isolated iframe — x-ray just adds the boundary
+	// lens overlay on top of the live islands (so the counter still increments, wakes fire for real).
+	const in_frame = (m: string) => m === 'islands' || m === 'xray';
+	// Toggle the lens WITHOUT re-rendering (a full render would reset the hydrated islands' state), so
+	// flipping x-ray ⇄ islands is a pure overlay change on the same live DOM.
+	$effect(() => {
+		const xray = previewMode === 'xray';
+		if (frameReady && in_frame(previewMode)) post_to_frame({ obsType: 'lens', on: xray });
 	});
 
 	// SERVER ISLANDS: the real runtime fetches a deferred region's `endpoint` (same-origin path) and
@@ -588,77 +596,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			return orig(input, init);
 		};
 	});
-
-	// WAKE VISUALIZER (x-ray): arm each island's REAL schedule with real browser primitives — `load`
-	// fires now, `idle` on requestIdleCallback, `visible` on a real IntersectionObserver (scroll the
-	// preview), `interaction` on the first pointer/focus inside, a media query on matchMedia; lakes +
-	// held-raw never wake (frozen). Each island lights from cold→hot when it wakes, stamped with +Xms.
-	function arm_wakes(el: HTMLElement) {
-		const t0 = performance.now();
-		const cleanups: Array<() => void> = [];
-		const wake = (node: Element, reason: string) => {
-			if (node.getAttribute('data-woke') === 'true') return;
-			node.setAttribute('data-woke', 'true');
-			node.setAttribute('data-woke-ms', String(Math.round(performance.now() - t0)));
-			node.setAttribute('data-woke-reason', reason);
-		};
-		for (const node of el.querySelectorAll('[data-obs-island]')) {
-			const w = node.getAttribute('data-wake') || '';
-			const kind = node.getAttribute('data-kind') || '';
-			// lakes + held-raw + server holes never ship JS to wake — mark frozen and leave them.
-			if (!(kind === 'island' || kind === 'preset')) {
-				node.setAttribute('data-woke', 'frozen');
-				continue;
-			}
-			node.setAttribute('data-woke', 'false');
-			if (w === 'load' || w === '') {
-				// load = as soon as the runtime connects; fire next frame so the glow animates in.
-				const id = requestAnimationFrame(() => wake(node, 'load'));
-				cleanups.push(() => cancelAnimationFrame(id));
-			} else if (w === 'idle') {
-				if ('requestIdleCallback' in window) {
-					const id = requestIdleCallback(() => wake(node, 'idle'), { timeout: 1500 });
-					cleanups.push(() => cancelIdleCallback(id));
-				} else {
-					const id = setTimeout(() => wake(node, 'idle'), 500);
-					cleanups.push(() => clearTimeout(id));
-				}
-			} else if (w === 'visible') {
-				const io = new IntersectionObserver(
-					(entries) => {
-						for (const e of entries)
-							if (e.isIntersecting) {
-								wake(node, 'visible');
-								io.disconnect();
-							}
-					},
-					{ root: el }
-				);
-				io.observe(node);
-				cleanups.push(() => io.disconnect());
-			} else if (w === 'interaction') {
-				const onInt = () => wake(node, 'interaction');
-				node.addEventListener('pointerdown', onInt, { once: true });
-				node.addEventListener('focusin', onInt, { once: true });
-				cleanups.push(() => {
-					node.removeEventListener('pointerdown', onInt);
-					node.removeEventListener('focusin', onInt);
-				});
-			} else {
-				// a media query string
-				try {
-					const mql = matchMedia(w);
-					const onC = () => mql.matches && wake(node, 'media');
-					onC();
-					mql.addEventListener('change', onC);
-					cleanups.push(() => mql.removeEventListener('change', onC));
-				} catch {
-					/* invalid query — leave asleep */
-				}
-			}
-		}
-		return () => cleanups.forEach((c) => c());
-	}
 
 	// Nav (keep · nav): the reconcile decision of the last navigation, for the readout.
 	let navInfo = $state<{ to: string; kept: string[]; mounted: string[]; removed: string[] } | null>(null);
@@ -694,6 +631,13 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			frameLiveTimers.push(t);
 		}
 	}
+	// Per-island JS byte count (from the ledger), keyed by file name — the frame's lens stamps it on
+	// each region so the boundary overlay can label "· 518 B JS" without re-deriving anything.
+	function lens_bytes(): Record<string, number> {
+		const out: Record<string, number> = {};
+		for (const f of analysis.ledger?.files ?? []) if (f.ships) out[f.name] = f.bytes;
+		return out;
+	}
 	/** Send the CURRENT analysis's page to the frame (a full render). */
 	function render_to_frame() {
 		const client = analysis.client;
@@ -710,7 +654,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		}
 		const rd = analysis.realDom;
 		if (!rd?.ok || !rd.html) return;
-		post_to_frame({ obsType: 'render', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}) });
+		post_to_frame({ obsType: 'render', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}), xray: previewMode === 'xray', bytes: lens_bytes() });
 		arm_frame_live(rd);
 	}
 
@@ -734,7 +678,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		if (!rd?.ok || !rd.html) return;
 		currentPage = entry;
 		clear_frame_live();
-		post_to_frame({ obsType: 'nav', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}) });
+		post_to_frame({ obsType: 'nav', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}), xray: previewMode === 'xray', bytes: lens_bytes() });
 		arm_frame_live(rd);
 	}
 
@@ -760,12 +704,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		const el = previewEl;
 		const sc = svelteClient;
 		const mode = previewMode;
-		wakeNonce; // dep: bumping it replays the x-ray wake sequence
 		if (!el) return;
-		if (xrayCleanup) {
-			xrayCleanup();
-			xrayCleanup = null;
-		}
 		if (mounted) {
 			try {
 				unmount(mounted);
@@ -778,16 +717,12 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		const fallback = () => {
 			if (analysis.rendered?.ok && analysis.rendered.html) el.innerHTML = analysis.rendered.html;
 		};
-		// X-RAY (boundary lens): show the marked SSR HTML, tinted by the .xray class — no live mount.
-		// Then arm the wake visualizer so each island lights up on its real schedule.
-		if (mode === 'xray') {
-			fallback();
-			xrayCleanup = arm_wakes(el);
-			return;
-		}
-		// ISLANDS (real runtime) renders in an ISOLATED <iframe> (/observatory-frame) — its own document,
-		// its own ogygia runtime + svelte instance. The frame effect below drives it over postMessage.
-		if (mode === 'islands') return;
+		// x-ray now shares the ISLANDS render — the real runtime in the iframe, with the boundary lens
+		// overlaid there (below). The old in-page simulated x-ray (arm_wakes) is gone: real islands wake
+		// on their real schedule and stay interactive. Both frame modes skip the in-page mount.
+		// ISLANDS + X-RAY (real runtime) render in an ISOLATED <iframe> (/observatory-frame) — its own
+		// document, its own ogygia runtime + svelte instance. The frame effect above drives it.
+		if (in_frame(mode)) return;
 		if (!sc || !client || client.error || !client.modules?.[client.entry]) {
 			fallback();
 			return;
@@ -905,7 +840,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			{#if analysis.rendered}
 				<div class="cap">
 					rendered
-					<span class="muted">· {previewMode === 'live' ? 'live, interactive — mounted in your browser' : previewMode === 'xray' ? 'x-ray — every marked region is an island' : 'islands — the real ogygia runtime hydrates each region'}</span>
+					<span class="muted">· {previewMode === 'live' ? 'live, interactive — mounted in your browser' : previewMode === 'xray' ? 'x-ray — the real runtime, with the boundary lens overlaid' : 'islands — the real ogygia runtime hydrates each region'}</span>
 					{#if analysis.rendered.stubs && analysis.rendered.stubs.length}
 						<span class="stubnote" title="components not provided in this single-file REPL render as placeholders">{analysis.rendered.stubs.length} stubbed</span>
 					{/if}
@@ -918,13 +853,12 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{#if previewMode === 'xray'}
 					<div class="lens-legend" data-obs-legend>
 						<span class="lk island">island · ships JS</span>
-						<span class="lk lake">lake · frozen</span>
 						<span class="lk hole">server hole</span>
-						<span class="lk raw">held raw</span>
+						<span class="lk live">live</span>
 						<span class="lk shell">the rest · free server HTML</span>
-						<button class="replay" data-obs-replay title="re-arm the wake schedules" onclick={() => wakeNonce++}>⟳ replay wakes</button>
+						<button class="replay" data-obs-replay title="re-render → islands re-hydrate on their schedule" onclick={() => render_to_frame()}>⟳ replay wakes</button>
 					</div>
-					<div class="wakehint muted">islands start cold. <b>load</b> wakes now · <b>idle</b> soon · <b>visible</b> on scroll · <b>interaction</b> on click · lakes stay frozen.</div>
+					<div class="wakehint muted">the <b>real runtime</b> — islands stay interactive. <b>load</b> woke now · <b>idle</b> soon · <b>visible</b> on scroll · <b>interaction</b> on click (dashed = still asleep).</div>
 				{/if}
 				{#if previewMode === 'live' && server_regions.length}
 					<div class="wakehint srvhint" data-obs-server-hint>
@@ -942,7 +876,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						its state survives the real reconcile) or <b>wake demo</b> (click Menu, scroll to Chart).
 					</div>
 				{/if}
-				{#if previewMode === 'islands' && navInfo}
+				{#if in_frame(previewMode) && navInfo}
 					<div class="navinfo" data-obs-navinfo>
 						<span class="ni-cap">reconcile → <b>{navInfo.to}</b></span>
 						{#if navInfo.kept.length}<span class="ni kept">kept {navInfo.kept.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
@@ -950,7 +884,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						{#if navInfo.removed.length}<span class="ni removed">removed {navInfo.removed.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
 					</div>
 				{/if}
-				{#if previewMode === 'islands' && runtimeEvents.length}
+				{#if in_frame(previewMode) && runtimeEvents.length}
 					<div class="rtev" data-obs-runtime-events>
 						<div class="rtev-cap">runtime events <span class="muted">· live from the devtools bus (Rung 0) as the real runtime hydrates</span></div>
 						<div class="rtev-log">
@@ -965,8 +899,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						</div>
 					</div>
 				{/if}
-				<!-- islands → an ISOLATED iframe (own runtime/svelte/document); live/x-ray → the in-page div. -->
-				{#if previewMode === 'islands'}
+				<!-- islands + x-ray → the ISOLATED iframe (own runtime/svelte/document), x-ray adds the lens
+					 overlay there; live → the in-page whole-app mount. -->
+				{#if in_frame(previewMode)}
 					<iframe
 						class="preview frame"
 						bind:this={frameEl}
@@ -975,7 +910,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						data-obs-frame
 					></iframe>
 				{:else}
-					<div class="preview og-canvas" class:xray={previewMode === 'xray'} bind:this={previewEl} data-obs-preview></div>
+					<div class="preview og-canvas" bind:this={previewEl} data-obs-preview></div>
 				{/if}
 				{#if analysis.rendered.ok}
 					<details class="pipe">
@@ -1664,87 +1599,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			opacity: 1;
 		}
 	}
-	/* ── BOUNDARY LENS (x-ray): dim the dead shell, light up every marked island ── */
-	.preview.xray {
-		background: var(--bg-sunken);
-		color: var(--text-dim);
-		position: relative;
-		max-height: 360px;
-	}
-	.preview.xray :global(ogygia-obs-island) {
-		display: block;
-		position: relative;
-		margin: 22px 0 10px;
-		padding: 8px 10px;
-		border-radius: 7px;
-		/* Theme-aware: the region's tint is a translucent wash over the canvas, so its text must be the
-		   canvas text colour (light on dark, dark on light) — a hardcoded slate went invisible in dark. */
-		color: var(--obs-text);
-		outline: 2px solid var(--lens, #14b8a6);
-		background: color-mix(in srgb, var(--lens, #14b8a6) 8%, transparent);
-	}
-	.preview.xray :global(ogygia-obs-island::before) {
-		content: attr(data-name) ' · ' attr(data-kind);
-		position: absolute;
-		top: -18px;
-		left: -2px;
-		padding: 1px 7px;
-		border-radius: 5px 5px 0 0;
-		background: var(--lens, #14b8a6);
-		color: #04121a;
-		font: 700 10px/1.5 ui-monospace, Menlo, monospace;
-		white-space: nowrap;
-	}
-	.preview.xray :global(ogygia-obs-island[data-ships='true']::after) {
-		position: absolute;
-		top: -18px;
-		right: -2px;
-		padding: 1px 7px;
-		border-radius: 5px 5px 0 0;
-		font: 10px/1.5 ui-monospace, Menlo, monospace;
-	}
-	/* cold: the island hasn't woken yet — dashed, dimmed, waiting for its schedule */
-	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='false']) {
-		outline-style: dashed;
-		outline-color: color-mix(in srgb, var(--lens, #14b8a6) 55%, transparent);
-		background: rgba(148, 163, 184, 0.06);
-	}
-	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='false'] > *) {
-		opacity: 0.45;
-		filter: grayscale(0.5);
-	}
-	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='false']::after) {
-		content: '💤 asleep · wakes on ' attr(data-wake);
-		background: rgba(100, 116, 139, 0.25);
-		color: var(--text-dim);
-	}
-	/* hot: it woke — solid, lit, stamped with when + bytes */
-	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='true']) {
-		outline-style: solid;
-		box-shadow: 0 0 0 4px color-mix(in srgb, var(--lens, #14b8a6) 18%, transparent);
-		transition: box-shadow 0.25s ease;
-	}
-	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='true']::after) {
-		content: '⚡ woke +' attr(data-woke-ms) 'ms · ' attr(data-bytes) ' B JS';
-		background: color-mix(in srgb, var(--lens, #14b8a6) 25%, var(--bg));
-		color: var(--lens, #14b8a6);
-	}
-	.preview.xray :global(ogygia-obs-island[data-kind='island']) {
-		--lens: #14b8a6;
-	}
-	.preview.xray :global(ogygia-obs-island[data-kind='preset']) {
-		--lens: #14b8a6;
-	}
-	.preview.xray :global(ogygia-obs-island[data-kind='lake']) {
-		--lens: #f59e0b;
-	}
-	.preview.xray :global(ogygia-obs-island[data-kind='held (raw)']) {
-		--lens: #fb923c;
-	}
-	.preview.xray :global(ogygia-obs-island[data-kind='server hole']),
-	.preview.xray :global(ogygia-obs-island[data-kind='live']) {
-		--lens: #8b5cf6;
-	}
+	/* The x-ray boundary lens now lives in the isolated iframe (observatory-frame/+page.svelte), overlaid
+	   on the REAL islands — see there. The in-page preview only ever renders `live` mode now. */
 	.lens-legend {
 		display: flex;
 		flex-wrap: wrap;
@@ -1761,17 +1617,13 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		background: rgba(20, 184, 166, 0.16);
 		color: var(--accent);
 	}
-	.lens-legend .lk.lake {
-		background: rgba(245, 158, 11, 0.16);
-		color: #fbbf24;
-	}
 	.lens-legend .lk.hole {
 		background: rgba(139, 92, 246, 0.18);
 		color: #c4b5fd;
 	}
-	.lens-legend .lk.raw {
-		background: rgba(251, 146, 60, 0.16);
-		color: #fdba74;
+	.lens-legend .lk.live {
+		background: rgba(139, 92, 246, 0.18);
+		color: #c4b5fd;
 	}
 	.lens-legend .lk.shell {
 		background: rgba(148, 163, 184, 0.14);
