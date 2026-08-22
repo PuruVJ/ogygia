@@ -58,8 +58,8 @@ Marked on a component import: `import X from './X.svelte' with { … }`.
 ## AI tooling — the ogygia MCP server (use it)
 
 `npx ogygia mcp` runs a stdio MCP server that runs the REAL `transformHost` in Node. When it is wired
-up (`npx ogygia ai`, or `claude mcp add ogygia -- npx ogygia mcp`), you have four tools — **prefer them
-over guessing** what the transform does:
+up (`npx ogygia ai`, or `claude mcp add ogygia -- npx ogygia mcp`), you have five tools — **prefer them
+over guessing** what the transform (or the running app) does:
 
 - `ogygia_check(source)` — **run this on any ogygia component you write or change before trusting it.** It
   runs the real transform and returns the exact `[ogygia]` rule violation (captured-state write, illegal
@@ -69,6 +69,11 @@ over guessing** what the transform does:
 - `ogygia_islands(source)` — the island map alone (structured JSON), the fast overview.
 - `ogygia_explain(source)` — prose runtime story per island (where its HTML comes from, when JS wakes,
   how props cross). Good for explaining a design to a human.
+- `ogygia_debug({ url })` — **the runtime half.** Loads a page of the RUNNING app in a headless browser,
+  lets islands hydrate (scrolls for `visible`; pass `click` to wake an `interaction` one), and returns the
+  ACTUAL per-island story from the devtools bus: SSR → wire → connected → woke → hydrated (with ms), plus
+  anomalies (SSR'd-but-never-connected, hydration failures). Use it to see what really happened when an
+  island misbehaves. Requires the app to run with `OGYGIA_DEVTOOLS=1` and Playwright installed.
 
 If the tools are not present, tell the user to run `npx ogygia ai` (or add the server manually).
 

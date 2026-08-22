@@ -187,6 +187,26 @@ const TOOLS = [
 			properties: { source: { type: 'string', description: 'The .svelte component source.' } },
 			required: ['source']
 		}
+	},
+	{
+		name: 'ogygia_debug',
+		description:
+			'Debug a REAL running page. Loads a URL of your running ogygia app in a headless browser, lets its ' +
+			'islands hydrate (scrolls to trigger `visible` islands; optionally clicks a selector to trigger an ' +
+			'`interaction` one), then returns the ACTUAL runtime story per island from the devtools event bus: ' +
+			'SSR → wire → connected → woke → hydrated (with timings), plus anomalies (SSR’d-but-never-connected, ' +
+			'hydration failures). Requires the app to be a devtools build (OGYGIA_DEVTOOLS=1) and Playwright ' +
+			'installed. Use this to see what really happened instead of reasoning from source.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				url: { type: 'string', description: 'URL of a page on the running app (e.g. http://localhost:5173/blog).' },
+				wait: { type: 'number', description: 'ms to wait for hydration to settle (default 2500, max 8000).' },
+				scroll: { type: 'boolean', description: 'Scroll the page to trigger `visible` islands (default true).' },
+				click: { type: 'string', description: 'Optional CSS selector to click, to wake an `interaction` island.' }
+			},
+			required: ['url']
+		}
 	}
 ];
 
@@ -274,7 +294,160 @@ function tool_explain(args: Attrs): ToolResult {
 	return text(`How this page behaves at runtime:\n\n${lines.join('\n')}`);
 }
 
-function dispatch_tool(name: string, args: Attrs): ToolResult {
+// ── ogygia_debug — the RUNTIME half: drive a headless browser over a real page ─────────────────────
+
+/** One event off `window.__ogygia_devtools` — the fp-correlated devtools stream (schema in devtools/). */
+type DtEvent = { name: string; fp?: string; entry?: string; realm?: string; seq?: number; t?: number; [k: string]: unknown };
+
+const short = (fp: string) => fp.slice(0, 8);
+
+/** Turn the raw event stream into a per-island runtime story + invariant warnings an AI can act on. */
+function render_story(url: string, events: DtEvent[]): string {
+	if (!events.length)
+		return `Loaded ${url}, but the devtools bus emitted no events — no islands on this page, or nothing had happened yet.`;
+
+	// Server (SSR) events are stamped with the SERVER process's `performance.now()` — a different clock
+	// than the browser's — so relative timing is computed from CLIENT events only; server events just
+	// read "SSR'd" with no client-relative ms.
+	const client_ts = events.filter((e) => e.realm === 'client').map((e) => Number(e.t ?? 0));
+	const t0 = client_ts.length ? Math.min(...client_ts) : Math.min(...events.map((e) => Number(e.t ?? 0)));
+	const at = (e: DtEvent) => (e.realm === 'server' ? '' : `+${Math.round(Number(e.t ?? t0) - t0)}ms`);
+	const when = (e?: DtEvent) => {
+		if (!e) return '';
+		const a = at(e);
+		return a ? ` (${a})` : '';
+	};
+	const has = (evs: DtEvent[], n: string) => evs.find((e) => e.name === n);
+
+	const by_fp = new Map<string, DtEvent[]>();
+	const global: DtEvent[] = [];
+	for (const e of events) {
+		if (typeof e.fp === 'string') {
+			const arr = by_fp.get(e.fp) ?? [];
+			arr.push(e);
+			by_fp.set(e.fp, arr);
+		} else {
+			global.push(e);
+		}
+	}
+
+	const warnings: string[] = [];
+	const blocks: string[] = [];
+	for (const [fp, evsRaw] of by_fp) {
+		const evs = evsRaw.slice().sort((a, b) => Number(a.seq ?? 0) - Number(b.seq ?? 0));
+		const ssr = has(evs, 'server.region.rendered');
+		const connected = has(evs, 'region.connected');
+		const woke = has(evs, 'wake.fired');
+		const done = has(evs, 'region.hydrate.done');
+		const failed = has(evs, 'region.hydrate.failed');
+		const applied = has(evs, 'region.server.applied');
+		const props = has(evs, 'wire.props');
+		const scheduled = has(evs, 'wake.scheduled');
+		const replay = has(evs, 'interaction.replay');
+		const strategy = String(connected?.wake ?? scheduled?.when ?? '(unknown)');
+		const entry = connected?.entry ?? scheduled?.entry ?? evs.find((e) => e.entry)?.entry;
+		const label = entry ? base(String(entry)) : `#${short(fp)}`;
+
+		let status = '✅';
+		if (failed) status = '❌';
+		else if (ssr && !connected) status = '⚠️';
+		else if (connected && !done && !applied) status = '⏳';
+
+		const lines: string[] = [];
+		if (ssr) lines.push(`  · SSR'd on the server${when(ssr)}`);
+		if (props) lines.push(`  · props crossed the wire${props.bytes != null ? ` (${props.bytes} B)` : ''}`);
+		if (connected) lines.push(`  · region connected — wake: ${strategy}${connected.nested ? ', nested (rides an awake ancestor)' : ''}${connected.deferred ? ', deferred hole' : ''}${when(connected)}`);
+		if (woke) lines.push(`  · wake fired${when(woke)}`);
+		if (applied) lines.push(`  · deferred HTML applied${applied.bytes != null ? ` (${applied.bytes} B)` : ''}${when(applied)}`);
+		if (done) lines.push(`  · hydrated${done.ms != null ? ` in ${Math.round(Number(done.ms) * 10) / 10}ms` : ''} — interactive${when(done)}`);
+		if (replay) lines.push(`  · replayed ${replay.clicks ?? '?'} queued click(s) after wake`);
+		if (failed) lines.push(`  · HYDRATION FAILED${failed.error ? `: ${failed.error}` : ''}`);
+
+		blocks.push(`### ${status}  ${label}${strategy !== '(unknown)' ? ` — wake:${strategy}` : ''}${entry ? `  (#${short(fp)})` : ''}\n${lines.join('\n')}`);
+
+		if (failed) warnings.push(`#${short(fp)}: hydration failed${failed.error ? ` — ${failed.error}` : ''}.`);
+		else if (ssr && !connected)
+			warnings.push(`#${short(fp)}: SSR'd but the region never connected — its custom element never ran (island JS not shipped/loaded, or a csr=true/false mismatch).`);
+		else if (connected && strategy === 'load' && !done)
+			warnings.push(`#${short(fp)}: connected with wake:load but never finished hydrating — stuck or errored mid-wake.`);
+	}
+
+	const boot = global.find((e) => e.name === 'runtime.boot');
+	const navs = global.filter((e) => e.name.startsWith('nav.'));
+	const header =
+		`# Runtime story — ${url}\n\n` +
+		`${by_fp.size} island(s) · ${events.length} events` +
+		(boot ? ` · runtime booted (${(boot.installers as string[] | undefined)?.join(', ') || 'installers ran'})` : '') +
+		(navs.length ? ` · ${navs.filter((n) => n.name === 'nav.finish').length} navigation(s)` : '');
+
+	return (
+		`${header}\n\n${blocks.join('\n\n')}` +
+		(warnings.length ? `\n\n## ⚠️ Warnings (${warnings.length})\n${warnings.map((w) => `- ${w}`).join('\n')}` : '\n\n## ✅ No lifecycle anomalies detected.')
+	);
+}
+
+/** Load a REAL page in a headless browser, let its islands hydrate, and read the devtools stream. */
+async function tool_debug(args: Attrs): Promise<ToolResult> {
+	const url = String(args.url ?? '');
+	if (!url) return fail('`url` is required — a page of a running ogygia app built with OGYGIA_DEVTOOLS=1.');
+	const wait = typeof args.wait === 'number' ? Math.min(Math.max(args.wait, 200), 8000) : 2500;
+	const do_scroll = args.scroll !== false;
+	const click_sel = typeof args.click === 'string' ? args.click : '';
+
+	let chromium: (typeof import('playwright'))['chromium'];
+	try {
+		// A VARIABLE specifier so the bundler can't freeze it to a concrete node_modules path — Playwright
+		// is an optional peer (only ogygia_debug needs it), resolved from the consumer's install at runtime.
+		const spec = 'playwright';
+		({ chromium } = (await import(spec)) as typeof import('playwright'));
+	} catch {
+		return fail('ogygia_debug needs Playwright: `npm i -D playwright && npx playwright install chromium`.');
+	}
+	let browser: Awaited<ReturnType<typeof chromium.launch>>;
+	try {
+		browser = await chromium.launch();
+	} catch (e) {
+		return fail(`could not launch a browser (${e instanceof Error ? e.message : String(e)}). Try \`npx playwright install chromium\`.`);
+	}
+	try {
+		const page = await browser.newPage();
+		try {
+			await page.goto(url, { waitUntil: 'load', timeout: 15000 });
+		} catch (e) {
+			return fail(`could not load ${url} — is the dev server up? (${e instanceof Error ? e.message : String(e)})`);
+		}
+		const has_hook = await page.evaluate(() => typeof (window as { __ogygia_devtools?: unknown }).__ogygia_devtools !== 'undefined');
+		if (!has_hook)
+			return fail(
+				`${url} loaded, but window.__ogygia_devtools is absent — the app is not a devtools build. Run its dev/build with ` +
+					`OGYGIA_DEVTOOLS=1 (or ogygia({ devtools: true }) in vite.config), then retry.`
+			);
+		await page.waitForTimeout(wait);
+		if (do_scroll) {
+			// Trigger `visible` islands the way a user would.
+			await page.evaluate(async () => {
+				for (let y = 0; y <= document.body.scrollHeight; y += 400) {
+					window.scrollTo(0, y);
+					await new Promise((r) => setTimeout(r, 120));
+				}
+				window.scrollTo(0, 0);
+			});
+			await page.waitForTimeout(500);
+		}
+		if (click_sel) {
+			await page.click(click_sel, { timeout: 3000 }).catch(() => {});
+			await page.waitForTimeout(400);
+		}
+		const trace = (await page.evaluate(() => (window as { __ogygia_devtools: { trace(): { events: unknown[] } } }).__ogygia_devtools.trace())) as {
+			events: DtEvent[];
+		};
+		return text(render_story(url, trace.events ?? []));
+	} finally {
+		await browser.close();
+	}
+}
+
+async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 	switch (name) {
 		case 'ogygia_compile':
 			return tool_compile(args);
@@ -284,6 +457,8 @@ function dispatch_tool(name: string, args: Attrs): ToolResult {
 			return tool_check(args);
 		case 'ogygia_explain':
 			return tool_explain(args);
+		case 'ogygia_debug':
+			return tool_debug(args);
 		default:
 			return fail(`Unknown tool: ${name}`);
 	}
@@ -321,13 +496,9 @@ function handle(msg: Rpc): void {
 	if (method === 'tools/call') {
 		const name = String(params?.name ?? '');
 		const args = (params?.arguments as Attrs) ?? {};
-		let result: ToolResult;
-		try {
-			result = dispatch_tool(name, args);
-		} catch (e) {
-			result = fail(`Internal error: ${e instanceof Error ? e.message : String(e)}`);
-		}
-		send({ jsonrpc: '2.0', id, result });
+		dispatch_tool(name, args)
+			.then((result) => send({ jsonrpc: '2.0', id, result }))
+			.catch((e) => send({ jsonrpc: '2.0', id, result: fail(`Internal error: ${e instanceof Error ? e.message : String(e)}`) }));
 		return;
 	}
 	if (method === 'ping') {
@@ -341,7 +512,7 @@ function handle(msg: Rpc): void {
 
 /** Start the stdio MCP server. Resolves when stdin closes (the client disconnected). */
 export async function runMcp(): Promise<void> {
-	log(`ogygia MCP server v${version} ready — 4 tools (compile, islands, check, explain)`);
+	log(`ogygia MCP server v${version} ready — 5 tools (compile, islands, check, explain, debug)`);
 	const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 	for await (const line of rl) {
 		const trimmed = line.trim();

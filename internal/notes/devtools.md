@@ -129,18 +129,26 @@ The only rung that touches the framework. Everything after is a consumer.
 
 ## Rung 8 — AiTools (AI as a first-class devtools consumer)
 
-> **SHIPPED (v1, compile-side):** `npx ogygia mcp` — a hand-rolled stdio JSON-RPC MCP server
-> (`packages/ogygia/src/mcp.ts`, dispatched from the CLI, built to `dist/mcp.js`). The real
-> `transformHost` runs in plain Node (no browser/WASM — the oxc parser auto-loads), so an AI can hand
-> ogygia a `.svelte` source and get the island map back. Four tools: `ogygia_compile` (island map +
-> rewritten host), `ogygia_islands` (the map alone), `ogygia_check` (runs the transform + reports any
-> `[ogygia]` rule violation — the static half of `check_invariants`), `ogygia_explain` (prose runtime
-> story per island — `explain_transform`). Zero runtime deps beyond ogygia's own compiler.
-> **Wire it up:** Claude Code → `claude mcp add ogygia -- npx ogygia mcp`; Claude Desktop →
-> `{ "mcpServers": { "ogygia": { "command": "npx", "args": ["ogygia", "mcp"] } } }`.
-> **Still to add (the runtime half):** `get_events` / `get_region_story` / `get_wire_payloads` need a
-> live app + the bus (the vite devtools plugin, Rung 7); `check_invariants` grows the stream checks
-> below; `mark(label)` segments a trace. The compile-side tools stand alone today.
+> **SHIPPED (v1):** `npx ogygia mcp` — a hand-rolled stdio JSON-RPC MCP server
+> (`packages/ogygia/src/mcp.ts`, dispatched from the CLI, built to `dist/mcp.js`). Zero runtime deps
+> beyond ogygia's own compiler (Playwright is an optional peer, only for `ogygia_debug`). Five tools:
+> - **Compile-side** (real `transformHost` in plain Node — no browser/WASM, oxc auto-loads):
+>   `ogygia_compile` (island map + rewritten host), `ogygia_islands` (map alone), `ogygia_check` (runs
+>   the transform + reports any `[ogygia]` rule violation — the static half of `check_invariants`),
+>   `ogygia_explain` (prose per island — `explain_transform`).
+> - **Runtime-side** (`get_region_story` / `get_events`): `ogygia_debug({ url })` drives a headless
+>   browser over a REAL page, lets islands hydrate (scrolls for `visible`, optional `click` for
+>   `interaction`), reads `window.__ogygia_devtools.trace()`, and renders the per-fingerprint story
+>   (SSR → wire → connected → woke → hydrated, with ms) + invariant warnings (SSR'd-but-never-connected,
+>   hydrate.failed). Requires the target app to be a devtools build (`OGYGIA_DEVTOOLS=1`). NOTE: server
+>   (SSR) events carry the server process's clock, so relative ms is computed from CLIENT events only.
+>
+> **Wire it up:** `npx ogygia ai` (installs the skill + registers the server), or
+> `claude mcp add ogygia -- npx ogygia mcp`. In THIS repo (unpublished) use the local path:
+> `node packages/ogygia/dist/cli.mjs mcp`.
+> **Still to add:** `get_wire_payloads`, `check_invariants` stream checks (below), `mark(label)` to
+> segment a trace around an agent's own Playwright action; a WS bridge so `ogygia_debug` can attach to
+> an already-open page instead of launching its own (the vite devtools plugin, Rung 7).
 
 The bus is already AI-shaped (JSON, identity-keyed). What AI debugging needs on top — ordered by
 "add now vs later":

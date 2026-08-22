@@ -139,6 +139,7 @@
 		"@sveltejs/kit": ">=2.70.2 <3",
 		"bits-ui": "^2.0.0",
 		"mdsvex": "^0.12.0",
+		"playwright": "^1.40.0",
 		"shiki": "^3.0.0 || ^4.0.0",
 		"svelte": "^5.40.0",
 		"vite": "^7.0.0 || ^8.0.0"
@@ -151,6 +152,9 @@
 			"optional": true
 		},
 		"mdsvex": {
+			"optional": true
+		},
+		"playwright": {
 			"optional": true
 		},
 		"shiki": {
