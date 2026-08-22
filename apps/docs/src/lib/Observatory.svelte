@@ -6,6 +6,7 @@
 	import CodeMirror from './CodeMirror.svelte';
 	import FormattedCode from './FormattedCode.svelte';
 	import { warmPrettier, formatCode } from './prettier';
+	import { parse as devalue_parse } from 'devalue';
 	import type { Analysis } from './observatory.worker';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
 
@@ -495,6 +496,17 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// Mobile: a single pane at a time, toggled between the editor and the inspector.
 	let mobilePane = $state<'editor' | 'result'>('editor');
 	let wakeNonce = $state(0); // bump to replay the x-ray wake sequence
+
+	// Wire tab: show the DECODED props by default (devalue's [{...},ref] wire format is unreadable);
+	// toggle to the raw encoded bytes (what actually crosses).
+	let wireDecoded = $state(true);
+	function decode_wire(payload: string): string {
+		try {
+			return JSON.stringify(devalue_parse(payload));
+		} catch {
+			return payload;
+		}
+	}
 	let xrayCleanup: (() => void) | null = null;
 	// REAL runtime events for the injected preview islands (islands mode), tapped off the devtools bus.
 	let runtimeEvents = $state<RuntimeEvent[]>([]);
@@ -1008,7 +1020,13 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 
 			<div class="tp" class:on={inspectorTab === 'wire'} data-tab="wire">
 			{#if analysis.rendered?.wire && analysis.rendered.wire.length}
-				<div class="cap">wire <span class="muted">· the props that cross to each island, by value (devalue)</span></div>
+				<div class="cap">
+					wire <span class="muted">· the props that cross to each island, by value (devalue)</span>
+					<span class="legs wiretoggle" data-obs-wire-toggle>
+						<button class:on={wireDecoded} onclick={() => (wireDecoded = true)} title="the props as JS values">decoded</button>
+						<button class:on={!wireDecoded} onclick={() => (wireDecoded = false)} title="the raw devalue bytes that actually cross">encoded</button>
+					</span>
+				</div>
 				<div class="wire" data-obs-wire>
 					{#each analysis.rendered.wire as w, i (w.name + i)}
 						<div class="wrow">
@@ -1016,7 +1034,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 							{#if w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]'}
 								<span class="muted wempty">no props cross — nothing to serialize</span>
 							{:else}
-								<code class="wpay">{w.payload}</code>
+								<code class="wpay">{wireDecoded ? decode_wire(w.payload) : w.payload}</code>
 								<span class="wbytes muted">{w.bytes} B</span>
 							{/if}
 						</div>

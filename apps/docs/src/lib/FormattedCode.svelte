@@ -7,7 +7,7 @@
 
 	let { doc, lang }: { doc: string; lang?: 'svelte' | 'ts' | 'js' | 'html' } = $props();
 
-	let shown = $state(doc);
+	let shown = $state('');
 	$effect(() => {
 		const raw = doc;
 		shown = raw;
