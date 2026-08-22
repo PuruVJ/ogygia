@@ -265,6 +265,52 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		if (active === name) active = 'App.svelte' in files ? 'App.svelte' : Object.keys(files)[0];
 	}
 
+	// Prettify (oxfmt has no browser build; prettier/standalone is the client-side path). The formatter +
+	// its Svelte/TS plugins are BIG, so they're dynamic-imported — warmed on hover, fetched on first use.
+	// printWidth 60 (the preview pane is narrow), tabs (matches the editor).
+	type PrettierBundle = { format: (src: string, opts: Record<string, unknown>) => Promise<string>; plugins: unknown[] };
+	let prettier_load: Promise<PrettierBundle> | null = null;
+	let formatting = $state(false);
+	function warm_prettier() {
+		if (prettier_load) return prettier_load;
+		prettier_load = (async () => {
+			const [core, svelte, estree, babel, ts, htmlp, postcss] = await Promise.all([
+				import('prettier/standalone'),
+				import('prettier-plugin-svelte'),
+				import('prettier/plugins/estree'),
+				import('prettier/plugins/babel'),
+				import('prettier/plugins/typescript'),
+				import('prettier/plugins/html'),
+				import('prettier/plugins/postcss')
+			]);
+			return { format: core.format, plugins: [svelte.default ?? svelte, estree, babel, ts, htmlp, postcss] };
+		})();
+		return prettier_load;
+	}
+	async function prettify() {
+		if (formatting) return;
+		const name = active;
+		const parser = name.endsWith('.svelte')
+			? 'svelte'
+			: name.endsWith('.ts')
+				? 'typescript'
+				: name.endsWith('.js') || name.endsWith('.mjs')
+					? 'babel'
+					: name.endsWith('.html')
+						? 'html'
+						: 'svelte';
+		formatting = true;
+		try {
+			const { format, plugins } = await warm_prettier();
+			const out = await format(files[name], { parser, plugins, printWidth: 60, useTabs: true, svelteStrictMode: false });
+			if (typeof out === 'string' && out !== files[name]) files[name] = out;
+		} catch {
+			/* a syntax error mid-edit — leave the source untouched */
+		} finally {
+			formatting = false;
+		}
+	}
+
 	// Test seam: drive the active file's source without depending on the editor widget (the e2e used to
 	// poke the old `<textarea>`; CodeMirror is a contenteditable, so tests get a stable get/set here).
 	$effect(() => {
@@ -776,6 +822,15 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					</button>
 				{/each}
 				<button class="filetab add" title="add a file" onclick={add_file}>+</button>
+				<button
+					class="fmt"
+					data-obs-fmt
+					title="Prettify (printWidth 60)"
+					onmouseenter={warm_prettier}
+					onfocus={warm_prettier}
+					onclick={prettify}
+					disabled={formatting}>{formatting ? '…' : 'Format'}</button
+				>
 			</div>
 			<CodeMirror doc={files[active]} docKey={active} oninput={(v) => (files[active] = v)} />
 		</section>
@@ -1222,6 +1277,27 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	.filetab.add {
 		color: var(--text-faint);
 		font-weight: 700;
+	}
+	.fmt {
+		margin-left: auto;
+		align-self: center;
+		padding: 3px 10px;
+		border: 1px solid var(--line);
+		border-radius: 6px;
+		background: var(--bg);
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 11px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.fmt:hover {
+		color: var(--text);
+		border-color: var(--line-strong);
+	}
+	.fmt:disabled {
+		opacity: 0.6;
+		cursor: default;
 	}
 	.cap {
 		display: flex;

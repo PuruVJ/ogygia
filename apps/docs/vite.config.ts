@@ -66,7 +66,16 @@ export default defineConfig({
 			'@codemirror/lang-javascript',
 			'@codemirror/lang-html',
 			'@replit/codemirror-lang-svelte',
-			'@lezer/highlight'
+			'@lezer/highlight',
+			// Prettier (the Observatory's Format button) is dynamic-imported on hover → a lazy chunk. Pre-
+			// bundle it so dev doesn't re-optimize+reload on first hover; the runtime fetch stays lazy.
+			'prettier/standalone',
+			'prettier-plugin-svelte',
+			'prettier/plugins/estree',
+			'prettier/plugins/babel',
+			'prettier/plugins/typescript',
+			'prettier/plugins/html',
+			'prettier/plugins/postcss'
 		]
 	},
 	// PROFILER_SOURCEMAPS=1 pnpm build → server chunks get .map files, so the SSR profiler
