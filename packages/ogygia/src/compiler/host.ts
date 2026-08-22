@@ -40,6 +40,7 @@ export interface HostFs {
 	writeFileSync(p: string, data: string): void;
 	mkdirSync(p: string, opts?: any): void;
 	rmSync(p: string, opts?: any): void;
+	renameSync(from: string, to: string): void;
 }
 /** The `path` surface (node's `path` and `path`-browserify both satisfy this). */
 export type HostPath = typeof import('node:path');

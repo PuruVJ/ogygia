@@ -18,7 +18,7 @@
 
 	// Regexes at script top level (created once for this singleton island, never per call).
 	const OBS_DEFER_URL = /\/__obs_defer\/([^/?#]+)/;
-	const PAGE_SVELTE = /(^|\/)\+page\.svelte$/;
+	const PAGE_SVELTE = /(^|\/)\+page\.(svelte|md|svx)$/;
 
 	/** A REPL project: a map of filename → source. */
 	type FileMap = Record<string, string>;
@@ -169,6 +169,41 @@
 	};
 
 	// Presets are file MAPS (Rung 6 multi-file). Most are single-file (their imports stub on render).
+	// A content page — ogygia's REAL markdown pipeline (mdsvex + Shiki + admonitions + heading ids) runs
+	// in the browser here, the same transform the shipped site uses. `\`` / `\${}` are escaped for the
+	// template literal; they reach the editor as plain markdown.
+	const CONTENT_MD = `---
+title: Content pages
+---
+
+# Markdown, live
+
+ogygia's **real** content pipeline runs right here — mdsvex, Shiki-highlighted
+fences, \`::: admonitions\`, heading ids + hover anchors, frontmatter. Edit the
+markdown and watch it recompile.
+
+::: tip
+This is a tip admonition. Try \`::: warning\`, \`::: danger\`, or \`::: details\` too.
+:::
+
+## A highlighted code fence
+
+\`\`\`js
+const greet = (name) => \`hello \${name}\`;
+console.log(greet('ogygia'));
+\`\`\`
+
+## A table
+
+| dial     | decides                     |
+| -------- | --------------------------- |
+| \`wake\`   | when an island's JS runs    |
+| \`render\` | where the HTML comes from   |
+
+Prose, [links](/docs), and \`inline code\` all render through the same pipeline
+your shipped site uses — no bespoke REPL markdown.
+`;
+
 	const PRESETS = {
 		'demo app': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
@@ -410,6 +445,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 </style>
 `
+		},
+		// A CONTENT page — the real ogygia markdown pipeline (mdsvex + Shiki + admonitions), live in-browser.
+		content: {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.md': CONTENT_MD
 		}
 	};
 

@@ -113,6 +113,30 @@ async function main() {
 	const backLive = await until(page, () => !!document.querySelector('[data-obs-preview]'), undefined, 10000);
 	ok('back to live re-mounts', !!backLive);
 
+	// 9. CONTENT: ogygia's REAL markdown pipeline (mdsvex + shiki + admonitions) runs in the browser and
+	// renders a `.md` entry — the same transform the shipped site uses.
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'content')?.click());
+	const mdHeading = await until(page, () => /Markdown, live/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
+	ok('markdown preset renders (mdsvex pipeline in-browser)', !!mdHeading);
+	const mdParts = await page.evaluate(() => {
+		const el = document.querySelector('[data-obs-preview]');
+		if (!el) return {};
+		return {
+			admonition: !!el.querySelector('.og-admonition, [class*=admonition]'),
+			shiki: !!el.querySelector('.shiki, pre[class*=shiki]'),
+			anchor: !!el.querySelector('.og-heading-anchor, a[href^="#"]'),
+			table: !!el.querySelector('table')
+		};
+	});
+	ok('markdown: admonition + shiki fence + heading anchor + table all render', mdParts.admonition && mdParts.shiki && mdParts.anchor && mdParts.table, JSON.stringify(mdParts));
+	// editing the markdown recompiles live
+	await setSrc(page, S(`# Edited heading RT\n\nplain prose paragraph.\n`));
+	const mdEdited = await until(page, () => /Edited heading RT/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
+	ok('markdown recompiles on edit', !!mdEdited);
+	// back to a svelte preset so later shared-workspace assertions aren't on a .md
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'demo app')?.click());
+	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
+
 	ok('no unexpected page errors', pageErrors.length === 0, JSON.stringify([...new Set(pageErrors)].slice(0, 3)));
 
 	console.log(`\n${'─'.repeat(46)}`);

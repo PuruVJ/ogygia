@@ -11,10 +11,18 @@ import {
 	islandVirtualId,
 	wrapperVirtualId,
 	CLIENT_BINDING_STUB,
-	set_parser
+	set_parser,
+	set_host
 } from 'ogygia/internal/compiler-browser';
 import { cdnPlugin, makeCdnCache, CSS_MODULE, css_inject_module } from './repl/cdn-plugin.ts';
 import { sveltePlugin } from './repl/svelte-plugin.ts';
+import { markdownPlugin, md_to_svelte, MD_MODULE } from './repl/markdown-plugin.ts';
+import { make_browser_host } from './repl/browser-host.ts';
+
+// Install the browser compiler HOST once, synchronously, before any transform/hash runs: region ids
+// (md5) + content region/fence keys (sha256) now hash through a vendored, node:crypto-verified impl —
+// no reliance on Vite incidentally polyfilling node:crypto, and BuildCache disables itself (throwing fs).
+set_host(make_browser_host());
 
 // A jsdelivr cache that LIVES for the worker session — an edit re-bundles, but package.json + files
 // already fetched are reused (a REPL edits constantly; re-fetching each keystroke would hammer the CDN).
@@ -637,8 +645,29 @@ function real_island_render(files: Record<string, string>, entry: string, island
 	}
 }
 
+/** A "svelte view" of the workspace: every `.md` / `.svx` file replaced by its markdown-pipeline Svelte
+ *  source (same key), so the whole sync analyze/SSR machinery treats a content page as a normal component
+ *  (mdsvex is async, so this is resolved ONCE up front). Non-content files pass through untouched. */
+async function content_svelte_view(files: Record<string, string>): Promise<Record<string, string>> {
+	const out: Record<string, string> = { ...files };
+	for (const [name, code] of Object.entries(files)) {
+		if (!MD_MODULE.test(name)) continue;
+		try {
+			out[name] = await md_to_svelte(code, '/repl/' + name.replace(/^\/+/, ''));
+		} catch (e) {
+			// A markdown compile error surfaces as a normal svelte-compile error downstream — leave a stub
+			// component so `rendered` still resolves (and the error shows) instead of crashing analyze.
+			out[name] = `<pre class="og-md-error">markdown error: ${(e instanceof Error ? e.message : String(e)).replace(/[<&]/g, ' ')}</pre>`;
+		}
+	}
+	return out;
+}
+
 async function analyze(files: Record<string, string>, active: string): Promise<Analysis> {
-	const source = files[active] ?? '';
+	// Resolve content pages to Svelte source ONCE (mdsvex is async); the rest of analyze is sync + treats
+	// a `.md`/`.svx` entry exactly like a `.svelte` component.
+	const svelte_files = await content_svelte_view(files);
+	const source = svelte_files[active] ?? '';
 	const marks = analyze_marks(source);
 	const t0 = now();
 
@@ -746,13 +775,13 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		realError = e instanceof Error ? `${e.message}` : String(e);
 	}
 
-	// The page to render: a Kit route `+page.svelte` (ogygia is SvelteKit-only), else legacy `App.svelte`,
-	// else whatever's open. Mirrors the client's entry_of pick.
+	// The page to render: a Kit route `+page.{svelte,md,svx}` (ogygia is SvelteKit-only), else legacy
+	// `App.svelte`, else whatever's open. Mirrors the client's entry_of pick.
 	const entryFile =
-		Object.keys(files).find((k) => /(^|\/)\+page\.svelte$/.test(k)) ??
-		('App.svelte' in files ? 'App.svelte' : active);
-	const ledger = byte_ledger(files);
-	const islandInfo = build_island_info(files);
+		Object.keys(svelte_files).find((k) => /(^|\/)\+page\.(svelte|md|svx)$/.test(k)) ??
+		('App.svelte' in svelte_files ? 'App.svelte' : active);
+	const ledger = byte_ledger(svelte_files);
+	const islandInfo = build_island_info(svelte_files);
 
 	return {
 		ok: marks.ok,
@@ -768,9 +797,11 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		modules,
 		realError,
 		oxc,
-		rendered: execute(files, entryFile, islandInfo),
-		realDom: real_island_render(files, entryFile, islandInfo),
-		client: client_bundle(files, entryFile),
+		// content pages resolved to svelte source above → the sync SSR/island/client legs treat them as
+		// normal components (the entry compile keys on the file, not the extension).
+		rendered: execute(svelte_files, entryFile, islandInfo),
+		realDom: real_island_render(svelte_files, entryFile, islandInfo),
+		client: client_bundle(svelte_files, entryFile),
 		ledger,
 		ms: now() - t0
 	};
@@ -853,6 +884,8 @@ async function bundle_preview(
 			input: entry,
 			plugins: [
 				workspace,
+				// `.md` / `.svx` → ogygia's real content pipeline (mdsvex + shiki + admonitions) → svelte JS.
+				markdownPlugin({ generate: 'client' }),
 				sveltePlugin({ generate: 'client', preprocess: (c: string) => c.replace(WITH_DIAL, '$1') }),
 				cdnPlugin({
 					cache: cdn_cache, // reused across edits — don't re-fetch jsdelivr every keystroke
