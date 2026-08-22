@@ -1476,9 +1476,35 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		padding: 14px;
 		border: 1px dashed var(--line-strong);
 		border-radius: 8px;
-		background: #fff;
-		color: #111;
 		overflow: auto;
+		/* The live/x-ray demos use --obs-* tokens (defined inside the iframe for islands mode); mirror them
+		   here — light default, dark under the site theme — so live/x-ray render styled + theme-aware too. */
+		--obs-bg: #ffffff;
+		--obs-panel: #f8fafc;
+		--obs-text: #0f172a;
+		--obs-muted: #64748b;
+		--obs-border: #e2e8f0;
+		--obs-accent: #0d9488;
+		background: var(--obs-bg);
+		color: var(--obs-text);
+	}
+	:global(:root:not([data-theme='light'])) .preview {
+		@media (prefers-color-scheme: dark) {
+			--obs-bg: #0b1220;
+			--obs-panel: #0f1a2e;
+			--obs-text: #e2e8f0;
+			--obs-muted: #94a3b8;
+			--obs-border: #1e293b;
+			--obs-accent: #5eead4;
+		}
+	}
+	:global(:root[data-theme='dark']) .preview {
+		--obs-bg: #0b1220;
+		--obs-panel: #0f1a2e;
+		--obs-text: #e2e8f0;
+		--obs-muted: #94a3b8;
+		--obs-border: #1e293b;
+		--obs-accent: #5eead4;
 	}
 	.preview.frame {
 		flex: 1;
