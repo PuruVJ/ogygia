@@ -516,6 +516,12 @@ export function analyze(profile: CpuProfile, resolver?: SourceMapResolver): Anal
 				files.set(fk, fg);
 			}
 			// group by package / bucket
+			// TODO(dev-budget): when `dev`, Vite's own cost (pkg vite / .vite / rolldown / esbuild —
+			// transform + module load, absent from the prod path) plus the profiler overhead dominate the
+			// window and drown the app's real proportion. Do the exclusion HERE (mark these buckets, or emit
+			// an `app_ms` total that nets them out) so every consumer — report_json, the dashboard UI, the
+			// `ogygia_profile` MCP tool — shows the same "% of app time" without re-deriving it. The MCP
+			// currently strips them itself (mcp.ts render_profile); fold that in as the canonical behaviour.
 			const bk =
 				r.category === 'dependency' || r.category === 'svelte'
 					? (r.pkg ?? 'node_modules')
