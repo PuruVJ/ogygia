@@ -38,6 +38,19 @@ export interface CdnPluginOptions {
 const SVELTE_EXTERNAL = /^svelte(\/|$)/;
 const HTTP_URL = /^https?:\/\//;
 const RELATIVE = /^\.\.?\//;
+const CSS_MODULE = /\.css(\?|$)/;
+
+/** A `.css` import → a JS module that injects the stylesheet (rolldown can't parse CSS as JS). Idempotent
+ *  per href so a re-mount doesn't stack duplicate <style> tags. */
+function css_inject_module(css: string, href: string): string {
+	return (
+		`const css = ${JSON.stringify(css)};\n` +
+		`const key = ${JSON.stringify('repl-css:' + href)};\n` +
+		`if (typeof document !== 'undefined' && !document.querySelector('style[data-repl-css=' + JSON.stringify(key) + ']')) {\n` +
+		`  const s = document.createElement('style'); s.setAttribute('data-repl-css', key); s.textContent = css; document.head.appendChild(s);\n` +
+		`}\nexport default css;`
+	);
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RolldownPlugin = any;
@@ -119,17 +132,21 @@ export function cdnPlugin(opts: CdnPluginOptions = {}): RolldownPlugin {
 			}
 			return null; // workspace/other → left to sibling plugins
 		},
-		load(id: string): string | null {
+		load(id: string): { code: string; moduleType?: string } | Promise<{ code: string; moduleType?: string }> | null {
 			if (id.startsWith(BROWSER_STUB)) {
-				// An inert module — a default {} and a Proxy-ish empty namespace so any import shape "works".
-				return 'const x = {}; export default x;';
+				// An inert module — default {} so any import shape "works". moduleType:'js' so a stubbed
+				// `.css`/`.node`/… id isn't mis-tagged (rolldown infers type from the id's extension).
+				return { code: 'const x = {}; export default x;', moduleType: 'js' };
 			}
 			if (HTTP_URL.test(id)) {
 				return (async () => {
 					const txt = await fetch_text(id);
 					if (txt == null) throw new Error('[observatory] CDN fetch failed: ' + id);
-					return txt;
-				})() as unknown as string;
+					// CSS can't be bundled by rolldown — inject it via a JS module, forced to moduleType 'js'
+					// (the `.css` id would otherwise be tagged CSS and rejected).
+					if (CSS_MODULE.test(id)) return { code: css_inject_module(txt, id), moduleType: 'js' };
+					return { code: txt };
+				})();
 			}
 			return null;
 		}

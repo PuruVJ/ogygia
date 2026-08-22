@@ -136,6 +136,37 @@ async function main() {
 		ok('JSON import (nanoid/package.json)', m.name === 'nanoid', `name=${m.name}`);
 	} catch (e) { fail += 1; console.log('  ✗ JSON import threw —', e.message); }
 
+	// 11. CSS import from a package → injected as a <style> (rolldown can't bundle CSS itself)
+	try {
+		const code = await withNet(bundle(`import 'normalize.css';\nexport const x = 1;`));
+		ok('CSS import → style injection', /createElement\((['"])style\1\)/.test(code) && /data-repl-css/.test(code));
+	} catch (e) { fail += 1; console.log('  ✗ CSS import threw —', e.message.split('\n')[0]); }
+
+	// 12. semver ranges + dist-tags (jsdelivr resolves them to a concrete version)
+	try {
+		const a = await withNet(run(`import { nanoid } from 'nanoid@^5.0.0';\nexport const t = typeof nanoid;`));
+		const c = await withNet(run(`import { nanoid } from 'nanoid@latest';\nexport const t = typeof nanoid;`));
+		ok('semver range (^5) + dist-tag (latest)', a.t === 'function' && c.t === 'function');
+	} catch (e) { fail += 1; console.log('  ✗ semver range threw —', e.message.split('\n')[0]); }
+
+	// 13. CJS package with heavy internals (immer — Proxies)
+	try {
+		const m = await withNet(run(`import { produce } from 'immer';\nexport const t = typeof produce;`));
+		ok('CJS internals (immer/produce)', m.t === 'function');
+	} catch (e) { fail += 1; console.log('  ✗ immer threw —', e.message.split('\n')[0]); }
+
+	// 14. a package that imports a node builtin transitively → stubbed, build survives
+	try {
+		const m = await withNet(run(`import mime from 'mime';\nexport const t = typeof mime;`));
+		ok('pkg with transitive node builtin (mime)', m.t === 'function' || m.t === 'object');
+	} catch (e) { fail += 1; console.log('  ✗ mime threw —', e.message.split('\n')[0]); }
+
+	// 15. deep transitive dep graph (d3-scale → many d3-*)
+	try {
+		const m = await withNet(run(`import { scaleLinear } from 'd3-scale';\nexport const t = typeof scaleLinear;`));
+		ok('deep transitive graph (d3-scale)', m.t === 'function');
+	} catch (e) { fail += 1; console.log('  ✗ d3-scale threw —', e.message.split('\n')[0]); }
+
 	console.log(`\n${'─'.repeat(44)}`);
 	console.log(`${fail === 0 ? '✓ ALL PASS' : '✗ FAILURES'}: ${pass} passed, ${fail} failed`);
 	process.exit(fail === 0 ? 0 : 1);
