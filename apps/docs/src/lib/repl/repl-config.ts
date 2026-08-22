@@ -29,15 +29,44 @@ export interface ReplMarkdownConfig {
 
 const SAFE_BOOL_KEYS = ['containers', 'tabs', 'headingAnchors', 'headingIds', 'codeIds', 'region'] as const;
 
-/** Extract the FIRST `name(<object literal>)` call's object source (brace-balanced, string-aware). Returns
- *  the `{ … }` text or null. Doesn't parse comments/regex, but a config is clean enough — it fails to null. */
+const WORD = /\w/;
+/** Find the `{` opening the FIRST `name( { … } )` call that sits at a CODE position — skipping line and
+ *  block comments and string literals, so a commented-out or stringified `ogygia({…})` isn't matched.
+ *  Returns the index of the `{`, or -1 if there's no such call. */
+function find_call_object_start(src: string, name: string): number {
+	let i = 0;
+	let str: string | null = null;
+	let line_comment = false;
+	let block_comment = false;
+	while (i < src.length) {
+		const c = src[i];
+		const c2 = src[i + 1];
+		if (line_comment) { if (c === '\n') line_comment = false; i++; continue; }
+		if (block_comment) { if (c === '*' && c2 === '/') { block_comment = false; i += 2; continue; } i++; continue; }
+		if (str) { if (c === '\\') i += 2; else { if (c === str) str = null; i++; } continue; }
+		if (c === '/' && c2 === '/') { line_comment = true; i += 2; continue; }
+		if (c === '/' && c2 === '*') { block_comment = true; i += 2; continue; }
+		if (c === '"' || c === "'" || c === '`') { str = c; i++; continue; }
+		// a code position: match `name` on a word boundary, then `(` (ws), then `{`
+		if (src.startsWith(name, i) && !WORD.test(src[i - 1] ?? '') && !WORD.test(src[i + name.length] ?? '')) {
+			let j = i + name.length;
+			while (j < src.length && /\s/.test(src[j])) j++;
+			if (src[j] === '(') {
+				let k = j + 1;
+				while (k < src.length && /\s/.test(src[k])) k++;
+				if (src[k] === '{') return k;
+			}
+		}
+		i++;
+	}
+	return -1;
+}
+
+/** Extract the FIRST code-level `name(<object literal>)` call's object source (brace-balanced, string- and
+ *  comment-aware). Returns the `{ … }` text or null. A commented-out / stringified call is ignored. */
 export function extract_call_object(src: string, name: string): string | null {
-	const re = new RegExp('\\b' + name + '\\s*\\(');
-	const m = re.exec(src);
-	if (!m) return null;
-	let i = m.index + m[0].length;
-	while (i < src.length && /\s/.test(src[i])) i++;
-	if (src[i] !== '{') return null;
+	let i = find_call_object_start(src, name);
+	if (i < 0) return null;
 	const start = i;
 	let depth = 0;
 	let str: string | null = null;

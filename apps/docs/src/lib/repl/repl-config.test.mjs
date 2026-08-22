@@ -81,6 +81,19 @@ for (const [label, src] of [
 	ok('prototype pollution attempt is contained', c && c.containers === true && {}.polluted === undefined);
 }
 
+// ── comment / string aware: a commented-out or stringified ogygia() must NOT be applied ──
+ok('line-commented config ignored', parse_config_markdown('// ogygia({ content: { markdown: { tabs: false } } })\nexport default {}') === null);
+ok('block-commented config ignored', parse_config_markdown('/* ogygia({ content: { markdown: { tabs: false } } }) */') === null);
+ok('stringified config ignored', parse_config_markdown('const s = "ogygia({ content: { markdown: {} } })";') === null);
+{
+	const c = parse_config_markdown('// ogygia({ content: { markdown: { containers: false } } })\nogygia({ content: { markdown: { tabs: false } } })');
+	ok('commented-before-real → the real call wins', c && c.tabs === false && !('containers' in c));
+}
+{
+	const c = parse_config_markdown(`ogygia({ content: { markdown: { wrapperClass: 'https://x//y', containers: true } } })`);
+	ok('a // inside a string literal is not treated as a comment', c && c.wrapperClass === 'https://x//y' && c.containers === true);
+}
+
 console.log(`\n${'─'.repeat(44)}`);
 console.log(`${fail === 0 ? '✓ ALL PASS' : '✗ FAILURES'}: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
