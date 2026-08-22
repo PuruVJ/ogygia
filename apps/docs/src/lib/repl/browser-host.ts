@@ -9,7 +9,10 @@
  * are vendored + unit-tested byte-for-byte against `node:crypto` (see `browser-host.test.mjs`).
  */
 import path from 'path-browserify';
-import type { CompilerHost, HostFs, HostHasher } from 'ogygia/internal/compiler-browser';
+import type { CompilerHost } from 'ogygia/internal/compiler-browser';
+// The lean browser entry exports only `CompilerHost`; derive the member types we annotate from it.
+type HostFs = CompilerHost['fs'];
+type HostHasher = ReturnType<CompilerHost['crypto']['createHash']>;
 
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 
