@@ -510,12 +510,21 @@ function render_profile(origin: string, r: ProfileReport): string {
 		.map((f) => `- ${sev_icon[f.severity ?? 'info'] ?? '•'} ${f.message ?? f.code ?? ''}`)
 		.join('\n');
 
-	// Where the time went, minus the profiler's own overhead (the real signal).
-	const budget = (r.budget ?? [])
-		.filter((b) => b.category !== 'profiler')
+	// Where the time went. Always drop the profiler's own overhead. In DEV also drop Vite and its bundler
+	// paths (transform, module load, rolldown) — they dominate the window and aren't in the prod path — and
+	// recompute each share over the REMAINING (app) time, so the app's real proportion is legible.
+	const dev_noise = new Set(['vite', '.vite', 'rolldown', 'esbuild']);
+	const is_noise = (b: { label?: string; category?: string }) =>
+		b.category === 'profiler' || (r.dev === true && dev_noise.has((b.label ?? '').toLowerCase()));
+	const kept = (r.budget ?? []).filter((b) => !is_noise(b));
+	const kept_total = kept.reduce((sum, b) => sum + (b.ms ?? 0), 0) || 1;
+	const budget = kept
 		.slice(0, 8)
-		.map((b) => `- ${b.label}: ${b.ms}ms (${b.pct}%)`)
+		.map((b) => `- ${b.label}: ${b.ms}ms (${(((b.ms ?? 0) / kept_total) * 100).toFixed(1)}%)`)
 		.join('\n');
+	const budget_title = r.dev
+		? 'Where the time went (Vite + profiler overhead excluded; % of remaining app time)'
+		: 'Where the time went (profiler overhead excluded)';
 
 	// Hottest functions that aren't profiler noise, by self time.
 	const hot = (r.hot_functions ?? [])
@@ -544,7 +553,7 @@ function render_profile(origin: string, r: ProfileReport): string {
 		head +
 		dev_note +
 		(findings ? `\n\n## Findings\n${findings}` : '') +
-		(budget ? `\n\n## Where the time went (profiler overhead excluded)\n${budget}` : '') +
+		(budget ? `\n\n## ${budget_title}\n${budget}` : '') +
 		(hot ? `\n\n## Hottest functions (self ms)\n${hot}` : '') +
 		(comps ? `\n\n## Components\n${comps}` : '') +
 		`\n\n## Network: ${net_line}  ·  Memory: ${mem_line}` +
