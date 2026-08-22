@@ -4,6 +4,8 @@
 	// injected regions; we tap the bus to show the true lifecycle story (Rung-0 layer → an instrument).
 	import { add_sink } from 'ogygia/devtools';
 	import CodeMirror from './CodeMirror.svelte';
+	import FormattedCode from './FormattedCode.svelte';
+	import { warmPrettier, formatCode } from './prettier';
 	import type { Analysis } from './observatory.worker';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
 
@@ -279,44 +281,15 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		if (active === name) active = 'App.svelte' in files ? 'App.svelte' : Object.keys(files)[0];
 	}
 
-	// Prettify (oxfmt has no browser build; prettier/standalone is the client-side path). The formatter +
-	// its Svelte/TS plugins are BIG, so they're dynamic-imported — warmed on hover, fetched on first use.
-	// printWidth 60 (the preview pane is narrow), tabs (matches the editor).
-	type PrettierBundle = { format: (src: string, opts: Record<string, unknown>) => Promise<string>; plugins: unknown[] };
-	let prettier_load: Promise<PrettierBundle> | null = null;
+	// Prettify the active file (the Format button). The formatter is the shared lazy prettier ($lib/prettier).
 	let formatting = $state(false);
-	function warm_prettier() {
-		if (prettier_load) return prettier_load;
-		prettier_load = (async () => {
-			const [core, svelte, estree, babel, ts, htmlp, postcss] = await Promise.all([
-				import('prettier/standalone'),
-				import('prettier-plugin-svelte'),
-				import('prettier/plugins/estree'),
-				import('prettier/plugins/babel'),
-				import('prettier/plugins/typescript'),
-				import('prettier/plugins/html'),
-				import('prettier/plugins/postcss')
-			]);
-			return { format: core.format, plugins: [svelte.default ?? svelte, estree, babel, ts, htmlp, postcss] };
-		})();
-		return prettier_load;
-	}
+	const warm_prettier = warmPrettier;
 	async function prettify() {
 		if (formatting) return;
 		const name = active;
-		const parser = name.endsWith('.svelte')
-			? 'svelte'
-			: name.endsWith('.ts')
-				? 'typescript'
-				: name.endsWith('.js') || name.endsWith('.mjs')
-					? 'babel'
-					: name.endsWith('.html')
-						? 'html'
-						: 'svelte';
 		formatting = true;
 		try {
-			const { format, plugins } = await warm_prettier();
-			const out = await format(files[name], { parser, plugins, printWidth: 60, useTabs: true, svelteStrictMode: false, htmlWhitespaceSensitivity: 'ignore' });
+			const out = await formatCode(files[name], name);
 			if (typeof out === 'string' && out !== files[name]) files[name] = out;
 		} catch {
 			/* a syntax error mid-edit — leave the source untouched */
@@ -973,7 +946,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{/if}
 				{#if analysis.rendered.ok}
 					<details class="pipe">
-						<summary>▸ rendered HTML source (SSR)</summary>
+						<summary>rendered HTML source (SSR)</summary>
 						<div class="code-out" data-obs-html><CodeMirror doc={ssr_source} lang="html" readonly /></div>
 					</details>
 				{:else if !analysis.client || analysis.client.error}
@@ -1099,13 +1072,13 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				<div class="warming" data-obs-warming>warming the in-browser compiler (rolldown WASM)…</div>
 			{/if}
 			<div class="code-out" data-obs-output>
-				<CodeMirror doc={shownOutput} lang="svelte" readonly />
+				<FormattedCode doc={shownOutput} lang="svelte" />
 			</div>
 
 			{#if analysis.compiledServer}
 				<details class="pipe" data-obs-compiled>
-					<summary>▸ svelte-compiled server JS <span class="muted">· source → transform → svelte compile</span></summary>
-					<div class="code-out"><CodeMirror doc={analysis.compiledServer} lang="js" readonly /></div>
+					<summary>svelte-compiled server JS <span class="muted">· source → transform → svelte compile</span></summary>
+					<div class="code-out"><FormattedCode doc={analysis.compiledServer} lang="js" /></div>
 				</details>
 			{/if}
 			</div>
@@ -1123,11 +1096,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 							</summary>
 							{#if m.wrapperSource}
 								<div class="mpath">{m.wrapperPath}</div>
-								<div class="code-out"><CodeMirror doc={m.wrapperSource} lang="svelte" readonly /></div>
+								<div class="code-out"><FormattedCode doc={m.wrapperSource} lang="svelte" /></div>
 							{/if}
 							{#if m.entrySource}
 								<div class="mpath">{m.entryPath}</div>
-								<div class="code-out"><CodeMirror doc={m.entrySource} lang="js" readonly /></div>
+								<div class="code-out"><FormattedCode doc={m.entrySource} lang="js" /></div>
 							{/if}
 							{#if !m.wrapperSource && !m.entrySource}
 								<div class="muted mpath">no standalone module (rendered inline / binding-only)</div>
