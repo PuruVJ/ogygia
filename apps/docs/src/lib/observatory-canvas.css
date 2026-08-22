@@ -141,3 +141,54 @@
 	text-decoration-thickness: 0.08em;
 	text-decoration-color: light-dark(rgb(185 28 28 / 0.6), rgb(248 113 113 / 0.6));
 }
+
+/* Admonitions (`::: tip` etc. → .og-admonition), ported from ogygia/content theme.css so content
+   previews show real coloured callouts. Each variant sets one hue token; border/tint/title derive. */
+.og-canvas .og-admonition {
+	--og-adm-c: var(--obs-accent, #14b8a6);
+	margin: 0 0 1.2rem;
+	padding: 0.8rem 1rem;
+	border: 1px solid color-mix(in srgb, var(--og-adm-c) 30%, var(--obs-border, #d4d4d8));
+	border-left: 3px solid var(--og-adm-c);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--og-adm-c) 8%, transparent);
+}
+.og-canvas .og-admonition-title {
+	margin: 0 0 0.35rem;
+	font-weight: 700;
+	font-size: 0.82em;
+	letter-spacing: 0.02em;
+	color: var(--og-adm-c);
+}
+.og-canvas .og-admonition > :last-child {
+	margin-bottom: 0;
+}
+.og-canvas .og-admonition-tip {
+	--og-adm-c: #10b981;
+}
+.og-canvas .og-admonition-info {
+	--og-adm-c: #3b82f6;
+}
+.og-canvas .og-admonition-important {
+	--og-adm-c: #8b5cf6;
+}
+.og-canvas .og-admonition-warning {
+	--og-adm-c: #f59e0b;
+}
+.og-canvas .og-admonition-danger {
+	--og-adm-c: #ef4444;
+}
+.og-canvas .og-admonition-details {
+	--og-adm-c: #94a3b8;
+}
+.og-canvas summary.og-admonition-title {
+	cursor: pointer;
+	user-select: none;
+}
+.og-canvas summary.og-admonition-title::-webkit-details-marker {
+	display: none;
+}
+.og-canvas summary.og-admonition-title::before {
+	content: '▸ ';
+	opacity: 0.6;
+}
