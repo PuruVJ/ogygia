@@ -89,8 +89,9 @@ function sanitize(md: any): ReplMarkdownConfig {
 export function parse_config_markdown(configSrc: string): ReplMarkdownConfig | null {
 	const objSrc = extract_call_object(configSrc, 'ogygia');
 	if (!objSrc) return null;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	let cfg: any;
+	// One try/catch around EVAL *and* extraction/sanitize: a config can throw not just while evaluating
+	// (a syntax error) but lazily on property access — a getter, a Proxy trap, a thrown value — and
+	// sanitize reads those properties. Any of it → treat the config as absent (defaults), never crash.
 	try {
 		const stub = (): undefined => undefined;
 		const helpers: Record<string, unknown> = {
@@ -101,11 +102,12 @@ export function parse_config_markdown(configSrc: string): ReplMarkdownConfig | n
 			get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : stub)
 		});
 		// eslint-disable-next-line no-new-func
-		cfg = new Function('__S__', `with(__S__){ return (${objSrc}); }`)(sandbox);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const cfg: any = new Function('__S__', `with(__S__){ return (${objSrc}); }`)(sandbox);
+		const md = cfg?.content?.markdown ?? cfg?.markdown;
+		if (!md || typeof md !== 'object') return null;
+		return sanitize(md);
 	} catch {
 		return null;
 	}
-	const md = cfg?.content?.markdown ?? cfg?.markdown;
-	if (!md || typeof md !== 'object') return null;
-	return sanitize(md);
 }

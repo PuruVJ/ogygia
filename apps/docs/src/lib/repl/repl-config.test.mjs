@@ -63,6 +63,24 @@ ok('malformed object → null (no throw)', parse_config_markdown('ogygia({ a: = 
 	ok('unsafe keys (loader/remark) not copied', c && c.containers === true && !('loader' in c) && !('remark' in c));
 }
 
+// ── adversarial: a config that throws LAZILY (getter / Proxy trap) must degrade to null, never crash ──
+for (const [label, src] of [
+	['getter throws', 'ogygia({ content: { markdown: { get containers() { throw 1 } } } })'],
+	['themes getter throws', 'ogygia({ content: { markdown: { get themes() { throw 1 } } } })'],
+	['transformers getter throws', 'ogygia({ content: { markdown: { code: { get transformers() { throw 1 } } } } })'],
+	['content getter throws', 'ogygia({ get content() { throw 1 } })'],
+	['proxy throws on any get', 'ogygia({ content: { markdown: new Proxy({}, { get() { throw 1 } }) } })']
+]) {
+	let threw = false, res;
+	try { res = parse_config_markdown(src); } catch { threw = true; }
+	ok(`lazy-throw config (${label}) → null, no crash`, !threw && res === null);
+}
+// prototype pollution attempt doesn't leak to the global Object prototype
+{
+	const c = parse_config_markdown('ogygia({ content: { markdown: { __proto__: { polluted: 1 }, containers: true } } })');
+	ok('prototype pollution attempt is contained', c && c.containers === true && {}.polluted === undefined);
+}
+
 console.log(`\n${'─'.repeat(44)}`);
 console.log(`${fail === 0 ? '✓ ALL PASS' : '✗ FAILURES'}: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
