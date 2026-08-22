@@ -191,6 +191,17 @@ async function main() {
 	});
 	ok('scoped <style> paints in the live preview (css injected)', !!paintedBg, `bg=${paintedBg}`);
 
+	// 11. the preview CONSOLE captures + richly formats console.* from the running preview (svelte.dev-style),
+	// and auto-opens on an error.
+	await setSrc(page, S(`<SCRIPT>\n console.log('mounted', { a: 1, xs: [1, 2] });\n console.error('kaboom', new Map([['k', 1]]));\n</SCRIPT>\n<h1>CONSOLE_TEST</h1>`));
+	await until(page, () => /CONSOLE_TEST/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
+	const consoleRows = await until(page, () => {
+		const rows = [...document.querySelectorAll('[data-obs-console-row]')].map((r) => (r.getAttribute('data-obs-console-row') || '') + '|' + (r.querySelector('.oc-text')?.textContent || ''));
+		return rows.length >= 2 ? rows : null;
+	});
+	ok('preview console captures + formats logs', !!consoleRows && consoleRows.some((r) => r.includes('log|mounted { a: 1, xs: [ 1, 2 ] }')) && consoleRows.some((r) => r.includes('error|kaboom Map(1) { "k" => 1 }')), JSON.stringify(consoleRows));
+	ok('console auto-opens on error', await page.evaluate(() => !!document.querySelector('[data-obs-console].open')));
+
 	ok('no unexpected page errors', pageErrors.length === 0, JSON.stringify([...new Set(pageErrors)].slice(0, 3)));
 
 	console.log(`\n${'─'.repeat(46)}`);

@@ -12,6 +12,7 @@
 	import { SplitPane } from '@neodrag/svelte/splitpane';
 	import { warmPrettier, formatCode } from './prettier';
 	import { parse as devalue_parse } from 'devalue';
+	import { format_console_args } from './repl/console-format';
 	import ReplPassthrough from './repl/ReplPassthrough.svelte';
 	import './observatory-canvas.css'; // gentle, overridable native-element defaults (.og-canvas), shared with the iframe
 	import type { Analysis } from './observatory.worker';
@@ -935,6 +936,39 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// The svelte submodules a compiled component can require (kept external in the bundle). Pre-imported
 	// (load_svelte_runtime, at init) so the eval's `require` is synchronous; unknowns fall back to client.
 	let svelteExtras = $state<Record<string, Record<string, unknown>>>({});
+
+	// PREVIEW CONSOLE (svelte.dev-style): the eval'd bundle's `console` is a PARAM that shadows the global
+	// (see eval_cjs), so only the PREVIEW's console.* is captured here — the Observatory's own logs stay out.
+	type ConsoleEntry = { level: 'log' | 'info' | 'debug' | 'warn' | 'error'; text: string; count: number };
+	let consoleLog = $state<ConsoleEntry[]>([]);
+	let consoleOpen = $state(false);
+	const CONSOLE_LEVELS = new Set(['log', 'info', 'debug', 'warn', 'error']);
+	function capture_console(level: ConsoleEntry['level'], args: unknown[]) {
+		const text = format_console_args(args);
+		const last = consoleLog[consoleLog.length - 1];
+		// Collapse consecutive identical lines into a count, like the browser console.
+		if (last && last.level === level && last.text === text) {
+			last.count++;
+			consoleLog = [...consoleLog];
+		} else {
+			consoleLog = [...consoleLog, { level, text, count: 1 }].slice(-200);
+		}
+		if (level === 'error' || level === 'warn') consoleOpen = true; // surface problems automatically
+	}
+	// A `console` for the eval: capture the 5 levels (+ forward to the real console so devtools still works),
+	// pass everything else (group/table/assert/…) straight through so the preview never breaks on them.
+	const preview_console: typeof console = new Proxy(console, {
+		get(target, prop: string) {
+			if (CONSOLE_LEVELS.has(prop)) {
+				return (...a: unknown[]) => {
+					capture_console(prop as ConsoleEntry['level'], a);
+					(target as unknown as Record<string, (...x: unknown[]) => void>)[prop]?.(...a);
+				};
+			}
+			return (target as unknown as Record<string, unknown>)[prop];
+		}
+	});
+
 	function bundle_require(spec: string): Record<string, unknown> {
 		if (spec === 'svelte') return svelteRuntime as unknown as Record<string, unknown>;
 		if (spec === 'svelte/internal/client') return (svelteClient as Record<string, unknown>) ?? {};
@@ -947,11 +981,12 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		if (spec === 'ogygia' || spec.startsWith('ogygia/')) return ogygia_passthrough;
 		return {};
 	}
-	/** Eval a CJS module string with our svelte-providing require; returns its exports. */
+	/** Eval a CJS module string with our svelte-providing require; returns its exports. The `console` param
+	 *  SHADOWS the global inside the bundle (+ its event handlers), so the preview's logs land in our panel. */
 	function eval_cjs(code: string): Record<string, unknown> {
 		const module = { exports: {} as Record<string, unknown> };
 		// eslint-disable-next-line no-new-func
-		new Function('require', 'module', 'exports', code)(bundle_require, module, module.exports);
+		new Function('require', 'module', 'exports', 'console', code)(bundle_require, module, module.exports, preview_console);
 		return module.exports;
 	}
 	// The isolated iframe (islands mode) talks to us over postMessage: it's ready (→ send the page),
@@ -1173,6 +1208,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	function remount_preview() {
 		const el = preview_el;
 		if (!el) return;
+		consoleLog = []; // fresh run → fresh console (like svelte.dev's REPL)
 		const bundle = previewBundle;
 		const client = analysis.client;
 		const sc = svelteClient;
@@ -1425,6 +1461,39 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					></iframe>
 				{:else}
 					<div class="preview og-canvas" {@attach preview_mount} data-obs-preview></div>
+					<!-- Console of the running preview (svelte.dev-style) — collapsible; auto-opens on warn/error. -->
+					<div class="obs-console" data-obs-console class:open={consoleOpen}>
+						<div
+							class="oc-head"
+							role="button"
+							tabindex="0"
+							onclick={() => (consoleOpen = !consoleOpen)}
+							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); consoleOpen = !consoleOpen; } }}
+						>
+							<span class="oc-tw">{consoleOpen ? '▾' : '▸'}</span>
+							<span class="oc-title">console</span>
+							{#if consoleLog.length}<span class="oc-n">{consoleLog.reduce((a, e) => a + e.count, 0)}</span>{/if}
+							{#if consoleLog.some((e) => e.level === 'error')}<span class="oc-dot error" title="errors"></span>{/if}
+							{#if consoleLog.some((e) => e.level === 'warn')}<span class="oc-dot warn" title="warnings"></span>{/if}
+							<span class="oc-spacer"></span>
+							{#if consoleLog.length}<button class="oc-clear" onclick={(e) => { e.stopPropagation(); consoleLog = []; }}>clear</button>{/if}
+						</div>
+						{#if consoleOpen}
+							<div class="oc-body" data-obs-console-body>
+								{#if !consoleLog.length}
+									<div class="oc-empty">console.log / warn / error / info from the preview appears here</div>
+								{:else}
+									{#each consoleLog as e, i (i)}
+										<div class="oc-row {e.level}" data-obs-console-row={e.level}>
+											{#if e.count > 1}<span class="oc-badge">{e.count}</span>{/if}
+											<span class="oc-lvl">{e.level}</span>
+											<span class="oc-text">{e.text}</span>
+										</div>
+									{/each}
+								{/if}
+							</div>
+						{/if}
+					</div>
 				{/if}
 				{#if analysis.rendered.ok}
 					<details class="pipe">
@@ -2210,6 +2279,130 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		border-radius: 8px;
 	}
 	/* CDN dependency readout (live mode): resolving spinner, then the packages pulled / stubbed. */
+	/* Preview console (svelte.dev-style) — collapsible strip under the live preview. */
+	.obs-console {
+		border-top: 1px solid var(--obs-border);
+		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+		font-size: 11px;
+		flex: 0 0 auto;
+		background: var(--obs-panel);
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+	.obs-console.open {
+		max-height: 40%;
+	}
+	.oc-head {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 12px;
+		cursor: pointer;
+		user-select: none;
+		color: var(--obs-muted);
+		font-size: 10px;
+		letter-spacing: 0.03em;
+		text-transform: uppercase;
+	}
+	.oc-head:hover {
+		color: var(--obs-text, inherit);
+	}
+	.oc-tw {
+		width: 0.8em;
+		opacity: 0.7;
+	}
+	.oc-title {
+		font-weight: 600;
+	}
+	.oc-n {
+		background: color-mix(in oklab, var(--obs-muted) 22%, transparent);
+		border-radius: 999px;
+		padding: 0 6px;
+		font-size: 9px;
+	}
+	.oc-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+	}
+	.oc-dot.error {
+		background: #ef4444;
+	}
+	.oc-dot.warn {
+		background: #f59e0b;
+	}
+	.oc-spacer {
+		flex: 1;
+	}
+	.oc-clear {
+		border: 0;
+		background: none;
+		color: var(--obs-muted);
+		cursor: pointer;
+		font: inherit;
+		text-transform: none;
+		letter-spacing: 0;
+		opacity: 0.75;
+	}
+	.oc-clear:hover {
+		opacity: 1;
+		color: var(--obs-accent);
+	}
+	.oc-body {
+		overflow: auto;
+		padding: 2px 0 6px;
+		min-height: 0;
+	}
+	.oc-empty {
+		padding: 6px 14px;
+		color: var(--obs-muted);
+		opacity: 0.7;
+		font-style: italic;
+	}
+	.oc-row {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		padding: 2px 12px;
+		border-bottom: 1px solid color-mix(in oklab, var(--obs-border) 40%, transparent);
+		white-space: pre-wrap;
+		word-break: break-word;
+		line-height: 1.5;
+	}
+	.oc-row.warn {
+		background: color-mix(in oklab, #f59e0b 8%, transparent);
+	}
+	.oc-row.error {
+		background: color-mix(in oklab, #ef4444 9%, transparent);
+	}
+	.oc-badge {
+		flex: 0 0 auto;
+		background: color-mix(in oklab, var(--obs-muted) 28%, transparent);
+		border-radius: 999px;
+		padding: 0 5px;
+		font-size: 9px;
+		align-self: center;
+	}
+	.oc-lvl {
+		flex: 0 0 auto;
+		font-size: 9px;
+		text-transform: uppercase;
+		opacity: 0.55;
+		min-width: 3.2em;
+	}
+	.oc-row.error .oc-lvl,
+	.oc-row.error .oc-text {
+		color: #ef4444;
+	}
+	.oc-row.warn .oc-lvl,
+	.oc-row.warn .oc-text {
+		color: #d98a00;
+	}
+	.oc-text {
+		flex: 1;
+	}
+
 	.cdndeps {
 		display: flex;
 		flex-wrap: wrap;
