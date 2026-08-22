@@ -207,7 +207,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	async function decode_hash(hash: string): Promise<FileMap | null> {
 		try {
 			if (hash.startsWith('#code=') && typeof DecompressionStream !== 'undefined') {
-				const stream = new Blob([b64url_decode(hash.slice(6))]).stream().pipeThrough(new DecompressionStream('gzip'));
+				const stream = new Blob([b64url_decode(hash.slice(6)) as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'));
 				const json = await new Response(stream).text();
 				const map = JSON.parse(json);
 				return map && typeof map === 'object' ? (map as FileMap) : null;
@@ -914,7 +914,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{#if analysis.rendered.ok}
 					<details class="pipe">
 						<summary>▸ rendered HTML source (SSR)</summary>
-						<div class="code-out" data-obs-html><CodeMirror doc={analysis.rendered.html} lang="html" readonly /></div>
+						<div class="code-out" data-obs-html><CodeMirror doc={analysis.rendered.html ?? ''} lang="html" readonly /></div>
 					</details>
 				{:else if !analysis.client || analysis.client.error}
 					<div class="err" data-obs-render-err>could not render: {analysis.rendered.error}</div>
@@ -1417,13 +1417,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		color: var(--accent);
 		font-size: 9px;
 		vertical-align: 1px;
-	}
-	pre {
-		margin: 0;
-		padding: 12px 14px;
-		white-space: pre-wrap;
-		word-break: break-word;
-		color: var(--text);
 	}
 	/* Code surface for every readonly CodeMirror output (transformed host, compiled JS, modules, HTML). */
 	.code-out {
