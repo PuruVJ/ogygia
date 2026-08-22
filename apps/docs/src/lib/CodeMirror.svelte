@@ -6,8 +6,8 @@
 	//
 	// CM is SSR-safe at module load; the view is built in a client-only $effect.
 	import { untrack } from 'svelte';
-	import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, dropCursor } from '@codemirror/view';
-	import { EditorState, Compartment } from '@codemirror/state';
+	import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, dropCursor, ViewPlugin, Decoration, type DecorationSet, type ViewUpdate } from '@codemirror/view';
+	import { EditorState, Compartment, RangeSetBuilder } from '@codemirror/state';
 	import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 	import { syntaxHighlighting, HighlightStyle, indentOnInput, bracketMatching, indentUnit } from '@codemirror/language';
 	import { javascript } from '@codemirror/lang-javascript';
@@ -81,11 +81,49 @@
 		'&.cm-focused': { outline: 'none' }
 	});
 
+	// Mark OUR OWN syntax — the ogygia dials (import attributes), macros, and virtual ids — with a faint
+	// accent box, so at a glance you see what's ogygia vs plain Svelte/JS.
+	const OG_PATTERNS = [/\bwith\s*\{[^}]*\}/g, /\bimport\.meta\.og\.\w+/g, /virtual:ogygia\/[\w/.-]+/g];
+	const og_mark = Decoration.mark({ class: 'cm-og-syntax' });
+	const ogHighlighter = ViewPlugin.fromClass(
+		class {
+			decorations: DecorationSet;
+			constructor(view: EditorView) {
+				this.decorations = this.build(view);
+			}
+			update(u: ViewUpdate) {
+				if (u.docChanged || u.viewportChanged) this.decorations = this.build(u.view);
+			}
+			build(view: EditorView): DecorationSet {
+				const marks: { from: number; to: number }[] = [];
+				for (const { from, to } of view.visibleRanges) {
+					const text = view.state.doc.sliceString(from, to);
+					for (const pat of OG_PATTERNS) {
+						pat.lastIndex = 0;
+						let m: RegExpExecArray | null;
+						while ((m = pat.exec(text))) marks.push({ from: from + m.index, to: from + m.index + m[0].length });
+					}
+				}
+				marks.sort((a, b) => a.from - b.from || a.to - b.to);
+				const builder = new RangeSetBuilder<Decoration>();
+				let last = -1;
+				for (const mk of marks) {
+					if (mk.from < last) continue; // RangeSetBuilder needs sorted, non-overlapping
+					builder.add(mk.from, mk.to, og_mark);
+					last = mk.to;
+				}
+				return builder.finish();
+			}
+		},
+		{ decorations: (v) => v.decorations }
+	);
+
 	function extensions(key: string | undefined, l: typeof lang) {
 		const base = [
 			lineNumbers(),
 			langComp.of(grammar(key, l)),
 			syntaxHighlighting(highlight),
+			ogHighlighter,
 			chrome,
 			EditorView.lineWrapping,
 			EditorState.tabSize.of(2), // render tabs (svelte's compiled output is tab-indented) at 2 cols
@@ -220,6 +258,13 @@
 
 	.cm-host :global(.cm-editor) {
 		width: 100%;
+	}
+	/* ogygia's own syntax (dials / macros / virtual ids) — a faint accent box. */
+	.cm-host :global(.cm-og-syntax) {
+		background: color-mix(in oklab, var(--accent, #0f7a4f) 12%, transparent);
+		border-radius: 3px;
+		box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent, #0f7a4f) 24%, transparent);
+		padding: 1px 0;
 	}
 	/* Editable editor fills its flex parent; readonly blocks grow to fit their code. */
 	.cm-host:not(.readonly) {
