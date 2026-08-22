@@ -3,7 +3,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
 import { defineConfig, type Plugin } from 'vite';
 import wasm from 'vite-plugin-wasm';
-import { observatoryNodeShims } from './observatory-node-shims.ts';
+import { observatoryNodeShims } from './observatory-node-shims';
 
 const require = createRequire(import.meta.url);
 

@@ -193,7 +193,9 @@ function free_names(fn: Node): string[] {
 		if (parent) {
 			const pt = parent.type as string;
 			// non-reference positions: member property (a.b), non-shorthand object key, labels,
-			// import/export names, TS type positions (oxc strips types before us anyway)
+			// import/export names, and TS type positions — a `: MyType` reference is not a value
+			// capture (matters once og.$ closures carry TS annotations, in a `lang="ts"` file).
+			if (pt.startsWith('TS')) return;
 			if (pt === 'MemberExpression' && parent.property === n && !parent.computed) return;
 			if ((pt === 'Property' || pt === 'ObjectProperty') && parent.key === n && !parent.shorthand)
 				return;
@@ -204,6 +206,44 @@ function free_names(fn: Node): string[] {
 		out.push(name);
 	});
 	return out;
+}
+
+/**
+ * The moved factory text is a RAW source slice, so in a `<script lang="ts">` (or `.ts`) file it still
+ * carries TS type annotations — and it lands in a PLAIN-JS registration script (`data-ogygia-fnm`) +
+ * the fn-manifest module. `(n: number) => …` there is a syntax error. Blank every TS-only span inside
+ * `fn` (type annotations, generics, `as`/`satisfies`/`!`) with spaces — length-preserving, so the
+ * captured-name offsets and the surrounding slice stay valid. This is the same technique as
+ * ts-blank-space, scoped to the one hoisted function.
+ */
+function strip_ts_types(fn: Node, region_code: string): string {
+	const base = fn.start as number;
+	const chars = region_code.slice(base, fn.end as number).split('');
+	const blank = (s: number, e: number): void => {
+		for (let i = s - base; i < e - base; i++) if (i >= 0 && i < chars.length) chars[i] = ' ';
+	};
+	walk(fn, (n) => {
+		const t = n.type as string;
+		// `: Type` on params / vars / arrow return, and `<T>` generics — the whole node is TS-only.
+		if (
+			t === 'TSTypeAnnotation' ||
+			t === 'TSTypeParameterDeclaration' ||
+			t === 'TSTypeParameterInstantiation'
+		) {
+			blank(n.start as number, n.end as number);
+		} else if (
+			// `expr as Type` / `expr satisfies Type` / `expr!` / `expr<T>` — keep the expression, blank
+			// only the TS suffix after it.
+			t === 'TSAsExpression' ||
+			t === 'TSSatisfiesExpression' ||
+			t === 'TSNonNullExpression' ||
+			t === 'TSInstantiationExpression'
+		) {
+			const expr = (n as { expression?: Node }).expression;
+			if (expr) blank(expr.end as number, n.end as number);
+		}
+	});
+	return chars.join('');
 }
 
 /** One hoisted factory, destined for the fn manifest. `factory_src` is self-contained. */
@@ -240,7 +280,11 @@ export function rewrite_dollar(
 	let needs_boundary_import = false;
 
 	for (const region of regions) {
-		const { program, ok } = parse_module(region.code, id);
+		// Parse as TS (a JS superset), so a `lang="ts"` script's og.$ closures — and any TS type
+		// annotations inside them — parse instead of erroring in oxc's JS mode (`.svelte` → JS). The
+		// template-call path below already does this; strip_ts_types then blanks the type spans from the
+		// hoisted factory text (a JS-mode parse yields no TS nodes to strip, so the types would leak).
+		const { program, ok } = parse_module(region.code, id.endsWith('.svelte') ? id + '.ts' : id);
 		if (!ok || !program) continue; // mid-edit unparseable: no transform (marker fails loudly at runtime)
 
 		// SERVER-ONLY imports may never be CAPTURED: on any page that serializes the handle, the
@@ -277,7 +321,7 @@ export function rewrite_dollar(
 					// legal value passes through untouched (mark-don't-wrap; passports already ride it).
 					claimed.add(n);
 					claimed.add(n.callee as Node);
-					const expr_text = region.code.slice(fn.start, fn.end);
+					const expr_text = strip_ts_types(fn, region.code);
 					const site = `${rel_id}:${line_of(src, abs)}`;
 					needs_boundary_import = true;
 					edits.push({
@@ -303,7 +347,7 @@ export function rewrite_dollar(
 						);
 					}
 				}
-				const fn_text = region.code.slice(fn.start, fn.end);
+				const fn_text = strip_ts_types(fn, region.code);
 				const tag = `${rel_id}#$${seq++}`;
 				// factory: captures become params SHADOWING the outer names, so the moved text's
 				// references bind to them — self-contained by construction.
@@ -379,19 +423,21 @@ export function rewrite_dollar(
 	for (const call of template_calls) {
 		const arg_text = call.args.trim();
 		if (!arg_text) misuse(id, src, call.start, `$() takes exactly one argument`);
-		const { program, ok } = parse_module(
-			`(${arg_text})`,
-			id.endsWith('.svelte') ? id + '.expr.ts' : id
-		);
+		// Parse as TS (the wrapped expr id ends `.expr.ts`), then strip TS type spans from the moved
+		// text — a markup `fmt={import.meta.og.$((n: number) => …)}` hoists into the plain-JS manifest
+		// just like a script one, so its annotations must be blanked too.
+		const wrapped = `(${arg_text})`;
+		const { program, ok } = parse_module(wrapped, id.endsWith('.svelte') ? id + '.expr.ts' : id);
 		if (!ok || !program)
 			misuse(id, src, call.start, `$()'s argument does not parse as an expression`);
 		const stmt = (program.body?.[0] ?? {}) as Node;
 		let expr = (stmt.expression ?? {}) as Node;
 		while (expr.type === 'ParenthesizedExpression') expr = expr.expression as Node;
+		const expr_text = strip_ts_types(expr, wrapped);
 		if (expr.type === 'ArrowFunctionExpression' || expr.type === 'FunctionExpression') {
 			const captures = free_names(expr);
 			const tag = `${rel_id}#$${seq++}`;
-			const factory = `(${captures.join(', ')}) => (${arg_text})`;
+			const factory = `(${captures.join(', ')}) => (${expr_text})`;
 			hoists.push({ tag, factory_src: factory });
 			(template_needs ??= { fn: false, boundary: false }).fn = true;
 			edits.push({
@@ -405,7 +451,7 @@ export function rewrite_dollar(
 			edits.push({
 				start: call.start,
 				end: call.end,
-				text: `__og_boundary((${arg_text}), ${JSON.stringify(site)})`
+				text: `__og_boundary((${expr_text}), ${JSON.stringify(site)})`
 			});
 		}
 	}

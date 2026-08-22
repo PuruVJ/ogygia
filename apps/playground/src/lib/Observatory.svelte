@@ -1,9 +1,21 @@
-<script>
+<script lang="ts">
 	import { mount, unmount } from 'svelte';
 	// The devtools event bus — in "islands" mode the page's REAL runtime emits hydration events for our
 	// injected regions; we tap the bus to show the true lifecycle story (Rung-0 layer → an instrument).
 	import { add_sink } from 'ogygia/devtools';
+	import type { Analysis } from './observatory.worker';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
+
+	/** A REPL project: a map of filename → source. */
+	type FileMap = Record<string, string>;
+	/** A component the linker builds from compiled client JS (raw svelte component fn). */
+	type SvelteComp = (...args: unknown[]) => unknown;
+	/** A linked module's exports (default is the component). */
+	type Linked = { default?: SvelteComp } & Record<string, unknown>;
+	/** A require() the linker feeds compiled modules (resolves bare + relative specifiers). */
+	type Require = (spec: string) => Linked;
+	/** One real-runtime lifecycle event, tapped off the devtools bus (islands mode). */
+	type RuntimeEvent = { name: string; label: string; t?: number; ms?: number; when?: string };
 
 	/**
 	 * OBSERVATORY v0 — the browser compiler, first rung (internal/notes/devtools.md, Rung 1: "the
@@ -117,11 +129,11 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 	};
 
 	// Share via URL (Rung 6): the whole file MAP round-trips through the hash `#files=<json>`.
-	function initial_files() {
+	function initial_files(): FileMap {
 		if (typeof location !== 'undefined' && location.hash.startsWith('#files=')) {
 			try {
 				const parsed = JSON.parse(decodeURIComponent(location.hash.slice(7)));
-				if (parsed && typeof parsed === 'object') return parsed;
+				if (parsed && typeof parsed === 'object') return parsed as FileMap;
 			} catch {
 				/* malformed — fall back to the demo */
 			}
@@ -129,13 +141,13 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 		return { ...FILES_DEMO };
 	}
 
-	let files = $state(initial_files());
-	let active = $state('App.svelte' in initial_files() ? 'App.svelte' : Object.keys(initial_files())[0]);
-	let analysis = $state({ ok: true, islands: [], output: '', real: false, realIslands: null });
+	let files = $state<FileMap>(initial_files());
+	let active = $state<string>('App.svelte' in initial_files() ? 'App.svelte' : Object.keys(initial_files())[0]);
+	let analysis = $state<Analysis>({ ok: true, islands: [], output: '', real: false, realIslands: null });
 	let busy = $state(false);
 	let shared = $state(false);
 
-	function load_preset(map) {
+	function load_preset(map: FileMap) {
 		files = structuredClone(map);
 		active = 'App.svelte' in map ? 'App.svelte' : Object.keys(map)[0];
 	}
@@ -146,7 +158,7 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 			active = name;
 		}
 	}
-	function remove_file(name) {
+	function remove_file(name: string) {
 		if (name === 'App.svelte') return; // keep an entry
 		delete files[name];
 		if (active === name) active = 'App.svelte' in files ? 'App.svelte' : Object.keys(files)[0];
@@ -178,10 +190,10 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 	let everWarmed = $state(false); // the WASM compiler needs ~1-2s to warm on first load
 
 	// Byte ledger helpers — the ogygia thesis, weighed live.
-	const fmt_bytes = (n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
+	const fmt_bytes = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
 
 	// Pretty-print a real runtime event (islands mode) into a short human line.
-	function fmt_event(e) {
+	function fmt_event(e: RuntimeEvent) {
 		switch (e.name) {
 			case 'region.connected':
 				return { icon: '◻', text: 'connected', cls: 'ev-dim' };
@@ -214,14 +226,14 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 	);
 
 	// `worker` is $state so the debounce effect re-runs (and posts the first analysis) once it's set.
-	let worker = $state(/** @type {Worker | null} */ (null));
+	let worker = $state<Worker | null>(null);
 	let seq = 0;
 	let want = 0;
 
 	// Boot the worker ONCE (reads no reactive state → never spawns a second worker).
 	$effect(() => {
 		const w = new Worker(new URL('./observatory.worker.ts', import.meta.url), { type: 'module' });
-		w.onmessage = (/** @type {MessageEvent} */ e) => {
+		w.onmessage = (e: MessageEvent<{ id: number; result: Analysis }>) => {
 			if (e.data.id === want) {
 				analysis = e.data.result;
 				busy = false;
@@ -248,14 +260,14 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 	// ── INTERACTIVE preview: link the CLIENT-compiled modules and mount() the app on the MAIN thread,
 	// so the rendered app is actually interactive (the counter button works). Falls back to the SSR
 	// HTML if the mount fails.
-	let previewEl = $state(/** @type {HTMLElement | null} */ (null));
-	let mounted = null;
-	let svelteClient = $state(/** @type {any} */ (null));
-	let previewMode = $state('live'); // 'live' (interactive mount) | 'xray' (boundary lens) | 'islands'
+	let previewEl = $state<HTMLElement | null>(null);
+	let mounted: ReturnType<typeof mount> | null = null;
+	let svelteClient = $state<Record<string, unknown> | null>(null);
+	let previewMode = $state<'live' | 'xray' | 'islands'>('live');
 	let wakeNonce = $state(0); // bump to replay the x-ray wake sequence
-	let xrayCleanup = /** @type {null | (() => void)} */ (null);
+	let xrayCleanup: (() => void) | null = null;
 	// REAL runtime events for the injected preview islands (islands mode), tapped off the devtools bus.
-	let runtimeEvents = $state(/** @type {Array<{name: string, label: string, t: number, ms?: number, when?: string}>} */ ([]));
+	let runtimeEvents = $state<RuntimeEvent[]>([]);
 	$effect(() => {
 		import('svelte/internal/client')
 			.then((m) => (svelteClient = m))
@@ -271,8 +283,8 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 		window.__OBS_FETCH_PATCHED__ = true;
 		window.__OBS_DEFER__ = window.__OBS_DEFER__ || {};
 		const orig = window.fetch.bind(window);
-		window.fetch = (input, init) => {
-			const url = typeof input === 'string' ? input : input?.url || '';
+		window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+			const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
 			const m = /\/__obs_defer\/([^/?#]+)/.exec(url);
 			if (m) {
 				const html = (window.__OBS_DEFER__ || {})[m[1]];
@@ -291,10 +303,10 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 	// fires now, `idle` on requestIdleCallback, `visible` on a real IntersectionObserver (scroll the
 	// preview), `interaction` on the first pointer/focus inside, a media query on matchMedia; lakes +
 	// held-raw never wake (frozen). Each island lights from cold→hot when it wakes, stamped with +Xms.
-	function arm_wakes(el) {
+	function arm_wakes(el: HTMLElement) {
 		const t0 = performance.now();
-		const cleanups = [];
-		const wake = (node, reason) => {
+		const cleanups: Array<() => void> = [];
+		const wake = (node: Element, reason: string) => {
 			if (node.getAttribute('data-woke') === 'true') return;
 			node.setAttribute('data-woke', 'true');
 			node.setAttribute('data-woke-ms', String(Math.round(performance.now() - t0)));
@@ -358,7 +370,7 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 		return () => cleanups.forEach((c) => c());
 	}
 
-	function eval_client(code, req) {
+	function eval_client(code: string, req: Require): Linked {
 		const body = code
 			.replace(/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = __require("$2");')
 			.replace(/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const __m_$1 = __require("$3"); const $1 = __m_$1.default; const {$2} = __m_$1;')
@@ -366,11 +378,11 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 			.replace(/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const {$1} = __require("$2");')
 			.replace(/import\s+['"][^'"]+['"]\s*;?/g, '')
 			.replace(/export\s+default\s+/g, '__exports.default = ')
-			.replace(/export\s*\{([^}]+)\}\s*;?/g, (_m, names) =>
-				names.split(',').map((n) => { const p = n.trim().split(/\s+as\s+/); return `__exports[${JSON.stringify((p[1] || p[0]).trim())}] = ${p[0].trim()};`; }).join(' ')
+			.replace(/export\s*\{([^}]+)\}\s*;?/g, (_m: string, names: string) =>
+				names.split(',').map((n: string) => { const p = n.trim().split(/\s+as\s+/); return `__exports[${JSON.stringify((p[1] || p[0]).trim())}] = ${p[0].trim()};`; }).join(' ')
 			)
 			.replace(/export\s+(const|let|var|function|class)\s+/g, '$1 ');
-		const __exports = {};
+		const __exports: Linked = {};
 		new Function('__require', '__exports', body)(req, __exports);
 		return __exports;
 	}
@@ -417,12 +429,12 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 			}
 			try {
 				runtimeEvents = [];
-				const fpNames = {};
+				const fpNames: Record<string, string> = {};
 				// Subscribe to the devtools bus BEFORE injecting, so we catch the full lifecycle. Only our
 				// own injected regions (data-og-fp="obsfp_…") are relayed; the page's other islands are not.
 				// The bus emits SYNCHRONOUSLY during hydration (which we trigger from inside this effect);
 				// writing $state synchronously there would form a reactive cycle, so batch + flush on a frame.
-				let pending = [];
+				let pending: RuntimeEvent[] = [];
 				let flushing = false;
 				const flush = () => {
 					flushing = false;
@@ -431,31 +443,33 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 						pending = [];
 					}
 				};
-				const unsubscribe = add_sink((ev) => {
-					if (ev?.domain !== 'runtime' || !ev.fp || !String(ev.fp).startsWith('obsfp_')) return;
-					pending.push({ name: ev.name, label: fpNames[ev.fp] || String(ev.fp), t: ev.t, ms: ev.ms, when: ev.when });
+				const unsubscribe = add_sink((event) => {
+					const ev = event as { domain?: string; name?: string; fp?: string; t?: number; ms?: number; when?: string };
+					if (ev.domain !== 'runtime' || !ev.fp || !ev.fp.startsWith('obsfp_')) return;
+					pending.push({ name: ev.name ?? '', label: fpNames[ev.fp] || ev.fp, t: ev.t, ms: ev.ms, when: ev.when });
 					if (!flushing) {
 						flushing = true;
 						requestAnimationFrame(flush);
 					}
 				});
-				const store = (globalThis.__OBS_ISLANDS__ ||= {});
+				const store: Record<string, unknown> = (globalThis.__OBS_ISLANDS__ ||= {});
 				// server islands: publish this render's deferred HTML for the fetch intercept to serve.
 				window.__OBS_DEFER__ = rd.deferred || {};
-				const blobs = [];
-				const cache = new Map();
-				const resolveName = (spec) => {
+				const blobs: Array<{ blob: string; key: string }> = [];
+				const cache = new Map<string, Linked>();
+				const resolveName = (spec: string): string | null => {
 					const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
 					if (client.modules[bare] != null) return bare;
 					const base = spec.split('/').pop();
 					return base && client.modules[base] != null ? base : null;
 				};
-				const require = (spec) => {
-					if (spec === 'svelte/internal/client') return sc;
+				const require: Require = (spec) => {
+					if (spec === 'svelte/internal/client') return sc as Linked;
 					const name = resolveName(spec);
 					if (name) {
-						if (cache.has(name)) return cache.get(name);
-						const ex = {};
+						const hit = cache.get(name);
+						if (hit) return hit;
+						const ex: Linked = {};
 						cache.set(name, ex);
 						Object.assign(ex, eval_client(client.modules[name], require));
 						return ex;
@@ -467,9 +481,12 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 				const tpl = document.createElement('div');
 				tpl.innerHTML = rd.html;
 				for (const region of tpl.querySelectorAll('ogygia-region[entry^="__ISLAND__:"]')) {
-					const file = region.getAttribute('entry').slice('__ISLAND__:'.length);
+					const entryAttr = region.getAttribute('entry');
+					if (!entryAttr) continue;
+					const file = entryAttr.slice('__ISLAND__:'.length);
 					if (client.modules[file] == null) continue;
-					fpNames[region.getAttribute('data-og-fp')] = region.getAttribute('data-name') || file;
+					const fp = region.getAttribute('data-og-fp');
+					if (fp) fpNames[fp] = region.getAttribute('data-name') || file;
 					const Comp = eval_client(client.modules[file], require).default;
 					const key = 'k' + Math.random().toString(36).slice(2);
 					store[key] = Comp;
@@ -502,19 +519,20 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 			return;
 		}
 		try {
-			const cache = new Map();
-			const resolveName = (spec) => {
+			const cache = new Map<string, Linked>();
+			const resolveName = (spec: string): string | null => {
 				const bare = spec.replace(/^\.\//, '').replace(/^\//, '');
 				if (client.modules[bare] != null) return bare;
 				const base = spec.split('/').pop();
 				return base && client.modules[base] != null ? base : null;
 			};
-			const require = (spec) => {
-				if (spec === 'svelte/internal/client') return sc;
+			const require: Require = (spec) => {
+				if (spec === 'svelte/internal/client') return sc as Linked;
 				const name = resolveName(spec);
 				if (name) {
-					if (cache.has(name)) return cache.get(name);
-					const exports = {};
+					const hit = cache.get(name);
+					if (hit) return hit;
+					const exports: Linked = {};
 					cache.set(name, exports);
 					Object.assign(exports, eval_client(client.modules[name], require));
 					return exports;
@@ -522,7 +540,7 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 				return { default: () => {} }; // unprovided component → no-op client stub
 			};
 			const App = eval_client(client.modules[client.entry], require).default;
-			mounted = mount(App, { target: el });
+			mounted = mount(App as never, { target: el });
 		} catch (e) {
 			console.error('[observatory] interactive mount failed:', e);
 			fallback();

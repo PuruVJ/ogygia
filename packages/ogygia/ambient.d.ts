@@ -175,6 +175,16 @@ interface ImportMeta {
 		 */
 		bake<T>(fn: () => T | Promise<T>): T;
 		/**
+		 * Brand a value as TRANSPORTABLE so it crosses an island boundary LIVE — most often a closure
+		 * (the wire's fn kind: the plugin hoists it to a self-contained factory, its captured locals
+		 * becoming bound params), but also a store or an `og.wire` class instance the drop-in
+		 * `setContext`/`og_derived` should carry live rather than freeze. Returns the SAME value (and
+		 * type) — at the call site it reads as identity; the transform does the branding/hoisting. A
+		 * branded closure must be self-contained (only its own captured locals + module imports, no
+		 * `$app/*`).
+		 */
+		$<T>(value: T): T;
+		/**
 		 * Mark an imported component as a region — the macro alternative to `import X from '…' with
 		 * { … }`, and the escape hatch for BARRELS. The import-attribute form only reaches a DEFAULT
 		 * import of one file; `asRegion` marks ANY imported component, including a NAMED export from a

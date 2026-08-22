@@ -1,5 +1,5 @@
 // MUST be first: shims `process` for rolldown-browser's tsconfig helper (runs before it loads).
-import './rd-process-shim.ts';
+import './rd-process-shim';
 import { parse, compile } from 'svelte/compiler';
 import { render } from 'svelte/server';
 import * as svelteInternalServer from 'svelte/internal/server';
@@ -370,7 +370,7 @@ function execute(files: Record<string, string>, entry: string, islandInfo?: Isla
 
 /** BYTE LEDGER — weigh the ogygia thesis live. Compile every component to client JS; ogygia ships only
  *  the waking islands (csr=false), plain Kit (csr=true) ships them all. Same compiler, honest bytes. */
-function byte_ledger(files: Record<string, string>): Analysis['ledger'] {
+function byte_ledger(files: Record<string, string>): NonNullable<Analysis['ledger']> {
 	const svelteFiles = Object.keys(files).filter((n) => n.endsWith('.svelte'));
 	const bytesOf = (name: string): number => {
 		try {
@@ -500,7 +500,7 @@ function real_island_render(files: Record<string, string>, entry: string, island
 			// isolated SSR of the island (matches what the client component will hydrate against)
 			let ssr = '';
 			try {
-				ssr = (render(Comp as never, { props }) as { body?: string }).body ?? '';
+				ssr = (render(Comp as never, { props: props as never }) as { body?: string }).body ?? '';
 			} catch {
 				ssr = '';
 			}
@@ -531,7 +531,7 @@ function real_island_render(files: Record<string, string>, entry: string, island
 			const { info, Comp, props } = deferred[idx];
 			let body = '';
 			try {
-				body = (render(Comp as never, { props }) as { body?: string }).body ?? '';
+				body = (render(Comp as never, { props: props as never }) as { body?: string }).body ?? '';
 			} catch {
 				body = '';
 			}

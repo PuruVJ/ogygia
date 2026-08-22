@@ -172,7 +172,10 @@ export function __og_store<F extends (...args: never[]) => object>(tag: string, 
 
 // ─────────────────────────────────── og_derived: a derived that RESUMES ───────────────────────────
 
-type AnyStore = { subscribe: (run: (v: never) => void) => unknown };
+// `unknown` (not `never`) for the subscribed value: under strictFunctionTypes a `never` run param
+// makes a concrete `Writable<number>` fail to match (number ⊄ never), so og_derived rejected real
+// stores. `unknown` accepts any store while staying safe (og_derived reads values opaquely).
+type AnyStore = { subscribe: (run: (v: unknown) => void) => unknown };
 type DerivedRecipe = { s: AnyStore[]; f: (...vals: never[]) => unknown; single: boolean };
 
 /**

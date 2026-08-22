@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	/**
 	 * THE BOUNDARY LAB — one page exercising everything that crosses (and what can't).
 	 * The host below is csr=false (dead after render); the two islands are separate hydration
@@ -28,7 +28,7 @@
 	setContext('tally', import.meta.og.$(tally));
 	setContext(
 		'track',
-		import.meta.og.$((event) => `${site}:${event}`),
+		import.meta.og.$((event: string) => `${site}:${event}`),
 	);
 
 	// ── the LIMITATIONS, demonstrated live ────────────────────────────────────
@@ -36,7 +36,7 @@
 	setContext('doubled', doubledOf(tally));
 	// …but og_derived RESUMES: its recipe (source refs + an og.$ formula) crosses, and islands
 	// re-derive against the reunified live source. Bump tally anywhere — this one follows.
-	setContext('doubledLive', og_derived(tally, import.meta.og.$((n) => n * 2)));
+	setContext('doubledLive', og_derived(tally, import.meta.og.$((n: number) => n * 2)));
 	// 2. an unprovable factory's methods don't survive (generic tier + console warning):
 	setContext('rough', makeUnprovable('quiet'));
 	// 3. host-only context: never serialized, islands read undefined:
@@ -58,11 +58,11 @@
 
 <LabPanel
 	name="A"
-	fmt={import.meta.og.$((n) => `€${(n / 100).toFixed(2)}`)}
+	fmt={import.meta.og.$((n: number) => `€${(n / 100).toFixed(2)}`)}
 	tally={import.meta.og.$(tally)}
 />
 <LabPanel
 	name="B"
-	fmt={import.meta.og.$((n) => `$${(n / 100).toFixed(2)}`)}
+	fmt={import.meta.og.$((n: number) => `$${(n / 100).toFixed(2)}`)}
 	tally={import.meta.og.$(tally)}
 />
