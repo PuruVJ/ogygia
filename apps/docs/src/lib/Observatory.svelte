@@ -1232,6 +1232,20 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						<button class:on={previewMode === 'islands'} onclick={() => set_mode('islands')} title="the page's real ogygia runtime hydrates the islands">islands</button>
 					</span>
 				</div>
+				{#if previewMode === 'live'}
+					<div class="cdndeps" data-obs-cdn>
+						{#if resolving}
+							<span class="resolving" data-obs-resolving><span class="spin"></span> resolving dependencies from jsdelivr…</span>
+						{:else if previewBundle?.packages?.length || previewBundle?.missing?.length}
+							{#if previewBundle.packages?.length}
+								<span class="deps-ok" title="fetched from jsdelivr, bundled into the preview">📦 {previewBundle.packages.join(', ')}</span>
+							{/if}
+							{#if previewBundle.missing?.length}
+								<span class="deps-missing" title="couldn't resolve — rendered as an inert stub">⚠ {previewBundle.missing.join(', ')}</span>
+							{/if}
+						{/if}
+					</div>
+				{/if}
 				{#if previewMode === 'xray'}
 					<div class="lens-legend" data-obs-legend>
 						<span class="lk island">island · ships JS</span>
@@ -2076,6 +2090,42 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		background: color-mix(in oklab, #f59e0b 9%, transparent);
 		border: 1px solid color-mix(in oklab, #f59e0b 26%, transparent);
 		border-radius: 8px;
+	}
+	/* CDN dependency readout (live mode): resolving spinner, then the packages pulled / stubbed. */
+	.cdndeps {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 12px;
+		align-items: center;
+		min-height: 16px;
+		padding: 0 14px 2px;
+		font-size: 10px;
+		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+	}
+	.cdndeps .resolving {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-dim);
+	}
+	.cdndeps .spin {
+		width: 9px;
+		height: 9px;
+		border: 1.5px solid color-mix(in oklab, var(--accent) 35%, transparent);
+		border-top-color: var(--accent);
+		border-radius: 50%;
+		animation: obs-spin 0.7s linear infinite;
+	}
+	@keyframes obs-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	.cdndeps .deps-ok {
+		color: var(--accent);
+	}
+	.cdndeps .deps-missing {
+		color: #f59e0b;
 	}
 	.srvhint b {
 		color: var(--text);
