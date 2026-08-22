@@ -14,6 +14,8 @@
 	import { javascript } from '@codemirror/lang-javascript';
 	import { html } from '@codemirror/lang-html';
 	import { svelte } from '@replit/codemirror-lang-svelte';
+	import { markdown } from '@codemirror/lang-markdown';
+	import { LanguageDescription } from '@codemirror/language';
 	import { tags as t } from '@lezer/highlight';
 
 	let {
@@ -48,8 +50,21 @@
 		if (k === 'ts' || k.endsWith('.ts')) return javascript({ typescript: true });
 		if (k === 'js' || k.endsWith('.js') || k.endsWith('.mjs')) return javascript();
 		if (k === 'html' || k.endsWith('.html')) return html();
+		// Content pages: markdown highlighting with per-fence code languages. `.svx` is markdown that
+		// hosts Svelte, so untagged fences default to svelte and `<script>`/tags nest through markdown's
+		// HTML handling — a pragmatic "markdown + svelte" blend without a bespoke grammar.
+		if (k === 'md' || k.endsWith('.md')) return markdown({ codeLanguages: MD_CODE_LANGS });
+		if (k === 'svx' || k.endsWith('.svx')) return markdown({ codeLanguages: MD_CODE_LANGS, defaultCodeLanguage: svelte() });
 		return javascript(); // sensible default for the compiled JS output
 	}
+	// Fenced-code + embedded languages inside markdown/svx, resolved by info-string to the grammars we
+	// already ship (loaded lazily by @codemirror/lang-markdown when a matching fence appears).
+	const MD_CODE_LANGS = [
+		LanguageDescription.of({ name: 'javascript', alias: ['js', 'mjs', 'jsx'], load: async () => javascript() }),
+		LanguageDescription.of({ name: 'typescript', alias: ['ts', 'tsx'], load: async () => javascript({ typescript: true }) }),
+		LanguageDescription.of({ name: 'svelte', load: async () => svelte() }),
+		LanguageDescription.of({ name: 'html', alias: ['htm'], load: async () => html() })
+	];
 
 	// Every colour is a --cm-* var → the editor tracks the site code theme with zero JS.
 	const highlight = HighlightStyle.define([
@@ -65,6 +80,16 @@
 		{ tag: [t.propertyName, t.variableName, t.definition(t.variableName), t.definition(t.propertyName)], color: 'var(--cm-name)' },
 		{ tag: [t.meta, t.documentMeta], color: 'var(--cm-comment)' },
 		{ tag: t.regexp, color: 'var(--cm-string)' },
+		// Markdown / svx prose tags (so a `.md`/`.svx` file isn't near-monochrome): headings + emphasis
+		// carry weight/slant; links, inline code, and the structural markers (`#`, `*`, `>`) get colour.
+		{ tag: [t.heading, t.heading1, t.heading2, t.heading3, t.heading4], color: 'var(--cm-tag)', fontWeight: '600' },
+		{ tag: t.strong, fontWeight: '600' },
+		{ tag: t.emphasis, fontStyle: 'italic' },
+		{ tag: t.strikethrough, textDecoration: 'line-through' },
+		{ tag: [t.link, t.url], color: 'var(--cm-fn)' },
+		{ tag: t.monospace, color: 'var(--cm-string)' },
+		{ tag: t.quote, color: 'var(--cm-comment)', fontStyle: 'italic' },
+		{ tag: [t.processingInstruction, t.list, t.contentSeparator], color: 'var(--cm-punct)' },
 		{ tag: t.invalid, color: 'var(--cm-invalid)' }
 	]);
 
