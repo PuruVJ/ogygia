@@ -38,11 +38,11 @@ export interface CdnPluginOptions {
 const SVELTE_EXTERNAL = /^svelte(\/|$)/;
 const HTTP_URL = /^https?:\/\//;
 const RELATIVE = /^\.\.?\//;
-const CSS_MODULE = /\.css(\?|$)/;
+export const CSS_MODULE = /\.css(\?|$)/;
 
 /** A `.css` import → a JS module that injects the stylesheet (rolldown can't parse CSS as JS). Idempotent
- *  per href so a re-mount doesn't stack duplicate <style> tags. */
-function css_inject_module(css: string, href: string): string {
+ *  per href so a re-mount doesn't stack duplicate <style> tags. Exported for the workspace loader too. */
+export function css_inject_module(css: string, href: string): string {
 	return (
 		`const css = ${JSON.stringify(css)};\n` +
 		`const key = ${JSON.stringify('repl-css:' + href)};\n` +

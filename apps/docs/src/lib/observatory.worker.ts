@@ -13,7 +13,7 @@ import {
 	CLIENT_BINDING_STUB,
 	set_parser
 } from 'ogygia/internal/compiler-browser';
-import { cdnPlugin } from './repl/cdn-plugin.ts';
+import { cdnPlugin, CSS_MODULE, css_inject_module } from './repl/cdn-plugin.ts';
 import { sveltePlugin } from './repl/svelte-plugin.ts';
 
 export interface Island {
@@ -826,7 +826,11 @@ async function bundle_preview(
 			return resolve_file(id, files); // relative / $lib / basename → a workspace key, or null
 		},
 		load(id: string) {
-			return files[id] != null ? files[id] : null;
+			if (files[id] == null) return null;
+			// A workspace `.css` file → the same style-injecting module the CDN loader uses (rolldown can't
+			// bundle CSS), forced to moduleType 'js' so the `.css` id isn't rejected.
+			if (CSS_MODULE.test(id)) return { code: css_inject_module(files[id], id), moduleType: 'js' };
+			return files[id];
 		}
 	};
 	try {
