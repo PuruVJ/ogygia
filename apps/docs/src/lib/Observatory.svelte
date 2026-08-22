@@ -359,6 +359,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	let mounted: ReturnType<typeof mount> | null = null;
 	let svelteClient = $state<Record<string, unknown> | null>(null);
 	let previewMode = $state<'live' | 'xray' | 'islands'>('live');
+	// The right pane is a tabbed inspector (declutters what used to be 6 stacked sections).
+	type InspectorTab = 'preview' | 'islands' | 'bytes' | 'wire' | 'output';
+	let inspectorTab = $state<InspectorTab>('preview');
+	// Mobile: a single pane at a time, toggled between the editor and the inspector.
+	let mobilePane = $state<'editor' | 'result'>('editor');
 	let wakeNonce = $state(0); // bump to replay the x-ray wake sequence
 	let xrayCleanup: (() => void) | null = null;
 	// REAL runtime events for the injected preview islands (islands mode), tapped off the devtools bus.
@@ -683,34 +688,47 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 </script>
 
 <div class="obs" data-observatory>
-	<header>
-		<b>ogygia observatory</b>
-		<span class="muted">· the real ogygia compiler, in your browser</span>
-		<span class="csrswitch" data-obs-csr>
-			<button class:on={!csr} onclick={() => (csr = false)} title="ogygia islands — only marked components ship JS">csr=false · islands</button>
-			<button class:on={csr} onclick={() => (csr = true)} title="plain Kit — ogygia steps aside, the whole tree ships + hydrates">csr=true · plain Kit</button>
+	<header class="obs-bar">
+		<div class="obs-brand">
+			<b>Observatory</b>
+			<span class="obs-sub">ogygia, live in your browser</span>
+		</div>
+
+		<span class="presets" data-obs-presets>
+			{#each Object.entries(PRESETS) as [name, map]}
+				<button onclick={() => load_preset(map)}>{name}</button>
+			{/each}
 		</span>
-		{#if analysis.oxc}
-			<span class="oxc" class:ok={analysis.oxc.ok} data-obs-oxc title={analysis.oxc.error || ''}>
-				{analysis.oxc.engine}: {analysis.oxc.ok ? `parsed ${analysis.oxc.imports} imports ✓` : 'failed'}
+
+		<div class="obs-bar-right">
+			{#if analysis.oxc}
+				<span class="oxc" class:ok={analysis.oxc.ok} data-obs-oxc title={analysis.oxc.error || `${analysis.oxc.engine}`}>
+					{analysis.oxc.ok ? `oxc/wasm ✓` : 'oxc failed'}
+				</span>
+			{/if}
+			<span class="status" data-obs-status>
+				<span class="busy" class:show={busy}>compiling…</span>
+				{#if analysis.ms != null && analysis.real}<span class="ms" title="transform + svelte compile">{analysis.ms.toFixed(1)} ms</span>{/if}
 			</span>
-		{/if}
-		<span class="status" data-obs-status>
-			<span class="busy" class:show={busy}>compiling…</span>
-			{#if analysis.ms != null && analysis.real}<span class="ms" title="transform + svelte compile">{analysis.ms.toFixed(1)} ms</span>{/if}
-		</span>
+			<span class="csrswitch" data-obs-csr>
+				<button class:on={!csr} onclick={() => (csr = false)} title="ogygia islands — only marked components ship JS">csr false</button>
+				<button class:on={csr} onclick={() => (csr = true)} title="plain Kit — ogygia steps aside, the whole tree ships + hydrates">csr true</button>
+			</span>
+			<button class="themebtn" data-obs-theme onclick={cycle_theme} title="theme (auto → light → dark) — syncs with the docs theme" aria-label="cycle theme">
+				{theme === 'light' ? '☀' : theme === 'dark' ? '☾' : '◐'}
+			</button>
+			<button class="share" data-obs-share onclick={share}>{shared ? 'copied ✓' : 'share'}</button>
+		</div>
 	</header>
 
-	<div class="grid">
-		<section class="editor">
-			<div class="cap">
-				<span class="presets" data-obs-presets>
-					{#each Object.entries(PRESETS) as [name, map]}
-						<button onclick={() => load_preset(map)}>{name}</button>
-					{/each}
-					<button class="share" data-obs-share onclick={share}>{shared ? 'link copied ✓' : 'share'}</button>
-				</span>
-			</div>
+	<!-- Mobile: one pane at a time -->
+	<div class="obs-mobile-switch" role="tablist" aria-label="pane">
+		<button class:on={mobilePane === 'editor'} onclick={() => (mobilePane = 'editor')}>Editor</button>
+		<button class:on={mobilePane === 'result'} onclick={() => (mobilePane = 'result')}>Result</button>
+	</div>
+
+	<div class="obs-main" data-pane={mobilePane}>
+		<section class="obs-editor">
 			<div class="filetabs" data-obs-filetabs>
 				{#each Object.keys(files) as name (name)}
 					<button class="filetab" class:on={active === name} onclick={() => (active = name)}>
@@ -733,7 +751,16 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			<ObsEditor doc={files[active]} docKey={active} oninput={(v) => (files[active] = v)} />
 		</section>
 
-		<section class="out">
+		<section class="obs-inspector">
+			<nav class="obs-tabs" role="tablist" aria-label="inspector">
+				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => (inspectorTab = 'preview')}>Preview</button>
+				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => (inspectorTab = 'islands')}>Islands{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
+				<button role="tab" class:on={inspectorTab === 'bytes'} onclick={() => (inspectorTab = 'bytes')}>Bytes</button>
+				<button role="tab" class:on={inspectorTab === 'wire'} onclick={() => (inspectorTab = 'wire')}>Wire</button>
+				<button role="tab" class:on={inspectorTab === 'output'} onclick={() => (inspectorTab = 'output')}>Output</button>
+			</nav>
+			<div class="obs-tabbody">
+			<div class="tp" class:on={inspectorTab === 'preview'} data-tab="preview">
 			{#if analysis.rendered}
 				<div class="cap">
 					rendered
@@ -746,11 +773,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 						<button class:on={previewMode === 'xray'} onclick={() => (previewMode = 'xray')}>x-ray</button>
 						<button class:on={previewMode === 'islands'} onclick={() => (previewMode = 'islands')} title="the page's real ogygia runtime hydrates the islands">islands</button>
 					</span>
-					{#if previewMode === 'islands'}
-						<button class="themebtn" data-obs-theme onclick={cycle_theme} title="preview theme — syncs with the docs theme (og-theme)">
-							{theme === 'system' ? '◐ auto' : theme === 'light' ? '☀ light' : '🌙 dark'}
-						</button>
-					{/if}
 				</div>
 				{#if previewMode === 'xray'}
 					<div class="lens-legend" data-obs-legend>
@@ -814,7 +836,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					<div class="err" data-obs-render-err>could not render: {analysis.rendered.error}</div>
 				{/if}
 			{/if}
+			</div>
 
+			<div class="tp" class:on={inspectorTab === 'bytes'} data-tab="bytes">
 			{#if analysis.ledger && analysis.ledger.kitBytes > 0}
 				<div class="cap">
 					byte ledger <span class="muted">· island JS shipped vs plain Kit (csr=true)</span>
@@ -863,7 +887,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					</div>
 				</div>
 			{/if}
+			</div>
 
+			<div class="tp" class:on={inspectorTab === 'wire'} data-tab="wire">
 			{#if analysis.rendered?.wire && analysis.rendered.wire.length}
 				<div class="cap">wire <span class="muted">· the props that cross to each island, by value (devalue)</span></div>
 				<div class="wire" data-obs-wire>
@@ -880,7 +906,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					{/each}
 				</div>
 			{/if}
+			</div>
 
+			<div class="tp" class:on={inspectorTab === 'islands'} data-tab="islands">
 			<div class="cap">island map — {analysis.islands.length} marked {analysis.islands.length === 1 ? 'region' : 'regions'}</div>
 			{#if !analysis.ok}
 				<div class="err">parse error: {analysis.error}</div>
@@ -904,7 +932,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					</tbody>
 				</table>
 			{/if}
+			</div>
 
+			<div class="tp" class:on={inspectorTab === 'output'} data-tab="output">
 			<div class="cap">
 				transformed host
 				{#if csr}
@@ -932,7 +962,9 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					<pre class="msrc">{analysis.compiledServer}</pre>
 				</details>
 			{/if}
+			</div>
 
+			<div class="tp" class:on={inspectorTab === 'islands'} data-tab="islands">
 			{#if analysis.modules && analysis.modules.length}
 				<div class="cap">generated modules <span class="muted">· what each island compiles to</span></div>
 				<div class="mods" data-obs-modules>
@@ -958,29 +990,69 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					{/each}
 				</div>
 			{/if}
+			</div>
+			</div>
 		</section>
 	</div>
 </div>
 
 <style>
+	/* Full-viewport REPL, edge to edge (Svelte-REPL style). Colours come from the docs tokens
+	   (app.css) so it's light/dark theme-aware and matches the site. */
 	.obs {
-		font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-		color: #e2e8f0;
-		background: #0b1220;
-		border: 1px solid rgba(148, 163, 184, 0.25);
-		border-radius: 12px;
+		font: 12px/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+		color: var(--text);
+		background: var(--bg);
+		height: 100dvh;
+		display: flex;
+		flex-direction: column;
 		overflow: hidden;
 	}
-	header {
+	.obs-bar {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 14px;
+		border-bottom: 1px solid var(--line);
+		background: var(--bg-raised);
+		flex: none;
+	}
+	.obs-brand {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		flex: none;
+	}
+	.obs-brand b {
+		color: var(--accent);
+		font-family: var(--font-display, inherit);
+		font-size: 15px;
+		font-weight: 600;
+	}
+	.obs-sub {
+		color: var(--text-faint);
+		font-size: 11px;
+	}
+	.obs-bar-right {
+		margin-left: auto;
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: 10px 14px;
-		border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-		background: #0d1526;
 	}
-	header b {
-		color: #5eead4;
+	.themebtn {
+		padding: 3px 8px;
+		border: 1px solid var(--line);
+		border-radius: 6px;
+		background: var(--bg);
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 13px;
+		cursor: pointer;
+		line-height: 1;
+	}
+	.themebtn:hover {
+		color: var(--text);
+		border-color: var(--line-strong);
 	}
 	.csrswitch {
 		display: inline-flex;
@@ -995,7 +1067,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		border: 0;
 		border-radius: 5px;
 		background: none;
-		color: #94a3b8;
+		color: var(--text-dim);
 		font: inherit;
 		font-size: 10px;
 		cursor: pointer;
@@ -1006,7 +1078,6 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		font-weight: 600;
 	}
 	.oxc {
-		margin-left: auto;
 		padding: 2px 8px;
 		border-radius: 999px;
 		background: rgba(239, 68, 68, 0.15);
@@ -1015,12 +1086,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.oxc.ok {
 		background: rgba(20, 184, 166, 0.16);
-		color: #5eead4;
+		color: var(--accent);
 	}
 	/* Reserved, right-aligned status slot — busy toggles via visibility (keeps its box) and the timing
 	   has a fixed min-width, so "compiling…" appearing never reflows the header. */
 	.status {
-		margin-left: auto;
 		display: inline-flex;
 		align-items: center;
 		justify-content: flex-end;
@@ -1028,7 +1098,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		flex: none;
 	}
 	.ms {
-		color: #5eead4;
+		color: var(--accent);
 		font-size: 11px;
 		min-width: 52px;
 		text-align: right;
@@ -1042,43 +1112,49 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		visibility: visible;
 	}
 	.presets {
-		margin-left: auto;
 		display: inline-flex;
+		flex-wrap: wrap;
 		gap: 4px;
 	}
 	.presets button {
 		padding: 2px 8px;
 		border: 1px solid rgba(148, 163, 184, 0.25);
-		background: #0d1526;
-		color: #94a3b8;
+		background: var(--bg-raised);
+		color: var(--text-dim);
 		font: inherit;
 		font-size: 10px;
 		cursor: pointer;
 		border-radius: 5px;
 	}
 	.presets button:hover {
-		color: #e2e8f0;
+		color: var(--text);
 		border-color: rgba(148, 163, 184, 0.5);
 	}
 	.presets .share {
-		color: #5eead4;
+		color: var(--accent);
 		border-color: rgba(20, 184, 166, 0.4);
 	}
 	.muted {
-		color: #64748b;
+		color: var(--text-faint);
 	}
-	.grid {
+	.obs-main {
+		flex: 1;
+		min-height: 0;
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		min-height: 460px;
 	}
-	.editor {
-		border-right: 1px solid rgba(148, 163, 184, 0.18);
+	.obs-editor {
+		border-right: 1px solid var(--line);
 		display: flex;
 		flex-direction: column;
 		/* CodeMirror's content has a large min-content width (long lines); without this the grid item's
 		   default min-width:auto lets the editor column blow past 1fr and collapse the preview to ~0. */
 		min-width: 0;
+		min-height: 0;
+	}
+	/* Mobile pane switch — hidden on desktop, both panes visible. */
+	.obs-mobile-switch {
+		display: none;
 	}
 	.filetabs {
 		display: flex;
@@ -1095,19 +1171,19 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		border-radius: 6px 6px 0 0;
 		border: 1px solid transparent;
 		background: none;
-		color: #94a3b8;
+		color: var(--text-dim);
 		font: inherit;
 		font-size: 11px;
 		cursor: pointer;
 	}
 	.filetab.on {
-		color: #5eead4;
+		color: var(--accent);
 		background: rgba(20, 184, 166, 0.1);
 		border-color: rgba(148, 163, 184, 0.2);
 		border-bottom-color: transparent;
 	}
 	.filetab .rm {
-		color: #64748b;
+		color: var(--text-faint);
 		font-size: 13px;
 		line-height: 1;
 	}
@@ -1115,7 +1191,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		color: #fca5a5;
 	}
 	.filetab.add {
-		color: #64748b;
+		color: var(--text-faint);
 		font-weight: 700;
 	}
 	.cap {
@@ -1123,19 +1199,83 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		align-items: center;
 		gap: 8px;
 		padding: 6px 14px;
-		color: #94a3b8;
+		color: var(--text-dim);
 		font-weight: 600;
 		border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 		background: rgba(148, 163, 184, 0.05);
 	}
-	.editor :global(.cm-host) {
+	.obs-editor :global(.cm-host) {
 		flex: 1;
 	}
-	.out {
+	.obs-inspector {
 		display: flex;
 		flex-direction: column;
-		overflow: auto;
 		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
+	}
+	/* Tab bar over the inspector — turns the old 6 stacked sections into one-at-a-time views. */
+	.obs-tabs {
+		display: flex;
+		gap: 2px;
+		padding: 6px 10px 0;
+		border-bottom: 1px solid var(--line);
+		flex: none;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	.obs-tabs::-webkit-scrollbar {
+		display: none;
+	}
+	.obs-tabs button {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 6px 12px;
+		border: 0;
+		border-bottom: 2px solid transparent;
+		background: none;
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 12px;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.obs-tabs button:hover {
+		color: var(--text);
+	}
+	.obs-tabs button.on {
+		color: var(--accent);
+		border-bottom-color: var(--accent);
+	}
+	.obs-tabs .tcount {
+		padding: 0 6px;
+		border-radius: 999px;
+		background: color-mix(in oklab, var(--accent) 20%, transparent);
+		color: var(--accent);
+		font-size: 10px;
+	}
+	.obs-tabbody {
+		flex: 1;
+		min-height: 0;
+		overflow: auto;
+		display: flex;
+		flex-direction: column;
+	}
+	/* One tab visible at a time. `.tp` panels are shown only when active; a hidden panel is display:none
+	   so its (possibly interactive) preview / iframe doesn't run in the background. */
+	.tp {
+		display: none;
+		flex-direction: column;
+		min-height: 0;
+	}
+	.tp.on {
+		display: flex;
+	}
+	/* Preview tab fills the body so the iframe/preview gets real height. */
+	.tp[data-tab='preview'].on {
+		flex: 1;
 	}
 	table {
 		border-collapse: collapse;
@@ -1148,7 +1288,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		vertical-align: top;
 	}
 	thead th {
-		color: #94a3b8;
+		color: var(--text-dim);
 		border-bottom: 1px solid rgba(148, 163, 184, 0.15);
 		font-weight: 600;
 	}
@@ -1169,7 +1309,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.realdot {
 		margin-left: 5px;
-		color: #5eead4;
+		color: var(--accent);
 		font-size: 9px;
 		vertical-align: 1px;
 	}
@@ -1185,7 +1325,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		padding: 1px 8px;
 		border-radius: 999px;
 		background: rgba(20, 184, 166, 0.16);
-		color: #5eead4;
+		color: var(--accent);
 		font-weight: 600;
 		font-size: 10px;
 	}
@@ -1195,7 +1335,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.fallback {
 		margin-left: 8px;
-		color: #64748b;
+		color: var(--text-faint);
 		font-weight: 400;
 		font-size: 10px;
 	}
@@ -1207,8 +1347,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	.legs button {
 		padding: 2px 8px;
 		border: 1px solid rgba(148, 163, 184, 0.25);
-		background: #0d1526;
-		color: #94a3b8;
+		background: var(--bg-raised);
+		color: var(--text-dim);
 		font: inherit;
 		font-size: 10px;
 		cursor: pointer;
@@ -1224,32 +1364,102 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		padding: 2px 9px;
 		border: 1px solid rgba(148, 163, 184, 0.3);
 		border-radius: 999px;
-		background: #0d1526;
-		color: #94a3b8;
+		background: var(--bg-raised);
+		color: var(--text-dim);
 		font: inherit;
 		font-size: 10px;
 		cursor: pointer;
 	}
 	.themebtn:hover {
-		color: #e2e8f0;
+		color: var(--text);
 		border-color: rgba(148, 163, 184, 0.5);
 	}
 	.preview {
-		margin: 8px 14px;
+		flex: 1;
+		min-height: 220px;
+		margin: 10px 14px 14px;
 		padding: 14px;
-		border: 1px dashed rgba(148, 163, 184, 0.3);
+		border: 1px dashed var(--line-strong);
 		border-radius: 8px;
 		background: #fff;
 		color: #111;
-		max-height: 260px;
 		overflow: auto;
 	}
 	.preview.frame {
+		flex: 1;
+		min-height: 240px;
 		padding: 0;
 		border-style: solid;
-		width: calc(100% - 28px);
-		height: 300px;
-		max-height: 300px;
+		border-color: var(--line);
+		width: auto;
+		height: auto;
+	}
+
+	/* ── Mobile: one pane at a time, toggled by the Editor/Result switch (Svelte-REPL style) ── */
+	@media (max-width: 820px) {
+		.obs-bar {
+			flex-wrap: wrap;
+			gap: 6px 8px;
+			padding: 8px 10px;
+		}
+		.obs-sub {
+			display: none;
+		}
+		.presets {
+			order: 3;
+			width: 100%;
+			overflow-x: auto;
+			scrollbar-width: none;
+			flex-wrap: nowrap;
+			padding-bottom: 2px;
+		}
+		.presets::-webkit-scrollbar {
+			display: none;
+		}
+		.obs-bar-right {
+			gap: 6px;
+		}
+		.oxc {
+			display: none;
+		}
+		.obs-mobile-switch {
+			display: flex;
+			gap: 4px;
+			padding: 6px 10px;
+			border-bottom: 1px solid var(--line);
+			background: var(--bg-raised);
+			flex: none;
+		}
+		.obs-mobile-switch button {
+			flex: 1;
+			padding: 8px;
+			border: 1px solid var(--line);
+			border-radius: 7px;
+			background: var(--bg);
+			color: var(--text-dim);
+			font: inherit;
+			font-size: 12px;
+			font-weight: 600;
+			cursor: pointer;
+		}
+		.obs-mobile-switch button.on {
+			background: var(--accent);
+			color: var(--text-on-invert, #04121a);
+			border-color: var(--accent);
+		}
+		.obs-main {
+			grid-template-columns: 1fr;
+		}
+		.obs-editor {
+			border-right: 0;
+		}
+		/* Only the selected pane is mounted-visible. */
+		.obs-main[data-pane='editor'] .obs-inspector {
+			display: none;
+		}
+		.obs-main[data-pane='result'] .obs-editor {
+			display: none;
+		}
 	}
 	.preview :global(.og-stub) {
 		display: inline-block;
@@ -1280,7 +1490,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	/* ── BOUNDARY LENS (x-ray): dim the dead shell, light up every marked island ── */
 	.preview.xray {
 		background: #f1f5f9;
-		color: #94a3b8;
+		color: var(--text-dim);
 		position: relative;
 		max-height: 360px;
 	}
@@ -1327,7 +1537,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='false']::after) {
 		content: '💤 asleep · wakes on ' attr(data-wake);
 		background: rgba(100, 116, 139, 0.25);
-		color: #94a3b8;
+		color: var(--text-dim);
 	}
 	/* hot: it woke — solid, lit, stamped with when + bytes */
 	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='true']) {
@@ -1337,7 +1547,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.preview.xray :global(ogygia-obs-island[data-ships='true'][data-woke='true']::after) {
 		content: '⚡ woke +' attr(data-woke-ms) 'ms · ' attr(data-bytes) ' B JS';
-		background: color-mix(in srgb, var(--lens, #14b8a6) 25%, #0b1220);
+		background: color-mix(in srgb, var(--lens, #14b8a6) 25%, var(--bg));
 		color: var(--lens, #14b8a6);
 	}
 	.preview.xray :global(ogygia-obs-island[data-kind='island']) {
@@ -1370,7 +1580,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.lens-legend .lk.island {
 		background: rgba(20, 184, 166, 0.16);
-		color: #5eead4;
+		color: var(--accent);
 	}
 	.lens-legend .lk.lake {
 		background: rgba(245, 158, 11, 0.16);
@@ -1386,15 +1596,15 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.lens-legend .lk.shell {
 		background: rgba(148, 163, 184, 0.14);
-		color: #94a3b8;
+		color: var(--text-dim);
 	}
 	.lens-legend .replay {
 		margin-left: auto;
 		padding: 1px 9px;
 		border: 1px solid rgba(20, 184, 166, 0.4);
 		border-radius: 999px;
-		background: #0d1526;
-		color: #5eead4;
+		background: var(--bg-raised);
+		color: var(--accent);
 		font: inherit;
 		font-size: 10px;
 		cursor: pointer;
@@ -1407,7 +1617,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		font-size: 10px;
 	}
 	.wakehint b {
-		color: #94a3b8;
+		color: var(--text-dim);
 	}
 	.navinfo {
 		display: flex;
@@ -1418,7 +1628,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		font-size: 11px;
 	}
 	.navinfo .ni-cap {
-		color: #94a3b8;
+		color: var(--text-dim);
 		font-weight: 600;
 	}
 	.navinfo .ni {
@@ -1428,7 +1638,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.navinfo .kept {
 		background: rgba(20, 184, 166, 0.16);
-		color: #5eead4;
+		color: var(--accent);
 	}
 	.navinfo .mounted {
 		background: rgba(139, 92, 246, 0.18);
@@ -1436,7 +1646,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.navinfo .removed {
 		background: rgba(148, 163, 184, 0.14);
-		color: #94a3b8;
+		color: var(--text-dim);
 		text-decoration: line-through;
 	}
 	.rtev {
@@ -1448,7 +1658,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	.rtev-cap {
 		padding: 5px 10px;
 		background: rgba(148, 163, 184, 0.05);
-		color: #94a3b8;
+		color: var(--text-dim);
 		font-weight: 600;
 		font-size: 11px;
 	}
@@ -1467,7 +1677,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	.rtev-island {
 		width: 110px;
 		flex: none;
-		color: #5eead4;
+		color: var(--accent);
 		text-align: right;
 	}
 	.rtev-icon {
@@ -1476,7 +1686,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		text-align: center;
 	}
 	.rtev-row.ev-dim {
-		color: #64748b;
+		color: var(--text-faint);
 	}
 	.rtev-row.ev-wake .rtev-icon,
 	.rtev-row.ev-wake .rtev-text {
@@ -1484,7 +1694,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	.rtev-row.ev-done .rtev-icon,
 	.rtev-row.ev-done .rtev-text {
-		color: #5eead4;
+		color: var(--accent);
 		font-weight: 600;
 	}
 	.rtev-row.ev-fail .rtev-icon,
@@ -1495,7 +1705,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		padding: 1px 8px;
 		border-radius: 999px;
 		background: rgba(148, 163, 184, 0.12);
-		color: #94a3b8;
+		color: var(--text-dim);
 		font-size: 10px;
 	}
 	.saved {
@@ -1503,7 +1713,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		padding: 1px 9px;
 		border-radius: 999px;
 		background: rgba(20, 184, 166, 0.18);
-		color: #5eead4;
+		color: var(--accent);
 		font-weight: 700;
 		font-size: 11px;
 	}
@@ -1524,7 +1734,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	.blabel {
 		width: 62px;
 		flex: none;
-		color: #94a3b8;
+		color: var(--text-dim);
 		text-align: right;
 	}
 	.btrack {
@@ -1540,7 +1750,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 	.bfill.og {
-		background: linear-gradient(90deg, #0d9488, #5eead4);
+		background: linear-gradient(90deg, #0d9488, var(--accent));
 	}
 	.bfill.kit {
 		background: rgba(148, 163, 184, 0.35);
@@ -1550,11 +1760,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		flex: none;
 	}
 	.bnum.og {
-		color: #5eead4;
+		color: var(--accent);
 		font-weight: 700;
 	}
 	.bnum.kit {
-		color: #94a3b8;
+		color: var(--text-dim);
 	}
 	.ltable {
 		width: 100%;
@@ -1568,11 +1778,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		border-top: 1px solid rgba(148, 163, 184, 0.07);
 	}
 	.lname {
-		color: #64748b;
+		color: var(--text-faint);
 		width: 130px;
 	}
 	.ltable tr.ships .lname {
-		color: #5eead4;
+		color: var(--accent);
 	}
 	.lwhy {
 		font-size: 11px;
@@ -1580,7 +1790,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	.lbytes {
 		text-align: right;
 		white-space: nowrap;
-		color: #64748b;
+		color: var(--text-faint);
 	}
 	.ltable tr.ships .lbytes {
 		color: #cbd5e1;
@@ -1611,7 +1821,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	.wname {
 		width: 120px;
 		flex: none;
-		color: #5eead4;
+		color: var(--accent);
 	}
 	.wpay {
 		flex: 1;
@@ -1641,7 +1851,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		padding: 6px 10px;
 		background: rgba(148, 163, 184, 0.05);
 		user-select: none;
-		color: #94a3b8;
+		color: var(--text-dim);
 	}
 	.mods {
 		padding: 4px 14px 14px;
@@ -1668,12 +1878,12 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		padding: 0 7px;
 		border-radius: 999px;
 		background: rgba(20, 184, 166, 0.14);
-		color: #5eead4;
+		color: var(--accent);
 		font-size: 10px;
 	}
 	.mpath {
 		padding: 6px 10px 2px;
-		color: #94a3b8;
+		color: var(--text-dim);
 		font-size: 10px;
 	}
 	.msrc {
