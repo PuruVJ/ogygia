@@ -325,6 +325,41 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		}
 	}
 
+	// The "rendered HTML source (SSR)" shows the REAL ogygia SSR shape — so strip the Observatory's own
+	// x-ray instrumentation (`<ogygia-obs-island data-obs-* …>` → the real `<ogygia-region wake="…">`
+	// shell) and svelte's SSR hydration anchors, then pretty-print it with the same prettier.
+	function clean_ssr(html: string): string {
+		return html
+			.replace(/<ogygia-obs-island\b[^>]*\bdata-wake="([^"]*)"[^>]*>/g, '<ogygia-region wake="$1">')
+			.replace(/<ogygia-obs-island\b[^>]*>/g, '<ogygia-region>')
+			.replace(/<\/ogygia-obs-island>/g, '</ogygia-region>')
+			.replace(/<!--\[[0-9-]*-->/g, '')
+			.replace(/<!--\]-->/g, '')
+			.replace(/<!---->/g, '');
+	}
+	let ssr_source = $state('');
+	$effect(() => {
+		const raw = analysis.rendered?.html;
+		if (!raw) {
+			ssr_source = '';
+			return;
+		}
+		const cleaned = clean_ssr(raw);
+		ssr_source = cleaned; // show immediately (unformatted) …
+		let cancelled = false;
+		warm_prettier()
+			.then(({ format, plugins }) => format(cleaned, { parser: 'html', plugins, printWidth: 80, useTabs: true }))
+			.then((pretty) => {
+				if (!cancelled && typeof pretty === 'string') ssr_source = pretty;
+			})
+			.catch(() => {
+				/* keep the unformatted clean version */
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	// Test seam: drive the active file's source without depending on the editor widget (the e2e used to
 	// poke the old `<textarea>`; CodeMirror is a contenteditable, so tests get a stable get/set here).
 	$effect(() => {
@@ -935,7 +970,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				{#if analysis.rendered.ok}
 					<details class="pipe">
 						<summary>▸ rendered HTML source (SSR)</summary>
-						<div class="code-out" data-obs-html><CodeMirror doc={analysis.rendered.html ?? ''} lang="html" readonly /></div>
+						<div class="code-out" data-obs-html><CodeMirror doc={ssr_source} lang="html" readonly /></div>
 					</details>
 				{:else if !analysis.client || analysis.client.error}
 					<div class="err" data-obs-render-err>could not render: {analysis.rendered.error}</div>
