@@ -1377,6 +1377,17 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			</div>
 			<div class="obs-tabbody">
 			<div class="tp" class:on={inspectorTab === 'preview'} data-tab="preview">
+			{#if analysis.configNotes && analysis.configNotes.length}
+				<div class="config-notes" data-obs-config-notes>
+					<div class="cn-head">vite.config — what the preview can apply</div>
+					{#each analysis.configNotes as n, i (i)}
+						<div class="cn-row {n.level}" data-obs-config-note={n.level}>
+							<span class="cn-ic">{n.level === 'error' ? '✕' : n.level === 'warn' ? '!' : 'ℹ'}</span>
+							<span class="cn-body"><span class="cn-msg">{n.message}</span>{#if n.hint}<span class="cn-hint">{n.hint}</span>{/if}</span>
+						</div>
+					{/each}
+				</div>
+			{/if}
 			{#if analysis.rendered}
 				<div class="cap">
 					rendered
@@ -2287,6 +2298,67 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	}
 	/* CDN dependency readout (live mode): resolving spinner, then the packages pulled / stubbed. */
 	/* Preview console (svelte.dev-style) — collapsible strip under the live preview. */
+	/* vite.config feedback — deliberate notes on what the preview can't apply. */
+	.config-notes {
+		margin: 0 0 10px;
+		border: 1px solid color-mix(in srgb, #f59e0b 32%, var(--obs-border));
+		border-radius: 8px;
+		background: color-mix(in srgb, #f59e0b 6%, var(--obs-panel));
+		overflow: hidden;
+	}
+	.cn-head {
+		padding: 5px 10px;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--obs-muted);
+		border-bottom: 1px solid color-mix(in srgb, #f59e0b 20%, var(--obs-border));
+	}
+	.cn-row {
+		display: flex;
+		gap: 8px;
+		padding: 6px 10px;
+		font-size: 12px;
+		line-height: 1.4;
+	}
+	.cn-row + .cn-row {
+		border-top: 1px solid color-mix(in srgb, var(--obs-border) 60%, transparent);
+	}
+	.cn-ic {
+		flex: none;
+		width: 16px;
+		height: 16px;
+		display: grid;
+		place-items: center;
+		border-radius: 50%;
+		font-size: 10px;
+		font-weight: 700;
+		color: #fff;
+	}
+	.cn-row.warn .cn-ic {
+		background: #f59e0b;
+	}
+	.cn-row.error .cn-ic {
+		background: #ef4444;
+	}
+	.cn-row.info .cn-ic {
+		background: #64748b;
+	}
+	.cn-body {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
+	}
+	.cn-msg {
+		color: var(--obs-text, inherit);
+	}
+	.cn-hint {
+		color: var(--obs-muted);
+		font-size: 11px;
+	}
+
 	.obs-console {
 		border-top: 1px solid var(--obs-border);
 		font-family: var(--font-mono, ui-monospace, Menlo, monospace);

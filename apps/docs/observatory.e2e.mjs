@@ -244,6 +244,23 @@ async function main() {
 	const admGone = await until(page, () => !document.querySelector('[data-obs-preview] .og-admonition') && /callout body/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
 	ok('vite.config.ts reconfigures the preview (containers:false → no admonition)', !!admGone);
 
+	// 9c. the config panel tells the user DELIBERATELY what the preview can't apply — a build-time key,
+	//     an unknown markdown option, and a wrong-typed value each surface a note (with a hint). (Still on
+	//     vite.config.ts from 9b.)
+	await setSrc(page, `import { ogygia } from 'ogygia/vite';\nexport default { plugins: [ogygia({ router: false, content: { markdown: { containers: 'yes', flurb: true } } })] };`);
+	const cfgNotes = await until(page, () => {
+		const rows = [...document.querySelectorAll('[data-obs-config-note]')].map((n) => (n.getAttribute('data-obs-config-note') || '') + '|' + (n.querySelector('.cn-msg')?.textContent || ''));
+		return rows.length >= 3 ? rows : null;
+	});
+	ok(
+		'vite.config notes surface build-time + unknown + illegal options',
+		!!cfgNotes &&
+			cfgNotes.some((r) => /^info\|.*router.*doesn.t affect/.test(r)) &&
+			cfgNotes.some((r) => /^warn\|markdown\.flurb/.test(r)) &&
+			cfgNotes.some((r) => /^warn\|markdown\.containers must be true or false/.test(r)),
+		JSON.stringify(cfgNotes)
+	);
+
 	// back to a svelte preset so later shared-workspace assertions aren't on a .md
 	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'demo app')?.click());
 	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));

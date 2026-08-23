@@ -17,7 +17,7 @@ import {
 import { cdnPlugin, makeCdnCache, CSS_MODULE, css_inject_module } from './repl/cdn-plugin.ts';
 import { sveltePlugin } from './repl/svelte-plugin.ts';
 import { markdownPlugin, md_to_svelte, md_to_svelte_islands, MD_MODULE, configure_content } from './repl/markdown-plugin.ts';
-import { parse_config_markdown } from './repl/repl-config.ts';
+import { parse_config_markdown, parse_config, type ConfigNote } from './repl/repl-config.ts';
 import { make_browser_host } from './repl/browser-host.ts';
 import { resolve_file } from './repl/resolve-file.ts';
 
@@ -138,6 +138,9 @@ export interface Analysis {
 		ogygiaCount: number;
 		kitCount: number;
 	};
+	/** Deliberate notes about anything the workspace vite.config asks for that the in-browser preview
+	 *  can't apply (build-time keys, unknown/illegal markdown options, un-runnable imports). */
+	configNotes?: ConfigNote[];
 }
 
 /** Illustrative region id (only used for the svelte-fallback map; the real transform uses md5). */
@@ -676,11 +679,23 @@ function real_island_render(files: Record<string, string>, entry: string, island
 	}
 }
 
+/** The workspace's vite.config source, if any (checked in ts/js/mjs order). */
+function config_source(files: Record<string, string>): string | null {
+	return files['vite.config.ts'] ?? files['vite.config.js'] ?? files['vite.config.mjs'] ?? null;
+}
+
 /** Configure the content pipeline from a workspace `vite.config.*`'s `ogygia({ content: { markdown } })`
  *  — the REPL user tunes the preview exactly as a real project does. Idempotent per config signature. */
 function apply_content_config(files: Record<string, string>): void {
-	const src = files['vite.config.ts'] ?? files['vite.config.js'] ?? files['vite.config.mjs'] ?? null;
+	const src = config_source(files);
 	configure_content(src ? parse_config_markdown(src) : null);
+}
+
+/** Deliberate notes on anything the workspace vite.config asks for that the in-browser preview can't
+ *  apply — surfaced in the UI so the user knows what's allowed and what to change. */
+function config_notes(files: Record<string, string>): ConfigNote[] {
+	const src = config_source(files);
+	return src ? parse_config(src).notes : [];
 }
 
 /** A "svelte view" of the workspace: every `.md` / `.svx` file replaced by its markdown-pipeline Svelte
@@ -853,6 +868,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		realDom,
 		client,
 		ledger,
+		configNotes: config_notes(files),
 		ms: now() - t0
 	};
 }

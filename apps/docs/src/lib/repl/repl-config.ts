@@ -29,6 +29,34 @@ export interface ReplMarkdownConfig {
 
 const SAFE_BOOL_KEYS = ['containers', 'tabs', 'headingAnchors', 'headingIds', 'codeIds', 'region'] as const;
 
+/** Every markdown option the in-browser preview can honour. Anything else in `content.markdown` is
+ *  reported (not silently dropped) so the user knows what to change. */
+const ALLOWED_MARKDOWN_KEYS = [
+	...SAFE_BOOL_KEYS,
+	'overrides',
+	'themes',
+	'defaultColor',
+	'wrapperClass',
+	'code'
+] as const;
+const ALLOWED_MARKDOWN_LIST = ALLOWED_MARKDOWN_KEYS.join(', ');
+
+/** A deliberate, human-readable note about a config option the preview can't apply — surfaced in the
+ *  UI so the user isn't left guessing why an edit did nothing. `hint` says what's allowed / to change. */
+export interface ConfigNote {
+	level: 'error' | 'warn' | 'info';
+	message: string;
+	hint?: string;
+}
+
+/** A plain-English type label for a rejected value ("a string", "an object", …). */
+function type_label(v: unknown): string {
+	if (v === null) return 'null';
+	if (Array.isArray(v)) return 'an array';
+	const t = typeof v;
+	return t === 'object' ? 'an object' : t === 'function' ? 'an imported/derived value' : `a ${t}`;
+}
+
 const WORD = /\w/;
 /** Find the `{` opening the FIRST `name( { … } )` call that sits at a CODE position — skipping line and
  *  block comments and string literals, so a commented-out or stringified `ogygia({…})` isn't matched.
@@ -114,29 +142,146 @@ function sanitize(md: any): ReplMarkdownConfig {
 	return out;
 }
 
-/** Parse a `vite.config.*` source → the safe markdown config, or null (no ogygia call / unparseable). */
-export function parse_config_markdown(configSrc: string): ReplMarkdownConfig | null {
-	const objSrc = extract_call_object(configSrc, 'ogygia');
-	if (!objSrc) return null;
-	// One try/catch around EVAL *and* extraction/sanitize: a config can throw not just while evaluating
-	// (a syntax error) but lazily on property access — a getter, a Proxy trap, a thrown value — and
-	// sanitize reads those properties. Any of it → treat the config as absent (defaults), never crash.
+/** Inspect the evaluated `ogygia({…})` config and report — deliberately — everything the in-browser
+ *  preview can't apply: build-time-only keys, unknown markdown options, illegal value types, and
+ *  imports/objects that can't run in the browser. Each note carries a hint on what's allowed / to change.
+ *  Never throws (each read is guarded). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function diagnose(cfg: any): ConfigNote[] {
+	const notes: ConfigNote[] = [];
+	if (!cfg || typeof cfg !== 'object') return notes;
 	try {
-		const stub = (): undefined => undefined;
-		const helpers: Record<string, unknown> = {
-			diff_markers, inline_markers, diffMarkers: diff_markers, inlineMarkers: inline_markers
-		};
-		const sandbox = new Proxy(helpers, {
-			has: () => true, // trap EVERY free-variable lookup so an unknown import can't reach the real scope
-			get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : stub)
-		});
-		// eslint-disable-next-line no-new-func
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const cfg: any = new Function('__S__', `with(__S__){ return (${objSrc}); }`)(sandbox);
-		const md = cfg?.content?.markdown ?? cfg?.markdown;
-		if (!md || typeof md !== 'object') return null;
-		return sanitize(md);
+		// Top-level ogygia keys other than `content` are build-time and don't affect a single-page preview.
+		for (const k of Object.keys(cfg)) {
+			if (k === 'content' || k === 'markdown') continue;
+			notes.push({
+				level: 'info',
+				message: `ogygia({ ${k} }) doesn't affect the preview.`,
+				hint: `The preview reads only content.markdown. ${k} (loaders, router, regions, images, …) runs in a real build.`
+			});
+		}
+		const content = cfg.content && typeof cfg.content === 'object' ? cfg.content : undefined;
+		if (content) {
+			for (const k of Object.keys(content)) {
+				if (k === 'markdown') continue;
+				notes.push({
+					level: 'info',
+					message: `content.${k} doesn't affect the preview.`,
+					hint: `The preview reads only content.markdown; ${k} is build-time.`
+				});
+			}
+		}
+		const md = (content ? content.markdown : undefined) ?? cfg.markdown;
+		if (md && typeof md === 'object') {
+			for (const k of Object.keys(md)) {
+				if (!(ALLOWED_MARKDOWN_KEYS as readonly string[]).includes(k)) {
+					notes.push({
+						level: 'warn',
+						message: `markdown.${k} isn't a preview option — it's ignored.`,
+						hint: `Allowed markdown options: ${ALLOWED_MARKDOWN_LIST}.`
+					});
+					continue;
+				}
+				// Known key, wrong type → the sanitizer drops it; say so with the expected type.
+				const v = md[k];
+				if ((SAFE_BOOL_KEYS as readonly string[]).includes(k) && typeof v !== 'boolean') {
+					notes.push({
+						level: 'warn',
+						message: `markdown.${k} must be true or false — got ${type_label(v)}, so it's ignored.`,
+						hint: `Use \`${k}: true\` or \`${k}: false\`.`
+					});
+				}
+			}
+			// themes must be Shiki theme NAMES (strings). An imported theme object can't run in-browser.
+			if ('themes' in md) {
+				const t = md.themes;
+				if (!t || typeof t !== 'object' || Array.isArray(t)) {
+					notes.push({
+						level: 'warn',
+						message: `markdown.themes must name bundled Shiki themes — got ${type_label(t)}.`,
+						hint: `Use e.g. { light: 'github-light', dark: 'github-dark' }; an imported theme object can't run in the preview.`
+					});
+				} else {
+					for (const side of ['light', 'dark'] as const) {
+						if (t[side] != null && typeof t[side] !== 'string')
+							notes.push({
+								level: 'warn',
+								message: `markdown.themes.${side} must be a theme name — got ${type_label(t[side])}, so it's ignored.`,
+								hint: `Use a bundled Shiki theme name, e.g. '${side === 'light' ? 'github-light' : 'github-dark'}'.`
+							});
+					}
+				}
+			}
+			// Custom code transformers can't run in the browser — only the built-in two do.
+			if (md.code && typeof md.code === 'object' && Array.isArray(md.code.transformers)) {
+				const dropped = md.code.transformers.filter(
+					(x: unknown) => x == null || typeof x !== 'object' || Array.isArray(x)
+				).length;
+				if (dropped > 0)
+					notes.push({
+						level: 'warn',
+						message: `${dropped} custom code transformer${dropped > 1 ? 's are' : ' is'} ignored in the preview.`,
+						hint: `Only the built-in diff_markers() and inline_markers() run in-browser.`
+					});
+			}
+		}
 	} catch {
-		return null;
+		/* a pathological throwing config → whatever notes we gathered; the eval-error note covers the rest */
 	}
+	return notes;
+}
+
+/** Parse a `vite.config.*` source → the safe markdown config PLUS deliberate notes on anything the
+ *  preview couldn't apply. `markdown` is null when there's no ogygia() call or it's unparseable. */
+export function parse_config(configSrc: string): { markdown: ReplMarkdownConfig | null; notes: ConfigNote[] } {
+	const objSrc = extract_call_object(configSrc, 'ogygia');
+	if (!objSrc) return { markdown: null, notes: [] };
+	const stub = (): undefined => undefined;
+	const helpers: Record<string, unknown> = {
+		diff_markers, inline_markers, diffMarkers: diff_markers, inlineMarkers: inline_markers
+	};
+	const sandbox = new Proxy(helpers, {
+		has: () => true, // trap EVERY free-variable lookup so an unknown import can't reach the real scope
+		get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : stub)
+	});
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let cfg: any;
+	try {
+		// eslint-disable-next-line no-new-func
+		cfg = new Function('__S__', `with(__S__){ return (${objSrc}); }`)(sandbox);
+	} catch {
+		return {
+			markdown: null,
+			notes: [
+				{
+					level: 'error',
+					message: `The ogygia() config couldn't be evaluated.`,
+					hint: `Check it for a syntax error or a throwing value — the preview is using defaults.`
+				}
+			]
+		};
+	}
+	// Reads below can still throw lazily (a getter / Proxy). Any of it → defaults, plus a clear note.
+	try {
+		const notes = diagnose(cfg);
+		const md = cfg?.content?.markdown ?? cfg?.markdown;
+		const markdown = md && typeof md === 'object' ? sanitize(md) : null;
+		return { markdown, notes };
+	} catch {
+		return {
+			markdown: null,
+			notes: [
+				{
+					level: 'error',
+					message: `The ogygia() config threw while reading its options.`,
+					hint: `Avoid getters or proxies that throw — the preview is using defaults.`
+				}
+			]
+		};
+	}
+}
+
+/** Back-compat: just the safe markdown config (used to CONFIGURE the pipeline; notes are for display). */
+export function parse_config_markdown(configSrc: string): ReplMarkdownConfig | null {
+	return parse_config(configSrc).markdown;
 }
