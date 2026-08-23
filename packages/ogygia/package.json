@@ -48,6 +48,10 @@
 			"types": "./dist/internal-server.d.ts",
 			"default": "./src/internal-server.ts"
 		},
+		"./internal/region-core": {
+			"types": "./dist/region-core.d.ts",
+			"default": "./dist/region-core.js"
+		},
 		"./internal/reconcile": {
 			"svelte": "./src/internal-reconcile.ts",
 			"types": "./dist/internal-reconcile.d.ts",
@@ -214,6 +218,11 @@
 				"types": "./dist/internal-server.d.ts",
 				"svelte": "./dist/internal-server.js",
 				"default": "./dist/internal-server.js"
+			},
+			"./internal/region-core": {
+				"types": "./dist/region-core.d.ts",
+				"svelte": "./dist/region-core.js",
+				"default": "./dist/region-core.js"
 			},
 			"./internal/reconcile": {
 				"types": "./dist/internal-reconcile.d.ts",

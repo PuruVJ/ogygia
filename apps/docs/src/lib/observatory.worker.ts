@@ -21,6 +21,11 @@ import { markdownPlugin, md_to_svelte, md_to_svelte_islands, MD_MODULE, configur
 import { parse_config_markdown, parse_config, type ConfigNote } from './repl/repl-config.ts';
 import { make_browser_host } from './repl/browser-host.ts';
 import { resolve_file } from './repl/resolve-file.ts';
+import { make_ogygia_server_module, make_ogygia_internal_module } from './repl/og-server.ts';
+
+// The real ogygia server-runtime modules the SSR eval sees — held regions render for real (no stub).
+const OGYGIA_SERVER = make_ogygia_server_module();
+const OGYGIA_INTERNAL = make_ogygia_internal_module();
 
 // Install the browser compiler HOST once, synchronously, before any transform/hash runs: region ids
 // (md5) + content region/fence keys (sha256) now hash through a vendored, node:crypto-verified impl —
@@ -410,16 +415,18 @@ function execute(files: Record<string, string>, entry: string, islandInfo?: Isla
 			const require = (spec: string): Record<string, unknown> => {
 				if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
 				if (spec === 'svelte/server') return { render } as Record<string, unknown>;
-				// ogygia content wrappers (TabGroup/Tab/…) are islands — the SSR leg renders them as a
-				// passthrough (children + optional label, stacked), matching the live mount's fallback so a
-				// `::: tabs` / `::: code-group` page shows its content instead of a stub or a crash.
+				// The REAL ogygia runtime where we have it — region()/isRegion + a server <Region> (held
+				// regions render inline, zero JS) from 'ogygia', og_html_region from 'ogygia/internal'.
+				// Everything else (content wrappers TabGroup/Tab/… — islands) falls back to a passthrough
+				// (children + optional label, stacked) so a `::: tabs` page shows its content, not a crash.
 				if (spec === 'ogygia' || spec.startsWith('ogygia/')) {
 					const Passthrough = ($$renderer: { push: (s: string) => void }, props?: Record<string, unknown>) => {
 						if (props?.label) $$renderer.push(`<div class="repl-passthrough-label">${esc(String(props.label))}</div>`);
 						const kids = props?.children;
 						if (typeof kids === 'function') (kids as (r: unknown) => void)($$renderer);
 					};
-					return new Proxy({ default: Passthrough } as Record<string | symbol, unknown>, {
+					const real = spec === 'ogygia/internal' ? OGYGIA_INTERNAL : spec === 'ogygia' ? OGYGIA_SERVER : {};
+					return new Proxy({ default: Passthrough, ...real } as Record<string | symbol, unknown>, {
 						get: (t, k) => (k in t ? t[k] : Passthrough)
 					}) as Record<string, unknown>;
 				}
@@ -539,6 +546,10 @@ function real_island_render(files: Record<string, string>, entry: string, island
 		const require = (spec: string): Record<string, unknown> => {
 			if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
 			if (spec === 'svelte/server') return { render } as Record<string, unknown>;
+			// The REAL ogygia runtime: region()/isRegion + a server <Region> that renders a held region
+			// inline (zero JS). `region('raw' component)` never signs on this path — see og-server.ts.
+			if (spec === 'ogygia/internal') return OGYGIA_INTERNAL;
+			if (spec === 'ogygia') return OGYGIA_SERVER;
 			const file = resolve_file(spec, files);
 			if (file && file.endsWith('.svelte')) {
 				const info = islandInfo.get(file);

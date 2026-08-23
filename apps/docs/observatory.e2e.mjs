@@ -287,15 +287,15 @@ async function main() {
 	ok('preview console captures + formats logs', !!consoleRows && consoleRows.some((r) => r.includes('log|mounted { a: 1, xs: [ 1, 2 ] }')) && consoleRows.some((r) => r.includes('error|kaboom Map(1) { "k" => 1 }')), JSON.stringify(consoleRows));
 	ok('console auto-opens on error', await page.evaluate(() => !!document.querySelector('[data-obs-console].open')));
 
-	// 11c. `region: 'raw'` is a held region — server HTML, ZERO JS. The SSR must render it as an INERT
-	//      <ogygia-region> (NO wake attr; an empty `wake=""` would read as "awake" to the runtime), while a
-	//      real island keeps `wake="load"`. And the region map must label it 'held (raw)', not the raw
-	//      build kind 'hydrate'.
+	// 11c. `region: 'raw'` is a held region rendered via `<Region of={region(Badge, …)}/>` — the REAL
+	//      library runs in the worker: region() takes the inline path (no signer) and the badge renders as
+	//      zero-JS server HTML. The region map labels it 'held (raw)' (not the build kind 'hydrate'); the
+	//      SSR keeps the Counter's `wake="load"` and no empty `wake=""`; and ISLANDS mode renders the badge.
 	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'raw region')?.click());
 	await until(page, () => /Held-raw region/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
 	await page.evaluate(() => { const d = [...document.querySelectorAll('details.pipe summary')].find((s) => /rendered HTML source/.test(s.textContent || '')); d?.click(); });
 	const rawSsr = await until(page, () => { const t = document.querySelector('[data-obs-html]')?.textContent || ''; return /Held-raw/.test(t) ? t : null; });
-	ok('region:raw SSR is an inert <ogygia-region> (no empty wake=""), island keeps wake="load"', !!rawSsr && !/wake=""/.test(rawSsr) && /wake="load"/.test(rawSsr), (rawSsr || '').replace(/\s+/g, ' ').slice(0, 100));
+	ok('region:raw SSR: no empty wake="", island keeps wake="load", badge HTML rendered', !!rawSsr && !/wake=""/.test(rawSsr) && /wake="load"/.test(rawSsr) && /server HTML/.test(rawSsr), (rawSsr || '').replace(/\s+/g, ' ').slice(0, 120));
 	await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].find((x) => /Regions/.test(x.textContent || ''))?.click());
 	await until(page, () => document.querySelector('[data-obs-modules]'));
 	const rawKind = await page.evaluate(() => {
@@ -304,6 +304,15 @@ async function main() {
 		return map && mods;
 	});
 	ok('region:raw is labelled "held (raw)" in the map AND generated modules (not "hydrate")', rawKind);
+	// islands mode: the worker SSRs the real held region → the badge renders as zero-JS server HTML.
+	await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].find((x) => /Preview/.test(x.textContent || ''))?.click());
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-preview-mode] button')].find((x) => x.textContent.trim() === 'islands')?.click());
+	const rawIslands = await until(page, () => {
+		const f = document.querySelector('iframe[data-obs-frame]');
+		try { return f?.contentDocument?.querySelector('.badge')?.textContent?.includes('server HTML') ? true : null; } catch { return null; }
+	}, undefined, 20000);
+	ok('region:raw held region renders as zero-JS server HTML in islands mode', !!rawIslands);
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-preview-mode] button')].find((x) => x.textContent.trim() === 'live')?.click());
 
 	// 11d. `import.meta.og.*` macros run the REAL compiler macro pass in-browser (no stub): `.code` bakes a
 	//      Shiki-highlighted snippet, `.md` renders markdown — both inlined as og_html_region and rendered

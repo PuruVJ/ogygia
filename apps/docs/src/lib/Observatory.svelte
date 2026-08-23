@@ -19,7 +19,7 @@
 	// so — like svelte — we hand the sandboxed eval the host's own linked ogygia. `og_html_region` +
 	// `Region` make the `import.meta.og.code`/`.md` macros render for real. Unknown ogygia named imports
 	// (content wrappers) still fall back to the passthrough.
-	import { Region, Provide, setContext as og_setContext, createContext } from 'ogygia';
+	import { Region, region, Provide, setContext as og_setContext, createContext } from 'ogygia';
 	import { og_html_region } from 'ogygia/internal';
 	import './observatory-canvas.css'; // gentle, overridable native-element defaults (.og-canvas), shared with the iframe
 	import type { Analysis } from './observatory.worker';
@@ -468,16 +468,20 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		'raw region': {
 			'src/routes/+layout.ts': `// ogygia renders pages as server HTML; only islands ship JS.\nexport const csr = false;`,
 			'src/routes/+page.svelte': `<scr${''}ipt>
+  import { Region, region } from 'ogygia';
   import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  // region: 'raw' marks Badge as a HELD region — a component a registry hands to region(). It is
+  // NEVER placed as <Badge/>; you render it through <Region of={region(Badge, props)}/>.
   import Badge from '$lib/Badge.svelte' with { region: 'raw' };
 </scr${''}ipt>
 
 <h1>Held-raw region</h1>
-<p>The badge is a <b>held-raw</b> region — its HTML is rendered on the server and it ships
-<b>no client module</b>. The counter next to it is a normal island (ships JS, interactive).</p>
+<p>The badge is a <b>held-raw</b> region: the server picks it, it renders as HTML and ships
+<b>no client module</b>. The counter beside it is a normal island (ships JS, interactive).
+Switch to <b>islands</b> mode to see the server render it.</p>
 
 <Counter start={0} />
-<Badge label="raw" note="server HTML · zero JS" />`,
+<Region of={region(Badge, { label: 'raw', note: 'server HTML · zero JS' })} />`,
 			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
 			'src/lib/Badge.svelte': `<scr${''}ipt>
 	let { label = '', note = '' } = $props();
@@ -921,7 +925,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// setContext / createContext just do native `setContext` (their server-only marker emission is gated on
 	// `typeof window === 'undefined'`) — read back with an unchanged `getContext` from 'svelte'. No stub.
 	const ogygia_passthrough: Record<string, unknown> = new Proxy(
-		{ default: ReplPassthrough, Region, Provide, setContext: og_setContext, createContext },
+		{ default: ReplPassthrough, Region, region, Provide, setContext: og_setContext, createContext },
 		{ get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : ReplPassthrough) }
 	);
 	// `ogygia/internal` — the macro-emitted `og_html_region(…)` resolves to the REAL builder here.
