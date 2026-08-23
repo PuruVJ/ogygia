@@ -794,6 +794,45 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 				: analysis.output
 	);
 
+	// ── csr=false ⇄ csr=true compare: the SAME source transformed both ways, as a line diff. It's the
+	// ogygia thesis in code — under csr=false the marked imports become lazy island wrappers; under
+	// csr=true ogygia steps aside and they're plain imports Kit hydrates. A compact LCS line diff (both
+	// outputs are ~a few dozen lines, so O(n·m) is nothing). Red = csr=false (ogygia) only, green =
+	// csr=true (plain Kit) only, dim = shared.
+	let compareCsr = $state(false);
+	function diff_lines(aStr: string, bStr: string): Array<{ t: 'same' | 'add' | 'del'; s: string }> {
+		const a = aStr.split('\n');
+		const b = bStr.split('\n');
+		const n = a.length;
+		const m = b.length;
+		const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+		for (let i = n - 1; i >= 0; i--)
+			for (let j = m - 1; j >= 0; j--)
+				dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+		const out: Array<{ t: 'same' | 'add' | 'del'; s: string }> = [];
+		let i = 0;
+		let j = 0;
+		while (i < n && j < m) {
+			if (a[i] === b[j]) {
+				out.push({ t: 'same', s: a[i] });
+				i++;
+				j++;
+			} else if (dp[i + 1][j] >= dp[i][j + 1]) {
+				out.push({ t: 'del', s: a[i++] });
+			} else {
+				out.push({ t: 'add', s: b[j++] });
+			}
+		}
+		while (i < n) out.push({ t: 'del', s: a[i++] });
+		while (j < m) out.push({ t: 'add', s: b[j++] });
+		return out;
+	}
+	const csr_diff = $derived(
+		compareCsr && analysis.output && analysis.outputCsrTrue
+			? diff_lines(analysis.output, analysis.outputCsrTrue)
+			: null
+	);
+
 	// `worker` is $state so the debounce effect re-runs (and posts the first analysis) once it's set.
 	let worker = $state<Worker | null>(null);
 	let seq = 0;
@@ -1764,25 +1803,47 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			<div class="tp" class:on={inspectorTab === 'output'} data-tab="output">
 			<div class="cap">
 				transformed host
-				{#if csr}
+				{#if compareCsr}
+					<span class="real cmp-legend" data-obs-real
+						>the same source, both ways · <span class="dl-key del">− csr=false (ogygia)</span>
+						<span class="dl-key add">+ csr=true (plain Kit)</span></span
+					>
+				{:else if csr}
 					<span class="real csr-true" data-obs-real>csr=true · plain Kit — islands stripped to plain, Kit hydrates the whole tree</span>
 				{:else if analysis.real}
 					<span class="real" data-obs-real>real ogygia transform · {analysis.realIslands} islands</span>
 				{:else}
 					<span class="fallback" title={analysis.realError || ''}>mark-preview (real transform: {analysis.realError ? 'error' : 'n/a'})</span>
 				{/if}
-				{#if !csr && analysis.outputClient && analysis.outputClient !== analysis.output}
+				{#if !csr && !compareCsr && analysis.outputClient && analysis.outputClient !== analysis.output}
 					<span class="legs" data-obs-legs>
 						<button class:on={leg === 'ssr'} onclick={() => (leg = 'ssr')}>SSR leg</button>
 						<button class:on={leg === 'client'} onclick={() => (leg = 'client')}>client leg</button>
 					</span>
+				{/if}
+				{#if analysis.output && analysis.outputCsrTrue && analysis.outputCsrTrue !== analysis.output}
+					<button
+						class="cmp-btn"
+						class:on={compareCsr}
+						onclick={() => (compareCsr = !compareCsr)}
+						title="diff the csr=false (ogygia) transform against csr=true (plain Kit)"
+						data-obs-cmp-csr>⇄ compare csr</button
+					>
 				{/if}
 			</div>
 			{#if !everWarmed}
 				<div class="warming" data-obs-warming>warming the in-browser compiler (rolldown WASM)…</div>
 			{/if}
 			<div class="code-out" data-obs-output>
-				<FormattedCode doc={shownOutput} lang="svelte" />
+				{#if csr_diff}
+					<div class="csr-diff" data-obs-csr-diff>
+						{#each csr_diff as d, i (i)}
+							<div class="dl {d.t}"><span class="dm">{d.t === 'add' ? '+' : d.t === 'del' ? '−' : ' '}</span><span class="dc">{d.s || ' '}</span></div>
+						{/each}
+					</div>
+				{:else}
+					<FormattedCode doc={shownOutput} lang="svelte" />
+				{/if}
 			</div>
 
 			{#if analysis.compiledServer}
@@ -2250,6 +2311,74 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		background: #14b8a6;
 		color: #022;
 		border-color: #0d9488;
+	}
+	/* csr=false ⇄ csr=true compare toggle + the line-diff view. */
+	.cmp-btn {
+		margin-left: auto;
+		padding: 2px 8px;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		background: var(--bg-raised);
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+		border-radius: 5px;
+	}
+	.cmp-btn.on {
+		background: #14b8a6;
+		color: #022;
+		border-color: #0d9488;
+	}
+	.cmp-legend .dl-key {
+		font-weight: 600;
+	}
+	.dl-key.del {
+		color: #f87171;
+	}
+	.dl-key.add {
+		color: #34d399;
+	}
+	.csr-diff {
+		overflow: auto;
+		max-height: 100%;
+		padding: 8px 0;
+		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+		font-size: 12px;
+		line-height: 1.5;
+		background: var(--bg, #0a0f0d);
+	}
+	.dl {
+		display: flex;
+		white-space: pre;
+		padding: 0 10px;
+	}
+	.dl .dm {
+		width: 1.2em;
+		flex: none;
+		color: var(--text-dim);
+		user-select: none;
+	}
+	.dl .dc {
+		flex: 1;
+		min-width: 0;
+	}
+	.dl.same {
+		color: var(--text-dim);
+		opacity: 0.75;
+	}
+	.dl.add {
+		background: color-mix(in oklab, #10b981 14%, transparent);
+	}
+	.dl.add .dm,
+	.dl.add .dc {
+		color: #34d399;
+	}
+	.dl.del {
+		background: color-mix(in oklab, #ef4444 12%, transparent);
+	}
+	.dl.del .dm,
+	.dl.del .dc {
+		color: #f87171;
 	}
 	.preview {
 		flex: 1;

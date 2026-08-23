@@ -59,6 +59,23 @@ async function main() {
 	const c1 = await btn.textContent().catch(() => '');
 	ok('live preview mounts + counter is interactive', /count is/.test(c0) && c0 !== c1, `${c0}→${c1}`);
 
+	// 1b. the Output tab's "compare csr" diffs the SAME source transformed both ways — the ogygia thesis
+	//     in code: csr=false rewrites a marked import to a `virtual:ogygia/…` lazy island wrapper (removed),
+	//     csr=true leaves it a plain `$lib/…` import Kit hydrates (added). Needs the real (WASM) transform.
+	await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].find((x) => x.textContent.trim() === 'Output')?.click());
+	const cmpReady = await until(page, () => document.querySelector('[data-obs-cmp-csr]') ? true : null, undefined, 30000);
+	if (cmpReady) await page.evaluate(() => document.querySelector('[data-obs-cmp-csr]')?.click());
+	const csrDiff = await until(page, () => {
+		const el = document.querySelector('[data-obs-csr-diff]');
+		if (!el) return null;
+		const del = [...el.querySelectorAll('.dl.del .dc')].some((x) => /virtual:ogygia/.test(x.textContent || ''));
+		const add = [...el.querySelectorAll('.dl.add .dc')].some((x) => /\$lib\//.test(x.textContent || ''));
+		return del && add ? true : null;
+	});
+	ok('Output "compare csr" diffs ogygia (virtual:ogygia wrapper) vs plain Kit ($lib import)', !!csrDiff);
+	await page.evaluate(() => document.querySelector('[data-obs-cmp-csr].on')?.click()); // compare off
+	await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].find((x) => x.textContent.trim() === 'Preview')?.click()); // back to Preview for the scenarios below
+
 	// 2. a real npm import from jsdelivr resolves, bundles, and RUNS
 	await setSrc(page, S(`<SCRIPT>\n  import { nanoid } from 'nanoid';\n  let id = $state(nanoid());\n</SCRIPT>\n<button onclick={() => id = nanoid()}>id {id}</button>`));
 	const cdn = await until(page, () => {
