@@ -218,11 +218,24 @@ Prose, [links](/docs), and \`inline code\` all render through the same pipeline
 your shipped site uses — no bespoke REPL markdown.
 `;
 
-	// The workspace's vite.config — configure ogygia exactly as a real project does. The REPL reads the
-	// markdown options that affect the preview (edit `containers`/`tabs`/`themes` and watch it recompile);
-	// a full app also configures loaders/router/regions here, which are build-time and don't affect a
-	// single-page preview, so they're honestly omitted.
-	const VITE_CONFIG = `import { sveltekit } from '@sveltejs/kit/vite';
+	// The workspace's vite.config — every template shows one, because this is exactly how a real ogygia
+	// project is wired: `ogygia()` BEFORE `sveltekit()`. The base config below is the minimal, honest
+	// wiring shared by all the interactive templates. (Loaders / router / regions are configured here in
+	// a full app too, but they're build-time and don't affect a single-page preview, so they're omitted.)
+	const VITE_CONFIG_BASE = `import { sveltekit } from '@sveltejs/kit/vite';
+import { ogygia } from 'ogygia/vite';
+
+export default {
+	plugins: [
+		// ogygia() MUST come before sveltekit(). SSR islands on stock SvelteKit — no Kit patches.
+		ogygia(),
+		sveltekit(),
+	],
+};
+`;
+	// The CONTENT template adds markdown options — and the REPL actually READS them: edit
+	// `containers`/`tabs`/`themes` and watch the preview recompile (see repl-config.ts + apply_content_config).
+	const VITE_CONFIG_CONTENT = `import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
 import { diff_markers, inline_markers } from 'ogygia/content/markdown';
 
@@ -489,12 +502,19 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		// A CONTENT page — the real ogygia markdown pipeline (mdsvex + Shiki + admonitions), live in-browser.
 		// Includes a vite.config.ts: edit its `content.markdown` options to reconfigure the preview.
 		content: {
-			'vite.config.ts': VITE_CONFIG,
+			'vite.config.ts': VITE_CONFIG_CONTENT,
 			'src/routes/+layout.ts': LAYOUT_CSR,
 			'src/routes/+page.md': CONTENT_MD,
 			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte']
 		}
 	};
+
+	// Every template shows a vite.config.ts in the file tree (the content one ships its own richer
+	// config above). Injected here so the presets don't each repeat the boilerplate.
+	for (const preset of Object.values(PRESETS)) {
+		const map = preset as Record<string, string>;
+		if (!('vite.config.ts' in map)) map['vite.config.ts'] = VITE_CONFIG_BASE;
+	}
 
 	// Share via URL (Rung 6): the whole workspace round-trips through the URL HASH — which browsers never
 	// send to a server, so a shared REPL (or one an agent hands the user) stays client-only. The codec
