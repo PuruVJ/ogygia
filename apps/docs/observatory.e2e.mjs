@@ -270,6 +270,24 @@ async function main() {
 	ok('preview console captures + formats logs', !!consoleRows && consoleRows.some((r) => r.includes('log|mounted { a: 1, xs: [ 1, 2 ] }')) && consoleRows.some((r) => r.includes('error|kaboom Map(1) { "k" => 1 }')), JSON.stringify(consoleRows));
 	ok('console auto-opens on error', await page.evaluate(() => !!document.querySelector('[data-obs-console].open')));
 
+	// 12. a CRAFTED / corrupt share link is untrusted input. A file map with a non-string value would
+	//     hand CodeMirror + the compiler a non-string doc and crash the tab. The workspace must sanitize
+	//     to string→string on load: drop the bad entry, keep the good one, boot cleanly. (Uncompressed
+	//     base64url of the JSON — decode auto-detects: no gzip magic → plain UTF-8 JSON.)
+	const craftPayload = JSON.stringify({ f: { 'Bad.svelte': 42, 'Good.svelte': '<h1>SANITIZED_OK</h1>' }, a: 'Good.svelte' });
+	const craftHash = Buffer.from(craftPayload, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+	// A hash-only goto doesn't reload (the fragment changed, not the path), so set it then reload for real.
+	await page.evaluate((h) => { location.hash = h; }, craftHash);
+	await page.reload({ waitUntil: 'load' }).catch(() => {});
+	const craftBooted = await until(page, () => !!window.__OBS_SOURCE, undefined, 45000);
+	await until(page, () => /SANITIZED_OK/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
+	const craftFiles = await page.evaluate(() => [...document.querySelectorAll('[data-obs-file]')].map((f) => f.getAttribute('data-obs-file')));
+	ok(
+		'crafted share link (non-string file) is sanitized, tab survives',
+		craftBooted && craftFiles.includes('Good.svelte') && !craftFiles.includes('Bad.svelte'),
+		JSON.stringify(craftFiles)
+	);
+
 	ok('no unexpected page errors', pageErrors.length === 0, JSON.stringify([...new Set(pageErrors)].slice(0, 3)));
 
 	console.log(`\n${'─'.repeat(46)}`);

@@ -517,6 +517,25 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// (short keys). gunzip is auto-detected by the gzip magic bytes, so a CompressionStream-less browser
 	// still round-trips (plain base64 of the utf8 JSON). Same gzip format as `ogygia mcp`'s link tool.
 	type Workspace = { files: FileMap; active?: string; tab?: string; mode?: string; cursor?: number };
+	// A share link is untrusted input. Keep ONLY real `string → string` entries (a crafted/corrupt link
+	// could carry `{ "App.svelte": 42 }` or nested objects, which would hand CodeMirror a non-string doc
+	// and the compiler a non-string source — both throw). Also cap count + total size so a giant map
+	// can't wedge the tab. Anything dropped just falls back to the demo.
+	const MAX_HASH_FILES = 400;
+	const MAX_HASH_BYTES = 4_000_000;
+	function sanitize_files(map: unknown): FileMap {
+		const out: FileMap = {};
+		if (!map || typeof map !== 'object') return out;
+		let n = 0;
+		let bytes = 0;
+		for (const [k, v] of Object.entries(map as Record<string, unknown>)) {
+			if (typeof k !== 'string' || !k.trim() || typeof v !== 'string') continue;
+			bytes += k.length + v.length;
+			if (++n > MAX_HASH_FILES || bytes > MAX_HASH_BYTES) break;
+			out[k] = v;
+		}
+		return out;
+	}
 	async function encode_hash(w: Workspace): Promise<string> {
 		const bytes = new TextEncoder().encode(JSON.stringify({ f: w.files, a: w.active, t: w.tab, m: w.mode, c: w.cursor }));
 		if (typeof CompressionStream === 'undefined') return '#' + b64url_encode(bytes);
@@ -532,7 +551,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 				const map = s.startsWith('code=')
 					? JSON.parse(await new Response(new Blob([b64url_decode(s.slice(5)) as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'))).text())
 					: JSON.parse(decodeURIComponent(s.slice(6)));
-				return map && typeof map === 'object' ? { files: map as FileMap } : null;
+				const files = sanitize_files(map);
+				return Object.keys(files).length ? { files } : null;
 			}
 			const raw = b64url_decode(s);
 			const json =
@@ -541,9 +561,12 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 					: new TextDecoder().decode(raw);
 			const obj = JSON.parse(json);
 			if (!obj || typeof obj !== 'object') return null;
+			// New shape carries UI state under `.f`; the very old shape was a bare file map.
+			const files = sanitize_files(obj.f && typeof obj.f === 'object' ? obj.f : obj);
+			if (!Object.keys(files).length) return null;
 			return obj.f && typeof obj.f === 'object'
-				? { files: obj.f as FileMap, active: obj.a, tab: obj.t, mode: obj.m, cursor: obj.c }
-				: { files: obj as FileMap };
+				? { files, active: obj.a, tab: obj.t, mode: obj.m, cursor: obj.c }
+				: { files };
 		} catch {
 			/* malformed — caller falls back to the demo */
 		}
