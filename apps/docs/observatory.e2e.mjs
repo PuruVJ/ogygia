@@ -317,6 +317,17 @@ async function main() {
 		return tokens >= 4 && baked ? { tokens, baked } : null;
 	});
 	ok('import.meta.og.code/.md run the real macro pass → highlighted code + baked markdown', !!macroOut, JSON.stringify(macroOut));
+
+	// 11e. cross-island CONTEXT via the REAL ogygia primitives (no stub): drop-in `setContext` seeds the
+	//      page root ('midnight'); a scoped `<Provide>` shadows it ('sunrise'); both read with a plain
+	//      `getContext`. Assert the two islands show the two different values.
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'context')?.click());
+	const ctxBadges = await until(page, () => {
+		const badges = [...document.querySelectorAll('[data-obs-preview] .badge')].map((x) => (x.textContent || '').replace(/\s+/g, ' ').trim());
+		return badges.length >= 2 && /midnight/.test(badges[0]) && /sunrise/.test(badges[1]) ? badges : null;
+	});
+	ok('real ogygia setContext + <Provide> reach islands (read via plain getContext)', !!ctxBadges, JSON.stringify(ctxBadges));
+
 	// back to a svelte preset for the crafted-hash scenario below
 	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'demo app')?.click());
 	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));

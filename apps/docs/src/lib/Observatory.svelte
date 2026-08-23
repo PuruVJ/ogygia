@@ -19,7 +19,7 @@
 	// so — like svelte — we hand the sandboxed eval the host's own linked ogygia. `og_html_region` +
 	// `Region` make the `import.meta.og.code`/`.md` macros render for real. Unknown ogygia named imports
 	// (content wrappers) still fall back to the passthrough.
-	import { Region } from 'ogygia';
+	import { Region, Provide, setContext as og_setContext, createContext } from 'ogygia';
 	import { og_html_region } from 'ogygia/internal';
 	import './observatory-canvas.css'; // gentle, overridable native-element defaults (.og-canvas), shared with the iframe
 	import type { Analysis } from './observatory.worker';
@@ -537,6 +537,45 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 
 <h2>Rendered markdown</h2>
 <Region of={note} />`
+		},
+		// CROSS-ISLAND CONTEXT — the real ogygia primitives. `setContext` (drop-in) seeds the page root;
+		// `<Provide>` scopes a subtree; both read back with an unchanged `getContext`. On a real csr=false
+		// page these bridge across island roots; here (one live tree) they run through svelte's own context.
+		context: {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  // drop-in: swap 'svelte' → 'ogygia' and setContext reaches child ISLANDS (not just the tree).
+  import { setContext, Provide } from 'ogygia';
+  import Badge from '$lib/Badge.svelte' with { wake: 'load' };
+
+  setContext('theme', 'midnight');
+</scr${''}ipt>
+
+<h1>Cross-island context</h1>
+<p>The page seeds <code>theme</code> in context; the island below reads it with a plain <code>getContext</code> — no props drilled through:</p>
+<Badge />
+
+<p>A scoped <code>&lt;Provide&gt;</code> shadows it for just this subtree:</p>
+<Provide values={{ theme: 'sunrise' }}>
+  <Badge />
+</Provide>`,
+			'src/lib/Badge.svelte': `<scr${''}ipt>
+  import { getContext } from 'svelte';
+  const theme = getContext('theme');
+</scr${''}ipt>
+
+<span class="badge">theme in this island: <b>{theme}</b></span>
+
+<style>
+  .badge {
+    display: inline-block;
+    margin: 6px 0;
+    padding: 6px 12px;
+    border: 1px solid var(--obs-border);
+    border-radius: 999px;
+    background: var(--obs-panel);
+  }
+</style>`
 		}
 	};
 
@@ -878,8 +917,11 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// via the region bridge), so mounting the host's real ones in the plain live mount fails. Hand the eval
 	// a passthrough (renders children + label) for ANY ogygia named import → content shows stacked instead
 	// of crashing. The real, interactive version lives in the preview's "islands" mode.
+	// The REAL context primitives too: in the live mount the page is ONE svelte tree, so ogygia's Provide /
+	// setContext / createContext just do native `setContext` (their server-only marker emission is gated on
+	// `typeof window === 'undefined'`) — read back with an unchanged `getContext` from 'svelte'. No stub.
 	const ogygia_passthrough: Record<string, unknown> = new Proxy(
-		{ default: ReplPassthrough, Region },
+		{ default: ReplPassthrough, Region, Provide, setContext: og_setContext, createContext },
 		{ get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : ReplPassthrough) }
 	);
 	// `ogygia/internal` — the macro-emitted `og_html_region(…)` resolves to the REAL builder here.
