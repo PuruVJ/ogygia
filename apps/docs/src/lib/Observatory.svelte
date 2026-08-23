@@ -742,6 +742,13 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 
 	// Byte ledger helpers — the ogygia thesis, weighed live.
 	const fmt_bytes = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
+	// Tie a region's STRATEGY to its COST: the client JS it ships (from the byte ledger), matched by
+	// component basename. A lake / held-raw / server-hole ships nothing — that's the ogygia thesis, per row.
+	function ship_info(component: string): { bytes: number; ships: boolean } | null {
+		const base = component.split('/').pop();
+		const f = analysis.ledger?.files.find((x) => x.name.split('/').pop() === base);
+		return f ? { bytes: f.bytes, ships: f.ships } : null;
+	}
 
 	// Pretty-print a real runtime event (islands mode) into a short human line.
 	function fmt_event(e: RuntimeEvent) {
@@ -965,9 +972,11 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	// no previewEl/mounted state; the attachment owns the node + the unmount cleanup.
 	let svelteClient = $state<Record<string, unknown> | null>(null);
 	let previewMode = $state<'live' | 'xray' | 'islands'>('live');
-	// The right pane is a tabbed inspector (declutters what used to be 6 stacked sections).
+	// The right pane is a tabbed inspector (declutters what used to be 6 stacked sections). The compiler
+	// OUTPUT leads — seeing how ogygia compiles your code (+ the region map, byte ledger, wire) is the
+	// Observatory's whole reason to exist; the (client-only) preview is the best-effort last tab.
 	type InspectorTab = 'preview' | 'islands' | 'bytes' | 'wire' | 'output';
-	let inspectorTab = $state<InspectorTab>('preview');
+	let inspectorTab = $state<InspectorTab>('output');
 	// Mobile: a single pane at a time — the file tree, the editor, or the inspector.
 	let mobilePane = $state<'files' | 'editor' | 'result'>('editor');
 	// Desktop: the file tree can collapse to a thin strip to reclaim width for code + preview.
@@ -1468,11 +1477,11 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 
 		<section class="obs-inspector" {...split.pane(2)}>
 			<div class="obs-tabs" role="tablist" aria-label="inspector">
-				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => set_tab('preview')}>Preview</button>
+				<button role="tab" class:on={inspectorTab === 'output'} onclick={() => set_tab('output')}>Output</button>
 				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => set_tab('islands')}>Regions{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
 				<button role="tab" class:on={inspectorTab === 'bytes'} onclick={() => set_tab('bytes')}>Bytes</button>
 				<button role="tab" class:on={inspectorTab === 'wire'} onclick={() => set_tab('wire')}>Wire</button>
-				<button role="tab" class:on={inspectorTab === 'output'} onclick={() => set_tab('output')}>Output</button>
+				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => set_tab('preview')}>Preview</button>
 			</div>
 			<div class="obs-tabbody">
 			<div class="tp" class:on={inspectorTab === 'preview'} data-tab="preview">
@@ -1724,15 +1733,25 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 				<div class="muted pad">no marked imports — everything here is free server HTML.</div>
 			{:else}
 				<table data-obs-map>
-					<thead><tr><th>binding</th><th>component</th><th>strategy</th><th>id</th></tr></thead>
+					<thead><tr><th>binding</th><th>component</th><th>strategy</th><th>ships</th><th>id</th></tr></thead>
 					<tbody>
 						{#each analysis.islands as i (i.id)}
+							{@const s = ship_info(i.component)}
 							<tr>
 								<td>{i.local}</td>
 								<td class="muted">{i.component.split('/').pop()}</td>
 								<td>
 									<span class="badge" style:--c={i.strategy.color}>{i.strategy.kind}</span>
 									<div class="detail muted">{i.strategy.detail}</div>
+								</td>
+								<td class="ships" data-obs-ships>
+									{#if s?.ships}
+										<span class="ships-yes" title="client JS this island ships">{fmt_bytes(s.bytes)}</span>
+									{:else if s}
+										<span class="ships-no" title="ships no client module — server HTML only">0 · no JS</span>
+									{:else}
+										<span class="muted">–</span>
+									{/if}
 								</td>
 								<td class="muted" title={i.real ? 'real md5 region id' : 'placeholder id (transform not yet run)'}>{i.id}{#if i.real}<span class="realdot" title="real ogygia region id">●</span>{/if}</td>
 							</tr>
@@ -2166,6 +2185,20 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		color: var(--accent);
 		font-size: 9px;
 		vertical-align: 1px;
+	}
+	.ships {
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+		font-size: 11px;
+	}
+	/* Shipping JS costs bytes (neutral); shipping ZERO JS is the ogygia win — make it pop green. */
+	.ships-yes {
+		color: var(--text-dim);
+		font-weight: 600;
+	}
+	.ships-no {
+		color: #10b981;
+		font-weight: 600;
 	}
 	/* Code surface for every readonly CodeMirror output (transformed host, compiled JS, modules, HTML). */
 	.code-out {

@@ -43,7 +43,13 @@ async function main() {
 	ok('island boots (no reactive loop, __OBS_SOURCE present)', !!booted);
 	if (!booted) { console.log('FATAL: island never booted'); await browser.close(); process.exit(1); }
 
-	// 1. the default demo mounts + is interactive (the no-$effect mount + per-file linker)
+	// The inspector now DEFAULTS to the compiler Output tab (the Observatory's USP), not the preview.
+	const defaultTab = await page.evaluate(() => [...document.querySelectorAll('[role="tab"].on')].map((t) => t.textContent.trim())[0]);
+	ok('inspector defaults to the compiler Output view', defaultTab === 'Output', defaultTab);
+
+	// 1. the default demo mounts + is interactive (the no-$effect mount + per-file linker). Switch to the
+	//    Preview tab first — the counter is only clickable when its pane is shown.
+	await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].find((x) => x.textContent.trim() === 'Preview')?.click());
 	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
 	const btn = page.locator('[data-obs-preview] button').first();
 	const c0 = await btn.textContent().catch(() => '');
@@ -304,6 +310,14 @@ async function main() {
 		return map && mods;
 	});
 	ok('region:raw is labelled "held (raw)" in the map AND generated modules (not "hydrate")', rawKind);
+	// the region map ties strategy → cost: the held-raw region ships zero JS, the island ships bytes.
+	const rawShips = await page.evaluate(() => {
+		const rows = [...document.querySelectorAll('[data-obs-map] tbody tr')];
+		const badge = rows.find((r) => /Badge/.test(r.textContent || ''));
+		const counter = rows.find((r) => /Counter/.test(r.textContent || ''));
+		return { badge: badge?.querySelector('[data-obs-ships]')?.textContent?.replace(/\s+/g, ' ').trim(), counter: counter?.querySelector('[data-obs-ships]')?.textContent?.replace(/\s+/g, ' ').trim() };
+	});
+	ok('region map ships column: held (raw) → "0 · no JS", island → bytes', /no JS/.test(rawShips.badge || '') && /B|KB/.test(rawShips.counter || ''), JSON.stringify(rawShips));
 	// islands mode: the worker SSRs the real held region → the badge renders as zero-JS server HTML.
 	await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].find((x) => /Preview/.test(x.textContent || ''))?.click());
 	await page.evaluate(() => [...document.querySelectorAll('[data-obs-preview-mode] button')].find((x) => x.textContent.trim() === 'islands')?.click());
