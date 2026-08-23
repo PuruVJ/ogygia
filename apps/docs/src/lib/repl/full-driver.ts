@@ -9,7 +9,19 @@
  * and a file-map-backed host fs so `prescan()` sees the workspace. This module installs its OWN
  * host/parser seams so it's self-consistent even if the full + lean entries don't share the singleton.
  */
-import { Compiler, Program, CompileCtx, set_host, set_parser } from 'ogygia/internal/compiler-browser-full';
+import {
+	Compiler,
+	Program,
+	CompileCtx,
+	set_host,
+	set_parser,
+	RESOLVED,
+	V_TRANSPORTABLES,
+	V_TRANSPORT,
+	V_FN_MANIFEST,
+	V_SERVER_MANIFEST,
+	V_RUNTIME_ENTRY
+} from 'ogygia/internal/compiler-browser-full';
 import { make_repl_host } from './browser-host.ts';
 
 /** The two-dial import-attribute grammar (defaults). */
@@ -56,6 +68,28 @@ function base_name(p: string | null | undefined): string {
 	return p.split('?')[0].split('/').pop() || p;
 }
 
+/** Read the REAL generated manifest modules off an SSR-leg Compiler — the exact source `emit()` produces
+ *  for each `virtual:ogygia/*` manifest, the same modules a real build ships. Each `emit` is wrapped so a
+ *  node-only branch (should any remain) degrades to an empty string instead of failing the whole analyze. */
+function extract_manifests(compiler: Compiler): DriverManifests {
+	const c = compiler as unknown as { emit: (id: string, o: unknown) => string | null };
+	const opts = { ssr: true, hashedRuntimeUrl: null, universalHooks: null };
+	const one = (v: string): string => {
+		try {
+			return c.emit(RESOLVED(v), opts) ?? '';
+		} catch {
+			return '';
+		}
+	};
+	return {
+		transportables: one(V_TRANSPORTABLES),
+		transport: one(V_TRANSPORT),
+		fnManifest: one(V_FN_MANIFEST),
+		serverManifest: one(V_SERVER_MANIFEST),
+		runtimeEntry: one(V_RUNTIME_ENTRY)
+	};
+}
+
 /** Read the driver's real WIRE graph off an SSR-leg Compiler — the codecs that actually cross a boundary:
  *  transportable classes (`static wire = import.meta.og.wire`), `import.meta.og.$` fn refs, and the runtime
  *  feature marks the sticky entry will carry. The Wire view shows props-by-value AND this codec graph. */
@@ -89,7 +123,13 @@ function extract_regions(compiler: Compiler): DriverRegion[] {
 	const enc = new TextEncoder();
 	const rows: DriverRegion[] = [];
 	for (const [vpath, e] of program.registry) {
+		const ssrSource = e.ssrSource as string | undefined;
 		const clientSource = e.clientSource as string | undefined;
+		const source = e.source as string | undefined;
+		// A held region keeps its leg split (ssrSource/clientSource); an island/wrapper carries ONE
+		// `source` used for both legs (client gets `$app` shims + lake placeholders at emit). So the
+		// generated client-leg module is `clientSource` for a region, else `source`.
+		const client_leg = clientSource ?? source;
 		rows.push({
 			id: (e.id as string) ?? '',
 			role: (e.role as DriverRegion['role']) ?? 'entry',
@@ -100,10 +140,10 @@ function extract_regions(compiler: Compiler): DriverRegion[] {
 			lakes: (e.lakes as string[]) ?? [],
 			kind: program.region_kinds.get(e.id as string) ?? null,
 			vpath,
-			ssrSource: e.ssrSource as string | undefined,
+			ssrSource,
 			clientSource,
-			source: e.source as string | undefined,
-			clientBytes: clientSource ? enc.encode(clientSource).length : 0
+			source,
+			clientBytes: client_leg ? enc.encode(client_leg).length : 0
 		});
 	}
 	return rows;
@@ -140,6 +180,21 @@ export interface DriverRegion {
 	clientBytes: number;
 }
 
+/** The REAL generated manifest modules — the exact source a build emits for each. Empty string when a
+ *  manifest is a no-op (no transportables, no fn refs, …). */
+export interface DriverManifests {
+	/** `virtual:ogygia/transportables` — eager `__register_transportable(tag, Cls)` calls per class. */
+	transportables: string;
+	/** `virtual:ogygia/transport` — the devalue transport codec map (+ app `transport` hooks). */
+	transport: string;
+	/** `virtual:ogygia/fn-manifest` — the `import.meta.og.$` factory registrations (pre-hydration). */
+	fnManifest: string;
+	/** `virtual:ogygia/server-manifest` — region id → kind/endpoint, populated in dev + build. */
+	serverManifest: string;
+	/** `virtual:ogygia/runtime-entry` — the feature-selected runtime entry the app's islands boot from. */
+	runtimeEntry: string;
+}
+
 /** The driver's real wire/codec graph — what actually crosses a boundary, by kind. */
 export interface DriverCodecs {
 	/** Root-relative modules that define a transportable class (`static wire = import.meta.og.wire`). */
@@ -161,6 +216,8 @@ export interface DriverResult {
 	regions?: DriverRegion[];
 	/** The REAL wire graph — transportable classes, fn refs, and active runtime marks. */
 	codecs?: DriverCodecs;
+	/** The REAL generated manifest module sources (transportables / transport / fn / server / runtime). */
+	manifests?: DriverManifests;
 	error?: string;
 	/** Full stack of a failing leg — Observatory-side diagnostic only (which module touched `window` etc.). */
 	stack?: string;
@@ -209,7 +266,8 @@ export class ReplDriver {
 				client,
 				csrTrue,
 				regions: extract_regions(ssrLeg.compiler),
-				codecs: extract_codecs(ssrLeg.compiler)
+				codecs: extract_codecs(ssrLeg.compiler),
+				manifests: extract_manifests(ssrLeg.compiler)
 			};
 		} catch (e) {
 			return { ssr: null, client: null, csrTrue: null, error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined };

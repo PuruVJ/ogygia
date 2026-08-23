@@ -1796,6 +1796,26 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 					{/if}
 				</div>
 			{/if}
+			{#if analysis.manifests}
+				{@const mlist = [
+					{ name: 'transportables', src: analysis.manifests.transportables, desc: 'eager __register_transportable(tag, Cls) per class' },
+					{ name: 'transport', src: analysis.manifests.transport, desc: 'the devalue codec map + app transport hooks' },
+					{ name: 'fn-manifest', src: analysis.manifests.fnManifest, desc: 'import.meta.og.$ factory registrations (pre-hydration)' },
+					{ name: 'server-manifest', src: analysis.manifests.serverManifest, desc: 'region id → kind / endpoint' },
+					{ name: 'runtime-entry', src: analysis.manifests.runtimeEntry, desc: 'the feature-selected runtime the islands boot from' }
+				].filter((m) => m.src && m.src.trim())}
+				{#if mlist.length}
+					<div class="cap">manifests <span class="muted">· the real generated modules a build emits (emit())</span></div>
+					<div class="mods" data-obs-manifests>
+						{#each mlist as m (m.name)}
+							<details>
+								<summary><span class="mono">{m.name}</span> <span class="muted">{m.desc}</span></summary>
+								<div class="code-out"><FormattedCode doc={m.src} lang="js" /></div>
+							</details>
+						{/each}
+					</div>
+				{/if}
+			{/if}
 			{#if analysis.rendered?.wire && analysis.rendered.wire.length}
 				<div class="cap">
 					wire <span class="muted">· the props that cross to each island, by value (devalue)</span>
@@ -1928,6 +1948,13 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 								<span class="muted mono">{r.id.slice(0, 12)}</span>
 							</summary>
 							<div class="mpath">{r.vpath}</div>
+							<div class="mpath muted">
+								{r.role === 'entry'
+									? 'client hydration entry — imports/re-exports the component; the wrapper mounts it'
+									: r.role === 'wrapper'
+										? 'SSR shell — mounts <Region> with the island entry, props, and CSS (the __component wiring)'
+										: 'held-region binding — leg-split: SSR signer descriptor vs client metadata'}
+							</div>
 							{#if r.ssrSource}
 								<div class="mpath muted">— SSR leg —</div>
 								<div class="code-out"><FormattedCode doc={r.ssrSource} lang="svelte" /></div>

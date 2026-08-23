@@ -34,3 +34,14 @@ export {
 	CLIENT_BINDING_STUB
 } from './region/transform.js';
 export { islandVirtualId } from './ids.js';
+// The manifest virtual-id vocabulary + the `\0`-prefix resolver, so a browser driver (the Observatory)
+// can `compiler.emit(RESOLVED(V_TRANSPORTABLES), …)` to read the REAL generated manifests (transportables,
+// transport codecs, fn factories, server manifest, runtime feature entry) — the same modules a build emits.
+export {
+	RESOLVED,
+	V_TRANSPORTABLES,
+	V_TRANSPORT,
+	V_FN_MANIFEST,
+	V_SERVER_MANIFEST,
+	V_RUNTIME_ENTRY
+} from './ids.js';
