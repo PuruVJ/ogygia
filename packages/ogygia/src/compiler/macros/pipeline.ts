@@ -14,7 +14,12 @@ import { rewrite_wire } from './wire.js';
 import { rewrite_dollar } from './dollar.js';
 import { rewrite_store, auto_brand_stores } from './store.js';
 import { rewrite_code } from './code.js';
-import { rewrite_bake, type AliasEntry } from './bake.js';
+// `bake` is imported LAZILY (only inside the marker guard below) — its two dynamic imports
+// (`import('rolldown')` + a `pathToFileURL(...)` module eval) are Node-only, and keeping bake.js out of
+// the STATIC graph is what lets the whole driver bundle into a browser worker (the Observatory) without
+// Vite's dep-optimizer double-declaring `__vite__injectQuery`. A build that uses no `import.meta.og.bake`
+// never loads bake.js (or rolldown) at all.
+import type { AliasEntry } from './bake.js';
 import { render_snippet } from '../../content/markdown/snippet.js';
 import { render_markdown } from '../../content/markdown/render-md.js';
 import type { MarkdownOptions } from '../../content/markdown/index.js';
@@ -119,6 +124,7 @@ export async function run_module_macros(
 	// Runs before the island transform so downstream sees plain data, not a call.
 	if (out.includes('import.meta.og.bake')) {
 		const __bk = profiler.P ? performance.now() : 0;
+		const { rewrite_bake } = await import('./bake.js'); // lazy — keeps bake's node-only graph out of the worker
 		const rewritten = await rewrite_bake(out, id, {
 			alias: ctx.resolveAlias as AliasEntry[],
 			root: ctx.root,
