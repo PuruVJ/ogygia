@@ -15,7 +15,11 @@
  * Constraint: a top-level `export class X` (declaration or `export { X }`). Default exports
  * and class expressions have no stable name to tag by.
  */
-import { parseSync } from 'vite';
+// Parse via the injectable oxc seam (parse/oxc.ts), NOT `import { parseSync } from 'vite'` — importing
+// the Node `vite` package here dragged the whole of vite onto the compiler's hot path, which is what
+// kept the FULL driver out of a browser worker (the Observatory). `set_parser` already installs the
+// sync oxc parser in every realm (Node default; the worker installs rolldown-browser's).
+import { parse_module } from '../parse/oxc.js';
 
 const CLASS_KW = /\bclass\b/;
 const MODULE_KW = /\bmodule\b/;
@@ -30,9 +34,9 @@ const GENERATED_MARK =
 function parse_body(code: string, id_n: string): AstNode[] | null {
 	// `parseSync` never throws — syntax errors land in `.errors`, which the real compiler reports.
 	try {
-		const result = parseSync(id_n, code) as { program?: { body?: AstNode[] }; errors?: unknown[] };
-		if (result.errors && result.errors.length > 0) return null;
-		return result.program?.body ?? [];
+		const result = parse_module(code, id_n);
+		if (!result.ok || !result.program) return null;
+		return (result.program as { body?: AstNode[] }).body ?? [];
 	} catch {
 		return null;
 	}
@@ -139,9 +143,9 @@ export function moduleHasTransportable(code: string, id_n: string): boolean {
 	if (code.includes('import.meta.og.wire')) return true;
 	let body: AstNode[];
 	try {
-		const result = parseSync(id_n, code) as { program?: { body?: AstNode[] }; errors?: unknown[] };
-		if (result.errors && result.errors.length > 0) return false;
-		body = result.program?.body ?? [];
+		const result = parse_module(code, id_n);
+		if (!result.ok || !result.program) return false;
+		body = (result.program as { body?: AstNode[] }).body ?? [];
 	} catch {
 		return false;
 	}
