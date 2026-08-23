@@ -22,7 +22,7 @@ import { parse_config_markdown, parse_config, type ConfigNote } from './repl/rep
 import { make_browser_host } from './repl/browser-host.ts';
 import { resolve_file } from './repl/resolve-file.ts';
 import { make_ogygia_server_module, make_ogygia_internal_module } from './repl/og-server.ts';
-import type { ReplDriver, DriverRegion, DriverCodecs, DriverManifests } from './repl/full-driver.ts';
+import type { ReplDriver, DriverRegion, DriverCodecs, DriverManifests, DriverCsrSummary } from './repl/full-driver.ts';
 
 // The FULL ogygia compiler driver (complete macros + transportable manifests + csr legs). Loaded
 // lazily inside the `drivetest` handler — a static import would drag the whole driver graph onto the
@@ -111,6 +111,9 @@ export interface Analysis {
 	/** The driver's REAL generated manifest module sources (Wire view): transportables / transport / fn /
 	 *  server / runtime-entry — the exact modules a build emits. Present only when the full driver ran. */
 	manifests?: DriverManifests;
+	/** The csr=TRUE leg's collapse summary (Regions view): how much of the island machinery survives when
+	 *  ogygia steps aside and plain Kit hydrates the whole page. Present only when the full driver ran. */
+	csr?: DriverCsrSummary;
 	/** Real island count from transformHost (md5 iids), or null. */
 	realIslands: number | null;
 	/** The REAL generated virtual modules per island (the wrapper + entry the driver serves). */
@@ -818,6 +821,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 	let driver_regions: DriverRegion[] | undefined;
 	let driver_codecs: DriverCodecs | undefined;
 	let driver_manifests: DriverManifests | undefined;
+	let driver_csr: DriverCsrSummary | undefined;
 	let realError: string | undefined;
 	let oxc: Analysis['oxc'];
 	try {
@@ -970,6 +974,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 				}
 				if (dr.codecs) driver_codecs = dr.codecs;
 				if (dr.manifests) driver_manifests = dr.manifests;
+				if (dr.csr) driver_csr = dr.csr;
 				// Re-run the LAST pipeline step (svelte → server JS) over the driver's output, so the
 				// "compiled" view matches the transform shown above instead of the lean one.
 				try {
@@ -1017,6 +1022,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		regions: driver_regions,
 		codecs: driver_codecs,
 		manifests: driver_manifests,
+		csr: driver_csr,
 		realError,
 		oxc,
 		// content pages resolved to svelte source above → the sync SSR/island/client legs treat them as

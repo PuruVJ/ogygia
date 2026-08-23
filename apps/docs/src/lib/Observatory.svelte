@@ -1883,6 +1883,30 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			</div>
 
 			<div class="tp" class:on={inspectorTab === 'islands'} data-tab="islands">
+			{#if analysis.csr && analysis.regions}
+				{@const f_wiring = analysis.regions.reduce((s, r) => s + r.clientBytes, 0)}
+				<div class="cap">csr=false → csr=true <span class="muted">· what the islands buy you (on csr=true, plain Kit hydrates the whole page)</span></div>
+				<div class="csr-collapse" data-obs-csr>
+					<div class="ccol">
+						<span class="chead">csr=false · islands</span>
+						<div>{analysis.regions.length} generated module{analysis.regions.length === 1 ? '' : 's'}</div>
+						<div>{analysis.codecs?.fns.length ?? 0} fn ref{(analysis.codecs?.fns.length ?? 0) === 1 ? '' : 's'}</div>
+						<div>{fmt_bytes(f_wiring)} island wiring</div>
+					</div>
+					<div class="carrow">→</div>
+					<div class="ccol">
+						<span class="chead">csr=true · plain Kit</span>
+						<div class:zero={analysis.csr.regions === 0}>{analysis.csr.regions} generated module{analysis.csr.regions === 1 ? '' : 's'}</div>
+						<div>{analysis.csr.fns} fn ref{analysis.csr.fns === 1 ? '' : 's'}</div>
+						<div class:zero={analysis.csr.wiringBytes === 0}>{fmt_bytes(analysis.csr.wiringBytes)} island wiring</div>
+					</div>
+				</div>
+				<div class="muted csr-note">
+					on csr=true ogygia stands aside — no island wrappers, no per-island hydration; Kit hydrates the
+					entire page as one tree. A page-level <span class="mono">import.meta.og.$</span> still transforms
+					(it isn't island-specific).
+				</div>
+			{/if}
 			<div class="cap">island map — {analysis.islands.length} marked {analysis.islands.length === 1 ? 'region' : 'regions'}</div>
 			{#if !analysis.ok}
 				<div class="err">parse error: {analysis.error}</div>
@@ -3292,6 +3316,42 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		background: var(--bg-subtle, rgba(127, 127, 127, 0.1));
 		color: var(--text-muted, var(--muted, currentColor));
 		font-size: 10px;
+	}
+	/* csr=false → csr=true collapse comparison (Regions tab) — two cards + an arrow. */
+	.csr-collapse {
+		display: flex;
+		align-items: stretch;
+		gap: 12px;
+		padding: 8px 12px 4px;
+	}
+	.ccol {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 8px 10px;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		font-size: 11px;
+	}
+	.chead {
+		font-size: 10px;
+		color: var(--text-muted, var(--muted, currentColor));
+		margin-bottom: 2px;
+	}
+	.carrow {
+		align-self: center;
+		color: var(--accent);
+		font-size: 16px;
+	}
+	.ccol .zero {
+		color: var(--accent);
+	}
+	.csr-note {
+		padding: 0 12px 8px;
+		font-size: 11px;
+		max-width: 62ch;
+		line-height: 1.5;
 	}
 	/* Wire codec graph — one row per kind (transportable / fn ref / runtime), each with its tags. */
 	.codecs {

@@ -90,6 +90,18 @@ function extract_manifests(compiler: Compiler): DriverManifests {
 	};
 }
 
+/** Boil a leg's Compiler down to the collapse-comparison counts (used for the csr=true leg). */
+function extract_csr_summary(compiler: Compiler): DriverCsrSummary {
+	const regions = extract_regions(compiler);
+	const codecs = extract_codecs(compiler);
+	return {
+		regions: regions.length,
+		fns: codecs.fns.length,
+		transportables: codecs.transportables.length,
+		wiringBytes: regions.reduce((sum, r) => sum + r.clientBytes, 0)
+	};
+}
+
 /** Read the driver's real WIRE graph off an SSR-leg Compiler — the codecs that actually cross a boundary:
  *  transportable classes (`static wire = import.meta.og.wire`), `import.meta.og.$` fn refs, and the runtime
  *  feature marks the sticky entry will carry. The Wire view shows props-by-value AND this codec graph. */
@@ -195,6 +207,20 @@ export interface DriverManifests {
 	runtimeEntry: string;
 }
 
+/** A compact summary of the csr=TRUE leg — for the collapse comparison (how much of the island machinery
+ *  survives when ogygia steps aside and plain Kit hydrates the whole page). Islands/wiring go to ~0; a
+ *  page-level `import.meta.og.$` still transforms (it isn't island-specific). */
+export interface DriverCsrSummary {
+	/** Island/region modules the linker minted on csr=true (≈0 — ogygia stands down). */
+	regions: number;
+	/** `import.meta.og.$` fn refs still present (these transform regardless of csr). */
+	fns: number;
+	/** Transportable classes still registered. */
+	transportables: number;
+	/** Total island-wiring client bytes emitted (≈0 on csr=true — no wrappers/entries). */
+	wiringBytes: number;
+}
+
 /** The driver's real wire/codec graph — what actually crosses a boundary, by kind. */
 export interface DriverCodecs {
 	/** Root-relative modules that define a transportable class (`static wire = import.meta.og.wire`). */
@@ -218,6 +244,8 @@ export interface DriverResult {
 	codecs?: DriverCodecs;
 	/** The REAL generated manifest module sources (transportables / transport / fn / server / runtime). */
 	manifests?: DriverManifests;
+	/** The csr=TRUE leg's collapse summary — for the "on csr=true this all vanishes" comparison. */
+	csr?: DriverCsrSummary;
 	error?: string;
 	/** Full stack of a failing leg — Observatory-side diagnostic only (which module touched `window` etc.). */
 	stack?: string;
@@ -259,15 +287,16 @@ export class ReplDriver {
 			const client = (await leg(false)).code;
 			// csr=true: a route with `export const csr = true` makes the driver step aside (islands → plain).
 			this.#files = { ...files, 'src/routes/+layout.ts': 'export const csr = true;' };
-			const csrTrue = (await leg(true)).code;
+			const csrLeg = await leg(true);
 			this.#files = files;
 			return {
 				ssr: ssrLeg.code,
 				client,
-				csrTrue,
+				csrTrue: csrLeg.code,
 				regions: extract_regions(ssrLeg.compiler),
 				codecs: extract_codecs(ssrLeg.compiler),
-				manifests: extract_manifests(ssrLeg.compiler)
+				manifests: extract_manifests(ssrLeg.compiler),
+				csr: extract_csr_summary(csrLeg.compiler)
 			};
 		} catch (e) {
 			return { ssr: null, client: null, csrTrue: null, error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined };
