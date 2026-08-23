@@ -726,6 +726,18 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 				request_all();
 			}
 		};
+		// Test/dev seam: run the FULL compiler driver in the worker directly and get its three legs back
+		// (the plain analyze() below now folds these in for a `.svelte` entry; this stays for isolating the
+		// driver from the rest of the analyze pipeline).
+		(window as unknown as Record<string, unknown>).__OBS_DRIVETEST = (f?: FileMap, entry?: string) =>
+			new Promise((resolve) => {
+				const id = --liveSeq;
+				drive_waiters.set(id, resolve);
+				worker?.postMessage({ id, type: 'drivetest', files: $state.snapshot(f ?? files), entry: entry ?? entryFile });
+			});
+		// Test/dev seam: the last Analysis the worker returned — so a probe can assert the Output view's
+		// three legs are the COMPLETE (full-driver) transform (`driverComplete`, `import.meta.og.$` rewritten).
+		(window as unknown as Record<string, unknown>).__OBS_ANALYSIS = () => $state.snapshot(analysis);
 	}
 
 	async function share() {
@@ -841,6 +853,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	let liveSeq = 0;
 	const liveWaiters = new Map<number, (html: string) => void>();
 	const pageWaiters = new Map<number, (rd: NonNullable<Analysis['realDom']> | null) => void>();
+	const drive_waiters = new Map<number, (r: unknown) => void>(); // full-driver test seam replies
 
 	/** Ask the worker to render ONE component (with props) → HTML, for a live tick. */
 	function live_request(fileMap: FileMap, file: string, props: Record<string, unknown>): Promise<string> {
@@ -987,6 +1000,11 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			if (e.data.type === 'live') {
 				liveWaiters.get(e.data.id)?.(e.data.html ?? '');
 				liveWaiters.delete(e.data.id);
+				return;
+			}
+			if (e.data.type === 'drivetest') {
+				drive_waiters.get(e.data.id)?.((e.data as { result?: unknown }).result);
+				drive_waiters.delete(e.data.id);
 				return;
 			}
 			if (e.data.type === 'page') {

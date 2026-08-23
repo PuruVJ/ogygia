@@ -166,3 +166,60 @@ export function make_browser_host(): CompilerHost {
 		crypto: { createHash }
 	};
 }
+
+/** A host `fs` backed by the in-memory workspace file map — so the FULL driver's `prescan()`
+ *  (readdir/stat over `src/`) and route-csr detection (readFile) actually see the workspace. Driver
+ *  paths are absolute under the ctx root (`/repl/...`); the map is keyed by workspace-relative path
+ *  (`src/...`). Read-only; writes are no-ops (the driver never writes on the analyze path). `get_files`
+ *  is read live, so re-running the driver after an edit sees the new files without re-installing. */
+export function make_repl_host(get_files: () => Record<string, string>): CompilerHost {
+	const key = (p: string) => p.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^repl\/?/, '').replace(/\/+$/, '');
+	const is_dir = (files: Record<string, string>, k: string) =>
+		k === '' || Object.keys(files).some((f) => f.startsWith(k + '/'));
+	const fs = {
+		readFileSync(p: string): string {
+			const v = get_files()[key(p)];
+			if (v == null) throw new Error('ENOENT: ' + p);
+			return v;
+		},
+		existsSync(p: string): boolean {
+			const files = get_files();
+			const k = key(p);
+			return files[k] != null || is_dir(files, k);
+		},
+		readdirSync(p: string, opts?: { withFileTypes?: boolean }): unknown[] {
+			const files = get_files();
+			const k = key(p);
+			const prefix = k ? k + '/' : '';
+			const names = new Set<string>();
+			for (const f of Object.keys(files)) {
+				if (prefix && !f.startsWith(prefix)) continue;
+				const seg = f.slice(prefix.length).split('/')[0];
+				if (seg) names.add(seg);
+			}
+			return [...names].map((name) =>
+				opts?.withFileTypes
+					? { name, isFile: () => files[prefix + name] != null, isDirectory: () => files[prefix + name] == null }
+					: name
+			);
+		},
+		statSync(p: string) {
+			const files = get_files();
+			const k = key(p);
+			const file = files[k];
+			const dir = file == null && k !== '' && is_dir(files, k);
+			if (file == null && !dir) throw new Error('ENOENT: ' + p);
+			return { isFile: () => file != null, isDirectory: () => dir, size: file != null ? file.length : 0, mtimeMs: 0 };
+		},
+		globSync: () => [],
+		writeFileSync: () => {},
+		mkdirSync: () => {},
+		rmSync: () => {},
+		renameSync: () => {}
+	};
+	return {
+		fs: fs as unknown as CompilerHost['fs'],
+		path: path as unknown as CompilerHost['path'],
+		crypto: { createHash }
+	};
+}

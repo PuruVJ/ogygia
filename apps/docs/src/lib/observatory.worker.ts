@@ -22,6 +22,19 @@ import { parse_config_markdown, parse_config, type ConfigNote } from './repl/rep
 import { make_browser_host } from './repl/browser-host.ts';
 import { resolve_file } from './repl/resolve-file.ts';
 import { make_ogygia_server_module, make_ogygia_internal_module } from './repl/og-server.ts';
+import type { ReplDriver } from './repl/full-driver.ts';
+
+// The FULL ogygia compiler driver (complete macros + transportable manifests + csr legs). Loaded
+// lazily inside the `drivetest` handler — a static import would drag the whole driver graph onto the
+// worker's boot path, so a plain analyze/preview session never pays for it.
+let repl_driver: ReplDriver | null = null;
+async function get_repl_driver(): Promise<ReplDriver> {
+	if (!repl_driver) {
+		const { ReplDriver } = await import('./repl/full-driver.ts');
+		repl_driver = new ReplDriver();
+	}
+	return repl_driver;
+}
 
 // The real ogygia server-runtime modules the SSR eval sees — held regions render for real (no stub).
 const OGYGIA_SERVER = make_ogygia_server_module();
@@ -84,6 +97,10 @@ export interface Analysis {
 	compiledError?: string;
 	/** Whether the output came from the real ogygia transformHost (vs the mark-only fallback). */
 	real: boolean;
+	/** True when the three legs (output/outputClient/outputCsrTrue) came from the FULL compiler driver
+	 *  — the complete pipeline (every macro incl. `$`/`store` + the transportable-registration manifest),
+	 *  not the lean `transformHost` (which skips those). Lets the Output view flag partial vs complete. */
+	driverComplete?: boolean;
 	/** Real island count from transformHost (md5 iids), or null. */
 	realIslands: number | null;
 	/** The REAL generated virtual modules per island (the wrapper + entry the driver serves). */
@@ -425,7 +442,12 @@ function execute(files: Record<string, string>, entry: string, islandInfo?: Isla
 						const kids = props?.children;
 						if (typeof kids === 'function') (kids as (r: unknown) => void)($$renderer);
 					};
-					const real = spec === 'ogygia/internal' ? OGYGIA_INTERNAL : spec === 'ogygia' ? OGYGIA_SERVER : {};
+					const real =
+						spec === 'ogygia/internal' || spec === 'ogygia/internal/register'
+							? OGYGIA_INTERNAL
+							: spec === 'ogygia'
+								? OGYGIA_SERVER
+								: {};
 					return new Proxy({ default: Passthrough, ...real } as Record<string | symbol, unknown>, {
 						get: (t, k) => (k in t ? t[k] : Passthrough)
 					}) as Record<string, unknown>;
@@ -548,7 +570,7 @@ function real_island_render(files: Record<string, string>, entry: string, island
 			if (spec === 'svelte/server') return { render } as Record<string, unknown>;
 			// The REAL ogygia runtime: region()/isRegion + a server <Region> that renders a held region
 			// inline (zero JS). `region('raw' component)` never signs on this path — see og-server.ts.
-			if (spec === 'ogygia/internal') return OGYGIA_INTERNAL;
+			if (spec === 'ogygia/internal' || spec === 'ogygia/internal/register') return OGYGIA_INTERNAL;
 			if (spec === 'ogygia') return OGYGIA_SERVER;
 			const file = resolve_file(spec, files);
 			if (file && file.endsWith('.svelte')) {
@@ -759,6 +781,9 @@ async function content_svelte_view(files: Record<string, string>, keepDials = fa
 }
 
 async function analyze(files: Record<string, string>, active: string): Promise<Analysis> {
+	// The ORIGINAL, pre-macro workspace — the FULL compiler driver runs its own macro pipeline, so it
+	// must see raw source (not the already-macro'd files below), exactly as a real build's entry does.
+	const original_files = files;
 	// Apply the workspace's ogygia markdown config (from a vite.config.ts) before compiling any content.
 	apply_content_config(files);
 	// Run the real `import.meta.og.*` macro passes BEFORE the transform / svelte compile sees the source
@@ -878,6 +903,58 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		realError = e instanceof Error ? `${e.message}` : String(e);
 	}
 
+	// ── The FULL compiler driver: the COMPLETE transform for the Output view ──
+	// The lean `transformHost` above still feeds islands / modules / preview, but it skips the `$`/`store`
+	// macros and the transportable-registration append. The full driver runs the ENTIRE pipeline, so the
+	// three legs it returns show `import.meta.og.$` rewritten, store codecs, and the registration manifest
+	// — the compiler OUTPUT the Observatory exists to show. Additive + best-effort: any driver error keeps
+	// the lean legs. Guarded to a raw `.svelte` entry (a `.md`/`.svx` entry takes the lean md→svelte path).
+	//
+	// Only pay for the driver's 3 extra compiler passes when its output would actually DIFFER from the lean
+	// legs: the divergence is exactly the `$`/`store` rewrites, a wire codec, or the registration manifest
+	// (any `export class`). For plain island code the two are byte-identical, so the lean legs are already
+	// the complete output — skip the driver (keeps per-keystroke analyze snappy) and still mark complete.
+	const uses_full_only = Object.values(original_files).some(
+		(c) =>
+			// No trailing `\b` after `$` — `$` is a non-word char, so `\$\b` can never match `…og.$(`.
+			/import\.meta\.og\.(?:\$|store)/.test(c) ||
+			/\bstatic\s+#?\w+\s*=\s*import\.meta\.og\.wire\b/.test(c) ||
+			/\bexport\s+(?:default\s+|abstract\s+)?class\b/.test(c)
+	);
+	let driverComplete = !uses_full_only; // lean == complete when no full-driver-only feature is present
+	if (uses_full_only && active.endsWith('.svelte') && original_files[active] != null) {
+		try {
+			await ensure_oxc();
+			const driver = await get_repl_driver();
+			driver.install((id, code) => oxc_mod!.parseSync(id, code));
+			const md_for_driver = (() => {
+				const s = config_source(original_files);
+				return s ? parse_config_markdown(s) : null;
+			})();
+			const dr = await driver.analyze(original_files, md_for_driver, active);
+			if (!dr.error && dr.ssr != null) {
+				real = true;
+				realCode = dr.ssr;
+				if (dr.client != null) realClientCode = dr.client;
+				if (dr.csrTrue != null) realCsrTrueCode = dr.csrTrue;
+				driverComplete = true;
+				// Re-run the LAST pipeline step (svelte → server JS) over the driver's output, so the
+				// "compiled" view matches the transform shown above instead of the lean one.
+				try {
+					const { js } = compile(realCode, { filename: 'App.svelte', generate: 'server', dev: true }) as {
+						js: { code: string };
+					};
+					compiledServer = js.code;
+					compiledError = undefined;
+				} catch (e) {
+					compiledError = e instanceof Error ? e.message : String(e);
+				}
+			}
+		} catch {
+			/* keep the lean legs — the full driver is best-effort over the lean transform */
+		}
+	}
+
 	// The page to render: a Kit route `+page.{svelte,md,svx}` (ogygia is SvelteKit-only), else legacy
 	// `App.svelte`, else whatever's open. Mirrors the client's entry_of pick.
 	const entryFile =
@@ -902,6 +979,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		compiledServer,
 		compiledError,
 		real,
+		driverComplete,
 		realIslands,
 		modules,
 		realError,
@@ -1025,7 +1103,8 @@ type InMsg =
 	| { id: number; type?: 'analyze'; files: Record<string, string>; active: string }
 	| { id: number; type: 'live'; files: Record<string, string>; file: string; props: Record<string, unknown> }
 	| { id: number; type: 'page'; files: Record<string, string>; entry: string }
-	| { id: number; type: 'bundle'; files: Record<string, string>; entry: string };
+	| { id: number; type: 'bundle'; files: Record<string, string>; entry: string }
+	| { id: number; type: 'drivetest'; files: Record<string, string>; entry: string };
 
 self.onmessage = (e: MessageEvent<InMsg>) => {
 	const msg = e.data;
@@ -1041,6 +1120,18 @@ self.onmessage = (e: MessageEvent<InMsg>) => {
 	if (msg.type === 'bundle') {
 		// The REAL rolldown bundle for the live preview (workspace + jsdelivr CDN deps). Async (network).
 		bundle_preview(msg.files, msg.entry).then((r) => self.postMessage({ id: msg.id, type: 'bundle', ...r }));
+		return;
+	}
+	if (msg.type === 'drivetest') {
+		// Prove the FULL driver runs in-worker: install its seams (parser first), run all legs.
+		(async () => {
+			await ensure_oxc();
+			const driver = await get_repl_driver();
+			driver.install((id, code) => oxc_mod!.parseSync(id, code));
+			const md = (() => { const s = config_source(msg.files); return s ? parse_config_markdown(s) : null; })();
+			const result = await driver.analyze(msg.files, md, msg.entry);
+			self.postMessage({ id: msg.id, type: 'drivetest', result });
+		})().catch((e) => self.postMessage({ id: msg.id, type: 'drivetest', result: { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined, ssr: null, client: null, csrTrue: null } }));
 		return;
 	}
 	analyze(msg.files, msg.active).then((result) => self.postMessage({ id: msg.id, result }));

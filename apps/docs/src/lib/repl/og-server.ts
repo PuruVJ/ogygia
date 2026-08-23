@@ -14,6 +14,11 @@
 // The worker-safe region seam — region()/isRegion/og_html_region WITHOUT Region.svelte or the client
 // runtime (which reference `window` and can't load in a Web Worker). See packages/ogygia/src/region-core.ts.
 import { region, isRegion, og_html_region } from 'ogygia/internal/region-core';
+// The compiler appends `import { __register_transportable, __tag_context } from 'ogygia/internal/register'`
+// to any module with an exported class / createContext (see compiler/content/transportables.ts). That
+// seam is Region-free, so it's safe to pull the REAL registration fns into the worker's SSR eval — user
+// code carrying an `export class` registers its codec exactly as a real build would.
+import { __register_transportable, __tag_context } from 'ogygia/internal/register';
 
 type ServerRenderer = { push: (s: string) => void };
 type ServerComponent = (r: ServerRenderer, props: Record<string, unknown>) => void;
@@ -43,7 +48,9 @@ export function make_ogygia_server_module(): Record<string, unknown> {
 	return { region, isRegion, Region };
 }
 
-/** The `ogygia/internal` module namespace — the macro-emitted `og_html_region(…)` resolves real here. */
+/** The `ogygia/internal` (and `ogygia/internal/register`) module namespace — the macro-emitted
+ *  `og_html_region(…)` resolves real here, as do the appended `__register_transportable` /
+ *  `__tag_context` registration calls. */
 export function make_ogygia_internal_module(): Record<string, unknown> {
-	return { og_html_region };
+	return { og_html_region, __register_transportable, __tag_context };
 }
