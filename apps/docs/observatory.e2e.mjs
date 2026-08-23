@@ -106,21 +106,70 @@ async function main() {
 	}
 	ok('file-switch is navigation, not a recompile', !recompiled);
 
-	// 6b. drag-and-drop: move a file into a folder (native HTML5 drag, dispatched with a DataTransfer).
-	const dndMoved = await page.evaluate(() => {
-		const src = document.querySelector('[data-obs-file="src/lib/Counter.svelte"]');
-		const tgt = [...document.querySelectorAll('.frow.folder')].find((b) => b.getAttribute('title') === 'src/routes');
-		if (!src || !tgt) return false;
-		const dt = new DataTransfer();
-		src.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true }));
-		tgt.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
-		tgt.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
-		src.dispatchEvent(new DragEvent('dragend', { dataTransfer: dt, bubbles: true }));
-		return true;
-	});
+	// 6b. drag-and-drop: move a file into a folder. neodrag is POINTER-based, so drive it with a real
+	//     mouse gesture over the element rects (synthetic native DragEvents wouldn't touch it) — down on
+	//     the file, past the 4px threshold, across to the folder header (stepped so the drop engine
+	//     samples zones), release. The move must target the hovered folder, not always the root.
+	const srcBox = await page.locator('[data-obs-file="src/lib/Counter.svelte"]').boundingBox().catch(() => null);
+	const tgtBox = await page.locator('.frow.folder[title="src/routes"]').boundingBox().catch(() => null);
+	let dndMoved = false;
+	if (srcBox && tgtBox) {
+		const sx = srcBox.x + srcBox.width / 2, sy = srcBox.y + srcBox.height / 2;
+		const tx = tgtBox.x + tgtBox.width / 2, ty = tgtBox.y + tgtBox.height / 2;
+		await page.mouse.move(sx, sy);
+		await page.mouse.down();
+		await page.mouse.move(sx + 6, sy + 6); // cross the drag threshold
+		await page.mouse.move(tx, ty, { steps: 10 }); // travel so drop zones are sampled
+		await page.mouse.move(tx, ty); // settle a frame on the target
+		await page.mouse.up();
+		dndMoved = true;
+	}
 	await until(page, () => [...document.querySelectorAll('[data-obs-file]')].some((f) => f.getAttribute('data-obs-file') === 'src/routes/Counter.svelte'));
 	const dndFiles = await page.evaluate(() => [...document.querySelectorAll('[data-obs-file]')].map((f) => f.getAttribute('data-obs-file')));
-	ok('drag-and-drop moves a file into a folder', dndMoved && dndFiles.includes('src/routes/Counter.svelte') && !dndFiles.includes('src/lib/Counter.svelte'), JSON.stringify(dndFiles));
+	ok('drag-and-drop moves a file into the hovered folder', dndMoved && dndFiles.includes('src/routes/Counter.svelte') && !dndFiles.includes('src/lib/Counter.svelte'), JSON.stringify(dndFiles));
+
+	// 6c. drag a nested file BACK OUT to the workspace root — drop on the tree body's empty area below
+	//     the rows (the lowest-priority root zone). The exact bug the redesign fixes is "it always went
+	//     to root"; here root is the *intended* target and a folder drop is the default — both must work.
+	const rowsBox = await page.locator('.frow.file[data-obs-file="src/routes/Counter.svelte"]').boundingBox().catch(() => null);
+	const bodyBox = await page.locator('.ftree-body').boundingBox().catch(() => null);
+	let outMoved = false;
+	if (rowsBox && bodyBox) {
+		const sx = rowsBox.x + rowsBox.width / 2, sy = rowsBox.y + rowsBox.height / 2;
+		const tx = bodyBox.x + bodyBox.width / 2, ty = bodyBox.y + bodyBox.height - 6; // empty space at the bottom
+		await page.mouse.move(sx, sy);
+		await page.mouse.down();
+		await page.mouse.move(sx + 6, sy + 6);
+		await page.mouse.move(tx, ty, { steps: 10 });
+		await page.mouse.move(tx, ty);
+		await page.mouse.up();
+		outMoved = true;
+	}
+	await until(page, () => [...document.querySelectorAll('[data-obs-file]')].some((f) => f.getAttribute('data-obs-file') === 'Counter.svelte'));
+	const outFiles = await page.evaluate(() => [...document.querySelectorAll('[data-obs-file]')].map((f) => f.getAttribute('data-obs-file')));
+	ok('drag-and-drop moves a nested file back to the root', outMoved && outFiles.includes('Counter.svelte') && !outFiles.includes('src/routes/Counter.svelte'), JSON.stringify(outFiles));
+
+	// 6d. drop onto a SIBLING FILE (not a folder header): a file zone outranks its enclosing folder
+	//     (priority 2 > 1), so the move targets that file's folder — VS Code-style. Drop the now-root
+	//     Counter onto src/lib/Header.svelte → it should land in src/lib.
+	const rootBox = await page.locator('.frow.file[data-obs-file="Counter.svelte"]').boundingBox().catch(() => null);
+	const sibBox = await page.locator('.frow.file[data-obs-file="src/lib/Header.svelte"]').boundingBox().catch(() => null);
+	let sibMoved = false;
+	if (rootBox && sibBox) {
+		const sx = rootBox.x + rootBox.width / 2, sy = rootBox.y + rootBox.height / 2;
+		const tx = sibBox.x + sibBox.width / 2, ty = sibBox.y + sibBox.height / 2;
+		await page.mouse.move(sx, sy);
+		await page.mouse.down();
+		await page.mouse.move(sx + 6, sy + 6);
+		await page.mouse.move(tx, ty, { steps: 10 });
+		await page.mouse.move(tx, ty);
+		await page.mouse.up();
+		sibMoved = true;
+	}
+	await until(page, () => [...document.querySelectorAll('[data-obs-file]')].some((f) => f.getAttribute('data-obs-file') === 'src/lib/Counter.svelte'));
+	const sibFiles = await page.evaluate(() => [...document.querySelectorAll('[data-obs-file]')].map((f) => f.getAttribute('data-obs-file')));
+	ok('drag onto a sibling file lands in that file’s folder', sibMoved && sibFiles.includes('src/lib/Counter.svelte') && !sibFiles.includes('Counter.svelte'), JSON.stringify(sibFiles));
+
 	// reset to a clean demo app so later assertions aren't on the moved layout
 	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'demo app')?.click());
 	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
