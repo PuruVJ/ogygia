@@ -25,7 +25,7 @@
 	// (single tree, so the fn/store are used directly; no cross-island manifest needed). Window-safe here.
 	import { og_html_region, __og_$, __og_store, __og_boundary } from 'ogygia/internal';
 	import './observatory-canvas.css'; // gentle, overridable native-element defaults (.og-canvas), shared with the iframe
-	import type { Analysis } from './observatory.worker';
+	import type { Analysis, Island } from './observatory.worker';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
 
 	// Regexes at script top level (created once for this singleton island, never per call).
