@@ -1174,6 +1174,37 @@ async function driver_render(
 	}
 }
 
+/** The full DRIVER preview payload for the iframe harness: the driver-sourced SSR (real <ogygia-region>
+ *  HTML) + the client island modules (keyed by component file, the same shape client_bundle produces and
+ *  the Harness links via `entry="__ISLAND__:<file>"`). The frame's real runtime then hydrates each region
+ *  — so the preview is the genuinely compiled app, straight from the driver. */
+async function driver_preview(
+	files: Record<string, string>,
+	entry: string
+): Promise<{ ok: boolean; html?: string; modules?: Record<string, string>; error?: string }> {
+	const rendered = await driver_render(files, entry);
+	if (!rendered.ok || rendered.html == null || !rendered.regions) return { ok: false, error: rendered.error };
+	// Client island modules — each island's component compiled client-side, keyed by the ISLAND ID the SSR
+	// emitted (`entry="__ISLAND__:<id>"`), from the registry's componentPath. Macro-rewritten first so an
+	// island using $/store compiles. The Harness links `__ISLAND__:<id>` → a blob of these + hydrates.
+	const macrod = await macro_files(files);
+	const view = await content_svelte_view(macrod);
+	const modules: Record<string, string> = {};
+	for (const reg of rendered.regions) {
+		if (reg.role !== 'entry' || !reg.componentPath) continue;
+		const file = reg.componentPath.replace(/^\/repl\//, '').replace(/^\/+/, '');
+		const src = view[file];
+		if (src == null || !file.endsWith('.svelte')) continue;
+		try {
+			const { js } = compile(src, { filename: file, generate: 'client', dev: false }) as { js: { code: string } };
+			modules[reg.id] = js.code;
+		} catch {
+			/* skip an island whose component won't client-compile */
+		}
+	}
+	return { ok: true, html: rendered.html, modules };
+}
+
 async function bundle_preview(
 	files: Record<string, string>,
 	entry: string
@@ -1262,8 +1293,9 @@ self.onmessage = (e: MessageEvent<InMsg>) => {
 		return;
 	}
 	if (msg.type === 'driverender') {
-		// Prove the DRIVER-sourced SSR: real transformed graph → genuine <ogygia-region> HTML.
-		driver_render(msg.files, msg.entry)
+		// Prove the DRIVER-sourced preview: real transformed graph → genuine <ogygia-region> HTML + the
+		// client island modules the Harness links + hydrates.
+		driver_preview(msg.files, msg.entry)
 			.then((result) => self.postMessage({ id: msg.id, type: 'driverender', result }))
 			.catch((e) => self.postMessage({ id: msg.id, type: 'driverender', result: { ok: false, error: e instanceof Error ? e.message : String(e) } }));
 		return;

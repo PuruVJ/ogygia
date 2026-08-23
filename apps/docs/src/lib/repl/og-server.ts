@@ -48,8 +48,9 @@ let region_seq = 0;
 function render_driver_island(r: ServerRenderer, p: Record<string, unknown>, mode: string): void {
 	const comp = p.__component as ServerComponent | undefined;
 	const inner = (p.__props as Record<string, unknown>) ?? {};
-	// The generated wrapper's `__entry` is `/@id/virtual:ogygia/island/<id>.js`; the island id is the
-	// Harness's link key (it maps `__ISLAND__:<id>` → a blob URL of the client island module).
+	// The Harness links `entry="__ISLAND__:<id>"` → the client module map. The wrapper's `__entry` is
+	// `/@id/virtual:ogygia/island/<id>.js` — the island's content-hashed id, which driver_preview keys its
+	// client modules by (from the registry's componentPath). (`__css` is the component VALUE, not a path.)
 	const entry = String(p.__entry ?? '');
 	const id = (entry.match(/island\/([0-9a-f]+)\.js/)?.[1] ?? entry).replace(/[^\w]/g, '');
 	const wake = mode === 'lake' ? 'none' : (WAKE_KEYS.find((k) => p[k]) ?? 'load');
