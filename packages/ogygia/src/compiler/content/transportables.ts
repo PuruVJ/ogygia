@@ -22,6 +22,13 @@
 import { parse_module } from '../parse/oxc.js';
 
 const CLASS_KW = /\bclass\b/;
+// A real (pre-transform) wire codec member: `static <name> = import.meta.og.wire(…)`. Tight on
+// purpose — the prescan uses this to catch a wire class BEFORE the macro rewrites it to the computed
+// `static [WIRE_EXPR]` form (which the AST check below sees). A BARE textual mention of the macro (a
+// comment or string that merely names it — e.g. the Observatory's own REPL analysis code) must NOT
+// read as a transportable, or the module gets side-effect-imported into every realm by the eager
+// registration manifest — including a Web Worker that references `self`, which then crashes on SSR.
+const WIRE_STATIC_MEMBER = /\bstatic\s+#?\w+\s*=\s*import\.meta\.og\.wire\b/;
 const MODULE_KW = /\bmodule\b/;
 const CONTEXT_MODULE_ATTR = /context\s*=\s*["']module["']/;
 const SVELTE_EXT = /\.svelte$/;
@@ -140,7 +147,7 @@ interface ClassMember {
  */
 export function moduleHasTransportable(code: string, id_n: string): boolean {
 	if (!CLASS_KW.test(code) || !code.includes('static')) return false;
-	if (code.includes('import.meta.og.wire')) return true;
+	if (WIRE_STATIC_MEMBER.test(code)) return true;
 	let body: AstNode[];
 	try {
 		const result = parse_module(code, id_n);
@@ -202,7 +209,11 @@ function registrationBlock(rel: string, classes: string[], contexts: string[]): 
 	const lines = [
 		'',
 		'// ogygia: generated registration (transportable codecs + createContext tags)',
-		`import { ${imports.join(', ')} } from 'ogygia/internal';`
+		// A Region-free seam, NOT the `ogygia/internal` barrel: this import lands in every module with
+		// an exported class / createContext, and the barrel re-exports `Region.svelte` (→ `$app/paths` →
+		// `window`). In a bundled build tree-shaking hides that, but Vite DEV serves raw ESM, so a
+		// no-window realm (the Observatory compiler worker) would crash at module-eval. See internal-register.ts.
+		`import { ${imports.join(', ')} } from 'ogygia/internal/register';`
 	];
 	for (const name of classes) lines.push(`__OGT(${JSON.stringify(rel + '#' + name)}, ${name});`);
 	for (const name of contexts) lines.push(`__OGC(${JSON.stringify(rel + '#' + name)}, ${name});`);

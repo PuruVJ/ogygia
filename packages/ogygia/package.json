@@ -48,6 +48,11 @@
 			"types": "./dist/internal-server.d.ts",
 			"default": "./src/internal-server.ts"
 		},
+		"./internal/register": {
+			"svelte": "./src/internal-register.ts",
+			"types": "./dist/internal-register.d.ts",
+			"default": "./src/internal-register.ts"
+		},
 		"./internal/region-core": {
 			"types": "./dist/region-core.d.ts",
 			"default": "./dist/region-core.js"
@@ -218,6 +223,11 @@
 				"types": "./dist/internal-server.d.ts",
 				"svelte": "./dist/internal-server.js",
 				"default": "./dist/internal-server.js"
+			},
+			"./internal/register": {
+				"types": "./dist/internal-register.d.ts",
+				"svelte": "./dist/internal-register.js",
+				"default": "./dist/internal-register.js"
 			},
 			"./internal/region-core": {
 				"types": "./dist/region-core.d.ts",
