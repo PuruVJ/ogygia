@@ -765,6 +765,43 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		return f ? { bytes: f.bytes, ships: f.ships } : null;
 	}
 
+	// When (in plain words) a client island's JS runs, from its `wake` dial.
+	function hydrate_phrase(wake: string | undefined): string {
+		if (wake === 'visible') return 'once it scrolls into view';
+		if (wake === 'idle') return 'once the browser goes idle';
+		if (wake === 'interaction') return 'only after you first interact with it — zero JS until then';
+		if (wake && wake.startsWith('(')) return `once the media query ${wake} matches`;
+		return 'as soon as the page loads';
+	}
+
+	// The "why" behind a row: the mark that made it this kind, then whether (and why) it ships JS, then
+	// what crosses to it. Plain language — the diagnostics half of the Observatory: turn the raw output
+	// into understanding. Reads the island's own `with { … }` attrs + the byte ledger + the wire capture.
+	function why_island(i: Island, s: { bytes: number; ships: boolean } | null): string[] {
+		const a = (i.attrs ?? {}) as Record<string, unknown>;
+		const wake = a.wake as string | undefined;
+		const kind = i.strategy.kind;
+		const lines: string[] = [];
+		if (kind === 'lake')
+			lines.push(`It's a lake: marked with { wake: 'none' }. A lake stays frozen server HTML inside its parent island and ships no client module of its own — the way to keep a heavy static subtree (prose, a chart) out of the island's bundle.`);
+		else if (kind === 'held (raw)')
+			lines.push(`It's a held region: marked with { region: 'raw' }. The server decides its HTML (a registry the transform can't see into), so zero JS crosses — the component's scoped CSS rides along with the response.`);
+		else if (kind === 'server hole')
+			lines.push(`It's a server island: marked with { render: 'deferred' }. It renders on the server per request, and the client fetches its HTML from a signed endpoint ${hydrate_phrase(wake)}. Request-specific but not interactive.`);
+		else if (kind === 'live')
+			lines.push(`It's a live region: marked with { render: 'live' }. Its HTML is baked and revalidates in the background, streamed over an SSE channel — the DOM morphs in place.`);
+		else if (kind === 'preset')
+			lines.push(`It uses the '${String(a.preset)}' preset: marked with { preset: '${String(a.preset)}' }, a named bundle of dials from your ogygia({ regions: { presets } }) config.`);
+		else lines.push(`It's a client island: marked with { wake: '${wake ?? 'load'}' }, so it hydrates ${hydrate_phrase(wake)} — that's why it ships its own JS.`);
+		if (s?.ships)
+			lines.push(`Ships ${fmt_bytes(s.bytes)} — its client entry plus the <Region> wrapper that mounts it. Only this subtree hydrates; the rest of the page stays server HTML.`);
+		else if (s) lines.push(`Ships zero JS — server HTML only. Nothing in this row hydrates on the client.`);
+		const w = analysis.rendered?.wire?.find((x) => x.name.split('/').pop() === i.component.split('/').pop());
+		if (w && !(w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]'))
+			lines.push(`${fmt_bytes(w.bytes)} of props cross to it by value (devalue) — see the Wire tab. Props are copied, never shared by reference; functions can't cross, they become fn refs.`);
+		return lines;
+	}
+
 	// Pretty-print a real runtime event (islands mode) into a short human line.
 	function fmt_event(e: RuntimeEvent) {
 		switch (e.name) {
@@ -1781,18 +1818,21 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 							<span class="ckind">transportable · {analysis.codecs.transportables.length}</span>
 							{#each analysis.codecs.transportables as t}<span class="mono ctag">{t}</span>{/each}
 						</div>
+						<div class="whyline">a class marked <span class="mono">static wire = import.meta.og.wire(…)</span> — it crosses as ONE live shared instance; every island holding it reunites into the same object.</div>
 					{/if}
 					{#if analysis.codecs.fns.length}
 						<div class="crow">
 							<span class="ckind">fn ref · {analysis.codecs.fns.length}</span>
 							{#each analysis.codecs.fns as f}<span class="mono ctag">{f}</span>{/each}
 						</div>
+						<div class="whyline">a function from <span class="mono">import.meta.og.$(…)</span> read into island markup — functions can't cross by value, so it's registered and crosses as a ref, rebuilt on the far side.</div>
 					{/if}
 					{#if analysis.codecs.marks.length}
 						<div class="crow">
 							<span class="ckind">runtime</span>
 							{#each analysis.codecs.marks as m}<span class="mono ctag">{m}</span>{/each}
 						</div>
+						<div class="whyline">the feature set folded into the sticky runtime chunk — the runtime ships only what this app's islands actually use.</div>
 					{/if}
 				</div>
 			{/if}
@@ -1860,6 +1900,10 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 								<td>
 									<span class="badge" style:--c={i.strategy.color}>{i.strategy.kind}</span>
 									<div class="detail muted">{i.strategy.detail}</div>
+									<details class="why">
+										<summary>why?</summary>
+										{#each why_island(i, s) as line}<div class="whyline">{line}</div>{/each}
+									</details>
 								</td>
 								<td class="ships" data-obs-ships>
 									{#if s?.ships}
@@ -2357,6 +2401,27 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	.detail {
 		margin-top: 2px;
 		font-size: 11px;
+	}
+	/* The "why?" explainer under a strategy — plain-language reasons, one per line. */
+	.why {
+		margin-top: 4px;
+	}
+	.why > summary {
+		cursor: pointer;
+		font-size: 11px;
+		color: var(--accent);
+		width: fit-content;
+	}
+	.whyline {
+		margin-top: 5px;
+		max-width: 52ch;
+		font-size: 11px;
+		line-height: 1.5;
+		color: var(--text-muted, var(--muted, currentColor));
+	}
+	.whyline::before {
+		content: '→ ';
+		color: var(--accent);
 	}
 	.realdot {
 		margin-left: 5px;
