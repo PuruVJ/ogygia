@@ -741,6 +741,13 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		// Test/dev seam: the last Analysis the worker returned — so a probe can assert the Output view's
 		// three legs are the COMPLETE (full-driver) transform (`driverComplete`, `import.meta.og.$` rewritten).
 		(window as unknown as Record<string, unknown>).__OBS_ANALYSIS = () => $state.snapshot(analysis);
+		// Test/dev seam: the DRIVER-sourced preview SSR (real <ogygia-region> HTML from the real transform).
+		(window as unknown as Record<string, unknown>).__OBS_DRIVERENDER = (f?: FileMap, entry?: string) =>
+			new Promise((resolve) => {
+				const id = --liveSeq;
+				drive_waiters.set(id, resolve);
+				worker?.postMessage({ id, type: 'driverender', files: $state.snapshot(f ?? files), entry: entry ?? entryFile });
+			});
 	}
 
 	async function share() {
@@ -1043,7 +1050,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 				liveWaiters.delete(e.data.id);
 				return;
 			}
-			if (e.data.type === 'drivetest') {
+			if (e.data.type === 'drivetest' || e.data.type === 'driverender') {
 				drive_waiters.get(e.data.id)?.((e.data as { result?: unknown }).result);
 				drive_waiters.delete(e.data.id);
 				return;

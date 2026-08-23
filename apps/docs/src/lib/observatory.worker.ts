@@ -302,15 +302,27 @@ const now = () => (typeof performance !== 'undefined' ? performance.now() : Date
 // evals it with a `__require` closure, and renders the default export. This is the real render loop
 // running in the browser — no bundler, no server.
 function eval_module(code: string, req: (spec: string) => Record<string, unknown>): Record<string, unknown> {
+	// A named-import list → a valid destructuring list: `a, b as c` → `a, b: c` (ES `import {b as c}`
+	// aliases to `b`, but object destructuring renames with `:`). The driver's generated modules use
+	// renamed imports (`import { makeRegionEndpoint as __ogRegionSign }`).
+	const names = (list: string) =>
+		list
+			.split(',')
+			.map((n) => {
+				const m = n.trim().match(/^([\w$]+)\s+as\s+([\w$]+)$/);
+				return m ? `${m[1]}: ${m[2]}` : n.trim();
+			})
+			.filter(Boolean)
+			.join(', ');
 	const body = code
 		// import * as X from 'y' [with {...}]
 		.replace(/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = __require("$2");')
 		// import D, { a, b } from 'y'
-		.replace(/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const __m_$1 = __require("$3"); const $1 = __m_$1.default; const {$2} = __m_$1;')
+		.replace(/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, (_m, d: string, list: string, spec: string) => `const __m_${d} = __require("${spec}"); const ${d} = __m_${d}.default; const {${names(list)}} = __m_${d};`)
 		// import D from 'y' [with {...}]
 		.replace(/import\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = (__require("$2")).default;')
 		// import { a, b } from 'y'
-		.replace(/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const {$1} = __require("$2");')
+		.replace(/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, (_m, list: string, spec: string) => `const {${names(list)}} = __require("${spec}");`)
 		// import 'y' (side-effect)
 		.replace(/import\s+['"][^'"]+['"]\s*;?/g, '')
 		// export default X
@@ -1089,6 +1101,79 @@ function clean_bundle_error(raw: string): string {
 
 /** The REAL bundle: run rolldown over the workspace (svelte-compiled) + jsdelivr CDN deps, svelte kept
  *  external. Returns a CJS module string the main thread evals + mounts, plus the packages it pulled. */
+/** REAL preview SSR, DRIVER-sourced — run the full compiler driver, then eval its EXACT transformed host
+ *  graph (host → region binding → wrapper → island entry → component) against the worker-safe island
+ *  `Region` shim (og-server), producing genuine `<ogygia-region>` HTML that is the real compiler output
+ *  (not the hand-built `real_island_render` shells). This is the SSR half of the two-build driver preview
+ *  (Phase 2b); the client island modules + Harness linking follow. */
+async function driver_render(
+	files: Record<string, string>,
+	entry: string
+): Promise<{ ok: boolean; html?: string; regions?: DriverRegion[]; error?: string }> {
+	await ensure_oxc();
+	const driver = await get_repl_driver();
+	driver.install((id, code) => oxc_mod!.parseSync(id, code));
+	const md = (() => {
+		const s = config_source(files);
+		return s ? parse_config_markdown(s) : null;
+	})();
+	const dr = await driver.analyze(files, md, entry);
+	if (dr.error || dr.ssr == null || !dr.regions) return { ok: false, error: dr.error ?? 'no driver output' };
+	const regionByVpath = new Map(dr.regions.map((r) => [r.vpath, r]));
+	const cache = new Map<string, Record<string, unknown>>();
+	const cached = (key: string, make: () => Record<string, unknown>): Record<string, unknown> => {
+		const hit = cache.get(key);
+		if (hit) return hit;
+		const exports: Record<string, unknown> = {};
+		cache.set(key, exports); // set before eval (tolerate the host↔region↔wrapper cycle)
+		Object.assign(exports, make());
+		return exports;
+	};
+	const require = (spec: string): Record<string, unknown> => {
+		if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
+		if (spec === 'svelte/server') return { render } as Record<string, unknown>;
+		if (spec === 'ogygia/internal' || spec === 'ogygia/internal/register') return OGYGIA_INTERNAL;
+		if (spec === 'ogygia') return OGYGIA_SERVER;
+		// The region signer / server-island minter — inert in the preview (no signed endpoints).
+		if (spec === 'ogygia/internal/server')
+			return { makeRegionEndpoint: () => '', mintServerIsland: () => '', known_region_fps: () => new Set() };
+		if (spec === 'virtual:ogygia/island-deps')
+			return { islandCss: () => '', islandDeps: () => [], contentCss: () => '' };
+		// A driver-generated region/wrapper/island virtual module → eval its real generated source.
+		const reg = regionByVpath.get(spec);
+		if (reg) {
+			return cached(reg.vpath, () => {
+				if (reg.role === 'wrapper') {
+					const { js } = compile(reg.source ?? '', { filename: 'wrapper.svelte', generate: 'server', dev: false }) as { js: { code: string } };
+					return eval_module(js.code, require);
+				}
+				return eval_module((reg.role === 'region' ? reg.ssrSource : reg.source) ?? '', require);
+			});
+		}
+		// Any other ogygia virtual (transportables/fn-manifest/…) → side-effect no-op in the preview.
+		if (spec.startsWith('virtual:ogygia/') || spec.startsWith('ogygia/')) return {};
+		// A workspace component (the region binding + wrapper import it by its `/repl/…` absolute path).
+		const key = spec.replace(/^\/repl\//, '').replace(/^\/+/, '');
+		const file = files[key] != null ? key : resolve_file(spec, files);
+		if (file && file.endsWith('.svelte'))
+			return cached(file, () => {
+				const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as { js: { code: string } };
+				return eval_module(js.code, require);
+			});
+		if (file && files[file] != null) return cached(file, () => eval_module(files[file], require));
+		return {};
+	};
+	try {
+		const { js } = compile(dr.ssr, { filename: 'App.svelte', generate: 'server', dev: false }) as { js: { code: string } };
+		const App = eval_module(js.code, require).default;
+		if (typeof App !== 'function') return { ok: false, error: 'driver host has no default component export' };
+		const html = (render(App as never, { props: {} }) as { body?: string }).body ?? '';
+		return { ok: true, html, regions: dr.regions };
+	} catch (e) {
+		return { ok: false, error: e instanceof Error ? e.message : String(e) };
+	}
+}
+
 async function bundle_preview(
 	files: Record<string, string>,
 	entry: string
@@ -1145,7 +1230,8 @@ type InMsg =
 	| { id: number; type: 'live'; files: Record<string, string>; file: string; props: Record<string, unknown> }
 	| { id: number; type: 'page'; files: Record<string, string>; entry: string }
 	| { id: number; type: 'bundle'; files: Record<string, string>; entry: string }
-	| { id: number; type: 'drivetest'; files: Record<string, string>; entry: string };
+	| { id: number; type: 'drivetest'; files: Record<string, string>; entry: string }
+	| { id: number; type: 'driverender'; files: Record<string, string>; entry: string };
 
 self.onmessage = (e: MessageEvent<InMsg>) => {
 	const msg = e.data;
@@ -1173,6 +1259,13 @@ self.onmessage = (e: MessageEvent<InMsg>) => {
 			const result = await driver.analyze(msg.files, md, msg.entry);
 			self.postMessage({ id: msg.id, type: 'drivetest', result });
 		})().catch((e) => self.postMessage({ id: msg.id, type: 'drivetest', result: { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined, ssr: null, client: null, csrTrue: null } }));
+		return;
+	}
+	if (msg.type === 'driverender') {
+		// Prove the DRIVER-sourced SSR: real transformed graph → genuine <ogygia-region> HTML.
+		driver_render(msg.files, msg.entry)
+			.then((result) => self.postMessage({ id: msg.id, type: 'driverender', result }))
+			.catch((e) => self.postMessage({ id: msg.id, type: 'driverender', result: { ok: false, error: e instanceof Error ? e.message : String(e) } }));
 		return;
 	}
 	analyze(msg.files, msg.active).then((result) => self.postMessage({ id: msg.id, result }));
