@@ -302,4 +302,25 @@ export class ReplDriver {
 			return { ssr: null, client: null, csrTrue: null, error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined };
 		}
 	}
+
+	/** SSR-only leg for the live PREVIEW — just the transformed host + its registry, no client/csr legs.
+	 *  A third of the work of {@link analyze} (which the preview never needed: it renders the SSR graph and
+	 *  compiles its own client island modules). */
+	async ssr_leg(
+		files: Record<string, string>,
+		markdown_config: unknown,
+		host_rel: string
+	): Promise<{ ssr: string | null; regions: DriverRegion[]; error?: string }> {
+		this.#files = files;
+		const host_id = '/repl/' + host_rel.replace(/^\/+/, '');
+		const src = files[host_rel] ?? '';
+		try {
+			const compiler = new Compiler(new Program({ forms: true, router: true }), { prof: {} as never, P: false, outHash: new Map() });
+			compiler.configure(repl_ctx(markdown_config));
+			const r = await compiler.transform_module(src, host_id, { ssr: true, emitFile: () => {} });
+			return { ssr: r?.code ?? src, regions: extract_regions(compiler) };
+		} catch (e) {
+			return { ssr: null, regions: [], error: e instanceof Error ? e.message : String(e) };
+		}
+	}
 }

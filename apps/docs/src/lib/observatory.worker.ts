@@ -1117,7 +1117,7 @@ async function driver_render(
 		const s = config_source(files);
 		return s ? parse_config_markdown(s) : null;
 	})();
-	const dr = await driver.analyze(files, md, entry);
+	const dr = await driver.ssr_leg(files, md, entry); // SSR-only — the preview never needs client/csr legs
 	if (dr.error || dr.ssr == null || !dr.regions) return { ok: false, error: dr.error ?? 'no driver output' };
 	const regionByVpath = new Map(dr.regions.map((r) => [r.vpath, r]));
 	const cache = new Map<string, Record<string, unknown>>();
