@@ -1351,10 +1351,32 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			post_to_frame({ obsType: 'renderKit', modules: $state.snapshot(client.modules), entry: client.entry });
 			return;
 		}
-		const rd = analysis.realDom;
-		if (!rd?.ok || !rd.html) return;
-		post_to_frame({ obsType: 'render', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}), xray: previewMode === 'xray', bytes: lens_bytes() });
-		arm_frame_live(rd);
+		const xray = previewMode === 'xray';
+		const post_handbuilt = () => {
+			const rd = analysis.realDom;
+			if (!rd?.ok || !rd.html) return;
+			post_to_frame({ obsType: 'render', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}), xray, bytes: lens_bytes() });
+			arm_frame_live(rd);
+		};
+		// The DRIVER-sourced preview: the genuinely compiled app — the driver's real transform → real
+		// <ogygia-region> HTML + client island modules the frame's runtime hydrates. Async (a full driver
+		// run); on any failure fall back to the hand-built real_island_render shells. Content (.md/.svx)
+		// entries keep the hand-built path (the driver preview is the raw-.svelte route path).
+		if (entryFile.endsWith('.svelte')) {
+			const id = --liveSeq;
+			const snap = $state.snapshot(files);
+			drive_waiters.set(id, (r) => {
+				const res = r as { ok?: boolean; html?: string; modules?: Record<string, string> };
+				if (res?.ok && typeof res.html === 'string') {
+					post_to_frame({ obsType: 'render', html: res.html, modules: res.modules ?? {}, deferred: {}, xray, bytes: lens_bytes() });
+				} else {
+					post_handbuilt();
+				}
+			});
+			worker?.postMessage({ id, type: 'driverender', files: snap, entry: entryFile });
+			return;
+		}
+		post_handbuilt();
 	}
 
 	/** Ask the worker to render a nav TARGET page to real-island HTML. */
