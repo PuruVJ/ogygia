@@ -15,6 +15,12 @@
 	import { format_console_args } from './repl/console-format';
 	import { encode_hash, decode_hash } from './repl/hash';
 	import ReplPassthrough from './repl/ReplPassthrough.svelte';
+	// REAL ogygia runtime pieces (NOT stubs): the docs build resolves ogygia's `virtual:ogygia/*` modules,
+	// so — like svelte — we hand the sandboxed eval the host's own linked ogygia. `og_html_region` +
+	// `Region` make the `import.meta.og.code`/`.md` macros render for real. Unknown ogygia named imports
+	// (content wrappers) still fall back to the passthrough.
+	import { Region } from 'ogygia';
+	import { og_html_region } from 'ogygia/internal';
 	import './observatory-canvas.css'; // gentle, overridable native-element defaults (.og-canvas), shared with the iframe
 	import type { Analysis } from './observatory.worker';
 	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
@@ -506,6 +512,31 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			'src/routes/+layout.ts': LAYOUT_CSR,
 			'src/routes/+page.md': CONTENT_MD,
 			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte']
+		},
+		// import.meta.og.* MACROS — the compiler's real macro pass runs in-browser. `code`/`md` bake a
+		// highlighted snippet / rendered markdown at BUILD (through the app's own Shiki + mdsvex pipeline)
+		// and inline it as a static, zero-JS region.
+		macros: {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import { Region } from 'ogygia';
+
+  // import.meta.og.code(source, lang) — highlighted at BUILD via the app's Shiki config, inlined as a
+  // static region. Zero client JS: the colours are baked into the HTML.
+  const snippet = import.meta.og.code('const answer = 6 * 7;\\nconsole.log(answer); // 42', 'ts');
+
+  // import.meta.og.md(text) — static prose + fenced code rendered at build (mdsvex), also a region.
+  const note = import.meta.og.md('## Baked at build\\n\\nThis **markdown** compiled through the same pipeline your pages use — and ships as plain HTML.');
+</scr${''}ipt>
+
+<h1>import.meta.og macros</h1>
+<p>The compiler's macro pass runs right here in your browser. Both blocks below are baked at build and ship as static HTML:</p>
+
+<h2>A highlighted snippet</h2>
+<Region of={snippet} />
+
+<h2>Rendered markdown</h2>
+<Region of={note} />`
 		}
 	};
 
@@ -848,7 +879,12 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 	// a passthrough (renders children + label) for ANY ogygia named import → content shows stacked instead
 	// of crashing. The real, interactive version lives in the preview's "islands" mode.
 	const ogygia_passthrough: Record<string, unknown> = new Proxy(
-		{ default: ReplPassthrough },
+		{ default: ReplPassthrough, Region },
+		{ get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : ReplPassthrough) }
+	);
+	// `ogygia/internal` — the macro-emitted `og_html_region(…)` resolves to the REAL builder here.
+	const ogygia_internal_module: Record<string, unknown> = new Proxy(
+		{ og_html_region },
 		{ get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : ReplPassthrough) }
 	);
 
@@ -984,6 +1020,7 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		if (spec.startsWith('svelte/')) return svelteExtras[spec] ?? {};
 		// ogygia runtime (external): content wrappers (TabGroup/Tab/…) → a children-rendering passthrough so
 		// the live mount shows their content instead of crashing on the island region bridge.
+		if (spec === 'ogygia/internal') return ogygia_internal_module;
 		if (spec === 'ogygia' || spec.startsWith('ogygia/')) return ogygia_passthrough;
 		return {};
 	}

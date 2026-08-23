@@ -12,7 +12,8 @@ import {
 	wrapperVirtualId,
 	CLIENT_BINDING_STUB,
 	set_parser,
-	set_host
+	set_host,
+	run_browser_macros
 } from 'ogygia/internal/compiler-browser';
 import { cdnPlugin, makeCdnCache, CSS_MODULE, css_inject_module } from './repl/cdn-plugin.ts';
 import { sveltePlugin } from './repl/svelte-plugin.ts';
@@ -698,6 +699,35 @@ function config_notes(files: Record<string, string>): ConfigNote[] {
 	return src ? parse_config(src).notes : [];
 }
 
+/** Run the REAL module-macro passes (`import.meta.og.wire` + `.code`/`.md`) over the workspace BEFORE
+ *  either the transform or the svelte compile sees it — exactly as a real build does (the compiler owns
+ *  the passes; the REPL just calls them). `.code`/`.md` bake through the app's own Shiki/mdsvex config
+ *  and inline `og_html_region(…)`; the runtime `og_html_region`/`Region` are provided real, not stubbed. */
+async function macro_files(files: Record<string, string>): Promise<Record<string, string>> {
+	// Only spin up the parser + run the passes when a macro marker is actually present anywhere.
+	if (!Object.values(files).some((s) => s.includes('import.meta.og.'))) return files;
+	await ensure_oxc(); // the macro passes parse with the oxc/WASM parser — install it before they run
+	const cfg_src = config_source(files);
+	const md_cfg = (cfg_src ? parse_config_markdown(cfg_src) : null) as Parameters<typeof run_browser_macros>[2];
+	let changed = false;
+	const out: Record<string, string> = { ...files };
+	for (const name of Object.keys(files)) {
+		const src = files[name];
+		// Fast skip: only .svelte/.ts/.js hosts, and only when a macro marker is actually present.
+		if (!/\.(svelte|ts|js)$/.test(name) || !src.includes('import.meta.og.')) continue;
+		try {
+			const { code, touched } = await run_browser_macros(src, '/repl/' + name.replace(/^\/+/, ''), md_cfg);
+			if (touched) {
+				out[name] = code;
+				changed = true;
+			}
+		} catch {
+			/* a malformed macro call → leave the source as-is; the error surfaces at compile downstream */
+		}
+	}
+	return changed ? out : files;
+}
+
 /** A "svelte view" of the workspace: every `.md` / `.svx` file replaced by its markdown-pipeline Svelte
  *  source (same key), so the whole sync analyze/SSR machinery treats a content page as a normal component
  *  (mdsvex is async, so this is resolved ONCE up front). Non-content files pass through untouched. */
@@ -720,6 +750,9 @@ async function content_svelte_view(files: Record<string, string>, keepDials = fa
 async function analyze(files: Record<string, string>, active: string): Promise<Analysis> {
 	// Apply the workspace's ogygia markdown config (from a vite.config.ts) before compiling any content.
 	apply_content_config(files);
+	// Run the real `import.meta.og.*` macro passes BEFORE the transform / svelte compile sees the source
+	// (exactly as a build does). No-op unless a macro marker is present.
+	files = await macro_files(files);
 	// Resolve content pages to Svelte source ONCE (mdsvex is async); the rest of analyze is sync + treats
 	// a `.md`/`.svx` entry exactly like a `.svelte` component.
 	const svelte_files = await content_svelte_view(files);
@@ -931,6 +964,7 @@ async function bundle_preview(
 	entry: string
 ): Promise<{ code?: string; packages?: string[]; missing?: string[]; error?: string }> {
 	apply_content_config(files); // honour the workspace vite.config's markdown options in the bundle leg too
+	files = await macro_files(files); // run the real `import.meta.og.*` macro passes before bundling too
 	const rb = (await import('@rolldown/browser')) as {
 		rolldown: (o: unknown) => Promise<{ generate: (o: unknown) => Promise<{ output: Array<{ code: string }> }> }>;
 	};

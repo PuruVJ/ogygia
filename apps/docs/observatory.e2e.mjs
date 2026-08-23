@@ -305,6 +305,22 @@ async function main() {
 	});
 	ok('region:raw is labelled "held (raw)" in the map AND generated modules (not "hydrate")', rawKind);
 
+	// 11d. `import.meta.og.*` macros run the REAL compiler macro pass in-browser (no stub): `.code` bakes a
+	//      Shiki-highlighted snippet, `.md` renders markdown — both inlined as og_html_region and rendered
+	//      through the real <Region>. Assert real highlighted tokens + the baked markdown appear.
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'macros')?.click());
+	const macroOut = await until(page, () => {
+		const prev = document.querySelector('[data-obs-preview]');
+		if (!prev || !/import\.meta\.og macros/.test(prev.textContent || '')) return null;
+		const tokens = prev.querySelectorAll('span[style*="color"]').length;
+		const baked = /Baked at build/.test(prev.textContent || '');
+		return tokens >= 4 && baked ? { tokens, baked } : null;
+	});
+	ok('import.meta.og.code/.md run the real macro pass → highlighted code + baked markdown', !!macroOut, JSON.stringify(macroOut));
+	// back to a svelte preset for the crafted-hash scenario below
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'demo app')?.click());
+	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
+
 	// 12. a CRAFTED / corrupt share link is untrusted input. A file map with a non-string value would
 	//     hand CodeMirror + the compiler a non-string doc and crash the tab. The workspace must sanitize
 	//     to string→string on load: drop the bad entry, keep the good one, boot cleanly. (Uncompressed

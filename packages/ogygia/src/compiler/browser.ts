@@ -15,3 +15,6 @@ export { set_host, type CompilerHost } from './host.js';
 // The same dedent the `import.meta.og.code` macro uses — pure, browser-safe. The Observatory uses it so
 // preset sources can sit naturally-indented in the source file (the common indent is stripped at load).
 export { dedent } from './macros/dedent.js';
+// The browser-safe module-macro pass (`import.meta.og.wire` + `.code`/`.md`) — the same passes a real
+// build runs, so the REPL rewrites macros exactly as the compiler does (minus the node-only `bake`).
+export { run_browser_macros } from './macros/browser.js';
