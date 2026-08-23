@@ -41,25 +41,24 @@ eq('$libfoo is NOT the alias', resolve_file('$libfoo/Counter.svelte', demo), 'sr
 	eq('relative import of a moved file resolves by name', resolve_file('../lib/Counter.svelte', moved), 'Counter.svelte');
 }
 
-// ── duplicate basename: disambiguate by trailing-path overlap, NOT arbitrary key order ──
+// ── the alias is a DIRECT mapping, not a fuzzy search: it never wanders outside src/lib ──
 {
 	const dup = {
 		'src/other/Button.svelte': 'OTHER',
 		'src/lib/ui/Button.svelte': 'LIB',
 		'src/lib/Button.svelte': 'LIBROOT'
 	};
-	eq('$lib/ui/Button prefers the src/lib/ui match (exact)', resolve_file('$lib/ui/Button.svelte', dup), 'src/lib/ui/Button.svelte');
-	// no exact match for this one → fall back, prefer the longest trailing overlap (ui/Button)
-	const partial = {
+	eq('$lib/ui/Button → the exact src/lib/ui path (not another Button)', resolve_file('$lib/ui/Button.svelte', dup), 'src/lib/ui/Button.svelte');
+	// The exact alias path is GONE here. It must NOT invent src/components/ui/Button just because that
+	// shares the ui/Button tail — that would violate the convention. It degrades to a by-name pick.
+	const noExact = {
 		'src/other/Button.svelte': 'OTHER',
 		'src/components/ui/Button.svelte': 'UI'
 	};
-	eq('ambiguous basename picks the best trailing-path overlap', resolve_file('$lib/ui/Button.svelte', partial), 'src/components/ui/Button.svelte');
-	// pure basename tie (no path hint beyond the name) → deterministic: shortest path then lexical
+	eq('missing exact alias path degrades to a deterministic by-name pick (shortest)', resolve_file('$lib/ui/Button.svelte', noExact), 'src/other/Button.svelte');
+	// pure basename tie → deterministic: shortest path, then lexical (not Object.keys order)
 	const tie = { 'b/X.svelte': 'x', 'a/X.svelte': 'x', 'aa/X.svelte': 'x' };
-	const got = resolve_file('$lib/X.svelte', tie);
-	eq('a bare-name tie resolves deterministically (shortest, then lexical)', got, 'a/X.svelte');
-	// same call twice is stable
+	eq('a bare-name tie resolves deterministically (shortest, then lexical)', resolve_file('$lib/X.svelte', tie), 'a/X.svelte');
 	ok('duplicate resolution is stable across calls', resolve_file('$lib/X.svelte', tie) === resolve_file('$lib/X.svelte', tie));
 }
 
