@@ -360,7 +360,14 @@ function build_island_info(files: Record<string, string>): IslandInfo {
 
 /** Render ONE page (entry) to real-island HTML — used for the initial render AND for a nav target. */
 function render_page(files: Record<string, string>, entry: string): Analysis['realDom'] {
-	return real_island_render(files, entry, build_island_info(files));
+	// Must NEVER throw: this runs synchronously inside the worker's postMessage reply, so a throw here
+	// posts no `page` message — and the main thread's pageWaiters promise (a pending navigation) would
+	// hang forever and leak. A hostile/malformed file that trips the compiler just yields no render.
+	try {
+		return real_island_render(files, entry, build_island_info(files));
+	} catch {
+		return undefined;
+	}
 }
 
 /** Render the ENTRY component to SSR HTML, resolving `./X.svelte` imports across the file MAP (they
