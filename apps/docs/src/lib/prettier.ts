@@ -4,6 +4,23 @@
 // client-side path.
 type PrettierBundle = { format: (src: string, opts: Record<string, unknown>) => Promise<string>; plugins: unknown[] };
 
+// prettier/standalone (prebundled for the browser) initialises a config-file loader with
+// `createRequire(import.meta.url)`. The dep optimizer (Rolldown) resolves `node:module` to a browser-
+// external stub whose `createRequire` is undefined, so that fire-and-forget init rejects with
+// "createRequire is not a function". It's BENIGN — the Observatory always formats with EXPLICIT plugins,
+// never touching config resolution — and it can't be shimmed at the optimizer (Rolldown ignores optimize-
+// pass plugins AND `resolve.alias` for `node:` builtins; verified). Installed once when this module loads
+// (before prettier is ever imported), it swallows exactly that one rejection; everything else propagates.
+if (typeof window !== 'undefined') {
+	window.addEventListener('unhandledrejection', (e) => {
+		const reason = (e as PromiseRejectionEvent).reason;
+		const msg = (reason && (reason.message ?? String(reason))) || '';
+		// The thrown expression is `(0, x.createRequire)(…)`, so the message reads
+		// "…createRequire) is not a function" — match both tokens rather than an exact phrase.
+		if (msg.includes('createRequire') && msg.includes('is not a function')) e.preventDefault();
+	});
+}
+
 let load: Promise<PrettierBundle> | null = null;
 
 export function warmPrettier(): Promise<PrettierBundle> {

@@ -80,7 +80,9 @@ export default defineConfig({
 			'@neodrag/svelte/sortable',
 			'@neodrag/svelte/drop',
 			// Prettier (the Observatory's Format button) is dynamic-imported on hover → a lazy chunk. Pre-
-			// bundle it so dev doesn't re-optimize+reload on first hover; the runtime fetch stays lazy.
+			// bundle it so dev doesn't re-optimize+reload on first hover; the runtime fetch stays lazy. It
+			// MUST be prebundled (not excluded): prettier ships CJS modules, and only the optimizer's
+			// CJS→ESM interop makes them loadable (excluding it → `exports is not defined`).
 			'prettier/standalone',
 			'prettier-plugin-svelte',
 			'prettier/plugins/estree',
@@ -96,6 +98,12 @@ export default defineConfig({
 			// enter this graph — which is what used to make pre-bundling double-declare `__vite__injectQuery`.)
 			'ogygia/internal/compiler-browser-full'
 		]
+		// NOTE: prettier's prebundle calls `createRequire(import.meta.url)` at init, and the optimizer
+		// (Rolldown) resolves `node:module` to a browser-external stub whose createRequire is undefined,
+		// so that fire-and-forget init rejects. It's benign (prettier formats with explicit plugins, never
+		// touching config resolution) and CANNOT be shimmed here — Rolldown ignores optimize-pass plugins
+		// and `resolve.alias` for `node:` builtins. The one rejection is swallowed at its source instead;
+		// see src/lib/prettier.ts.
 	},
 	// PROFILER_SOURCEMAPS=1 pnpm build → server chunks get .map files, so the SSR profiler
 	// (ogygia/profiler) maps bundled frames back to source files and recovers original
