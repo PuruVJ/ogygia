@@ -13,6 +13,7 @@
 	import { warmPrettier, formatCode } from './prettier';
 	import { parse as devalue_parse } from 'devalue';
 	import { format_console_args } from './repl/console-format';
+	import { encode_hash, decode_hash } from './repl/hash';
 	import ReplPassthrough from './repl/ReplPassthrough.svelte';
 	import './observatory-canvas.css'; // gentle, overridable native-element defaults (.og-canvas), shared with the iframe
 	import type { Analysis } from './observatory.worker';
@@ -495,83 +496,10 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		}
 	};
 
-	// Share via URL (Rung 6): the whole file MAP round-trips through the URL HASH — which browsers never
-	// send to a server, so a shared REPL (or one an agent hands the user) stays client-only. Encoded as
-	// `#code=<base64url(gzip(json))>` via the built-in CompressionStream (Chrome 80 / FF 113 / Safari
-	// 16.4). `#files=<uriComponent(json)>` (uncompressed) is still READ for old links + as the fallback
-	// when CompressionStream is missing. The gzip format matches Node's zlib, so `ogygia mcp`'s
-	// ogygia_observatory tool mints the same link.
-	const b64url_encode = (bytes: Uint8Array): string => {
-		let bin = '';
-		for (const b of bytes) bin += String.fromCharCode(b);
-		return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-	};
-	const b64url_decode = (b64: string): Uint8Array => {
-		const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
-		const bytes = new Uint8Array(bin.length);
-		for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-		return bytes;
-	};
-	// The WHOLE workspace — files + UI state — is ONE opaque string after the hash: `#<base64url(gzip(json))>`.
-	// No visible code=/f=/tab= params. The JSON is `{ f: files, a: active, t: tab, m: mode, c: cursor }`
-	// (short keys). gunzip is auto-detected by the gzip magic bytes, so a CompressionStream-less browser
-	// still round-trips (plain base64 of the utf8 JSON). Same gzip format as `ogygia mcp`'s link tool.
-	type Workspace = { files: FileMap; active?: string; tab?: string; mode?: string; cursor?: number };
-	// A share link is untrusted input. Keep ONLY real `string → string` entries (a crafted/corrupt link
-	// could carry `{ "App.svelte": 42 }` or nested objects, which would hand CodeMirror a non-string doc
-	// and the compiler a non-string source — both throw). Also cap count + total size so a giant map
-	// can't wedge the tab. Anything dropped just falls back to the demo.
-	const MAX_HASH_FILES = 400;
-	const MAX_HASH_BYTES = 4_000_000;
-	function sanitize_files(map: unknown): FileMap {
-		const out: FileMap = {};
-		if (!map || typeof map !== 'object') return out;
-		let n = 0;
-		let bytes = 0;
-		for (const [k, v] of Object.entries(map as Record<string, unknown>)) {
-			if (typeof k !== 'string' || !k.trim() || typeof v !== 'string') continue;
-			bytes += k.length + v.length;
-			if (++n > MAX_HASH_FILES || bytes > MAX_HASH_BYTES) break;
-			out[k] = v;
-		}
-		return out;
-	}
-	async function encode_hash(w: Workspace): Promise<string> {
-		const bytes = new TextEncoder().encode(JSON.stringify({ f: w.files, a: w.active, t: w.tab, m: w.mode, c: w.cursor }));
-		if (typeof CompressionStream === 'undefined') return '#' + b64url_encode(bytes);
-		const gz = new Uint8Array(await new Response(new Blob([bytes as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
-		return '#' + b64url_encode(gz);
-	}
-	async function decode_hash(hash: string): Promise<Workspace | null> {
-		const s = hash.replace(/^#/, '');
-		if (!s) return null;
-		try {
-			// legacy `#code=`/`#files=` links (files-only)
-			if (s.startsWith('code=') || s.startsWith('files=')) {
-				const map = s.startsWith('code=')
-					? JSON.parse(await new Response(new Blob([b64url_decode(s.slice(5)) as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'))).text())
-					: JSON.parse(decodeURIComponent(s.slice(6)));
-				const files = sanitize_files(map);
-				return Object.keys(files).length ? { files } : null;
-			}
-			const raw = b64url_decode(s);
-			const json =
-				raw[0] === 0x1f && raw[1] === 0x8b && typeof DecompressionStream !== 'undefined'
-					? await new Response(new Blob([raw as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
-					: new TextDecoder().decode(raw);
-			const obj = JSON.parse(json);
-			if (!obj || typeof obj !== 'object') return null;
-			// New shape carries UI state under `.f`; the very old shape was a bare file map.
-			const files = sanitize_files(obj.f && typeof obj.f === 'object' ? obj.f : obj);
-			if (!Object.keys(files).length) return null;
-			return obj.f && typeof obj.f === 'object'
-				? { files, active: obj.a, tab: obj.t, mode: obj.m, cursor: obj.c }
-				: { files };
-		} catch {
-			/* malformed — caller falls back to the demo */
-		}
-		return null;
-	}
+	// Share via URL (Rung 6): the whole workspace round-trips through the URL HASH — which browsers never
+	// send to a server, so a shared REPL (or one an agent hands the user) stays client-only. The codec
+	// (base64url(gzip(json)), legacy-format reads, and the untrusted-input sanitizer) lives in the pure,
+	// unit-tested ./repl/hash module — see hash.test.mjs.
 
 	let files = $state<FileMap>(structuredClone(PRESETS['demo app']));
 	let active = $state<string>('src/routes/+page.svelte');
