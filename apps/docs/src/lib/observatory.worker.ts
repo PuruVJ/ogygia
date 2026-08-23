@@ -19,6 +19,7 @@ import { sveltePlugin } from './repl/svelte-plugin.ts';
 import { markdownPlugin, md_to_svelte, md_to_svelte_islands, MD_MODULE, configure_content } from './repl/markdown-plugin.ts';
 import { parse_config_markdown } from './repl/repl-config.ts';
 import { make_browser_host } from './repl/browser-host.ts';
+import { resolve_file } from './repl/resolve-file.ts';
 
 // Install the browser compiler HOST once, synchronously, before any transform/hash runs: region ids
 // (md5) + content region/fence keys (sha256) now hash through a vendored, node:crypto-verified impl —
@@ -312,21 +313,6 @@ function client_bundle(files: Record<string, string>, entry: string): Analysis['
 	} catch (e) {
 		return { entry, modules: {}, error: e instanceof Error ? e.message : String(e) };
 	}
-}
-
-/** Resolve an import specifier to a key in the file map. Exact first (`./Counter.svelte` →
- *  `Counter.svelte`), then match any key by basename — so a folder-keyed file resolves through an
- *  alias or a different relative path (`$lib/Counter.svelte` / `../lib/Counter.svelte` →
- *  `src/lib/Counter.svelte`). Basename-tolerant on purpose: MCP-collected codebases nest in folders,
- *  and an approximate link that renders beats a hard miss. */
-function resolve_file(spec: string, files: Record<string, string>): string | null {
-	const clean = spec.split('?')[0];
-	const bare = clean.replace(/^\.\//, '').replace(/^\//, '');
-	if (files[bare] != null) return bare;
-	const base = clean.split('/').pop();
-	if (!base) return null;
-	if (files[base] != null) return base;
-	return Object.keys(files).find((k) => k.split('/').pop() === base) ?? null;
 }
 
 /** Boundary-lens metadata per island file — kind/wake/bytes, so the render can mark each region. */
