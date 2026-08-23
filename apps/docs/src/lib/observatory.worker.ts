@@ -1155,13 +1155,27 @@ async function driver_render(
 		// A workspace component (the region binding + wrapper import it by its `/repl/…` absolute path).
 		const key = spec.replace(/^\/repl\//, '').replace(/^\/+/, '');
 		const file = files[key] != null ? key : resolve_file(spec, files);
-		if (file && file.endsWith('.svelte'))
+		// A labelled stub — a component the workspace doesn't have (a template that imports one it never
+		// ships), or one that won't server-compile. NEVER throw: a single missing component must degrade
+		// to a marker, not blank the whole driver preview (which then can't fall back either).
+		const stub = (): Record<string, unknown> => {
+			const name = (spec.split('/').pop() || spec).replace(/\.svelte$/, '').replace(/[^\w]/g, '');
+			return { default: ($$r: { push: (s: string) => void }) => $$r.push(`<span data-og-stub="${name}"></span>`) };
+		};
+		if (file && files[file] != null) {
 			return cached(file, () => {
-				const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as { js: { code: string } };
-				return eval_module(js.code, require);
+				try {
+					if (file.endsWith('.svelte')) {
+						const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as { js: { code: string } };
+						return eval_module(js.code, require);
+					}
+					return eval_module(files[file], require);
+				} catch {
+					return stub();
+				}
 			});
-		if (file && files[file] != null) return cached(file, () => eval_module(files[file], require));
-		return {};
+		}
+		return stub();
 	};
 	try {
 		const { js } = compile(dr.ssr, { filename: 'App.svelte', generate: 'server', dev: false }) as { js: { code: string } };
@@ -1191,18 +1205,31 @@ async function driver_preview(
 	const view = await content_svelte_view(macrod);
 	const modules: Record<string, string> = {};
 	for (const reg of rendered.regions) {
-		if (reg.role !== 'entry' || !reg.componentPath) continue;
-		const file = reg.componentPath.replace(/^\/repl\//, '').replace(/^\/+/, '');
-		const src = view[file];
-		if (src == null || !file.endsWith('.svelte')) continue;
+		if (reg.role !== 'entry') continue;
+		// Resolve the component file robustly: the `/repl/…`-stripped componentPath, else resolve_file on
+		// the path or the basename (componentPath can be null for some registry rows, and a template may
+		// key its file differently). Whatever the SSR wrapped as this island id, hydrate that component.
+		const raw = (reg.componentPath ?? '').replace(/^\/repl\//, '').replace(/^\/+/, '');
+		const file =
+			(view[raw] != null && raw) ||
+			resolve_file(reg.componentPath ?? '', view) ||
+			resolve_file(reg.component ?? '', view);
+		if (!file || view[file] == null || !file.endsWith('.svelte')) continue;
 		try {
-			const { js } = compile(src, { filename: file, generate: 'client', dev: false }) as { js: { code: string } };
+			const { js } = compile(view[file], { filename: file, generate: 'client', dev: false }) as { js: { code: string } };
 			modules[reg.id] = js.code;
 		} catch {
 			/* skip an island whose component won't client-compile */
 		}
 	}
-	return { ok: true, html: rendered.html, modules };
+	// A region whose component the workspace doesn't ship (a static demo template like "all strategies")
+	// gets no client module — strip its `entry` so the runtime leaves it as static server HTML instead of
+	// trying to fetch `__ISLAND__:<id>` as a URL (which fails, noisily). It still shows; it just won't wake.
+	const html = rendered.html.replace(
+		/\s*entry="__ISLAND__:([^"]+)"/g,
+		(m, id: string) => (modules[id] ? m : '')
+	);
+	return { ok: true, html, modules };
 }
 
 async function bundle_preview(
