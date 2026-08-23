@@ -982,6 +982,22 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	}
 	const entryFile = $derived(entry_of(files));
 
+	// The in-browser preview runs the CLIENT side only — Kit's server pipeline (server loads, remote
+	// functions, server-island data) isn't here, and can't be without shipping a fragile Kit-internals
+	// emulation. So DON'T fake it: detect server-only code and say so plainly in the preview, pointing at
+	// the compiler output (the Observatory's real value) instead of rendering something wrong or empty.
+	const preview_limits = $derived.by(() => {
+		const names = Object.keys(files);
+		const out: string[] = [];
+		if (names.some((n) => /\.server\.(ts|js)$/.test(n)))
+			out.push('Server load functions (a +page.server.ts / +layout.server.ts) run on the server — they don’t execute in the preview.');
+		if (names.some((n) => /\.remote\.(ts|js)$/.test(n)))
+			out.push('Remote functions (query / command / form) run on the server — they don’t execute in the preview.');
+		if (Object.values(files).some((s) => /from ['"]\$app\/server['"]/.test(s)))
+			out.push('$app/server is server-only — it doesn’t run in the preview.');
+		return out;
+	});
+
 	// Resizable panes (neodrag splitpane) — file tree | editor | inspector. Drag either gutter to
 	// rebalance; on mobile the CSS overrides the flex layout back to one-pane-at-a-time (data-pane).
 	// minSizes (per pane) keep a pane from collapsing to nothing.
@@ -1460,6 +1476,21 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			</div>
 			<div class="obs-tabbody">
 			<div class="tp" class:on={inspectorTab === 'preview'} data-tab="preview">
+			{#if preview_limits.length}
+				<div class="config-notes server-note" data-obs-preview-limits>
+					<div class="cn-head">this runs on the server — not in the preview</div>
+					{#each preview_limits as msg, i (i)}
+						<div class="cn-row info" data-obs-preview-limit>
+							<span class="cn-ic">↯</span>
+							<span class="cn-body"><span class="cn-msg">{msg}</span></span>
+						</div>
+					{/each}
+					<div class="cn-row info">
+						<span class="cn-ic">→</span>
+						<span class="cn-body"><span class="cn-msg">The <b>Output</b>, <b>Regions</b> and <b>Bytes</b> tabs show how it compiles — that’s the Observatory’s real diagnostic.</span></span>
+					</div>
+				</div>
+			{/if}
 			{#if analysis.configNotes && analysis.configNotes.length}
 				<div class="config-notes" data-obs-config-notes>
 					<div class="cn-head">vite.config — what the preview can apply</div>
@@ -2388,6 +2419,17 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		border-radius: 8px;
 		background: color-mix(in srgb, #f59e0b 6%, var(--obs-panel));
 		overflow: hidden;
+	}
+	/* The server-side notice reads as info (it's expected), not a config warning — tint it accent. */
+	.config-notes.server-note {
+		border-color: color-mix(in srgb, var(--obs-accent, #14b8a6) 32%, var(--obs-border));
+		background: color-mix(in srgb, var(--obs-accent, #14b8a6) 6%, var(--obs-panel));
+	}
+	.config-notes.server-note .cn-head {
+		border-bottom-color: color-mix(in srgb, var(--obs-accent, #14b8a6) 20%, var(--obs-border));
+	}
+	.config-notes.server-note .cn-row.info .cn-ic {
+		background: var(--obs-accent, #14b8a6);
 	}
 	.cn-head {
 		padding: 5px 10px;

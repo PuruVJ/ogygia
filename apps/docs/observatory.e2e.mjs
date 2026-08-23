@@ -337,6 +337,22 @@ async function main() {
 	});
 	ok('real ogygia setContext + <Provide> reach islands (read via plain getContext)', !!ctxBadges, JSON.stringify(ctxBadges));
 
+	// 11f. server-side code (a `.remote.ts`, `$app/server`, a `.server.ts` load) can't run in the
+	//      in-browser preview — the preview says so plainly and points at the compiler tabs, instead of
+	//      faking it. A crafted workspace with a `.remote.ts` + `$app/server` import must show the notice.
+	{
+		const files = { 'src/routes/+layout.ts': 'export const csr=false;', 'src/routes/+page.svelte': '<h1>srv</h1>', 'src/routes/data.remote.ts': "import { query } from '$app/server';\nexport const g = query(async () => 'hi');" };
+		const h = Buffer.from(JSON.stringify({ f: files, a: 'src/routes/+page.svelte' }), 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+		await page.evaluate((x) => { location.hash = x; }, h);
+		await page.reload({ waitUntil: 'load' }).catch(() => {});
+		await until(page, () => !!window.__OBS_SOURCE, undefined, 45000);
+		const limits = await until(page, () => {
+			const rows = [...document.querySelectorAll('[data-obs-preview-limit]')].map((e) => e.textContent || '');
+			return rows.length && rows.some((r) => /Remote functions/.test(r)) && rows.some((r) => /\$app\/server/.test(r)) ? rows.length : null;
+		});
+		ok('server-side code shows a "not in the preview" notice pointing at the compiler tabs', !!limits, String(limits));
+	}
+
 	// back to a svelte preset for the crafted-hash scenario below
 	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'demo app')?.click());
 	await until(page, () => /count is/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
