@@ -270,6 +270,24 @@ async function main() {
 	ok('preview console captures + formats logs', !!consoleRows && consoleRows.some((r) => r.includes('log|mounted { a: 1, xs: [ 1, 2 ] }')) && consoleRows.some((r) => r.includes('error|kaboom Map(1) { "k" => 1 }')), JSON.stringify(consoleRows));
 	ok('console auto-opens on error', await page.evaluate(() => !!document.querySelector('[data-obs-console].open')));
 
+	// 11c. `region: 'raw'` is a held region — server HTML, ZERO JS. The SSR must render it as an INERT
+	//      <ogygia-region> (NO wake attr; an empty `wake=""` would read as "awake" to the runtime), while a
+	//      real island keeps `wake="load"`. And the region map must label it 'held (raw)', not the raw
+	//      build kind 'hydrate'.
+	await page.evaluate(() => [...document.querySelectorAll('[data-obs-presets] button')].find((x) => x.textContent.trim() === 'raw region')?.click());
+	await until(page, () => /Held-raw region/.test(document.querySelector('[data-obs-preview]')?.textContent || ''));
+	await page.evaluate(() => { const d = [...document.querySelectorAll('details.pipe summary')].find((s) => /rendered HTML source/.test(s.textContent || '')); d?.click(); });
+	const rawSsr = await until(page, () => { const t = document.querySelector('[data-obs-html]')?.textContent || ''; return /Held-raw/.test(t) ? t : null; });
+	ok('region:raw SSR is an inert <ogygia-region> (no empty wake=""), island keeps wake="load"', !!rawSsr && !/wake=""/.test(rawSsr) && /wake="load"/.test(rawSsr), (rawSsr || '').replace(/\s+/g, ' ').slice(0, 100));
+	await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].find((x) => /Regions/.test(x.textContent || ''))?.click());
+	await until(page, () => document.querySelector('[data-obs-modules]'));
+	const rawKind = await page.evaluate(() => {
+		const map = [...document.querySelectorAll('[data-obs-map] tbody tr')].some((r) => /Badge/.test(r.textContent || '') && /held \(raw\)/.test(r.textContent || ''));
+		const mods = [...document.querySelectorAll('[data-obs-modules] summary')].some((s) => /Badge/.test(s.textContent || '') && /held \(raw\)/.test(s.textContent || '') && !/hydrate/.test(s.textContent || ''));
+		return map && mods;
+	});
+	ok('region:raw is labelled "held (raw)" in the map AND generated modules (not "hydrate")', rawKind);
+
 	// 12. a CRAFTED / corrupt share link is untrusted input. A file map with a non-string value would
 	//     hand CodeMirror + the compiler a non-string doc and crash the tab. The workspace must sanitize
 	//     to string→string on load: drop the bad entry, keep the good one, boot cleanly. (Uncompressed

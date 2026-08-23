@@ -615,13 +615,26 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		}
 	}
 
-	// The "rendered HTML source (SSR)" shows the REAL ogygia SSR shape — so strip the Observatory's own
-	// x-ray instrumentation (`<ogygia-obs-island data-obs-* …>` → the real `<ogygia-region wake="…">`
-	// shell) and svelte's SSR hydration anchors, then pretty-print it with the same prettier.
+	// The "rendered HTML source (SSR)" shows the REAL ogygia SSR shape — so rewrite the Observatory's own
+	// x-ray instrumentation (`<ogygia-obs-island data-obs-* …>`) into the real `<ogygia-region …>` shell,
+	// per KIND (not a blanket `wake="…"` — that printed a meaningless `wake=""` for a raw held region and
+	// mislabelled lakes / server holes / live regions). Then drop svelte's SSR hydration anchors.
 	function clean_ssr(html: string): string {
 		return html
-			.replace(/<ogygia-obs-island\b[^>]*\bdata-wake="([^"]*)"[^>]*>/g, '<ogygia-region wake="$1">')
-			.replace(/<ogygia-obs-island\b[^>]*>/g, '<ogygia-region>')
+			.replace(/<ogygia-obs-island\b([^>]*)>/g, (_m, attrs: string) => {
+				const kind = (attrs.match(/\bdata-kind="([^"]*)"/) || [])[1] || '';
+				const wake = (attrs.match(/\bdata-wake="([^"]*)"/) || [])[1] || '';
+				// A held-raw region ships server HTML and no schedule → a plain, inert boundary (zero JS).
+				if (kind === 'held (raw)') return '<ogygia-region>';
+				// A lake is frozen: SSR DOM kept, no client module.
+				if (kind === 'lake') return '<ogygia-region wake="none">';
+				// A server island fetches its HTML later from a signed endpoint on its schedule.
+				if (kind === 'server hole') return `<ogygia-region render="defer" when="${wake || 'load'}">`;
+				// A live region's baked HTML revalidates + morphs in place.
+				if (kind === 'live') return '<ogygia-region live>';
+				// island / preset → a hydrating shell that wakes on its schedule.
+				return `<ogygia-region wake="${wake || 'load'}">`;
+			})
 			.replace(/<\/ogygia-obs-island>/g, '</ogygia-region>')
 			.replace(/<!--\[[0-9-]*-->/g, '')
 			.replace(/<!--\]-->/g, '')

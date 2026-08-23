@@ -760,7 +760,10 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 			modules = list.map((isl) => ({
 				id: isl.id ?? '',
 				component: base0(isl.componentPath),
-				kind: isl.kind ?? '',
+				// The build kind is 'hydrate' for every emitted binding — even a held-raw region (its chunk
+				// exists only in case it's woken at the `region()` call; it ships zero JS otherwise). Show the
+				// friendly strategy label from the marks instead, so the map reads 'held (raw)' / 'lake' / etc.
+				kind: marks.islands.find((m) => base0(m.component) === base0(isl.componentPath))?.strategy.kind ?? isl.kind ?? '',
 				wrapperPath: isl.wrapperPath,
 				wrapperSource: isl.wrapperSource,
 				entryPath: isl.virtualPath,
