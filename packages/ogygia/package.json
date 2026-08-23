@@ -53,6 +53,11 @@
 			"types": "./dist/internal-register.d.ts",
 			"default": "./src/internal-register.ts"
 		},
+		"./internal/compiler-ids": {
+			"svelte": "./src/compiler/ids.ts",
+			"types": "./dist/compiler/ids.d.ts",
+			"default": "./src/compiler/ids.ts"
+		},
 		"./internal/region-core": {
 			"types": "./dist/region-core.d.ts",
 			"default": "./dist/region-core.js"
@@ -228,6 +233,11 @@
 				"types": "./dist/internal-register.d.ts",
 				"svelte": "./dist/internal-register.js",
 				"default": "./dist/internal-register.js"
+			},
+			"./internal/compiler-ids": {
+				"types": "./dist/compiler/ids.d.ts",
+				"svelte": "./dist/compiler/ids.js",
+				"default": "./dist/compiler/ids.js"
 			},
 			"./internal/region-core": {
 				"types": "./dist/region-core.d.ts",

@@ -9,19 +9,19 @@
  * and a file-map-backed host fs so `prescan()` sees the workspace. This module installs its OWN
  * host/parser seams so it's self-consistent even if the full + lean entries don't share the singleton.
  */
+import { Compiler, Program, CompileCtx, set_host, set_parser } from 'ogygia/internal/compiler-browser-full';
+// The manifest virtual-id vocabulary + the `\0` resolver, from the SOURCE-served `ids` entry (svelte
+// condition → src, never prebundled) — NOT from `compiler-browser-full`, whose prebundle drops the
+// `export { RESOLVED } from './ids.js'` re-export ("does not provide an export named 'RESOLVED'", which
+// crashes the Observatory island's hydration). Same real constants, no duplication.
 import {
-	Compiler,
-	Program,
-	CompileCtx,
-	set_host,
-	set_parser,
 	RESOLVED,
 	V_TRANSPORTABLES,
 	V_TRANSPORT,
 	V_FN_MANIFEST,
 	V_SERVER_MANIFEST,
 	V_RUNTIME_ENTRY
-} from 'ogygia/internal/compiler-browser-full';
+} from 'ogygia/internal/compiler-ids';
 import { make_repl_host } from './browser-host.ts';
 
 /** The two-dial import-attribute grammar (defaults). */
