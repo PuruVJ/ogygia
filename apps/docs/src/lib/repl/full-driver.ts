@@ -47,6 +47,109 @@ function repl_ctx(markdown_config: unknown): CompileCtx {
 	});
 }
 
+/** One row of the driver's REAL virtual-module registry — an island / wrapper / held-region artifact the
+ *  linker minted, with its true (content-hashed md5) id. Replaces the Observatory's basename-matched
+ *  placeholder ids + mark scan in the Regions view. */
+/** Basename of a (possibly query-suffixed) path — `…/Counter.svelte?x` → `Counter.svelte`. */
+function base_name(p: string | null | undefined): string {
+	if (!p) return '';
+	return p.split('?')[0].split('/').pop() || p;
+}
+
+/** Read the driver's real WIRE graph off an SSR-leg Compiler — the codecs that actually cross a boundary:
+ *  transportable classes (`static wire = import.meta.og.wire`), `import.meta.og.$` fn refs, and the runtime
+ *  feature marks the sticky entry will carry. The Wire view shows props-by-value AND this codec graph. */
+function extract_codecs(compiler: Compiler): DriverCodecs {
+	const c = compiler as unknown as {
+		program: { transportable_modules: Set<string>; runtime_marks: Record<string, unknown> };
+		dollar_hoists: Map<string, string>;
+	};
+	const rel = (p: string) => p.replace(/^\/repl\//, '').replace(/^\/+/, '');
+	// The feature marks that are actually ON (a boolean flag set, or a non-empty id list).
+	const marks: string[] = [];
+	for (const [k, v] of Object.entries(c.program.runtime_marks)) {
+		if (v === true) marks.push(k);
+		else if (Array.isArray(v) && v.length) marks.push(`${k}(${v.length})`);
+	}
+	return {
+		transportables: [...c.program.transportable_modules].map(rel).sort(),
+		fns: [...c.dollar_hoists.keys()].sort(),
+		marks: marks.sort()
+	};
+}
+
+/** Read the driver's real registry off an SSR-leg Compiler — every island/wrapper/held-region the linker
+ *  minted, with its true content-hashed id and scheduling kind. This is what the Regions view shows
+ *  instead of the basename-matched placeholder ids + `with { … }` mark scan. */
+function extract_regions(compiler: Compiler): DriverRegion[] {
+	const program = compiler.program as unknown as {
+		registry: Map<string, Record<string, unknown>>;
+		region_kinds: Map<string, 'hydrate' | 'defer' | 'lake'>;
+	};
+	const enc = new TextEncoder();
+	const rows: DriverRegion[] = [];
+	for (const [vpath, e] of program.registry) {
+		const clientSource = e.clientSource as string | undefined;
+		rows.push({
+			id: (e.id as string) ?? '',
+			role: (e.role as DriverRegion['role']) ?? 'entry',
+			component: base_name(e.componentPath as string),
+			componentPath: (e.componentPath as string) ?? null,
+			server: !!e.server,
+			portable: !!e.portable,
+			lakes: (e.lakes as string[]) ?? [],
+			kind: program.region_kinds.get(e.id as string) ?? null,
+			vpath,
+			ssrSource: e.ssrSource as string | undefined,
+			clientSource,
+			source: e.source as string | undefined,
+			clientBytes: clientSource ? enc.encode(clientSource).length : 0
+		});
+	}
+	return rows;
+}
+
+/** One row of the driver's REAL virtual-module registry — an island / wrapper / held-region artifact the
+ *  linker minted, with its true (content-hashed md5) id. Replaces the Observatory's basename-matched
+ *  placeholder ids + mark scan in the Regions view. */
+export interface DriverRegion {
+	/** The build's real content-hashed id (md5), not a placeholder FNV. */
+	id: string;
+	/** `entry` (a wake wrapper) · `wrapper` (dedup shell) · `region` (held-value binding). */
+	role: 'entry' | 'wrapper' | 'region';
+	/** Component basename, e.g. `Counter.svelte`. */
+	component: string;
+	/** Root-relative component path, or null (a synthesized region). */
+	componentPath: string | null;
+	/** A server island (`render: 'deferred'`). */
+	server: boolean;
+	/** A portable (a snippet/binding that crosses a boundary alive). */
+	portable: boolean;
+	/** Lake locals excluded from this island's client chunk. */
+	lakes: string[];
+	/** The scheduling kind the linker recorded. */
+	kind: 'hydrate' | 'defer' | 'lake' | null;
+	/** The generated virtual module path (`virtual:ogygia/island|region/<id>.js`). */
+	vpath: string;
+	/** The generated SSR + client leg sources (the "generated modules" panel). */
+	ssrSource?: string;
+	clientSource?: string;
+	source?: string;
+	/** Real byte size (UTF-8) of the generated CLIENT leg — the actual island-wiring ogygia ships for
+	 *  this module. 0 when the module has no standalone client leg (rendered inline / binding-only). */
+	clientBytes: number;
+}
+
+/** The driver's real wire/codec graph — what actually crosses a boundary, by kind. */
+export interface DriverCodecs {
+	/** Root-relative modules that define a transportable class (`static wire = import.meta.og.wire`). */
+	transportables: string[];
+	/** `import.meta.og.$` fn-ref tags (each a fn that crosses as a ref). */
+	fns: string[];
+	/** Runtime feature marks that are ON (hydrate/defer/router/live/wire/…; list marks show a count). */
+	marks: string[];
+}
+
 export interface DriverResult {
 	/** The transformed host — the SSR leg (islands wrapped, `virtual:ogygia/region/*`). */
 	ssr: string | null;
@@ -54,6 +157,10 @@ export interface DriverResult {
 	client: string | null;
 	/** The transformed host — the csr=TRUE leg (ogygia steps aside, islands stripped to plain). */
 	csrTrue: string | null;
+	/** The REAL registry the SSR leg minted — true island/region ids, roles, kinds, generated sources. */
+	regions?: DriverRegion[];
+	/** The REAL wire graph — transportable classes, fn refs, and active runtime marks. */
+	codecs?: DriverCodecs;
 	error?: string;
 	/** Full stack of a failing leg — Observatory-side diagnostic only (which module touched `window` etc.). */
 	stack?: string;
@@ -78,24 +185,32 @@ export class ReplDriver {
 		const host_id = '/repl/' + host_rel.replace(/^\/+/, '');
 		const src = files[host_rel] ?? '';
 		const emitFile = () => {};
-		const leg = async (ssr: boolean): Promise<string | null> => {
+		// A leg returns its transformed host AND its Compiler — the SSR leg's Compiler carries the real
+		// linker Program (registry / region kinds / marks) the Regions view reads.
+		const leg = async (ssr: boolean): Promise<{ code: string | null; compiler: Compiler }> => {
 			const compiler = new Compiler(new Program({ forms: true, router: true }), { prof: {} as never, P: false, outHash: new Map() });
 			compiler.configure(repl_ctx(markdown_config));
 			try {
 				const r = await compiler.transform_module(src, host_id, { ssr, emitFile });
-				return r?.code ?? src;
+				return { code: r?.code ?? src, compiler };
 			} catch (e) {
 				throw e instanceof Error ? e : new Error(String(e));
 			}
 		};
 		try {
-			const ssr = await leg(true);
-			const client = await leg(false);
+			const ssrLeg = await leg(true);
+			const client = (await leg(false)).code;
 			// csr=true: a route with `export const csr = true` makes the driver step aside (islands → plain).
 			this.#files = { ...files, 'src/routes/+layout.ts': 'export const csr = true;' };
-			const csrTrue = await leg(true);
+			const csrTrue = (await leg(true)).code;
 			this.#files = files;
-			return { ssr, client, csrTrue };
+			return {
+				ssr: ssrLeg.code,
+				client,
+				csrTrue,
+				regions: extract_regions(ssrLeg.compiler),
+				codecs: extract_codecs(ssrLeg.compiler)
+			};
 		} catch (e) {
 			return { ssr: null, client: null, csrTrue: null, error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined };
 		}

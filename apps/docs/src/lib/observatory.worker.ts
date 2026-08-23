@@ -22,7 +22,7 @@ import { parse_config_markdown, parse_config, type ConfigNote } from './repl/rep
 import { make_browser_host } from './repl/browser-host.ts';
 import { resolve_file } from './repl/resolve-file.ts';
 import { make_ogygia_server_module, make_ogygia_internal_module } from './repl/og-server.ts';
-import type { ReplDriver } from './repl/full-driver.ts';
+import type { ReplDriver, DriverRegion, DriverCodecs } from './repl/full-driver.ts';
 
 // The FULL ogygia compiler driver (complete macros + transportable manifests + csr legs). Loaded
 // lazily inside the `drivetest` handler — a static import would drag the whole driver graph onto the
@@ -101,6 +101,13 @@ export interface Analysis {
 	 *  — the complete pipeline (every macro incl. `$`/`store` + the transportable-registration manifest),
 	 *  not the lean `transformHost` (which skips those). Lets the Output view flag partial vs complete. */
 	driverComplete?: boolean;
+	/** The driver's REAL virtual-module registry (Regions view): true content-hashed island/region ids,
+	 *  roles (entry/wrapper/region), scheduling kinds, and generated SSR/client leg sources. Present only
+	 *  when the full driver ran; the map table + generated-modules panel prefer it over the lean scan. */
+	regions?: DriverRegion[];
+	/** The driver's REAL wire graph (Wire view): transportable classes, `import.meta.og.$` fn refs, and
+	 *  the active runtime feature marks. Present only when the full driver ran. */
+	codecs?: DriverCodecs;
 	/** Real island count from transformHost (md5 iids), or null. */
 	realIslands: number | null;
 	/** The REAL generated virtual modules per island (the wrapper + entry the driver serves). */
@@ -805,6 +812,8 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 	let compiledError: string | undefined;
 	let realIslands: number | null = null;
 	let modules: Analysis['modules'];
+	let driver_regions: DriverRegion[] | undefined;
+	let driver_codecs: DriverCodecs | undefined;
 	let realError: string | undefined;
 	let oxc: Analysis['oxc'];
 	try {
@@ -938,6 +947,24 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 				if (dr.client != null) realClientCode = dr.client;
 				if (dr.csrTrue != null) realCsrTrueCode = dr.csrTrue;
 				driverComplete = true;
+				// The REAL registry the SSR leg minted — powers the Regions view (roles/kinds/generated
+				// sources) and overlays the true content-hashed ids onto the friendly mark-derived island
+				// map (more complete than the lean overlay: it also carries held regions + server islands).
+				if (dr.regions) {
+					driver_regions = dr.regions;
+					const b = (p?: string) => (p ? p.split('?')[0].split('/').pop() || p : '');
+					const realById = new Map<string, string>();
+					for (const r of dr.regions)
+						if ((r.role === 'entry' || r.role === 'region') && r.component && r.id) realById.set(r.component, r.id);
+					for (const isl of marks.islands) {
+						const rid = realById.get(b(isl.component));
+						if (rid) {
+							isl.id = rid;
+							(isl as Island & { real?: boolean }).real = true;
+						}
+					}
+				}
+				if (dr.codecs) driver_codecs = dr.codecs;
 				// Re-run the LAST pipeline step (svelte → server JS) over the driver's output, so the
 				// "compiled" view matches the transform shown above instead of the lean one.
 				try {
@@ -982,6 +1009,8 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		driverComplete,
 		realIslands,
 		modules,
+		regions: driver_regions,
+		codecs: driver_codecs,
 		realError,
 		oxc,
 		// content pages resolved to svelte source above → the sync SSR/island/client legs treat them as

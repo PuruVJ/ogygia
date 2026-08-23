@@ -1751,6 +1751,19 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 							{/each}
 						</tbody>
 					</table>
+					{#if analysis.regions && analysis.regions.some((r) => r.clientBytes)}
+						{@const wiringBytes = analysis.regions.reduce((s, r) => s + r.clientBytes, 0)}
+						{@const wiringCount = analysis.regions.filter((r) => r.clientBytes).length}
+						<div class="lwire">
+							<span class="ckind">island wiring</span>
+							<span class="muted"
+								>{fmt_bytes(wiringBytes)} of driver-generated client legs across {wiringCount} module{wiringCount ===
+								1
+									? ''
+									: 's'} — the real glue ogygia emits to wake your islands (measured, on top of the component JS above)</span
+							>
+						</div>
+					{/if}
 					<div class="lfoot muted">
 						uncompressed compiled JS · both share the svelte runtime (excluded) · ogygia adds its ~8&nbsp;KB
 						island runtime, plain Kit hydrates the whole tree
@@ -1760,6 +1773,29 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			</div>
 
 			<div class="tp" class:on={inspectorTab === 'wire'} data-tab="wire">
+			{#if analysis.codecs && (analysis.codecs.transportables.length || analysis.codecs.fns.length || analysis.codecs.marks.length)}
+				<div class="cap">codecs <span class="muted">· what crosses the boundary, by kind (the driver's real wire graph)</span></div>
+				<div class="codecs" data-obs-codecs>
+					{#if analysis.codecs.transportables.length}
+						<div class="crow">
+							<span class="ckind">transportable · {analysis.codecs.transportables.length}</span>
+							{#each analysis.codecs.transportables as t}<span class="mono ctag">{t}</span>{/each}
+						</div>
+					{/if}
+					{#if analysis.codecs.fns.length}
+						<div class="crow">
+							<span class="ckind">fn ref · {analysis.codecs.fns.length}</span>
+							{#each analysis.codecs.fns as f}<span class="mono ctag">{f}</span>{/each}
+						</div>
+					{/if}
+					{#if analysis.codecs.marks.length}
+						<div class="crow">
+							<span class="ckind">runtime</span>
+							{#each analysis.codecs.marks as m}<span class="mono ctag">{m}</span>{/each}
+						</div>
+					{/if}
+				</div>
+			{/if}
 			{#if analysis.rendered?.wire && analysis.rendered.wire.length}
 				<div class="cap">
 					wire <span class="muted">· the props that cross to each island, by value (devalue)</span>
@@ -1877,7 +1913,39 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			</div>
 
 			<div class="tp" class:on={inspectorTab === 'islands'} data-tab="islands">
-			{#if analysis.modules && analysis.modules.length}
+			{#if analysis.regions && analysis.regions.length}
+				<div class="cap">generated modules <span class="muted">· the real registry the driver minted (id · role · kind)</span></div>
+				<div class="mods" data-obs-modules>
+					{#each analysis.regions as r (r.vpath)}
+						<details>
+							<summary>
+								<span class="mono">{r.component || r.role}</span>
+								<span class="mkind">{r.role}{r.kind ? ' · ' + r.kind : ''}</span>
+								{#if r.server}<span class="rbadge">server</span>{/if}
+								{#if r.portable}<span class="rbadge">portable</span>{/if}
+								{#if r.lakes.length}<span class="rbadge">{r.lakes.length} lake{r.lakes.length > 1 ? 's' : ''}</span>{/if}
+								{#if r.clientBytes}<span class="rbadge" title="real UTF-8 size of the generated client leg">{fmt_bytes(r.clientBytes)}</span>{/if}
+								<span class="muted mono">{r.id.slice(0, 12)}</span>
+							</summary>
+							<div class="mpath">{r.vpath}</div>
+							{#if r.ssrSource}
+								<div class="mpath muted">— SSR leg —</div>
+								<div class="code-out"><FormattedCode doc={r.ssrSource} lang="svelte" /></div>
+							{/if}
+							{#if r.clientSource}
+								<div class="mpath muted">— client leg —</div>
+								<div class="code-out"><FormattedCode doc={r.clientSource} lang="js" /></div>
+							{/if}
+							{#if r.source && !r.ssrSource && !r.clientSource}
+								<div class="code-out"><FormattedCode doc={r.source} lang="svelte" /></div>
+							{/if}
+							{#if !r.ssrSource && !r.clientSource && !r.source}
+								<div class="muted mpath">no standalone module (rendered inline / binding-only)</div>
+							{/if}
+						</details>
+					{/each}
+				</div>
+			{:else if analysis.modules && analysis.modules.length}
 				<div class="cap">generated modules <span class="muted">· what each island compiles to</span></div>
 				<div class="mods" data-obs-modules>
 					{#each analysis.modules as m (m.id)}
@@ -3037,6 +3105,16 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		font-size: 10px;
 		line-height: 1.5;
 	}
+	/* Driver-generated island-wiring total (Bytes tab) — the real client-leg glue ogygia emits. */
+	.lwire {
+		display: flex;
+		align-items: baseline;
+		gap: 7px;
+		margin-top: 10px;
+		padding-top: 8px;
+		border-top: 1px solid var(--border);
+		font-size: 11px;
+	}
 	.wire {
 		padding: 6px 14px 4px;
 	}
@@ -3113,6 +3191,43 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		background: rgba(20, 184, 166, 0.14);
 		color: var(--accent);
 		font-size: 10px;
+	}
+	/* Registry facet chips (server island / portable / lakes) on a generated-module row. */
+	.rbadge {
+		padding: 0 6px;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+		background: var(--bg-subtle, rgba(127, 127, 127, 0.1));
+		color: var(--text-muted, var(--muted, currentColor));
+		font-size: 10px;
+	}
+	/* Wire codec graph — one row per kind (transportable / fn ref / runtime), each with its tags. */
+	.codecs {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 8px 10px 12px;
+	}
+	.crow {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+	}
+	.ckind {
+		padding: 0 7px;
+		border-radius: 999px;
+		background: rgba(20, 184, 166, 0.14);
+		color: var(--accent);
+		font-size: 10px;
+		white-space: nowrap;
+	}
+	.ctag {
+		padding: 0 6px;
+		border-radius: 4px;
+		border: 1px solid var(--border);
+		background: var(--bg-subtle, rgba(127, 127, 127, 0.1));
+		font-size: 11px;
 	}
 	.mpath {
 		padding: 6px 10px 2px;
