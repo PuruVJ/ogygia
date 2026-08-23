@@ -3,13 +3,19 @@
  * real compiler in-browser (the Observatory). It runs `import.meta.og.wire` and `import.meta.og.code` /
  * `.md` — the same passes, over the same parser, with the same Shiki/mdsvex renderers as a real build.
  *
- * It deliberately OMITS:
- *   - `bake` — runs `fn` at build via a mini rolldown bundle + `node:url` module eval (Node-only);
- *   - `$` / `store` — their transport hoists need the fn/store manifest emit the driver owns.
- * So `run_module_macros` (which statically imports the node-only `bake` pass) stays out of the browser
+ * It runs `import.meta.og.wire`, `.$` / `.store`, and `.code` / `.md`. It deliberately OMITS only
+ * `bake` — which runs `fn` at build via a mini rolldown bundle + `node:url` module eval (Node-only) —
+ * so `run_module_macros` (which statically imports the node-only `bake` pass) stays out of the browser
  * bundle; this is the narrow, node-free slice the REPL needs. Keep the pass order in sync with pipeline.ts.
+ *
+ * The `$` / `store` passes emit a SELF-CONTAINED call (`__og_$(tag, bound, () => factory)` — the factory
+ * is inline), so a single-tree live preview runs them by providing the runtime `__og_$` / `__og_store`
+ * (see the Observatory's `ogygia/internal` module). The build's fn/store MANIFEST (the cross-island decode
+ * fallback the driver emits from the hoists) is not needed here — the preview is one tree.
  */
 import { rewrite_wire } from './wire.js';
+import { rewrite_dollar } from './dollar.js';
+import { rewrite_store } from './store.js';
 import { rewrite_code } from './code.js';
 import { render_snippet } from '../../content/markdown/snippet.js';
 import { render_markdown } from '../../content/markdown/render-md.js';
@@ -34,6 +40,27 @@ export async function run_browser_macros(
 	// codec). Pure AST rewrite — needs only the parser (already installed in the browser realm).
 	if (out.includes('import.meta.og.wire')) {
 		const rewritten = rewrite_wire(out, id, MARKUP_EXTS);
+		if (rewritten !== out) {
+			out = rewritten;
+			touched = true;
+		}
+	}
+
+	// `import.meta.og.$(fn)` → `__og_$(tag, bound, () => fn)` (a boundary-crossing fn ref). The factory
+	// rides inline in the call, so the emitted code runs on its own — the driver's fn-MANIFEST (built from
+	// the returned `hoists`, for a deferred island's decode fallback) isn't needed in a single-tree preview.
+	if (out.includes('import.meta.og.$')) {
+		const res = rewrite_dollar(out, id, id, MARKUP_EXTS);
+		if (res.code !== out) {
+			out = res.code;
+			touched = true;
+		}
+	}
+
+	// `import.meta.og.store(factory)` → `__og_store(tag, factory)` (registered at module load, products
+	// branded). Same story: self-contained, so providing the runtime `__og_store` is all the preview needs.
+	if (out.includes('import.meta.og.store')) {
+		const rewritten = rewrite_store(out, id, id, MARKUP_EXTS);
 		if (rewritten !== out) {
 			out = rewritten;
 			touched = true;
