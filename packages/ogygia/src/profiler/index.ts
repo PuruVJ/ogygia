@@ -47,6 +47,13 @@ import {
 	type RouteAgg
 } from './report.js';
 import { ogp_encode, ogp_decode, is_ogp } from './crypto.js';
+import { document } from '../document.js';
+import { region } from '../region.js';
+import Dashboard from './ui/Dashboard.svelte';
+import Report from './ui/Report.svelte';
+import Login from './ui/Login.svelte';
+import Upload from './ui/Upload.svelte';
+import Message from './ui/Message.svelte';
 
 export interface ProfilerOptions {
 	/**
@@ -667,7 +674,6 @@ class Profiler {
 			// Show the unlock page (a styled password field → session cookie) when the UI is enabled (a
 			// secret is set). With no secret the UI stays hidden (404).
 			if (this.ui_enabled && this.secret && !this.dev) {
-				const { default: Login } = await import('./ui/Login.svelte');
 				return this.#view(Login, {
 					base: this.base,
 					next: event.url.pathname + event.url.search
@@ -681,7 +687,6 @@ class Profiler {
 		const q = event.url.searchParams;
 
 		if (sub === '') {
-			const { default: Dashboard } = await import('./ui/Dashboard.svelte');
 			return this.#view(
 				Dashboard,
 				{
@@ -696,14 +701,6 @@ class Profiler {
 				},
 				{ set_cookie }
 			);
-		}
-
-		// TEMP: prove a profiler-side (node_modules) island hydrates when served via document().
-		if (sub === '/_uitest') {
-			const { document } = await import('../document.js');
-			const { region } = await import('../region.js');
-			const { default: Host } = await import('./ui/_uitest/Host.svelte');
-			return document(region(Host as never, {}), { title: 'uitest' });
 		}
 
 		// Manually clear a wedged recording flag (belt-and-suspenders with the time-based auto-heal).
@@ -827,7 +824,6 @@ class Profiler {
 					);
 				}
 			}
-			const { default: Upload } = await import('./ui/Upload.svelte');
 			// pass set_cookie so reaching /view?key=… seats the session cookie — the island's POST back
 			// carries it and stays authed (otherwise the upload fetch is rejected).
 			return this.#view(Upload, { base: this.base }, { set_cookie });
@@ -893,18 +889,8 @@ class Profiler {
 		} catch {
 			ogpB64 = undefined;
 		}
-		const { default: Report } = await import('./ui/Report.svelte');
 		return this.#view(Report, { a, meta, base: this.base, extras, ogpB64 });
 	}
-
-	/** Lazily-loaded UI render deps (svelte/server via document(), + region()). Loaded once, on the
-	 *  first UI page — kept off the recording path. */
-	#view_deps:
-		| Promise<{
-				document: (typeof import('../document.js'))['document'];
-				region: (typeof import('../region.js'))['region'];
-		  }>
-		| null = null;
 
 	/** Render a profiler view component into a complete ogygia document (islands inside hydrate). */
 	async #view(
@@ -912,10 +898,6 @@ class Profiler {
 		props: Record<string, unknown>,
 		opts: { status?: number; set_cookie?: string | null } = {}
 	): Promise<Response> {
-		this.#view_deps ??= Promise.all([import('../document.js'), import('../region.js')]).then(
-			([d, r]) => ({ document: d.document, region: r.region })
-		);
-		const { document, region } = await this.#view_deps;
 		return document(region(component as never, props), {
 			status: opts.status,
 			headers: opts.set_cookie ? { 'set-cookie': opts.set_cookie } : undefined
@@ -950,7 +932,6 @@ class Profiler {
 
 	/** A one-off message page (errors, not-found, …). */
 	async #message(title: string, msg: string, status = 200): Promise<Response> {
-		const { default: Message } = await import('./ui/Message.svelte');
 		return this.#view(Message, { title, msg, base: this.base }, { status });
 	}
 
