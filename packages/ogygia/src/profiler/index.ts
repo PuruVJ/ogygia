@@ -37,7 +37,6 @@ import {
 import type { CallerSite, NetCall, NetContext } from './net.js';
 import type { IoOp } from './async-io.js';
 import {
-	render_upload_page,
 	report_json,
 	report_dump,
 	is_dump,
@@ -680,14 +679,6 @@ class Profiler {
 
 		const sub = event.url.pathname.slice(this.base.length).replace(/\/$/, '');
 		const q = event.url.searchParams;
-		const html = (body: string, status = 200) => {
-			const headers = new Headers({
-				'content-type': 'text/html; charset=utf-8',
-				'cache-control': 'no-store'
-			});
-			if (set_cookie) headers.append('set-cookie', set_cookie);
-			return new Response(body, { status, headers });
-		};
 
 		if (sub === '') {
 			const { default: Dashboard } = await import('./ui/Dashboard.svelte');
@@ -811,10 +802,13 @@ class Profiler {
 		// a serverless-recorded profile gets viewed.
 		if (sub === '/view') {
 			if (event.request.method === 'POST') {
+				// The upload island POSTs the bytes + key and expects JSON: `{ url }` to navigate to on
+				// success, or `{ error }`. We STORE the dump and hand back its /report/<id> URL rather than
+				// render inline — the report is an islands page, so it must load normally to hydrate.
 				try {
 					const bytes = new Uint8Array(await event.request.arrayBuffer());
 					if (!is_ogp(bytes)) {
-						return this.#message('Not an .ogp', 'That file is not an ogygia .ogp profile.', 400);
+						return json_response({ error: 'That file is not an ogygia .ogp profile.' }, 400);
 					}
 					// Brotli + AES-GCM. Decrypt with the key the uploader supplies (`x-ogp-key`) so ANY .ogp
 					// opens in ANY profiler — its key can differ from this instance's secret. Left blank, we
@@ -823,18 +817,20 @@ class Profiler {
 					const ogp_key = event.request.headers.get('x-ogp-key') || this.secret;
 					const dump: unknown = await ogp_decode(bytes, ogp_key);
 					if (!is_dump(dump)) {
-						return this.#message('Not a profile', 'That file is not an ogygia profiler dump.', 400);
+						return json_response({ error: 'That file is not an ogygia profiler dump.' }, 400);
 					}
-					return this.#report_view(dump.analysis, dump.meta, dump.extras);
+					return json_response({ url: `${this.base}/report/${this.#store_uploaded(dump)}` });
 				} catch {
-					return this.#message(
-						'Could not open',
-						"That file isn't a profile, or it was made with a different key.",
+					return json_response(
+						{ error: "That file isn't a profile, or it was made with a different key." },
 						400
 					);
 				}
 			}
-			return html(render_upload_page(this.base));
+			const { default: Upload } = await import('./ui/Upload.svelte');
+			// pass set_cookie so reaching /view?key=… seats the session cookie — the island's POST back
+			// carries it and stays authed (otherwise the upload fetch is rejected).
+			return this.#view(Upload, { base: this.base }, { set_cookie });
 		}
 
 		const report_match = /^\/report\/([a-z0-9]+)(\/raw|\.json|\/json)?$/.exec(sub);
@@ -924,6 +920,32 @@ class Profiler {
 			status: opts.status,
 			headers: opts.set_cookie ? { 'set-cookie': opts.set_cookie } : undefined
 		});
+	}
+
+	/** Store an uploaded dump as a report so it renders (+ hydrates) at its own /report/<id> URL — an
+	 *  islands page can't be swapped in via document.write. No cpuprofile in a dump, so `raw` is empty
+	 *  (its /raw link just 404s; everything else works). */
+	#store_uploaded(dump: { analysis: Analysis; meta: ReportMeta; extras: ReportExtras }): string {
+		const id = Math.random().toString(36).slice(2, 10);
+		const e = dump.extras;
+		this.#reports.set(id, {
+			meta: { ...dump.meta, id },
+			analysis: dump.analysis,
+			heap: e.heap,
+			net: e.net,
+			mem: e.mem,
+			measures: e.measures ?? [],
+			gc: e.gc ?? null,
+			io: e.io ?? [],
+			call_counts: e.call_counts ?? {},
+			raw: ''
+		});
+		while (this.#reports.size > this.max_reports) {
+			const oldest = this.#reports.keys().next().value;
+			if (oldest === undefined) break;
+			this.#reports.delete(oldest);
+		}
+		return id;
 	}
 
 	/** A one-off message page (errors, not-found, …). */
