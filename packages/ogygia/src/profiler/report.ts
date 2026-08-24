@@ -188,6 +188,16 @@ input, select, button {
 }
 button { cursor: pointer; background: #22303f; }
 button:hover { background: #2b3d50; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 14px 0; }
+.btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 8px;
+	border: 1px solid #2b3340; background: #1c2530; color: #d8dee6; cursor: pointer;
+	font: inherit; font-size: 13px; text-decoration: none; transition: background .12s, border-color .12s; }
+.btn:hover { background: #26313f; border-color: #3a4757; }
+.btn.primary { background: #24507e; border-color: #356293; color: #eaf1f8; }
+.btn.primary:hover { background: #2b5f96; }
+.btn[disabled] { opacity: .6; cursor: default; }
+.btn .ic { width: 15px; height: 15px; opacity: .85; }
+.btn .sub { color: #8a94a2; font-size: 11px; }
 #flame { width: 100%; height: 460px; border: 1px solid #232a35; border-radius: 8px; background: #0c0f13; cursor: pointer; }
 #flame-tip { position: fixed; pointer-events: none; background: #1c232d; border: 1px solid #2b3340; border-radius: 6px;
 	padding: 6px 10px; font-size: 12px; display: none; max-width: 480px; z-index: 10; box-shadow: 0 4px 16px #0008; }
@@ -240,6 +250,46 @@ const fmt_bytes = (n: number): string =>
 			: n + ' B';
 
 // ---------------------------------------------------------------------------
+// import / export (.ogp = gzipped profiler dump JSON)
+
+const IC_DOWN =
+	'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"/></svg>';
+const IC_UP =
+	'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V8m0 0L7.5 12.5M12 8l4.5 4.5M4 3h16"/></svg>';
+
+/**
+ * An Import link → the `/view` page, where you pick a `.ogp` and enter the key it was exported with
+ * (ANY .ogp opens in ANY profiler). The key is a field there, not a browser prompt: the profiler is
+ * itself behind HTTP Basic Auth, and one request can carry only one `Authorization`, so it can't
+ * authenticate the profiler AND carry a different `.ogp` key at once.
+ */
+function import_button(base: string): string {
+	return `<a class="btn" href="${base}/view">${IC_UP}Import<span class="sub">.ogp</span></a>`;
+}
+
+/**
+ * An Export button whose data is EMBEDDED in the page (not a server URL) — the download works even
+ * after the server has evicted this report from memory (only the last few are kept). `ogp_b64` is the
+ * already gzipped + AES-GCM-encrypted `.ogp` bytes (base64); clicking just decodes + saves them, so no
+ * key ever touches the browser. A trace exposes server internals, so the file can only be reopened by
+ * a profiler holding the same key.
+ */
+function export_button(id: string, ogp_b64: string): string {
+	return `<button type="button" class="btn primary" id="og-export">${IC_DOWN}Export<span class="sub">.ogp · encrypted</span></button>
+<script type="application/json" id="og-ogp">${JSON.stringify(ogp_b64)}</script>
+<script>(function(){
+	var b=document.getElementById('og-export');if(!b)return;
+	b.addEventListener('click',function(){
+		var b64=JSON.parse(document.getElementById('og-ogp').textContent);
+		var bin=atob(b64),n=bin.length,arr=new Uint8Array(n);for(var k=0;k<n;k++)arr[k]=bin.charCodeAt(k);
+		var blob=new Blob([arr],{type:'application/octet-stream'});
+		var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='profile-'+${JSON.stringify(id)}+'.ogp';
+		document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href);},1500);
+	});
+})();</script>`;
+}
+
+// ---------------------------------------------------------------------------
 // dashboard
 
 export function render_dashboard(opts: {
@@ -252,7 +302,7 @@ export function render_dashboard(opts: {
 	rss_mb: number;
 	inflight: number;
 }): string {
-	const { base, recent, routes, reports, recording, rss_mb, inflight } = opts;
+	const { base, recent, routes, reports, recording, rss_mb, inflight, dev } = opts;
 
 	const report_rows = reports
 		.map(
@@ -299,16 +349,19 @@ export function render_dashboard(opts: {
 		'SSR profiler',
 		`<h1>SSR profiler <small>live since server start · ${rss_mb} MB rss · ${inflight} in flight</small></h1>
 
-${recording ? '<p class="verdict">A profile is running right now. Refresh in a moment.</p>' : ''}
+<div class="actions">${import_button(base)}<span class="sub">open an encrypted <code>.ogp</code> exported from any run</span>${dev ? '' : `<a class="btn" href="${base}/logout" style="margin-left:auto">Lock</a>`}</div>
+
+${recording ? `<p class="verdict">A profile is running right now. Refresh in a moment — or <a href="${base}/reset">reset</a> if a run got stuck.</p>` : ''}
 
 <h2>Profile a page</h2>
 <p class="hint">Enter a path on this site. It renders through your real server a few times and shows exactly where the time went — components, functions, allocations, and outbound calls.</p>
 <form class="inline" action="${base}/page" method="get">
 	<label>path <input name="p" placeholder="/some/slow/page" size="28"></label>
 	<label>renders <input name="runs" value="5" size="3"></label>
+	<label title="Recommended on serverless (Amplify/Vercel/Netlify): the report can't be kept in memory across invocations, and a huge report can crash the browser. Download the encrypted .ogp, then open it via Import."><input type="checkbox" name="format" value="ogp"> download <code>.ogp</code></label>
 	<button>Profile</button>
 </form>
-<p class="hint">Or send any request with the header <code>x-profile: &lt;secret&gt;</code> to profile exactly that request. On a serverless host add <code>?format=dump</code> to download the profile, then <a href="${base}/view">open it here</a>.</p>
+<p class="hint">On a <b>serverless</b> host, tick <b>download .ogp</b> — the profile streams back as an encrypted file (the report can't be kept in memory, and a full report can be too heavy for the browser), then <a href="${base}/view">open it here</a>. Or profile one live request with the <code>x-profile: &lt;secret&gt;</code> header.</p>
 
 ${reports.length ? `<h2>Reports</h2><table><tr><th>report</th><th>when</th><th class="num">window</th><th class="num">requests</th></tr>${report_rows}</table>` : ''}
 
@@ -856,16 +909,17 @@ export function render_upload_page(base: string): string {
 	return page(
 		'Open a saved profile',
 		`<h1>Open a saved profile</h1>
-<p class="hint">Recorded on a serverless host (Amplify, Vercel, Netlify) where the report can't be kept in memory? Download the profile there, then drop the file here to see the full interactive report. The file is read and rendered by this profiler instance.</p>
-<p><input type="file" id="f" accept=".json,application/json"></p>
+<p class="hint">Recorded on a serverless host (Amplify, Vercel, Netlify) where the report can't be kept in memory? Export the <code>.ogp</code> there, then open it here — it's decrypted and rendered by this profiler. ANY <code>.ogp</code> opens in ANY profiler: enter the key it was exported with (leave blank to use this profiler's own key).</p>
+<p><label>key <input type="password" id="k" placeholder="the .ogp's export key — blank = this profiler's" size="44"></label></p>
+<p><input type="file" id="f" accept=".ogp,application/octet-stream"></p>
 <p class="hint"><a href="${base}">← dashboard</a></p>
 <script>
-var inp = document.getElementById('f');
+var inp = document.getElementById('f'), kin = document.getElementById('k');
 inp.addEventListener('change', async function () {
   var f = inp.files[0]; if (!f) return;
-  var text = await f.text();
-  var res = await fetch(location.pathname + location.search, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: text
+  var buf = await f.arrayBuffer();
+  var res = await fetch(location.pathname, {
+    method: 'POST', headers: { 'content-type': 'application/octet-stream', 'x-ogp-key': kin.value }, body: buf
   });
   var html = await res.text();
   document.open(); document.write(html); document.close();
@@ -939,7 +993,8 @@ export function render_report(
 	a: Analysis,
 	meta: ReportMeta,
 	base: string,
-	extras: ReportExtras
+	extras: ReportExtras,
+	ogp_b64?: string
 ): string {
 	const busy_pct = a.duration_ms > 0 ? (a.busy_ms / a.duration_ms) * 100 : 0;
 	const net = extras.net.filter((c) => c.ms >= 0);
@@ -1133,7 +1188,8 @@ ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 	return page(
 		`SSR profile — ${label_of(meta)}`,
 		`<h1>SSR profile <small>${esc(label_of(meta))} · ${new Date(meta.created).toLocaleString()} · node ${esc(meta.node)}${a.sourcemapped ? ' · sourcemapped' : ''}</small></h1>
-<p class="hint"><a href="${base}">← dashboard</a> · <a href="${base}/report/${meta.id}/dump" download>download</a> (re-open later via <a href="${base}/view">upload</a>) · <a href="${base}/report/${meta.id}.json">JSON</a> (agents) · <a href="${base}/report/${meta.id}/raw">.cpuprofile</a> (DevTools / speedscope)</p>
+<div class="actions">${ogp_b64 ? export_button(meta.id, ogp_b64) : ''}${import_button(base)}</div>
+<p class="hint"><a href="${base}">← dashboard</a> · <a href="${base}/report/${meta.id}.json">JSON</a> (agents) · <a href="${base}/report/${meta.id}/raw">.cpuprofile</a> (DevTools / speedscope) · Export is an encrypted <code>.ogp</code> — re-open it with Import (needs this profiler's key)</p>
 
 <div class="summary">${stats.join('')}</div>
 
@@ -1420,5 +1476,38 @@ export function render_message(title: string, msg: string, base: string): string
 	return page(
 		title,
 		`<h1>${esc(title)}</h1><p>${esc(msg)}</p><p><a href="${base}">← dashboard</a></p>`
+	);
+}
+
+/**
+ * The unlock page — a single password field that POSTs the key to `${base}/login`, which validates it
+ * and sets a session cookie. Replaces HTTP Basic Auth: one styled field, a real session (survives
+ * navigation, cleared by Logout), and the `Authorization` header stays free. `next` is where to return
+ * after unlocking. Renders 200 so it's a normal page, not a browser auth dialog.
+ */
+export function render_login(base: string, next: string): string {
+	return page(
+		'ogygia profiler — locked',
+		`<h1>ogygia profiler <small>locked</small></h1>
+<p class="hint">Enter the profiler key to continue. It's kept for this browser session.</p>
+<p class="verdict" id="og-login-err" style="display:none">Wrong key.</p>
+<form class="inline" id="og-login">
+	<label>key <input type="password" id="og-login-key" autofocus size="34" autocomplete="current-password"></label>
+	<button class="btn primary">Unlock</button>
+</form>
+<script>(function(){
+	var f=document.getElementById('og-login'),k=document.getElementById('og-login-key'),e=document.getElementById('og-login-err');
+	var next=${JSON.stringify(next)};
+	// fetch + JSON (not a form POST) so Kit's CSRF — which only guards form content-types and would
+	// otherwise need the app's ORIGIN set — never applies. The session cookie rides the response.
+	f.addEventListener('submit',async function(ev){
+		ev.preventDefault();e.style.display='none';
+		try{
+			var r=await fetch(${JSON.stringify(base + '/login')},{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({key:k.value,next:next})});
+			if(r.ok){var d=await r.json();location.href=d.next||${JSON.stringify(base)};return;}
+		}catch(x){}
+		e.style.display='';k.value='';k.focus();
+	});
+})();</script>`
 	);
 }

@@ -38,6 +38,7 @@ import type { CallerSite, NetCall, NetContext } from './net.js';
 import type { IoOp } from './async-io.js';
 import {
 	render_dashboard,
+	render_login,
 	render_message,
 	render_report,
 	render_upload_page,
@@ -50,6 +51,7 @@ import {
 	type RequestEntry,
 	type RouteAgg
 } from './report.js';
+import { ogp_encode, ogp_decode, is_ogp } from './crypto.js';
 
 export interface ProfilerOptions {
 	/**
@@ -152,6 +154,10 @@ interface WindowCapture {
 const MAX_NET_PER_REQUEST = 100;
 const MAX_WINDOW_NET = 2000;
 const MAX_BACKGROUND_NET = 300;
+// A recording that started longer ago than this is treated as abandoned (a frozen/timed-out
+// serverless invocation whose cleanup never ran), so the profiler unwedges itself. Longer than any
+// real profile: a serverless request is capped well under this anyway.
+const RECORDING_MAX_MS = 120_000;
 
 type HashFn = (algo: string) => { update(s: string): { digest(enc: 'hex'): string } };
 
@@ -179,7 +185,11 @@ class Profiler {
 	readonly #background_net: NetCall[] = [];
 	#window_net: NetCall[] | null = null;
 	#inflight = 0;
-	#recording = false;
+	// Epoch-ms a recording began, or 0. A TIMESTAMP (not a boolean) so a stuck run self-heals: on a
+	// serverless host (Amplify/Lambda) the process can freeze or time out mid-profile and the `finally`
+	// that clears it never runs — leaving a boolean flag `true` forever, which is exactly the "previous
+	// session is still running, can't profile again" bug. Past RECORDING_MAX_MS a stale run is ignored.
+	#recording_since = 0;
 	#als: import('node:async_hooks').AsyncLocalStorage<Ctx> | null = null;
 	#init_done: Promise<void> | null = null;
 
@@ -235,6 +245,12 @@ class Profiler {
 	}
 
 	// ---- recording --------------------------------------------------------
+	/** A recording is "active" only if one started recently — a run abandoned by a frozen/killed
+	 *  serverless invocation ages out after the cap instead of wedging the profiler forever. */
+	#recording_active(): boolean {
+		return this.#recording_since > 0 && Date.now() - this.#recording_since < RECORDING_MAX_MS;
+	}
+
 	async #capture_window(interval_us: number, work: () => Promise<void>): Promise<WindowCapture> {
 		const { Session } = await import('node:inspector/promises');
 		const perf_hooks = await import('node:perf_hooks');
@@ -548,23 +564,56 @@ class Profiler {
 			.digest('hex');
 	}
 
+	/** Cookie header that starts / clears a profiler session (Set-Cookie value). */
+	#session_cookie(token: string, event: RequestEvent): string {
+		const secure = event.url.protocol === 'https:' ? '; Secure' : '';
+		const clear = token === '' ? '; Max-Age=0' : '';
+		return `og_profiler=${token}; Path=${this.base}; HttpOnly; SameSite=Strict${secure}${clear}`;
+	}
+
+	/**
+	 * Validate + set up a session. The unlock page POSTs the key here; a match sets the session cookie
+	 * and returns to `next`. No HTTP Basic dialog — a plain form + cookie, so the `Authorization` header
+	 * is never spent on profiler auth (it stays free, and there's a real Logout).
+	 */
+	async #login(event: RequestEvent): Promise<Response> {
+		const body = (await event.request.json().catch(() => null)) as {
+			key?: unknown;
+			next?: unknown;
+		} | null;
+		const key = String(body?.key ?? '');
+		const raw_next = String(body?.next ?? this.base);
+		// no open redirect — only back into the profiler
+		const next = raw_next.startsWith(this.base) ? raw_next : this.base;
+		const json = (obj: unknown, status: number, cookie?: string) => {
+			const headers = new Headers({
+				'content-type': 'application/json',
+				'cache-control': 'no-store'
+			});
+			if (cookie) headers.append('set-cookie', cookie);
+			return new Response(JSON.stringify(obj), { status, headers });
+		};
+		if (!(await this.#key_matches(key))) return json({ ok: false }, 401);
+		const { createHash } = await import('node:crypto');
+		return json({ ok: true, next }, 200, this.#session_cookie(this.#cookie_token(createHash), event));
+	}
+
 	/** false = denied; true = authed; string = authed AND set this cookie */
 	async #authed(event: RequestEvent): Promise<boolean | string> {
 		if (!this.ui_enabled) return false;
 		if (this.dev) return true;
+		// The session cookie (set by the unlock page) is the normal path; `?key=` / `x-profiler-key`
+		// stay for programmatic access (a CI script hitting `?format=ogp`).
 		const provided =
+			event.cookies.get('og_profiler') ??
 			event.url.searchParams.get('key') ??
-			event.request.headers.get('x-profiler-key') ??
-			event.cookies.get('og_profiler');
+			event.request.headers.get('x-profiler-key');
 		if (!(await this.#key_matches(provided))) return false;
-		// remember the auth so links inside reports work without ?key= — set
-		// on our own Response (Kit only serializes event.cookies for resolved
-		// pages, not for responses a handle returns directly)
+		// a `?key=` link also starts the session (set the cookie so the following links drop it)
 		if (event.url.searchParams.get('key')) {
 			try {
 				const { createHash } = await import('node:crypto');
-				const secure = event.url.protocol === 'https:' ? '; Secure' : '';
-				return `og_profiler=${this.#cookie_token(createHash)}; Path=${this.base}; HttpOnly; SameSite=Strict${secure}`;
+				return this.#session_cookie(this.#cookie_token(createHash), event);
 			} catch {
 				return true;
 			}
@@ -574,8 +623,27 @@ class Profiler {
 
 	// ---- profiler UI routes ----------------------------------------------
 	async #ui(event: RequestEvent): Promise<Response> {
+		const pre = event.url.pathname.slice(this.base.length).replace(/\/$/, '');
+		// Login / logout run WITHOUT being authed — they establish or clear the session.
+		if (pre === '/login' && event.request.method === 'POST') return this.#login(event);
+		if (pre === '/logout') {
+			const headers = new Headers({ location: this.base, 'cache-control': 'no-store' });
+			headers.append('set-cookie', this.#session_cookie('', event));
+			return new Response(null, { status: 303, headers });
+		}
+
 		const auth = await this.#authed(event);
-		if (!auth) return new Response('Not found', { status: 404 });
+		if (!auth) {
+			// Show the unlock page (a styled password field → session cookie) when the UI is enabled (a
+			// secret is set). With no secret the UI stays hidden (404).
+			if (this.ui_enabled && this.secret && !this.dev) {
+				return new Response(render_login(this.base, event.url.pathname + event.url.search), {
+					status: 200,
+					headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
+				});
+			}
+			return new Response('Not found', { status: 404 });
+		}
 		const set_cookie = typeof auth === 'string' ? auth : null;
 
 		const sub = event.url.pathname.slice(this.base.length).replace(/\/$/, '');
@@ -596,7 +664,7 @@ class Profiler {
 					recent: this.#ring,
 					routes: route_aggregates(this.#ring),
 					reports: [...this.#reports.values()].map((r) => r.meta).reverse(),
-					recording: this.#recording,
+					recording: this.#recording_active(),
 					dev: this.dev,
 					rss_mb: Math.round(process.memoryUsage().rss / 1048576),
 					inflight: this.#inflight
@@ -604,14 +672,26 @@ class Profiler {
 			);
 		}
 
+		// Manually clear a wedged recording flag (belt-and-suspenders with the time-based auto-heal).
+		if (sub === '/reset') {
+			this.#recording_since = 0;
+			const headers = new Headers({ location: this.base, 'cache-control': 'no-store' });
+			if (set_cookie) headers.append('set-cookie', set_cookie);
+			return new Response(null, { status: 303, headers });
+		}
+
 		if (sub === '/page') {
-			if (this.#recording) {
+			if (this.#recording_active()) {
 				return html(
-					render_message('Busy', 'A profile is already running. Try again in a moment.', this.base),
+					render_message(
+						'Busy',
+						'A profile is already running. It clears itself within a couple of minutes if a run was abandoned — or hit Reset on the dashboard.',
+						this.base
+					),
 					409
 				);
 			}
-			this.#recording = true;
+			this.#recording_since = Date.now();
 			try {
 				const path = q.get('p') ?? '';
 				if (!path.startsWith('/') || path.startsWith('//')) {
@@ -650,11 +730,13 @@ class Profiler {
 				});
 				const id = await this.#finish_report(cap, { trigger: 'page', page: path, runs: run_ms });
 				const s = this.#reports.get(id)!;
-				// serverless (Amplify/Vercel/Netlify) can't keep the report in memory across
-				// invocations, so `?format=dump` returns the whole thing as a download the user
-				// re-opens later at `<base>/view`. `?format=json` is the curated agent view.
-				if (q.get('format') === 'dump') {
-					return this.#dump_response(id, s);
+				// serverless (Amplify/Vercel/Netlify) can't keep the report in memory across invocations
+				// AND a fresh instance may serve the follow-up render — so `?format=ogp` streams the whole
+				// profile back NOW as an encrypted `.ogp` the user re-opens at `<base>/view`. This is also
+				// the reliable path when the full report is too heavy for the browser. `?format=json` is
+				// the curated agent view.
+				if (q.get('format') === 'ogp') {
+					return this.#ogp_response(id, s);
 				}
 				const wants_json =
 					q.get('format') === 'json' ||
@@ -680,7 +762,7 @@ class Profiler {
 					500
 				);
 			} finally {
-				this.#recording = false;
+				this.#recording_since = 0;
 			}
 		}
 
@@ -690,7 +772,22 @@ class Profiler {
 		if (sub === '/view') {
 			if (event.request.method === 'POST') {
 				try {
-					const dump: unknown = JSON.parse(await event.request.text());
+					const bytes = new Uint8Array(await event.request.arrayBuffer());
+					if (!is_ogp(bytes)) {
+						return html(
+							render_message(
+								'Not an .ogp',
+								'That file is not an ogygia .ogp profile.',
+								this.base
+							),
+							400
+						);
+					}
+					// Brotli + AES-GCM. Decrypt with the key the uploader supplies (`x-ogp-key`) so ANY .ogp
+					// opens in ANY profiler — its key can differ from this instance's secret; blank falls
+					// back to this profiler's own key. A wrong key fails the GCM tag → caught below.
+					const ogp_key = event.request.headers.get('x-ogp-key') || this.secret;
+					const dump: unknown = await ogp_decode(bytes, ogp_key);
 					if (!is_dump(dump)) {
 						return html(
 							render_message(
@@ -701,10 +798,14 @@ class Profiler {
 							400
 						);
 					}
-					return html(render_report(dump.analysis, dump.meta, this.base, dump.extras));
+					return html(await this.#report_html(dump.analysis, dump.meta, dump.extras));
 				} catch {
 					return html(
-						render_message('Bad file', 'Could not read that file as a profiler dump.', this.base),
+						render_message(
+							'Could not open',
+							"That file isn't a profile, or it was made with a different key.",
+							this.base
+						),
 						400
 					);
 				}
@@ -712,7 +813,7 @@ class Profiler {
 			return html(render_upload_page(this.base));
 		}
 
-		const report_match = /^\/report\/([a-z0-9]+)(\/raw|\.json|\/json|\/dump)?$/.exec(sub);
+		const report_match = /^\/report\/([a-z0-9]+)(\/raw|\.json|\/json)?$/.exec(sub);
 		if (report_match) {
 			const stored = this.#reports.get(report_match[1]);
 			if (!stored)
@@ -725,9 +826,6 @@ class Profiler {
 					404
 				);
 			const suffix = report_match[2];
-			if (suffix === '/dump') {
-				return this.#dump_response(stored.meta.id, stored);
-			}
 			if (suffix === '.json' || suffix === '/json') {
 				return json_response(
 					report_json(stored.analysis, stored.meta, this.base, this.#report_extras(stored))
@@ -762,21 +860,41 @@ class Profiler {
 				});
 			}
 			return html(
-				render_report(stored.analysis, stored.meta, this.base, this.#report_extras(stored))
+				await this.#report_html(stored.analysis, stored.meta, this.#report_extras(stored))
 			);
 		}
 
 		return html(render_message('Not found', 'Unknown profiler page.', this.base), 404);
 	}
 
-	#dump_response(id: string, stored: StoredReport): Response {
-		const body = JSON.stringify(
-			report_dump(stored.analysis, stored.meta, this.#report_extras(stored))
+	/**
+	 * Render a report page with its dump embedded as an encrypted `.ogp` (base64), so the Export button
+	 * downloads it with no server round-trip (the report may be evicted by then) and no key in the page.
+	 * Encoding is async (Brotli + scrypt off-thread — never blocks the event loop) and best-effort: if
+	 * Node crypto/zlib is unavailable (a stripped edge runtime), the Export button is simply omitted and
+	 * the JSON / .cpuprofile links still work.
+	 */
+	async #report_html(a: Analysis, meta: ReportMeta, extras: ReportExtras): Promise<string> {
+		let ogp_b64: string | undefined;
+		try {
+			const bytes = await ogp_encode(report_dump(a, meta, extras), this.secret);
+			ogp_b64 = Buffer.from(bytes).toString('base64');
+		} catch {
+			ogp_b64 = undefined;
+		}
+		return render_report(a, meta, this.base, extras, ogp_b64);
+	}
+
+	/** The full profile as an encrypted `.ogp` download (Brotli + AES-GCM, async — never blocks). */
+	async #ogp_response(id: string, stored: StoredReport): Promise<Response> {
+		const bytes = await ogp_encode(
+			report_dump(stored.analysis, stored.meta, this.#report_extras(stored)),
+			this.secret
 		);
-		return new Response(body, {
+		return new Response(bytes, {
 			headers: {
-				'content-type': 'application/json',
-				'content-disposition': `attachment; filename="profile-${id}.ogprof.json"`,
+				'content-type': 'application/octet-stream',
+				'content-disposition': `attachment; filename="profile-${id}.ogp"`,
 				'cache-control': 'no-store'
 			}
 		});
@@ -864,11 +982,11 @@ class Profiler {
 		const profile_header = event.request.headers.get('x-profile');
 		if (
 			profile_header &&
-			!this.#recording &&
+			!this.#recording_active() &&
 			(await this.#key_matches(profile_header)) &&
 			this.ui_enabled
 		) {
-			this.#recording = true;
+			this.#recording_since = Date.now();
 			try {
 				let res: Response | undefined;
 				const cap = await this.#capture_window(100, async () => {
@@ -886,7 +1004,7 @@ class Profiler {
 				}
 				return res!;
 			} finally {
-				this.#recording = false;
+				this.#recording_since = 0;
 			}
 		}
 
