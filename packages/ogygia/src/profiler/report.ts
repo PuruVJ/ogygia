@@ -907,15 +907,14 @@ export function render_upload_page(base: string): string {
 	return page(
 		'Open a saved profile',
 		`<h1>Open a saved profile</h1>
-<p class="hint">Recorded on a serverless host (Amplify, Vercel, Netlify) where the report can't be kept in memory? Export the <code>.ogp</code> there, then open it here — it's decrypted and rendered by this profiler. ANY <code>.ogp</code> opens in ANY profiler, but ONLY with its key: a trace exposes server internals, so you must enter the key it was exported with. This profiler's own secret is never substituted.</p>
-<p><label>key <input type="password" id="k" placeholder="the key this .ogp was exported with (required)" size="44" required></label></p>
+<p class="hint">Recorded on a serverless host (Amplify, Vercel, Netlify) where the report can't be kept in memory? Export the <code>.ogp</code> there, then open it here — it's decrypted and rendered by this profiler. ANY <code>.ogp</code> opens in ANY profiler: enter the key it was exported with. Leave it blank and this profiler tries its OWN secret — so a report this profiler made re-opens without retyping the key.</p>
+<p><label>key <input type="password" id="k" placeholder="the .ogp's export key — blank tries this profiler's own secret" size="44"></label></p>
 <p><input type="file" id="f" accept=".ogp,application/octet-stream"></p>
 <p class="hint"><a href="${base}">← dashboard</a></p>
 <script>
 var inp = document.getElementById('f'), kin = document.getElementById('k');
 inp.addEventListener('change', async function () {
   var f = inp.files[0]; if (!f) return;
-  if (!kin.value.trim()) { alert('Enter the key this .ogp was exported with.'); kin.focus(); inp.value = ''; return; }
   var buf = await f.arrayBuffer();
   var res = await fetch(location.pathname, {
     method: 'POST', headers: { 'content-type': 'application/octet-stream', 'x-ogp-key': kin.value }, body: buf

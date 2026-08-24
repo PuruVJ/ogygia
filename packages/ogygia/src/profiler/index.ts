@@ -824,22 +824,11 @@ class Profiler {
 							400
 						);
 					}
-					// Brotli + AES-GCM. Decrypt with ONLY the key the uploader supplies (`x-ogp-key`) — a .ogp
-					// exposes server internals, so it must open only when its key is entered. We deliberately
-					// do NOT fall back to this profiler's own secret: that let anyone holding the file view it
-					// without knowing the key, just by uploading it to the profiler that made it. A missing key
-					// is refused up front (no silent dev-key attempt either); a wrong key fails the GCM tag.
-					const ogp_key = (event.request.headers.get('x-ogp-key') ?? '').trim();
-					if (!ogp_key) {
-						return html(
-							render_message(
-								'Key required',
-								'This .ogp is encrypted. Enter the key it was exported with to open it.',
-								this.base
-							),
-							401
-						);
-					}
+					// Brotli + AES-GCM. Decrypt with the key the uploader supplies (`x-ogp-key`) so ANY .ogp
+					// opens in ANY profiler — its key can differ from this instance's secret. Left blank, we
+					// fall back to THIS profiler's own secret, so the reports it made re-open without retyping
+					// the key (the upload form says so). A wrong key fails the GCM tag → caught below.
+					const ogp_key = event.request.headers.get('x-ogp-key') || this.secret;
 					const dump: unknown = await ogp_decode(bytes, ogp_key);
 					if (!is_dump(dump)) {
 						return html(
