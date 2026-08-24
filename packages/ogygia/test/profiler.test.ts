@@ -11,13 +11,8 @@ import {
 import { sequential_ms, type NetCall } from '../src/profiler/net.js';
 import { profiler } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
-import {
-	render_report,
-	report_json,
-	report_dump,
-	is_dump,
-	derive_findings
-} from '../src/profiler/report.js';
+import { report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.js';
+import { budget_segments, build_treemap, waiting_rows } from '../src/profiler/ui/report-data.js';
 import type { RequestEvent } from '@sveltejs/kit';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,7 +163,7 @@ describe('analyze', () => {
 	});
 });
 
-describe('render_report visuals', () => {
+describe('report data (JSON, findings, budget, treemap, waiting)', () => {
 	const meta = {
 		id: 'abc',
 		created: 1_700_000_000_000,
@@ -194,18 +189,13 @@ describe('render_report visuals', () => {
 			timeDeltas: [500_000, 500_000]
 		};
 		const a = analyze(profile);
-		const html = render_report(a, meta, '/__profiler', { net: [], heap: null, mem: [] });
-		expect(html).toContain('Where the time went');
-		expect(html).toContain('<canvas id="tree"'); // interactive zoomable treemap
-		expect(html).toContain('id="tree-data"'); // hierarchy for client-side zoom
-		const budget = /<div class="budget">([\s\S]*?)<\/div>\s*<div class="legend"/.exec(html);
-		expect(budget).toBeTruthy();
-		// idle is the '#3a3f47' color — must appear exactly once (not double-counted)
-		const idleCells = (budget![1].match(/background:#3a3f47/g) ?? []).length;
-		expect(idleCells).toBe(1);
+		// the treemap has a hierarchy to render
+		expect(build_treemap(a)).toBeTruthy();
+		const budget = budget_segments(a);
+		// idle appears exactly once (not double-counted)
+		expect(budget.filter((s) => s.cat === 'idle')).toHaveLength(1);
 		// widths sum to ~100% (idle counted once → ~100, double → ~150)
-		const widths = [...budget![1].matchAll(/width:([\d.]+)%/g)].map((m) => Number(m[1]));
-		const sum = widths.reduce((s, w) => s + w, 0);
+		const sum = budget.reduce((s, seg) => s + seg.pct, 0);
 		expect(sum).toBeGreaterThan(95);
 		expect(sum).toBeLessThan(101);
 	});
@@ -266,11 +256,11 @@ describe('render_report visuals', () => {
 		expect(is_dump(wire)).toBe(true);
 		expect(is_dump({ meta, analysis: a })).toBe(false); // missing extras → rejected
 		expect(is_dump({ kind: 'nope', meta, analysis: a, extras })).toBe(false);
-		// the uploaded dump renders the same report as the live one
-		const live = render_report(a, meta, '/__profiler', extras);
-		const fromDump = render_report(wire.analysis, wire.meta, '/__profiler', wire.extras);
-		expect(fromDump).toBe(live);
-		expect(fromDump).toContain('Header');
+		// the uploaded dump produces the same curated report as the live one
+		const live = report_json(a, meta, '/__profiler', extras);
+		const fromDump = report_json(wire.analysis, wire.meta, '/__profiler', wire.extras);
+		expect(fromDump).toEqual(live);
+		expect(fromDump.components.map((c: { name: string }) => c.name)).toContain('Header');
 	});
 
 	it('shares one findings source between HTML and JSON', () => {
@@ -286,9 +276,12 @@ describe('render_report visuals', () => {
 		};
 		const a = analyze(profile);
 		const findings = derive_findings(a, meta, { net: [], heap: null, mem: [] });
-		const html = render_report(a, meta, '/__profiler', { net: [], heap: null, mem: [] });
-		// every finding message appears verbatim in the rendered verdict
-		for (const f of findings) expect(html).toContain(f.message);
+		const j = report_json(a, meta, '/__profiler', { net: [], heap: null, mem: [] }) as {
+			findings: { message: string }[];
+		};
+		// the JSON findings ARE derive_findings' output — one source, no drift (the UI verdict reads
+		// the same derive_findings())
+		expect(j.findings.map((f) => f.message)).toEqual(findings.map((f) => f.message));
 	});
 
 	it('sorts the components table by self desc by default (ancestors sink)', () => {
@@ -304,15 +297,15 @@ describe('render_report visuals', () => {
 			timeDeltas: [1000, 1000, 1000]
 		};
 		const a = analyze(profile);
-		const html = render_report(a, meta, '/__profiler', { net: [], heap: null, mem: [] });
-		const body = html.slice(html.indexOf('data-sortable'));
-		const first = body.indexOf('data-name="Heavy"');
-		const ancestor = body.indexOf('data-name="_page"');
-		// Heavy (self-heavy) must appear before _page (self ~0) in default order
-		expect(first).toBeGreaterThan(0);
-		expect(first).toBeLessThan(ancestor);
-		// default sort marker is on the self column
-		expect(html).toContain('data-key="self" data-dir="desc"');
+		const j = report_json(a, meta, '/__profiler', { net: [], heap: null, mem: [] }) as {
+			components: { name: string; self_ms: number }[];
+		};
+		// components are emitted self-desc (the ComponentsTable island defaults to this sort), so
+		// Heavy (self-heavy) leads and the ancestor _page (self ≈ 0) sinks below it
+		const heavy = j.components.findIndex((c) => c.name === 'Heavy');
+		const ancestor = j.components.findIndex((c) => c.name === '_page');
+		expect(heavy).toBeGreaterThanOrEqual(0);
+		expect(heavy).toBeLessThan(ancestor);
 	});
 });
 
@@ -357,19 +350,18 @@ describe('I/O wait attribution', () => {
 			samples: [1],
 			timeDeltas: [1]
 		});
-		const html = render_report(a, meta2, '/__profiler', {
-			net: [netcall('callService (data.ts:8)', 2000)],
-			heap: null,
-			mem: [],
-			io: [
+		const rows = waiting_rows(
+			[netcall('callService (data.ts:8)', 2000)],
+			[
 				{ type: 'Timeout', caller: 'queryDatabase (db.ts:4)', ms: 1500, start: 0 },
 				{ type: 'FSREQCALLBACK', caller: 'readConfig (config.ts:2)', ms: 12, start: 0 }
 			]
-		});
-		expect(html).toContain('Waiting by function');
-		expect(html).toContain('callService (data.ts:8)');
-		expect(html).toContain('queryDatabase (db.ts:4)'); // the timer wait, invisible to CPU sampling
-		expect(html).toContain('readConfig (config.ts:2)');
+		);
+		const callers = rows.map((r) => r.caller);
+		expect(callers).toContain('callService (data.ts:8)');
+		expect(callers).toContain('queryDatabase (db.ts:4)'); // the timer wait, invisible to CPU sampling
+		expect(callers).toContain('readConfig (config.ts:2)');
+		void a;
 	});
 
 	it('includes the waiting aggregate and callers in the JSON', () => {
