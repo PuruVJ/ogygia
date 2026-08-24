@@ -19,8 +19,15 @@ import { compile } from 'svelte/compiler';
 // fails in their CI. It's the guard that keeps the profiler UI portable.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ui_dir = fileURLToPath(new URL('../src/profiler/ui/', import.meta.url));
-const files = readdirSync(ui_dir).filter((f) => f.endsWith('.svelte'));
+// Every dir whose `.svelte` ships raw and gets compiled by the CONSUMER's Svelte pipeline. Add a dir
+// here when you ship components from it — the same TS-in-template / <style>-literal traps apply.
+const dirs = ['../src/profiler/ui/', '../src/devtools/'];
+const files = dirs.flatMap((d) => {
+	const abs = fileURLToPath(new URL(d, import.meta.url));
+	return readdirSync(abs)
+		.filter((f) => f.endsWith('.svelte'))
+		.map((f) => abs + f);
+});
 
 /** Strip TS from the `<script lang="ts">` body and drop the lang attr — what the consumer's
  *  preprocess does before Svelte ever sees the file. Markup is left untouched (as it is in reality). */
@@ -41,17 +48,19 @@ function to_consumer_js(source: string): string {
 	);
 }
 
-describe('profiler UI is consumer-compilable (no TS in template markup)', () => {
-	it('found the profiler UI components', () => {
+const name_of = (abs: string) => abs.slice(abs.lastIndexOf('/') + 1);
+
+describe('shipped .svelte is consumer-compilable (no TS in template markup)', () => {
+	it('found the shipped components', () => {
 		expect(files.length).toBeGreaterThan(5);
-		expect(files).toContain('Report.svelte');
-		expect(files).toContain('Shell.svelte');
+		expect(files.map(name_of)).toContain('Report.svelte');
+		expect(files.map(name_of)).toContain('ProfilerTab.svelte');
 	});
 
-	for (const f of files) {
+	for (const abs of files) {
+		const f = name_of(abs);
 		it(`${f} compiles after the consumer strips script TS`, () => {
-			const src = readFileSync(ui_dir + f, 'utf8');
-			const js = to_consumer_js(src);
+			const js = to_consumer_js(readFileSync(abs, 'utf8'));
 			// both generate targets — the consumer builds SSR (server) and hydration (client)
 			expect(() => compile(js, { filename: f, generate: 'server' })).not.toThrow();
 			expect(() => compile(js, { filename: f, generate: 'client' })).not.toThrow();
@@ -61,10 +70,10 @@ describe('profiler UI is consumer-compilable (no TS in template markup)', () => 
 	// A `<style>…</style>` literal anywhere in a <script> block gets regex-scanned as a real style
 	// element by some preprocess pipelines, which then feed its (non-CSS) contents to postcss. Keep the
 	// substring out of scripts entirely (Shell.svelte builds the tag from a variable).
-	for (const f of files) {
+	for (const abs of files) {
+		const f = name_of(abs);
 		it(`${f} has no <style> literal inside a <script> block`, () => {
-			const src = readFileSync(ui_dir + f, 'utf8');
-			const scripts = src.match(/<script\b[^>]*>[\s\S]*?<\/script>/g) ?? [];
+			const scripts = readFileSync(abs, 'utf8').match(/<script\b[^>]*>[\s\S]*?<\/script>/g) ?? [];
 			for (const block of scripts) {
 				expect(block, `${f} script block contains a literal <style> tag`).not.toMatch(/<\/?style>/);
 			}

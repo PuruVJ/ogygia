@@ -57,7 +57,7 @@
 		Enter a path on this site. It renders through your real server a few times and shows exactly where
 		the time went — components, functions, allocations, and outbound calls.
 	</p>
-	<form class="inline" action="{base}/page" method="get">
+	<form class="inline" action="{base}/run" method="get">
 		<label>path <input name="p" placeholder="/some/slow/page" size="28" /></label>
 		<label>renders <input name="runs" value="5" size="3" /></label>
 		<label

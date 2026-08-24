@@ -53,6 +53,7 @@ import { document } from '../document.js';
 import { region } from '../region.js';
 import Dashboard from './ui/Dashboard.svelte';
 import Report from './ui/Report.svelte';
+import Run from './ui/Run.svelte';
 import Login from './ui/Login.svelte';
 import Upload from './ui/Upload.svelte';
 import Message from './ui/Message.svelte';
@@ -744,6 +745,19 @@ class Profiler {
 				},
 				{ set_cookie }
 			);
+		}
+
+		// The interactive run page: shows a progress bar, fires the profile at /page from an island, then
+		// swaps to the report. Both the dashboard "Profile a page" form and the devtools Profiler tab
+		// point here (the tab embeds it in an iframe), so the progress UX lives in one place.
+		if (sub === '/run') {
+			const path = q.get('p') ?? '';
+			if (!path.startsWith('/') || path.startsWith('//')) {
+				return this.#message('Bad path', 'Give a path on this site, like /docs/overview.', 400);
+			}
+			const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
+			const format = q.get('format') === 'ogp' ? 'ogp' : '';
+			return this.#view(Run, { base: this.base, path, runs, format }, { set_cookie });
 		}
 
 		// Manually clear a wedged recording flag (belt-and-suspenders with the time-based auto-heal).

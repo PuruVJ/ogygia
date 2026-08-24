@@ -11,6 +11,7 @@
 	import WireTab from './WireTab.svelte';
 	import HubTab from './HubTab.svelte';
 	import NavTab from './NavTab.svelte';
+	import ProfilerTab from './ProfilerTab.svelte';
 	import { onMount } from 'svelte';
 	import BoundaryOverlay from './BoundaryOverlay.svelte';
 	import IslandDetail from './IslandDetail.svelte';
@@ -38,7 +39,8 @@
 		{ id: 'wire', label: 'Wire' },
 		{ id: 'hub', label: 'Hub' },
 		{ id: 'nav', label: 'Nav' },
-		{ id: 'timeline', label: 'Timeline' }
+		{ id: 'timeline', label: 'Timeline' },
+		{ id: 'profiler', label: 'Profiler' }
 	];
 
 	let open = $state(false);
@@ -176,6 +178,8 @@
 				<NavTab {tick} />
 			{:else if tab === 'timeline'}
 				<TimelineTab {tick} />
+			{:else if tab === 'profiler'}
+				<ProfilerTab {tick} />
 			{/if}
 		</div>
 	</div>
