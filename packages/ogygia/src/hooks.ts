@@ -1056,6 +1056,8 @@ export interface OgygiaHandleOptions {
 // actual Kit transport hook must live in the UNIVERSAL hooks (client needs decode), so wire it
 // from `'ogygia'` in src/hooks.ts, not here.
 export { ogygiaTransport as transport } from './transport.js';
+// `document()` — render a held region into a complete ogygia document (a `Response`). Server-only.
+export { document, type DocumentOptions } from './document.js';
 
 export function handle(options: OgygiaHandleOptions = {}): Handle {
 	const instance = new OgygiaHandle(options);
