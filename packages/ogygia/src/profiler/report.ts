@@ -1149,7 +1149,7 @@ ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 		)
 		.join('');
 
-	const waterfall = render_waterfall(net, meta);
+	const waterfall = render_waterfall(net);
 
 	// ---- user timings (performance.measure) -------------------------------
 	const measures = extras.measures ?? [];
@@ -1208,7 +1208,7 @@ ${runs_html}
 ${
 	net.length
 		? `<h2>Network</h2>
-<p class="hint">Every outbound call the server made during the window, tied to the route that made it. "wait" = until headers arrived; "body" = reading the response.</p>
+<p class="hint">Every outbound call the server made during the window, tied to the route that made it. "wait" = until headers arrived; "body" = reading the response.${meta.trigger === 'page' && (meta.runs?.length ?? 0) > 1 ? ` Shown for one representative render (of ${meta.runs!.length}) — the same page rendered ${meta.runs!.length}× makes the same calls, so the waterfall isn't multiplied.` : ''}</p>
 ${waterfall}
 <table><tr><th>host</th><th class="num">calls</th><th class="num">total ms</th><th class="num">p50</th><th class="num">max</th><th class="num">errors</th></tr>${host_rows}</table>
 <br>
@@ -1317,12 +1317,16 @@ function top_hosts(
 }
 
 /** timeline of network calls, offset from window start */
-function render_waterfall(net: NetCall[], meta: ReportMeta): string {
+function render_waterfall(net: NetCall[]): string {
 	if (net.length < 2 || net.length > 120) return '';
-	const t0 = meta.created;
-	const span = Math.max(meta.duration_ms, 1);
-	const rows = [...net]
-		.sort((a, b) => a.epoch - b.epoch)
+	const sorted = [...net].sort((a, b) => a.epoch - b.epoch);
+	// Span from the first call to the last call's end — NOT the whole profiling window (which
+	// includes CPU-only time, and in page mode the other identical renders). This fills the width
+	// with the one render's calls instead of bunching them into a slice.
+	const t0 = sorted[0].epoch;
+	const last_end = sorted.reduce((m, c) => Math.max(m, c.epoch + c.ms + (c.body_ms ?? 0)), 0);
+	const span = Math.max(last_end - t0, 1);
+	const rows = sorted
 		.map((c) => {
 			const left = Math.max(0, ((c.epoch - t0) / span) * 100);
 			const dur = c.ms + (c.body_ms ?? 0);

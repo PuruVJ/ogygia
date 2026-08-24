@@ -809,7 +809,8 @@ async function tool_profile_open(args: Attrs): Promise<ToolResult> {
 	}
 	if (!is_dump(dump)) return fail(`${file} decrypted, but it is not an ogygia profiler dump.`);
 
-	const report = report_json(dump.analysis, dump.meta, '/__profiler', dump.extras) as ProfileReport;
+	// report_json's return is a superset of the loose ProfileReport view render_profile reads.
+	const report = report_json(dump.analysis, dump.meta, '/__profiler', dump.extras) as unknown as ProfileReport;
 	report.links = undefined; // the source server is gone — its report URLs would 404
 	const node = (dump.meta as { node?: string }).node;
 	return text(`> Imported from \`${file}\`${node ? ` · Node ${node}` : ''}\n\n` + render_profile('', report));

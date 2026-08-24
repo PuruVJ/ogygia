@@ -162,6 +162,32 @@ const RECORDING_MAX_MS = 120_000;
 type HashFn = (algo: string) => { update(s: string): { digest(enc: 'hex'): string } };
 
 /**
+ * Page mode renders the SAME page N times, so its outbound calls are the same handful repeated N
+ * times — a waterfall of 5×3 identical bars is noise. Given each run's [start,end] window, keep only
+ * ONE representative render's net + io (the run that captured the most calls — the fullest picture;
+ * ties go to the later, warmer run) so the network view reads as "one request + its leaf calls". CPU
+ * stays merged across all runs (more samples = steadier median); network is inherently per-render.
+ */
+function scope_net_to_one_run(
+	cap: { net: NetCall[]; io_ops: IoOp[] },
+	windows: Array<{ start: number; end: number }>
+): void {
+	if (windows.length <= 1) return;
+	const within = (t: number, w: { start: number; end: number }) => t >= w.start && t <= w.end;
+	let best = windows[0];
+	let best_n = -1;
+	for (const w of windows) {
+		const n = cap.net.reduce((s, c) => s + (within(c.start, w) ? 1 : 0), 0);
+		if (n >= best_n) {
+			best_n = n;
+			best = w;
+		}
+	}
+	cap.net = cap.net.filter((c) => within(c.start, best));
+	cap.io_ops = cap.io_ops.filter((o) => within(o.start, best));
+}
+
+/**
  * The profiler as a class — state lives in fields, not closures, matching the
  * `OgygiaHandle` house style. `profiler(options)` (below) constructs one and
  * returns its bound `handle`.
@@ -703,6 +729,7 @@ class Profiler {
 				const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
 				const interval = clamp(Number(q.get('interval')) || 200, 50, 10_000);
 				const run_ms: number[] = [];
+				const run_windows: Array<{ start: number; end: number }> = [];
 				// one un-profiled warm-up render: pays the cold module-load / cache-fill
 				// cost outside the window so the measured runs (and the median) are steady
 				try {
@@ -715,13 +742,18 @@ class Profiler {
 						const t = performance.now();
 						const res = await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } });
 						await res.text();
-						run_ms.push(round2(performance.now() - t));
+						const done = performance.now();
+						run_ms.push(round2(done - t));
+						run_windows.push({ start: t, end: done });
 						// let the event loop turn once between renders: flushes the GC
 						// PerformanceObserver (its entries arrive on a macrotask) and keeps
 						// each render a clean, separately-attributed unit
 						await new Promise((r) => setImmediate(r));
 					}
 				});
+				// N identical renders → N copies of the same outbound calls. Keep one render's worth so
+				// the waterfall shows one request + its leaf calls, not the same handful ×N.
+				scope_net_to_one_run(cap, run_windows);
 				// call counts come from ONE extra render under precise coverage — a
 				// SEPARATE pass, because coverage stops V8 inlining and would otherwise
 				// inflate the CPU profile (svelte's hot `child`/`push` would dominate)
@@ -891,7 +923,7 @@ class Profiler {
 			report_dump(stored.analysis, stored.meta, this.#report_extras(stored)),
 			this.secret
 		);
-		return new Response(bytes, {
+		return new Response(new Uint8Array(bytes), {
 			headers: {
 				'content-type': 'application/octet-stream',
 				'content-disposition': `attachment; filename="profile-${id}.ogp"`,

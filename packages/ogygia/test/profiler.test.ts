@@ -337,8 +337,8 @@ describe('I/O wait attribution', () => {
 			heap: null,
 			mem: [],
 			io: [
-				{ type: 'Timeout', caller: 'queryDatabase (db.ts:4)', ms: 1500 },
-				{ type: 'FSREQCALLBACK', caller: 'readConfig (config.ts:2)', ms: 12 }
+				{ type: 'Timeout', caller: 'queryDatabase (db.ts:4)', ms: 1500, start: 0 },
+				{ type: 'FSREQCALLBACK', caller: 'readConfig (config.ts:2)', ms: 12, start: 0 }
 			]
 		});
 		expect(html).toContain('Waiting by function');
@@ -359,7 +359,7 @@ describe('I/O wait attribution', () => {
 			net: [netcall('callService (data.ts:8)', 2000)],
 			heap: null,
 			mem: [],
-			io: [{ type: 'Timeout', caller: 'queryDatabase (db.ts:4)', ms: 1500 }]
+			io: [{ type: 'Timeout', caller: 'queryDatabase (db.ts:4)', ms: 1500, start: 0 }]
 		}) as Record<string, any>;
 		const byWait = j.waiting.sort((x: any, y: any) => y.wait_ms - x.wait_ms);
 		expect(byWait[0]).toMatchObject({ caller: 'callService (data.ts:8)', kind: 'http' });

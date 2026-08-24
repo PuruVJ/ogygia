@@ -28,6 +28,8 @@ export interface IoOp {
 	caller_site?: CallerSite;
 	/** init → destroy duration in ms — the time the code waited on this resource */
 	ms: number;
+	/** performance.now() at init — lets page mode window ops to a single representative render */
+	start: number;
 	/** still open when the window ended (long-lived socket, watcher) */
 	open?: boolean;
 }
@@ -80,7 +82,7 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 			if (!s) return;
 			open.delete(asyncId);
 			if (ops.length < MAX) {
-				ops.push({ type: s.type, caller_site: s.site, ms: round2(performance.now() - s.t) });
+				ops.push({ type: s.type, caller_site: s.site, ms: round2(performance.now() - s.t), start: s.t });
 			}
 		}
 	});
@@ -94,7 +96,7 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 			const now = performance.now();
 			for (const s of open.values()) {
 				if (ops.length < MAX) {
-					ops.push({ type: s.type, caller_site: s.site, ms: round2(now - s.t), open: true });
+					ops.push({ type: s.type, caller_site: s.site, ms: round2(now - s.t), start: s.t, open: true });
 				}
 			}
 			open.clear();
