@@ -59,6 +59,65 @@ function misuse(id: string, src: string, offset: number, what: string): never {
 	);
 }
 
+/** Unwrap oxc's preserved parens. */
+function unparen(v: Node | null | undefined): Node | null | undefined {
+	while (v && v.type === 'ParenthesizedExpression') v = v.expression as Node;
+	return v;
+}
+
+/** Provably NOT a store — the literal tier only: bare return, undefined, void, null, primitive
+ *  literals. Identifiers, calls, members, ternaries are never flagged: they could be stores, the
+ *  mark is the author's assertion, and dynamic values get the runtime floor instead. */
+function literal_non_store(v: Node | null | undefined): boolean {
+	v = unparen(v);
+	if (!v) return true;
+	if (v.type === 'Identifier') return v.name === 'undefined';
+	if (v.type === 'UnaryExpression') return v.operator === 'void';
+	return (
+		v.type === 'NullLiteral' ||
+		v.type === 'BooleanLiteral' ||
+		v.type === 'NumericLiteral' ||
+		v.type === 'StringLiteral' ||
+		v.type === 'BigIntLiteral' ||
+		v.type === 'TemplateLiteral'
+	);
+}
+
+/** First provably-non-store return inside an EXPLICITLY marked inline factory (top-level returns
+ *  only — nested functions' returns are theirs). Region-relative offset, or undefined. */
+function first_non_store_return(fn: Node): number | undefined {
+	const body = fn.body as Node;
+	if (body.type !== 'BlockStatement')
+		return literal_non_store(body) ? (body.start as number) : undefined;
+	let found: number | undefined;
+	(function collect(n: Node): void {
+		for (const key in n) {
+			if (found !== undefined) return;
+			if (key === 'type' || key === 'start' || key === 'end') continue;
+			const child = n[key];
+			const kids = Array.isArray(child)
+				? child
+				: child && typeof child === 'object' && typeof child.type === 'string'
+					? [child]
+					: [];
+			for (const c of kids as Node[]) {
+				if (
+					c.type === 'ArrowFunctionExpression' ||
+					c.type === 'FunctionExpression' ||
+					c.type === 'FunctionDeclaration'
+				)
+					continue;
+				if (c.type === 'ReturnStatement' && literal_non_store(c.argument as Node)) {
+					found = c.start;
+					return;
+				}
+				collect(c);
+			}
+		}
+	})(body);
+	return found;
+}
+
 /** Rewrite every `import.meta.og.store` mark. Same-reference return when nothing to do. */
 export function rewrite_store(
 	src: string,
@@ -100,6 +159,22 @@ export function rewrite_store(
 				}
 				claimed.add(n);
 				claimed.add(n.callee as Node);
+				if (fn.type !== 'Identifier') {
+					// WARN tier (not a build error): a literal `return undefined`/`return;`/primitive inside
+					// the marked factory breaks the mark's own assertion. Legal on purpose — a client-only
+					// store may return nothing on the server — so the runtime floor handles it; this names
+					// the exact line at build time instead of a warning at first render.
+					const bad = first_non_store_return(fn);
+					if (bad !== undefined && typeof console !== 'undefined') {
+						console.warn(
+							`[ogygia] ${id}:${line_of(src, region.offset + bad)} — this import.meta.og.store ` +
+								`factory has a return that is provably not a store (undefined/null/primitive). ` +
+								`Where that branch runs, the product crosses as plain data, unbranded. If it is an ` +
+								`environment guard, return a store there too (e.g. writable(seed)) and guard the ` +
+								`side effects inside the factory instead.`
+						);
+					}
+				}
 				const fn_text = region.code.slice(fn.start, fn.end);
 				const tag = `${rel_id}#store${seq++}`;
 				needs_import = true;

@@ -89,13 +89,33 @@ export function __register_store_factory(tag: string, factory: unknown): void {
 	store_registry().factories.set(tag, factory as (seed: unknown) => object);
 }
 
+/** For warnings: `null` is an object to typeof, and the distinction matters at this seam. */
+const type_of = (v: unknown): string => (v === null ? 'null' : typeof v);
+
 /**
  * Brand a store with its factory tag so encode ships the tag instead of the generic one.
  * Returns the store (chainable at a return site). Hand-written today; the auto-wire compiler
  * pass will emit this into provably store-returning factories.
+ *
+ * THE FLOOR: never detonate on a product that can't carry a brand. A factory may legitimately
+ * return undefined/a primitive on one side (SSR-guard pattern) — that passes through unbranded
+ * (the `__og_store` wrapper owns the warning, so hand callers stay silent-by-contract). A
+ * frozen/sealed store can't take the stamp either — it degrades to the generic tier (value
+ * still crosses; only factory-grafted methods are lost), with a warning naming the tag.
  */
 export function mark_store<T extends object>(store: T, tag: string): T {
-	Object.defineProperty(store, STORE_TAG, { value: tag, enumerable: false });
+	if (store === null || (typeof store !== 'object' && typeof store !== 'function')) return store;
+	try {
+		Object.defineProperty(store, STORE_TAG, { value: tag, enumerable: false });
+	} catch {
+		if (typeof console !== 'undefined') {
+			console.warn(
+				`[ogygia] store "${tag}": the store object is not extensible (frozen/sealed), so it cannot ` +
+					`carry its factory brand — it will cross boundaries as a plain writable (custom methods ` +
+					`unavailable). Brand before freezing, or leave the store extensible.`
+			);
+		}
+	}
 	return store;
 }
 
@@ -124,7 +144,21 @@ export function register_store_kind(): void {
 				}
 				return writable(ref.d) as object;
 			}
-			return factory ? factory(ref.d) : (writable(ref.d) as object);
+			const built = factory ? factory(ref.d) : (writable(ref.d) as object);
+			if (built === null || typeof built !== 'object') {
+				// Same graceful floor, other failure: the factory ran but produced a non-store (its
+				// environment guard fired on THIS side). Only a real store gets encoded under a tag, so
+				// the seed is real — it must survive even when the factory won't cooperate here.
+				if (typeof console !== 'undefined') {
+					console.warn(
+						`[ogygia] store "${t}": factory returned ${type_of(built)} while rebuilding — degraded ` +
+							`to a plain writable (custom methods unavailable). A store factory must return a ` +
+							`store on every call; move environment guards inside the factory body.`
+					);
+				}
+				return writable(ref.d) as object;
+			}
+			return built;
 		}
 	});
 }
@@ -161,13 +195,34 @@ export function revive_store(payload: StorePayload, remember: boolean): unknown 
  * tag, so encode ships the tag instead of the generic one and decode rebuilds THROUGH the
  * factory — custom methods survive the wire.
  */
+/** Tags already warned about non-store products — once per tag, not once per call (a hot
+ *  SSR path would otherwise warn on every request). */
+const warned_unbranded = new Set<string>();
+
 export function __og_store<F extends (...args: never[]) => object>(tag: string, factory: F): F {
 	// decode side: factory(seed), branded so a revived store can cross a FURTHER boundary
 	__register_store_factory(tag, (seed: unknown) =>
 		mark_store((factory as unknown as (...a: unknown[]) => object)(seed), tag)
 	);
-	// encode side: every product of the wrapped factory carries its passport
-	return ((...args: never[]) => mark_store(factory(...args), tag)) as F;
+	// encode side: every product of the wrapped factory carries its passport. A non-object
+	// product (SSR-guard factory) passes through unbranded — legal for a client-only store,
+	// but worth one warning: if this store was meant to cross a boundary, it can't from here.
+	return ((...args: never[]) => {
+		const product = factory(...args);
+		if (product === null || typeof product !== 'object') {
+			if (!warned_unbranded.has(tag) && typeof console !== 'undefined') {
+				warned_unbranded.add(tag);
+				console.warn(
+					`[ogygia] store "${tag}": factory returned ${type_of(product)} — nothing to brand, value ` +
+						`passed through as-is. Fine for a client-only store; a store that must cross an island ` +
+						`boundary has to exist on the server too — return e.g. writable(seed) under your guard ` +
+						`and gate the side effects inside the factory instead.`
+				);
+			}
+			return product;
+		}
+		return mark_store(product, tag);
+	}) as F;
 }
 
 // ─────────────────────────────────── og_derived: a derived that RESUMES ───────────────────────────

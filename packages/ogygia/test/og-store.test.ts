@@ -2,12 +2,13 @@
  * `import.meta.og.store` — the store-factory assert construct + its runtime (__og_store).
  * The corpus case it clears: a house factory's custom methods surviving the island wire.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { get, writable, derived } from 'svelte/store';
 import { parse, stringify } from 'devalue';
 import { rewrite_store, auto_brand_stores } from '../src/compiler/macros/store.js';
 import {
 	__og_store,
+	__register_store_factory,
 	mark_store,
 	reduce_store,
 	revive_store,
@@ -58,6 +59,28 @@ describe('og.store transform', () => {
 		);
 		expect(() => run(`const alias = import.meta.og.store;`)).toThrow(/bare import.meta.og.store/);
 	});
+
+	it('WARNS (not errors) on a provably non-store return; the wrap still happens', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const src = `export const s = import.meta.og.store((seed) => { if (import.meta.env.SSR) return undefined; return { subscribe: () => {}, seed }; });`;
+		const code = run(src);
+		expect(code).toContain(`__og_store("src/lib/cart.ts#store0"`);
+		expect(warn).toHaveBeenCalledOnce();
+		expect(String(warn.mock.calls[0]![0])).toMatch(/src\/lib\/cart\.ts:1/);
+		expect(String(warn.mock.calls[0]![0])).toContain('provably not a store');
+		warn.mockRestore();
+	});
+
+	it('quiet when returns are dynamic or store-shaped; nested fn returns are theirs', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		run(`export const a = import.meta.og.store((s) => make(s));`);
+		run(
+			`export const b = import.meta.og.store((s) => { const stop = () => undefined; return { subscribe: () => {}, stop }; });`
+		);
+		run(`export const c = import.meta.og.store(someFactory);`);
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
 });
 
 describe('__og_store runtime (the corpus C9 round-trip)', () => {
@@ -97,6 +120,51 @@ describe('__og_store runtime (the corpus C9 round-trip)', () => {
 		const foreign = mark_store({ subscribe }, 'test/lazy.ts#store0');
 		const revived = dec(enc(foreign)) as { tag: () => string };
 		expect(revived.tag()).toBe('lazy'); // rebuilt THROUGH the registered factory
+	});
+});
+
+describe('robustness floor (SSR-guard factories, frozen stores)', () => {
+	it('mark_store passes non-objects through untouched — no defineProperty detonation', () => {
+		expect(mark_store(undefined as never, 't#s0')).toBe(undefined);
+		expect(mark_store(null as never, 't#s0')).toBe(null);
+		expect(mark_store(42 as never, 't#s0')).toBe(42);
+		expect(mark_store('nope' as never, 't#s0')).toBe('nope');
+	});
+
+	it('a frozen store cannot carry the brand — warns with the tag, still crosses generic', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const { subscribe } = writable(3);
+		const frozen = Object.freeze({ subscribe });
+		expect(() => mark_store(frozen, 'test/frozen.ts#store0')).not.toThrow();
+		expect(warn).toHaveBeenCalledOnce();
+		expect(String(warn.mock.calls[0]![0])).toContain('test/frozen.ts#store0');
+		const revived = dec(enc(frozen));
+		expect(get(revived as never)).toBe(3); // unbranded → generic tier, value survives
+		warn.mockRestore();
+	});
+
+	it('wrapped SSR-guard factory: undefined product passes through, ONE warning per tag', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const make = __og_store('test/guard.ts#store0', (() => undefined) as never) as (
+			...a: never[]
+		) => unknown;
+		expect(make()).toBe(undefined);
+		expect(make()).toBe(undefined); // second call: no second warning
+		expect(warn).toHaveBeenCalledOnce();
+		expect(String(warn.mock.calls[0]![0])).toContain('test/guard.ts#store0');
+		warn.mockRestore();
+	});
+
+	it('decode floor: a factory that returns nothing on this side degrades to writable(seed)', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		__register_store_factory('test/degrade.ts#store0', () => undefined as never);
+		const { subscribe } = writable(7);
+		const foreign = mark_store({ subscribe }, 'test/degrade.ts#store0');
+		const revived = dec(enc(foreign)) as { set: (v: number) => void };
+		expect(get(revived as never)).toBe(7); // the seed survived …
+		expect(typeof revived.set).toBe('function'); // … as a live plain writable
+		expect(warn.mock.calls.some((c) => String(c[0]).includes('degraded'))).toBe(true);
+		warn.mockRestore();
 	});
 });
 
