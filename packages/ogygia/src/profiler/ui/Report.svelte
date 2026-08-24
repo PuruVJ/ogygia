@@ -188,7 +188,7 @@
 		<p class="hint">
 			Every outbound call the server made during the window, tied to the route that made it. "wait" =
 			until headers arrived; "body" = reading the response.{#if meta.trigger === 'page' && (meta.runs?.length ?? 0) > 1}
-				Shown for one representative render (of {meta.runs!.length}).{/if}
+				Shown for one representative render (of {meta.runs?.length ?? 0}).{/if}
 		</p>
 		{#if wf.length}
 			<div class="wf">

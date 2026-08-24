@@ -2,12 +2,17 @@
 	/**
 	 * The profiler UI shell: injects the one stylesheet (via `<svelte:head>`, which `document()` lifts
 	 * into `<head>`) and renders the footer. Every profiler view wraps its body in this. Styles are a
-	 * raw head `<style>`, not Svelte scoped styles — see style.ts for why.
+	 * raw head style element, not Svelte scoped styles — see style.ts for why.
 	 */
 	import type { Snippet } from 'svelte';
 	import { PROFILER_STYLE } from './style.js';
 	let { children }: { children: Snippet } = $props();
-	const style_tag = `<style>${PROFILER_STYLE}</style>`;
+	// Assemble the head style element from a variable so the literal tag never appears as a substring
+	// in this file. A consumer's preprocess pipeline regex-scans sources for style blocks; a literal
+	// one here (even in a string or comment) gets its contents handed to postcss, which chokes on the
+	// interpolation ("Unknown word PROFILER_STYLE"). See test/profiler-ui-consumer-safe.
+	const T = 'style';
+	const style_tag = `<${T}>${PROFILER_STYLE}</${T}>`;
 </script>
 
 <svelte:head>
