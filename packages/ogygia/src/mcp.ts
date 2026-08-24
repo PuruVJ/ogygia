@@ -19,6 +19,8 @@ import { readdirSync, readFileSync, type Dirent } from 'node:fs';
 import path from 'node:path';
 import { parse } from 'svelte/compiler';
 import { transformHost, islandVirtualId, wrapperVirtualId, CLIENT_BINDING_STUB } from './compiler/index.js';
+import { ogp_decode, is_ogp } from './profiler/crypto.js';
+import { report_json, is_dump } from './profiler/report.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
@@ -227,6 +229,25 @@ const TOOLS = [
 				base: { type: 'string', description: 'Profiler mount path (default /__profiler).' }
 			},
 			required: ['url']
+		}
+	},
+	{
+		name: 'ogygia_profile_open',
+		description:
+			'Open a downloaded `.ogp` profile and return the same digest as ogygia_profile — verdict, render ' +
+			'p50, CPU findings, time-by-category, hottest functions + components, network, heap. A `.ogp` is the ' +
+			'encrypted trace you download when a live report can’t be kept (serverless/Amplify evict it, or the ' +
+			'browser can’t render it). It decrypts entirely from the FILE — no running server, no profiler ' +
+			'login. The file is AES-encrypted with the key it was exported with; pass that as `key`. If you don’t ' +
+			'have it, ask the user for the export key and retry. That key is the ONLY thing needed — it is not ' +
+			'the app’s profiler secret, and holding the file + its key already authorizes reading it.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				file: { type: 'string', description: 'Path to the .ogp file (absolute, or relative to the MCP server cwd).' },
+				key: { type: 'string', description: 'The export key the .ogp was made with. Omit only for a dev-key export; a wrong/absent key fails cleanly and asks for it.' }
+			},
+			required: ['file']
 		}
 	},
 	{
@@ -650,6 +671,38 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 	return fail(`profiler did not return JSON (HTTP ${res.status}). ${body || '(check the profiler key / route path)'}`);
 }
 
+async function tool_profile_open(args: Attrs): Promise<ToolResult> {
+	const file = String(args.file ?? '');
+	if (!file) return fail('`file` is required — the path to a downloaded .ogp profile.');
+	const key = typeof args.key === 'string' && args.key ? args.key : undefined;
+
+	let bytes: Uint8Array;
+	try {
+		bytes = new Uint8Array(readFileSync(path.resolve(file)));
+	} catch (e) {
+		return fail(`could not read ${file}: ${e instanceof Error ? e.message : String(e)}`);
+	}
+	if (!is_ogp(bytes)) return fail(`${file} is not an ogygia .ogp profile (bad magic).`);
+
+	// The encryption IS the authorization: decrypt straight from the file, no server, no profiler login.
+	let dump: unknown;
+	try {
+		dump = await ogp_decode(bytes, key);
+	} catch {
+		return fail(
+			key
+				? `Could not open ${file} — that export key does not match this .ogp (its AES tag failed). Confirm the key it was exported with.`
+				: `${file} is encrypted. Re-run with \`key\` set to the export key it was made with. Ask the user for it if you don’t have it — it is the .ogp’s own key, not the app’s profiler secret.`
+		);
+	}
+	if (!is_dump(dump)) return fail(`${file} decrypted, but it is not an ogygia profiler dump.`);
+
+	const report = report_json(dump.analysis, dump.meta, '/__profiler', dump.extras) as ProfileReport;
+	report.links = undefined; // the source server is gone — its report URLs would 404
+	const node = (dump.meta as { node?: string }).node;
+	return text(`> Imported from \`${file}\`${node ? ` · Node ${node}` : ''}\n\n` + render_profile('', report));
+}
+
 // ── ogygia_observatory — bundle files into a client-only Observatory link ──────────────────────────
 
 const DEFAULT_OBSERVATORY = 'https://ogygia.puruvj.dev/observatory';
@@ -821,6 +874,8 @@ async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 			return tool_debug(args);
 		case 'ogygia_profile':
 			return tool_profile(args);
+		case 'ogygia_profile_open':
+			return tool_profile_open(args);
 		case 'ogygia_observatory':
 			return tool_observatory(args);
 		case 'ogygia_scan':
