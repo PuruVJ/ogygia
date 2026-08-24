@@ -69,7 +69,40 @@ export const fileURLToPath = (u) => String(u).replace(/^file:\\/\\//, '');
 export default { pathToFileURL, fileURLToPath };`;
 			}
 			if (id === EMPTY_STUB) {
-				return `export default {};`;
+				// Inert NAMED exports for the node:worker_threads / util / tty / child_process / os symbols
+				// that @rolldown/browser (the in-worker compiler) statically imports. The browser build
+				// never runs these paths, but rolldown's bundler still resolves the named imports and errors
+				// on a missing export — so every name it reaches for must exist, even as a no-op.
+				return `
+export const isMainThread = true;
+export const parentPort = null;
+export const workerData = null;
+export const threadId = 0;
+export class Worker {}
+export class MessageChannel {}
+export class MessagePort {}
+export const formatWithOptions = (_o, ...a) => a.map(String).join(' ');
+export const format = (...a) => a.map(String).join(' ');
+export const styleText = (_s, t) => String(t);
+export const inspect = (v) => String(v);
+export const promisify = (fn) => fn;
+export const inherits = () => {};
+export const deprecate = (fn) => fn;
+export class WriteStream {}
+export class ReadStream {}
+export const isatty = () => false;
+export const spawn = () => { throw new Error('[observatory] child_process is unavailable in the browser'); };
+export const spawnSync = () => ({ status: 0, stdout: '', stderr: '' });
+export const exec = () => {};
+export const execSync = () => '';
+export const platform = () => 'browser';
+export const arch = () => 'wasm';
+export const homedir = () => '/';
+export const tmpdir = () => '/tmp';
+export const cpus = () => [];
+export const EOL = '\\n';
+export default {};
+`;
 			}
 			if (id === FS_STUB) {
 				// Default + named exports; every method throws/no-ops (never hit on the transform path).

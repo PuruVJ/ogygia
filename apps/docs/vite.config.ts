@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { ogygia } from 'ogygia/vite';
 import { diff_markers, inline_markers } from 'ogygia/content/markdown';
 import { defineConfig, type Plugin } from 'vite';
@@ -113,7 +114,10 @@ export default defineConfig(({ command }) => ({
 	worker: {
 		format: 'es',
 		// The nested WASI worker (wasi-worker.mjs) imports node:module — needs the shims here too.
-		plugins: () => [observatoryNodeShims(), wasm()]
+		// `svelte()` so the Observatory worker's transitive `.svelte` imports (og_html_region pulls in
+		// RawHtml.svelte through region-core) COMPILE in the worker bundle instead of tripping rolldown's
+		// JS parser — the worker uses the region's pre-baked HTML, so the component is compiled but inert.
+		plugins: () => [svelte(), observatoryNodeShims(), wasm()]
 	},
 	plugins: [
 		// Observatory: node shims (client/worker only — SSR keeps real node builtins), COOP/COEP on the
