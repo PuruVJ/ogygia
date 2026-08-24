@@ -37,7 +37,6 @@ import {
 import type { CallerSite, NetCall, NetContext } from './net.js';
 import type { IoOp } from './async-io.js';
 import {
-	render_report,
 	render_upload_page,
 	report_json,
 	report_dump,
@@ -826,7 +825,7 @@ class Profiler {
 					if (!is_dump(dump)) {
 						return this.#message('Not a profile', 'That file is not an ogygia profiler dump.', 400);
 					}
-					return html(await this.#report_html(dump.analysis, dump.meta, dump.extras));
+					return this.#report_view(dump.analysis, dump.meta, dump.extras);
 				} catch {
 					return this.#message(
 						'Could not open',
@@ -877,9 +876,7 @@ class Profiler {
 					}
 				});
 			}
-			return html(
-				await this.#report_html(stored.analysis, stored.meta, this.#report_extras(stored))
-			);
+			return this.#report_view(stored.analysis, stored.meta, this.#report_extras(stored));
 		}
 
 		return this.#message('Not found', 'Unknown profiler page.', 404);
@@ -892,15 +889,16 @@ class Profiler {
 	 * Node crypto/zlib is unavailable (a stripped edge runtime), the Export button is simply omitted and
 	 * the JSON / .cpuprofile links still work.
 	 */
-	async #report_html(a: Analysis, meta: ReportMeta, extras: ReportExtras): Promise<string> {
-		let ogp_b64: string | undefined;
+	async #report_view(a: Analysis, meta: ReportMeta, extras: ReportExtras): Promise<Response> {
+		let ogpB64: string | undefined;
 		try {
 			const bytes = await ogp_encode(report_dump(a, meta, extras), this.secret);
-			ogp_b64 = Buffer.from(bytes).toString('base64');
+			ogpB64 = Buffer.from(bytes).toString('base64');
 		} catch {
-			ogp_b64 = undefined;
+			ogpB64 = undefined;
 		}
-		return render_report(a, meta, this.base, extras, ogp_b64);
+		const { default: Report } = await import('./ui/Report.svelte');
+		return this.#view(Report, { a, meta, base: this.base, extras, ogpB64 });
 	}
 
 	/** Lazily-loaded UI render deps (svelte/server via document(), + region()). Loaded once, on the

@@ -44,6 +44,24 @@ export const CATEGORY_COLOR: Record<FrameCategory, string> = {
 	unknown: '#6b7280'
 };
 
+/** Bar color per I/O kind, for the Waiting-by-function bars. */
+export function kind_color(kind: string): string {
+	switch (kind) {
+		case 'http':
+			return '#5b8fd6';
+		case 'timer':
+			return '#b58a3d';
+		case 'file':
+			return '#4a9d6e';
+		case 'socket':
+			return '#c1544f';
+		case 'dns':
+			return '#7d6bb0';
+		default:
+			return '#8a8f98';
+	}
+}
+
 /** A report's one-line label for lists + headers. */
 export function label_of(r: ReportMeta): string {
 	if (r.trigger === 'page') return `page ${r.page} ×${r.runs?.length ?? 0}`;
