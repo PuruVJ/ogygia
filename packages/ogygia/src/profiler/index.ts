@@ -37,8 +37,6 @@ import {
 import type { CallerSite, NetCall, NetContext } from './net.js';
 import type { IoOp } from './async-io.js';
 import {
-	render_login,
-	render_message,
 	render_report,
 	render_upload_page,
 	report_json,
@@ -671,9 +669,10 @@ class Profiler {
 			// Show the unlock page (a styled password field → session cookie) when the UI is enabled (a
 			// secret is set). With no secret the UI stays hidden (404).
 			if (this.ui_enabled && this.secret && !this.dev) {
-				return new Response(render_login(this.base, event.url.pathname + event.url.search), {
-					status: 200,
-					headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
+				const { default: Login } = await import('./ui/Login.svelte');
+				return this.#view(Login, {
+					base: this.base,
+					next: event.url.pathname + event.url.search
 				});
 			}
 			return new Response('Not found', { status: 404 });
@@ -705,7 +704,7 @@ class Profiler {
 					rss_mb: Math.round(process.memoryUsage().rss / 1048576),
 					inflight: this.#inflight
 				},
-				set_cookie
+				{ set_cookie }
 			);
 		}
 
@@ -727,12 +726,9 @@ class Profiler {
 
 		if (sub === '/page') {
 			if (this.#recording_active()) {
-				return html(
-					render_message(
-						'Busy',
-						'A profile is already running. It clears itself within a couple of minutes if a run was abandoned — or hit Reset on the dashboard.',
-						this.base
-					),
+				return this.#message(
+					'Busy',
+					'A profile is already running. It clears itself within a couple of minutes if a run was abandoned — or hit Reset on the dashboard.',
 					409
 				);
 			}
@@ -740,10 +736,7 @@ class Profiler {
 			try {
 				const path = q.get('p') ?? '';
 				if (!path.startsWith('/') || path.startsWith('//')) {
-					return html(
-						render_message('Bad path', 'Give a path on this site, like /docs/overview.', this.base),
-						400
-					);
+					return this.#message('Bad path', 'Give a path on this site, like /docs/overview.', 400);
 				}
 				const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
 				const interval = clamp(Number(q.get('interval')) || 200, 50, 10_000);
@@ -802,14 +795,11 @@ class Profiler {
 				if (set_cookie) headers.append('set-cookie', set_cookie);
 				return new Response(null, { status: 303, headers });
 			} catch (e) {
-				return html(
-					render_message(
-						'Profiling unavailable',
-						e instanceof Error && /inspector/.test(e.message)
-							? 'CPU profiling needs a Node.js server (adapter-node or dev). This platform does not expose the V8 inspector.'
-							: `Profiling failed: ${e instanceof Error ? e.message : String(e)}`,
-						this.base
-					),
+				return this.#message(
+					'Profiling unavailable',
+					e instanceof Error && /inspector/.test(e.message)
+						? 'CPU profiling needs a Node.js server (adapter-node or dev). This platform does not expose the V8 inspector.'
+						: `Profiling failed: ${e instanceof Error ? e.message : String(e)}`,
 					500
 				);
 			} finally {
@@ -825,14 +815,7 @@ class Profiler {
 				try {
 					const bytes = new Uint8Array(await event.request.arrayBuffer());
 					if (!is_ogp(bytes)) {
-						return html(
-							render_message(
-								'Not an .ogp',
-								'That file is not an ogygia .ogp profile.',
-								this.base
-							),
-							400
-						);
+						return this.#message('Not an .ogp', 'That file is not an ogygia .ogp profile.', 400);
 					}
 					// Brotli + AES-GCM. Decrypt with the key the uploader supplies (`x-ogp-key`) so ANY .ogp
 					// opens in ANY profiler — its key can differ from this instance's secret. Left blank, we
@@ -841,23 +824,13 @@ class Profiler {
 					const ogp_key = event.request.headers.get('x-ogp-key') || this.secret;
 					const dump: unknown = await ogp_decode(bytes, ogp_key);
 					if (!is_dump(dump)) {
-						return html(
-							render_message(
-								'Not a profile',
-								'That file is not an ogygia profiler dump.',
-								this.base
-							),
-							400
-						);
+						return this.#message('Not a profile', 'That file is not an ogygia profiler dump.', 400);
 					}
 					return html(await this.#report_html(dump.analysis, dump.meta, dump.extras));
 				} catch {
-					return html(
-						render_message(
-							'Could not open',
-							"That file isn't a profile, or it was made with a different key.",
-							this.base
-						),
+					return this.#message(
+						'Could not open',
+						"That file isn't a profile, or it was made with a different key.",
 						400
 					);
 				}
@@ -869,14 +842,7 @@ class Profiler {
 		if (report_match) {
 			const stored = this.#reports.get(report_match[1]);
 			if (!stored)
-				return html(
-					render_message(
-						'Gone',
-						'That report has expired (only the last few are kept).',
-						this.base
-					),
-					404
-				);
+				return this.#message('Gone', 'That report has expired (only the last few are kept).', 404);
 			const suffix = report_match[2];
 			if (suffix === '.json' || suffix === '/json') {
 				return json_response(
@@ -916,7 +882,7 @@ class Profiler {
 			);
 		}
 
-		return html(render_message('Not found', 'Unknown profiler page.', this.base), 404);
+		return this.#message('Not found', 'Unknown profiler page.', 404);
 	}
 
 	/**
@@ -950,15 +916,22 @@ class Profiler {
 	async #view(
 		component: unknown,
 		props: Record<string, unknown>,
-		set_cookie?: string | null
+		opts: { status?: number; set_cookie?: string | null } = {}
 	): Promise<Response> {
 		this.#view_deps ??= Promise.all([import('../document.js'), import('../region.js')]).then(
 			([d, r]) => ({ document: d.document, region: r.region })
 		);
 		const { document, region } = await this.#view_deps;
 		return document(region(component as never, props), {
-			headers: set_cookie ? { 'set-cookie': set_cookie } : undefined
+			status: opts.status,
+			headers: opts.set_cookie ? { 'set-cookie': opts.set_cookie } : undefined
 		});
+	}
+
+	/** A one-off message page (errors, not-found, …). */
+	async #message(title: string, msg: string, status = 200): Promise<Response> {
+		const { default: Message } = await import('./ui/Message.svelte');
+		return this.#view(Message, { title, msg, base: this.base }, { status });
 	}
 
 	/** The full profile as an encrypted `.ogp` download (Brotli + AES-GCM, async — never blocks). */
