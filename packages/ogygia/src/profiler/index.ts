@@ -37,7 +37,6 @@ import {
 import type { CallerSite, NetCall, NetContext } from './net.js';
 import type { IoOp } from './async-io.js';
 import {
-	render_dashboard,
 	render_login,
 	render_message,
 	render_report,
@@ -693,8 +692,10 @@ class Profiler {
 		};
 
 		if (sub === '') {
-			return html(
-				render_dashboard({
+			const { default: Dashboard } = await import('./ui/Dashboard.svelte');
+			return this.#view(
+				Dashboard,
+				{
 					base: this.base,
 					recent: this.#ring,
 					routes: route_aggregates(this.#ring),
@@ -703,7 +704,8 @@ class Profiler {
 					dev: this.dev,
 					rss_mb: Math.round(process.memoryUsage().rss / 1048576),
 					inflight: this.#inflight
-				})
+				},
+				set_cookie
 			);
 		}
 
@@ -933,6 +935,30 @@ class Profiler {
 			ogp_b64 = undefined;
 		}
 		return render_report(a, meta, this.base, extras, ogp_b64);
+	}
+
+	/** Lazily-loaded UI render deps (svelte/server via document(), + region()). Loaded once, on the
+	 *  first UI page — kept off the recording path. */
+	#view_deps:
+		| Promise<{
+				document: (typeof import('../document.js'))['document'];
+				region: (typeof import('../region.js'))['region'];
+		  }>
+		| null = null;
+
+	/** Render a profiler view component into a complete ogygia document (islands inside hydrate). */
+	async #view(
+		component: unknown,
+		props: Record<string, unknown>,
+		set_cookie?: string | null
+	): Promise<Response> {
+		this.#view_deps ??= Promise.all([import('../document.js'), import('../region.js')]).then(
+			([d, r]) => ({ document: d.document, region: r.region })
+		);
+		const { document, region } = await this.#view_deps;
+		return document(region(component as never, props), {
+			headers: set_cookie ? { 'set-cookie': set_cookie } : undefined
+		});
 	}
 
 	/** The full profile as an encrypted `.ogp` download (Brotli + AES-GCM, async — never blocks). */
