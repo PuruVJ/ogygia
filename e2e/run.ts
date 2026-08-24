@@ -78,8 +78,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['presets.ts', false, 'transform-level: region syntax + presets + errors'],
 	['dedup.ts', false, 'same-component-two-strategies → ONE client chunk'],
 	['dollar-fn.ts', true, 'og.$: a fn ref crosses context into an island and rebinds (bound captures)'],
-	['server-delta.ts', true, 'server-delta nav: shared island skipped server-side on SPA nav, kept live + interactive (no blank hole)'],
-	['observatory.ts', true, 'browser compiler (Rung 1): mark analysis in a Web Worker, island map + host rewrite, live edit']
+	['server-delta.ts', true, 'server-delta nav: shared island skipped server-side on SPA nav, kept live + interactive (no blank hole)']
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
