@@ -1,11 +1,14 @@
 /**
  * Registration for transportable classes (`static [import.meta.og.wire]` codecs).
  *
- * ALIAS-PROOF BY DESIGN: the build never tries to recognize the codec key — it registers
- * every *exported class declaration* (found by parsing, so strings/comments never
- * false-match), and the RUNTIME decides which matter: `__register_transportable(tag, Cls)`
- * is a no-op unless the class actually carries `Symbol.for('ogygia.wire')`. So
- * `const k = import.meta.og.wire` hops, minified keys — every spelling works (the construct rewrites to the symbol wherever it appears).
+ * Registers ONLY exported classes that actually carry a wire codec — NOT every exported class.
+ * A plain `export class Foo {}` must never be registered, because the registration appends an
+ * `import … from 'ogygia/internal/register'`, and dragging that into an unrelated module (or a
+ * workspace package that doesn't even depend on ogygia) breaks its resolution for nothing.
+ * Detection is exact, not heuristic: by the time this runs the wire macro has already normalized
+ * `static wire = import.meta.og.wire(…)` into `static [Symbol.for('ogygia.wire')] = …`, so a class
+ * is transportable iff it has that member (the pre-rewrite call form is matched too, defensively).
+ * The macro is name-locked to `static wire`, so there is exactly one shape to find — no aliasing.
  *
  * Tags are root-relative module path + export name: identical in the server build and every
  * island bundle with zero coordination. Registrations import from `ogygia/internal` — a
@@ -49,21 +52,21 @@ function parse_body(code: string, id_n: string): AstNode[] | null {
 	}
 }
 
-/** Collect names of top-level classes that are exported (declaration or `export {}`). */
-function exportedClassNames(code: string, id_n: string): string[] {
+/** Collect names of top-level exported classes that carry a wire codec (and only those). */
+function exportedWireClassNames(code: string, id_n: string): string[] {
 	const body = parse_body(code, id_n);
-	return body ? exportedClassNamesFromBody(body) : [];
+	return body ? exportedWireClassNamesFromBody(body) : [];
 }
 
-function exportedClassNamesFromBody(body: AstNode[]): string[] {
-	const classNames = new Set<string>(); // every top-level class declaration
+function exportedWireClassNamesFromBody(body: AstNode[]): string[] {
+	const classNodes = new Map<string, AstNode>(); // every top-level class declaration, by name
 	const exported = new Set<string>(); // subset that is exported
 	for (const node of body) {
 		if (node.type === 'ClassDeclaration' && node.id) {
-			classNames.add(node.id.name);
+			classNodes.set(node.id.name, node);
 		} else if (node.type === 'ExportNamedDeclaration') {
 			if (node.declaration?.type === 'ClassDeclaration' && node.declaration.id?.name) {
-				classNames.add(node.declaration.id.name);
+				classNodes.set(node.declaration.id.name, node.declaration as AstNode);
 				exported.add(node.declaration.id.name);
 			}
 			// `export { Foo, Bar as Baz }` — the LOCAL name must be a class (resolved after the loop).
@@ -74,7 +77,70 @@ function exportedClassNamesFromBody(body: AstNode[]): string[] {
 			}
 		}
 	}
-	return [...exported].filter((name) => classNames.has(name));
+	// Only classes that actually carry a wire codec — a plain exported class is not transportable.
+	return [...exported].filter((name) => {
+		const cls = classNodes.get(name);
+		return !!cls && classHasWireMember(cls);
+	});
+}
+
+/** Minimal shape of the expression nodes the wire checks below walk. */
+interface ExprNode {
+	type?: string;
+	name?: string;
+	computed?: boolean;
+	value?: unknown;
+	callee?: ExprNode;
+	object?: ExprNode;
+	property?: { name?: string };
+	meta?: { name?: string };
+	arguments?: { type?: string; value?: unknown }[];
+}
+
+/**
+ * A class carrying a wire codec. Post-macro (the usual case here — macros run before this pass):
+ * `static [Symbol.for('ogygia.wire')] = …`. Pre-macro, defensively: `static <name> =
+ * import.meta.og.wire(…)`. Anything else is a plain class and must NOT be registered.
+ */
+function classHasWireMember(cls: AstNode): boolean {
+	const members = (cls.body as { body?: ClassMember[] } | undefined)?.body ?? [];
+	return members.some((m) => {
+		if (m.static !== true) return false;
+		if (m.computed === true && isWireSymbolKey(m.key)) return true; // static [Symbol.for('ogygia.wire')]
+		return isWireMacroCall(m.value); // static wire = import.meta.og.wire(…)
+	});
+}
+
+/** `Symbol.for('ogygia.wire')` — the computed key the wire macro emits. */
+function isWireSymbolKey(key: unknown): boolean {
+	const k = key as ExprNode | undefined;
+	if (k?.type !== 'CallExpression') return false;
+	const callee = k.callee;
+	if (
+		callee?.type !== 'MemberExpression' ||
+		callee.object?.name !== 'Symbol' ||
+		callee.property?.name !== 'for'
+	) {
+		return false;
+	}
+	const arg = k.arguments?.[0];
+	return (
+		!!arg && (arg.type === 'StringLiteral' || arg.type === 'Literal') && arg.value === 'ogygia.wire'
+	);
+}
+
+/** `import.meta.og.wire(…)` — the raw construct, before the macro rewrites it to the symbol key. */
+function isWireMacroCall(value: unknown): boolean {
+	const v = value as ExprNode | undefined;
+	if (v?.type !== 'CallExpression') return false;
+	const callee = v.callee; // (import.meta.og).wire
+	if (callee?.type !== 'MemberExpression' || callee.computed || callee.property?.name !== 'wire') {
+		return false;
+	}
+	const og = callee.object; // import.meta.og
+	if (og?.type !== 'MemberExpression' || og.computed || og.property?.name !== 'og') return false;
+	const meta = og.object; // import.meta
+	return meta?.type === 'MetaProperty' && meta.meta?.name === 'import' && meta.property?.name === 'meta';
 }
 
 interface AstNode {
@@ -132,6 +198,8 @@ interface ClassMember {
 	type: string;
 	static?: boolean;
 	computed?: boolean;
+	key?: unknown;
+	value?: unknown;
 }
 
 /**
@@ -194,7 +262,7 @@ export function appendTransportRegistrations(
 	// parse twice).
 	const body = parse_body(code, id_n);
 	if (!body) return null;
-	const classes = maybeClass ? exportedClassNamesFromBody(body) : [];
+	const classes = maybeClass ? exportedWireClassNamesFromBody(body) : [];
 	const contexts = maybeCtx ? contextExportNamesFromBody(body) : [];
 	if (classes.length === 0 && contexts.length === 0) return null;
 
@@ -260,7 +328,7 @@ export function appendSvelteModuleRegistrations(
 	if (code.includes(GENERATED_MARK) || !CLASS_KW.test(code)) return null;
 	const mod = moduleScriptOf(code);
 	if (!mod) return null;
-	const exported = exportedClassNames(mod.body, id_n.replace(SVELTE_EXT, '.svelte.ts'));
+	const exported = exportedWireClassNames(mod.body, id_n.replace(SVELTE_EXT, '.svelte.ts'));
 	if (exported.length === 0) return null;
 	const rel = pathModule.relative(root, id_n).split('\\').join('/');
 	const block = '\n' + registrationBlock(rel, exported, []) + '\n';
