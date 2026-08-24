@@ -40,6 +40,16 @@ export interface ReportMeta {
 	trigger: 'window' | 'page' | 'request';
 	/** page mode: the path that was rendered */
 	page?: string;
+	/** page mode: the originally-requested path, when it redirected to `page` (trailing slash, i18n, …) */
+	redirected_from?: string;
+	/** page mode: wall ms of the one un-profiled warm-up render (cold module load / cache fill) */
+	warmup_ms?: number;
+	/** page mode: the HTTP status the profiled renders returned (200 = a real render; 3xx/4xx = not) */
+	run_status?: number;
+	/** page mode: representative response body size in bytes (a real page is large; a redirect is tiny) */
+	run_bytes?: number;
+	/** page mode: a plain note when the run plan was trimmed to fit the serverless budget */
+	budget_note?: string;
 	/** page mode: wall ms of each render run */
 	runs?: number[];
 	/** request mode: the profiled request */
@@ -131,6 +141,55 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 				? ` and ${net.length} outbound network calls took ${fmt_ms(net_total)} ms combined.`
 				: '.')
 	);
+
+	// Page mode: did we actually profile a real render? A 3xx/4xx status or a tiny body means we
+	// measured a redirect or error page, not the page — the classic "3 ms window, no components" report.
+	if (meta.trigger === 'page') {
+		if (meta.redirected_from && meta.page) {
+			info(
+				'redirected',
+				`Profiled ${meta.page} — followed a redirect from ${meta.redirected_from}.`
+			);
+		}
+		const status = meta.run_status ?? 200;
+		const bytes = meta.run_bytes ?? 0;
+		if (status >= 300) {
+			warn(
+				'not-a-render',
+				`The profiled renders returned HTTP ${status}, not a page. This is almost always an ` +
+					`unfollowed redirect or an error route — the numbers below are not your page. Check the path.`
+			);
+		} else if (bytes > 0 && bytes < 512) {
+			warn(
+				'not-a-render',
+				`Each render returned only ${bytes} bytes — too small to be the real page (an error, an empty ` +
+					`shell, or a cached stub). The profile below is not representative.`
+			);
+		} else if (a.components.length === 0 && a.sample_count < 200) {
+			// no component work AND barely any samples: either a non-render or a page so fast there is
+			// nothing to see. Either way the verdict can't be trusted — say so instead of dressing it up.
+			warn(
+				'low-confidence',
+				`Only ${a.sample_count} CPU sample${a.sample_count === 1 ? '' : 's'} and no components were ` +
+					`seen — the render was too fast or too small to profile accurately. If the page is genuinely ` +
+					`instant it may be cached/prerendered; otherwise the wrong URL was profiled.`
+			);
+		}
+		if (meta.warmup_ms !== undefined && meta.runs?.length) {
+			const median = [...meta.runs].sort((x, y) => x - y)[Math.floor(meta.runs.length / 2)];
+			// warm-up an order of magnitude slower than the steady runs = the app cached the page after
+			// the first render (or paid a big cold cost). The warm-up is then the only real render.
+			if (median > 0 && meta.warmup_ms > median * 8 && meta.warmup_ms > 200) {
+				info(
+					'cached-after-first',
+					`The first (warm-up) render took ${fmt_ms(meta.warmup_ms)} ms but the timed runs averaged ` +
+						`~${fmt_ms(median)} ms — the app appears to cache this page after the first render, so the ` +
+						`profile reflects cache hits, not the ${fmt_ms(meta.warmup_ms)} ms first paint.`
+				);
+			}
+		}
+		if (meta.budget_note) info('budget', meta.budget_note);
+	}
 
 	if (net.length >= 2 && seq > meta.duration_ms * 0.5 && busy_pct < 60) {
 		warn(
@@ -254,7 +313,16 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 		node: meta.node,
 		dev: !!meta.dev,
 		sourcemapped: a.sourcemapped,
-		target: { page: meta.page ?? null, runs: meta.runs ?? null, request: meta.request ?? null },
+		target: {
+			page: meta.page ?? null,
+			redirected_from: meta.redirected_from ?? null,
+			runs: meta.runs ?? null,
+			warmup_ms: meta.warmup_ms ?? null,
+			run_status: meta.run_status ?? null,
+			run_bytes: meta.run_bytes ?? null,
+			budget_note: meta.budget_note ?? null,
+			request: meta.request ?? null
+		},
 		summary: {
 			window_ms: meta.duration_ms,
 			busy_ms: a.busy_ms,

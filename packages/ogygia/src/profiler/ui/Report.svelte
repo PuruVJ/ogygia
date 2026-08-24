@@ -168,10 +168,13 @@
 	{#if meta.trigger === 'page' && meta.runs?.length}
 		<h2>Renders of {meta.page ?? ''}</h2>
 		<p class="hint">
-			Each run is one full server render, median {fmt_ms(runsMedian)} ms. The first run may include
-			one-time module loading.
+			Each run is one full server render, median {fmt_ms(runsMedian)} ms.
+			{#if meta.redirected_from}Followed a redirect from <code>{meta.redirected_from}</code>.{/if}
+			{#if meta.warmup_ms !== undefined}Warm-up render {fmt_ms(meta.warmup_ms)} ms (un-profiled, pays cold module load).{/if}
+			{#if meta.run_status !== undefined}Status {meta.run_status}{#if meta.run_bytes !== undefined}, {fmt_bytes(meta.run_bytes)}{/if}.{/if}
 		</p>
 		<p class="fn">{meta.runs.map((r) => fmt_ms(r) + ' ms').join(' · ')}</p>
+		{#if meta.budget_note}<p class="verdict">{meta.budget_note}</p>{/if}
 	{:else if meta.trigger === 'request' && meta.request}
 		<h2>Profiled request</h2>
 		<p class="fn">

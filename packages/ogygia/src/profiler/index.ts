@@ -163,6 +163,36 @@ const MAX_BACKGROUND_NET = 300;
 // real profile: a serverless request is capped well under this anyway.
 const RECORDING_MAX_MS = 120_000;
 
+// Serverless page-profile budget. On a managed host the whole `/page` request must return before the
+// platform's gateway kills it, so we cap all profiling work (warm-up + CPU runs + coverage pass) and
+// keep the rest of the budget for analysis + serialization + response.
+//
+// NONE of these platforms expose their function timeout as a runtime env var (checked Aug 2026:
+// Vercel's full system-env list, Amplify, Netlify) — it's build-time / gateway config — so we DETECT
+// the platform and use its binding timeout, and honour OGYGIA_PROFILER_BUDGET_MS when the author has
+// raised or lowered maxDuration from the default.
+const SERVERLESS_RESERVE_MS = 5_000; // analysis + report build + .ogp/json serialize + jitter
+/** The whole-request wall budget (ms) before the platform's gateway kills a /page profile — Infinity
+ *  on a real server (adapter-node, dev). An explicit OGYGIA_PROFILER_BUDGET_MS wins over detection. */
+function detect_request_budget_ms(): number {
+	const override = Number(process.env.OGYGIA_PROFILER_BUDGET_MS);
+	if (Number.isFinite(override) && override > 0) return override;
+	const env = process.env;
+	// Vercel + Netlify BOTH run on Lambda (AWS_LAMBDA_FUNCTION_NAME set), so check them FIRST.
+	if (env.VERCEL) return 300_000; // Vercel Functions: 300s default (fluid); Pro/Ent max 800s
+	if (env.NETLIFY) return 10_000; // Netlify Functions: 10s synchronous default (max 26s)
+	// AWS Amplify (WEB_COMPUTE SSR) → CloudFront 30s origin timeout; also the generic Lambda + API GW cap.
+	if (env.AWS_LAMBDA_FUNCTION_NAME || env.LAMBDA_TASK_ROOT) return 30_000;
+	return Infinity; // a real server — no gateway kill
+}
+/** Time allotted to the profiling work itself (warm-up + runs + coverage), keeping RESERVE for the
+ *  rest of the request. Halves as a floor so a very small budget still spends most of itself working. */
+function serverless_work_budget_ms(): number {
+	const req = detect_request_budget_ms();
+	if (!Number.isFinite(req)) return Infinity;
+	return Math.max(req - SERVERLESS_RESERVE_MS, Math.floor(req * 0.5));
+}
+
 type HashFn = (algo: string) => { update(s: string): { digest(enc: 'hex'): string } };
 
 /**
@@ -486,7 +516,18 @@ class Profiler {
 
 	async #finish_report(
 		cap: WindowCapture,
-		meta_partial: Pick<ReportMeta, 'trigger' | 'page' | 'runs' | 'request'>
+		meta_partial: Pick<
+			ReportMeta,
+			| 'trigger'
+			| 'page'
+			| 'runs'
+			| 'request'
+			| 'redirected_from'
+			| 'warmup_ms'
+			| 'run_status'
+			| 'run_bytes'
+			| 'budget_note'
+		>
 	): Promise<string> {
 		const resolver = await this.#make_resolver();
 		const analysis = analyze(cap.profile, resolver, cap.call_counts);
@@ -729,21 +770,77 @@ class Profiler {
 				}
 				const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
 				const interval = clamp(Number(q.get('interval')) || 200, 50, 10_000);
+				// The whole /page request has to return before the platform's gateway kills it (Amplify 30s,
+				// Netlify 10s, Vercel 300s, …). Start the budget clock now — warm-up, CPU runs, AND the
+				// coverage pass all live inside it. Infinity on a real server.
+				const work_budget = serverless_work_budget_ms();
+				const deadline = Number.isFinite(work_budget) ? Date.now() + work_budget : Infinity;
+				const fetch_render = (p: string) =>
+					event.fetch(p, { headers: { 'x-og-profiler-internal': '1' } });
+
+				// Warm-up + redirect resolve. `/fr/fr` may 308 → `/fr/fr/` (trailing slash), or i18n-redirect;
+				// profiling the 3xx measures nothing (the classic "3 ms window, no components" report). Follow
+				// the chain HERE, once, un-profiled (it also pays the cold module-load cost), and profile the
+				// FINAL url. The warm-up's own wall time is reported so a caching app is obvious.
+				let target = path;
+				let redirected_from: string | undefined;
+				let warmup_ms: number | undefined;
+				let warm_status = 0;
+				let warm_bytes = 0;
+				for (let hop = 0; hop < 5; hop++) {
+					const t = performance.now();
+					let res: Response;
+					try {
+						res = await fetch_render(target);
+					} catch {
+						break; // warm-up failure surfaces on the real runs below
+					}
+					const body = await res.text();
+					warmup_ms = round2(performance.now() - t);
+					warm_status = res.status;
+					warm_bytes = body.length;
+					// fetch may follow same-origin redirects itself (res.redirected) or hand back the 3xx
+					const next = res.redirected
+						? new URL(res.url).pathname + new URL(res.url).search
+						: res.status >= 300 && res.status < 400
+							? (() => {
+									const loc = res.headers.get('location');
+									if (!loc) return null;
+									const u = new URL(loc, event.url.origin);
+									return u.pathname + u.search;
+								})()
+							: null;
+					if (!next || next === target) break;
+					redirected_from ??= path;
+					target = next;
+				}
+
 				const run_ms: number[] = [];
 				const run_windows: Array<{ start: number; end: number }> = [];
-				// one un-profiled warm-up render: pays the cold module-load / cache-fill
-				// cost outside the window so the measured runs (and the median) are steady
-				try {
-					await (await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } })).text();
-				} catch {
-					// warm-up failures surface on the real runs below
-				}
+				let run_status = warm_status;
+				let run_bytes = warm_bytes;
+				let budget_note: string | undefined;
+				// Reserve room for the coverage pass (call counts — "traverse ×768k") so a slow page can never
+				// consume the whole budget on CPU runs and starve it. One render ≈ the warm-up's wall time.
+				const coverage_reserve = Math.max(warmup_ms ?? 0, 300);
 				const cap = await this.#capture_window(interval, async () => {
 					for (let i = 0; i < runs; i++) {
+						// Stop early if another CPU run + the reserved coverage pass wouldn't finish in time.
+						if (i > 0 && Date.now() + (warmup_ms ?? 0) + coverage_reserve > deadline) {
+							const budget_label =
+								work_budget >= 1000 ? `${Math.round(work_budget / 1000)}s` : `${Math.round(work_budget)}ms`;
+							budget_note =
+								`Ran ${i} of ${runs} render${i === 1 ? '' : 's'} — trimmed to fit the ` +
+								`${budget_label} serverless budget (the page renders in ~${Math.round(warmup_ms ?? 0)}ms). ` +
+								`Fewer runs, same accuracy per run.`;
+							break;
+						}
 						const t = performance.now();
-						const res = await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } });
-						await res.text();
+						const res = await fetch_render(target);
+						const body = await res.text();
 						const done = performance.now();
+						run_status = res.status;
+						run_bytes = body.length;
 						run_ms.push(round2(done - t));
 						run_windows.push({ start: t, end: done });
 						// let the event loop turn once between renders: flushes the GC
@@ -757,11 +854,21 @@ class Profiler {
 				scope_net_to_one_run(cap, run_windows);
 				// call counts come from ONE extra render under precise coverage — a
 				// SEPARATE pass, because coverage stops V8 inlining and would otherwise
-				// inflate the CPU profile (svelte's hot `child`/`push` would dominate)
+				// inflate the CPU profile (svelte's hot `child`/`push` would dominate).
+				// Always run it (the ×N counts are the point) — the loop above reserved its time.
 				cap.call_counts = await this.#count_calls(async () => {
-					await (await event.fetch(path, { headers: { 'x-og-profiler-internal': '1' } })).text();
+					await fetch_render(target).then((r) => r.text());
 				});
-				const id = await this.#finish_report(cap, { trigger: 'page', page: path, runs: run_ms });
+				const id = await this.#finish_report(cap, {
+					trigger: 'page',
+					page: target,
+					redirected_from,
+					warmup_ms,
+					run_status,
+					run_bytes,
+					budget_note,
+					runs: run_ms
+				});
 				const s = this.#reports.get(id)!;
 				// serverless (Amplify/Vercel/Netlify) can't keep the report in memory across invocations
 				// AND a fresh instance may serve the follow-up render — so `?format=ogp` streams the whole

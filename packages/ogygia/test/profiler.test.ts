@@ -309,6 +309,78 @@ describe('report data (JSON, findings, budget, treemap, waiting)', () => {
 	});
 });
 
+describe('page-mode honesty findings (redirect / not-a-render / budget)', () => {
+	// a real render: components sampled, plenty of samples
+	const real_profile: CpuProfile = {
+		startTime: 0,
+		endTime: 4000,
+		nodes: [
+			{ id: 1, callFrame: frame('(root)'), children: [2] },
+			{ id: 2, callFrame: frame('Page', '/app/src/routes/+page.svelte', 0) }
+		],
+		samples: Array.from({ length: 300 }, () => 2),
+		timeDeltas: Array.from({ length: 300 }, () => 10)
+	};
+	// a non-render: one frame, two samples, no component
+	const empty_profile: CpuProfile = {
+		startTime: 0,
+		endTime: 20,
+		nodes: [
+			{ id: 1, callFrame: frame('(root)'), children: [2] },
+			{ id: 2, callFrame: frame('dispatch', '', 0) }
+		],
+		samples: [2, 2],
+		timeDeltas: [10, 10]
+	};
+	const base = {
+		id: 'p',
+		created: 1,
+		trigger: 'page' as const,
+		duration_ms: 4000,
+		sample_interval_us: 500,
+		requests: [],
+		node: 'v20'
+	};
+	const codes = (a: ReturnType<typeof analyze>, meta: Parameters<typeof derive_findings>[1]) =>
+		derive_findings(a, meta, { net: [], heap: null, mem: [] }).map((f) => f.code);
+
+	it('reports the redirect it followed', () => {
+		const a = analyze(real_profile);
+		expect(codes(a, { ...base, page: '/fr/fr/', redirected_from: '/fr/fr', run_status: 200, run_bytes: 90000 })).toContain('redirected');
+	});
+
+	it('warns when the profiled renders were a 3xx (unfollowed redirect), not a page', () => {
+		const a = analyze(empty_profile);
+		expect(codes(a, { ...base, page: '/fr/fr', run_status: 308, run_bytes: 40 })).toContain('not-a-render');
+	});
+
+	it('warns when the body was too small to be a real page', () => {
+		const a = analyze(empty_profile);
+		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 40 })).toContain('not-a-render');
+	});
+
+	it('flags a low-confidence window (no components, few samples)', () => {
+		const a = analyze(empty_profile);
+		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 5000 })).toContain('low-confidence');
+	});
+
+	it('does NOT cry low-confidence on a real render', () => {
+		const a = analyze(real_profile);
+		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 90000 })).not.toContain('low-confidence');
+	});
+
+	it('spots an app that caches the page after the first render', () => {
+		const a = analyze(real_profile);
+		const c = codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 90000, warmup_ms: 5000, runs: [15, 16, 14] });
+		expect(c).toContain('cached-after-first');
+	});
+
+	it('echoes the serverless budget note', () => {
+		const a = analyze(real_profile);
+		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 90000, budget_note: 'Ran 3 of 5 renders — trimmed to fit the 25s serverless budget.' })).toContain('budget');
+	});
+});
+
 describe('I/O wait attribution', () => {
 	const meta2 = {
 		id: 'io',
