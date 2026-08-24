@@ -12,17 +12,20 @@ time to your components by itself.
 
 ## Install
 
-One line in `src/hooks.server.ts`:
+Turn it on in `vite.config.ts` — nowhere else:
 
 ```ts
-import { sequence } from '@sveltejs/kit/hooks';
-import { profiler } from 'ogygia/profiler';
+import { ogygia } from 'ogygia/vite';
 
-export const handle = sequence(profiler() /* ...your other handles */);
+export default defineConfig({
+	plugins: [ogygia({ profiler: true }), sveltekit()]
+});
 ```
 
-Put it **first** in the sequence so it times the whole chain below it. In
-production, set a secret so the UI is reachable:
+`ogygia.handle()` mounts it for you, so `src/hooks.server.ts` stays a plain
+`sequence(...)`. Pass options instead of `true` to tune it —
+`ogygia({ profiler: { secret, path, sampleInterval } })`. In production, set a
+secret so the UI is reachable:
 
 ```bash
 OGYGIA_PROFILER_SECRET=some-long-random-string

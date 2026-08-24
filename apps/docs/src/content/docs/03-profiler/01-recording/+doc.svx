@@ -78,7 +78,7 @@ Then open **`/__profiler/view`** anywhere — your production route, or the same
 Set a secret. Without one, the UI is disabled and 404s.
 
 ```bash
-PROFILER_SECRET=some-long-random-string
+OGYGIA_PROFILER_SECRET=some-long-random-string
 ```
 
 Then reach the dashboard with `?key=<secret>`. The key is remembered in a cookie for that session, so links inside a report work without repeating it. Matching is timing-safe.
@@ -112,15 +112,20 @@ The report header shows **sourcemapped** when it worked. Leave it off for normal
 
 ## Options
 
+Pass an object instead of `true` to the vite plugin's `profiler` option:
+
 ```ts
-profiler({
-  secret: process.env.PROFILER_SECRET, // default: the PROFILER_SECRET env var
-  path: '/__profiler',                 // UI base path
-  sampleInterval: 500,                 // µs between CPU samples
-  maxReports: 6,                       // profiles kept in memory (gzipped)
-  network: true,                       // patch fetch/http to attribute calls
-  serverTiming: undefined,             // default: on in dev, off in production
-  heap: true,                          // sample heap allocations while recording
-  enabled: true,                       // master switch
+// vite.config.ts
+ogygia({
+  profiler: {
+    secret: process.env.OGYGIA_PROFILER_SECRET, // default: the OGYGIA_PROFILER_SECRET env var
+    path: '/__profiler',                        // UI base path
+    sampleInterval: 500,                        // µs between CPU samples
+    maxReports: 6,                              // profiles kept in memory (gzipped)
+    network: true,                              // patch fetch/http to attribute calls
+    serverTiming: undefined,                    // default: on in dev, off in production
+    heap: true,                                 // sample heap allocations while recording
+    enabled: true,                              // master switch
+  },
 });
 ```

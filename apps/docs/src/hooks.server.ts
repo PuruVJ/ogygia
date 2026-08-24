@@ -1,6 +1,5 @@
 import { sequence } from '@sveltejs/kit/hooks';
 import * as ogygia from 'ogygia/server';
-import { profiler } from 'ogygia/profiler';
 import type { Handle } from '@sveltejs/kit';
 
 // Cross-origin isolation for the Observatory (/observatory + its /observatory-frame iframe). The
@@ -21,6 +20,7 @@ const crossOriginIsolation: Handle = async ({ event, resolve }) => {
 	return res;
 };
 
-// profiler() goes first so it times the whole chain. Without a PROFILER_SECRET
-// env var the UI hides itself in production, so this is inert on deploys.
-export const handle = sequence(profiler(), crossOriginIsolation, ogygia.handle());
+// The SSR profiler is configured in vite.config.ts (`profiler: true`) and mounted inside
+// ogygia.handle() — not wired here. Without OGYGIA_PROFILER_SECRET the UI hides itself in
+// production, so it's inert on deploys.
+export const handle = sequence(crossOriginIsolation, ogygia.handle());

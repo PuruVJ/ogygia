@@ -129,6 +129,10 @@ export default defineConfig(({ command }) => ({
 			// The devtools dock (launcher + Lens/Bytes/Wire/Nav/Timeline) — dev only, so the built
 			// docs site never ships the instrument graph. `command === 'serve'` is `vite dev`.
 			devtools: command === 'serve',
+			// The SSR profiler — configured ONLY here (no profiler() hook). ogygia.handle() mounts it
+			// internally. UI at /__profiler (dev = open; prod needs ?key=<OGYGIA_PROFILER_SECRET>).
+			// Build with PROFILER_SOURCEMAPS=1 to recover original frame names (see build.sourcemap).
+			profiler: true,
 			regions: {
 				visible: { margin: '120px' },
 				presets: {

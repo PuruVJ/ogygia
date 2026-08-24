@@ -662,11 +662,9 @@ async function find_local_profiler(base: string, key: string): Promise<string[]>
 }
 
 const NOT_MOUNTED = (base: string, where: string) =>
-	`The profiler is not mounted at ${base} on ${where}. Add it to src/hooks.server.ts:\n\n` +
-	`  import { sequence } from '@sveltejs/kit/hooks';\n` +
-	`  import { profiler } from 'ogygia/profiler';\n` +
-	`  export const handle = sequence(profiler(), /* …your other handles */);\n\n` +
-	`Put profiler() FIRST so it times the whole chain. Restart the server, then retry.`;
+	`The profiler is not mounted at ${base} on ${where}. Turn it on in vite.config.ts:\n\n` +
+	`  ogygia({ profiler: true /* or { secret, path, … } */ })\n\n` +
+	`ogygia.handle() mounts it for you — no hooks wiring needed. Restart the server, then retry.`;
 
 async function tool_profile(args: Attrs): Promise<ToolResult> {
 	const raw = String(args.url ?? '').trim();

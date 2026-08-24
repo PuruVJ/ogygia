@@ -46,8 +46,8 @@ export function sign_module(ssr: boolean, hmac_module: string): string {
  * `virtual:ogygia/profiler-config` — SERVER only: the profiler options from `ogygia({ profiler })`,
  * or `null` when unset. `ogygia.handle()` reads it and, when non-null, dynamically imports and mounts
  * the profiler — so hooks.server.ts never mentions it and the profiler's weight loads only when
- * enabled. The SECRET is deliberately NOT here: it stays a runtime env var (PROFILER_SECRET), never
- * baked into a build artifact.
+ * enabled. The SECRET is deliberately NOT here: it stays a runtime env var (OGYGIA_PROFILER_SECRET),
+ * never baked into a build artifact.
  */
 export function profiler_config_module(
 	ssr: boolean,

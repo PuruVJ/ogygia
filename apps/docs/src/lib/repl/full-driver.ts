@@ -55,7 +55,10 @@ function repl_ctx(markdown_config: unknown): CompileCtx {
 		client_binding_stub_file: '/node_modules/ogygia/dist/runtime/client-binding-stub.js',
 		app_shims: {},
 		is_build: false,
-		content_presets: null
+		content_presets: null,
+		extra_scan_roots: [], // REPL scans nothing beyond the virtual /repl tree
+		profiler_config: null, // no SSR profiler in the browser REPL
+		devtools: false // the REPL shows compiler output; no devtools instruments to bake
 	});
 }
 

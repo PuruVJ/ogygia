@@ -26,20 +26,20 @@ The trick that makes it readable: Svelte compiles every component to a function 
 
 ## Install
 
-One line in `src/hooks.server.ts`, first in the sequence so it times everything below it:
+Turn it on in `vite.config.ts` — nowhere else. `ogygia.handle()` mounts it for you, so `src/hooks.server.ts` stays a plain `sequence(...)`:
 
 ```ts
-import { sequence } from '@sveltejs/kit/hooks';
-import { profiler } from 'ogygia/profiler';
-import * as ogygia from 'ogygia/server';
+import { ogygia } from 'ogygia/vite';
 
-export const handle = sequence(profiler(), ogygia.handle());
+export default defineConfig({
+	plugins: [ogygia({ profiler: true }), sveltekit()]
+});
 ```
 
-In production, set a secret so the UI is reachable and gated:
+Pass options instead of `true` to tune it — `ogygia({ profiler: { secret, path, sampleInterval } })`. In production, set a secret so the UI is reachable and gated:
 
 ```bash
-PROFILER_SECRET=some-long-random-string
+OGYGIA_PROFILER_SECRET=some-long-random-string
 ```
 
 Then open **`/__profiler`** — add `?key=<secret>` in production.

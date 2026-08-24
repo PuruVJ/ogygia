@@ -1,11 +1,13 @@
 /**
- * ogygia/profiler — a drop-in, production-safe SSR profiler for SvelteKit.
+ * The drop-in, production-safe SSR profiler for SvelteKit. Configured ENTIRELY in
+ * vite.config.ts — never wired in hooks:
  *
- * One line in hooks.server.ts:
+ *     ogygia({ profiler: true })          // or { profiler: { secret, path, … } }
  *
- *     import { sequence } from '@sveltejs/kit/hooks';
- *     import { profiler } from 'ogygia/profiler';
- *     export const handle = sequence(profiler(), ...yourOtherHandles);
+ * `ogygia.handle()` reads that config (through the `virtual:ogygia/profiler-config`
+ * module) and dynamically imports + mounts this internally, so hooks.server.ts stays
+ * a plain `sequence(...)`. This module is NOT a public entry point — it is reached
+ * only through the handle's lazy import.
  *
  * What you get, with zero per-component wrapping:
  *
@@ -1080,11 +1082,10 @@ class Profiler {
 }
 
 /**
- * ogygia/profiler — a drop-in, production-safe SSR profiler for SvelteKit.
- *
- *     import { sequence } from '@sveltejs/kit/hooks';
- *     import { profiler } from 'ogygia/profiler';
- *     export const handle = sequence(profiler(), ...yourOtherHandles);
+ * Build a profiler handle. INTERNAL — the profiler is configured in vite.config.ts
+ * (`ogygia({ profiler: true })`) and `ogygia.handle()` constructs + mounts this itself.
+ * Kept as a named export only so the handle's lazy import can reach it; it is not a
+ * public entry point.
  *
  * See the class doc and README for what it captures. Visit `<path>` (default
  * /__profiler) — in prod add `?key=<secret>`.
