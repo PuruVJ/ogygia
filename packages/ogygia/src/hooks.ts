@@ -38,6 +38,7 @@ import {
 } from 'virtual:ogygia/router-config';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
+import devtools_boot_url from 'virtual:ogygia/devtools-boot-url';
 import { verify, region_mac_message } from './server/hmac.js';
 import { render_cache_key, cached_render } from './server/render-cache.js';
 import { B64Url } from './server/payload.js';
@@ -376,7 +377,23 @@ class OgygiaHandle {
 		bag?: RequestBag
 	): Promise<string> {
 		// csr=true page — Kit serializes its own remotes and hydrates the whole tree; skip seeds.
-		if (html_has_kit_bootstrap(html)) return html;
+		if (html_has_kit_bootstrap(html)) {
+			// The ogygia runtime never boots here (Kit owns the page), so it can't mount the devtools
+			// dock. When devtools is compiled in (`devtools_boot_url` is non-empty only then, dev-only),
+			// inject a standalone dock boot so the launcher is on EVERY dev page — on this csr=true page
+			// it renders a "csr=true — open a csr=false page" notice, since there are no islands here.
+			if (
+				devtools_boot_url &&
+				html.includes('</head>') &&
+				!html.includes('data-ogygia-devtools-boot')
+			) {
+				html = html.replace(
+					'</head>',
+					`<script type="module" data-ogygia-devtools-boot src="${devtools_boot_url}"></script></head>`
+				);
+			}
+			return html;
+		}
 
 		// Router (global, opt out with `ogygia({ router: false })`). The handle owns the runtime
 		// bootstrap + the `ogygia-router` meta the client router reads per-navigation, so no

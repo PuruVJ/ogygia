@@ -51,6 +51,13 @@ declare module 'virtual:ogygia/dev-hmr-url' {
 	const url: string;
 	export default url;
 }
+declare module 'virtual:ogygia/devtools-boot' {
+	/* side-effect only — mounts the standalone devtools dock on a csr=true page */
+}
+declare module 'virtual:ogygia/devtools-boot-url' {
+	const url: string;
+	export default url;
+}
 declare module 'virtual:ogygia/secret' {
 	export const secret: string;
 	/** True when the key is env-provided (OGYGIA_SECRET) and thus survives redeploys. */
@@ -194,6 +201,11 @@ interface Window {
 	// client-side nav vs a real reload. Read by Playwright `page.evaluate` (a separate script
 	// boundary), so it must be a string-keyed global. NOT used by any library logic.
 	__marker?: number;
+	// Dev-only devtools maps the dock fetches from the plugin's `/__ogygia_devtools_meta` middleware.
+	// `names`: island id → component name (tab labels). `bytes`: island id → transitive dev-module
+	// size (the Bytes tab's real-cost estimate). Absent off a devtools build.
+	__ogygia_region_names?: Record<string, string>;
+	__ogygia_region_bytes?: Record<string, { bytes: number; modules: number }>;
 }
 
 // Rune globals used by the `.svelte.ts` shims. Those files are compiled by the CONSUMER's

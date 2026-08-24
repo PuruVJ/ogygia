@@ -4,7 +4,14 @@
 	 * chunk, from PerformanceResourceTiming. Cold islands show `cold` and fill in live as the panel
 	 * ticks. Measures each island's OWN chunk (not transitive deps); dev sizes are flagged.
 	 */
-	import { all_regions, chunk_bytes, basename, kb } from './regions.js';
+	import {
+		all_regions,
+		chunk_bytes,
+		basename,
+		kb,
+		region_name,
+		region_transitive
+	} from './regions.js';
 
 	let { tick = 0 } = $props();
 	const IS_DEV = !!(import.meta.env && import.meta.env.DEV);
@@ -23,49 +30,66 @@
 		}
 
 		const rows = [...groups.values()]
-			.map((g) => ({ ...g, ...chunk_bytes(g.entry) }))
-			.sort((a, b) => b.wire - a.wire);
+			.map((g) => {
+				const t = region_transitive(g.entry);
+				return {
+					...g,
+					...chunk_bytes(g.entry),
+					name: region_name(g.entry),
+					transitive: t ? t.bytes : 0,
+					modules: t ? t.modules : 0
+				};
+			})
+			// Sort by the real (transitive) cost when we have it, else by the entry-chunk wire size.
+			.sort((a, b) => b.transitive - a.transitive || b.wire - a.wire);
 
 		const runtimeSrc =
 			document.querySelector('script[data-ogygia-runtime]')?.getAttribute('src') || '';
 		const runtime = runtimeSrc ? { src: runtimeSrc, ...chunk_bytes(runtimeSrc) } : null;
 
-		// Page total over UNIQUE chunks.
+		// Page total over UNIQUE chunks (rows are already one-per-island). `wire` = wrapper chunks;
+		// `transitive` = each island's whole subgraph (the real-cost column).
 		const counted = new Set();
 		let wire = 0;
-		let raw = 0;
+		let transitive = 0;
 		for (const row of rows) {
-			if (!row.loaded || counted.has(basename(row.entry))) continue;
-			counted.add(basename(row.entry));
-			wire += row.wire;
-			raw += row.raw;
+			const key = basename(row.entry);
+			if (counted.has(key)) continue;
+			counted.add(key);
+			if (row.loaded) wire += row.wire;
+			transitive += row.transitive;
 		}
-		if (runtime?.loaded && !counted.has(basename(runtime.src))) {
-			wire += runtime.wire;
-			raw += runtime.raw;
-		}
-		return { rows, runtime, totalWire: wire, totalRaw: raw };
+		if (runtime?.loaded && !counted.has(basename(runtime.src))) wire += runtime.wire;
+		return { rows, runtime, totalWire: wire, totalTransitive: transitive };
 	});
 </script>
 
-<h4>byte ledger — JavaScript shipped</h4>
+<h4>byte ledger — JavaScript per island</h4>
 {#if IS_DEV}
-	<div class="note">dev server — sizes are unbundled/unminified, not representative. Build + preview for real numbers.</div>
+	<div class="note">
+		dev estimate — <b>+deps</b> sums the island's whole module subgraph (component + everything it
+		imports), so it reflects real cost, not just the wrapper. Sizes are unbundled/unminified; build
+		+ preview for shipped numbers. A cold island (not yet woken) shows <b>—</b> until it loads.
+	</div>
 {/if}
 
 <table>
 	<thead>
-		<tr><th>chunk</th><th>kind</th><th>over&nbsp;wire</th><th>raw</th></tr>
+		<tr><th>island</th><th>kind</th><th>wrapper</th><th>+deps</th></tr>
 	</thead>
 	<tbody>
 		{#each model.rows as row (row.entry)}
 			<tr>
 				<td title={row.entry}>
-					{basename(row.entry)}{#if row.count > 1}<span class="muted"> ×{row.count}</span>{/if}
+					<span class="nm">{row.name}</span>{#if row.count > 1}<span class="muted"> ×{row.count}</span>{/if}
 				</td>
 				<td>{row.kind}{row.kind === 'island' ? ' · ' + row.wake : ''}</td>
 				<td>{#if row.loaded}{kb(row.wire)}{:else}<span class="muted">cold</span>{/if}</td>
-				<td>{#if row.loaded}{kb(row.raw)}{:else}<span class="muted">—</span>{/if}</td>
+				<td>
+					{#if row.transitive}
+						<span class="strong">{kb(row.transitive)}</span><span class="muted"> · {row.modules} mod</span>
+					{:else}<span class="muted">—</span>{/if}
+				</td>
 			</tr>
 		{:else}
 			<tr><td colspan="4" class="muted">no island chunks on this page</td></tr>
@@ -75,14 +99,14 @@
 				<td>ogygia runtime</td>
 				<td class="muted">shared</td>
 				<td>{model.runtime.loaded ? kb(model.runtime.wire) : '—'}</td>
-				<td>{model.runtime.loaded ? kb(model.runtime.raw) : '—'}</td>
+				<td class="muted">—</td>
 			</tr>
 		{/if}
 	</tbody>
 	<tfoot>
 		<tr>
-			<td>page total (unique chunks)</td><td></td>
-			<td>{kb(model.totalWire)}</td><td>{kb(model.totalRaw)}</td>
+			<td>page total</td><td class="muted">unique · +deps</td>
+			<td>{kb(model.totalWire)}</td><td>{kb(model.totalTransitive)}</td>
 		</tr>
 	</tfoot>
 </table>
@@ -124,5 +148,12 @@
 	}
 	.muted {
 		color: #64748b;
+	}
+	.nm {
+		color: #e2e8f0;
+		font-weight: 600;
+	}
+	.strong {
+		color: #e2e8f0;
 	}
 </style>

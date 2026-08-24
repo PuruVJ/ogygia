@@ -5,6 +5,7 @@
 	 * different origin. The track width follows the window (bind:clientWidth), so it never overflows.
 	 */
 	import { snapshot } from './bus.js';
+	import { region_name, region_name_by_fp } from './regions.js';
 
 	let { tick = 0 } = $props();
 
@@ -30,40 +31,64 @@
 		tick; // refresh with the panel tick
 		const events = snapshot().filter((e) => e.realm === 'client' && MARK[e.name]);
 		if (events.length === 0) return { events: [], lanes: [], span: 0 };
+
+		// Group by region, keeping only the FIRST occurrence of each phase. A live region re-emits
+		// wake/hydrate on every tick — folding to first-per-phase keeps a 2-minute live tail from
+		// stretching the axis so the real initial-load hydrations collapse into a single dot.
+		const laneMap = new Map();
+		for (const e of events) {
+			const key = e.fp || 'page';
+			let lane = laneMap.get(key);
+			if (!lane) laneMap.set(key, (lane = { key, first: new Map(), entry: null }));
+			if (!lane.first.has(e.name)) lane.first.set(e.name, e);
+			if (e.entry && !lane.entry) lane.entry = e.entry;
+		}
+
+		// Axis spans only those first events — i.e. the initial hydration wave.
 		let t0 = Infinity;
 		let t1 = -Infinity;
-		for (const e of events) {
-			if (e.t < t0) t0 = e.t;
-			if (e.t > t1) t1 = e.t;
-		}
+		for (const lane of laneMap.values())
+			for (const e of lane.first.values()) {
+				if (e.t < t0) t0 = e.t;
+				if (e.t > t1) t1 = e.t;
+			}
 		const span = Math.max(1, t1 - t0);
 		const x = (t) => ((t - t0) / span) * trackW;
 
-		const laneMap = new Map();
-		laneMap.set('page', []);
-		for (const e of events) {
-			const key = e.fp || 'page';
-			if (!laneMap.has(key)) laneMap.set(key, []);
-			laneMap.get(key).push(e);
-		}
 		const lanes = [];
-		for (const [key, evs] of laneMap) {
-			if (evs.length === 0) continue;
-			const withEntry = evs.find((e) => e.entry);
+		for (const lane of laneMap.values()) {
+			const evs = [...lane.first.values()].sort((a, b) => a.t - b.t);
 			const label =
-				key === 'page'
+				lane.key === 'page'
 					? 'page / nav'
-					: (withEntry?.entry ? withEntry.entry.split('/').pop().replace(/\.js$/, '') : key.slice(0, 10)).slice(0, 20);
-			const start = evs.find((e) => e.name === 'region.hydrate.start');
-			const done = evs.find((e) => e.name === 'region.hydrate.done');
-			const bar = start && done ? { left: x(start.t), width: Math.max(2, x(done.t) - x(start.t)) } : null;
+					: lane.entry
+						? region_name(lane.entry)
+						: region_name_by_fp(lane.key);
+			// Bar = schedule → done (or the earliest phase we saw → done). Open bar when hydrate hasn't
+			// finished yet, so a still-waking region reads differently from a done one.
+			const start =
+				lane.first.get('wake.scheduled') ||
+				lane.first.get('wake.fired') ||
+				lane.first.get('region.hydrate.start');
+			const done =
+				lane.first.get('region.hydrate.done') || lane.first.get('region.hydrate.failed');
+			const bar = start
+				? {
+						left: x(start.t),
+						width: done ? Math.max(3, x(done.t) - x(start.t)) : Math.max(3, trackW - x(start.t)),
+						open: !done,
+						failed: lane.first.has('region.hydrate.failed')
+					}
+				: null;
+			const dur = start && done ? done.t - start.t : null;
 			const dots = evs.map((e) => ({
 				left: x(e.t),
 				color: MARK[e.name].c,
 				title: `${MARK[e.name].t} · ${e.name} @ +${(e.t - t0).toFixed(1)}ms`
 			}));
-			lanes.push({ key, label, bar, dots });
+			lanes.push({ key: lane.key, label, bar, dots, dur, order: evs[0]?.t ?? 0 });
 		}
+		lanes.sort((a, b) => a.order - b.order);
 		return { events, lanes, span };
 	});
 </script>
@@ -78,8 +103,17 @@
 			<div class="lane">
 				<div class="label" title={lane.key} style:width="{LABEL_W}px">{lane.label}</div>
 				<div class="track" style:width="{trackW}px">
-					{#if lane.bar}<div class="bar" style:left="{lane.bar.left}px" style:width="{lane.bar.width}px"></div>{/if}
+					{#if lane.bar}
+						<div
+							class="bar"
+							class:open={lane.bar.open}
+							class:failed={lane.bar.failed}
+							style:left="{lane.bar.left}px"
+							style:width="{lane.bar.width}px"
+						></div>
+					{/if}
 					{#each lane.dots as d}<div class="dot" title={d.title} style:left="{d.left}px" style:background={d.color}></div>{/each}
+					{#if lane.dur != null}<span class="dur" style:left="{(lane.bar?.left ?? 0) + (lane.bar?.width ?? 0)}px">{lane.dur < 10 ? lane.dur.toFixed(1) : Math.round(lane.dur)} ms</span>{/if}
 				</div>
 			</div>
 		{/each}
@@ -129,10 +163,30 @@
 	}
 	.bar {
 		position: absolute;
-		top: 8px;
-		height: 4px;
-		border-radius: 2px;
-		background: rgba(34, 197, 94, 0.45);
+		top: 7px;
+		height: 5px;
+		border-radius: 3px;
+		background: linear-gradient(90deg, rgba(56, 189, 248, 0.5), rgba(34, 197, 94, 0.6));
+	}
+	.bar.open {
+		background: repeating-linear-gradient(
+			90deg,
+			rgba(245, 158, 11, 0.5),
+			rgba(245, 158, 11, 0.5) 4px,
+			transparent 4px,
+			transparent 8px
+		);
+	}
+	.bar.failed {
+		background: rgba(239, 68, 68, 0.6);
+	}
+	.dur {
+		position: absolute;
+		top: 3px;
+		margin-left: 5px;
+		font-size: 10px;
+		color: #94a3b8;
+		white-space: nowrap;
 	}
 	.dot {
 		position: absolute;

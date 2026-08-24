@@ -11,8 +11,15 @@
 	import WireTab from './WireTab.svelte';
 	import HubTab from './HubTab.svelte';
 	import NavTab from './NavTab.svelte';
+	import { onMount } from 'svelte';
 	import BoundaryOverlay from './BoundaryOverlay.svelte';
+	import IslandDetail from './IslandDetail.svelte';
 	import { to_trace } from './sinks.js';
+
+	// `csrTrue` = mounted by the standalone boot on a Kit-hydrated (csr=true) page. The ogygia runtime
+	// never ran there, so there's no event bus and no islands to inspect — the window shows a notice
+	// pointing at a csr=false page instead of the (empty) instrument tabs.
+	let { csrTrue = false } = $props();
 
 	let copied = $state(false);
 	async function copy_trace() {
@@ -38,6 +45,35 @@
 	let tab = $state('lens');
 	let overlay = $state(false);
 	let tick = $state(0);
+	// The cross-highlighted region — an `<ogygia-region>` element shared by the Lens tab (its roster
+	// rows) and the BoundaryOverlay (the on-page boxes). Hovering EITHER lights up the other, the way a
+	// browser element inspector links its tree to the page. `null` = nothing focused.
+	let focus = $state(/** @type {Element | null} */ (null));
+	// The SELECTED region — clicking a roster row (or picking one on the page) opens its detail view
+	// over the tab body. `picking` = the "inspect on page" mode: overlay boxes become clickable.
+	let selected = $state(/** @type {Element | null} */ (null));
+	let picking = $state(false);
+	// Selecting closes the picker; leaving the Lens tab drops a half-started pick.
+	$effect(() => {
+		if (selected) picking = false;
+	});
+
+	// Pull the compiler's devtools metadata (dev-server middleware) once on mount: `names` (island id
+	// → component name, so tabs label "Counter" not a hash) and `bytes` (island id → its transitive
+	// dev-module-graph size, so the Bytes tab shows real cost, not the wrapper alone). Best-effort —
+	// the endpoint only exists on a dev devtools build, so a 404/parse error just leaves the fallbacks.
+	// `tick++` nudges the open tab to re-read immediately.
+	onMount(() => {
+		fetch('/__ogygia_devtools_meta')
+			.then((r) => (r.ok ? r.json() : null))
+			.then((meta) => {
+				if (!meta || typeof meta !== 'object') return;
+				if (meta.names) window.__ogygia_region_names = meta.names;
+				if (meta.bytes) window.__ogygia_region_bytes = meta.bytes;
+				tick++;
+			})
+			.catch(() => {});
+	});
 
 	// Refresh pulse while the window is open, so the active tab re-reads the bus/DOM live.
 	$effect(() => {
@@ -87,7 +123,7 @@
 	}
 </script>
 
-<BoundaryOverlay {overlay} />
+<BoundaryOverlay {overlay} bind:focus {selected} bind:picking onpick={(el) => (selected = el)} />
 
 {#if open}
 	<div
@@ -101,19 +137,35 @@
 	>
 		<div class="hd" role="toolbar" tabindex="-1" aria-label="ogygia devtools" onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}>
 			<span class="ttl">ogygia</span>
-			{#each TABS as t}
-				<button class="tab" data-og-tab={t.id} class:on={tab === t.id} onclick={() => (tab = t.id)}>
-					{t.label}
+			{#if !csrTrue}
+				{#each TABS as t}
+					<button class="tab" data-og-tab={t.id} class:on={tab === t.id} onclick={() => (tab = t.id)}>
+						{t.label}
+					</button>
+				{/each}
+				<button class="trace" title="copy an event trace to the clipboard" onclick={copy_trace}>
+					{copied ? 'copied ✓' : 'trace'}
 				</button>
-			{/each}
-			<button class="trace" title="copy an event trace to the clipboard" onclick={copy_trace}>
-				{copied ? 'copied ✓' : 'trace'}
-			</button>
+			{:else}
+				<span class="mode">csr=true</span>
+			{/if}
 			<button class="x" title="close" onclick={() => (open = false)}>✕</button>
 		</div>
 		<div class="body">
-			{#if tab === 'lens'}
-				<LensTab {tick} bind:overlay />
+			{#if csrTrue}
+				<!-- csr=true: no ogygia regions on the page; instruments show a notice -->
+				<div class="notice" data-og-csr-notice>
+					<p class="h">This page runs on <code>csr=true</code>.</p>
+					<p>
+						SvelteKit hydrates the whole page here, so ogygia's runtime never boots — there are no
+						islands, no wire, and no byte ledger to inspect.
+					</p>
+					<p>Open a <code>csr=false</code> page to see the instruments.</p>
+				</div>
+			{:else if selected}
+				<IslandDetail el={selected} {tick} onclose={() => (selected = null)} />
+			{:else if tab === 'lens'}
+				<LensTab {tick} bind:overlay bind:focus bind:selected bind:picking />
 			{:else if tab === 'bytes'}
 				<LedgerTab {tick} />
 			{:else if tab === 'wire'}
@@ -246,5 +298,35 @@
 		flex: 1;
 		overflow: auto;
 		padding: 12px 14px;
+	}
+	/* csr=true header pill — takes the `margin-left:auto` slot the trace button usually holds, so the
+	   close ✕ stays pinned right. */
+	.mode {
+		margin-left: auto;
+		padding: 3px 9px;
+		border-radius: 7px;
+		border: 1px solid rgba(251, 191, 36, 0.35);
+		background: rgba(251, 191, 36, 0.1);
+		color: #fbbf24;
+		font-size: 11px;
+		letter-spacing: 0.02em;
+	}
+	.notice {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		max-width: 46ch;
+		color: #cbd5e1;
+		line-height: 1.6;
+	}
+	.notice .h {
+		color: #e2e8f0;
+		font-weight: 600;
+	}
+	.notice code {
+		padding: 1px 5px;
+		border-radius: 5px;
+		background: rgba(148, 163, 184, 0.16);
+		color: #5eead4;
 	}
 </style>

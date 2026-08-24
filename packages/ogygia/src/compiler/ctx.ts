@@ -53,6 +53,9 @@ export interface CompileCtxInit {
 	is_build: boolean;
 	/** Configured content presets (name → merged config), or `null` when content is off. */
 	content_presets: Record<string, unknown> | null;
+	/** Devtools instruments compiled in (`ogygia({ devtools: true })`). Bakes the standalone dock
+	 *  boot for csr=true pages into `virtual:ogygia/devtools-boot-url`. */
+	devtools: boolean;
 }
 
 export class CompileCtx {
@@ -81,6 +84,7 @@ export class CompileCtx {
 	readonly app_shims: Record<string, string>;
 	readonly is_build: boolean;
 	readonly content_presets: Record<string, unknown> | null;
+	readonly devtools: boolean;
 	/** `with { … }` hint matcher — a node_modules `.svelte` is only transformed when it carries one
 	 *  (so a library can declare its own islands). Built once from the resolved import keys. */
 	readonly #island_hint_re: RegExp;
@@ -111,6 +115,7 @@ export class CompileCtx {
 		this.app_shims = init.app_shims;
 		this.is_build = init.is_build;
 		this.content_presets = init.content_presets;
+		this.devtools = init.devtools;
 		const hint_keys = Object.values(init.import_keys).filter(
 			(v) => typeof v === 'string'
 		) as string[];

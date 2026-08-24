@@ -59,6 +59,8 @@ import {
 	V_RUNTIME_ENTRY,
 	V_DEV_HMR,
 	V_DEV_HMR_URL,
+	V_DEVTOOLS_BOOT,
+	V_DEVTOOLS_BOOT_URL,
 	V_ISLAND_DEPS,
 	V_TRANSPORT,
 	V_SECRET,
@@ -131,6 +133,26 @@ export class Compiler {
 	/** Bind the resolved compile context (called once the bundler has resolved the build). */
 	configure(ctx: CompileCtx) {
 		this.#ctx = ctx;
+	}
+
+	/**
+	 * Devtools: the `island id → component name` map, read at call time off the live registry (so a
+	 * dev-server middleware serves a COMPLETE, current map — no stale virtual-module snapshot). Keys
+	 * are the island id (`<hash>` in `virtual:ogygia/island/<hash>.js`); values the component's
+	 * basename. A held/generated island with no source file is skipped (the tab keeps its short hash).
+	 */
+	region_names(): Record<string, string> {
+		const names: Record<string, string> = {};
+		for (const [iid, vpath] of this.program.by_id) {
+			const cp = this.program.registry.get(vpath)?.componentPath;
+			if (!cp) continue;
+			const base = (cp.split('?')[0].split('#')[0].split('/').pop() || '').replace(
+				/\.(svelte|js|ts)$/,
+				''
+			);
+			if (base && base !== iid) names[iid] = base;
+		}
+		return names;
 	}
 
 	/**
@@ -526,6 +548,25 @@ export class Compiler {
 			if (!is_dev) return `export default '';`;
 			return `export default ${JSON.stringify('/@id/__x00__' + V_DEV_HMR)};`;
 		}
+		if (id === RESOLVED(V_DEVTOOLS_BOOT)) {
+			// Standalone dock boot for csr=true (Kit-owned) pages: the ogygia runtime never boots
+			// there, so mount ONLY the dock — no router/region features (Kit owns navigation). The
+			// dock renders a "csr=true here — open a csr=false page" notice, since a Kit-hydrated page
+			// has no ogygia islands to inspect. Empty when devtools is off (never injected then).
+			if (!ctx.devtools) return `export {}`;
+			const ui_path = `${ctx.runtime_dir}/../devtools/ui.js`.replace(/\\/g, '/');
+			return (
+				`import { install_devtools_ui } from ${JSON.stringify(ui_path)};\n` +
+				`install_devtools_ui({ csr_true: true });\n`
+			);
+		}
+		if (id === RESOLVED(V_DEVTOOLS_BOOT_URL)) {
+			// The served URL the handle injects on csr=true pages. Empty in build/preview and when
+			// devtools is off; the vite-dev `/@id/` URL otherwise. Dev-only, matching how apps enable
+			// devtools for `vite dev` alone (`devtools: command === 'serve'`).
+			if (!ctx.devtools || !is_dev) return `export default '';`;
+			return `export default ${JSON.stringify('/@id/__x00__' + V_DEVTOOLS_BOOT)};`;
+		}
 		if (id === RESOLVED(V_ISLAND_DEPS)) {
 			return island_deps_module(ssr, is_dev);
 		}
@@ -650,6 +691,8 @@ export class Compiler {
 		if (source === V_RUNTIME_ENTRY) return RESOLVED(V_RUNTIME_ENTRY);
 		if (source === V_DEV_HMR) return RESOLVED(V_DEV_HMR);
 		if (source === V_DEV_HMR_URL) return RESOLVED(V_DEV_HMR_URL);
+		if (source === V_DEVTOOLS_BOOT) return RESOLVED(V_DEVTOOLS_BOOT);
+		if (source === V_DEVTOOLS_BOOT_URL) return RESOLVED(V_DEVTOOLS_BOOT_URL);
 		if (source === V_ISLAND_DEPS) return RESOLVED(V_ISLAND_DEPS);
 		if (source === V_SECRET) return RESOLVED(V_SECRET);
 		if (source === V_SIGN) return RESOLVED(V_SIGN);

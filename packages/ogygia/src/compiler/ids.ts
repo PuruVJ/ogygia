@@ -11,6 +11,11 @@ export const V_RUNTIME = 'virtual:ogygia-runtime';
 export const V_RUNTIME_ENTRY = 'virtual:ogygia/runtime-entry';
 export const V_DEV_HMR = 'virtual:ogygia/dev-hmr';
 export const V_DEV_HMR_URL = 'virtual:ogygia/dev-hmr-url';
+// The standalone devtools dock boot for csr=true (Kit-owned) pages — the ogygia runtime never boots
+// there, so the handle injects this to mount ONLY the dock (no router/region features). Empty when
+// devtools is off. The `-url` sibling is what the handle imports (a served URL, like dev-hmr-url).
+export const V_DEVTOOLS_BOOT = 'virtual:ogygia/devtools-boot';
+export const V_DEVTOOLS_BOOT_URL = 'virtual:ogygia/devtools-boot-url';
 export const V_ISLAND_DEPS = 'virtual:ogygia/island-deps';
 export const V_FN_MANIFEST = 'virtual:ogygia/fn-manifest';
 export const V_SECRET = 'virtual:ogygia/secret';

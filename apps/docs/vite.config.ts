@@ -50,7 +50,7 @@ const crossOriginIsolation = (): Plugin => {
 // registers its markdown config synchronously here (before sveltekit() loads svelte.config.js), so
 // the value-free `ogygia.extensions()` / `ogygia.preprocess()` in svelte.config.js resolve to the
 // full markdown + island pipeline for the build.
-export default defineConfig({
+export default defineConfig(({ command }) => ({
 	resolve: {
 		// Observatory: browser variant of rolldown's ./utils (WASI worker-threads binding).
 		alias: { '@rolldown/browser/utils': RB_UTILS_BROWSER }
@@ -122,6 +122,9 @@ export default defineConfig({
 		crossOriginIsolation(),
 		wasm(),
 		ogygia({
+			// The devtools dock (launcher + Lens/Bytes/Wire/Nav/Timeline) — dev only, so the built
+			// docs site never ships the instrument graph. `command === 'serve'` is `vite dev`.
+			devtools: command === 'serve',
 			regions: {
 				visible: { margin: '120px' },
 				presets: {
@@ -175,4 +178,4 @@ export default defineConfig({
 		}),
 		sveltekit(),
 	],
-});
+}));

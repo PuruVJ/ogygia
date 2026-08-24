@@ -551,13 +551,40 @@ function byte_ledger(files: Record<string, string>): NonNullable<Analysis['ledge
 			if (!reason.has(target) || ships) reason.set(target, { ships, why });
 		}
 	}
+	// SHIPPING CLOSURE — a marked island doesn't ship alone: every child component it imports (and
+	// their children) hydrates as part of the island's tree, so ogygia ships them too. Walk the import
+	// graph from each shipping island across the file map; count the `.svelte` components reached.
+	// A bare npm import (`svelte`, `ogygia`) doesn't resolve in the file map → excluded, exactly like
+	// the shared svelte runtime the footer already sets aside. Traversal steps THROUGH `.ts` (barrels /
+	// re-exports) to reach components, but only components are counted.
+	const shipping = new Set<string>();
+	const carried_by = new Map<string, string>(); // component → the island whose tree ships it
+	const walk_seen = new Set<string>();
+	const stack: string[] = [];
+	for (const [target, r] of reason) if (r.ships) stack.push(target);
+	while (stack.length) {
+		const f = stack.pop()!;
+		if (walk_seen.has(f) || files[f] == null) continue;
+		walk_seen.add(f);
+		if (f.endsWith('.svelte')) shipping.add(f);
+		for (const spec of import_specifiers(files[f])) {
+			const t = resolve_file(spec, files);
+			if (!t || walk_seen.has(t)) continue;
+			if (t.endsWith('.svelte') && !reason.get(t)?.ships && !carried_by.has(t)) carried_by.set(t, f);
+			stack.push(t);
+		}
+	}
 	const filesOut = svelteFiles.map((name) => {
 		const bytes = bytesOf(name);
-		const r = reason.get(name);
-		const ships = r?.ships ?? false;
-		const why =
-			r?.why ??
-			(name === 'App.svelte' ? 'page shell · server HTML only' : 'unmarked · free server HTML');
+		const marked = reason.get(name);
+		const ships = shipping.has(name);
+		const why = marked?.why
+			? marked.why
+			: ships
+				? `ships inside ${(carried_by.get(name) ?? '').split('/').pop() || 'an island'} · hydrates with it`
+				: name === 'App.svelte'
+					? 'page shell · server HTML only'
+					: 'unmarked · free server HTML';
 		return { name, bytes, ships, why };
 	});
 	const ogygiaBytes = filesOut.filter((f) => f.ships).reduce((s, f) => s + f.bytes, 0);
@@ -566,9 +593,20 @@ function byte_ledger(files: Record<string, string>): NonNullable<Analysis['ledge
 		files: filesOut,
 		ogygiaBytes,
 		kitBytes,
-		ogygiaCount: filesOut.filter((f) => f.ships).length,
+		// Count the ENTRY points (marked islands), not the closure — a child that ships inside an
+		// island isn't a separate island. Its bytes are in `ogygiaBytes`; the table shows where.
+		ogygiaCount: [...reason.values()].filter((r) => r.ships).length,
 		kitCount: filesOut.length
 	};
+}
+
+/** Import specifiers in a module's source — `import X from '…'`, `import '…'`, `export … from '…'`. */
+function import_specifiers(code: string): string[] {
+	const out: string[] = [];
+	const re = /(?:import|export)\b[^'"]*?\bfrom\s*['"]([^'"]+)['"]|import\s*['"]([^'"]+)['"]/g;
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(code))) out.push(m[1] ?? m[2]);
+	return out;
 }
 
 /** REAL ISLANDS — render the app so each waking island becomes a genuine `<ogygia-region>` shell (with

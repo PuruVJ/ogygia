@@ -65,6 +65,7 @@ import {
 	needs_island_entry_full_reload
 } from '../compiler/dev/hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
+import { island_subgraph_bytes } from '../compiler/dev/region-bytes.js';
 import { collectIslandDepModulepreloads } from '../compiler/link/island-deps.js';
 import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.js';
 import { Program, strip_id } from '../compiler/program.js';
@@ -435,7 +436,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						app_shims: APP_SHIMS,
 						is_build,
 						content_presets:
-							(islandBridge.contentPresets as Record<string, unknown> | undefined) ?? null
+							(islandBridge.contentPresets as Record<string, unknown> | undefined) ?? null,
+						devtools
 					})
 				);
 			},
@@ -519,6 +521,27 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 			configureServer(server) {
 				vite_server = server;
+				// Devtools: serve the live `island id → component name` map so the dock can label a
+				// region "Counter" instead of a hashed entry. A middleware (not a virtual module) so it
+				// reads the CURRENT registry at request time — the dock fetches it after mount, by which
+				// point every island app-wide is registered, so the map is complete and never stale.
+				if (!devtools) return;
+				server.middlewares.use((req, res, next) => {
+					if ((req.url || '').split('?')[0] !== '/__ogygia_devtools_meta') return next();
+					// `names`: island id → component name (live registry). `bytes`: island id → its
+					// transitive dev-module-graph size (wrapper + component + everything imported), so the
+					// Bytes tab can show real cost instead of the wrapper chunk alone. Both read live, so
+					// the map is complete once the dock fetches (post-mount, islands registered).
+					const envs = (
+						server as unknown as {
+							environments?: Record<string, { moduleGraph?: { idToModuleMap?: Map<string, unknown> } }>;
+						}
+					).environments;
+					const client_modules = envs?.client?.moduleGraph?.idToModuleMap?.values();
+					const bytes = client_modules ? island_subgraph_bytes(client_modules as never) : {};
+					res.setHeader('content-type', 'application/json');
+					res.end(JSON.stringify({ names: compiler.region_names(), bytes }));
+				});
 			},
 
 			watchChange(id, change) {

@@ -238,6 +238,8 @@ export type HubEventInput =
 			kind: string;
 			id: string;
 			scope: string;
+			/** Registration tag `<module>#<ExportName>` (wire classes) — the hub inspector's name. */
+			tag?: string;
 			/** True when an existing instance was reunited (memo hit), false on a fresh decode. */
 			hit: boolean;
 	  }
@@ -275,10 +277,14 @@ export type NavEventInput =
 	| {
 			domain: 'nav';
 			name: 'nav.reconcile';
-			/** The reconcile key (signature+fingerprint / keep name). */
+			/** The reconcile key: `k\0<keepName>` (keep marker) / `p\0<sig>` (persist) / `r\0<fp>` (props fp). */
 			key: string;
 			/** keep | patch | mount | remove — the per-region delta decision. */
 			decision: 'keep' | 'patch' | 'mount' | 'remove';
+			/** The region's `entry` module URL — lets the nav lab label the decision by component NAME. */
+			entry?: string;
+			/** The region's wake strategy, for the nav lab row. */
+			wake?: string;
 	  }
 	| {
 			domain: 'nav';

@@ -8,7 +8,7 @@
 	 * side-channel; nothing here needs a socket — it's the same in-page bus.
 	 */
 	import { snapshot } from './bus.js';
-	import { short_chunk, kb } from './regions.js';
+	import { short_chunk, kb, region_name } from './regions.js';
 
 	let { tick = 0 } = $props();
 
@@ -31,11 +31,16 @@
 {:else}
 	<div class="sec">islands · props payload</div>
 	<table>
-		<thead><tr><th>region</th><th>mode</th><th>fp</th><th>props</th></tr></thead>
+		<thead><tr><th>island</th><th>mode</th><th>fp</th><th>props</th></tr></thead>
 		<tbody>
 			{#each model.renders as r (r.seq)}
 				<tr>
-					<td title={r.entry || ''}>{short_chunk(r.entry) || '—'}</td>
+					<td title={r.entry || ''}>
+						{#if r.entry}
+							<span class="nm">{region_name(r.entry)}</span>
+							<span class="id">{short_chunk(r.entry)}</span>
+						{:else}—{/if}
+					</td>
 					<td>{r.mode}</td>
 					<td>{r.fp || '—'}</td>
 					<td>{r.propsBytes != null ? r.propsBytes + ' B' : '—'}</td>
@@ -119,5 +124,14 @@
 		border-top: 1px solid rgba(148, 163, 184, 0.2);
 		color: #5eead4;
 		font-weight: 600;
+	}
+	.nm {
+		color: #e2e8f0;
+		font-weight: 600;
+	}
+	.id {
+		margin-left: 7px;
+		color: #64748b;
+		font-size: 10px;
 	}
 </style>

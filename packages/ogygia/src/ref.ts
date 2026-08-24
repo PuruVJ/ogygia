@@ -306,7 +306,7 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 				}
 			}
 			if (DEVTOOLS)
-				dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, hit: true });
+				dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, tag: ref.t, hit: true });
 			return existing;
 		}
 	}
@@ -339,7 +339,7 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 				// the page bucket too, so late-hydrating islands on the same page reunite with it.
 				remember_in(reg, 'page', ref.i, kept, ref.k);
 				if (DEVTOOLS)
-					dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, hit: true });
+					dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, tag: ref.t, hit: true });
 				return kept;
 			}
 			const instance = kind.decode(ref);
@@ -348,7 +348,7 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 				remember_in(reg, 'page', ref.i, instance as object, ref.k);
 			}
 			if (DEVTOOLS)
-				dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, hit: false });
+				dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, tag: ref.t, hit: false });
 			return instance;
 		}
 	}
@@ -358,7 +358,7 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 		remember_in(reg, 'page', ref.i, instance as object, ref.k);
 	}
 	if (DEVTOOLS)
-		dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, hit: false });
+		dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, tag: ref.t, hit: false });
 	return instance;
 }
 

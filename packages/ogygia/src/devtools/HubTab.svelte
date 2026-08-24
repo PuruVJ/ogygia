@@ -12,9 +12,24 @@
 
 	let { tick = 0 } = $props();
 
+	// A transportable's registration tag is `<module path>#<ExportName>` — the class/const name is the
+	// part after `#`. That's the human label; the id is a mint hash (fall back to it when untagged).
 	function short_id(id) {
 		return id && id.length > 12 ? id.slice(0, 8) + '…' : id;
 	}
+	function name_of(m) {
+		if (m.tag) return m.tag.split('#').pop() || m.tag;
+		return short_id(m.id);
+	}
+
+	// Kind → colour, so wire / store / snippet / region / fn read at a glance.
+	const KIND = {
+		wire: '#14b8a6',
+		store: '#8b5cf6',
+		snippet: '#f59e0b',
+		region: '#38bdf8',
+		fn: '#ec4899'
+	};
 
 	const model = $derived.by(() => {
 		tick; // refresh with the panel tick
@@ -33,18 +48,25 @@
 			} else if (e.name === 'hub.resolve') {
 				const m = get(e.id);
 				if (!m.kind) m.kind = e.kind;
+				if (e.tag && !m.tag) m.tag = e.tag; // wire tag rides the client decode (mint is server-only)
 				m.scope = e.scope;
 				m.resolves++;
 				if (e.hit) m.reunions++;
 			}
 		}
-		const rows = [...byId.values()].sort((a, b) => b.resolves - a.resolves);
+		// Shared instances (reunited at least once) first — they ARE the story — then by carrier count.
+		const rows = [...byId.values()].sort(
+			(a, b) => b.reunions - a.reunions || b.resolves - a.resolves
+		);
+		const shared = rows.filter((r) => r.reunions > 0).length;
 		const disposes = ev.filter((e) => e.name === 'hub.dispose');
-		return { rows, disposes };
+		return { rows, shared, disposes };
 	});
 </script>
 
-<h4>hub inspector — shared identity across islands</h4>
+<div class="cap">
+	hub inspector <span class="muted">· one live object, shared across islands by identity</span>
+</div>
 
 {#if model.rows.length === 0}
 	<div class="muted">
@@ -52,25 +74,38 @@
 		<b>/transportable</b> or <b>/lab/wire</b>) — then reopen this tab.
 	</div>
 {:else}
+	{#if model.shared > 0}
+		<div class="hero">
+			<b>{model.shared}</b> shared live object{model.shared === 1 ? '' : 's'} — each held by several
+			islands but decoded ONCE, so every holder reunites on the same instance.
+		</div>
+	{/if}
 	<table>
 		<thead>
-			<tr><th>id</th><th>kind</th><th>scope</th><th>resolves</th><th>reunions</th></tr>
+			<tr><th>object</th><th>kind</th><th>scope</th><th>held&nbsp;by</th><th>reunited</th></tr>
 		</thead>
 		<tbody>
 			{#each model.rows as r (r.id)}
-				<tr>
-					<td title={r.tag ? `${r.id} · ${r.tag}` : r.id}>{short_id(r.id)}</td>
-					<td><span class="kind">{r.kind || '—'}</span></td>
-					<td>{r.scope || '—'}</td>
-					<td>{r.resolves}</td>
-					<td class:shared={r.reunions > 0}>{r.reunions}{#if r.reunions > 0}<span class="badge">1 instance</span>{/if}</td>
+				<tr class:shared={r.reunions > 0}>
+					<td title={r.tag || r.id}><span class="nm">{name_of(r)}</span></td>
+					<td>
+						<span class="dot" style:background={KIND[r.kind] || '#64748b'}></span>{r.kind || '—'}
+					</td>
+					<td class="muted">{r.scope || '—'}</td>
+					<td>{r.resolves}×</td>
+					<td>
+						{#if r.reunions > 0}
+							<span class="badge">1 instance · {r.reunions} reunion{r.reunions === 1 ? '' : 's'}</span>
+						{:else}<span class="muted">fresh</span>{/if}
+					</td>
 				</tr>
 			{/each}
 		</tbody>
 	</table>
 	<div class="note muted">
-		<b>reunions</b> = times an existing live instance was returned instead of decoding a fresh one —
-		so a row with N resolves and N−1 reunions is ONE object shared by N islands.
+		<b>held by</b> = how many carriers (islands) picked this handle up. <b>reunited</b> = a memo hit
+		returning the existing live instance instead of decoding a fresh one — the reunification that
+		makes N islands share ONE reactive object.
 	</div>
 
 	{#if model.disposes.length}
@@ -87,16 +122,29 @@
 {/if}
 
 <style>
-	h4 {
-		margin: 0 0 8px;
+	.cap {
 		font-size: 12px;
 		color: #5eead4;
+		margin-bottom: 8px;
 	}
 	.muted {
 		color: #64748b;
 	}
 	.muted b {
 		color: #94a3b8;
+	}
+	.hero {
+		margin-bottom: 10px;
+		padding: 7px 10px;
+		border-radius: 8px;
+		background: rgba(20, 184, 166, 0.1);
+		border: 1px solid rgba(20, 184, 166, 0.25);
+		color: #cbd5e1;
+		line-height: 1.5;
+	}
+	.hero b {
+		color: #5eead4;
+		font-size: 13px;
 	}
 	table {
 		border-collapse: collapse;
@@ -105,7 +153,7 @@
 	th,
 	td {
 		text-align: right;
-		padding: 2px 8px;
+		padding: 3px 8px;
 		white-space: nowrap;
 	}
 	th:first-child,
@@ -118,11 +166,20 @@
 		color: #94a3b8;
 		border-bottom: 1px solid rgba(148, 163, 184, 0.2);
 	}
-	.kind {
-		color: #c4b5fd;
+	.nm {
+		color: #e2e8f0;
+		font-weight: 600;
 	}
-	.shared {
-		color: #5eead4;
+	.dot {
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		margin-right: 6px;
+		vertical-align: 0;
+	}
+	tr.shared td {
+		background: rgba(20, 184, 166, 0.08);
 	}
 	.badge {
 		margin-left: 6px;
