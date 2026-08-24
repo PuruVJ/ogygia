@@ -707,6 +707,14 @@ class Profiler {
 			);
 		}
 
+		// TEMP: prove a profiler-side (node_modules) island hydrates when served via document().
+		if (sub === '/_uitest') {
+			const { document } = await import('../document.js');
+			const { region } = await import('../region.js');
+			const { default: Host } = await import('./ui/_uitest/Host.svelte');
+			return document(region(Host as never, {}), { title: 'uitest' });
+		}
+
 		// Manually clear a wedged recording flag (belt-and-suspenders with the time-based auto-heal).
 		if (sub === '/reset') {
 			this.#recording_since = 0;

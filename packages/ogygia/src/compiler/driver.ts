@@ -349,6 +349,11 @@ export class Compiler {
 		{
 			const __ps = P ? performance.now() : 0;
 			walk(src_dir);
+			// Extra island roots beyond the app's src (e.g. the profiler UI, `ogygia({ profiler: true })`):
+			// server-only library components whose client hydrate chunks only build if the prescan — which
+			// runs in both build legs — registers them here. Same `walk`, so same iid ⇒ the SSR shell's
+			// `entry` matches the chunk this emits.
+			for (const extra of ctx.extra_scan_roots) walk(extra);
 			if (P) prof.prescanMs += performance.now() - __ps;
 		}
 

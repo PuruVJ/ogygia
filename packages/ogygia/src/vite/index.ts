@@ -88,6 +88,7 @@ import {
 	REGION_ENDPOINT_MODULE,
 	RUNTIME_HASH
 } from './paths.js';
+import { library_island_roots } from './library-islands.js';
 
 import type {
 	OgygiaPreset,
@@ -118,6 +119,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const presets = options.regions?.presets || {};
 	validate_region_presets(presets);
 	const import_keys = normalize_import_keys(options.importKeys);
+	// Library-declared island roots (zero config): each direct dependency may declare island dirs in
+	// its package.json (`"ogygia": { "islands": [...] }` — ogygia's own profiler UI does). The prescan
+	// walks them in both legs so those server-only components get client hydrate chunks. Resolved once
+	// root is known (configResolved fills it).
+	let extra_scan_roots: string[] = [];
 
 	// Publish the markdown config so a value-free `markdown()` in the svelte config reads it — all
 	// content/markdown config stays here in the one plugin. `standalone` re-invokes this factory for
@@ -406,6 +412,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// app's universal hooks — resolved off the app root (see resolve_kit_paths).
 				({ kit_wire_path, kit_remote_index, universal_hooks } = resolve_kit_paths(root));
 
+				// Dependencies that ship their own islands (package.json `ogygia.islands`) — extra prescan
+				// roots, so their server-only components get client hydrate chunks. See library-islands.ts.
+				extra_scan_roots = library_island_roots(root);
+
 				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
 				// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
 				// the snapshot is complete before the driver is first called.
@@ -414,6 +424,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						root,
 						base,
 						libDir,
+						extra_scan_roots,
 						is_dev,
 						id_salt,
 						visibleMargin,
