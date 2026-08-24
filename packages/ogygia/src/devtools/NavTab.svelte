@@ -62,7 +62,7 @@
 	});
 </script>
 
-<div class="cap">nav lab <span class="muted">· what the last SPA navigation did, per island</span></div>
+<div class="cap">nav lab <span class="muted">· the last SPA navigation's per-island decisions</span></div>
 
 {#if !model.hasNav}
 	<div class="muted">no navigation yet — click a link (SPA nav) and reopen this tab.</div>
