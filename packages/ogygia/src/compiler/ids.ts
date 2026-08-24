@@ -21,6 +21,7 @@ export const V_FN_MANIFEST = 'virtual:ogygia/fn-manifest';
 export const V_SECRET = 'virtual:ogygia/secret';
 export const V_SIGN = 'virtual:ogygia/sign';
 export const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
+export const V_PROFILER_CONFIG = 'virtual:ogygia/profiler-config';
 export const V_SESSION_COOKIE = 'virtual:ogygia/session-cookie';
 export const V_REGION_TTL = 'virtual:ogygia/region-ttl';
 export const V_ROUTER_CONFIG = 'virtual:ogygia/router-config';

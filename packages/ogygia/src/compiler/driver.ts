@@ -40,6 +40,7 @@ import { island_deps_module } from './link/island-deps.js';
 import {
 	secret_module,
 	sign_module,
+	profiler_config_module,
 	rate_limit_module,
 	session_cookie_module,
 	region_ttl_module,
@@ -68,6 +69,7 @@ import {
 	V_REQUEST_EVENT,
 	V_ROUTE_CSR,
 	V_REGION_ENDPOINT,
+	V_PROFILER_CONFIG,
 	V_RATE_LIMIT,
 	V_ROUTER_CONFIG,
 	V_SESSION_COOKIE,
@@ -611,6 +613,9 @@ export class Compiler {
 		if (id === RESOLVED(V_RATE_LIMIT)) {
 			return rate_limit_module(ssr, ctx.rate_limit);
 		}
+		if (id === RESOLVED(V_PROFILER_CONFIG)) {
+			return profiler_config_module(ssr, ctx.profiler_config);
+		}
 		if (id === RESOLVED(V_ROUTER_CONFIG)) {
 			return router_config_module(ctx.router_enabled, ctx.router_view_transitions);
 		}
@@ -702,6 +707,7 @@ export class Compiler {
 		if (source === V_SECRET) return RESOLVED(V_SECRET);
 		if (source === V_SIGN) return RESOLVED(V_SIGN);
 		if (source === V_RATE_LIMIT) return RESOLVED(V_RATE_LIMIT);
+		if (source === V_PROFILER_CONFIG) return RESOLVED(V_PROFILER_CONFIG);
 		if (source === V_ROUTER_CONFIG) return RESOLVED(V_ROUTER_CONFIG);
 		if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);
 		if (source === V_REGION_TTL) return RESOLVED(V_REGION_TTL);

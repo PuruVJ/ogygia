@@ -9,6 +9,9 @@ export default defineConfig({
 	// ogygia MUST run before sveltekit() (enforce:'pre' also guarantees ordering)
 	plugins: [
 		ogygia({
+			// The SSR profiler — configured ONLY here. Builds its UI islands + auto-mounts in
+			// ogygia.handle() (no profiler() hook). Secret from OGYGIA_PROFILER_SECRET env at runtime.
+			profiler: true,
 			// Markdown content pipeline (stock defaults) so the `.svx` fixture behind e2e/content-css
 			// compiles — that check guards content-body scoped CSS shipping to a csr=false page.
 			content: { markdown: {} },

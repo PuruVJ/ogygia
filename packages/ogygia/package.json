@@ -5,12 +5,6 @@
 	"sideEffects": [
 		"**/*.css"
 	],
-	"ogygia": {
-		"islands": [
-			"./src/profiler/ui",
-			"./dist/profiler/ui"
-		]
-	},
 	"description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
 	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {

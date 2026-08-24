@@ -36,6 +36,7 @@ import {
 	viewTransitions as router_view_transitions,
 	speculationRules as mpa_speculation_rules
 } from 'virtual:ogygia/router-config';
+import { profilerConfig } from 'virtual:ogygia/profiler-config';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import devtools_boot_url from 'virtual:ogygia/devtools-boot-url';
@@ -245,7 +246,35 @@ class OgygiaHandle {
 		});
 	}
 
+	/** Constructed profiler handle, or null when `ogygia({ profiler })` is off. `undefined` = not yet
+	 *  resolved (the dynamic import runs once, on the first request). */
+	#profiler: Handle | null | undefined;
+
+	/** Lazily import + construct the profiler from `virtual:ogygia/profiler-config`. The profiler's
+	 *  weight (node:inspector, crypto, its UI-rendering path) enters a SEPARATE chunk that loads only
+	 *  when configured — so an app that doesn't use it pays nothing, and hooks.server.ts never mentions
+	 *  it. The secret is read from OGYGIA_PROFILER_SECRET at runtime unless the config baked one. */
+	async #ensure_profiler(): Promise<Handle | null> {
+		if (this.#profiler !== undefined) return this.#profiler;
+		if (!profilerConfig) return (this.#profiler = null);
+		try {
+			const { profiler } = await import('./profiler/index.js');
+			this.#profiler = profiler(profilerConfig as Parameters<typeof profiler>[0]);
+		} catch {
+			this.#profiler = null; // profiler unavailable (edge without node:inspector, etc.)
+		}
+		return this.#profiler;
+	}
+
+	// The public handle: when the profiler is configured (vite plugin only) it wraps the core handle,
+	// so it times the SSR render and serves its UI — with zero hooks wiring. Otherwise it's the core.
 	handle: Handle = async ({ event, resolve }) => {
+		const prof = await this.#ensure_profiler();
+		if (prof) return prof({ event, resolve: (e) => this.#core({ event: e, resolve }) });
+		return this.#core({ event, resolve });
+	};
+
+	#core: Handle = async ({ event, resolve }) => {
 		const path = decode_pathname(event.url.pathname);
 		if (path === null) {
 			return new Response('Bad Request', { status: 400 });

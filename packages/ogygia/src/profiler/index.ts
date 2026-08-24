@@ -55,7 +55,7 @@ import { ogp_encode, ogp_decode, is_ogp } from './crypto.js';
 
 export interface ProfilerOptions {
 	/**
-	 * Auth secret. Defaults to the PROFILER_SECRET env var. Required outside
+	 * Auth secret. Defaults to the OGYGIA_PROFILER_SECRET env var. Required outside
 	 * dev — with no secret in production the profiler UI is disabled (the
 	 * always-on request log still collects, invisibly).
 	 */
@@ -234,7 +234,7 @@ class Profiler {
 		// Server-Timing exposes internal render/network timings to every client, so
 		// default it ON in dev but OFF in production unless explicitly enabled.
 		this.want_server_timing = options.serverTiming ?? this.dev;
-		this.secret = options.secret ?? process.env.PROFILER_SECRET ?? '';
+		this.secret = options.secret ?? process.env.OGYGIA_PROFILER_SECRET ?? '';
 		this.ui_enabled = options.enabled !== false && (this.dev || this.secret !== '');
 		this.#disabled = options.enabled === false;
 	}

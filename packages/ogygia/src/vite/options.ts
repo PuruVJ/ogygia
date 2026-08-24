@@ -4,6 +4,7 @@
  * pure type declarations (the plugin factory in index.ts imports them back).
  */
 import type { ImportKeys } from '../compiler/region/transform.js';
+import type { ProfilerOptions } from '../profiler/index.js';
 import type { ContentPluginOptions } from '../content/vite/plugin.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
 
@@ -186,6 +187,17 @@ export interface OgygiaOptions {
 	 * Keep short for harvested-URL risk; raise only if long-lived tabs must keep deferred holes valid.
 	 */
 	regionTtl?: number;
+
+	/**
+	 * The drop-in SSR profiler — configured ENTIRELY here, nowhere else. `true` (or an options object)
+	 * turns it on: the plugin builds its UI (real Svelte islands, marked inside ogygia's own source and
+	 * rendered only from its handle, so the client build can't otherwise see them) AND transports this
+	 * config to `ogygia.handle()` via a virtual module. The handle dynamically imports and mounts the
+	 * profiler itself — no `profiler()` in hooks, no handler wiring, and the profiler's weight loads only
+	 * when it's on. The secret defaults to the `OGYGIA_PROFILER_SECRET` env var at runtime; pass
+	 * `{ secret }` to override (baked into the server build). Off → no profiler at all.
+	 */
+	profiler?: boolean | ProfilerOptions;
 
 	/**
 	 * @internal Recreate this plugin instance inside the standalone client build.

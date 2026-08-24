@@ -42,6 +42,21 @@ export function sign_module(ssr: boolean, hmac_module: string): string {
 	return `export { sign, verify, region_mac_message } from ${JSON.stringify(hmac_module)};`;
 }
 
+/**
+ * `virtual:ogygia/profiler-config` — SERVER only: the profiler options from `ogygia({ profiler })`,
+ * or `null` when unset. `ogygia.handle()` reads it and, when non-null, dynamically imports and mounts
+ * the profiler — so hooks.server.ts never mentions it and the profiler's weight loads only when
+ * enabled. The SECRET is deliberately NOT here: it stays a runtime env var (PROFILER_SECRET), never
+ * baked into a build artifact.
+ */
+export function profiler_config_module(
+	ssr: boolean,
+	profiler_config: Record<string, unknown> | null
+): string {
+	if (!ssr) return `export const profilerConfig = null;`;
+	return `export const profilerConfig = ${JSON.stringify(profiler_config)};`;
+}
+
 /** `virtual:ogygia/rate-limit` — SERVER only; the region handle is the only consumer. */
 export function rate_limit_module(
 	ssr: boolean,

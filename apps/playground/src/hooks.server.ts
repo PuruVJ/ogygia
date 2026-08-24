@@ -2,7 +2,6 @@ import { sequence } from '@sveltejs/kit/hooks';
 import type { Handle } from '@sveltejs/kit';
 import { handle as ogygiaHandle, document } from 'ogygia/server';
 import { region } from 'ogygia';
-import { profiler } from 'ogygia/profiler';
 import DocTest from '$lib/doctest/DocTest.svelte';
 
 // A trivial second handle to prove `ogygia.handle()` composes with `sequence()`.
@@ -17,7 +16,7 @@ const doc_test: Handle = async ({ event, resolve }) => {
 	return resolve(event);
 };
 
-// The SSR profiler goes FIRST so it times the whole chain below it. UI at /__profiler
-// (dev = open; prod needs ?key=<PROFILER_SECRET>). `ogygia.handle()` serves the signed
-// island endpoint; everything else falls through to the passthrough.
-export const handle = sequence(profiler(), doc_test, ogygiaHandle(), passthrough);
+// The SSR profiler is NOT wired here — it's configured entirely in vite.config.ts (`profiler: true`)
+// and ogygia.handle() dynamically imports + mounts it internally. UI at /__profiler (dev = open;
+// prod needs ?key=<OGYGIA_PROFILER_SECRET>).
+export const handle = sequence(doc_test, ogygiaHandle(), passthrough);

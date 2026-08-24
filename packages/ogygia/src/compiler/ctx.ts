@@ -16,9 +16,13 @@ export interface CompileCtxInit {
 	root: string;
 	base: string;
 	libDir: string;
-	/** Extra dirs (beyond `<root>/src`) the prescan walks for island components — e.g. the shipped
-	 *  profiler UI, whose server-only components would otherwise never get client hydrate chunks. */
+	/** Extra dirs (beyond `<root>/src`) the prescan walks for island components — the shipped profiler
+	 *  UI, whose server-only components would otherwise never get client hydrate chunks. */
 	extra_scan_roots: string[];
+	/** `ogygia({ profiler })` normalized (or `null` when off) — baked into `virtual:ogygia/profiler-config`
+	 *  so `ogygia.handle()` dynamically imports + mounts the profiler with no hooks/handler wiring. The
+	 *  secret is NOT baked: it reads OGYGIA_PROFILER_SECRET at runtime unless overridden here. */
+	profiler_config: Record<string, unknown> | null;
 	is_dev: boolean;
 	id_salt: string;
 	visibleMargin: string | undefined;
@@ -66,6 +70,7 @@ export class CompileCtx {
 	readonly base: string;
 	readonly libDir: string;
 	readonly extra_scan_roots: string[];
+	readonly profiler_config: Record<string, unknown> | null;
 	readonly is_dev: boolean;
 	readonly id_salt: string;
 	readonly visibleMargin: string | undefined;
@@ -98,6 +103,7 @@ export class CompileCtx {
 		this.base = init.base;
 		this.libDir = init.libDir;
 		this.extra_scan_roots = init.extra_scan_roots;
+		this.profiler_config = init.profiler_config;
 		this.is_dev = init.is_dev;
 		this.id_salt = init.id_salt;
 		this.visibleMargin = init.visibleMargin;

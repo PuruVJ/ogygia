@@ -85,6 +85,11 @@ declare module 'virtual:ogygia/rate-limit' {
 	/** `max: 0` disables. Baked from `ogygia({ rateLimit })`. */
 	export const rateLimit: { max: number; windowMs: number };
 }
+declare module 'virtual:ogygia/profiler-config' {
+	/** Profiler options from `ogygia({ profiler })`, or `null` when off. SERVER only (client: null).
+	 *  `ogygia.handle()` reads this and dynamically imports + mounts the profiler when non-null. */
+	export const profilerConfig: Record<string, unknown> | null;
+}
 declare module 'virtual:ogygia/session-cookie' {
 	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ sessionCookie })`. */
 	export const sessionCookie: string;

@@ -25,7 +25,7 @@ Put it **first** in the sequence so it times the whole chain below it. In
 production, set a secret so the UI is reachable:
 
 ```bash
-PROFILER_SECRET=some-long-random-string
+OGYGIA_PROFILER_SECRET=some-long-random-string
 ```
 
 Then open **`/__profiler`** (add `?key=<secret>` in production).
@@ -97,7 +97,7 @@ the always-on request log still works; CPU/heap recording does not.
 
 ```ts
 profiler({
-	secret: process.env.PROFILER_SECRET, // default: PROFILER_SECRET env
+	secret: process.env.OGYGIA_PROFILER_SECRET, // default: OGYGIA_PROFILER_SECRET env
 	path: '/__profiler', // UI base path
 	sampleInterval: 500, // µs between CPU samples
 	maxReports: 6, // profiles kept in memory (gzipped)

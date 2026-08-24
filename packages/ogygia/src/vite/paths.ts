@@ -28,6 +28,19 @@ export const OGYGIA_INJECTED_IMPORTS = new Set(['ogygia/internal', 'ogygia/inter
  * point at `src/internal.ts` too — same module, no Region/brand identity fork.
  */
 const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
+
+/**
+ * ogygia's own profiler UI components — island `.svelte` files marked INSIDE ogygia's source and
+ * rendered only from server code (`document()` pages), so no app file ever marks them and the src
+ * prescan can't discover them. When `ogygia({ profiler })` is set, the plugin adds this dir as a
+ * prescan root so their client hydrate chunks build. Same self-reference pattern as
+ * OGYGIA_INJECTED_FILES: live `src` in the workspace, the raw-shipped `dist` copy when installed.
+ * (App islands — including workspace-package components marked at an app import site — need none of
+ * this; the mark lives in app source and the src walk already finds it.)
+ */
+export const PROFILER_UI_DIR = OG_HAS_SRC
+	? path.join(PKG_ROOT, 'src/profiler/ui')
+	: path.join(PKG_ROOT, 'dist/profiler/ui');
 export const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
 	? {
 			'ogygia/internal': path.join(PKG_ROOT, 'src/internal.ts'),
