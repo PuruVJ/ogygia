@@ -435,16 +435,25 @@ class Profiler {
 				await work();
 				const cov = (await session.post('Profiler.takePreciseCoverage')) as {
 					result: Array<{
+						url: string;
 						functions: Array<{ functionName: string; ranges: Array<{ count: number }> }>;
 					}>;
 				};
 				await session.post('Profiler.stopPreciseCoverage');
+				// Key by name AND script url: many scripts have a `traverse`/`update`/etc., and merging them
+				// by bare name gave every same-named frame the SUMMED total. `<name>\0<url>` is the same
+				// identity analyze() joins on (a CPU frame's raw functionName + url), so each function keeps
+				// its own count. Anonymous (`(anonymous)`, empty) frames are skipped — components attach via
+				// their named wrapper.
 				for (const script of cov.result) {
 					for (const fn of script.functions) {
 						const nm = fn.functionName;
 						if (!nm || nm.startsWith('(')) continue;
 						const c = fn.ranges[0]?.count ?? 0;
-						if (c > 0) counts[nm] = (counts[nm] ?? 0) + c;
+						if (c > 0) {
+							const k = nm + '\0' + script.url;
+							counts[k] = (counts[k] ?? 0) + c;
+						}
 					}
 				}
 			} finally {
@@ -476,7 +485,7 @@ class Profiler {
 		meta_partial: Pick<ReportMeta, 'trigger' | 'page' | 'runs' | 'request'>
 	): Promise<string> {
 		const resolver = await this.#make_resolver();
-		const analysis = analyze(cap.profile, resolver);
+		const analysis = analyze(cap.profile, resolver, cap.call_counts);
 		const heap = cap.heap ? analyze_heap(cap.heap) : null;
 		// resolve each I/O caller's bundled location back to source, using the same
 		// sourcemap resolver the CPU frames use — turns `_page.server.ts.js:8` into
@@ -815,10 +824,22 @@ class Profiler {
 							400
 						);
 					}
-					// Brotli + AES-GCM. Decrypt with the key the uploader supplies (`x-ogp-key`) so ANY .ogp
-					// opens in ANY profiler — its key can differ from this instance's secret; blank falls
-					// back to this profiler's own key. A wrong key fails the GCM tag → caught below.
-					const ogp_key = event.request.headers.get('x-ogp-key') || this.secret;
+					// Brotli + AES-GCM. Decrypt with ONLY the key the uploader supplies (`x-ogp-key`) — a .ogp
+					// exposes server internals, so it must open only when its key is entered. We deliberately
+					// do NOT fall back to this profiler's own secret: that let anyone holding the file view it
+					// without knowing the key, just by uploading it to the profiler that made it. A missing key
+					// is refused up front (no silent dev-key attempt either); a wrong key fails the GCM tag.
+					const ogp_key = (event.request.headers.get('x-ogp-key') ?? '').trim();
+					if (!ogp_key) {
+						return html(
+							render_message(
+								'Key required',
+								'This .ogp is encrypted. Enter the key it was exported with to open it.',
+								this.base
+							),
+							401
+						);
+					}
 					const dump: unknown = await ogp_decode(bytes, ogp_key);
 					if (!is_dump(dump)) {
 						return html(

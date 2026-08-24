@@ -749,11 +749,10 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 		findings: derive_findings(a, meta, extras),
 		budget,
 		components: (() => {
-			const cc = extras.call_counts ?? {};
 			return [...a.components]
 				.sort((x, y) => y.self_ms - x.self_ms)
 				.map((c) => {
-					const n = (cc[c.name] ?? 0) || null;
+					const n = (c.calls ?? 0) || null;
 					return {
 						name: c.name,
 						instances: n,
@@ -769,9 +768,8 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 				});
 		})(),
 		hot_functions: (() => {
-			const cc = extras.call_counts ?? {};
 			return a.functions.slice(0, 80).map((f) => {
-				const n = (cc[f.name] ?? 0) || null;
+				const n = (f.calls ?? 0) || null;
 				return {
 					name: f.name,
 					instances: n,
@@ -909,14 +907,15 @@ export function render_upload_page(base: string): string {
 	return page(
 		'Open a saved profile',
 		`<h1>Open a saved profile</h1>
-<p class="hint">Recorded on a serverless host (Amplify, Vercel, Netlify) where the report can't be kept in memory? Export the <code>.ogp</code> there, then open it here — it's decrypted and rendered by this profiler. ANY <code>.ogp</code> opens in ANY profiler: enter the key it was exported with (leave blank to use this profiler's own key).</p>
-<p><label>key <input type="password" id="k" placeholder="the .ogp's export key — blank = this profiler's" size="44"></label></p>
+<p class="hint">Recorded on a serverless host (Amplify, Vercel, Netlify) where the report can't be kept in memory? Export the <code>.ogp</code> there, then open it here — it's decrypted and rendered by this profiler. ANY <code>.ogp</code> opens in ANY profiler, but ONLY with its key: a trace exposes server internals, so you must enter the key it was exported with. This profiler's own secret is never substituted.</p>
+<p><label>key <input type="password" id="k" placeholder="the key this .ogp was exported with (required)" size="44" required></label></p>
 <p><input type="file" id="f" accept=".ogp,application/octet-stream"></p>
 <p class="hint"><a href="${base}">← dashboard</a></p>
 <script>
 var inp = document.getElementById('f'), kin = document.getElementById('k');
 inp.addEventListener('change', async function () {
   var f = inp.files[0]; if (!f) return;
+  if (!kin.value.trim()) { alert('Enter the key this .ogp was exported with.'); kin.focus(); inp.value = ''; return; }
   var buf = await f.arrayBuffer();
   var res = await fetch(location.pathname, {
     method: 'POST', headers: { 'content-type': 'application/octet-stream', 'x-ogp-key': kin.value }, body: buf
@@ -1043,10 +1042,10 @@ export function render_report(
 	const has_alloc = alloc_by_name.size > 0;
 
 	// how many times each component rendered — a component's cost is often
-	// repetition (×800), not one heavy render. Per render in page mode.
-	const counts = extras.call_counts ?? {};
-	const has_counts = Object.keys(counts).length > 0;
-	const instances = (name: string): number => counts[name] ?? 0;
+	// repetition (×800), not one heavy render. Per render in page mode. The count rides on each
+	// FrameStat (joined in analyze() per name+url), so same-named functions keep separate counts.
+	const has_counts =
+		a.components.some((c) => c.calls != null) || a.functions.some((f) => f.calls != null);
 
 	// default order: self desc, so real CPU burners rise and structural
 	// ancestors (Root/_layout/_page, self ≈ 0) sink to the bottom
@@ -1057,7 +1056,7 @@ export function render_report(
 			const alloc = alloc_by_name.get(f.name);
 			const totW = (f.total_ms / comp_max_total) * 100;
 			const slfW = (f.self_ms / comp_max_total) * 100;
-			const n = instances(f.name);
+			const n = f.calls ?? 0;
 			// per-call = total ÷ renders. n falls back to 1 (no tag ⇒ rendered once).
 			const per = f.total_ms / (n > 0 ? n : 1);
 			const tag =
@@ -1081,7 +1080,7 @@ ${has_alloc ? `<td class="num">${alloc ? fmt_bytes(alloc) : '—'}</td>` : ''}
 		.slice(0, 80)
 		.map((f) => {
 			const alloc = alloc_by_name.get(f.name);
-			const n = instances(f.name);
+			const n = f.calls ?? 0;
 			const per = f.total_ms / (n > 0 ? n : 1);
 			const tag =
 				n > 1

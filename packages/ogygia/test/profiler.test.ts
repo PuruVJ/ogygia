@@ -141,6 +141,31 @@ describe('analyze', () => {
 		expect(handle.t).toBe(5);
 		expect(handle.ch![0].n).toBe('Header');
 	});
+
+	it('joins call counts per function by name+url, so same-named functions stay separate', () => {
+		// Two DIFFERENT `traverse` functions in different scripts. Keyed by name alone (the old bug)
+		// they merged and each row showed the summed 800; keyed by name+url they keep their own count.
+		const NUL = String.fromCharCode(0);
+		const dup: CpuProfile = {
+			startTime: 0,
+			endTime: 4000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2, 3] },
+				{ id: 2, callFrame: frame('traverse', 'file:///app/a.js', 1) },
+				{ id: 3, callFrame: frame('traverse', 'file:///app/b.js', 1) }
+			],
+			samples: [2, 3, 2, 3],
+			timeDeltas: [1000, 1000, 1000, 1000]
+		};
+		const counts = {
+			['traverse' + NUL + 'file:///app/a.js']: 100,
+			['traverse' + NUL + 'file:///app/b.js']: 700
+		};
+		const a = analyze(dup, undefined, counts);
+		const traverses = a.functions.filter((f) => f.name === 'traverse');
+		expect(traverses).toHaveLength(2);
+		expect(traverses.map((t) => t.calls).sort((x, y) => (x ?? 0) - (y ?? 0))).toEqual([100, 700]);
+	});
 });
 
 describe('render_report visuals', () => {

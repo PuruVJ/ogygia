@@ -56,6 +56,8 @@ export interface FrameStat {
 	self_ms: number;
 	/** ms spent here plus everything it called (recursion counted once) */
 	total_ms: number;
+	/** exact invocation count from V8 precise coverage, when available (this frame's own count) */
+	calls?: number;
 }
 
 export interface GroupStat {
@@ -376,7 +378,14 @@ function short_path(url: string): string {
 	return parts.length > 4 ? parts.slice(-4).join('/') : u;
 }
 
-export function analyze(profile: CpuProfile, resolver?: SourceMapResolver): Analysis {
+export function analyze(
+	profile: CpuProfile,
+	resolver?: SourceMapResolver,
+	call_counts?: Record<string, number>
+): Analysis {
+	// Invocation count per FRAME KEY, joined from coverage by the raw `<functionName>\0<url>` identity
+	// (the same key #count_calls emits). Filled during the resolve loop, read when a FrameStat is created.
+	const calls_by_key = new Map<string, number>();
 	const by_id = new Map<number, ProfileNode>();
 	for (const n of profile.nodes) by_id.set(n.id, n);
 
@@ -458,6 +467,16 @@ export function analyze(profile: CpuProfile, resolver?: SourceMapResolver): Anal
 			category: cat.category,
 			pkg: cat.pkg
 		});
+		// Join this frame's invocation count from coverage, on the RAW identity (pre-sourcemap name+url).
+		// A component key merges several raw frames (the named wrapper + anonymous inline regions) — only
+		// the wrapper, whose raw name IS the component name, carries the render count; the inline loop's
+		// own count would misreport it. Set once per key (the same function has one true count).
+		if (call_counts && !calls_by_key.has(key)) {
+			const c = call_counts[(f.functionName || '') + '\0' + f.url];
+			if (c && (cat.category !== 'component' || f.functionName === name)) {
+				calls_by_key.set(key, c);
+			}
+		}
 	}
 
 	// --- roots -------------------------------------------------------------
@@ -490,7 +509,8 @@ export function analyze(profile: CpuProfile, resolver?: SourceMapResolver): Anal
 				category: r.category,
 				pkg: r.pkg,
 				self_ms: 0,
-				total_ms: 0
+				total_ms: 0,
+				calls: calls_by_key.get(r.key)
 			};
 			agg.set(r.key, stat);
 		} else if (r.url.endsWith('.svelte') && !stat.url.endsWith('.svelte')) {
