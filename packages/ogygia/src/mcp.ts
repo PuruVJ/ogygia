@@ -215,17 +215,29 @@ const TOOLS = [
 	{
 		name: 'ogygia_profile',
 		description:
-			'Profile the SERVER-SIDE render of a route. Records N renders through ogygia’s SSR profiler and ' +
-			'returns a digest of its analysis: verdict (compute- vs io-bound), render p50, CPU findings, where ' +
-			'the time went by category, the hottest functions + components (Svelte names each component after ' +
-			'its file), network calls, and heap growth. Requires the app to mount profiler() in hooks.server.ts ' +
-			'(the tool tells you how if it is missing). Profile a prod build for real numbers; dev is indicative.',
+			'Profile the SERVER-SIDE render of a route — runs the whole thing itself, nothing to download. ' +
+			'ASK THE USER which URL to profile before calling (they prefer to name the host): a full URL like ' +
+			'`http://localhost:5173/fr/fr` (local) or `https://app.com/fr/fr` (remote). Pass it as `url`. ' +
+			'A bare path is accepted too, but then the tool just asks you for the URL (and lists any local ' +
+			'server it can see). Records N renders and returns a digest: verdict (compute- vs io-bound), render ' +
+			'p50, CPU findings, time-by-category, hottest functions + components (Svelte names each after its ' +
+			'file), network, heap. Self-heals a stuck session (auto /reset + retry). Requires the app to mount ' +
+			'profiler() in hooks.server.ts (the tool tells you how if missing). Prod build = real numbers; dev ' +
+			'is indicative (the digest says which). For a report you already downloaded, use ogygia_profile_open.',
 		inputSchema: {
 			type: 'object',
 			properties: {
-				url: { type: 'string', description: 'The route URL to profile (e.g. http://localhost:5173/blog).' },
+				url: {
+					type: 'string',
+					description:
+						'Route to profile: a bare path (`/fr/fr`) = your local running server (auto-found), or a full URL (`https://app.com/fr/fr`) = that host.'
+				},
 				runs: { type: 'number', description: 'Profiled renders to record (default 5, max 50). More = steadier median.' },
-				key: { type: 'string', description: 'Profiler secret (?key=) — needed only when the app set one (prod).' },
+				key: { type: 'string', description: 'Profiler secret (?key=) — needed only when the app set one (prod/locked).' },
+				origin: {
+					type: 'string',
+					description: 'Force a specific local origin (e.g. http://localhost:5173) when a bare path could match several running servers.'
+				},
 				base: { type: 'string', description: 'Profiler mount path (default /__profiler).' }
 			},
 			required: ['url']
@@ -618,57 +630,157 @@ function render_profile(origin: string, r: ProfileReport): string {
 }
 
 /** Record an SSR profile of a route on the running app + return the digested findings. */
-async function tool_profile(args: Attrs): Promise<ToolResult> {
-	const raw = String(args.url ?? '');
-	if (!raw) return fail('`url` is required — the route to profile, e.g. http://localhost:5173/blog.');
-	let origin: string;
-	let route: string;
+// Where a local SvelteKit app usually listens — probed (preview first: real numbers) when the caller
+// gives a bare path instead of a full URL, so an agent can just say "profile /fr/fr".
+const LOCAL_PORTS = [4173, 5173, 3000, 5174, 4174, 3001, 8080, 4321, 5175];
+
+/** fetch with a hard deadline — a hung server can't wedge the tool. */
+async function fetch_timeout(url: string | URL, opts: RequestInit, ms: number): Promise<Response> {
+	const ac = new AbortController();
+	const t = setTimeout(() => ac.abort(), ms);
 	try {
-		const u = new URL(raw);
-		origin = u.origin;
-		route = u.pathname + u.search;
-	} catch {
-		return fail(`invalid url: ${raw}`);
+		return await fetch(url, { ...opts, signal: ac.signal });
+	} finally {
+		clearTimeout(t);
 	}
+}
+
+/** Probe localhost ports in parallel for a MOUNTED profiler; returns hits in priority order. */
+async function find_local_profiler(base: string, key: string): Promise<string[]> {
+	const key_q = key ? `?key=${encodeURIComponent(key)}` : '';
+	const probes = LOCAL_PORTS.map(async (port) => {
+		const origin = `http://localhost:${port}`;
+		try {
+			const r = await fetch_timeout(origin + base + key_q, { redirect: 'manual' }, 700);
+			// 404 = no profiler here (bare Kit 404s that path). 200/401/30x = profiler answering.
+			return r.status !== 404 ? origin : null;
+		} catch {
+			return null; // nothing listening / not http — skip
+		}
+	});
+	return (await Promise.all(probes)).filter((o): o is string => !!o);
+}
+
+const NOT_MOUNTED = (base: string, where: string) =>
+	`The profiler is not mounted at ${base} on ${where}. Add it to src/hooks.server.ts:\n\n` +
+	`  import { sequence } from '@sveltejs/kit/hooks';\n` +
+	`  import { profiler } from 'ogygia/profiler';\n` +
+	`  export const handle = sequence(profiler(), /* …your other handles */);\n\n` +
+	`Put profiler() FIRST so it times the whole chain. Restart the server, then retry.`;
+
+async function tool_profile(args: Attrs): Promise<ToolResult> {
+	const raw = String(args.url ?? '').trim();
+	if (!raw)
+		return fail(
+			'`url` is required — a route path like `/fr/fr` (profiles your local running server), or a full URL like `https://app.com/fr/fr` (profiles that host).'
+		);
 	const profiler_base = String(args.base ?? '/__profiler').replace(/\/$/, '');
 	const runs = typeof args.runs === 'number' ? Math.min(Math.max(Math.round(args.runs), 1), 50) : 5;
 	const key = typeof args.key === 'string' ? args.key : '';
-	const key_q = key ? `?key=${encodeURIComponent(key)}` : '';
+	const explicit_origin =
+		typeof args.origin === 'string' && args.origin ? args.origin.replace(/\/$/, '') : '';
 
-	// Precheck: is the profiler mounted? (a clean "add it to hooks" message beats a cryptic failure)
-	let pre: Response;
-	try {
-		pre = await fetch(origin + profiler_base + key_q, { redirect: 'manual' });
-	} catch (e) {
-		return fail(`could not reach ${origin} — is the dev/preview server running? (${e instanceof Error ? e.message : String(e)})`);
+	// Resolve WHERE to profile. Full URL → that host. Bare path → the given `origin`, else ASK the user
+	// for the URL (they would rather name the host than have us guess) — offering any local server we see.
+	let origin: string;
+	let route: string;
+	if (/^https?:\/\//i.test(raw)) {
+		const u = new URL(raw);
+		origin = u.origin;
+		route = u.pathname + u.search;
+	} else {
+		route = raw.startsWith('/') ? raw : '/' + raw;
+		if (explicit_origin) {
+			origin = explicit_origin;
+		} else {
+			const hits = await find_local_profiler(profiler_base, key);
+			const suggest = hits.length
+				? `\n\nRunning locally right now with the profiler mounted — reply with one to use it:\n${hits.map((h) => `  • ${h}${route}`).join('\n')}`
+				: `\n\n(No local server with the profiler is up — start \`vite dev\` / \`vite preview\`, or give a remote URL.)`;
+			return fail(
+				`Which URL should I profile \`${route}\` on? Ask the user, then call ogygia_profile again with the full \`url\`.\n\n` +
+					`Local looks like http://localhost:5173${route}; remote like https://your-app.com${route}.${suggest}`
+			);
+		}
 	}
-	if (pre.status === 404) {
+
+	// Confirm the profiler is mounted AND we're authed — clean messages beat a cryptic failure. A locked
+	// profiler serves its login PAGE at 200 (not 401), so sniff for it: no key → ask for one, wrong key
+	// → say so, before we bother recording.
+	{
+		const key_q = key ? `?key=${encodeURIComponent(key)}` : '';
+		let pre: Response;
+		try {
+			pre = await fetch_timeout(origin + profiler_base + key_q, { redirect: 'manual' }, 8000);
+		} catch (e) {
+			return fail(
+				`Could not reach ${origin} — is it running and reachable? (${e instanceof Error ? e.message : String(e)})`
+			);
+		}
+		if (pre.status === 404) return fail(NOT_MOUNTED(profiler_base, origin));
+		const pre_body = await pre.text().catch(() => '');
+		if (/id="og-login"/.test(pre_body))
+			return fail(
+				key
+					? `The profiler on ${origin} rejected that \`key\` (still locked). Confirm its secret with the user.`
+					: `The profiler on ${origin} is locked. Ask the user for its secret and pass it as \`key\`.`
+			);
+	}
+
+	const record_once = () => {
+		const rec = new URL(origin + profiler_base + '/page');
+		rec.searchParams.set('p', route);
+		rec.searchParams.set('format', 'json');
+		rec.searchParams.set('runs', String(runs));
+		if (key) rec.searchParams.set('key', key);
+		// N heavy renders can be slow — give it room, but never hang forever.
+		return fetch_timeout(rec, { headers: { accept: 'application/json' } }, 90_000);
+	};
+
+	let res: Response;
+	try {
+		res = await record_once();
+	} catch (e) {
+		const aborted = e instanceof Error && e.name === 'AbortError';
 		return fail(
-			`The profiler is not mounted at ${profiler_base} on ${origin}. Add it to src/hooks.server.ts:\n\n` +
-				`  import { sequence } from '@sveltejs/kit/hooks';\n` +
-				`  import { profiler } from 'ogygia/profiler';\n` +
-				`  export const handle = sequence(profiler(), /* …your other handles */);\n\n` +
-				`Put profiler() FIRST so it times the whole chain. Restart the server, then retry.`
+			aborted
+				? `Recording ${route} on ${origin} took over 90s and was aborted. Try fewer \`runs\`, or if this host times out (serverless), download the .ogp from ${origin}${profiler_base} and open it with ogygia_profile_open.`
+				: `Recording failed: ${e instanceof Error ? e.message : String(e)}`
 		);
 	}
 
-	const rec = new URL(origin + profiler_base + '/page');
-	rec.searchParams.set('p', route);
-	rec.searchParams.set('format', 'json');
-	rec.searchParams.set('runs', String(runs));
-	if (key) rec.searchParams.set('key', key);
-	let res: Response;
-	try {
-		res = await fetch(rec, { headers: { accept: 'application/json' } });
-	} catch (e) {
-		return fail(`recording failed: ${e instanceof Error ? e.message : String(e)}`);
+	// Stuck-session self-heal: a run abandoned by a crashed/timed-out request leaves a 409. Clear it
+	// via /reset (which we own) and retry ONCE — the agent shouldn't have to wait out the 2-min auto-heal.
+	if (res.status === 409) {
+		try {
+			const reset = new URL(origin + profiler_base + '/reset');
+			if (key) reset.searchParams.set('key', key);
+			await fetch_timeout(reset, { redirect: 'manual' }, 5000);
+			res = await record_once();
+		} catch {
+			/* fall through to the 409 message below */
+		}
 	}
+
 	if ((res.headers.get('content-type') ?? '').includes('application/json')) {
 		return text(render_profile(origin, (await res.json()) as ProfileReport));
 	}
-	const body = (await res.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
-	if (res.status === 409) return fail(`A profile is already running on ${origin}. Wait a moment and retry.`);
-	return fail(`profiler did not return JSON (HTTP ${res.status}). ${body || '(check the profiler key / route path)'}`);
+	const body = (await res.text())
+		.replace(/<[^>]+>/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.slice(0, 300);
+	if (res.status === 409)
+		return fail(
+			`A profile is already running on ${origin} and /reset didn’t clear it. It auto-heals after ~2 min — wait and retry.`
+		);
+	if (res.status === 401 || res.status === 403)
+		return fail(
+			`The profiler on ${origin} is locked. Pass its secret as \`key\` (ask the user for it).`
+		);
+	return fail(
+		`profiler did not return JSON (HTTP ${res.status}). ${body || '(check the profiler key / route path)'}`
+	);
 }
 
 async function tool_profile_open(args: Attrs): Promise<ToolResult> {
