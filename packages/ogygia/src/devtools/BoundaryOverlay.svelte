@@ -11,6 +11,7 @@
 	 * dim. The overlay is `pointer-events:none`, so the page stays fully interactive — hover is read off
 	 * the real element under the cursor via `<svelte:window>`. A pure consumer, drawn only while on.
 	 */
+	import { onMount } from 'svelte';
 	import {
 		all_regions,
 		region_info,
@@ -33,27 +34,23 @@
 		onpick?.(el);
 		picking = false;
 	}
-	// Esc cancels a half-started pick.
-	$effect(() => {
-		if (!picking) return;
+	// A frame counter that advances only while the overlay is on — box rects follow scroll / hydration.
+	let frame = $state(0);
+	// One-time wiring (lifecycle, not an effect): Esc cancels a half-started pick, and a single rAF loop
+	// bumps `frame` while the overlay is on. Both read their reactive props live at call time.
+	onMount(() => {
 		const onkey = (e) => {
-			if (e.key === 'Escape') picking = false;
+			if (e.key === 'Escape' && picking) picking = false;
 		};
 		window.addEventListener('keydown', onkey);
-		return () => window.removeEventListener('keydown', onkey);
-	});
-
-	// A frame counter bumped by rAF while the overlay is on — box rects follow scroll / hydration.
-	let frame = $state(0);
-	$effect(() => {
-		if (!overlay) return;
-		let raf = 0;
-		const loop = () => {
-			frame++;
+		let raf = requestAnimationFrame(function loop() {
+			if (overlay) frame++;
 			raf = requestAnimationFrame(loop);
+		});
+		return () => {
+			window.removeEventListener('keydown', onkey);
+			cancelAnimationFrame(raf);
 		};
-		raf = requestAnimationFrame(loop);
-		return () => cancelAnimationFrame(raf);
 	});
 
 	const boxes = $derived.by(() => {
@@ -74,9 +71,15 @@
 			hover = null;
 			return;
 		}
-		const t = e.target;
-		// Pointer over the dock UI → let the Lens tab own `focus`; don't clobber its row hover.
-		if (t instanceof Element && t.closest('[data-og-win],[data-og-panel-toggle]')) return;
+		// The devtools lives in a shadow root, so `e.target` retargets to the host — read the composed
+		// path's innermost element to tell "over the page" from "over the dock".
+		const t = e.composedPath?.()[0] ?? e.target;
+		// Pointer over the dock UI → drop the page tip so it can't hover-cover the panel, but leave
+		// `focus` to the Lens tab (its roster rows drive it).
+		if (t instanceof Element && t.closest('[data-og-win],[data-og-panel-toggle]')) {
+			hover = null;
+			return;
+		}
 		let el = t instanceof Element ? t.closest('ogygia-region') : null;
 		// In pick mode the box catches the pointer (not the region under it) — resolve back by fp.
 		if (!el && t instanceof Element) {
@@ -126,7 +129,7 @@
 		{#each boxes as b (b.info.el)}
 			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 			<div
-				class="box {b.info.kind}"
+				class="box og-{b.info.kind}"
 				data-og-box={b.info.kind}
 				data-og-fp={b.info.fp}
 				class:cold={b.info.kind === 'island' && !b.info.hydrated}
@@ -141,7 +144,7 @@
 				style:width="{b.rect.width}px"
 				style:height="{b.rect.height}px"
 			>
-				<span class="tag {b.info.kind}">
+				<span class="tag og-{b.info.kind}">
 					<b>{b.name}</b><span class="meta"
 						>{b.info.kind === 'island' ? ' ' + b.info.wake : ' ' + b.info.kind}{b.js != null
 							? ' · ' + kb(b.js)
@@ -163,9 +166,9 @@
 			style:top="{Math.min(hover.y + 14, innerHeight - 160)}px"
 		>
 			<div class="head">
-				<span class="dot {tip.kind}"></span><b>{tip.name}</b>
+				<span class="dot og-{tip.kind}"></span><b>{tip.name}</b>
 			</div>
-			<div class="sub {tip.kind}">
+			<div class="sub og-{tip.kind}">
 				{tip.kind}{tip.kind === 'island' ? ` · wakes on ${tip.wake}` : ''} · {tip.state}
 			</div>
 			<div class="rows">
@@ -204,15 +207,15 @@
 		border: 1.5px solid;
 		transition: opacity 0.12s ease;
 	}
-	.box.island {
+	.box.og-island {
 		border-color: #14b8a6;
 		background: rgba(20, 184, 166, 0.12);
 	}
-	.box.lake {
+	.box.og-lake {
 		border-color: #f59e0b;
 		background: rgba(245, 158, 11, 0.12);
 	}
-	.box.hole {
+	.box.og-hole {
 		border-color: #8b5cf6;
 		background: rgba(139, 92, 246, 0.12);
 	}
@@ -256,13 +259,13 @@
 	.pickhint b {
 		font-weight: 700;
 	}
-	.box.on.island {
+	.box.on.og-island {
 		background: rgba(20, 184, 166, 0.22);
 	}
-	.box.on.lake {
+	.box.on.og-lake {
 		background: rgba(245, 158, 11, 0.22);
 	}
-	.box.on.hole {
+	.box.on.og-hole {
 		background: rgba(139, 92, 246, 0.22);
 	}
 	.tag {
@@ -285,13 +288,13 @@
 		font-weight: 500;
 		opacity: 0.8;
 	}
-	.tag.island {
+	.tag.og-island {
 		background: #14b8a6;
 	}
-	.tag.lake {
+	.tag.og-lake {
 		background: #f59e0b;
 	}
-	.tag.hole {
+	.tag.og-hole {
 		background: #8b5cf6;
 	}
 	.tip {
@@ -324,26 +327,26 @@
 		border-radius: 50%;
 		flex: none;
 	}
-	.tip .dot.island {
+	.tip .dot.og-island {
 		background: #14b8a6;
 	}
-	.tip .dot.lake {
+	.tip .dot.og-lake {
 		background: #f59e0b;
 	}
-	.tip .dot.hole {
+	.tip .dot.og-hole {
 		background: #8b5cf6;
 	}
 	.tip .sub {
 		margin: 1px 0 7px 14px;
 		color: #94a3b8;
 	}
-	.tip .sub.island {
+	.tip .sub.og-island {
 		color: #5eead4;
 	}
-	.tip .sub.lake {
+	.tip .sub.og-lake {
 		color: #fbbf24;
 	}
-	.tip .sub.hole {
+	.tip .sub.og-hole {
 		color: #c4b5fd;
 	}
 	.tip .rows {

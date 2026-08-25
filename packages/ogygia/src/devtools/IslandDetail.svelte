@@ -91,7 +91,7 @@
 <div class="detail" data-og-detail>
 	<div class="bar">
 		<button class="back" onclick={onclose} title="back to the roster">‹ back</button>
-		<span class="dot {model.info.kind}"></span>
+		<span class="dot og-{model.info.kind}"></span>
 		<b class="name">{model.name}</b>
 		<span class="k">{model.info.kind}{model.info.kind === 'island' ? ' · ' + model.info.wake : ''}</span>
 		<button class="loc" onclick={locate}>scroll to it ›</button>
@@ -186,13 +186,13 @@
 		border-radius: 50%;
 		flex: none;
 	}
-	.dot.island {
+	.dot.og-island {
 		background: #14b8a6;
 	}
-	.dot.lake {
+	.dot.og-lake {
 		background: #f59e0b;
 	}
-	.dot.hole {
+	.dot.og-hole {
 		background: #8b5cf6;
 	}
 	.name {

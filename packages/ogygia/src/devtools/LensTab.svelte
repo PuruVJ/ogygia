@@ -60,9 +60,9 @@
 		<span class="target"></span>{picking ? 'click an island…' : 'pick on page'}
 	</button>
 	<span class="legend">
-		<span class="sw island"></span>{summary.island}
-		<span class="sw lake"></span>{summary.lake}
-		<span class="sw hole"></span>{summary.hole}
+		<span class="sw og-island"></span>{summary.island}
+		<span class="sw og-lake"></span>{summary.lake}
+		<span class="sw og-hole"></span>{summary.hole}
 	</span>
 	{#if summary.js > 0}<span class="tot">{kb(summary.js)} JS{#if summary.cold}<span class="muted"> · {summary.cold} cold</span>{/if}</span>{/if}
 </div>
@@ -78,10 +78,10 @@
 				class:cold={r.kind === 'island' && !r.hydrated}
 				onmouseenter={() => (focus = r.el)}
 				onmouseleave={() => (focus = null)}
-				onclick={() => (selected = r.el)}
+				onclick={() => { selected = r.el; picking = false; }}
 				title="inspect this region"
 			>
-				<td><span class="dot {r.kind}"></span><span class="nm">{name}</span></td>
+				<td><span class="dot og-{r.kind}"></span><span class="nm">{name}</span></td>
 				<td>{r.kind === 'island' ? r.wake : r.kind}</td>
 				<td class="mono">
 					{#if r.kind !== 'island'}<span class="muted">0 B</span>
@@ -177,16 +177,16 @@
 		border-radius: 3px;
 		margin-left: 6px;
 	}
-	.sw.island,
-	.dot.island {
+	.sw.og-island,
+	.dot.og-island {
 		background: #14b8a6;
 	}
-	.sw.lake,
-	.dot.lake {
+	.sw.og-lake,
+	.dot.og-lake {
 		background: #f59e0b;
 	}
-	.sw.hole,
-	.dot.hole {
+	.sw.og-hole,
+	.dot.og-hole {
 		background: #8b5cf6;
 	}
 	.dot {

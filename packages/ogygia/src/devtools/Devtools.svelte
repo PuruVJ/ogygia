@@ -1,9 +1,17 @@
 <script>
 	/**
-	 * The devtools ROOT app — one component we `mount()` once (from ui.ts, behind the gate). It owns
-	 * the launcher button, a draggable tabbed window, and the boundary overlay; each tab is a child
-	 * component that reads the event bus. All UI state lives here as runes; children get `tick` (a
-	 * refresh pulse while the window is open) + `overlay` (bindable, from the Lens tab).
+	 * The devtools ROOT app — one component we `mount()` once (from ui.ts, behind the gate). It owns the
+	 * launcher, a draggable + resizable tabbed window, and the boundary overlay; each tab is a child that
+	 * reads the event bus. All UI state lives here as runes; children get `tick` (a refresh pulse while
+	 * the window is open) + `overlay` (bindable, from the Lens tab).
+	 *
+	 * Reactivity rule for this whole component: **no `$effect`.** Everything runs at the moment a value
+	 * changes or a callback fires — neodrag's get/set option pairs persist layout on drag/resize end, the
+	 * open/close path owns the refresh timer, and the one global keydown is registered in `onMount`.
+	 *
+	 * Drag/resize is @neodrag/svelte (a bundled devDependency — never a runtime dep of ogygia). The window
+	 * drags only by its header; it may sit partly off-screen. Everything lives inside a fixed, clipped,
+	 * click-through root so an off-screen panel can never make the host page scroll.
 	 */
 	import LensTab from './LensTab.svelte';
 	import LedgerTab from './LedgerTab.svelte';
@@ -16,11 +24,159 @@
 	import BoundaryOverlay from './BoundaryOverlay.svelte';
 	import IslandDetail from './IslandDetail.svelte';
 	import { to_trace } from './sinks.js';
+	import { Draggable } from '@neodrag/svelte';
+	import { Resizable, RESIZE_EDGES } from '@neodrag/svelte/resize';
 
 	// `csrTrue` = mounted by the standalone boot on a Kit-hydrated (csr=true) page. The ogygia runtime
 	// never ran there, so there's no event bus and no islands to inspect — the window shows a notice
 	// pointing at a csr=false page instead of the (empty) instrument tabs.
 	let { csrTrue = false } = $props();
+
+	const TABS = [
+		{ id: 'lens', label: 'Lens' },
+		{ id: 'bytes', label: 'Bytes' },
+		{ id: 'wire', label: 'Wire' },
+		{ id: 'hub', label: 'Hub' },
+		{ id: 'nav', label: 'Nav' },
+		{ id: 'timeline', label: 'Timeline' },
+		{ id: 'profiler', label: 'Profiler' }
+	];
+
+	// ── persisted layout (localStorage; written from callbacks, never an effect) ─────────────────────
+	const LS_KEY = 'ogygia:devtools:layout:v4';
+	function load_layout() {
+		try {
+			return JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {};
+		} catch {
+			return {};
+		}
+	}
+	const saved = load_layout();
+	// The window is CSS-anchored top-left; neodrag's translate (`winPos`) places it. On the very first
+	// open with nothing saved we drop it bottom-right, above the launcher (`place_near_launcher`).
+	let launchPos = $state(saved.launch ?? { x: 0, y: 0 });
+	// Two SEPARATE offsets: `winPos` is the drag translate, `winResizeOff` is the translate a w/n resize
+	// induces to pin the far edge. neodrag SUMS both into the node transform, so they must be distinct —
+	// binding one state to both doubled it and threw the window off-screen.
+	let winPos = $state(saved.win ?? { x: 0, y: 0 });
+	let winResizeOff = $state(saved.rz ?? { x: 0, y: 0 });
+	let winSize = $state(saved.size ?? { width: 600, height: 680 });
+	let open = $state(saved.open ?? false);
+	let placed = saved.win != null;
+	function save_layout() {
+		try {
+			localStorage.setItem(
+				LS_KEY,
+				JSON.stringify({ open, launch: launchPos, win: winPos, rz: winResizeOff, size: winSize })
+			);
+		} catch {
+			/* private mode / quota — layout just won't persist */
+		}
+	}
+
+	// ── neodrag: launcher drags whole; window drags by header, resizes by its edges ─────────────────
+	const launchDrag = new Draggable({
+		// Keep a grabbable sliver on-screen but otherwise let it roam.
+		bounds: { target: 'viewport', padding: -80 },
+		get position() {
+			return launchPos;
+		},
+		set position(p) {
+			launchPos = p;
+		},
+		onDragEnd: (e) => {
+			launchPos = e.offset;
+			save_layout();
+		}
+	});
+	// Drag + resize COMPOSE through neodrag's shared transform: both bind the same `winPos` offset, so a
+	// `w`/`n` resize's far-edge-pin translate and the drag translate never fight. The resize core also owns
+	// applying width/height — we never set them ourselves. Negative bounds padding lets it roam anywhere,
+	// partly off-screen (the clip root stops any page scroll); a sliver always stays grabbable.
+	const winDrag = new Draggable({
+		bounds: { target: 'viewport', padding: -240 },
+		get position() {
+			return winPos;
+		},
+		set position(p) {
+			winPos = p;
+		},
+		onDragEnd: () => save_layout()
+	});
+	const winResize = new Resizable({
+		minWidth: 300,
+		minHeight: 200,
+		get size() {
+			return winSize;
+		},
+		set size(s) {
+			winSize = s;
+		},
+		get position() {
+			return winResizeOff;
+		},
+		set position(p) {
+			winResizeOff = p;
+		},
+		onResizeEnd: () => save_layout()
+	});
+	// Stable attachment/handle objects — computed once so re-renders don't re-run the attachments.
+	const winHandle = winDrag.handle();
+	const winCancel = winDrag.cancel();
+	// All eight edges — the shared-`winPos` composition above makes w/n resizes behave.
+	const resizeHandles = RESIZE_EDGES.map((edge) => ({ edge, props: winResize.handle(edge) }));
+
+	// ── open/close owns the live-refresh timer (no effect) ──────────────────────────────────────────
+	let tab = $state('lens');
+	let tick = $state(0);
+	// Explicit hover state for the launcher (pointerenter/leave — a `:hover` descendant selector proved
+	// flaky against neodrag's inline transform). `up` = fully revealed; otherwise it peeks below the fold.
+	let launchHover = $state(false);
+	let tickTimer = /** @type {ReturnType<typeof setInterval> | null} */ (null);
+	function refresh_on() {
+		if (!tickTimer) tickTimer = setInterval(() => tick++, 700);
+	}
+	function refresh_off() {
+		if (tickTimer) {
+			clearInterval(tickTimer);
+			tickTimer = null;
+		}
+	}
+	function place_near_launcher() {
+		winPos = {
+			x: Math.max(8, innerWidth - winSize.width - 24),
+			y: Math.max(8, innerHeight - winSize.height - 88)
+		};
+	}
+	function set_open(v) {
+		open = v;
+		if (open) {
+			if (!placed) {
+				place_near_launcher();
+				placed = true;
+			}
+			refresh_on();
+		} else {
+			refresh_off();
+		}
+		save_layout();
+	}
+	function toggle_open() {
+		set_open(!open);
+	}
+
+	// ── selection / picking (cross-highlight with the overlay + Lens tab) ───────────────────────────
+	let overlay = $state(false);
+	let focus = $state(/** @type {Element | null} */ (null));
+	let selected = $state(/** @type {Element | null} */ (null));
+	let picking = $state(false);
+	// Picking an island on the page ends pick mode AND turns off the overlay the picker switched on — you
+	// wanted THAT island, not the boxes. Done here at the assignment, not via an effect.
+	function select_region(el) {
+		selected = el;
+		picking = false;
+		overlay = false;
+	}
 
 	let copied = $state(false);
 	async function copy_trace() {
@@ -33,39 +189,19 @@
 		}
 	}
 
-	const TABS = [
-		{ id: 'lens', label: 'Lens' },
-		{ id: 'bytes', label: 'Bytes' },
-		{ id: 'wire', label: 'Wire' },
-		{ id: 'hub', label: 'Hub' },
-		{ id: 'nav', label: 'Nav' },
-		{ id: 'timeline', label: 'Timeline' },
-		{ id: 'profiler', label: 'Profiler' }
-	];
-
-	let open = $state(false);
-	let tab = $state('lens');
-	let overlay = $state(false);
-	let tick = $state(0);
-	// The cross-highlighted region — an `<ogygia-region>` element shared by the Lens tab (its roster
-	// rows) and the BoundaryOverlay (the on-page boxes). Hovering EITHER lights up the other, the way a
-	// browser element inspector links its tree to the page. `null` = nothing focused.
-	let focus = $state(/** @type {Element | null} */ (null));
-	// The SELECTED region — clicking a roster row (or picking one on the page) opens its detail view
-	// over the tab body. `picking` = the "inspect on page" mode: overlay boxes become clickable.
-	let selected = $state(/** @type {Element | null} */ (null));
-	let picking = $state(false);
-	// Selecting closes the picker; leaving the Lens tab drops a half-started pick.
-	$effect(() => {
-		if (selected) picking = false;
-	});
-
-	// Pull the compiler's devtools metadata (dev-server middleware) once on mount: `names` (island id
-	// → component name, so tabs label "Counter" not a hash) and `bytes` (island id → its transitive
-	// dev-module-graph size, so the Bytes tab shows real cost, not the wrapper alone). Best-effort —
-	// the endpoint only exists on a dev devtools build, so a 404/parse error just leaves the fallbacks.
-	// `tick++` nudges the open tab to re-read immediately.
+	// One-time setup: Alt+O toggle, the compiler's devtools metadata, and (re)starting the refresh timer
+	// if we restored an open window. Returns the teardown — this is lifecycle, not reactive state.
 	onMount(() => {
+		const onkey = (e) => {
+			if (e.altKey && (e.key === 'o' || e.key === 'O')) {
+				e.preventDefault();
+				toggle_open();
+			}
+		};
+		window.addEventListener('keydown', onkey);
+
+		// `names` (island id → component name) and `bytes` (island id → transitive dev-graph size) label
+		// the tabs with real names/costs. Best-effort — the endpoint only exists on a dev devtools build.
 		fetch('/__ogygia_devtools_meta')
 			.then((r) => (r.ok ? r.json() : null))
 			.then((meta) => {
@@ -75,163 +211,127 @@
 				tick++;
 			})
 			.catch(() => {});
-	});
 
-	// Refresh pulse while the window is open, so the active tab re-reads the bus/DOM live.
-	$effect(() => {
-		if (!open) return;
-		const id = setInterval(() => tick++, 700);
-		return () => clearInterval(id);
-	});
-
-	// Alt+O toggles the window.
-	$effect(() => {
-		const onkey = (e) => {
-			if (e.altKey && (e.key === 'o' || e.key === 'O')) {
-				e.preventDefault();
-				open = !open;
-			}
+		if (open) refresh_on();
+		return () => {
+			window.removeEventListener('keydown', onkey);
+			refresh_off();
 		};
-		window.addEventListener('keydown', onkey);
-		return () => window.removeEventListener('keydown', onkey);
 	});
-
-	// Drag the window by its header.
-	let winEl = $state(/** @type {HTMLElement | null} */ (null));
-	let pos = $state(/** @type {null | { left: number; top: number }} */ (null));
-	let drag = null;
-	function down(e) {
-		if (e.target instanceof HTMLElement && e.target.closest('.tab, .x')) return;
-		const r = winEl.getBoundingClientRect();
-		drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
-		e.currentTarget.setPointerCapture(e.pointerId);
-	}
-	function move(e) {
-		if (!drag || !winEl) return;
-		const w = winEl.offsetWidth;
-		const h = winEl.offsetHeight;
-		pos = {
-			left: Math.max(4, Math.min(innerWidth - w - 4, e.clientX - drag.dx)),
-			top: Math.max(4, Math.min(innerHeight - h - 4, e.clientY - drag.dy))
-		};
-	}
-	function up(e) {
-		drag = null;
-		try {
-			e.currentTarget.releasePointerCapture(e.pointerId);
-		} catch {
-			/* already released */
-		}
-	}
 </script>
 
-<BoundaryOverlay {overlay} bind:focus {selected} bind:picking onpick={(el) => (selected = el)} />
+<BoundaryOverlay {overlay} bind:focus {selected} bind:picking onpick={select_region} />
 
-{#if open}
-	<div
-		class="win"
-		data-og-win
-		bind:this={winEl}
-		style:left={pos ? pos.left + 'px' : null}
-		style:top={pos ? pos.top + 'px' : null}
-		style:right={pos ? 'auto' : null}
-		style:bottom={pos ? 'auto' : null}
-	>
-		<div class="hd" role="toolbar" tabindex="-1" aria-label="ogygia devtools" onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}>
-			<span class="ttl">ogygia</span>
-			{#if !csrTrue}
-				{#each TABS as t}
-					<button class="tab" data-og-tab={t.id} class:on={tab === t.id} onclick={() => (tab = t.id)}>
-						{t.label}
-					</button>
-				{/each}
-				<button class="trace" title="copy an event trace to the clipboard" onclick={copy_trace}>
-					{copied ? 'copied ✓' : 'trace'}
-				</button>
-			{:else}
-				<span class="mode">csr=true</span>
-			{/if}
-			<button class="x" title="close" onclick={() => (open = false)}>✕</button>
-		</div>
-		<div class="body">
-			{#if csrTrue}
-				<!-- csr=true: no ogygia regions on the page; instruments show a notice -->
-				<div class="notice" data-og-csr-notice>
-					<p class="h">This page runs on <code>csr=true</code>.</p>
-					<p>
-						SvelteKit hydrates the whole page here, so ogygia's runtime never boots — there are no
-						islands, no wire, and no byte ledger to inspect.
-					</p>
-					<p>Open a <code>csr=false</code> page to see the instruments.</p>
+<!-- Fixed, clipped, click-through root: absolute children (window/launcher) can be dragged partly
+     off-screen and are clipped at the viewport edge, so the host page never gains a scrollbar. -->
+<div class="og-root">
+	{#if open}
+		<section
+			class="win"
+			class:busy={winResize.isResizing || winDrag.isDragging}
+			data-og-win
+			{...winDrag.attach}
+			{...winResize.attach}
+		>
+			<header class="hd" {...winHandle} role="toolbar" tabindex="-1" aria-label="ogygia devtools">
+				<!-- Title bar = the drag zone. Only the two buttons on it are cancel zones, so most of the row
+				     (grip + title + spacer) is a generous grab area with a grab cursor. -->
+				<div class="bar">
+					<span class="grip" aria-hidden="true"></span>
+					<span class="ttl">ogygia devtools</span>
+					{#if !csrTrue}
+						<button class="trace" {...winCancel} title="copy an event trace to the clipboard" onclick={copy_trace}>
+							{copied ? 'copied ✓' : 'trace'}
+						</button>
+					{:else}
+						<span class="mode">csr=true</span>
+					{/if}
+					<button class="x" {...winCancel} title="close" onclick={() => set_open(false)}>✕</button>
 				</div>
-			{:else if selected}
-				<IslandDetail el={selected} {tick} onclose={() => (selected = null)} />
-			{:else if tab === 'lens'}
-				<LensTab {tick} bind:overlay bind:focus bind:selected bind:picking />
-			{:else if tab === 'bytes'}
-				<LedgerTab {tick} />
-			{:else if tab === 'wire'}
-				<WireTab {tick} />
-			{:else if tab === 'hub'}
-				<HubTab {tick} />
-			{:else if tab === 'nav'}
-				<NavTab {tick} />
-			{:else if tab === 'timeline'}
-				<TimelineTab {tick} />
-			{:else if tab === 'profiler'}
-				<ProfilerTab {tick} />
-			{/if}
-		</div>
-	</div>
-{/if}
+				{#if !csrTrue}
+					<div class="tabs">
+						{#each TABS as t}
+							<button class="tab" {...winCancel} data-og-tab={t.id} class:on={tab === t.id} onclick={() => (tab = t.id)}>
+								{t.label}
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</header>
 
-<button
-	class="launch"
-	data-og-panel-toggle
-	class:on={open}
-	title="ogygia devtools (Alt+O)"
-	onclick={() => (open = !open)}
->
-	<span class="dot"></span>og devtools
-</button>
+			<div class="body">
+				{#if csrTrue}
+					<div class="notice" data-og-csr-notice>
+						<p class="h">This page runs on <code>csr=true</code>.</p>
+						<p>
+							SvelteKit hydrates the whole page here, so ogygia's runtime never boots — there are no
+							islands, no wire, and no byte ledger to inspect.
+						</p>
+						<p>Open a <code>csr=false</code> page to see the instruments.</p>
+					</div>
+				{:else if selected}
+					<IslandDetail el={selected} {tick} onclose={() => (selected = null)} />
+				{:else if tab === 'lens'}
+					<LensTab {tick} bind:overlay bind:focus bind:selected bind:picking />
+				{:else if tab === 'bytes'}
+					<LedgerTab {tick} />
+				{:else if tab === 'wire'}
+					<WireTab {tick} />
+				{:else if tab === 'hub'}
+					<HubTab {tick} />
+				{:else if tab === 'nav'}
+					<NavTab {tick} />
+				{:else if tab === 'timeline'}
+					<TimelineTab {tick} />
+				{:else if tab === 'profiler'}
+					<ProfilerTab {tick} />
+				{/if}
+			</div>
+
+			{#each resizeHandles as h (h.edge)}
+				<div class="rh rh-{h.edge}" {...h.props}></div>
+			{/each}
+		</section>
+	{/if}
+
+	<div
+		class="launch-wrap"
+		{...launchDrag.attach}
+		onpointerenter={() => (launchHover = true)}
+		onpointerleave={() => (launchHover = false)}
+	>
+		<button
+			class="launch"
+			data-og-panel-toggle
+			class:on={open}
+			class:up={open || launchHover}
+			title="ogygia devtools (Alt+O)"
+			onclick={toggle_open}
+		>
+			<span class="dot"></span>og devtools
+		</button>
+	</div>
+</div>
 
 <style>
-	.launch {
+	.og-root {
 		position: fixed;
-		right: 16px;
-		bottom: 16px;
-		z-index: 2147483600;
-		display: flex;
-		align-items: center;
-		gap: 7px;
-		padding: 8px 13px;
-		border-radius: 999px;
-		border: 1px solid rgba(148, 163, 184, 0.35);
-		background: #0b1220;
-		color: #e2e8f0;
-		font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-	}
-	.launch.on {
-		background: #14b8a6;
-		color: #022;
-		border-color: #0d9488;
-	}
-	.launch .dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: currentColor;
-		opacity: 0.85;
-	}
-	.win {
-		position: fixed;
-		right: 16px;
-		bottom: 64px;
+		inset: 0;
+		overflow: hidden;
+		pointer-events: none;
 		z-index: 2147483550;
-		width: min(680px, 94vw);
-		height: min(460px, 72vh);
+		font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+	}
+
+	/* ── window ───────────────────────────────────────────────────────────── */
+	.win {
+		position: absolute;
+		left: 0;
+		top: 0;
+		/* Pre-attach fallback size; neodrag's resize core applies the live/persisted size on mount. */
+		width: 600px;
+		height: 680px;
+		pointer-events: auto;
 		display: flex;
 		flex-direction: column;
 		background: #0b1220;
@@ -240,12 +340,17 @@
 		border-radius: 12px;
 		box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
 		overflow: hidden;
-		font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+	}
+	/* While dragging or resizing, kill text selection so a gesture never highlights the panel's contents. */
+	.win.busy,
+	.win.busy * {
+		user-select: none;
+		-webkit-user-select: none;
 	}
 	.hd {
 		display: flex;
-		align-items: center;
-		gap: 4px;
+		flex-direction: column;
+		gap: 8px;
 		padding: 8px 10px;
 		cursor: grab;
 		user-select: none;
@@ -254,6 +359,26 @@
 	}
 	.hd:active {
 		cursor: grabbing;
+	}
+	/* Title bar — the drag zone. */
+	.bar {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.grip {
+		width: 16px;
+		height: 12px;
+		flex: none;
+		background-image: radial-gradient(circle, #475569 1.1px, transparent 1.3px);
+		background-size: 5px 5px;
+		background-position: 1px 1px;
+		opacity: 0.75;
+	}
+	.tabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
 	}
 	.ttl {
 		font-weight: 700;
@@ -303,8 +428,7 @@
 		overflow: auto;
 		padding: 12px 14px;
 	}
-	/* csr=true header pill — takes the `margin-left:auto` slot the trace button usually holds, so the
-	   close ✕ stays pinned right. */
+	/* csr=true header pill — takes the `margin-left:auto` slot the trace button usually holds. */
 	.mode {
 		margin-left: auto;
 		padding: 3px 9px;
@@ -332,5 +456,108 @@
 		border-radius: 5px;
 		background: rgba(148, 163, 184, 0.16);
 		color: #5eead4;
+	}
+
+	/* ── resize handles (neodrag marks them by data-attr; we place + size them) ── */
+	.rh {
+		position: absolute;
+		z-index: 3;
+	}
+	.rh-n {
+		top: -3px;
+		left: 10px;
+		right: 10px;
+		height: 7px;
+		cursor: ns-resize;
+	}
+	.rh-s {
+		bottom: -3px;
+		left: 10px;
+		right: 10px;
+		height: 7px;
+		cursor: ns-resize;
+	}
+	.rh-e {
+		right: -3px;
+		top: 10px;
+		bottom: 10px;
+		width: 7px;
+		cursor: ew-resize;
+	}
+	.rh-w {
+		left: -3px;
+		top: 10px;
+		bottom: 10px;
+		width: 7px;
+		cursor: ew-resize;
+	}
+	.rh-ne {
+		top: -4px;
+		right: -4px;
+		width: 14px;
+		height: 14px;
+		cursor: nesw-resize;
+	}
+	.rh-nw {
+		top: -4px;
+		left: -4px;
+		width: 14px;
+		height: 14px;
+		cursor: nwse-resize;
+	}
+	.rh-se {
+		bottom: -4px;
+		right: -4px;
+		width: 14px;
+		height: 14px;
+		cursor: nwse-resize;
+	}
+	.rh-sw {
+		bottom: -4px;
+		left: -4px;
+		width: 14px;
+		height: 14px;
+		cursor: nesw-resize;
+	}
+
+	/* ── launcher: anchored to the bottom, peeks up half-hidden + faded, hover reveals ── */
+	.launch-wrap {
+		position: absolute;
+		right: 24px;
+		bottom: 0;
+		pointer-events: auto;
+	}
+	.launch {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		padding: 9px 14px;
+		border-radius: 999px;
+		border: 1px solid rgba(148, 163, 184, 0.35);
+		background: #0b1220;
+		color: #e2e8f0;
+		font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+		cursor: pointer;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+		/* Peeks up below the fold + dimmed until revealed (open or hovered). */
+		transform: translateY(44%);
+		opacity: 0.55;
+		transition: transform 0.18s ease, opacity 0.18s ease, background 0.15s ease;
+	}
+	.launch.up {
+		transform: translateY(-8px);
+		opacity: 1;
+	}
+	.launch.on {
+		background: #14b8a6;
+		color: #022;
+		border-color: #0d9488;
+	}
+	.launch .dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: currentColor;
+		opacity: 0.85;
 	}
 </style>

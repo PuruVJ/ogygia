@@ -65,13 +65,13 @@
 </script>
 
 <h4>byte ledger — JavaScript per island</h4>
-{#if IS_DEV}
-	<div class="note">
-		dev estimate — <b>+deps</b> sums the island's whole module subgraph (component + everything it
-		imports), so it reflects real cost, not just the wrapper. Sizes are unbundled/unminified; build
-		+ preview for shipped numbers. A cold island (not yet woken) shows <b>—</b> until it loads.
-	</div>
-{/if}
+<div class="note">
+	Each <b>+deps</b> figure is that island's <b>whole bundle</b> — the component plus every shared function
+	and utility it imports. Shared code is therefore counted in <em>every</em> island that uses it, so the
+	figures overlap and the page total over-counts code that actually ships once.{#if IS_DEV}
+		Dev estimate: sizes are unbundled/unminified — build + preview for shipped numbers.{/if} A cold island
+	(not yet woken) shows <b>—</b> until it loads.
+</div>
 
 <table>
 	<thead>
