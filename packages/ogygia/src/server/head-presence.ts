@@ -44,3 +44,27 @@ export function page_declares_dev_hmr_script(html: string): boolean {
 export function page_declares_speculation_rules(html: string): boolean {
 	return SPECULATION_RULES_RE.test(html);
 }
+
+// Hoisted (they run on every SSR head transform). Both are single bounded `[^>]*` runs — linear, no
+// backtracking; a documented (HTML-escaped) tag carries `&lt;`, never a literal `<link`, so prose
+// in a code block can't match (same law as the predicates above).
+const MODULEPRELOAD_LINK_RE = /<link\b[^>]*\brel=["']modulepreload["'][^>]*>/g;
+const LINK_HREF_RE = /\bhref=["']([^"']*)["']/;
+
+/**
+ * Drop duplicate `<link rel="modulepreload">` tags (same href), keeping the first. Each island's SSR
+ * emits its own dep-hint block, so two `load` islands sharing dep chunks — or one island rendered N
+ * times — repeat identical hints; a real page carried ~44 duplicate tags (~4 kB of dead head HTML).
+ * A same-href duplicate is redundant whoever emitted it, so this pass is safe on app-authored hints
+ * too. Called by the handle's head transform on the chunk carrying `</head>`.
+ */
+export function dedupe_modulepreload_links(html: string): string {
+	if (!html.includes('modulepreload')) return html;
+	const seen = new Set<string>();
+	return html.replace(MODULEPRELOAD_LINK_RE, (tag) => {
+		const href = LINK_HREF_RE.exec(tag)?.[1] ?? tag;
+		if (seen.has(href)) return '';
+		seen.add(href);
+		return tag;
+	});
+}

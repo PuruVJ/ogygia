@@ -61,7 +61,8 @@ import {
 	page_declares_router_meta,
 	page_declares_runtime_script,
 	page_declares_dev_hmr_script,
-	page_declares_speculation_rules
+	page_declares_speculation_rules,
+	dedupe_modulepreload_links
 } from './server/head-presence.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
@@ -224,6 +225,7 @@ function region_css_links(id: string): string {
 function emit_ogygia_script(subtype: string, escaped_payload: string, marker = ''): string {
 	return `<script type="application/ogygia-${subtype}"${marker ? ' ' + marker : ''}>${escaped_payload}</script>`;
 }
+
 
 class OgygiaHandle {
 	readonly #endpoint: string;
@@ -441,6 +443,10 @@ class OgygiaHandle {
 		// DOCUMENTS one of these tags in a code block (the changelog does) renders it escaped, which a
 		// bare `html.includes('name="ogygia-router"')` false-matches, suppressing the injection. See
 		// `head-presence.ts` for why that dropped documented pages to full-page navigation.
+		// Dedupe the region-emitted modulepreload hints (each island instance emits its own dep block,
+		// so shared deps repeat). Head hints all live in the chunk that carries `</head>`.
+		if (html.includes('</head>')) html = dedupe_modulepreload_links(html);
+
 		const has_router_meta = page_declares_router_meta(html);
 		const has_runtime_script = page_declares_runtime_script(html);
 		const has_dev_hmr_script = page_declares_dev_hmr_script(html);
