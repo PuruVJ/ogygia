@@ -102,8 +102,10 @@
 		<a class="btn" href="{base}/view">Import<span class="sub">.ogp</span></a>
 	</div>
 	<p class="hint">
-		<a href={base}>← dashboard</a> · <a href="{base}/report/{meta.id}.json">JSON</a> (agents) ·
-		<a href="{base}/report/{meta.id}/raw">.cpuprofile</a> (DevTools / speedscope) · Export is an
+		<a href={base}>← dashboard</a> ·
+		<a href="{base}/report/{meta.id}.json" download="ogygia-profile-{meta.id}.json">JSON</a> (agents) ·
+		<a href="{base}/report/{meta.id}/raw" download="ogygia-profile-{meta.id}.cpuprofile">.cpuprofile</a>
+		(DevTools / speedscope) · Export is an
 		encrypted <code>.ogp</code> — re-open it with Import (needs this profiler's key)
 	</p>
 
