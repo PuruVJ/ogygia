@@ -430,6 +430,9 @@ importers:
 
   packages/ogygia:
     dependencies:
+      '@neodrag/svelte':
+        specifier: 3.0.0-next.12
+        version: 3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)
       '@sveltejs/kit':
         specifier: '>=2.70.2 <3'
         version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
@@ -455,9 +458,6 @@ importers:
         specifier: ^5.40.0
         version: 5.56.8
     devDependencies:
-      '@neodrag/svelte':
-        specifier: 3.0.0-next.12
-        version: 3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)
       '@orama/orama':
         specifier: ^3.1.18
         version: 3.1.18

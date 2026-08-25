@@ -9,9 +9,9 @@
 	 * changes or a callback fires — neodrag's get/set option pairs persist layout on drag/resize end, the
 	 * open/close path owns the refresh timer, and the one global keydown is registered in `onMount`.
 	 *
-	 * Drag/resize is @neodrag/svelte (a bundled devDependency — never a runtime dep of ogygia). The window
-	 * drags only by its header; it may sit partly off-screen. Everything lives inside a fixed, clipped,
-	 * click-through root so an off-screen panel can never make the host page scroll.
+	 * Drag/resize is @neodrag/svelte (a runtime dependency of ogygia, so the bare import resolves for any
+	 * consumer). The window drags only by its header and may sit partly off-screen; everything lives inside
+	 * a fixed, clipped, click-through root so an off-screen panel can never make the host page scroll.
 	 */
 	import LensTab from './LensTab.svelte';
 	import LedgerTab from './LedgerTab.svelte';
