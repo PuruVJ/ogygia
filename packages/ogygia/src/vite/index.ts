@@ -188,6 +188,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 	let root: string;
 	let base = '';
+	/** SvelteKit `config.kit.appDir` (default `_app`) — read from Kit's `__SVELTEKIT_APP_DIR__` define. */
+	let app_dir = '_app';
 	let libDir: string;
 	let is_dev = false;
 	/** Resolved `resolve.alias` entries — passed to bake()'s rolldown eval so `$lib` etc. resolve. */
@@ -368,6 +370,23 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			configResolved(config) {
 				root = config.root;
 				base = config.base || '';
+				// SvelteKit exposes appDir via a build-time `define` (its `config` hook runs before any
+				// `configResolved`, so it's present whatever the plugin order). We read it so our runtime +
+				// island chunks are emitted AND referenced under the user's real appDir — a hardcoded `_app`
+				// 404s under a custom appDir. `base` / `paths.assets` are NOT read here: `Region.svelte`
+				// runs every baked URL through Kit's `asset()`, the sole base/assets/relative authority.
+				// Missing (no sveltekit()) → the standalone `_app` default.
+				const app_dir_define = (config.define as Record<string, unknown> | undefined)?.[
+					'__SVELTEKIT_APP_DIR__'
+				];
+				if (typeof app_dir_define === 'string') {
+					try {
+						const v = JSON.parse(app_dir_define);
+						if (typeof v === 'string' && v) app_dir = v;
+					} catch {
+						/* non-JSON define → keep the `_app` default */
+					}
+				}
 				// Normalize resolve.alias (array or object form) to `{ find, replacement }[]` for bake().
 				const ra = config.resolve?.alias ?? [];
 				resolve_alias = Array.isArray(ra)
@@ -429,6 +448,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					new CompileCtx({
 						root,
 						base,
+						app_dir,
 						libDir,
 						extra_scan_roots,
 						profiler_config,

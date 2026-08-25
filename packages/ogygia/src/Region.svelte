@@ -296,9 +296,10 @@
 				: undefined
 	);
 
-	const island_module_url = $derived(
-		nested || !island_entry ? '' : island_entry.startsWith('/@') ? island_entry : asset(island_entry)
-	);
+	// `asset()` is the sole base/assets authority — every ogygia URL is baked base-LESS (prod
+	// `/${appDir}/immutable/…`, dev `/@id/…`) and resolved here once. (Kit dev serves `/@id/…` under
+	// base, and `asset()` supplies that prefix — so we never special-case dev URLs.)
+	const island_module_url = $derived(nested || !island_entry ? '' : asset(island_entry));
 
 	const island_payload = $derived(
 		nested ? '' : stringify_props(island_props_wire, island_entry).split(LT).join('\\u003C')
@@ -326,9 +327,10 @@
 		if (island_inline || !is_island || hydrate_attr !== 'load' || !island_module_url) return '';
 		const hrefs = [island_module_url];
 		const add_with_deps = (entry, url) => {
-			if (url && !hrefs.includes(url)) hrefs.push(url);
+			const own = url ? asset(url) : '';
+			if (own && !hrefs.includes(own)) hrefs.push(own);
 			for (const dep of islandDeps(entry)) {
-				const href = dep.startsWith('/@') ? dep : asset(dep);
+				const href = asset(dep);
 				if (href && !hrefs.includes(href)) hrefs.push(href);
 			}
 		};
@@ -338,7 +340,8 @@
 		// the link exists iff the island that carries the snippet actually rendered (the compiler's
 		// old static-scan emission preloaded every portable candidate in the host, rendered or not).
 		// The payload embeds each descriptor's public entry URL; prod-shaped (dev has no preloads).
-		for (const m of island_payload.match(/\/_app\/immutable\/og-region\.[0-9a-f]+\.js/g) ?? []) {
+		// Match any appDir (`/<appDir>/immutable/og-region.<hash>.js`), not a hardcoded `/_app/`.
+		for (const m of island_payload.match(/\/[^"\s]+\/immutable\/og-region\.[0-9a-f]+\.js/g) ?? []) {
 			add_with_deps(m, m);
 		}
 		let html = '';
@@ -361,9 +364,7 @@
 	// so there is nothing to import. Must not fall back to the region id: the router's next-page warm
 	// scans `entry="…"` and `import()`s each as a module, so a bare id there fetches `/<id>` → 404 on
 	// nav. The endpoint (which fetches the hole's HTML) is minted from `__entry` above, independently.
-	const server_region_entry = $derived(
-		!nested && __module ? (__module.startsWith('/@') ? __module : asset(__module)) : ''
-	);
+	const server_region_entry = $derived(!nested && __module ? asset(__module) : '');
 
 	const server_payload = $derived(
 		nested || !__hydrate ? '' : stringify_props(__props, __entry).split(LT).join('\\u003C')
@@ -381,7 +382,7 @@
 		if (nested || !server_wants_modulepreload || !server_region_entry) return '';
 		const hrefs = [server_region_entry];
 		for (const dep of islandDeps(__module)) {
-			const href = dep.startsWith('/@') ? dep : asset(dep);
+			const href = asset(dep);
 			if (href && !hrefs.includes(href)) hrefs.push(href);
 		}
 		let html = '';
@@ -439,7 +440,7 @@
 		if (!resolved || resolved.kind !== 'dual' || !resolved.module) return '';
 		let html = '';
 		for (const href of claim_region_css(islandCss(resolved.module)))
-			html += LT + 'link rel="stylesheet" href="' + href + '" data-ogygia-region-css' + GT;
+			html += LT + 'link rel="stylesheet" href="' + asset(href) + '" data-ogygia-region-css' + GT;
 		return html;
 	});
 	// A PLACED client island's CSS is ASSUMED to already sit in the page's own stylesheet (Kit links
@@ -454,7 +455,7 @@
 		if (island_inline || __mode !== 'island' || !island_entry) return '';
 		let html = '';
 		for (const href of claim_region_css(islandCss(island_entry)))
-			html += LT + 'link rel="stylesheet" href="' + href + '" data-ogygia-region-css' + GT;
+			html += LT + 'link rel="stylesheet" href="' + asset(href) + '" data-ogygia-region-css' + GT;
 		return html;
 	});
 
@@ -467,7 +468,7 @@
 		if (resolved?.kind !== 'inline' || !resolved.content_id) return '';
 		let html = '';
 		for (const href of claim_region_css(contentCss(resolved.content_id)))
-			html += LT + 'link rel="stylesheet" href="' + href + '" data-ogygia-region-css' + GT;
+			html += LT + 'link rel="stylesheet" href="' + asset(href) + '" data-ogygia-region-css' + GT;
 		return html;
 	});
 

@@ -5,14 +5,14 @@
  * build (unlike the client manifest, which dev fills from URLs); the client build gets an empty map.
  * A whole-program emitter: it reads the Program's descriptor registry.
  */
-import { islandPublicUrl } from '../region/transform.js';
 import type { Program } from '../program.js';
 
 export function server_manifest_module(
 	ssr: boolean,
 	program: Program,
 	is_dev: boolean,
-	devUrlFor: (virtualPath: string) => string
+	devUrlFor: (virtualPath: string) => string,
+	publicUrlFor: (iid: string) => string
 ): string {
 	if (!ssr) return `export const islands = {};\nexport const island_url = {};`;
 	const entries: string[] = [];
@@ -25,7 +25,7 @@ export function server_manifest_module(
 		// build that's the hashed client chunk (→ handoff CSS assets); in dev it's the entry's
 		// dev module URL (→ `islandCss` returns it, the client imports it for CSS). Same channel.
 		urls.push(
-			`  ${JSON.stringify(iid)}: ${JSON.stringify(is_dev ? devUrlFor(virtualPath) : islandPublicUrl(iid))}`
+			`  ${JSON.stringify(iid)}: ${JSON.stringify(is_dev ? devUrlFor(virtualPath) : publicUrlFor(iid))}`
 		);
 	}
 	return (

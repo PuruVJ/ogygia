@@ -8,6 +8,7 @@ import {
 	transformHost,
 	normalize_import_keys,
 	islandPublicUrl,
+	islandChunkFileName,
 	regionIdentity,
 	regionId,
 	strategyKey,
@@ -157,6 +158,31 @@ describe('portable binding rewrite', () => {
 				`__entry=\\{${JSON.stringify(islandPublicUrl(iid)).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}`
 			)
 		);
+	});
+
+	test('appDir threads into the baked island entry URL (no hardcoded _app, no baked base)', () => {
+		const iid = idFor(C_REL, loadMark);
+		// Default ctx (no appDir): the historic /_app/immutable/… URL.
+		const def = run(wrap(LOAD, '<C />'))!;
+		expect(def.islands[0].wrapperSource).toContain(
+			`__entry={"/_app/immutable/og-region.${iid}.js"}`
+		);
+		// Custom SvelteKit appDir: it rides the URL, no `_app` leaks. base is NOT baked here — Region's
+		// asset() adds it at SSR — so the URL stays a leading-slash app path.
+		const custom = run(wrap(LOAD, '<C />'), makeCtx({ appDir: 'internal' }))!;
+		expect(custom.islands[0].wrapperSource).toContain(
+			`__entry={"/internal/immutable/og-region.${iid}.js"}`
+		);
+		expect(custom.islands[0].wrapperSource).not.toContain('/_app/');
+	});
+
+	test('islandChunkFileName / islandPublicUrl honor appDir (base-less)', () => {
+		// Output filename: appDir-prefixed, no leading slash (an on-disk build path).
+		expect(islandChunkFileName('abc')).toBe('_app/immutable/og-region.abc.js');
+		expect(islandChunkFileName('abc', 'internal')).toBe('internal/immutable/og-region.abc.js');
+		// Public URL: leading slash + appDir, NEVER a base (asset() applies base/assets at render).
+		expect(islandPublicUrl('abc')).toBe('/_app/immutable/og-region.abc.js');
+		expect(islandPublicUrl('abc', 'internal')).toBe('/internal/immutable/og-region.abc.js');
 	});
 
 	test('maxAge is DEFERRED-ONLY: an island preset maxAge is ignored (no __cacheTtl on the island)', () => {

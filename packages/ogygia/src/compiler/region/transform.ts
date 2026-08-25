@@ -28,6 +28,9 @@ interface HostCtx {
 	virtualPathFor: (hostId: string, iid: string) => string;
 	wrapperPathFor: (hostId: string, iid: string) => string;
 	devUrlFor: (virtualPath: string) => string;
+	/** SvelteKit `appDir` (default `_app`) — where island chunks are emitted + served (base-less; Kit's
+	 *  `asset()` adds `base`/assets at render). */
+	appDir?: string;
 	visibleMargin: string | undefined;
 	presets: Record<string, unknown>;
 	importKeys: Partial<ImportKeys> | undefined;
@@ -46,6 +49,9 @@ interface TsRegionCtx {
 	dev: boolean;
 	virtualPathFor: (hostId: string, iid: string) => string;
 	devUrlFor: (virtualPath: string) => string;
+	/** SvelteKit `appDir` (default `_app`) — where island chunks are emitted + served (base-less; Kit's
+	 *  `asset()` adds `base`/assets at render). */
+	appDir?: string;
 	importKeys: Partial<ImportKeys> | undefined;
 	idSalt: string;
 	/** Guarded (typeof) — the ts-region leg falls back to `wrapperVirtualId` when absent. */
@@ -219,13 +225,16 @@ export function islandId(relHostPath: string, index: string | number, salt = '')
  * SSR bakes this into `<ogygia-region entry>` so the sticky runtime can `import(entry)` with no
  * app-wide regions map — Kit builds server before client, so content-hashed Vite names can't hand off.
  */
-export function islandChunkFileName(iid: string) {
-	return `_app/immutable/og-region.${iid}.js`;
+export function islandChunkFileName(iid: string, appDir = '_app') {
+	return `${appDir}/immutable/og-region.${iid}.js`;
 }
 
-/** Public URL for {@link islandChunkFileName} (leading slash, same shape as runtime-url). */
-export function islandPublicUrl(iid: string) {
-	return '/' + islandChunkFileName(iid);
+/** App-internal URL for {@link islandChunkFileName}: `/<appDir>/immutable/…` (leading slash, appDir,
+ *  NO base). It is what SSR bakes onto `<ogygia-region entry>`; `Region.svelte` runs it through Kit's
+ *  `asset()` at render time, which is the sole authority on `base` / the assets CDN / relative paths —
+ *  so a base is never baked here (that would double-apply it). NOT the on-disk output filename. */
+export function islandPublicUrl(iid: string, appDir = '_app') {
+	return '/' + islandChunkFileName(iid, appDir);
 }
 
 /** Portable wrapper module id — SSR / csr=true host binding (Island/ServerIsland/Lake shell). */
@@ -312,14 +321,16 @@ function parse_ts_as_region_options(
 	arg: SvelteNode,
 	fail: (msg: string) => Error,
 	regionKey: string,
-	wakeKey: string
-): { region?: string; wake?: string } {
+	wakeKey: string,
+	renderKey: string
+): { region?: string; wake?: string; render?: string } {
 	if (!arg || arg.type !== 'ObjectExpression')
 		throw fail(
 			`needs an options object — e.g. \`import.meta.og.asRegion(Comp, { wake: 'load' })\`.`
 		);
 	let region: string | undefined;
 	let wake: string | undefined;
+	let render: string | undefined;
 	for (const p of arg.properties ?? []) {
 		if (p.type !== 'Property' || p.computed)
 			throw fail('options must be a plain object of string-valued keys.');
@@ -329,15 +340,21 @@ function parse_ts_as_region_options(
 		const val = String(p.value.value);
 		if (key === regionKey || key === 'region') region = val;
 		else if (key === wakeKey || key === 'wake') wake = val;
+		else if (key === renderKey || key === 'render') render = val;
 		else
 			throw fail(
-				`unknown option \`${key}\` — a .ts region takes \`wake: '…'\` or \`region: 'raw'\`.`
+				`unknown option \`${key}\` — a .ts region takes \`wake: '…'\`, \`region: 'raw'\`, or \`render: 'deferred'\`.`
 			);
+	}
+	// `render: 'deferred'` may carry `wake` (its fetch schedule); `region`/`wake` are exclusive.
+	if (render != null) {
+		if (region != null) throw fail('`render` and `region` are different markers — use one.');
+		return { render, wake };
 	}
 	if (region != null && wake != null) throw fail('takes exactly one of `wake` or `region`.');
 	if (region != null) return { region };
 	if (wake != null) return { wake };
-	throw fail('needs a `wake` or `region` option.');
+	throw fail('needs a `wake`, `region`, or `render` option.');
 }
 
 /**
@@ -1682,7 +1699,7 @@ class FileCompilation {
 							componentPath,
 							entryPath,
 							hostPath: id,
-							moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+							moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir),
 							exportName,
 							identity
 						})
@@ -1731,7 +1748,7 @@ class FileCompilation {
 									entryPath,
 									mark.options,
 									exportName,
-									ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+									ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir),
 									lang
 								),
 								source: island_entry_source(componentPath, iid, exportName),
@@ -1751,7 +1768,7 @@ class FileCompilation {
 								componentPath,
 								entryPath,
 								wrapperPath: wrapPath,
-								moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+								moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir),
 								strategy: mark.strategy,
 								options: mark.options,
 								exportName,
@@ -1978,7 +1995,7 @@ class FileCompilation {
 					portable: true
 				});
 			}
-			const url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid);
+			const url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir);
 			const cap_obj = captures.length ? `{ ${captures.join(', ')} }` : '{}';
 			// SSR renders the entry inline (static import); the csr=false client loads it by url on wake.
 			// Two identical snippets dedupe to one iid → import/preload each entry ONCE (else a duplicate
@@ -2194,11 +2211,67 @@ class TsRegionCompilation {
 	// default import, the barrel export name for a named one.
 	#emit_ts_region(
 		componentPath: string,
-		marker: { region?: string; wake?: string },
+		marker: { region?: string; wake?: string; render?: string },
 		exportName?: string
-	): { iid: string; record: object } {
+	): { iid: string; record: object; importFrom: string } {
 		const comp_rel = this.#component_identity(componentPath);
 		const id_base = exportName && exportName !== 'default' ? `${comp_rel}#${exportName}` : comp_rel;
+		// `render: 'deferred'` — a SERVER island (a content hole fetched from the endpoint on the `wake`
+		// schedule). Mirrors the `.svelte` deferred path (resolve_region_mark's server block + the inline
+		// server record), so a `.svelte` and a `.ts` deferred import are byte-identical. The rewritten
+		// import points at the WRAPPER (not a held binding): placed as `<C {...}/>` it emits the hole; its
+		// `ogygiaFallback` slot is preserved (the router supplies it). `render: 'live'` stays .svelte-only.
+		if (marker.render != null) {
+			const renderKey = this.#import_keys.render;
+			if (marker.render !== 'deferred') {
+				throw new Error(
+					marker.render === 'live'
+						? `[ogygia] ${this.#rel_host}: \`${renderKey}: 'live'\` is not supported on a .ts import — use it in a .svelte file.`
+						: `[ogygia] ${this.#rel_host}: unknown \`${renderKey}\` '${marker.render}'. Use 'deferred'.`
+				);
+			}
+			const dval = marker.wake ?? 'load';
+			let when: string;
+			if (KNOWN_STRATEGIES.has(dval)) when = dval;
+			else if (is_media_query(dval)) when = dval;
+			else
+				throw new Error(
+					`[ogygia] ${this.#rel_host}: \`${renderKey}: 'deferred'\` fetches on the \`${this.#wakeKey}\` schedule, but '${dval}' is not one. Use \`${this.#wakeKey}: 'load' | 'idle' | 'visible'\` or a media query (a hole must fetch — not 'none'/'interaction').`
+				);
+			const options: { when: string; margin?: string } = { when };
+			if (when === 'visible' && this.#ctx.visibleMargin != null) options.margin = this.#ctx.visibleMargin;
+			const identity = regionIdentity(id_base, { strategy: 'server', options });
+			const iid = regionId(identity, this.#salt);
+			const entryPath = this.#ctx.virtualPathFor(this.#id, iid);
+			const wrapPath = this.#wrapper_path_for(iid);
+			return {
+				iid,
+				importFrom: wrapPath, // placed as `<C/>`, the wrapper emits the deferred hole
+				record: {
+					id: iid,
+					virtualPath: entryPath,
+					wrapperPath: wrapPath,
+					wrapperSource: server_wrapper_source(
+						iid,
+						componentPath,
+						entryPath,
+						options,
+						exportName,
+						this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid, this.#ctx.appDir),
+						''
+					),
+					source: island_entry_source(componentPath, iid, exportName),
+					hostPath: this.#id,
+					componentPath,
+					server: true,
+					kind: 'defer',
+					lakes: [],
+					identity,
+					strategy: 'server',
+					fetchWhen: options.when
+				}
+			};
+		}
 		if (marker.region != null) {
 			normalize_region_value(marker.region, this.#rel_host, this.#regionKey);
 			const identity = regionIdentity(id_base, { strategy: 'held', options: {} });
@@ -2206,12 +2279,13 @@ class TsRegionCompilation {
 			const entryPath = this.#ctx.virtualPathFor(this.#id, iid);
 			return {
 				iid,
+				importFrom: regionBindingVirtualId(iid),
 				record: make_region_binding({
 					iid,
 					componentPath,
 					entryPath,
 					hostPath: this.#id,
-					moduleUrl: this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+					moduleUrl: this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid, this.#ctx.appDir),
 					exportName,
 					identity
 				})
@@ -2230,12 +2304,13 @@ class TsRegionCompilation {
 		const entryPath = this.#ctx.virtualPathFor(this.#id, iid);
 		return {
 			iid,
+			importFrom: regionBindingVirtualId(iid),
 			record: make_wake_island({
 				iid,
 				componentPath,
 				entryPath,
 				wrapperPath: this.#wrapper_path_for(iid),
-				moduleUrl: this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid),
+				moduleUrl: this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid, this.#ctx.appDir),
 				strategy,
 				options: hydrateMargin ? { margin: hydrateMargin } : {},
 				hostPath: this.#id,
@@ -2254,11 +2329,13 @@ class TsRegionCompilation {
 		const import_keys = this.#import_keys;
 		const regionKey = this.#regionKey;
 		const wakeKey = this.#wakeKey;
-		// cheap bail — a held import (`with { region|wake }`) OR the `import.meta.og.asRegion(…)` macro.
+		const renderKey = import_keys.render;
+		// cheap bail — a held import (`with { region|wake|render }`) OR the `import.meta.og.asRegion(…)` macro.
 		const has_as_region = source.includes('asRegion');
 		if (
 			!has_as_region &&
-			((!source.includes(regionKey) && !source.includes(wakeKey)) || !source.includes('with'))
+			((!source.includes(regionKey) && !source.includes(wakeKey) && !source.includes(renderKey)) ||
+				!source.includes('with'))
 		)
 			return null;
 
@@ -2286,13 +2363,20 @@ class TsRegionCompilation {
 		while ((m = re.exec(source))) {
 			const [full, local, , spec, attrsRaw] = m;
 			const attrs = parse_import_attrs(attrsRaw);
+			const has_render = attrs.has(renderKey);
 			const has_region = attrs.has(regionKey);
 			const has_wake = attrs.has(wakeKey);
-			if (!has_region && !has_wake) continue;
+			if (!has_render && !has_region && !has_wake) continue;
 			if (inside_literal(m.index)) continue;
-			if (attrs.size > 1) {
+			// `region` is exclusive; `render` (deferred) may pair with `wake` (its fetch schedule); a bare
+			// `wake` is exclusive. Anything else is a mismatched marker set.
+			const bad_combo =
+				(has_region && attrs.size > 1) ||
+				(has_render && [...attrs.keys()].some((k) => k !== renderKey && k !== wakeKey)) ||
+				(!has_render && has_wake && attrs.size > 1);
+			if (bad_combo) {
 				throw new Error(
-					`[ogygia] ${rel_host}: a held-region import on '${local}' takes exactly one marker — \`${regionKey}: 'raw'\` (schedule set at the \`region()\` call) or \`${wakeKey}: '…'\` (baked schedule).`
+					`[ogygia] ${rel_host}: a held-region import on '${local}' takes ONE marker — \`${regionKey}: 'raw'\`, \`${wakeKey}: '…'\`, or \`${renderKey}: 'deferred'\` (optionally with \`${wakeKey}\` as its fetch schedule).`
 				);
 			}
 			const componentPath = this.#resolve_spec(spec);
@@ -2301,16 +2385,14 @@ class TsRegionCompilation {
 					`[ogygia] ${rel_host}: held-region import '${local}' needs a module specifier ($lib/…, relative, or a package specifier like 'pkg/component').`
 				);
 			}
-			const { iid, record } = this.#emit_ts_region(
-				componentPath,
-				has_region ? { region: attrs.get(regionKey) } : { wake: attrs.get(wakeKey) }
-			);
+			const marker = has_render
+				? { render: attrs.get(renderKey), wake: attrs.get(wakeKey) }
+				: has_region
+					? { region: attrs.get(regionKey) }
+					: { wake: attrs.get(wakeKey) };
+			const { iid, record, importFrom } = this.#emit_ts_region(componentPath, marker);
 			if (!islands_by_id.has(iid)) islands_by_id.set(iid, record);
-			s.overwrite(
-				m.index,
-				m.index + full.length,
-				`import ${local} from ${JSON.stringify(regionBindingVirtualId(iid))};`
-			);
+			s.overwrite(m.index, m.index + full.length, `import ${local} from ${JSON.stringify(importFrom)};`);
 			matched = true;
 		}
 
@@ -2418,15 +2500,16 @@ class TsRegionCompilation {
 						call_args[1],
 						(msg) => this.#as_err(local, msg),
 						regionKey,
-						wakeKey
+						wakeKey,
+						renderKey
 					);
-					const { iid, record } = this.#emit_ts_region(componentPath, marker, binding.exportName);
+					const { iid, record, importFrom } = this.#emit_ts_region(
+						componentPath,
+						marker,
+						binding.exportName
+					);
 					if (!islands_by_id.has(iid)) islands_by_id.set(iid, record);
-					s.overwrite(
-						node.start,
-						node.end,
-						`import ${local} from ${JSON.stringify(regionBindingVirtualId(iid))};`
-					);
+					s.overwrite(node.start, node.end, `import ${local} from ${JSON.stringify(importFrom)};`);
 					matched = true;
 				}
 			}

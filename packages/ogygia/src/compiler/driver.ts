@@ -19,7 +19,6 @@ import {
 	wrapperVirtualId,
 	ISLAND_DIR,
 	is_island_path,
-	islandChunkFileName,
 	CLIENT_BINDING_STUB
 } from './region/transform.js';
 import { routeCsrIsFalse, routeCsrIsTrue, hasAnyCsrTrueRoute, clean_stale_ogygia_dirs } from './kit.js';
@@ -252,6 +251,7 @@ export class Compiler {
 			virtualPathFor: (_hostId: string, iid: string) => ctx.island_virtual_id(iid),
 			wrapperPathFor: (_hostId: string, iid: string) => wrapperVirtualId(iid),
 			devUrlFor: (virtualPath: string) => ctx.dev_url_for(virtualPath),
+			appDir: ctx.app_dir,
 			visibleMargin: ctx.visibleMargin,
 			presets: ctx.presets,
 			importKeys: ctx.import_keys,
@@ -285,6 +285,7 @@ export class Compiler {
 			dev: ctx.is_dev,
 			virtualPathFor: (_hostId: string, iid: string) => ctx.island_virtual_id(iid),
 			devUrlFor: (virtualPath: string) => ctx.dev_url_for(virtualPath),
+			appDir: ctx.app_dir,
 			importKeys: ctx.import_keys,
 			idSalt: ctx.id_salt
 		});
@@ -450,9 +451,9 @@ export class Compiler {
 		return this.#ctx!.runtime_chunk_filename(this.program.runtime_feature_hash);
 	}
 
-	/** Public URL of the runtime chunk (`'/' + runtime_chunk_filename()`). */
+	/** Public URL of the runtime chunk (asset prefix + filename — honors a non-root base / assets CDN). */
 	runtime_chunk_url(): string {
-		return '/' + this.runtime_chunk_filename();
+		return this.#ctx!.runtime_chunk_url(this.program.runtime_feature_hash);
 	}
 
 	/**
@@ -476,7 +477,7 @@ export class Compiler {
 			if (!virtualPath) continue;
 			if (emitted_island_chunks.has(rid)) continue;
 			emitted_island_chunks.add(rid);
-			emitFile({ type: 'chunk', id: virtualPath, fileName: islandChunkFileName(rid) });
+			emitFile({ type: 'chunk', id: virtualPath, fileName: this.#ctx!.island_chunk_filename(rid) });
 		}
 	}
 
@@ -631,7 +632,13 @@ export class Compiler {
 		if (id === RESOLVED(V_SERVER_MANIFEST)) {
 			// Populated in BOTH dev and build (unlike the client manifest, which dev fills from URLs).
 			if (ssr) this.prescan();
-			return server_manifest_module(ssr, program, is_dev, (vp: string) => ctx.dev_url_for(vp));
+			return server_manifest_module(
+				ssr,
+				program,
+				is_dev,
+				(vp: string) => ctx.dev_url_for(vp),
+				(iid: string) => ctx.island_public_url(iid)
+			);
 		}
 		if (id === RESOLVED(V_MANIFEST)) {
 			return manifest_module(is_dev);
@@ -944,7 +951,7 @@ export class Compiler {
 						if (kind !== 'hydrate' || !isl.virtualPath || emitted_island_chunks.has(isl.id))
 							continue;
 						emitted_island_chunks.add(isl.id);
-						emitFile({ type: 'chunk', id: isl.virtualPath, fileName: islandChunkFileName(isl.id) });
+						emitFile({ type: 'chunk', id: isl.virtualPath, fileName: ctx.island_chunk_filename(isl.id) });
 					}
 				}
 			}

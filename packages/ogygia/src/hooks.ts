@@ -39,6 +39,7 @@ import {
 import { profilerConfig } from 'virtual:ogygia/profiler-config';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
+import { asset } from '$app/paths';
 import devtools_boot_url from 'virtual:ogygia/devtools-boot-url';
 import { verify, region_mac_message } from './server/hmac.js';
 import { render_cache_key, cached_render } from './server/render-cache.js';
@@ -209,7 +210,8 @@ function region_css_links(id: string): string {
 	if (!url) return '';
 	let out = '';
 	for (const href of islandCss(url)) {
-		out += `<link rel="stylesheet" href="${href}" data-ogygia-region-css>`;
+		// `asset()` supplies base/assets — islandCss hrefs are baked base-less (see Region.svelte).
+		out += `<link rel="stylesheet" href="${asset(href)}" data-ogygia-region-css>`;
 	}
 	return out;
 }
@@ -432,9 +434,8 @@ class OgygiaHandle {
 		//    only load-only pages get the runtime injected here;
 		//  • a page can override view transitions per-route by emitting its own
 		//    `<meta name="ogygia-router" content="plain">` — present → we leave it, so the page wins.
-		// The runtime URL is root-relative (base-correct for `base: ''`); island pages under a base
-		// path get the base-correct URL from Region's `asset()`, so only base-path + island-less pages
-		// are affected — a rare follow-up.
+		// The runtime URL is base-resolved below via Kit's `asset()` — the same authority Region uses for
+		// island pages — so an island-less page under a non-root `base` (or an assets CDN) loads it too.
 		//
 		// Every presence check matches a REAL element, not the tag's name as TEXT — a page that
 		// DOCUMENTS one of these tags in a code block (the changelog does) renders it escaped, which a
@@ -466,11 +467,14 @@ class OgygiaHandle {
 					`<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`
 				);
 			}
+			// Base-resolve the same way Region does — `asset()` is the sole base/assets authority, and
+			// every ogygia URL (prod `/${appDir}/…`, dev `/@id/…`) is baked base-LESS — so an island-LESS
+			// page under a non-root `base` loads the runtime too (the follow-up the old injection deferred).
 			if (runtime_url && !has_runtime_script) {
-				head.push(`<script type="module" data-ogygia-runtime src="${runtime_url}"></script>`);
+				head.push(`<script type="module" data-ogygia-runtime src="${asset(runtime_url)}"></script>`);
 			}
 			if (dev_hmr_url && !has_dev_hmr_script) {
-				head.push(`<script type="module" data-ogygia-dev-hmr src="${dev_hmr_url}"></script>`);
+				head.push(`<script type="module" data-ogygia-dev-hmr src="${asset(dev_hmr_url)}"></script>`);
 				// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:
 				// a changed stylesheet joins this page only when the plugin derives the same scope
 				// among its owners — two route-group sub-apps never paint each other in dev.

@@ -8,13 +8,24 @@
  */
 import { fs } from './host.js';
 import { islandVirtualId } from './ids.js';
-import { wrapperVirtualId, type ImportKeys } from './region/transform.js';
-
-const TRAILING_SLASH = /\/$/;
+import {
+	islandChunkFileName,
+	islandPublicUrl,
+	wrapperVirtualId,
+	type ImportKeys
+} from './region/transform.js';
 
 export interface CompileCtxInit {
 	root: string;
 	base: string;
+	/** SvelteKit `config.kit.appDir` (default `_app`) — the dir Kit emits AND serves its immutable
+	 *  assets under. ogygia's runtime + island chunks MUST land here too: a custom appDir otherwise
+	 *  404s them (Kit's adapter only maps `<appDir>/immutable/*` to the immutable-cache route). Read
+	 *  from Kit's `__SVELTEKIT_APP_DIR__` build define; `_app` when Kit isn't present (standalone).
+	 *  NOTE: only the app-internal PATH lives here. `base` / `paths.assets` (CDN) resolution is Kit's
+	 *  `asset()`'s job — `Region.svelte` runs every baked entry / runtime URL through it at SSR — so
+	 *  ogygia never bakes a base into these URLs (doing so double-applies it). */
+	app_dir: string;
 	libDir: string;
 	/** Extra dirs (beyond `<root>/src`) the prescan walks for island components — the shipped profiler
 	 *  UI, whose server-only components would otherwise never get client hydrate chunks. */
@@ -68,6 +79,7 @@ export interface CompileCtxInit {
 export class CompileCtx {
 	readonly root: string;
 	readonly base: string;
+	readonly app_dir: string;
 	readonly libDir: string;
 	readonly extra_scan_roots: string[];
 	readonly profiler_config: Record<string, unknown> | null;
@@ -101,6 +113,7 @@ export class CompileCtx {
 	constructor(init: CompileCtxInit) {
 		this.root = init.root;
 		this.base = init.base;
+		this.app_dir = init.app_dir;
 		this.libDir = init.libDir;
 		this.extra_scan_roots = init.extra_scan_roots;
 		this.profiler_config = init.profiler_config;
@@ -145,7 +158,23 @@ export class CompileCtx {
 	 *  hash until prescan runs. `program_feature_hash` is `Program.runtime_feature_hash`, threaded in by
 	 *  the caller so this stays a pure naming function. */
 	runtime_chunk_filename(program_feature_hash: string): string {
-		return `_app/immutable/og-runtime.${this.runtime_hash}${program_feature_hash ? '-' + program_feature_hash : ''}.js`;
+		return `${this.app_dir}/immutable/og-runtime.${this.runtime_hash}${program_feature_hash ? '-' + program_feature_hash : ''}.js`;
+	}
+
+	/** App-internal URL of the runtime chunk (leading slash + appDir; NO base). SSR bakes it as the
+	 *  `<script src>`, then `asset()` prepends base / the assets CDN at render time. */
+	runtime_chunk_url(program_feature_hash: string): string {
+		return '/' + this.runtime_chunk_filename(program_feature_hash);
+	}
+
+	/** Output filename for a hydrate island chunk (under the app dir; an on-disk build path). */
+	island_chunk_filename(iid: string): string {
+		return islandChunkFileName(iid, this.app_dir);
+	}
+
+	/** App-internal URL of a hydrate island chunk (leading slash + appDir; NO base — `asset()` adds it). */
+	island_public_url(iid: string): string {
+		return islandPublicUrl(iid, this.app_dir);
 	}
 
 	/** Read a file as UTF-8, or `null` if it can't be read (the transform tolerates missing deps). */
@@ -167,9 +196,11 @@ export class CompileCtx {
 		return wrapperVirtualId(iid);
 	}
 
-	/** Dev URL for a dynamic `import(entry)` of a virtual island module (honors a non-root base). */
+	/** Dev URL for a dynamic `import(entry)` of a virtual island module. Base-LESS, exactly like the
+	 *  prod island/runtime URLs and the dev runtime URL: `Region.svelte` runs it through Kit's `asset()`
+	 *  at SSR, which is the sole base authority. Baking `base` here would double it (Vite dev serves
+	 *  `/@id/…` UNDER base, and `asset()` already adds that prefix). */
 	dev_url_for(virtualPath: string): string {
-		const prefix = this.base && this.base !== '/' ? this.base.replace(TRAILING_SLASH, '') : '';
-		return prefix + '/@id/' + virtualPath;
+		return '/@id/' + virtualPath;
 	}
 }
