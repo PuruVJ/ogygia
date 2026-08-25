@@ -85,10 +85,22 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 	// path byte-for-byte. `renderer.global.mode`/`child` are internal svelte APIs; the feature-detect
 	// degrades safely if they move.
 	if (!BROWSER && desc.m === 'live') {
+		type HeadChild = { push(html: string): void };
 		type ServerRenderer = {
 			push(html: string): void;
 			child(fn: (r: ServerRenderer) => unknown): unknown;
+			head?(fn: (child: HeadChild) => void): void;
 			global?: { mode?: string };
+		};
+		// The entry's inline SSR carries its OWN `<svelte:head>` — the nested islands' `island_preload`
+		// hints (correct priority already baked by Region.svelte) and their scoped-CSS links. `ssr_render`
+		// isolates that into `.head`; thread it into the DOCUMENT head so a portable forwarded through a
+		// PLAIN host still gets its islands' preloads — not only when a host island's props happen to carry
+		// the descriptor (the props-gated path in Region.svelte covers only island hosts). Same threading
+		// pattern svelte uses for async/boundary head; feature-detected so it degrades to body-only if the
+		// internal `head` renderer moves. A same-href hint the props path also emits is deduped downstream.
+		const thread_head = (r: ServerRenderer, head: string | undefined) => {
+			if (head && typeof r.head === 'function') r.head((child) => child.push(head));
 		};
 		const server_snip = ((renderer: ServerRenderer, ...args: unknown[]) => {
 			// Server snippet args arrive as raw values; forward call-time params as `__ogArgs`.
@@ -98,12 +110,13 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 			if (can_async) {
 				renderer.child(async (r) => {
 					const out = await ssr_render(live_entry!, { props });
+					thread_head(r, out.head);
 					r.push(WRAP_OPEN + out.body + WRAP_CLOSE);
 				});
 			} else {
-				renderer.push(
-					WRAP_OPEN + (live_entry ? ssr_render(live_entry, { props }).body : '') + WRAP_CLOSE
-				);
+				const out = live_entry ? ssr_render(live_entry, { props }) : { head: '', body: '' };
+				thread_head(renderer, out.head);
+				renderer.push(WRAP_OPEN + out.body + WRAP_CLOSE);
 			}
 		}) as unknown as RegionSnippet;
 		server_snip.__ogRegion = desc;
