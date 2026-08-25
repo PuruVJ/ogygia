@@ -48,6 +48,26 @@ describe('dedupe_modulepreload_links', () => {
 		expect(dedupe_modulepreload_links(html)).toBe(`${doc}${link('/a.js')}</head>`);
 	});
 
+	it('keeps the normal-priority copy when a chunk is hinted both ways (load beats visible)', () => {
+		const low = (href: string) => `<link rel="modulepreload" href="${href}" fetchpriority="low">`;
+		// visible island's block first (low), load island's block second (normal) — normal must win
+		const html =
+			low('/og-region.vvv.js') + low('/chunks/shared.js') +
+			link('/og-region.lll.js') + link('/chunks/shared.js') +
+			'</head>';
+		expect(dedupe_modulepreload_links(html)).toBe(
+			low('/og-region.vvv.js') + link('/og-region.lll.js') + link('/chunks/shared.js') + '</head>'
+		);
+	});
+
+	it('dedupes low-priority hints against each other (two visible islands, shared deps)', () => {
+		const low = (href: string) => `<link rel="modulepreload" href="${href}" fetchpriority="low">`;
+		const html = low('/a.js') + low('/shared.js') + low('/b.js') + low('/shared.js') + '</head>';
+		expect(dedupe_modulepreload_links(html)).toBe(
+			low('/a.js') + low('/shared.js') + low('/b.js') + '</head>'
+		);
+	});
+
 	it('is a no-op when no hints are present (fast bail)', () => {
 		const html = '<head><meta charset="utf-8"></head><body>modulepreload as text</body>';
 		// contains the word but no tag — replace finds nothing, html unchanged

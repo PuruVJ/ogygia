@@ -323,8 +323,17 @@
 	);
 
 	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
+	// `wake: 'visible'` — the SAME hints at `fetchpriority="low"`: the bytes ride in the background
+	// (never contending with critical work), the module map is warm, and the runtime's idle warm /
+	// the real wake `import()` reuse them — modulepreload compiles into the module map with module
+	// CORS semantics, so the later import is a pure cache hit, never a double fetch. Only SSR can do
+	// this: the client knows just the facade URL; the dep closure lives in the islandDeps manifest.
+	// Browsers without fetchpriority ignore the attribute (hints degrade to normal priority).
+	// `interaction` / media wakes stay unhinted — "maybe never" schedules download nothing.
 	const island_preload = $derived.by(() => {
-		if (island_inline || !is_island || hydrate_attr !== 'load' || !island_module_url) return '';
+		if (island_inline || !is_island || !island_module_url) return '';
+		if (hydrate_attr !== 'load' && hydrate_attr !== 'visible') return '';
+		const low = hydrate_attr === 'visible' ? ' fetchpriority="low"' : '';
 		const hrefs = [island_module_url];
 		const add_with_deps = (entry, url) => {
 			const own = url ? asset(url) : '';
@@ -345,7 +354,7 @@
 			add_with_deps(m, m);
 		}
 		let html = '';
-		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + GT;
+		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + low + GT;
 		return html;
 	});
 
@@ -376,17 +385,22 @@
 	);
 
 	const server_wants_modulepreload = $derived(
-		!!__module && !!__hydrate && (__hydrate === 'load' || __hydrate === __defer)
+		!!__module &&
+			!!__hydrate &&
+			(__hydrate === 'load' || __hydrate === __defer || __hydrate === 'visible')
 	);
 	const server_modulepreload = $derived.by(() => {
 		if (nested || !server_wants_modulepreload || !server_region_entry) return '';
+		// Same low-priority background hints as `island_preload` for a phase-2 `visible` hydrate.
+		const low =
+			__hydrate === 'visible' && __hydrate !== __defer ? ' fetchpriority="low"' : '';
 		const hrefs = [server_region_entry];
 		for (const dep of islandDeps(__module)) {
 			const href = asset(dep);
 			if (href && !hrefs.includes(href)) hrefs.push(href);
 		}
 		let html = '';
-		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + GT;
+		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + low + GT;
 		return html;
 	});
 	const server_fetch_preload = $derived.by(() => {

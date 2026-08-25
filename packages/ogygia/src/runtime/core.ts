@@ -530,8 +530,12 @@ class OgygiaRegion extends HTMLElement {
 			: raw_fire;
 		// A `visible` island won't hydrate until it scrolls into view — and only THEN fetches its JS
 		// chunk, stalling hydration on a real network. Warm the module during idle so the scroll-in is
-		// instant. Kept to `visible` on purpose: `idle` fires imminently anyway, while `interaction`
-		// and `media` are "maybe never" schedules where NOT downloading is the whole point.
+		// instant. In prod the BYTES mostly ride the SSR-emitted `fetchpriority="low"` modulepreload
+		// hints (background priority, full dep closure — see Region.svelte's island_preload); this
+		// idle `import()` then evaluates from the warm module map (near-zero network) so the wake is a
+		// pure cache hit. In dev (no hints) it is also the byte layer. Kept to `visible` on purpose:
+		// `idle` fires imminently anyway, while `interaction` and `media` are "maybe never" schedules
+		// where NOT downloading is the whole point.
 		if (!deferred && when === 'visible') this.#warm_module();
 		this.#arm(when, fire);
 	}
