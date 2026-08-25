@@ -47,6 +47,27 @@ function now_ms(): number {
 }
 
 /**
+ * Did the SSR ship this island's bytes as background `fetchpriority="low"` modulepreload hints?
+ * (Region.svelte emits them for `visible`/`interaction` wakes in prod — full dep closure.) When it
+ * did, the idle warm must NOT `import()` — that would escalate still-queued hint fetches to High.
+ * Hrefs are resolved against the document so `./_app/…` hints match the element's `entry` attr.
+ */
+function has_low_priority_hint(entry: string): boolean {
+	try {
+		const abs = new URL(entry, location.href).href;
+		for (const l of document.querySelectorAll(
+			'link[rel="modulepreload"][fetchpriority="low"]'
+		)) {
+			const href = l.getAttribute('href');
+			if (href && new URL(href, location.href).href === abs) return true;
+		}
+	} catch {
+		// URL parse hiccup — treat as unhinted; the idle import stays the byte layer
+	}
+	return false;
+}
+
+/**
  * Parse the `<script data-ogygia-props>` that follows a region (skipping `<link>` hints). Uses the
  * client reviver (`remember: true`) so a named/shared transportable reunites with its live instance.
  * Returns `{}` when there is no props sibling.
@@ -533,9 +554,11 @@ class OgygiaRegion extends HTMLElement {
 		// instant. In prod the BYTES mostly ride the SSR-emitted `fetchpriority="low"` modulepreload
 		// hints (background priority, full dep closure — see Region.svelte's island_preload); this
 		// idle `import()` then evaluates from the warm module map (near-zero network) so the wake is a
-		// pure cache hit. In dev (no hints) it is also the byte layer. Kept to `visible` on purpose:
-		// `idle` fires imminently anyway, while `interaction` and `media` are "maybe never" schedules
-		// where NOT downloading is the whole point.
+		// pure cache hit. In dev (no hints) it is also the byte layer. `interaction` islands get the
+		// SAME low-priority byte hints but no idle import — evaluation waits for the gesture (the
+		// hover warm / wake import hits the cache). Media-query wakes get neither: the server can't
+		// know the viewport, so downloading would be a blind bet. Idle warm kept to `visible` on
+		// purpose — `idle` fires imminently anyway.
 		if (!deferred && when === 'visible') this.#warm_module();
 		this.#arm(when, fire);
 	}
@@ -544,6 +567,12 @@ class OgygiaRegion extends HTMLElement {
 	#warm_module() {
 		const entry = this.getAttribute('entry');
 		if (!entry) return;
+		// Prod: the SSR already shipped this island's bytes as `fetchpriority="low"` modulepreload
+		// hints (full dep closure). An `import()` here would ESCALATE any still-queued hint fetch to
+		// High — the exact contention the low hints exist to avoid — so leave the bytes in the
+		// background and pay only module evaluation at the real wake. Dev has no hints; the idle
+		// import stays the byte layer there.
+		if (has_low_priority_hint(entry)) return;
 		const warm = () => warm_island_module(entry);
 		if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 2000 });
 		else setTimeout(warm, 200);

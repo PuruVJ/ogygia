@@ -323,17 +323,20 @@
 	);
 
 	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
-	// `wake: 'visible'` — the SAME hints at `fetchpriority="low"`: the bytes ride in the background
-	// (never contending with critical work), the module map is warm, and the runtime's idle warm /
-	// the real wake `import()` reuse them — modulepreload compiles into the module map with module
-	// CORS semantics, so the later import is a pure cache hit, never a double fetch. Only SSR can do
+	// `wake: 'visible'` / `wake: 'interaction'` — the SAME hints at `fetchpriority="low"`: the bytes
+	// ride in the background (never contending with critical work), the module map is warm, and the
+	// later `import()` (visible's idle warm, interaction's hover warm, or the real wake) is a pure
+	// cache hit — modulepreload compiles into the module map with module CORS semantics, never a
+	// double fetch. Execution still waits for the schedule; only bytes move early. Only SSR can do
 	// this: the client knows just the facade URL; the dep closure lives in the islandDeps manifest.
 	// Browsers without fetchpriority ignore the attribute (hints degrade to normal priority).
-	// `interaction` / media wakes stay unhinted — "maybe never" schedules download nothing.
+	// Media-query wakes stay unhinted — the server can't know the viewport, so downloading would be
+	// a blind bet.
 	const island_preload = $derived.by(() => {
 		if (island_inline || !is_island || !island_module_url) return '';
-		if (hydrate_attr !== 'load' && hydrate_attr !== 'visible') return '';
-		const low = hydrate_attr === 'visible' ? ' fetchpriority="low"' : '';
+		if (hydrate_attr !== 'load' && hydrate_attr !== 'visible' && hydrate_attr !== 'interaction')
+			return '';
+		const low = hydrate_attr === 'load' ? '' : ' fetchpriority="low"';
 		const hrefs = [island_module_url];
 		const add_with_deps = (entry, url) => {
 			const own = url ? asset(url) : '';
@@ -387,13 +390,19 @@
 	const server_wants_modulepreload = $derived(
 		!!__module &&
 			!!__hydrate &&
-			(__hydrate === 'load' || __hydrate === __defer || __hydrate === 'visible')
+			(__hydrate === 'load' ||
+				__hydrate === __defer ||
+				__hydrate === 'visible' ||
+				__hydrate === 'interaction')
 	);
 	const server_modulepreload = $derived.by(() => {
 		if (nested || !server_wants_modulepreload || !server_region_entry) return '';
-		// Same low-priority background hints as `island_preload` for a phase-2 `visible` hydrate.
+		// Same low-priority background hints as `island_preload` for a phase-2 `visible`/`interaction`
+		// hydrate.
 		const low =
-			__hydrate === 'visible' && __hydrate !== __defer ? ' fetchpriority="low"' : '';
+			(__hydrate === 'visible' || __hydrate === 'interaction') && __hydrate !== __defer
+				? ' fetchpriority="low"'
+				: '';
 		const hrefs = [server_region_entry];
 		for (const dep of islandDeps(__module)) {
 			const href = asset(dep);

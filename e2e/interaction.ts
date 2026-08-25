@@ -21,7 +21,7 @@ check('SSR: interaction region has an entry chunk', interactionEntry.length > 0,
 
 const browser = await chromium.launch();
 try {
-	// ---------- cold: no interaction chunk on load ----------
+	// ---------- cold: bytes ride background hints, but NOTHING executes ----------
 	{
 		const page = await browser.newPage();
 		const fetched: string[] = [];
@@ -29,15 +29,22 @@ try {
 		await page.goto(base + '/interaction', { waitUntil: 'networkidle' });
 		await page.waitForTimeout(300);
 		const entryFile = interactionEntry.split('/').pop() ?? '@@none@@';
-		check('cold: interaction chunk NOT fetched on load', !fetched.some((u) => u.includes(entryFile)), entryFile);
+		// New contract: an interaction island's BYTES prefetch at load via an SSR-emitted
+		// `fetchpriority="low"` modulepreload hint (background priority — never contends with
+		// critical work); evaluation still waits for the gesture. The chunk is therefore fetched
+		// at load — hint-initiated, not island-initiated — and the region stays cold.
+		const hint = await page
+			.locator(`link[rel="modulepreload"][fetchpriority="low"][href*="${entryFile}"]`)
+			.count();
+		check('cold: low-priority modulepreload hint for the interaction chunk', hint === 1);
+		check('cold: chunk prefetched in the background', fetched.some((u) => u.includes(entryFile)), entryFile);
 		check('cold: region not hydrated', (await page.locator('ogygia-region[wake="interaction"][data-hydrated]').count()) === 0);
 		// eager load island on the same page DID hydrate (islands generally work here)
 		check('cold: eager island on same page hydrated', (await page.locator('ogygia-region[wake="load"][data-hydrated]').count()) === 1);
 
-		// ---------- hover warms the chunk without hydrating ----------
+		// ---------- hover pre-evaluates (cache hit) without hydrating ----------
 		await page.locator('[data-interaction-counter]').hover();
 		await page.waitForTimeout(250);
-		check('hover: warms the chunk (module fetched)', fetched.some((u) => u.includes(entryFile)));
 		check('hover: still not hydrated', (await page.locator('ogygia-region[wake="interaction"][data-hydrated]').count()) === 0);
 
 		// ---------- first click wakes + replays (counts exactly once) ----------
