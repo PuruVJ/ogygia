@@ -1,6 +1,8 @@
 # ogygia router — programmatic routing on components
 
-**Status: DESIGN, loop-refined. Not implemented.** This doc is sharpened iteratively: each pass
+**Status: BUILT (v1) on branch `router`; design loop-refined (14 passes).** `ogygia/router` ships
+`routes()`/`view()`/verb wrappers + RF-binding detection; the profiler is rewritten on top as its
+handler-mode dogfood (21 router tests, full suite green). This doc is sharpened iteratively: each pass
 picks one non-obvious problem real routers must solve, tests the current design against it, rates
 the experience, and expands the API only if the scenario demands it — without making the 80% case
 clunkier. Elegance × power. The refinement log at the bottom is the audit trail.
@@ -62,15 +64,15 @@ where addresses are minted. Everything below follows from that.
 
 ```ts
 // router.ts — an ordinary module
-import { routes, view } from 'ogygia/server';
+import { routes, view } from 'ogygia/router';
 import Home from '$lib/views/Home.svelte';
 import Doc from '$lib/views/Doc.svelte';
 import Search from '$lib/views/Search.svelte';
 
 export const app = routes({
-	'/': Home,                                                    // bare component — nothing else needed
-	'/docs/[slug]': ({ params }) => view(Doc, { slug: params.slug }),
-	'/search': ({ url }) => view(Search, { q: url.searchParams.get('q') ?? '' })
+	'/': view(Home),                                              // a static page is a view() — never bare
+	'/docs/[slug]': (c) => view(Doc, { slug: c.params.slug }),    // c.params.slug is typed `string` — no annotation
+	'/search': (c) => view(Search, { q: c.url.searchParams.get('q') ?? '' })
 });
 ```
 
@@ -82,8 +84,8 @@ export const handle = sequence(app.handle, ogygia.handle());
 
 // or src/routes/[...path]/+server.ts (app-owned catchall; Kit routes still win elsewhere)
 import { app } from '$lib/router';
-export const prerender = app.prerender; // 'auto' when anything stays dynamic
-export const entries = app.entries;     // derived — see Freshness
+export const prerender = 'auto';        // static build value Kit reads off the module — you set it, not the router
+export const entries = app.entries;     // the crawl list (static views + prerender-RF inputs) — see Freshness
 export const GET = ({ request }) => app.fetch(request);
 ```
 
@@ -95,10 +97,11 @@ Three more things arrive the moment you need them (refinements 7–8):
 
 ```ts
 export const app = routes({
-	'/': Home,
+	'/': view(Home),
 	'/docs/[slug]': doc_page,
 	'/view': get(() => view(Upload, { base })).post(upload), // verbs chain ON THE ENTRY — one path, one place
-	'/login': post(login),                                   // a POST-only route
+	'/search': get(SearchSchema, (c) => view(Results, c.input)), // schema gates the GET; c.input typed
+	'/login': post(LoginSchema, login),                      // POST-only, body validated before login runs
 	'/api': api // a router is a value — mount one under a prefix; patterns + types flow through
 });
 
@@ -109,8 +112,8 @@ app.href('/docs/[slug]', { slug: 'intro' }); // typed links — domain = the GET
 
 | Value | Meaning | Freshness (law 7) |
 | --- | --- | --- |
-| `Component` | Bare component, no props — inert page, islands inside wake | prerendered (provably static: it receives nothing) |
-| `(ctx) => …` | Inline handler; `ctx.params` typed from the pattern key | request-time (it reads the request) |
+| `view(Component, props?)` | A page — inert HTML, islands inside wake. Static pages are `view(Home)` (never a bare component: that would break `ctx` inference) | prerenderable (a static value, takes no request) |
+| `(c) => …` | Inline handler; `c.params` typed from the pattern key, zero annotation | request-time (it reads the request) |
 | remote `prerender(...)` | The function IS the page; params validated by its schema | baked; instances = the RF's own `inputs` |
 | remote `query(...)` | Same, per-request | request-time |
 | remote `query.live(...)` | Same, and the page morphs as the query yields | live (SSE) — parking lot, scenario candidate |
@@ -221,20 +224,51 @@ Kit's grammar, exactly — zero new syntax to learn:
 ```ts
 type Params<P extends string> = /* template-literal parse of P */;
 
-function routes<T>(table: {
+function routes<T extends Record<string, unknown>>(table: {
 	[P in keyof T & string]:
-		| Component                                             // bare, provably static
-		| ((ctx: Ctx<Params<P>>) => Answer | Promise<Answer>)   // inline handler
+		| View                                                  // view(Component, props?) — a page
+		| ((ctx: Ctx<Params<P>>) => Answer | Promise<Answer>)   // inline handler — ctx.params typed from P
+		| Methods                                               // verb wrappers (get/post/…/query)
+		| Router                                                // sub-router mounted at this prefix
 		| RemoteView<Params<P>>;                                // RF whose input accepts the params
-}, opts?: { slash?: 'ignore' | 'never' | 'always' }): Router;
+}, opts?: { base?: string; slash?: 'ignore' | 'never' | 'always'; miss?: Handler }): Router;
+// ✅ params inference WORKS (refinement 11): because a page is a `view()` (a non-function value), the
+// handler is the ONLY function in the union, so TS contextually types `ctx` — `c.params.slug` is typed
+// `string` with ZERO annotation, and `c.params.nope` on a route without that param is a type error.
+// Dropping the bare-`Component` route value (a second callable) is what unlocked it.
 
-interface Ctx<P> {
-	params: P;
+interface Ctx<P, I = undefined> {
+	params: P;                    // typed from the pattern
 	url: URL;
 	request: Request;
-	/** present when mounted inside Kit (handle/catchall) — cookies, locals, platform */
+	input: I;                     // the validated input when the route has a schema; else undefined (refinement 12)
+	/** present when mounted inside Kit (handle/catchall) — cookies, locals, platform, event.fetch */
 	event?: RequestEvent;
+	// response shortcuts (refinement 10, Hono-style) — a handler rarely constructs a Response by hand
+	json(data: unknown, init?: ResponseInit): Response;   // application/json, no-store
+	redirect(location: string, status?: number): Response; // default 303
+	text(body: string, init?: ResponseInit): Response;
+	// typed href: the pattern types its params (missing/extra param → type error). On a handler's ctx the
+	// pattern KEY is any string; on `app.href` (Router<T>) the key is constrained to real route keys.
+	href<K extends string>(pattern: K, ...args: HrefArgs<K>): string;
+	state: Record<string, unknown>;   // per-request scratch bag — a guard writes, the handler reads (refinement 13)
 }
+
+// Guards (refinement 13) — run BEFORE the handler. Return a Response to DENY; void to ALLOW; enrich
+// ctx.state. Table-wide via routes(t, { guard }), per-route/subtree via guard(fn, value); sub-router
+// guards compose (parent runs first). Table guards cover unmatched paths too (deny, not 404 — good for
+// auth). A guard is a PRE-check; response-modifying middleware (e.g. set a cookie) still rides the seam
+// (`sequence(...)` / the handle wrapper) — the two are complementary, which is why the seam non-goal held.
+type Guard = (ctx: Ctx) => Response | void | Promise<Response | void>;
+function guard<V>(g: Guard | Guard[], value: V): Guarded;
+
+// The schema gate (refinement 12) — verbs take a Standard Schema (Zod/Valibot/…) FIRST; the router
+// validates `{ …jsonBody, …search, …params }` (path wins) BEFORE the handler, 400s on issues so the
+// handler never runs on bad input, and hands the typed result to `c.input`. Same schema an RF takes.
+get(handler): Methods;
+get<S extends StandardSchemaV1>(schema: S, handler: (c: Ctx<P, InferOutput<S>>) => Answer): Methods;
+// …post/put/patch/del/query/options identical. A bound RF gets the same merged input (its own schema
+// validates), so search params come free with the RF's schema.
 
 type Answer = View | Response | null | undefined;
 
@@ -245,20 +279,20 @@ function view<C extends Component>(
 ): View;
 
 // verbs are VALUES, chained per record entry (refinement 8) — one path, one place
-function get<P>(h: Handler<P>): MethodValue<P>;      // post/put/patch/del/options: same shape
+function get<P>(h: Handler<P>): MethodValue<P>;      // also: post/put/patch/del/query/options
 interface MethodValue<P> {
 	post(h: Handler<P>): MethodValue<P>;               // accumulate more verbs on THIS entry
-	put: …; patch: …; del: …;                          // del(): `delete` is reserved
+	put: …; patch: …; del: …; query: …; options: …;    // del(): `delete` is reserved
+	// query() = the HTTP QUERY method — a safe, GET-like verb that carries a request body (refinement 9)
 }
 
 interface Router<T> {
 	handle: Handle;                                    // Kit hooks seam
 	fetch: (req: Request) => Promise<Response | null>; // web seam (catchall, tests, Bun)
 	match: (path: string) => Match | null;             // introspection, no side effects
-	prerender: boolean | 'auto';                       // derived from route values (law 7)
-	entries: () => Promise<Array<{ path: string }>>;   // derived: static paths + RF inputs
-	// typed links (TanStack's lesson) — domain = the keys that answer GET, because links ARE GETs.
-	href<P extends GetKeys<T>>(pattern: P, ...params: ParamsArgs<P>): string;
+	entries: () => Promise<Array<{ path: string }>>;   // catchall crawl list (static views + RF inputs)
+	// typed links — pattern constrained to THIS router's route keys, params typed from the pattern.
+	href<K extends keyof T & string>(pattern: K, ...args: HrefArgs<K>): string;
 }
 ```
 
@@ -541,3 +575,122 @@ answer GET". Hono's verbs and Elysia's accumulation survive — relocated from t
 entry, which is where the route lives. Warts owned: `del()` (reserved word), and the `get` import
 can collide with svelte/store's `get`. Cost to the 80%: zero. After: 9/10 / 9/10 — every question
 about a path is answered by reading its one line.
+
+### 9 · Building it — the profiler dogfood + two implementation truths (2026-08-25, user: "build it, rewrite the profiler on it")
+
+**Scenario.** Not a thought experiment — actually implement `ogygia/router` and port the profiler
+(~270-line `sub === '…'` if-chain) onto it. Implementation is where designs meet reality.
+
+**What held.** The whole surface survived contact: `routes()` over a record, `view().action()`, verb
+wrappers, `base`/`miss`/`slash`, sub-router delegation, RF detection off Kit's real `__.type` brand
+(query/prerender → GET, command/form → POST), derived `entries`/`prerender`, `href`. The profiler
+table reads like its sitemap; auth stayed a single `gate()` wrapper (the middleware non-goal held a
+second time). 21 router tests + the full suite green; every profiler route verified live, including
+`DELETE /view → 405 allow: GET, POST` (the honest-405 the string-key design never could give).
+
+**What reality forced.**
+- **Component vs handler is undecidable by type.** Both are functions, so a bare `Component` and an
+  inline `(ctx) => …` sit in the same union and TS won't contextually type `ctx` — an inline table
+  handler needs `({ params }: Ctx) => …` today (verb-wrapper + RF handlers infer fine). At RUNTIME
+  they're told apart by ARITY: a Svelte 5 component takes `($$payload, $$props)` (length 2), a
+  handler takes `ctx` (length ≤ 1). Documented; per-pattern `params` inference is the next pass.
+- **`render()` must await the answer.** A handler (or `miss`) may return a `Promise<Response>`; the
+  first cut type-checked the un-awaited promise, wasn't a `Response`, and got JSON-wrapped → a bogus
+  200 on the profiler's 404. One-line fix (`await input` first); a reminder that the Answer union is
+  really `Answer | Promise<Answer>` end to end.
+- **QUERY joined the verbs.** HTTP QUERY (safe, GET-like, body-carrying) is now a verb wrapper
+  alongside get/post/put/patch/del — the record still holds only URL-bar-reachable GETs.
+
+Rating: 9/10 ease, 9/10 intuitiveness — the one scar a newcomer meets is the `: Ctx` annotation on
+inline table handlers, and it's the thing to erase next.
+
+### 10 · `ctx` is the interface — response shortcuts + the profiler goes all-in (2026-08-25, user: "it's not router enough — use more of the router's ctx, move things into the router")
+
+**Scenario.** The first profiler port took `ctx` apart at the table (`({ url }) => this.#run(url)`,
+`({ params }) => this.#report(params.id)`) and rebuilt Responses by hand (`new Response(null, {
+status: 303, … })`, a local `json_response`). The router's `ctx` was a bag of four fields, not an
+interface you'd want to program against.
+
+**Test.** Handlers threaded primitives instead of `ctx`; every JSON/redirect was hand-rolled;
+`ctx.event` was reached for even when `ctx.url`/`ctx.request` would do. Reads as "a router bolted
+on", not "the router way". 6/10.
+
+**Expansion.** `ctx` gains Hono-style shortcuts — `ctx.json(data, init?)`, `ctx.redirect(location,
+status = 303)`, `ctx.text(body, init?)` — built once per request in `make_ctx`. The profiler now
+passes `ctx` straight into every handler (`(c) => this.#report(c)`), which read `c.params.id`,
+`c.url.searchParams`, `c.request`, and reserve `c.event` for the ONE Kit-only thing (`event.fetch`,
+the internal SSR render). All response construction moved to `c.json`/`c.redirect`; the local
+`json_response` is deleted. Login/logout are routes; the gate does auth only. Net: the profiler no
+longer imports `document`/`region` OR builds a raw Response for a page — the router owns rendering
+AND the common response shapes. Cost to the 80%: zero (shortcuts are additive). After: 9/10 / 9/10.
+The profiler is now a faithful mirror of what an app author writes.
+
+### 12 · The schema gate — validation before the handler, RF-symmetric (2026-08-25, user: "the whole point of a schema is to protect from running the handler at all")
+
+**Scenario.** The first search-params sketch was `c.search(schema)` — called INSIDE the handler. Wrong:
+the handler has already started. A schema must be a GATE — validate first, 400 on bad input, the
+handler never fires — which is exactly how an RF works. So the schema belongs ON the route, and the
+non-RF and RF stories should look nearly identical.
+
+**Test.** `c.search()` ran the body before validating; it couldn't reject-before-run; and it left the
+RF and non-RF stories asymmetric. 4/10 against "the schema protects the handler".
+
+**Expansion.** Standard Schema (`~standard` — the very interface Kit's RFs consume) is the bridge, so
+ONE Zod/Valibot schema works both ways. Verbs take it first: `get(schema, handler)`, mirroring
+`query(schema, handler)`. The router builds the input `{ …jsonBody, …search, …params }` (path wins;
+repeated search key → array), runs `schema['~standard'].validate` BEFORE the handler, returns a 400
+listing the issues if invalid, and only then calls the handler with `c.input` typed to the schema's
+output. A bound RF gets the same merged input — so **search params come free with an RF's schema**,
+and migrating a handler to an RF is `get(S, h)` → `query(S, h)`, body unchanged. Cost to the 80%:
+zero — the schema is a strictly-additive first arg; `view()`, bare handlers, and `get(h)` are
+untouched; `c.input` is `undefined` without a schema. 7 tests. After: 9/10 / 9/10.
+
+**Also this pass (href gets a consumer, and gets typed):** `href` moved onto `ctx`, and the profiler
+builds its report redirect with `ctx.href('/report/[id]', { id })` instead of a hand-built string —
+rename-safe. First cut shipped it LOOSE (`href(pattern: string, params?: Record<…>)`) and the doc
+overclaimed "typed"; the user caught it. Fixed: `Router` is now generic (`Router<T>`), `app.href`'s
+pattern is constrained to real route keys AND its params are typed from the pattern (a typo'd route or
+a missing param is a type error); `ctx.href` types the params from the pattern literal (key stays any
+string on a handler's loose ctx). Threading the table `T` into the types did NOT break the `c.params`
+inference (verified). Typed-search-`href` stays parked — no link needs typed search yet.
+
+### 13 · Per-route guards — the one clear competitive gap (2026-08-25, user picks it: "let's do #1")
+
+**Scenario.** Guards/`beforeLoad`/context are table stakes in TanStack + Elysia and the one thing our
+router lacked. We'd made middleware a NON-GOAL (one `gate()` at the seam), elegant for the profiler's
+single auth concern but unable to say "this ONE route needs admin". So: add scoped guards without
+resurrecting a middleware chain.
+
+**Test.** Before: a per-route auth check meant hand-rolling `if` at the top of the handler (already
+running) — the same "schema must gate, not run inside" mistake, one level up. 3/10.
+
+**Expansion.** A `Guard = (ctx) => Response | void` runs BEFORE the handler: a Response denies
+(401/403/redirect), void allows, and it can enrich `ctx.state` (the DI story, untyped v1) for the
+handler. Three placements, one model: table-wide `routes(t, { guard })`, per-route/subtree
+`guard(fn, value)` (flattens when nested), and a sub-router's own table guard — which COMPOSE, because
+delegation runs the parent's table guards first (they fire once, early, covering sub-routes AND
+unmatched paths, so an unauthed probe is denied rather than 404'd). Table guards run pre-match (no
+params); per-route guards run post-match (params available) — the one wart, documented. 6 tests
+(deny-before-handler, ctx.state, per-route, order/first-Response-wins, parent→sub compose, guards a
+`get()`/`view()` alike). Cost to the 80%: zero (no `guard` = nothing runs).
+
+**Design finding (guards vs the seam):** guards are a PRE-check. The seam (`sequence`, the handle) is
+where response *transforms* live. They're complementary — and refinement 14 shows the profiler's auth
+belonged entirely on the guard side once one URL smell was removed. After: 9/10 / 9/10.
+
+### 14 · Remove `?key=`, auth becomes a guard (2026-08-25, user: "?key should've been removed — move it to a guard")
+
+**Scenario.** Refinement 13 claimed the profiler couldn't migrate to a guard because it *seated a
+cookie on the response* when you arrived with `?key=<secret>` — a post-effect. But the user pointed at
+the real problem: a secret in a URL is a smell (logged, cached, shared, in Referer). Drop `?key=`
+entirely and the post-effect vanishes with it — auth turns into a pure pre-check.
+
+**Expansion.** `?key=` is gone from `#authed` (browser → login cookie; programmatic → the
+`x-profiler-key` header, which is what the MCP tools now send). No `?key=` means no cookie-seating on a
+GET, so `#authed` returns a plain boolean. The whole `#ui` gate collapses to `router.fetch()`, and auth
+moves to a table guard `routes(table, { guard: #auth_guard })` that exempts `/login`/`/logout`, allows
+in dev, redirects to `/login` when locked, and 404s when the UI is disabled — a textbook pre-check. So
+the profiler DOES dogfood guards after all; refinement 13's "keeps its bespoke gate" is superseded.
+Verified in a prod preview: unauthed → 303 to /login, `x-profiler-key: <secret>` → 200, `?key=` no
+longer authenticates. Lesson: a feature that "needs" a post-effect is often carrying a design smell
+that, once removed, makes it fit the cleaner primitive. After: 9/10 / 10/10.

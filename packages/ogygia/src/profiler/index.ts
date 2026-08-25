@@ -21,7 +21,7 @@
  * - Memory: RSS/heap sampling during recordings plus a heap allocation
  *   profile ("who allocates the most").
  *
- * Visit `<path>` (default /__profiler) — in prod add `?key=<secret>`.
+ * Visit `<path>` (default /__profiler) — in prod, log in (or send the x-profiler-key header).
  * All state lives in memory; nothing is written to disk.
  */
 
@@ -49,14 +49,8 @@ import {
 	type RouteAgg
 } from './report.js';
 import { ogp_encode, ogp_decode, is_ogp } from './crypto.js';
-import { document } from '../document.js';
-import { region } from '../region.js';
-import Dashboard from './ui/Dashboard.svelte';
-import Report from './ui/Report.svelte';
-import Run from './ui/Run.svelte';
-import Login from './ui/Login.svelte';
-import Upload from './ui/Upload.svelte';
-import Message from './ui/Message.svelte';
+import { type Router, type Ctx as RouteCtx } from '../router/index.js';
+import { build_profiler_router } from './profiler-router.js';
 
 export interface ProfilerOptions {
 	/**
@@ -104,7 +98,7 @@ interface GcSummary {
 	max_ms: number;
 }
 
-interface StoredReport {
+export interface StoredReport {
 	meta: ReportMeta;
 	analysis: Analysis;
 	heap: HeapAllocator[] | null;
@@ -163,6 +157,8 @@ const MAX_BACKGROUND_NET = 300;
 // serverless invocation whose cleanup never ran), so the profiler unwedges itself. Longer than any
 // real profile: a serverless request is capped well under this anyway.
 const RECORDING_MAX_MS = 120_000;
+/** an inspector-unavailable recording error (edge runtimes) vs a real profiling failure */
+const INSPECTOR_ERR = /inspector/;
 
 // Serverless page-profile budget. On a managed host the whole `/page` request must return before the
 // platform's gateway kills it, so we cap all profiling work (warm-up + CPU runs + coverage pass) and
@@ -657,344 +653,342 @@ class Profiler {
 	 * and returns to `next`. No HTTP Basic dialog — a plain form + cookie, so the `Authorization` header
 	 * is never spent on profiler auth (it stays free, and there's a real Logout).
 	 */
-	async #login(event: RequestEvent): Promise<Response> {
-		const body = (await event.request.json().catch(() => null)) as {
+	async #login(ctx: RouteCtx): Promise<Response> {
+		const body = (await ctx.request.json().catch(() => null)) as {
 			key?: unknown;
 			next?: unknown;
 		} | null;
 		const key = String(body?.key ?? '');
-		const raw_next = String(body?.next ?? this.base);
-		// no open redirect — only back into the profiler
-		const next = raw_next.startsWith(this.base) ? raw_next : this.base;
-		const json = (obj: unknown, status: number, cookie?: string) => {
-			const headers = new Headers({
-				'content-type': 'application/json',
-				'cache-control': 'no-store'
-			});
-			if (cookie) headers.append('set-cookie', cookie);
-			return new Response(JSON.stringify(obj), { status, headers });
-		};
-		if (!(await this.#key_matches(key))) return json({ ok: false }, 401);
+		const next = this.#safe_next(String(body?.next ?? this.base)); // no open redirect
+		if (!(await this.#key_matches(key))) return ctx.json({ ok: false }, { status: 401 });
 		const { createHash } = await import('node:crypto');
-		return json({ ok: true, next }, 200, this.#session_cookie(this.#cookie_token(createHash), event));
+		const res = ctx.json({ ok: true, next });
+		res.headers.append('set-cookie', this.#session_cookie(this.#cookie_token(createHash), ctx.event!));
+		return res;
 	}
 
 	/** false = denied; true = authed; string = authed AND set this cookie */
-	async #authed(event: RequestEvent): Promise<boolean | string> {
+	async #authed(event: RequestEvent): Promise<boolean> {
 		if (!this.ui_enabled) return false;
 		if (this.dev) return true;
-		// The session cookie (set by the unlock page) is the normal path; `?key=` / `x-profiler-key`
-		// stay for programmatic access (a CI script hitting `?format=ogp`).
+		// The session cookie (set by the login page) is the browser path; the `x-profiler-key` header is
+		// the programmatic path (CI / the MCP tools). No `?key=` — a secret in a URL gets logged & cached.
 		const provided =
-			event.cookies.get('og_profiler') ??
-			event.url.searchParams.get('key') ??
-			event.request.headers.get('x-profiler-key');
-		if (!(await this.#key_matches(provided))) return false;
-		// a `?key=` link also starts the session (set the cookie so the following links drop it)
-		if (event.url.searchParams.get('key')) {
-			try {
-				const { createHash } = await import('node:crypto');
-				return this.#session_cookie(this.#cookie_token(createHash), event);
-			} catch {
-				return true;
-			}
-		}
-		return true;
+			event.cookies.get('og_profiler') ?? event.request.headers.get('x-profiler-key');
+		return this.#key_matches(provided);
 	}
 
-	// ---- profiler UI routes ----------------------------------------------
+	// ---- profiler UI: an ogygia/router handler-mode dogfood ---------------
+	// The gate does AUTH ONLY — no rendering. /login + /logout manage the session and are always
+	// reachable; everything else needs a valid session (dev = open). Every page below is a `view()` the
+	// router renders through document(); the profiler itself never touches document/region.
+	// Auth is a router GUARD now (#auth_guard); nothing to gate here — just dispatch under the base.
 	async #ui(event: RequestEvent): Promise<Response> {
-		const pre = event.url.pathname.slice(this.base.length).replace(/\/$/, '');
-		// Login / logout run WITHOUT being authed — they establish or clear the session.
-		if (pre === '/login' && event.request.method === 'POST') return this.#login(event);
-		if (pre === '/logout') {
-			const headers = new Headers({ location: this.base, 'cache-control': 'no-store' });
-			headers.append('set-cookie', this.#session_cookie('', event));
-			return new Response(null, { status: 303, headers });
+		return (await this.#router().fetch(event.request, event)) ?? new Response('Not found', { status: 404 });
+	}
+
+	// Auth as a router guard (a pure pre-check): /login + /logout are always reachable (they manage the
+	// session); everything else needs a valid session (dev = open; no-secret prod = hidden → 404). No
+	// `?key=` (a key in a URL gets logged/cached/shared) — the browser uses the login cookie, and
+	// programmatic access uses the `x-profiler-key` header. The /login POST seats the cookie; this guard
+	// never touches the response.
+	async #auth_guard(ctx: RouteCtx): Promise<Response | undefined> {
+		const rel = ctx.url.pathname.slice(this.base.length).replace(/\/$/, '') || '/';
+		if (rel === '/login' || rel === '/logout') return;
+		if (await this.#authed(ctx.event!)) return; // allow
+		if (this.ui_enabled && this.secret && !this.dev) {
+			const next = encodeURIComponent(ctx.url.pathname + ctx.url.search);
+			return ctx.redirect(`${this.base}/login?next=${next}`);
 		}
+		return new Response('Not found', { status: 404 });
+	}
 
-		const auth = await this.#authed(event);
-		if (!auth) {
-			// Show the unlock page (a styled password field → session cookie) when the UI is enabled (a
-			// secret is set). With no secret the UI stays hidden (404).
-			if (this.ui_enabled && this.secret && !this.dev) {
-				return this.#view(Login, {
-					base: this.base,
-					next: event.url.pathname + event.url.search
-				});
-			}
-			return new Response('Not found', { status: 404 });
+	// The profiler route tree. Built once. Auth is a top layer `load` (Kit-idiomatic — a redirect/404
+	// from the load short-circuits every page below it); `/login` + `/logout` exempt themselves inside
+	// it. Each page endpoint returns a `view()` the router renders through document(); method routing
+	// rides `.get(...).post(...)` on /login and /view. `base` makes patterns base-relative; `miss` gives
+	// the profiler its own 404 for anything else under the base.
+	#routes: Router | undefined;
+	#router(): Router {
+		// The route tree lives in profiler-router.ts (so its $infer type is importable by the UI); the
+		// host just supplies the handlers as a typed Deps boundary.
+		return (this.#routes ??= build_profiler_router({
+			base: this.base,
+			auth_guard: (c) => this.#auth_guard(c),
+			dashboard: () => this.#dashboard(),
+			run_page: (c) => this.#run_page(c),
+			record_page: (c) => this.#record_page(c),
+			reset: (c) => this.#reset(c),
+			login_props: (c) => ({
+				base: this.base,
+				next: this.#safe_next(c.url.searchParams.get('next'))
+			}),
+			login: (c) => this.#login(c),
+			logout: (c) => this.#logout(c),
+			upload: (c) => this.#upload(c),
+			report_stored: (id) => this.#reports.get(id ?? ''),
+			report_view: (stored) => this.#report_view(stored),
+			report_json: (stored) => this.#report_json(stored),
+			report_raw: (stored) => this.#report_raw(stored)
+		}) as Router);
+	}
+
+	/** No open redirect — a `next` only bounces back into the profiler. */
+	#safe_next(next: string | null): string {
+		const n = next ?? this.base;
+		return n.startsWith(this.base) ? n : this.base;
+	}
+
+	/** Clear the session cookie and bounce to the dashboard. */
+	#logout(ctx: RouteCtx): Response {
+		const res = ctx.redirect(this.base);
+		res.headers.append('set-cookie', this.#session_cookie('', ctx.event!));
+		return res;
+	}
+
+	#dashboard() {
+		return {
+			base: this.base,
+			recent: this.#ring,
+			routes: route_aggregates(this.#ring),
+			reports: [...this.#reports.values()].map((r) => r.meta).reverse(),
+			recording: this.#recording_active(),
+			dev: this.dev,
+			rss_mb: Math.round(process.memoryUsage().rss / 1048576),
+			inflight: this.#inflight
+		};
+	}
+
+	// The interactive run page: shows a progress bar, fires the profile at /page from an island, then
+	// swaps to the report. Both the dashboard "Profile a page" form and the devtools Profiler tab point
+	// here (the tab embeds it in an iframe), so the progress UX lives in one place.
+	#run_page(ctx: RouteCtx) {
+		const q = ctx.url.searchParams;
+		const path = q.get('p') ?? '';
+		if (!path.startsWith('/') || path.startsWith('//')) {
+			return ctx.error(400, 'Give a path on this site, like /docs/overview.');
 		}
-		const set_cookie = typeof auth === 'string' ? auth : null;
+		const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
+		const format = q.get('format') === 'ogp' ? 'ogp' : '';
+		return { base: this.base, path, runs, format };
+	}
 
-		const sub = event.url.pathname.slice(this.base.length).replace(/\/$/, '');
-		const q = event.url.searchParams;
+	// Manually clear a wedged recording flag (belt-and-suspenders with the time-based auto-heal).
+	#reset(ctx: RouteCtx): Response {
+		this.#recording_since = 0;
+		return ctx.redirect(this.base);
+	}
 
-		if (sub === '') {
-			return this.#view(
-				Dashboard,
-				{
-					base: this.base,
-					recent: this.#ring,
-					routes: route_aggregates(this.#ring),
-					reports: [...this.#reports.values()].map((r) => r.meta).reverse(),
-					recording: this.#recording_active(),
-					dev: this.dev,
-					rss_mb: Math.round(process.memoryUsage().rss / 1048576),
-					inflight: this.#inflight
-				},
-				{ set_cookie }
+	// The page-profile recording: warm-up + redirect-resolve, a serverless-budgeted run loop, and the
+	// always-on coverage pass. Redirects to the report (or ?format=json / ?format=ogp).
+	async #record_page(ctx: RouteCtx): Promise<Response> {
+		const event = ctx.event!; // event.fetch (Kit's internal SSR render) is the one thing only Kit gives
+		if (this.#recording_active()) {
+			return ctx.error(
+				409,
+				'A profile is already running. It clears itself within a couple of minutes if a run was abandoned — or hit Reset on the dashboard.'
 			);
 		}
-
-		// The interactive run page: shows a progress bar, fires the profile at /page from an island, then
-		// swaps to the report. Both the dashboard "Profile a page" form and the devtools Profiler tab
-		// point here (the tab embeds it in an iframe), so the progress UX lives in one place.
-		if (sub === '/run') {
+		const q = ctx.url.searchParams;
+		this.#recording_since = Date.now();
+		try {
 			const path = q.get('p') ?? '';
 			if (!path.startsWith('/') || path.startsWith('//')) {
-				return this.#message('Bad path', 'Give a path on this site, like /docs/overview.', 400);
+				return ctx.error(400, 'Give a path on this site, like /docs/overview.');
 			}
 			const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
-			const format = q.get('format') === 'ogp' ? 'ogp' : '';
-			return this.#view(Run, { base: this.base, path, runs, format }, { set_cookie });
-		}
+			const interval = clamp(Number(q.get('interval')) || 200, 50, 10_000);
+			// The whole /page request has to return before the platform's gateway kills it (Amplify 30s,
+			// Netlify 10s, Vercel 300s, …). Start the budget clock now — warm-up, CPU runs, AND the
+			// coverage pass all live inside it. Infinity on a real server.
+			const work_budget = serverless_work_budget_ms();
+			const deadline = Number.isFinite(work_budget) ? Date.now() + work_budget : Infinity;
+			const fetch_render = (p: string) =>
+				event.fetch(p, { headers: { 'x-og-profiler-internal': '1' } });
 
-		// Manually clear a wedged recording flag (belt-and-suspenders with the time-based auto-heal).
-		if (sub === '/reset') {
-			this.#recording_since = 0;
-			const headers = new Headers({ location: this.base, 'cache-control': 'no-store' });
-			if (set_cookie) headers.append('set-cookie', set_cookie);
-			return new Response(null, { status: 303, headers });
-		}
-
-		if (sub === '/page') {
-			if (this.#recording_active()) {
-				return this.#message(
-					'Busy',
-					'A profile is already running. It clears itself within a couple of minutes if a run was abandoned — or hit Reset on the dashboard.',
-					409
-				);
-			}
-			this.#recording_since = Date.now();
-			try {
-				const path = q.get('p') ?? '';
-				if (!path.startsWith('/') || path.startsWith('//')) {
-					return this.#message('Bad path', 'Give a path on this site, like /docs/overview.', 400);
-				}
-				const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
-				const interval = clamp(Number(q.get('interval')) || 200, 50, 10_000);
-				// The whole /page request has to return before the platform's gateway kills it (Amplify 30s,
-				// Netlify 10s, Vercel 300s, …). Start the budget clock now — warm-up, CPU runs, AND the
-				// coverage pass all live inside it. Infinity on a real server.
-				const work_budget = serverless_work_budget_ms();
-				const deadline = Number.isFinite(work_budget) ? Date.now() + work_budget : Infinity;
-				const fetch_render = (p: string) =>
-					event.fetch(p, { headers: { 'x-og-profiler-internal': '1' } });
-
-				// Warm-up + redirect resolve. `/fr/fr` may 308 → `/fr/fr/` (trailing slash), or i18n-redirect;
-				// profiling the 3xx measures nothing (the classic "3 ms window, no components" report). Follow
-				// the chain HERE, once, un-profiled (it also pays the cold module-load cost), and profile the
-				// FINAL url. The warm-up's own wall time is reported so a caching app is obvious.
-				let target = path;
-				let redirected_from: string | undefined;
-				let warmup_ms: number | undefined;
-				let warm_status = 0;
-				let warm_bytes = 0;
-				for (let hop = 0; hop < 5; hop++) {
-					const t = performance.now();
-					let res: Response;
-					try {
-						res = await fetch_render(target);
-					} catch {
-						break; // warm-up failure surfaces on the real runs below
-					}
-					const body = await res.text();
-					warmup_ms = round2(performance.now() - t);
-					warm_status = res.status;
-					warm_bytes = body.length;
-					// fetch may follow same-origin redirects itself (res.redirected) or hand back the 3xx
-					const next = res.redirected
-						? new URL(res.url).pathname + new URL(res.url).search
-						: res.status >= 300 && res.status < 400
-							? (() => {
-									const loc = res.headers.get('location');
-									if (!loc) return null;
-									const u = new URL(loc, event.url.origin);
-									return u.pathname + u.search;
-								})()
-							: null;
-					if (!next || next === target) break;
-					redirected_from ??= path;
-					target = next;
-				}
-
-				const run_ms: number[] = [];
-				const run_windows: Array<{ start: number; end: number }> = [];
-				let run_status = warm_status;
-				let run_bytes = warm_bytes;
-				let budget_note: string | undefined;
-				// Reserve room for the coverage pass (call counts — "traverse ×768k") so a slow page can never
-				// consume the whole budget on CPU runs and starve it. One render ≈ the warm-up's wall time.
-				const coverage_reserve = Math.max(warmup_ms ?? 0, 300);
-				const cap = await this.#capture_window(interval, async () => {
-					for (let i = 0; i < runs; i++) {
-						// Stop early if another CPU run + the reserved coverage pass wouldn't finish in time.
-						if (i > 0 && Date.now() + (warmup_ms ?? 0) + coverage_reserve > deadline) {
-							const budget_label =
-								work_budget >= 1000 ? `${Math.round(work_budget / 1000)}s` : `${Math.round(work_budget)}ms`;
-							budget_note =
-								`Ran ${i} of ${runs} render${i === 1 ? '' : 's'} — trimmed to fit the ` +
-								`${budget_label} serverless budget (the page renders in ~${Math.round(warmup_ms ?? 0)}ms). ` +
-								`Fewer runs, same accuracy per run.`;
-							break;
-						}
-						const t = performance.now();
-						const res = await fetch_render(target);
-						const body = await res.text();
-						const done = performance.now();
-						run_status = res.status;
-						run_bytes = body.length;
-						run_ms.push(round2(done - t));
-						run_windows.push({ start: t, end: done });
-						// let the event loop turn once between renders: flushes the GC
-						// PerformanceObserver (its entries arrive on a macrotask) and keeps
-						// each render a clean, separately-attributed unit
-						await new Promise((r) => setImmediate(r));
-					}
-				});
-				// N identical renders → N copies of the same outbound calls. Keep one render's worth so
-				// the waterfall shows one request + its leaf calls, not the same handful ×N.
-				scope_net_to_one_run(cap, run_windows);
-				// call counts come from ONE extra render under precise coverage — a
-				// SEPARATE pass, because coverage stops V8 inlining and would otherwise
-				// inflate the CPU profile (svelte's hot `child`/`push` would dominate).
-				// Always run it (the ×N counts are the point) — the loop above reserved its time.
-				cap.call_counts = await this.#count_calls(async () => {
-					await fetch_render(target).then((r) => r.text());
-				});
-				const id = await this.#finish_report(cap, {
-					trigger: 'page',
-					page: target,
-					redirected_from,
-					warmup_ms,
-					run_status,
-					run_bytes,
-					budget_note,
-					runs: run_ms
-				});
-				const s = this.#reports.get(id)!;
-				// serverless (Amplify/Vercel/Netlify) can't keep the report in memory across invocations
-				// AND a fresh instance may serve the follow-up render — so `?format=ogp` streams the whole
-				// profile back NOW as an encrypted `.ogp` the user re-opens at `<base>/view`. This is also
-				// the reliable path when the full report is too heavy for the browser. `?format=json` is
-				// the curated agent view.
-				if (q.get('format') === 'ogp') {
-					return this.#ogp_response(id, s);
-				}
-				const wants_json =
-					q.get('format') === 'json' ||
-					(event.request.headers.get('accept') ?? '').includes('application/json');
-				if (wants_json) {
-					return json_response(report_json(s.analysis, s.meta, this.base, this.#report_extras(s)));
-				}
-				const headers = new Headers({
-					location: `${this.base}/report/${id}`,
-					'cache-control': 'no-store'
-				});
-				if (set_cookie) headers.append('set-cookie', set_cookie);
-				return new Response(null, { status: 303, headers });
-			} catch (e) {
-				return this.#message(
-					'Profiling unavailable',
-					e instanceof Error && /inspector/.test(e.message)
-						? 'CPU profiling needs a Node.js server (adapter-node or dev). This platform does not expose the V8 inspector.'
-						: `Profiling failed: ${e instanceof Error ? e.message : String(e)}`,
-					500
-				);
-			} finally {
-				this.#recording_since = 0;
-			}
-		}
-
-		// Open a saved profile: GET shows the upload form, POST renders the uploaded dump.
-		// Rendering needs no inspector, so this works on ANY host (edge included) — it is how
-		// a serverless-recorded profile gets viewed.
-		if (sub === '/view') {
-			if (event.request.method === 'POST') {
-				// The upload island POSTs the bytes + key and expects JSON: `{ url }` to navigate to on
-				// success, or `{ error }`. We STORE the dump and hand back its /report/<id> URL rather than
-				// render inline — the report is an islands page, so it must load normally to hydrate.
+			// Warm-up + redirect resolve. `/fr/fr` may 308 → `/fr/fr/` (trailing slash), or i18n-redirect;
+			// profiling the 3xx measures nothing (the classic "3 ms window, no components" report). Follow
+			// the chain HERE, once, un-profiled (it also pays the cold module-load cost), and profile the
+			// FINAL url. The warm-up's own wall time is reported so a caching app is obvious.
+			let target = path;
+			let redirected_from: string | undefined;
+			let warmup_ms: number | undefined;
+			let warm_status = 0;
+			let warm_bytes = 0;
+			for (let hop = 0; hop < 5; hop++) {
+				const t = performance.now();
+				let res: Response;
 				try {
-					const bytes = new Uint8Array(await event.request.arrayBuffer());
-					if (!is_ogp(bytes)) {
-						return json_response({ error: 'That file is not an ogygia .ogp profile.' }, 400);
-					}
-					// Brotli + AES-GCM. Decrypt with the key the uploader supplies (`x-ogp-key`) so ANY .ogp
-					// opens in ANY profiler — its key can differ from this instance's secret. Left blank, we
-					// fall back to THIS profiler's own secret, so the reports it made re-open without retyping
-					// the key (the upload form says so). A wrong key fails the GCM tag → caught below.
-					const ogp_key = event.request.headers.get('x-ogp-key') || this.secret;
-					const dump: unknown = await ogp_decode(bytes, ogp_key);
-					if (!is_dump(dump)) {
-						return json_response({ error: 'That file is not an ogygia profiler dump.' }, 400);
-					}
-					return json_response({ url: `${this.base}/report/${this.#store_uploaded(dump)}` });
+					res = await fetch_render(target);
 				} catch {
-					return json_response(
-						{ error: "That file isn't a profile, or it was made with a different key." },
-						400
-					);
+					break; // warm-up failure surfaces on the real runs below
 				}
+				const body = await res.text();
+				warmup_ms = round2(performance.now() - t);
+				warm_status = res.status;
+				warm_bytes = body.length;
+				// fetch may follow same-origin redirects itself (res.redirected) or hand back the 3xx
+				const next = res.redirected
+					? new URL(res.url).pathname + new URL(res.url).search
+					: res.status >= 300 && res.status < 400
+						? (() => {
+								const loc = res.headers.get('location');
+								if (!loc) return null;
+								const u = new URL(loc, event.url.origin);
+								return u.pathname + u.search;
+							})()
+						: null;
+				if (!next || next === target) break;
+				redirected_from ??= path;
+				target = next;
 			}
-			// pass set_cookie so reaching /view?key=… seats the session cookie — the island's POST back
-			// carries it and stays authed (otherwise the upload fetch is rejected).
-			return this.#view(Upload, { base: this.base }, { set_cookie });
-		}
 
-		const report_match = /^\/report\/([a-z0-9]+)(\/raw|\.json|\/json)?$/.exec(sub);
-		if (report_match) {
-			const stored = this.#reports.get(report_match[1]);
-			if (!stored)
-				return this.#message('Gone', 'That report has expired (only the last few are kept).', 404);
-			const suffix = report_match[2];
-			if (suffix === '.json' || suffix === '/json') {
-				return json_response(
-					report_json(stored.analysis, stored.meta, this.base, this.#report_extras(stored))
-				);
-			}
-			if (suffix === '/raw') {
-				let body: string;
-				if (typeof stored.raw === 'string') {
-					body = stored.raw;
-				} else {
-					try {
-						const { gunzipSync } = await import('node:zlib');
-						body = gunzipSync(stored.raw).toString('utf8');
-					} catch {
-						// no zlib to inflate — serve the gzip bytes with the encoding header
-						return new Response(new Uint8Array(stored.raw), {
-							headers: {
-								'content-type': 'application/json',
-								'content-encoding': 'gzip',
-								'content-disposition': `attachment; filename="ssr-${stored.meta.id}.cpuprofile"`,
-								'cache-control': 'no-store'
-							}
-						});
+			const run_ms: number[] = [];
+			const run_windows: Array<{ start: number; end: number }> = [];
+			let run_status = warm_status;
+			let run_bytes = warm_bytes;
+			let budget_note: string | undefined;
+			// Reserve room for the coverage pass (call counts — "traverse ×768k") so a slow page can never
+			// consume the whole budget on CPU runs and starve it. One render ≈ the warm-up's wall time.
+			const coverage_reserve = Math.max(warmup_ms ?? 0, 300);
+			const cap = await this.#capture_window(interval, async () => {
+				for (let i = 0; i < runs; i++) {
+					// Stop early if another CPU run + the reserved coverage pass wouldn't finish in time.
+					if (i > 0 && Date.now() + (warmup_ms ?? 0) + coverage_reserve > deadline) {
+						const budget_label =
+							work_budget >= 1000 ? `${Math.round(work_budget / 1000)}s` : `${Math.round(work_budget)}ms`;
+						budget_note =
+							`Ran ${i} of ${runs} render${i === 1 ? '' : 's'} — trimmed to fit the ` +
+							`${budget_label} serverless budget (the page renders in ~${Math.round(warmup_ms ?? 0)}ms). ` +
+							`Fewer runs, same accuracy per run.`;
+						break;
 					}
+					const t = performance.now();
+					const res = await fetch_render(target);
+					const body = await res.text();
+					const done = performance.now();
+					run_status = res.status;
+					run_bytes = body.length;
+					run_ms.push(round2(done - t));
+					run_windows.push({ start: t, end: done });
+					// let the event loop turn once between renders: flushes the GC
+					// PerformanceObserver (its entries arrive on a macrotask) and keeps
+					// each render a clean, separately-attributed unit
+					await new Promise((r) => setImmediate(r));
 				}
-				return new Response(body, {
+			});
+			// N identical renders → N copies of the same outbound calls. Keep one render's worth so
+			// the waterfall shows one request + its leaf calls, not the same handful ×N.
+			scope_net_to_one_run(cap, run_windows);
+			// call counts come from ONE extra render under precise coverage — a
+			// SEPARATE pass, because coverage stops V8 inlining and would otherwise
+			// inflate the CPU profile (svelte's hot `child`/`push` would dominate).
+			// Always run it (the ×N counts are the point) — the loop above reserved its time.
+			cap.call_counts = await this.#count_calls(async () => {
+				await fetch_render(target).then((r) => r.text());
+			});
+			const id = await this.#finish_report(cap, {
+				trigger: 'page',
+				page: target,
+				redirected_from,
+				warmup_ms,
+				run_status,
+				run_bytes,
+				budget_note,
+				runs: run_ms
+			});
+			const s = this.#reports.get(id)!;
+			// serverless (Amplify/Vercel/Netlify) can't keep the report in memory across invocations
+			// AND a fresh instance may serve the follow-up render — so `?format=ogp` streams the whole
+			// profile back NOW as an encrypted `.ogp` the user re-opens at `<base>/view`. This is also
+			// the reliable path when the full report is too heavy for the browser. `?format=json` is
+			// the curated agent view.
+			if (q.get('format') === 'ogp') {
+				return this.#ogp_response(id, s);
+			}
+			const wants_json =
+				q.get('format') === 'json' ||
+				(ctx.request.headers.get('accept') ?? '').includes('application/json');
+			if (wants_json) {
+				return ctx.json(report_json(s.analysis, s.meta, this.base, this.#report_extras(s)));
+			}
+			// the session cookie is seated by the gate in #ui, not here
+			return ctx.redirect(ctx.href('/report/[id]', { id }));
+		} catch (e) {
+			return ctx.error(
+				500,
+				e instanceof Error && INSPECTOR_ERR.test(e.message)
+					? 'CPU profiling needs a Node.js server (adapter-node or dev). This platform does not expose the V8 inspector.'
+					: `Profiling failed: ${e instanceof Error ? e.message : String(e)}`
+			);
+		} finally {
+			this.#recording_since = 0;
+		}
+	}
+
+	// Open a saved profile (the /view POST). The upload island POSTs the .ogp bytes + key and expects
+	// JSON: `{ url }` to navigate to, or `{ error }`. We STORE the dump and hand back its /report/<id>
+	// URL rather than render inline — the report is an islands page, so it must load normally to hydrate.
+	async #upload(ctx: RouteCtx): Promise<Response> {
+		try {
+			const bytes = new Uint8Array(await ctx.request.arrayBuffer());
+			if (!is_ogp(bytes)) {
+				return ctx.json({ error: 'That file is not an ogygia .ogp profile.' }, { status: 400 });
+			}
+			// Brotli + AES-GCM. Decrypt with the key the uploader supplies (`x-ogp-key`) so ANY .ogp opens
+			// in ANY profiler — its key can differ from this instance's secret. Left blank, we fall back to
+			// THIS profiler's own secret, so the reports it made re-open without retyping the key (the
+			// upload form says so). A wrong key fails the GCM tag → caught below.
+			const ogp_key = ctx.request.headers.get('x-ogp-key') || this.secret;
+			const dump: unknown = await ogp_decode(bytes, ogp_key);
+			if (!is_dump(dump)) {
+				return ctx.json({ error: 'That file is not an ogygia profiler dump.' }, { status: 400 });
+			}
+			return ctx.json({ url: ctx.href('/report/[id]', { id: this.#store_uploaded(dump) }) });
+		} catch {
+			return ctx.json(
+				{ error: "That file isn't a profile, or it was made with a different key." },
+				{ status: 400 }
+			);
+		}
+	}
+
+	// The report page, its JSON, and its raw .cpuprofile all take the ALREADY-looked-up report — the
+	// shared `/report/[id]` layer load in profiler-router does the lookup + 404 once and cascades it.
+	#report_json(stored: StoredReport): Response {
+		const body = report_json(stored.analysis, stored.meta, this.base, this.#report_extras(stored));
+		return new Response(JSON.stringify(body), {
+			headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+		});
+	}
+
+	async #report_raw(stored: StoredReport): Promise<Response> {
+		let body: string;
+		if (typeof stored.raw === 'string') {
+			body = stored.raw;
+		} else {
+			try {
+				const { gunzipSync } = await import('node:zlib');
+				body = gunzipSync(stored.raw).toString('utf8');
+			} catch {
+				// no zlib to inflate — serve the gzip bytes with the encoding header
+				return new Response(new Uint8Array(stored.raw), {
 					headers: {
 						'content-type': 'application/json',
+						'content-encoding': 'gzip',
 						'content-disposition': `attachment; filename="ssr-${stored.meta.id}.cpuprofile"`,
 						'cache-control': 'no-store'
 					}
 				});
 			}
-			return this.#report_view(stored.analysis, stored.meta, this.#report_extras(stored));
 		}
-
-		return this.#message('Not found', 'Unknown profiler page.', 404);
+		return new Response(body, {
+			headers: {
+				'content-type': 'application/json',
+				'content-disposition': `attachment; filename="ssr-${stored.meta.id}.cpuprofile"`,
+				'cache-control': 'no-store'
+			}
+		});
 	}
 
 	/**
@@ -1004,7 +998,9 @@ class Profiler {
 	 * Node crypto/zlib is unavailable (a stripped edge runtime), the Export button is simply omitted and
 	 * the JSON / .cpuprofile links still work.
 	 */
-	async #report_view(a: Analysis, meta: ReportMeta, extras: ReportExtras): Promise<Response> {
+	async #report_view(stored: StoredReport) {
+		const { analysis: a, meta } = stored;
+		const extras = this.#report_extras(stored);
 		let ogpB64: string | undefined;
 		try {
 			const bytes = await ogp_encode(report_dump(a, meta, extras), this.secret);
@@ -1012,19 +1008,7 @@ class Profiler {
 		} catch {
 			ogpB64 = undefined;
 		}
-		return this.#view(Report, { a, meta, base: this.base, extras, ogpB64 });
-	}
-
-	/** Render a profiler view component into a complete ogygia document (islands inside hydrate). */
-	async #view(
-		component: unknown,
-		props: Record<string, unknown>,
-		opts: { status?: number; set_cookie?: string | null } = {}
-	): Promise<Response> {
-		return document(region(component as never, props), {
-			status: opts.status,
-			headers: opts.set_cookie ? { 'set-cookie': opts.set_cookie } : undefined
-		});
+		return { a, meta, base: this.base, extras, ogpB64 };
 	}
 
 	/** Store an uploaded dump as a report so it renders (+ hydrates) at its own /report/<id> URL — an
@@ -1051,11 +1035,6 @@ class Profiler {
 			this.#reports.delete(oldest);
 		}
 		return id;
-	}
-
-	/** A one-off message page (errors, not-found, …). */
-	async #message(title: string, msg: string, status = 200): Promise<Response> {
-		return this.#view(Message, { title, msg, base: this.base }, { status });
 	}
 
 	/** The full profile as an encrypted `.ogp` download (Brotli + AES-GCM, async — never blocks). */
@@ -1209,7 +1188,7 @@ class Profiler {
  * public entry point.
  *
  * See the class doc and README for what it captures. Visit `<path>` (default
- * /__profiler) — in prod add `?key=<secret>`.
+ * /__profiler) — in prod, log in (or send the x-profiler-key header).
  */
 export function profiler(options: ProfilerOptions = {}): Handle {
 	const instance = new Profiler(options);
@@ -1247,13 +1226,6 @@ function route_aggregates(ring: RequestEntry[]): RouteAgg[] {
 function pct(sorted: number[], p: number): number {
 	if (!sorted.length) return 0;
 	return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
-}
-
-function json_response(obj: unknown, status = 200): Response {
-	return new Response(JSON.stringify(obj, null, 2), {
-		status,
-		headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }
-	});
 }
 
 function clamp(n: number, lo: number, hi: number): number {

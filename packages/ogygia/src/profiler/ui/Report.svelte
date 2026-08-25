@@ -4,8 +4,6 @@
 	 * `wake:'load'` islands (treemap, flame graph, sortable tables, export button). Ports report.ts's
 	 * render_report — no HTML strings, no minified script blobs.
 	 */
-	import type { Analysis, ReportMeta } from '../analyze.js';
-	import type { ReportExtras } from '../report.js';
 	import { derive_findings } from '../report.js';
 	import { fmt_ms, fmt_pct, fmt_bytes, label_of, CATEGORY_COLOR, CATEGORY_LABEL } from './format.js';
 	import {
@@ -26,19 +24,9 @@
 	import FunctionsTable from './FunctionsTable.svelte' with { wake: 'load' };
 	import WaitingTable from './WaitingTable.svelte' with { wake: 'load' };
 
-	let {
-		a,
-		meta,
-		base,
-		extras,
-		ogpB64
-	}: {
-		a: Analysis;
-		meta: ReportMeta;
-		base: string;
-		extras: ReportExtras;
-		ogpB64?: string;
-	} = $props();
+	import type { ProfilerRoutes } from '../profiler-router.js';
+	let { data }: ProfilerRoutes['/report/[id]'] = $props();
+	const { a, meta, base, extras, ogpB64 } = $derived(data);
 
 	const busy_pct = a.duration_ms > 0 ? (a.busy_ms / a.duration_ms) * 100 : 0;
 	const net = extras.net.filter((c) => c.ms >= 0);

@@ -22,8 +22,11 @@
  * Server-only (it renders): call it from a handle / endpoint / server module.
  */
 import { render } from 'svelte/server';
+import { stringify } from 'devalue';
 import type { Component } from 'svelte';
 import Region from './Region.svelte';
+import { PageSeed } from './server/page-seed.js';
+import { page_seed_reducers } from './server/page-stream.js';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import {
@@ -48,6 +51,18 @@ export interface DocumentOptions {
 	headers?: HeadersInit;
 	/** `<html lang>` (default 'en'). */
 	lang?: string;
+	/** Seed for `$app/state` inside islands (`page.data`/`params`/`url`, `route.id`, `form`). The router
+	 *  passes it so islands on a rendered page read `$page` just like on a Kit-served page. Promises in
+	 *  `data`/`form` aren't streamed here — a non-serializable leaf drops that one field. */
+	pageState?: {
+		url?: { href?: string };
+		params?: Record<string, string | undefined>;
+		route?: { id: string | null };
+		status?: number;
+		data?: unknown;
+		form?: unknown;
+		error?: unknown;
+	};
 }
 
 const escape_text = (s: string) =>
@@ -93,6 +108,24 @@ export async function document(
 	}
 	if (dev_hmr_url && !page_declares_dev_hmr_script(head_so_far())) {
 		head.push(`<script type="module" data-ogygia-dev-hmr src="${dev_hmr_url}"></script>`);
+	}
+	// Page-state seed (`$app/state` inside islands) — the same `application/ogygia-page` side-channel the
+	// handle injects for a Kit page, built here from the caller's snapshot (router-rendered pages).
+	if (options.pageState) {
+		const s = options.pageState;
+		const payload = PageSeed.serialize(
+			{
+				url: s.url,
+				params: s.params as Record<string, string> | undefined,
+				route: s.route,
+				status: s.status,
+				data: s.data,
+				form: s.form,
+				error: s.error
+			},
+			(v: unknown) => stringify(v, page_seed_reducers)
+		);
+		if (payload) head.push(`<script type="application/ogygia-page" data-ogygia-page>${payload}</script>`);
 	}
 
 	const html =

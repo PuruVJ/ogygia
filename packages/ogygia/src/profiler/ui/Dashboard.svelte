@@ -4,29 +4,11 @@
 	 * "profile a page" form. Static server render — no island; it's a data snapshot. Ports report.ts's
 	 * render_dashboard.
 	 */
-	import type { ReportMeta, RequestEntry, RouteAgg } from '../report.js';
 	import { fmt_ms, label_of } from './format.js';
 	import Shell from './Shell.svelte';
-
-	let {
-		base,
-		recent,
-		routes,
-		reports,
-		recording,
-		dev,
-		rss_mb,
-		inflight
-	}: {
-		base: string;
-		recent: RequestEntry[];
-		routes: RouteAgg[];
-		reports: ReportMeta[];
-		recording: boolean;
-		dev: boolean;
-		rss_mb: number;
-		inflight: number;
-	} = $props();
+	import type { ProfilerRoutes } from '../profiler-router.js';
+	let { data }: ProfilerRoutes['/'] = $props();
+	const { base, recent, routes, reports, recording, dev, rss_mb, inflight } = $derived(data);
 
 	const time = (ms: number) => new Date(ms).toLocaleTimeString();
 	let recent_desc = $derived(recent.slice(-40).reverse());

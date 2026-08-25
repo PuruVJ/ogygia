@@ -3,7 +3,9 @@
 	 *  render_upload_page. */
 	import Shell from './Shell.svelte';
 	import UploadForm from './UploadForm.svelte' with { wake: 'load' };
-	let { base }: { base: string } = $props();
+	import type { ProfilerRoutes } from '../profiler-router.js';
+	let { data }: ProfilerRoutes['/view'] = $props();
+	const { base } = $derived(data);
 </script>
 
 <Shell>

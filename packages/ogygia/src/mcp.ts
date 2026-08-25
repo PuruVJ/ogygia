@@ -233,7 +233,7 @@ const TOOLS = [
 						'Route to profile: a bare path (`/fr/fr`) = your local running server (auto-found), or a full URL (`https://app.com/fr/fr`) = that host.'
 				},
 				runs: { type: 'number', description: 'Profiled renders to record (default 5, max 50). More = steadier median.' },
-				key: { type: 'string', description: 'Profiler secret (?key=) — needed only when the app set one (prod/locked).' },
+				key: { type: 'string', description: 'Profiler secret (sent as the x-profiler-key header) — needed only when the app set one (prod/locked).' },
 				origin: {
 					type: 'string',
 					description: 'Force a specific local origin (e.g. http://localhost:5173) when a bare path could match several running servers.'
@@ -647,11 +647,11 @@ async function fetch_timeout(url: string | URL, opts: RequestInit, ms: number): 
 
 /** Probe localhost ports in parallel for a MOUNTED profiler; returns hits in priority order. */
 async function find_local_profiler(base: string, key: string): Promise<string[]> {
-	const key_q = key ? `?key=${encodeURIComponent(key)}` : '';
+	const key_h: Record<string, string> = key ? { 'x-profiler-key': key } : {};
 	const probes = LOCAL_PORTS.map(async (port) => {
 		const origin = `http://localhost:${port}`;
 		try {
-			const r = await fetch_timeout(origin + base + key_q, { redirect: 'manual' }, 700);
+			const r = await fetch_timeout(origin + base, { redirect: 'manual', headers: key_h }, 700);
 			// 404 = no profiler here (bare Kit 404s that path). 200/401/30x = profiler answering.
 			return r.status !== 404 ? origin : null;
 		} catch {
@@ -706,10 +706,10 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 	// profiler serves its login PAGE at 200 (not 401), so sniff for it: no key → ask for one, wrong key
 	// → say so, before we bother recording.
 	{
-		const key_q = key ? `?key=${encodeURIComponent(key)}` : '';
+		const key_h: Record<string, string> = key ? { 'x-profiler-key': key } : {};
 		let pre: Response;
 		try {
-			pre = await fetch_timeout(origin + profiler_base + key_q, { redirect: 'manual' }, 8000);
+			pre = await fetch_timeout(origin + profiler_base, { redirect: 'manual', headers: key_h }, 8000);
 		} catch (e) {
 			return fail(
 				`Could not reach ${origin} — is it running and reachable? (${e instanceof Error ? e.message : String(e)})`
@@ -730,9 +730,10 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 		rec.searchParams.set('p', route);
 		rec.searchParams.set('format', 'json');
 		rec.searchParams.set('runs', String(runs));
-		if (key) rec.searchParams.set('key', key);
+		const headers: Record<string, string> = { accept: 'application/json' };
+		if (key) headers['x-profiler-key'] = key;
 		// N heavy renders can be slow — give it room, but never hang forever.
-		return fetch_timeout(rec, { headers: { accept: 'application/json' } }, 90_000);
+		return fetch_timeout(rec, { headers }, 90_000);
 	};
 
 	let res: Response;
@@ -752,8 +753,8 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 	if (res.status === 409) {
 		try {
 			const reset = new URL(origin + profiler_base + '/reset');
-			if (key) reset.searchParams.set('key', key);
-			await fetch_timeout(reset, { redirect: 'manual' }, 5000);
+			const reset_h: Record<string, string> = key ? { 'x-profiler-key': key } : {};
+			await fetch_timeout(reset, { redirect: 'manual', headers: reset_h }, 5000);
 			res = await record_once();
 		} catch {
 			/* fall through to the 409 message below */

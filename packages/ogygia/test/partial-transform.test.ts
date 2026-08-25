@@ -217,6 +217,41 @@ export const loadCard = region(Card, {});`;
 	test('returns null when no held import is present', () => {
 		expect(transformTsRegions(`export const x = 1;`, id, makeCtx())).toBeNull();
 	});
+
+	test('render: deferred → a .ts server island; import rewritten to the WRAPPER', () => {
+		const src = `import D from './D.svelte' with { render: 'deferred' };
+export const page = D;`;
+		const r = transformTsRegions(src, id, makeCtx());
+		const isl = r!.islands[0] as Record<string, unknown>;
+		expect(isl.server).toBe(true);
+		expect(isl.kind).toBe('defer');
+		expect(isl.strategy).toBe('server');
+		expect(isl.fetchWhen).toBe('load');
+		// the wrapper renders the server shell AND keeps the ogygiaFallback slot the router supplies
+		expect(String(isl.wrapperSource)).toContain('OgygiaRegion__Wrapper __mode="server"');
+		expect(String(isl.wrapperSource)).toContain('ogygiaFallback');
+		// placed as `<D/>` the wrapper must emit the hole — so the import points at the wrapper, not a binding
+		expect(r!.code).toContain('virtual:ogygia/wrapper/');
+	});
+
+	test('render: deferred takes `wake` as its fetch schedule (+ margin on visible)', () => {
+		const src = `import D from './D.svelte' with { render: 'deferred', wake: 'visible' };
+export const page = D;`;
+		const r = transformTsRegions(src, id, makeCtx({ visibleMargin: '150px' }));
+		const isl = r!.islands[0] as Record<string, unknown>;
+		expect(isl.fetchWhen).toBe('visible');
+		expect(String(isl.wrapperSource)).toContain('__margin');
+	});
+
+	test('render: deferred rejects a non-fetch schedule (interaction/none)', () => {
+		const bad = `import D from './D.svelte' with { render: 'deferred', wake: 'interaction' };`;
+		expect(() => transformTsRegions(bad, id, makeCtx())).toThrow(/fetch/i);
+	});
+
+	test('render: live is rejected on a .ts import (svelte-only)', () => {
+		const bad = `import D from './D.svelte' with { render: 'live' };`;
+		expect(() => transformTsRegions(bad, id, makeCtx())).toThrow(/live|\.svelte/i);
+	});
 });
 
 describe('transformTsRegions — import.meta.og.asRegion (barrel / named in .ts)', () => {
@@ -324,7 +359,7 @@ export const registry = [H, F];`;
 	test('unknown option key → error', () => {
 		expect(() =>
 			transformTsRegions(
-				`import { H } from '@d/s';\nconst X = import.meta.og.asRegion(H, { render: 'deferred' });`,
+				`import { H } from '@d/s';\nconst X = import.meta.og.asRegion(H, { nope: 'x' });`,
 				id,
 				makeCtx()
 			)
