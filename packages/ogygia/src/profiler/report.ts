@@ -405,6 +405,11 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 					wait_ms: c.ms,
 					body_ms: c.body_ms ?? null,
 					bytes: c.bytes ?? null,
+					transfer_bytes: c.transfer_bytes ?? null,
+					encoding: c.encoding ?? null,
+					type: c.type ?? null,
+					req_bytes: c.req_bytes ?? null,
+					req_payload: c.req_payload ?? null,
 					route: c.route ?? c.path ?? null,
 					caller: c.caller ?? null,
 					error: c.error ?? null

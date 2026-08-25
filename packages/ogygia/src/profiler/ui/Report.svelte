@@ -14,7 +14,8 @@
 		top_hosts,
 		short_url,
 		waterfall_rows,
-		spark as build_spark
+		spark as build_spark,
+		net_size
 	} from './report-data.js';
 	import Shell from './Shell.svelte';
 	import ExportButton from './ExportButton.svelte' with { wake: 'load' };
@@ -216,29 +217,43 @@
 			</tbody>
 		</table>
 		<br />
-		<table>
-			<thead>
-				<tr
-					><th>method</th><th>url</th><th class="num">status</th><th class="num">wait ms</th><th
-						class="num">body ms</th
-					><th class="num">size</th><th>from route</th><th>caller</th></tr
-				>
-			</thead>
-			<tbody>
-				{#each netSorted as c}
-					<tr>
-						<td>{c.method}</td>
-						<td class="file" title={c.url}>{short_url(c.url)}</td>
-						<td class="num">{#if c.error}<span class="warn">ERR</span>{:else}{c.status || '—'}{/if}</td>
-						<td class="num"><b>{fmt_ms(c.ms)}</b></td>
-						<td class="num">{c.body_ms !== undefined ? fmt_ms(c.body_ms) : '—'}</td>
-						<td class="num">{c.bytes !== undefined ? fmt_bytes(c.bytes) : '—'}</td>
-						<td class="file">{c.route ?? c.path ?? '—'}</td>
-						<td class="fn">{c.caller ?? '—'}</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
+		<p class="hint">Each request — expand for its payload, sizes, and where it came from.</p>
+		<div class="reqs">
+			{#each netSorted as c}
+				{@const sz = net_size(c)}
+				<details class="req">
+					<summary class="req-sum">
+						<span class="rm">{c.method}</span>
+						<span class="ru" title={c.url}>{short_url(c.url)}</span>
+						<span class="rs {c.error ? 'warn' : ''}">{c.error ? 'ERR' : c.status || '—'}</span>
+						<span class="rt">{fmt_ms(c.ms)}{#if c.body_ms}<span class="dim"> +{fmt_ms(c.body_ms)}</span>{/if}</span>
+						<span class="rz">{sz != null ? fmt_bytes(sz) : '—'}</span>
+					</summary>
+					<div class="req-detail">
+						<dl>
+							<dt>URL</dt>
+							<dd class="brk">{c.url}</dd>
+							<dt>Response</dt>
+							<dd>
+								{c.error ? 'error' : c.status || '—'}{#if c.type} · {c.type}{/if}{#if c.encoding} · {c.encoding}{/if}{#if c.error} · {c.error}{/if}
+							</dd>
+							<dt>Size</dt>
+							<dd>
+								{#if c.bytes != null}<b>{fmt_bytes(c.bytes)}</b> decoded{/if}{#if c.transfer_bytes != null && c.transfer_bytes !== c.bytes}{#if c.bytes != null}, {/if}{fmt_bytes(c.transfer_bytes)} on the wire{#if c.encoding} <span class="dim">({c.encoding})</span>{/if}{/if}{#if c.bytes == null && c.transfer_bytes == null}—{/if}
+							</dd>
+							<dt>Timing</dt>
+							<dd>{fmt_ms(c.ms)} to headers{#if c.body_ms} · {fmt_ms(c.body_ms)} reading the body{/if}</dd>
+							{#if c.route ?? c.path}<dt>From route</dt><dd class="brk">{c.route ?? c.path}</dd>{/if}
+							{#if c.caller}<dt>Caller</dt><dd class="brk">{c.caller}</dd>{/if}
+							{#if c.req_payload}
+								<dt>Request payload{#if c.req_bytes} <span class="dim">({fmt_bytes(c.req_bytes)})</span>{/if}</dt>
+								<dd><pre class="payload"><code class="language-json">{c.req_payload}</code></pre></dd>
+							{/if}
+						</dl>
+					</div>
+				</details>
+			{/each}
+		</div>
 	{:else}
 		<p class="hint">
 			No outbound HTTP calls seen in this window. If requests are still slow while the CPU is idle, the

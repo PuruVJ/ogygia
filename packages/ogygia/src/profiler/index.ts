@@ -1069,11 +1069,21 @@ class Profiler {
 		if (this.#disabled) return resolve(event);
 		await this.#init();
 
-		if (
-			this.ui_enabled &&
-			(event.url.pathname === this.base || event.url.pathname.startsWith(this.base + '/'))
-		) {
+		const on_ui_path =
+			event.url.pathname === this.base || event.url.pathname.startsWith(this.base + '/');
+		if (this.ui_enabled && on_ui_path) {
 			return this.#ui(event);
+		}
+		// Enabled by config but NO secret set in production → the UI is off. Someone still hit the UI
+		// path; OWN the response with a clear 404 instead of falling through — otherwise the app's own
+		// routing (e.g. an i18n catch-all) can silently redirect `/__profiler` to the home page, which
+		// looks like the profiler is broken. This tells the developer exactly what to set.
+		if (!this.#disabled && !this.ui_enabled && !this.dev && this.secret === '' && on_ui_path) {
+			return new Response(
+				'ogygia profiler is installed but disabled: set OGYGIA_PROFILER_SECRET (or ' +
+					'`ogygia({ profiler: { secret } })`) to enable the UI in production.',
+				{ status: 404, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } }
+			);
 		}
 
 		const entry: RequestEntry = {

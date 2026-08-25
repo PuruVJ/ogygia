@@ -24,7 +24,19 @@ export interface NetCall {
 	host: string;
 	/** 0 = errored before a response */
 	status: number;
+	/** DECODED response body size (what the app receives) — measured by counting a cloned body stream,
+	 *  so it's captured however the app reads (json/text/stream) and even when there's no content-length. */
 	bytes?: number;
+	/** wire/transfer size from `content-length` (compressed when `encoding` is set) */
+	transfer_bytes?: number;
+	/** response `content-encoding` (gzip / br / …) when compressed */
+	encoding?: string;
+	/** short response `content-type` (params stripped) */
+	type?: string;
+	/** request body size in bytes, when it has one */
+	req_bytes?: number;
+	/** request body preview (truncated) — for string / form / URLSearchParams bodies */
+	req_payload?: string;
 	kind: 'fetch' | 'http';
 	/** route of the page render that made this call, when known */
 	route: string | null;
@@ -207,13 +219,19 @@ function patch_fetch(emit: Emit): void {
 			path: null,
 			caller_site: capture_stacks ? nearest_app_site() : undefined
 		};
+		capture_req_payload(init, call);
 		emit(call);
 		try {
 			const res = await orig(input as RequestInfo, init);
 			call.ms = round2(performance.now() - call.start);
 			call.status = res.status;
+			call.type = short_ct(res.headers.get('content-type'));
+			call.encoding = res.headers.get('content-encoding') || undefined;
 			const len = res.headers.get('content-length');
-			if (len) call.bytes = Number(len) || undefined;
+			if (len) call.transfer_bytes = Number(len) || undefined;
+			// Robust DECODED size: count a cloned body stream. Works however the app reads the original
+			// (json/text/stream) and with no content-length (chunked / dev servers) — no more dashes.
+			count_decoded(res, call);
 			wrap_body(res, call);
 			return res;
 		} catch (e) {
@@ -249,6 +267,77 @@ function wrap_body(res: Response, call: NetCall): void {
 			// frozen response — skip body timing
 		}
 	}
+}
+
+/** Strip params from a content-type: "application/json; charset=utf-8" → "application/json". */
+function short_ct(ct: string | null): string | undefined {
+	if (!ct) return undefined;
+	const i = ct.indexOf(';');
+	return (i === -1 ? ct : ct.slice(0, i)).trim() || undefined;
+}
+
+// Keep request bodies large enough to inspect the real thing — workplaces routinely POST multi-MB JSON.
+// The report/window path holds the full clipped body; the report UI formats + highlights it lazily and
+// off the main thread (see Shell.svelte) so a big payload never freezes the page. 4 MB is the ceiling a
+// single body is stored at; a page's handful of outbound calls keeps peak memory bounded.
+const MAX_PAYLOAD = 4_000_000;
+const utf8_len = (s: string): number => {
+	try {
+		return new TextEncoder().encode(s).byteLength;
+	} catch {
+		return s.length;
+	}
+};
+const clip = (s: string): string => (s.length > MAX_PAYLOAD ? s.slice(0, MAX_PAYLOAD) + '\n… (truncated)' : s);
+
+/** Capture the request body's size (+ a preview for string / form bodies). Never consumes a stream. */
+function capture_req_payload(init: RequestInit | undefined, call: NetCall): void {
+	const body = init?.body;
+	if (body == null) return;
+	try {
+		if (typeof body === 'string') {
+			call.req_bytes = utf8_len(body);
+			call.req_payload = clip(body);
+		} else if (body instanceof URLSearchParams) {
+			const s = body.toString();
+			call.req_bytes = utf8_len(s);
+			call.req_payload = clip(s);
+		} else if (body instanceof ArrayBuffer) {
+			call.req_bytes = body.byteLength;
+		} else if (ArrayBuffer.isView(body)) {
+			call.req_bytes = (body as ArrayBufferView).byteLength;
+		}
+		// FormData / Blob / ReadableStream: sizing would consume/serialize it — skip.
+	} catch {
+		/* exotic body — skip */
+	}
+}
+
+/** Count the DECODED response body size by draining a CLONE in the background (the original is left
+ *  untouched). Sets `call.bytes` when done — the render finishes first, so it's ready by report time. */
+function count_decoded(res: Response, call: NetCall): void {
+	let clone: Response;
+	try {
+		clone = res.clone();
+	} catch {
+		return; // already consumed, or not cloneable
+	}
+	const stream = clone.body;
+	if (!stream) return;
+	void (async () => {
+		try {
+			const reader = stream.getReader();
+			let total = 0;
+			for (;;) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				total += value?.byteLength ?? 0;
+			}
+			call.bytes = total;
+		} catch {
+			/* stream errored mid-read — leave the size to the wrap_body / transfer fallback */
+		}
+	})();
 }
 
 // ---------------------------------------------------------------------------
@@ -332,8 +421,20 @@ function instrument_client_request(
 
 	r.on('response', (res) => {
 		call.ms = round2(performance.now() - call.start);
-		const rr = res as { statusCode?: number; on?: (ev: string, cb: () => void) => void };
+		const rr = res as {
+			statusCode?: number;
+			headers?: Record<string, string | string[] | undefined>;
+			on?: (ev: string, cb: () => void) => void;
+		};
 		call.status = rr.statusCode ?? 0;
+		const h = rr.headers ?? {};
+		const str_h = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+		const len = str_h(h['content-length']);
+		if (len) call.transfer_bytes = Number(len) || undefined;
+		call.encoding = str_h(h['content-encoding']) || undefined;
+		call.type = short_ct(str_h(h['content-type']) ?? null);
+		// no cloned-stream count here: adding a 'data' listener would flip a paused stream to flowing and
+		// could steal chunks from the app — content-length is the safe size on the raw-http path.
 		rr.on?.('end', () => {
 			call.body_ms = round2(performance.now() - call.start - call.ms);
 		});

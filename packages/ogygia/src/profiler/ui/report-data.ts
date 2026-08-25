@@ -11,6 +11,12 @@ import type { MemSample } from '../report.js';
 import { io_kind } from '../async-io.js';
 import { CATEGORY_LABEL, CATEGORY_COLOR } from './format.js';
 
+/** The size to show for a call: the DECODED body when we measured it (robust — a cloned-stream count),
+ *  else the wire size from content-length, else undefined. */
+export function net_size(c: NetCall): number | undefined {
+	return c.bytes ?? c.transfer_bytes;
+}
+
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 export interface TreeNode {
