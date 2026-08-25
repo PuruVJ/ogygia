@@ -81,7 +81,7 @@ Set a secret. Without one, the UI is disabled and 404s.
 OGYGIA_PROFILER_SECRET=some-long-random-string
 ```
 
-Then reach the dashboard with `?key=<secret>`. The key is remembered in a cookie for that session, so links inside a report work without repeating it. Matching is timing-safe.
+Then open the dashboard and **log in** with the secret. The profiler sets a session cookie, so links inside a report work for the rest of the session without repeating it. Matching is timing-safe, and the key never rides in a URL — where it would be logged, cached, or shared. (The profiler is also reachable programmatically over MCP with `ogygia mcp` / `ogygia ai`.)
 
 ## Sharper names with source maps
 

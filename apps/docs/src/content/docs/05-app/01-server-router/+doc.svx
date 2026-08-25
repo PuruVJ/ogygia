@@ -1,0 +1,143 @@
+---
+title: Server router
+summary: SvelteKit's routing as a typed, programmatic table — pages, layouts, endpoints, loads and actions in one .ts file, with router.$infer giving every component its typed data.
+related:
+  - app/router
+  - app/dashboards
+  - regions/held-regions
+---
+
+`ogygia/router` is SvelteKit's routing written as a **value** instead of a file tree. One `.ts` file declares the whole route table — pages, layouts, endpoints, `load`s, and actions — and the compiler threads the types through it, so every component reads its `data`, `params`, and `form` fully typed with **no codegen**.
+
+It runs on the **server**: it dispatches the request, runs the load cascade, and renders the page. This is the counterpart to the [SPA router](/docs/app/router), which navigates between those pages on the client. You can use either alone; together, the server router defines routes and the SPA router moves between them.
+
+::: tip When to use
+Reach for it when your routes are *computed* — a CMS whose paths come from a database, a tool whose pages are generated, a package that ships its own routes — or when you just want your route table, loaders, and components in one place instead of scattered across `+page.svelte` / `+page.server.ts` / `+server.ts` files. For a handful of ordinary pages, Kit's file routes are simpler; this is not a replacement you're required to adopt.
+:::
+
+## The table
+
+A route table is a record of `pattern → (r) => …`. The builder `r` carries that pattern's params and the accumulated parent data as **types**.
+
+```ts title=src/routes.ts
+import { routes } from 'ogygia/router';
+import AppShell from './AppShell.svelte';
+import Home from './Home.svelte';
+import Doc from './Doc.svelte';
+import Login from './Login.svelte';
+import { getDoc, login, read, update } from './server';
+
+export const router = routes((r) =>
+  r
+    .layout(AppShell)
+    .load((c) => ({ user: c.locals?.user }))
+    .routes({
+      '/':            (r) => r.page(Home),
+      '/docs/[slug]': (r) => r.page(Doc).load((c) => ({ doc: getDoc(c.params.slug) })),
+      '/login':       (r) => r.page(Login).action(login).layout(false),
+      '/api/[id]':    (r) => r.GET((c) => c.json(read(c.params.id))).POST(update),
+    })
+);
+
+export type Routes = typeof router.$infer;
+```
+
+Each key is a Kit-shaped pattern (`[slug]`, `[...rest]`). The callback builds ONE route with `r`.
+
+## Pages, layouts, endpoints
+
+- **`r.page(Comp)`** — a page (Kit's `+page.svelte`). Chain `.load(fn)` for its data and `.action(fn)` for a form action.
+- **`r.layout(Comp)`** — a layout layer (Kit's `+layout.svelte`). Its `.load()` cascades into every child; `.routes({ … })` nests the children under it.
+- **`r.GET(fn)` / `.POST` / `.PUT` / `.PATCH` / `.DELETE` / `.OPTIONS`** — an endpoint (Kit's `+server.ts`). Verbs are **uppercase**, matching Kit. Chain them: `r.GET(read).POST(write)`.
+- **`r.routes({ … })`** — a transparent group: nests children with no chrome of its own (a shared `load` without a shared layout).
+- **`r.mount(subRouter)`** — delegate a whole subtree to another router (compose route tables).
+
+```ts
+'/settings': (r) =>
+  r.layout(SettingsShell).routes({
+    '/':        (r) => r.page(SettingsHome),
+    '/billing': (r) => r.page(Billing).load(loadBilling).action(updatePlan),
+  }),
+```
+
+### Breaking out of a layout
+
+`.layout()` on a page controls only its **visual** chrome — Kit's `+page@…` reset, without the `@` syntax. The load cascade above it still runs, so the page's `c.data` and its typed `data` are the same either way; you're only changing which layouts wrap it.
+
+- `.layout(false)` — drop every inherited layout (a full-screen, chrome-less page).
+- `.layout(SomeAncestorLayout)` — reset *up to* an ancestor already in this page's chain: the outer layouts through that one stay, the inner ones are dropped. (Passing a layout that isn't an ancestor is a no-op — the full chain stays.)
+
+```ts
+'/login': (r) => r.page(Login).layout(false),   // full-screen, no app chrome — its data still loads
+```
+
+## The context `c`
+
+Every `load`, action, and endpoint receives `c` — Kit's load event, unchanged: `c.fetch`, `c.cookies`, `c.locals`, `c.params`, `c.url`, `c.request`, `c.setHeaders`, `c.platform`, plus `c.json()`, `c.redirect()`, `c.error()`, `c.text()`. Kit's `fetch` is the same one you know — same-origin requests resolve in-process.
+
+```ts
+r.page(Doc).load((c) => {
+  const doc = getDoc(c.params.slug);
+  if (!doc) return c.error(404, 'No such doc');   // short-circuits, renders the nearest error page
+  return { doc };
+});
+```
+
+Set an error boundary with **`r.error(Comp)`** on a layer; a `c.error()` from any load below renders it.
+
+## Typed data, for free
+
+`router.$infer` is a phantom-typed map: `path → { data, params, form }`. It exists only at the type level (reading it at runtime throws — always `typeof router.$infer`). A component types its props by **indexing** it:
+
+```svelte title=Doc.svelte
+<script lang="ts">
+  import type { Routes } from '../routes';
+  let { data, params }: Routes['/docs/[slug]'] = $props();
+  // data.user  (from the AppShell layout's load — cascaded down)
+  // data.doc   (from this page's own load)
+  // params.slug
+</script>
+```
+
+Every `load` return threads **down** into its children's `c.data` — Kit's implicit `parent()`, but typed: a page under `AppShell` sees `{ user }` merged with its own `{ doc }`. This cascade is what makes `Routes['/path'].data` the exact intersection of every load above it. No `+page.svelte` files exist; components live anywhere.
+
+### Typed search params and bodies
+
+Pass a [Standard Schema](https://standardschema.dev) (Valibot, Zod, …) to a verb or action to validate and type its input:
+
+```ts
+'/search': (r) =>
+  r.GET(searchSchema, (c, query) => c.json(search(query))),   // query is typed from the schema
+```
+
+## Pages carry region dials
+
+Because a page is just a component here, its **wake / render** schedule rides as import attributes on `page()` — the same dials as a marked island import:
+
+```ts
+import Chart from './Chart.svelte' with { wake: 'visible' };
+import Greeting from './Greeting.svelte' with { render: 'deferred' };
+
+'/dashboard': (r) => r.page(Chart),
+'/':          (r) => r.page(Greeting, { fallback: Skeleton }),   // deferred page + its loading slot
+```
+
+`render: 'deferred'` gives you a **partially-prerendered page from the route table** — the shell is static, the page fills its hole per visitor — with the `fallback` snippet as the loading UI. `keep: 'name'` keeps a page's live island across a navigation.
+
+## Mounting it
+
+Export the router, then serve it. In `hooks.server.ts` (composes with `sequence()`):
+
+```ts title=src/hooks.server.ts
+import { sequence } from '@sveltejs/kit/hooks';
+import { handle as ogygiaHandle } from 'ogygia/server';
+import { router } from './routes';
+
+export const handle = sequence(ogygiaHandle(), router.handle);
+```
+
+Or dispatch it yourself from a catch-all with `router.fetch(request, event)`. Kit's hooks, `transport`, and form actions all keep working — this is Kit's routing, just shaped as a table.
+
+::: warning Two routers, one app
+This page is about the **server** router (`ogygia/router`) — the route table. The [SPA router](/docs/app/router) is separate: it intercepts link clicks and navigates on the client. They compose, and each works without the other.
+:::

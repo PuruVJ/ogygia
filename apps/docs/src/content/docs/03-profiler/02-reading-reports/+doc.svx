@@ -54,7 +54,7 @@ Native runtime built-ins — Node and V8 internals like `existsSync` or the UTF-
 
 ## Network
 
-Every outbound `fetch` and `http`/`https` call the render made, tied to the route that made it, with a waterfall on a real timeline.
+Every outbound `fetch` and `http`/`https` call the render made, tied to the route that made it, with a waterfall on a real timeline. Expand any request to see its **payload** — formatted, syntax-highlighted JSON, rendered lazily and off the main thread so a multi-MB body opens without freezing — plus its wire and decoded sizes and encoding. The waterfall shows ONE representative render, not the same handful of calls repeated across every run.
 
 The classic slow-page shape shows up here immediately: several calls stacked **one after another** instead of overlapping. That is sequential `await`s. The report flags it, and the fix is usually to run them together:
 

@@ -1,0 +1,53 @@
+---
+title: Devtools
+summary: An in-page x-ray for the island graph — see every region boxed on the page, its real JS cost, what crossed the wire, and when each island woke.
+related:
+  - regions/regions
+  - profiler/overview
+  - reference/performance
+---
+
+The devtools are a dock that mounts on any `csr = false` page and x-rays the island graph: every region boxed on the page, its real over-the-wire JS, the values that crossed the boundary, and a timeline of when each island woke. It reads the same event bus the runtime emits, so it shows what actually happened, not a guess.
+
+## Enabling
+
+One flag in the Vite plugin. It is compiled behind a gate, so when off (the default) the entire devtools graph — the dock, the instruments, their CSS — **tree-shakes to nothing**. Meant for development; leave it off in production.
+
+```ts title=vite.config.ts
+import { ogygia } from 'ogygia/vite';
+
+export default {
+  plugins: [
+    ogygia({ devtools: !!process.env.OGYGIA_DEVTOOLS }),   // on when OGYGIA_DEVTOOLS=1
+    // or just `ogygia({ devtools: true })` in a dev-only config
+  ],
+};
+```
+
+Then run with `OGYGIA_DEVTOOLS=1`. A launcher appears at the bottom of every `csr = false` page.
+
+## The dock
+
+The launcher peeks up from the bottom edge; hover to reveal it, click (or **Alt+O**) to open the panel. The panel drags by its title bar and resizes from any edge, and its position, size, and open state **persist** across reloads. It lives in a shadow root, so nothing from your page's CSS can reach it and its own styles can't leak out.
+
+## Instruments
+
+- **Lens** — the boundary overlay. Toggle it and every `<ogygia-region>` on the page is boxed and labelled by name, tinted by kind (island / lake / hole) and dashed while cold. A roster lists them with kind, wake schedule, JS cost, and hydration state; hovering a row lights up its box on the page, and vice-versa. "Pick on page" lets you click a region to inspect it.
+- **Bytes** — the byte ledger. Real over-the-wire JS per island entry chunk (from `PerformanceResourceTiming`), plus `+deps`: each island's whole transitive bundle, so you see the *real* cost, not just the wrapper. Because shared code is counted in every island that imports it, the figures overlap and the page total over-counts what actually ships once.
+- **Wire** — everything the server shipped across a boundary: the devalue props per island, the page/query seeds, capabilities.
+- **Hub** — the identity spine. Per `Ref` id: its kind, resolve count, reunion (memo-hit) count, and disposal.
+- **Nav** — per-region SPA-navigation decisions (keep / patch / mount / remove) with timing, so you can see the reconciler at work.
+- **Timeline** — client-realm events on a time axis, one lane per region, with hydrate bars.
+- **Profiler** — embeds the [SSR profiler](/docs/profiler/overview)'s run page (needs `ogygia({ profiler: true })`).
+
+## Inspecting one island
+
+Click a roster row, or use "pick on page" and click a region, to open its detail card: identity, the full cost breakdown, its decoded props (as a collapsible tree, with hub-ref chips), and a client-lifecycle mini-timeline (connected → scheduled → woke → hydrated).
+
+::: tip
+The devtools never mount on [profiler](/docs/profiler/overview) pages — including the Profiler tab's own embedded frame — so the tooling never x-rays itself.
+:::
+
+::: warning `csr = true` pages
+On a Kit-hydrated (`csr = true`) page the ogygia runtime never boots, so there are no islands to inspect — the dock shows a notice pointing you at a `csr = false` page instead.
+:::

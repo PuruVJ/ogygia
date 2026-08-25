@@ -95,6 +95,16 @@ import Chart from '$lib/Chart.svelte' with { wake: 'visible', margin: '200px' };
 ogygia({ regions: { visible: { margin: '0px' } } });
 ```
 
+### How the bytes arrive
+
+Waking decides when JS *runs*; the *bytes* are prepaid in the background so a wake never stalls on a cold fetch. The server emits `<link rel="modulepreload">` for each island's full static dependency closure — the facade, every chunk it imports (transitively), and their CSS — at a priority that matches the schedule:
+
+- **`load`** islands preload at normal priority — their JS is needed at first paint.
+- **`visible`** and **`interaction`** islands preload at **`fetchpriority="low"`**: the bytes ride in the background, never contending with the runtime, `load` islands, or the LCP image, so the wake (scroll-in, or the tap / hover) evaluates from the warm module map instead of fetching cold.
+- **media-query** wakes preload nothing — the server can't know the viewport, so downloading would be a blind bet; the chunk fetches when the query matches.
+
+A chunk shared by two islands takes the **highest** priority any of them asked for, so a low-priority background hint can never demote a chunk a `load` island needs at first paint.
+
 ## Deferred content that is also interactive
 
 A `render: 'deferred'` region is content only: it never ships JS. On it, `wake` is the *fetch* schedule (below, the hole waits until it scrolls into view before it even costs a request):

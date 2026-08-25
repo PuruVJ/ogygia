@@ -58,6 +58,18 @@ When you navigate into a page with several [server islands](/docs/regions/server
 
 The flush is out of order: each hole's HTML comes back the moment that region settles, so a fast region lands before a slow one regardless of source order. Content appears as it is ready. A [command that returns a region](/docs/regions/held-regions) rides the same one-response path: a single flight that both mutates and repaints.
 
+## Skip re-rendering what didn't change {#server-delta}
+
+By default every SPA navigation re-renders the whole incoming page on the server. Opt into **server-delta** and the client tells the server which islands it already holds, so the server re-renders only the ones whose inputs actually changed:
+
+```ts title=vite.config.ts
+ogygia({ router: { serverDelta: true } });
+```
+
+On a navigation the client sends the fingerprints of the regions it holds (an `x-ogygia-known` header); the server renders only the regions whose entry, endpoint, or props changed and marks the rest **skipped**. An unchanged island keeps its live DOM and interaction state — nothing to re-send, nothing to re-hydrate.
+
+It is safe by construction: the fingerprint is computed the same way on both sides from compiler-emitted attributes (never from live-mutated HTML), so the server skips exactly the regions the client says it has. Off by default — with it off the client never sends the header and the server always full-renders, the safe fallback.
+
 ## Speculative prerender {#speculate}
 
 Prefetch warms the *HTML cache*. **Speculation goes further: the browser fully prerenders the next page** (runs its JS, fills its islands, resolves its server-island holes) in a hidden tab, before you click. Click, and the prerendered page is activated instantly, already interactive.
