@@ -141,19 +141,22 @@ export interface NetContext {
 type Emit = (call: NetCall) => void;
 
 let installed = false;
+// The active emit sink, kept module-level so `ensure_fetch_patched` can RE-wrap `globalThis.fetch` with
+// the same sink after something replaces it.
+let net_emit: Emit | null = null;
+// Brands OUR wrapper so a re-assert never wraps our own wrapper (which would count every call twice).
+const OG_FETCH_PATCH = Symbol.for('ogygia.profiler.net.fetch-patch');
 
 /**
  * Install the patches. `fallback` receives calls made outside any request
  * context (startup work, background jobs) so window recordings still see them.
+ * Idempotent: a second call just re-asserts the fetch patch (see `ensure_fetch_patched`).
  */
 export async function install_net_capture(
 	als: AsyncLocalStorage<NetContext>,
 	fallback: Emit
 ): Promise<void> {
-	if (installed) return;
-	installed = true;
-
-	const emit = (call: NetCall) => {
+	net_emit = (call: NetCall) => {
 		const ctx = als.getStore();
 		if (ctx) {
 			call.route = ctx.route;
@@ -164,8 +167,28 @@ export async function install_net_capture(
 		}
 	};
 
-	patch_fetch(emit);
-	await patch_http(emit);
+	if (installed) {
+		ensure_fetch_patched();
+		return;
+	}
+	installed = true;
+	patch_fetch(net_emit);
+	await patch_http(net_emit);
+}
+
+/**
+ * Re-assert the `globalThis.fetch` patch. `globalThis.fetch` can be REPLACED out from under us after
+ * install — a late undici init, a framework fetch polyfill, an HMR reload of this module — which
+ * silently kills capture, so reports "sometimes catch network, sometimes don't". Call this before every
+ * profile: if the live fetch isn't ours (identified by the brand symbol, so we never wrap our own
+ * wrapper) re-wrap whatever is there now with the same sink. One property read, idempotent — safe to
+ * call every request/run.
+ */
+export function ensure_fetch_patched(): void {
+	if (!net_emit) return;
+	const cur = globalThis.fetch as (typeof globalThis.fetch & { [OG_FETCH_PATCH]?: boolean }) | undefined;
+	if (typeof cur === 'function' && cur[OG_FETCH_PATCH]) return; // still ours
+	patch_fetch(net_emit);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,8 +213,9 @@ function host_of(url: string): string {
 }
 
 function patch_fetch(emit: Emit): void {
-	const orig = globalThis.fetch;
+	const orig = globalThis.fetch as (typeof globalThis.fetch & { [OG_FETCH_PATCH]?: boolean }) | undefined;
 	if (typeof orig !== 'function') return;
+	if (orig[OG_FETCH_PATCH]) return; // the live fetch is already our wrapper — don't wrap it again
 
 	const patched = async function fetch(
 		input: RequestInfo | URL,
@@ -240,6 +264,7 @@ function patch_fetch(emit: Emit): void {
 			throw e;
 		}
 	};
+	(patched as typeof patched & { [OG_FETCH_PATCH]?: boolean })[OG_FETCH_PATCH] = true;
 	globalThis.fetch = patched as typeof globalThis.fetch;
 }
 

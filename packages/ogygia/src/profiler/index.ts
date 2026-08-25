@@ -249,6 +249,8 @@ class Profiler {
 	#recording_since = 0;
 	#als: import('node:async_hooks').AsyncLocalStorage<Ctx> | null = null;
 	#init_done: Promise<void> | null = null;
+	/** Re-assert the `globalThis.fetch` patch before a profile (self-heal if it was replaced). */
+	#ensure_net: (() => void) | null = null;
 
 	constructor(options: ProfilerOptions = {}) {
 		this.base = options.path ?? '/__profiler';
@@ -288,12 +290,16 @@ class Profiler {
 			}
 			if (this.#als) {
 				try {
-					const { install_net_capture } = await import('./net.js');
+					const { install_net_capture, ensure_fetch_patched } = await import('./net.js');
 					await install_net_capture(this.#als, (call) => {
 						this.#collect_window(call);
 						this.#background_net.push(call);
 						if (this.#background_net.length > MAX_BACKGROUND_NET) this.#background_net.shift();
 					});
+					// Kept so every profile can re-assert the patch — `globalThis.fetch` may have been
+					// replaced since install (late undici init / a polyfill / HMR), which silently drops
+					// capture. This is what makes a run RELIABLY see network instead of sometimes.
+					this.#ensure_net = ensure_fetch_patched;
 				} catch {
 					// platform without patchable modules — wall timing still works
 				}
@@ -791,6 +797,9 @@ class Profiler {
 		}
 		const q = ctx.url.searchParams;
 		this.#recording_since = Date.now();
+		// Re-assert the fetch patch right before profiling — `globalThis.fetch` may have been replaced
+		// since install, which is why runs sometimes missed network. Self-heals to reliable capture.
+		this.#ensure_net?.();
 		try {
 			const path = q.get('p') ?? '';
 			if (!path.startsWith('/') || path.startsWith('//')) {

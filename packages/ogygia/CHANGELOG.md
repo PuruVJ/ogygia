@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The **passage** release — the runtime and the compiler both rebuilt from the studs, with byte-identical output the whole way. The runtime collapses onto ONE identity primitive: serialization, resumability, cross-island sharing, and navigation reconciliation all become operations on the same `Ref`. A live class, a store, a function, a snippet, a held region cross the island boundary and reunite to a single live instance across every island that reads them; a navigation now MOVES regions instead of resetting them; and the server can be told to re-render only what actually changed. Separately, the Vite plugin is carved into a real, bundler-agnostic compiler you can run without Vite at all.
 
+On top of the islands, this release also ships a whole tooling layer: a drop-in production **SSR profiler** (`ogygia({ profiler })`), an island-graph **devtools** dock (`ogygia({ devtools })`), a fully-typed programmatic **router** (`ogygia/router`), and priority-aware preloading so lazy islands warm in the background instead of fighting first paint.
+
 ### Added
 
 - **The Ref hub — one identity layer for everything that crosses a boundary.** Every value that leaves
@@ -81,6 +83,70 @@ The **passage** release — the runtime and the compiler both rebuilt from the s
   emit, and id resolution — importing zero Vite. A REPL or any non-Vite host is now just a second adapter:
   build a `CompileCtx`, `configure()` a `Compiler`, feed it source, read back the artifacts.
 
+- **The SSR profiler — `ogygia({ profiler })`, and nothing else to wire.** A drop-in production profiler
+  that samples the WHOLE Node process during server rendering: CPU (flame graph + treemap, self / total /
+  per-call), outbound network (per-request payloads, wire + decoded sizes, encoding, a one-render
+  waterfall — not the same calls ×N runs), async-I/O waits attributed to the function that started them,
+  and heap / RSS over the window. Configured entirely in the Vite plugin (`profiler: true`, or
+  `{ secret, … }`); `ogygia.handle()` auto-mounts the UI at `/__profiler` — no `profiler()` hook, no route
+  files. The whole UI is reactive Svelte 5 (dashboard, login, the full report, upload), served through
+  `document()`. Highlights:
+  - **Request payloads, streamed.** Each outbound call shows its JSON body, formatted and syntax-
+    highlighted (highlight.js from a CDN — never an ogygia dependency), lazily on expand and off the main
+    thread, so a multi-MB body opens without freezing; sizes are counted robustly from a cloned response
+    stream.
+  - **Encrypted `.ogp` export / import.** A report downloads as an encrypted file and re-opens via Import
+    (needs this profiler's key) — the serverless answer, where a report can't be kept in memory across
+    invocations.
+  - **Serverless-safe runs.** The page-profile loop is budgeted to the platform gateway timeout
+    (Amplify 30s / Netlify 10s / Vercel 300s), warms + resolves redirects once, and profiles the FINAL url.
+  - **Real names in prod.** Minified frames resolve through `.map` files sitting next to the server chunks;
+    the report carries a `sourcemapped` flag so a missing map is obvious.
+  - **AI tools.** `ogygia mcp` / `ogygia ai` expose the profiler over MCP (four tools) — run a whole
+    profile (ask-for-URL, self-heal, clean auth), or read a downloaded `.ogp` with no live server or login.
+  Auth is a router guard (dev is open; prod needs `OGYGIA_PROFILER_SECRET` or a passed `secret`).
+
+- **Devtools — `ogygia({ devtools })`, an x-ray for the island graph.** A dock that mounts on every
+  csr=false page — inside a **shadow root**, so no host-page CSS can reach it — with a peeking, draggable
+  **and** resizable launcher (`@neodrag/svelte`) whose position and size persist. Instruments: a
+  **boundary lens** that boxes every region tinted by kind, a **byte ledger** of real over-the-wire JS per
+  island chunk, a **timeline** of client-realm events, plus **wire / hub / nav** views and a per-island
+  "inspect element" detail card — with island names everywhere (from the compiler's dev metadata). A
+  shared, fp-correlated event bus unifies the client and server realms into one stream. Entirely behind
+  the `__OGYGIA_DEVTOOLS__` compile gate — tree-shaken to nothing when off (the default, proven by an
+  e2e); flip on with `OGYGIA_DEVTOOLS=1`. The embedded Profiler tab points at the profiler's `/run` page.
+
+- **`ogygia/router` — Kit's routing, programmatic and fully typed.** Define a route tree in a `.ts` with
+  a builder: `routes((r) => r.routes({ '/': (r) => r.page(Home).load(fn), '/api': (r) => r.GET(fn) }))`.
+  `.load().action()` chaining, uppercase verbs matching Kit's `+server.ts`, layouts, error boundaries, and
+  per-page region marks as import attributes on `page(Comp, { … })` (`wake` / `render: 'deferred'` /
+  `keep`). The whole tree exposes a phantom-typed map, `router.$infer`, so a component types its props as
+  `Routes['/the/path']` and gets a typed `data` (cascaded from every `load` above it, Kit's implicit
+  `parent()`), `params`, and `form` — no `+page.svelte` files, components thrown anywhere. Deferred (PPR)
+  holes work straight from the `.ts` config — the compiler learned `render: 'deferred'` in `.ts` region
+  imports. Kit's hooks, transport, and `event.fetch` all pass through unchanged.
+
+- **`document()` — a complete ogygia page from a handle.** `document(region(Comp, props), { status })`
+  from `ogygia/server` renders a held region into a full HTML document (runtime, seeds, `<head>`) with no
+  `+page.svelte` — islands inside hydrate and stay reactive. This is what the profiler and devtools UIs
+  are served through.
+
+- **Zero-config library islands.** A dependency can declare its island roots in its own package manifest;
+  the consuming app's build discovers them and compiles them as islands with no import-site marks and no
+  app wiring — a library ships interactive islands that Just Work.
+
+- **Background-priority bytes for lazy islands.** A `wake: 'visible'` or `wake: 'interaction'` island's
+  full static dependency closure (facade + every chunk it statically imports, transitively, + their CSS)
+  is now emitted as `<link rel="modulepreload" fetchpriority="low">` in the SSR head. The bytes ride in
+  the background — never contending with the runtime, `load` islands, or the LCP — so the wake (scroll-in,
+  or the tap / hover) evaluates from the warm module map instead of stalling on a cold fetch. `load`
+  islands stay High (needed at first paint); media-query wakes stay unhinted (the server can't know the
+  viewport). Hints are deduped per page render, with a priority tie-break — a chunk a `load` island also
+  needs keeps High, so a background hint can never demote a first-paint chunk — and the idle warm no longer
+  fires an `import()` when the bytes already have a hint (that was escalating a queued fetch to High).
+  Islands rendered inside a `{#snippet}` (forwarded through a plain layout component) get their hints too,
+  by threading the portable's inline-SSR `<head>` into the document head.
+
 ### Changed
 
 - **The Vite plugin is a compiler now.** The 2,752-line plugin blob became a compiler module tree
@@ -114,6 +180,35 @@ The **passage** release — the runtime and the compiler both rebuilt from the s
 
 - **Lakes restore pairs by DOM position, not a shared entry id** — two lakes with the same entry no
   longer cross-match on restore.
+
+- **SvelteKit `appDir` + `paths.base`, respected everywhere.** Island and runtime URLs are baked
+  base-LESS and resolved once through `asset()` — the SOLE base/assets authority — so a custom `appDir`
+  (e.g. `/_uce_/immutable/`) or a non-root `base` (or an assets CDN) loads islands correctly, and the old
+  double-application (`/base/base/…` → 404) can't happen. `appDir` is read from Kit's
+  `__SVELTEKIT_APP_DIR__` define.
+
+- **The compiler registered EVERY exported class, not just wired ones.** Transportable registration was
+  injected into every `export class`, so a pnpm sub-package that doesn't depend on ogygia got a broken
+  `ogygia/internal/register` import. It now injects only into classes with a `static wire`.
+
+- **Page profiling survives serverless timeouts.** The warm-up, CPU runs, and coverage pass all live
+  inside one budget clock sized to the platform gateway limit, so a profile completes (trimmed to fit,
+  same accuracy per run) instead of being killed mid-flight on Amplify / Vercel / Netlify. The network
+  waterfall shows ONE representative render, not the same handful of calls repeated ×N runs.
+
+- **Profiler network capture is now reliable.** The profiler patches `globalThis.fetch` to attribute
+  outbound calls, but that reference can be REPLACED after install — a late undici init, a framework
+  fetch polyfill, an HMR reload — which silently dropped capture, so a run would "sometimes catch network,
+  sometimes not". The patch is now branded and self-healing: every profile re-asserts it, re-wrapping the
+  live fetch when it isn't ours (never double-wrapping the wrapper). Captures land every run.
+
+- **The profiler UI ships TS-free templates.** Shipped `.svelte` files carry no `lang="ts"` in markup and
+  no literal closing-tag substrings, so a consumer's own Svelte + preprocess pipeline compiles the
+  profiler UI without choking (tsdown strips TS from scripts, not markup).
+
+- **The profiler's JSON / `.cpuprofile` links download instead of opening.** They carry a `download`
+  attribute (which the SPA router already leaves alone), so a click saves a report-named file rather than
+  rendering the JSON inline.
 
 ### Internal
 
