@@ -210,6 +210,12 @@ On top of the islands, this release also ships a whole tooling layer: a drop-in 
   attribute (which the SPA router already leaves alone), so a click saves a report-named file rather than
   rendering the JSON inline.
 
+- **Importing a `.ogp` moved between machines no longer fails as "not a .ogp file".** A binary `.ogp`
+  copied through a text-y channel (a Windows VDI → Mac clipboard, a chat, an editor round-trip) picks up a
+  prepended UTF-8 BOM or gets base64-encoded, so its magic bytes no longer match. Import now recovers both
+  (strip the BOM, decode the base64) before checking, and the rejection message points at the transfer as
+  the likely cause.
+
 ### Internal
 
 - **Full TypeScript `strict` at the library level.** `strict: true`, all resulting errors fixed; every

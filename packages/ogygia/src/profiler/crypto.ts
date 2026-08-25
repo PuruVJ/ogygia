@@ -42,6 +42,38 @@ export function is_ogp(bytes: Uint8Array): boolean {
 	);
 }
 
+const BASE64_RE = /^[A-Za-z0-9+/=\s]+$/;
+
+/**
+ * Undo the two ways a `.ogp` gets mangled moving BETWEEN machines through a text-y channel (a shared
+ * clipboard, an editor re-save, a chat) — the file arrives byte-perfect on either side of the codec,
+ * so the raw magic is intact, but its wrapper isn't:
+ *   - a **UTF-8 BOM** prepended (`EF BB BF`) — strip it;
+ *   - the whole file **base64-encoded** — decode it.
+ * A real `.ogp` already starts with the magic, so this is a no-op on it. Returns bytes to hand to
+ * `is_ogp` / `ogp_decode`; if it can't recover, returns the input unchanged (import then rejects it).
+ */
+export function recover_ogp_bytes(bytes: Uint8Array): Uint8Array {
+	if (is_ogp(bytes)) return bytes;
+	// Leading UTF-8 BOM from a text-editor round-trip.
+	if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+		const stripped = bytes.subarray(3);
+		if (is_ogp(stripped)) return stripped;
+		bytes = stripped;
+	}
+	// Base64-encoded in transit (sent as text). Only attempt when it actually looks like base64.
+	try {
+		const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes).trim();
+		if (text.length > 8 && BASE64_RE.test(text)) {
+			const decoded = new Uint8Array(Buffer.from(text, 'base64'));
+			if (is_ogp(decoded)) return decoded;
+		}
+	} catch {
+		// not text / not base64 — fall through
+	}
+	return bytes;
+}
+
 /** Compress + encrypt a dump object into `.ogp` bytes. Async — never blocks the event loop. */
 export async function ogp_encode(dump: unknown, secret: string | undefined): Promise<Uint8Array> {
 	const { crypto, zlib, scrypt, brotli } = await node();

@@ -48,7 +48,7 @@ import {
 	type RequestEntry,
 	type RouteAgg
 } from './report.js';
-import { ogp_encode, ogp_decode, is_ogp } from './crypto.js';
+import { ogp_encode, ogp_decode, is_ogp, recover_ogp_bytes } from './crypto.js';
 import { type Router, type Ctx as RouteCtx } from '../router/index.js';
 import { build_profiler_router } from './profiler-router.js';
 
@@ -940,9 +940,18 @@ class Profiler {
 	// URL rather than render inline — the report is an islands page, so it must load normally to hydrate.
 	async #upload(ctx: RouteCtx): Promise<Response> {
 		try {
-			const bytes = new Uint8Array(await ctx.request.arrayBuffer());
+			// Tolerate a `.ogp` mangled by a text-y transfer between machines (a prepended BOM, or the whole
+			// file base64-encoded) — recover the raw bytes before checking the magic.
+			const bytes = recover_ogp_bytes(new Uint8Array(await ctx.request.arrayBuffer()));
 			if (!is_ogp(bytes)) {
-				return ctx.json({ error: 'That file is not an ogygia .ogp profile.' }, { status: 400 });
+				return ctx.json(
+					{
+						error:
+							'That file is not an ogygia .ogp profile. If you moved it between machines, copy it as a ' +
+							'binary file — a text editor or chat can silently re-encode it.'
+					},
+					{ status: 400 }
+				);
 			}
 			// Brotli + AES-GCM. Decrypt with the key the uploader supplies (`x-ogp-key`) so ANY .ogp opens
 			// in ANY profiler — its key can differ from this instance's secret. Left blank, we fall back to
