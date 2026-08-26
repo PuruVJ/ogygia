@@ -52,6 +52,18 @@ export const PROFILER_UI_DIR = OG_HAS_SRC
 export const PROFILER_ROUTER_MODULE = OG_HAS_SRC
 	? path.join(PKG_ROOT, 'src/profiler/profiler-router.ts')
 	: path.join(PKG_ROOT, 'dist/profiler/profiler-router.js');
+
+/**
+ * ogygia's own `hooks` module (the `ogygia/server` handle), as the POSIX id Vite hands the transform
+ * hook — precomputed so the per-module hot path spends ONE string equality (no regex, no split) to
+ * spot it. Dev severs this module's `import('./profiler/index.js')` edge from import-analysis there
+ * (see the transform hook) so Kit's dev css crawl can't descend into the profiler UI's stylesheets.
+ */
+export const OGYGIA_HOOKS_MODULE = (
+	OG_HAS_SRC ? path.join(PKG_ROOT, 'src/hooks.ts') : path.join(PKG_ROOT, 'dist/hooks.js')
+)
+	.split(path.sep)
+	.join('/');
 export const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
 	? {
 			'ogygia/internal': path.join(PKG_ROOT, 'src/internal.ts'),

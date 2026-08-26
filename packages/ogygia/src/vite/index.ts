@@ -78,6 +78,7 @@ import {
 	PKG_ROOT,
 	PROFILER_UI_DIR,
 	PROFILER_ROUTER_MODULE,
+	OGYGIA_HOOKS_MODULE,
 	OGYGIA_INJECTED_IMPORTS,
 	OGYGIA_INJECTED_FILES,
 	APP_SHIMS,
@@ -165,6 +166,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		server_delta,
 		devtools
 	} = resolve_options(options, DEFAULT_REGION_TTL_SEC);
+	// The devtools value everything downstream reads (define, CompileCtx, dev middleware). The config
+	// hook coerces it to false for builds — devtools is dev-server-only and must never ship to prod.
+	let devtools_effective = devtools;
 
 	// The Program — this plugin instance's cross-file linker / island graph. It owns the descriptor
 	// registry + the feature-mark bag (seeded from the two app-wide config flags), and the behavior
@@ -321,6 +325,20 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			config: {
 				order: 'pre',
 				handler(userConfig, env) {
+					// DEVTOOLS is dev-server-only, ENFORCED — a `devtools: true` left on for a build must
+					// never ship instrumentation to production (a consumer did exactly that: prod pages
+					// carried the server event side-channel + the dock). Coerce here, where the command is
+					// known, so the define below AND the CompileCtx/middleware gates all see the same value.
+					if (devtools_effective && env.command === 'build') {
+						devtools_effective = false;
+						if (isMainThread)
+							console.warn(
+								'[ogygia] devtools is dev-only — ignoring `devtools: true` for this build ' +
+									'(it never ships to production). Enable it for the dev server alone: ' +
+									'`ogygia({ devtools: command === "serve" })`.'
+							);
+					}
+
 					// Keep Kit's client build alive on all-csr=false apps: inject a URL-less keepalive
 					// route BEFORE Kit reads the routes. Main build thread only; removed at process exit.
 					if (env.command === 'build' && !standalone && isMainThread) {
@@ -356,9 +374,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						define: {
 							__OGYGIA_CONTINUITY_FORMS__: JSON.stringify(continuity_forms),
 							__OGYGIA_SERVER_DELTA__: JSON.stringify(server_delta),
-							// DEVTOOLS event-layer gate — off unless `ogygia({ devtools: true })`. When false,
-							// every `if (DEVTOOLS) emit({…})` folds out and the bus tree-shakes away.
-							__OGYGIA_DEVTOOLS__: JSON.stringify(devtools)
+							// DEVTOOLS event-layer gate — off unless `ogygia({ devtools: true })` AND this is
+							// the dev server (coerced above; builds always get false). When false, every
+							// `if (DEVTOOLS) emit({…})` folds out and the bus tree-shakes away.
+							__OGYGIA_DEVTOOLS__: JSON.stringify(devtools_effective)
 						},
 						server: {
 							fs: {
@@ -485,7 +504,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						is_build,
 						content_presets:
 							(islandBridge.contentPresets as Record<string, unknown> | undefined) ?? null,
-						devtools
+						devtools: devtools_effective
 					})
 				);
 			},
@@ -605,7 +624,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// region "Counter" instead of a hashed entry. A middleware (not a virtual module) so it
 				// reads the CURRENT registry at request time — the dock fetches it after mount, by which
 				// point every island app-wide is registered, so the map is complete and never stale.
-				if (!devtools) return;
+				if (!devtools_effective) return;
 				server.middlewares.use((req, res, next) => {
 					if ((req.url || '').split('?')[0] !== '/__ogygia_devtools_meta') return next();
 					// `names`: island id → component name (live registry). `bytes`: island id → its
@@ -815,17 +834,39 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			},
 
 			async transform(code, id, options) {
+				// DEV ONLY: sever the hooks → profiler dependency EDGE from Vite's import-analysis.
+				// SvelteKit's dev "inline all styles" crawl walks every recorded dep (dynamic included)
+				// from the route graph — and Kit's generated server/internal.js (reachable from any page
+				// via `$app/*`) dynamically imports the app hooks, so everything the handle can reach is
+				// crawled. The profiler UI now carries REAL css modules (scoped `<style>` + profiler.css),
+				// so a literal `import('./profiler/index.js')` here would inline the profiler stylesheet
+				// into EVERY dev page of the app (the docs homepage leak). An opaque specifier records no
+				// dep — the crawl stops at hooks — while the runner still resolves it importer-relative at
+				// request time, so `/__profiler` itself is untouched (its css rides the router-css system,
+				// not the crawl). Build legs keep the literal: rolldown must see it to bundle the profiler.
+				// One string equality on the hot path (OGYGIA_HOOKS_MODULE is precomputed — no regex);
+				// the replace only ever runs on that single module.
+				let source = code;
+				if (is_dev && options?.ssr && id === OGYGIA_HOOKS_MODULE) {
+					source = source.replace(
+						/import\((['"])\.\/profiler\/index\.js\1\)/,
+						'import(/* @vite-ignore */ ((s) => s)($1./profiler/index.js$1))'
+					);
+				}
+
 				// The whole per-file pass — content-preset tag ▸ macros ▸ host-island transform ▸ ts-region
 				// mint ▸ $app shim — is the driver's; `this.emitFile` (the one Vite primitive it needs, for
 				// the transform-time deterministic island chunk) is threaded in. The driver's result is
 				// bundler-neutral (`map: unknown`); cast it to Vite's transform shape at this boundary.
-				const result = await compiler.transform_module(code, id, {
+				const result = await compiler.transform_module(source, id, {
 					ssr: options?.ssr === true,
 					emitFile: (chunk) => {
 						this.emitFile(chunk);
 					}
 				});
-				return result as { code: string; map: Rolldown.SourceMapInput | null } | null;
+				if (result) return result as { code: string; map: Rolldown.SourceMapInput | null };
+				// The driver saw nothing to do, but the edge rewrite above must still ship.
+				return source === code ? null : { code: source, map: null };
 			},
 
 			renderChunk(code) {
