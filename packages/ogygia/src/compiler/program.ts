@@ -69,7 +69,13 @@ export interface IslandDescriptor {
 /** The relevant shape of a file's transform result the linker registers. */
 export interface RegisterResult {
 	islands?: IslandDescriptor[];
-	hasIslandChildren?: boolean;
+	/** THE one wire question a compilation answers: can this file cross live content into an island?
+	 *  The transform owns all the evidence — static placement with children, a portable `{#snippet}`,
+	 *  a wake binding with no static placement (registry/each/`svelte:component`/prop hand-off, where
+	 *  call sites are compile-invisible), a `.ts`-minted wake region. One flag here, one rule below;
+	 *  the server encoder is not gated, so a missed case is a production app whose islands ALL fail
+	 *  with "Unknown type OgygiaRef" (the factory-registry regression). */
+	hasWireCrossing?: boolean;
 }
 
 export class Program {
@@ -203,6 +209,11 @@ export class Program {
 		const { registry, island_graph, by_id, region_kinds, host_index, id_hosts } = this;
 		this.unregister_host(hostId);
 		const key = host_key(hostId);
+		// The ONE wire rule: the transform said this file can cross live content into an island
+		// (children / portable snippet / dynamically-placed wake binding — see RegisterResult), so the
+		// runtime must carry the hub revivers. The other wire evidence class — a transportable CLASS
+		// definition — is placement-independent and marked in the driver's prescan instead.
+		if (result.hasWireCrossing) this.note_runtime_mark({ wire: true });
 		const idx: HostIndexEntry = { ids: new Set(), vpaths: new Set() };
 		for (const isl of result.islands ?? []) {
 			region_kinds.set(isl.id, isl.kind ?? (isl.server ? 'defer' : 'hydrate'));
@@ -221,13 +232,6 @@ export class Program {
 			if (isl.held) this.note_runtime_mark({ live: true, morph: true });
 			if (isl.lakes?.length) this.note_runtime_mark({ lakes: true });
 			if (isl.keep) this.note_runtime_mark({ persist: true, persistKeys: [isl.keep] });
-			// A portable-snippet synth entry crosses a live snippet into an island — it is revived on the
-			// client through the wire codec, so this app needs the wire runtime.
-			if (isl.portable) this.note_runtime_mark({ wire: true });
-			// Likewise a hydrate island with real HOST CHILDREN: they cross as an OgygiaS slot
-			// pointer the client must revive (adapters regression: a minimal app with children got a
-			// usage-gated runtime without the revivers → "Unknown type OgygiaS" at hydrate).
-			if (result.hasIslandChildren) this.note_runtime_mark({ wire: true });
 			let holders = id_hosts.get(isl.id);
 			if (!holders) {
 				holders = new Set();

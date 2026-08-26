@@ -80,7 +80,19 @@ function region_prop_revivers(): Record<string, (d: never) => unknown> | undefin
 	const wire = slots.wire;
 	if (wire === cached_wire) return cached_revivers;
 	cached_wire = wire;
-	cached_revivers = wire ? { [wire.REF_WIRE_KEY]: (d: never) => wire.resolve(d, true) } : undefined;
+	cached_revivers = wire
+		? { [wire.REF_WIRE_KEY]: (d: never) => wire.resolve(d, true) }
+		: {
+				// Insurance against a feature-detection miss: the server encoded a wired value but this
+				// build's runtime omitted the wire feature. Say so instead of devalue's bare "Unknown
+				// type OgygiaRef" — the opaque form cost a real debugging session (the factory-registry
+				// placement the detector used to miss). Short on purpose: this string ships in core.
+				OgygiaRef: () => {
+					throw new Error(
+						'wired prop but no wire feature in this build — ogygia detection bug, please report'
+					);
+				}
+			};
 	return cached_revivers;
 }
 

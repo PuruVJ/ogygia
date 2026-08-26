@@ -871,6 +871,13 @@ class FileCompilation {
 	#as_region_nodes!: Set<SvelteNode>;
 	#synthetic_export!: Map<string, string | undefined>;
 	#has_island_children!: boolean;
+	/** Hydrate bindings PLACED as a static `<Tag>` in this host — the complement (a marked hydrate
+	 *  binding with NO static placement) is a dynamically-used island: a registry value, an each/
+	 *  `{@const}`/`svelte:component` use, a prop hand-off. Its call sites are compile-invisible, so
+	 *  children CAN cross at runtime and the app must carry the wire revivers (see program.register —
+	 *  the Schneider regression: a factory-placed carousel's slot pointers hydrated against a runtime
+	 *  without the hub → "Unknown type OgygiaRef", every island dead). */
+	#static_placed!: Set<string>;
 	#has_island_hint!: boolean;
 
 	constructor(source: string, id: string, ctx: HostCtx) {
@@ -1186,6 +1193,7 @@ class FileCompilation {
 						);
 					}
 				} else if (this.#marked_components.has(name)) {
+					this.#static_placed.add(name);
 					const mark = this.#marked_components.get(name)!;
 					if (mark.strategy === 'lake') {
 						if (mark.options?.remount === 'swr')
@@ -1503,6 +1511,7 @@ class FileCompilation {
 		/** Non-fallback children on a hydrate/defer call site cannot cross devalue — reject. */
 
 		this.#has_island_children = false;
+		this.#static_placed = new Set();
 		this.#visit_usages(ast.fragment?.nodes ?? []);
 
 		// analyze products → shared compilation state (the FileIR fields), read by #lower().
@@ -2040,11 +2049,26 @@ class FileCompilation {
 		if (!has_island_hint && !portable_emitted && islands_by_id.size === 0)
 			return null;
 
+		// THE one wire question a host compilation answers: can this host cross live content into an
+		// island? True for a static placement WITH children (they cross as slot pointers), for a
+		// portable `{#snippet}` synth (a live snippet crossing), and for a hydrate binding with NO
+		// static placement — a value used dynamically (registry export, each/`svelte:component`,
+		// prop hand-off) whose placement sites are compile-invisible, so crossing can't be ruled out.
+		// program.register turns this single flag into the runtime `wire` mark; server/held/lake
+		// marks never cross children this way and stay out of it.
+		const has_dynamic_island_use = [...marked_components].some(
+			([name, m]) =>
+				m.strategy !== 'server' &&
+				m.strategy !== 'held' &&
+				m.strategy !== 'lake' &&
+				!this.#static_placed.has(name)
+		);
+
 		return {
 			code: s.toString(),
 			map: s.generateMap({ hires: true, source: id, includeContent: true }),
 			islands: [...islands_by_id.values()],
-			hasIslandChildren: has_island_children
+			hasWireCrossing: has_island_children || has_dynamic_island_use || portable_emitted
 		};
 	}
 }
@@ -2516,10 +2540,19 @@ class TsRegionCompilation {
 		}
 
 		if (!matched) return null;
+		const islands = [...islands_by_id.values()];
 		return {
 			code: s.toString(),
 			map: s.generateMap({ hires: true, source: id, includeContent: true }),
-			islands: [...islands_by_id.values()]
+			islands,
+			// A `.ts`/`.js` mint has no markup — every minted WAKE island is a VALUE placed at
+			// compile-invisible sites (the registry/factory pattern), so children can cross there and
+			// the wire revivers must ship. `strategy` is the discriminator: wake mints carry their wake
+			// value; deferred mints say 'server' (isolation — children never cross); raw/held bindings
+			// carry none (data-minting); 'none' is a lake (static HTML). Those keep lean apps lean.
+			hasWireCrossing: islands.some(
+				(i) => typeof i.strategy === 'string' && i.strategy !== 'server' && i.strategy !== 'none'
+			)
 		};
 	}
 }
