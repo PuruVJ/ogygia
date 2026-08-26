@@ -110,11 +110,15 @@ export function router_css_module(
 	const lines: string[] = [`import { register_router_css } from 'ogygia/internal/register';`];
 
 	if (opts.is_dev) {
-		// DEV: no built assets — inline the compiled CSS (what Kit does in dev). Compiled here at
-		// module-emit time; the plugin invalidates this virtual on css/svelte hot updates.
-		for (let i = 0; i < roots.length; i++) {
-			const abs = roots[i];
-			const rel = posix(path.relative(opts.root, abs));
+		// DEV: no built assets — inline the compiled CSS (what Kit does in dev), registered as pure
+		// `path → entries` DATA. Deliberately IMPORT-FREE (component identity comes from svelte's own
+		// dev filename metadata at lookup): this virtual is reachable from graph territory SvelteKit's
+		// dev "inline all styles" collector can crawl from ANY page (internal.js → hooks → profiler →
+		// router). Component imports here would weld every router page's tree — scoped styles, plain
+		// `.css` imports — into that crawl and leak router stylesheets into unrelated app pages.
+		// Compiled at module-emit time; the plugin invalidates this virtual on css/svelte hot updates.
+		const assignments: string[] = [];
+		for (const abs of roots) {
 			const entries: Array<{ key: string; css: string }> = [];
 			for (const e of collectFoucCssReachable(abs, {
 				root: opts.root,
@@ -135,10 +139,23 @@ export function router_css_module(
 					if (css) entries.push({ key: `rcss-dev:${e_rel}`, css });
 				}
 			}
-			lines.push(`import __OgRcss${i} from ${JSON.stringify(abs)};`);
-			lines.push(`register_router_css(__OgRcss${i}, () => ${JSON.stringify(entries)});`);
+			if (!entries.length) continue;
+			// The lookup key is whatever svelte's dev FILENAME metadata carries, which is whatever id
+			// form vite-plugin-svelte passed to the compiler: ROOT-RELATIVE for in-root files, absolute
+			// for out-of-root ones (the shipped profiler UI). Register the SAME entries array under both
+			// forms so either resolves — one literal, two keys, no duplicated css text.
+			const abs_key = JSON.stringify(posix(abs));
+			const rel = posix(path.relative(opts.root, abs));
+			const keys =
+				rel.startsWith('..') || path.isAbsolute(rel)
+					? [abs_key]
+					: [abs_key, JSON.stringify(rel)];
+			assignments.push(`m[${keys.join('] = m[')}] = ${JSON.stringify(entries)};`);
 		}
-		return lines.join('\n') + '\n';
+		return (
+			`import { register_router_css_paths } from 'ogygia/internal/register';\n` +
+			`const m = {};\n${assignments.join('\n')}\nregister_router_css_paths(m);\n`
+		);
 	}
 
 	// PROD: hrefs resolve lazily from the island-deps handoff (written by the client leg, read at

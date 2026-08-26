@@ -10,7 +10,11 @@ import {
 	router_css_module,
 	router_css_key
 } from '../src/compiler/link/router-css.js';
-import { register_router_css, router_css_of } from '../src/router-css.js';
+import {
+	register_router_css,
+	register_router_css_paths,
+	router_css_of
+} from '../src/router-css.js';
 
 const ROOT = '/app';
 const LIB = '/app/src/lib';
@@ -112,6 +116,14 @@ describe('router_css_module — the generated virtual', () => {
 		expect(src).toContain('rcss-dev:src/lib/Shell.svelte');
 		expect(src).toContain('rcss-dev:src/lib/Badge.svelte');
 		expect(src).not.toContain('islandCss'); // dev never touches the build handoff
+		// STRUCTURAL: the dev virtual must be pure data — a component import here would weld the whole
+		// router-page tree into graph territory SvelteKit's dev css collector can crawl from any page,
+		// leaking router stylesheets into unrelated pages (seen in the wild via the profiler's UI).
+		expect(src).not.toContain('import __OgRcss');
+		expect(src).not.toContain('from "/app'); // no module imports of app files at all
+		expect(src).toContain('register_router_css_paths(m)');
+		// keyed under BOTH filename forms vite-plugin-svelte can hand the compiler
+		expect(src).toContain('m["/app/src/lib/Shell.svelte"] = m["src/lib/Shell.svelte"]');
 	});
 
 	it('collects a plain .css import (the profiler.css shared-sheet pattern)', () => {
@@ -148,5 +160,22 @@ describe('runtime registry', () => {
 		expect(router_css_of(B)).toEqual([]); // degrade to unstyled, never crash the render
 		expect(router_css_of(function C() {})).toEqual([]); // unregistered
 		expect(router_css_of(null)).toEqual([]);
+	});
+
+	it('dev path registration resolves through svelte dev FILENAME symbol (no component import)', () => {
+		register_router_css_paths({
+			'/app/src/lib/rtr/Shell.svelte': [{ key: 'rcss-dev:src/lib/rtr/Shell.svelte', css: '.x{}' }]
+		});
+		// A dev-compiled Svelte 5 component carries `Comp[Symbol(filename)] = '<abs path>'`.
+		const Comp = function Shell() {};
+		(Comp as unknown as Record<symbol, string>)[Symbol('filename')] =
+			'/app/src/lib/rtr/Shell.svelte';
+		expect(router_css_of(Comp)).toEqual([
+			{ key: 'rcss-dev:src/lib/rtr/Shell.svelte', css: '.x{}' }
+		]);
+		// An unregistered path resolves to nothing.
+		const Other = function Other() {};
+		(Other as unknown as Record<symbol, string>)[Symbol('filename')] = '/app/src/lib/Nope.svelte';
+		expect(router_css_of(Other)).toEqual([]);
 	});
 });

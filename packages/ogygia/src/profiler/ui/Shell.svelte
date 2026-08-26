@@ -18,7 +18,15 @@
 	// The shared profiler vocabulary (reset, typography, tables, buttons, form controls…). Global by
 	// nature — every page composes with it — so it lives in a sibling stylesheet, not scoped here. It's
 	// collected onto every page's server-router CSS aggregate because Shell is a child of every page.
-	import './profiler.css';
+	//
+	// `?inline`, deliberately: the router-css walk reads the FILE (this import is only its discovery
+	// marker — the query is stripped before resolution), so the sheet must never be a live css MODULE.
+	// The profiler loads on the first request of any dev session (its handle times every render), which
+	// welds this subtree into the SSR module graph — and SvelteKit's dev "inline all styles" collector
+	// walks that graph and would inject this GLOBAL sheet (body{ max-width… }) into the app's own
+	// pages (seen in the wild: every page squeezed to 1150px, profiler-dark). Kit's collector skips
+	// `?inline` css urls by rule, so this is leak-proof no matter how the crawl reaches us.
+	import './profiler.css?inline';
 	let { children }: { children: Snippet } = $props();
 </script>
 
