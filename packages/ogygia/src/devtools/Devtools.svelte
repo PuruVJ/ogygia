@@ -319,7 +319,10 @@
 		inset: 0;
 		overflow: hidden;
 		pointer-events: none;
-		z-index: 2147483550;
+		/* Max int32 — the launcher + window must beat anything. (The shadow HOST also carries max
+		   z-index in the page context — see ui.ts; in here we only order against our own siblings:
+		   the boundary overlay sits below at 2147483000 so the window paints over the lens.) */
+		z-index: 2147483647;
 		font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
 	}
 

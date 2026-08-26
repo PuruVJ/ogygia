@@ -24,9 +24,14 @@ export function install_devtools_ui(opts?: { csr_true?: boolean }): void {
 	if (document.querySelector('meta[name="ogygia-devtools"][content="off"]')) return;
 	mounted = true;
 	// A 0×0 fixed host holds the shadow root; the real UI is a fixed, viewport-filling root inside it.
+	// MAX z-index (int32) on the HOST: without one the host stacks at `auto` in the page's root
+	// context, so any app overlay with a z-index paints over the dock. At 2147483647 — plus being
+	// appended to documentElement AFTER body, which wins the DOM-order tiebreak against equal-z page
+	// elements — nothing a page can write out-stacks it. Everything inside the shadow root then only
+	// orders against itself.
 	const host = document.createElement('div');
 	host.setAttribute('data-ogygia-devtools-host', '');
-	host.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0';
+	host.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647';
 	document.documentElement.appendChild(host);
 	const root = host.attachShadow({ mode: 'open' });
 	// `csr_true` = the standalone boot on a Kit-hydrated (csr=true) page, where the ogygia runtime
