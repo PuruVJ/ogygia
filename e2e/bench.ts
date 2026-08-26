@@ -8,7 +8,7 @@
 // rollup/svelte; build timing captures the whole thing.
 // ─────────────────────────────────────────────────────────────────────────────
 import { transformHost } from '../packages/ogygia/dist/compiler/region/transform.js';
-import { CTX_EXTRA } from './_ctx-extra.js';
+import { CTX_EXTRA } from './_ctx-extra.ts';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, appendFileSync, rmSync, readdirSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';

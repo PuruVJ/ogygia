@@ -6,7 +6,7 @@
 //       object (prod-silence on production builds). Mode-aware, like flicker.ts.
 // Usage: node verify/mutation-guards.ts [baseUrl]
 import { transformHost, wrapperVirtualId } from '../packages/ogygia/dist/compiler/region/transform.js';
-import { CTX_EXTRA } from './_ctx-extra.js';
+import { CTX_EXTRA } from './_ctx-extra.ts';
 import { chromium } from 'playwright';
 import path from 'node:path';
 

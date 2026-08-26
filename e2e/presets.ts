@@ -1,7 +1,7 @@
 // Transform-level checks for the region-model import syntax + presets + validation.
 // Runs the built transform directly (no server needed). Usage: node verify/presets.ts
 import { transformHost, wrapperVirtualId } from '../packages/ogygia/dist/compiler/region/transform.js';
-import { CTX_EXTRA } from './_ctx-extra.js';
+import { CTX_EXTRA } from './_ctx-extra.ts';
 import path from 'node:path';
 
 let failures = 0;

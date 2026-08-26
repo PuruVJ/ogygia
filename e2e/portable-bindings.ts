@@ -2,7 +2,7 @@
 // and each/list share one entry module. csr=false client hosts omit wrappers (scale).
 // Usage: node verify/portable-bindings.ts [baseUrl]
 import { chromium } from 'playwright';
-import { CTX_EXTRA } from './_ctx-extra.js';
+import { CTX_EXTRA } from './_ctx-extra.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
