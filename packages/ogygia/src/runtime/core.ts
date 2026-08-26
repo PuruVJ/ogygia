@@ -2,7 +2,6 @@ import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
 import { frameAddress } from '../frame.js';
 import { set_current_region } from '../current-region.js';
-import { collect_provided_context } from '../context-bridge.js';
 import { capture_region_ids } from './reconcile.js';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import { install_page_defer, page_defer_revivers } from './page-defer.js';
@@ -931,7 +930,7 @@ class OgygiaRegion extends HTMLElement {
 				// Seed this island's context from any `<Provide>` above it in the DOM, so a child's plain
 				// `getContext('key')` reads a (csr=false) layout's context across the island-root split.
 				// Undefined when there is no provider above — the common case pays only a short DOM walk.
-				const provided_ctx = capture_region_ids(this, () => collect_provided_context(this));
+				const provided_ctx = capture_region_ids(this, () => slots.context?.(this));
 				// A PERSIST island hydrates through LiveHost (same no-DOM render as NestedProvider) so
 				// that when it relocates onto the next page its props can be pushed in reactively.
 				const LiveHost = slots.live;
@@ -1102,7 +1101,7 @@ class OgygiaRegion extends HTMLElement {
 			}
 			return;
 		}
-		const provided_ctx = capture_region_ids(this, () => collect_provided_context(this));
+		const provided_ctx = capture_region_ids(this, () => slots.context?.(this));
 		this.#live_app = hydrate(LiveHost, {
 			target: this,
 			props: {

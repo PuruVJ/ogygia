@@ -36,6 +36,8 @@ import { rewrite_regions } from './content/regions.js';
 import { materialize } from './content/git.js';
 import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT } from './region/emit.js';
 import { island_deps_module } from './link/island-deps.js';
+import { source_uses_ogygia_context } from './link/context-detect.js';
+import { router_css_roots, router_css_module } from './link/router-css.js';
 import {
 	secret_module,
 	sign_module,
@@ -46,7 +48,12 @@ import {
 	route_csr_module
 } from './link/caps.js';
 import { router_config_module } from './link/router-config.js';
-import { transport_module, transportables_module } from './link/transport.js';
+import {
+	transport_module,
+	transportables_module,
+	kit_transport_module,
+	source_crosses_wire
+} from './link/transport.js';
 import { server_manifest_module } from './link/server-manifest.js';
 import { manifest_module } from './link/manifest.js';
 import { dev_hmr_client_source } from './dev/dev-hmr.js';
@@ -63,6 +70,8 @@ import {
 	V_DEVTOOLS_BOOT_URL,
 	V_ISLAND_DEPS,
 	V_TRANSPORT,
+	V_KIT_TRANSPORT,
+	V_ROUTER_CSS,
 	V_SECRET,
 	V_SIGN,
 	V_REQUEST_EVENT,
@@ -103,6 +112,20 @@ export interface Profiler {
 }
 
 const LEADING_SLASH = /^\//;
+
+// Import/export-from specifier extraction for the router-css closure (link/router-css.ts). A cheap
+// regex over raw source — a stray match in a comment/string just fails to resolve later, harmless.
+// Runs once per file in the prescan walk; module-level so it compiles once.
+const MODULE_SPEC_RE =
+	/(?:^|[\n;])\s*(?:import|export)\b[^;'"()]*?from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]/g;
+const ROUTER_PKG_SPEC = 'ogygia/router';
+function extract_module_specs(src: string): string[] {
+	MODULE_SPEC_RE.lastIndex = 0;
+	const specs: string[] = [];
+	let m: RegExpExecArray | null;
+	while ((m = MODULE_SPEC_RE.exec(src))) specs.push(m[1] ?? m[2]);
+	return specs;
+}
 
 const fnv = (str: string) => {
 	let h = 0x811c9dc5;
@@ -325,6 +348,15 @@ export class Compiler {
 				} else if (entry.name.endsWith('.svelte')) {
 					const src = ctx.read_file(full);
 					if (src == null) continue;
+					if (!runtime_marks.context && source_uses_ogygia_context(src))
+						runtime_marks.context = true;
+					if (!program.crosses_wire && source_crosses_wire(src)) program.crosses_wire = true;
+					{
+						// Router-css closure data: this module's import specs + whether it defines routers.
+						const specs = extract_module_specs(src);
+						if (specs.length) program.module_specs.set(full, specs);
+						if (specs.includes(ROUTER_PKG_SPEC)) program.router_modules.add(full);
+					}
 					// A `<script module>` transportable class goes in the manifest too (keyed by the
 					// .svelte path — side-effect-importing the component runs its module registration).
 					if (svelteModuleHasTransportable(src, full)) transportable_modules.add(full);
@@ -341,6 +373,21 @@ export class Compiler {
 					// lazy transform order would otherwise leave the id missing (403 on first fetch).
 					const src = ctx.read_file(full);
 					if (src == null) continue;
+					if (!runtime_marks.context && source_uses_ogygia_context(src))
+						runtime_marks.context = true;
+					if (
+						!program.crosses_wire &&
+						(entry.name.endsWith('.remote.ts') ||
+							entry.name.endsWith('.remote.js') ||
+							source_crosses_wire(src))
+					)
+						program.crosses_wire = true;
+					{
+						// Router-css closure data: this module's import specs + whether it defines routers.
+						const specs = extract_module_specs(src);
+						if (specs.length) program.module_specs.set(full, specs);
+						if (specs.includes(ROUTER_PKG_SPEC)) program.router_modules.add(full);
+					}
 					// Transportable classes go into the eager-registration manifest so an island
 					// receiving one as a prop never has to import the class itself.
 					if (moduleHasTransportable(src, full)) transportable_modules.add(full);
@@ -462,6 +509,33 @@ export class Compiler {
 	 * SSR can bake `entry` without a client→server hash handoff; csr=false hosts omit wrapper imports so
 	 * this emit owns the module. N instances of a region → still one entry URL. Idempotent per id.
 	 */
+	#router_css_roots_cache: string[] | null = null;
+	/** The server-router component roots (link/router-css.ts). Build: prescan is complete before any
+	 *  consumer runs — memoized. Dev: modules appear lazily (HMR), recompute per call. */
+	router_css_roots(): string[] {
+		const ctx = this.#ctx!;
+		if (ctx.is_build && this.#router_css_roots_cache) return this.#router_css_roots_cache;
+		const roots = new Set(
+			router_css_roots(this.program.router_modules, this.program.module_specs, ctx.libDir)
+		);
+		// Injected router modules (the shipped profiler router — never in app source): take their DIRECT
+		// `.svelte` imports as roots. No barrel walk: profiler-router type-imports `./index.js`, and
+		// following that would drag the whole host's graph in. Each page component wraps Shell, so its
+		// aggregate already carries the global + page CSS.
+		for (const mod of ctx.extra_router_modules ?? []) {
+			const src = ctx.read_file(mod);
+			if (!src) continue;
+			for (const spec of extract_module_specs(src)) {
+				if (!spec.endsWith('.svelte')) continue;
+				const abs = resolveFoucImportSpec(spec, mod, ctx.libDir);
+				if (abs && ctx.read_file(abs) != null) roots.add(path.normalize(abs));
+			}
+		}
+		const sorted = [...roots].sort();
+		if (ctx.is_build) this.#router_css_roots_cache = sorted;
+		return sorted;
+	}
+
 	emit_build_chunks(
 		emitFile: (chunk: { type: 'chunk'; id: string; fileName: string }) => void,
 		{ emitRuntime }: { emitRuntime: boolean }
@@ -580,6 +654,24 @@ export class Compiler {
 		}
 		if (id === RESOLVED(V_TRANSPORT)) {
 			return transport_module(universalHooks);
+		}
+		if (id === RESOLVED(V_KIT_TRANSPORT)) {
+			// `ogygia.transport` — the codec cluster only when the app crosses a region/wired value over
+			// Kit's wire (wire mark, or a remote/region/content producer); an empty map for a pure-island
+			// app. transport.js sits one level up from the runtime dir (dist/transport.js).
+			const crosses = this.program.runtime_marks.wire === true || this.program.crosses_wire;
+			const transport_spec = `${ctx.runtime_dir}/../transport.js`.replace(/\\/g, '/');
+			return kit_transport_module(crosses, transport_spec);
+		}
+		if (id === RESOLVED(V_ROUTER_CSS)) {
+			// Server-router component→CSS registrations (link/router-css.ts). `export {}` for apps
+			// without a server router — the router's dynamic import then costs nothing.
+			return router_css_module(this.router_css_roots(), {
+				root: ctx.root,
+				lib_dir: ctx.libDir,
+				is_dev,
+				read_file: (p) => ctx.read_file(p)
+			});
 		}
 		if (id === RESOLVED(V_SECRET)) {
 			return secret_module(ssr, ctx.build_secret);
@@ -711,6 +803,8 @@ export class Compiler {
 		if (source === V_DEVTOOLS_BOOT) return RESOLVED(V_DEVTOOLS_BOOT);
 		if (source === V_DEVTOOLS_BOOT_URL) return RESOLVED(V_DEVTOOLS_BOOT_URL);
 		if (source === V_ISLAND_DEPS) return RESOLVED(V_ISLAND_DEPS);
+		if (source === V_KIT_TRANSPORT) return RESOLVED(V_KIT_TRANSPORT);
+		if (source === V_ROUTER_CSS) return RESOLVED(V_ROUTER_CSS);
 		if (source === V_SECRET) return RESOLVED(V_SECRET);
 		if (source === V_SIGN) return RESOLVED(V_SIGN);
 		if (source === V_RATE_LIMIT) return RESOLVED(V_RATE_LIMIT);

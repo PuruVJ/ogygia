@@ -80,7 +80,7 @@ The sections build on each other. Read them in order:
 3. **[Content](/docs/content/collections).** A collection turns markdown, JSON, or a CMS into typed
    entries. [`site()`](/docs/content/site) arranges collections into a nav tree, search, emissions,
    and a shell. These docs are built with it.
-4. **[The app layer](/docs/app/router).** The router swaps pages without a reload, batches server
+4. **[The app layer](/docs/app/spa-router).** The router swaps pages without a reload, batches server
    islands into one request, and prerenders what you will click next.
 5. **[Macros](/docs/macros/overview).** `import.meta.og.*` settles at compile time everything that
    never changes between requests.

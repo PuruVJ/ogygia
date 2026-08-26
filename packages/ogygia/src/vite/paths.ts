@@ -41,6 +41,17 @@ const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
 export const PROFILER_UI_DIR = OG_HAS_SRC
 	? path.join(PKG_ROOT, 'src/profiler/ui')
 	: path.join(PKG_ROOT, 'dist/profiler/ui');
+
+/**
+ * The profiler's OWN server router (`ogygia/router`, shipped in dist) — never in app source, so the
+ * router-css closure walk can't find the page components it renders. When the profiler is on, the
+ * plugin injects this as an extra router-css seed: its DIRECT `.svelte` imports (the page components,
+ * each wrapping `Shell`) become router-css roots, so their scoped `<style>` blocks are emitted +
+ * linked exactly like an app router page's. Parallel to PROFILER_UI_DIR's src/dist self-reference.
+ */
+export const PROFILER_ROUTER_MODULE = OG_HAS_SRC
+	? path.join(PKG_ROOT, 'src/profiler/profiler-router.ts')
+	: path.join(PKG_ROOT, 'dist/profiler/profiler-router.js');
 export const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
 	? {
 			'ogygia/internal': path.join(PKG_ROOT, 'src/internal.ts'),

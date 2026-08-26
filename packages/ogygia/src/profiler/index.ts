@@ -700,7 +700,12 @@ class Profiler {
 	// never touches the response.
 	async #auth_guard(ctx: RouteCtx): Promise<Response | undefined> {
 		const rel = ctx.url.pathname.slice(this.base.length).replace(/\/$/, '') || '/';
-		if (rel === '/login' || rel === '/logout') return;
+		// `/login` + `/logout` manage the session. The BARE report page (`/report/<id>`, no `.json`/
+		// `.dump`/`/raw` suffix) is PUBLIC: a recipient with a share link renders it entirely client-side
+		// from the URL `#fragment` (no account). Its SERVER data is still gated — the page's own load
+		// only returns a stored report when `authed()`, so an unauth visitor can't read reports by
+		// guessing the short id, and the suffixed data endpoints stay behind auth below.
+		if (rel === '/login' || rel === '/logout' || /^\/report\/[^/.]+$/.test(rel)) return;
 		if (await this.#authed(ctx.event!)) return; // allow
 		if (this.ui_enabled && this.secret && !this.dev) {
 			const next = encodeURIComponent(ctx.url.pathname + ctx.url.search);
@@ -721,6 +726,7 @@ class Profiler {
 		return (this.#routes ??= build_profiler_router({
 			base: this.base,
 			auth_guard: (c) => this.#auth_guard(c),
+			authed: (c) => this.#authed((c as { event?: RequestEvent }).event!),
 			dashboard: () => this.#dashboard(),
 			run_page: (c) => this.#run_page(c),
 			record_page: (c) => this.#record_page(c),
@@ -735,6 +741,7 @@ class Profiler {
 			report_stored: (id) => this.#reports.get(id ?? ''),
 			report_view: (stored) => this.#report_view(stored),
 			report_json: (stored) => this.#report_json(stored),
+			report_dump_json: (stored) => this.#report_dump_json(stored),
 			report_raw: (stored) => this.#report_raw(stored)
 		}) as Router);
 	}
@@ -975,6 +982,15 @@ class Profiler {
 	// shared `/report/[id]` layer load in profiler-router does the lookup + 404 once and cascades it.
 	#report_json(stored: StoredReport): Response {
 		const body = report_json(stored.analysis, stored.meta, this.base, this.#report_extras(stored));
+		return new Response(JSON.stringify(body), {
+			headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+		});
+	}
+
+	/** The RAW dump JSON (`{ kind, version, meta, analysis, extras }`) the share-link viewer renders —
+	 *  the same shape `.ogp` carries. Authed (only the owner mints a link); the recipient never hits it. */
+	#report_dump_json(stored: StoredReport): Response {
+		const body = report_dump(stored.analysis, stored.meta, this.#report_extras(stored));
 		return new Response(JSON.stringify(body), {
 			headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
 		});

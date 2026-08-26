@@ -412,6 +412,7 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 					req_payload: c.req_payload ?? null,
 					route: c.route ?? c.path ?? null,
 					caller: c.caller ?? null,
+					headers: c.headers ?? null,
 					error: c.error ?? null
 				}))
 		},

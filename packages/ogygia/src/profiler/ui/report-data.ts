@@ -9,7 +9,7 @@ import type { NetCall } from '../net.js';
 import type { IoOp } from '../async-io.js';
 import type { MemSample } from '../report.js';
 import { io_kind } from '../async-io.js';
-import { CATEGORY_LABEL, CATEGORY_COLOR } from './format.js';
+import { CATEGORY_LABEL, CATEGORY_COLOR, fmt_bytes } from './format.js';
 
 /** The size to show for a call: the DECODED body when we measured it (robust — a cloned-stream count),
  *  else the wire size from content-length, else undefined. */
@@ -198,6 +198,26 @@ function wf_url(url: string): string {
 	}
 }
 
+/** The request detail a waterfall bar opens in the side panel (a serializable slice of NetCall). */
+export interface WfCall {
+	method: string;
+	url: string;
+	status: number;
+	ms: number;
+	body_ms?: number;
+	bytes?: number;
+	transfer_bytes?: number;
+	encoding?: string;
+	type?: string;
+	req_bytes?: number;
+	req_payload?: string;
+	route: string | null;
+	path: string | null;
+	caller?: string;
+	headers?: Record<string, string>;
+	error?: string;
+}
+
 export interface WfRow {
 	left: number;
 	width: number;
@@ -206,6 +226,10 @@ export interface WfRow {
 	label: string;
 	title: string;
 	rightAnchored: boolean;
+	/** Compact size shown INSIDE the bar (decoded, else transfer). Empty when unknown. */
+	sizeLabel: string;
+	/** Everything the side panel shows when the bar is clicked. */
+	call: WfCall;
 }
 
 /** Network waterfall bars, spanned from the first call to the last call's end. */
@@ -219,6 +243,7 @@ export function waterfall_rows(net: NetCall[]): WfRow[] {
 		const left = Math.max(0, ((c.epoch - t0) / span) * 100);
 		const dur = c.ms + (c.body_ms ?? 0);
 		const width = Math.min(100 - left, Math.max((dur / span) * 100, 0.3));
+		const sz = net_size(c);
 		return {
 			left,
 			width,
@@ -226,7 +251,26 @@ export function waterfall_rows(net: NetCall[]): WfRow[] {
 			err: !!c.error,
 			title: c.url,
 			label: `${c.method} ${wf_url(c.url)} — ${dur >= 100 ? dur.toFixed(0) : dur >= 10 ? dur.toFixed(1) : dur.toFixed(2)} ms`,
-			rightAnchored: left + width > 62
+			rightAnchored: left + width > 62,
+			sizeLabel: sz != null ? fmt_bytes(sz) : '',
+			call: {
+				method: c.method,
+				url: c.url,
+				status: c.status,
+				ms: c.ms,
+				body_ms: c.body_ms,
+				bytes: c.bytes,
+				transfer_bytes: c.transfer_bytes,
+				encoding: c.encoding,
+				type: c.type,
+				req_bytes: c.req_bytes,
+				req_payload: c.req_payload,
+				route: c.route,
+				path: c.path,
+				caller: c.caller,
+				headers: c.headers,
+				error: c.error
+			}
 		};
 	});
 }

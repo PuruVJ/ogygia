@@ -127,6 +127,13 @@ export type Slots = {
 	frames: FrameOps | null;
 	spaLifecycle: SpaLifecycle | null;
 	nav: NavOps | null;
+	/**
+	 * Cross-island context bridge, filled by the `context` feature. Walks the DOM from an island up
+	 * to seed its `getContext` from a `<Provide>` / drop-in-`setContext` marker above it. Null when the
+	 * build detected no ogygia context provider — a plain app never bundles the ~4.7 kB bridge, and
+	 * core's call optional-chains to `undefined` (exactly "no provider above", the existing empty case).
+	 */
+	context: ((start: Element | null) => Map<string, unknown> | undefined) | null;
 };
 
 /** The live registry. A feature's `install()` assigns its slot; core/router read them. */
@@ -153,5 +160,6 @@ export const slots: Slots = {
 	remoteSeeds: null,
 	frames: null,
 	spaLifecycle: null,
-	nav: null
+	nav: null,
+	context: null
 };

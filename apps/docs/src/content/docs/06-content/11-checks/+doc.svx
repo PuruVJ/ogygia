@@ -95,4 +95,4 @@ Two different layers, deliberately. **Structural invariants** (an orphan entry, 
 
 ---
 
-*Next chapter: [the router](/docs/app/router) makes navigation feel like an app: one request, no reload, no waterfall.*
+*Next chapter: [the router](/docs/app/spa-router) makes navigation feel like an app: one request, no reload, no waterfall.*

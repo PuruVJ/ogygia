@@ -112,7 +112,7 @@ ogygia({ regions: { visible: { margin: '200px' } } })
 
 ### `router`
 
-The SPA router is on by default, app-wide (see [SPA router](/docs/app/router)). This is the one place router config lives. There is no `<Router/>` component.
+The SPA router is on by default, app-wide (see [SPA router](/docs/app/spa-router)). This is the one place router config lives. There is no `<Router/>` component.
 
 ```ts
 ogygia()                                       // router on, view transitions on, form continuity on
@@ -222,7 +222,7 @@ Island-safe replacements for `$app/navigation` (a csr=false page has no Kit clie
 
 `goto` · `invalidate` · `invalidateAll` · `preloadData` · `preloadCode` · `beforeNavigate` · `afterNavigate` · `disableScrollHandling`
 
-Prefer these over `$app/navigation` inside islands. See [SPA router](/docs/app/router).
+Prefer these over `$app/navigation` inside islands. See [SPA router](/docs/app/spa-router).
 
 ## `ogygia/content`
 

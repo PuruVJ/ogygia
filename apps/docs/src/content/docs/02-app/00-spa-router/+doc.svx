@@ -1,5 +1,5 @@
 ---
-title: SPA router & PPR
+title: SPA router
 summary: Global client navigation for islands apps: intercept links, keep chrome, prefetch and prerender the next page, and serve partially-prerendered shells that fill their holes per visitor.
 related:
   - app/dashboards

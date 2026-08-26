@@ -5,7 +5,7 @@ related:
   - data-state/state-context
   - data-state/remote-functions
   - regions/held-regions
-  - app/router
+  - app/spa-router
 ---
 
 A dashboard is the worst case for the classic choice. Render it static and it is dead weight; ship it as a SPA and you hydrate a whole app to show twelve mostly-read-only tiles. It is also the best case for ogygia, because a dashboard decomposes *exactly* along island lines; you just have to know which primitive owns which job.
@@ -18,7 +18,7 @@ This page is a recipe, not a new API. Every piece is covered in depth elsewhere;
 
 | Dashboard piece | ogygia primitive |
 | --- | --- |
-| Shell: nav, headers, layout chrome | Plain page markup (zero JS), [prerendered](/docs/app/router) |
+| Shell: nav, headers, layout chrome | Plain page markup (zero JS), [prerendered](/docs/app/spa-router) |
 | Interactive tile: chart with tooltips, sortable table | [Client island](/docs/regions/client-islands) (`wake`) |
 | Read-only tile: personalized or per-request HTML | [Server island](/docs/regions/server-islands) (`render: 'deferred'`) |
 | Heavy static content inside a tile | [Lake](/docs/regions/lakes) (`wake: 'none'`) |
@@ -125,7 +125,7 @@ Not every tile earns hydration. A "recent orders" list nobody interacts with is 
 </script>
 ```
 
-Each `render: 'deferred'` hole fetches its own HTML on load, and on a SPA navigation [single-flight navigation](/docs/app/router#single-flight) pulls them all down one batch request, with no waterfall. `render: 'deferred', wake: 'visible'` tiles below the fold don't even cost the server a render until scrolled to.
+Each `render: 'deferred'` hole fetches its own HTML on load, and on a SPA navigation [single-flight navigation](/docs/app/spa-router#single-flight) pulls them all down one batch request, with no waterfall. `render: 'deferred', wake: 'visible'` tiles below the fold don't even cost the server a render until scrolled to.
 
 Two refinements for the tiles you *do* hydrate:
 
@@ -152,7 +152,7 @@ A `'static'` held region **morphs** in: focus, typed text, and open popovers sur
 
 ## Drill-down and navigation
 
-Dashboards navigate: overview → orders → order detail. With the [SPA router](/docs/app/router), those are real routes (URLs, back button, `load` functions), not modal state.
+Dashboards navigate: overview → orders → order detail. With the [SPA router](/docs/app/spa-router), those are real routes (URLs, back button, `load` functions), not modal state.
 
 - **Filters can follow.** Give the codec an `id` and the same live `Filters` instance survives navigation (session lifetime); the detail page opens already scoped to the range the user picked. Skip the `id` and filters reset per page. Both are one line; decide which your users expect. For shareable dashboards, mirror filters into the URL and merge in `load`.
 - **Expensive tiles can survive.** `keep: 'chart'` relocates the live island across navigation instead of remounting: a rendered chart, its zoom level, its fetched data all carry over, with the new page's props pushed in.

@@ -1,3 +1,4 @@
+import { base } from '$app/paths';
 import { routes } from 'ogygia/router';
 import Shell from '$lib/rtr/Shell.svelte';
 import Inner from '$lib/rtr/Inner.svelte';
@@ -18,7 +19,11 @@ const app = routes(
 						.routes({ '/': (r) => r.page(Deep).load((c) => ({ who: c.data.who, nav: c.data.nav })) }),
 				'/api/ping': (r) => r.GET((c) => c.json({ pong: true }))
 			}),
-	{ base: '/base/rtr' }
+	// Mounted under the Kit route `rtr/[...path]` — derive the mount from Kit's own base so the
+	// fixture works with or without a configured base (it was hardcoded '/base/rtr' before, which
+	// never matched this base-less app: every rtr URL 404'd).
+	{ base: `${base}/rtr` }
 );
 
-export const GET = (event) => app.fetch(event.request, event);
+export const GET = async (event) =>
+	(await app.fetch(event.request, event)) ?? new Response('Not found', { status: 404 });

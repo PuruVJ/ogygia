@@ -33,6 +33,7 @@ function repl_ctx(markdown_config: unknown): CompileCtx {
 	return new CompileCtx({
 		root: '/repl',
 		base: '/',
+		app_dir: '_app',
 		libDir: '/repl/src/lib',
 		is_dev: true,
 		id_salt: 'repl',
@@ -57,6 +58,7 @@ function repl_ctx(markdown_config: unknown): CompileCtx {
 		is_build: false,
 		content_presets: null,
 		extra_scan_roots: [], // REPL scans nothing beyond the virtual /repl tree
+		extra_router_modules: [], // no server router in the browser REPL
 		profiler_config: null, // no SSR profiler in the browser REPL
 		devtools: false // the REPL shows compiler output; no devtools instruments to bake
 	});

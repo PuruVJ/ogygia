@@ -20,6 +20,10 @@ export type RuntimeMarks = {
 	forms?: boolean;
 	wire?: boolean;
 	remoteSeeds?: boolean;
+	/** App imports an ogygia context provider (`Provide` / `setContext` / `createContext`). Set by the
+	 *  driver's import scan; gates the cross-island context bridge (~4.7 kB) out of apps that never
+	 *  provide context. Read-only providers (`getContext`) don't set it — there's nothing to bridge. */
+	context?: boolean;
 };
 
 export type FeatureId =
@@ -31,7 +35,8 @@ export type FeatureId =
 	| 'live'
 	| 'interaction'
 	| 'forms'
-	| 'router';
+	| 'router'
+	| 'context';
 
 export type FeatureDef = {
 	/** Path relative to `runtime/` (no leading ./). */
@@ -91,6 +96,14 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 		// none of these and tree-shakes the store away. (The router's single-flight nav imports the store separately.)
 		detect: (m) =>
 			(m.defer || []).length > 0 || m.live === true || m.morph === true || m.lakes === true
+	},
+	context: {
+		module: 'context.js',
+		deps: [],
+		// The cross-island context bridge. Opt-IN: only when the app imports an ogygia context provider
+		// (`Provide` / `setContext` / `createContext` from 'ogygia'). A read-only or context-free app
+		// tree-shakes the ~4.7 kB DOM-walk + devalue reviver away.
+		detect: (m) => m.context === true
 	}
 };
 
@@ -103,7 +116,8 @@ export const FEATURE_ORDER: FeatureId[] = [
 	'live',
 	'interaction',
 	'forms',
-	'router'
+	'router',
+	'context'
 ];
 
 /** Resolve the closed feature set for a marks manifest. */

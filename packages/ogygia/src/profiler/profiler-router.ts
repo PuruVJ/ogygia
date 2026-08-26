@@ -34,6 +34,9 @@ const P = { Dashboard, Report, Run, Login, Upload, Message } as unknown as Recor
 export interface ProfilerDeps {
 	base: string;
 	auth_guard(c: Ctx): Promise<Response | undefined>;
+	/** Is this request logged in? The public bare report page gates its SERVER data on this (a share
+	 *  `#fragment` renders without it). */
+	authed(c: Ctx): Promise<boolean>;
 	dashboard(): {
 		base: string;
 		recent: RequestEntry[];
@@ -56,6 +59,7 @@ export interface ProfilerDeps {
 		stored: StoredReport
 	): Promise<{ a: Analysis; meta: ReportMeta; base: string; extras: ReportExtras; ogpB64?: string }>;
 	report_json(stored: StoredReport): Response;
+	report_dump_json(stored: StoredReport): Response;
 	report_raw(stored: StoredReport): Promise<Response>;
 }
 
@@ -78,19 +82,37 @@ export function build_profiler_router(d: ProfilerDeps) {
 						r.page(P.Login).load((c) => d.login_props(c)).action((c) => d.login(c)),
 					'/logout': (r) => r.GET((c) => d.logout(c)),
 					'/view': (r) => r.page(P.Upload).load(() => ({ base: d.base })).action((c) => d.upload(c)),
+					// ONE report view. The bare `/report/[id]` page is PUBLIC (see auth_guard) and renders via
+					// `Report` → `ReportBody` from EITHER: the server report (only when logged in — else an
+					// unauth visitor could read reports by guessing the short id), OR a share-link `#fragment`
+					// decrypted client-side (public, zero-knowledge). No shared layer load — that would
+					// serialize `stored` to the client and leak it; each child looks it up itself. `.json` /
+					// `.dump` / `.raw` keep the `.`/`/raw` suffix so they stay behind auth (id-guess safe).
 					'/report/[id]': (r) =>
-						r
-							.load((c) => {
-								const stored = d.report_stored(c.params.id);
-								return stored
-									? { stored }
-									: c.error(404, 'That report has expired (only the last few are kept).');
-							})
-							.routes({
-								'/': (r) => r.page(P.Report).load((c) => d.report_view(c.data.stored)),
-								'.json': (r) => r.GET((c) => d.report_json(c.data.stored)),
-								'/raw': (r) => r.GET((c) => d.report_raw(c.data.stored))
-							})
+						r.routes({
+							'/': (r) =>
+								r.page(P.Report).load(async (c) => {
+									const stored = d.report_stored(c.params.id);
+									return stored && (await d.authed(c))
+										? { report: await d.report_view(stored), base: d.base }
+										: { report: null, base: d.base };
+								}),
+							'.json': (r) =>
+								r.GET((c) => {
+									const s = d.report_stored(c.params.id);
+									return s ? d.report_json(s) : c.error(404, 'That report has expired.');
+								}),
+							'.dump': (r) =>
+								r.GET((c) => {
+									const s = d.report_stored(c.params.id);
+									return s ? d.report_dump_json(s) : c.error(404, 'That report has expired.');
+								}),
+							'/raw': (r) =>
+								r.GET((c) => {
+									const s = d.report_stored(c.params.id);
+									return s ? d.report_raw(s) : c.error(404, 'That report has expired.');
+								})
+						})
 				}),
 		{ base: d.base, miss: (c) => c.error(404, 'Unknown profiler page.') }
 	);

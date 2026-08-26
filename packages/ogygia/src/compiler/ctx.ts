@@ -30,6 +30,10 @@ export interface CompileCtxInit {
 	/** Extra dirs (beyond `<root>/src`) the prescan walks for island components — the shipped profiler
 	 *  UI, whose server-only components would otherwise never get client hydrate chunks. */
 	extra_scan_roots: string[];
+	/** Extra `ogygia/router` modules NOT in app source (the shipped profiler router) — seeded into the
+	 *  router-css closure so its page components' scoped `<style>` blocks emit + link like any router
+	 *  page's. Only their DIRECT `.svelte` imports are taken (no barrel walk). Empty for normal apps. */
+	extra_router_modules: string[];
 	/** `ogygia({ profiler })` normalized (or `null` when off) — baked into `virtual:ogygia/profiler-config`
 	 *  so `ogygia.handle()` dynamically imports + mounts the profiler with no hooks/handler wiring. The
 	 *  secret is NOT baked: it reads OGYGIA_PROFILER_SECRET at runtime unless overridden here. */
@@ -82,6 +86,7 @@ export class CompileCtx {
 	readonly app_dir: string;
 	readonly libDir: string;
 	readonly extra_scan_roots: string[];
+	readonly extra_router_modules: string[];
 	readonly profiler_config: Record<string, unknown> | null;
 	readonly is_dev: boolean;
 	readonly id_salt: string;
@@ -116,6 +121,7 @@ export class CompileCtx {
 		this.app_dir = init.app_dir;
 		this.libDir = init.libDir;
 		this.extra_scan_roots = init.extra_scan_roots;
+		this.extra_router_modules = init.extra_router_modules;
 		this.profiler_config = init.profiler_config;
 		this.is_dev = init.is_dev;
 		this.id_salt = init.id_salt;

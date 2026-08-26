@@ -12,7 +12,7 @@
 		"prepare": "svelte-kit sync || echo ''"
 	},
 	"dependencies": {
-		"ogygia": "file:/Users/puruvj/Projects/sk-islands/bench/.tarballs/ogygia-0.5.0.tgz"
+		"ogygia": "file:/Users/puruvj/Projects/sk-islands/internal/bench/.tarballs/ogygia-0.8.0.tgz"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-static": "3.0.10",

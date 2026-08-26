@@ -31,9 +31,10 @@ The method is a port of Stanislav Khromov's
 
 - **Islands stay flat.** ogygia, Astro and Mochi ship the same JS whether the post is 9k or 71k words.
   SvelteKit's whole-page hydration climbs with the prose.
-- **ogygia vs the other islands.** Astro's Preact islands are the smallest; Mochi (Svelte 5 islands) is
-  leaner than ogygia. ogygia trades a little more baseline runtime for a much larger feature surface:
-  server islands, held/live/frozen regions, and full SvelteKit integration (see the matrix below).
+- **ogygia vs the other islands.** All four now ship **Svelte 5** islands, so this is a pure
+  architecture comparison — no framework handicap. Astro's island runtime is the smallest, then Mochi,
+  then ogygia. ogygia trades a little more baseline runtime for a much larger feature surface: server
+  islands, held/live/frozen regions, and full SvelteKit integration (see the matrix below).
 - **The runtime is feature-selected.** ogygia ships only the features your app uses; a load-only page
   never pays for the router, lakes, or persistence. We track the per-profile runtime size in
   [`e2e/bundle-size.snapshot.json`](https://github.com/PuruVJ/ogygia/tree/main/e2e/bundle-size.snapshot.json)
@@ -48,7 +49,7 @@ Speed is easy to match with islands; the difference is surface area. Here are th
 | SSR / prerender | ✅ | ✅ | ✅ | ✅ |
 | Partial hydration (islands) | ❌ whole-page | ✅ | ✅ | ✅ |
 | Client JS **flat** as content grows | ❌ | ✅ | ✅ | ✅ |
-| Islands are Svelte 5 | ✅ | ➖ (Preact et al.) | ✅ | ✅ |
+| Islands are Svelte 5 | ✅ | ✅ (any framework) | ✅ | ✅ |
 | Per-component wake: `load`·`idle`·`visible`·`interaction`·`media` | ❌ | ➖ (no `interaction`) | ? | ✅ |
 | Server islands (defer render to an endpoint) | ✅ | ✅ | ? | ✅ |
 | **Held regions**: `region()` values you place like data | ❌ | ❌ | ❌ | ✅ |

@@ -117,3 +117,30 @@
 		{#if tip.node.f}<br /><span style="color:#7d8590">{tip.node.f}</span>{/if}
 	</div>
 {/if}
+
+<style>
+	.flame {
+		width: 100%;
+		height: 460px;
+		border: 1px solid #232a35;
+		border-radius: 8px;
+		background: #0c0f13;
+		cursor: pointer;
+	}
+	.flame-tip {
+		position: fixed;
+		pointer-events: none;
+		background: #1c232d;
+		border: 1px solid #2b3340;
+		border-radius: 6px;
+		padding: 6px 10px;
+		font-size: 12px;
+		display: none;
+		max-width: 480px;
+		z-index: 10;
+		box-shadow: 0 4px 16px #0008;
+	}
+	.flame-tip b {
+		font-family: ui-monospace, monospace;
+	}
+</style>

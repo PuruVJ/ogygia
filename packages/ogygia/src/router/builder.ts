@@ -165,6 +165,7 @@ export interface R<AllP, D, Path extends string> {
 		[K in keyof T & string]: (r: R<Simplify<AllP & Params<K>>, D, Join<Path, K>>) => T[K];
 	}): U2I<{ [K in keyof T & string]: Contribution<T[K]> }[keyof T & string]>;
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	// oxlint-disable-next-line no-explicit-any -- accepts a router of ANY route map (M is invariant).
 	mount(router: Router<any>): Record<string, never>;
 }
 
@@ -204,9 +205,9 @@ export interface LayerNode {
 	error?: AnyComponent;
 	children: Array<[string, AnyNode]>;
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface MountNode {
 	t: 'mount';
+	// oxlint-disable-next-line no-explicit-any -- a mount holds a router of ANY route map; M is invariant, so no concrete type accepts them all, and it's erased at runtime.
 	router: Router<any>;
 }
 export type AnyNode = PageNode | EndpointNode | LayerNode | MountNode;

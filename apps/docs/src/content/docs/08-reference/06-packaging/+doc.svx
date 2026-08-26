@@ -1,0 +1,57 @@
+---
+title: Packaging
+summary: Publishing a package of Svelte components that light up as islands in a consumer's ogygia app — ship the components, the consumer marks the strategy.
+related:
+  - macros/asregion
+  - regions/timing-nesting
+  - reference/constraints
+---
+
+You're publishing a package of Svelte components and you want them to work as islands in someone's ogygia app. Good news: there's almost nothing to do.
+
+## The one fact
+
+A `wake` mark is **file-local**, and it's the **consuming app's** build that scans its own import graph and emits the island chunks. Your components become islands the moment that app imports and marks them. Your job as a library author is just to make them importable — exactly like any Svelte component library. Nothing ogygia-specific ships in your package.
+
+## Ship your components
+
+Export your `.svelte` files as subpaths, the same shape [`@sveltejs/package`](https://svelte.dev/docs/kit/packaging) produces:
+
+```json title=package.json
+{
+  "name": "my-widgets",
+  "exports": {
+    "./Widget.svelte": "./dist/Widget.svelte"
+  }
+}
+```
+
+The consumer marks the strategy that fits **their** page:
+
+```svelte
+<script>
+  import Widget from 'my-widgets/Widget.svelte' with { wake: 'load' };
+</script>
+
+<Widget count={3} />
+```
+
+That's the whole integration. The consumer chooses `wake` — only they know whether the widget sits above the fold, should wait for a click, or is gated on a media query. Ship raw `.svelte` source and their Svelte compiler handles the rest; `lang="ts"` in your components is fine (their build preprocesses it).
+
+The [boundary laws](/docs/regions/timing-nesting) apply to a library component exactly as to a local one: props cross by value, callbacks don't cross, captured host state is a snapshot.
+
+## Barrel exports
+
+If you re-export from an index, the consumer can't hang `with { … }` on a named import. That's what the [`asRegion`](/docs/macros/asregion) macro is for — used **on their side**, in their build:
+
+```ts
+import { Widget } from 'my-widgets';
+
+const WidgetIsland = import.meta.og.asRegion(Widget, { wake: 'visible' });
+```
+
+`asRegion` is barrel-friendly (region identity keys on the export name) and it runs in the consumer's app, so it's the answer whenever the mark can't sit on the import itself. You don't ship anything for it.
+
+::: warning What a package can't do
+An island your library renders only from its **own** server code — one the consumer never imports — won't get a client chunk. The consumer's build scans the consumer's imports; a component it never imports is invisible to it, and its hydrate fetch 404s. Keep every island **importable** (above) so it enters that graph. (ogygia's own profiler and devtools UI are the one exception — they're marked inside ogygia and the plugin adds their dir as a scan root itself. There's no public manifest for a third-party package to do the same.)
+:::

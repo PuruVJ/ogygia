@@ -112,6 +112,32 @@ export function buildFoucCssModuleSource(
 		readFile?: (p: string) => string | null;
 	}
 ) {
+	const entries = collectFoucCssReachable(entryAbs, opts);
+	const posix_rel = (abs: string) => path.relative(opts.root, abs).split(PATH_SEP).join('/');
+	const imports = entries.map((e) =>
+		e.kind === 'scoped' ? foucScopedVirtualId(posix_rel(e.abs)) : e.abs
+	);
+	if (imports.length === 0) {
+		return 'export {}';
+	}
+	return imports.map((s) => `import ${JSON.stringify(s)};`).join('\n') + '\n';
+}
+
+/**
+ * The transitive CSS-reachability walk under `buildFoucCssModuleSource`, exported on its own for the
+ * server-router CSS registry (link/router-css.ts): from a component entry, in DISCOVERY ORDER (the
+ * cascade order the aggregator has always imported in), every `.svelte` with a `<style>` block
+ * (`kind: 'scoped'`) and every plain style-file import (`kind: 'css'`) reachable through the
+ * component tree. Abs paths. Same resolution rules as the aggregator, so both stay in lockstep.
+ */
+export function collectFoucCssReachable(
+	entryAbs: string,
+	opts: {
+		root: string;
+		libDir: string;
+		readFile?: (p: string) => string | null;
+	}
+): Array<{ kind: 'scoped' | 'css'; abs: string }> {
 	const read =
 		opts.readFile ||
 		((p: string) => {
@@ -121,10 +147,10 @@ export function buildFoucCssModuleSource(
 				return null;
 			}
 		});
-	const posix_rel = (abs: string) => path.relative(opts.root, abs).split(PATH_SEP).join('/');
 
-	const imports = new Set();
-	const seen_svelte = new Set();
+	const entries: Array<{ kind: 'scoped' | 'css'; abs: string }> = [];
+	const seen_css = new Set<string>();
+	const seen_svelte = new Set<string>();
 
 	const visit_svelte = (abs: string) => {
 		const norm = path.normalize(abs);
@@ -133,9 +159,8 @@ export function buildFoucCssModuleSource(
 		const source = read(norm);
 		if (source == null) return;
 
-		const rel = posix_rel(norm);
 		if (svelteHasStyle(source)) {
-			imports.add(foucScopedVirtualId(rel));
+			entries.push({ kind: 'scoped', abs: norm });
 		}
 
 		for (const spec of listStaticImportSpecs(source, norm)) {
@@ -143,7 +168,10 @@ export function buildFoucCssModuleSource(
 			if (!resolved) continue;
 			const clean = resolved.split('?')[0];
 			if (STYLE_EXT.test(clean)) {
-				imports.add(clean);
+				if (!seen_css.has(clean)) {
+					seen_css.add(clean);
+					entries.push({ kind: 'css', abs: clean });
+				}
 			} else if (SVELTE_EXT.test(clean) || clean.endsWith('.svelte')) {
 				visit_svelte(clean);
 			}
@@ -151,11 +179,7 @@ export function buildFoucCssModuleSource(
 	};
 
 	visit_svelte(entryAbs);
-
-	if (imports.size === 0) {
-		return 'export {}';
-	}
-	return [...imports].map((s) => `import ${JSON.stringify(s)};`).join('\n') + '\n';
+	return entries;
 }
 
 /**

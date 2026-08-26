@@ -4,14 +4,17 @@
  * sorted view + a click handler. Svelte runes in a `.svelte.ts` module — imported by the table
  * islands, one instance each.
  */
-export function sortable<T extends Record<string, unknown>>(rows: () => T[], initial_key: string) {
+// `T` is unconstrained (a typed row interface like `FrameStat` has no index signature, so it can't
+// satisfy `Record<string, unknown>`); the string `key` indexes through a local cast, and `sorted`
+// stays `T[]` so the tables read `row.name` etc. with real types.
+export function sortable<T>(rows: () => T[], initial_key: string) {
 	let key = $state(initial_key);
 	let dir = $state<'asc' | 'desc'>('desc');
 
 	const sorted = $derived(
 		[...rows()].sort((a, b) => {
-			const x = Number(a[key]) || 0;
-			const y = Number(b[key]) || 0;
+			const x = Number((a as Record<string, unknown>)[key]) || 0;
+			const y = Number((b as Record<string, unknown>)[key]) || 0;
 			return dir === 'asc' ? x - y : y - x;
 		})
 	);

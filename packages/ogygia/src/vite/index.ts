@@ -55,6 +55,7 @@ import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.js';
 import {
 	buildFoucCssModuleSource,
+	collectFoucCssReachable,
 	compileFoucScopedCss,
 	foucRelFromId,
 	isFoucCssId,
@@ -68,13 +69,15 @@ import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/cs
 import { island_subgraph_bytes } from '../compiler/dev/region-bytes.js';
 import { collectIslandDepModulepreloads } from '../compiler/link/island-deps.js';
 import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.js';
+import { router_css_key } from '../compiler/link/router-css.js';
 import { Program, strip_id } from '../compiler/program.js';
 import { Compiler } from '../compiler/driver.js';
 import { CompileCtx } from '../compiler/ctx.js';
-import { V_KIT_WIRE } from '../compiler/ids.js';
+import { V_KIT_WIRE, V_ROUTER_CSS } from '../compiler/ids.js';
 import {
 	PKG_ROOT,
 	PROFILER_UI_DIR,
+	PROFILER_ROUTER_MODULE,
 	OGYGIA_INJECTED_IMPORTS,
 	OGYGIA_INJECTED_FILES,
 	APP_SHIMS,
@@ -134,6 +137,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// rendered only from the profiler handle (never on a Kit page), so no app file marks them and the
 	// src prescan can't see them. Add ogygia's own UI dir as a prescan root (PKG_ROOT self-reference).
 	const extra_scan_roots = profiler_config ? [PROFILER_UI_DIR] : [];
+	// Router-css seed: the profiler's own server router, so its page components' scoped CSS emits +
+	// links through the same handoff as an app router page (see driver.router_css_roots).
+	const extra_router_modules = profiler_config ? [PROFILER_ROUTER_MODULE] : [];
 
 	// Publish the markdown config so a value-free `markdown()` in the svelte config reads it — all
 	// content/markdown config stays here in the one plugin. `standalone` re-invokes this factory for
@@ -182,6 +188,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 	/** content_css_key → emitted CSS asset referenceId (client leg). Resolved to hrefs in writeBundle. */
 	const content_css_refs = new Map();
+	/** router-css `rcss:<rel>` key → emitted CSS asset referenceId (client leg). A server router page
+	 *  component's whole-tree scoped CSS, compiled + emitted as a dedicated asset (link/router-css.ts). */
+	const router_css_refs = new Map<string, string>();
 	// tag → self-contained factory source from og.$ rewrites (served by the fn-manifest virtual so
 	// client bundles can register factories pre-hydration; the payload-source fallback covers bundles
 	// that miss it) now lives on the driver as `compiler.dollar_hoists` — the macro leg fills it.
@@ -451,6 +460,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						app_dir,
 						libDir,
 						extra_scan_roots,
+						extra_router_modules,
 						profiler_config,
 						is_dev,
 						id_salt,
@@ -518,6 +528,38 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					compiler.emit_build_chunks((chunk) => this.emitFile(chunk), {
 						emitRuntime: emit_runtime
 					});
+					// SERVER-ROUTER CSS (link/router-css.ts): a router page component is a runtime value, not
+					// a Kit route, so nothing links its scoped `<style>`. Compile each router-reachable
+					// component's whole tree CSS (its own scoped styles + every child's + plain style
+					// imports, in cascade order) and emit it as ONE dedicated asset per root — resolved to a
+					// handoff `rcss:<rel>` href in writeBundle, linked at SSR by `virtual:ogygia/router-css`.
+					// A dedicated asset (vs a chunk's importedCss) can't be scattered by rolldown's
+					// shared-chunk CSS hoisting, which breaks any root that shares a child (every profiler
+					// page wraps Shell). Same emit shape as the content-body CSS leg just below.
+					router_css_refs.clear();
+					for (const abs of compiler.router_css_roots()) {
+						const parts: string[] = [];
+						for (const e of collectFoucCssReachable(abs, { root, libDir, readFile })) {
+							if (e.kind === 'scoped') {
+								const src = readFile(e.abs);
+								if (src == null) continue;
+								const css = compileFoucScopedCss(e.abs, src);
+								if (css) parts.push(css);
+							} else if (/\.css$/.test(e.abs)) {
+								// Plain `.css` import — ship verbatim. Preprocessor dialects (.scss/…) can't be
+								// compiled here; they're skipped (a router page wanting those is a future case).
+								const css = readFile(e.abs);
+								if (css) parts.push(css);
+							}
+						}
+						if (!parts.length) continue;
+						const ref = this.emitFile({
+							type: 'asset',
+							name: 'og-rcss.css',
+							source: parts.join('\n')
+						});
+						router_css_refs.set(router_css_key(root, abs), ref);
+					}
 					// Content CSS: a content module's OWN scoped `<style>` compiles into the SERVER bundle
 					// only (the leak-free corpus never enters the client graph), so on a csr=false doc page it
 					// ships on no stylesheet. Extract that scoped CSS here and emit it as a client asset.
@@ -613,6 +655,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			handleHotUpdate({ file, server }) {
 				if (!is_dev) return;
 				vite_server = server;
+
+				// Server-router CSS: the dev `virtual:ogygia/router-css` INLINES compiled css at emit
+				// time, so any style-bearing source change must invalidate it — the next SSR re-emits
+				// with fresh css. Cheap (module-graph lookup), so no root-membership check.
+				if (/\.(svelte|css|scss|sass|less|styl)$/.test(file)) {
+					const mod = server.moduleGraph.getModuleById('\0' + V_ROUTER_CSS);
+					if (mod) server.moduleGraph.invalidateModule(mod);
+				}
 
 				// SCOPED soft CSS HMR. App css joins the browser graph LAZILY (see dev_hmr_client_source):
 				//  - already joined on a client → fall through to Vite's normal CSS update (soft);
@@ -806,6 +856,21 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						}
 					>
 				);
+				// SERVER-ROUTER CSS handoff: each root's whole component-tree CSS was compiled + emitted as
+				// ONE dedicated asset in buildStart (router_css_refs). Resolve each referenceId to its
+				// hashed URL under `rcss:<rel>`, the key `virtual:ogygia/router-css` reads via `islandCss()`
+				// at SSR. A dedicated asset (not a chunk's importedCss) is immune to rolldown's shared-chunk
+				// CSS hoisting — every profiler page shares Shell, which otherwise scatters onto whichever
+				// chunk rolldown parks it on (an island's, off the router's static graph entirely).
+				for (const [key, ref] of router_css_refs) {
+					try {
+						const file = this.getFileName(ref);
+						map.css[key] = [file.startsWith('/') ? file : '/' + file];
+					} catch {
+						/* asset dropped — skip; the page just goes unstyled rather than 404 a link */
+					}
+				}
+
 				// Content-body CSS handoff: content_css_key → the emitted CSS asset URL, so Region.svelte can
 				// link a content body's own scoped CSS (which lives on no page stylesheet — the corpus is
 				// server-only). The client leg emitted each as an asset and stashed its referenceId; resolve

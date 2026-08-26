@@ -1531,11 +1531,8 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 
 <div class="obs" data-observatory {@attach init_observatory}>
 	<header class="obs-bar">
-		<div class="obs-brand">
-			<b>Observatory</b>
-			<span class="obs-sub">ogygia, live in your browser</span>
-		</div>
-
+		<!-- The `Observatory` title + tagline lived here; the shared site header's `ogygia │ Observatory`
+		     breadcrumb covers it now, so the bar carries only the presets + live controls. -->
 		<span class="presets" data-obs-presets>
 			{#each Object.entries(PRESETS) as [name, map]}
 				<button onclick={() => load_preset(map)}>{name}</button>

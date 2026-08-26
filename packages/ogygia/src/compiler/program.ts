@@ -93,6 +93,18 @@ export class Program {
 	/** Absolute paths of app modules that define a transportable class (built during prescan). */
 	readonly transportable_modules = new Set<string>();
 
+	/** App modules importing `'ogygia/router'` (server-router definition sites) + every walked
+	 *  module's import specifiers — the build data `virtual:ogygia/router-css` computes its
+	 *  component closure from (see link/router-css.ts). Filled during the prescan walk. */
+	readonly router_modules = new Set<string>();
+	readonly module_specs = new Map<string, string[]>();
+
+	/** App crosses a held region / transportable value through Kit's `transport` hook — a `.remote.*`
+	 *  file, or a `region`/`site`/content import (loads & remotes that carry regions or wired values).
+	 *  Set during the prescan walk; with `runtime_marks.wire` it decides whether `ogygia.transport`
+	 *  (the generated `virtual:ogygia/kit-transport`) carries the codec cluster or is an empty map. */
+	crosses_wire = false;
+
 	/** Build-time capability marks for the sticky runtime entry. Incomplete → kitchen-sink. */
 	readonly runtime_marks: RuntimeMarks;
 

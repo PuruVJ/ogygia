@@ -33,6 +33,8 @@ export interface NetCall {
 	encoding?: string;
 	/** short response `content-type` (params stripped) */
 	type?: string;
+	/** response headers (curated + capped) — shown in the request side panel */
+	headers?: Record<string, string>;
 	/** request body size in bytes, when it has one */
 	req_bytes?: number;
 	/** request body preview (truncated) — for string / form / URLSearchParams bodies */
@@ -253,6 +255,7 @@ function patch_fetch(emit: Emit): void {
 			call.encoding = res.headers.get('content-encoding') || undefined;
 			const len = res.headers.get('content-length');
 			if (len) call.transfer_bytes = Number(len) || undefined;
+			call.headers = headers_of(res.headers);
 			// Robust DECODED size: count a cloned body stream. Works however the app reads the original
 			// (json/text/stream) and with no content-length (chunked / dev servers) — no more dashes.
 			count_decoded(res, call);
@@ -299,6 +302,18 @@ function short_ct(ct: string | null): string | undefined {
 	if (!ct) return undefined;
 	const i = ct.indexOf(';');
 	return (i === -1 ? ct : ct.slice(0, i)).trim() || undefined;
+}
+
+/** Snapshot response headers for the request side panel. Capped (≤40 entries, ≤512 chars each) so a
+ *  rogue header value can't bloat the `.ogp`. Returns undefined when there are none. */
+function headers_of(h: Headers): Record<string, string> | undefined {
+	const out: Record<string, string> = {};
+	let n = 0;
+	for (const [k, v] of h) {
+		if (n++ >= 40) break;
+		out[k] = v.length > 512 ? v.slice(0, 512) + '…' : v;
+	}
+	return n ? out : undefined;
 }
 
 // Keep request bodies large enough to inspect the real thing — workplaces routinely POST multi-MB JSON.

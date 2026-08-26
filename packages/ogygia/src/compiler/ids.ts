@@ -25,6 +25,9 @@ export const V_PROFILER_CONFIG = 'virtual:ogygia/profiler-config';
 export const V_SESSION_COOKIE = 'virtual:ogygia/session-cookie';
 export const V_REGION_TTL = 'virtual:ogygia/region-ttl';
 export const V_ROUTER_CONFIG = 'virtual:ogygia/router-config';
+/** Generated component→CSS registrations for the SERVER router — the module that makes a router
+ *  page's `<style>` reach the document (see link/router-css.ts). SSR-only, imported by ogygia/router. */
+export const V_ROUTER_CSS = 'virtual:ogygia/router-css';
 export const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
 export const V_REQUEST_EVENT = 'virtual:ogygia/request-event';
 /** SSR-only map of csr=true route ids — lets Region degrade a csr=false layout's islands to inline
@@ -37,6 +40,9 @@ export const V_REGION_ENDPOINT = 'virtual:ogygia/region-endpoint';
 // (bypassing the exports map) and feed it the app's universal `transport` hook.
 export const V_KIT_WIRE = 'virtual:ogygia/kit-wire';
 export const V_TRANSPORT = 'virtual:ogygia/transport';
+/** The app's Kit `transport` hook (`ogygia.transport`), generated per-app: the codec cluster when the
+ *  app crosses regions/wired-values over the wire, an empty map for a pure-island app (no dead codecs). */
+export const V_KIT_TRANSPORT = 'virtual:ogygia/kit-transport';
 export const V_TRANSPORTABLES = 'virtual:ogygia/transportables';
 
 /** Resolve a virtual id to its `\0`-prefixed resolved form (Vite/rollup convention). */

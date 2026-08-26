@@ -8,6 +8,8 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { document } from '../document.js';
 import { region } from '../region.js';
+import { router_css_of } from '../router-css.js';
+import { claim_region_css } from '../context.js';
 import LayoutChain from './LayoutChain.svelte';
 import { compile_all, match_path, type CompiledPattern } from './match.js';
 import {
@@ -28,6 +30,54 @@ import type { Layer } from './builder.js';
 /** c.error() Responses are registered here with their { status, message } so the router can render the
  *  nearest error component instead of sending the JSON. A WeakMap → the tag is GC'd with the Response. */
 const error_meta = new WeakMap<Response, { status: number; message?: string }>();
+
+// ── component CSS ────────────────────────────────────────────────────────────────────────────────
+// Router pages are VALUES, not Kit routes, so nothing file-derived links their `<style>` — the build
+// emits `virtual:ogygia/router-css` (component → stylesheet registrations; see link/router-css.ts)
+// and each render links exactly what it renders, through `document()`'s head. The virtual only
+// resolves under the app's Vite pipeline; anywhere else (bare node, `ogygia mcp`) the import fails
+// and CSS linking is a silent no-op — those realms render data, not styled documents.
+const rcss_ready: Promise<unknown> | null = (() => {
+	try {
+		// Static specifier — resolved by the ogygia plugin under Vite; rejects anywhere else.
+		return import('virtual:ogygia/router-css').catch(() => null);
+	} catch {
+		return null;
+	}
+})();
+
+/** Head tags for the components ONE page render places (layout chain + page/error component):
+ *  prod `<link>`s from the build handoff, dev inline `<style>`s. Claimed via `claim_region_css`, so
+ *  a held region linking the same sheet in this request dedupes against us (and vice versa). */
+async function router_css_head(components: AnyComponent[]): Promise<string> {
+	if (rcss_ready) await rcss_ready;
+	const entries = components.flatMap((c) => router_css_of(c));
+	if (!entries.length) return '';
+	const keys = entries.map((e) => e.key);
+	let fresh = new Set(claim_region_css(keys));
+	// Off-request realm (bare `router.fetch` with no Kit event): the per-request claim is inert —
+	// dedupe locally instead so the document still styles. (Inside a request, an empty claim result
+	// means everything was already linked by an earlier render — correctly emit nothing.)
+	if (fresh.size === 0 && keys.length) {
+		try {
+			// claim returns [] both when off-request AND when all keys were already claimed — probe with
+			// a sentinel that can never collide with a real key: off-request the claim is inert and the
+			// probe ALSO comes back empty → fall back to local dedupe. On-request the fresh probe comes
+			// back, proving the claim works → everything really was linked already, emit nothing.
+			if (claim_region_css(['\0og-rcss-probe']).length === 0) fresh = new Set(keys);
+		} catch {
+			fresh = new Set(keys);
+		}
+	}
+	let head = '';
+	for (const e of entries) {
+		if (!fresh.has(e.key)) continue;
+		fresh.delete(e.key); // shared child CSS can repeat across components — link once
+		if (e.href) head += `<link rel="stylesheet" href="${e.href}" data-ogygia-region-css>`;
+		else if (e.css) head += `<style data-ogygia-rcss>${e.css.replace(/<\/style/gi, '<\\/style')}</style>`;
+	}
+	return head;
+}
 
 export interface RoutesOptions {
 	/** Mount prefix, stripped before matching. Required for a library that owns a subtree. */
@@ -183,8 +233,11 @@ export function routes<E>(
 			data: ctx.data,
 			fallback: node.fallback
 		});
+		// Stylesheets of the components THIS render places (chain + page) — see router_css_head.
+		const css_head = await router_css_head([...chain, node.component]);
 		const res = await document(of, {
 			...doc_opts(node.opts),
+			head: css_head,
 			// Seed $app/state so islands on this page read $page.data/params/url + route.id.
 			pageState: {
 				url: ctx.url,
@@ -229,8 +282,10 @@ export function routes<E>(
 			props: { status, error: { message: message ?? 'Error' }, data: ctx.data, params: ctx.params },
 			data: ctx.data
 		});
+		const css_head = await router_css_head([...chrome, layers[boundary].error!]);
 		return document(of, {
 			status,
+			head: css_head,
 			pageState: {
 				url: ctx.url,
 				params: ctx.params,

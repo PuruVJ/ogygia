@@ -2,14 +2,14 @@
 title: Server router
 summary: SvelteKit's routing as a typed, programmatic table — pages, layouts, endpoints, loads and actions in one .ts file, with router.$infer giving every component its typed data.
 related:
-  - app/router
+  - app/spa-router
   - app/dashboards
   - regions/held-regions
 ---
 
 `ogygia/router` is SvelteKit's routing written as a **value** instead of a file tree. One `.ts` file declares the whole route table — pages, layouts, endpoints, `load`s, and actions — and the compiler threads the types through it, so every component reads its `data`, `params`, and `form` fully typed with **no codegen**.
 
-It runs on the **server**: it dispatches the request, runs the load cascade, and renders the page. This is the counterpart to the [SPA router](/docs/app/router), which navigates between those pages on the client. You can use either alone; together, the server router defines routes and the SPA router moves between them.
+It runs on the **server**: it dispatches the request, runs the load cascade, and renders the page. This is the counterpart to the [SPA router](/docs/app/spa-router), which navigates between those pages on the client. You can use either alone; together, the server router defines routes and the SPA router moves between them.
 
 ::: tip When to use
 Reach for it when your routes are *computed* — a CMS whose paths come from a database, a tool whose pages are generated, a package that ships its own routes — or when you just want your route table, loaders, and components in one place instead of scattered across `+page.svelte` / `+page.server.ts` / `+server.ts` files. For a handful of ordinary pages, Kit's file routes are simpler; this is not a replacement you're required to adopt.
@@ -139,5 +139,5 @@ export const handle = sequence(ogygiaHandle(), router.handle);
 Or dispatch it yourself from a catch-all with `router.fetch(request, event)`. Kit's hooks, `transport`, and form actions all keep working — this is Kit's routing, just shaped as a table.
 
 ::: warning Two routers, one app
-This page is about the **server** router (`ogygia/router`) — the route table. The [SPA router](/docs/app/router) is separate: it intercepts link clicks and navigates on the client. They compose, and each works without the other.
+This page is about the **server** router (`ogygia/router`) — the route table. The [SPA router](/docs/app/spa-router) is separate: it intercepts link clicks and navigates on the client. They compose, and each works without the other.
 :::

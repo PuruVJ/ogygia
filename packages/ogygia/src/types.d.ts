@@ -121,6 +121,15 @@ declare const __OGYGIA_SERVER_DELTA__: boolean;
  *  every `if (DEVTOOLS) emit({…})` folds to `if (false)` and the whole bus tree-shakes away. */
 declare const __OGYGIA_DEVTOOLS__: boolean;
 
+declare module 'virtual:ogygia/router-css' {
+	// Generated component→CSS registrations for the server router — side-effect only.
+}
+declare module 'virtual:ogygia/kit-transport' {
+	export const transport: Record<
+		string,
+		{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
+	>;
+}
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<
 		string,

@@ -3,7 +3,7 @@ title: Data & remote functions
 summary: All six Kit remote primitives work inside islands: query, command, form, and more.
 related:
   - regions/held-regions
-  - app/router
+  - app/spa-router
 ---
 
 Islands are real Svelte components (see the [last chapter](/docs/regions/regions)), so Kit's remote functions work inside them unchanged. All six primitives (`query`, `query.batch`, `query.live`, `command`, `form`, and `prerender`) run in an island exactly as they do in a Kit page.

@@ -59,7 +59,12 @@ export type {
 // source (it does not run preprocessors for its type pass), so the fallback slot must be declared
 // here, on the component, and cannot be injected by tooling.
 export type Fallback<P = unknown> = P & { ogygiaFallback?: import('svelte').Snippet };
-export { ogygiaTransport as transport } from './transport.js';
+// `transport` is GENERATED per-app (virtual:ogygia/kit-transport): the codec cluster when the app
+// crosses a region/wired value over Kit's wire, an empty map for a pure-island app — so a plain-props
+// app never bundles the ~9 kB of decoders it can't use. The virtual re-exports the real `ogygiaTransport`
+// from './transport.js' by absolute path; the barrel deliberately does NOT re-export it directly (that
+// would be a second, ungated path to the codec cluster for `import * as ogygia`).
+export { transport } from 'virtual:ogygia/kit-transport';
 
 // Transportable state — a class crosses island boundaries as a prop by declaring
 // `static wire = import.meta.og.wire({ encode, decode })`. Same instance across islands stays one
@@ -81,6 +86,10 @@ export type { TransportCodec } from './live-transport.js';
 // the scoped/shadowed form; both are read with the same unchanged `getContext('key')`.
 export { createContext, setContext, __tag_context } from './context-bridge.js';
 export { default as Provide } from './Provide.svelte';
+// `getContext` is re-exported verbatim from Svelte, purely for import symmetry — `import { setContext,
+// getContext } from 'ogygia'` reads better than mixing sources. It is Svelte's own: ogygia seeds each
+// island's context at hydrate, so a plain `getContext` already reads bridged values with no wrapper.
+export { getContext } from 'svelte';
 
 // Which schedule woke this hydration root ('interaction' islands replay their first click, which
 // is not a trusted gesture — components can adapt). Call during setup, like getContext.
