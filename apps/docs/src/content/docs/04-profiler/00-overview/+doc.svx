@@ -49,7 +49,7 @@ Then open **`/__profiler`**. In development the UI is open; in production it 404
 - **Always on, near zero cost.** Every request is wall-timed and logged, with per-route p50/p95. The CPU is only sampled while you are actively recording.
 - **On demand.** Profile a page by URL, or profile a single request with a header. See [Recording](/docs/profiler/recording).
 - **A readable report.** A wall-clock budget bar (compute vs waiting), an interactive treemap of where the CPU went, sortable component and function tables (with per-call cost and `×N` repeat counts), a network waterfall where each request expands to its formatted JSON payload and wire/decoded sizes, a waiting-by-function breakdown for non-HTTP I/O, memory and GC, and a flame graph. See [Reading a report](/docs/profiler/reading-reports).
-- **Share it, or open it in the devtools.** A report exports as an encrypted `.ogp` you re-open via Import (the serverless answer, where a report can't stay in memory). If you also enable [devtools](/docs/app/devtools), its Profiler tab runs the same page profiles inline.
+- **Share it, or open it in the devtools.** A report exports as an encrypted `.ogp` you re-open via Import (the serverless answer, where a report can't stay in memory). If you also enable [devtools](/docs/devtools/overview), its Profiler tab runs the same page profiles inline.
 
 ## What it needs
 
