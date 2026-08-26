@@ -52,6 +52,26 @@ const WidgetIsland = import.meta.og.asRegion(Widget, { wake: 'visible' });
 
 `asRegion` is barrel-friendly (region identity keys on the export name) and it runs in the consumer's app, so it's the answer whenever the mark can't sit on the import itself. You don't ship anything for it.
 
+## If your package imports ogygia
+
+Everything above is for packages that ship plain components. The moment a package imports from `'ogygia'` **itself** — say a shared workspace package using the [context bridge's](/docs/data-state/state-context) drop-in `setContext` — one rule applies to every build that touches it:
+
+**ogygia can never be bundled into a library. It's an external, the same category as `$app/*`.** The `ogygia` entry points resolve through virtual modules that only exist inside the final app's Vite pipeline, and the runtime keeps module-level registries that must be a singleton per app. A lib-mode build must leave the import specifier intact.
+
+This propagates further than people expect in a monorepo. If your lib builds **bundle** workspace dependencies (Vite lib mode does by default), then a single `import { setContext } from 'ogygia'` in one shared package surfaces in the bundle graph of *every* package that depends on it — and each of those builds now needs `'ogygia'` in its `external` list too, even though none of them import ogygia themselves. Two ways to hold this:
+
+- **Enumerate**: add `'ogygia'` next to your existing `$app`/`$env` externals in each affected package's config. Correct, just repetitive.
+- **Externalize all bare imports** (the library-build convention), which subsumes ogygia, `$app/*`, `$env/*`, and everything else at once:
+
+```ts title=vite.config.ts
+build: {
+  lib: { entry: './index.ts', name: 'my-widgets' },
+  rollupOptions: {
+    external: (id) => !id.startsWith('.') && !path.isAbsolute(id)
+  }
+}
+```
+
 ::: warning What a package can't do
 An island your library renders only from its **own** server code — one the consumer never imports — won't get a client chunk. The consumer's build scans the consumer's imports; a component it never imports is invisible to it, and its hydrate fetch 404s. Keep every island **importable** (above) so it enters that graph. (ogygia's own profiler and devtools UI are the one exception — they're marked inside ogygia and the plugin adds their dir as a scan root itself. There's no public manifest for a third-party package to do the same.)
 :::
