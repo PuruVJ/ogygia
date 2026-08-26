@@ -20,6 +20,7 @@
 />
 
 <div class="wf">
+	<div class="wf-track">
 	{#each rows as r}
 		<div class="wf-row">
 			<button
@@ -42,6 +43,7 @@
 			>
 		</div>
 	{/each}
+	</div>
 </div>
 
 {#if selected}
@@ -96,13 +98,19 @@
 {/if}
 
 <style>
+	/* The shell scrolls; the track keeps a usable minimum width so a narrow viewport (or the open
+	   drawer) pans the timeline instead of crushing the % -positioned bars into unreadability. */
 	.wf {
-		position: relative;
 		background: #0c0f13;
 		border: 1px solid #232a35;
 		border-radius: 8px;
-		padding: 8px 0;
 		margin: 8px 0;
+		overflow-x: auto;
+	}
+	.wf-track {
+		position: relative;
+		min-width: 640px;
+		padding: 8px 0;
 	}
 	.wf-row {
 		position: relative;

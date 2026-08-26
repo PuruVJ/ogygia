@@ -249,6 +249,12 @@
 		Every function on the server, by time spent inside it.{#if hasCounts}
 			<b>×N</b> is the exact call count (from V8 coverage).{/if}
 	</p>
+	{#if !a.sourcemapped}
+		<p class="hint warn">
+			Locations are bundled chunk positions — no sourcemap resolved. Ship .map files next to the
+			server chunks (build with server sourcemaps) and "where" maps back to your source files.
+		</p>
+	{/if}
 	<FunctionsTable rows={fnRows} {hasAlloc} />
 
 	{#if heap.length}

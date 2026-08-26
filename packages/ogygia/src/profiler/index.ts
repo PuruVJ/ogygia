@@ -505,12 +505,25 @@ class Profiler {
 	async #make_resolver(): Promise<SourceMapResolver | undefined> {
 		try {
 			const fs = await import('node:fs');
+			const path = await import('node:path');
+			// Frame urls are not always absolute: a host that re-bundles the adapter output as CJS
+			// (Lambda / Amplify) hands V8 script names RELATIVE to the bundle dir ('./chunks/x.js').
+			// A bare readFileSync resolves those against the process CWD — usually NOT the bundle dir
+			// on such hosts — so every map lookup missed and `where` stayed at bundled positions even
+			// with .map files shipped. Try the entry script's dir (and its parent) before cwd; the
+			// resolver caches per chunk, so the extra attempts cost once per file.
+			const entry = process.argv[1] ? path.dirname(process.argv[1]) : undefined;
+			const bases = entry ? [entry, path.dirname(entry), '.'] : ['.'];
+			const is_abs = (p: string) => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
 			return sourcemap_resolver((p) => {
-				try {
-					return fs.readFileSync(p, 'utf8');
-				} catch {
-					return undefined;
+				for (const base of is_abs(p) ? [''] : bases) {
+					try {
+						return fs.readFileSync(base ? path.join(base, p) : p, 'utf8');
+					} catch {
+						/* try the next base */
+					}
 				}
+				return undefined;
 			});
 		} catch {
 			return undefined;
