@@ -1,29 +1,25 @@
 import { base } from '$app/paths';
-import { routes } from 'ogygia/router';
+import { routes, page, layout } from 'ogygia/router';
 import Shell from '$lib/rtr/Shell.svelte';
 import Inner from '$lib/rtr/Inner.svelte';
 import Home from '$lib/rtr/Home.svelte';
 import Deep from '$lib/rtr/Deep.svelte';
 
+// v2: layouts are named table→table wrappers; nesting = spreading a wrapped sub-table. Deep's `data`
+// merges shell.who + inner.nav (Kit's cascade), so it needs no load of its own. Endpoints are the
+// plain `{ GET }` object form; this Kit route file itself exports `GET` (the HTTP handler below).
+const shell = layout('shell', Shell, { load: () => ({ who: 'ada' }) });
+const inner = layout('inner', Inner, { load: () => ({ nav: 'sidebar-42' }) });
+
 const app = routes(
-	(r) =>
-		r
-			.layout(Shell)
-			.load(() => ({ who: 'ada' }))
-			.routes({
-				'/': (r) => r.page(Home),
-				'/deep': (r) =>
-					r
-						.layout(Inner)
-						.load(() => ({ nav: 'sidebar-42' }))
-						.routes({ '/': (r) => r.page(Deep).load((c) => ({ who: c.data.who, nav: c.data.nav })) }),
-				'/api/ping': (r) => r.GET((c) => c.json({ pong: true }))
-			}),
-	// Mounted under the Kit route `rtr/[...path]` — derive the mount from Kit's own base so the
-	// fixture works with or without a configured base (it was hardcoded '/base/rtr' before, which
-	// never matched this base-less app: every rtr URL 404'd).
+	shell({
+		'/': page(Home),
+		...inner({ '/deep': page(Deep) }),
+		'/api/ping': { GET: (c) => c.json({ pong: true }) }
+	}),
+	// Mounted under the Kit route `rtr/[...path]` — derive the mount from Kit's own base.
 	{ base: `${base}/rtr` }
 );
 
-export const GET = async (event) =>
-	(await app.fetch(event.request, event)) ?? new Response('Not found', { status: 404 });
+export const GET = async (event: { request: Request }) =>
+	(await app.fetch(event.request, event as never)) ?? new Response('Not found', { status: 404 });

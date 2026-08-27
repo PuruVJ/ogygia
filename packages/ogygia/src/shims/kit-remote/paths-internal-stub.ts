@@ -14,4 +14,5 @@ export const assets =
 	typeof __SVELTEKIT_PATHS_ASSETS__ !== 'undefined' && __SVELTEKIT_PATHS_ASSETS__
 		? __SVELTEKIT_PATHS_ASSETS__
 		: base;
-export const app_dir = typeof __SVELTEKIT_APP_DIR__ !== 'undefined' ? __SVELTEKIT_APP_DIR__ : '_app';
+export const app_dir =
+	typeof __SVELTEKIT_APP_DIR__ !== 'undefined' ? __SVELTEKIT_APP_DIR__ : '_app';

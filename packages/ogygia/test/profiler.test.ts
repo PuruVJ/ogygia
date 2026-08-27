@@ -346,38 +346,69 @@ describe('page-mode honesty findings (redirect / not-a-render / budget)', () => 
 
 	it('reports the redirect it followed', () => {
 		const a = analyze(real_profile);
-		expect(codes(a, { ...base, page: '/fr/fr/', redirected_from: '/fr/fr', run_status: 200, run_bytes: 90000 })).toContain('redirected');
+		expect(
+			codes(a, {
+				...base,
+				page: '/fr/fr/',
+				redirected_from: '/fr/fr',
+				run_status: 200,
+				run_bytes: 90000
+			})
+		).toContain('redirected');
 	});
 
 	it('warns when the profiled renders were a 3xx (unfollowed redirect), not a page', () => {
 		const a = analyze(empty_profile);
-		expect(codes(a, { ...base, page: '/fr/fr', run_status: 308, run_bytes: 40 })).toContain('not-a-render');
+		expect(codes(a, { ...base, page: '/fr/fr', run_status: 308, run_bytes: 40 })).toContain(
+			'not-a-render'
+		);
 	});
 
 	it('warns when the body was too small to be a real page', () => {
 		const a = analyze(empty_profile);
-		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 40 })).toContain('not-a-render');
+		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 40 })).toContain(
+			'not-a-render'
+		);
 	});
 
 	it('flags a low-confidence window (no components, few samples)', () => {
 		const a = analyze(empty_profile);
-		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 5000 })).toContain('low-confidence');
+		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 5000 })).toContain(
+			'low-confidence'
+		);
 	});
 
 	it('does NOT cry low-confidence on a real render', () => {
 		const a = analyze(real_profile);
-		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 90000 })).not.toContain('low-confidence');
+		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 90000 })).not.toContain(
+			'low-confidence'
+		);
 	});
 
 	it('spots an app that caches the page after the first render', () => {
 		const a = analyze(real_profile);
-		const c = codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 90000, warmup_ms: 5000, runs: [15, 16, 14] });
+		const c = codes(a, {
+			...base,
+			page: '/x',
+			run_status: 200,
+			run_bytes: 90000,
+			warmup_ms: 5000,
+			runs: [15, 16, 14]
+		});
 		expect(c).toContain('cached-after-first');
 	});
 
 	it('echoes the serverless budget note', () => {
 		const a = analyze(real_profile);
-		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 90000, budget_note: 'Ran 3 of 5 renders — trimmed to fit the 25s serverless budget.' })).toContain('budget');
+		expect(
+			codes(a, {
+				...base,
+				page: '/x',
+				run_status: 200,
+				run_bytes: 90000,
+				budget_note: 'Ran 3 of 5 renders — trimmed to fit the 25s serverless budget.'
+			})
+		).toContain('budget');
 	});
 });
 

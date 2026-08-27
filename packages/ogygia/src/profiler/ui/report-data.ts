@@ -109,7 +109,8 @@ export function budget_segments(a: Analysis): BudgetSeg[] {
 	const segs = a.buckets
 		.filter((b) => b.self_ms > 0 && b.category !== 'idle')
 		.map((b) => ({ label: b.key, cat: b.category, ms: b.self_ms }));
-	if (a.idle_ms > 0) segs.push({ label: 'idle / waiting', cat: 'idle' as FrameCategory, ms: a.idle_ms });
+	if (a.idle_ms > 0)
+		segs.push({ label: 'idle / waiting', cat: 'idle' as FrameCategory, ms: a.idle_ms });
 	const acc = segs.reduce((s, x) => s + x.ms, 0);
 	if (dur - acc > dur * 0.02)
 		segs.push({ label: 'other', cat: 'unknown' as FrameCategory, ms: dur - acc });
@@ -298,7 +299,10 @@ export function spark(mem: MemSample[]): Spark | null {
 	const max = Math.max(...values);
 	const range = Math.max(max - min, 1);
 	const pts = mem
-		.map((m) => `${pad + (m.t / t_max) * (w - 2 * pad)},${h - pad - ((m.rss - min) / range) * (h - 2 * pad)}`)
+		.map(
+			(m) =>
+				`${pad + (m.t / t_max) * (w - 2 * pad)},${h - pad - ((m.rss - min) / range) * (h - 2 * pad)}`
+		)
 		.join(' ');
 	return { pts, min, max, w, h, pad, first: mem[0], last: mem.at(-1)! };
 }

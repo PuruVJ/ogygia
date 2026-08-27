@@ -42,7 +42,9 @@ const INNER_PARAM = /\[([a-zA-Z_$][\w$]*)\]/g;
 
 export function compile(pattern: string): CompiledPattern {
 	if (!pattern.startsWith('/')) {
-		throw new Error(`[ogygia/router] route pattern must start with "/": ${JSON.stringify(pattern)}`);
+		throw new Error(
+			`[ogygia/router] route pattern must start with "/": ${JSON.stringify(pattern)}`
+		);
 	}
 	const segs = pattern.split('/').filter((s) => s !== '');
 	const params: ParamSpec[] = [];

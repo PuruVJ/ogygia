@@ -3,13 +3,7 @@
  * listener over {@link ./bus.js the bus}; none touches framework internals. Load only what you use —
  * the REPL wants `postMessage`, our e2e wants the `window` hook, a bug report wants a trace.
  */
-import {
-	add_sink,
-	snapshot,
-	clear,
-	ingest,
-	type DevtoolsSink
-} from './bus.js';
+import { add_sink, snapshot, clear, ingest, type DevtoolsSink } from './bus.js';
 import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './schema.js';
 
 /** The global the {@link install_window_sink window sink} publishes. Distinct from the compile-time
@@ -102,7 +96,6 @@ export function to_trace(): DevtoolsTrace {
 		events: snapshot()
 	};
 }
-
 
 /**
  * Read the server realm's `<script type="application/ogygia-devtools">` side-channel (injected by the

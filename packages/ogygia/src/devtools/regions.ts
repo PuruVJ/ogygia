@@ -50,7 +50,8 @@ export function all_regions(): RegionInfo[] {
 export function region_props_sidecar(el: Element): string | null {
 	let sib = el.nextElementSibling;
 	while (sib) {
-		if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]')) return sib.textContent;
+		if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]'))
+			return sib.textContent;
 		if (sib.tagName === 'LINK') {
 			sib = sib.nextElementSibling;
 			continue;

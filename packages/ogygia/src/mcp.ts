@@ -18,7 +18,12 @@ import { gzipSync } from 'node:zlib';
 import { readdirSync, readFileSync, type Dirent } from 'node:fs';
 import path from 'node:path';
 import { parse } from 'svelte/compiler';
-import { transformHost, islandVirtualId, wrapperVirtualId, CLIENT_BINDING_STUB } from './compiler/index.js';
+import {
+	transformHost,
+	islandVirtualId,
+	wrapperVirtualId,
+	CLIENT_BINDING_STUB
+} from './compiler/index.js';
 import { ogp_decode, is_ogp } from './profiler/crypto.js';
 import { report_json, is_dump } from './profiler/report.js';
 
@@ -83,11 +88,13 @@ function parse_marks(source: string): Mark[] {
 		if (node.type !== 'ImportDeclaration') continue;
 		const attrs: Attrs = {};
 		for (const a of (node.attributes as Array<Record<string, never>>) || []) {
-			const key = (a.key as { name?: string; value?: string })?.name ?? (a.key as { value?: string })?.value;
+			const key =
+				(a.key as { name?: string; value?: string })?.name ?? (a.key as { value?: string })?.value;
 			if (key) attrs[key] = (a.value as { value?: unknown })?.value;
 		}
 		if (!Object.keys(attrs).some((k) => MARK_KEYS.has(k))) continue;
-		const local = (node.specifiers as Array<{ local?: { name?: string } }>)?.[0]?.local?.name ?? '?';
+		const local =
+			(node.specifiers as Array<{ local?: { name?: string } }>)?.[0]?.local?.name ?? '?';
 		const component = (node.source as { value: string }).value;
 		marks.push({ local, component, attrs });
 	}
@@ -99,24 +106,38 @@ const base = (p?: string) => (p ? p.split('?')[0].split('/').pop() || p : '');
 /** A one-line, human/AI-legible label for what a mark's dials make it. */
 function strategy_label(attrs: Attrs): string {
 	if (attrs.region === 'raw') return 'held region (raw — HTML only, ships no JS)';
-	if (attrs.render === 'deferred') return `server island (deferred, fetched on ${attrs.wake ?? 'load'})`;
+	if (attrs.render === 'deferred')
+		return `server island (deferred, fetched on ${attrs.wake ?? 'load'})`;
 	if (attrs.render === 'live') return 'live region (baked, revalidates in background)';
 	if (attrs.wake === 'none') return 'lake (frozen server HTML, ships no JS)';
 	const wake = (attrs.wake as string) ?? 'load';
 	return `island (interactive, wakes on ${wake})${attrs.keep ? `, kept across nav as "${attrs.keep}"` : ''}`;
 }
 
-type Island = { component: string; local: string; kind: string; strategy: string; attrs: Attrs; id: string };
+type Island = {
+	component: string;
+	local: string;
+	kind: string;
+	strategy: string;
+	attrs: Attrs;
+	id: string;
+};
 
 /** Run the real transform + merge in the marks → the island map an AI can read. Throws are the caller's. */
-function compile(source: string, filename: string, ssr: boolean, route_csr: boolean): { code: string; islands: Island[] } {
+function compile(
+	source: string,
+	filename: string,
+	ssr: boolean,
+	route_csr: boolean
+): { code: string; islands: Island[] } {
 	const id = `/repl/src/routes/${filename}`;
 	const result = transformHost(source, id, build_ctx(ssr, route_csr)) as HostResult;
 	const marks = parse_marks(source);
 	const list = result?.islands ?? [];
 	// Real md5 id + authoritative kind come from transformHost; local + dials come from the marks.
 	const real_by_component = new Map<string, HostIsland>();
-	for (const isl of list) if (isl.componentPath) real_by_component.set(base(isl.componentPath), isl);
+	for (const isl of list)
+		if (isl.componentPath) real_by_component.set(base(isl.componentPath), isl);
 	const islands: Island[] = marks.map((m) => {
 		const hit = real_by_component.get(base(m.component));
 		return {
@@ -152,7 +173,8 @@ const TOOLS = [
 				filename: { type: 'string', description: 'File name for ids/errors (default App.svelte).' },
 				csr: {
 					type: 'boolean',
-					description: 'true = compile the csr=true leg (ogygia steps aside, islands stripped to plain). Default false.'
+					description:
+						'true = compile the csr=true leg (ogygia steps aside, islands stripped to plain). Default false.'
 				}
 			},
 			required: ['source']
@@ -177,7 +199,9 @@ const TOOLS = [
 			'island dynamic-import, …). Use this to validate a component an AI wrote before trusting it.',
 		inputSchema: {
 			type: 'object',
-			properties: { source: { type: 'string', description: 'The .svelte component source to validate.' } },
+			properties: {
+				source: { type: 'string', description: 'The .svelte component source to validate.' }
+			},
 			required: ['source']
 		}
 	},
@@ -204,10 +228,22 @@ const TOOLS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				url: { type: 'string', description: 'URL of a page on the running app (e.g. http://localhost:5173/blog).' },
-				wait: { type: 'number', description: 'ms to wait for hydration to settle (default 2500, max 8000).' },
-				scroll: { type: 'boolean', description: 'Scroll the page to trigger `visible` islands (default true).' },
-				click: { type: 'string', description: 'Optional CSS selector to click, to wake an `interaction` island.' }
+				url: {
+					type: 'string',
+					description: 'URL of a page on the running app (e.g. http://localhost:5173/blog).'
+				},
+				wait: {
+					type: 'number',
+					description: 'ms to wait for hydration to settle (default 2500, max 8000).'
+				},
+				scroll: {
+					type: 'boolean',
+					description: 'Scroll the page to trigger `visible` islands (default true).'
+				},
+				click: {
+					type: 'string',
+					description: 'Optional CSS selector to click, to wake an `interaction` island.'
+				}
 			},
 			required: ['url']
 		}
@@ -232,11 +268,19 @@ const TOOLS = [
 					description:
 						'Route to profile: a bare path (`/fr/fr`) = your local running server (auto-found), or a full URL (`https://app.com/fr/fr`) = that host.'
 				},
-				runs: { type: 'number', description: 'Profiled renders to record (default 5, max 50). More = steadier median.' },
-				key: { type: 'string', description: 'Profiler secret (sent as the x-profiler-key header) — needed only when the app set one (prod/locked).' },
+				runs: {
+					type: 'number',
+					description: 'Profiled renders to record (default 5, max 50). More = steadier median.'
+				},
+				key: {
+					type: 'string',
+					description:
+						'Profiler secret (sent as the x-profiler-key header) — needed only when the app set one (prod/locked).'
+				},
 				origin: {
 					type: 'string',
-					description: 'Force a specific local origin (e.g. http://localhost:5173) when a bare path could match several running servers.'
+					description:
+						'Force a specific local origin (e.g. http://localhost:5173) when a bare path could match several running servers.'
 				},
 				base: { type: 'string', description: 'Profiler mount path (default /__profiler).' }
 			},
@@ -256,8 +300,15 @@ const TOOLS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				file: { type: 'string', description: 'Path to the .ogp file (absolute, or relative to the MCP server cwd).' },
-				key: { type: 'string', description: 'The export key the .ogp was made with. Omit only for a dev-key export; a wrong/absent key fails cleanly and asks for it.' }
+				file: {
+					type: 'string',
+					description: 'Path to the .ogp file (absolute, or relative to the MCP server cwd).'
+				},
+				key: {
+					type: 'string',
+					description:
+						'The export key the .ogp was made with. Omit only for a dev-key export; a wrong/absent key fails cleanly and asks for it.'
+				}
 			},
 			required: ['file']
 		}
@@ -273,7 +324,11 @@ const TOOLS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				dir: { type: 'string', description: 'Directory to scan, relative to the server cwd or absolute (default "src"; try "src/routes").' }
+				dir: {
+					type: 'string',
+					description:
+						'Directory to scan, relative to the server cwd or absolute (default "src"; try "src/routes").'
+				}
 			}
 		}
 	},
@@ -288,10 +343,22 @@ const TOOLS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				files: { type: 'object', description: 'Map of filename → source. App.svelte is the entry; include the components it imports.', additionalProperties: { type: 'string' } },
-				source: { type: 'string', description: 'Single-file convenience: the component source (paired with `filename`).' },
+				files: {
+					type: 'object',
+					description:
+						'Map of filename → source. App.svelte is the entry; include the components it imports.',
+					additionalProperties: { type: 'string' }
+				},
+				source: {
+					type: 'string',
+					description: 'Single-file convenience: the component source (paired with `filename`).'
+				},
 				filename: { type: 'string', description: 'Name for `source` (default App.svelte).' },
-				base: { type: 'string', description: 'Observatory base URL (default the public docs Observatory; use a localhost URL to target a dev build).' }
+				base: {
+					type: 'string',
+					description:
+						'Observatory base URL (default the public docs Observatory; use a localhost URL to target a dev build).'
+				}
 			}
 		}
 	}
@@ -309,10 +376,23 @@ function tool_compile(args: Attrs): ToolResult {
 		return fail(`[ogygia] transform error:\n${e instanceof Error ? e.message : String(e)}`);
 	}
 	const map = out.islands.length
-		? out.islands.map((i) => `- ${i.component} (as ${i.local}) — ${i.strategy}${i.id ? ` · id ${i.id.slice(0, 8)}` : ''}`).join('\n')
+		? out.islands
+				.map(
+					(i) =>
+						`- ${i.component} (as ${i.local}) — ${i.strategy}${i.id ? ` · id ${i.id.slice(0, 8)}` : ''}`
+				)
+				.join('\n')
 		: '(no marked components — the whole file is free server HTML)';
 	const structured = JSON.stringify(
-		{ csr, islands: out.islands.map((i) => ({ component: i.component, kind: i.kind, ...i.attrs, id: i.id })) },
+		{
+			csr,
+			islands: out.islands.map((i) => ({
+				component: i.component,
+				kind: i.kind,
+				...i.attrs,
+				id: i.id
+			}))
+		},
 		null,
 		2
 	);
@@ -333,8 +413,16 @@ function tool_islands(args: Attrs): ToolResult {
 	} catch (e) {
 		return fail(`[ogygia] transform error:\n${e instanceof Error ? e.message : String(e)}`);
 	}
-	const structured = out.islands.map((i) => ({ component: i.component, local: i.local, kind: i.kind, ...i.attrs, id: i.id }));
-	return text(`${out.islands.length} marked region(s)\n\n\`\`\`json\n${JSON.stringify(structured, null, 2)}\n\`\`\``);
+	const structured = out.islands.map((i) => ({
+		component: i.component,
+		local: i.local,
+		kind: i.kind,
+		...i.attrs,
+		id: i.id
+	}));
+	return text(
+		`${out.islands.length} marked region(s)\n\n\`\`\`json\n${JSON.stringify(structured, null, 2)}\n\`\`\``
+	);
 }
 
 function tool_check(args: Attrs): ToolResult {
@@ -366,16 +454,23 @@ function tool_explain(args: Attrs): ToolResult {
 		return fail(`[ogygia] transform error:\n${e instanceof Error ? e.message : String(e)}`);
 	}
 	if (!out.islands.length)
-		return text('This component marks nothing, so it ships as pure server HTML — zero JavaScript, no islands.');
+		return text(
+			'This component marks nothing, so it ships as pure server HTML — zero JavaScript, no islands.'
+		);
 	const lines = out.islands.map((i) => {
 		const a = i.attrs;
-		if (a.region === 'raw') return `• ${i.component}: a held region marked \`raw\` — server picks it, it renders as HTML and ships no JS.`;
+		if (a.region === 'raw')
+			return `• ${i.component}: a held region marked \`raw\` — server picks it, it renders as HTML and ships no JS.`;
 		if (a.render === 'deferred')
 			return `• ${i.component}: a server island. Its HTML is fetched later from a signed endpoint (on ${a.wake ?? 'load'}); show \`ogygiaFallback\` while it loads. Not interactive unless it nests its own wake island.`;
-		if (a.render === 'live') return `• ${i.component}: a live region — baked at request, then revalidated in the background and morphed in place.`;
-		if (a.wake === 'none') return `• ${i.component}: a lake — heavy static subtree frozen to server HTML inside an island; ships no JS of its own.`;
+		if (a.render === 'live')
+			return `• ${i.component}: a live region — baked at request, then revalidated in the background and morphed in place.`;
+		if (a.wake === 'none')
+			return `• ${i.component}: a lake — heavy static subtree frozen to server HTML inside an island; ships no JS of its own.`;
 		const wake = a.wake ?? 'load';
-		const keep = a.keep ? ` It is kept across SPA navigation as "${a.keep}" — its live \`$state\` survives the nav.` : '';
+		const keep = a.keep
+			? ` It is kept across SPA navigation as "${a.keep}" — its live \`$state\` survives the nav.`
+			: '';
 		return `• ${i.component}: an island. Its own hydration root; JS wakes on ${wake}. Props cross by value (devalue) — functions never cross, captured host state is a snapshot.${keep}`;
 	});
 	return text(`How this page behaves at runtime:\n\n${lines.join('\n')}`);
@@ -384,7 +479,15 @@ function tool_explain(args: Attrs): ToolResult {
 // ── ogygia_debug — the RUNTIME half: drive a headless browser over a real page ─────────────────────
 
 /** One event off `window.__ogygia_devtools` — the fp-correlated devtools stream (schema in devtools/). */
-type DtEvent = { name: string; fp?: string; entry?: string; realm?: string; seq?: number; t?: number; [k: string]: unknown };
+type DtEvent = {
+	name: string;
+	fp?: string;
+	entry?: string;
+	realm?: string;
+	seq?: number;
+	t?: number;
+	[k: string]: unknown;
+};
 
 const short = (fp: string) => fp.slice(0, 8);
 
@@ -397,8 +500,11 @@ function render_story(url: string, events: DtEvent[]): string {
 	// than the browser's — so relative timing is computed from CLIENT events only; server events just
 	// read "SSR'd" with no client-relative ms.
 	const client_ts = events.filter((e) => e.realm === 'client').map((e) => Number(e.t ?? 0));
-	const t0 = client_ts.length ? Math.min(...client_ts) : Math.min(...events.map((e) => Number(e.t ?? 0)));
-	const at = (e: DtEvent) => (e.realm === 'server' ? '' : `+${Math.round(Number(e.t ?? t0) - t0)}ms`);
+	const t0 = client_ts.length
+		? Math.min(...client_ts)
+		: Math.min(...events.map((e) => Number(e.t ?? 0)));
+	const at = (e: DtEvent) =>
+		e.realm === 'server' ? '' : `+${Math.round(Number(e.t ?? t0) - t0)}ms`;
 	const when = (e?: DtEvent) => {
 		if (!e) return '';
 		const a = at(e);
@@ -442,21 +548,38 @@ function render_story(url: string, events: DtEvent[]): string {
 
 		const lines: string[] = [];
 		if (ssr) lines.push(`  · SSR'd on the server${when(ssr)}`);
-		if (props) lines.push(`  · props crossed the wire${props.bytes != null ? ` (${props.bytes} B)` : ''}`);
-		if (connected) lines.push(`  · region connected — wake: ${strategy}${connected.nested ? ', nested (rides an awake ancestor)' : ''}${connected.deferred ? ', deferred hole' : ''}${when(connected)}`);
+		if (props)
+			lines.push(`  · props crossed the wire${props.bytes != null ? ` (${props.bytes} B)` : ''}`);
+		if (connected)
+			lines.push(
+				`  · region connected — wake: ${strategy}${connected.nested ? ', nested (rides an awake ancestor)' : ''}${connected.deferred ? ', deferred hole' : ''}${when(connected)}`
+			);
 		if (woke) lines.push(`  · wake fired${when(woke)}`);
-		if (applied) lines.push(`  · deferred HTML applied${applied.bytes != null ? ` (${applied.bytes} B)` : ''}${when(applied)}`);
-		if (done) lines.push(`  · hydrated${done.ms != null ? ` in ${Math.round(Number(done.ms) * 10) / 10}ms` : ''} — interactive${when(done)}`);
+		if (applied)
+			lines.push(
+				`  · deferred HTML applied${applied.bytes != null ? ` (${applied.bytes} B)` : ''}${when(applied)}`
+			);
+		if (done)
+			lines.push(
+				`  · hydrated${done.ms != null ? ` in ${Math.round(Number(done.ms) * 10) / 10}ms` : ''} — interactive${when(done)}`
+			);
 		if (replay) lines.push(`  · replayed ${replay.clicks ?? '?'} queued click(s) after wake`);
 		if (failed) lines.push(`  · HYDRATION FAILED${failed.error ? `: ${failed.error}` : ''}`);
 
-		blocks.push(`### ${status}  ${label}${strategy !== '(unknown)' ? ` — wake:${strategy}` : ''}${entry ? `  (#${short(fp)})` : ''}\n${lines.join('\n')}`);
+		blocks.push(
+			`### ${status}  ${label}${strategy !== '(unknown)' ? ` — wake:${strategy}` : ''}${entry ? `  (#${short(fp)})` : ''}\n${lines.join('\n')}`
+		);
 
-		if (failed) warnings.push(`#${short(fp)}: hydration failed${failed.error ? ` — ${failed.error}` : ''}.`);
+		if (failed)
+			warnings.push(`#${short(fp)}: hydration failed${failed.error ? ` — ${failed.error}` : ''}.`);
 		else if (ssr && !connected)
-			warnings.push(`#${short(fp)}: SSR'd but the region never connected — its custom element never ran (island JS not shipped/loaded, or a csr=true/false mismatch).`);
+			warnings.push(
+				`#${short(fp)}: SSR'd but the region never connected — its custom element never ran (island JS not shipped/loaded, or a csr=true/false mismatch).`
+			);
 		else if (connected && strategy === 'load' && !done)
-			warnings.push(`#${short(fp)}: connected with wake:load but never finished hydrating — stuck or errored mid-wake.`);
+			warnings.push(
+				`#${short(fp)}: connected with wake:load but never finished hydrating — stuck or errored mid-wake.`
+			);
 	}
 
 	const boot = global.find((e) => e.name === 'runtime.boot');
@@ -464,19 +587,24 @@ function render_story(url: string, events: DtEvent[]): string {
 	const header =
 		`# Runtime story — ${url}\n\n` +
 		`${by_fp.size} island(s) · ${events.length} events` +
-		(boot ? ` · runtime booted (${(boot.installers as string[] | undefined)?.join(', ') || 'installers ran'})` : '') +
+		(boot
+			? ` · runtime booted (${(boot.installers as string[] | undefined)?.join(', ') || 'installers ran'})`
+			: '') +
 		(navs.length ? ` · ${navs.filter((n) => n.name === 'nav.finish').length} navigation(s)` : '');
 
 	return (
 		`${header}\n\n${blocks.join('\n\n')}` +
-		(warnings.length ? `\n\n## ⚠️ Warnings (${warnings.length})\n${warnings.map((w) => `- ${w}`).join('\n')}` : '\n\n## ✅ No lifecycle anomalies detected.')
+		(warnings.length
+			? `\n\n## ⚠️ Warnings (${warnings.length})\n${warnings.map((w) => `- ${w}`).join('\n')}`
+			: '\n\n## ✅ No lifecycle anomalies detected.')
 	);
 }
 
 /** Load a REAL page in a headless browser, let its islands hydrate, and read the devtools stream. */
 async function tool_debug(args: Attrs): Promise<ToolResult> {
 	const url = String(args.url ?? '');
-	if (!url) return fail('`url` is required — a page of a running ogygia app built with OGYGIA_DEVTOOLS=1.');
+	if (!url)
+		return fail('`url` is required — a page of a running ogygia app built with OGYGIA_DEVTOOLS=1.');
 	const wait = typeof args.wait === 'number' ? Math.min(Math.max(args.wait, 200), 8000) : 2500;
 	const do_scroll = args.scroll !== false;
 	const click_sel = typeof args.click === 'string' ? args.click : '';
@@ -488,22 +616,30 @@ async function tool_debug(args: Attrs): Promise<ToolResult> {
 		const spec = 'playwright';
 		({ chromium } = (await import(spec)) as typeof import('playwright'));
 	} catch {
-		return fail('ogygia_debug needs Playwright: `npm i -D playwright && npx playwright install chromium`.');
+		return fail(
+			'ogygia_debug needs Playwright: `npm i -D playwright && npx playwright install chromium`.'
+		);
 	}
 	let browser: Awaited<ReturnType<typeof chromium.launch>>;
 	try {
 		browser = await chromium.launch();
 	} catch (e) {
-		return fail(`could not launch a browser (${e instanceof Error ? e.message : String(e)}). Try \`npx playwright install chromium\`.`);
+		return fail(
+			`could not launch a browser (${e instanceof Error ? e.message : String(e)}). Try \`npx playwright install chromium\`.`
+		);
 	}
 	try {
 		const page = await browser.newPage();
 		try {
 			await page.goto(url, { waitUntil: 'load', timeout: 15000 });
 		} catch (e) {
-			return fail(`could not load ${url} — is the dev server up? (${e instanceof Error ? e.message : String(e)})`);
+			return fail(
+				`could not load ${url} — is the dev server up? (${e instanceof Error ? e.message : String(e)})`
+			);
 		}
-		const has_hook = await page.evaluate(() => typeof (window as { __ogygia_devtools?: unknown }).__ogygia_devtools !== 'undefined');
+		const has_hook = await page.evaluate(
+			() => typeof (window as { __ogygia_devtools?: unknown }).__ogygia_devtools !== 'undefined'
+		);
 		if (!has_hook)
 			return fail(
 				`${url} loaded, but window.__ogygia_devtools is absent — the app is not a devtools build. Run its dev/build with ` +
@@ -525,7 +661,11 @@ async function tool_debug(args: Attrs): Promise<ToolResult> {
 			await page.click(click_sel, { timeout: 3000 }).catch(() => {});
 			await page.waitForTimeout(400);
 		}
-		const trace = (await page.evaluate(() => (window as { __ogygia_devtools: { trace(): { events: unknown[] } } }).__ogygia_devtools.trace())) as {
+		const trace = (await page.evaluate(() =>
+			(
+				window as { __ogygia_devtools: { trace(): { events: unknown[] } } }
+			).__ogygia_devtools.trace()
+		)) as {
 			events: DtEvent[];
 		};
 		return text(render_story(url, trace.events ?? []));
@@ -536,7 +676,14 @@ async function tool_debug(args: Attrs): Promise<ToolResult> {
 
 // ── ogygia_profile — run the SSR profiler on a route + digest its agent JSON ────────────────────────
 
-const sev_icon: Record<string, string> = { critical: '❌', error: '❌', warn: '⚠️', warning: '⚠️', info: 'ℹ️', good: '✅' };
+const sev_icon: Record<string, string> = {
+	critical: '❌',
+	error: '❌',
+	warn: '⚠️',
+	warning: '⚠️',
+	info: 'ℹ️',
+	good: '✅'
+};
 const median = (xs: number[]): number => {
 	if (!xs.length) return 0;
 	const s = [...xs].sort((a, b) => a - b);
@@ -547,13 +694,38 @@ const median = (xs: number[]): number => {
 type ProfileReport = {
 	target?: { page?: string; request?: string; runs?: number[] };
 	dev?: boolean;
-	summary?: { verdict?: string; window_ms?: number; busy_ms?: number; busy_pct?: number; cpu_percent?: number; rss_mb?: number };
+	summary?: {
+		verdict?: string;
+		window_ms?: number;
+		busy_ms?: number;
+		busy_pct?: number;
+		cpu_percent?: number;
+		rss_mb?: number;
+	};
 	findings?: Array<{ severity?: string; code?: string; message?: string }>;
 	budget?: Array<{ label?: string; category?: string; ms?: number; pct?: number }>;
-	hot_functions?: Array<{ name?: string; file?: string; line?: number; category?: string; self_ms?: number; per_call_ms?: number }>;
-	components?: Array<{ name?: string; instances?: number; self_ms?: number; total_ms?: number; alloc_bytes?: number | null }>;
+	hot_functions?: Array<{
+		name?: string;
+		file?: string;
+		line?: number;
+		category?: string;
+		self_ms?: number;
+		per_call_ms?: number;
+	}>;
+	components?: Array<{
+		name?: string;
+		instances?: number;
+		self_ms?: number;
+		total_ms?: number;
+		alloc_bytes?: number | null;
+	}>;
 	network?: { count?: number; total_ms?: number; sequential_ms?: number; errors?: number };
-	memory?: { rss_start_mb?: number; rss_end_mb?: number; growth_mb?: number; allocators?: Array<{ name?: string; category?: string; self_bytes?: number }> };
+	memory?: {
+		rss_start_mb?: number;
+		rss_end_mb?: number;
+		growth_mb?: number;
+		allocators?: Array<{ name?: string; category?: string; self_bytes?: number }>;
+	};
 	links?: { html?: string; json?: string; cpuprofile?: string };
 };
 
@@ -599,17 +771,25 @@ function render_profile(origin: string, r: ProfileReport): string {
 		.filter((h) => h.category !== 'profiler')
 		.sort((a, b) => (b.self_ms ?? 0) - (a.self_ms ?? 0))
 		.slice(0, 8)
-		.map((h, i) => `${i + 1}. ${h.name} — ${h.self_ms}ms self${h.category ? ` [${h.category}]` : ''}${h.file ? ` · ${base(h.file)}${h.line ? `:${h.line}` : ''}` : ''}`)
+		.map(
+			(h, i) =>
+				`${i + 1}. ${h.name} — ${h.self_ms}ms self${h.category ? ` [${h.category}]` : ''}${h.file ? ` · ${base(h.file)}${h.line ? `:${h.line}` : ''}` : ''}`
+		)
 		.join('\n');
 
 	const comps = (r.components ?? [])
 		.sort((a, b) => (b.self_ms ?? 0) - (a.self_ms ?? 0))
 		.slice(0, 10)
-		.map((c) => `- ${c.name} ×${c.instances ?? 1} — ${c.self_ms}ms self${c.alloc_bytes ? `, ${Math.round(c.alloc_bytes / 1024)} KB alloc` : ''}`)
+		.map(
+			(c) =>
+				`- ${c.name} ×${c.instances ?? 1} — ${c.self_ms}ms self${c.alloc_bytes ? `, ${Math.round(c.alloc_bytes / 1024)} KB alloc` : ''}`
+		)
 		.join('\n');
 
 	const net = r.network;
-	const net_line = net ? `${net.count ?? 0} call(s)${net.total_ms ? `, ${net.total_ms}ms total` : ''}${net.errors ? `, ${net.errors} error(s)` : ''}` : 'n/a';
+	const net_line = net
+		? `${net.count ?? 0} call(s)${net.total_ms ? `, ${net.total_ms}ms total` : ''}${net.errors ? `, ${net.errors} error(s)` : ''}`
+		: 'n/a';
 	const mem = r.memory;
 	const mem_line = mem ? `RSS ${mem.rss_start_mb}→${mem.rss_end_mb} MB (+${mem.growth_mb})` : 'n/a';
 
@@ -709,7 +889,11 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 		const key_h: Record<string, string> = key ? { 'x-profiler-key': key } : {};
 		let pre: Response;
 		try {
-			pre = await fetch_timeout(origin + profiler_base, { redirect: 'manual', headers: key_h }, 8000);
+			pre = await fetch_timeout(
+				origin + profiler_base,
+				{ redirect: 'manual', headers: key_h },
+				8000
+			);
 		} catch (e) {
 			return fail(
 				`Could not reach ${origin} — is it running and reachable? (${e instanceof Error ? e.message : String(e)})`
@@ -809,10 +993,17 @@ async function tool_profile_open(args: Attrs): Promise<ToolResult> {
 	if (!is_dump(dump)) return fail(`${file} decrypted, but it is not an ogygia profiler dump.`);
 
 	// report_json's return is a superset of the loose ProfileReport view render_profile reads.
-	const report = report_json(dump.analysis, dump.meta, '/__profiler', dump.extras) as unknown as ProfileReport;
+	const report = report_json(
+		dump.analysis,
+		dump.meta,
+		'/__profiler',
+		dump.extras
+	) as unknown as ProfileReport;
 	report.links = undefined; // the source server is gone — its report URLs would 404
 	const node = (dump.meta as { node?: string }).node;
-	return text(`> Imported from \`${file}\`${node ? ` · Node ${node}` : ''}\n\n` + render_profile('', report));
+	return text(
+		`> Imported from \`${file}\`${node ? ` · Node ${node}` : ''}\n\n` + render_profile('', report)
+	);
 }
 
 // ── ogygia_observatory — bundle files into a client-only Observatory link ──────────────────────────
@@ -830,18 +1021,27 @@ function observatory_link(files: Record<string, string>, base: string): string {
 function tool_observatory(args: Attrs): ToolResult {
 	let files: Record<string, string> = {};
 	if (args.files && typeof args.files === 'object' && !Array.isArray(args.files)) {
-		for (const [k, v] of Object.entries(args.files as Record<string, unknown>)) if (typeof v === 'string') files[k] = v;
+		for (const [k, v] of Object.entries(args.files as Record<string, unknown>))
+			if (typeof v === 'string') files[k] = v;
 	} else if (typeof args.source === 'string') {
 		files[String(args.filename ?? 'App.svelte')] = args.source;
 	}
 	const names = Object.keys(files);
-	if (!names.length) return fail('Provide `files` (a map of filename → source) or `source` (+ optional `filename`).');
+	if (!names.length)
+		return fail(
+			'Provide `files` (a map of filename → source) or `source` (+ optional `filename`).'
+		);
 	if (!names.some((n) => n.endsWith('.svelte')))
-		return text(`⚠️ No .svelte file given — the Observatory renders a Svelte component (App.svelte is the entry). Add one.\n\nFiles: ${names.join(', ')}`);
+		return text(
+			`⚠️ No .svelte file given — the Observatory renders a Svelte component (App.svelte is the entry). Add one.\n\nFiles: ${names.join(', ')}`
+		);
 
 	const base = String(args.base ?? DEFAULT_OBSERVATORY);
 	const url = observatory_link(files, base);
-	const long = url.length > 8000 ? `\n\n⚠️ The link is ${url.length} chars — some tools truncate very long URLs. Trim to the files that matter if it breaks.` : '';
+	const long =
+		url.length > 8000
+			? `\n\n⚠️ The link is ${url.length} chars — some tools truncate very long URLs. Trim to the files that matter if it breaks.`
+			: '';
 	return text(
 		`Open this in the ogygia Observatory to see ${names.length === 1 ? 'this component' : `these ${names.length} files`} compiled live — the island map, byte ledger, wire payloads, and a real hydrating preview:\n\n` +
 			`${url}\n\n` +
@@ -851,7 +1051,16 @@ function tool_observatory(args: Attrs): ToolResult {
 
 // ── ogygia_scan — walk a real project, map every island + lint the whole codebase ──────────────────
 
-const SKIP_DIRS = new Set(['node_modules', '.svelte-kit', '.git', 'dist', 'build', '.vercel', '.netlify', 'coverage']);
+const SKIP_DIRS = new Set([
+	'node_modules',
+	'.svelte-kit',
+	'.git',
+	'dist',
+	'build',
+	'.vercel',
+	'.netlify',
+	'coverage'
+]);
 
 function walk_svelte(dir: string, out: string[] = [], depth = 0): string[] {
 	if (depth > 12 || out.length > 2000) return out;
@@ -872,14 +1081,24 @@ function walk_svelte(dir: string, out: string[] = [], depth = 0): string[] {
 	return out;
 }
 
-type ScanIsland = { component: string; local: string; kind: string; strategy: string; attrs: Attrs; file: string };
+type ScanIsland = {
+	component: string;
+	local: string;
+	kind: string;
+	strategy: string;
+	attrs: Attrs;
+	file: string;
+};
 type Violation = { file: string; severity: 'error' | 'warn'; msg: string };
 
 function tool_scan(args: Attrs): ToolResult {
 	const dir = String(args.dir ?? 'src');
 	const root = path.isAbsolute(dir) ? dir : path.resolve(process.cwd(), dir);
 	const files = walk_svelte(root);
-	if (!files.length) return fail(`No .svelte files found under ${dir} (cwd: ${process.cwd()}). Pass \`dir\` (e.g. "src" or "src/routes").`);
+	if (!files.length)
+		return fail(
+			`No .svelte files found under ${dir} (cwd: ${process.cwd()}). Pass \`dir\` (e.g. "src" or "src/routes").`
+		);
 
 	const rel = (f: string) => path.relative(root, f) || path.basename(f);
 	const islands: ScanIsland[] = [];
@@ -904,8 +1123,13 @@ function tool_scan(args: Attrs): ToolResult {
 		// Real kinds + hard errors from the transform. The id is the clean relative path (nice messages).
 		const kind_by_component = new Map<string, string>();
 		try {
-			const r = transformHost(source, '/' + rel(f).replace(/\\/g, '/'), build_ctx(true)) as HostResult;
-			for (const isl of r?.islands ?? []) if (isl.componentPath) kind_by_component.set(base(isl.componentPath), isl.kind ?? '');
+			const r = transformHost(
+				source,
+				'/' + rel(f).replace(/\\/g, '/'),
+				build_ctx(true)
+			) as HostResult;
+			for (const isl of r?.islands ?? [])
+				if (isl.componentPath) kind_by_component.set(base(isl.componentPath), isl.kind ?? '');
 		} catch (e) {
 			const raw = (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').trim();
 			// "unknown preset" is a scan limitation (we don't load the app's ogygia({ regions: { presets } })
@@ -916,16 +1140,32 @@ function tool_scan(args: Attrs): ToolResult {
 
 		for (const m of marks) {
 			const kind = kind_by_component.get(base(m.component)) ?? '(mark only)';
-			islands.push({ component: m.component, local: m.local, kind, strategy: strategy_label(m.attrs), attrs: m.attrs, file: rel(f) });
+			islands.push({
+				component: m.component,
+				local: m.local,
+				kind,
+				strategy: strategy_label(m.attrs),
+				attrs: m.attrs,
+				file: rel(f)
+			});
 			kinds[kind] = (kinds[kind] ?? 0) + 1;
 			// a real interactive island (not a lake/raw) — remember its component basename
-			if (m.attrs.wake !== 'none' && m.attrs.region !== 'raw') island_components.add(base(m.component));
+			if (m.attrs.wake !== 'none' && m.attrs.region !== 'raw')
+				island_components.add(base(m.component));
 
 			// ── soft lints (per mark) ──
 			if (m.attrs.wake === 'none' && m.attrs.render === 'deferred')
-				violations.push({ file: rel(f), severity: 'warn', msg: `${m.component}: wake:'none' + render:'deferred' is nonsense (HTML later, no JS) — dev treats it as defer-only. Drop one.` });
+				violations.push({
+					file: rel(f),
+					severity: 'warn',
+					msg: `${m.component}: wake:'none' + render:'deferred' is nonsense (HTML later, no JS) — dev treats it as defer-only. Drop one.`
+				});
 			if (m.attrs.wake === 'interaction' && m.attrs.render === 'deferred')
-				violations.push({ file: rel(f), severity: 'warn', msg: `${m.component}: render:'deferred' ignores wake:'interaction' (a server island renders inline in an island). Nest a wake island inside it instead.` });
+				violations.push({
+					file: rel(f),
+					severity: 'warn',
+					msg: `${m.component}: render:'deferred' ignores wake:'interaction' (a server island renders inline in an island). Nest a wake island inside it instead.`
+				});
 		}
 	}
 
@@ -943,12 +1183,18 @@ function tool_scan(args: Attrs): ToolResult {
 		}
 	}
 
-	if (!islands.length) return text(`Scanned ${files.length} .svelte file(s) under ${dir} — no marked regions. The whole tree is free server HTML.`);
+	if (!islands.length)
+		return text(
+			`Scanned ${files.length} .svelte file(s) under ${dir} — no marked regions. The whole tree is free server HTML.`
+		);
 
 	const by_file = new Map<string, ScanIsland[]>();
 	for (const i of islands) (by_file.get(i.file) ?? by_file.set(i.file, []).get(i.file)!).push(i);
 	const map_lines = [...by_file.entries()]
-		.map(([file, list]) => `### ${file}\n${list.map((i) => `- ${i.component} (as ${i.local}) — ${i.strategy}`).join('\n')}`)
+		.map(
+			([file, list]) =>
+				`### ${file}\n${list.map((i) => `- ${i.component} (as ${i.local}) — ${i.strategy}`).join('\n')}`
+		)
 		.join('\n\n');
 	const kind_summary = Object.entries(kinds)
 		.map(([k, n]) => `${n} ${k}`)
@@ -957,7 +1203,9 @@ function tool_scan(args: Attrs): ToolResult {
 	const warns = violations.filter((v) => v.severity === 'warn');
 	const vio_block = violations.length
 		? `\n\n## ⚠️ Findings (${violations.length})\n` +
-			[...errs, ...warns].map((v) => `- ${v.severity === 'error' ? '❌' : '⚠️'} ${v.file}: ${v.msg}`).join('\n')
+			[...errs, ...warns]
+				.map((v) => `- ${v.severity === 'error' ? '❌' : '⚠️'} ${v.file}: ${v.msg}`)
+				.join('\n')
 		: `\n\n## ✅ No rule violations across ${files.length} files.`;
 
 	const preset_note = preset_marks
@@ -999,7 +1247,12 @@ async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 
 // ── JSON-RPC 2.0 over stdio ────────────────────────────────────────────────────
 
-type Rpc = { jsonrpc?: string; id?: number | string | null; method?: string; params?: Record<string, unknown> };
+type Rpc = {
+	jsonrpc?: string;
+	id?: number | string | null;
+	method?: string;
+	params?: Record<string, unknown>;
+};
 
 function send(msg: Record<string, unknown>): void {
 	process.stdout.write(JSON.stringify(msg) + '\n');
@@ -1031,7 +1284,13 @@ function handle(msg: Rpc): void {
 		const args = (params?.arguments as Attrs) ?? {};
 		dispatch_tool(name, args)
 			.then((result) => send({ jsonrpc: '2.0', id, result }))
-			.catch((e) => send({ jsonrpc: '2.0', id, result: fail(`Internal error: ${e instanceof Error ? e.message : String(e)}`) }));
+			.catch((e) =>
+				send({
+					jsonrpc: '2.0',
+					id,
+					result: fail(`Internal error: ${e instanceof Error ? e.message : String(e)}`)
+				})
+			);
 		return;
 	}
 	if (method === 'ping') {
@@ -1045,7 +1304,9 @@ function handle(msg: Rpc): void {
 
 /** Start the stdio MCP server. Resolves when stdin closes (the client disconnected). */
 export async function runMcp(): Promise<void> {
-	log(`ogygia MCP server v${version} ready — 8 tools (compile, islands, check, explain, debug, profile, observatory, scan)`);
+	log(
+		`ogygia MCP server v${version} ready — 8 tools (compile, islands, check, explain, debug, profile, observatory, scan)`
+	);
 	const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 	for await (const line of rl) {
 		const trimmed = line.trim();

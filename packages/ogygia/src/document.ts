@@ -125,7 +125,8 @@ export async function document(
 			},
 			(v: unknown) => stringify(v, page_seed_reducers)
 		);
-		if (payload) head.push(`<script type="application/ogygia-page" data-ogygia-page>${payload}</script>`);
+		if (payload)
+			head.push(`<script type="application/ogygia-page" data-ogygia-page>${payload}</script>`);
 	}
 
 	const html =

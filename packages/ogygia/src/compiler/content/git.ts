@@ -87,7 +87,9 @@ let _exec: typeof import('node:child_process').execFileSync | undefined;
 const git = (args: string[], cwd?: string) => {
 	const exec = (_exec ??= createRequire(import.meta.url)('node:child_process')
 		.execFileSync as typeof import('node:child_process').execFileSync);
-	return exec('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+	return exec('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+		.toString()
+		.trim();
 };
 
 /**

@@ -140,7 +140,9 @@ function isWireMacroCall(value: unknown): boolean {
 	const og = callee.object; // import.meta.og
 	if (og?.type !== 'MemberExpression' || og.computed || og.property?.name !== 'og') return false;
 	const meta = og.object; // import.meta
-	return meta?.type === 'MetaProperty' && meta.meta?.name === 'import' && meta.property?.name === 'meta';
+	return (
+		meta?.type === 'MetaProperty' && meta.meta?.name === 'import' && meta.property?.name === 'meta'
+	);
 }
 
 interface AstNode {

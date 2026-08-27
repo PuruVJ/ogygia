@@ -49,7 +49,7 @@ import {
 	type RouteAgg
 } from './report.js';
 import { ogp_encode, ogp_decode, is_ogp, recover_ogp_bytes } from './crypto.js';
-import { type Router, type Ctx as RouteCtx } from '../router/index.js';
+import { error, type Router, type Ctx as RouteCtx } from '../router/index.js';
 import { build_profiler_router } from './profiler-router.js';
 
 export interface ProfilerOptions {
@@ -682,7 +682,10 @@ class Profiler {
 		if (!(await this.#key_matches(key))) return ctx.json({ ok: false }, { status: 401 });
 		const { createHash } = await import('node:crypto');
 		const res = ctx.json({ ok: true, next });
-		res.headers.append('set-cookie', this.#session_cookie(this.#cookie_token(createHash), ctx.event!));
+		res.headers.append(
+			'set-cookie',
+			this.#session_cookie(this.#cookie_token(createHash), ctx.event!)
+		);
 		return res;
 	}
 
@@ -703,7 +706,10 @@ class Profiler {
 	// router renders through document(); the profiler itself never touches document/region.
 	// Auth is a router GUARD now (#auth_guard); nothing to gate here — just dispatch under the base.
 	async #ui(event: RequestEvent): Promise<Response> {
-		return (await this.#router().fetch(event.request, event)) ?? new Response('Not found', { status: 404 });
+		return (
+			(await this.#router().fetch(event.request, event)) ??
+			new Response('Not found', { status: 404 })
+		);
 	}
 
 	// Auth as a router guard (a pure pre-check): /login + /logout are always reachable (they manage the
@@ -792,7 +798,7 @@ class Profiler {
 		const q = ctx.url.searchParams;
 		const path = q.get('p') ?? '';
 		if (!path.startsWith('/') || path.startsWith('//')) {
-			return ctx.error(400, 'Give a path on this site, like /docs/overview.');
+			return error(400, 'Give a path on this site, like /docs/overview.');
 		}
 		const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
 		const format = q.get('format') === 'ogp' ? 'ogp' : '';
@@ -810,7 +816,7 @@ class Profiler {
 	async #record_page(ctx: RouteCtx): Promise<Response> {
 		const event = ctx.event!; // event.fetch (Kit's internal SSR render) is the one thing only Kit gives
 		if (this.#recording_active()) {
-			return ctx.error(
+			return error(
 				409,
 				'A profile is already running. It clears itself within a couple of minutes if a run was abandoned — or hit Reset on the dashboard.'
 			);
@@ -823,7 +829,7 @@ class Profiler {
 		try {
 			const path = q.get('p') ?? '';
 			if (!path.startsWith('/') || path.startsWith('//')) {
-				return ctx.error(400, 'Give a path on this site, like /docs/overview.');
+				return error(400, 'Give a path on this site, like /docs/overview.');
 			}
 			const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
 			const interval = clamp(Number(q.get('interval')) || 200, 50, 10_000);
@@ -885,7 +891,9 @@ class Profiler {
 					// Stop early if another CPU run + the reserved coverage pass wouldn't finish in time.
 					if (i > 0 && Date.now() + (warmup_ms ?? 0) + coverage_reserve > deadline) {
 						const budget_label =
-							work_budget >= 1000 ? `${Math.round(work_budget / 1000)}s` : `${Math.round(work_budget)}ms`;
+							work_budget >= 1000
+								? `${Math.round(work_budget / 1000)}s`
+								: `${Math.round(work_budget)}ms`;
 						budget_note =
 							`Ran ${i} of ${runs} render${i === 1 ? '' : 's'} — trimmed to fit the ` +
 							`${budget_label} serverless budget (the page renders in ~${Math.round(warmup_ms ?? 0)}ms). ` +
@@ -944,7 +952,7 @@ class Profiler {
 			// the session cookie is seated by the gate in #ui, not here
 			return ctx.redirect(ctx.href('/report/[id]', { id }));
 		} catch (e) {
-			return ctx.error(
+			return error(
 				500,
 				e instanceof Error && INSPECTOR_ERR.test(e.message)
 					? 'CPU profiling needs a Node.js server (adapter-node or dev). This platform does not expose the V8 inspector.'
@@ -1129,7 +1137,10 @@ class Profiler {
 			return new Response(
 				'ogygia profiler is installed but disabled: set OGYGIA_PROFILER_SECRET (or ' +
 					'`ogygia({ profiler: { secret } })`) to enable the UI in production.',
-				{ status: 404, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } }
+				{
+					status: 404,
+					headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }
+				}
 			);
 		}
 

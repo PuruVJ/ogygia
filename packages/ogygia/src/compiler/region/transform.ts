@@ -2046,8 +2046,7 @@ class FileCompilation {
 		}
 
 		// Snippet-only files that produced no island or portable work are untouched — behave as bailed.
-		if (!has_island_hint && !portable_emitted && islands_by_id.size === 0)
-			return null;
+		if (!has_island_hint && !portable_emitted && islands_by_id.size === 0) return null;
 
 		// THE one wire question a host compilation answers: can this host cross live content into an
 		// island? True for a static placement WITH children (they cross as slot pointers), for a
@@ -2263,7 +2262,8 @@ class TsRegionCompilation {
 					`[ogygia] ${this.#rel_host}: \`${renderKey}: 'deferred'\` fetches on the \`${this.#wakeKey}\` schedule, but '${dval}' is not one. Use \`${this.#wakeKey}: 'load' | 'idle' | 'visible'\` or a media query (a hole must fetch — not 'none'/'interaction').`
 				);
 			const options: { when: string; margin?: string } = { when };
-			if (when === 'visible' && this.#ctx.visibleMargin != null) options.margin = this.#ctx.visibleMargin;
+			if (when === 'visible' && this.#ctx.visibleMargin != null)
+				options.margin = this.#ctx.visibleMargin;
 			const identity = regionIdentity(id_base, { strategy: 'server', options });
 			const iid = regionId(identity, this.#salt);
 			const entryPath = this.#ctx.virtualPathFor(this.#id, iid);
@@ -2309,7 +2309,9 @@ class TsRegionCompilation {
 					componentPath,
 					entryPath,
 					hostPath: this.#id,
-					moduleUrl: this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid, this.#ctx.appDir),
+					moduleUrl: this.#ctx.dev
+						? this.#ctx.devUrlFor(entryPath)
+						: islandPublicUrl(iid, this.#ctx.appDir),
 					exportName,
 					identity
 				})
@@ -2334,7 +2336,9 @@ class TsRegionCompilation {
 				componentPath,
 				entryPath,
 				wrapperPath: this.#wrapper_path_for(iid),
-				moduleUrl: this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid, this.#ctx.appDir),
+				moduleUrl: this.#ctx.dev
+					? this.#ctx.devUrlFor(entryPath)
+					: islandPublicUrl(iid, this.#ctx.appDir),
 				strategy,
 				options: hydrateMargin ? { margin: hydrateMargin } : {},
 				hostPath: this.#id,
@@ -2416,7 +2420,11 @@ class TsRegionCompilation {
 					: { wake: attrs.get(wakeKey) };
 			const { iid, record, importFrom } = this.#emit_ts_region(componentPath, marker);
 			if (!islands_by_id.has(iid)) islands_by_id.set(iid, record);
-			s.overwrite(m.index, m.index + full.length, `import ${local} from ${JSON.stringify(importFrom)};`);
+			s.overwrite(
+				m.index,
+				m.index + full.length,
+				`import ${local} from ${JSON.stringify(importFrom)};`
+			);
 			matched = true;
 		}
 

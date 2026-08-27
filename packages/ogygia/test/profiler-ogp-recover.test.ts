@@ -7,7 +7,13 @@ import { describe, expect, it } from 'vitest';
 import { is_ogp, recover_ogp_bytes } from '../src/profiler/crypto.js';
 
 // A minimally-valid `.ogp` shape: the 'OGP1' magic + enough bytes to clear is_ogp's length gate (>44).
-const ogp = new Uint8Array([0x4f, 0x47, 0x50, 0x31, ...Array.from({ length: 60 }, (_, i) => (i * 7) & 0xff)]);
+const ogp = new Uint8Array([
+	0x4f,
+	0x47,
+	0x50,
+	0x31,
+	...Array.from({ length: 60 }, (_, i) => (i * 7) & 0xff)
+]);
 
 describe('recover_ogp_bytes', () => {
 	it('passes a real .ogp through unchanged', () => {
@@ -30,7 +36,9 @@ describe('recover_ogp_bytes', () => {
 	});
 
 	it('decodes base64 with wrapping newlines', () => {
-		const wrapped = Buffer.from(ogp).toString('base64').replace(/(.{20})/g, '$1\n');
+		const wrapped = Buffer.from(ogp)
+			.toString('base64')
+			.replace(/(.{20})/g, '$1\n');
 		const b64 = new TextEncoder().encode(wrapped);
 		expect(is_ogp(recover_ogp_bytes(b64))).toBe(true);
 	});

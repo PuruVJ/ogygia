@@ -694,3 +694,71 @@ the profiler DOES dogfood guards after all; refinement 13's "keeps its bespoke g
 Verified in a prod preview: unauthed → 303 to /login, `x-profiler-key: <secret>` → 200, `?key=` no
 longer authenticates. Lesson: a feature that "needs" a post-effect is often carrying a design smell
 that, once removed, makes it fit the cleaner primitive. After: 9/10 / 10/10.
+
+### 14 · The builder was the regression — flat table + `wrap()` (2026-08-27, user: "folks say the router is ugly; Kit's concepts were the mistake; start fresh")
+
+**Scenario.** Readers of real route tables (the profiler's, consumers') call the shipped surface
+ugly. Diagnosis against this doc: what shipped is NOT this doc's design. The implementation
+(`routes((r) => r.layout().load().error().routes({ '/': (r) => r.page(C).load(f) }))`) is a
+Kit-shaped BUILDER — layers, load cascade, `.reset`, `(r) =>` lambdas at every nesting level,
+`.page().load()` chains. Every one of those concepts exists in Kit because the filesystem is the
+tree and data must cascade down invisible directory levels. A programmatic router has no
+filesystem: the tree is whatever values you compose. The doc knew this (laws 2, 8, 9; refinements
+7–8 chose the flat record); the build drifted back because the ONE thing the flat design had
+parked — shared chrome — is the thing the profiler needed on day one, and the path of least
+resistance was Kit's layout/layer model. The parked problem pulled the whole surface into its
+gravity well.
+
+**Rating.** Current surface: intuitiveness 3/10 (read order inverts: structure lambdas first,
+URL second, component third, data last), power 8/10, honesty 4/10 (four concepts — layer, load,
+reset, cascade — exist only to re-model the filesystem we deliberately don't have).
+
+**Expansion — close the parked item and the rest collapses.** Shared chrome is a VALUE
+transformation, not route structure: `wrap(Shell, table)` returns a table whose pages render
+inside `Shell` (children = the inner view; islands inside the shell wake normally). Data-driven
+chrome is the ctx form: `wrap((c) => view(Shell, { base: c.state.base }), table)` — a view with a
+hole; the matched route's view fills `children`. Composition gives every Kit layout feature
+without its DSL:
+
+- nesting = wrapping a sub-table (or a mounted sub-router — same thing, refinement 7);
+- `reset` DELETED — inheritance is explicit structure, so "no chrome" = don't wrap that table;
+- load cascade DELETED — shared data is a guard writing `ctx.state` (refinement 13), read by any
+  handler; no invisible `Object.assign` bag flowing down layers;
+- error boundary = table option `catch: Component` (the view rendered for thrown `c.error()`),
+  scoped by the same composition (a wrapped sub-table can carry its own `catch`).
+
+The profiler's whole tree in the target surface:
+
+```ts
+const app = routes({
+	'/':                 (c) => view(Dashboard, d.dashboard()),
+	'/run':              (c) => view(Run, d.run_page(c)),
+	'/login':            get((c) => view(Login, d.login_props(c))).post(d.login),
+	'/logout':           get(d.logout),
+	'/view':             get((c) => view(Upload, { base: d.base })).post(d.upload),
+	'/report/[id]':      async (c) => view(Report, await report_props(c)),
+	'/report/[id].json': (c) => d.report_json(c.params.id),
+}, {
+	base: d.base,
+	guard: d.auth_guard,                       // deny ≠ 404; writes c.state (base, session)
+	catch: Message,                            // error view for thrown c.error()
+	miss: (c) => c.error(404, 'Unknown profiler page.'),
+});
+```
+
+One line per route, URL first, the whole sitemap in one glance. `view(Report, props)` type-checks
+props against the component's real `$props` — STRONGER than the shipped `$infer` indirection
+(components go back to owning their prop types; no `ProfilerRoutes['/']` indexing). `href` stays
+typed off the table keys. Everything else in this doc (RF bindings, freshness law, verbs on the
+entry, guards, patterns) is unchanged — the flat design was never the problem; not shipping it was.
+
+**Deleted concepts (the whole point):** layer, load cascade, `.reset`, `PageB`/`EndpointB` chain
+types, `(r) =>` builder lambdas, `$infer`-indexed component props. **Kept:** `Ctx` shape + response
+shortcuts (refinement 10), pattern grammar, mounting, `base`/`miss`/`slash`.
+
+**Migration surface:** profiler-router (the dogfood — becomes the table above), playground rtr
+fixture, docs 01-server-router page, bcms's rtr usage. The old builder ships today (0.8.x) — decide
+whether it dies outright (greenfield rule) or the builder becomes a thin deprecated shim over the
+table. After: intuitiveness 9/10, power 9/10 (nothing lost; guards+wrap cover every layer use),
+honesty 9/10. NOT BUILT — awaiting ruling on: (a) `wrap()` name + ctx-form signature, (b) `catch:`
+naming, (c) kill-vs-shim for the builder.

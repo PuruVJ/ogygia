@@ -25,12 +25,19 @@ describe('dedupe_modulepreload_links', () => {
 	it('dedupes across interleaved per-island blocks (the real emission shape)', () => {
 		// island 1: facade + shared deps; island 2: its facade + the SAME shared deps
 		const html =
-			link('/og-region.aaa.js') + link('/chunks/shared1.js') + link('/chunks/shared2.js') +
-			link('/og-region.bbb.js') + link('/chunks/shared1.js') + link('/chunks/shared2.js') +
+			link('/og-region.aaa.js') +
+			link('/chunks/shared1.js') +
+			link('/chunks/shared2.js') +
+			link('/og-region.bbb.js') +
+			link('/chunks/shared1.js') +
+			link('/chunks/shared2.js') +
 			'</head>';
 		expect(dedupe_modulepreload_links(html)).toBe(
-			link('/og-region.aaa.js') + link('/chunks/shared1.js') + link('/chunks/shared2.js') +
-			link('/og-region.bbb.js') + '</head>'
+			link('/og-region.aaa.js') +
+				link('/chunks/shared1.js') +
+				link('/chunks/shared2.js') +
+				link('/og-region.bbb.js') +
+				'</head>'
 		);
 	});
 
@@ -52,8 +59,10 @@ describe('dedupe_modulepreload_links', () => {
 		const low = (href: string) => `<link rel="modulepreload" href="${href}" fetchpriority="low">`;
 		// visible island's block first (low), load island's block second (normal) — normal must win
 		const html =
-			low('/og-region.vvv.js') + low('/chunks/shared.js') +
-			link('/og-region.lll.js') + link('/chunks/shared.js') +
+			low('/og-region.vvv.js') +
+			low('/chunks/shared.js') +
+			link('/og-region.lll.js') +
+			link('/chunks/shared.js') +
 			'</head>';
 		expect(dedupe_modulepreload_links(html)).toBe(
 			low('/og-region.vvv.js') + link('/og-region.lll.js') + link('/chunks/shared.js') + '</head>'

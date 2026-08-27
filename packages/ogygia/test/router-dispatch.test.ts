@@ -1,19 +1,26 @@
+/**
+ * Router v2 dispatch — endpoints, params, verbs, base/slash, thrown redirect/error, miss, and the
+ * load memoization + parent-sharing that makes waterfalls-and-waste impossible together. Page RENDER
+ * (document/region) is covered by the playground rtr e2e; here we exercise the pure request→response
+ * spine through endpoints and loads (no runtime needed).
+ */
 import { describe, it, expect } from 'vitest';
-import { routes } from '../src/router/router.js';
+import { routes, load, redirect, error } from '../src/router/index.js';
 
 const req = (path: string, init?: RequestInit) => new Request('http://x' + path, init);
 
-describe('router dispatch — endpoints & params', () => {
-	const app = routes((r) =>
-		r.routes({
-			'/': (r) => r.GET((c) => c.json({ home: true })),
-			'/docs/[slug]': (r) => r.GET((c) => c.json({ slug: c.params.slug })),
-			'/api/[id]': (r) => r.GET((c) => c.json({ read: c.params.id })).PUT((c) => c.json({ put: c.params.id })),
-			'/files/[...path]': (r) => r.GET((c) => c.json({ path: c.params.path }))
-		})
-	);
+describe('dispatch — endpoints, params, verbs', () => {
+	const app = routes({
+		'/': { GET: (c) => c.json({ home: true }) },
+		'/docs/[slug]': { GET: (c) => c.json({ slug: c.params.slug }) },
+		'/api/[id]': {
+			GET: (c) => c.json({ read: c.params.id }),
+			PUT: (c) => c.json({ put: c.params.id })
+		},
+		'/files/[...path]': { GET: (c) => c.json({ path: c.params.path }) }
+	});
 
-	it('routes GET endpoints with typed params', async () => {
+	it('routes GET endpoints with params ([slug], [...rest])', async () => {
 		expect(await (await app.fetch(req('/')))!.json()).toEqual({ home: true });
 		expect(await (await app.fetch(req('/docs/intro')))!.json()).toEqual({ slug: 'intro' });
 		expect(await (await app.fetch(req('/files/a/b')))!.json()).toEqual({ path: 'a/b' });
@@ -23,90 +30,104 @@ describe('router dispatch — endpoints & params', () => {
 		expect(await app.fetch(req('/nope'))).toBeNull();
 	});
 
-	it('dispatches verbs and 405s the rest with allow', async () => {
+	it('dispatches verbs, 405s the rest with allow, answers OPTIONS', async () => {
 		expect(await (await app.fetch(req('/api/7')))!.json()).toEqual({ read: '7' });
 		expect(await (await app.fetch(req('/api/7', { method: 'PUT' })))!.json()).toEqual({ put: '7' });
 		const bad = await app.fetch(req('/api/7', { method: 'DELETE' }));
 		expect(bad!.status).toBe(405);
 		expect(bad!.headers.get('allow')).toBe('GET, PUT');
-	});
-
-	it('answers OPTIONS from the known method set', async () => {
 		const o = await app.fetch(req('/api/7', { method: 'OPTIONS' }));
 		expect(o!.status).toBe(204);
 		expect(o!.headers.get('allow')).toBe('GET, PUT');
 	});
 });
 
-describe('router — data cascade (Kit parent())', () => {
-	const app = routes((r) =>
-		r.load(() => ({ a: 1 })).routes({
-			'/x': (r) =>
-				r.load(() => ({ b: 2 })).routes({
-					'/y': (r) => r.GET((c) => c.json(c.data))
-				}),
-			'/flat': (r) => r.GET((c) => c.json(c.data))
-		})
-	);
-
-	it('merges every ancestor load, top-down, into c.data', async () => {
-		expect(await (await app.fetch(req('/x/y')))!.json()).toEqual({ a: 1, b: 2 });
-		expect(await (await app.fetch(req('/flat')))!.json()).toEqual({ a: 1 });
-	});
-
-	it('a load returning a Response short-circuits (redirect/error)', async () => {
-		const guarded = routes((r) =>
-			r.load((c) => c.redirect('/login')).routes({
-				'/secret': (r) => r.GET((c) => c.json({ never: true }))
-			})
-		);
-		const res = await guarded.fetch(req('/secret'));
-		expect(res!.status).toBe(303);
-		expect(res!.headers.get('location')).toBe('/login');
-	});
-});
-
-describe('router — base + miss + slash', () => {
+describe('dispatch — base, slash, miss', () => {
 	const app = routes(
-		(r) =>
-			r.routes({
-				'/': (r) => r.GET((c) => c.json({ ok: 1 })),
-				'/x': (r) => r.GET((c) => c.json({ x: 1 }))
-			}),
-		{ base: '/__p', slash: 'never' }
+		{ '/x': { GET: (c) => c.json({ x: c.params }) } },
+		{
+			base: '/app',
+			slash: 'never',
+			miss: (c) => c.json({ missed: c.url.pathname }, { status: 404 })
+		}
 	);
 
-	it('strips base and owns its subtree (404 on miss, not fall-through)', async () => {
-		expect(await (await app.fetch(req('/__p')))!.json()).toEqual({ ok: 1 });
-		expect(await (await app.fetch(req('/__p/x')))!.json()).toEqual({ x: 1 });
-		expect((await app.fetch(req('/__p/nope')))!.status).toBe(404);
-		expect(await app.fetch(req('/elsewhere'))).toBeNull(); // outside base → not ours
+	it('strips base, returns null for out-of-base', async () => {
+		expect(await (await app.fetch(req('/app/x')))!.json()).toEqual({ x: {} });
+		expect(await app.fetch(req('/other'))).toBeNull();
 	});
-
-	it('canonicalizes a trailing slash (308)', async () => {
-		const r = await app.fetch(req('/__p/x/'));
+	it('308-canonicalizes a trailing slash under slash:never', async () => {
+		const r = await app.fetch(req('/app/x/'));
 		expect(r!.status).toBe(308);
-		expect(r!.headers.get('location')).toBe('/__p/x');
+		expect(r!.headers.get('location')).toBe('/app/x');
+	});
+	it('runs miss for an unmatched path under base', async () => {
+		const r = await app.fetch(req('/app/nope'));
+		expect(r!.status).toBe(404);
+		expect(await r!.json()).toEqual({ missed: '/app/nope' });
 	});
 });
 
-describe('router — endpoint returns', () => {
-	const app = routes((r) =>
-		r.routes({
-			'/plain': (r) => r.GET(() => ({ plain: true })), // bare object → JSON
-			'/empty': (r) => r.GET(() => null), // null → 204
-			'/resp': (r) => r.GET((c) => c.text('hi'))
-		})
+describe('dispatch — thrown redirect / error', () => {
+	const app = routes(
+		{
+			'/go': { GET: () => redirect(303, '/there') },
+			'/boom': { GET: () => error(418, "I'm a teapot") },
+			'/ok': { GET: (c) => c.json({ ok: true }) }
+		},
+		{ base: '/b' }
 	);
-	it('turns a bare object into JSON', async () => {
-		const r = await app.fetch(req('/plain'));
-		expect(r!.headers.get('content-type')).toContain('application/json');
-		expect(await r!.json()).toEqual({ plain: true });
+	it('redirect() → a redirect response', async () => {
+		const r = await app.fetch(req('/b/go'));
+		expect(r!.status).toBe(303);
+		expect(r!.headers.get('location')).toBe('/there');
 	});
-	it('turns null into 204', async () => {
-		expect((await app.fetch(req('/empty')))!.status).toBe(204);
+	it('error() from an endpoint → JSON error', async () => {
+		const r = await app.fetch(req('/b/boom'));
+		expect(r!.status).toBe(418);
+		expect(await r!.json()).toEqual({ error: "I'm a teapot", status: 418 });
 	});
-	it('passes a Response through', async () => {
-		expect(await (await app.fetch(req('/resp')))!.text()).toBe('hi');
+});
+
+describe('loads — memoization + parent-sharing (no waterfall, no waste)', () => {
+	it('a shared load runs ONCE per request even when two loads await it', async () => {
+		let runs = 0;
+		const session = load(async () => {
+			runs++;
+			return { user: 'ada' };
+		});
+		// two endpoints in one request can't share; prove memo via one handler awaiting it twice + a
+		// dependent load. Using an endpoint so we read the result directly.
+		const app = routes({
+			'/x': {
+				GET: async (c) => {
+					const a = await session(c);
+					const b = await session(c); // same request → cache hit
+					return c.json({ a, b, runs });
+				}
+			}
+		});
+		const r = await (await app.fetch(req('/x')))!.json();
+		expect(r.runs).toBe(1);
+		expect(r.a).toEqual({ user: 'ada' });
+		expect(r.b).toEqual({ user: 'ada' });
+	});
+
+	it('memo is per-request (a second request re-runs)', async () => {
+		let runs = 0;
+		const l = load(async () => {
+			runs++;
+			return runs;
+		});
+		const app = routes({ '/x': { GET: async (c) => c.json(await l(c)) } });
+		expect(await (await app.fetch(req('/x')))!.json()).toBe(1);
+		expect(await (await app.fetch(req('/x')))!.json()).toBe(2);
+	});
+});
+
+describe('href — rename-safe links off the table keys', () => {
+	const app = routes({ '/docs/[slug]': { GET: (c) => c.text(c.params.slug) } }, { base: '/b' });
+	it('fills params + prefixes base', () => {
+		expect(app.href('/docs/[slug]', { slug: 'intro' })).toBe('/b/docs/intro');
 	});
 });

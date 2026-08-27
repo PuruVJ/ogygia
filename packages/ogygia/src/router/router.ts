@@ -1,123 +1,115 @@
 /**
- * `routes((r) => …)` — the router. The builder callback constructs a node tree (see builder.ts); at
- * construction we flatten it into matchable leaf routes, each carrying its ancestor layer chain. A
- * request matches one leaf, runs its layers top-down (guards + data cascade), then the leaf (a page
- * rendered through its layout chain, or an endpoint). One `document()` per page render; API routes
- * never get chrome. The whole tree is exposed as a typed `$infer` map.
+ * `routes(table, opts?)` — the router. A flat table of `pattern → page()/get()` values (layout chains
+ * ride on each page entry via `layout(...)()`); at construction we compile the keys into a match
+ * table. A request matches one entry, runs its branch loads CONCURRENTLY (memoized — see load()),
+ * merges their data (Kit's cascade), then renders the page through its layout chain via `document()`,
+ * or runs the endpoint. Control flow is the throwable `redirect`/`error` and returnable `fail`
+ * (respond.ts). The whole table is exposed as a typed `$infer` map. See internal/notes/router-v2.md.
  */
 import type { RequestEvent } from '@sveltejs/kit';
+import type { Component } from 'svelte';
 import { document } from '../document.js';
 import { region } from '../region.js';
-import { router_css_of } from '../router-css.js';
-import { claim_region_css } from '../context.js';
 import LayoutChain from './LayoutChain.svelte';
 import { compile_all, match_path, type CompiledPattern } from './match.js';
+import { make_ctx, type Ctx } from './ctx.js';
 import {
-	build_routes,
+	compile_endpoint,
+	is_page,
+	to_load,
 	type AnyComponent,
-	type Contribution,
-	type Ctx,
-	type EndpointNode,
-	type LeafRoute,
-	type PageNode,
-	type PageOpts,
-	type R,
-	type Router
-} from './builder.js';
-import type { StandardSchemaV1 } from './view.js';
-import type { Layer } from './builder.js';
-
-/** c.error() Responses are registered here with their { status, message } so the router can render the
- *  nearest error component instead of sending the JSON. A WeakMap → the tag is GC'd with the Response. */
-const error_meta = new WeakMap<Response, { status: number; message?: string }>();
-
-// ── component CSS ────────────────────────────────────────────────────────────────────────────────
-// Router pages are VALUES, not Kit routes, so nothing file-derived links their `<style>` — the build
-// emits `virtual:ogygia/router-css` (component → stylesheet registrations; see link/router-css.ts)
-// and each render links exactly what it renders, through `document()`'s head. The virtual only
-// resolves under the app's Vite pipeline; anywhere else (bare node, `ogygia mcp`) the import fails
-// and CSS linking is a silent no-op — those realms render data, not styled documents.
-const rcss_ready: Promise<unknown> | null = (() => {
-	try {
-		// Static specifier — resolved by the ogygia plugin under Vite; rejects anywhere else.
-		return import('virtual:ogygia/router-css').catch(() => null);
-	} catch {
-		return null;
-	}
-})();
-
-/** Head tags for the components ONE page render places (layout chain + page/error component):
- *  prod `<link>`s from the build handoff, dev inline `<style>`s. Claimed via `claim_region_css`, so
- *  a held region linking the same sheet in this request dedupes against us (and vice versa). */
-async function router_css_head(components: AnyComponent[]): Promise<string> {
-	if (rcss_ready) await rcss_ready;
-	const entries = components.flatMap((c) => router_css_of(c));
-	if (!entries.length) return '';
-	const keys = entries.map((e) => e.key);
-	let fresh = new Set(claim_region_css(keys));
-	// Off-request realm (bare `router.fetch` with no Kit event): the per-request claim is inert —
-	// dedupe locally instead so the document still styles. (Inside a request, an empty claim result
-	// means everything was already linked by an earlier render — correctly emit nothing.)
-	if (fresh.size === 0 && keys.length) {
-		try {
-			// claim returns [] both when off-request AND when all keys were already claimed — probe with
-			// a sentinel that can never collide with a real key: off-request the claim is inert and the
-			// probe ALSO comes back empty → fall back to local dedupe. On-request the fresh probe comes
-			// back, proving the claim works → everything really was linked already, emit nothing.
-			if (claim_region_css(['\0og-rcss-probe']).length === 0) fresh = new Set(keys);
-		} catch {
-			fresh = new Set(keys);
-		}
-	}
-	let head = '';
-	for (const e of entries) {
-		if (!fresh.has(e.key)) continue;
-		fresh.delete(e.key); // shared child CSS can repeat across components — link once
-		if (e.href) head += `<link rel="stylesheet" href="${e.href}" data-ogygia-region-css>`;
-		else if (e.css) head += `<style data-ogygia-rcss>${e.css.replace(/<\/style/gi, '<\\/style')}</style>`;
-	}
-	return head;
-}
+	type Endpoint,
+	type EndpointDef,
+	type LoadDef,
+	type LoadInput,
+	type PageDef,
+	type RouteTable
+} from './define.js';
+import type { InferMap } from './infer.js';
+import type { StandardSchemaV1, HrefArgs } from './view.js';
+import {
+	finalize,
+	is_action_failure,
+	is_http_error,
+	is_redirect,
+	json_response,
+	method_not_allowed,
+	not_found,
+	options_response,
+	redirect_response
+} from './respond.js';
+import { router_css_head } from './css-head.js';
 
 export interface RoutesOptions {
 	/** Mount prefix, stripped before matching. Required for a library that owns a subtree. */
 	base?: string;
 	/** Trailing-slash policy. 'ignore' (default) matches both; 'never'/'always' 308-canonicalize. */
 	slash?: 'ignore' | 'never' | 'always';
-	/** Response for an unmatched path UNDER `base` (default: a 404). Ignored without `base`. */
-	miss?: (ctx: Ctx) => unknown;
+	/** Response for an unmatched path UNDER `base` (default: 404). Ignored without `base`. */
+	miss?: (c: Ctx) => unknown;
+	/** Root error boundary component (Kit's top `+error.svelte`) for thrown `error()` with no nearer
+	 *  layout boundary. */
+	error?: AnyComponent;
+	/** A table-wide load run before EVERY route (pages and endpoints) — Kit's root `+layout.server.ts`
+	 *  load without a component. The place for a guard with no shared chrome: it throws
+	 *  `redirect`/`error` to gate, and its returned data merges into every page's `data` (outermost). */
+	load?: LoadInput;
 }
 
-export type { Router } from './builder.js';
+/** The router value. `$infer` is a type-only phantom read as `typeof app.$infer`. */
+export interface Router<T extends RouteTable = RouteTable> {
+	readonly __ogrouter: true;
+	/** `(request) => Response | null` — null on no-match (a catchall 404s its own way). */
+	fetch(request: Request, event?: RequestEvent): Promise<Response | null>;
+	/** Kit handle: dispatches, else falls through to the rest of the app. */
+	handle(input: {
+		event: RequestEvent;
+		resolve: (e: RequestEvent) => Response | Promise<Response>;
+	}): Promise<Response>;
+	/** Rename-safe URL to a route in this table. */
+	href<P extends keyof T & string>(pattern: P, ...args: HrefArgs<P>): string;
+	/** The catchall crawl list (static page routes) — `export const entries = app.entries`. */
+	entries(): Promise<Array<{ path: string }>>;
+	/** Type-only phantom map: `export type App = typeof app.$infer`. */
+	readonly $infer: InferMap<T>;
+}
+
+interface Leaf {
+	pattern: string;
+	/** a page value, or an endpoint object compiled to its method map at construction */
+	def: PageDef | EndpointDef;
+}
 
 const HEAD_AS_GET = (m: string) => (m === 'HEAD' ? 'GET' : m);
 
-/** Build a router from a `(r) => …` route-tree builder. */
-export function routes<E>(
-	build: (r: R<Record<never, never>, Record<never, never>, ''>) => E,
-	opts: RoutesOptions = {}
-): Router<Contribution<E>> {
+export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions = {}): Router<T> {
 	const base = (opts.base ?? '').replace(/\/$/, '');
 	const slash = opts.slash ?? 'ignore';
-	const miss = opts.miss;
+	const root_load = to_load(opts.load);
 
-	const leaves = build_routes(build as unknown as (r: unknown) => unknown);
-
-	// Mount nodes delegate by prefix; everything else compiles into one match table.
-	const subs: Array<{ prefix: string; router: Router }> = [];
-	const matchable: LeafRoute[] = [];
-	for (const leaf of leaves) {
-		if (leaf.node.t === 'mount') {
-			subs.push({ prefix: leaf.pattern.replace(/\/$/, ''), router: leaf.node.router });
-		} else {
-			matchable.push(leaf);
+	// Validate layout-name uniqueness across the whole table (a layout is keyed by name in `$infer`).
+	const seen_layout = new Map<string, AnyComponent>();
+	for (const key in table) {
+		const def = table[key];
+		if (is_page(def)) {
+			for (const l of def.layouts) {
+				const prev = seen_layout.get(l.name);
+				if (prev && prev !== l.component)
+					throw new Error(
+						`[ogygia/router] two different layouts share the name ${JSON.stringify(l.name)} — names must be unique (they key App['(name)']).`
+					);
+				seen_layout.set(l.name, l.component);
+			}
 		}
 	}
-	subs.sort((a, b) => b.prefix.length - a.prefix.length); // longest prefix wins
-	const compiled: CompiledPattern[] = compile_all(matchable.map((l) => l.pattern));
-	const by_pattern = new Map(matchable.map((l) => [l.pattern, l]));
-	// The root layer (shared by every leaf) — its error component catches miss-level c.error().
-	const root_layer: Layer | undefined = leaves[0]?.layers[0];
+
+	const leaves: Leaf[] = Object.keys(table).map((pattern) => {
+		const raw = table[pattern];
+		// Endpoint objects (`{ GET, POST, … }`) compile to their method map once here; pages pass through.
+		return { pattern, def: is_page(raw) ? raw : compile_endpoint(raw as Endpoint) };
+	});
+	const compiled: CompiledPattern[] = compile_all(leaves.map((l) => l.pattern));
+	const by_pattern = new Map(leaves.map((l) => [l.pattern, l]));
 
 	const href_fn = (pattern: string, params?: Record<string, string | number>) =>
 		base + fill(pattern, params ?? {});
@@ -131,32 +123,25 @@ export function routes<E>(
 			else return null; // not under our base → not ours
 		}
 
-		// sub-router delegation (longest prefix first). A mounted router renders its own document, so
-		// layer chrome declared ABOVE a mount does not wrap it (documented limitation of mounts).
-		for (const s of subs) {
-			if (path === s.prefix || path.startsWith(s.prefix + '/')) {
-				const inner = path.slice(s.prefix.length) || '/';
-				const rewritten = new Request(new URL(inner + url.search, url.origin), request);
-				const res = await s.router.fetch(rewritten, event);
-				if (res) return res;
-			}
-		}
-
 		const canon = canonical_slash(path, slash);
-		if (canon) return redirect_to(base + canon + url.search);
+		if (canon)
+			return new Response(null, { status: 308, headers: { location: base + canon + url.search } });
 
 		const hit = match_path(compiled, path);
 		if (!hit) {
-			if (base && miss) {
+			if (base && opts.miss) {
 				const ctx = make_ctx({}, url, request, event, href_fn, '');
-				const out = await miss(ctx);
-				if (out instanceof Response) {
-					const em = error_meta.get(out);
-					// a miss c.error renders the ROOT error component (inside root chrome); else send as-is
-					if (em && root_layer) return render_error([root_layer], 1, ctx, em.status, em.message);
-					return out;
+				try {
+					return finalize(await opts.miss(ctx));
+				} catch (thrown) {
+					if (is_redirect(thrown)) return redirect_response(thrown.status, thrown.location);
+					if (is_http_error(thrown))
+						return json_response(
+							{ error: thrown.message, status: thrown.status },
+							{ status: thrown.status }
+						);
+					throw thrown;
 				}
-				return finalize(out);
 			}
 			if (base) return not_found();
 			return null; // no base → fall through to the rest of the app
@@ -164,125 +149,134 @@ export function routes<E>(
 
 		const leaf = by_pattern.get(hit.pattern)!;
 		const ctx = make_ctx(hit.params, url, request, event, href_fn, hit.pattern);
-		const is_page = leaf.node.t === 'page';
 
-		// Layer chain, top-down: each layer's load cascades into ctx.data. A load returning a Response
-		// short-circuits — an error-tagged one (c.error) renders the nearest error component (page leaves
-		// only; an API route gets the JSON), anything else (c.redirect) is sent as-is.
-		for (let i = 0; i < leaf.layers.length; i++) {
-			const load = leaf.layers[i].load;
-			if (!load) continue;
-			const r = await load(ctx);
-			if (r instanceof Response) {
-				const em = error_meta.get(r);
-				if (em && is_page) return render_error(leaf.layers, i, ctx, em.status, em.message);
-				return r;
+		try {
+			// Table-wide load (the no-chrome guard) runs before every route, gating endpoints too. A
+			// load may return a Response to short-circuit (a guard's redirect/deny) — v1 parity.
+			if (root_load) {
+				const rl = await root_load(ctx);
+				if (rl instanceof Response) return rl;
 			}
-			if (r) Object.assign(ctx.data as Record<string, unknown>, r);
+			if ((leaf.def as { __ogkind?: string }).__ogkind === 'endpoint')
+				return await run_endpoint(leaf.def as EndpointDef, ctx, request.method);
+			return await render_page(leaf.def as PageDef, ctx, request.method, url);
+		} catch (thrown) {
+			return handle_thrown(thrown, leaf.def, ctx);
 		}
-
-		const node = leaf.node;
-		if (node.t === 'endpoint') return run_endpoint(node, ctx, request.method);
-		if (node.t === 'page') return render_page(node, ctx, leaf.layers, request.method, url);
-		return not_found(); // a mount can't be a matched leaf (filtered into `subs`)
 	}
 
-	async function render_page(
-		node: PageNode,
-		ctx: Ctx,
-		layers: Layer[],
-		method: string,
-		url: URL
-	): Promise<Response> {
+	async function render_page(node: PageDef, ctx: Ctx, method: string, url: URL): Promise<Response> {
 		const m = HEAD_AS_GET(method);
-		// A page-level error (from an action or the page load) has its boundary at or above the innermost
-		// layer — origin = layers.length (below every layer).
-		const page_err = (r: Response) => {
-			const em = error_meta.get(r);
-			return em ? render_error(layers, layers.length, ctx, em.status, em.message) : r;
-		};
+
+		// Route input: coerce/validate path params (bad → 404) and query (bad → 400) into typed ctx.
+		if (node.params_schema) {
+			const v = await validate(node.params_schema, ctx.params);
+			if (v.issues) return not_found();
+			(ctx as { params: unknown }).params = v.value;
+		}
+		if (node.search_schema) {
+			const v = await validate(node.search_schema, ctx.search);
+			if (v.issues)
+				return json_response({ error: 'Invalid query', issues: v.issues }, { status: 400 });
+			(ctx as { search: unknown }).search = v.value;
+		}
 
 		let form: unknown;
+		let status = 200;
+
 		if (m === 'POST') {
-			const action = pick_action(node, url);
-			if (!action) return method_not_allowed(page_allow(node));
-			const fr = await action(ctx);
-			if (fr instanceof Response) return page_err(fr); // error → boundary; redirect/custom → as-is
-			form = fr;
+			const act = pick_action(node, url);
+			if (!act) return method_not_allowed(page_allow(node));
+			const out = await act(ctx); // throws redirect/error caught by dispatch's try
+			if (out instanceof Response) return out;
+			if (is_action_failure(out)) {
+				form = out.data;
+				status = out.status;
+			} else {
+				form = out ?? undefined;
+			}
 		} else if (m !== 'GET') {
 			if (method === 'OPTIONS') return options_response(page_allow(node));
 			return method_not_allowed(page_allow(node));
 		}
 
-		// The page's own load (Kit's +page.ts) runs after any action, for the render.
-		if (node.load) {
-			const r = await node.load(ctx);
-			if (r instanceof Response) return page_err(r);
-			if (r) Object.assign(ctx.data as Record<string, unknown>, r);
+		// Branch loads: the table-wide root load, then every layout's (outermost→inner), then the page's
+		// — CONCURRENTLY. Each is memoized on ctx (root_load already ran in dispatch, so it's a cache
+		// hit here), merged into `data` in branch order (last wins).
+		const load_defs: (LoadDef | undefined)[] = [
+			root_load,
+			...node.layouts.map((l) => l.load),
+			node.load
+		];
+		const results = await Promise.all(load_defs.map((l) => (l ? l(ctx) : undefined)));
+		const data: Record<string, unknown> = {};
+		for (const r of results) {
+			if (r instanceof Response) return r; // a load may short-circuit (redirect / custom response)
+			if (r && typeof r === 'object') Object.assign(data, r);
 		}
 
-		const layouts = layers.filter((l) => l.layout).map((l) => l.layout!);
-		const chain = apply_reset(layouts, node.reset);
-		// LayoutChain places the page component AS MARKUP (`<Page {...props} />`) at the bottom of the
-		// chain, so any import-attribute mark on it (wake / deferred / raw / keep) emits its shell. Used
-		// even with an empty chain, so a bare page still renders as a placement site (not a held region).
+		const chain = node.layouts.map((l) => l.component);
 		const of = region(LayoutChain as never, {
 			chain,
 			component: node.component,
-			props: { data: ctx.data, form, params: ctx.params },
-			data: ctx.data,
+			props: { data, form, params: ctx.params },
+			data,
 			fallback: node.fallback
 		});
-		// Stylesheets of the components THIS render places (chain + page) — see router_css_head.
 		const css_head = await router_css_head([...chain, node.component]);
 		const res = await document(of, {
-			...doc_opts(node.opts),
+			status,
 			head: css_head,
-			// Seed $app/state so islands on this page read $page.data/params/url + route.id.
 			pageState: {
 				url: ctx.url,
 				params: ctx.params,
 				route: { id: ctx.route.id || null },
-				status: node.opts.status ?? 200,
-				data: ctx.data,
+				status,
+				data,
 				form
 			}
 		});
 		return method === 'HEAD' ? new Response(null, res) : res;
 	}
 
-	// Render the nearest error component (Kit's +error.svelte boundary walk). `origin` is where the error
-	// happened (a layer index, or layers.length for a page-level error). We find the closest error
-	// component at/above it, keep the chrome ABOVE that boundary (its own layout too, unless that same
-	// layer's load is what failed), and render the error component in its place. No boundary → JSON.
-	async function render_error(
-		layers: Layer[],
-		origin: number,
-		ctx: Ctx,
-		status: number,
-		message: string | undefined
+	// A thrown redirect/error/fail from a load, action, or handler. redirect → 303/…; error →
+	// nearest layout boundary component (or root `opts.error`), else JSON; anything else re-throws.
+	async function handle_thrown(
+		thrown: unknown,
+		def: PageDef | EndpointDef,
+		ctx: Ctx
 	): Promise<Response> {
+		if (is_redirect(thrown)) return redirect_response(thrown.status, thrown.location);
+		if (is_action_failure(thrown)) return json_response(thrown.data, { status: thrown.status });
+		if (!is_http_error(thrown)) throw thrown;
+
+		const { status, message } = thrown;
+		// Endpoints (and pages with no boundary) → JSON error.
+		if ((def as { __ogkind?: string }).__ogkind === 'endpoint')
+			return json_response({ error: message, status }, { status });
+		const pnode = def as PageDef;
+
+		// Nearest layout error boundary at/above the page, keeping the chrome ABOVE it. Layout loads run
+		// concurrently, so we can't know WHICH layer failed — render the innermost boundary with all
+		// chrome outside it (Kit's page-load-failed shape; a layout-load failure degrades to the same).
 		let boundary = -1;
-		for (let i = Math.min(origin, layers.length - 1); i >= 0; i--) {
-			if (layers[i].error) {
+		for (let i = pnode.layouts.length - 1; i >= 0; i--) {
+			if (pnode.layouts[i].error) {
 				boundary = i;
 				break;
 			}
 		}
-		if (boundary === -1) return json_response({ error: message ?? 'Error', status }, { status });
+		const err_component = boundary >= 0 ? pnode.layouts[boundary].error! : opts.error;
+		if (!err_component) return json_response({ error: message, status }, { status });
 
-		// The boundary layer's own layout wraps the error UNLESS its own load is what failed.
-		const upto = boundary < origin ? boundary : boundary - 1;
-		const chrome: AnyComponent[] = [];
-		for (let i = 0; i <= upto; i++) if (layers[i].layout) chrome.push(layers[i].layout!);
-
+		const chrome = boundary >= 0 ? pnode.layouts.slice(0, boundary).map((l) => l.component) : [];
 		const of = region(LayoutChain as never, {
 			chain: chrome,
-			component: layers[boundary].error!,
-			props: { status, error: { message: message ?? 'Error' }, data: ctx.data, params: ctx.params },
-			data: ctx.data
+			component: err_component,
+			props: { status, error: { message }, data: {}, params: ctx.params },
+			data: {}
 		});
-		const css_head = await router_css_head([...chrome, layers[boundary].error!]);
+		const css_head = await router_css_head([...chrome, err_component]);
 		return document(of, {
 			status,
 			head: css_head,
@@ -291,149 +285,76 @@ export function routes<E>(
 				params: ctx.params,
 				route: { id: ctx.route.id || null },
 				status,
-				data: ctx.data,
-				error: { message: message ?? 'Error' }
+				data: {},
+				error: { message }
 			}
 		});
 	}
 
-	const self: Router<Contribution<E>> = {
+	const self: Router<T> = {
 		__ogrouter: true,
-		get $infer(): never {
-			throw new Error('router.$infer is a type-only phantom — read `typeof router.$infer`.');
-		},
 		fetch: dispatch,
 		handle: async ({ event, resolve }) => {
 			const r = await dispatch(event.request, event);
 			return r ?? resolve(event);
 		},
-		match(pathname) {
-			let path = pathname;
-			if (base) {
-				if (path === base) path = '/';
-				else if (path.startsWith(base + '/')) path = path.slice(base.length);
-				else return null;
-			}
-			return match_path(compiled, path);
-		},
-		href: href_fn as Router<Contribution<E>>['href'],
-		// The catchall crawl list: every static page route (no `[param]`), filled through the pattern.
-		// Mount it as `export const entries = app.entries` and set `export const prerender = 'auto'`.
+		href: ((pattern: string, params?: Record<string, string | number>) =>
+			href_fn(pattern, params)) as Router<T>['href'],
 		async entries() {
 			const out: Array<{ path: string }> = [];
-			for (const leaf of matchable) {
-				if (leaf.node.t === 'page' && !leaf.pattern.includes('[')) out.push({ path: base + leaf.pattern });
+			for (const leaf of leaves) {
+				if (is_page(leaf.def) && !leaf.pattern.includes('['))
+					out.push({ path: base + leaf.pattern });
 			}
 			return out;
+		},
+		get $infer(): never {
+			throw new Error('router.$infer is a type-only phantom — read `typeof app.$infer`.');
 		}
 	};
 	return self;
 }
 
-// ── endpoints ────────────────────────────────────────────────────────────────────────────────────
-async function run_endpoint(node: EndpointNode, ctx: Ctx, method: string): Promise<Response> {
+// ── endpoints ─────────────────────────────────────────────────────────────────────────────────────
+async function run_endpoint(node: EndpointDef, ctx: Ctx, method: string): Promise<Response> {
 	const m = HEAD_AS_GET(method);
 	const allow = [...node.methods.keys()];
 	if (method === 'OPTIONS' && !node.methods.has('OPTIONS')) return options_response(allow);
 	const e = node.methods.get(m);
 	if (!e) return method_not_allowed(allow);
-	if (e.schema) {
-		const v = await validate_input(e.schema, await build_input(ctx, m));
-		if (v instanceof Response) return v;
+	// Body schema (POST/PUT/PATCH): validate the parsed JSON body → typed `c.input` (400 on failure).
+	// Path params stay on `c.params`; query on `c.search`/`c.url` — three clean surfaces, no grab-bag.
+	if (e.bodySchema) {
+		let body: unknown = undefined;
+		const ct = ctx.request.headers.get('content-type') ?? '';
+		if (ct.includes('application/json')) {
+			try {
+				body = await ctx.request.clone().json();
+			} catch {
+				return json_response({ error: 'Invalid JSON body' }, { status: 400 });
+			}
+		}
+		const v = await validate(e.bodySchema, body);
+		if (v.issues)
+			return json_response({ error: 'Invalid body', issues: v.issues }, { status: 400 });
 		(ctx as { input: unknown }).input = v.value;
 	}
 	return finalize(await e.handler(ctx));
 }
 
-// ── layout reset ───────────────────────────────────────────────────────────────────────────────
-/** Trim the layout chain for a page's `layout()` reset: `false` → none; a component → up to and
- *  including it (its OUTERMOST occurrence); omitted → the full chain. */
-function apply_reset(layouts: AnyComponent[], reset: AnyComponent | false | undefined): AnyComponent[] {
-	if (reset === undefined) return layouts;
-	if (reset === false) return [];
-	const i = layouts.indexOf(reset);
-	return i === -1 ? layouts : layouts.slice(0, i + 1);
-}
-
-// ── ctx ──────────────────────────────────────────────────────────────────────────────────────────
-function make_ctx(
-	params: Record<string, string | undefined>,
-	url: URL,
-	request: Request,
-	event: RequestEvent | undefined,
-	href: (pattern: string, params?: Record<string, string | number>) => string,
-	routeId: string
-): Ctx {
-	return {
-		params,
-		data: {},
-		input: undefined,
-		url,
-		request,
-		route: { id: routeId },
-		fetch: event?.fetch ?? fetch,
-		cookies: event?.cookies,
-		locals: event?.locals,
-		setHeaders: event?.setHeaders,
-		platform: event?.platform,
-		event,
-		json: (data, init) => json_response(data, init),
-		redirect: (location, status = 303) =>
-			new Response(null, { status, headers: { location, 'cache-control': 'no-store' } }),
-		text: (body, init) =>
-			new Response(body, {
-				...init,
-				headers: { 'content-type': 'text/plain; charset=utf-8', ...init?.headers }
-			}),
-		error: (status, message) => {
-			// Tagged so the router renders the nearest error COMPONENT (Kit's +error.svelte) instead of the
-			// JSON — c.redirect()/c.json() Responses stay untagged and pass through as-is.
-			const r = json_response({ error: message ?? 'Error', status }, { status });
-			error_meta.set(r, { status, message });
-			return r;
-		},
-		href,
-		state: {}
-	} as Ctx;
-}
-
-/** The route input a schema validates: JSON body (mutating methods) ⊕ search params ⊕ path params. */
-async function build_input(ctx: Ctx, method: string): Promise<Record<string, unknown>> {
-	const obj: Record<string, unknown> = {};
-	if (method !== 'GET' && method !== 'HEAD') {
-		const ct = ctx.request.headers.get('content-type') ?? '';
-		if (ct.includes('application/json')) {
-			try {
-				const body = await ctx.request.clone().json();
-				if (body && typeof body === 'object') Object.assign(obj, body);
-			} catch {
-				/* not JSON — leave the body out */
-			}
-		}
-	}
-	for (const key of new Set(ctx.url.searchParams.keys())) {
-		const all = ctx.url.searchParams.getAll(key);
-		obj[key] = all.length > 1 ? all : all[0];
-	}
-	Object.assign(obj, ctx.params);
-	return obj;
-}
-
-async function validate_input(
+/** Run a Standard Schema; issues normalized to `{ message, path }[]`. */
+async function validate(
 	schema: StandardSchemaV1,
 	input: unknown
-): Promise<{ value: unknown } | Response> {
+): Promise<
+	{ value: unknown; issues?: undefined } | { issues: Array<{ message: string; path?: unknown }> }
+> {
 	const r = await schema['~standard'].validate(input);
-	if (r.issues) {
-		return json_response(
-			{ error: 'Invalid input', issues: r.issues.map((i) => ({ message: i.message, path: i.path })) },
-			{ status: 400 }
-		);
-	}
+	if (r.issues) return { issues: r.issues.map((i) => ({ message: i.message, path: i.path })) };
 	return { value: r.value };
 }
 
-// ── small helpers (hoisted; no per-request regex construction) ─────────────────────────────────
+// ── helpers ─────────────────────────────────────────────────────────────────────────────────────
 const TRAILING_SLASH = /\/+$/;
 function canonical_slash(path: string, mode: 'ignore' | 'never' | 'always'): string | null {
 	if (mode === 'ignore' || path === '/') return null;
@@ -443,34 +364,20 @@ function canonical_slash(path: string, mode: 'ignore' | 'never' | 'always'): str
 	return null;
 }
 
-function doc_opts(o: PageOpts) {
-	const headers = new Headers(o.headers);
-	if (o.cache !== undefined && !headers.has('cache-control')) {
-		headers.set('cache-control', cache_control(o.cache));
-	}
-	return { title: o.title, status: o.status, headers };
-}
-function cache_control(c: NonNullable<PageOpts['cache']>): string {
-	if (c === false) return 'no-store';
-	const parts = [c.private ? 'private' : 'public'];
-	if (c.maxAge != null) parts.push(`max-age=${c.maxAge}`);
-	if (c.swr != null) parts.push(`stale-while-revalidate=${c.swr}`);
-	return parts.join(', ');
-}
-
-function pick_action(node: PageNode, url: URL): ((c: Ctx) => unknown) | undefined {
-	// Kit's form-action convention: `?/name` (a search key starting with '/'). Default = null key.
+function pick_action(node: PageDef, url: URL): ((c: Ctx) => unknown) | undefined {
+	const actions = node.actions;
+	if (!actions) return undefined;
 	for (const key of url.searchParams.keys()) {
 		if (key.startsWith('/')) {
-			const named = node.actions.get(key.slice(1));
+			const named = actions[key.slice(1)];
 			if (named) return named;
 		}
 	}
-	return node.actions.get(null);
+	return actions.default;
 }
-function page_allow(node: PageNode): string[] {
+function page_allow(node: PageDef): string[] {
 	const a = ['GET', 'HEAD'];
-	if (node.actions.size) a.push('POST');
+	if (node.actions && Object.keys(node.actions).length) a.push('POST');
 	return a;
 }
 
@@ -482,27 +389,5 @@ function fill(pattern: string, params: Record<string, string | number>): string 
 	});
 }
 
-/** An endpoint/miss return → a Response: a Response passes through; null → 204; anything else → JSON. */
-function finalize(out: unknown): Response {
-	if (out instanceof Response) return out;
-	if (out == null) return new Response(null, { status: 204 });
-	return json_response(out);
-}
-function redirect_to(location: string): Response {
-	return new Response(null, { status: 308, headers: { location } });
-}
-function not_found(): Response {
-	return new Response('Not found', { status: 404 });
-}
-function method_not_allowed(allow: string[]): Response {
-	return new Response('Method not allowed', { status: 405, headers: { allow: allow.join(', ') } });
-}
-function options_response(allow: string[]): Response {
-	return new Response(null, { status: 204, headers: { allow: allow.join(', ') } });
-}
-function json_response(data: unknown, init?: ResponseInit): Response {
-	return new Response(JSON.stringify(data), {
-		...init,
-		headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...init?.headers }
-	});
-}
+// re-export the component type so LayoutChain's props stay in one vocabulary
+export type { Component };

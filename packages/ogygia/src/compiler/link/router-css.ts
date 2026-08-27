@@ -147,9 +147,7 @@ export function router_css_module(
 			const abs_key = JSON.stringify(posix(abs));
 			const rel = posix(path.relative(opts.root, abs));
 			const keys =
-				rel.startsWith('..') || path.isAbsolute(rel)
-					? [abs_key]
-					: [abs_key, JSON.stringify(rel)];
+				rel.startsWith('..') || path.isAbsolute(rel) ? [abs_key] : [abs_key, JSON.stringify(rel)];
 			assignments.push(`m[${keys.join('] = m[')}] = ${JSON.stringify(entries)};`);
 		}
 		return (

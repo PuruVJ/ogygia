@@ -120,7 +120,10 @@ describe('appendTransportRegistrations — inject ONLY for wire classes', () => 
 	});
 
 	it('a wire class (rewritten computed-symbol form) IS registered', () => {
-		const out = reg(`export class C { static [Symbol.for('ogygia.wire')] = ${CODEC}; }`, '/app/c.ts');
+		const out = reg(
+			`export class C { static [Symbol.for('ogygia.wire')] = ${CODEC}; }`,
+			'/app/c.ts'
+		);
 		expect(out).not.toBe(null);
 		expect(out).toContain("from 'ogygia/internal/register'");
 		expect(out).toContain('c.ts#C');

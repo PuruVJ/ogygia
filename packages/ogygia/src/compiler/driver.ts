@@ -21,7 +21,12 @@ import {
 	is_island_path,
 	CLIENT_BINDING_STUB
 } from './region/transform.js';
-import { routeCsrIsFalse, routeCsrIsTrue, hasAnyCsrTrueRoute, clean_stale_ogygia_dirs } from './kit.js';
+import {
+	routeCsrIsFalse,
+	routeCsrIsTrue,
+	hasAnyCsrTrueRoute,
+	clean_stale_ogygia_dirs
+} from './kit.js';
 import { run_module_macros } from './macros/pipeline.js';
 import { generateRuntimeEntrySource, resolveFeatures } from './link/runtime-entry.js';
 import { resolveFoucImportSpec, FOUC_CSS_PREFIX, FOUC_SCOPED_PREFIX } from './fouc-css.js';
@@ -1045,7 +1050,11 @@ export class Compiler {
 						if (kind !== 'hydrate' || !isl.virtualPath || emitted_island_chunks.has(isl.id))
 							continue;
 						emitted_island_chunks.add(isl.id);
-						emitFile({ type: 'chunk', id: isl.virtualPath, fileName: ctx.island_chunk_filename(isl.id) });
+						emitFile({
+							type: 'chunk',
+							id: isl.virtualPath,
+							fileName: ctx.island_chunk_filename(isl.id)
+						});
 					}
 				}
 			}

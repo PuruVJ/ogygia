@@ -4,7 +4,10 @@ import { compile, compile_all, match_one, match_path } from '../src/router/match
 describe('router pattern matching', () => {
 	it('matches root, static, and params', () => {
 		expect(match_one(compile('/'), '/')).toEqual({ pattern: '/', params: {} });
-		expect(match_one(compile('/docs/new'), '/docs/new')).toEqual({ pattern: '/docs/new', params: {} });
+		expect(match_one(compile('/docs/new'), '/docs/new')).toEqual({
+			pattern: '/docs/new',
+			params: {}
+		});
 		expect(match_one(compile('/docs/new'), '/docs/old')).toBeNull();
 		expect(match_one(compile('/docs/[slug]'), '/docs/intro')).toEqual({
 			pattern: '/docs/[slug]',
@@ -19,7 +22,9 @@ describe('router pattern matching', () => {
 
 	it('handles [...rest] (may be empty) and [[optional]]', () => {
 		expect(match_one(compile('/files/[...path]'), '/files')!.params).toEqual({ path: '' });
-		expect(match_one(compile('/files/[...path]'), '/files/a/b/c')!.params).toEqual({ path: 'a/b/c' });
+		expect(match_one(compile('/files/[...path]'), '/files/a/b/c')!.params).toEqual({
+			path: 'a/b/c'
+		});
 		expect(match_one(compile('/[[lang]]/docs'), '/docs')!.params).toEqual({ lang: undefined });
 		expect(match_one(compile('/[[lang]]/docs'), '/en/docs')!.params).toEqual({ lang: 'en' });
 	});

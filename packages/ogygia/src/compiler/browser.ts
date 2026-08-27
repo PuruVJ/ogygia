@@ -8,7 +8,12 @@
  * These modules reach `node:fs` / `node:path` / `node:crypto` only through the injectable
  * {@link ./host.js host} (default: Node); a browser realm installs a virtual host via `set_host`.
  */
-export { transformHost, transformTsRegions, wrapperVirtualId, CLIENT_BINDING_STUB } from './region/transform.js';
+export {
+	transformHost,
+	transformTsRegions,
+	wrapperVirtualId,
+	CLIENT_BINDING_STUB
+} from './region/transform.js';
 export { islandVirtualId } from './ids.js';
 export { set_parser, type RawParse, type ParseResult } from './parse/oxc.js';
 export { set_host, type CompilerHost } from './host.js';

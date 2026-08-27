@@ -188,7 +188,9 @@ export async function install_net_capture(
  */
 export function ensure_fetch_patched(): void {
 	if (!net_emit) return;
-	const cur = globalThis.fetch as (typeof globalThis.fetch & { [OG_FETCH_PATCH]?: boolean }) | undefined;
+	const cur = globalThis.fetch as
+		| (typeof globalThis.fetch & { [OG_FETCH_PATCH]?: boolean })
+		| undefined;
 	if (typeof cur === 'function' && cur[OG_FETCH_PATCH]) return; // still ours
 	patch_fetch(net_emit);
 }
@@ -215,7 +217,9 @@ function host_of(url: string): string {
 }
 
 function patch_fetch(emit: Emit): void {
-	const orig = globalThis.fetch as (typeof globalThis.fetch & { [OG_FETCH_PATCH]?: boolean }) | undefined;
+	const orig = globalThis.fetch as
+		| (typeof globalThis.fetch & { [OG_FETCH_PATCH]?: boolean })
+		| undefined;
 	if (typeof orig !== 'function') return;
 	if (orig[OG_FETCH_PATCH]) return; // the live fetch is already our wrapper — don't wrap it again
 
@@ -328,7 +332,8 @@ const utf8_len = (s: string): number => {
 		return s.length;
 	}
 };
-const clip = (s: string): string => (s.length > MAX_PAYLOAD ? s.slice(0, MAX_PAYLOAD) + '\n… (truncated)' : s);
+const clip = (s: string): string =>
+	s.length > MAX_PAYLOAD ? s.slice(0, MAX_PAYLOAD) + '\n… (truncated)' : s;
 
 /** Capture the request body's size (+ a preview for string / form bodies). Never consumes a stream. */
 function capture_req_payload(init: RequestInit | undefined, call: NetCall): void {

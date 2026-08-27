@@ -16,7 +16,11 @@ export const fmt_pct = (part: number, whole: number): string =>
 
 /** bytes → MB / kB / B. */
 export const fmt_bytes = (n: number): string =>
-	n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? (n / 1024).toFixed(0) + ' kB' : n + ' B';
+	n >= 1048576
+		? (n / 1048576).toFixed(1) + ' MB'
+		: n >= 1024
+			? (n / 1024).toFixed(0) + ' kB'
+			: n + ' B';
 
 export const CATEGORY_LABEL: Record<FrameCategory, string> = {
 	component: 'component',

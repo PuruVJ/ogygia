@@ -421,7 +421,9 @@ async function ai_install(): Promise<void> {
 	const already = 'ogygia' in cfg.mcpServers;
 	cfg.mcpServers.ogygia = { command: 'npx', args: ['ogygia', 'mcp'] };
 	writeFileSync(abs, JSON.stringify(cfg, null, '\t') + '\n');
-	stdout.write(`  ${ok('✓')} ${rel} ${dim(already ? '(ogygia server updated)' : '(ogygia server added)')}\n`);
+	stdout.write(
+		`  ${ok('✓')} ${rel} ${dim(already ? '(ogygia server updated)' : '(ogygia server added)')}\n`
+	);
 
 	// 3. next steps
 	stdout.write(

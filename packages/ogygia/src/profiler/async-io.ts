@@ -82,7 +82,12 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 			if (!s) return;
 			open.delete(asyncId);
 			if (ops.length < MAX) {
-				ops.push({ type: s.type, caller_site: s.site, ms: round2(performance.now() - s.t), start: s.t });
+				ops.push({
+					type: s.type,
+					caller_site: s.site,
+					ms: round2(performance.now() - s.t),
+					start: s.t
+				});
 			}
 		}
 	});
@@ -96,7 +101,13 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 			const now = performance.now();
 			for (const s of open.values()) {
 				if (ops.length < MAX) {
-					ops.push({ type: s.type, caller_site: s.site, ms: round2(now - s.t), start: s.t, open: true });
+					ops.push({
+						type: s.type,
+						caller_site: s.site,
+						ms: round2(now - s.t),
+						start: s.t,
+						open: true
+					});
 				}
 			}
 			open.clear();

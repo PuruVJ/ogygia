@@ -633,7 +633,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// the map is complete once the dock fetches (post-mount, islands registered).
 					const envs = (
 						server as unknown as {
-							environments?: Record<string, { moduleGraph?: { idToModuleMap?: Map<string, unknown> } }>;
+							environments?: Record<
+								string,
+								{ moduleGraph?: { idToModuleMap?: Map<string, unknown> } }
+							>;
 						}
 					).environments;
 					const client_modules = envs?.client?.moduleGraph?.idToModuleMap?.values();

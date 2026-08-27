@@ -1,39 +1,54 @@
-/* Type-level guard for router.$infer — cascade data, path params, action-return form. tsc-only. */
-import { routes } from '../src/router/index.js';
+/* Type-level guard for router v2 `$infer` — merged cascade data (Kit's rule), schema-coerced params,
+ * typed search, action-return form, and layout keys `App['(name)']`. tsc-only (no runtime). */
+import { routes, page, layout, type StandardSchemaV1 } from '../src/router/index.js';
 import type { Component } from 'svelte';
 
-declare const App: Component;
-declare const Home: Component;
-declare const Doc: Component;
+const C = (() => {}) as unknown as Component<Record<string, unknown>>;
+const NumId: StandardSchemaV1<{ id: number }> = {
+	'~standard': {
+		version: 1,
+		vendor: 't',
+		validate: () => ({ value: { id: 1 } }),
+		types: { output: { id: 0 } }
+	}
+};
 
-const router = routes((r) =>
-	r
-		.layout(App)
-		.load(() => ({ user: { id: 1 } }))
-		.routes({
-			'/': (r) => r.page(Home).load(() => ({ featured: ['x'] })),
-			'/docs': (r) =>
-				r.layout(Doc).load(() => ({ nav: ['a'] })).routes({
-					'/[slug]': (r) => r.page(Doc).load((c) => ({ doc: c.params.slug })),
-				}),
-			'/login': (r) => r.page(Home).action('go', () => ({ ok: true })),
-		})
+const shell = layout('app', C, { load: async () => ({ user: 'ada' as string }) });
+const section = layout('docs', C, { load: async () => ({ nav: ['a'] as string[] }) });
+
+const app = routes(
+	shell({
+		'/': page(C, { load: async () => ({ featured: ['x'] as string[] }) }),
+		'/post/[id]': page(C, { params: NumId, load: async (c) => ({ n: c.params.id }) }),
+		'/login': page(C, { actions: { default: async () => ({ ok: true as boolean }) } }),
+		'/search': page(C, {
+			search: NumId as unknown as StandardSchemaV1<{ q: string }>,
+			load: async (c) => ({ q: c.search.q })
+		}),
+		...section({
+			'/docs/[slug]': page(C, { load: async (c) => ({ doc: c.params.slug }) })
+		}),
+		'/api/[id]': { GET: (c) => new Response(c.params.id) }
+	}),
+	{ error: C }
 );
+type App = typeof app.$infer;
 
-type Routes = typeof router.$infer;
+// Merged cascade: shell load ∧ page load.
+const _home: App['/']['data'] = { user: 'x', featured: ['a'] };
+// Schema-coerced params (number, not string).
+const _postParams: App['/post/[id]']['params'] = { id: 5 };
+// @ts-expect-error — params.id is number
+const _bad: App['/post/[id]']['params'] = { id: 'str' };
+// Action return → form (nullable).
+const _form: App['/login']['form'] = { ok: true };
+const _noForm: App['/login']['form'] = null;
+// Typed search.
+const _search: App['/search']['search'] = { q: 'x' };
+// Nested layout: shell ∧ section data.
+const _docData: App['/docs/[slug]']['data'] = { user: 'x', nav: ['a'], doc: 'y' };
+// Layout keys.
+const _shell: App['(app)']['data'] = { user: 'x' };
+const _section: App['(docs)']['data'] = { user: 'x', nav: ['a'] };
 
-// data cascades: leaf sees user (root) + nav (mid) + doc (own)
-type _D = Routes['/docs/[slug]']['data'];
-const _d: _D = { user: { id: 1 }, nav: ['a'], doc: 's' };
-// @ts-expect-error doc is a string, not number
-const _dBad: _D = { user: { id: 1 }, nav: ['a'], doc: 1 };
-
-// params typed from the path
-const _p: Routes['/docs/[slug]']['params'] = { slug: 's' };
-// @ts-expect-error the root route has no slug param
-const _pBad: Routes['/']['params'] = { slug: 's' };
-
-// form is the action's return type
-const _f: Routes['/login']['form'] = { ok: true };
-
-void _d; void _dBad; void _p; void _pBad; void _f;
+void [_home, _postParams, _bad, _form, _noForm, _search, _docData, _shell, _section];

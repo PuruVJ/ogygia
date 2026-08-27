@@ -25,7 +25,7 @@ export type InferOutput<S> = S extends StandardSchemaV1<infer O> ? O : never;
 
 /** Route params derived from the pattern string via template literals — `/docs/[slug]` → { slug: string },
  *  `/[[lang]]` → { lang?: string }, `/[...rest]` → { rest: string }, `/[id].json` → { id: string }. No codegen. */
-type Simplify<T> = { [K in keyof T]: T[K] } & {};
+export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 type SegParam<S extends string> = S extends `[[${infer O}]]`
 	? { [K in O]?: string }
 	: S extends `[...${infer R}]`
@@ -41,6 +41,5 @@ export type Params<P extends string> = Simplify<ParamsAcc<P>>;
 /** The params object `href` accepts for a pattern — every param, as a string or number. */
 export type HrefParams<P extends string> = { [K in keyof Params<P>]: string | number };
 /** href args: params are REQUIRED when the pattern has any, omittable when it has none. */
-export type HrefArgs<P extends string> = {} extends Params<P>
-	? [params?: HrefParams<P>]
-	: [params: HrefParams<P>];
+export type HrefArgs<P extends string> =
+	{} extends Params<P> ? [params?: HrefParams<P>] : [params: HrefParams<P>];

@@ -6,9 +6,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 // replaces the token instead; here we simulate "devtools build on".
 (globalThis as unknown as { __OGYGIA_DEVTOOLS__: boolean }).__OGYGIA_DEVTOOLS__ = true;
 
-const { DEVTOOLS, emit, snapshot, clear, add_sink, configure } = await import(
-	'../src/devtools/bus.js'
-);
+const { DEVTOOLS, emit, snapshot, clear, add_sink, configure } =
+	await import('../src/devtools/bus.js');
 const { install_console_sink, to_trace } = await import('../src/devtools/sinks.js');
 const { DEVTOOLS_SCHEMA_VERSION } = await import('../src/devtools/schema.js');
 
@@ -99,7 +98,14 @@ describe('devtools bus — sampling + pause', () => {
 	it('keeps 1-in-N for a sampled event name', () => {
 		configure({ sample: { 'hub.resolve': 3 } });
 		for (let i = 0; i < 9; i++)
-			emit({ domain: 'hub', name: 'hub.resolve', kind: 'wire', id: String(i), scope: 'page', hit: false });
+			emit({
+				domain: 'hub',
+				name: 'hub.resolve',
+				kind: 'wire',
+				id: String(i),
+				scope: 'page',
+				hit: false
+			});
 		const kept = snapshot().filter((e) => e.name === 'hub.resolve');
 		expect(kept.length).toBe(3);
 	});
@@ -114,7 +120,13 @@ describe('devtools bus — sampling + pause', () => {
 
 describe('devtools trace', () => {
 	it('serializes a versioned, JSON-safe trace', () => {
-		emit({ domain: 'runtime', name: 'region.connected', entry: 'x', deferred: false, nested: false });
+		emit({
+			domain: 'runtime',
+			name: 'region.connected',
+			entry: 'x',
+			deferred: false,
+			nested: false
+		});
 		const trace = to_trace();
 		expect(trace.kind).toBe('ogygia-devtools-trace');
 		expect(trace.version).toBe(DEVTOOLS_SCHEMA_VERSION);

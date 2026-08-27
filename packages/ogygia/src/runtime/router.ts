@@ -518,7 +518,13 @@ class SpaRouter {
 		const dt_t0 = DEVTOOLS ? dt_now() : 0;
 		let dt_reconciled = false;
 		if (DEVTOOLS)
-			dt_emit({ domain: 'nav', name: 'nav.start', from: from.pathname + from.search, to: url.pathname + url.search, type });
+			dt_emit({
+				domain: 'nav',
+				name: 'nav.start',
+				from: from.pathname + from.search,
+				to: url.pathname + url.search,
+				type
+			});
 
 		// Cancel any in-flight navigation; only the latest gen may apply a body swap (P2).
 		this.#nav_abort?.abort();

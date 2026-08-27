@@ -202,8 +202,7 @@ function remember_in(
 export function dispose_scope(scope: Scope): void {
 	const reg = registry();
 	const b = reg.instances.get(scope);
-	if (DEVTOOLS)
-		dt_emit({ domain: 'hub', name: 'hub.dispose', scope, count: b?.size ?? 0 });
+	if (DEVTOOLS) dt_emit({ domain: 'hub', name: 'hub.dispose', scope, count: b?.size ?? 0 });
 	if (b !== undefined && b.size > 0) {
 		// instances reachable from a longer-lived bucket must survive this disposal
 		const survivors = new Set<object>();
@@ -306,7 +305,15 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 				}
 			}
 			if (DEVTOOLS)
-				dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, tag: ref.t, hit: true });
+				dt_emit({
+					domain: 'hub',
+					name: 'hub.resolve',
+					kind: ref.k,
+					id: ref.i,
+					scope,
+					tag: ref.t,
+					hit: true
+				});
 			return existing;
 		}
 	}
@@ -339,7 +346,15 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 				// the page bucket too, so late-hydrating islands on the same page reunite with it.
 				remember_in(reg, 'page', ref.i, kept, ref.k);
 				if (DEVTOOLS)
-					dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, tag: ref.t, hit: true });
+					dt_emit({
+						domain: 'hub',
+						name: 'hub.resolve',
+						kind: ref.k,
+						id: ref.i,
+						scope,
+						tag: ref.t,
+						hit: true
+					});
 				return kept;
 			}
 			const instance = kind.decode(ref);
@@ -348,7 +363,15 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 				remember_in(reg, 'page', ref.i, instance as object, ref.k);
 			}
 			if (DEVTOOLS)
-				dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, tag: ref.t, hit: false });
+				dt_emit({
+					domain: 'hub',
+					name: 'hub.resolve',
+					kind: ref.k,
+					id: ref.i,
+					scope,
+					tag: ref.t,
+					hit: false
+				});
 			return instance;
 		}
 	}
@@ -358,7 +381,15 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 		remember_in(reg, 'page', ref.i, instance as object, ref.k);
 	}
 	if (DEVTOOLS)
-		dt_emit({ domain: 'hub', name: 'hub.resolve', kind: ref.k, id: ref.i, scope, tag: ref.t, hit: false });
+		dt_emit({
+			domain: 'hub',
+			name: 'hub.resolve',
+			kind: ref.k,
+			id: ref.i,
+			scope,
+			tag: ref.t,
+			hit: false
+		});
 	return instance;
 }
 

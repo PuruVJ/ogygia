@@ -83,10 +83,7 @@ import { serialize_provided_context } from './context-bridge.js';
 import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
 import { set_page_recorder, type PageSnapshot } from './page-seed-registry.js';
-import {
-	set_server_devtools_recorder,
-	record_server_event
-} from './devtools/server-registry.js';
+import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
 import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './devtools/schema.js';
 
 /** Hard cap on rendered region HTML (bytes). */
@@ -142,7 +139,13 @@ if (DEVTOOLS)
 		if (!bag) return;
 		const buf = dt_buffers.get(bag);
 		if (!buf) return;
-		buf.events.push({ ...input, v: DEVTOOLS_SCHEMA_VERSION, seq: buf.seq++, t: dt_now(), realm: 'server' });
+		buf.events.push({
+			...input,
+			v: DEVTOOLS_SCHEMA_VERSION,
+			seq: buf.seq++,
+			t: dt_now(),
+			realm: 'server'
+		});
 	});
 
 /** Cap on a batch POST body before `request.json()` buffers it. 32 endpoints × ~8.5kB (props cap
@@ -225,7 +228,6 @@ function region_css_links(id: string): string {
 function emit_ogygia_script(subtype: string, escaped_payload: string, marker = ''): string {
 	return `<script type="application/ogygia-${subtype}"${marker ? ' ' + marker : ''}>${escaped_payload}</script>`;
 }
-
 
 class OgygiaHandle {
 	readonly #endpoint: string;
@@ -477,10 +479,14 @@ class OgygiaHandle {
 			// every ogygia URL (prod `/${appDir}/…`, dev `/@id/…`) is baked base-LESS — so an island-LESS
 			// page under a non-root `base` loads the runtime too (the follow-up the old injection deferred).
 			if (runtime_url && !has_runtime_script) {
-				head.push(`<script type="module" data-ogygia-runtime src="${asset(runtime_url)}"></script>`);
+				head.push(
+					`<script type="module" data-ogygia-runtime src="${asset(runtime_url)}"></script>`
+				);
 			}
 			if (dev_hmr_url && !has_dev_hmr_script) {
-				head.push(`<script type="module" data-ogygia-dev-hmr src="${asset(dev_hmr_url)}"></script>`);
+				head.push(
+					`<script type="module" data-ogygia-dev-hmr src="${asset(dev_hmr_url)}"></script>`
+				);
 				// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:
 				// a changed stylesheet joins this page only when the plugin derives the same scope
 				// among its owners — two route-group sub-apps never paint each other in dev.
