@@ -25,7 +25,10 @@ import {
 } from './region-attrs.js';
 import { slots, type LiftedLake } from './slots.js';
 import { emit as dt_emit } from '../devtools/bus.js';
-import { install_window_sink as dt_install_window_sink, ingest_server_events as dt_ingest_server } from '../devtools/sinks.js';
+import {
+	install_window_sink as dt_install_window_sink,
+	ingest_server_events as dt_ingest_server
+} from '../devtools/sinks.js';
 import { install_devtools_ui as dt_install_ui } from '../devtools/ui.js';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (the proven DCE pattern): when off, every
@@ -54,9 +57,7 @@ function now_ms(): number {
 function has_low_priority_hint(entry: string): boolean {
 	try {
 		const abs = new URL(entry, location.href).href;
-		for (const l of document.querySelectorAll(
-			'link[rel="modulepreload"][fetchpriority="low"]'
-		)) {
+		for (const l of document.querySelectorAll('link[rel="modulepreload"][fetchpriority="low"]')) {
 			const href = l.getAttribute('href');
 			if (href && new URL(href, location.href).href === abs) return true;
 		}
@@ -924,6 +925,14 @@ class OgygiaRegion extends HTMLElement {
 			lifted = slots.lakes.lift(this);
 			if (!this.isConnected) return;
 
+			// FOREIGN-MUTATION DETECTOR (arm): a successful hydration CLAIMS the server-rendered
+			// nodes — they stay in the region. Svelte 5's mismatch recovery instead silently discards
+			// them and re-renders fresh, which reads as success here while the SSR content (and
+			// anything a post-SSR transform injected into it — declarative shadow DOM, A/B edits) is
+			// destroyed. Remember the SSR element children (post-lake-lift) so the check below can
+			// tell a claim from a recovery. See internal/notes/foreign-dom.md (the se.com incident).
+			const ssr_children = Array.from(this.children);
+
 			// Hydration envelope: `hydrate()` anchors on a top-level `<!--[-->` comment and then
 			// expects the component's OWN region envelope — but embedded SSR (Region.svelte)
 			// emits only the inner layer. `render()` (region endpoint / deferred swap) has BOTH
@@ -989,6 +998,28 @@ class OgygiaRegion extends HTMLElement {
 				}
 				this.#app = null;
 				return;
+			}
+
+			// FOREIGN-MUTATION DETECTOR (check): if EVERY SSR element child was discarded during
+			// hydrate, Svelte's silent mismatch recovery threw the server DOM away and re-rendered
+			// this island client-side. The usual cause is something mutating the region's HTML
+			// between SSR and wake — a post-SSR transform (`transformPageChunk`, a DSD-injecting
+			// middleware), an A/B tool, an edge rewriter. A legitimate claim keeps the nodes (a
+			// browser-only `{#if}` may drop SOME, so only zero survivors trips this).
+			if (ssr_children.length > 0 && !ssr_children.some((el) => this.contains(el))) {
+				this.setAttribute('data-og-recovered', '');
+				if (DEVTOOLS)
+					dt_emit({ domain: 'runtime', name: 'region.hydrate.recovered', ...dt_ids(this) });
+				console.warn(
+					`[ogygia] island "${entry}" discarded its ENTIRE server-rendered DOM during hydration ` +
+						`and re-rendered client-side (Svelte hydration-mismatch recovery). Something changed this ` +
+						`region's HTML between SSR and wake — a post-SSR transform (transformPageChunk / an ` +
+						`HTML-rewriting middleware), an A/B-testing snippet, or an edge rewriter. Whatever that ` +
+						`step injected (e.g. declarative shadow DOM) was just destroyed, and the swap is ` +
+						`timing-dependent, so symptoms look erratic. Fix: make the mutation invisible to hydration ` +
+						`(mutate only <head>, attributes, or shadow templates — never the region's light DOM), or ` +
+						`freeze the foreign-owned subtree with a wake:'none' (lake) boundary.`
+				);
 			}
 
 			this.setAttribute('data-hydrated', '');

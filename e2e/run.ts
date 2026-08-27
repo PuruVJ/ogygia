@@ -33,6 +33,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['browser.ts', true, 'hydration, load/idle/visible/media, devalue, SPA'],
 	['console.ts', true, 'zero hydration_mismatch across pages (incl. /lakes)'],
 	['hydrate-in-place.ts', true, 'islands adopt SSR root (no discard+recreate / class-less flash)'],
+	['detector.ts', true, 'foreign-mutation detector: corrupted region → data-og-recovered + warn; healthy pages clean'],
 	['placed-island-css.ts', true, 'REGRESSION: placed client island ships its own CSS (chunk-split :global)'],
 	['content-css.ts', true, 'REGRESSION: content body (.svx) ships + applies its own scoped CSS (server-only corpus)'],
 	['lakes.ts', true, 'frozen region, no client JS, island-in-lake, restore, remount cache/swr'],

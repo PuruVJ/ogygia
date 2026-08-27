@@ -201,6 +201,15 @@ export type RuntimeEventInput =
 	  }
 	| {
 			domain: 'runtime';
+			/** Svelte's silent mismatch RECOVERY discarded this region's entire server DOM and
+			 *  re-rendered it client-side — something mutated the region between SSR and wake
+			 *  (post-SSR transform, A/B tool, DSD injector). See internal/notes/foreign-dom.md. */
+			name: 'region.hydrate.recovered';
+			entry?: string;
+			fp?: string;
+	  }
+	| {
+			domain: 'runtime';
 			name: 'region.server.applied';
 			entry?: string;
 			endpoint?: string;
