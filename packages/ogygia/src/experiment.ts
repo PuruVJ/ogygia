@@ -62,6 +62,16 @@ export function allowOverrides(gate: (c: CtxLike) => boolean): void {
 	override_gate = gate;
 }
 
+/** The EXPOSURE sink — called once per (request, experiment/flag) on first assignment, with
+ *  `(name, variant, c)`. ogygia deliberately ships no metrics pipeline: this is the one seam —
+ *  log it, queue it, POST it to your analytics; the stamp is the join key. Register once at
+ *  server startup; `null` clears. Server-side, synchronous entry (fire-and-forget your own
+ *  async inside), and a throwing sink never breaks a request. */
+let exposure_sink: ((name: string, variant: string, c: CtxLike) => void) | null = null;
+export function onExposure(sink: ((name: string, variant: string, c: CtxLike) => void) | null): void {
+	exposure_sink = sink;
+}
+
 /** QA override: `?og-exp=csr-mode:hydrated` (repeatable / comma-separable). Gated — see
  *  {@link allowOverrides}. (An upstream shell that HONORED an override still propagates it to
  *  mounted teams through carried claims — the gate is per evaluating server.) */
@@ -145,6 +155,16 @@ export function experiment<V extends string>(
 		if (cached !== undefined) return cached;
 		const v = compute(c);
 		memo.set(c.request, v);
+		// EXPOSURE fires on the first computation per request — under SSR, assignment IS
+		// rendering the variant, so first-read ≈ the visitor met the experience. Once per
+		// (request, experiment); a throwing sink must never break the page.
+		if (exposure_sink) {
+			try {
+				exposure_sink(name, v, c);
+			} catch {
+				/* the sink is app code — its failure is not the request's problem */
+			}
+		}
 		return v;
 	};
 

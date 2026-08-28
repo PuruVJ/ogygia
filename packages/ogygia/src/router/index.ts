@@ -54,6 +54,7 @@ export type {
 	Simplify
 } from './view.js';
 export { compile, match_path, type CompiledPattern } from './match.js';
+export { anonymousVisitor, type AnonymousVisitorOptions } from './visitor.js';
 
 // EXPERIMENTAL — fragment federation: an MFE `expose()`s its route tree; the shell makes ONE
 // `client()` per MFE (signing / timeout / SWR cache / coalescing / generation-safe invalidation)

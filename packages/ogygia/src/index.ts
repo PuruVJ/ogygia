@@ -108,6 +108,7 @@ export {
 	flag,
 	layer,
 	allowOverrides,
+	onExposure,
 	type Experiment,
 	type ExperimentOptions,
 	type Flag,

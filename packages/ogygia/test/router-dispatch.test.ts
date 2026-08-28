@@ -157,12 +157,34 @@ describe('loads — memoization + parent-sharing (no waterfall, no waste)', () =
 	});
 });
 
+describe('entries — prerender param sets for dynamic patterns', () => {
+	it('fills declared entries into the crawl list; undeclared dynamics are skipped', async () => {
+		const { page } = await import('../src/router/index.js');
+		const { default: RawHtml } = await import('../src/RawHtml.svelte');
+		const app = routes(
+			{
+				'/': page(RawHtml as never),
+				'/posts/[id]': page(RawHtml as never, {
+					entries: () => [{ id: '1' }, { id: '2' }]
+				}),
+				'/tags/[tag]': page(RawHtml as never) // dynamic, no entries → skipped
+			},
+			{ base: '/blog' }
+		);
+		const paths = (await app.entries()).map((e) => e.path).sort();
+		expect(paths).toEqual(['/blog/', '/blog/posts/1', '/blog/posts/2']);
+	});
+});
+
 describe('miss — HTML boundary for page requests', () => {
 	// RawHtml stands in for an app error page — any real component works; the assertions are
 	// about STATUS and CONTENT TYPE, the long-noted "miss answers JSON" gap.
 	it('unmatched page GET under a base renders the root error page as HTML 404', async () => {
 		const { default: RawHtml } = await import('../src/RawHtml.svelte');
-		const app = routes({ '/': { GET: (c) => c.json({ ok: true }) } }, { base: '/app', error: RawHtml as never });
+		const app = routes(
+			{ '/': { GET: (c) => c.json({ ok: true }) } },
+			{ base: '/app', error: RawHtml as never }
+		);
 		const res = await app.fetch(
 			new Request('http://x/app/nope', { headers: { accept: 'text/html,*/*' } })
 		);
@@ -172,7 +194,10 @@ describe('miss — HTML boundary for page requests', () => {
 
 	it('unmatched NON-HTML request keeps the JSON 404 (fetch/API callers)', async () => {
 		const { default: RawHtml } = await import('../src/RawHtml.svelte');
-		const app = routes({ '/': { GET: (c) => c.json({ ok: true }) } }, { base: '/app', error: RawHtml as never });
+		const app = routes(
+			{ '/': { GET: (c) => c.json({ ok: true }) } },
+			{ base: '/app', error: RawHtml as never }
+		);
 		const res = await app.fetch(
 			new Request('http://x/app/nope', { headers: { accept: 'application/json' } })
 		);

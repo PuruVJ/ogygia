@@ -6,7 +6,17 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { generateKeyPairSync } from 'node:crypto';
-import { routes, client, mount, kitMount, proxy, expose, catalog, sign_headers, verify_fragment_request } from '../src/router/index.js';
+import {
+	routes,
+	client,
+	mount,
+	kitMount,
+	proxy,
+	expose,
+	catalog,
+	sign_headers,
+	verify_fragment_request
+} from '../src/router/index.js';
 import { experiment } from '../src/experiment.js';
 
 const CLAIMS = Symbol.for('ogygia.claims.v1');
@@ -41,9 +51,7 @@ describe('routes({ visitor }) — the ONE identity', () => {
 			const sub = c.request.headers.get('x-session');
 			return sub ? { sub } : undefined;
 		});
-		const res = await app.fetch(
-			new Request('http://x/me', { headers: { 'x-session': 'u1' } })
-		);
+		const res = await app.fetch(new Request('http://x/me', { headers: { 'x-session': 'u1' } }));
 		const { first, second } = await res!.json();
 		expect(first).toEqual({ sub: 'u1' });
 		expect(second).toEqual({ sub: 'u1' }); // same derivation, read twice
@@ -227,8 +235,12 @@ describe('mount() — claims auto-built from the table identity', () => {
 	});
 
 	it('STATUS CHANNEL: a mounted 404 answers 404 through the shell (no 200-wrapped errors)', async () => {
-		vi.stubGlobal('fetch', async () =>
-			new Response(JSON.stringify({ status: 404, title: 'not found', css: [], body: 'MFE 404 page' }))
+		vi.stubGlobal(
+			'fetch',
+			async () =>
+				new Response(
+					JSON.stringify({ status: 404, title: 'not found', css: [], body: 'MFE 404 page' })
+				)
 		);
 		const app = routes({ '/cms/[...rest]': mount('http://mfe.test') });
 		const res = await app.fetch(new Request('http://shell/cms/nope'));
@@ -237,16 +249,18 @@ describe('mount() — claims auto-built from the table identity', () => {
 	});
 
 	it('HEAD CHANNEL: the doc `head` joins the document head', async () => {
-		vi.stubGlobal('fetch', async () =>
-			new Response(
-				JSON.stringify({
-					status: 200,
-					title: 't',
-					css: [],
-					head: '<meta name="description" content="from the MFE">',
-					body: 'B'
-				})
-			)
+		vi.stubGlobal(
+			'fetch',
+			async () =>
+				new Response(
+					JSON.stringify({
+						status: 200,
+						title: 't',
+						css: [],
+						head: '<meta name="description" content="from the MFE">',
+						body: 'B'
+					})
+				)
 		);
 		const app = routes({ '/cms/[...rest]': mount('http://mfe.test') });
 		const html = await (await app.fetch(new Request('http://shell/cms/p')))!.text();
@@ -278,10 +292,12 @@ describe('mount() — claims auto-built from the table identity', () => {
 	});
 
 	it('a hostile document TITLE is escaped into the head (raw-head emitter law)', async () => {
-		vi.stubGlobal('fetch', async () =>
-			new Response(
-				JSON.stringify({ status: 200, title: '</title><script>x</script>', css: [], body: 'B' })
-			)
+		vi.stubGlobal(
+			'fetch',
+			async () =>
+				new Response(
+					JSON.stringify({ status: 200, title: '</title><script>x</script>', css: [], body: 'B' })
+				)
 		);
 		const app = routes({ '/cms/[...rest]': mount('http://mfe.test') });
 		const html = await (await app.fetch(new Request('http://shell/cms/p')))!.text();
@@ -333,13 +349,20 @@ describe('verify_fragment_request — hardening', () => {
 
 	it('AUDIENCE override: explicit label survives a Host rewrite between the hops', () => {
 		// signer binds label "cms-canonical"; the process sees an internal host — explicit audience matches
-		const req = signed_req('http://cms.internal:9000/og/fragment/page?path=/', priv, 'cms-canonical');
+		const req = signed_req(
+			'http://cms.internal:9000/og/fragment/page?path=/',
+			priv,
+			'cms-canonical'
+		);
 		const seen = new Request('http://10.0.0.5:9000/og/fragment/page?path=/', {
 			headers: Object.fromEntries(req.headers)
 		});
 		expect(
-			verify_fragment_request({ publicKeys: [pub], audience: 'cms-canonical' }, seen, new URL(seen.url))
-				?.user?.sub
+			verify_fragment_request(
+				{ publicKeys: [pub], audience: 'cms-canonical' },
+				seen,
+				new URL(seen.url)
+			)?.user?.sub
 		).toBe('u1');
 		// …but the default host-based verifier rejects it (bound audience ≠ seen host)
 		expect(verify_fragment_request({ publicKeys: [pub] }, seen, new URL(seen.url))).toBeNull();
@@ -389,6 +412,56 @@ describe('verify_fragment_request — hardening', () => {
 	});
 });
 
+describe('mount — canary: a per-request CLIENT resolver', () => {
+	it('routes each request to the client the resolver picks (A/B of infrastructure)', async () => {
+		const hosts: string[] = [];
+		vi.stubGlobal('fetch', async (u: URL) => {
+			hosts.push(new URL(u).host);
+			return new Response(doc_json());
+		});
+		const v1 = client('http://cms-v1.test');
+		const v2 = client('http://cms-v2.test');
+		const app = routes(
+			{
+				'/cms/[...rest]': mount((c) => (c.url.searchParams.has('canary') ? v2 : v1))
+			}
+		);
+		await app.fetch(new Request('http://shell/cms/a'));
+		await app.fetch(new Request('http://shell/cms/a?canary'));
+		expect(hosts).toEqual(['cms-v1.test', 'cms-v2.test']);
+	});
+});
+
+describe('anonymousVisitor — sticky identity for logged-out traffic', () => {
+	it('mints a cookie once, reads it forever; splits become sticky for anonymous', async () => {
+		const { anonymousVisitor } = await import('../src/router/index.js');
+		const roll = experiment('anon-roll', { variants: ['a', 'b'], split: { b: 100 } });
+		const jar = new Map<string, string>();
+		const app = routes(
+			{ '/x': { GET: (c) => c.json({ sub: c.visitor?.sub ?? null, v: roll.bucket(c as never) }) } },
+			{ visitor: anonymousVisitor() }
+		);
+		// standalone (no Kit cookie jar): the set-cookie rides the router-built response
+		const first = await app.fetch(new Request('http://s/x'));
+		const setc = first!.headers.get('set-cookie') ?? '';
+		expect(setc).toMatch(/og-vid=[0-9a-f-]{36}/);
+		const id = /og-vid=([0-9a-f-]+)/.exec(setc)![1];
+		const j1 = await first!.json();
+		expect(j1.sub).toBe(id); // identity readable in the SAME request
+		expect(j1.v).toBe('b'); // 100% split reaches the anonymous visitor
+		// second request presents the cookie via a Kit-shaped jar → same identity, no re-mint
+		jar.set('og-vid', id);
+		const app2 = routes(
+			{ '/x': { GET: (c) => c.json({ sub: c.visitor?.sub ?? null }) } },
+			{ visitor: anonymousVisitor() }
+		);
+		const evt = { cookies: { get: (n: string) => jar.get(n), set: () => {} } };
+		const second = await app2.fetch(new Request('http://s/x'), evt as never);
+		expect((await second!.json()).sub).toBe(id);
+		expect(second!.headers.get('set-cookie')).toBeNull();
+	});
+});
+
 describe('kitMount — mounting from a PLAIN Kit catchall (no ogygia router)', () => {
 	const ev = (path: string, init?: RequestInit) => {
 		const headers: Record<string, string> = {};
@@ -402,8 +475,10 @@ describe('kitMount — mounting from a PLAIN Kit catchall (no ogygia router)', (
 	};
 
 	it('load returns the doc + per-team Server-Timing via Kit setHeaders', async () => {
-		vi.stubGlobal('fetch', async () =>
-			new Response(JSON.stringify({ status: 200, title: 't', css: [], body: 'B', server_ms: 7 }))
+		vi.stubGlobal(
+			'fetch',
+			async () =>
+				new Response(JSON.stringify({ status: 200, title: 't', css: [], body: 'B', server_ms: 7 }))
 		);
 		const m = kitMount('http://mfe.test');
 		const e = ev('hello');
@@ -413,19 +488,27 @@ describe('kitMount — mounting from a PLAIN Kit catchall (no ogygia router)', (
 	});
 
 	it('an upstream 404 becomes Kit error(404) — correct status through a plain Kit shell', async () => {
-		vi.stubGlobal('fetch', async () =>
-			new Response(JSON.stringify({ status: 404, title: 'nope', css: [], body: 'x' }))
+		vi.stubGlobal(
+			'fetch',
+			async () => new Response(JSON.stringify({ status: 404, title: 'nope', css: [], body: 'x' }))
 		);
 		const m = kitMount('http://mfe.test');
 		await expect(m.load(ev('missing'))).rejects.toMatchObject({ status: 404 });
 	});
 
 	it("the MFE's PRG redirect re-throws as a Kit redirect (load + action)", async () => {
-		vi.stubGlobal('fetch', async () =>
-			new Response(JSON.stringify({ status: 303, location: '/cms/posts/1', title: '', css: [], body: '' }))
+		vi.stubGlobal(
+			'fetch',
+			async () =>
+				new Response(
+					JSON.stringify({ status: 303, location: '/cms/posts/1', title: '', css: [], body: '' })
+				)
 		);
 		const m = kitMount('http://mfe.test');
-		await expect(m.load(ev('old'))).rejects.toMatchObject({ status: 303, location: '/cms/posts/1' });
+		await expect(m.load(ev('old'))).rejects.toMatchObject({
+			status: 303,
+			location: '/cms/posts/1'
+		});
 		await expect(
 			m.actions.default(ev('posts/1', { method: 'POST', body: 'comment=hi' }))
 		).rejects.toMatchObject({ status: 303, location: '/cms/posts/1' });
@@ -446,10 +529,11 @@ describe('catalog — the MFE widget door', () => {
 		return { params: { name }, url, request: new Request(url, { headers }) };
 	};
 
-	it('__catalog answers the manifest — the CI-diffable inventory', async () => {
-		const { GET } = catalog(widgets, { verify: false });
-		const res = await GET(ev('__catalog'));
+	it('__catalog answers the manifest UNSIGNED (inventory, not data) — content stays gated', async () => {
+		const { GET } = catalog(widgets, { verify: { publicKeys: [pub] } });
+		const res = await GET(ev('__catalog')); // no signature at all
 		expect(await res.json()).toEqual({ names: ['kpis'] });
+		expect((await GET(ev('kpis'))).status).toBe(401); // the widgets themselves still 401
 	});
 
 	it('bakes a widget with claims + absolutized asset refs', async () => {

@@ -11,10 +11,7 @@ const CLAIMS = Symbol.for('ogygia.claims.v1');
 // depend on how the test runner resolves esm-env's DEV condition
 beforeAll(() => allowOverrides(() => true));
 
-function ctx(
-	url = 'http://s/x',
-	opts: { vid?: string; claims?: Record<string, unknown> } = {}
-) {
+function ctx(url = 'http://s/x', opts: { vid?: string; claims?: Record<string, unknown> } = {}) {
 	const request = new Request(url);
 	if (opts.claims) (request as unknown as Record<symbol, unknown>)[CLAIMS] = opts.claims;
 	return {
@@ -35,7 +32,8 @@ describe('experiment — precedence and stickiness', () => {
 		const one = ctx('http://s/x', { vid: 'visitor-42' });
 		expect(e.bucket(one)).toBe(e.bucket(one)); // deterministic
 		let hits = 0;
-		for (let i = 0; i < 2000; i++) if (e.bucket(ctx('http://s/x', { vid: `v${i}` })) === 'v2') hits++;
+		for (let i = 0; i < 2000; i++)
+			if (e.bucket(ctx('http://s/x', { vid: `v${i}` })) === 'v2') hits++;
 		expect(hits / 2000).toBeGreaterThan(0.07); // 10% ± tolerance
 		expect(hits / 2000).toBeLessThan(0.13);
 	});
@@ -74,8 +72,16 @@ describe('experiment — precedence and stickiness', () => {
 describe('experiment — layers (mutual exclusion)', () => {
 	it('a visitor lands in at most ONE member experiment', () => {
 		const hero = layer('hero-slot');
-		const a = experiment('hero-video', { variants: ['control', 'on'], split: { on: 100 }, layer: hero });
-		const b = experiment('hero-quiz', { variants: ['control', 'on'], split: { on: 100 }, layer: hero });
+		const a = experiment('hero-video', {
+			variants: ['control', 'on'],
+			split: { on: 100 },
+			layer: hero
+		});
+		const b = experiment('hero-quiz', {
+			variants: ['control', 'on'],
+			split: { on: 100 },
+			layer: hero
+		});
 		let in_a = 0;
 		let in_b = 0;
 		for (let i = 0; i < 500; i++) {
@@ -95,7 +101,10 @@ describe('experiment — pick() (the page() component chooser)', () => {
 	it('resolves the arm per request and falls back to control', () => {
 		const A = { name: 'A' };
 		const B = { name: 'B' };
-		const e = experiment('csr-mode', { variants: ['static', 'hydrated'], split: { hydrated: 100 } });
+		const e = experiment('csr-mode', {
+			variants: ['static', 'hydrated'],
+			split: { hydrated: 100 }
+		});
 		const p = e.pick({ static: A, hydrated: B });
 		expect(p.__ogpick(ctx('http://s/x?og-exp=csr-mode:hydrated'))).toBe(B);
 		expect(p.__ogpick(ctx('http://s/x?og-exp=csr-mode:static'))).toBe(A);
@@ -147,7 +156,9 @@ describe('flag — the boolean face', () => {
 
 	it('carried claims from an upstream shell decide it (one world across teams)', () => {
 		const f = flag('nav', { rollout: 0 });
-		expect(f.on(ctx('http://s/x', { claims: { sub: 'u', experiments: { nav: 'on' } } }))).toBe(true);
+		expect(f.on(ctx('http://s/x', { claims: { sub: 'u', experiments: { nav: 'on' } } }))).toBe(
+			true
+		);
 	});
 
 	it('the override GATE: closed → ?og-exp is inert (prod default); reopened → honored', () => {
@@ -160,6 +171,25 @@ describe('flag — the boolean face', () => {
 			allowOverrides(() => true);
 		}
 		expect(f.on(ctx(url, { vid: 'fresh-2' }))).toBe(true); // QA gate open → honored
+	});
+
+	it('onExposure: fires ONCE per (request, experiment) on first assignment; a throwing sink is contained', async () => {
+		const { onExposure } = await import('../src/experiment.js');
+		const seen: string[] = [];
+		onExposure((name, variant) => {
+			seen.push(`${name}:${variant}`);
+			throw new Error('sink exploded'); // must never break the page
+		});
+		try {
+			const f = flag('exposed', { rollout: 100 });
+			const c = ctx('http://s/x', { vid: 'v1' });
+			expect(f.on(c)).toBe(true); // computed + exposed, sink's throw swallowed
+			f.on(c); // memo hit — NO second exposure
+			f.stamp(c); // still the same request — no exposure either
+			expect(seen).toEqual(['exposed:on']);
+		} finally {
+			onExposure(null);
+		}
 	});
 
 	it('IS an experiment: satisfies the routes({ experiments }) shape + pick() + stamp()', () => {

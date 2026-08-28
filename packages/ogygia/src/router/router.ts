@@ -282,7 +282,9 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 		// come from LOADS, never components.
 		const resolved =
 			typeof node.component === 'object' && node.component !== null && '__ogpick' in node.component
-				? (node.component as { __ogpick: (c: Ctx, data: Record<string, unknown>) => unknown }).__ogpick(ctx, data)
+				? (
+						node.component as { __ogpick: (c: Ctx, data: Record<string, unknown>) => unknown }
+					).__ogpick(ctx, data)
 				: node.component;
 		// An html view renders through ogygia's OWN pure-HTML region component (og_html_region's
 		// RawHtml) — the wire document is just html + css, no bespoke page component. Its css tags
@@ -366,12 +368,16 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 		}
 		// layouts whose loads SUCCEEDED (index 0 = the table-wide load, i+1 = layouts[i]):
 		// the failing layout's own chrome cannot render — it has no data
-		const renderable =
-			failing === 0 ? 0 : Math.min(failing - 1, pnode.layouts.length);
+		const renderable = failing === 0 ? 0 : Math.min(failing - 1, pnode.layouts.length);
 		// merged data of every fulfilled load — the surviving chrome (and the boundary) read it
 		const data: Record<string, unknown> = {};
 		for (const s of settled) {
-			if (s.status === 'fulfilled' && s.value && typeof s.value === 'object' && !(s.value instanceof Response))
+			if (
+				s.status === 'fulfilled' &&
+				s.value &&
+				typeof s.value === 'object' &&
+				!(s.value instanceof Response)
+			)
 				Object.assign(data, s.value);
 		}
 
@@ -425,8 +431,15 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 		async entries() {
 			const out: Array<{ path: string }> = [];
 			for (const leaf of leaves) {
-				if (is_page(leaf.def) && !leaf.pattern.includes('['))
+				if (!is_page(leaf.def)) continue;
+				if (!leaf.pattern.includes('[')) {
 					out.push({ path: base + leaf.pattern });
+					continue;
+				}
+				// a DYNAMIC pattern with declared param sets prerenders each filled path (Kit's
+				// per-route `entries` export); without them it's skipped (crawled or SSR'd live)
+				const list = leaf.def.entries ? await leaf.def.entries() : null;
+				if (list) for (const params of list) out.push({ path: base + fill(leaf.pattern, params) });
 			}
 			return out;
 		},

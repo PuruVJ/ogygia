@@ -121,6 +121,12 @@ export interface PageServer {
 	search?: StandardSchemaV1;
 	load?: LoadInput;
 	actions?: Record<string, ActionInput>;
+	/** PRERENDER param sets for a DYNAMIC pattern — Kit's per-route `entries` export. Each item
+	 *  fills the pattern (`/posts/[id]` + `{ id: '1' }` → `/posts/1`) and joins the router's
+	 *  `entries()` crawl list; a dynamic page without this is skipped (crawled or SSR'd live). */
+	entries?: () =>
+		| Array<Record<string, string>>
+		| Promise<Array<Record<string, string>>>;
 }
 
 /** A page route def, generic over its layout chain / load / actions so `$infer` reads them. `L` is
@@ -143,6 +149,8 @@ export interface PageDef<
 	readonly search_schema?: StandardSchemaV1;
 	/** a deferred page's loading placeholder — the component's reserved `ogygiaFallback` slot */
 	readonly fallback?: AnyComponent;
+	/** prerender param sets for a dynamic pattern — see {@link PageServer.entries} */
+	readonly entries?: PageServer['entries'];
 	readonly layouts: L;
 	/** phantom — carries the authored load/actions/schema types to `$infer`; never read at runtime */
 	readonly __types?: { load: Load; actions: Actions; params: ParamsSchema; search: SearchSchema };
@@ -202,6 +210,7 @@ export function page<S extends PageServer>(
 		actions,
 		params_schema: server?.params,
 		search_schema: server?.search,
+		entries: server?.entries,
 		layouts: []
 	} as never;
 }

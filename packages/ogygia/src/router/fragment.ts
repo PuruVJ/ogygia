@@ -380,7 +380,11 @@ export function expose(
 		const doc = (d: FragmentDocument) => {
 			const ms = Math.round((performance.now() - t0) * 10) / 10;
 			return new Response(
-				JSON.stringify({ ...d, trace: { trace_id: trace.trace_id, span_id: trace.span_id }, server_ms: ms }),
+				JSON.stringify({
+					...d,
+					trace: { trace_id: trace.trace_id, span_id: trace.span_id },
+					server_ms: ms
+				}),
 				{
 					headers: {
 						'content-type': 'application/json',
@@ -413,10 +417,9 @@ export function expose(
 		return doc({
 			status: res.status,
 			title: head.match(TITLE_RE)?.[1] ?? '',
-			css: [
-				...(head.match(STYLESHEET_LINK_RE) ?? []),
-				...(head.match(STYLE_TAG_RE) ?? [])
-			].map((t) => absolutize(t, url.origin)),
+			css: [...(head.match(STYLESHEET_LINK_RE) ?? []), ...(head.match(STYLE_TAG_RE) ?? [])].map(
+				(t) => absolutize(t, url.origin)
+			),
 			...(head_meta ? { head: head_meta } : {}),
 			body: absolutize(html.match(BODY_RE)?.[1] ?? html, url.origin),
 			...(runtime_src ? { runtime: new URL(runtime_src, url.origin + '/').href } : {})
@@ -452,7 +455,13 @@ export type Widget = (
 export function catalog(
 	widgets: Record<string, Widget>,
 	opts: { verify?: VerifyConfig | false } = {}
-): { GET: (e: { params: Partial<Record<string, string>>; url: URL; request: Request }) => Promise<Response> } {
+): {
+	GET: (e: {
+		params: Partial<Record<string, string>>;
+		url: URL;
+		request: Request;
+	}) => Promise<Response>;
+} {
 	if (opts.verify === undefined) {
 		console.warn(
 			'[ogygia] catalog() has no `verify` — these widget endpoints are UNAUTHENTICATED. Pass ' +
@@ -464,17 +473,20 @@ export function catalog(
 
 	return {
 		GET: async ({ params, url, request }) => {
+			const name = params.name ?? '';
+			// The MANIFEST is deliberately UNSIGNED (names only — content stays gated below):
+			// CI diffs and `npx ogygia fragments` need it without key ceremony, the same trade
+			// as a /.well-known discovery document. Widget names are inventory, not data.
+			if (name === '__catalog')
+				return new Response(JSON.stringify({ names }), {
+					headers: { 'content-type': 'application/json' }
+				});
 			let user: Claims | undefined;
 			if (verify) {
 				const v = verify_fragment_request(verify, request, url);
 				if (!v) return json_error_response(401, 'invalid or missing signature');
 				user = v.user;
 			}
-			const name = params.name ?? '';
-			if (name === '__catalog')
-				return new Response(JSON.stringify({ names }), {
-					headers: { 'content-type': 'application/json' }
-				});
 			const make = widgets[name];
 			if (!make) return json_error_response(404, `unknown fragment '${name}'`);
 			const trace = child_traceparent(request.headers.get('traceparent'));
@@ -549,7 +561,12 @@ export interface FragmentClient {
 	readonly label: string;
 	/** Page document (whole-app mount's GET path) — cache/SWR/coalescing-managed. Throws the
 	 *  router's `error()` (502/504) — call from loads/actions. */
-	doc(path: string, search: string, claims?: Claims, traceparent?: string): Promise<FragmentDocument>;
+	doc(
+		path: string,
+		search: string,
+		claims?: Claims,
+		traceparent?: string
+	): Promise<FragmentDocument>;
 	/** Mutation document — bypasses the cache and INVALIDATES it (generation-safe). */
 	postDoc(
 		path: string,
@@ -577,7 +594,8 @@ export function client(origin: string, opts: ClientOptions = {}): FragmentClient
 	/** LRU bookkeeping: refresh recency on hit, evict oldest past `cache_max` on insert. The key
 	 *  carries the visitor's claims — cardinality is visitors × paths, so unbounded = memory leak. */
 	const cache_put = (key: string, entry: { doc: FragmentDocument; at: number }) => {
-		if (cache.has(key)) cache.delete(key); // re-insert = most recent
+		if (cache.has(key))
+			cache.delete(key); // re-insert = most recent
 		else if (cache.size >= cache_max) cache.delete(cache.keys().next().value as string);
 		cache.set(key, entry);
 	};
@@ -599,7 +617,14 @@ export function client(origin: string, opts: ClientOptions = {}): FragmentClient
 		traceparent?: string
 	): Promise<Response> => {
 		const signed = opts.sign
-			? sign_headers(opts.sign.privateKey, init?.method ?? 'GET', u, init?.body, claims, opts.audience)
+			? sign_headers(
+					opts.sign.privateKey,
+					init?.method ?? 'GET',
+					u,
+					init?.body,
+					claims,
+					opts.audience
+				)
 			: {};
 		return fetch(u, {
 			signal: AbortSignal.timeout(timeout),
@@ -741,13 +766,23 @@ function claims_for(c: Ctx, user_override?: (c: Ctx) => Claims | undefined): Cla
  * Shell side. One route-table entry mounts a whole remote app:
  * `'/cms/[...rest]': mount(cms)` where `cms = client('http://cms.internal', { … })` — or
  * `mount('http://cms.internal', { timeout: 800, cache: { ttl: 30_000 } })` as inline sugar.
+ *
+ * CANARY / BLUE-GREEN: pass a PER-REQUEST resolver instead — the promised A/B-of-infrastructure:
+ *
+ *     const v2 = flag('cms-v2', { rollout: 10 });
+ *     '/cms/[...rest]': mount((c) => (v2.on(c) ? cms_v2 : cms_v1))
+ *
+ * Clients are prebuilt singletons (each keeps its own cache/coalescing); the resolver only
+ * CHOOSES between them, so stickiness comes from the flag and transport state stays per-target.
  */
 export function mount(
-	target: string | FragmentClient,
+	target: string | FragmentClient | ((c: Ctx) => FragmentClient),
 	opts: MountOptions = {}
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): PageDef<any, any, any, any, any> {
-	const cl = typeof target === 'string' ? client(target, opts) : target;
+	const fixed = typeof target === 'function' ? null : typeof target === 'string' ? client(target, opts) : target;
+	const resolve_client = (c: Ctx): FragmentClient =>
+		fixed ?? (target as (c: Ctx) => FragmentClient)(c);
 
 	// The page slot is a RESOLVER into an html view — the wire document IS the page. No bespoke
 	// component: the router renders it through ogygia's own pure-HTML region, the doc's css tags
@@ -771,12 +806,18 @@ export function mount(
 
 	return page(mounted_view, {
 		load: async (c) => {
+			const cl = resolve_client(c);
 			const rest = (c.params as { rest?: string }).rest ?? '';
 			// continue the PAGE's trace into the hop (fresh span), and time the whole exchange —
 			// the shell's own response then names the team in Server-Timing (visible in DevTools)
 			const trace = child_traceparent(c.request.headers.get('traceparent'));
 			const t0 = performance.now();
-			const doc = await cl.doc('/' + rest, c.url.search, claims_for(c, opts.user), trace.traceparent);
+			const doc = await cl.doc(
+				'/' + rest,
+				c.url.search,
+				claims_for(c, opts.user),
+				trace.traceparent
+			);
 			const hop_ms = Math.round((performance.now() - t0) * 10) / 10;
 			if (doc.location) redirect(doc.status as 301 | 302 | 303 | 307 | 308, doc.location);
 			c.setHeaders?.({
@@ -791,6 +832,7 @@ export function mount(
 		},
 		actions: {
 			default: async (c) => {
+				const cl = resolve_client(c);
 				const rest = (c.params as { rest?: string }).rest ?? '';
 				const body = await c.request.arrayBuffer();
 				const doc = await cl.postDoc(
@@ -934,7 +976,8 @@ export function proxy(
 			const [app, ...frag] = (e.params.name ?? '').split(':');
 			const cl = clients[app];
 			const name = frag.join(':');
-			if (!cl || frag.length === 0) return json_doc({ failed: true, reason: 'unknown fragment' }, 404);
+			if (!cl || frag.length === 0)
+				return json_doc({ failed: true, reason: 'unknown fragment' }, 404);
 			// allowlist gate: the browser chose `name` — a request outside the allowlist learns
 			// nothing (same 404 as an unknown app, so probing can't enumerate the catalog)
 			if (opts.widgets && !opts.widgets[app]?.includes(name))
