@@ -2,7 +2,7 @@
 // variants assigned per visitor, deterministically. These tests pin the precedence chain
 // (override → carried → assign → split → control), stickiness, split accuracy, layer
 // exclusivity, and the page() ComponentPick contract.
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { experiment, flag, layer, allowOverrides } from '../src/experiment.js';
 
 const CLAIMS = Symbol.for('ogygia.claims.v1');
@@ -189,6 +189,35 @@ describe('flag — the boolean face', () => {
 			expect(seen).toEqual(['exposed:on']);
 		} finally {
 			onExposure(null);
+		}
+	});
+
+	it('batchExposures: flushes at max, at the timer, and never lets send() break a request', async () => {
+		const { onExposure, batchExposures } = await import('../src/experiment.js');
+		vi.useFakeTimers();
+		const batches: Array<Array<{ name: string; variant: string }>> = [];
+		const sink = batchExposures(
+			(b) => {
+				batches.push(b);
+				throw new Error('pipeline down'); // contained — nothing above may notice
+			},
+			{ max: 2, ms: 1000 }
+		);
+		onExposure(sink);
+		try {
+			const f = flag('batched', { rollout: 100 });
+			f.on({ ...ctx('http://s/x', { vid: 'v1' }), visitor: { sub: 'v1' } });
+			expect(batches).toHaveLength(0); // queued, below max
+			f.on({ ...ctx('http://s/x', { vid: 'v2' }), visitor: { sub: 'v2' } }); // hits max=2
+			expect(batches).toHaveLength(1);
+			expect(batches[0].map((e) => e.name)).toEqual(['batched', 'batched']);
+			f.on({ ...ctx('http://s/x', { vid: 'v3' }), visitor: { sub: 'v3' } });
+			vi.advanceTimersByTime(1001); // the timer drains the tail
+			expect(batches).toHaveLength(2);
+			expect(batches[1]).toHaveLength(1);
+		} finally {
+			onExposure(null);
+			vi.useRealTimers();
 		}
 	});
 

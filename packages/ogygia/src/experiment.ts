@@ -68,8 +68,51 @@ export function allowOverrides(gate: (c: CtxLike) => boolean): void {
  *  server startup; `null` clears. Server-side, synchronous entry (fire-and-forget your own
  *  async inside), and a throwing sink never breaks a request. */
 let exposure_sink: ((name: string, variant: string, c: CtxLike) => void) | null = null;
-export function onExposure(sink: ((name: string, variant: string, c: CtxLike) => void) | null): void {
+export function onExposure(
+	sink: ((name: string, variant: string, c: CtxLike) => void) | null
+): void {
 	exposure_sink = sink;
+}
+
+export interface ExposureEvent {
+	name: string;
+	variant: string;
+	/** the sticky identity the assignment keyed on (undefined = anonymous) */
+	sub?: string;
+	at: number;
+}
+
+/** Batch exposures for a real pipeline: `onExposure(batchExposures(send))`. Collects events and
+ *  calls `flush(batch)` at `max` events or after `ms` since the first queued one — whichever
+ *  comes first. `send` failures are contained (a lost batch must never take a request down);
+ *  call the returned sink's `.flush()` on server shutdown to drain the tail. */
+export function batchExposures(
+	send: (batch: ExposureEvent[]) => void | Promise<void>,
+	opts: { max?: number; ms?: number } = {}
+): ((name: string, variant: string, c: CtxLike) => void) & { flush(): void } {
+	const max = opts.max ?? 25;
+	const ms = opts.ms ?? 2000;
+	let queue: ExposureEvent[] = [];
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	const flush = () => {
+		if (timer) clearTimeout(timer);
+		timer = null;
+		if (queue.length === 0) return;
+		const batch = queue;
+		queue = [];
+		try {
+			void send(batch);
+		} catch {
+			/* a lost batch is an analytics problem, never a request problem */
+		}
+	};
+	const sink = (name: string, variant: string, c: CtxLike) => {
+		queue.push({ name, variant, sub: c.visitor?.sub, at: Date.now() });
+		if (queue.length >= max) flush();
+		else if (!timer) timer = setTimeout(flush, ms);
+	};
+	sink.flush = flush;
+	return sink;
 }
 
 /** QA override: `?og-exp=csr-mode:hydrated` (repeatable / comma-separable). Gated — see

@@ -66,6 +66,8 @@ const v2 = flag('cms-v2', { rollout: 10 });
 
 Clients stay prebuilt singletons (each keeps its own cache and coalescing); the resolver only chooses between them, and stickiness comes from the flag.
 
+**Streamed mounts**: `mount(cms, { stream: true })` flushes the shell's page immediately with a skeleton (or your `fallback` html) in the slot, and the fragment swaps in down the same response when the MFE answers — a slow team stops delaying the shell's first byte entirely. The hop stays buffered and signed exactly as ever; only the browser-facing leg streams. Trades (GET only): the status and title flush before the document arrives, a late redirect degrades to a link card, and per-team Server-Timing is lost — which is why buffered stays the default.
+
 Two channels ride the document beyond the body: **status** — the MFE's own 404/500 page renders under shell chrome and the shell *answers with that status* (a 200-wrapped error page poisons caches and SEO) — and **head** — the MFE page's SEO/social meta (`description`, `og:*`, canonical links) joins the shell's document head, while `charset`/`viewport`/`http-equiv` stay the shell's own.
 
 ### Mount from plain SvelteKit: `kitMount`
@@ -109,7 +111,7 @@ export const { GET } = catalog(
 );
 ```
 
-The reserved name `__catalog` answers a manifest (`{ names: [...] }`) — deliberately **unsigned** (it's inventory, not data; the widgets themselves stay gated). `npx ogygia fragments <origin> --out widgets.ts` turns it into a typed stub (`WidgetName` union), and `--check widgets.ts` in CI exits non-zero when the live catalog drifts — a renamed or removed widget becomes a build-time conversation between teams, not a production 404. The shell stitches a widget during its own render:
+The reserved name `__catalog` answers a manifest — deliberately **unsigned** (it's inventory, not data; the widgets themselves stay gated). Declare a widget as `{ props: ['org'], make }` and its prop names ride the manifest too. `npx ogygia fragments <origin> --out widgets.ts` turns it into a typed stub (`WidgetName` union + per-widget `WidgetProps`), and `--check widgets.ts` in CI exits non-zero when the live catalog drifts — a renamed widget or changed prop becomes a build-time conversation between teams, not a production 404. The shell stitches a widget during its own render:
 
 ```ts
 const doc = await dash.widget('kpis', { org: 'acme' }, { claims: session() });

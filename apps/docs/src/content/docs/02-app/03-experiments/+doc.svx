@@ -182,7 +182,7 @@ onExposure((name, variant, c) => {
 });
 ```
 
-Register it once at server startup; a throwing sink never breaks a request.
+Register it once at server startup; a throwing sink never breaks a request. For a real pipeline, batch: `onExposure(batchExposures(send, { max: 25, ms: 2000 }))` collects events and calls `send(batch)` at the size cap or the timer, whichever first — and the returned sink's `.flush()` drains the tail on shutdown.
 
 ## One world across teams
 

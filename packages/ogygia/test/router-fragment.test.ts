@@ -421,11 +421,9 @@ describe('mount — canary: a per-request CLIENT resolver', () => {
 		});
 		const v1 = client('http://cms-v1.test');
 		const v2 = client('http://cms-v2.test');
-		const app = routes(
-			{
-				'/cms/[...rest]': mount((c) => (c.url.searchParams.has('canary') ? v2 : v1))
-			}
-		);
+		const app = routes({
+			'/cms/[...rest]': mount((c) => (c.url.searchParams.has('canary') ? v2 : v1))
+		});
 		await app.fetch(new Request('http://shell/cms/a'));
 		await app.fetch(new Request('http://shell/cms/a?canary'));
 		expect(hosts).toEqual(['cms-v1.test', 'cms-v2.test']);
@@ -532,8 +530,17 @@ describe('catalog — the MFE widget door', () => {
 	it('__catalog answers the manifest UNSIGNED (inventory, not data) — content stays gated', async () => {
 		const { GET } = catalog(widgets, { verify: { publicKeys: [pub] } });
 		const res = await GET(ev('__catalog')); // no signature at all
-		expect(await res.json()).toEqual({ names: ['kpis'] });
+		expect(await res.json()).toEqual({ names: ['kpis'], widgets: { kpis: { props: [] } } });
 		expect((await GET(ev('kpis'))).status).toBe(401); // the widgets themselves still 401
+
+		// declared props ride the manifest (→ typed stubs via `npx ogygia fragments`)
+		const typed = catalog(
+			{ kpis: { props: ['org', 'range'], make: widgets.kpis } },
+			{ verify: false }
+		);
+		expect((await (await typed.GET(ev('__catalog'))).json()).widgets).toEqual({
+			kpis: { props: ['org', 'range'] }
+		});
 	});
 
 	it('bakes a widget with claims + absolutized asset refs', async () => {

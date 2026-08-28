@@ -16,11 +16,14 @@ const keys = [env.SHELL_PUBLIC_KEY, env.CMS_PUBLIC_KEY].filter((k): k is string 
 
 export const { GET } = catalog(
 	{
-		kpis: (props, { user }) =>
-			region(Kpis, {
-				org: String(props.org ?? 'acme'),
-				viewer: (user as { sub?: string; roles?: string[] } | undefined) ?? null
-			})
+		kpis: {
+			props: ['org'], // declared → typed in the manifest stub (`npx ogygia fragments`)
+			make: (props, { user }) =>
+				region(Kpis, {
+					org: String(props.org ?? 'acme'),
+					viewer: (user as { sub?: string; roles?: string[] } | undefined) ?? null
+				})
+		}
 	},
 	{ verify: keys.length ? { publicKeys: keys } : false }
 );

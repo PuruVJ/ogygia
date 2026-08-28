@@ -355,6 +355,24 @@ A **dynamic** pattern prerenders by declaring its param sets — Kit's per-route
 
 Each set fills the pattern into the router's `entries()` crawl list; a dynamic page without them is crawled or SSR'd live, as before.
 
+## Streamed pages: yield regions
+
+"The next state of a slot is a region" already powers [live regions](/docs/regions/held-regions); the same vocabulary works on the **initial response**. A page slot can be an async generator: the first yield renders and the page **flushes immediately**; every later yield rides down the *same* response and swaps into place as it arrives. One connection, closed when the generator ends.
+
+```ts
+'/report': page(async function* (c, data) {
+  yield '<div class="skeleton">crunching…</div>';        // flushes NOW
+  yield region(Report, { data: await slow_numbers(c) }); // swaps in when ready
+}),
+```
+
+- Yield regions or raw html strings. A component region bakes with its islands inside — and because islands are self-waking custom elements, they connect and hydrate the moment the late chunk lands. No orchestration layer.
+- Multiple late yields apply in order — progressive states are free.
+- A throw after the flush becomes an inline error card in the slot; the page always closes cleanly.
+- The honest trades: status, title, and headers go out with the first yield — a late failure can't change an already-sent 200, and `setHeaders` after the flush is lost. Non-GET requests buffer to the final yield (actions need a whole answer).
+- Streamed responses carry `Cache-Control: no-transform` — a compressing intermediary buffers while it gzips, which would collapse the early flush into one late paint. If your CDN compresses regardless, exempt these routes (or accept buffered delivery there).
+- A component you yield from a server-only module needs a mark (`with { region: 'raw' }`, or a wake) — a plain import has no client leg, so its region can't bake. Getting this wrong fails loudly into the slot's error card.
+
 ## Mounting
 
 Export the router; serve it either seam.

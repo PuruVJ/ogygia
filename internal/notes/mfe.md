@@ -526,10 +526,48 @@ as dedicated session"; smell 3 = region-resolver pages, deferred):
 - **Streaming**: still blocked UPSTREAM — svelte's `render()` is synchronous; no streamed SSR
   primitive to build on. Stays a documented v1 non-goal rather than a fake.
 
+### ROUND 21 (2026-08-29) — STREAMED PAGES: yield regions on the initial response
+
+The user's instinct ("we can yield region already, so something similar") unblocked streaming
+WITHOUT svelte streamed SSR: stream the DOCUMENT, not the component render. `page(async
+function* (c, data) { yield … })` — first yield renders + the page flushes; later yields ride
+the SAME response as `<template data-og-late>` chunks; a tiny CLASSIC inline boot (module
+scripts wait for end-of-parse — the exact thing streaming avoids) swaps each into its
+`og-late-slot` as it parses, hoisting stylesheets first; islands inside late chunks are custom
+elements → wake on adoption, zero orchestration (the self-waking-islands superpower). SPA navs
+fetch the completed stream → runtime applies leftover templates post-swap
+(apply_late_templates). Yields = regions or html strings (bake_yield: inline region html /
+awaited bake — the catalog path). Throw after flush → escaped error-card chunk; page always
+closes. Non-GET buffers to the FINAL yield. `mount(cms, { stream: true | { fallback: html } })`
+= the sugar (fragment hop stays buffered+signed; late redirect → link card; Server-Timing lost —
+buffered stays default). src/router/stream.ts + render_page + runtime/late-templates;
+test/router-stream.test.ts (6); e2e/stream-page.ts proves FLUSH-BEFORE-SLOW-YIELD timing (first
+chunk < 140ms vs a 150ms upstream), wire order, late-island interactivity, SPA twin.
+
+Also closed the last parked pair: **widget PROP types** — catalog accepts `{ props: ['org'],
+make }`, the manifest carries `widgets: { name: { props } }`, `ogygia fragments` emits
+`WidgetProps` per widget; **batchExposures(send, { max, ms })** — size/timer-flushed exposure
+batching with a contained send and `.flush()` for shutdown.
+
+Two lessons the e2e taught (units were green, the wire was not):
+- **Async generators AUTO-AWAIT yielded thenables** — `yield region(…)` delivers the RESOLVED
+  bake (`{ kind, html }` top-level), never the raw thenable. bake_yield now extracts
+  `o.html ?? o.props.html`, recurses on still-thenables (sync generators), and a region that
+  resolved WITHOUT html (unmarked import → no identity/client leg, the round-1 `region:'raw'`
+  rule) throws LOUDLY into the error card instead of streaming an empty chunk. Unit tests must
+  yield REAL regions — string-only yields hid all of this.
+- **Compression BUFFERS streams**: vite preview (and CDNs) gzip/brotli by request
+  accept-encoding, collapsing first-flush into one late paint (ttfb ≈ the upstream sleep — the
+  tell). Framework: streamed responses carry `cache-control: no-transform` (CDN-correct; vite
+  ignores it — it checks only accept-encoding). Harness: the timing check fetches with
+  `accept-encoding: identity` and asserts the DELTA (first chunk vs full body ≥ sleep width),
+  never an absolute ms.
+
 ### Open (post-v1)
 
-Streaming fragments (blocked on svelte streamed SSR); widget PROP types in the manifest
-(names-only today); exposure batching helpers.
+True MFE-side render streaming (still blocked on svelte streamed SSR — our chunks stream the
+document around whole bakes); multi-slot streamed pages (one slot per page today); component
+fallbacks for streamed mounts (html strings today).
 
 ## Build order when implemented
 
