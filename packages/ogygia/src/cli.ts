@@ -13,6 +13,7 @@
 // codemods and BUNDLE it into this file at build time — ogygia declares no extra runtime dependency.
 // ─────────────────────────────────────────────────────────────────────────────
 import { spawnSync } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -44,13 +45,20 @@ const argv = process.argv.slice(2);
 const command = argv[0];
 const flags = new Set(argv.slice(1).filter((a) => a.startsWith('-')));
 
-if (command !== 'init' && command !== 'site' && command !== 'mcp' && command !== 'ai') {
+if (
+	command !== 'init' &&
+	command !== 'site' &&
+	command !== 'mcp' &&
+	command !== 'ai' &&
+	command !== 'keys'
+) {
 	const unknown = command && command !== 'help' && !command.startsWith('-');
 	stdout.write(
 		`${strong('ogygia')} ${dim(`v${version}`)}\n\n` +
 			`Usage:\n` +
 			`  ${accent('npx ogygia init')} ${dim('[--markdown] [--no-install] [-y]')}\n` +
 			`  ${accent('npx ogygia site init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n` +
+			`  ${accent('npx ogygia keys')} ${dim('[name] (mint an Ed25519 pair for fragment-federation signing)')}\n` +
 			`  ${accent('npx ogygia ai')} ${dim('(install the Claude skill + register the MCP server)')}\n` +
 			`  ${accent('npx ogygia mcp')} ${dim('(stdio MCP server — hand ogygia components to an AI)')}\n\n` +
 			`${strong('init')}  — wires ogygia into the SvelteKit app in the current directory.\n` +
@@ -61,6 +69,8 @@ if (command !== 'init' && command !== 'site' && command !== 'mcp' && command !==
 			`  --layout <path>              layout route to write (default ${dim('src/routes/+layout.svelte')})\n` +
 			`  --force                      overwrite existing route/site files (the layout always asks)\n` +
 			`  -y, --yes                    accept defaults, no prompts\n\n` +
+			`${strong('keys')}  — prints a caller keypair as env lines (${dim('<NAME>_SIGNING_KEY')} stays with the caller,\n` +
+			`  ${dim('<NAME>_PUBLIC_KEY')} goes to the apps it calls). Redirect where you like: ${dim('npx ogygia keys shell >> keys.env')}\n\n` +
 			`${strong('ai')}  — installs the ogygia Claude skill into ${dim('.claude/skills/ogygia/')} and registers the MCP\n` +
 			`  server in ${dim('.mcp.json')}, so any agent on this repo gets the mental model + live compiler tools.\n\n` +
 			`${strong('mcp')}  — runs a Model Context Protocol server on stdio. Point an MCP client at it to give an\n` +
@@ -774,8 +784,34 @@ function globHasSvx(dir: string): boolean {
 	return false;
 }
 
+// ── keys ─────────────────────────────────────────────────────────────────────
+// Mint one Ed25519 caller pair for fragment-federation signing, in EXACTLY the format
+// `sign`/`verify` consume (base64 PKCS8 DER private, base64 SPKI DER public) — the openssl
+// flag maze (`-outform DER | base64`, `-pubout`) is where wrong keys and confusing 401s
+// come from. Env lines go to STDOUT (redirectable, e.g. `>> keys.env`); guidance goes to
+// STDERR so redirection captures ONLY secrets. Never writes a file.
+const ENV_NAME_RE = /[^A-Z0-9]+/g;
+const ENV_TRIM_RE = /^_|_$/g;
+function keys_mint(): void {
+	const raw = argv[1] && !argv[1].startsWith('-') ? argv[1] : 'ogygia';
+	const name = raw.toUpperCase().replace(ENV_NAME_RE, '_').replace(ENV_TRIM_RE, '') || 'OGYGIA';
+	const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+	stdout.write(
+		`export ${name}_SIGNING_KEY=${privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')}\n` +
+			`export ${name}_PUBLIC_KEY=${publicKey.export({ type: 'spki', format: 'der' }).toString('base64')}\n`
+	);
+	process.stderr.write(
+		`\n${ok('✓')} minted an Ed25519 pair for caller ${strong(name)}\n` +
+			`  ${dim('SIGNING (private)')} — stays with the caller; hand it to ${accent('client(origin, { sign })')}\n` +
+			`  ${dim('PUBLIC')} — give to the apps it calls; list it in ${accent('expose(router, { verify: { publicKeys } })')}\n` +
+			`  keep the private key in your secret store — never commit it\n`
+	);
+}
+
 // ── dispatch ─────────────────────────────────────────────────────────────────
-if (command === 'mcp') {
+if (command === 'keys') {
+	keys_mint();
+} else if (command === 'mcp') {
 	// `./mcp.js` is a sibling in dist (its own library-built module, NOT bundled into this CLI — the
 	// computed URL keeps rolldown from inlining the whole compiler here). It imports the compiler at
 	// runtime and runs the stdio server until stdin closes.
