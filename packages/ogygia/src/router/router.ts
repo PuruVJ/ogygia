@@ -30,6 +30,7 @@ import {
 import type { InferMap } from './infer.js';
 import type { StandardSchemaV1, HrefArgs } from './view.js';
 import {
+	error,
 	finalize,
 	is_action_failure,
 	is_http_error,
@@ -41,6 +42,7 @@ import {
 	redirect_response
 } from './respond.js';
 import { router_css_head } from './css-head.js';
+import { is_stream_slot, bake_yield, slot_html, stream_document, PAGE_SLOT_ID } from './stream.js';
 
 export interface RoutesOptions {
 	/** Mount prefix, stripped before matching. Required for a library that owns a subtree. */
@@ -280,12 +282,42 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 		// components — discovery walks the router module's .svelte IMPORT specs, never the table
 		// values, so anything an arm can return was already an import. Free for `$infer`: types
 		// come from LOADS, never components.
+		// STREAMED page (`page(async function* (c, data) { yield region(...); ... })`): the FIRST
+		// yield renders in the document and the page flushes; later yields ride the same response
+		// as late template chunks (see stream.ts). Non-GET renders run the generator to COMPLETION
+		// and show the final yield — actions need a whole answer, streaming is a GET affair.
+		let gen_rest: AsyncGenerator<unknown> | null = null;
+		let gen_first_html: string | null = null;
+		if (is_stream_slot(node.component)) {
+			const it = (
+				node.component as unknown as (c: Ctx, d: Record<string, unknown>) => AsyncGenerator<unknown>
+			)(ctx, data);
+			const first = await it.next();
+			if (first.done) error(500, 'a streamed page must yield at least one region');
+			if (m === 'GET' && method !== 'HEAD') {
+				gen_first_html = await bake_yield(first.value);
+				gen_rest = it;
+			} else {
+				let last = first.value;
+				for (;;) {
+					const n = await it.next();
+					if (n.done) break;
+					last = n.value;
+				}
+				gen_first_html = await bake_yield(last);
+			}
+		}
+
 		const resolved =
-			typeof node.component === 'object' && node.component !== null && '__ogpick' in node.component
-				? (
-						node.component as { __ogpick: (c: Ctx, data: Record<string, unknown>) => unknown }
-					).__ogpick(ctx, data)
-				: node.component;
+			gen_first_html !== null
+				? { __oghtml: true as const, html: slot_html(PAGE_SLOT_ID, gen_first_html) }
+				: typeof node.component === 'object' &&
+					  node.component !== null &&
+					  '__ogpick' in node.component
+					? (
+							node.component as { __ogpick: (c: Ctx, data: Record<string, unknown>) => unknown }
+						).__ogpick(ctx, data)
+					: node.component;
 		// An html view renders through ogygia's OWN pure-HTML region component (og_html_region's
 		// RawHtml) — the wire document is just html + css, no bespoke page component. Its css tags
 		// + escaped title join the DOCUMENT head (the router owns the head; a component would have
@@ -325,7 +357,11 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 				form
 			}
 		});
-		return method === 'HEAD' ? new Response(null, res) : res;
+		if (method === 'HEAD') return new Response(null, res);
+		// Late yields remain → chunk them down THIS response (one connection, closes when the
+		// generator ends). The full document string is already rendered; only delivery streams.
+		if (gen_rest) return stream_document(await res.text(), res, gen_rest, PAGE_SLOT_ID);
+		return res;
 	}
 
 	// A thrown redirect/error/fail from a load, action, or handler. redirect → 303/…; error →

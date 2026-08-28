@@ -262,6 +262,26 @@ export function spa_html_cacheable(cacheControl: string, setCookie: boolean): bo
 }
 
 /** Same document = pathname + search. Hash is not part of document identity. */
+/** Apply STREAMED-page late chunks after an SPA body swap: move each inert
+ *  `<template data-og-late>` into its `og-late-slot` (stylesheets hoisted first via the same
+ *  keyed head installer, so the swap never paints unstyled). On a full load the inline boot
+ *  script in the streamed head does this progressively during parse — this is the swap-path
+ *  twin. Islands inside the adopted content are custom elements: they connect and wake alone. */
+export function apply_late_templates(root: ParentNode) {
+	for (const tpl of Array.from(root.querySelectorAll('template[data-og-late]'))) {
+		const id = tpl.getAttribute('data-og-late') ?? '';
+		const slot = document.querySelector(`og-late-slot[data-og-slot="${CSS.escape(id)}"]`);
+		if (slot) {
+			const content = (tpl as HTMLTemplateElement).content;
+			for (const sheet of Array.from(content.querySelectorAll('link[rel="stylesheet"], style'))) {
+				install_head_style(sheet);
+			}
+			slot.replaceChildren(content);
+		}
+		tpl.remove();
+	}
+}
+
 function same_document(a: URL, b: URL) {
 	return a.pathname === b.pathname && a.search === b.search;
 }
@@ -640,6 +660,10 @@ class SpaRouter {
 				runtime_session.settle_lakes_in(document.body);
 				dispose_scope('page');
 			}
+			// STREAMED pages fetched over SPA nav arrive COMPLETE (fetch buffers the stream), so any
+			// late templates still inert in the parsed doc apply now — the inline boot script that
+			// handles them on a full load never executes across a body swap.
+			apply_late_templates(document.body);
 			// Old islands disconnected; new hydrates are awaiting — sweep stale Kit remotes now.
 			slots.spaLifecycle?.finish();
 			// CONTINUITY: restore fields the visitor left on THIS page in a prior visit (this session).

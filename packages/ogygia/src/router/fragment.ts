@@ -453,7 +453,7 @@ export type Widget = (
  * release, so a renamed/removed widget is a build-time conversation, not a prod 404.
  */
 export function catalog(
-	widgets: Record<string, Widget>,
+	widgets: Record<string, Widget | { props: readonly string[]; make: Widget }>,
 	opts: { verify?: VerifyConfig | false } = {}
 ): {
 	GET: (e: {
@@ -469,7 +469,17 @@ export function catalog(
 		);
 	}
 	const verify = opts.verify || null;
-	const names = Object.keys(widgets).sort();
+	// normalized: name → { make, props? }. Declared props are DOCUMENTATION for the manifest —
+	// `npx ogygia fragments` turns them into typed stubs; the endpoint itself stays permissive
+	// (widgets must authorize by claims regardless — props were never a trust input).
+	const entries = new Map<string, { make: Widget; props?: readonly string[] }>();
+	for (const [k, v] of Object.entries(widgets)) {
+		entries.set(k, typeof v === 'function' ? { make: v } : { make: v.make, props: v.props });
+	}
+	const names = [...entries.keys()].sort();
+	const manifest_widgets = Object.fromEntries(
+		names.map((n) => [n, { props: [...(entries.get(n)!.props ?? [])].sort() }])
+	);
 
 	return {
 		GET: async ({ params, url, request }) => {
@@ -478,7 +488,7 @@ export function catalog(
 			// CI diffs and `npx ogygia fragments` need it without key ceremony, the same trade
 			// as a /.well-known discovery document. Widget names are inventory, not data.
 			if (name === '__catalog')
-				return new Response(JSON.stringify({ names }), {
+				return new Response(JSON.stringify({ names, widgets: manifest_widgets }), {
 					headers: { 'content-type': 'application/json' }
 				});
 			let user: Claims | undefined;
@@ -487,7 +497,7 @@ export function catalog(
 				if (!v) return json_error_response(401, 'invalid or missing signature');
 				user = v.user;
 			}
-			const make = widgets[name];
+			const make = entries.get(name)?.make;
 			if (!make) return json_error_response(404, `unknown fragment '${name}'`);
 			const trace = child_traceparent(request.headers.get('traceparent'));
 			const t0 = performance.now();
@@ -745,6 +755,13 @@ export interface MountOptions extends ClientOptions {
 	 *  identity (`routes(table, { visitor })`) — with the table's `experiments` buckets
 	 *  auto-carried alongside. Claims never transit the browser. */
 	user?: (c: Ctx) => Claims | undefined;
+	/** STREAM the mount: the shell's page flushes immediately with `fallback` (or a neutral
+	 *  skeleton) in the slot, and the fragment swaps in down the SAME response when the MFE
+	 *  answers — a slow team stops delaying the shell's first byte entirely. GET only (actions
+	 *  stay buffered). Streaming's trades: the status/title flush before the doc arrives (a
+	 *  late 404 shows the MFE's error BODY but the response was already 200), redirects render
+	 *  a link card instead of redirecting, and per-team Server-Timing is lost. */
+	stream?: boolean | { fallback?: string };
 }
 
 /** The on-behalf-of claims for a hop: the table's ONE identity + auto-carried experiment
@@ -780,9 +797,67 @@ export function mount(
 	opts: MountOptions = {}
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): PageDef<any, any, any, any, any> {
-	const fixed = typeof target === 'function' ? null : typeof target === 'string' ? client(target, opts) : target;
+	const fixed =
+		typeof target === 'function'
+			? null
+			: typeof target === 'string'
+				? client(target, opts)
+				: target;
 	const resolve_client = (c: Ctx): FragmentClient =>
 		fixed ?? (target as (c: Ctx) => FragmentClient)(c);
+
+	// STREAM MODE: the page slot is a GENERATOR — fallback flushes with the shell's page, the
+	// fragment swaps in down the same response when (and only when) the MFE answers. The hop
+	// itself stays buffered + signed exactly as ever; only the browser-facing leg streams.
+	if (opts.stream) {
+		// fallback is an HTML string (v1): fragment.ts stays .svelte-free, and skeletons are
+		// exactly the static-markup case anyway
+		const fb =
+			typeof opts.stream === 'object' && opts.stream.fallback != null
+				? opts.stream.fallback
+				: '<div data-og-mount-fallback style="min-height:6rem;border-radius:8px;background:linear-gradient(90deg,#f3f4f6,#e5e7eb,#f3f4f6)"></div>';
+		const stream_slot = async function* (c: Ctx) {
+			yield fb;
+			const cl = resolve_client(c);
+			const rest = (c.params as { rest?: string }).rest ?? '';
+			try {
+				const doc = await cl.doc(
+					'/' + rest,
+					c.url.search,
+					claims_for(c, opts.user),
+					child_traceparent(c.request.headers.get('traceparent')).traceparent
+				);
+				if (doc.location) {
+					// the status flushed long ago — a redirect can only be OFFERED, not performed
+					yield `<p data-og-mount-moved>This page moved. <a href="${doc.location}">Continue</a></p>`;
+					return;
+				}
+				yield (doc.css?.join('') ?? '') + (doc.head ?? '') + doc.body;
+			} catch {
+				yield '<div data-og-mount-failed style="border:1px dashed #dc2626;border-radius:8px;padding:1rem;color:#dc2626">This section is temporarily unavailable.</div>';
+			}
+		};
+		return page(stream_slot as never, {
+			actions: {
+				// mutations stay BUFFERED (an action needs a whole answer + its PRG redirect)
+				default: async (c: Ctx) => {
+					const cl = resolve_client(c);
+					const rest = (c.params as { rest?: string }).rest ?? '';
+					const body = await c.request.arrayBuffer();
+					const doc = await cl.postDoc(
+						'/' + rest,
+						c.url.search,
+						body,
+						c.request.headers.get('content-type') ?? 'application/x-www-form-urlencoded',
+						claims_for(c, opts.user),
+						child_traceparent(c.request.headers.get('traceparent')).traceparent
+					);
+					if (doc.location) redirect(303, doc.location);
+					return { doc };
+				}
+			}
+		});
+	}
 
 	// The page slot is a RESOLVER into an html view — the wire document IS the page. No bespoke
 	// component: the router renders it through ogygia's own pure-HTML region, the doc's css tags

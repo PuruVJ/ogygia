@@ -124,9 +124,7 @@ export interface PageServer {
 	/** PRERENDER param sets for a DYNAMIC pattern — Kit's per-route `entries` export. Each item
 	 *  fills the pattern (`/posts/[id]` + `{ id: '1' }` → `/posts/1`) and joins the router's
 	 *  `entries()` crawl list; a dynamic page without this is skipped (crawled or SSR'd live). */
-	entries?: () =>
-		| Array<Record<string, string>>
-		| Promise<Array<Record<string, string>>>;
+	entries?: () => Array<Record<string, string>> | Promise<Array<Record<string, string>>>;
 }
 
 /** A page route def, generic over its layout chain / load / actions so `$infer` reads them. `L` is
