@@ -54,3 +54,34 @@ export type {
 	Simplify
 } from './view.js';
 export { compile, match_path, type CompiledPattern } from './match.js';
+
+// EXPERIMENTAL — fragment federation: an MFE `expose()`s its route tree; the shell makes ONE
+// `client()` per MFE (signing / timeout / SWR cache / coalescing / generation-safe invalidation)
+// and consumes it three ways — `mount(client)` as one table entry, `client.widget()` in its own
+// SSR stitch, `proxy({ app })` as the lazy client-stitch endpoint. Ed25519 caller signing +
+// signature-bound visitor claims (`user(c)`, auto-built from `c.visitor` + the table's
+// experiments) + W3C trace continuity ride the same hop. Design + POC log: internal/notes/mfe.md.
+export {
+	expose,
+	catalog,
+	client,
+	mount,
+	kitMount,
+	proxy,
+	sign_headers,
+	verify_fragment_request,
+	user,
+	child_traceparent,
+	FRAGMENT_ROUTES_PATH,
+	type FragmentDocument,
+	type FragmentClient,
+	type ClientOptions,
+	type WidgetDocument,
+	type MountOptions,
+	type KitMountOptions,
+	type ProxyOptions,
+	type Widget,
+	type WidgetInfo,
+	type Claims,
+	type VerifyConfig
+} from './fragment.js';
