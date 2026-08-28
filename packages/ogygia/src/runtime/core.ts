@@ -10,11 +10,13 @@ import NestedProvider from '../NestedProvider.svelte';
 import { document_has_kit_bootstrap } from './kit-boot.js';
 import { runtime_session } from './session.js';
 import {
+	ABSOLUTE_URL_SCHEME,
 	is_allowed_region_endpoint,
 	is_same_origin_response,
 	island_module_url,
 	warm_island_module
 } from './region-endpoint-url.js';
+import { foreign_region_prop_revivers } from './foreign-props.js';
 import {
 	is_awake,
 	is_deferred,
@@ -97,11 +99,12 @@ function region_prop_revivers(): Record<string, (d: never) => unknown> | undefin
 	return cached_revivers;
 }
 
-function read_region_props(region: Element): Record<string, unknown> {
+function read_region_props(region: Element, foreign = false): Record<string, unknown> {
 	let sib = region.nextElementSibling;
 	while (sib) {
 		if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]')) {
-			return parse(sib.textContent, region_prop_revivers() as Parameters<typeof parse>[1]);
+			const revivers = foreign ? foreign_region_prop_revivers() : region_prop_revivers();
+			return parse(sib.textContent, revivers as Parameters<typeof parse>[1]);
 		}
 		if (sib.tagName === 'LINK') {
 			sib = sib.nextElementSibling;
@@ -471,6 +474,9 @@ class OgygiaRegion extends HTMLElement {
 	#disarm_interaction: (() => void) | null = null;
 	/** A persist island's LiveHost app — lets the next page push fresh props into the relocated app. */
 	#keep_host: { setProps?: (p: Record<string, unknown>) => void } | null = null;
+	/** A FOREIGN island (another build's entry — fragment federation) must be unmounted by ITS OWN
+	 *  svelte instance; this holds the entry's `__og_unmount`. null = local island, use ours. */
+	#foreign_unmount: ((app: unknown) => void) | null = null;
 
 	/**
 	 * CONTINUITY: this persisted island is relocating onto `next` (the incoming page's SSR region).
@@ -518,7 +524,14 @@ class OgygiaRegion extends HTMLElement {
 		const boundary = this.parentElement && this.parentElement.closest('ogygia-region');
 		const slot = this.parentElement && this.parentElement.closest('ogygia-slot');
 		const in_adopted_slot = !!(boundary && slot && boundary.contains(slot));
-		if (boundary && is_awake(boundary) && !is_deferred(this) && !in_adopted_slot) {
+		// Third exception (fragment federation): a FOREIGN-ORIGIN entry — a stitched fragment's
+		// island, possibly swapped in post-hoc by a client-stitch hole — is by construction NOT
+		// part of the parent's compiled tree; the parent's hydration cannot reach it, so nothing
+		// else will ever wake it. It always self-runs.
+		const entry_attr = this.getAttribute('entry') || '';
+		const foreign_entry =
+			ABSOLUTE_URL_SCHEME.test(entry_attr) && new URL(entry_attr).origin !== location.origin;
+		if (boundary && is_awake(boundary) && !is_deferred(this) && !in_adopted_slot && !foreign_entry) {
 			this.setAttribute('data-nested', '');
 			if (DEVTOOLS)
 				dt_emit({
@@ -887,9 +900,15 @@ class OgygiaRegion extends HTMLElement {
 			if (!this.isConnected) return;
 			const Component = mod.default;
 
+			// FOREIGN origin (fragment federation)? Decided from the ENTRY alone — a foreign
+			// island's props must parse plain (membrane) whether or not its module carries the
+			// hydrate contract.
+			const is_foreign_entry =
+				ABSOLUTE_URL_SCHEME.test(entry) && new URL(entry).origin !== location.origin;
+
 			// R3 ownership: capture which page hub ids this island resolves from its props, so a
 			// reconcile nav can dispose exactly this region's ids if it is later removed.
-			const props = capture_region_ids(this, () => read_region_props(this));
+			const props = capture_region_ids(this, () => read_region_props(this, is_foreign_entry));
 
 			// Mixed mode: on a csr=true page Kit already hydrates this component — skip. EXCEPT a
 			// deferred region (server island / <Region>): its HTML was FETCHED after load and swapped
@@ -933,11 +952,18 @@ class OgygiaRegion extends HTMLElement {
 			// tell a claim from a recovery. See internal/notes/foreign-dom.md (the se.com incident).
 			const ssr_children = Array.from(this.children);
 
+			// FOREIGN delegation (fragment federation): the entry came from another build/origin and
+			// exports its own `__og_hydrate` — envelope preparation belongs to the svelte that
+			// compiled the entry, so the consumer must not shape it. Computed here so the envelope
+			// insertion below can stand down.
+			const foreign_delegate =
+				is_foreign_entry && typeof (mod as { __og_hydrate?: unknown }).__og_hydrate === 'function';
+
 			// Hydration envelope: `hydrate()` anchors on a top-level `<!--[-->` comment and then
 			// expects the component's OWN region envelope — but embedded SSR (Region.svelte)
 			// emits only the inner layer. `render()` (region endpoint / deferred swap) has BOTH
 			// layers — do not wrap again or hydration mismatches. (Verified against svelte 5.56.)
-			if (!is_deferred(this)) {
+			if (!is_deferred(this) && !foreign_delegate) {
 				this.insertBefore(document.createComment('['), this.firstChild);
 				this.appendChild(document.createComment(']'));
 			}
@@ -947,7 +973,22 @@ class OgygiaRegion extends HTMLElement {
 			// (single hydration with this parent). The provider adds no DOM, so this matches SSR.
 			set_current_region(this);
 			try {
-				const wrapped = prop_guard.wrap(props, entry || '');
+				// Foreign islands take RAW props: the dev mutation-guard proxy is THIS build's code
+				// running inside another build's render — harmless, but it's a wire, and we don't
+				// cross wires. (Plain data either way; the parse membrane already enforced that.)
+				const wrapped = is_foreign_entry ? props : prop_guard.wrap(props, entry || '');
+				// FOREIGN island (fragment federation): its module-level svelte state is not ours, so
+				// delegate the whole hydrate to the entry's own `__og_hydrate` (and remember its
+				// unmounter). No NestedProvider, no context capture — context deliberately does not
+				// cross a team boundary.
+				if (foreign_delegate) {
+					const mod_h = (
+						mod as unknown as { __og_hydrate: (t: Element, p: Record<string, unknown>) => unknown }
+					).__og_hydrate;
+					this.#app = mod_h(this, wrapped) as ReturnType<typeof hydrate>;
+					this.#foreign_unmount =
+						(mod as { __og_unmount?: (app: unknown) => void }).__og_unmount ?? null;
+				} else {
 				// Seed this island's context from any `<Provide>` above it in the DOM, so a child's plain
 				// `getContext('key')` reads a (csr=false) layout's context across the island-root split.
 				// Undefined when there is no provider above — the common case pays only a short DOM walk.
@@ -978,6 +1019,7 @@ class OgygiaRegion extends HTMLElement {
 						...(provided_ctx ? { context: provided_ctx } : {})
 					});
 				}
+				} // end local-island path (foreign delegation branch above)
 			} finally {
 				set_current_region(null);
 			}
@@ -992,11 +1034,12 @@ class OgygiaRegion extends HTMLElement {
 			// the orphan app; disconnectedCallback may have run before `#app` was assigned.
 			if (!this.isConnected) {
 				try {
-					if (this.#app) unmount(this.#app);
+					if (this.#app) (this.#foreign_unmount ?? unmount)(this.#app);
 				} catch {
 					/* noop */
 				}
 				this.#app = null;
+				this.#foreign_unmount = null;
 				return;
 			}
 
@@ -1199,11 +1242,12 @@ class OgygiaRegion extends HTMLElement {
 		}
 		if (this.#app) {
 			try {
-				unmount(this.#app);
+				(this.#foreign_unmount ?? unmount)(this.#app);
 			} catch {
 				/* noop */
 			}
 			this.#app = null;
+			this.#foreign_unmount = null;
 		}
 		this.#scheduled = false;
 	}

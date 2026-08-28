@@ -63,9 +63,35 @@ export function island_entry_source(
 ): string {
 	return (
 		`import 'virtual:ogygia/transportables';\n` +
+		`import { hydrate as __og_h, unmount as __og_u } from 'svelte';\n` +
+		`import { NestedProvider as __og_NP } from 'ogygia/internal';\n` +
 		component_import_line(`__OgygiaComp_${iid}`, componentPath, exportName) +
 		'\n' +
-		`export default __OgygiaComp_${iid};\n`
+		`export default __OgygiaComp_${iid};\n` +
+		// The FOREIGN-HYDRATE CONTRACT (fragment federation): a stitched fragment's island entry
+		// may be woken by ANOTHER app's runtime. Svelte's hydrate/unmount carry module-level state
+		// (hydration cursor, effect context), so the call must run against THIS build's svelte
+		// instance — the consuming runtime only schedules and delegates. The hydration ENVELOPE is
+		// prepared here too: anchor conventions belong to the svelte that compiled this entry, so
+		// the consumer must never shape them. Same-origin wakes ignore these exports entirely.
+		//
+		// Hydrate through THIS build's NestedProvider, mirroring the local runtime's call shape:
+		// the SSR children were rendered through the provider's dynamic-component branch (the
+		// `<!--[0-->` marker), so a bare-component hydrate walks one marker layer short — svelte
+		// aborts mid-walk and client-re-renders ("Failed to hydrate … appendChild" per island,
+		// recovery-invisible but noisy, and the SSR claim is lost). This was round 9's intended
+		// contract; the edit that shipped hydrated the bare component instead.
+		`export function __og_hydrate(target, props) {\n` +
+		`\tif (!target.__og_env) {\n` +
+		`\t\ttarget.__og_env = true;\n` +
+		`\t\ttarget.insertBefore(document.createComment('['), target.firstChild);\n` +
+		`\t\ttarget.appendChild(document.createComment(']'));\n` +
+		`\t}\n` +
+		`\treturn __og_h(__og_NP, { target, props: { component: __OgygiaComp_${iid}, props } });\n` +
+		`}\n` +
+		`export function __og_unmount(app) {\n` +
+		`\treturn __og_u(app);\n` +
+		`}\n`
 	);
 }
 

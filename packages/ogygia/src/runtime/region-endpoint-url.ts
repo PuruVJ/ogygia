@@ -1,4 +1,6 @@
-const ABSOLUTE_URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+/** Hoisted (hot paths — connectedCallback/hydrate run per region); shared with core's
+ *  foreign-origin checks. */
+export const ABSOLUTE_URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 /**
  * Defense-in-depth: only fetch region HTML from same-origin capability URLs.
