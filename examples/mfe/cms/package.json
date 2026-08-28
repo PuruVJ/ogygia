@@ -1,0 +1,23 @@
+{
+ "name": "mfe-cms",
+ "private": true,
+ "version": "0.0.0",
+ "type": "module",
+ "scripts": {
+  "dev": "vite dev --port 5182",
+  "build": "vite build",
+  "preview": "vite preview --port 5182"
+ },
+ "devDependencies": {
+  "@sveltejs/adapter-node": "^5.5.7",
+  "@sveltejs/kit": "^2.70.2",
+  "@sveltejs/vite-plugin-svelte": "^7.2.0",
+  "svelte": "^5.56.8",
+  "typescript": "^6.0.3",
+  "vite": "^8.2.0"
+ },
+ "dependencies": {
+  "@corp/contracts": "workspace:*",
+  "ogygia": "workspace:*"
+ }
+}

@@ -4,6 +4,8 @@ packages:
   # Non-library projects (talk deck, benchmark harness, repros) — workspace members so they share
   # the root install instead of each spawning its own node_modules.
   - 'internal/*'
+  # Runnable demos (the MFE federation trio + contracts) — consume the live packages/ogygia.
+  - 'examples/mfe/*'
 allowBuilds:
   '@swc/core': true
   esbuild: true

@@ -42,6 +42,11 @@ dist/
 # local experiments — not part of the published library
 /experiment/
 
+# examples: generated signing keys + build artifacts
+/examples/mfe/keys.env
+/examples/mfe/*/build/
+/examples/mfe/*/.svelte-kit/
+
 # Slidev talk nested installs / builds
 /talks/*/node_modules/
 /talks/*/dist/

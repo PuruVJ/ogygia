@@ -36,6 +36,7 @@
     "@rolldown/browser": "1.2.2",
     "devalue": "^5.9.0",
     "ogygia": "workspace:*",
+    "repro-island-pkg": "workspace:*",
     "repro-subpkg": "workspace:*",
     "valibot": "^1.4.2"
   }
