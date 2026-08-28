@@ -149,6 +149,22 @@ Mark a subtree with `data-ogygia-keep` and it survives navigations untouched: it
 
 The sidebar on this very site uses it: notice it does not flash or reset as you navigate. For sharing island state across a kept subtree, see [state context](/docs/data-state/state-context).
 
+## Lifecycle events {#lifecycle}
+
+A body swap never executes inserted `<script>` tags (standard browser behavior), so per-navigation code needs a hook. The router dispatches three plain DOM events on `document` (Astro's naming, `og:` prefixed):
+
+| event | when |
+| --- | --- |
+| `og:before-swap` | last chance to read the OUTGOING page's DOM |
+| `og:after-swap` | the incoming DOM is in place (islands may still be waking on their own schedules) |
+| `og:page-load` | navigation complete — head merged, scroll settled. Also fired once on the initial load, so ONE listener covers every page view |
+
+```js
+document.addEventListener('og:page-load', () => analytics.pageview(location.pathname));
+```
+
+For anything stateful, an island with `wake: 'load'` is still the first choice — it re-mounts per navigation with real component semantics. The events are for the genuinely global glue (analytics, focus management, third-party widget re-inits).
+
 ## What it is not
 
 The router does no script processing: `<script>` tags injected by a body swap do not execute (standard browser behavior). If you need code to run per navigation, use an island. Shallow routing (`pushState` / `replaceState`) is not supported without Kit's client; use `goto()`.

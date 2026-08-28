@@ -42,6 +42,15 @@ export const app = routes(table, {
 
 That becomes [`c.visitor`](/docs/app/server-router) everywhere — experiments stick on `c.visitor.sub`, and it's the same identity [mounts sign onward](/docs/app/federation) to other teams. Outside the router (or for anonymous traffic) the fallback chain is an `og-vid` cookie, then anonymous — and **anonymous visitors always see control**, so a split can never flap for someone you can't recognize.
 
+For sticky rollouts on **logged-out traffic**, mint the cookie: `anonymousVisitor()` returns a resolver that reads `og-vid` or mints a random id into it (first-party, httpOnly, carries nothing) — usable alone or as a session's fallback:
+
+```ts
+import { anonymousVisitor } from 'ogygia/router';
+
+const anon = anonymousVisitor();                       // { cookie?, days? }
+routes(table, { visitor: (c) => session(c) ?? anon(c) });
+```
+
 ## Assign on any condition
 
 `split` is the tail. For targeting, put an `assign` in front — return a variant to decide, or `undefined` to fall through to the split:
@@ -163,7 +172,17 @@ Flags rot: the industry's answer to flag debt is refactoring bots that delete st
 <section data-og-exp={data.stamp}>…</section>
 ```
 
-ogygia deliberately ships **no metrics pipeline** — assignment is the primitive; counting is your analytics' job, and the stamp is the join key.
+ogygia deliberately ships **no metrics pipeline** — assignment is the primitive; counting is your analytics' job, and the stamp is the join key. The one seam is `onExposure`: a sink called once per request per experiment/flag, on first assignment (under SSR, assignment *is* rendering the variant):
+
+```ts
+import { onExposure } from 'ogygia';
+
+onExposure((name, variant, c) => {
+  queue_analytics_event('exposure', { name, variant, sub: c.visitor?.sub });
+});
+```
+
+Register it once at server startup; a throwing sink never breaks a request.
 
 ## One world across teams
 

@@ -57,6 +57,15 @@ The client owns signing, bounded latency, the SWR cache, request coalescing (con
 
 One table entry. GET loads the document; the MFE's redirects re-throw as shell redirects; POSTs forward the form body and follow the MFE's PRG redirect. A dead or slow MFE renders the shell's error boundary card — the shell's page is never held hostage by another team.
 
+**Canary / blue-green** is a per-request resolver instead of a fixed client — [A/B testing](/docs/app/experiments) of infrastructure itself:
+
+```ts
+const v2 = flag('cms-v2', { rollout: 10 });
+'/cms/[...rest]': mount((c) => (v2.on(c) ? cms_v2 : cms_v1)),
+```
+
+Clients stay prebuilt singletons (each keeps its own cache and coalescing); the resolver only chooses between them, and stickiness comes from the flag.
+
 Two channels ride the document beyond the body: **status** — the MFE's own 404/500 page renders under shell chrome and the shell *answers with that status* (a 200-wrapped error page poisons caches and SEO) — and **head** — the MFE page's SEO/social meta (`description`, `og:*`, canonical links) joins the shell's document head, while `charset`/`viewport`/`http-equiv` stay the shell's own.
 
 ### Mount from plain SvelteKit: `kitMount`
@@ -100,7 +109,7 @@ export const { GET } = catalog(
 );
 ```
 
-The reserved name `__catalog` answers a manifest (`{ names: [...] }`) — record it in CI and diff per release, so a renamed or removed widget is a build-time conversation between teams, not a production 404. The shell stitches a widget during its own render:
+The reserved name `__catalog` answers a manifest (`{ names: [...] }`) — deliberately **unsigned** (it's inventory, not data; the widgets themselves stay gated). `npx ogygia fragments <origin> --out widgets.ts` turns it into a typed stub (`WidgetName` union), and `--check widgets.ts` in CI exits non-zero when the live catalog drifts — a renamed or removed widget becomes a build-time conversation between teams, not a production 404. The shell stitches a widget during its own render:
 
 ```ts
 const doc = await dash.widget('kpis', { org: 'acme' }, { claims: session() });

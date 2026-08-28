@@ -344,6 +344,17 @@ import Greeting from '$lib/views/Greeting.svelte' with { render: 'deferred' };
 
 `render: 'deferred'` gives a **partially-prerendered page from the route table** — a static shell with a per-visitor hole and the `fallback` snippet as its loading UI. See [held regions](/docs/regions/held-regions) and [server islands](/docs/regions/server-islands).
 
+A **dynamic** pattern prerenders by declaring its param sets — Kit's per-route `entries` export, as a page option:
+
+```ts
+'/posts/[id]': page(Post, {
+  entries: async () => (await posts.refs()).map((p) => ({ id: p.id })),
+  load: (c) => ({ post: posts.get(c.params.id) }),
+}),
+```
+
+Each set fills the pattern into the router's `entries()` crawl list; a dynamic page without them is crawled or SSR'd live, as before.
+
 ## Mounting
 
 Export the router; serve it either seam.
@@ -361,7 +372,7 @@ export const handle = sequence(ogygiaHandle(), router.handle);
 ```ts title="src/routes/[...path]/+server.ts"
 import { router } from '$lib/router';
 export const GET = (event) => router.fetch(event.request, event);
-export const entries = router.entries;      // static page routes → Kit's prerender crawl
+export const entries = router.entries;      // static routes + declared dynamic entries → Kit's crawl
 export const prerender = 'auto';
 ```
 

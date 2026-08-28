@@ -504,10 +504,32 @@ as dedicated session"; smell 3 = region-resolver pages, deferred):
   sig-over-body/replay-defense/504-card work; bounded by timeout+maxBodyBytes).
 - 1256 unit; smoke 22 checks ALL GREEN (browser truth incl.).
 
+### ROUND 20 (2026-08-28) — "more core" + the post-v1 parked list
+
+- **Canary mounts**: `mount((c) => v2.on(c) ? cms_v2 : cms_v1)` — a per-request CLIENT resolver;
+  clients stay prebuilt singletons (own cache/coalescing), the flag provides stickiness. The
+  A/B-of-infrastructure story promised in the smell-2 pitch, now real.
+- **onExposure(sink)**: the ONE measurement seam — fires once per (request, experiment/flag) on
+  first assignment (SSR: assignment IS rendering); throwing sinks contained; `null` clears.
+- **anonymousVisitor()**: sticky rollouts for logged-out traffic — mints `og-vid` (randomUUID,
+  httpOnly, first-party) via Kit's cookie jar or a set-cookie on the router-built response;
+  identity readable in the SAME request; composes as a session fallback.
+- **entries for dynamic patterns**: `page(Post, { entries: () => [{id}] })` fills the pattern
+  into `router.entries()` (Kit's per-route entries export); undeclared dynamics skipped.
+- **Lifecycle DOM events** (Astro parity): `og:before-swap` / `og:after-swap` / `og:page-load`
+  on document; page-load ALSO fires on initial boot so one listener covers every page view.
+  e2e/lifecycle-events.ts.
+- **Typed catalog stubs + CI diff**: `__catalog` now UNSIGNED (inventory, not data — widgets
+  stay gated; the /.well-known trade); `npx ogygia fragments <origin> [--out|--check]` emits a
+  WidgetName-union stub / exits 1 on drift (live-verified incl. the drift path — first sed used
+  the wrong quotes and silently no-opped: test your negative tests).
+- **Streaming**: still blocked UPSTREAM — svelte's `render()` is synchronous; no streamed SSR
+  primitive to build on. Stays a documented v1 non-goal rather than a fake.
+
 ### Open (post-v1)
 
-Streaming fragments (wire-format change); catalog TYPED stubs (client-side codegen from
-`__catalog`); Astro-style DOM lifecycle events.
+Streaming fragments (blocked on svelte streamed SSR); widget PROP types in the manifest
+(names-only today); exposure batching helpers.
 
 ## Build order when implemented
 
