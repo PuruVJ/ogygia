@@ -242,7 +242,7 @@ migrate as the dogfood.
   candidate design if targeted invalidation earns its keep.
 - `snapshot` — map onto `keep`/form-continuity, or a `{ capture, restore }` hook on `page()`.
 - Streaming loads (nested-promise `data`).
-- Typed search params (schema per entry — TanStack's best idea).
+- ~~Typed search params (schema per entry — TanStack's best idea).~~ **SHIPPED** with the FINAL API below: `page(C, { search: Schema })` → coerced `c.search`, bad → 400, in `App['/p']['search']`. Runtime gate covered by `test/router-schema.test.ts` (2026-08-21).
 - Endpoint `$infer` map for typed API clients.
 
 ## FINAL API — BUILT (2026-08-27)
