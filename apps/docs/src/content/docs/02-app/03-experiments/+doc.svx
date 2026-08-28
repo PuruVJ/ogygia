@@ -1,0 +1,176 @@
+---
+title: Experiments
+summary: A/B tests, feature flags, targeting, and rollouts as ONE primitive — variants assigned per visitor, deterministically, during SSR. Zero JS ships for the assignment; csr=false pages experiment for free.
+related:
+  - app/server-router
+  - app/federation
+  - regions/timing-nesting
+---
+
+Splits, flags, targeting, rollouts, canaries — they're all the same thing: **variants of something, assigned per visitor**. `experiment()` owns that assignment and nothing else. Branching rides the primitives you already have (a router page's component, a load's data, a region choice), and because assignment happens **server-side during SSR**, the chosen variant is simply what gets rendered. No flicker, no client SDK, no JS shipped for the decision — a `csr = false` page runs experiments for free.
+
+## The primitive
+
+```ts
+import { experiment } from 'ogygia';
+
+export const heroExp = experiment('hero-redesign', {
+  variants: ['control', 'bold'],   // first variant IS the control
+  split: { bold: 20 },             // 20% of traffic, sticky per visitor; the rest see control
+});
+```
+
+Read it anywhere a request context exists — a load, an action, an endpoint:
+
+```ts
+'/': page(Home, {
+  load: (c) => ({ hero: heroExp.bucket(c) })   // 'control' | 'bold', typed
+}),
+```
+
+`bucket(c)` is **deterministic and sticky**: the same visitor gets the same variant on every request, from a hash of `(experiment name, visitor id)` — no storage, no cookie writes, nothing to sync.
+
+## Who is the visitor?
+
+Stickiness needs an identity. Declare it **once**, on the route table:
+
+```ts
+export const app = routes(table, {
+  visitor: (c) => session_from(c.cookies),   // → { sub: 'u123', … } or undefined
+});
+```
+
+That becomes [`c.visitor`](/docs/app/server-router) everywhere — experiments stick on `c.visitor.sub`, and it's the same identity [mounts sign onward](/docs/app/federation) to other teams. Outside the router (or for anonymous traffic) the fallback chain is an `og-vid` cookie, then anonymous — and **anonymous visitors always see control**, so a split can never flap for someone you can't recognize.
+
+## Assign on any condition
+
+`split` is the tail. For targeting, put an `assign` in front — return a variant to decide, or `undefined` to fall through to the split:
+
+```ts
+export const checkout = experiment('new-checkout', {
+  variants: ['classic', 'fast'],
+  assign: (c) => {
+    if (c.visitor?.roles?.includes('beta')) return 'fast';   // beta program: always in
+    if (c.visitor?.locale === 'de') return 'classic';        // not launched there yet
+    return undefined;                                        // everyone else → the split
+  },
+  split: { fast: 10 },
+});
+```
+
+The taxonomy collapses: a **feature flag** is an experiment whose `assign` never falls through. A **beta program** is `assign` first with `split` as the everyone-else tail. A **rollout** is a split you turn up.
+
+## Feature flags: `flag()`
+
+Flags are the everyday case, so they get a boolean face — `flag()` is a thin wrapper that IS an `Experiment<'off' | 'on'>` underneath:
+
+```ts
+import { flag } from 'ogygia';
+
+export const newNav = flag('new-nav', {
+  enabled: (c) => {
+    if (c.visitor?.roles?.includes('beta')) return true;    // beta program: in
+    if (c.visitor?.locale === 'de') return false;           // targeted OFF — rollout can't re-include
+    return undefined;                                       // everyone else → the rollout
+  },
+  rollout: 10,   // sticky 10% of the rest
+});
+```
+
+```ts
+'/': page(Home, { load: (c) => ({ nav: newNav.on(c) ? 'new' : 'classic' }) }),
+```
+
+- `on(c)` is the whole read API. A bare `flag('x')` is off for everyone — the safe default.
+- Everything an experiment gets, a flag gets: sticky per-visitor rollout, `?og-exp=new-nav:on` QA override, `pick()` for page branching, `stamp()` for logs, and listing it in `routes({ experiments: [newNav] })` carries it to [mounted teams](/docs/app/federation) — one world.
+- **Runtime toggles without a redeploy** are just `enabled`: it runs per request, so read an env var, a cookie, or a database row. A kill switch is `enabled: () => process.env.NEW_NAV !== 'off' ? undefined : false`.
+- An explicit `false` from `enabled` is definitive — a targeted off is never re-included by the rollout percentage.
+
+## Branch a page: `pick()`
+
+For a router page, branch the **component** per request:
+
+```ts
+import Hero from './Hero.svelte';
+import HeroBold from './HeroBold.svelte';
+
+'/': page(heroExp.pick({ control: Hero, bold: HeroBold }), { load }),
+```
+
+`$infer` never notices — the page's types come from the load, so arms are free.
+
+The arms don't have to be different files. Because a page component's schedule rides its **import attribute**, two bindings of ONE file are two different pages — which answers the classic question "does full hydration actually beat islands?" as a real experiment:
+
+```ts
+import Lab from './Lab.svelte';                          // pure server HTML — zero JS
+import LabLive from './Lab.svelte' with { wake: 'load' }; // the same file as ONE live island
+
+export const csrExp = experiment('csr-mode', { variants: ['static', 'hydrated'], split: { hydrated: 50 } });
+
+'/lab': page(csrExp.pick({ static: Lab, hydrated: LabLive }), { load }),
+```
+
+Half your visitors get the zero-JS page, half get the fully-hydrated one, stickily — measure and settle the argument.
+
+## Mutual exclusion: `layer()`
+
+Two experiments that touch the same surface must never hit the same visitor, or neither is measurable. A layer **partitions** traffic between its members:
+
+```ts
+import { experiment, layer } from 'ogygia';
+
+const hero = layer('hero-surface');
+const expA = experiment('hero-redesign', { variants: ['control', 'bold'], split: { bold: 50 }, layer: hero });
+const expB = experiment('hero-video',    { variants: ['control', 'video'], split: { video: 50 }, layer: hero });
+```
+
+Each visitor is owned by at most one member experiment; for the others they're control.
+
+## QA override
+
+Force any variant from the URL — it wins over everything, including stickiness:
+
+```
+/lab?og-exp=csr-mode:hydrated
+/?og-exp=hero-redesign:bold,new-checkout:fast
+```
+
+**Dev-only by default.** In production an open URL override would let any visitor force themselves into unfinished features and pollute your experiment data — so out of the box, production ignores `?og-exp`. Opt QA in with something a visitor can't forge:
+
+```ts title=hooks.server.ts
+import { allowOverrides } from 'ogygia';
+
+allowOverrides((c) => c.visitor?.roles?.includes('qa') ?? false);
+```
+
+An upstream shell that honored an override still propagates it to [mounted teams](/docs/app/federation) through carried claims — only the evaluating server's gate matters.
+
+## The flag manifest
+
+Every production build writes an inventory of the `flag()` and `experiment()` call sites it compiled — AST-resolved (renamed and namespace imports count; an unrelated local function named `flag` doesn't) — to:
+
+```
+node_modules/.ogygia/flags-manifest.json   →  { flags: [{ name, kind, file, line }], names: [...] }
+```
+
+Flags rot: the industry's answer to flag debt is refactoring bots that delete stale branches. A code-first setup gets most of that value from the inventory alone — record the manifest in CI, diff it per release, and alarm on any name that survives past its expected retirement. Retiring a flag stays a human edit (delete the flag, keep the winning branch); the manifest tells you which ones are overdue.
+
+## Stamping and measurement
+
+`stamp(c)` gives `name:variant` for wherever your measurement lives — a `data-og-exp` attribute, a log line, a Server-Timing label:
+
+```svelte
+<section data-og-exp={data.stamp}>…</section>
+```
+
+ogygia deliberately ships **no metrics pipeline** — assignment is the primitive; counting is your analytics' job, and the stamp is the join key.
+
+## One world across teams
+
+The full precedence per request: **override → carried → assign → split → control**. "Carried" is the federation tier: when a shell [mounts other teams' apps](/docs/app/federation), it lists its experiments on the table —
+
+```ts
+routes(table, { visitor: session, experiments: [csrExp, heroExp] })
+```
+
+— and every mount automatically signs the visitor's buckets into its hops. Downstream apps read the same world; nobody hand-lists anything, and a `?og-exp` override (where the shell's gate allows it) propagates too. An upstream-carried assignment beats local `assign`/`split`, so one visitor can never straddle two worlds between teams.

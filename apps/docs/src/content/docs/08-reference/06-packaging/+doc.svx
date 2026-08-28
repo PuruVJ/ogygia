@@ -1,6 +1,6 @@
 ---
 title: Packaging
-summary: Publishing a package of Svelte components that light up as islands in a consumer's ogygia app — ship the components, the consumer marks the strategy.
+summary: Publishing a package of Svelte components that light up as islands in a consumer's ogygia app — ship the components and the consumer marks the strategy, or declare ogygia.files and ship your own marks and routes.
 related:
   - macros/asregion
   - regions/timing-nesting
@@ -52,11 +52,53 @@ const WidgetIsland = import.meta.og.asRegion(Widget, { wake: 'visible' });
 
 `asRegion` is barrel-friendly (region identity keys on the export name) and it runs in the consumer's app, so it's the answer whenever the mark can't sit on the import itself. You don't ship anything for it.
 
+## Marks inside your package: `ogygia.files`
+
+Everything above assumes the **consumer** marks your components. Sometimes the mark belongs on **your** side: a `Panel.svelte` whose search box is an island by design, whatever app it lands in — or a whole route table you ship for the consumer to spread into their [router](/docs/app/server-router). Those marks live in files inside `node_modules`, where the consumer's build normally doesn't look.
+
+Declare the paths that carry them, in your own `package.json`:
+
+```json title=package.json
+{
+  "name": "my-widgets",
+  "ogygia": {
+    "files": ["./src/widgets", "./src/pages/**/*.svelte", "./src/routes.ts"]
+  }
+}
+```
+
+The field works like npm's `"files"`: a bare directory includes everything under it, globs are fine, and every path must stay inside the package. That's the whole authoring surface — the consumer configures **nothing**. Their ogygia plugin reads the declarations of their direct dependencies and gives your paths full app-source treatment: they're scanned and compiled like the app's own `src/` (`.svelte` *and* `.ts`, so a shipped route table's marked imports work), kept un-external on the server, and kept out of the dev prebundle.
+
+Only declared packages are ever scanned, and only their declared paths — there is no blind `node_modules` walk. A dependency that uses marks *without* declaring gets a loud build warning instead of silently dead islands.
+
+Rules for declared paths:
+
+- **Ship source.** Raw `.svelte`, and `.ts`/`.js` with the `with { … }` attributes intact — the consumer's pipeline compiles them. (If you transpile, check your tool preserves import attributes.)
+- **Depend on ogygia.** A declared surface is real ogygia code; list `ogygia` as a dependency or peer so its imports resolve from your package.
+- The app-side placement rules apply unchanged — no content corpora in components, server-only modules stay server-only.
+
+A shipped route table is then just an export the consumer spreads:
+
+```ts title=my-widgets/src/routes.ts
+import { page } from 'ogygia/router';
+import Board from './pages/Board.svelte' with { wake: 'load' };
+
+export const widget_table = {
+  '/board': page(Board, { load: () => ({ title: 'Live board' }) })
+};
+```
+
+```ts title=consumer
+import { widget_table } from 'my-widgets/routes';
+
+const app = routes({ '/': page(Home), ...widget_table }, { base });
+```
+
 ## If your package imports ogygia
 
 Everything above is for packages that ship plain components. The moment a package imports from `'ogygia'` **itself** — say a shared workspace package using the [context bridge's](/docs/data-state/state-context) drop-in `setContext` — one rule applies to every build that touches it:
 
-**ogygia can never be bundled into a library. It's an external, the same category as `$app/*`.** The `ogygia` entry points resolve through virtual modules that only exist inside the final app's Vite pipeline, and the runtime keeps module-level registries that must be a singleton per app. A lib-mode build must leave the import specifier intact.
+**ogygia can never be bundled into a library. It's an external, the same category as `$app/*`.** The `ogygia` entry points resolve through virtual modules that only exist inside the final app's Vite pipeline, and the runtime keeps module-level registries that must be a singleton per app. A lib-mode build must leave the import specifier intact. (An `ogygia.files` package that ships raw source satisfies this by construction — the specifiers reach the consumer untouched. The rule bites when a build step **bundles**.)
 
 This propagates further than people expect in a monorepo. If your lib builds **bundle** workspace dependencies (Vite lib mode does by default), then a single `import { setContext } from 'ogygia'` in one shared package surfaces in the bundle graph of *every* package that depends on it — and each of those builds now needs `'ogygia'` in its `external` list too, even though none of them import ogygia themselves. Two ways to hold this:
 
@@ -72,6 +114,6 @@ build: {
 }
 ```
 
-::: warning What a package can't do
-An island your library renders only from its **own** server code — one the consumer never imports — won't get a client chunk. The consumer's build scans the consumer's imports; a component it never imports is invisible to it, and its hydrate fetch 404s. Keep every island **importable** (above) so it enters that graph. (ogygia's own profiler and devtools UI are the one exception — they're marked inside ogygia and the plugin adds their dir as a scan root itself. There's no public manifest for a third-party package to do the same.)
+::: tip Islands the consumer never imports
+An island your library renders only from its **own** server code — one the consumer never imports — is invisible to the consumer's import graph. That's exactly what the `ogygia.files` declaration above is for: declare the path and the consumer's build scans it like its own source, so the island's client chunk emits. (ogygia's own profiler UI rides the same mechanism internally.)
 :::

@@ -260,6 +260,19 @@ Every load, action, and handler receives `c` — Kit's request surface:
 | `c.json()` / `c.redirect()` / `c.text()` | Response shortcuts |
 | `c.href('/docs/[slug]', { slug })` | a rename-safe URL to a route in this table |
 | `c.state` | a per-request scratch bag (a guard writes, a handler reads) |
+| `c.visitor` | THE identity — resolved once, lazily (below) |
+
+### One identity: `c.visitor`
+
+Declare who the request is **once**, on the table, and read it everywhere:
+
+```ts
+routes(table, {
+  visitor: (c) => session_from(c.cookies),   // → { sub: 'u123', roles: [...] } or undefined
+});
+```
+
+`c.visitor` is lazy and memoized — the resolver runs at most once per request, and only if something reads it. [Experiments](/docs/app/experiments) stick on it, [mounts](/docs/app/federation) sign it onward to other teams, loads personalize with it. When the request arrived through a signed federation hop, the upstream's signature-bound claims **win** over the local resolver — proof beats config.
 
 ## Control flow: redirect, error, fail
 
@@ -361,6 +374,8 @@ routes(table, {
   error: ErrorPage,             // root error boundary
   miss: (c) => c.error(404),    // response for an unmatched path under `base`
   load: authGuard,              // a table-wide load before EVERY route — a guard with no chrome
+  visitor: session,             // THE identity → c.visitor (see above)
+  experiments: [csrExp],        // auto-carried into federation hops — see Experiments
 });
 ```
 
