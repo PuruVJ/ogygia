@@ -151,7 +151,8 @@
 		"esm-env": "^1.2.2",
 		"estree-walker": "^3.0.3",
 		"magic-string": "^1.1.0",
-		"rolldown": ">=1.0.0"
+		"rolldown": ">=1.0.0",
+		"tinyglobby": "^0.2.17"
 	},
 	"peerDependencies": {
 		"@orama/orama": "^3.0.0",

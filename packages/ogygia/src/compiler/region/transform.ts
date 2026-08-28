@@ -28,6 +28,9 @@ interface HostCtx {
 	virtualPathFor: (hostId: string, iid: string) => string;
 	wrapperPathFor: (hostId: string, iid: string) => string;
 	devUrlFor: (virtualPath: string) => string;
+	/** Install-independent identity (`<pkg-name>/<rel>`) for files under a declared `ogygia.files`
+	 *  package — `null`/absent falls back to root-relative (see CompileCtx.pkg_identity). */
+	pkg_identity?: (abs: string) => string | null;
 	/** SvelteKit `appDir` (default `_app`) — where island chunks are emitted + served (base-less; Kit's
 	 *  `asset()` adds `base`/assets at render). */
 	appDir?: string;
@@ -58,6 +61,8 @@ interface TsRegionCtx {
 	wrapperPathFor?: (hostId: string, iid: string) => string;
 	/** Guarded (`!= null`) — only a `visible` strategy reads it. */
 	visibleMargin?: string;
+	/** Guarded (typeof) — install-independent identity for declared `ogygia.files` package files. */
+	pkg_identity?: (abs: string) => string | null;
 }
 
 /** An error-raising callback the region-option parsers use (thrown by the caller). */
@@ -1236,10 +1241,16 @@ class FileCompilation {
 	/**
 	 * Region-identity path for a component: filesystem components key on their root-relative posix
 	 * path; a package specifier IS its own identity (already stable + posix, and identical across
-	 * hosts — so two hosts marking the same package import share one region id).
+	 * hosts — so two hosts marking the same package import share one region id). A file under a
+	 * DECLARED `ogygia.files` package keys as `<pkg-name>/<rel>` instead of root-relative: pnpm
+	 * store paths carry version+peer hashes, so a root-relative key would change per install and
+	 * prod HTML would stop matching its chunks.
 	 */
 	#component_identity(p: string) {
-		return this.#ctx.pathModule.isAbsolute(p) ? this.#posix_rel(p) : p;
+		if (!this.#ctx.pathModule.isAbsolute(p)) return p;
+		const pkg =
+			typeof this.#ctx.pkg_identity === 'function' ? this.#ctx.pkg_identity(p) : null;
+		return pkg ?? this.#posix_rel(p);
 	}
 
 	/** `[ogygia] host: import { … } — msg` — the region-import error formatter. */
@@ -1970,7 +1981,12 @@ class FileCompilation {
 				.update(`${markup}\0${captures.join(',')}\0${cleaned_imports.join('\n')}\0${params_src}`)
 				.digest('hex')
 				.slice(0, 12);
-			const identity = regionIdentity(`${rel_host}\0psnip:${hash}`, { strategy: 'hydrate' });
+			// host identity via #component_identity: a declared-package host keys `<pkg>/<rel>`
+			// (install-independent), everything else stays root-relative — same rule as components.
+			const identity = regionIdentity(
+				`${this.#component_identity(this.#id)}\0psnip:${hash}`,
+				{ strategy: 'hydrate' }
+			);
 			const iid = regionId(identity, salt);
 			const entryPath = ctx.virtualPathFor(id, iid).replace(JS_EXT, '.svelte');
 			if (!islands_by_id.has(iid)) {
@@ -2213,9 +2229,14 @@ class TsRegionCompilation {
 		return spec;
 	}
 
-	/** Region-identity path — filesystem components key on their posix path; a package spec is its own. */
+	/** Region-identity path — filesystem components key on their posix path; a package spec is its
+	 *  own. Declared-package files key `<pkg-name>/<rel>` (install-independent — see
+	 *  FileCompilation#component_identity); duck-typed like wrapperPathFor, host ctxs may lack it. */
 	#component_identity(p: string) {
-		return this.#path.isAbsolute(p) ? this.#posix_rel(p) : p;
+		if (!this.#path.isAbsolute(p)) return p;
+		const ctx = this.#ctx;
+		const pkg = typeof ctx.pkg_identity === 'function' ? ctx.pkg_identity(p) : null;
+		return pkg ?? this.#posix_rel(p);
 	}
 
 	#wrapper_path_for(wid: string) {

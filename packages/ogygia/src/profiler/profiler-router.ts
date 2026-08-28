@@ -16,7 +16,11 @@
  * `$infer` still comes from the LOADS, which keep their real return types. This is the same reason Kit
  * generates `./$types` in a component-free module — a programmatic router has no codegen to hide it.
  */
-import { routes, page, error, type Ctx } from '../router/index.js';
+// The PUBLIC self-reference spec (like ogygia/internal), not '../router/index.js': the prescan
+// spots router modules by the literal 'ogygia/router' import, and THAT is what makes this module's
+// page components router-css roots with no hand-seeding (the old extra_router_modules special case).
+// Same module either way — the svelte export condition resolves it back into this build's source.
+import { routes, page, error, type Ctx } from 'ogygia/router';
 import type { AnyComponent } from '../router/define.js';
 import type { Analysis } from './analyze.js';
 import type { ReportExtras, ReportMeta, RequestEntry, RouteAgg } from './report.js';

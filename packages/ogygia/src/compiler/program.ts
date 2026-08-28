@@ -104,6 +104,9 @@ export class Program {
 	 *  component closure from (see link/router-css.ts). Filled during the prescan walk. */
 	readonly router_modules = new Set<string>();
 	readonly module_specs = new Map<string, string[]>();
+	/** flag()/experiment() call sites the prescan OBSERVED (modules importing 'ogygia' only) —
+	 *  written to node_modules/.ogygia/flags-manifest.json at build for CI flag-debt diffs. */
+	readonly flag_sites: import('./flags.js').FlagSite[] = [];
 
 	/** App crosses a held region / transportable value through Kit's `transport` hook — a `.remote.*`
 	 *  file, or a `region`/`site`/content import (loads & remotes that carry regions or wired values).

@@ -901,7 +901,9 @@ describe('asRegion macro (import.meta.og.asRegion)', () => {
 		expect(r.islands[0].source).toMatch(
 			/import __OgygiaComp_[0-9a-f]+ from ["'][^"']*Card\.svelte["']/
 		);
-		expect(r.islands[0].source).not.toMatch(/import \{ /);
+		// the COMPONENT import must be a default import, never a named one (the entry also
+		// carries the foreign-hydrate contract's named svelte import — that one is expected)
+		expect(r.islands[0].source).not.toMatch(/import \{ [^}]*\} from ["'][^"']*Card\.svelte["']/);
 	});
 
 	test('a fully-consumed barrel import is stripped from the host (no barrel in host chunk)', () => {

@@ -10,6 +10,7 @@
  * recomputes on its own; the linker's `unregister_host` deliberately does NOT clear it.
  */
 import { fs, path, createHash } from './host.js';
+import { fnv1a32 } from '../runtime/fingerprint.js';
 // `performance` is a global in both Node (≥16) and the browser — no import, so the driver graph loads
 // in the browser compiler (Observatory REPL) without pulling node:perf_hooks.
 const performance = globalThis.performance;
@@ -42,6 +43,7 @@ import { materialize } from './content/git.js';
 import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT } from './region/emit.js';
 import { island_deps_module } from './link/island-deps.js';
 import { source_uses_ogygia_context } from './link/context-detect.js';
+import { collect_flag_sites } from './flags.js';
 import { router_css_roots, router_css_module } from './link/router-css.js';
 import {
 	secret_module,
@@ -124,6 +126,15 @@ const LEADING_SLASH = /^\//;
 const MODULE_SPEC_RE =
 	/(?:^|[\n;])\s*(?:import|export)\b[^;'"()]*?from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]/g;
 const ROUTER_PKG_SPEC = 'ogygia/router';
+/** flag()/experiment() live on the ROOT export — the flag-site sweep only runs on importers. */
+const OGYGIA_ROOT_SPEC = 'ogygia';
+/** Manifest path for a flag site: package-relative for declared surfaces, root-relative else. */
+function flag_site_file(
+	ctx: { pkg_identity(p: string): string | null; root: string },
+	full: string
+): string {
+	return (ctx.pkg_identity(full) ?? path.relative(ctx.root, full)).split(path.sep).join('/');
+}
 function extract_module_specs(src: string): string[] {
 	MODULE_SPEC_RE.lastIndex = 0;
 	const specs: string[] = [];
@@ -132,14 +143,22 @@ function extract_module_specs(src: string): string[] {
 	return specs;
 }
 
-const fnv = (str: string) => {
-	let h = 0x811c9dc5;
-	for (let i = 0; i < str.length; i++) {
-		h ^= str.charCodeAt(i);
-		h = Math.imul(h, 0x01000193);
-	}
-	return h >>> 0;
-};
+// one shared FNV-1a-32 (runtime/fingerprint.ts is the pure, import-anywhere home)
+const fnv = fnv1a32;
+
+/** Once per module id: a dependency file carries ogygia marks but its package declares no
+ *  `ogygia.files` — the marks are then silently inert (a `with { }` attribute is valid syntax,
+ *  it just never rewrites), which is the worst way to fail. Say it loudly, once. */
+const warned_undeclared = new Set<string>();
+function warn_undeclared_pkg_marks(id: string): void {
+	if (warned_undeclared.has(id)) return;
+	warned_undeclared.add(id);
+	console.warn(
+		`[ogygia] ${id} uses ogygia marks, but its package declares no ` +
+			`\`"ogygia": { "files": [...] }\` — the marks are IGNORED. Add the field to that ` +
+			`package's package.json (npm-"files"-style paths/globs) to put it on ogygia's compile surface.`
+	);
+}
 
 export class Compiler {
 	readonly program: Program;
@@ -284,6 +303,7 @@ export class Compiler {
 			presets: ctx.presets,
 			importKeys: ctx.import_keys,
 			idSalt: ctx.id_salt,
+			pkg_identity: (abs: string) => ctx.pkg_identity(abs),
 			linkVirtualIsland: link_virtual,
 			clientBindingStub: CLIENT_BINDING_STUB,
 			routeCsr: route_csr,
@@ -315,7 +335,8 @@ export class Compiler {
 			devUrlFor: (virtualPath: string) => ctx.dev_url_for(virtualPath),
 			appDir: ctx.app_dir,
 			importKeys: ctx.import_keys,
-			idSalt: ctx.id_salt
+			idSalt: ctx.id_salt,
+			pkg_identity: (abs: string) => ctx.pkg_identity(abs)
 		});
 	}
 
@@ -338,6 +359,57 @@ export class Compiler {
 
 		const src_dir = path.join(root, 'src');
 		clean_stale_ogygia_dirs(src_dir);
+		const scan_file = (full: string, name: string) => {
+			if (name.endsWith('.svelte')) {
+				const src = ctx.read_file(full);
+				if (src == null) return;
+				if (!runtime_marks.context && source_uses_ogygia_context(src))
+					runtime_marks.context = true;
+				if (!program.crosses_wire && source_crosses_wire(src)) program.crosses_wire = true;
+				{
+					// Router-css closure data: this module's import specs + whether it defines routers.
+					const specs = extract_module_specs(src);
+					if (specs.length) program.module_specs.set(full, specs);
+					if (specs.includes(ROUTER_PKG_SPEC)) program.router_modules.add(full);
+					if (specs.includes(OGYGIA_ROOT_SPEC))
+						program.flag_sites.push(...collect_flag_sites(src, full, flag_site_file(ctx, full)));
+				}
+				// A `<script module>` transportable class goes in the manifest too (keyed by the
+				// .svelte path — side-effect-importing the component runs its module registration).
+				if (svelteModuleHasTransportable(src, full)) transportable_modules.add(full);
+				const result = this.transform(src, full);
+				if (result) program.register(result, full);
+			} else if (
+				(name.endsWith('.ts') || name.endsWith('.js') || name.endsWith('.mjs')) &&
+				!name.endsWith('.d.ts')
+			) {
+				// `.ts` / `.js` region mints (load / remote functions). Discover them up front so a
+				// deferred region's server-manifest entry exists before the endpoint is ever hit —
+				// lazy transform order would otherwise leave the id missing (403 on first fetch).
+				const src = ctx.read_file(full);
+				if (src == null) return;
+				if (!runtime_marks.context && source_uses_ogygia_context(src))
+					runtime_marks.context = true;
+				if (
+					!program.crosses_wire &&
+					(name.endsWith('.remote.ts') || name.endsWith('.remote.js') || source_crosses_wire(src))
+				)
+					program.crosses_wire = true;
+				{
+					// Router-css closure data: this module's import specs + whether it defines routers.
+					const specs = extract_module_specs(src);
+					if (specs.length) program.module_specs.set(full, specs);
+					if (specs.includes(ROUTER_PKG_SPEC)) program.router_modules.add(full);
+					if (specs.includes(OGYGIA_ROOT_SPEC))
+						program.flag_sites.push(...collect_flag_sites(src, full, flag_site_file(ctx, full)));
+				}
+				// Transportable classes go into the eager-registration manifest so an island
+				// receiving one as a prop never has to import the class itself.
+				if (moduleHasTransportable(src, full)) transportable_modules.add(full);
+				const result = this.ts_regions(src, full);
+				if (result) program.register(result, full);
+			}
+		};
 		const walk = (dir: string) => {
 			let entries;
 			try {
@@ -350,54 +422,8 @@ export class Compiler {
 				if (entry.isDirectory()) {
 					if (entry.name === 'node_modules' || entry.name === ISLAND_DIR) continue;
 					walk(full);
-				} else if (entry.name.endsWith('.svelte')) {
-					const src = ctx.read_file(full);
-					if (src == null) continue;
-					if (!runtime_marks.context && source_uses_ogygia_context(src))
-						runtime_marks.context = true;
-					if (!program.crosses_wire && source_crosses_wire(src)) program.crosses_wire = true;
-					{
-						// Router-css closure data: this module's import specs + whether it defines routers.
-						const specs = extract_module_specs(src);
-						if (specs.length) program.module_specs.set(full, specs);
-						if (specs.includes(ROUTER_PKG_SPEC)) program.router_modules.add(full);
-					}
-					// A `<script module>` transportable class goes in the manifest too (keyed by the
-					// .svelte path — side-effect-importing the component runs its module registration).
-					if (svelteModuleHasTransportable(src, full)) transportable_modules.add(full);
-					const result = this.transform(src, full);
-					if (result) program.register(result, full);
-				} else if (
-					(entry.name.endsWith('.ts') ||
-						entry.name.endsWith('.js') ||
-						entry.name.endsWith('.mjs')) &&
-					!entry.name.endsWith('.d.ts')
-				) {
-					// `.ts` / `.js` region mints (load / remote functions). Discover them up front so a
-					// deferred region's server-manifest entry exists before the endpoint is ever hit —
-					// lazy transform order would otherwise leave the id missing (403 on first fetch).
-					const src = ctx.read_file(full);
-					if (src == null) continue;
-					if (!runtime_marks.context && source_uses_ogygia_context(src))
-						runtime_marks.context = true;
-					if (
-						!program.crosses_wire &&
-						(entry.name.endsWith('.remote.ts') ||
-							entry.name.endsWith('.remote.js') ||
-							source_crosses_wire(src))
-					)
-						program.crosses_wire = true;
-					{
-						// Router-css closure data: this module's import specs + whether it defines routers.
-						const specs = extract_module_specs(src);
-						if (specs.length) program.module_specs.set(full, specs);
-						if (specs.includes(ROUTER_PKG_SPEC)) program.router_modules.add(full);
-					}
-					// Transportable classes go into the eager-registration manifest so an island
-					// receiving one as a prop never has to import the class itself.
-					if (moduleHasTransportable(src, full)) transportable_modules.add(full);
-					const result = this.ts_regions(src, full);
-					if (result) program.register(result, full);
+				} else {
+					scan_file(full, entry.name);
 				}
 			}
 		};
@@ -408,7 +434,15 @@ export class Compiler {
 			// server-only library components whose client hydrate chunks only build if the prescan — which
 			// runs in both build legs — registers them here. Same `walk`, so same iid ⇒ the SSR shell's
 			// `entry` matches the chunk this emits.
-			for (const extra of ctx.extra_scan_roots) walk(extra);
+			// Declared compile surfaces beyond src (`"ogygia": { "files": […] }` in a DEP's
+			// package.json; ogygia's own profiler UI rides the same rail as an internal entry):
+			// the same walk/scan as app src, so a library island gets everything an app island gets
+			// (feature marks, deferred manifests, wired classes, router-css specs) and both build
+			// legs mint the same iids. Only DECLARED packages, only their DECLARED paths.
+			for (const p of ctx.pkg_scan) {
+				for (const d of p.dirs) walk(d);
+				for (const f of p.files) scan_file(f, f.slice(f.lastIndexOf('/') + 1));
+			}
 			if (P) prof.prescanMs += performance.now() - __ps;
 		}
 
@@ -520,25 +554,26 @@ export class Compiler {
 	router_css_roots(): string[] {
 		const ctx = this.#ctx!;
 		if (ctx.is_build && this.#router_css_roots_cache) return this.#router_css_roots_cache;
+		// One path for ALL router modules — app source AND declared surfaces (the shipped profiler
+		// router imports the literal 'ogygia/router', so the prescan of its declared entry detects
+		// it like any app router module; no injected special case). The walk's recursion is bounded
+		// by prescanned module_specs, so profiler-router's type-import of `./index.js` dead-ends
+		// instead of dragging the host graph in.
 		const roots = new Set(
 			router_css_roots(this.program.router_modules, this.program.module_specs, ctx.libDir)
 		);
-		// Injected router modules (the shipped profiler router — never in app source): take their DIRECT
-		// `.svelte` imports as roots. No barrel walk: profiler-router type-imports `./index.js`, and
-		// following that would drag the whole host's graph in. Each page component wraps Shell, so its
-		// aggregate already carries the global + page CSS.
-		for (const mod of ctx.extra_router_modules ?? []) {
-			const src = ctx.read_file(mod);
-			if (!src) continue;
-			for (const spec of extract_module_specs(src)) {
-				if (!spec.endsWith('.svelte')) continue;
-				const abs = resolveFoucImportSpec(spec, mod, ctx.libDir);
-				if (abs && ctx.read_file(abs) != null) roots.add(path.normalize(abs));
-			}
-		}
 		const sorted = [...roots].sort();
 		if (ctx.is_build) this.#router_css_roots_cache = sorted;
 		return sorted;
+	}
+
+	/** Does the program hold ANY hydrate island? The runtime-emission gate needs this because
+	 *  `hasAnyCsrFalseRoute` only inspects Kit PAGE leaves — an app whose islands live solely in
+	 *  router-rendered components (a pure-router / fragment-only service has ZERO `+page` files)
+	 *  answers "no csr=false page" while its documents still `<script src>` the runtime. */
+	has_hydrate_regions(): boolean {
+		for (const kind of this.program.region_kinds.values()) if (kind === 'hydrate') return true;
+		return false;
 	}
 
 	emit_build_chunks(
@@ -1026,7 +1061,9 @@ export class Compiler {
 		if (
 			id_n.endsWith('.svelte') &&
 			(!is_island_path(bare_v) || portable_entry) &&
-			(!in_node_modules || ctx.has_island_hint(code))
+			// declared `ogygia.files` surfaces transform unconditionally (full app-source citizenship);
+			// undeclared node_modules `.svelte` keeps the legacy hint sniff
+			(!in_node_modules || ctx.in_declared_pkg(bare_v) || ctx.has_island_hint(code))
 		) {
 			// Pass Vite's ssr flag through — client csr=false hosts omit wrapper links.
 			// `out`, NOT `code`: the wire/code/md/bake rewrites above already landed in `out`, and
@@ -1074,9 +1111,25 @@ export class Compiler {
 		// `.ts` / `.js` region minting (load / remote functions): rewrite `with { wake: … }`
 		// imports. Runs before rolldown's core transform (enforce:'pre') so the attribute is
 		// stripped before it would trip the parser.
+		const nm_ts = (id_n.endsWith('.ts') || id_n.endsWith('.js') || id_n.endsWith('.mjs'))
+			? id_n.includes('/node_modules/')
+			: null;
+		// A dependency's `.ts`/`.js` with marks but NO `ogygia.files` declaration would die
+		// SILENTLY (the import attribute is valid syntax, it just never rewrites) — say so.
+		// (ogygia's OWN modules are exempt: in an installed consumer they live in node_modules and
+		// flow through the SSR pipeline (noExternal), and compiler/emit sources legitimately CONTAIN
+		// `with { wake` as strings — the hint sniff would warn-spam on every build.)
 		if (
-			(id_n.endsWith('.ts') || id_n.endsWith('.js') || id_n.endsWith('.mjs')) &&
-			!id_n.includes('/node_modules/') &&
+			nm_ts === true &&
+			!id_n.startsWith(ctx.pkg_root) &&
+			!ctx.in_declared_pkg(id_n) &&
+			ctx.has_island_hint(out)
+		) {
+			warn_undeclared_pkg_marks(id_n);
+		}
+		if (
+			nm_ts !== null &&
+			(nm_ts === false || ctx.in_declared_pkg(id_n)) &&
 			!is_island_path(id_n)
 		) {
 			this.#warn_content_placement(id_n, out);

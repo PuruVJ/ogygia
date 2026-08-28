@@ -15,6 +15,25 @@ import {
 	type ImportKeys
 } from './region/transform.js';
 
+/** One dependency package's declared compile surface (`"ogygia": { "files": […] }` in ITS
+ *  package.json) — produced by the plugin's discovery (`vite/package-files.ts`), consumed here
+ *  type-only: the compiler stays browser-host-clean, so the node:fs/glob work lives plugin-side.
+ *  All paths are posix REALPATHS — Vite resolves ids through symlinks (pnpm), so gate matching
+ *  must speak real paths or every check silently misses. */
+export interface PackageScan {
+	/** The package's published name — the stable identity prefix for its regions. */
+	name: string;
+	/** realpath of the package root. */
+	root: string;
+	/** Declared bare directories (prefix-matched, so files added mid-dev still count). */
+	dirs: string[];
+	/** Individually declared / glob-expanded files. */
+	files: string[];
+}
+
+/** Windows separators → posix, for id matching against the (posix) declared-path index. */
+const BACKSLASH_SEP = /\\/;
+
 export interface CompileCtxInit {
 	root: string;
 	base: string;
@@ -27,17 +46,15 @@ export interface CompileCtxInit {
 	 *  ogygia never bakes a base into these URLs (doing so double-applies it). */
 	app_dir: string;
 	libDir: string;
-	/** Extra dirs (beyond `<root>/src`) the prescan walks for island components — the shipped profiler
-	 *  UI, whose server-only components would otherwise never get client hydrate chunks. */
-	extra_scan_roots: string[];
-	/** Extra `ogygia/router` modules NOT in app source (the shipped profiler router) — seeded into the
-	 *  router-css closure so its page components' scoped `<style>` blocks emit + link like any router
-	 *  page's. Only their DIRECT `.svelte` imports are taken (no barrel walk). Empty for normal apps. */
-	extra_router_modules: string[];
 	/** `ogygia({ profiler })` normalized (or `null` when off) — baked into `virtual:ogygia/profiler-config`
 	 *  so `ogygia.handle()` dynamically imports + mounts the profiler with no hooks/handler wiring. The
 	 *  secret is NOT baked: it reads OGYGIA_PROFILER_SECRET at runtime unless overridden here. */
 	profiler_config: Record<string, unknown> | null;
+	/** Dependency packages that DECLARED their ogygia compile surface (`"ogygia": { "files": […] }`
+	 *  in THEIR package.json) — prescanned + transformed like app source, node_modules gates lifted
+	 *  for exactly these paths. Optional (default none): standalone/browser hosts have no
+	 *  node_modules to declare from. */
+	pkg_scan?: PackageScan[];
 	is_dev: boolean;
 	id_salt: string;
 	visibleMargin: string | undefined;
@@ -85,8 +102,7 @@ export class CompileCtx {
 	readonly base: string;
 	readonly app_dir: string;
 	readonly libDir: string;
-	readonly extra_scan_roots: string[];
-	readonly extra_router_modules: string[];
+	readonly pkg_scan: PackageScan[];
 	readonly profiler_config: Record<string, unknown> | null;
 	readonly is_dev: boolean;
 	readonly id_salt: string;
@@ -114,14 +130,18 @@ export class CompileCtx {
 	/** `with { … }` hint matcher — a node_modules `.svelte` is only transformed when it carries one
 	 *  (so a library can declare its own islands). Built once from the resolved import keys. */
 	readonly #island_hint_re: RegExp;
+	/** Declared package files (exact) + dirs (prefix) — the transform-gate membership index. */
+	readonly #pkg_files: Set<string>;
+	readonly #pkg_dirs: string[];
+	/** Package roots, longest first, for stable-identity mapping (root → published name). */
+	readonly #pkg_roots: Array<{ root: string; name: string }>;
 
 	constructor(init: CompileCtxInit) {
 		this.root = init.root;
 		this.base = init.base;
 		this.app_dir = init.app_dir;
 		this.libDir = init.libDir;
-		this.extra_scan_roots = init.extra_scan_roots;
-		this.extra_router_modules = init.extra_router_modules;
+		this.pkg_scan = init.pkg_scan ?? [];
 		this.profiler_config = init.profiler_config;
 		this.is_dev = init.is_dev;
 		this.id_salt = init.id_salt;
@@ -152,11 +172,39 @@ export class CompileCtx {
 		this.#island_hint_re = hint_keys.length
 			? new RegExp(`\\bwith\\s*\\{[^}]*\\b(?:${hint_keys.join('|')})\\b`)
 			: /$^/;
+		this.#pkg_files = new Set(this.pkg_scan.flatMap((p) => p.files));
+		this.#pkg_dirs = this.pkg_scan.flatMap((p) => p.dirs);
+		this.#pkg_roots = this.pkg_scan
+			.map((p) => ({ root: p.root, name: p.name }))
+			.sort((a, b) => b.root.length - a.root.length);
 	}
 
 	/** True when `code` carries an ogygia `with { … }` island hint (gates node_modules `.svelte`). */
 	has_island_hint(code: string): boolean {
 		return this.#island_hint_re.test(code);
+	}
+
+	/** True when `id` is inside a dependency's DECLARED `ogygia.files` surface — those files are
+	 *  prescanned + transformed exactly like app source (the node_modules gates lift for them). */
+	in_declared_pkg(id: string): boolean {
+		if (this.#pkg_files.size === 0 && this.#pkg_dirs.length === 0) return false;
+		const p = id.split(BACKSLASH_SEP).join('/');
+		if (this.#pkg_files.has(p)) return true;
+		for (const dir of this.#pkg_dirs) if (p.startsWith(dir + '/')) return true;
+		return false;
+	}
+
+	/** Install-independent region identity for a file under a declared package: `<name>/<rel>`.
+	 *  Store paths carry version + peer-resolution hashes (`node_modules/.pnpm/pkg@1.2.3(...)`),
+	 *  so a root-relative identity would change per install/machine and prod HTML would stop
+	 *  matching its chunks. Returns `null` for anything not under a declared package root. */
+	pkg_identity(abs: string): string | null {
+		if (this.#pkg_roots.length === 0) return null;
+		const p = abs.split(BACKSLASH_SEP).join('/');
+		for (const { root, name } of this.#pkg_roots) {
+			if (p.startsWith(root + '/')) return name + p.slice(root.length);
+		}
+		return null;
 	}
 
 	/** The feature-selected runtime chunk name (`RUNTIME_HASH` ⊕ the prescan's feature hash). Immutable-

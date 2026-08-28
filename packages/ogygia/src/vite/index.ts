@@ -72,7 +72,9 @@ import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/b
 import { router_css_key } from '../compiler/link/router-css.js';
 import { Program, strip_id } from '../compiler/program.js';
 import { Compiler } from '../compiler/driver.js';
-import { CompileCtx } from '../compiler/ctx.js';
+import { CompileCtx, type PackageScan } from '../compiler/ctx.js';
+import { discover_package_files } from './package-files.js';
+import { flags_manifest } from '../compiler/flags.js';
 import { V_KIT_WIRE, V_ROUTER_CSS } from '../compiler/ids.js';
 import {
 	PKG_ROOT,
@@ -105,6 +107,18 @@ import type {
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
 const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
 
+/** Windows separators → posix. */
+const WIN_SEP_RE = /\\/g;
+/** realpath + posix — declared-surface paths must match Vite's symlink-resolved module ids. */
+function real_posix(p: string): string {
+	try {
+		p = fs.realpathSync(p);
+	} catch {
+		/* keep as-given — a missing path simply never matches an id */
+	}
+	return p.replace(WIN_SEP_RE, '/');
+}
+
 /**
  * Vite plugin: transforms `with { hydrate | defer | preset }` imports into islands,
  * serves virtual island modules, and wires signed region endpoints for deferred HTML.
@@ -134,13 +148,22 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				? {}
 				: { ...options.profiler }
 			: null;
-	// Profiler on → build its UI. Its island components are marked inside ogygia's own source and
-	// rendered only from the profiler handle (never on a Kit page), so no app file marks them and the
-	// src prescan can't see them. Add ogygia's own UI dir as a prescan root (PKG_ROOT self-reference).
-	const extra_scan_roots = profiler_config ? [PROFILER_UI_DIR] : [];
-	// Router-css seed: the profiler's own server router, so its page components' scoped CSS emits +
-	// links through the same handoff as an app router page (see driver.router_css_roots).
-	const extra_router_modules = profiler_config ? [PROFILER_ROUTER_MODULE] : [];
+	// Compile surfaces beyond the app's src — ONE mechanism for ogygia's own profiler UI and for
+	// dependencies that declare `"ogygia": { "files": […] }` in their package.json (discovered in
+	// the config hook, where root is known; the array is captured by reference into the CompileCtx
+	// built in configResolved). The profiler was this feature's hardcoded prototype
+	// (extra_scan_roots / extra_router_modules); it now rides the general rail as one internal
+	// entry: its UI dir + its server-router module. The router module is DETECTED as a router-css
+	// root the same way an app's is (it imports the literal 'ogygia/router') — no hand-seeding.
+	const pkg_scan: PackageScan[] = [];
+	if (profiler_config) {
+		pkg_scan.push({
+			name: 'ogygia',
+			root: real_posix(PKG_ROOT),
+			dirs: [real_posix(PROFILER_UI_DIR)],
+			files: [real_posix(PROFILER_ROUTER_MODULE)]
+		});
+	}
 
 	// Publish the markdown config so a value-free `markdown()` in the svelte config reads it — all
 	// content/markdown config stays here in the one plugin. `standalone` re-invokes this factory for
@@ -354,6 +377,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						}
 					}
 
+					// Dependencies that DECLARED an ogygia compile surface (`"ogygia": { "files": […] }`
+					// in their own package.json) — only declared packages, only their declared paths,
+					// never a blind node_modules walk. Discovered here (root known), consumed by the
+					// prescan + transform gates via CompileCtx.pkg_scan. Guarded against double-push:
+					// Kit invokes plugin config more than once per process in some flows.
+					if (!standalone && !pkg_scan.some((p) => p.name !== 'ogygia')) {
+						for (const p of discover_package_files(path.resolve(userConfig.root ?? '.')))
+							pkg_scan.push(p);
+					}
+					const declared_pkg_names = pkg_scan
+						.filter((p) => p.name !== 'ogygia')
+						.map((p) => p.name);
+
 					// Match Kit: SSR-inline `esm-env` so its development/production export conditions
 					// resolve per mode (used if anything in our server graph imports it). Do NOT
 					// optimizeDeps.exclude it — that breaks Svelte client prebundles that import DEV.
@@ -367,8 +403,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// pins/overrides noExternal), so we force it here — the plugin is always present, so this
 					// can't be missed. `server.fs.allow`: kit-remote stubs / runtime resolve to absolute
 					// paths under this package; without it Vite 403s them when the app root is docs/ or playground/.
+					//
+					// Declared `ogygia.files` packages join both lists: SSR-external code never enters
+					// our compiler, and the dev prebundle would choke on `with { }` attributes (esbuild)
+					// before the transform ever saw them.
 					return {
-						ssr: { noExternal: ['esm-env', 'ogygia'] },
+						ssr: { noExternal: ['esm-env', 'ogygia', ...declared_pkg_names] },
+						optimizeDeps: { exclude: declared_pkg_names },
 						// CONTINUITY config → compile-time constants the client runtime reads (typeof-guarded,
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
@@ -478,8 +519,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						base,
 						app_dir,
 						libDir,
-						extra_scan_roots,
-						extra_router_modules,
+						pkg_scan,
 						profiler_config,
 						is_dev,
 						id_salt,
@@ -541,7 +581,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// Pure csr=true app (no csr=false route anywhere) → Kit hydrates everything itself, ogygia
 					// ships nothing. Skip the runtime chunk entirely; every host's islands were stripped to
 					// plain by the csrTrue transform branch, so nothing references it anyway.
-					const emit_runtime = !standalone && hasAnyCsrFalseRoute(path.join(root, 'src', 'routes'));
+					// `hasAnyCsrFalseRoute` only sees Kit PAGE leaves, so a PURE-ROUTER app (all pages
+					// router-rendered, zero `+page` files — the fragment-only MFE service shape) reads as
+					// "no csr=false route" while its documents reference the runtime; the compiler's own
+					// island registry is the second, page-independent signal (found by the MFE POC: the
+					// cms app shipped documents pointing at a runtime chunk that was never emitted).
+					const emit_runtime =
+						!standalone &&
+						(hasAnyCsrFalseRoute(path.join(root, 'src', 'routes')) ||
+							compiler.has_hydrate_regions());
 					// The runtime entry (feature-selected) + one deterministic chunk per deduped hydrate
 					// region — the driver owns the naming + dedup; `this.emitFile` is the injected primitive.
 					compiler.emit_build_chunks((chunk) => this.emitFile(chunk), {
@@ -887,6 +935,26 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!is_build || is_ssr) return;
 
 				warn_content_leaks(bundle as Record<string, unknown>, root, is_island_path);
+
+				// FLAG MANIFEST — the inventory the prescan OBSERVED (AST-resolved flag()/experiment()
+				// call sites in modules importing 'ogygia'). Written once per build for CI flag-debt
+				// diffs; the client leg runs last, so the file reflects the completed build.
+				if (program.flag_sites.length && isMainThread) {
+					try {
+						const dir = path.join(root, 'node_modules', '.ogygia');
+						fs.mkdirSync(dir, { recursive: true });
+						const manifest = flags_manifest(program.flag_sites);
+						fs.writeFileSync(
+							path.join(dir, 'flags-manifest.json'),
+							JSON.stringify(manifest, null, '\t') + '\n'
+						);
+						console.log(
+							`[ogygia] flags manifest: ${manifest.names.length} flag(s)/experiment(s) → node_modules/.ogygia/flags-manifest.json`
+						);
+					} catch {
+						/* a read-only FS must never fail the build over an inventory */
+					}
+				}
 
 				const map = collectIslandDepModulepreloads(
 					bundle as Record<
