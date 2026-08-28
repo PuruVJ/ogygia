@@ -363,8 +363,7 @@ export class Compiler {
 			if (name.endsWith('.svelte')) {
 				const src = ctx.read_file(full);
 				if (src == null) return;
-				if (!runtime_marks.context && source_uses_ogygia_context(src))
-					runtime_marks.context = true;
+				if (!runtime_marks.context && source_uses_ogygia_context(src)) runtime_marks.context = true;
 				if (!program.crosses_wire && source_crosses_wire(src)) program.crosses_wire = true;
 				{
 					// Router-css closure data: this module's import specs + whether it defines routers.
@@ -388,8 +387,7 @@ export class Compiler {
 				// lazy transform order would otherwise leave the id missing (403 on first fetch).
 				const src = ctx.read_file(full);
 				if (src == null) return;
-				if (!runtime_marks.context && source_uses_ogygia_context(src))
-					runtime_marks.context = true;
+				if (!runtime_marks.context && source_uses_ogygia_context(src)) runtime_marks.context = true;
 				if (
 					!program.crosses_wire &&
 					(name.endsWith('.remote.ts') || name.endsWith('.remote.js') || source_crosses_wire(src))
@@ -1111,9 +1109,10 @@ export class Compiler {
 		// `.ts` / `.js` region minting (load / remote functions): rewrite `with { wake: … }`
 		// imports. Runs before rolldown's core transform (enforce:'pre') so the attribute is
 		// stripped before it would trip the parser.
-		const nm_ts = (id_n.endsWith('.ts') || id_n.endsWith('.js') || id_n.endsWith('.mjs'))
-			? id_n.includes('/node_modules/')
-			: null;
+		const nm_ts =
+			id_n.endsWith('.ts') || id_n.endsWith('.js') || id_n.endsWith('.mjs')
+				? id_n.includes('/node_modules/')
+				: null;
 		// A dependency's `.ts`/`.js` with marks but NO `ogygia.files` declaration would die
 		// SILENTLY (the import attribute is valid syntax, it just never rewrites) — say so.
 		// (ogygia's OWN modules are exempt: in an installed consumer they live in node_modules and
@@ -1127,11 +1126,7 @@ export class Compiler {
 		) {
 			warn_undeclared_pkg_marks(id_n);
 		}
-		if (
-			nm_ts !== null &&
-			(nm_ts === false || ctx.in_declared_pkg(id_n)) &&
-			!is_island_path(id_n)
-		) {
+		if (nm_ts !== null && (nm_ts === false || ctx.in_declared_pkg(id_n)) && !is_island_path(id_n)) {
 			this.#warn_content_placement(id_n, out);
 
 			// `import.meta.og.loader.*` — the compiler content constructs (like import.meta.glob).

@@ -35,7 +35,9 @@ function page_store(): Store {
 /** Read a server-printed seed: `<script type="application/json" data-og-shared="<name>">`. */
 function read_seed(name: string): unknown | undefined {
 	if (typeof document === 'undefined') return undefined;
-	const el = document.querySelector(`script[type="application/json"][data-og-shared=${JSON.stringify(name)}]`);
+	const el = document.querySelector(
+		`script[type="application/json"][data-og-shared=${JSON.stringify(name)}]`
+	);
 	if (!el?.textContent) return undefined;
 	try {
 		return JSON.parse(el.textContent);
@@ -115,7 +117,10 @@ export class SharedState<T extends object> {
 		// pattern costs one notification, not N). Plain objects/arrays keep the trap path —
 		// array methods called with the proxy receiver trip the set traps naturally.
 		const slotted =
-			value instanceof Map || value instanceof Set || value instanceof Date || value instanceof RegExp;
+			value instanceof Map ||
+			value instanceof Set ||
+			value instanceof Date ||
+			value instanceof RegExp;
 		if (slotted) {
 			return new Proxy(value as object, {
 				get: (t, p) => {

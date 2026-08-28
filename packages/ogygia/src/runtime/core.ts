@@ -531,7 +531,13 @@ class OgygiaRegion extends HTMLElement {
 		const entry_attr = this.getAttribute('entry') || '';
 		const foreign_entry =
 			ABSOLUTE_URL_SCHEME.test(entry_attr) && new URL(entry_attr).origin !== location.origin;
-		if (boundary && is_awake(boundary) && !is_deferred(this) && !in_adopted_slot && !foreign_entry) {
+		if (
+			boundary &&
+			is_awake(boundary) &&
+			!is_deferred(this) &&
+			!in_adopted_slot &&
+			!foreign_entry
+		) {
 			this.setAttribute('data-nested', '');
 			if (DEVTOOLS)
 				dt_emit({
@@ -989,36 +995,36 @@ class OgygiaRegion extends HTMLElement {
 					this.#foreign_unmount =
 						(mod as { __og_unmount?: (app: unknown) => void }).__og_unmount ?? null;
 				} else {
-				// Seed this island's context from any `<Provide>` above it in the DOM, so a child's plain
-				// `getContext('key')` reads a (csr=false) layout's context across the island-root split.
-				// Undefined when there is no provider above — the common case pays only a short DOM walk.
-				const provided_ctx = capture_region_ids(this, () => slots.context?.(this));
-				// A PERSIST island hydrates through LiveHost (same no-DOM render as NestedProvider) so
-				// that when it relocates onto the next page its props can be pushed in reactively.
-				const LiveHost = slots.live;
-				if (this.hasAttribute('data-ogygia-keep') && LiveHost) {
-					// Keep needs SPA navigation — a full-page load throws the DOM away, so there is
-					// nothing to relocate. Warn (dev) when the router is off on this page.
-					if (import.meta.env.DEV && !document.querySelector('meta[name="ogygia-router"]')) {
-						console.warn(
-							`[ogygia] island "${entry}" has keep:'${this.getAttribute('data-ogygia-keep')}' but the SPA router is off (ogygia({ router: false })) — keep relies on SPA navigation; a full-page load replaces the DOM, so the attribute is a no-op here.`
-						);
+					// Seed this island's context from any `<Provide>` above it in the DOM, so a child's plain
+					// `getContext('key')` reads a (csr=false) layout's context across the island-root split.
+					// Undefined when there is no provider above — the common case pays only a short DOM walk.
+					const provided_ctx = capture_region_ids(this, () => slots.context?.(this));
+					// A PERSIST island hydrates through LiveHost (same no-DOM render as NestedProvider) so
+					// that when it relocates onto the next page its props can be pushed in reactively.
+					const LiveHost = slots.live;
+					if (this.hasAttribute('data-ogygia-keep') && LiveHost) {
+						// Keep needs SPA navigation — a full-page load throws the DOM away, so there is
+						// nothing to relocate. Warn (dev) when the router is off on this page.
+						if (import.meta.env.DEV && !document.querySelector('meta[name="ogygia-router"]')) {
+							console.warn(
+								`[ogygia] island "${entry}" has keep:'${this.getAttribute('data-ogygia-keep')}' but the SPA router is off (ogygia({ router: false })) — keep relies on SPA navigation; a full-page load replaces the DOM, so the attribute is a no-op here.`
+							);
+						}
+						this.#app = hydrate(LiveHost, {
+							target: this,
+							props: { component: Component, initialProps: wrapped },
+							...(provided_ctx ? { context: provided_ctx } : {})
+						});
+						this.#keep_host = this.#app as unknown as {
+							setProps?: (p: Record<string, unknown>) => void;
+						};
+					} else {
+						this.#app = hydrate(NestedProvider, {
+							target: this,
+							props: { component: Component, props: wrapped },
+							...(provided_ctx ? { context: provided_ctx } : {})
+						});
 					}
-					this.#app = hydrate(LiveHost, {
-						target: this,
-						props: { component: Component, initialProps: wrapped },
-						...(provided_ctx ? { context: provided_ctx } : {})
-					});
-					this.#keep_host = this.#app as unknown as {
-						setProps?: (p: Record<string, unknown>) => void;
-					};
-				} else {
-					this.#app = hydrate(NestedProvider, {
-						target: this,
-						props: { component: Component, props: wrapped },
-						...(provided_ctx ? { context: provided_ctx } : {})
-					});
-				}
 				} // end local-island path (foreign delegation branch above)
 			} finally {
 				set_current_region(null);

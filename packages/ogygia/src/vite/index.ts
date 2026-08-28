@@ -386,9 +386,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						for (const p of discover_package_files(path.resolve(userConfig.root ?? '.')))
 							pkg_scan.push(p);
 					}
-					const declared_pkg_names = pkg_scan
-						.filter((p) => p.name !== 'ogygia')
-						.map((p) => p.name);
+					const declared_pkg_names = pkg_scan.filter((p) => p.name !== 'ogygia').map((p) => p.name);
 
 					// Match Kit: SSR-inline `esm-env` so its development/production export conditions
 					// resolve per mode (used if anything in our server graph imports it). Do NOT

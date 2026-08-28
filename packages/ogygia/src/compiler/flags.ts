@@ -47,8 +47,7 @@ function line_at(src: string, index: number, base_line: number): number {
 function string_arg(node: AstNode | undefined): string | null {
 	if (!node) return null;
 	if (node.type === 'Literal' && typeof node.value === 'string') return node.value;
-	if (node.type === 'StringLiteral' && typeof node.value === 'string')
-		return node.value as string;
+	if (node.type === 'StringLiteral' && typeof node.value === 'string') return node.value as string;
 	return null;
 }
 
@@ -115,13 +114,7 @@ export function collect_flag_sites(code: string, id: string, file: string): Flag
 		let m: RegExpExecArray | null;
 		while ((m = SCRIPT_BLOCK_RE.exec(code))) {
 			const body_start = m.index + m[0].indexOf('>') + 1;
-			collect_from_source(
-				m[1],
-				id + '.ts',
-				file,
-				line_at(code, body_start, 1),
-				out
-			);
+			collect_from_source(m[1], id + '.ts', file, line_at(code, body_start, 1), out);
 		}
 	} else {
 		collect_from_source(code, id, file, 1, out);

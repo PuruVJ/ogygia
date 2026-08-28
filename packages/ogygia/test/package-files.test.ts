@@ -69,7 +69,9 @@ beforeAll(() => {
 		'node_modules/@corp/ui/package.json',
 		JSON.stringify({
 			name: '@corp/ui',
-			ogygia: { files: ['./src/components', './src/tables/**/*.ts', './src/entry.svelte', './nope'] }
+			ogygia: {
+				files: ['./src/components', './src/tables/**/*.ts', './src/entry.svelte', './nope']
+			}
 		})
 	);
 	write('node_modules/@corp/ui/src/components/Card.svelte');

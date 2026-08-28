@@ -67,9 +67,7 @@ export interface ProfilerDeps {
 	logout(c: Ctx): Response;
 	upload(c: Ctx): Promise<Response>;
 	report_stored(id: string | undefined): StoredReport | undefined;
-	report_view(
-		stored: StoredReport
-	): Promise<{
+	report_view(stored: StoredReport): Promise<{
 		a: Analysis;
 		meta: ReportMeta;
 		base: string;

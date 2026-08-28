@@ -1248,8 +1248,7 @@ class FileCompilation {
 	 */
 	#component_identity(p: string) {
 		if (!this.#ctx.pathModule.isAbsolute(p)) return p;
-		const pkg =
-			typeof this.#ctx.pkg_identity === 'function' ? this.#ctx.pkg_identity(p) : null;
+		const pkg = typeof this.#ctx.pkg_identity === 'function' ? this.#ctx.pkg_identity(p) : null;
 		return pkg ?? this.#posix_rel(p);
 	}
 
@@ -1983,10 +1982,9 @@ class FileCompilation {
 				.slice(0, 12);
 			// host identity via #component_identity: a declared-package host keys `<pkg>/<rel>`
 			// (install-independent), everything else stays root-relative — same rule as components.
-			const identity = regionIdentity(
-				`${this.#component_identity(this.#id)}\0psnip:${hash}`,
-				{ strategy: 'hydrate' }
-			);
+			const identity = regionIdentity(`${this.#component_identity(this.#id)}\0psnip:${hash}`, {
+				strategy: 'hydrate'
+			});
 			const iid = regionId(identity, salt);
 			const entryPath = ctx.virtualPathFor(id, iid).replace(JS_EXT, '.svelte');
 			if (!islands_by_id.has(iid)) {

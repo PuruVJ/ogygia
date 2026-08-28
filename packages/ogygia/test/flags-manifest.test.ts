@@ -37,7 +37,7 @@ export const y = og.experiment('ns-exp', { variants: ['a'] });
 		expect(names).toEqual(['flag:ns-flag', 'experiment:ns-exp']);
 	});
 
-	it("a LOCAL function named `flag` is NOT counted (a text sweep would false-positive)", () => {
+	it('a LOCAL function named `flag` is NOT counted (a text sweep would false-positive)', () => {
 		const src = `import { experiment } from 'ogygia';
 const flag = (name) => name; // somebody's own helper
 export const x = flag('not-ours');
@@ -47,7 +47,9 @@ export const real = experiment('ours', { variants: ['a'] });
 	});
 
 	it('a module that never imports ogygia yields nothing', () => {
-		expect(collect_flag_sites(`export const flag = () => 'x'; flag('nope');`, '/a/b.ts', 'b.ts')).toEqual([]);
+		expect(
+			collect_flag_sites(`export const flag = () => 'x'; flag('nope');`, '/a/b.ts', 'b.ts')
+		).toEqual([]);
 	});
 
 	it('a dynamic first argument is skipped (not inventoriable)', () => {
