@@ -94,3 +94,24 @@ export { getContext } from 'svelte';
 // Which schedule woke this hydration root ('interaction' islands replay their first click, which
 // is not a trusted gesture — components can adapt). Call during setup, like getContext.
 export { hydratedBy } from './hydration-info.js';
+
+// EXPERIMENTAL — cross-fragment shared state (contract packages import this): `.current` like
+// MediaQuery, reactive via createSubscriber, all builds meet at one Symbol.for page store.
+// Server-seedable via a printed JSON script tag; vanilla door at globalThis.ogygia.shared().
+export { SharedState } from './shared-state.js';
+
+// Experiments / flags / rollouts: the ASSIGNMENT primitive (server-side, sticky, zero-JS).
+// Branching rides existing primitives — a router page's `pick`, a load's data branch, a region
+// choice. Environment-free on purpose (pure hash, no node builtins).
+export {
+	experiment,
+	flag,
+	layer,
+	allowOverrides,
+	type Experiment,
+	type ExperimentOptions,
+	type Flag,
+	type FlagOptions,
+	type Layer,
+	type ComponentPick
+} from './experiment.js';

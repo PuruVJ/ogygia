@@ -26,6 +26,18 @@ export function fnv1a(s: string): string {
 	return h.toString(16).padStart(16, '0');
 }
 
+/** FNV-1a 32-bit over a string → uint32. The NUMERIC sibling for callers that bucket/mod rather
+ *  than compare (experiment splits, build-cache keys) — no BigInt, no hex round-trip. This is THE
+ *  one shared implementation; the driver/vite copies were folded into it. */
+export function fnv1a32(s: string): number {
+	let h = 0x811c9dc5;
+	for (let i = 0; i < s.length; i++) {
+		h ^= s.charCodeAt(i);
+		h = Math.imul(h, 0x01000193);
+	}
+	return h >>> 0;
+}
+
 /**
  * The stable part of a signed endpoint URL: everything up to the volatile `&exp=…&sig=…` tail.
  * A deferred region's endpoint encodes `?id=…&props=…&exp=…&sig=…`; exp/sig rotate per render, so
