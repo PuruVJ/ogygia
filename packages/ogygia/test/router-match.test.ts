@@ -37,6 +37,21 @@ describe('router pattern matching', () => {
 		expect(match_path(sorted, '/anything/here')!.pattern).toBe('/[...all]');
 	});
 
+	it('REGRESSION: an empty-matching [...rest] must not shadow shorter routes', () => {
+		// '/[...all]' matches '' too — depth-counting its rest segment ranked it ABOVE '/'
+		// and the home route 404'd (found via the MFE fragment-mount POC's cms catchall).
+		const s = compile_all(['/', '/[...all]', '/posts/[id]', '/old-blog']);
+		expect(match_path(s, '/')!.pattern).toBe('/');
+		expect(match_path(s, '/old-blog')!.pattern).toBe('/old-blog');
+		expect(match_path(s, '/posts/1')!.pattern).toBe('/posts/[id]');
+		expect(match_path(s, '/nope')!.pattern).toBe('/[...all]');
+		// prefix beats its own rest extension; a genuinely deeper param still beats the rest
+		const t = compile_all(['/docs/[...r]', '/docs', '/docs/[slug]']);
+		expect(match_path(t, '/docs')!.pattern).toBe('/docs');
+		expect(match_path(t, '/docs/x')!.pattern).toBe('/docs/[slug]');
+		expect(match_path(t, '/docs/x/y')!.pattern).toBe('/docs/[...r]');
+	});
+
 	it('distinguishes dot-suffixed and nested variants (the profiler /report cases)', () => {
 		const s = compile_all(['/report/[id]', '/report/[id].json', '/report/[id]/raw']);
 		expect(match_path(s, '/report/abc.json')!.pattern).toBe('/report/[id].json');

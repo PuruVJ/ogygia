@@ -107,9 +107,16 @@ export function compile(pattern: string): CompiledPattern {
 
 	// score: pack per-segment digits big-endian (base-5), then favour more segments. Static-heavy,
 	// longer patterns sort first — '/docs/new' > '/docs/[slug]' > '/[...all]', and '[id].json' > '[id]'.
+	// A trailing [...rest] matches ZERO-or-more segments, so it must not count as depth — otherwise
+	// '/[...all]' (one "segment") outranks '/' (zero) and shadows the home route. Score a rest
+	// pattern as its prefix, then nudge it just BELOW that prefix: '/docs' > '/docs/[...r]', and
+	// '/docs/[slug]' > '/docs/[...r]' still holds (the param pattern is genuinely deeper).
+	const trailing_rest = params.length > 0 && params[params.length - 1].rest === true;
+	const eff = trailing_rest ? digits.slice(0, -1) : digits;
 	let score = 0;
-	for (const d of digits) score = score * 5 + d;
-	score = score * 64 + digits.length; // length as a low-order tiebreaker
+	for (const d of eff) score = score * 5 + d;
+	score = score * 64 + eff.length; // length as a low-order tiebreaker
+	if (trailing_rest) score -= 1;
 
 	return { pattern, regex, params, score };
 }

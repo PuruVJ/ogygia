@@ -11,8 +11,9 @@ import type { Component } from 'svelte';
 import { document } from '../document.js';
 import { region } from '../region.js';
 import LayoutChain from './LayoutChain.svelte';
+import RawHtml from '../RawHtml.svelte';
 import { compile_all, match_path, type CompiledPattern } from './match.js';
-import { make_ctx, type Ctx } from './ctx.js';
+import { make_ctx, type Ctx, type Visitor } from './ctx.js';
 import {
 	compile_endpoint,
 	is_page,
@@ -23,6 +24,7 @@ import {
 	type LoadDef,
 	type LoadInput,
 	type PageDef,
+	type PageHtmlView,
 	type RouteTable
 } from './define.js';
 import type { InferMap } from './infer.js';
@@ -54,6 +56,14 @@ export interface RoutesOptions {
 	 *  load without a component. The place for a guard with no shared chrome: it throws
 	 *  `redirect`/`error` to gate, and its returned data merges into every page's `data` (outermost). */
 	load?: LoadInput;
+	/** WHO is this request? Derived ONCE here, read everywhere as `c.visitor` — experiments stick
+	 *  on it, mounts sign it into claims, loads personalize with it. Signature-bound claims from
+	 *  an upstream shell (fragment federation) take precedence over this resolver. */
+	visitor?: (c: Ctx) => Visitor | undefined;
+	/** Experiments whose buckets mounts AUTO-CARRY in signed claims — so every downstream team
+	 *  renders this visitor in the same world without hand-listing anything. Explicit on purpose
+	 *  (no hidden registry): the table names the worlds it propagates. */
+	experiments?: ReadonlyArray<{ name: string; bucket(c: never): string }>;
 }
 
 /** The router value. `$infer` is a type-only phantom read as `typeof app.$infer`. */
@@ -81,6 +91,13 @@ interface Leaf {
 }
 
 const HEAD_AS_GET = (m: string) => (m === 'HEAD' ? 'GET' : m);
+// A mounted document's title lands in a RAW head string — escape it (every text-into-markup
+// emitter escapes; the wire is trusted federation, the law is unconditional).
+const AMP_RE = /&/g;
+const LT_RE = /</g;
+const GT_RE = />/g;
+const escape_text = (s: string) =>
+	s.replace(AMP_RE, '&amp;').replace(LT_RE, '&lt;').replace(GT_RE, '&gt;');
 
 export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions = {}): Router<T> {
 	const base = (opts.base ?? '').replace(/\/$/, '');
@@ -130,7 +147,7 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 		const hit = match_path(compiled, path);
 		if (!hit) {
 			if (base && opts.miss) {
-				const ctx = make_ctx({}, url, request, event, href_fn, '');
+				const ctx = make_ctx({}, url, request, event, href_fn, '', opts.visitor);
 				try {
 					return finalize(await opts.miss(ctx));
 				} catch (thrown) {
@@ -143,25 +160,66 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 					throw thrown;
 				}
 			}
+			// An unmatched PAGE request under an owned base renders the root error BOUNDARY as
+			// HTML with 404 — a browser hitting a dead URL deserves the app's 404 page, not JSON
+			// (the long-noted `miss answers JSON` gap). Non-HTML requests (fetch/API) keep JSON.
+			if (base && opts.error && (request.method === 'GET' || request.method === 'HEAD')) {
+				const accept = request.headers.get('accept') ?? '';
+				if (accept.includes('text/html')) {
+					const ctx = make_ctx({}, url, request, event, href_fn, '', opts.visitor);
+					const of = region(LayoutChain as never, {
+						chain: [],
+						component: opts.error,
+						props: { status: 404, error: { message: 'Not found' }, data: {}, params: {} },
+						data: {}
+					});
+					return document(of, {
+						status: 404,
+						head: await router_css_head([opts.error]),
+						pageState: {
+							url: ctx.url,
+							params: {},
+							route: { id: null },
+							status: 404,
+							data: {},
+							error: { message: 'Not found' }
+						}
+					});
+				}
+			}
 			if (base) return not_found();
 			return null; // no base → fall through to the rest of the app
 		}
 
 		const leaf = by_pattern.get(hit.pattern)!;
-		const ctx = make_ctx(hit.params, url, request, event, href_fn, hit.pattern);
+		const ctx = make_ctx(hit.params, url, request, event, href_fn, hit.pattern, opts.visitor);
+		if (opts.experiments) ctx.__og_experiments = opts.experiments;
+
+		// `c.setHeaders` must reach the Response WE build — Kit's own setHeaders only applies to
+		// `resolve()`-built responses, and a router-rendered document bypasses resolve entirely
+		// (found when a load's Server-Timing header silently vanished). Existing headers win so a
+		// handler's explicit Response headers are never clobbered.
+		const with_collected = (res: Response): Response => {
+			if (ctx.collected_headers?.size) {
+				for (const [k, v] of ctx.collected_headers) {
+					if (!res.headers.has(k)) res.headers.set(k, v);
+				}
+			}
+			return res;
+		};
 
 		try {
 			// Table-wide load (the no-chrome guard) runs before every route, gating endpoints too. A
 			// load may return a Response to short-circuit (a guard's redirect/deny) — v1 parity.
 			if (root_load) {
 				const rl = await root_load(ctx);
-				if (rl instanceof Response) return rl;
+				if (rl instanceof Response) return with_collected(rl);
 			}
 			if ((leaf.def as { __ogkind?: string }).__ogkind === 'endpoint')
-				return await run_endpoint(leaf.def as EndpointDef, ctx, request.method);
-			return await render_page(leaf.def as PageDef, ctx, request.method, url);
+				return with_collected(await run_endpoint(leaf.def as EndpointDef, ctx, request.method));
+			return with_collected(await render_page(leaf.def as PageDef, ctx, request.method, url));
 		} catch (thrown) {
-			return handle_thrown(thrown, leaf.def, ctx);
+			return with_collected(await handle_thrown(thrown, leaf.def, ctx));
 		}
 	}
 
@@ -216,14 +274,43 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 		}
 
 		const chain = node.layouts.map((l) => l.component);
+		// ONE slot resolution — bare component, ComponentPick, and mount()'s html view all take
+		// the same door: a branded per-request resolver, run post-loads (so a mounted wire doc
+		// rides `data`). Resolver ARMS are covered by build-time CSS discovery exactly like bare
+		// components — discovery walks the router module's .svelte IMPORT specs, never the table
+		// values, so anything an arm can return was already an import. Free for `$infer`: types
+		// come from LOADS, never components.
+		const resolved =
+			typeof node.component === 'object' && node.component !== null && '__ogpick' in node.component
+				? (node.component as { __ogpick: (c: Ctx, data: Record<string, unknown>) => unknown }).__ogpick(ctx, data)
+				: node.component;
+		// An html view renders through ogygia's OWN pure-HTML region component (og_html_region's
+		// RawHtml) — the wire document is just html + css, no bespoke page component. Its css tags
+		// + escaped title join the DOCUMENT head (the router owns the head; a component would have
+		// needed <svelte:head>).
+		const html_view =
+			typeof resolved === 'object' && resolved !== null && '__oghtml' in resolved
+				? (resolved as PageHtmlView)
+				: null;
+		const page_component = html_view ? (RawHtml as AnyComponent) : (resolved as AnyComponent);
+		// STATUS CHANNEL: a view carrying an error status (a mounted app's own 404/500 page)
+		// answers with THAT status through the shell — never a 200-wrapped error page. 2xx/3xx
+		// view statuses don't override (redirects already threw; action-fail status stands).
+		if (html_view?.status && html_view.status >= 400) status = html_view.status;
 		const of = region(LayoutChain as never, {
 			chain,
-			component: node.component,
-			props: { data, form, params: ctx.params },
+			component: page_component,
+			props: html_view ? { html: html_view.html } : { data, form, params: ctx.params },
 			data,
 			fallback: node.fallback
 		});
-		const css_head = await router_css_head([...chain, node.component]);
+		const css_head =
+			(await router_css_head(html_view ? chain : [...chain, page_component])) +
+			(html_view
+				? (html_view.title ? `<title>${escape_text(html_view.title)}</title>` : '') +
+					(html_view.css?.join('') ?? '') +
+					(html_view.head ?? '')
+				: '');
 		const res = await document(of, {
 			status,
 			head: css_head,
@@ -256,11 +343,43 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 			return json_response({ error: message, status }, { status });
 		const pnode = def as PageDef;
 
-		// Nearest layout error boundary at/above the page, keeping the chrome ABOVE it. Layout loads run
-		// concurrently, so we can't know WHICH layer failed — render the innermost boundary with all
-		// chrome outside it (Kit's page-load-failed shape; a layout-load failure degrades to the same).
+		// The failing DEPTH is knowable: loads are memoized on ctx, so re-awaiting settles
+		// instantly for anything that already ran (and runs the rest — an action's throw still
+		// wants live chrome, exactly like Kit rendering +error under working layouts). The
+		// shallowest REJECTED load names the failing layer; everything above it has real data.
+		const load_defs: (LoadDef | undefined)[] = [
+			root_load,
+			...pnode.layouts.map((l) => l.load),
+			pnode.load
+		];
+		// async-wrapped: a load that throws SYNCHRONOUSLY (plain `error(404)` body) must become a
+		// rejection here, not escape the map — allSettled can only see promises that exist
+		const settled = await Promise.allSettled(
+			load_defs.map(async (l) => (l ? await l(ctx) : undefined))
+		);
+		let failing = settled.length; // nothing rejected → the throw came from an action/handler
+		for (let i = 0; i < settled.length; i++) {
+			if (settled[i].status === 'rejected') {
+				failing = i;
+				break;
+			}
+		}
+		// layouts whose loads SUCCEEDED (index 0 = the table-wide load, i+1 = layouts[i]):
+		// the failing layout's own chrome cannot render — it has no data
+		const renderable =
+			failing === 0 ? 0 : Math.min(failing - 1, pnode.layouts.length);
+		// merged data of every fulfilled load — the surviving chrome (and the boundary) read it
+		const data: Record<string, unknown> = {};
+		for (const s of settled) {
+			if (s.status === 'fulfilled' && s.value && typeof s.value === 'object' && !(s.value instanceof Response))
+				Object.assign(data, s.value);
+		}
+
+		// Nearest boundary whose OWN layout still has data — its error page renders INSIDE that
+		// layout's chrome (Kit's shape: +error.svelte lives inside its layout). A failure in
+		// layout k can only use a boundary above k; a page-load failure can use the innermost.
 		let boundary = -1;
-		for (let i = pnode.layouts.length - 1; i >= 0; i--) {
+		for (let i = renderable - 1; i >= 0; i--) {
 			if (pnode.layouts[i].error) {
 				boundary = i;
 				break;
@@ -269,12 +388,15 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 		const err_component = boundary >= 0 ? pnode.layouts[boundary].error! : opts.error;
 		if (!err_component) return json_response({ error: message, status }, { status });
 
-		const chrome = boundary >= 0 ? pnode.layouts.slice(0, boundary).map((l) => l.component) : [];
+		// chrome INCLUDES the boundary's own layout — the error page renders inside it
+		const chrome = (boundary >= 0 ? pnode.layouts.slice(0, boundary + 1) : []).map(
+			(l) => l.component
+		);
 		const of = region(LayoutChain as never, {
 			chain: chrome,
 			component: err_component,
-			props: { status, error: { message }, data: {}, params: ctx.params },
-			data: {}
+			props: { status, error: { message }, data, params: ctx.params },
+			data
 		});
 		const css_head = await router_css_head([...chrome, err_component]);
 		return document(of, {
@@ -285,7 +407,7 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 				params: ctx.params,
 				route: { id: ctx.route.id || null },
 				status,
-				data: {},
+				data,
 				error: { message }
 			}
 		});

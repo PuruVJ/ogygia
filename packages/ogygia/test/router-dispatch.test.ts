@@ -42,6 +42,38 @@ describe('dispatch — endpoints, params, verbs', () => {
 	});
 });
 
+describe('dispatch — c.setHeaders reaches router-built responses', () => {
+	// REGRESSION: Kit's `event.setHeaders` only affects `resolve()`-built responses; a
+	// router-rendered Response bypassed it, so load/handler setHeaders silently vanished
+	// (found when a mount load's Server-Timing header never reached the page).
+	const app = routes({
+		'/timed': {
+			GET: (c) => {
+				c.setHeaders?.({ 'Server-Timing': 'upstream;dur=12' });
+				return c.json({ ok: true });
+			}
+		},
+		'/explicit': {
+			GET: (c) => {
+				c.setHeaders?.({ 'x-a': 'from-setheaders' });
+				// a handler's OWN Response headers must win over collected ones
+				return new Response('{}', { headers: { 'x-a': 'explicit' } });
+			}
+		}
+	});
+
+	it('applies collected headers to the built response', async () => {
+		const res = await app.fetch(req('/timed'));
+		expect(res!.headers.get('server-timing')).toBe('upstream;dur=12');
+		expect(await res!.json()).toEqual({ ok: true });
+	});
+
+	it('never clobbers headers the handler set explicitly', async () => {
+		const res = await app.fetch(req('/explicit'));
+		expect(res!.headers.get('x-a')).toBe('explicit');
+	});
+});
+
 describe('dispatch — base, slash, miss', () => {
 	const app = routes(
 		{ '/x': { GET: (c) => c.json({ x: c.params }) } },
@@ -122,6 +154,30 @@ describe('loads — memoization + parent-sharing (no waterfall, no waste)', () =
 		const app = routes({ '/x': { GET: async (c) => c.json(await l(c)) } });
 		expect(await (await app.fetch(req('/x')))!.json()).toBe(1);
 		expect(await (await app.fetch(req('/x')))!.json()).toBe(2);
+	});
+});
+
+describe('miss — HTML boundary for page requests', () => {
+	// RawHtml stands in for an app error page — any real component works; the assertions are
+	// about STATUS and CONTENT TYPE, the long-noted "miss answers JSON" gap.
+	it('unmatched page GET under a base renders the root error page as HTML 404', async () => {
+		const { default: RawHtml } = await import('../src/RawHtml.svelte');
+		const app = routes({ '/': { GET: (c) => c.json({ ok: true }) } }, { base: '/app', error: RawHtml as never });
+		const res = await app.fetch(
+			new Request('http://x/app/nope', { headers: { accept: 'text/html,*/*' } })
+		);
+		expect(res!.status).toBe(404);
+		expect(res!.headers.get('content-type')).toContain('text/html');
+	});
+
+	it('unmatched NON-HTML request keeps the JSON 404 (fetch/API callers)', async () => {
+		const { default: RawHtml } = await import('../src/RawHtml.svelte');
+		const app = routes({ '/': { GET: (c) => c.json({ ok: true }) } }, { base: '/app', error: RawHtml as never });
+		const res = await app.fetch(
+			new Request('http://x/app/nope', { headers: { accept: 'application/json' } })
+		);
+		expect(res!.status).toBe(404);
+		expect(res!.headers.get('content-type')).not.toContain('text/html');
 	});
 });
 

@@ -7,6 +7,7 @@
  * the Kit dictionary live in internal/notes/router-v2.md.
  */
 import type { Component } from 'svelte';
+import type { ComponentPick } from '../experiment.js';
 import type { Ctx } from './ctx.js';
 import type { Params } from './view.js';
 import type { StandardSchemaV1 } from './view.js';
@@ -133,7 +134,9 @@ export interface PageDef<
 	SearchSchema = undefined
 > {
 	readonly __ogkind: 'page';
-	readonly component: AnyComponent;
+	/** The page component, or a per-request `ComponentPick` (`page(exp.pick({...}))`) — an
+	 *  experiment/flag choosing between arms; the dispatcher resolves it with the ctx. */
+	readonly component: AnyComponent | ComponentPick;
 	readonly load: LoadDef | undefined;
 	readonly actions: Record<string, ActionDef> | undefined;
 	readonly params_schema?: StandardSchemaV1;
@@ -157,11 +160,36 @@ function to_action(input: ActionInput): ActionDef {
 	return action(input as (c: Ctx) => unknown);
 }
 
+/** A page slot that resolved to RAW HTML (a mounted fragment document): rendered through
+ *  ogygia's own pure-HTML region component — no bespoke page component. `css` tags and the
+ *  (escaped) `title` join the DOCUMENT head. */
+export interface PageHtmlView {
+	__oghtml: true;
+	html: string;
+	css?: readonly string[];
+	title?: string;
+	/** Extra raw head markup (a mounted document's SEO/social meta — trusted federation). */
+	head?: string;
+	/** STATUS CHANNEL: `>= 400` becomes the response status — a mounted app's 404 page must
+	 *  answer 404 THROUGH the shell (a 200-wrapped error page poisons caches and SEO). */
+	status?: number;
+}
+
+/** THE page-slot primitive: a branded per-request resolver, run AFTER the branch's loads —
+ *  returns the component to render, or a {@link PageHtmlView}. Everything else is sugar over
+ *  this ONE shape: a bare component is the constant resolver, `experiment().pick()` is the
+ *  single-arg public face (it ignores `data`), and `mount()` resolves its wire document out of
+ *  `data` into an html view. Branded (not a bare function) because Svelte 5 components ARE
+ *  functions. */
+export interface PageSlotResolver {
+	__ogpick: (c: Ctx, data: Record<string, unknown>) => unknown;
+}
+
 /** `page(Component)` / `page(Component, { params?, search?, load?, actions? })`. The second arg mirrors
  *  +page.server.ts; `params`/`search` are input schemas (typed into `c` + `$infer`), `load`/`actions`
  *  are behaviors (wrappers or bare typed functions — see {@link Load} / {@link Action}). */
 export function page<S extends PageServer>(
-	component: AnyComponent,
+	component: AnyComponent | ComponentPick | PageSlotResolver,
 	server?: S
 ): PageDef<readonly [], S['load'], S['actions'], S['params'], S['search']> {
 	const actions = server?.actions

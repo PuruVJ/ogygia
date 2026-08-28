@@ -9,6 +9,12 @@ import type { RequestEvent } from '@sveltejs/kit';
 import type { Simplify } from './view.js';
 import { json_response, redirect_response } from './respond.js';
 
+/** The visitor's identity — plain claims (`sub`, roles, whatever the app's session carries). */
+export type Visitor = Record<string, unknown> & { sub?: string };
+
+/** Signature-bound claims attached by `expose()` after verification (fragment federation). */
+const CLAIMS = Symbol.for('ogygia.claims.v1');
+
 export interface Ctx<
 	P = Record<string, string | undefined>,
 	S = Record<string, string>,
@@ -29,7 +35,21 @@ export interface Ctx<
 	fetch: typeof fetch;
 	cookies?: RequestEvent['cookies'];
 	locals?: RequestEvent['locals'];
+	/** Set response headers from a load/action/handler. ALWAYS works: the router applies these to
+	 *  the Response IT builds — Kit's own `event.setHeaders` only affects `resolve()`-built
+	 *  responses, and a router-rendered document bypasses resolve (found when a mount load's
+	 *  Server-Timing silently vanished). */
 	setHeaders?: RequestEvent['setHeaders'];
+	/** @internal headers collected via setHeaders — the dispatcher merges them onto the response. */
+	collected_headers?: Map<string, string>;
+	/** WHO is this request? THE identity — derived ONCE. Precedence: signature-bound claims from
+	 *  an upstream shell (fragment federation — unforgeable, they arrived inside an Ed25519
+	 *  signature) → the table's `visitor` resolver (`routes(table, { visitor })`) → undefined.
+	 *  Everything downstream READS this instead of re-deriving: experiments stick on it, mounts
+	 *  sign it onward, loads personalize with it. */
+	readonly visitor?: Visitor;
+	/** @internal the table's `experiments` list — mounts auto-carry their buckets in claims. */
+	__og_experiments?: ReadonlyArray<{ name: string; bucket(c: never): string }>;
 	platform?: Readonly<RequestEvent['platform']>;
 	getClientAddress?: RequestEvent['getClientAddress'];
 	/** The raw Kit event, when mounted in Kit. */
@@ -52,11 +72,26 @@ export function make_ctx(
 	request: Request,
 	event: RequestEvent | undefined,
 	href: (pattern: string, params?: Record<string, string | number>) => string,
-	routeId: string
+	routeId: string,
+	visitor_resolver?: (c: Ctx) => Visitor | undefined
 ): Ctx {
 	const search: Record<string, string> = {};
 	for (const [k, v] of url.searchParams) if (!(k in search)) search[k] = v;
-	return {
+	const collected_headers = new Map<string, string>();
+	// lazy, memoized identity — endpoints that never ask never pay
+	let visitor_memo: Visitor | undefined;
+	let visitor_resolved = false;
+	const ctx: Ctx = {
+		collected_headers,
+		get visitor(): Visitor | undefined {
+			if (!visitor_resolved) {
+				visitor_resolved = true;
+				// signature-bound claims from an upstream shell win (they are PROOF, not config)
+				const claims = (request as unknown as Record<symbol, Visitor | undefined>)[CLAIMS];
+				visitor_memo = claims ?? visitor_resolver?.(ctx);
+			}
+			return visitor_memo;
+		},
 		params,
 		search,
 		input: undefined,
@@ -66,7 +101,10 @@ export function make_ctx(
 		fetch: event?.fetch ?? fetch,
 		cookies: event?.cookies,
 		locals: event?.locals,
-		setHeaders: event?.setHeaders,
+		setHeaders: (headers) => {
+			for (const [k, v] of Object.entries(headers)) collected_headers.set(k.toLowerCase(), v);
+			event?.setHeaders?.(headers); // still forward to Kit for resolve()-built responses
+		},
 		platform: event?.platform,
 		getClientAddress: event?.getClientAddress,
 		event,
@@ -79,5 +117,6 @@ export function make_ctx(
 			}),
 		href,
 		state: {}
-	} as Ctx;
+	};
+	return ctx;
 }
