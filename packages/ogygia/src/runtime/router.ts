@@ -596,6 +596,8 @@ class SpaRouter {
 		const swap = () => {
 			// Stale nav: do not mutate the DOM (view-transition can otherwise commit a superseded swap).
 			if (gen !== this.#nav_gen) return;
+			// LIFECYCLE (Astro-parity DOM events): last chance to read the OUTGOING page's DOM.
+			document.dispatchEvent(new Event('og:before-swap'));
 			this.#merge_head(doc.head); // keeps our runtime module script alive across swaps
 			if (gen !== this.#nav_gen) return;
 			// CONTINUITY: snapshot the LEAVING page's changed island form fields (session-scoped) so
@@ -642,6 +644,9 @@ class SpaRouter {
 			slots.spaLifecycle?.finish();
 			// CONTINUITY: restore fields the visitor left on THIS page in a prior visit (this session).
 			if (slots.forms.enabled) slots.forms.restore(url.pathname);
+			// LIFECYCLE: the INCOMING page's DOM is in place (islands may still be waking on their
+			// own schedules — this is the DOM milestone, not a hydration barrier).
+			document.dispatchEvent(new Event('og:after-swap'));
 		};
 
 		if (use_vt && document.startViewTransition) {
@@ -693,6 +698,10 @@ class SpaRouter {
 		}
 
 		this.#run_after(from, url, type);
+		// LIFECYCLE: the navigation is COMPLETE (head merged, body in place, scroll settled) — the
+		// per-navigation hook for code that a body swap's inert <script> tags can never run. Also
+		// fired once on initial load by the runtime boot, so ONE listener covers every page view.
+		document.dispatchEvent(new Event('og:page-load'));
 		// new <body> -> re-evaluate eager/viewport preload links on the freshly-swapped page
 		this.#scan_eager_viewport();
 	}
@@ -1213,6 +1222,9 @@ export function install() {
 		if (!document.querySelector('meta[name="ogygia-router"]')) return;
 		if (document_has_kit_bootstrap()) return;
 		startRouter();
+		// LIFECYCLE: fire the per-page-view event for the INITIAL load too — one `og:page-load`
+		// listener then covers first paint AND every SPA navigation (Astro's page-load parity).
+		document.dispatchEvent(new Event('og:page-load'));
 	};
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', start, { once: true });

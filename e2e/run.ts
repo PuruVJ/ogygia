@@ -68,6 +68,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['context.ts', true, 'Provide + drop-in setContext + createContext: DOM-bridged, live across roots'],
 	['subpkg-island.ts', true, 'REGRESSION: island host in a workspace sub-package w/o ogygia dep — injected ogygia/internal resolves (self-ref) + hydrates'],
 	['island-pkg.ts', true, 'ogygia.files: dependency-declared compile surface — package-internal islands + distributed routes + .ts-table marks compile and hydrate'],
+	['lifecycle-events.ts', true, 'og:before-swap / og:after-swap / og:page-load DOM events — initial load + per SPA navigation (Astro parity)'],
 	['csr-mixed-tree.ts', true, 'REGRESSION: csr=false subtree under csr=true ancestor layout — reset marker keeps islands islanding'],
 	['page-data.ts', true, '$page.data reaches islands + load promises STREAM in (marker seed, resolve-per-settle, Kit tail drained)'],
 	['page-data-stress.ts', true, 'ADVERSARIAL streaming: rejection/:catch, nested-promise recursion, 12 staggered, non-navigate settle no-crash'],
