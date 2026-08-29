@@ -48,9 +48,13 @@
  */
 import { slots } from './slots.js';
 
-const ELEMENT = Node.ELEMENT_NODE;
-const TEXT = Node.TEXT_NODE;
-const COMMENT = Node.COMMENT_NODE;
+// DOM spec constants by VALUE (they are frozen: 1/3/8 forever) — referencing the `Node` global
+// at module scope made every importer of this file require a DOM at IMPORT time, which broke
+// `ogygia/internal/reconcile` under plain node (found by verify:package, present since the
+// module's birth). The functions still need a real DOM to DO anything; loading them doesn't.
+const ELEMENT = 1; // Node.ELEMENT_NODE
+const TEXT = 3; // Node.TEXT_NODE
+const COMMENT = 8; // Node.COMMENT_NODE
 
 /** Feature entry: fill the `morph` slot (live static-region ticks morph in place). */
 export function install(): void {
