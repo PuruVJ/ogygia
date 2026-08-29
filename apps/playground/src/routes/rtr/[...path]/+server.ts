@@ -7,6 +7,7 @@ import { region } from 'ogygia';
 // `region: 'raw'` — a plain import in a server-only module has no client leg, so the bake
 // would mint nothing (the round-1 catalog rule); the mark gives the region its identity + CSS.
 import StreamPayload from '$lib/rtr/StreamPayload.svelte' with { region: 'raw' };
+import StreamRegion from '$lib/rtr/StreamRegion.svelte';
 import Shell from '$lib/rtr/Shell.svelte';
 import Inner from '$lib/rtr/Inner.svelte';
 import Home from '$lib/rtr/Home.svelte';
@@ -28,6 +29,17 @@ const app = routes(
 			yield '<div data-stream-skeleton>loading the slow part…</div>';
 			await new Promise((r) => setTimeout(r, 150)); // a pretend slow upstream
 			yield region(StreamPayload, { data: { title: 'streamed in' } });
+		}),
+		// LATE REGION: the load hands the page a PROMISE of a region; <Region of={pending}> shows
+		// its placeholder in the flushed document and the resolution streams down the same
+		// response as a completion-order chunk ("streamed load data", ogygia-style).
+		'/stream-region': page(StreamRegion, {
+			load: () => ({
+				pending: (async () => {
+					await new Promise((r) => setTimeout(r, 150)); // a pretend slow upstream
+					return region(StreamPayload, { data: { title: 'late region' } });
+				})()
+			})
 		}),
 		...pkg_table,
 		'/api/ping': { GET: (c) => c.json({ pong: true }) }

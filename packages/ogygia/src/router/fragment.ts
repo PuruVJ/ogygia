@@ -597,7 +597,17 @@ export interface FragmentClient {
 
 /** One transport per MFE: `const cms = client('http://cms.internal', { sign, timeout, cache })`.
  *  Hand it to `mount(cms)`, `proxy({ cms })`, or call `cms.widget()` in your own stitch. */
-export function client(origin: string, opts: ClientOptions = {}): FragmentClient {
+export function client(
+	origin_or_origins: string | string[],
+	opts: ClientOptions = {}
+): FragmentClient {
+	// FAILOVER: extra origins are same-build replicas tried IN ORDER when an earlier one is
+	// unreachable or answers 5xx — READS only (a retried mutation risks a double write; POSTs
+	// stay pinned to the primary). Signing binds each attempt to ITS target host automatically
+	// (the audience defaults to the URL's host), and cache/coalescing state is shared — a
+	// replica serves the same documents.
+	const origins = Array.isArray(origin_or_origins) ? origin_or_origins : [origin_or_origins];
+	const origin = origins[0];
 	const timeout = opts.timeout ?? 5000;
 	const ttl = opts.cache?.ttl ?? 0;
 	const cache_max = opts.cache?.max ?? 500;
@@ -654,10 +664,23 @@ export function client(origin: string, opts: ClientOptions = {}): FragmentClient
 		claims?: Claims,
 		traceparent?: string
 	): Promise<FragmentDocument> => {
-		const u = new URL(FRAGMENT_ROUTES_PATH, origin);
-		u.searchParams.set('path', path);
-		if (search) u.searchParams.set('search', search);
-		const res = await signed_fetch(u, init, claims, traceparent);
+		const is_read = !init?.method || init.method === 'GET';
+		const pool = is_read ? origins : [origin]; // mutations never fail over
+		let res: Response | undefined;
+		let last_err: unknown;
+		for (let i = 0; i < pool.length; i++) {
+			const u = new URL(FRAGMENT_ROUTES_PATH, pool[i]);
+			u.searchParams.set('path', path);
+			if (search) u.searchParams.set('search', search);
+			try {
+				res = await signed_fetch(u, init, claims, traceparent);
+			} catch (e) {
+				last_err = e; // unreachable / timed out — try the next replica
+				continue;
+			}
+			if (res.status < 500 || i === pool.length - 1) break; // 5xx → next, unless last
+		}
+		if (!res) throw last_err;
 		if (!res.ok && res.status !== 404) error(502, `fragment app answered ${res.status}`);
 		return (await res.json()) as FragmentDocument;
 	};
@@ -739,11 +762,23 @@ export function client(origin: string, opts: ClientOptions = {}): FragmentClient
 			);
 		},
 		async widget(name, props = {}, w = {}) {
-			const u = new URL(`/og/fragment/${name}`, origin);
-			for (const [k, v] of Object.entries(props)) u.searchParams.set(k, v);
 			// plain Error (not the router's error()) — widget() runs in ANY server code, where the
-			// right failure mode is the CALLER's degrade card, not a thrown response
-			const res = await signed_fetch(u, undefined, w.claims, w.traceparent);
+			// right failure mode is the CALLER's degrade card, not a thrown response. Reads fail
+			// over the replica pool like doc() does.
+			let res: Response | undefined;
+			let last_err: unknown;
+			for (let i = 0; i < origins.length; i++) {
+				const u = new URL(`/og/fragment/${name}`, origins[i]);
+				for (const [k, v] of Object.entries(props)) u.searchParams.set(k, v);
+				try {
+					res = await signed_fetch(u, undefined, w.claims, w.traceparent);
+				} catch (e) {
+					last_err = e;
+					continue;
+				}
+				if (res.status < 500 || i === origins.length - 1) break;
+			}
+			if (!res) throw last_err instanceof Error ? last_err : new Error(String(last_err));
 			if (!res.ok) throw new Error(`fragment '${name}' answered ${res.status}`);
 			return (await res.json()) as WidgetDocument;
 		}
@@ -761,7 +796,7 @@ export interface MountOptions extends ClientOptions {
 	 *  stay buffered). Streaming's trades: the status/title flush before the doc arrives (a
 	 *  late 404 shows the MFE's error BODY but the response was already 200), redirects render
 	 *  a link card instead of redirecting, and per-team Server-Timing is lost. */
-	stream?: boolean | { fallback?: string };
+	stream?: boolean | { fallback?: string | unknown };
 }
 
 /** The on-behalf-of claims for a hop: the table's ONE identity + auto-carried experiment
@@ -810,14 +845,18 @@ export function mount(
 	// fragment swaps in down the same response when (and only when) the MFE answers. The hop
 	// itself stays buffered + signed exactly as ever; only the browser-facing leg streams.
 	if (opts.stream) {
-		// fallback is an HTML string (v1): fragment.ts stays .svelte-free, and skeletons are
-		// exactly the static-markup case anyway
+		// fallback: an HTML string, or a COMPONENT (baked as an inline region — svelte/server is
+		// imported lazily by the bake, so this module stays import-light for non-streaming hosts)
 		const fb =
 			typeof opts.stream === 'object' && opts.stream.fallback != null
 				? opts.stream.fallback
 				: '<div data-og-mount-fallback style="min-height:6rem;border-radius:8px;background:linear-gradient(90deg,#f3f4f6,#e5e7eb,#f3f4f6)"></div>';
 		const stream_slot = async function* (c: Ctx) {
-			yield fb;
+			if (typeof fb === 'string') yield fb;
+			else {
+				const { region } = await import('../region-core.js');
+				yield region(fb as never, {});
+			}
 			const cl = resolve_client(c);
 			const rest = (c.params as { rest?: string }).rest ?? '';
 			try {

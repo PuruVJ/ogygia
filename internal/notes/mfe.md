@@ -563,11 +563,37 @@ Two lessons the e2e taught (units were green, the wire was not):
   `accept-encoding: identity` and asserts the DELTA (first chunk vs full body ≥ sleep width),
   never an absolute ms.
 
+### ROUND 22 (2026-08-29, /loop "do em all") — the whole next-queue
+
+- **Typed API client**: VerbEntry gained phantom `<Out, In>` (a PLAIN handler return IS the JSON
+  payload — finalize() serializes it; a raw Response erases to unknown); `$infer` gained
+  ENDPOINT entries (`{ get: { out, in }, params }`, lowercase verbs — pages never carry one, so
+  the client's key constraint falls out free); `api<App>(base, { headers, fetch })` from
+  `ogygia/router/client` (BROWSER-SAFE: imports only match.ts — islands can use it) with
+  ApiError(status, body), params-required-when-pattern-has-them, schema-typed bodies. `fill`
+  moved to match.ts (shared token grammar). Tests: full loop against a REAL router via injected
+  fetch + type-level @ts-expect-error coverage.
+- **LATE REGIONS = streamed load data + multi-slot in one**: `<Region of={promise}>` on a
+  csr=false page previously showed its placeholder FOREVER (resolution was a client $effect that
+  never runs). Now: a request-scoped recorder (registry front mirroring page-seed-registry —
+  browser-safe no-op; hooks installs recorder+taker via the SAME request ALS; the router drains
+  through the registry seam, NEVER importing hooks — its virtual: imports break vitest) wraps
+  the placeholder in `og-late-slot data-og-slot="rN"` and the router streams each promise's
+  BAKED region as a completion-order chunk (late_region_chunks race pool; merge_chunks
+  interleaves with a page generator by readiness; per-slot error cards on rejection). Any number
+  of holes per page. e2e: placeholder in flushed part, chunk targets r-id, payload after flush.
+- **Component fallbacks for streamed mounts**: `stream.fallback` takes html OR a component —
+  baked as an INLINE region (svelte/server lazily imported by the bake; no mark needed, unlike
+  server-only region() calls).
+- **Client failover**: `client([primary, ...replicas])` — READS (doc/widget) walk the pool on
+  unreachable/5xx; 404 is an answer not an outage; MUTATIONS stay pinned (double-write risk);
+  per-target audience signing is automatic (defaults to the URL host).
+
 ### Open (post-v1)
 
 True MFE-side render streaming (still blocked on svelte streamed SSR — our chunks stream the
-document around whole bakes); multi-slot streamed pages (one slot per page today); component
-fallbacks for streamed mounts (html strings today).
+document around whole bakes); named late slots for page generators (regions have per-slot ids;
+generator yields all target the one page slot); widget prop TYPES beyond names (schema refs).
 
 ## Build order when implemented
 

@@ -412,6 +412,57 @@ describe('verify_fragment_request — hardening', () => {
 	});
 });
 
+describe('client failover — replica origins for READS', () => {
+	it('an unreachable primary fails over to the next origin; a 404 does NOT', async () => {
+		const hosts: string[] = [];
+		vi.stubGlobal('fetch', async (u: URL) => {
+			const host = new URL(u).host;
+			hosts.push(host);
+			if (host === 'a.test') throw new TypeError('fetch failed'); // primary down
+			if (new URL(u).searchParams.get('path') === '/missing')
+				return new Response(doc_json('miss', 404));
+			return new Response(doc_json('from-b'));
+		});
+		const cms = client(['http://a.test', 'http://b.test']);
+		expect((await cms.doc('/p', '')).body).toBe('from-b');
+		expect(hosts).toEqual(['a.test', 'b.test']);
+		// 404 is an ANSWER (the MFE's own not-found), not an outage — no second attempt
+		hosts.length = 0;
+		const miss = await cms.doc('/missing', '');
+		expect(miss.status).toBe(404);
+		expect(hosts).toEqual(['a.test', 'b.test']); // a still down → b answered the 404
+	});
+
+	it('a 5xx primary fails over; mutations stay PINNED to the primary', async () => {
+		const calls: Array<{ host: string; method: string }> = [];
+		vi.stubGlobal('fetch', async (u: URL, init?: RequestInit) => {
+			const host = new URL(u).host;
+			calls.push({ host, method: init?.method ?? 'GET' });
+			if (init?.method === 'POST') return new Response(doc_json('posted'));
+			if (host === 'a.test') return new Response('boom', { status: 503 });
+			return new Response(doc_json('from-b'));
+		});
+		const cms = client(['http://a.test', 'http://b.test']);
+		expect((await cms.doc('/p', '')).body).toBe('from-b'); // 503 → replica
+		calls.length = 0;
+		await cms.postDoc('/p', '', new ArrayBuffer(0), 'text/plain');
+		expect(calls).toEqual([{ host: 'a.test', method: 'POST' }]); // never retried elsewhere
+	});
+
+	it('widget() reads fail over the same pool', async () => {
+		const hosts: string[] = [];
+		vi.stubGlobal('fetch', async (u: URL) => {
+			const host = new URL(u).host;
+			hosts.push(host);
+			if (host === 'a.test') return new Response('down', { status: 502 });
+			return new Response(JSON.stringify({ html: '<b>w</b>' }));
+		});
+		const dash = client(['http://a.test', 'http://b.test']);
+		expect((await dash.widget('kpis')).html).toBe('<b>w</b>');
+		expect(hosts).toEqual(['a.test', 'b.test']);
+	});
+});
+
 describe('mount — canary: a per-request CLIENT resolver', () => {
 	it('routes each request to the client the resolver picks (A/B of infrastructure)', async () => {
 		const hosts: string[] = [];

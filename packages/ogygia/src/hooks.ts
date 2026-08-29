@@ -83,6 +83,7 @@ import { serialize_provided_context } from './context-bridge.js';
 import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
 import { set_page_recorder, type PageSnapshot } from './page-seed-registry.js';
+import { set_late_recorder, set_late_taker, type LateRegion } from './late-region-registry.js';
 import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
 import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './devtools/schema.js';
 
@@ -116,6 +117,10 @@ type RequestBag = {
 	deferred: Deferred[] | null;
 	/** Next free defer id after data+form staging — re-staging (nested promises) continues from here. */
 	defer_next_id: number;
+	/** LATE REGIONS registered during the render (`<Region of={promise}>` on a streamed router
+	 *  page) — the router drains these into completion-order template chunks. */
+	late: LateRegion[] | null;
+	late_next: number;
 	/** devalue reducers for streamed resolve scripts (app transport encoders + defer marker). */
 	seed_reducers: Record<string, (v: unknown) => unknown> | null;
 };
@@ -127,6 +132,22 @@ set_ctx_recorder((key, value) => {
 set_page_recorder((snapshot) => {
 	const bag = request_als.getStore();
 	if (bag) bag.page = snapshot;
+});
+// LATE REGIONS: a promise `of` registers per request; the id keys the region's slot wrapper AND
+// its later template chunk. The taker DRAINS (the router reads once, post-render).
+set_late_recorder((promise) => {
+	const bag = request_als.getStore();
+	if (!bag) return null;
+	const id = `r${bag.late_next++}`;
+	(bag.late ??= []).push({ id, promise });
+	return id;
+});
+set_late_taker(() => {
+	const bag = request_als.getStore();
+	if (!bag?.late?.length) return null;
+	const list = bag.late;
+	bag.late = null;
+	return list;
 });
 // DEVTOOLS: per-request event buffers, keyed off the request bag by a side WeakMap so RequestBag stays
 // pristine (and free) when devtools is off. GC'd with the bag; never a global ring (which would mix
@@ -306,6 +327,8 @@ class OgygiaHandle {
 				page: null,
 				deferred: null,
 				defer_next_id: 0,
+				late: null,
+				late_next: 0,
 				seed_reducers: null
 			};
 			// DEVTOOLS: attach a request-scoped event buffer via a side WeakMap (keeps RequestBag — and

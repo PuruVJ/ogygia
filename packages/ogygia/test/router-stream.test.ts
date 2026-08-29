@@ -135,6 +135,23 @@ describe('mount({ stream: true }) — the sugar', () => {
 		expect(html).toContain('data-og-mount-failed');
 	});
 
+	it('a COMPONENT fallback bakes as an inline region into the flushed part', async () => {
+		vi.stubGlobal('fetch', async () => new Response(doc_json('late-body')));
+		const { default: RawHtml } = await import('../src/RawHtml.svelte');
+		const app = routes({
+			'/cms/[...rest]': mount('http://mfe.test', {
+				stream: { fallback: RawHtml as never }
+			})
+		});
+		const html = await (await app.fetch(new Request('http://shell/cms/p')))!.text();
+		const i_slot = html.indexOf('og-late-slot');
+		const i_tpl = html.indexOf('<template data-og-late');
+		expect(i_slot).toBeGreaterThan(-1); // the component fallback rendered into the slot
+		expect(i_tpl).toBeGreaterThan(i_slot);
+		expect(html.slice(i_tpl)).toContain('late-body');
+		expect(html).not.toContain('data-og-late-error');
+	});
+
 	it('a late redirect degrades to a link card (status already flushed)', async () => {
 		vi.stubGlobal(
 			'fetch',

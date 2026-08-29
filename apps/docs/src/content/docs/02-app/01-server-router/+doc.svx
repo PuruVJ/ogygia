@@ -330,6 +330,25 @@ It is computed from the **loads and schemas** — never from component types —
 This replaces Kit's generated `./$types`. The component declaration `App['/path']` *is* the check: props are defined as the route's type. Change a load's return, the component squiggles — exactly Kit's flow, with zero generated files.
 :::
 
+## Typed API client
+
+The table already knows every endpoint's path grammar, body schema, and payload — `api()` hands that to any consumer as a typed fetch client:
+
+```ts
+export type App = typeof app.$infer;                 // the map the app already exports
+
+import { api } from 'ogygia/router/client';           // browser-safe (islands can import it)
+const svc = api<App>('https://svc.internal');
+
+const post = await svc.get('/posts/[id]', { params: { id: '1' } });   // payload: typed
+await svc.post('/posts', { body: { title } });                        // body: schema-typed
+```
+
+- **Plain returns are the payload.** `GET: (c) => ({ id: c.params.id })` serializes to JSON (`finalize()`), so its type flows to the caller. A handler that returns a raw `Response` types as `unknown` — its payload is sealed inside.
+- Paths are constrained to keys that carry the verb (page paths never do), `params` is required exactly when the pattern has some, and a `POST(schema, fn)` body types from the schema.
+- Non-2xx throws `ApiError` with the status and the parsed error body (a schema 400 carries its issues).
+- Pass `{ headers }` for auth on every call, `{ fetch }` for a Kit event's cookie-forwarding fetch or a test stub.
+
 ## Pages carry region dials
 
 A routed page is just a component, so its **wake / render** schedule rides as an import attribute on the component you pass to `page()` — the same dials as any marked island import:
@@ -372,6 +391,22 @@ Each set fills the pattern into the router's `entries()` crawl list; a dynamic p
 - The honest trades: status, title, and headers go out with the first yield — a late failure can't change an already-sent 200, and `setHeaders` after the flush is lost. Non-GET requests buffer to the final yield (actions need a whole answer).
 - Streamed responses carry `Cache-Control: no-transform` — a compressing intermediary buffers while it gzips, which would collapse the early flush into one late paint. If your CDN compresses regardless, exempt these routes (or accept buffered delivery there).
 - A component you yield from a server-only module needs a mark (`with { region: 'raw' }`, or a wake) — a plain import has no client leg, so its region can't bake. Getting this wrong fails loudly into the slot's error card.
+
+**Streamed load data** needs no generator at all: hand a *promise of a region* from the load to a `<Region of={…}>` and the region resolves down the initial response — placeholder in the flushed document, the baked region as a completion-order chunk, islands inside waking on adoption. Any number of such holes on one page; each fails into its own error card.
+
+```ts
+'/report': page(Report, {
+  load: () => ({ pending: (async () => region(Numbers, await slow()))() }),
+}),
+```
+
+```svelte
+<Region of={data.pending}>
+  {#snippet placeholder()}<div class="skeleton" />{/snippet}
+</Region>
+```
+
+(This rides the ogygia handle's request scope — standard wiring; a rejection becomes that slot's error card and never touches its neighbors.)
 
 ## Mounting
 

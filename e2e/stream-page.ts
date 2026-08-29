@@ -53,6 +53,19 @@ function check(name: string, cond: unknown, extra = '') {
 	);
 }
 
+// 2b) LATE REGIONS (streamed load data): a load's promise-of-region resolves down the SAME
+// response — placeholder in the flushed part, the baked region as a completion-order chunk.
+{
+	const raw = await (await fetch(base + '/rtr/stream-region')).text();
+	const i_skel = raw.indexOf('data-region-skeleton');
+	const i_slot = raw.indexOf('og-late-slot');
+	const i_tpl = raw.indexOf('<template data-og-late="r');
+	const i_payload = raw.indexOf('data-stream-payload');
+	check('late region: placeholder in the flushed part', i_skel > -1 && i_slot > -1);
+	check('late region: chunk targets the region slot (r-id)', i_tpl > -1);
+	check('late region: baked payload arrives after the flush', i_payload > i_tpl && i_tpl > i_skel);
+}
+
 // 3) BROWSER truth: payload swapped in, template consumed, the LATE island is interactive
 const browser = await chromium.launch();
 try {

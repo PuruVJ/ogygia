@@ -39,6 +39,7 @@
 	import { register_fn_kind } from './fn-transport.js';
 	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
+	import { register_late_region } from './late-region-registry.js';
 	import LakeBoundary from './LakeBoundary.svelte';
 	import SlotBoundary from './SlotBoundary.svelte';
 	import { record_server_event } from './devtools/server-registry.js';
@@ -123,6 +124,15 @@
 				'promise resolves and its stylesheet loads. Add {#snippet placeholder()}…{/snippet} for the wait.'
 		);
 	}
+	// LATE REGION (streamed documents): with the server recorder armed (the handle's ALS), a
+	// promise `of` registers for completion-order delivery DOWN THIS RESPONSE — the placeholder
+	// wraps in an `og-late-slot` the boot swaps when the promise's baked chunk parses. Unarmed
+	// (client, standalone, non-streaming context) → null → today's placeholder behavior.
+	// svelte-ignore state_referenced_locally
+	const late_slot =
+		of_is_promise && typeof window === 'undefined'
+			? register_late_region(/** @type {Promise<unknown>} */ (of))
+			: null;
 	/** @type {import('./region.js').RegionValue | undefined} */
 	let awaited = $state(undefined);
 	// What every held branch below renders. A plain value resolves synchronously (SSR renders it in
@@ -643,6 +653,9 @@
 		<ogygia-region entry={d.module || ''} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{@html held_props_script}
 	{/key}
 {:else if of}
-	<!-- Promise `of` still in flight (first resolution) — the region owns the whole wait. -->
-	{@render placeholder?.()}
+	<!-- Promise `of` still in flight (first resolution) — the region owns the whole wait. On a
+	     STREAMED document the slot wrapper makes this hole late-chunk-addressable. -->
+	{#if late_slot}<og-late-slot data-og-slot={late_slot} style="display:contents"
+			>{@render placeholder?.()}</og-late-slot
+		>{:else}{@render placeholder?.()}{/if}
 {/if}

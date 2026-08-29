@@ -105,11 +105,27 @@ const HEAD_CLOSE_RE = /<\/head>/i;
  * chunk (the page must never end broken) — the status is already on the wire, which is
  * streaming's documented trade.
  */
+/** One late chunk headed for one slot — the multi-slot unit `stream_document` drains. */
+export interface LateChunk {
+	slot: string;
+	html: string;
+}
+
+/** Adapt a page GENERATOR's remaining yields into page-slot chunks (bake included). */
+export async function* page_slot_chunks(rest: AsyncGenerator<unknown>): AsyncGenerator<LateChunk> {
+	for (;;) {
+		const n = await rest.next();
+		if (n.done) return;
+		yield { slot: PAGE_SLOT_ID, html: await bake_yield(n.value) };
+	}
+}
+
 export function stream_document(
 	full_html: string,
 	res: Response,
-	rest: AsyncGenerator<unknown>,
-	slot_id: string
+	rest: AsyncGenerator<LateChunk>,
+	/** the slot an ERROR CARD lands in when the chunk source itself throws */
+	error_slot: string = PAGE_SLOT_ID
 ): Response {
 	const with_boot = full_html.replace(HEAD_CLOSE_RE, LATE_BOOT_SCRIPT + '</head>');
 	const cut = with_boot.lastIndexOf('</body>');
@@ -124,19 +140,10 @@ export function stream_document(
 				for (;;) {
 					const n = await rest.next();
 					if (n.done) break;
-					controller.enqueue(enc.encode(late_chunk(slot_id, await bake_yield(n.value))));
+					controller.enqueue(enc.encode(late_chunk(n.value.slot, n.value.html)));
 				}
 			} catch (e) {
-				const msg = e instanceof Error ? e.message : String(e);
-				controller.enqueue(
-					enc.encode(
-						late_chunk(
-							slot_id,
-							`<div data-og-late-error style="border:1px dashed #dc2626;border-radius:8px;padding:1rem;color:#dc2626">` +
-								`This section failed to load. ${escape_text(msg)}</div>`
-						)
-					)
-				);
+				controller.enqueue(enc.encode(late_chunk(error_slot, error_card_html(e))));
 			}
 			controller.enqueue(enc.encode(tail_part));
 			controller.close();
@@ -159,3 +166,50 @@ const LT_RE = /</g;
 const GT_RE = />/g;
 const escape_text = (s: string) =>
 	s.replace(AMP_RE, '&amp;').replace(LT_RE, '&lt;').replace(GT_RE, '&gt;');
+
+/** The in-slot failure card (message escaped) — a stream must never end broken or empty. */
+export function error_card_html(e: unknown): string {
+	const msg = e instanceof Error ? e.message : String(e);
+	return (
+		`<div data-og-late-error style="border:1px dashed #dc2626;border-radius:8px;padding:1rem;color:#dc2626">` +
+		`This section failed to load. ${escape_text(msg)}</div>`
+	);
+}
+
+/** Drain registered LATE REGIONS (`<Region of={promise}>` holes) in COMPLETION order — the slot
+ *  that resolves first streams first. A rejection becomes that slot's error card; the others are
+ *  unaffected (per-slot isolation, the same law as mounts). */
+export async function* late_region_chunks(
+	list: ReadonlyArray<{ id: string; promise: Promise<unknown> }>
+): AsyncGenerator<LateChunk> {
+	const pending = new Map(
+		list.map(({ id, promise }) => [
+			id,
+			promise.then(
+				async (v) => ({ id, html: await bake_yield(v) }),
+				(e: unknown) => ({ id, html: error_card_html(e) })
+			)
+		])
+	);
+	while (pending.size) {
+		const { id, html } = await Promise.race(pending.values());
+		pending.delete(id);
+		yield { slot: id, html };
+	}
+}
+
+/** Interleave chunk sources by READINESS (a page generator + the late-region pool run together;
+ *  whichever has a chunk ready streams next). Ends when every source ends. */
+export async function* merge_chunks(
+	...sources: AsyncGenerator<LateChunk>[]
+): AsyncGenerator<LateChunk> {
+	const nexts = new Map(sources.map((s, i) => [i, s.next().then((r) => ({ i, r }))]));
+	while (nexts.size) {
+		const { i, r } = await Promise.race(nexts.values());
+		if (r.done) nexts.delete(i);
+		else {
+			nexts.set(i, sources[i].next().then((res) => ({ i, r: res })));
+			yield r.value;
+		}
+	}
+}
