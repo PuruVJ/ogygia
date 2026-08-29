@@ -55,6 +55,7 @@ export type {
 } from './view.js';
 export { compile, match_path, type CompiledPattern } from './match.js';
 export { anonymousVisitor, type AnonymousVisitorOptions } from './visitor.js';
+export { api, ApiError, type ApiClient, type ApiClientOptions } from './client-api.js';
 
 // EXPERIMENTAL — fragment federation: an MFE `expose()`s its route tree; the shell makes ONE
 // `client()` per MFE (signing / timeout / SWR cache / coalescing / generation-safe invalidation)

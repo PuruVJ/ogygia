@@ -34,6 +34,38 @@ const app = routes(
 );
 type App = typeof app.$infer;
 
+// ── endpoint entries + the typed api() client ─────────────────────────────────────────────────
+import { GET, POST, api } from '../src/router/index.js';
+
+const Body: StandardSchemaV1<{ title: string }> = NumId as never;
+const typedApp = routes({
+	// PLAIN returns are the JSON payload — typed end to end
+	'/posts/[id]': { GET: GET<'/posts/[id]'>((c) => ({ id: c.params.id, title: 'x' as string })) },
+	'/posts': { POST: POST(Body, (c) => ({ created: c.input.title })) },
+	// a raw Response return erases to unknown (its payload is inside the Response)
+	'/raw': { GET: (c) => c.json({ opaque: true }) }
+});
+type TApp = typeof typedApp.$infer;
+
+const _out: TApp['/posts/[id]']['get']['out'] = { id: '1', title: 't' };
+const _in: TApp['/posts']['post']['in'] = { title: 't' };
+const _params: TApp['/posts/[id]']['params'] = { id: '1' };
+
+const client = api<TApp>('http://x');
+// typed returns + required params + schema-typed body
+const _r1: Promise<{ id: string; title: string }> = client.get('/posts/[id]', {
+	params: { id: '1' }
+});
+const _r2: Promise<{ created: string }> = client.post('/posts', { body: { title: 'hi' } });
+// a Response-returning endpoint types unknown
+const _r3: Promise<unknown> = client.get('/raw');
+// @ts-expect-error — page paths carry no verbs, the client rejects them
+client.get('/');
+// @ts-expect-error — params are REQUIRED when the pattern has any
+client.get('/posts/[id]');
+// @ts-expect-error — the body must match the schema output
+client.post('/posts', { body: { wrong: true } });
+
 // Merged cascade: shell load ∧ page load.
 const _home: App['/']['data'] = { user: 'x', featured: ['a'] };
 // Schema-coerced params (number, not string).

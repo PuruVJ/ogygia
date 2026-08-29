@@ -104,6 +104,10 @@
 			"types": "./dist/router/index.d.ts",
 			"default": "./src/router/index.ts"
 		},
+		"./router/client": {
+			"types": "./dist/router/client-api.d.ts",
+			"default": "./src/router/client-api.ts"
+		},
 		"./devtools": {
 			"types": "./dist/devtools/index.d.ts",
 			"default": "./src/devtools/index.ts"
@@ -278,6 +282,10 @@
 			"./router": {
 				"types": "./dist/router/index.d.ts",
 				"default": "./dist/router/index.js"
+			},
+			"./router/client": {
+				"types": "./dist/router/client-api.d.ts",
+				"default": "./dist/router/client-api.js"
 			},
 			"./devtools": {
 				"types": "./dist/devtools/index.d.ts",

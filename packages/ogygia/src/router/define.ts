@@ -277,11 +277,16 @@ export function layout<Name extends string, S extends { load?: LoadInput; error?
 
 /** A verb entry produced by the `GET`/`POST`/… value wrappers — a handler plus (for body verbs) a
  *  body schema. Used as an endpoint object value in place of a bare handler when you want typed params
- *  (`GET<'/p'>(fn)`) or body validation (`POST(schema, fn)`). Symmetric with `load()`/`action()`. */
-export interface VerbEntry {
+ *  (`GET<'/p'>(fn)`) or body validation (`POST(schema, fn)`). Symmetric with `load()`/`action()`.
+ *  `Out`/`In` are PHANTOM types for `$infer` + the typed `api()` client: a PLAIN return is the
+ *  endpoint's JSON payload (finalize() serializes it), a `Response` return erases to `unknown`;
+ *  `In` is the body schema's output. */
+export interface VerbEntry<Out = unknown, In = undefined> {
 	readonly __ogverb: true;
 	readonly handler: (c: Ctx) => unknown;
 	readonly bodySchema?: StandardSchemaV1;
+	/** phantom — never read at runtime */
+	readonly __types?: { out: Out; in: In };
 }
 
 /** A bare endpoint handler. `c.params` is an INDEXABLE record — `c.params.id` reads without restating
@@ -318,31 +323,39 @@ const verb_entry = (handler: (c: Ctx) => unknown, bodySchema?: StandardSchemaV1)
 
 /** `GET(handler)` / `GET<'/p'>(handler)` — a verb wrapper for a GET slot: types `c.params` from the
  *  pattern arg. No body (GET has none), so no schema. Use as `{ GET: GET<'/p'>((c) => …) }`. */
-export function GET<P extends string = string>(handler: Handler<P>): VerbEntry {
-	return verb_entry(handler as (c: Ctx) => unknown);
+export function GET<P extends string = string, R = unknown>(
+	handler: (c: Ctx<Params<P>>) => R
+): VerbEntry<Awaited<R>> {
+	return verb_entry(handler as (c: Ctx) => unknown) as VerbEntry<Awaited<R>>;
 }
 /** `DELETE(handler)` — a verb wrapper for a DELETE slot (no body schema). */
-export function DELETE<P extends string = string>(handler: Handler<P>): VerbEntry {
-	return verb_entry(handler as (c: Ctx) => unknown);
+export function DELETE<P extends string = string, R = unknown>(
+	handler: (c: Ctx<Params<P>>) => R
+): VerbEntry<Awaited<R>> {
+	return verb_entry(handler as (c: Ctx) => unknown) as VerbEntry<Awaited<R>>;
 }
 /** `POST(handler)` / `POST(bodySchema, handler)` — a POST slot. The schema validates the JSON body
  *  into `c.input` (400 on failure), like a `command` RF's typed argument. */
-export function POST<P extends string = string>(handler: Handler<P>): VerbEntry;
-export function POST<P extends string, Sch extends StandardSchemaV1>(
+export function POST<P extends string = string, R = unknown>(
+	handler: (c: Ctx<Params<P>>) => R
+): VerbEntry<Awaited<R>>;
+export function POST<P extends string, Sch extends StandardSchemaV1, R = unknown>(
 	schema: Sch,
-	handler: Handler<P, InferOutput<Sch>>
-): VerbEntry;
+	handler: (c: Ctx<Params<P>, Record<string, string>, InferOutput<Sch>>) => R
+): VerbEntry<Awaited<R>, InferOutput<Sch>>;
 export function POST(a: unknown, b?: unknown): VerbEntry {
 	return b === undefined
 		? verb_entry(a as (c: Ctx) => unknown)
 		: verb_entry(b as (c: Ctx) => unknown, a as StandardSchemaV1);
 }
 /** `PUT(handler)` / `PUT(bodySchema, handler)`. */
-export function PUT<P extends string = string>(handler: Handler<P>): VerbEntry;
-export function PUT<P extends string, Sch extends StandardSchemaV1>(
+export function PUT<P extends string = string, R = unknown>(
+	handler: (c: Ctx<Params<P>>) => R
+): VerbEntry<Awaited<R>>;
+export function PUT<P extends string, Sch extends StandardSchemaV1, R = unknown>(
 	schema: Sch,
-	handler: Handler<P, InferOutput<Sch>>
-): VerbEntry;
+	handler: (c: Ctx<Params<P>, Record<string, string>, InferOutput<Sch>>) => R
+): VerbEntry<Awaited<R>, InferOutput<Sch>>;
 export function PUT(a: unknown, b?: unknown): VerbEntry {
 	return b === undefined
 		? verb_entry(a as (c: Ctx) => unknown)

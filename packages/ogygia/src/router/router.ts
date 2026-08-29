@@ -12,7 +12,7 @@ import { document } from '../document.js';
 import { region } from '../region.js';
 import LayoutChain from './LayoutChain.svelte';
 import RawHtml from '../RawHtml.svelte';
-import { compile_all, match_path, type CompiledPattern } from './match.js';
+import { compile_all, match_path, fill, type CompiledPattern } from './match.js';
 import { make_ctx, type Ctx, type Visitor } from './ctx.js';
 import {
 	compile_endpoint,
@@ -42,7 +42,17 @@ import {
 	redirect_response
 } from './respond.js';
 import { router_css_head } from './css-head.js';
-import { is_stream_slot, bake_yield, slot_html, stream_document, PAGE_SLOT_ID } from './stream.js';
+import { take_late_regions } from '../late-region-registry.js';
+import {
+	is_stream_slot,
+	bake_yield,
+	slot_html,
+	stream_document,
+	page_slot_chunks,
+	late_region_chunks,
+	merge_chunks,
+	PAGE_SLOT_ID
+} from './stream.js';
 
 export interface RoutesOptions {
 	/** Mount prefix, stripped before matching. Required for a library that owns a subtree. */
@@ -358,9 +368,19 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 			}
 		});
 		if (method === 'HEAD') return new Response(null, res);
-		// Late yields remain → chunk them down THIS response (one connection, closes when the
-		// generator ends). The full document string is already rendered; only delivery streams.
-		if (gen_rest) return stream_document(await res.text(), res, gen_rest, PAGE_SLOT_ID);
+		// Late content remains — a page generator's later yields, and/or LATE REGIONS the render
+		// registered (`<Region of={promise}>` holes, armed via the handle's ALS) — chunk it all
+		// down THIS response in readiness order (one connection, closes when every source ends).
+		const late = take_late_regions();
+		const chunk_src =
+			gen_rest && late?.length
+				? merge_chunks(page_slot_chunks(gen_rest), late_region_chunks(late))
+				: gen_rest
+					? page_slot_chunks(gen_rest)
+					: late?.length
+						? late_region_chunks(late)
+						: null;
+		if (chunk_src && m === 'GET') return stream_document(await res.text(), res, chunk_src);
 		return res;
 	}
 
@@ -552,13 +572,7 @@ function page_allow(node: PageDef): string[] {
 	return a;
 }
 
-const fill_token = /\[(\.\.\.)?\[?([a-zA-Z_$][\w$]*)\]?\]/g;
-function fill(pattern: string, params: Record<string, string | number>): string {
-	return pattern.replace(fill_token, (_m, _rest, name: string) => {
-		const val = params[name];
-		return val == null ? '' : encodeURIComponent(String(val));
-	});
-}
+// `fill` moved to match.ts — shared with the typed `api()` client (one token grammar).
 
 // re-export the component type so LayoutChain's props stay in one vocabulary
 export type { Component };

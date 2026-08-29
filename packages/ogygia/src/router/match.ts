@@ -149,6 +149,16 @@ export function match_one(c: CompiledPattern, pathname: string): PathMatch | nul
 	return { pattern: c.pattern, params };
 }
 
+/** Fill a pattern's `[param]` / `[...rest]` tokens from a params record (URL-encoded). Shared by
+ *  `href()` (router) and the typed `api()` client — one token grammar, one filler. */
+const fill_token = /\[(\.\.\.)?\[?([a-zA-Z_$][\w$]*)\]?\]/g;
+export function fill(pattern: string, params: Record<string, string | number>): string {
+	return pattern.replace(fill_token, (_m, _rest, name: string) => {
+		const val = params[name];
+		return val == null ? '' : encodeURIComponent(String(val));
+	});
+}
+
 /** First (most-specific) match in a pre-sorted list, or null. */
 export function match_path(sorted: CompiledPattern[], pathname: string): PathMatch | null {
 	for (const c of sorted) {

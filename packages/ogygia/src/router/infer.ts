@@ -9,7 +9,7 @@
  * its ancestors + own. See internal/notes/router-v2.md.
  */
 import type { Snippet } from 'svelte';
-import type { LoadDef, LayoutDef, PageDef, RouteTable } from './define.js';
+import type { LoadDef, LayoutDef, PageDef, RouteTable, VerbEntry } from './define.js';
 import type { ActionFailure } from './respond.js';
 import type { Params, Simplify, StandardSchemaV1, InferOutput } from './view.js';
 
@@ -100,5 +100,32 @@ type AllLayoutEntries<T> = UnionToIntersection<
 	{ [K in keyof T]: T[K] extends AnyPageDef ? LayoutEntries<Layouts<T[K]>> : {} }[keyof T]
 >;
 
-/** The full `$infer` map: page paths ⊕ layout `(name)`s. */
-export type InferMap<T extends RouteTable> = Simplify<PageEntries<T> & AllLayoutEntries<T>>;
+// ── endpoint entries (the typed `api()` client's food) ───────────────────────────────────────────
+/** A handler's PAYLOAD type: a PLAIN return is the JSON body (`finalize()` serializes it); a
+ *  `Response` return erases to `unknown` (the payload type is inside the Response, unknowable). */
+type PayloadOf<R> = [R] extends [never] ? unknown : R extends Response ? unknown : R;
+type SlotOut<H> =
+	H extends VerbEntry<infer O, unknown>
+		? PayloadOf<O>
+		: H extends (c: never) => infer R
+			? PayloadOf<Awaited<R>>
+			: unknown;
+type SlotIn<H> = H extends VerbEntry<unknown, infer I> ? I : undefined;
+type SlotEntry<H> = { out: SlotOut<H>; in: SlotIn<H> };
+
+/** One endpoint's verb map, lowercase-keyed: `{ get: { out, in }, post: … }` — plus `params` from
+ *  the table key. Pages never appear here (they carry `__ogkind`), so a key having `get`/`post`
+ *  is what the `api()` client constrains on. */
+type EndpointVerbs<V> = {
+	[M in keyof V & string as V[M] extends undefined ? never : Lowercase<M>]: SlotEntry<V[M]>;
+};
+type EndpointEntries<T> = {
+	[K in keyof T & string as T[K] extends AnyPageDef ? never : K]: T[K] extends AnyPageDef
+		? never
+		: Simplify<EndpointVerbs<T[K]> & { params: Simplify<Params<K>> }>;
+};
+
+/** The full `$infer` map: page paths ⊕ endpoint paths ⊕ layout `(name)`s. */
+export type InferMap<T extends RouteTable> = Simplify<
+	PageEntries<T> & EndpointEntries<T> & AllLayoutEntries<T>
+>;
