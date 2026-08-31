@@ -307,6 +307,11 @@ class OgygiaHandle {
 		if (path === null) {
 			return new Response('Bad Request', { status: 400 });
 		}
+		// Resolve the flag SOURCE (if `decide({ source })` set one) ONCE per request — HERE, above
+		// the endpoint/page split, so page renders, remote-function calls, AND the region endpoint
+		// (deferred/live holes — the per-visitor leg of a CDN-cached page, where flag reads matter
+		// most) all see the same primed decisions. Sync reads after; no-op without a source.
+		await prime_flags({ request: event.request, url: event.url, cookies: event.cookies });
 		// Compare against the DECODED request pathname so the percent-encoded UTF-8 the browser
 		// sends matches our raw-emoji literal regardless of how Kit hands us the URL. Suffix match
 		// (not `===`) so it works under any `paths.base` without needing the base at all: the request
@@ -335,10 +340,6 @@ class OgygiaHandle {
 			// DEVTOOLS: attach a request-scoped event buffer via a side WeakMap (keeps RequestBag — and
 			// its cost — untouched when devtools is off; the map + this line DCE out then).
 			if (DEVTOOLS) dt_buffers.set(bag, { events: [], seq: 0 });
-			// Resolve the flag SOURCE (if `decide({ source })` set one) once for this request, so
-			// `flag(c)` reads during render stay sync. On plain Kit the registry warms per route as
-			// modules load; router apps prime again in dispatch (idempotent) with a complete registry.
-			await prime_flags({ request: event.request, url: event.url, cookies: event.cookies });
 			let response: Response;
 			try {
 				response = await request_als.run(bag, () =>
@@ -365,9 +366,14 @@ class OgygiaHandle {
 			return response;
 		}
 		// POST to the endpoint = a BATCH frame stream (client-side navigation, single-flight): render a set
-		// of signed region calls and flush each as an out-of-order frame in one response.
-		if (event.request.method.toUpperCase() === 'POST') return await this.render_batch(event);
-		return await this.render_region(event);
+		// of signed region calls and flush each as an out-of-order frame in one response. Exposures
+		// queued by flag reads during these renders drain at the request's end too (serverless-safe).
+		try {
+			if (event.request.method.toUpperCase() === 'POST') return await this.render_batch(event);
+			return await this.render_region(event);
+		} finally {
+			flush_exposures();
+		}
 	};
 
 	/**
