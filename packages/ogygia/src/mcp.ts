@@ -24,6 +24,7 @@ import {
 	wrapperVirtualId,
 	CLIENT_BINDING_STUB
 } from './compiler/index.js';
+import { collect_flag_sites, flags_manifest, type FlagSite } from './compiler/flags.js';
 import { ogp_decode, is_ogp } from './profiler/crypto.js';
 import { report_json, is_dump } from './profiler/report.js';
 
@@ -360,6 +361,42 @@ const TOOLS = [
 						'Observatory base URL (default the public docs Observatory; use a localhost URL to target a dev build).'
 				}
 			}
+		}
+	},
+	{
+		name: 'ogygia_flags',
+		description:
+			'Inventory every flag() / experiment() call site in a project — the same AST collector the build ' +
+			'uses (real import bindings from ogygia, renames + namespaces included, literal names only). ' +
+			'Live-scans src/, and diffs against the last build manifest (node_modules/.ogygia/flags-manifest.json) ' +
+			'when present. Use it to audit rollouts, find dead flags, or list what ?og-exp can override.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				dir: {
+					type: 'string',
+					description:
+						'Project root (the directory containing src/ and node_modules/), relative to the server cwd or absolute. Default ".".'
+				}
+			}
+		}
+	},
+	{
+		name: 'ogygia_fragment',
+		description:
+			'Probe a federation MFE origin. Reports whether its fragment routes endpoint verifies signatures ' +
+			'(an unsigned request should get 401 — a 200 means the endpoint is OPEN) and fetches the unsigned ' +
+			'__catalog widget manifest (names + props, plus the typed-stub command). Use it BEFORE writing ' +
+			'mount()/proxy() code against an MFE, or to sanity-check an exposed fragment in review.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				origin: {
+					type: 'string',
+					description: 'The MFE origin, e.g. https://cms.internal or http://localhost:5174.'
+				}
+			},
+			required: ['origin']
 		}
 	}
 ];
@@ -1220,6 +1257,159 @@ function tool_scan(args: Attrs): ToolResult {
 	);
 }
 
+// ── flags: the build's own AST collector, run live over src/ ─────────────────────────────────
+
+function walk_flag_files(dir: string, out: string[] = [], depth = 0): string[] {
+	if (depth > 12 || out.length > 3000) return out;
+	let entries: Dirent[];
+	try {
+		entries = readdirSync(dir, { withFileTypes: true }) as Dirent[];
+	} catch {
+		return out;
+	}
+	for (const e of entries) {
+		if (e.name.startsWith('.')) continue;
+		if (e.isDirectory()) {
+			if (!SKIP_DIRS.has(e.name)) walk_flag_files(path.join(dir, e.name), out, depth + 1);
+		} else if (
+			(e.name.endsWith('.ts') && !e.name.endsWith('.d.ts')) ||
+			e.name.endsWith('.svelte')
+		) {
+			out.push(path.join(dir, e.name));
+		}
+	}
+	return out;
+}
+
+function tool_flags(args: Attrs): ToolResult {
+	const dir = String(args.dir ?? '.');
+	const root = path.isAbsolute(dir) ? dir : path.resolve(process.cwd(), dir);
+
+	// The last build's inventory, when this project has one (client build writes it).
+	let manifest: { flags: FlagSite[]; names: string[] } | null = null;
+	try {
+		manifest = JSON.parse(
+			readFileSync(path.join(root, 'node_modules', '.ogygia', 'flags-manifest.json'), 'utf8')
+		) as { flags: FlagSite[]; names: string[] };
+	} catch {
+		manifest = null;
+	}
+
+	// Live scan — same collector the build runs (AST-resolved 'ogygia' imports, literal names).
+	const files = walk_flag_files(path.join(root, 'src'));
+	const sites: FlagSite[] = [];
+	for (const f of files.slice(0, 3000)) {
+		let source: string;
+		try {
+			source = readFileSync(f, 'utf8');
+		} catch {
+			continue;
+		}
+		const rel = path.relative(root, f).replace(/\\/g, '/');
+		sites.push(...collect_flag_sites(source, rel, rel));
+	}
+	const live = flags_manifest(sites);
+
+	if (!live.flags.length && !manifest)
+		return text(
+			`No flag() / experiment() call sites under ${dir}/src (${files.length} file(s) scanned), and no ` +
+				`build manifest. Flags are defined with \`flag('name', …)\` / \`experiment('name', …)\` from 'ogygia' ` +
+				`— literal names only (a dynamic first argument is invisible to the inventory).`
+		);
+
+	const by_name = new Map<string, FlagSite[]>();
+	for (const s of live.flags) {
+		const k = `${s.name} (${s.kind})`;
+		const list = by_name.get(k) ?? [];
+		if (!list.length) by_name.set(k, list);
+		list.push(s);
+	}
+	const site_lines = [...by_name.entries()]
+		.map(([k, list]) => `### ${k}\n${list.map((s) => `- ${s.file}:${s.line}`).join('\n')}`)
+		.join('\n\n');
+
+	const flag_count = live.flags.filter((f) => f.kind === 'flag').length;
+	const exp_count = live.flags.filter((f) => f.kind === 'experiment').length;
+	const live_names = new Set(live.names);
+	const stale = manifest ? manifest.names.filter((n) => !live_names.has(n)) : [];
+	const manifest_note = !manifest
+		? `\n\n> No build manifest yet — node_modules/.ogygia/flags-manifest.json appears after a client build.`
+		: stale.length
+			? `\n\n> ⚠️ In the last build's manifest but NOT in source now (deleted or renamed since): ${stale.join(', ')}. Rebuild to refresh.`
+			: `\n\n> Matches the last build's manifest.`;
+
+	return text(
+		`# ogygia flags — ${dir}\n\n` +
+			`${flag_count} flag(s) · ${exp_count} experiment(s) · ${live.flags.length} call site(s) across ${files.length} scanned file(s)\n\n` +
+			site_lines +
+			manifest_note +
+			`\n\n> Override in dev: \`?og-exp=<name>:<variant>\` (repeat or comma-separate). Prod honors overrides only behind \`allowOverrides(gate)\`.`
+	);
+}
+
+// ── fragment: probe a federation MFE origin ──────────────────────────────────────────────────
+
+async function tool_fragment(args: Attrs): Promise<ToolResult> {
+	const raw = String(args.origin ?? '');
+	if (!raw) return fail('Pass `origin` — the MFE origin to probe (e.g. https://cms.internal).');
+	let origin: string;
+	try {
+		origin = new URL(raw).origin;
+	} catch {
+		return fail(`Not a valid origin: ${raw}`);
+	}
+	const get = async (url: string): Promise<Response | null> => {
+		try {
+			return await fetch(url, {
+				signal: AbortSignal.timeout(10_000),
+				headers: { accept: 'application/json' }
+			});
+		} catch {
+			return null;
+		}
+	};
+
+	// The fixed page endpoint expose() serves — keep in sync with FRAGMENT_ROUTES_PATH
+	// (router/fragment.ts). Deliberately not imported: the MCP must not pull the router graph.
+	const page_res = await get(`${origin}/og/fragment/page?path=${encodeURIComponent('/')}`);
+	const posture = !page_res
+		? '❌ unreachable (network error / timeout)'
+		: page_res.status === 401
+			? '🔒 signature-verified — an unsigned request is rejected (good)'
+			: page_res.status === 200
+				? '⚠️ OPEN — served an UNSIGNED request. Unless this origin is private-network-only, pass `verify: { publicKeys: […] }` to expose().'
+				: page_res.status === 404
+					? 'not exposed here (no /og/fragment/page — page mounting unavailable)'
+					: `HTTP ${page_res.status}`;
+
+	const cat_res = await get(`${origin}/og/fragment/__catalog`);
+	let widgets_block =
+		'No widget catalog (catalog() not mounted, or not an ogygia fragment origin).';
+	if (cat_res?.ok) {
+		try {
+			const manifest = (await cat_res.json()) as {
+				names?: string[];
+				widgets?: Record<string, { props?: string[] }>;
+			};
+			const names = manifest.names ?? [];
+			widgets_block = names.length
+				? names
+						.map((n) => `- \`${n}(${(manifest.widgets?.[n]?.props ?? []).join(', ')})\``)
+						.join('\n') +
+					`\n\nTyped stubs: \`npx ogygia fragments ${origin} --out src/lib/widgets.ts\` (add \`--check\` in CI to fail on drift).`
+				: 'Catalog mounted, zero widgets declared.';
+		} catch {
+			widgets_block = '__catalog returned non-JSON — not an ogygia widget catalog.';
+		}
+	}
+
+	return text(
+		`# ogygia fragment probe — ${origin}\n\n` +
+			`- routes endpoint (\`/og/fragment/page\`): ${posture}\n\n` +
+			`## Widgets (\`__catalog\`)\n${widgets_block}`
+	);
+}
+
 async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 	switch (name) {
 		case 'ogygia_compile':
@@ -1240,6 +1430,10 @@ async function dispatch_tool(name: string, args: Attrs): Promise<ToolResult> {
 			return tool_observatory(args);
 		case 'ogygia_scan':
 			return tool_scan(args);
+		case 'ogygia_flags':
+			return tool_flags(args);
+		case 'ogygia_fragment':
+			return tool_fragment(args);
 		default:
 			return fail(`Unknown tool: ${name}`);
 	}
@@ -1305,7 +1499,7 @@ function handle(msg: Rpc): void {
 /** Start the stdio MCP server. Resolves when stdin closes (the client disconnected). */
 export async function runMcp(): Promise<void> {
 	log(
-		`ogygia MCP server v${version} ready — 8 tools (compile, islands, check, explain, debug, profile, observatory, scan)`
+		`ogygia MCP server v${version} ready — ${TOOLS.length} tools (${TOOLS.map((t) => t.name.replace('ogygia_', '')).join(', ')})`
 	);
 	const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 	for await (const line of rl) {
