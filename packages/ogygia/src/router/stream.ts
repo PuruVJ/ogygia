@@ -208,7 +208,10 @@ export async function* merge_chunks(
 		const { i, r } = await Promise.race(nexts.values());
 		if (r.done) nexts.delete(i);
 		else {
-			nexts.set(i, sources[i].next().then((res) => ({ i, r: res })));
+			nexts.set(
+				i,
+				sources[i].next().then((res) => ({ i, r: res }))
+			);
 			yield r.value;
 		}
 	}

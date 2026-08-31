@@ -40,9 +40,8 @@ type InOf<App, K extends keyof App, M extends string> =
 	App[K] extends Record<M, { in: infer I }> ? I : undefined;
 
 /** `params` is REQUIRED exactly when the pattern has any (same rule as `href`). */
-type ParamsOpt<K extends string> = {} extends Params<K>
-	? { params?: HrefParams<K> }
-	: { params: HrefParams<K> };
+type ParamsOpt<K extends string> =
+	{} extends Params<K> ? { params?: HrefParams<K> } : { params: HrefParams<K> };
 type BodyOpt<In> = undefined extends In ? { body?: In } : { body: In };
 type CallOpts<K extends string, In = undefined> = ParamsOpt<K> &
 	BodyOpt<In> & {
@@ -50,7 +49,8 @@ type CallOpts<K extends string, In = undefined> = ParamsOpt<K> &
 		headers?: Record<string, string>;
 	};
 /** args tuple: the options object itself is omittable when nothing in it is required. */
-type CallArgs<K extends string, In = undefined> = {} extends Params<K> & (undefined extends In ? {} : { body: In })
+type CallArgs<K extends string, In = undefined> = {} extends Params<K> &
+	(undefined extends In ? {} : { body: In })
 	? [opts?: CallOpts<K, In>]
 	: [opts: CallOpts<K, In>];
 
