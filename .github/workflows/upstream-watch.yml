@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Branch/tag to test (default: main)'
+        description: 'Branch/tag to test (default: passage)'
         required: false
-        default: 'main'
+        default: 'passage'
 
 permissions:
   contents: read
@@ -24,9 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      # `passage` is the LIVING branch — main is frozen at the 0.7.0 release, and its stale check
+      # chain kept failing this watcher on pre-existing rot (never on upstream). Watch the code
+      # that actually ships next; flip back to 'main' when passage merges.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event.inputs.ref || 'passage' }}
 
       - uses: pnpm/action-setup@v4
 
