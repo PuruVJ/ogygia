@@ -3,7 +3,8 @@
  * each app compiles its own copy. The truly shared thing is the NAME + the shape.
  * Cart belongs to the dash team; changing a shape here is a reviewed version bump.
  */
-import { SharedState, flag } from 'ogygia';
+import { SharedState } from 'ogygia';
+import { flag } from 'ogygia/flag';
 
 /** @type {SharedState<{ items: string[] }>} */
 export const cart = new SharedState('corp.cart', { items: [] });

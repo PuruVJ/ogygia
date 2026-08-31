@@ -1,11 +1,11 @@
 /**
- * `ogygia/openfeature` (OFREP) — speak the OpenFeature Remote Evaluation Protocol directly, with
+ * `ogygia/flag/openfeature` (OFREP) — speak the OpenFeature Remote Evaluation Protocol directly, with
  * ZERO vendor SDK. Any OFREP endpoint works (flagd, the OpenFeature operator, a gateway). One
  * bulk POST per request over the app's declared flags; decisions come back as variant names +
  * optional payloads, indistinguishable from native flags after the await.
  *
- *   import { decide } from 'ogygia';
- *   import { ofrep } from 'ogygia/openfeature';
+ *   import { decide } from 'ogygia/flag';
+ *   import { ofrep } from 'ogygia/flag/openfeature';
  *   decide({ source: ofrep({ url: 'http://flagd:8016' }) });
  */
 import type { FlagSource, FlagQuery, Resolved, CtxLike } from '../flags.js';

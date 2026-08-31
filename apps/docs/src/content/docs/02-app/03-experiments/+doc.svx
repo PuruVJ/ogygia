@@ -14,7 +14,7 @@ You read a flag by **calling it**. You branch with `pick`. You wire a vendor (Op
 ## Declare — the second argument is the shape
 
 ```ts
-import { flag } from 'ogygia';
+import { flag } from 'ogygia/flag';
 
 export const checkout = flag('new-checkout');                    // kill switch — off until decided on
 export const promo    = flag('summer-promo', 10);                // number → sticky rollout to 10%
@@ -120,8 +120,8 @@ Native flags need no setup. To decide flags with a vendor instead, wire it **onc
 ```ts title=hooks.server.ts
 import { OpenFeature } from '@openfeature/server-sdk';
 import { LaunchDarklyProvider } from '@launchdarkly/openfeature-node-server';
-import { decide } from 'ogygia';
-import { openfeature } from 'ogygia/openfeature';
+import { decide } from 'ogygia/flag';
+import { openfeature } from 'ogygia/flag/openfeature';
 
 OpenFeature.setProvider(new LaunchDarklyProvider(env.LD_KEY));
 decide({ source: openfeature(OpenFeature.getClient()) });
@@ -132,7 +132,7 @@ The source is resolved **once per request** over exactly the flags your app decl
 No vendor SDK? Speak the OpenFeature remote protocol directly:
 
 ```ts
-import { ofrep } from 'ogygia/openfeature';
+import { ofrep } from 'ogygia/flag/openfeature';
 decide({ source: ofrep({ url: 'http://flagd:8016' }) });
 ```
 

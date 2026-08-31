@@ -100,22 +100,6 @@ export { hydratedBy } from './hydration-info.js';
 // Server-seedable via a printed JSON script tag; vanilla door at globalThis.ogygia.shared().
 export { SharedState } from './shared-state.js';
 
-// Flags / rollouts / experiments: the ONE decision primitive (server-side, sticky, zero-JS).
-// A kill switch, a rollout, a targeting rule, and an A/B/n test are the same `flag()`; branching
-// rides `flag.pick()`; `decide()` wires a vendor (OpenFeature/OFREP) once. Environment-free on
-// purpose (pure hash, no node builtins).
-export {
-	flag,
-	decide,
-	type FlagShape,
-	type FlagOptions,
-	type BoolFlag,
-	type VariantFlag,
-	type DecideOptions,
-	type FlagSource,
-	type FlagQuery,
-	type Resolved,
-	type ExposureEvent,
-	type ComponentPick,
-	type CtxLike
-} from './flags.js';
+// Flags / rollouts / experiments live on their OWN subpath: `import { flag, decide } from
+// 'ogygia/flag'` (adapters: 'ogygia/flag/openfeature'). Deliberately not re-exported here —
+// the decision surface is its own vocabulary, and the root stays the island vocabulary.

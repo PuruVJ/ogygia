@@ -5,7 +5,7 @@
  * behind the lazy client-stitch holes. No hand-rolled fetch anywhere in the shell.
  */
 import { client } from 'ogygia/router';
-import { decide } from 'ogygia';
+import { decide } from 'ogygia/flag';
 
 // DEMO ONLY: `?og-exp` overrides are dev-gated by default (any visitor could force themselves
 // into unfinished features in prod). This demo opens them unconditionally so the gauntlet can

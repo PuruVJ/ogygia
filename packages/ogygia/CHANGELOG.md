@@ -46,7 +46,7 @@ On top of the islands, this release also ships a whole tooling layer: a drop-in 
   pick of clients — `mount(v2.pick({ off: cms_v1, on: cms_v2 }))` — the same `pick` verb that
   chooses components and values chooses infrastructure (canary/blue-green, sticky per visitor).
 
-- **OpenFeature interop — `ogygia/openfeature`.** `decide({ source: openfeature(client) })`
+- **OpenFeature interop — `ogygia/flag/openfeature`.** `decide({ source: openfeature(client) })`
   bridges any OpenFeature server client (no vendor SDK dependency — you pass your own), resolved
   once per request over exactly the flags the app declares, then every read stays sync. `ofrep({
   url })` speaks the remote-evaluation protocol directly (zero SDK); a source is otherwise just a

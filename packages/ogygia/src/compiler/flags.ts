@@ -8,7 +8,7 @@
  *
  * AST-walked, not text-matched (user ruling): `flag` is an ordinary function — a text sweep
  * would miss `import { flag as f }` and false-positive on any local function that happens to be
- * named `flag`. The walk resolves the module's ACTUAL bindings from `'ogygia'` (named, renamed,
+ * named `flag`. The walk resolves the module's ACTUAL bindings from `'ogygia/flag'` (named, renamed,
  * or namespace imports) and only counts calls through those. Known pragmatic limit (same as the
  * macro family's): a local declaration SHADOWING an imported `flag` inside a nested scope is not
  * scope-analyzed.
@@ -62,12 +62,12 @@ function collect_from_source(
 	const result = parse_module(src, id);
 	if (!result.ok || !result.program) return;
 
-	// 1) resolve this module's REAL bindings from 'ogygia': local name → kind, plus namespaces
+	// 1) resolve this module's REAL bindings from 'ogygia/flag': local name → kind, plus namespaces
 	const locals = new Map<string, FlagSite['kind']>();
 	const namespaces = new Set<string>();
 	for (const node of ((result.program as AstNode).body as AstNode[]) ?? []) {
 		if (node.type !== 'ImportDeclaration') continue;
-		if ((node.source as AstNode | undefined)?.value !== 'ogygia') continue;
+		if ((node.source as AstNode | undefined)?.value !== 'ogygia/flag') continue;
 		for (const s of (node.specifiers as AstNode[]) ?? []) {
 			if (s.type === 'ImportSpecifier') {
 				const imported = (s.imported as AstNode)?.name as string;

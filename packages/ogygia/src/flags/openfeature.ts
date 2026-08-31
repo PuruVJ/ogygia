@@ -1,5 +1,5 @@
 /**
- * `ogygia/openfeature` — bridge an OpenFeature client into ogygia's flag decision seam.
+ * `ogygia/flag/openfeature` — bridge an OpenFeature client into ogygia's flag decision seam.
  *
  * The app already creates its own OpenFeature client (any provider — LaunchDarkly, Flagsmith,
  * Unleash, flagd, …); ogygia depends on NO vendor SDK. This adapter is pure structural typing:
@@ -8,11 +8,13 @@
  * indistinguishable from a native one — same sync reads, same `pick()`, same federation carry.
  *
  *   import { OpenFeature } from '@openfeature/server-sdk';
- *   import { decide } from 'ogygia';
- *   import { openfeature } from 'ogygia/openfeature';
+ *   import { decide } from 'ogygia/flag';
+ *   import { openfeature } from 'ogygia/flag/openfeature';
  *   decide({ source: openfeature(OpenFeature.getClient()) });
  */
 import type { FlagSource, FlagQuery, Resolved, CtxLike } from '../flags.js';
+
+export { ofrep, type OfrepOptions } from './ofrep.js';
 
 /** The slice of the OpenFeature server `Client` we use — structural, so any SDK version fits. */
 export interface OpenFeatureClientLike {

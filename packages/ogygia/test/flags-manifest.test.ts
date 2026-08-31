@@ -9,7 +9,7 @@ import { collect_flag_sites, flags_manifest } from '../src/compiler/flags.js';
 
 describe('collect_flag_sites — AST binding resolution', () => {
 	it('counts calls through named imports, with names and lines', () => {
-		const src = `import { flag } from 'ogygia';
+		const src = `import { flag } from 'ogygia/flag';
 export const nav = flag('new-nav', 10);
 export const mode = flag('csr-mode', { a: 50, b: 50 });
 `;
@@ -20,7 +20,7 @@ export const mode = flag('csr-mode', { a: 50, b: 50 });
 	});
 
 	it('follows a RENAMED import (a text sweep would miss this)', () => {
-		const src = `import { flag as f } from 'ogygia';
+		const src = `import { flag as f } from 'ogygia/flag';
 export const x = f('renamed-flag');
 `;
 		expect(collect_flag_sites(src, '/a/b.ts', 'b.ts')).toEqual([
@@ -29,7 +29,7 @@ export const x = f('renamed-flag');
 	});
 
 	it('follows a NAMESPACE import (og.flag)', () => {
-		const src = `import * as og from 'ogygia';
+		const src = `import * as og from 'ogygia/flag';
 export const x = og.flag('ns-flag');
 export const y = og.flag('ns-variant', { a: 1, b: 1 });
 `;
@@ -38,7 +38,7 @@ export const y = og.flag('ns-variant', { a: 1, b: 1 });
 	});
 
 	it('a LOCAL function named `flag` is NOT counted (a text sweep would false-positive)', () => {
-		const src = `import { flag as real_flag } from 'ogygia';
+		const src = `import { flag as real_flag } from 'ogygia/flag';
 const flag = (name) => name; // somebody's own helper
 export const x = flag('not-ours');
 export const real = real_flag('ours');
@@ -53,7 +53,7 @@ export const real = real_flag('ours');
 	});
 
 	it('a dynamic first argument is skipped (not inventoriable)', () => {
-		const src = `import { flag } from 'ogygia';
+		const src = `import { flag } from 'ogygia/flag';
 export const x = flag(process.env.NAME);
 export const y = flag('static-one');
 `;
@@ -63,7 +63,7 @@ export const y = flag('static-one');
 	it('svelte: flags inside <script> blocks carry FILE line numbers', () => {
 		const src = `<h1>hi</h1>
 <script lang="ts">
-	import { flag } from 'ogygia';
+	import { flag } from 'ogygia/flag';
 	const inline = flag('in-svelte');
 </script>
 `;
