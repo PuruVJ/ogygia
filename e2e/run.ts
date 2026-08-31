@@ -76,6 +76,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['as-region.ts', true, 'import.meta.og.asRegion: barrel/named-import islands SSR+hydrate; unused barrel exports tree-shaken'],
 	['island-children.ts', true, 'host children/snippets cross into a hydrate island (synth entry)'],
 	['portable-snippet.ts', true, 'a snippet forwarded THROUGH a plain shell into an island crosses + comes alive'],
+	['store-snippet.ts', true, 'REGRESSION: $store reads in a crossing snippet hoist as VALUE snapshots (no verbatim $-identifier in the synth)'],
 	['snippet-islands.ts', true, 'islands in a {#snippet} to a plain shell: marks survive + top-level await SSRs'],
 	['interaction.ts', true, "wake:'interaction' — cold until used, click replay, typing survives"],
 	['devtools.ts', true, 'devtools event layer: event-driven interaction/nav/trace (skips if build has devtools off)'],
