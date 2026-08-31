@@ -214,7 +214,11 @@ const _layers = new Map<string, string[]>();
 function layer_member_for(group: string, v: string): string | undefined {
 	const members = _layers.get(group);
 	if (!members || members.length === 0) return undefined;
-	return members[pct(`layer:${group}:${v}`) % members.length];
+	// Index into a SORTED view: registration order is module-import order, which can differ
+	// between two server builds/replicas — lane assignment must depend only on (group, names,
+	// visitor), never on which chunk loaded first.
+	const lanes = [...members].sort();
+	return lanes[pct(`layer:${group}:${v}`) % lanes.length];
 }
 
 // ── the primitive ────────────────────────────────────────────────────────────────────────────
@@ -227,8 +231,11 @@ export interface ComponentPick {
 
 /** Rare knobs (third arg to `flag`). */
 export interface FlagOptions<Value = unknown> {
-	/** Mutual-exclusion group: flags/experiments sharing a `layer` partition traffic — a visitor
-	 *  lands in at most one (others see their first variant). */
+	/** Mutual-exclusion group. Members sharing a `layer` string split visitors into equal LANES:
+	 *  one sticky hash of (group, visitor) over the sorted member names picks each visitor's
+	 *  OWNER, and every other member answers control before its own rule runs — two experiments
+	 *  on one surface never share a visitor, so their measurements stay attributable. Real
+	 *  exposure = a member's split ÷ member count. Override/carried/source outrank the gate. */
 	layer?: string;
 	/** Standard Schema for a vendor-authored payload read via `.value(c)`. A vendor value that
 	 *  fails the schema is IGNORED (never enters) — the same trust-boundary law as body schemas. */

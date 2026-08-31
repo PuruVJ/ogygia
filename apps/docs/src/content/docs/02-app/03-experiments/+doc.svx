@@ -176,14 +176,25 @@ decide({ overrides: (c) => c.visitor?.roles?.includes('qa') ?? false });
 
 ## Mutual exclusion — the `layer` option
 
-Two flags that touch the same surface must never hit the same visitor, or neither is measurable. A `layer` string **partitions** traffic between the flags that share it:
+**The problem.** Two experiments touch the hero section: a redesign, and an autoplay video. If one visitor lands in BOTH treatments and conversions move, you cannot say which change did it — the two measurements contaminate each other. Experiments on the same surface must never share a visitor.
+
+**The mechanism: lanes.** Flags sharing a `layer` string form a group:
 
 ```ts
 const heroRedesign = flag('hero-redesign', { control: 50, bold: 50 }, { layer: 'hero-surface' });
 const heroVideo    = flag('hero-video',    { control: 50, video: 50 }, { layer: 'hero-surface' });
 ```
 
-Each visitor is owned by at most one member; for the others they see control.
+For each visitor the layer makes ONE sticky decision, before any member's own logic runs: hash `(layer name, visitor id)` over the **sorted** member names. That picks the visitor's **owner** — picture all traffic split into N equal lanes, one lane per member. Reading a member flag then opens with a single question: *am I this visitor's owner?*
+
+- **Not the owner** → answer control, immediately. The flag's targeting and weights never even run for that visitor.
+- **The owner** → proceed exactly as if the layer didn't exist, inside your own lane.
+
+Walkthrough: visitor `puru` hashes into `hero-video`'s lane. `heroRedesign(puru)` → `'control'`, always — its 50/50 never executes. `heroVideo(puru)` → its own 50/50. The same inputs hash the same way on every request and every replica (sorted names, so module import order can never flip a lane) — no storage, no cross-server coordination, nothing to sync.
+
+**The arithmetic to remember.** A member only ever experiments inside its own lane, so its real exposure is its split **divided by the member count**: a 50% variant in a 2-member layer reaches 25% of all traffic; add a third member and every lane shrinks to a third.
+
+**What outranks the layer.** The override, carried claims, and the vendor source all sit ABOVE the lane gate in the precedence chain — `?og-exp=hero-redesign:bold` shows QA the variant even for a visitor owned by the other member, an upstream shell's carried decision is honored as-is, and a vendor that answers for a flag bypasses the lane (the vendor owns exclusion then — don't run the same surface in both systems).
 
 ## Measurement — `decide({ exposure })`
 
