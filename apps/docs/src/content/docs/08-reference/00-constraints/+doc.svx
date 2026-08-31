@@ -50,6 +50,19 @@ ogygia stops the mistake for you two ways:
 
 Pass data as props; own mutable state inside the island.
 
+### Store reads are snapshots too
+
+A `$store` auto-subscription read inside a snippet that crosses an island boundary is captured the same way: the compiler evaluates the subscription at the host — where the `$` sugar is legal — and hands the **value** across as a plain serialized prop, rewriting the snippet's copy to use it. The build warns with a trace to each read: in native Svelte `$store` is live, but across the boundary it is a frozen render-time snapshot; later store updates never reach the island.
+
+```svelte
+{#snippet children()}
+  <!-- captured as the VALUE of $country at render time (build warning points here) -->
+  <span>{$country}</span>
+{/snippet}
+```
+
+To make the snapshot explicit (and silence the warning), read the store at host scope and use the plain value inside the snippet. The store **object** itself cannot cross — a host-declared store's functions don't serialize (the compiler warns here too). For live shared state across the boundary, use a [wired class](/docs/data-state/state-context).
+
 ## Page-level lifecycle is dead code
 
 On a `csr = false` page, the page module never runs on the client. Top-level `onMount`, effects, and event listeners in the page do nothing.

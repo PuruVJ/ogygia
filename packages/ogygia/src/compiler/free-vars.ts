@@ -36,6 +36,14 @@ interface Sink {
 	refs: Set<string>;
 	/** free names written to (assignment / update / bind target root) */
 	mutated: Set<string>;
+	/**
+	 * Free `$`-prefixed references (store auto-subscriptions like `$country`, plus the
+	 * `$$props` family), with every occurrence's source offsets. The sugar is host-scoped:
+	 * emitted verbatim into a synth entry it names an out-of-scope `$`-identifier, which
+	 * runes mode rejects — the transform captures the subscription VALUE and rewrites these
+	 * exact spans to the capture's prop name instead.
+	 */
+	stores: Map<string, Array<{ start: number; end: number }>>;
 }
 
 /** Collect bound names from an estree binding pattern. */
@@ -182,7 +190,14 @@ function add_expression_refs(expr: SvelteNode, svelte_bound: Set<string>, sink: 
 			} else if (node.type === 'UpdateExpression') {
 				record_writes(node.argument);
 			} else if (node.type === 'Identifier' && is_reference(node, parent, key)) {
-				if (!has(node.name)) sink.refs.add(node.name);
+				if (!has(node.name)) {
+					sink.refs.add(node.name);
+					if (node.name.startsWith('$') && node.start != null && node.end != null) {
+						let sites = sink.stores.get(node.name);
+						if (!sites) sink.stores.set(node.name, (sites = []));
+						sites.push({ start: node.start, end: node.end });
+					}
+				}
 			}
 		},
 		leave(node, parent) {
@@ -379,12 +394,12 @@ export function collectSnippetNames(nodes: SvelteNode[]) {
 
 /**
  * @param nodes hoisted subtree top-level nodes
- * @returns free identifier names + free mutation targets
+ * @returns free identifier names + free mutation targets + `$store` read sites
  */
 export function collectCaptureInfo(nodes: SvelteNode[]) {
-	const sink: Sink = { refs: new Set(), mutated: new Set() };
+	const sink: Sink = { refs: new Set(), mutated: new Set(), stores: new Map() };
 	walk_template(nodes, new Set(), sink);
-	return { free: sink.refs, mutated: sink.mutated };
+	return { free: sink.refs, mutated: sink.mutated, stores: sink.stores };
 }
 
 /**

@@ -131,6 +131,32 @@ const RENDER_MODES = new Set(['static', 'deferred', 'live']);
 
 const JS_IDENT = /^[A-Za-z_$][\w$]*$/;
 
+// ── store-crossing detection (portable snippets) ────────────────────────────────────────────
+/** Store constructor callees marking a host declaration as store-like (best-effort signal). */
+const STORE_CTORS = new Set(['writable', 'readable', 'derived', 'toStore', 'fromStore']);
+/** `$name` subscription reads anywhere in a file (heuristic store signal; runes filtered out). */
+const STORE_SUB_RE = /\$([A-Za-z_][\w$]*)/g;
+const RUNE_NAMES = new Set(['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host']);
+/** 1-based `line:col` for an offset — trace addresses in store-crossing warnings (cold path). */
+function line_col(src: string, offset: number): string {
+	let line = 1;
+	let last = -1;
+	for (let i = 0; i < offset; i++) {
+		if (src.charCodeAt(i) === 10) {
+			line++;
+			last = i;
+		}
+	}
+	return `${line}:${offset - last}`;
+}
+/** Once per key for the process — the ssr AND client passes both transform the same host. */
+const store_warned = new Set<string>();
+function warn_once(key: string, msg: string): void {
+	if (store_warned.has(key)) return;
+	store_warned.add(key);
+	console.warn(msg);
+}
+
 // Invariant per-build — hoisted to module scope so they aren't reallocated on every transformHost.
 const KNOWN_STRATEGIES = new Set(['load', 'idle', 'visible']);
 // `interaction` is a wake-only schedule (first pointer/key/focus inside the region, with click
@@ -1636,6 +1662,26 @@ class FileCompilation {
 			}
 		}
 
+		// Best-effort store detection, for warning when a store crosses a boundary as an OBJECT:
+		// a name is store-like when the host initializes it via a store constructor, or the file
+		// subscribes to it (`$name`) anywhere. Heuristic by design — used only to warn, never to gate.
+		const store_like = new Set<string>();
+		for (const node of instance_body) {
+			if (node.type !== 'VariableDeclaration') continue;
+			for (const d of node.declarations) {
+				const callee = d.init?.type === 'CallExpression' ? d.init.callee : null;
+				const cname = callee?.type === 'Identifier' ? callee.name : null;
+				if (cname && STORE_CTORS.has(cname) && d.id?.type === 'Identifier')
+					store_like.add(d.id.name);
+			}
+		}
+		STORE_SUB_RE.lastIndex = 0;
+		for (let m; (m = STORE_SUB_RE.exec(source));) {
+			// skip `$$props`-family and the runes ($state/$derived/…): not store subscriptions
+			if (source.charCodeAt(m.index - 1) === 36 /* $ */) continue;
+			if (!RUNE_NAMES.has(m[1])) store_like.add(m[1]);
+		}
+
 		// Children of a hydrate island need NO compile-time crossing (the old per-usage "child synth"
 		// is gone): the wrapper forwards them to Region as its slot, the server renders them IN-PLACE
 		// inside a `<ogygia-slot>` marker, and the payload carries a slot POINTER the client revives into
@@ -1944,16 +1990,55 @@ class FileCompilation {
 				}
 			};
 			collect_param_names(snip_params);
-			const { free, mutated } = collectCaptureInfo(body);
+			const { free, mutated, stores } = collectCaptureInfo(body);
 			// Only a HOST-state write disqualifies branding (a captured snapshot can't write back). A snippet
 			// mutating its OWN parameter is fine — params ride `__ogArgs`, not a capture — so exclude them,
 			// exactly as the `free` loop below does. Otherwise a snippet that only reassigns its own param was
 			// wrongly left native and failed to cross as a region.
 			if ([...mutated].some((m) => !param_names.has(m))) continue;
+			// Store auto-subscriptions (`$country`) read in the body: the `$` sugar is HOST-scoped.
+			// Re-emitted verbatim it names an out-of-scope `$`-identifier in the runes-mode synth
+			// ("illegal variable name" pointing at generated code). Capture the subscription VALUE
+			// instead — the same snapshot law as every other capture: evaluate `$store` at the host,
+			// where it is legal, and rewrite the body's occurrences to the capture's prop name.
+			// ALWAYS warn with a trace: in native Svelte `$store` is live; across a boundary it is a
+			// render-time snapshot — and when the base can't even be verified as a store, say that too.
+			const store_captures: Array<{ prop: string; expr: string }> = [];
+			const store_rewrites: Array<{ start: number; end: number; prop: string }> = [];
+			for (const [nm, sites] of stores) {
+				if (nm.startsWith('$$')) {
+					throw new Error(
+						`[ogygia] ${rel_host}: {#snippet ${name}} crosses an island boundary but reads \`${nm}\` — ` +
+							`the host's $$-props cannot cross. Read the value into a plain host variable outside the snippet and use that instead.`
+					);
+				}
+				const base = nm.slice(1);
+				const prop = `__og_sub_${base}`;
+				store_captures.push({ prop, expr: nm });
+				for (const p of sites) store_rewrites.push({ start: p.start, end: p.end, prop });
+				const trace = sites.map((p) => `${rel_host}:${line_col(source, p.start)}`).join(', ');
+				if (host_declared.has(base) || imports.has(base)) {
+					warn_once(
+						`${id}\0${name}\0${nm}\0frozen`,
+						`[ogygia] ${rel_host}: {#snippet ${name}} crosses an island boundary and reads \`${nm}\` ` +
+							`(at ${trace}) — captured as a FROZEN snapshot of the store's value at render time; later ` +
+							`store updates never reach the island. To make the snapshot explicit (and silence this), ` +
+							`read it at host scope outside the snippet — e.g. \`const ${base}_value = ${nm};\` — and use that.`
+					);
+				} else {
+					warn_once(
+						`${id}\0${name}\0${nm}\0unresolved`,
+						`[ogygia] ${rel_host}: {#snippet ${name}} reads \`${nm}\` (at ${trace}), but \`${base}\` is not ` +
+							`a host declaration or import, so ogygia cannot verify it is a store. Its value is captured ` +
+							`at the host anyway — if the build now errors in ${rel_host}, start there.`
+					);
+				}
+			}
 			const cleaned_imports: string[] = [];
 			const seen_imports = new Set<string>();
 			const captures: string[] = [];
 			for (const nm of free) {
+				if (nm.startsWith('$')) continue; // store subscription — captured by VALUE above
 				if (param_names.has(nm)) continue; // a snippet param — rides __ogArgs, never a capture
 				if (imports.has(nm)) {
 					// An ISLAND placement inside the snippet body must stay an island inside the entry: emit
@@ -1972,10 +2057,40 @@ class FileCompilation {
 						seen_imports.add(text);
 						cleaned_imports.push(text);
 					}
-				} else if (host_declared.has(nm)) captures.push(nm);
+				} else if (host_declared.has(nm)) {
+					// A host-declared STORE captured as an OBJECT: devalue can't serialize its functions —
+					// the island gets a runtime error or a dead copy. Warn with the fix; never gate.
+					if (store_like.has(nm)) {
+						warn_once(
+							`${id}\0${name}\0${nm}\0object`,
+							`[ogygia] ${rel_host}: {#snippet ${name}} crosses an island boundary and captures the ` +
+								`store \`${nm}\` as an OBJECT — a host-declared store cannot cross (its functions ` +
+								`don't serialize). Use its value (\`$${nm}\`) inside the snippet, or share live state ` +
+								`with a wired class instead.`
+						);
+					}
+					captures.push(nm);
+				}
 				// else: a global — referenced directly in the entry, needs no wiring.
 			}
-			const markup = source.slice(body[0].start, body[body.length - 1].end);
+			// Body markup, with each `$store` read span rewritten to its capture prop. The rewritten
+			// text fully determines the store captures (prop names are derived from the spans), so the
+			// identity hash below needs no extra segment for them.
+			const body_start = body[0].start;
+			const body_end = body[body.length - 1].end;
+			let markup: string;
+			if (store_rewrites.length) {
+				store_rewrites.sort((a, b) => a.start - b.start);
+				let out = '';
+				let cursor = body_start;
+				for (const r of store_rewrites) {
+					out += source.slice(cursor, r.start) + r.prop;
+					cursor = r.end;
+				}
+				markup = out + source.slice(cursor, body_end);
+			} else {
+				markup = source.slice(body_start, body_end);
+			}
 			const hash = createHash('md5')
 				.update(`${markup}\0${captures.join(',')}\0${cleaned_imports.join('\n')}\0${params_src}`)
 				.digest('hex')
@@ -1988,7 +2103,10 @@ class FileCompilation {
 			const iid = regionId(identity, salt);
 			const entryPath = ctx.virtualPathFor(id, iid).replace(JS_EXT, '.svelte');
 			if (!islands_by_id.has(iid)) {
-				const prop_names = snip_params.length ? ['__ogArgs = []', ...captures] : captures;
+				const store_props = store_captures.map((c) => c.prop);
+				const prop_names = snip_params.length
+					? ['__ogArgs = []', ...captures, ...store_props]
+					: [...captures, ...store_props];
 				const synth =
 					`<script${lang}>\n` +
 					`\timport 'virtual:ogygia/transportables';\n` +
@@ -2019,7 +2137,8 @@ class FileCompilation {
 				});
 			}
 			const url = ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir);
-			const cap_obj = captures.length ? `{ ${captures.join(', ')} }` : '{}';
+			const cap_entries = [...captures, ...store_captures.map((c) => `${c.prop}: ${c.expr}`)];
+			const cap_obj = cap_entries.length ? `{ ${cap_entries.join(', ')} }` : '{}';
 			// SSR renders the entry inline (static import); the csr=false client loads it by url on wake.
 			// Two identical snippets dedupe to one iid → import/preload each entry ONCE (else a duplicate
 			// `__OgPS_<iid>` declaration).
