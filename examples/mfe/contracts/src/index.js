@@ -3,14 +3,12 @@
  * each app compiles its own copy. The truly shared thing is the NAME + the shape.
  * Cart belongs to the dash team; changing a shape here is a reviewed version bump.
  */
-import { SharedState, experiment } from 'ogygia';
+import { SharedState, flag } from 'ogygia';
 
 /** @type {SharedState<{ items: string[] }>} */
 export const cart = new SharedState('corp.cart', { items: [] });
 
-/** The boss's question, as a contract: does full hydration beat islands? The SHELL assigns
- *  (sticky 50/50), the bucket rides the signed claims, every team renders the same world. */
-export const csr_exp = experiment('csr-mode', {
-	variants: ['static', 'hydrated'],
-	split: { hydrated: 50 }
-});
+/** The boss's question, as a contract: does full hydration beat islands? The SHELL decides
+ *  (sticky 50/50 weighted variants), the bucket rides the signed claims, every team renders the
+ *  same world. A weighted-variant `flag` — `static` is control, `hydrated` gets half. */
+export const csr_flag = flag('csr-mode', { static: 50, hydrated: 50 });

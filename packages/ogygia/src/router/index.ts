@@ -19,7 +19,7 @@
  *
  * See internal/notes/router-v2.md for the full design + the Kit ↔ v2 dictionary.
  */
-export { routes, type Router, type RoutesOptions } from './router.js';
+export { routes, when, type Router, type RoutesOptions } from './router.js';
 export {
 	load,
 	action,
@@ -61,14 +61,13 @@ export { api, ApiError, type ApiClient, type ApiClientOptions } from './client-a
 // `client()` per MFE (signing / timeout / SWR cache / coalescing / generation-safe invalidation)
 // and consumes it three ways — `mount(client)` as one table entry, `client.widget()` in its own
 // SSR stitch, `proxy({ app })` as the lazy client-stitch endpoint. Ed25519 caller signing +
-// signature-bound visitor claims (`user(c)`, auto-built from `c.visitor` + the table's
-// experiments) + W3C trace continuity ride the same hop. Design + POC log: internal/notes/mfe.md.
+// signature-bound visitor claims (`user(c)`, auto-built from `c.visitor` + every flag the
+// request decided) + W3C trace continuity ride the same hop. Design + POC log: internal/notes/mfe.md.
 export {
 	expose,
 	catalog,
 	client,
 	mount,
-	kitMount,
 	proxy,
 	sign_headers,
 	verify_fragment_request,

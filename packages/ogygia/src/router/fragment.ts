@@ -21,6 +21,7 @@
  * BODY renders under shell chrome but the shell's status is 200); sign/catalog the endpoint.
  */
 import { error, redirect, is_http_error } from './respond.js';
+import { assigned_buckets, type ComponentPick } from '../flags.js';
 import { page } from './define.js';
 import type { PageDef } from './define.js';
 import type { Router } from './router.js';
@@ -799,15 +800,15 @@ export interface MountOptions extends ClientOptions {
 	stream?: boolean | { fallback?: string | unknown };
 }
 
-/** The on-behalf-of claims for a hop: the table's ONE identity + auto-carried experiment
- *  buckets. No hand-listed experiments map — forgetting one entry used to silently fork a
- *  visitor's world between teams. Explicit claims (override or base) win on collision. */
+/** The on-behalf-of claims for a hop: the table's ONE identity + auto-carried flag decisions.
+ *  Every `flag(c)` decided this request self-registers its bucket (see `assigned_buckets` — a page
+ *  read, or a table `flags: […]` pre-decision), so a mounted team renders the visitor in the SAME
+ *  world with no hand-listed map — forgetting an entry used to silently fork a visitor between
+ *  teams. Explicit claims (override or base) win on collision. */
 function claims_for(c: Ctx, user_override?: (c: Ctx) => Claims | undefined): Claims | undefined {
 	const base = user_override ? user_override(c) : (c.visitor as Claims | undefined);
-	const exps = c.__og_experiments;
-	if (!exps?.length) return base;
-	const buckets: Record<string, string> = {};
-	for (const e of exps) buckets[e.name] = e.bucket(c as never);
+	const buckets = assigned_buckets(c.request);
+	if (!buckets || Object.keys(buckets).length === 0) return base;
 	return {
 		...base,
 		experiments: { ...buckets, ...((base?.experiments as object | undefined) ?? {}) }
@@ -822,13 +823,17 @@ function claims_for(c: Ctx, user_override?: (c: Ctx) => Claims | undefined): Cla
  * CANARY / BLUE-GREEN: pass a PER-REQUEST resolver instead — the promised A/B-of-infrastructure:
  *
  *     const v2 = flag('cms-v2', { rollout: 10 });
- *     '/cms/[...rest]': mount((c) => (v2.on(c) ? cms_v2 : cms_v1))
+ *     const v2 = flag('cms-v2', 10);
+ *     '/cms/[...rest]': mount(v2.pick({ off: cms_v1, on: cms_v2 }))
  *
- * Clients are prebuilt singletons (each keeps its own cache/coalescing); the resolver only
- * CHOOSES between them, so stickiness comes from the flag and transport state stays per-target.
+ * — the same `pick` verb that chooses components and values chooses infrastructure (a bare
+ * `(c) => FragmentClient` resolver works too). Clients are prebuilt singletons (each keeps its
+ * own cache/coalescing); the pick only CHOOSES between them, so stickiness comes from the flag,
+ * federation carry keeps the canaried team consistent across the visitor's session, and
+ * transport state stays per-target.
  */
-export function mount(
-	target: string | FragmentClient | ((c: Ctx) => FragmentClient),
+function mount_fn(
+	target: string | FragmentClient | ComponentPick | ((c: Ctx) => FragmentClient),
 	opts: MountOptions = {}
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): PageDef<any, any, any, any, any> {
@@ -837,9 +842,19 @@ export function mount(
 			? null
 			: typeof target === 'string'
 				? client(target, opts)
-				: target;
-	const resolve_client = (c: Ctx): FragmentClient =>
-		fixed ?? (target as (c: Ctx) => FragmentClient)(c);
+				: '__ogpick' in target
+					? null
+					: target;
+	const resolve_client = (c: Ctx): FragmentClient => {
+		if (fixed) return fixed;
+		const got =
+			typeof target === 'function' ? target(c) : (target as ComponentPick).__ogpick(c as never);
+		if (!got || typeof (got as FragmentClient).doc !== 'function')
+			throw new Error(
+				`[ogygia] mount(): the ${typeof target === 'function' ? 'resolver' : 'pick'} must yield a FragmentClient (a client(origin, …) instance).`
+			);
+		return got as FragmentClient;
+	};
 
 	// STREAM MODE: the page slot is a GENERATOR — fallback flushes with the shell's page, the
 	// fragment swaps in down the same response when (and only when) the MFE answers. The hop
@@ -964,7 +979,11 @@ export function mount(
 	});
 }
 
-// ── kitMount: mounting WITHOUT ogygia's router ───────────────────────────────────────────────
+/** The mount surface: call it (`mount(cms)` in a routes table), or mount from PLAIN SvelteKit
+ *  with `mount.kit(cms)` (a catchall `+page.server.ts`, no ogygia router). One noun. */
+export const mount = Object.assign(mount_fn, { kit: kit_mount });
+
+// ── mount.kit: mounting WITHOUT ogygia's router ──────────────────────────────────────────────
 /** A Kit-shaped server event — the structural subset kitMount touches. */
 type KitMountEvent = {
 	params: Partial<Record<string, string>>;
@@ -985,7 +1004,7 @@ export interface KitMountOptions {
  * Mount an MFE from a PLAIN SvelteKit catchall — no ogygia router needed. In
  * `src/routes/cms/[...rest]/+page.server.ts`:
  *
- *     const m = kitMount(cms);                       // cms = client(origin, { sign, … })
+ *     const m = mount.kit(cms);                      // cms = client(origin, { sign, … })
  *     export const load = m.load;
  *     export const actions = m.actions;
  *
@@ -997,7 +1016,7 @@ export interface KitMountOptions {
  * an upstream 4xx/5xx becomes Kit's `error(status)` — correct status, but the SHELL's error page
  * renders instead of the MFE's error body (the router's mount keeps both).
  */
-export function kitMount(
+function kit_mount(
 	target: string | FragmentClient,
 	opts: KitMountOptions = {}
 ): {

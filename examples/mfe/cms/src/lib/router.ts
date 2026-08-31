@@ -4,7 +4,7 @@
  * a redirect, a miss → everything the shell's mount must translate faithfully.
  */
 import { routes, page, layout, error, redirect } from 'ogygia/router';
-import { csr_exp } from '@corp/contracts';
+import { csr_flag } from '@corp/contracts';
 import { stitch_dash_kpis } from './nested-stitch.js';
 import CmsShell from './CmsShell.svelte';
 import PostsShell from './PostsShell.svelte';
@@ -48,8 +48,8 @@ export const cms_router = routes(
 					dash_html: await stitch_dash_kpis(c.visitor, c.request.headers.get('traceparent'))
 				})
 			}),
-			'/lab': page(csr_exp.pick({ static: Lab, hydrated: LabLive }), {
-				load: (c) => ({ mode: csr_exp.bucket(c), stamp: csr_exp.stamp(c) })
+			'/lab': page(csr_flag.pick({ static: Lab, hydrated: LabLive }), {
+				load: (c) => ({ mode: csr_flag(c), stamp: csr_flag.stamp(c) })
 			}),
 			...posts_shell({
 				'/posts/[id]': page(Post, {

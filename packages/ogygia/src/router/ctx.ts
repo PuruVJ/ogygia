@@ -48,8 +48,6 @@ export interface Ctx<
 	 *  Everything downstream READS this instead of re-deriving: experiments stick on it, mounts
 	 *  sign it onward, loads personalize with it. */
 	readonly visitor?: Visitor;
-	/** @internal the table's `experiments` list — mounts auto-carry their buckets in claims. */
-	__og_experiments?: ReadonlyArray<{ name: string; bucket(c: never): string }>;
 	platform?: Readonly<RequestEvent['platform']>;
 	getClientAddress?: RequestEvent['getClientAddress'];
 	/** The raw Kit event, when mounted in Kit. */

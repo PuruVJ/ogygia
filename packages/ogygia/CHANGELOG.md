@@ -14,13 +14,50 @@ The **passage** release — the runtime and the compiler both rebuilt from the s
 
 On top of the islands, this release also ships a whole tooling layer: a drop-in production **SSR profiler** (`ogygia({ profiler })`), an island-graph **devtools** dock (`ogygia({ devtools })`), a fully-typed programmatic **router** (`ogygia/router`), and priority-aware preloading so lazy islands warm in the background instead of fighting first paint.
 
+### Changed (breaking)
+
+- **Flags & experiments collapsed onto ONE primitive, `flag()`.** A kill switch, a rollout, a
+  targeting rule, and an A/B/n test are the same thing; the old `experiment` / `layer` /
+  `allowOverrides` / `onExposure` / `batchExposures` / `.bucket` / `.on` surface is **removed**.
+  Now: declare with a shape (`flag('x')` off · `flag('x', 10)` rollout % · `flag('x', fn)`
+  targeting · `flag('x', { control: 80, bold: 20 })` weighted variants); **read by calling** the
+  flag (`checkout(c)` → boolean, `hero(c)` → variant); branch with `flag.pick(map)` (a `page()`
+  slot) or `flag.pick(c, map)` (this visitor's typed value); read a vendor payload with
+  `flag.value(c)` (schema-validated, with a `fallback`). One `decide({ source?, overrides?,
+  exposure?, batch? })` configures everything (was the three scattered globals). Federation
+  auto-carry is now registry-based — every flag a request decides self-registers its bucket into
+  the signed claims, so `routes({ experiments })` is gone; a route-only shell pre-decides with
+  `routes({ flags: [...] })`.
+
+- **`kitMount` is now `mount.kit`.** One mount noun: call it in a routes table (`mount(cms)`),
+  or mount from plain SvelteKit with the property (`mount.kit(cms)` in a catchall
+  `+page.server.ts`). Same behavior, same options.
+
 ### Added
 
-- **The ogygia MCP server grew to eleven tools.** `ogygia_flags` inventories every `flag()` /
-  `experiment()` call site with the build's own AST collector and diffs against the build
-  manifest to surface dead or renamed flags; `ogygia_fragment` probes a federation MFE origin —
-  signature posture (401 without a signature = verified; 200 = open) plus the `__catalog` widget
-  manifest with the typed-stub command.
+- **`when()` — flags gate routes, and `pick` chooses infrastructure.** `when(flag, entry)` wraps
+  any table entry (a page, an endpoint object, a `mount()`): OFF means the route DOES NOT EXIST
+  for that request — the app's 404/error page under an owned `base`, clean fall-through to the
+  rest of the app without one. A boolean `flag()` slots in directly, so a staged rollout of a
+  whole page, a beta route, an endpoint kill switch, and a per-cohort fragment rollout
+  (`when(cmsRollout, mount(cms))`) are one wrapper; the gate runs after `decide({ source })`
+  primes, so a vendor kill switch gates routes too, and the decision carries across federation
+  like any flag read. `$infer` sees the entry as if unwrapped. And `mount()` now accepts a flag
+  pick of clients — `mount(v2.pick({ off: cms_v1, on: cms_v2 }))` — the same `pick` verb that
+  chooses components and values chooses infrastructure (canary/blue-green, sticky per visitor).
+
+- **OpenFeature interop — `ogygia/openfeature`.** `decide({ source: openfeature(client) })`
+  bridges any OpenFeature server client (no vendor SDK dependency — you pass your own), resolved
+  once per request over exactly the flags the app declares, then every read stays sync. `ofrep({
+  url })` speaks the remote-evaluation protocol directly (zero SDK); a source is otherwise just a
+  function. Vendor decisions are validated against declared variants; a slow/down source degrades
+  every flag to its native rule and never gates first byte.
+
+- **The ogygia MCP server grew to eleven tools.** `ogygia_flags` inventories every `flag()`
+  call site with the build's own AST collector and diffs against the build manifest to surface
+  dead or renamed flags; `ogygia_fragment` probes a federation MFE origin — signature posture
+  (401 without a signature = verified; 200 = open) plus the `__catalog` widget manifest with the
+  typed-stub command.
 
 - **The bundled AI skill rewritten** against the whole current surface: server router
   (routes-as-values, `$infer`, streamed pages), fragment federation, experiments & flags,

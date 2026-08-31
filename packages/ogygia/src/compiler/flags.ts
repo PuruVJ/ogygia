@@ -18,7 +18,7 @@ import { parse_module } from './parse/oxc.js';
 
 export interface FlagSite {
 	name: string;
-	kind: 'flag' | 'experiment';
+	kind: 'flag';
 	/** root-relative (or package-relative) posix path. */
 	file: string;
 	line: number;
@@ -31,9 +31,9 @@ type AstNode = {
 	[k: string]: unknown;
 };
 
-const KINDS = new Set(['flag', 'experiment']);
+const KINDS = new Set(['flag']);
 /** Cheap pre-parse gate — most modules import ogygia for other reasons. */
-const MAYBE_RE = /\b(?:flag|experiment)\b/;
+const MAYBE_RE = /\bflag\b/;
 /** All `<script …>` blocks of a `.svelte` file (instance AND module — flags can sit in either). */
 const SCRIPT_BLOCK_RE = /<script\b[^>]*>([\s\S]*?)<\/script>/g;
 const NL = 10;

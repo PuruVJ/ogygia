@@ -1,34 +1,81 @@
 ---
-title: Experiments
-summary: A/B tests, feature flags, targeting, and rollouts as ONE primitive — variants assigned per visitor, deterministically, during SSR. Zero JS ships for the assignment; csr=false pages experiment for free.
+title: Flags & experiments
+summary: Kill switches, rollouts, targeting, and A/B tests as ONE primitive — flag(). Decided per visitor, server-side during SSR, zero JS shipped for the decision. OpenFeature plugs in through one decide() call; csr=false pages A/B for free.
 related:
   - app/server-router
   - app/federation
   - regions/timing-nesting
 ---
 
-Splits, flags, targeting, rollouts, canaries — they're all the same thing: **variants of something, assigned per visitor**. `experiment()` owns that assignment and nothing else. Branching rides the primitives you already have (a router page's component, a load's data, a region choice), and because assignment happens **server-side during SSR**, the chosen variant is simply what gets rendered. No flicker, no client SDK, no JS shipped for the decision — a `csr = false` page runs experiments for free.
+A kill switch, a staged rollout, a targeting rule, and an A/B/n test are the same thing: **a name with variants, decided per visitor**. One primitive owns that decision — `flag()` — and because the decision happens **server-side during SSR**, the chosen variant is simply what gets rendered. No flicker, no client SDK, no JS shipped for the decision. A `csr = false` page A/B tests for free.
 
-## The primitive
+You read a flag by **calling it**. You branch with `pick`. You wire a vendor (OpenFeature) with one `decide()`. That's the whole surface.
+
+## Declare — the second argument is the shape
 
 ```ts
-import { experiment } from 'ogygia';
+import { flag } from 'ogygia';
 
-export const heroExp = experiment('hero-redesign', {
-  variants: ['control', 'bold'],   // first variant IS the control
-  split: { bold: 20 },             // 20% of traffic, sticky per visitor; the rest see control
-});
+export const checkout = flag('new-checkout');                    // kill switch — off until decided on
+export const promo    = flag('summer-promo', 10);                // number → sticky rollout to 10%
+export const beta     = flag('beta', (c) => !!c.visitor?.beta);  // function → targeting
+export const hero     = flag('hero', { control: 80, bold: 20 }); // record → weighted variants (ratios)
 ```
 
-Read it anywhere a request context exists — a load, an action, an endpoint:
+- **omitted** → a kill switch, off for everyone (the safe default).
+- **a number** → the sticky percent of traffic that gets the feature.
+- **a function** → per-request targeting: `true` = on, `false` = **definitively** off (a rollout can't re-include it), `undefined` = fall through. It runs per request, so read a cookie, an env var, a DB row — runtime toggles without a redeploy.
+- **a record** → weighted variants. Weights are **ratios** (`{ control: 3, bold: 1 }` is 75/25); the first key is control.
+
+## Read — by calling the flag
 
 ```ts
 '/': page(Home, {
-  load: (c) => ({ hero: heroExp.bucket(c) })   // 'control' | 'bold', typed
+  load: (c) => ({
+    dark: checkout(c),        // boolean
+    variant: hero(c),         // 'control' | 'bold' — sticky per visitor
+  }),
 }),
 ```
 
-`bucket(c)` is **deterministic and sticky**: the same visitor gets the same variant on every request, from a hash of `(experiment name, visitor id)` — no storage, no cookie writes, nothing to sync.
+The decision is **deterministic and sticky**: the same visitor gets the same answer on every request, from a hash of `(flag name, visitor id)` — no storage, no cookie writes, nothing to sync.
+
+## Branch — `pick`, one verb, two forms
+
+`pick` means "here's a map of variant → thing; give this visitor their entry."
+
+**A page slot** (no `c` — the router supplies it per request):
+
+```ts
+import Hero from './Hero.svelte';
+import HeroBold from './HeroBold.svelte';
+
+'/': page(hero.pick({ control: Hero, bold: HeroBold }), { load }),
+```
+
+`$infer` never notices — the page's types come from the load, so the arms are free. The arms don't have to be different files: because a component's schedule rides its **import attribute**, two bindings of ONE file are two different pages — which answers "does full hydration actually beat islands?" as a real experiment:
+
+```ts
+import Lab from './Lab.svelte';                          // pure server HTML — zero JS
+import LabLive from './Lab.svelte' with { wake: 'load' }; // the SAME file as one live island
+
+export const csrMode = flag('csr-mode', { static: 50, hydrated: 50 });
+
+'/lab': page(csrMode.pick({ static: Lab, hydrated: LabLive }), { load }),
+```
+
+**A value** (you have `c`, so pass it and get the answer):
+
+```ts
+const trialDays = pricing.pick(c, { control: 7, generous: 30 });    // 7 | 30, typed + total
+const label     = hero.pick(c, { control: 'Buy now', bold: 'BUY →' });
+const cfg        = hero.pick(c, {
+  control: { columns: 2, video: false },
+  bold:    { columns: 1, video: true },
+});
+```
+
+TypeScript forces the map to cover every variant, and the return type is the union of its values. `pick` earns its keep at 3+ variants; for a boolean flag, just call it, and for two variants a ternary is fine.
 
 ## Who is the visitor?
 
@@ -40,9 +87,9 @@ export const app = routes(table, {
 });
 ```
 
-That becomes [`c.visitor`](/docs/app/server-router) everywhere — experiments stick on `c.visitor.sub`, and it's the same identity [mounts sign onward](/docs/app/federation) to other teams. Outside the router (or for anonymous traffic) the fallback chain is an `og-vid` cookie, then anonymous — and **anonymous visitors always see control**, so a split can never flap for someone you can't recognize.
+That becomes [`c.visitor`](/docs/app/server-router) everywhere — flags stick on `c.visitor.sub`, and it's the same identity [mounts sign onward](/docs/app/federation) to other teams. Outside the router (or for anonymous traffic) the fallback is an `og-vid` cookie, then anonymous — and **anonymous visitors always see control**, so a split never flaps for someone you can't recognize.
 
-For sticky rollouts on **logged-out traffic**, mint the cookie: `anonymousVisitor()` returns a resolver that reads `og-vid` or mints a random id into it (first-party, httpOnly, carries nothing) — usable alone or as a session's fallback:
+For sticky rollouts on **logged-out traffic**, mint the cookie:
 
 ```ts
 import { anonymousVisitor } from 'ogygia/router';
@@ -51,89 +98,66 @@ const anon = anonymousVisitor();                       // { cookie?, days? }
 routes(table, { visitor: (c) => session(c) ?? anon(c) });
 ```
 
-## Assign on any condition
+## Vendor values — `.value()`
 
-`split` is the tail. For targeting, put an `assign` in front — return a variant to decide, or `undefined` to fall through to the split:
+A flag can carry a vendor-authored payload (config edited in the vendor's dashboard, not in code). Validate it with a schema — an invalid payload is **ignored**, never entered, the same trust-boundary law as a body schema:
 
 ```ts
-export const checkout = experiment('new-checkout', {
-  variants: ['classic', 'fast'],
-  assign: (c) => {
-    if (c.visitor?.roles?.includes('beta')) return 'fast';   // beta program: always in
-    if (c.visitor?.locale === 'de') return 'classic';        // not launched there yet
-    return undefined;                                        // everyone else → the split
-  },
-  split: { fast: 10 },
+import * as v from 'valibot';
+
+export const banner = flag('promo-banner', 0, {
+  value: v.object({ text: v.string(), tone: v.picklist(['info', 'warn']) }),
+  fallback: { text: '', tone: 'info' },   // when the vendor is silent or the value is invalid
 });
+
+banner.value(c);   // typed payload — never undefined
 ```
 
-The taxonomy collapses: a **feature flag** is an experiment whose `assign` never falls through. A **beta program** is `assign` first with `split` as the everyone-else tail. A **rollout** is a split you turn up.
+## OpenFeature — `decide({ source })`
 
-## Feature flags: `flag()`
+Native flags need no setup. To decide flags with a vendor instead, wire it **once**. ogygia depends on no vendor SDK — you hand `decide` your own OpenFeature client:
 
-Flags are the everyday case, so they get a boolean face — `flag()` is a thin wrapper that IS an `Experiment<'off' | 'on'>` underneath:
+```ts title=hooks.server.ts
+import { OpenFeature } from '@openfeature/server-sdk';
+import { LaunchDarklyProvider } from '@launchdarkly/openfeature-node-server';
+import { decide } from 'ogygia';
+import { openfeature } from 'ogygia/openfeature';
+
+OpenFeature.setProvider(new LaunchDarklyProvider(env.LD_KEY));
+decide({ source: openfeature(OpenFeature.getClient()) });
+```
+
+The source is resolved **once per request** over exactly the flags your app declares, then every read stays sync — after that instant, a vendor-decided flag is indistinguishable from a native one (same calls, same `pick`, same [federation carry](#one-world-across-teams)). Decisions are validated against your declared variants; a vendor typo can't invent a bucket. If the vendor is slow or down, every flag degrades to its native rule — it never gates first byte.
+
+No vendor SDK? Speak the OpenFeature remote protocol directly:
 
 ```ts
-import { flag } from 'ogygia';
-
-export const newNav = flag('new-nav', {
-  enabled: (c) => {
-    if (c.visitor?.roles?.includes('beta')) return true;    // beta program: in
-    if (c.visitor?.locale === 'de') return false;           // targeted OFF — rollout can't re-include
-    return undefined;                                       // everyone else → the rollout
-  },
-  rollout: 10,   // sticky 10% of the rest
-});
+import { ofrep } from 'ogygia/openfeature';
+decide({ source: ofrep({ url: 'http://flagd:8016' }) });
 ```
+
+Custom logic or a database? A source is just a function:
 
 ```ts
-'/': page(Home, { load: (c) => ({ nav: newNav.on(c) ? 'new' : 'classic' }) }),
+decide({ source: async (queries, c) => {
+  const rows = await db.flags(c.visitor?.sub);
+  return Object.fromEntries(rows.map((r) => [r.name, r.variant]));
+}});
 ```
 
-- `on(c)` is the whole read API. A bare `flag('x')` is off for everyone — the safe default.
-- Everything an experiment gets, a flag gets: sticky per-visitor rollout, `?og-exp=new-nav:on` QA override, `pick()` for page branching, `stamp()` for logs, and listing it in `routes({ experiments: [newNav] })` carries it to [mounted teams](/docs/app/federation) — one world.
-- **Runtime toggles without a redeploy** are just `enabled`: it runs per request, so read an env var, a cookie, or a database row. A kill switch is `enabled: () => process.env.NEW_NAV !== 'off' ? undefined : false`.
-- An explicit `false` from `enabled` is definitive — a targeted off is never re-included by the rollout percentage.
+> On plain SvelteKit (no ogygia router), `import` your flags module in `hooks.server.ts` so every flag is registered before the first request primes the source. Router apps import all route modules at startup, so their registry is always complete.
 
-## Branch a page: `pick()`
+## The precedence chain
 
-For a router page, branch the **component** per request:
+Every read resolves in this order, first hit wins:
 
-```ts
-import Hero from './Hero.svelte';
-import HeroBold from './HeroBold.svelte';
+**`?og-exp` override → carried claims → the source → the native rule → control.**
 
-'/': page(heroExp.pick({ control: Hero, bold: HeroBold }), { load }),
-```
-
-`$infer` never notices — the page's types come from the load, so arms are free.
-
-The arms don't have to be different files. Because a page component's schedule rides its **import attribute**, two bindings of ONE file are two different pages — which answers the classic question "does full hydration actually beat islands?" as a real experiment:
-
-```ts
-import Lab from './Lab.svelte';                          // pure server HTML — zero JS
-import LabLive from './Lab.svelte' with { wake: 'load' }; // the same file as ONE live island
-
-export const csrExp = experiment('csr-mode', { variants: ['static', 'hydrated'], split: { hydrated: 50 } });
-
-'/lab': page(csrExp.pick({ static: Lab, hydrated: LabLive }), { load }),
-```
-
-Half your visitors get the zero-JS page, half get the fully-hydrated one, stickily — measure and settle the argument.
-
-## Mutual exclusion: `layer()`
-
-Two experiments that touch the same surface must never hit the same visitor, or neither is measurable. A layer **partitions** traffic between its members:
-
-```ts
-import { experiment, layer } from 'ogygia';
-
-const hero = layer('hero-surface');
-const expA = experiment('hero-redesign', { variants: ['control', 'bold'], split: { bold: 50 }, layer: hero });
-const expB = experiment('hero-video',    { variants: ['control', 'video'], split: { video: 50 }, layer: hero });
-```
-
-Each visitor is owned by at most one member experiment; for the others they're control.
+- **override** — a QA force from the URL (below).
+- **carried claims** — a decision an upstream shell already made (federation).
+- **source** — the vendor, if `decide({ source })` set one.
+- **native rule** — your targeting function / weights / rollout.
+- **control** — the first variant (or `off`).
 
 ## QA override
 
@@ -141,55 +165,59 @@ Force any variant from the URL — it wins over everything, including stickiness
 
 ```
 /lab?og-exp=csr-mode:hydrated
-/?og-exp=hero-redesign:bold,new-checkout:fast
+/?og-exp=hero:bold,new-checkout:on
 ```
 
-**Dev-only by default.** In production an open URL override would let any visitor force themselves into unfinished features and pollute your experiment data — so out of the box, production ignores `?og-exp`. Opt QA in with something a visitor can't forge:
+**Dev-only by default.** In production an open URL override would let any visitor force themselves into unfinished features and pollute your data — so out of the box, production ignores `?og-exp`. Opt QA in with something a visitor can't forge:
 
 ```ts title=hooks.server.ts
-import { allowOverrides } from 'ogygia';
-
-allowOverrides((c) => c.visitor?.roles?.includes('qa') ?? false);
+decide({ overrides: (c) => c.visitor?.roles?.includes('qa') ?? false });
 ```
 
-An upstream shell that honored an override still propagates it to [mounted teams](/docs/app/federation) through carried claims — only the evaluating server's gate matters.
+## Mutual exclusion — the `layer` option
 
-## The flag manifest
+Two flags that touch the same surface must never hit the same visitor, or neither is measurable. A `layer` string **partitions** traffic between the flags that share it:
 
-Every production build writes an inventory of the `flag()` and `experiment()` call sites it compiled — AST-resolved (renamed and namespace imports count; an unrelated local function named `flag` doesn't) — to:
-
+```ts
+const heroRedesign = flag('hero-redesign', { control: 50, bold: 50 }, { layer: 'hero-surface' });
+const heroVideo    = flag('hero-video',    { control: 50, video: 50 }, { layer: 'hero-surface' });
 ```
-node_modules/.ogygia/flags-manifest.json   →  { flags: [{ name, kind, file, line }], names: [...] }
+
+Each visitor is owned by at most one member; for the others they see control.
+
+## Measurement — `decide({ exposure })`
+
+ogygia ships **no metrics pipeline** — the decision is the primitive; counting is your analytics' job. The one seam is an exposure sink, fired once per request per flag on first read (under SSR, deciding *is* rendering the variant). Batching is built in:
+
+```ts title=hooks.server.ts
+decide({
+  exposure: (events) => analytics.track(events),   // an array of { name, variant, sub, at }
+  batch: { max: 25, ms: 2000 },                     // flushed at the cap, the timer, or request end
+});
 ```
 
-Flags rot: the industry's answer to flag debt is refactoring bots that delete stale branches. A code-first setup gets most of that value from the inventory alone — record the manifest in CI, diff it per release, and alarm on any name that survives past its expected retirement. Retiring a flag stays a human edit (delete the flag, keep the winning branch); the manifest tells you which ones are overdue.
-
-## Stamping and measurement
-
-`stamp(c)` gives `name:variant` for wherever your measurement lives — a `data-og-exp` attribute, a log line, a Server-Timing label:
+A throwing sink never breaks a request; the tail drains at each request's end (serverless-safe). For logs and `data-og-exp` stamps, `stamp(c)` gives `name:variant`:
 
 ```svelte
 <section data-og-exp={data.stamp}>…</section>
 ```
 
-ogygia deliberately ships **no metrics pipeline** — assignment is the primitive; counting is your analytics' job, and the stamp is the join key. The one seam is `onExposure`: a sink called once per request per experiment/flag, on first assignment (under SSR, assignment *is* rendering the variant):
-
-```ts
-import { onExposure } from 'ogygia';
-
-onExposure((name, variant, c) => {
-  queue_analytics_event('exposure', { name, variant, sub: c.visitor?.sub });
-});
-```
-
-Register it once at server startup; a throwing sink never breaks a request. For a real pipeline, batch: `onExposure(batchExposures(send, { max: 25, ms: 2000 }))` collects events and calls `send(batch)` at the size cap or the timer, whichever first — and the returned sink's `.flush()` drains the tail on shutdown.
-
 ## One world across teams
 
-The full precedence per request: **override → carried → assign → split → control**. "Carried" is the federation tier: when a shell [mounts other teams' apps](/docs/app/federation), it lists its experiments on the table —
+"Carried" in the precedence chain is the federation tier. Every flag a request **decides** self-registers its bucket, so when a shell [mounts other teams' apps](/docs/app/federation) the visitor's whole world travels in the signed claims — nobody hand-lists anything, and forgetting an entry can't silently fork a visitor between teams. A carried decision beats the local native rule, so one visitor never straddles two worlds.
+
+A shell that only **routes** to teams (it never reads the flag itself) pre-decides it on the table, so the bucket still travels:
 
 ```ts
-routes(table, { visitor: session, experiments: [csrExp, heroExp] })
+routes(table, { visitor: session, flags: [csrMode] });   // decide-but-don't-render
 ```
 
-— and every mount automatically signs the visitor's buckets into its hops. Downstream apps read the same world; nobody hand-lists anything, and a `?og-exp` override (where the shell's gate allows it) propagates too. An upstream-carried assignment beats local `assign`/`split`, so one visitor can never straddle two worlds between teams.
+## The flag manifest
+
+Every production build writes an inventory of the `flag()` call sites it compiled — AST-resolved (renamed and namespace imports count; an unrelated local function named `flag` doesn't) — to:
+
+```
+node_modules/.ogygia/flags-manifest.json   →  { flags: [{ name, kind, file, line }], names: [...] }
+```
+
+Flags rot. A code-first setup gets most of the industry's flag-debt tooling from the inventory alone — record the manifest in CI, diff it per release, and alarm on any name that outlives its retirement. The `ogygia_flags` MCP tool reads it live. Retiring a flag stays a human edit (delete the flag, keep the winning branch); the manifest tells you which ones are overdue.

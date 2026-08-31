@@ -7,7 +7,7 @@
  * the Kit dictionary live in internal/notes/router-v2.md.
  */
 import type { Component } from 'svelte';
-import type { ComponentPick } from '../experiment.js';
+import type { ComponentPick } from '../flags.js';
 import type { Ctx } from './ctx.js';
 import type { Params } from './view.js';
 import type { StandardSchemaV1 } from './view.js';

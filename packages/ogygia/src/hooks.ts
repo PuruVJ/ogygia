@@ -45,6 +45,7 @@ import { verify, region_mac_message } from './server/hmac.js';
 import { render_cache_key, cached_render } from './server/render-cache.js';
 import { B64Url } from './server/payload.js';
 import { REF_WIRE_KEY, ref_reviver } from './ref.js';
+import { prime_flags, flush_exposures } from './flags.js';
 // PULL-registration at decode time (idempotent; no import-time side effects).
 import { register_wire_kind } from './live-transport.js';
 import { register_store_kind, register_derived_kind } from './store-transport.js';
@@ -334,12 +335,21 @@ class OgygiaHandle {
 			// DEVTOOLS: attach a request-scoped event buffer via a side WeakMap (keeps RequestBag — and
 			// its cost — untouched when devtools is off; the map + this line DCE out then).
 			if (DEVTOOLS) dt_buffers.set(bag, { events: [], seq: 0 });
-			const response = await request_als.run(bag, () =>
-				resolve(event, {
-					transformPageChunk: async ({ html }) =>
-						this.inject_client_seeds(html, store?.state, event, bag)
-				})
-			);
+			// Resolve the flag SOURCE (if `decide({ source })` set one) once for this request, so
+			// `flag(c)` reads during render stay sync. On plain Kit the registry warms per route as
+			// modules load; router apps prime again in dispatch (idempotent) with a complete registry.
+			await prime_flags({ request: event.request, url: event.url, cookies: event.cookies });
+			let response: Response;
+			try {
+				response = await request_als.run(bag, () =>
+					resolve(event, {
+						transformPageChunk: async ({ html }) =>
+							this.inject_client_seeds(html, store?.state, event, bag)
+					})
+				);
+			} finally {
+				flush_exposures(); // drain queued exposures at the request's end (serverless-safe tail)
+			}
 			// Stream captured `$page.data` promises into islands (csr=false, real browser load). The doc
 			// — with the pending seed + resolve-global bootstrap — is fully built now (transformPageChunk
 			// ran synchronously inside `resolve`); the tail streams a resolve script per promise as it

@@ -100,21 +100,22 @@ export { hydratedBy } from './hydration-info.js';
 // Server-seedable via a printed JSON script tag; vanilla door at globalThis.ogygia.shared().
 export { SharedState } from './shared-state.js';
 
-// Experiments / flags / rollouts: the ASSIGNMENT primitive (server-side, sticky, zero-JS).
-// Branching rides existing primitives — a router page's `pick`, a load's data branch, a region
-// choice. Environment-free on purpose (pure hash, no node builtins).
+// Flags / rollouts / experiments: the ONE decision primitive (server-side, sticky, zero-JS).
+// A kill switch, a rollout, a targeting rule, and an A/B/n test are the same `flag()`; branching
+// rides `flag.pick()`; `decide()` wires a vendor (OpenFeature/OFREP) once. Environment-free on
+// purpose (pure hash, no node builtins).
 export {
-	experiment,
 	flag,
-	layer,
-	allowOverrides,
-	onExposure,
-	batchExposures,
-	type ExposureEvent,
-	type Experiment,
-	type ExperimentOptions,
-	type Flag,
+	decide,
+	type FlagShape,
 	type FlagOptions,
-	type Layer,
-	type ComponentPick
-} from './experiment.js';
+	type BoolFlag,
+	type VariantFlag,
+	type DecideOptions,
+	type FlagSource,
+	type FlagQuery,
+	type Resolved,
+	type ExposureEvent,
+	type ComponentPick,
+	type CtxLike
+} from './flags.js';

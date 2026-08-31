@@ -9,13 +9,13 @@ import { collect_flag_sites, flags_manifest } from '../src/compiler/flags.js';
 
 describe('collect_flag_sites — AST binding resolution', () => {
 	it('counts calls through named imports, with names and lines', () => {
-		const src = `import { flag, experiment } from 'ogygia';
-export const nav = flag('new-nav', { rollout: 10 });
-export const mode = experiment('csr-mode', { variants: ['a', 'b'] });
+		const src = `import { flag } from 'ogygia';
+export const nav = flag('new-nav', 10);
+export const mode = flag('csr-mode', { a: 50, b: 50 });
 `;
 		expect(collect_flag_sites(src, '/app/src/flags.ts', 'src/flags.ts')).toEqual([
 			{ name: 'new-nav', kind: 'flag', file: 'src/flags.ts', line: 2 },
-			{ name: 'csr-mode', kind: 'experiment', file: 'src/flags.ts', line: 3 }
+			{ name: 'csr-mode', kind: 'flag', file: 'src/flags.ts', line: 3 }
 		]);
 	});
 
@@ -31,17 +31,17 @@ export const x = f('renamed-flag');
 	it('follows a NAMESPACE import (og.flag)', () => {
 		const src = `import * as og from 'ogygia';
 export const x = og.flag('ns-flag');
-export const y = og.experiment('ns-exp', { variants: ['a'] });
+export const y = og.flag('ns-variant', { a: 1, b: 1 });
 `;
 		const names = collect_flag_sites(src, '/a/b.ts', 'b.ts').map((s) => `${s.kind}:${s.name}`);
-		expect(names).toEqual(['flag:ns-flag', 'experiment:ns-exp']);
+		expect(names).toEqual(['flag:ns-flag', 'flag:ns-variant']);
 	});
 
 	it('a LOCAL function named `flag` is NOT counted (a text sweep would false-positive)', () => {
-		const src = `import { experiment } from 'ogygia';
+		const src = `import { flag as real_flag } from 'ogygia';
 const flag = (name) => name; // somebody's own helper
 export const x = flag('not-ours');
-export const real = experiment('ours', { variants: ['a'] });
+export const real = real_flag('ours');
 `;
 		expect(collect_flag_sites(src, '/a/b.ts', 'b.ts').map((s) => s.name)).toEqual(['ours']);
 	});
@@ -76,7 +76,7 @@ export const y = flag('static-one');
 describe('flags_manifest', () => {
 	it('dedupes the two build legs and sorts stably', () => {
 		const site = { name: 'nav', kind: 'flag' as const, file: 'src/f.ts', line: 2 };
-		const other = { name: 'csr', kind: 'experiment' as const, file: 'src/e.ts', line: 1 };
+		const other = { name: 'csr', kind: 'flag' as const, file: 'src/e.ts', line: 1 };
 		const m = flags_manifest([site, other, site]); // ssr + client legs both saw `site`
 		expect(m.flags).toEqual([other, site]);
 		expect(m.names).toEqual(['csr', 'nav']);

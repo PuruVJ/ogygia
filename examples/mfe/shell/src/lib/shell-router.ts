@@ -3,7 +3,7 @@
  * chrome with ONE table entry, identity + experiments declared ONCE at the table.
  */
 import { routes, layout, mount } from 'ogygia/router';
-import { csr_exp } from '@corp/contracts';
+import { csr_flag } from '@corp/contracts';
 import { cms, session } from './clients.server.js';
 import ShellChrome from './ShellChrome.svelte';
 import ShellError from './ShellError.svelte';
@@ -21,12 +21,13 @@ export const shell_router = routes(
 	{
 		base: '',
 		// THE identity — resolved once per request, read everywhere as `c.visitor`; every
-		// mount signs it into its hops (on-behalf-of, never via the browser)
+		// mount signs it into its hops (on-behalf-of, never via the browser).
 		visitor: () => session(),
-		// experiments assign HERE, once — every mount AUTO-CARRIES the buckets in its signed
-		// claims, so all teams render this visitor in the same world (a ?og-exp override
-		// propagates too, since the shell's ctx sees the query before computing the bucket).
-		// No hand-listed claims map: forgetting one entry used to silently fork worlds.
-		experiments: [csr_exp]
+		// Pre-decide csr_flag HERE: the shell only ROUTES to the cms (it never reads the flag
+		// itself), but it wants the visitor's world to travel. Listing it force-decides the bucket
+		// so the mount carries it in its signed claims — every team renders the same world. A flag
+		// a page actually reads needs no listing (it auto-carries). A ?og-exp override propagates
+		// too (the shell's ctx sees the query before deciding).
+		flags: [csr_flag]
 	}
 );

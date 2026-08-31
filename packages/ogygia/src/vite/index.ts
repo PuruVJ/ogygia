@@ -948,7 +948,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							JSON.stringify(manifest, null, '\t') + '\n'
 						);
 						console.log(
-							`[ogygia] flags manifest: ${manifest.names.length} flag(s)/experiment(s) → node_modules/.ogygia/flags-manifest.json`
+							`[ogygia] flags manifest: ${manifest.names.length} flag(s) → node_modules/.ogygia/flags-manifest.json`
 						);
 					} catch {
 						/* a read-only FS must never fail the build over an inventory */

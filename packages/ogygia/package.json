@@ -108,6 +108,10 @@
 			"types": "./dist/router/client-api.d.ts",
 			"default": "./src/router/client-api.ts"
 		},
+		"./openfeature": {
+			"types": "./dist/openfeature.d.ts",
+			"default": "./src/openfeature.ts"
+		},
 		"./devtools": {
 			"types": "./dist/devtools/index.d.ts",
 			"default": "./src/devtools/index.ts"
@@ -286,6 +290,10 @@
 			"./router/client": {
 				"types": "./dist/router/client-api.d.ts",
 				"default": "./dist/router/client-api.js"
+			},
+			"./openfeature": {
+				"types": "./dist/openfeature.d.ts",
+				"default": "./dist/openfeature.js"
 			},
 			"./devtools": {
 				"types": "./dist/devtools/index.d.ts",

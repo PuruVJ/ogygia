@@ -10,14 +10,13 @@ import {
 	routes,
 	client,
 	mount,
-	kitMount,
 	proxy,
 	expose,
 	catalog,
 	sign_headers,
 	verify_fragment_request
 } from '../src/router/index.js';
-import { experiment } from '../src/experiment.js';
+import { flag } from '../src/flags.js';
 
 const CLAIMS = Symbol.for('ogygia.claims.v1');
 
@@ -174,7 +173,7 @@ describe('mount() — claims auto-built from the table identity', () => {
 	const { publicKey, privateKey } = generateKeyPairSync('ed25519');
 	const pub_b64 = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
 	const priv_b64 = privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');
-	const mode = experiment('mode', { variants: ['static', 'hydrated'], split: { hydrated: 100 } });
+	const mode = flag('mode', { static: 0, hydrated: 100 });
 
 	const capture_hop = () => {
 		const seen: { url?: URL; headers?: Record<string, string> } = {};
@@ -196,7 +195,7 @@ describe('mount() — claims auto-built from the table identity', () => {
 		const seen = capture_hop();
 		const app = routes(
 			{ '/cms/[...rest]': mount('http://mfe.test', { sign: { privateKey: priv_b64 } }) },
-			{ visitor: () => ({ sub: 'puru', roles: ['admin'] }), experiments: [mode] }
+			{ visitor: () => ({ sub: 'puru', roles: ['admin'] }), flags: [mode] }
 		);
 		const res = await app.fetch(new Request('http://shell/cms/hello'));
 		expect(res!.status).toBe(200);
@@ -226,7 +225,7 @@ describe('mount() — claims auto-built from the table identity', () => {
 					user: () => ({ sub: 'service-account' })
 				})
 			},
-			{ visitor: () => ({ sub: 'puru' }), experiments: [mode] }
+			{ visitor: () => ({ sub: 'puru' }), flags: [mode] }
 		);
 		await app.fetch(new Request('http://shell/cms/hello'));
 		const claims = decode_claims(seen.headers!);
@@ -484,10 +483,10 @@ describe('mount — canary: a per-request CLIENT resolver', () => {
 describe('anonymousVisitor — sticky identity for logged-out traffic', () => {
 	it('mints a cookie once, reads it forever; splits become sticky for anonymous', async () => {
 		const { anonymousVisitor } = await import('../src/router/index.js');
-		const roll = experiment('anon-roll', { variants: ['a', 'b'], split: { b: 100 } });
+		const roll = flag('anon-roll', { a: 0, b: 100 });
 		const jar = new Map<string, string>();
 		const app = routes(
-			{ '/x': { GET: (c) => c.json({ sub: c.visitor?.sub ?? null, v: roll.bucket(c as never) }) } },
+			{ '/x': { GET: (c) => c.json({ sub: c.visitor?.sub ?? null, v: roll(c) }) } },
 			{ visitor: anonymousVisitor() }
 		);
 		// standalone (no Kit cookie jar): the set-cookie rides the router-built response
@@ -511,7 +510,7 @@ describe('anonymousVisitor — sticky identity for logged-out traffic', () => {
 	});
 });
 
-describe('kitMount — mounting from a PLAIN Kit catchall (no ogygia router)', () => {
+describe('mount.kit — mounting from a PLAIN Kit catchall (no ogygia router)', () => {
 	const ev = (path: string, init?: RequestInit) => {
 		const headers: Record<string, string> = {};
 		return {
@@ -529,7 +528,7 @@ describe('kitMount — mounting from a PLAIN Kit catchall (no ogygia router)', (
 			async () =>
 				new Response(JSON.stringify({ status: 200, title: 't', css: [], body: 'B', server_ms: 7 }))
 		);
-		const m = kitMount('http://mfe.test');
+		const m = mount.kit('http://mfe.test');
 		const e = ev('hello');
 		const { doc } = await m.load(e);
 		expect(doc.body).toBe('B');
@@ -541,7 +540,7 @@ describe('kitMount — mounting from a PLAIN Kit catchall (no ogygia router)', (
 			'fetch',
 			async () => new Response(JSON.stringify({ status: 404, title: 'nope', css: [], body: 'x' }))
 		);
-		const m = kitMount('http://mfe.test');
+		const m = mount.kit('http://mfe.test');
 		await expect(m.load(ev('missing'))).rejects.toMatchObject({ status: 404 });
 	});
 
@@ -553,7 +552,7 @@ describe('kitMount — mounting from a PLAIN Kit catchall (no ogygia router)', (
 					JSON.stringify({ status: 303, location: '/cms/posts/1', title: '', css: [], body: '' })
 				)
 		);
-		const m = kitMount('http://mfe.test');
+		const m = mount.kit('http://mfe.test');
 		await expect(m.load(ev('old'))).rejects.toMatchObject({
 			status: 303,
 			location: '/cms/posts/1'

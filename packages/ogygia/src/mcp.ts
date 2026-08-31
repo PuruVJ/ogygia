@@ -366,7 +366,7 @@ const TOOLS = [
 	{
 		name: 'ogygia_flags',
 		description:
-			'Inventory every flag() / experiment() call site in a project — the same AST collector the build ' +
+			'Inventory every flag() call site in a project — the same AST collector the build ' +
 			'uses (real import bindings from ogygia, renames + namespaces included, literal names only). ' +
 			'Live-scans src/, and diffs against the last build manifest (node_modules/.ogygia/flags-manifest.json) ' +
 			'when present. Use it to audit rollouts, find dead flags, or list what ?og-exp can override.',
@@ -1312,8 +1312,8 @@ function tool_flags(args: Attrs): ToolResult {
 
 	if (!live.flags.length && !manifest)
 		return text(
-			`No flag() / experiment() call sites under ${dir}/src (${files.length} file(s) scanned), and no ` +
-				`build manifest. Flags are defined with \`flag('name', …)\` / \`experiment('name', …)\` from 'ogygia' ` +
+			`No flag() call sites under ${dir}/src (${files.length} file(s) scanned), and no ` +
+				`build manifest. Flags are defined with \`flag('name', …)\` from 'ogygia' ` +
 				`— literal names only (a dynamic first argument is invisible to the inventory).`
 		);
 
@@ -1328,8 +1328,6 @@ function tool_flags(args: Attrs): ToolResult {
 		.map(([k, list]) => `### ${k}\n${list.map((s) => `- ${s.file}:${s.line}`).join('\n')}`)
 		.join('\n\n');
 
-	const flag_count = live.flags.filter((f) => f.kind === 'flag').length;
-	const exp_count = live.flags.filter((f) => f.kind === 'experiment').length;
 	const live_names = new Set(live.names);
 	const stale = manifest ? manifest.names.filter((n) => !live_names.has(n)) : [];
 	const manifest_note = !manifest
@@ -1340,10 +1338,10 @@ function tool_flags(args: Attrs): ToolResult {
 
 	return text(
 		`# ogygia flags — ${dir}\n\n` +
-			`${flag_count} flag(s) · ${exp_count} experiment(s) · ${live.flags.length} call site(s) across ${files.length} scanned file(s)\n\n` +
+			`${live.names.length} flag(s) · ${live.flags.length} call site(s) across ${files.length} scanned file(s)\n\n` +
 			site_lines +
 			manifest_note +
-			`\n\n> Override in dev: \`?og-exp=<name>:<variant>\` (repeat or comma-separate). Prod honors overrides only behind \`allowOverrides(gate)\`.`
+			`\n\n> Override in dev: \`?og-exp=<name>:<variant>\` (repeat or comma-separate). Prod honors overrides only behind \`decide({ overrides })\`.`
 	);
 }
 

@@ -64,8 +64,14 @@ One table entry. GET loads the document; the MFE's redirects re-throw as shell r
 **Canary / blue-green** is a per-request resolver instead of a fixed client — [A/B testing](/docs/app/experiments) of infrastructure itself:
 
 ```ts
-const v2 = flag('cms-v2', { rollout: 10 });
-'/cms/[...rest]': mount((c) => (v2.on(c) ? cms_v2 : cms_v1)),
+const v2 = flag('cms-v2', 10);
+'/cms/[...rest]': mount(v2.pick({ off: cms_v1, on: cms_v2 })),
+```
+
+The same `pick` verb that [chooses components and values](/docs/app/experiments) chooses infrastructure. And a **per-cohort fragment rollout** is `when()` — off means the route doesn't exist for that visitor:
+
+```ts
+'/cms/[...rest]': when(cmsRollout, mount(cms)),
 ```
 
 Clients stay prebuilt singletons (each keeps its own cache and coalescing); the resolver only chooses between them, and stickiness comes from the flag.
@@ -74,15 +80,15 @@ Clients stay prebuilt singletons (each keeps its own cache and coalescing); the 
 
 Two channels ride the document beyond the body: **status** — the MFE's own 404/500 page renders under shell chrome and the shell *answers with that status* (a 200-wrapped error page poisons caches and SEO) — and **head** — the MFE page's SEO/social meta (`description`, `og:*`, canonical links) joins the shell's document head, while `charset`/`viewport`/`http-equiv` stay the shell's own.
 
-### Mount from plain SvelteKit: `kitMount`
+### Mount from plain SvelteKit: `mount.kit`
 
 The shell doesn't have to use ogygia's router. From an ordinary Kit catchall (`src/routes/cms/[...rest]/`):
 
 ```ts title=+page.server.ts
-import { kitMount } from 'ogygia/router';
+import { mount } from 'ogygia/router';
 import { cms } from '$lib/clients.server';
 
-const m = kitMount(cms, { user: (e) => session_from(e) });
+const m = mount.kit(cms, { user: (e) => session_from(e) });
 export const load = m.load;
 export const actions = m.actions;
 ```

@@ -5,13 +5,13 @@
  * behind the lazy client-stitch holes. No hand-rolled fetch anywhere in the shell.
  */
 import { client } from 'ogygia/router';
-import { allowOverrides } from 'ogygia';
+import { decide } from 'ogygia';
 
 // DEMO ONLY: `?og-exp` overrides are dev-gated by default (any visitor could force themselves
 // into unfinished features in prod). This demo opens them unconditionally so the gauntlet can
 // exercise override propagation; a real app gates on something unforgeable:
-//   allowOverrides((c) => c.visitor?.roles?.includes('qa') ?? false)
-allowOverrides(() => true);
+//   decide({ overrides: (c) => c.visitor?.roles?.includes('qa') ?? false })
+decide({ overrides: () => true });
 
 const sign = process.env.SHELL_SIGNING_KEY
 	? { sign: { privateKey: process.env.SHELL_SIGNING_KEY } }

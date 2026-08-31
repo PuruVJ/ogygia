@@ -42,6 +42,7 @@ import {
 	redirect_response
 } from './respond.js';
 import { router_css_head } from './css-head.js';
+import { prime_flags } from '../flags.js';
 import { take_late_regions } from '../late-region-registry.js';
 import {
 	is_stream_slot,
@@ -72,10 +73,11 @@ export interface RoutesOptions {
 	 *  on it, mounts sign it into claims, loads personalize with it. Signature-bound claims from
 	 *  an upstream shell (fragment federation) take precedence over this resolver. */
 	visitor?: (c: Ctx) => Visitor | undefined;
-	/** Experiments whose buckets mounts AUTO-CARRY in signed claims — so every downstream team
-	 *  renders this visitor in the same world without hand-listing anything. Explicit on purpose
-	 *  (no hidden registry): the table names the worlds it propagates. */
-	experiments?: ReadonlyArray<{ name: string; bucket(c: never): string }>;
+	/** Flags to PRE-DECIDE at the table, so mounts carry their buckets even when no page on this
+	 *  server reads them (a shell that only ROUTES to teams still wants the visitor's world to
+	 *  travel). Any flag a page DOES read auto-carries without being listed here — this is just for
+	 *  the decide-but-don't-render case. `flags: [csr]`. */
+	flags?: ReadonlyArray<(c: Ctx) => unknown>;
 }
 
 /** The router value. `$infer` is a type-only phantom read as `typeof app.$infer`. */
@@ -100,6 +102,26 @@ interface Leaf {
 	pattern: string;
 	/** a page value, or an endpoint object compiled to its method map at construction */
 	def: PageDef | EndpointDef;
+	/** `when()` gate — off means the route does not exist for this request. */
+	when?: (c: Ctx) => boolean;
+}
+
+/**
+ * Flag-gate a table entry — page or endpoint. OFF means the route DOES NOT EXIST for that
+ * request: 404 (the app's error page) under an owned `base`, fall-through to the rest of the app
+ * without one. The gate is any `(c) => boolean` — a boolean `flag()` slots in directly, so a
+ * staged rollout of a whole page, a beta route, or an endpoint kill switch is one wrapper:
+ *
+ *     '/checkout-v2': when(checkoutV2, page(NewCheckout, { load })),
+ *     '/api/export':  when(exportsFlag, { GET: GET(export_csv) }),
+ *     '/cms/[...rest]': when(cmsRollout, mount(cms)),          // per-cohort fragment rollout
+ *
+ * Decided AFTER `decide({ source })` primes, so a vendor kill switch gates routes too; the
+ * decision self-registers for federation carry like any flag read. Type-transparent: `$infer`
+ * sees the entry exactly as if unwrapped.
+ */
+export function when<T extends PageDef | Endpoint>(gate: (c: Ctx) => boolean, entry: T): T {
+	return { ...(entry as object), __ogwhen: gate } as unknown as T;
 }
 
 const HEAD_AS_GET = (m: string) => (m === 'HEAD' ? 'GET' : m);
@@ -134,8 +156,14 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 
 	const leaves: Leaf[] = Object.keys(table).map((pattern) => {
 		const raw = table[pattern];
+		// A `when()` gate rides the raw entry; endpoint compilation would drop it, so lift it here.
+		const gate = (raw as { __ogwhen?: (c: Ctx) => boolean }).__ogwhen;
 		// Endpoint objects (`{ GET, POST, … }`) compile to their method map once here; pages pass through.
-		return { pattern, def: is_page(raw) ? raw : compile_endpoint(raw as Endpoint) };
+		return {
+			pattern,
+			def: is_page(raw) ? raw : compile_endpoint(raw as Endpoint),
+			...(gate ? { when: gate } : {})
+		};
 	});
 	const compiled: CompiledPattern[] = compile_all(leaves.map((l) => l.pattern));
 	const by_pattern = new Map(leaves.map((l) => [l.pattern, l]));
@@ -157,7 +185,9 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 			return new Response(null, { status: 308, headers: { location: base + canon + url.search } });
 
 		const hit = match_path(compiled, path);
-		if (!hit) {
+		// Unmatched — and `when()`-gated-off routes, which contractually DO NOT EXIST for the
+		// request: the app's 404/error page under an owned base; fall-through without one.
+		const unmatched = async (): Promise<Response | null> => {
 			if (base && opts.miss) {
 				const ctx = make_ctx({}, url, request, event, href_fn, '', opts.visitor);
 				try {
@@ -201,11 +231,23 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 			}
 			if (base) return not_found();
 			return null; // no base → fall through to the rest of the app
-		}
+		};
+		if (!hit) return unmatched();
 
 		const leaf = by_pattern.get(hit.pattern)!;
 		const ctx = make_ctx(hit.params, url, request, event, href_fn, hit.pattern, opts.visitor);
-		if (opts.experiments) ctx.__og_experiments = opts.experiments;
+		// Resolve the flag SOURCE (if `decide({ source })` set one) ONCE for this request, so every
+		// `flag(c)` read below stays sync. The routes table imported every flag module at startup, so
+		// the registry the source is asked over is complete. Idempotent + no-op without a source.
+		await prime_flags(ctx);
+		// Pre-decide the table's `flags` — force their buckets into the request so a mount carries
+		// them even if no page here reads them (each read self-records for federation auto-carry).
+		if (opts.flags) for (const f of opts.flags) f(ctx);
+
+		// `when()` gate: OFF → this route does not exist for this request (the unmatched contract,
+		// verbatim). Checked AFTER the source primes, so a vendor kill switch gates whole routes,
+		// and the decision self-registers for federation carry like any other flag read.
+		if (leaf.when && !leaf.when(ctx)) return unmatched();
 
 		// `c.setHeaders` must reach the Response WE build — Kit's own setHeaders only applies to
 		// `resolve()`-built responses, and a router-rendered document bypasses resolve entirely

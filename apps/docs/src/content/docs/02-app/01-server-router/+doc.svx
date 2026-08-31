@@ -408,6 +408,25 @@ Each set fills the pattern into the router's `entries()` crawl list; a dynamic p
 
 (This rides the ogygia handle's request scope — standard wiring; a rejection becomes that slot's error card and never touches its neighbors.)
 
+## Flag-gated routes: `when()`
+
+Wrap any table entry — a page, an endpoint object, a [`mount()`](/docs/app/federation) — and it exists only when the gate says so:
+
+```ts
+import { when } from 'ogygia/router';
+import { checkoutV2, exportsFlag, cmsRollout } from '$lib/flags';
+
+routes({
+  '/checkout-v2': when(checkoutV2, page(NewCheckout, { load })),  // staged rollout of a whole page
+  '/api/export':  when(exportsFlag, { GET: GET(export_csv) }),    // endpoint kill switch
+  '/cms/[...rest]': when(cmsRollout, mount(cms)),                 // per-cohort fragment rollout
+});
+```
+
+**Off means the route does not exist** for that request: under an owned `base` the app's 404/error page answers; without one, the router falls through to the rest of the app — so a gated-off ogygia route can be served by a plain Kit route at the same path during a migration.
+
+The gate is any `(c) => boolean`, which is exactly what a boolean [`flag()`](/docs/app/experiments) is — so a [vendor-decided](/docs/app/experiments#openfeature--decide-source) kill switch gates whole routes (the gate runs after the source primes), the decision is sticky per visitor, and it [carries across federation](/docs/app/federation) like any flag read. `$infer` sees the entry exactly as if unwrapped.
+
 ## Mounting
 
 Export the router; serve it either seam.
