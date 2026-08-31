@@ -8,7 +8,11 @@
 	},
 	"exports": {
 		"./routes": "./src/routes.ts",
-		"./Panel.svelte": "./src/widgets/Panel.svelte"
+		"./Panel.svelte": {
+			"types": "./src/widgets/Panel.svelte.d.ts",
+			"svelte": "./src/widgets/Panel.svelte",
+			"default": "./src/widgets/Panel.svelte"
+		}
 	},
 	"dependencies": {
 		"ogygia": "workspace:*"

@@ -138,9 +138,10 @@ export interface PageDef<
 	SearchSchema = undefined
 > {
 	readonly __ogkind: 'page';
-	/** The page component, or a per-request `ComponentPick` (`page(exp.pick({...}))`) — an
-	 *  experiment/flag choosing between arms; the dispatcher resolves it with the ctx. */
-	readonly component: AnyComponent | ComponentPick;
+	/** The page component, a per-request `ComponentPick` (`page(flag.pick({...}))`), or a
+	 *  STREAMED page (`page(async function* (c, data) { … })` — see {@link StreamSlot});
+	 *  the dispatcher resolves it with the ctx. */
+	readonly component: AnyComponent | ComponentPick | StreamSlot;
 	readonly load: LoadDef | undefined;
 	readonly actions: Record<string, ActionDef> | undefined;
 	readonly params_schema?: StandardSchemaV1;
@@ -191,11 +192,19 @@ export interface PageSlotResolver {
 	__ogpick: (c: Ctx, data: Record<string, unknown>) => unknown;
 }
 
+/** A STREAMED page slot: `page(async function* (c, data) { yield fast; yield await slow; })`.
+ *  The first yield flushes with the document; later yields ride the SAME response as template
+ *  chunks. Yield regions or HTML strings. Params are contravariant-friendly (`never`) so any
+ *  authored `(c, data) => AsyncGenerator<…>` fits without ceremony. */
+export type StreamSlot = (c: never, data: never) => AsyncGenerator<unknown, unknown, unknown>;
+
 /** `page(Component)` / `page(Component, { params?, search?, load?, actions? })`. The second arg mirrors
  *  +page.server.ts; `params`/`search` are input schemas (typed into `c` + `$infer`), `load`/`actions`
- *  are behaviors (wrappers or bare typed functions — see {@link Load} / {@link Action}). */
+ *  are behaviors (wrappers or bare typed functions — see {@link Load} / {@link Action}). The
+ *  component slot also takes a `flag.pick()`, a {@link PageSlotResolver}, or a streamed-page
+ *  generator ({@link StreamSlot}). */
 export function page<S extends PageServer>(
-	component: AnyComponent | ComponentPick | PageSlotResolver,
+	component: AnyComponent | ComponentPick | PageSlotResolver | StreamSlot,
 	server?: S
 ): PageDef<readonly [], S['load'], S['actions'], S['params'], S['search']> {
 	const actions = server?.actions

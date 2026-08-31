@@ -37,6 +37,11 @@ jobs:
       - name: Warm wrangler
         run: npx --yes wrangler --version
 
+      # Root `check` (build:lib + svelte-check over lib/playground + e2e tsc) — the e2e suite
+      # alone never runs it, which let type debt rot invisibly until upstream-watch tripped on it.
+      - name: Type-check (build:lib, check:lib, check:playground, check:verify)
+        run: pnpm run check
+
       - name: Run the full e2e suite (verify + adapters, node + bun)
         run: pnpm run e2e
         env:
