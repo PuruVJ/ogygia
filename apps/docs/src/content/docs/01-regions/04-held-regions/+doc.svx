@@ -4,7 +4,7 @@ summary: A server-chosen island you render like data. The server picks the compo
 related:
   - regions/server-islands
   - content/collections
-  - app/router
+  - app/spa-router
 ---
 
 A **held region** is a component the server picks at runtime and the client renders: props type-checked, delivered over the wire. It is ogygia's take on RSC: the server decides the UI, the client just paints it.

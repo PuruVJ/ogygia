@@ -2,6 +2,7 @@
 // and each/list share one entry module. csr=false client hosts omit wrappers (scale).
 // Usage: node verify/portable-bindings.ts [baseUrl]
 import { chromium } from 'playwright';
+import { CTX_EXTRA } from './_ctx-extra.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +12,7 @@ import {
 	regionIdentity,
 	regionId,
 	CLIENT_BINDING_STUB
-} from '../packages/ogygia/dist/compiler/transform.js';
+} from '../packages/ogygia/dist/compiler/region/transform.js';
 
 const base = process.argv[2] || 'http://localhost:3051';
 const repo = fileURLToPath(new URL('..', import.meta.url));
@@ -27,6 +28,7 @@ function check(name: string, cond: unknown, extra = '') {
 	const ROOT = '/app';
 	const HOST = '/app/src/routes/+page.svelte';
 	const ctx = {
+		...CTX_EXTRA,
 		root: ROOT,
 		libDir: '/app/src/lib',
 		readFile: () => null,
@@ -95,6 +97,7 @@ const list = [{ Comp: A, props: { n: 1 } }, { Comp: B, props: { n: 2 } }];
 {
 	const ROOT = '/app';
 	const ctx = {
+		...CTX_EXTRA,
 		root: ROOT,
 		libDir: '/app/src/lib',
 		readFile: () => null,

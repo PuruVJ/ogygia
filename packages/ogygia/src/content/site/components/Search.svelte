@@ -65,7 +65,11 @@
 		if (mode !== 'dialog') return;
 		return on(window, 'keydown', (e: KeyboardEvent) => {
 			const k = e.key.toLowerCase();
-			const typing = /^(input|textarea|select)$/i.test((e.target as Element)?.tagName ?? '');
+			const el = e.target as HTMLElement | null;
+			// A bare `/` must NOT hijack search while the user is typing — including in a contenteditable
+			// EDITOR (CodeMirror and friends are `contenteditable` divs, not <input>/<textarea>), where `/`
+			// is a real character (division, comments, closing tags, regex).
+			const typing = /^(input|textarea|select)$/i.test(el?.tagName ?? '') || el?.isContentEditable === true;
 			if ((e.metaKey || e.ctrlKey) && k === 'k') {
 				e.preventDefault();
 				if (open) open = false;

@@ -173,6 +173,26 @@ instance maps in `prepare_spa_document` (pre-swap).
 
 ---
 
+## PAGE-CSR — a page's csr is Kit's rule; a layout's world derives from its pages
+
+**What:** `compiler/kit.ts` computes every `+page.svelte` leaf's Kit-effective csr exactly the way Kit does — the option-file chain root → page dir (`+layout.*` then the page's own `+page.*`), deepest declaration wins — walked ONCE per routesDir and memoized (`page_worlds`). Every other csr decision DERIVES from that map:
+
+- a **page host's** compile world is its own entry;
+- a **`+layout.svelte` host** has NO world of its own — it folds the pages at/below its dir: all true → strip (Kit hydrates every page it serves), all false → island world, mixed → shared world (islands kept; `documentIsCsrTrue` degrades per document at runtime); no pages below → its own chain;
+- the runtime `csr_true_routes` set is the same map's true entries.
+
+**Why:** A layout serves pages; judging it by its own partial chain is wrong the moment a `csr` declaration lives below it. That exact shape (`csr = false` only in a deep catch-all, root layout undeclared) stripped a consumer's root Header/BootEffects to plain while Kit shipped no client for those pages — dead chrome everywhere.
+
+**Do not:**
+
+- Read `export const csr` ad hoc anywhere else — go through `page_worlds()` / the exported kit.ts helpers (one walk, one truth).
+- Strip a layout when ANY page below it is csr=false.
+- Skip `clear_route_csr_cache()` on dev route-topology changes — the watcher covers `+page/+layout(.server).(svelte|js|ts)`.
+
+**Tests:** `packages/ogygia/test/route-csr.test.ts` (declaration forms × chain shapes × layout folds × cache, plus the transform strip/keep seam) and `e2e/deep-csr.ts` (real build of `internal/repro-deep-csr`, browser truth in both worlds).
+
+---
+
 ## Related docs
 
 - Product vocabulary: [`DESIGN.md`](./DESIGN.md)

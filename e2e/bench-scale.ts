@@ -2,7 +2,7 @@
 // ogygia SCALE bench — stress the two things that actually grow with a big app:
 //   A. TRANSFORM: thousands of hosts × many island imports (varied schedules) → the plugin's
 //      per-host parse + rewrite + island dedup.
-//   B. CONTENT: a collection with MILLIONS of entries → catalog build, get()/ids()/entries().
+//   B. CONTENT: a collection with MILLIONS of entries → catalog build, refs()/get().
 //
 //   node verify/bench-scale.ts                 # default scale (fast, ~seconds)
 //   node verify/bench-scale.ts --huge          # millions of content entries + 5k hosts
@@ -10,21 +10,21 @@
 //
 // Appends a row to internal/notes/perf-checkpoints.md (## scale).
 // ─────────────────────────────────────────────────────────────────────────────
-import { transformHost } from '../packages/ogygia/dist/compiler/transform.js';
+import { transformHost } from '../packages/ogygia/dist/compiler/region/transform.js';
+import { CTX_EXTRA } from './_ctx-extra.ts';
 import { content } from '../packages/ogygia/dist/content/factory.js';
 
-// The lib no longer ships `fromArray` (write a `{ get, list, ids }` directly); local copy for fixtures.
-function fromArray<T extends { id: string }>(entries: T[]) {
+// A minimal in-memory Source (the only shape `content({ loader })` accepts): `refs()` (metadata rows)
+// + `get()` (one full entry). The lib no longer ships a `fromArray`; this local fixture builds one.
+function fromArray<T extends { id: string; data: Record<string, unknown> }>(entries: T[]) {
 	const map = new Map(entries.map((e) => [e.id, e]));
 	return {
+		async refs() {
+			return entries.map((e) => ({ id: e.id, data: e.data }));
+		},
 		async get(id: string) {
-			return map.get(id) ?? null;
-		},
-		async list() {
-			return entries.slice();
-		},
-		async ids() {
-			return entries.map((e) => e.id);
+			const e = map.get(id);
+			return e ? { id: e.id, data: e.data } : null;
 		}
 	};
 }
@@ -45,6 +45,7 @@ const mb = () => Math.round(process.memoryUsage().heapUsed / 1e6);
 const ms = (t: number) => `${t.toFixed(0)}ms`;
 
 const ctx = {
+	...CTX_EXTRA,
 	root: '/app',
 	libDir: '/app/src/lib',
 	readFile: () => null,
@@ -123,9 +124,9 @@ const memBefore = mb();
 const col = content({ loader: fromArray([...gen()]) });
 
 const tIds0 = performance.now();
-const ids = await col.ids(); // triggers catalog build
+const ids = await col.refs(); // triggers catalog build
 const tIds = performance.now() - tIds0;
-console.log(`     build+ids() ${ms(tIds)}  ·  ${ids.length.toLocaleString()} ids  ·  heap +${mb() - memBefore}MB`);
+console.log(`     build+refs() ${ms(tIds)}  ·  ${ids.length.toLocaleString()} refs  ·  heap +${mb() - memBefore}MB`);
 
 // random get() latency
 const tGet0 = performance.now();
@@ -139,9 +140,9 @@ const tGet = performance.now() - tGet0;
 console.log(`     ${N_GET.toLocaleString()} random get() ${ms(tGet)}  ·  ${(tGet / N_GET * 1000).toFixed(2)}µs/get  ·  hits ${hit.toLocaleString()}`);
 
 const tEnt0 = performance.now();
-const all = await col.entries();
+const all = await col.refs();
 const tEnt = performance.now() - tEnt0;
-console.log(`     entries() (materialize all) ${ms(tEnt)}  ·  ${all.length.toLocaleString()} rows  ·  heap ${mb()}MB`);
+console.log(`     refs() (materialize all) ${ms(tEnt)}  ·  ${all.length.toLocaleString()} rows  ·  heap ${mb()}MB`);
 
 // ── C. CONTENT GRAPH at scale (relations + backlink inversion) ────────────────
 const G = Math.min(ENTRIES, huge ? 500_000 : 50_000);
@@ -155,7 +156,7 @@ const posts = content({
 	),
 	relations: () => ({ author: authors })
 });
-await posts.ids();
+await posts.refs();
 const tBl0 = performance.now();
 const N_BL = 50_000;
 for (let i = 0; i < N_BL; i++) await authors.get(`a${Math.floor(rnd() * G)}`);

@@ -108,7 +108,8 @@ export default defineConfig([
 				/\.svelte$/, // the 3 wrapper components (shipped as source)
 				'ogygia/runtime',
 				'ogygia/internal',
-				'ogygia/internal/server'
+				'ogygia/internal/server',
+				'ogygia/router'
 			]
 		}
 	},

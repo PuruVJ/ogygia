@@ -13,8 +13,7 @@
  * filename so hashes match SSR.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
+import { fs, path } from './host.js';
 import { compile, parse } from 'svelte/compiler';
 import { walk } from 'estree-walker';
 
@@ -30,29 +29,29 @@ const SVELTE_EXT = /\.svelte(?:\?|$)/i;
 const IMPORT_SPEC =
 	/import\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+\.(?:svelte|css|scss|sass|less|styl|pcss)(?:\?[^"']*)?)["']/g;
 
-/** @param {string} relPosix */
+/** @param relPosix */
 export function foucCssVirtualId(relPosix: string) {
 	return FOUC_CSS_PREFIX + encodeURIComponent(relPosix.split(PATH_SEP).join('/')) + '.js';
 }
 
-/** @param {string} relPosix */
+/** @param relPosix */
 export function foucScopedVirtualId(relPosix: string) {
 	return FOUC_SCOPED_PREFIX + encodeURIComponent(relPosix.split(PATH_SEP).join('/')) + '.css';
 }
 
-/** @param {string} id */
+/** @param id */
 export function isFoucCssId(id: string) {
 	const bare = id.startsWith('\0') ? id.slice(1) : id;
 	return bare.startsWith(FOUC_CSS_PREFIX) && bare.endsWith('.js');
 }
 
-/** @param {string} id */
+/** @param id */
 export function isFoucScopedId(id: string) {
 	const bare = id.startsWith('\0') ? id.slice(1) : id;
 	return bare.startsWith(FOUC_SCOPED_PREFIX) && bare.endsWith('.css');
 }
 
-/** @param {string} id */
+/** @param id */
 export function foucRelFromId(id: string) {
 	const bare = id.startsWith('\0') ? id.slice(1) : id;
 	let encoded = null;
@@ -73,7 +72,12 @@ export function foucRelFromId(id: string) {
 	// `..`. Reject traversal / absolute specifiers — otherwise a crafted request to the dev server
 	// (`…/fouc-scoped/..%2F..%2Fetc%2Fpasswd.css`) would read files outside the project (Vite's
 	// `server.fs.allow` does NOT cover a plugin's own `fs.readFileSync`). Mirrors content/source.ts.
-	if (rel.startsWith('/') || rel.startsWith('\\') || /^[a-zA-Z]:/.test(rel) || /(^|[\\/])\.\.([\\/]|$)/.test(rel)) {
+	if (
+		rel.startsWith('/') ||
+		rel.startsWith('\\') ||
+		/^[a-zA-Z]:/.test(rel) ||
+		/(^|[\\/])\.\.([\\/]|$)/.test(rel)
+	) {
 		return null;
 	}
 	return rel;
@@ -81,9 +85,9 @@ export function foucRelFromId(id: string) {
 
 /**
  * Resolve a static import specifier against an importer file + `$lib`.
- * @param {string} spec
- * @param {string} importerAbs
- * @param {string} libDir
+ * @param spec
+ * @param importerAbs
+ * @param libDir
  */
 export function resolveFoucImportSpec(spec: string, importerAbs: string, libDir: string) {
 	if (spec === '$lib' || spec.startsWith('$lib/')) {
@@ -97,8 +101,8 @@ export function resolveFoucImportSpec(spec: string, importerAbs: string, libDir:
 
 /**
  * Collect side-effect import specs that pull island CSS into the client graph without JS.
- * @param {string} entryAbs absolute path to the island entry `.svelte`
- * @param {{ root: string, libDir: string, readFile?: (p: string) => string | null }} opts
+ * @param entryAbs absolute path to the island entry `.svelte`
+ * @param opts
  */
 export function buildFoucCssModuleSource(
 	entryAbs: string,
@@ -108,6 +112,32 @@ export function buildFoucCssModuleSource(
 		readFile?: (p: string) => string | null;
 	}
 ) {
+	const entries = collectFoucCssReachable(entryAbs, opts);
+	const posix_rel = (abs: string) => path.relative(opts.root, abs).split(PATH_SEP).join('/');
+	const imports = entries.map((e) =>
+		e.kind === 'scoped' ? foucScopedVirtualId(posix_rel(e.abs)) : e.abs
+	);
+	if (imports.length === 0) {
+		return 'export {}';
+	}
+	return imports.map((s) => `import ${JSON.stringify(s)};`).join('\n') + '\n';
+}
+
+/**
+ * The transitive CSS-reachability walk under `buildFoucCssModuleSource`, exported on its own for the
+ * server-router CSS registry (link/router-css.ts): from a component entry, in DISCOVERY ORDER (the
+ * cascade order the aggregator has always imported in), every `.svelte` with a `<style>` block
+ * (`kind: 'scoped'`) and every plain style-file import (`kind: 'css'`) reachable through the
+ * component tree. Abs paths. Same resolution rules as the aggregator, so both stay in lockstep.
+ */
+export function collectFoucCssReachable(
+	entryAbs: string,
+	opts: {
+		root: string;
+		libDir: string;
+		readFile?: (p: string) => string | null;
+	}
+): Array<{ kind: 'scoped' | 'css'; abs: string }> {
 	const read =
 		opts.readFile ||
 		((p: string) => {
@@ -117,12 +147,10 @@ export function buildFoucCssModuleSource(
 				return null;
 			}
 		});
-	const posix_rel = (abs: string) => path.relative(opts.root, abs).split(PATH_SEP).join('/');
 
-	/** @type {Set<string>} */
-	const imports = new Set();
-	/** @type {Set<string>} */
-	const seen_svelte = new Set();
+	const entries: Array<{ kind: 'scoped' | 'css'; abs: string }> = [];
+	const seen_css = new Set<string>();
+	const seen_svelte = new Set<string>();
 
 	const visit_svelte = (abs: string) => {
 		const norm = path.normalize(abs);
@@ -131,9 +159,8 @@ export function buildFoucCssModuleSource(
 		const source = read(norm);
 		if (source == null) return;
 
-		const rel = posix_rel(norm);
 		if (svelteHasStyle(source)) {
-			imports.add(foucScopedVirtualId(rel));
+			entries.push({ kind: 'scoped', abs: norm });
 		}
 
 		for (const spec of listStaticImportSpecs(source, norm)) {
@@ -141,7 +168,10 @@ export function buildFoucCssModuleSource(
 			if (!resolved) continue;
 			const clean = resolved.split('?')[0];
 			if (STYLE_EXT.test(clean)) {
-				imports.add(clean);
+				if (!seen_css.has(clean)) {
+					seen_css.add(clean);
+					entries.push({ kind: 'css', abs: clean });
+				}
 			} else if (SVELTE_EXT.test(clean) || clean.endsWith('.svelte')) {
 				visit_svelte(clean);
 			}
@@ -149,17 +179,13 @@ export function buildFoucCssModuleSource(
 	};
 
 	visit_svelte(entryAbs);
-
-	if (imports.size === 0) {
-		return 'export {}';
-	}
-	return [...imports].map((s) => `import ${JSON.stringify(s)};`).join('\n') + '\n';
+	return entries;
 }
 
 /**
  * Compile scoped CSS for a `.svelte` file (filename must match SSR for hash stability).
- * @param {string} abs
- * @param {string} source
+ * @param abs
+ * @param source
  */
 export function compileFoucScopedCss(abs: string, source: string) {
 	const stripped = source.replace(SCRIPT_TAG, '');
@@ -176,34 +202,33 @@ export function compileFoucScopedCss(abs: string, source: string) {
 	}
 }
 
-/** @param {string} source */
+/** @param source */
 export function svelteHasStyle(source: string) {
 	return STYLE_OPEN.test(source);
 }
 
-/** @param {string} source */
+/** @param source */
 function extractRawStyleBodies(source: string) {
 	return [...source.matchAll(STYLE_BODY)].map((m) => m[1]).join('\n');
 }
 
 /**
  * Static import sources from a Svelte file's script blocks (default + side-effect).
- * @param {string} source
- * @param {string} filename
+ * @param source
+ * @param filename
  */
 export function listStaticImportSpecs(source: string, filename: string) {
-	/** @type {string[]} */
 	const specs: string[] = [];
 	try {
 		const ast = parse(source, { filename, modern: true });
 		const scripts = [ast.instance, ast.module].filter(Boolean);
 		for (const block of scripts) {
-			const content = /** @type {{ content?: { type?: string } }} */ (block)?.content;
+			const content = block?.content;
 			if (!content || content.type !== 'Program') continue;
 			walk(content, {
 				enter(node) {
 					if (node.type !== 'ImportDeclaration') return;
-					const src = /** @type {{ value?: unknown }} */ (node.source)?.value;
+					const src = node.source?.value;
 					if (typeof src === 'string') specs.push(src);
 				}
 			});

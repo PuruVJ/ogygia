@@ -48,9 +48,13 @@
  */
 import { slots } from './slots.js';
 
-const ELEMENT = Node.ELEMENT_NODE;
-const TEXT = Node.TEXT_NODE;
-const COMMENT = Node.COMMENT_NODE;
+// DOM spec constants by VALUE (they are frozen: 1/3/8 forever) — referencing the `Node` global
+// at module scope made every importer of this file require a DOM at IMPORT time, which broke
+// `ogygia/internal/reconcile` under plain node (found by verify:package, present since the
+// module's birth). The functions still need a real DOM to DO anything; loading them doesn't.
+const ELEMENT = 1; // Node.ELEMENT_NODE
+const TEXT = 3; // Node.TEXT_NODE
+const COMMENT = 8; // Node.COMMENT_NODE
 
 /** Feature entry: fill the `morph` slot (live static-region ticks morph in place). */
 export function install(): void {
@@ -222,10 +226,16 @@ function same_node(a: Node, b: Node): boolean {
 
 /** A subtree that must be kept intact: user-marked persist, or a hydrated (Svelte-owned) island root. */
 function is_preserved(el: Element): boolean {
-	// `data-persist` is a general user marker (any tag), so it is always probed. `data-hydrated` is
-	// only ever set on hyphenated custom-element roots (`<ogygia-region>` / `<ogygia-island>`), so its
-	// probe is gated behind a cheap `localName` hyphen test — an ordinary `<td>` never pays for it.
-	return el.hasAttribute('data-persist') || (el.localName.includes('-') && el.hasAttribute('data-hydrated'));
+	// `data-persist` and `data-ogygia-keep` are general user markers (any tag) — always probed; a
+	// matched keep-node is kept intact across a nav reconcile (this is what makes the morph path
+	// subsume persist's relocate). `data-hydrated` is only ever set on hyphenated custom-element
+	// roots (`<ogygia-region>` / `<ogygia-island>`), so its probe is gated behind a cheap `localName`
+	// hyphen test — an ordinary `<td>` never pays for it.
+	return (
+		el.hasAttribute('data-persist') ||
+		el.hasAttribute('data-ogygia-keep') ||
+		(el.localName.includes('-') && el.hasAttribute('data-hydrated'))
+	);
 }
 
 /**

@@ -6,7 +6,7 @@ async function queryDatabase(ms: number): Promise<{ rows: number }> {
 	await new Promise((r) => setTimeout(r, ms));
 	return { rows: ms };
 }
-async function callService(origin: string, name: string, ms: number): Promise<unknown> {
+async function callService(origin: string, name: string, ms: number): Promise<{ name: string; ms: number }> {
 	const res = await fetch(`${origin}/slow-io/api?name=${name}&ms=${ms}`);
 	return res.json();
 }

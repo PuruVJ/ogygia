@@ -1,5 +1,9 @@
 <script lang="ts">
 	import newsreaderItalicUrl from '@fontsource-variable/newsreader/files/newsreader-latin-opsz-italic.woff2?url';
+	// The roman display face (the `ogygia` wordmark uses it) is `font-display: optional`, so on a cold
+	// first load it fell back to thick Georgia on some pages and thin Newsreader on others. Preload it
+	// too, so the wordmark is the SAME thin serif everywhere.
+	import newsreaderRomanUrl from '@fontsource-variable/newsreader/files/newsreader-latin-opsz-normal.woff2?url';
 	import fontsMonoUrl from '../../fonts-mono.css?url';
 	import '../../fonts.css';
 	import '../../app.css';
@@ -11,8 +15,7 @@
 	import DocsShell from 'ogygia/content/docs-shell';
 	import 'ogygia/content/shell.css'; // layout FORM only (@layer ogygia — the unlayered skin wins)
 	import '$lib/styles/shell-skin.css'; // the site's LOOK on the .ph-* hooks
-	import Logo from '$lib/Logo.svelte';
-	import MarketingHeader from '$lib/MarketingHeader.svelte';
+	import SiteHeader from '$lib/SiteHeader.svelte';
 	import * as ogygia from 'ogygia';
 	import { page } from '$app/state';
 	import { meta } from '$lib/docs.remote';
@@ -23,11 +26,16 @@
 	const bare = page.url.pathname.startsWith('/demo/');
 	// The homepage is a marketing page: full-viewport, no docs sidebar — its own slim top-nav instead.
 	const isHome = page.url.pathname === '/';
+	// The Observatory: the SAME site top-nav (MarketingHeader) as the homepage, then the full-viewport
+	// REPL fills the rest (the REPL carries its own secondary toolbar).
+	const isObservatory = page.url.pathname.startsWith('/observatory');
+	// Breadcrumb after the wordmark: `ogygia │ Docs` / `ogygia │ Observatory`; nothing on the homepage.
+	const section = isHome ? null : isObservatory ? 'Observatory' : 'Docs';
 
 	// The leak-free shell bundle (nav + switcher) — docs pages only. Skipped on the homepage (no
 	// sidebar) and bare canvases, which also saves the nav-tree fetch there. csr=false → every nav is
 	// a fresh SSR pass, so a top-level await is current per page.
-	const shellMeta = bare || isHome ? null : await meta(page.params.slug ?? '');
+	const shellMeta = bare || isHome || isObservatory ? null : await meta(page.params.slug ?? '');
 
 	// No-flash theme: apply a saved forced theme before first paint. `ogygia.script` serializes
 	// the self-contained function into a safe inline <script> (no `String.fromCharCode` gymnastics).
@@ -70,36 +78,39 @@
 		type="font/woff2"
 		crossorigin="anonymous"
 	/>
+	<link
+		rel="preload"
+		href={newsreaderRomanUrl}
+		as="font"
+		type="font/woff2"
+		crossorigin="anonymous"
+	/>
 	{@html themeTag}
 	{@html monoTag}
 </svelte:head>
 
 {#if bare}
 	{@render children()}
+{:else if isObservatory}
+	<!-- Shared site header (same as home + docs), then the full-viewport REPL fills the rest. -->
+	<div class="obs-page" data-sveltekit-preload-data="hover">
+		<SiteHeader section="Observatory" />
+		{@render children()}
+	</div>
 {:else if isHome}
-	<!-- Marketing homepage: slim top-nav + full-width content, no docs sidebar. -->
-	<div data-sveltekit-preload-data="hover">
-		<MarketingHeader />
+	<!-- Marketing homepage: the shared header (no breadcrumb) + full-width content, no docs sidebar.
+	     The header is FIXED, so the content clears its height. -->
+	<div class="home-page" data-sveltekit-preload-data="hover">
+		<SiteHeader section={null} />
 		{@render children()}
 	</div>
 {:else}
-	<!-- body is preload=off; the chrome opts hover back in so docs links warm on hover -->
+	<!-- Docs: the SAME shared header on top (DocsShell's `header` snippet), so the sidebar carries only
+	     the nav — `tools={null}` drops the panel-chrome search/theme, now in the header. -->
 	<div data-sveltekit-preload-data="hover">
-		<DocsShell meta={shellMeta!} base="/docs" home="/" title="ogygia" header={null}>
-			{#snippet side()}
-				<a class="doc-brand" href="/" aria-label="ogygia home">
-					<Logo size={22} decorative />
-					<span class="doc-brand-word">ogygia</span>
-				</a>
-				<a
-					class="doc-gh"
-					href="https://github.com/PuruVJ/ogygia"
-					target="_blank"
-					rel="noreferrer"
-					aria-label="GitHub repository"
-				>
-					<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.23c-3.34.73-4.03-1.42-4.03-1.42-.55-1.39-1.33-1.76-1.33-1.76-1.09-.74.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.66-.3-5.46-1.33-5.46-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.82.58A12.01 12.01 0 0 0 24 12c0-6.63-5.37-12-12-12Z" /></svg>
-				</a>
+		<DocsShell meta={shellMeta!} base="/docs" home="/" title="ogygia" tools={null}>
+			{#snippet header()}
+				<SiteHeader section="Docs" />
 			{/snippet}
 			{@render children()}
 		</DocsShell>
@@ -107,25 +118,26 @@
 {/if}
 
 <style>
-	/* The panel's brand row — logo + wordmark left, GitHub right (the old SideNav's top). */
-	:global(.doc-brand) {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.45rem;
-		color: var(--text);
-		text-decoration: none;
+	/* The header is fixed (out of flow) so the elastic overscroll can't drag it — the homepage content
+	   clears its height. (Docs clears it via .og-cframe; the Observatory keeps its header in-flow.) */
+	:global(.home-page) {
+		padding-top: 3.5rem;
 	}
-	:global(.doc-brand-word) {
-		font: 600 1.05rem/1 var(--font-display);
-		letter-spacing: -0.01em;
+
+	/* Observatory page: site header as a top bar (in flow, not sticky), REPL fills the rest. */
+	:global(.obs-page) {
+		height: 100dvh;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
 	}
-	:global(.doc-gh) {
-		margin-left: auto;
-		display: inline-flex;
-		color: var(--text-faint);
-		text-decoration: none;
+	:global(.obs-page .site-nav) {
+		position: static;
 	}
-	:global(.doc-gh:hover) {
-		color: var(--text);
+	:global(.obs-page > ogygia-region) {
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
 	}
 </style>

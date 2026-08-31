@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
 	collectIslandDepModulepreloads,
 	islandDepsHandoffPath
-} from '../dist/vite/index.js';
+} from '../dist/compiler/link/island-deps.js';
 
 describe('collectIslandDepModulepreloads', () => {
 	test('walks transitive static imports for og-region facades', () => {

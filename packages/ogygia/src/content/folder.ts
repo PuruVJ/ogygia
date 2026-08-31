@@ -14,7 +14,14 @@
  * content({ loader: folder(map, (raw) => blocks(raw, registry)) })   // any format; default markdown
  * ```
  */
-import { numbered, read_meta, strip_order_prefix, title_case, type Convention, type MetaDecoration } from './convention.js';
+import {
+	numbered,
+	read_meta,
+	strip_order_prefix,
+	title_case,
+	type Convention,
+	type MetaDecoration
+} from './convention.js';
 import { markdown } from './formats.js';
 import type { GlobMap, RawRecord, RawSource, Source } from './source.js';
 
@@ -40,7 +47,8 @@ function common_prefix(keys: string[]): string {
 	const parts = keys.map(norm);
 	let prefix = parts[0] ? parts[0].slice(0, parts[0].lastIndexOf('/') + 1) : '';
 	for (const p of parts.slice(1)) {
-		while (prefix && !p.startsWith(prefix)) prefix = prefix.slice(0, prefix.slice(0, -1).lastIndexOf('/') + 1);
+		while (prefix && !p.startsWith(prefix))
+			prefix = prefix.slice(0, prefix.slice(0, -1).lastIndexOf('/') + 1);
 	}
 	return prefix;
 }
@@ -56,7 +64,10 @@ function unwrap(value: unknown): Record<string, unknown> {
 	return {};
 }
 
-export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderOptions<Meta> = {}): Source<Meta> {
+export function folder<Meta = Record<string, never>>(
+	map: GlobMap,
+	opts: FolderOptions<Meta> = {}
+): Source<Meta> {
 	const page_rx = opts.page ?? DEFAULT_PAGE;
 	const meta_rx = opts.meta ?? DEFAULT_META;
 	const conv = opts.convention ?? numbered();
@@ -85,7 +96,12 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 		// lets that `index.md` be the label, not a bodyless junk page. Safe for the `+doc.svx`/`+meta.json`
 		// defaults — those regexes don't overlap, so order can't change their outcome.
 		if (meta_rx && meta_rx.test(k)) {
-			const dir = rel(key).replace(meta_rx, '').split('/').map(strip_order_prefix).filter(Boolean).join('/');
+			const dir = rel(key)
+				.replace(meta_rx, '')
+				.split('/')
+				.map(strip_order_prefix)
+				.filter(Boolean)
+				.join('/');
 			meta_entries.push({ dir, value: map[key] });
 		} else if (page_rx.test(k)) {
 			page_map[key] = map[key];
@@ -96,11 +112,16 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 				(siblings.get(parent) ?? siblings.set(parent, new Set()).get(parent)!).add(segs[d]);
 			}
 		} else {
-			throw new Error(`[ogygia/content] folder(): unexpected file '${key}' — expected a page (${page_rx}) or sidecar (${meta_rx || 'none'}). A '**/*' glob drags colocated components into the bundle; narrow it.`);
+			throw new Error(
+				`[ogygia/content] folder(): unexpected file '${key}' — expected a page (${page_rx}) or sidecar (${meta_rx || 'none'}). A '**/*' glob drags colocated components into the bundle; narrow it.`
+			);
 		}
 	}
 
-	const page_id = (key: string) => raw_segments(key).map((s) => conv.segment(s).slug).join('/');
+	const page_id = (key: string) =>
+		raw_segments(key)
+			.map((s) => conv.segment(s).slug)
+			.join('/');
 	const page_order = (key: string): number[] => raw_segments(key).map((s) => conv.segment(s).order);
 
 	// Each directory's `+meta.json` decoration + the clean group path → label map. Resolved ONCE, on
@@ -113,7 +134,9 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 		(resolved ??= (async () => {
 			const decorations = new Map<string, MetaDecoration>();
 			for (const { dir, value } of meta_entries) {
-				const mod = unwrap(typeof value === 'function' ? await (value as () => Promise<unknown>)() : value);
+				const mod = unwrap(
+					typeof value === 'function' ? await (value as () => Promise<unknown>)() : value
+				);
 				const deco = read_meta(mod);
 				// An `index.md` sidecar (the svelte.dev convention) is a compiled markdown MODULE — its
 				// frontmatter `title` is the section label ("Template syntax", not the title-cased slug).
@@ -133,7 +156,8 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 	const verify = async () => {
 		const { decorations } = await resolve_meta();
 		const errors: string[] = [];
-		for (const [dir, set] of siblings) errors.push(...conv.verify(dir, [...set], decorations.get(dir)));
+		for (const [dir, set] of siblings)
+			errors.push(...conv.verify(dir, [...set], decorations.get(dir)));
 		if (errors.length) throw new Error(`[ogygia/content] folder(): ${errors.join('; ')}`);
 	};
 
@@ -146,7 +170,8 @@ export function folder<Meta = Record<string, never>>(map: GlobMap, opts: FolderO
 	for (const key of Object.keys(page_map)) {
 		const id = page_id(key);
 		if (!id) throw new Error(`[ogygia/content] folder(): empty id for '${key}'`);
-		if (keys_by_id.has(id)) throw new Error(`[ogygia/content] folder(): duplicate id '${id}' ('${key}')`);
+		if (keys_by_id.has(id))
+			throw new Error(`[ogygia/content] folder(): duplicate id '${id}' ('${key}')`);
 		keys_by_id.set(id, key);
 	}
 	const record = async (id: string, key: string): Promise<RawRecord<unknown>> => ({

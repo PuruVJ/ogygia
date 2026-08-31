@@ -8,6 +8,298 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] — 2026-08-21
+
+The **passage** release — the runtime and the compiler both rebuilt from the studs, with byte-identical output the whole way. The runtime collapses onto ONE identity primitive: serialization, resumability, cross-island sharing, and navigation reconciliation all become operations on the same `Ref`. A live class, a store, a function, a snippet, a held region cross the island boundary and reunite to a single live instance across every island that reads them; a navigation now MOVES regions instead of resetting them; and the server can be told to re-render only what actually changed. Separately, the Vite plugin is carved into a real, bundler-agnostic compiler you can run without Vite at all.
+
+On top of the islands, this release also ships a whole tooling layer: a drop-in production **SSR profiler** (`ogygia({ profiler })`), an island-graph **devtools** dock (`ogygia({ devtools })`), a fully-typed programmatic **router** (`ogygia/router`), and priority-aware preloading so lazy islands warm in the background instead of fighting first paint.
+
+### Changed (breaking)
+
+- **Flags & experiments collapsed onto ONE primitive, `flag()`.** A kill switch, a rollout, a
+  targeting rule, and an A/B/n test are the same thing; the old `experiment` / `layer` /
+  `allowOverrides` / `onExposure` / `batchExposures` / `.bucket` / `.on` surface is **removed**.
+  Now: declare with a shape (`flag('x')` off · `flag('x', 10)` rollout % · `flag('x', fn)`
+  targeting · `flag('x', { control: 80, bold: 20 })` weighted variants); **read by calling** the
+  flag (`checkout(c)` → boolean, `hero(c)` → variant); branch with `flag.pick(map)` (a `page()`
+  slot) or `flag.pick(c, map)` (this visitor's typed value); read a vendor payload with
+  `flag.value(c)` (schema-validated, with a `fallback`). One `decide({ source?, overrides?,
+  exposure?, batch? })` configures everything (was the three scattered globals). Federation
+  auto-carry is now registry-based — every flag a request decides self-registers its bucket into
+  the signed claims, so `routes({ experiments })` is gone; a route-only shell pre-decides with
+  `routes({ flags: [...] })`.
+
+- **`kitMount` is now `mount.kit`.** One mount noun: call it in a routes table (`mount(cms)`),
+  or mount from plain SvelteKit with the property (`mount.kit(cms)` in a catchall
+  `+page.server.ts`). Same behavior, same options.
+
+### Added
+
+- **`when()` — flags gate routes, and `pick` chooses infrastructure.** `when(flag, entry)` wraps
+  any table entry (a page, an endpoint object, a `mount()`): OFF means the route DOES NOT EXIST
+  for that request — the app's 404/error page under an owned `base`, clean fall-through to the
+  rest of the app without one. A boolean `flag()` slots in directly, so a staged rollout of a
+  whole page, a beta route, an endpoint kill switch, and a per-cohort fragment rollout
+  (`when(cmsRollout, mount(cms))`) are one wrapper; the gate runs after `decide({ source })`
+  primes, so a vendor kill switch gates routes too, and the decision carries across federation
+  like any flag read. `$infer` sees the entry as if unwrapped. And `mount()` now accepts a flag
+  pick of clients — `mount(v2.pick({ off: cms_v1, on: cms_v2 }))` — the same `pick` verb that
+  chooses components and values chooses infrastructure (canary/blue-green, sticky per visitor).
+
+- **OpenFeature interop — `ogygia/flag/openfeature`.** `decide({ source: openfeature(client) })`
+  bridges any OpenFeature server client (no vendor SDK dependency — you pass your own), resolved
+  once per request over exactly the flags the app declares, then every read stays sync. `ofrep({
+  url })` speaks the remote-evaluation protocol directly (zero SDK); a source is otherwise just a
+  function. Vendor decisions are validated against declared variants; a slow/down source degrades
+  every flag to its native rule and never gates first byte.
+
+- **The ogygia MCP server grew to eleven tools.** `ogygia_flags` inventories every `flag()`
+  call site with the build's own AST collector and diffs against the build manifest to surface
+  dead or renamed flags; `ogygia_fragment` probes a federation MFE origin — signature posture
+  (401 without a signature = verified; 200 = open) plus the `__catalog` widget manifest with the
+  typed-stub command.
+
+- **The bundled AI skill rewritten** against the whole current surface: server router
+  (routes-as-values, `$infer`, streamed pages), fragment federation, experiments & flags,
+  `ogygia.files` packaging, the full plugin-config/CLI/env reference, and the store-snapshot
+  boundary law.
+
+- **The Ref hub — one identity layer for everything that crosses a boundary.** Every value that leaves
+  a component and reappears inside an island — a `[import.meta.og.wire]` class, a Svelte store, an
+  `import.meta.og.$` function, a region snippet, a resumable `$derived`, a held region — is now a `Ref`
+  of a KIND: `{ kind, identity, code-tag, data }`. A kind is a plugin that teaches the hub how its
+  values travel (`match` / `encode` / `decode`); the hub owns identity. Three operations fall out of
+  that one design:
+  - **MINT** — every live instance gets ONE id (WeakMap-memoized), however many props or context keys
+    carry it. That shared id is what lets the client REUNITE all the copies.
+  - **RESOLVE** — the browser memoizes `decode` by id, so five islands decoding one handle share ONE
+    live object (mutate it in island A, island B repaints). The server NEVER memoizes: each request and
+    each deferred-island render decodes fresh, so one visitor's state can't leak into another's HTML.
+  - **THE KEEP** — a kind may name a ref for SESSION continuity: the tab then reunites navigations with
+    the same live instance, merging fresh server data through the kind's `merge`. Browser-only; the
+    server never touches it. (This is what makes a session cart follow the visitor across SPA navs while
+    each page's server truth still merges in.)
+  Reunify across islands = same id; survive a navigation = same id in the Keep; dedupe = same id; the
+  region reconciler = diff two id sets. Identity is the spine; kinds are plugins. All registry state
+  lives on `globalThis` under `Symbol.for` keys, because the runtime and each island entry are separate
+  bundles and per-module state would silently fork.
+
+- **Transportable everything — the serialization seam, unified.** Values devalue rejects now cross by
+  declaring how they travel, each as a hub kind:
+  - **`[import.meta.og.wire]` classes** — `encode` ships a snapshot, `decode` rebuilds a live instance
+    on the other side; a `merge` (with a named id) reconciles server truth against live user edits.
+  - **stores** — a subscribe-shaped value crosses the same way: the CURRENT value travels as data, the
+    CODE comes from a module on the far side, and hub identity makes it live — `set` in island A
+    repaints `$store` in island B; provable factory shapes auto-brand with zero authoring.
+  - **functions (`import.meta.og.$`)** — a closure can't serialize, but a QRL-style handle can: the
+    compiler hoists the marked closure to a generated module (WHERE the code lives) and the captures
+    ride as data (WHAT it closed over), rebound on the other side. Registered pre-hydration through a
+    rename-proof `globalThis` bridge so strict-CSP apps get a real fn manifest.
+  - **snippets & resumable `$derived`** — a snippet crosses as a region pointer; a derived crosses as
+    its RECIPE, and each island re-derives against the reunified sources.
+
+- **The boundary classifier — unbridgeable values fail at discovery, not in prod.** A value heading for
+  an island is walked leaf by leaf and each is named: cross free, auto-wire, warn, or REFUSE — with the
+  dot-path to the offender. A live DOM node, a bare function, or a secret-looking key now fails at
+  boundary discovery (`context 'user' @ profile.avatarEl: live DOM node`) instead of an island silently
+  reading `undefined` on a csr=false page. Pure and dependency-light, so it costs nothing server-side.
+
+- **Server-delta navigation (opt-in: `router: { serverDelta: true }`).** On an SPA navigation the client
+  sends the region fingerprints it already holds (`x-ogygia-known`); the server re-renders ONLY the
+  regions whose inputs changed and marks the rest skipped, so an unchanged island keeps its live DOM and
+  interaction state instead of being re-sent and re-hydrated. The skip is safe BY CONSTRUCTION: a pure,
+  dependency-free fingerprint core is shared by both bundles — the server emits `data-og-fp =
+  fingerprint_of(entry, endpoint, props-seed)` on each island and the client computes the identical hash
+  from the same attributes — so the server skips exactly the regions the client says it has. The
+  fingerprint is 64-bit FNV-1a: a skip on a match means a collision would keep stale content silently, so
+  the extra bits buy that away. Off by default (the client never sends the header; the server always
+  full-renders — the safe fallback).
+
+- **State-delta reconciler — a nav MOVES regions, it doesn't reset them.** The client reconcile stamps
+  each `<ogygia-region>` with a key derived purely from compiler-emitted attributes (never from
+  live-mutated innerHTML) — a SIGNATURE (which slot: entry + endpoint) and a props FINGERPRINT (did the
+  inputs change) — then morphs old→new: an unchanged region KEEPS its live hydrated island (interaction
+  state the fresh SSR HTML lacks is the source of truth), a changed one is PATCHED (re-hydrated), a new
+  one MOUNTS, a removed one is torn down and its page-scoped hub ids disposed. Kept regions absorb the
+  incoming page's props (prop-push), so a persisted player reflects the new route without re-mounting.
+  The old separate persist machinery is gone — a `keep: 'name'` island is now just a reconciler keep,
+  relocated live across the nav.
+
+- **`ogygia/internal/compiler` — the compiler as a standalone, bundler-agnostic engine.** `Compiler` /
+  `Program` / `CompileCtx` run the whole file-local + island-discovery front-end — the host-island
+  transform, `.ts`/`.js` region minting, the `import.meta.og.*` macros, whole-app prescan, virtual-module
+  emit, and id resolution — importing zero Vite. A REPL or any non-Vite host is now just a second adapter:
+  build a `CompileCtx`, `configure()` a `Compiler`, feed it source, read back the artifacts.
+
+- **The SSR profiler — `ogygia({ profiler })`, and nothing else to wire.** A drop-in production profiler
+  that samples the WHOLE Node process during server rendering: CPU (flame graph + treemap, self / total /
+  per-call), outbound network (per-request payloads, wire + decoded sizes, encoding, a one-render
+  waterfall — not the same calls ×N runs), async-I/O waits attributed to the function that started them,
+  and heap / RSS over the window. Configured entirely in the Vite plugin (`profiler: true`, or
+  `{ secret, … }`); `ogygia.handle()` auto-mounts the UI at `/__profiler` — no `profiler()` hook, no route
+  files. The whole UI is reactive Svelte 5 (dashboard, login, the full report, upload), served through
+  `document()`. Highlights:
+  - **Request payloads, streamed.** Each outbound call shows its JSON body, formatted and syntax-
+    highlighted (highlight.js from a CDN — never an ogygia dependency), lazily on expand and off the main
+    thread, so a multi-MB body opens without freezing; sizes are counted robustly from a cloned response
+    stream.
+  - **Encrypted `.ogp` export / import.** A report downloads as an encrypted file and re-opens via Import
+    (needs this profiler's key) — the serverless answer, where a report can't be kept in memory across
+    invocations.
+  - **Serverless-safe runs.** The page-profile loop is budgeted to the platform gateway timeout
+    (Amplify 30s / Netlify 10s / Vercel 300s), warms + resolves redirects once, and profiles the FINAL url.
+  - **Real names in prod.** Minified frames resolve through `.map` files sitting next to the server chunks;
+    the report carries a `sourcemapped` flag so a missing map is obvious.
+  - **AI tools.** `ogygia mcp` / `ogygia ai` expose the profiler over MCP (four tools) — run a whole
+    profile (ask-for-URL, self-heal, clean auth), or read a downloaded `.ogp` with no live server or login.
+  Auth is a router guard (dev is open; prod needs `OGYGIA_PROFILER_SECRET` or a passed `secret`).
+
+- **Devtools — `ogygia({ devtools })`, an x-ray for the island graph.** A dock that mounts on every
+  csr=false page — inside a **shadow root**, so no host-page CSS can reach it — with a peeking, draggable
+  **and** resizable launcher (`@neodrag/svelte`) whose position and size persist. Instruments: a
+  **boundary lens** that boxes every region tinted by kind, a **byte ledger** of real over-the-wire JS per
+  island chunk, a **timeline** of client-realm events, plus **wire / hub / nav** views and a per-island
+  "inspect element" detail card — with island names everywhere (from the compiler's dev metadata). A
+  shared, fp-correlated event bus unifies the client and server realms into one stream. Entirely behind
+  the `__OGYGIA_DEVTOOLS__` compile gate — tree-shaken to nothing when off (the default, proven by an
+  e2e); flip on with `OGYGIA_DEVTOOLS=1`. The embedded Profiler tab points at the profiler's `/run` page.
+
+- **`ogygia/router` — Kit's routing, programmatic and fully typed.** Define a route tree in a `.ts` with
+  a builder: `routes((r) => r.routes({ '/': (r) => r.page(Home).load(fn), '/api': (r) => r.GET(fn) }))`.
+  `.load().action()` chaining, uppercase verbs matching Kit's `+server.ts`, layouts, error boundaries, and
+  per-page region marks as import attributes on `page(Comp, { … })` (`wake` / `render: 'deferred'` /
+  `keep`). The whole tree exposes a phantom-typed map, `router.$infer`, so a component types its props as
+  `Routes['/the/path']` and gets a typed `data` (cascaded from every `load` above it, Kit's implicit
+  `parent()`), `params`, and `form` — no `+page.svelte` files, components thrown anywhere. Deferred (PPR)
+  holes work straight from the `.ts` config — the compiler learned `render: 'deferred'` in `.ts` region
+  imports. Kit's hooks, transport, and `event.fetch` all pass through unchanged.
+
+- **`document()` — a complete ogygia page from a handle.** `document(region(Comp, props), { status })`
+  from `ogygia/server` renders a held region into a full HTML document (runtime, seeds, `<head>`) with no
+  `+page.svelte` — islands inside hydrate and stay reactive. This is what the profiler and devtools UIs
+  are served through.
+
+- **Zero-config library islands.** A dependency can declare its island roots in its own package manifest;
+  the consuming app's build discovers them and compiles them as islands with no import-site marks and no
+  app wiring — a library ships interactive islands that Just Work.
+
+- **Background-priority bytes for lazy islands.** A `wake: 'visible'` or `wake: 'interaction'` island's
+  full static dependency closure (facade + every chunk it statically imports, transitively, + their CSS)
+  is now emitted as `<link rel="modulepreload" fetchpriority="low">` in the SSR head. The bytes ride in
+  the background — never contending with the runtime, `load` islands, or the LCP — so the wake (scroll-in,
+  or the tap / hover) evaluates from the warm module map instead of stalling on a cold fetch. `load`
+  islands stay High (needed at first paint); media-query wakes stay unhinted (the server can't know the
+  viewport). Hints are deduped per page render, with a priority tie-break — a chunk a `load` island also
+  needs keeps High, so a background hint can never demote a first-paint chunk — and the idle warm no longer
+  fires an `import()` when the bytes already have a hint (that was escalating a queued fetch to High).
+  Islands rendered inside a `{#snippet}` (forwarded through a plain layout component) get their hints too,
+  by threading the portable's inline-SSR `<head>` into the document head.
+
+### Changed
+
+- **The Vite plugin is a compiler now.** The 2,752-line plugin blob became a compiler module tree
+  (`parse` / `macros` / `content` / `link` / `region` / `dev`) driven by a thin Vite adapter that maps
+  bundler lifecycle to driver calls. The irreducibly-Vite primitives — `emitFile`, `resolve`, dev-server
+  module invalidation — are injected into the driver as callbacks, so the driver stays bundler-agnostic;
+  the adapter is left holding only config binding, the dev-server hooks, and bundle output. Output is
+  **byte-identical**, guarded end-to-end by a transform-determinism digest over the fixture corpus.
+
+- **Region rendering is region-granular.** Each region renders and reconciles independently; the former
+  whole-graph render pass is gone. `inject_csr_reset` argument handling was corrected along the way.
+
+### Fixed
+
+- **PAGE-CSR invariant — a layout's csr world now derives from the pages it serves.** Declaring
+  `csr = false` only in a deep route (a catch-all `+page.ts`, say) used to leave the ROOT layout
+  reading as csr=true: its `wake:` chrome (header, boot islands) was stripped to plain components
+  while Kit shipped no client for those pages — dead chrome everywhere. Now every `+page.svelte`
+  leaf's Kit-effective csr (option-file chain, deepest declaration wins) is computed once and
+  every decision derives from it: a page uses its own entry; a layout folds the pages at/below it
+  (all true → strip, all false → island world, mixed → islands kept, degraded per document at
+  runtime); the runtime `csr_true_routes` set comes from the same map. Guarded by a
+  declaration × chain × fold unit matrix and a self-building real-app fixture e2e
+  (`internal/repro-deep-csr`). See PAGE-CSR in `internal/notes/INVARIANTS.md`.
+
+- **Store auto-subscriptions in crossing snippets hoist as value snapshots.** A `{#snippet}`
+  crossing into an island whose body read `$store` re-emitted the `$`-identifier verbatim into
+  the runes-mode island entry — the build died inside `virtual:ogygia/island/…` with
+  "illegal variable name". The compiler now captures the subscription's VALUE at the host (where
+  the sugar is legal), rewrites every body occurrence (props, template literals, member chains),
+  and always warns with per-site `file:line:col` traces that the crossed copy is a frozen
+  render-time snapshot. A host-declared store crossing as an OBJECT warns too (its functions
+  don't serialize); `$$props` in a crossing snippet is a hard build error.
+
+- **A csr=true page under a csr=false layout wiped the layout's chrome.** `wake:`-marked chrome (a
+  header/footer) in a csr=false layout, rendered on a child page that opts into `csr = true`, painted
+  on the server and then VANISHED right after Kit hydrated the document — with a redundant-island dev
+  warning. Two causes stacked: the layout's islands were stubbed on the client (so Kit hydrated
+  nothing where they were), and the inline-vs-island choice was decided per HOST, not per document, so
+  the two legs desynced at hydrate. Fixed by deciding it from the one fact that matters — whether Kit
+  hydrates the WHOLE document, i.e. the leaf page's effective csr — via a new `documentIsCsrTrue()`
+  (server: a build-time csr=true route map; client: Kit-bootstrap detection), plus linking a csr=false
+  layout's island wrapper on the client when the app has any csr=true route. Such a page now ships
+  ZERO ogygia (no region tag, no runtime, no FOUC) and the chrome stays, Kit-hydrated and interactive.
+
+- **Nested-island dev warning crashed dev SSR (TDZ).** `Region.svelte`'s "nested island — strategy
+  ignored" dev warning read the `island_entry` `$derived` before it was declared, so an
+  `import.meta.env.DEV` server render of any page with a nested island (e.g. the cross-island context
+  page) threw `Cannot access 'island_entry' before initialization`. Builds masked it (the `DEV` block is
+  dead-code-eliminated), so no e2e caught it. Moved past the declaration.
+
+- **Lakes restore pairs by DOM position, not a shared entry id** — two lakes with the same entry no
+  longer cross-match on restore.
+
+- **SvelteKit `appDir` + `paths.base`, respected everywhere.** Island and runtime URLs are baked
+  base-LESS and resolved once through `asset()` — the SOLE base/assets authority — so a custom `appDir`
+  (e.g. `/_uce_/immutable/`) or a non-root `base` (or an assets CDN) loads islands correctly, and the old
+  double-application (`/base/base/…` → 404) can't happen. `appDir` is read from Kit's
+  `__SVELTEKIT_APP_DIR__` define.
+
+- **The compiler registered EVERY exported class, not just wired ones.** Transportable registration was
+  injected into every `export class`, so a pnpm sub-package that doesn't depend on ogygia got a broken
+  `ogygia/internal/register` import. It now injects only into classes with a `static wire`.
+
+- **Page profiling survives serverless timeouts.** The warm-up, CPU runs, and coverage pass all live
+  inside one budget clock sized to the platform gateway limit, so a profile completes (trimmed to fit,
+  same accuracy per run) instead of being killed mid-flight on Amplify / Vercel / Netlify. The network
+  waterfall shows ONE representative render, not the same handful of calls repeated ×N runs.
+
+- **Profiler network capture is now reliable.** The profiler patches `globalThis.fetch` to attribute
+  outbound calls, but that reference can be REPLACED after install — a late undici init, a framework
+  fetch polyfill, an HMR reload — which silently dropped capture, so a run would "sometimes catch network,
+  sometimes not". The patch is now branded and self-healing: every profile re-asserts it, re-wrapping the
+  live fetch when it isn't ours (never double-wrapping the wrapper). Captures land every run.
+
+- **The profiler UI ships TS-free templates.** Shipped `.svelte` files carry no `lang="ts"` in markup and
+  no literal closing-tag substrings, so a consumer's own Svelte + preprocess pipeline compiles the
+  profiler UI without choking (tsdown strips TS from scripts, not markup).
+
+- **The profiler's JSON / `.cpuprofile` links download instead of opening.** They carry a `download`
+  attribute (which the SPA router already leaves alone), so a click saves a report-named file rather than
+  rendering the JSON inline.
+
+- **Importing a `.ogp` moved between machines no longer fails as "not a .ogp file".** A binary `.ogp`
+  copied through a text-y channel (a Windows VDI → Mac clipboard, a chat, an editor round-trip) picks up a
+  prepended UTF-8 BOM or gets base64-encoded, so its magic bytes no longer match. Import now recovers both
+  (strip the BOM, decode the base64) before checking, and the rejection message points at the transfer as
+  the likely cause.
+
+### Internal
+
+- **Full TypeScript `strict` at the library level.** `strict: true`, all resulting errors fixed; every
+  JSDoc `@type`/`@param` annotation converted to real TypeScript; the 10 core runtime components moved to
+  `<script lang="ts">`; `svelte-check` now runs in the library `check` (tsc → svelte-check → vitest →
+  lint); zero explicit `any` (oxlint clean). AST-walking code shares the sanctioned loose `SvelteNode`
+  alias so strictness holds without littering the compiler with `any`.
+- **oxfmt** adopted as the workspace formatter (tabs, single quotes, 100 columns), replacing the
+  homegrown no-`any` script.
+- **Collapsed the per-host csr context cascade into one per-document signal.** Removed `CSR_TRUE_KEY`
+  / `isCsrTrue()` and the compiler's `setContext` marker + `csr=false` reset injection (`CSR_CTX_INJECT`
+  / `CSR_FALSE_INJECT` / `inject_csr_reset`, `#needs_csr_reset`). That marker dance only ever
+  re-derived the leaf page's effective csr indirectly through a downward context cascade + reset;
+  `documentIsCsrTrue()` reads it directly, so the whole mechanism is gone. The compile-time strip of a
+  csr=true page's OWN islands (it ships zero ogygia) stays.
+
 ## [0.7.0] — 2026-08-20
 
 Two arcs land together. **Cross-island context** becomes one model on Svelte's own `getContext` (with a drop-in `setContext`), and **`$page.data`** — streamed load promises and all — reaches islands on csr=false. And **region authoring** grows two ways to reach imports the `import X with { … }` form never could: `import.meta.og.asRegion(Comp, options)` marks any imported component (named / barrel, in `.svelte`, `.ts`, and `.js`), and a `.ts` registry `with { wake }` binding is now mountable — placeable by a third-party renderer (e.g. Builder.io's `<svelte:component>`), not only by `region()`. Plus a batch of correctness and build fixes.

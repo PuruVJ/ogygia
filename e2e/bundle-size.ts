@@ -18,8 +18,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rolldown } from 'rolldown';
-import { generateRuntimeEntrySource, resolveFeatures } from '../packages/ogygia/dist/vite/runtime-entry.js';
-import type { RuntimeMarks } from '../packages/ogygia/dist/vite/runtime-entry.js';
+import { generateRuntimeEntrySource, resolveFeatures } from '../packages/ogygia/dist/compiler/link/runtime-entry.js';
+import type { RuntimeMarks } from '../packages/ogygia/dist/compiler/link/runtime-entry.js';
 
 const RUNTIME_DIR = fileURLToPath(new URL('../packages/ogygia/dist/runtime', import.meta.url));
 const SNAPSHOT = fileURLToPath(new URL('./bundle-size.snapshot.json', import.meta.url));
@@ -36,13 +36,14 @@ const PROFILES: Array<{ name: string; blurb: string; marks: RuntimeMarks }> = [
 	{ name: 'SPA router', blurb: 'client-side navigation', marks: { complete: true, hydrate: ['load'], router: true, forms: true } },
 	{ name: 'Frozen regions', blurb: 'lakes', marks: { complete: true, hydrate: ['none'], lakes: true, forms: false } },
 	{ name: 'Live regions', blurb: 'streaming held regions', marks: { complete: true, hydrate: ['load'], live: true, morph: true } },
+	{ name: 'Context', blurb: 'cross-island Provide / setContext', marks: { complete: true, hydrate: ['load'], context: true, forms: false } },
 	{
 		name: 'Everything',
 		blurb: 'kitchen sink',
 		marks: {
 			complete: true, hydrate: ['load', 'interaction', 'none'], defer: ['load'], router: true,
 			live: true, morph: true, lakes: true, persist: true, persistKeys: ['x'], forms: true,
-			wire: true, remoteSeeds: true
+			wire: true, remoteSeeds: true, context: true
 		}
 	}
 ];
@@ -61,7 +62,19 @@ async function measure(marks: RuntimeMarks): Promise<{ raw: number; brotli: numb
 		external: [/^svelte(\/|$)/, /^\$app\//, 'esm-env', /\.svelte$/],
 		// Strip DEV like a real Vite prod build (import.meta.env.DEV → false), so the numbers reflect
 		// what actually ships — not the dev-only warnings and the PropMutationGuard, which prod DCEs.
-		transform: { define: { 'import.meta.env.DEV': 'false', 'import.meta.env.MODE': '"production"' } },
+		// Mirror the plugin's `define` (vite/index.ts) at their prod defaults: the runtime's build-time
+		// gates are `typeof __X__ !== 'undefined' ? __X__ : default`, which only fold when the toolchain
+		// replaces the global. This isolated rolldown build bypasses the plugin, so define them here or
+		// the devtools graph (and the server-delta branch) can't tree-shake — a false +4 kB per profile.
+		transform: {
+			define: {
+				'import.meta.env.DEV': 'false',
+				'import.meta.env.MODE': '"production"',
+				__OGYGIA_DEVTOOLS__: 'false', // off by default — user apps never ship it
+				__OGYGIA_CONTINUITY_FORMS__: 'true', // form continuity on by default (gated by the profile's marks)
+				__OGYGIA_SERVER_DELTA__: 'false' // server-delta nav is opt-in
+			}
+		},
 		logLevel: 'silent'
 	});
 	const { output } = await bundle.generate({ format: 'es', minify: true });

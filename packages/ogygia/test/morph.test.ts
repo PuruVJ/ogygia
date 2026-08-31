@@ -156,9 +156,7 @@ describe('keyed children (id / data-key)', () => {
 	});
 
 	test('reorder preserves per-node DOM state (typed-in input value)', () => {
-		const parent = el(
-			'<ul><li id="a"><input name="x"></li><li id="b"><input name="y"></li></ul>'
-		);
+		const parent = el('<ul><li id="a"><input name="x"></li><li id="b"><input name="y"></li></ul>');
 		const inputA = parent.children[0].firstElementChild as DomElement;
 		inputA.value = 'typed';
 		morph_children(

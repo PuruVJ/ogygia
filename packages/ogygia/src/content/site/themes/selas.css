@@ -877,7 +877,13 @@
 		margin: 2.5rem 0;
 		border: 0;
 		height: 1px;
-		background: linear-gradient(90deg, transparent, var(--og-line) 20%, var(--og-line) 80%, transparent);
+		background: linear-gradient(
+			90deg,
+			transparent,
+			var(--og-line) 20%,
+			var(--og-line) 80%,
+			transparent
+		);
 	}
 	.og-body img {
 		max-width: 100%;
@@ -1229,7 +1235,16 @@
 	}
 
 	:is(.og-shell, .og-shell, [class*='og-search'], [class*='og-sw-'], .og-sheet)
-		:is(a, button, [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='option'], input, summary):focus-visible {
+		:is(
+			a,
+			button,
+			[role='menuitem'],
+			[role='menuitemradio'],
+			[role='tab'],
+			[role='option'],
+			input,
+			summary
+		):focus-visible {
 		outline: 2px solid var(--og-accent);
 		outline-offset: 2px;
 		border-radius: var(--og-radius-sm);

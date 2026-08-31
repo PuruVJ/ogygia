@@ -4,7 +4,7 @@ summary: Add the package, register the Vite plugin before sveltekit(), wire the 
 related:
   - start/quickstart
   - start/overview
-  - app/router
+  - app/spa-router
 ---
 
 ogygia drops into an existing SvelteKit app. First you wire it in: the package, the Vite plugin, the server handle. Then you adopt it one route at a time, with everything else staying a normal Kit page.
@@ -145,7 +145,7 @@ export const csr = false;
 
 ### The router is global
 
-The SPA router is on by default, app-wide. There is no component to render. On routes still `csr = true`, Kit's client owns navigation and ogygia does not intercept clicks, so the two coexist. Opt out entirely with `ogygia({ router: false })`. See [Router](/docs/app/router).
+The SPA router is on by default, app-wide. There is no component to render. On routes still `csr = true`, Kit's client owns navigation and ogygia does not intercept clicks, so the two coexist. Opt out entirely with `ogygia({ router: false })`. See [Router](/docs/app/spa-router).
 
 ### Islands on a normal Kit page
 

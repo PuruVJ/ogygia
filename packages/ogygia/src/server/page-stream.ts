@@ -73,7 +73,8 @@ export function stage_deferred(
 		if (Array.isArray(v)) return v.map((x) => walk(x, depth + 1));
 		if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
 			const out: Record<string, unknown> = {};
-			for (const k in v as Record<string, unknown>) out[k] = walk((v as Record<string, unknown>)[k], depth + 1);
+			for (const k in v as Record<string, unknown>)
+				out[k] = walk((v as Record<string, unknown>)[k], depth + 1);
 			return out;
 		}
 		return v;
@@ -154,6 +155,7 @@ export function resolve_script(
 
 export function normalize_error(err: unknown): { message: string } {
 	if (err instanceof Error) return { message: err.message };
-	if (err && typeof err === 'object' && 'message' in err) return { message: String((err as { message: unknown }).message) };
+	if (err && typeof err === 'object' && 'message' in err)
+		return { message: String((err as { message: unknown }).message) };
 	return { message: String(err) };
 }

@@ -1,0 +1,265 @@
+// Integration suite for the CDN plugin — node `rolldown` + LIVE jsdelivr, bundling real packages across
+// the gnarly patterns and asserting the output. Network-dependent. Run: `node cdn-plugin.test.mjs`.
+import { rolldown } from 'rolldown';
+import { writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { cdnPlugin } from './cdn-plugin.ts';
+import { sveltePlugin } from './svelte-plugin.ts';
+
+let pass = 0;
+let fail = 0;
+const ok = (label, cond, detail = '') => {
+	if (cond) { pass++; console.log(`  ✓ ${label}`); }
+	else { fail++; console.log(`  ✗ ${label}${detail ? '  — ' + detail : ''}`); }
+};
+
+/** Bundle an entry through the CDN plugin + svelte-compile; svelte stays external. `pkgs` collects
+ *  resolved package names (a "resolving …" readout in the UI later). */
+async function bundle(entryCode, { extraExternal, pkgs } = {}) {
+	const files = { '/entry.js': entryCode };
+	const workspace = {
+		name: 'ws',
+		resolveId(id) { return files[id] ? id : null; },
+		load(id) { return files[id] ?? null; }
+	};
+	const b = await rolldown({
+		input: '/entry.js',
+		plugins: [
+			workspace,
+			cdnPlugin({ isExternal: extraExternal, onPackage: (n) => pkgs?.add(n) }),
+			sveltePlugin()
+		],
+		cwd: '/',
+		onLog() {}
+	});
+	const { output } = await b.generate({ format: 'es' });
+	return output.map((o) => o.code).join('\n');
+}
+
+/** Write a bundled ES module to a temp file and import it, returning its exports. */
+async function importCode(code) {
+	const dir = await mkdtemp(join(tmpdir(), 'repl-cdn-'));
+	const file = join(dir, 'out.mjs');
+	await writeFile(file, code);
+	try {
+		return await import(pathToFileURL(file).href);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+}
+
+/** Bundle + actually RUN it (for npm-only cases), returning the module's exports. */
+async function run(entryCode) {
+	return importCode(await bundle(entryCode));
+}
+
+/** Bundle an entry with an INJECTED fetch (deterministic, offline) — for the wasm/asset paths. */
+async function bundleWith(entryCode, fetchFn) {
+	const files = { '/entry.js': entryCode };
+	const ws = { name: 'ws', resolveId(id) { return files[id] ? id : null; }, load(id) { return files[id] ?? null; } };
+	const missing = [];
+	const b = await rolldown({
+		input: '/entry.js',
+		plugins: [ws, cdnPlugin({ fetch: fetchFn, onMissing: (id) => missing.push(id) })],
+		cwd: '/',
+		onLog() {}
+	});
+	const { output } = await b.generate({ format: 'es' });
+	return { code: output.map((o) => o.code).join('\n'), missing };
+}
+
+/** A minimal VALID wasm module (magic `\0asm` + version 1) — instantiable, no imports/exports. */
+const WASM8 = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
+/** A fetch that serves `WASM8` for any `.wasm` URL and 404s everything else. */
+const wasmFetch = async (u) =>
+	/\.wasm/.test(String(u))
+		? { ok: true, arrayBuffer: async () => WASM8.buffer.slice(0) }
+		: { ok: false, arrayBuffer: async () => new ArrayBuffer(0), text: async () => null };
+
+const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+const withNet = (p) => Promise.race([p, timeout(45000)]);
+
+async function main() {
+	console.log('CDN plugin — live jsdelivr integration\n');
+
+	// 1. CJS package, default export (canvas-confetti)
+	try {
+		const m = await withNet(run(`import confetti from 'canvas-confetti';\nexport const t = typeof confetti;\nexport const hasReset = typeof confetti.reset;`));
+		ok('CJS default export (canvas-confetti)', m.t === 'function', `typeof=${m.t}`);
+		ok('CJS static props preserved (.reset)', m.hasReset === 'function');
+	} catch (e) { fail += 2; console.log('  ✗ canvas-confetti threw —', e.message); }
+
+	// 2. Pure ESM, named exports (nanoid)
+	try {
+		const m = await withNet(run(`import { nanoid, customAlphabet } from 'nanoid';\nexport const a = typeof nanoid;\nexport const b = typeof customAlphabet;\nexport const id = nanoid();`));
+		ok('ESM named exports (nanoid)', m.a === 'function' && m.b === 'function');
+		ok('ESM runtime works (nanoid() returns id)', typeof m.id === 'string' && m.id.length > 0, `id=${m.id}`);
+	} catch (e) { fail += 2; console.log('  ✗ nanoid threw —', e.message); }
+
+	// 3. Namespace import + ESM subpath (lodash-es)
+	try {
+		const m = await withNet(run(`import { debounce, cloneDeep } from 'lodash-es';\nexport const a = typeof debounce;\nexport const b = typeof cloneDeep;`));
+		ok('ESM barrel named imports (lodash-es)', m.a === 'function' && m.b === 'function');
+	} catch (e) { fail += 1; console.log('  ✗ lodash-es threw —', e.message); }
+
+	// 4. CJS subpath (lodash/debounce)
+	try {
+		const m = await withNet(run(`import debounce from 'lodash/debounce';\nexport const t = typeof debounce;`));
+		ok('CJS subpath default (lodash/debounce)', m.t === 'function', `typeof=${m.t}`);
+	} catch (e) { fail += 1; console.log('  ✗ lodash/debounce threw —', e.message); }
+
+	// 5. Scoped package with exports map + transitive deps (@floating-ui/dom → @floating-ui/core)
+	try {
+		const m = await withNet(run(`import { computePosition, autoUpdate } from '@floating-ui/dom';\nexport const a = typeof computePosition;\nexport const b = typeof autoUpdate;`));
+		ok('scoped + exports map + transitive (@floating-ui/dom)', m.a === 'function' && m.b === 'function');
+	} catch (e) { fail += 1; console.log('  ✗ @floating-ui/dom threw —', e.message); }
+
+	// 6. Versioned specifier
+	try {
+		const m = await withNet(run(`import { nanoid } from 'nanoid@5.0.7';\nexport const t = typeof nanoid;`));
+		ok('versioned specifier (nanoid@5.0.7)', m.t === 'function');
+	} catch (e) { fail += 1; console.log('  ✗ nanoid@5.0.7 threw —', e.message); }
+
+	// 7. svelte stays EXTERNAL (not bundled from CDN). `mount` is re-exported so it isn't tree-shaken.
+	try {
+		const code = await withNet(bundle(`import { mount } from 'svelte';\nimport confetti from 'canvas-confetti';\nexport { mount };\nexport const t = typeof confetti;`));
+		const importsSvelte = /from\s*["']svelte["']/.test(code);
+		const bundledSvelte = /jsdelivr[^\n]*svelte/.test(code);
+		ok('svelte kept external (import preserved, not CDN-bundled)', importsSvelte && !bundledSvelte, `import=${importsSvelte} bundled=${bundledSvelte}`);
+	} catch (e) { fail += 1; console.log('  ✗ svelte-external threw —', e.message); }
+
+	// 7b. A Svelte component lib shipping `.svelte` SOURCE via a deep barrel (radix-svelte): the `svelte`
+	//     export condition resolves, `export * from './components'` chains resolve, `.svelte` files
+	//     compile, and svelte/internal stays external. THE hard one.
+	try {
+		const pkgs = new Set();
+		const code = await withNet(bundle(
+			`import { Accordion } from 'radix-svelte';\nexport const keys = Object.keys(Accordion);`,
+			{ pkgs }
+		));
+		const compiled = /svelte\/internal\/client/.test(code); // .svelte files were compiled
+		const svelteExternal = /from\s*["']svelte\/internal\/client["']/.test(code);
+		ok('radix-svelte: svelte-source deep barrel bundles', code.length > 500 && pkgs.has('radix-svelte'), `pkgs=${[...pkgs]}`);
+		ok('radix-svelte: .svelte compiled, svelte/internal external', compiled && svelteExternal, `compiled=${compiled} external=${svelteExternal}`);
+	} catch (e) { fail += 2; console.log('  ✗ radix-svelte threw —', (e.stack || e.message).split('\n').slice(0, 3).join(' | ')); }
+
+	// 8. Node builtins: unpolyfillable ones (fs) stub; polyfillable ones resolve their browser shim.
+	try {
+		const m = await withNet(run(`import fs from 'fs';\nimport path from 'node:path';\nimport { Buffer } from 'buffer';\nexport const fsType = typeof fs;\nexport const joined = path.join('a', 'b');\nexport const enc = Buffer.from('hi').toString('base64');`));
+		ok('unpolyfillable builtin (fs) → inert stub', m.fsType === 'object');
+		ok('node:path → path-browserify polyfill (works)', m.joined === 'a/b', `join=${m.joined}`);
+		ok('buffer → real polyfill (Buffer.from works)', m.enc === 'aGk=', `enc=${m.enc}`);
+	} catch (e) { fail += 3; console.log('  ✗ node-builtin/polyfill threw —', e.message.split('\n')[0]); }
+
+	// 9. Unknown package → stub, build survives
+	try {
+		const m = await withNet(run(`import x from 'this-package-does-not-exist-9z9z9z';\nexport const t = typeof x;`));
+		ok('unknown package stubbed (build survives)', m.t === 'object', `typeof=${m.t}`);
+	} catch (e) { fail += 1; console.log('  ✗ unknown-package threw —', e.message); }
+
+	// 10. JSON import from a package (immer ships no json; use a known-json path) — data URL-ish: skip if flaky
+	try {
+		const m = await withNet(run(`import pkg from 'nanoid/package.json';\nexport const name = pkg.name;`));
+		ok('JSON import (nanoid/package.json)', m.name === 'nanoid', `name=${m.name}`);
+	} catch (e) { fail += 1; console.log('  ✗ JSON import threw —', e.message); }
+
+	// 11. CSS import from a package → injected as a <style> (rolldown can't bundle CSS itself)
+	try {
+		const code = await withNet(bundle(`import 'normalize.css';\nexport const x = 1;`));
+		ok('CSS import → style injection', /createElement\((['"])style\1\)/.test(code) && /data-repl-css/.test(code));
+	} catch (e) { fail += 1; console.log('  ✗ CSS import threw —', e.message.split('\n')[0]); }
+
+	// 12. semver ranges + dist-tags (jsdelivr resolves them to a concrete version)
+	try {
+		const a = await withNet(run(`import { nanoid } from 'nanoid@^5.0.0';\nexport const t = typeof nanoid;`));
+		const c = await withNet(run(`import { nanoid } from 'nanoid@latest';\nexport const t = typeof nanoid;`));
+		ok('semver range (^5) + dist-tag (latest)', a.t === 'function' && c.t === 'function');
+	} catch (e) { fail += 1; console.log('  ✗ semver range threw —', e.message.split('\n')[0]); }
+
+	// 13. CJS package with heavy internals (immer — Proxies)
+	try {
+		const m = await withNet(run(`import { produce } from 'immer';\nexport const t = typeof produce;`));
+		ok('CJS internals (immer/produce)', m.t === 'function');
+	} catch (e) { fail += 1; console.log('  ✗ immer threw —', e.message.split('\n')[0]); }
+
+	// 14. a package that imports a node builtin transitively → stubbed, build survives
+	try {
+		const m = await withNet(run(`import mime from 'mime';\nexport const t = typeof mime;`));
+		ok('pkg with transitive node builtin (mime)', m.t === 'function' || m.t === 'object');
+	} catch (e) { fail += 1; console.log('  ✗ mime threw —', e.message.split('\n')[0]); }
+
+	// 15. deep transitive dep graph (d3-scale → many d3-*)
+	try {
+		const m = await withNet(run(`import { scaleLinear } from 'd3-scale';\nexport const t = typeof scaleLinear;`));
+		ok('deep transitive graph (d3-scale)', m.t === 'function');
+	} catch (e) { fail += 1; console.log('  ✗ d3-scale threw —', e.message.split('\n')[0]); }
+
+	// 16. a stalled CDN response must not hang the build — the per-request timeout aborts → stub (no net)
+	try {
+		const files = { '/entry.js': `import x from 'never-responds-pkg';\nexport const t = typeof x;` };
+		const ws = { name: 'ws', resolveId(id) { return files[id] ? id : null; }, load(id) { return files[id] ?? null; } };
+		const hang = () => new Promise(() => {}); // never resolves
+		const t0 = Date.now();
+		const b = await rolldown({ input: '/entry.js', plugins: [ws, cdnPlugin({ fetch: hang, fetchTimeout: 150 })], cwd: '/', onLog() {} });
+		const { output } = await b.generate({ format: 'es' });
+		const elapsed = Date.now() - t0;
+		// The guarantee: the build COMPLETES (the package stubbed) well under any hang, not a specific shape.
+		ok('stalled fetch times out → build completes (no hang)', output[0].code.length > 0 && elapsed < 3000, `${elapsed}ms`);
+	} catch (e) { fail += 1; console.log('  ✗ timeout test threw —', e.message.split('\n')[0]); }
+
+	// 17. a STATIC `.wasm` import → a real loader whose init() instantiates to a WebAssembly.Instance
+	try {
+		const { code } = await bundleWith(`import init from 'https://cdn.jsdelivr.net/npm/fake@1/x.wasm';\nexport const go = () => init();`, wasmFetch);
+		const m = await importCode(code);
+		const inst = await m.go();
+		ok('wasm static import → init() yields a WebAssembly.Instance', inst instanceof WebAssembly.Instance);
+	} catch (e) { fail += 1; console.log('  ✗ wasm init test threw —', e.message.split('\n')[0]); }
+
+	// 18. a `.wasm?url` import → a `data:` URL string (Vite convention)
+	try {
+		const { code } = await bundleWith(`import u from 'https://cdn.jsdelivr.net/npm/fake@1/x.wasm?url';\nexport const url = u;`, wasmFetch);
+		const m = await importCode(code);
+		ok('wasm ?url import → data: URL string', typeof m.url === 'string' && m.url.startsWith('data:application/wasm;base64,'), (m.url || '').slice(0, 40));
+	} catch (e) { fail += 1; console.log('  ✗ wasm ?url test threw —', e.message.split('\n')[0]); }
+
+	// 19. a wasm fetch that FAILS → inert stub, build still completes (no crash)
+	try {
+		const failFetch = async () => ({ ok: false, arrayBuffer: async () => new ArrayBuffer(0), text: async () => null });
+		const { code, missing } = await bundleWith(`import init from 'https://cdn.jsdelivr.net/npm/fake@1/x.wasm';\nexport const t = typeof init;`, failFetch);
+		ok('wasm fetch fails → inert stub, build survives', code.length > 0 && missing.length > 0, `missing=${missing.length}`);
+	} catch (e) { fail += 1; console.log('  ✗ wasm fail test threw —', e.message.split('\n')[0]); }
+
+	// 20. a native `.node` addon anywhere in the graph → stub, never fetched, build survives
+	try {
+		const { code, missing } = await bundleWith(`import x from 'https://cdn.jsdelivr.net/npm/fake@1/build/x.node';\nexport const t = typeof x;`, wasmFetch);
+		ok('native .node addon → stub, build survives', code.length > 0 && missing.some((id) => /\.node/.test(id)), `missing=${missing.join(',')}`);
+	} catch (e) { fail += 1; console.log('  ✗ .node test threw —', e.message.split('\n')[0]); }
+
+	// 21. browser-field MAP on inner files: `./node.js` → `./browser.js`, `./fslib.js` → false (stub).
+	// The node adapter of an axios-class package is dropped for its browser variant (verified on real axios).
+	try {
+		const CDN = 'https://cdn.jsdelivr.net/npm/';
+		const PKG = JSON.stringify({ name: 'bmap-pkg', version: '1.0.0', main: './index.js', browser: { './node.js': './browser.js', './fslib.js': false } });
+		const FILES = {
+			'bmap-pkg/package.json': PKG,
+			'bmap-pkg@1.0.0/package.json': PKG,
+			'bmap-pkg@1.0.0/index.js': `import x from './node.js';\nimport y from './fslib.js';\nexport const v = x;\nexport const stub = y;`,
+			'bmap-pkg@1.0.0/browser.js': `export default 'BROWSER';`,
+			'bmap-pkg@1.0.0/node.js': `export default 'NODE';`,
+			'bmap-pkg@1.0.0/fslib.js': `export default 'REALFS';`
+		};
+		const bmapFetch = async (url) => { const p = String(url).slice(CDN.length); const b = FILES[p]; return b != null ? { ok: true, text: async () => b, arrayBuffer: async () => new ArrayBuffer(0) } : { ok: false, text: async () => null, arrayBuffer: async () => new ArrayBuffer(0) }; };
+		const { code } = await bundleWith(`import { v, stub } from 'bmap-pkg';\nexport const version = v;\nexport const stubType = typeof stub;`, bmapFetch);
+		const m = await importCode(code);
+		ok('browser map remaps inner node→browser file', m.version === 'BROWSER', `got ${m.version}`);
+		ok('browser:false inner file → inert stub', m.stubType === 'object', `got ${m.stubType}`);
+	} catch (e) { fail += 2; console.log('  ✗ browser-map test threw —', e.message.split('\n')[0]); }
+
+	console.log(`\n${'─'.repeat(44)}`);
+	console.log(`${fail === 0 ? '✓ ALL PASS' : '✗ FAILURES'}: ${pass} passed, ${fail} failed`);
+	process.exit(fail === 0 ? 0 : 1);
+}
+
+main().catch((e) => { console.error('FATAL', e); process.exit(1); });

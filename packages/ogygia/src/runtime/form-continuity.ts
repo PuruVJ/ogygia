@@ -14,7 +14,8 @@ import { slots } from './slots.js';
 
 /** Feature entry: enable form-field survival across SPA nav (unless the build disabled it). */
 export function install() {
-	const on = typeof __OGYGIA_CONTINUITY_FORMS__ !== 'undefined' ? __OGYGIA_CONTINUITY_FORMS__ : true;
+	const on =
+		typeof __OGYGIA_CONTINUITY_FORMS__ !== 'undefined' ? __OGYGIA_CONTINUITY_FORMS__ : true;
 	if (!on) return;
 	slots.forms = { enabled: true, snapshot: snapshot_forms, restore: arm_form_restore };
 }

@@ -24,7 +24,21 @@ export interface NetCall {
 	host: string;
 	/** 0 = errored before a response */
 	status: number;
+	/** DECODED response body size (what the app receives) — measured by counting a cloned body stream,
+	 *  so it's captured however the app reads (json/text/stream) and even when there's no content-length. */
 	bytes?: number;
+	/** wire/transfer size from `content-length` (compressed when `encoding` is set) */
+	transfer_bytes?: number;
+	/** response `content-encoding` (gzip / br / …) when compressed */
+	encoding?: string;
+	/** short response `content-type` (params stripped) */
+	type?: string;
+	/** response headers (curated + capped) — shown in the request side panel */
+	headers?: Record<string, string>;
+	/** request body size in bytes, when it has one */
+	req_bytes?: number;
+	/** request body preview (truncated) — for string / form / URLSearchParams bodies */
+	req_payload?: string;
 	kind: 'fetch' | 'http';
 	/** route of the page render that made this call, when known */
 	route: string | null;
@@ -129,19 +143,22 @@ export interface NetContext {
 type Emit = (call: NetCall) => void;
 
 let installed = false;
+// The active emit sink, kept module-level so `ensure_fetch_patched` can RE-wrap `globalThis.fetch` with
+// the same sink after something replaces it.
+let net_emit: Emit | null = null;
+// Brands OUR wrapper so a re-assert never wraps our own wrapper (which would count every call twice).
+const OG_FETCH_PATCH = Symbol.for('ogygia.profiler.net.fetch-patch');
 
 /**
  * Install the patches. `fallback` receives calls made outside any request
  * context (startup work, background jobs) so window recordings still see them.
+ * Idempotent: a second call just re-asserts the fetch patch (see `ensure_fetch_patched`).
  */
 export async function install_net_capture(
 	als: AsyncLocalStorage<NetContext>,
 	fallback: Emit
 ): Promise<void> {
-	if (installed) return;
-	installed = true;
-
-	const emit = (call: NetCall) => {
+	net_emit = (call: NetCall) => {
 		const ctx = als.getStore();
 		if (ctx) {
 			call.route = ctx.route;
@@ -152,8 +169,30 @@ export async function install_net_capture(
 		}
 	};
 
-	patch_fetch(emit);
-	await patch_http(emit);
+	if (installed) {
+		ensure_fetch_patched();
+		return;
+	}
+	installed = true;
+	patch_fetch(net_emit);
+	await patch_http(net_emit);
+}
+
+/**
+ * Re-assert the `globalThis.fetch` patch. `globalThis.fetch` can be REPLACED out from under us after
+ * install — a late undici init, a framework fetch polyfill, an HMR reload of this module — which
+ * silently kills capture, so reports "sometimes catch network, sometimes don't". Call this before every
+ * profile: if the live fetch isn't ours (identified by the brand symbol, so we never wrap our own
+ * wrapper) re-wrap whatever is there now with the same sink. One property read, idempotent — safe to
+ * call every request/run.
+ */
+export function ensure_fetch_patched(): void {
+	if (!net_emit) return;
+	const cur = globalThis.fetch as
+		| (typeof globalThis.fetch & { [OG_FETCH_PATCH]?: boolean })
+		| undefined;
+	if (typeof cur === 'function' && cur[OG_FETCH_PATCH]) return; // still ours
+	patch_fetch(net_emit);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,8 +217,11 @@ function host_of(url: string): string {
 }
 
 function patch_fetch(emit: Emit): void {
-	const orig = globalThis.fetch;
+	const orig = globalThis.fetch as
+		| (typeof globalThis.fetch & { [OG_FETCH_PATCH]?: boolean })
+		| undefined;
 	if (typeof orig !== 'function') return;
+	if (orig[OG_FETCH_PATCH]) return; // the live fetch is already our wrapper — don't wrap it again
 
 	const patched = async function fetch(
 		input: RequestInfo | URL,
@@ -207,13 +249,20 @@ function patch_fetch(emit: Emit): void {
 			path: null,
 			caller_site: capture_stacks ? nearest_app_site() : undefined
 		};
+		capture_req_payload(init, call);
 		emit(call);
 		try {
 			const res = await orig(input as RequestInfo, init);
 			call.ms = round2(performance.now() - call.start);
 			call.status = res.status;
+			call.type = short_ct(res.headers.get('content-type'));
+			call.encoding = res.headers.get('content-encoding') || undefined;
 			const len = res.headers.get('content-length');
-			if (len) call.bytes = Number(len) || undefined;
+			if (len) call.transfer_bytes = Number(len) || undefined;
+			call.headers = headers_of(res.headers);
+			// Robust DECODED size: count a cloned body stream. Works however the app reads the original
+			// (json/text/stream) and with no content-length (chunked / dev servers) — no more dashes.
+			count_decoded(res, call);
 			wrap_body(res, call);
 			return res;
 		} catch (e) {
@@ -222,6 +271,7 @@ function patch_fetch(emit: Emit): void {
 			throw e;
 		}
 	};
+	(patched as typeof patched & { [OG_FETCH_PATCH]?: boolean })[OG_FETCH_PATCH] = true;
 	globalThis.fetch = patched as typeof globalThis.fetch;
 }
 
@@ -249,6 +299,90 @@ function wrap_body(res: Response, call: NetCall): void {
 			// frozen response — skip body timing
 		}
 	}
+}
+
+/** Strip params from a content-type: "application/json; charset=utf-8" → "application/json". */
+function short_ct(ct: string | null): string | undefined {
+	if (!ct) return undefined;
+	const i = ct.indexOf(';');
+	return (i === -1 ? ct : ct.slice(0, i)).trim() || undefined;
+}
+
+/** Snapshot response headers for the request side panel. Capped (≤40 entries, ≤512 chars each) so a
+ *  rogue header value can't bloat the `.ogp`. Returns undefined when there are none. */
+function headers_of(h: Headers): Record<string, string> | undefined {
+	const out: Record<string, string> = {};
+	let n = 0;
+	for (const [k, v] of h) {
+		if (n++ >= 40) break;
+		out[k] = v.length > 512 ? v.slice(0, 512) + '…' : v;
+	}
+	return n ? out : undefined;
+}
+
+// Keep request bodies large enough to inspect the real thing — workplaces routinely POST multi-MB JSON.
+// The report/window path holds the full clipped body; the report UI formats + highlights it lazily and
+// off the main thread (see Shell.svelte) so a big payload never freezes the page. 4 MB is the ceiling a
+// single body is stored at; a page's handful of outbound calls keeps peak memory bounded.
+const MAX_PAYLOAD = 4_000_000;
+const utf8_len = (s: string): number => {
+	try {
+		return new TextEncoder().encode(s).byteLength;
+	} catch {
+		return s.length;
+	}
+};
+const clip = (s: string): string =>
+	s.length > MAX_PAYLOAD ? s.slice(0, MAX_PAYLOAD) + '\n… (truncated)' : s;
+
+/** Capture the request body's size (+ a preview for string / form bodies). Never consumes a stream. */
+function capture_req_payload(init: RequestInit | undefined, call: NetCall): void {
+	const body = init?.body;
+	if (body == null) return;
+	try {
+		if (typeof body === 'string') {
+			call.req_bytes = utf8_len(body);
+			call.req_payload = clip(body);
+		} else if (body instanceof URLSearchParams) {
+			const s = body.toString();
+			call.req_bytes = utf8_len(s);
+			call.req_payload = clip(s);
+		} else if (body instanceof ArrayBuffer) {
+			call.req_bytes = body.byteLength;
+		} else if (ArrayBuffer.isView(body)) {
+			call.req_bytes = (body as ArrayBufferView).byteLength;
+		}
+		// FormData / Blob / ReadableStream: sizing would consume/serialize it — skip.
+	} catch {
+		/* exotic body — skip */
+	}
+}
+
+/** Count the DECODED response body size by draining a CLONE in the background (the original is left
+ *  untouched). Sets `call.bytes` when done — the render finishes first, so it's ready by report time. */
+function count_decoded(res: Response, call: NetCall): void {
+	let clone: Response;
+	try {
+		clone = res.clone();
+	} catch {
+		return; // already consumed, or not cloneable
+	}
+	const stream = clone.body;
+	if (!stream) return;
+	void (async () => {
+		try {
+			const reader = stream.getReader();
+			let total = 0;
+			for (;;) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				total += value?.byteLength ?? 0;
+			}
+			call.bytes = total;
+		} catch {
+			/* stream errored mid-read — leave the size to the wrap_body / transfer fallback */
+		}
+	})();
 }
 
 // ---------------------------------------------------------------------------
@@ -332,8 +466,20 @@ function instrument_client_request(
 
 	r.on('response', (res) => {
 		call.ms = round2(performance.now() - call.start);
-		const rr = res as { statusCode?: number; on?: (ev: string, cb: () => void) => void };
+		const rr = res as {
+			statusCode?: number;
+			headers?: Record<string, string | string[] | undefined>;
+			on?: (ev: string, cb: () => void) => void;
+		};
 		call.status = rr.statusCode ?? 0;
+		const h = rr.headers ?? {};
+		const str_h = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+		const len = str_h(h['content-length']);
+		if (len) call.transfer_bytes = Number(len) || undefined;
+		call.encoding = str_h(h['content-encoding']) || undefined;
+		call.type = short_ct(str_h(h['content-type']) ?? null);
+		// no cloned-stream count here: adding a 'data' listener would flip a paused stream to flowing and
+		// could steal chunks from the app — content-length is the safe size on the raw-http path.
 		rr.on?.('end', () => {
 			call.body_ms = round2(performance.now() - call.start - call.ms);
 		});

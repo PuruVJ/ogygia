@@ -3,7 +3,7 @@ title: Server islands
 summary: HTML fetched from the server after the page loads. Placeholder first, then real HTML. No JS required.
 related:
   - regions/timing-nesting
-  - app/router
+  - app/spa-router
   - regions/held-regions
 ---
 
@@ -114,7 +114,7 @@ Server islands need the [server handle](/docs/start/install) installed, since th
 ## Do / don't
 
 - **Do** give a server island an `ogygiaFallback` so the placeholder is not an empty gap while its HTML loads.
-- **Do** lean on server islands when a page has several holes. Each fills on load, and a SPA navigation batches them all into one request (no waterfall), no config. See [SPA router](/docs/app/router#single-flight).
+- **Do** lean on server islands when a page has several holes. Each fills on load, and a SPA navigation batches them all into one request (no waterfall), no config. See [SPA router](/docs/app/spa-router#single-flight).
 - **Don't** use a server island for interactive UI. That is a [client island](/docs/regions/client-islands). For content that is *both* personalized and interactive, nest a `wake` island inside the server island.
 - **Do** remember `render: 'deferred'` ships no JS: the fetched HTML is inert until an island inside it wakes.
 

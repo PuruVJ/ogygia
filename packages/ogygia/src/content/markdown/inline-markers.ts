@@ -129,7 +129,8 @@ export function inline_markers(options: InlineMarkerOptions = {}): ShikiTransfor
 			let out = html;
 			// Restore redacted removed-content (still fenced by its `---` space runs) before matching.
 			if (meta) {
-				for (const { placeholder, content } of meta.redactions) out = out.replace(placeholder, content);
+				for (const { placeholder, content } of meta.redactions)
+					out = out.replace(placeholder, content);
 			}
 			out = highlight_all_spans(out, SUB['---'], CLASS['---']);
 			out = highlight_all_spans(out, SUB['+++'], CLASS['+++']);

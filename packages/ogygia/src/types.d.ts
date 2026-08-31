@@ -40,11 +40,21 @@ declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
 	 *  region response so a server-picked component styles a page that never imported it. */
 	export function islandCss(entry: string): string[];
+	/** og.$ hoisted factories (tag → self-contained source) for the page-inline registration
+	 *  script — prod SSR only; null in dev/client (dev uses the fn-manifest virtual). */
+	export function fnManifest(): Record<string, string> | null;
 }
 declare module 'virtual:ogygia/dev-hmr' {
 	/* side-effect only — CSS HMR bridge under csr=false */
 }
 declare module 'virtual:ogygia/dev-hmr-url' {
+	const url: string;
+	export default url;
+}
+declare module 'virtual:ogygia/devtools-boot' {
+	/* side-effect only — mounts the standalone devtools dock on a csr=true page */
+}
+declare module 'virtual:ogygia/devtools-boot-url' {
 	const url: string;
 	export default url;
 }
@@ -67,12 +77,18 @@ declare module 'virtual:ogygia/sign' {
 declare module 'virtual:ogygia/request-event' {
 	export function getRequestEvent(): {
 		cookies: { get: (name: string) => string | undefined };
+		request: Request;
 		[key: string]: unknown;
 	};
 }
 declare module 'virtual:ogygia/rate-limit' {
 	/** `max: 0` disables. Baked from `ogygia({ rateLimit })`. */
 	export const rateLimit: { max: number; windowMs: number };
+}
+declare module 'virtual:ogygia/profiler-config' {
+	/** Profiler options from `ogygia({ profiler })`, or `null` when off. SERVER only (client: null).
+	 *  `ogygia.handle()` reads this and dynamically imports + mounts the profiler when non-null. */
+	export const profilerConfig: Record<string, unknown> | null;
 }
 declare module 'virtual:ogygia/session-cookie' {
 	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ sessionCookie })`. */
@@ -92,11 +108,33 @@ declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regionTtl })` (default 3600). */
 	export const regionTtl: number;
 }
+declare module 'virtual:ogygia/route-csr' {
+	/** Route ids (Kit `route.id`, group-stripped) whose effective csr is true — SSR leg only; the
+	 *  client leg is an empty set (it reads `kit_hydrates_page()` instead). */
+	export const csr_true_routes: ReadonlySet<string>;
+}
 /** CONTINUITY compile-time constants (Vite `define`; typeof-guarded so node dist import is safe). */
 declare const __OGYGIA_CONTINUITY_FORMS__: boolean;
+/** SERVER-DELTA NAV opt-in (Vite `define`; default OFF — see `router.serverDelta`). */
+declare const __OGYGIA_SERVER_DELTA__: boolean;
+/** DEVTOOLS event layer gate (Vite `define`; default OFF — see `ogygia({ devtools })`). When off,
+ *  every `if (DEVTOOLS) emit({…})` folds to `if (false)` and the whole bus tree-shakes away. */
+declare const __OGYGIA_DEVTOOLS__: boolean;
 
+declare module 'virtual:ogygia/router-css' {
+	// Generated component→CSS registrations for the server router — side-effect only.
+}
+declare module 'virtual:ogygia/kit-transport' {
+	export const transport: Record<
+		string,
+		{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
+	>;
+}
 declare module 'virtual:ogygia/transport' {
-	export const transport: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;
+	export const transport: Record<
+		string,
+		{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
+	>;
 }
 declare module 'virtual:ogygia/kit-wire' {
 	export function stringify_remote_arg(value: unknown, transport: unknown): string;
@@ -118,6 +156,7 @@ declare module '$app/environment' {
 declare module '$app/server' {
 	export function getRequestEvent(): {
 		cookies: { get: (name: string) => string | undefined };
+		request: Request;
 		[key: string]: unknown;
 	};
 }
@@ -156,7 +195,10 @@ declare module '@sveltejs/kit/internal/server' {
 		data: Map<RemoteInternals, Record<string, Promise<unknown>>> | null;
 	}
 	export interface RequestState {
-		transport?: Record<string, { encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }>;
+		transport?: Record<
+			string,
+			{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
+		>;
 		remote: RequestRemoteState;
 	}
 	export interface RequestStore {
@@ -173,6 +215,11 @@ interface Window {
 	// client-side nav vs a real reload. Read by Playwright `page.evaluate` (a separate script
 	// boundary), so it must be a string-keyed global. NOT used by any library logic.
 	__marker?: number;
+	// Dev-only devtools maps the dock fetches from the plugin's `/__ogygia_devtools_meta` middleware.
+	// `names`: island id → component name (tab labels). `bytes`: island id → transitive dev-module
+	// size (the Bytes tab's real-cost estimate). Absent off a devtools build.
+	__ogygia_region_names?: Record<string, string>;
+	__ogygia_region_bytes?: Record<string, { bytes: number; modules: number }>;
 }
 
 // Rune globals used by the `.svelte.ts` shims. Those files are compiled by the CONSUMER's

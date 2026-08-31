@@ -87,7 +87,10 @@ export function strip_prose(src: string): string {
 }
 
 /** Split a page's source into `{ heading, text }` chunks aligned to its collected headings. */
-export function split_sections(source: string, headings: Heading[]): { heading: Heading | null; text: string }[] {
+export function split_sections(
+	source: string,
+	headings: Heading[]
+): { heading: Heading | null; text: string }[] {
 	const body = source.replace(/^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
 	const lines = body.split('\n');
 	const chunks: { heading: Heading | null; text: string }[] = [];
@@ -166,7 +169,15 @@ export async function build_docs(ol: Outline, only?: Collection[]): Promise<Sear
 			const extra = Object.values(entry.data)
 				.filter((v): v is string => typeof v === 'string')
 				.join(' ');
-			docs.push({ id: slug, slug, anchor: '', title, section: hit.record.section, heading: '', text: strip_prose(`${summary} ${extra}`) });
+			docs.push({
+				id: slug,
+				slug,
+				anchor: '',
+				title,
+				section: hit.record.section,
+				heading: '',
+				text: strip_prose(`${summary} ${extra}`)
+			});
 		}
 	}
 	return docs;
@@ -196,7 +207,8 @@ async function load_orama(): Promise<OramaModule> {
 }
 
 const ESC_RX = /[.*+?^${}()|[\]\\]/g;
-const esc_html = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const esc_html = (s: string) =>
+	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /**
  * A match-centered excerpt with the query terms wrapped in `<mark>` — the window starts just before
@@ -213,7 +225,10 @@ export function excerpt_of(text: string, terms: string[], span = 150): string {
 	const start = at <= 40 ? 0 : at - 40;
 	let out = esc_html(text.slice(start, start + span));
 	for (const t of [...terms].sort((a, b) => b.length - a.length)) {
-		out = out.replace(new RegExp(`(${esc_html(t).replace(ESC_RX, '\\$&')})`, 'gi'), '<mark>$1</mark>');
+		out = out.replace(
+			new RegExp(`(${esc_html(t).replace(ESC_RX, '\\$&')})`, 'gi'),
+			'<mark>$1</mark>'
+		);
 	}
 	return (start > 0 ? '…' : '') + out + (start + span < text.length ? '…' : '');
 }
@@ -256,7 +271,13 @@ export function orama_engine(): SearchEngine {
 			docs.forEach((d, i) => {
 				const rid = String(i);
 				by_id.set(rid, d);
-				mod!.insert(db, { id: rid, title: d.title, heading: d.heading, text: d.text, section: d.section });
+				mod!.insert(db, {
+					id: rid,
+					title: d.title,
+					heading: d.heading,
+					text: d.text,
+					section: d.section
+				});
 			});
 			return {
 				async query(q, { limit, base }) {

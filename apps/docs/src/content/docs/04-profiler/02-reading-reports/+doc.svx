@@ -1,0 +1,92 @@
+---
+title: Reading a report
+summary: How to read a profile — the wall-clock budget bar, the CPU treemap, self vs total and per-call cost for components, the network waterfall, waiting by function, and memory. Plus what the common slow patterns look like.
+related:
+  - profiler/overview
+  - profiler/recording
+  - reference/performance
+---
+
+A report reads top to bottom, from "is this compute or waiting?" down to the exact function. Here is what each part tells you.
+
+## Where the time went
+
+One bar for the whole window, split by what the CPU was doing. Read this first.
+
+- If the biggest segment is **your code**, it is a compute problem — go to the treemap and the component table.
+- If the biggest segment is **idle / waiting**, the server was blocked on I/O, not computing. A CPU profiler would have found nothing here. Go to the network section.
+
+This one split — compute vs waiting — is the whole reason a plain CPU profiler misses "5 second" pages. Those pages are usually waiting.
+
+## CPU by self time
+
+An interactive treemap. Every box is real work, sized by time; the biggest box is the bottleneck. Click a box to zoom in, and use the breadcrumb to zoom out.
+
+It is built from **self** time, so structural parents like `_layout` and `Root` barely show — only code that actually burns CPU. Hover any box for its file and cost.
+
+## Components: self vs total
+
+The two numbers confuse people, so it is worth stating plainly:
+
+- **self** is the time in the component's *own* code — its script and building its own HTML — not counting nested components.
+- **total** is self plus every component and function it calls.
+
+A page's root component always has a huge total and a tiny self, because its total *contains the whole page*. That is expected, not a bug.
+
+So:
+
+- **Sort by self** to find the components that actually burn CPU. This is the default.
+- **Sort by total** to find the most expensive subtree — useful when the cost is spread across many small children (a big list of rows, say).
+
+The inline bar on each row shows self (bright) inside total (dim), so you can see at a glance whether a component is slow itself or slow because of what it renders.
+
+## Renders and per call
+
+A component's cost is often *repetition*, not one heavy render. A **`×N`** tag next to a name means it ran N times during the window — `HeavyRow ×800` is eight hundred cheap renders, not one slow component. No tag means it ran once.
+
+The **per call** column makes that explicit: it is `total ÷ N`, the cost of a single render. A component can top the table on self and total yet sit near the bottom on per call — that is the "thousand small rows" shape, and the fix is to render fewer, not to make one faster. A component that is high on *per call* is the one that is genuinely heavy to render once.
+
+## Hot functions
+
+Every function on the server, sortable by self, total, or **per call**. This is where the CPU went, below the component level — a formatter constructed per row, a regex pass, a serializer. The file and line point you straight at it, and the same `×N` tag flags a hot loop (`escape_html ×7800`) rather than one slow call.
+
+Native runtime built-ins — Node and V8 internals like `existsSync` or the UTF-8 codecs — carry no source file, so their row is labelled **node core** with a `native` location. That is the runtime doing low-level work, not your code.
+
+## Network
+
+Every outbound `fetch` and `http`/`https` call the render made, tied to the route that made it, with a waterfall on a real timeline. Expand any request to see its **payload** — formatted, syntax-highlighted JSON, rendered lazily and off the main thread so a multi-MB body opens without freezing — plus its wire and decoded sizes and encoding. The waterfall shows ONE representative render, not the same handful of calls repeated across every run.
+
+The classic slow-page shape shows up here immediately: several calls stacked **one after another** instead of overlapping. That is sequential `await`s. The report flags it, and the fix is usually to run them together:
+
+```ts
+// slow: ~sum of all three
+const a = await getA();
+const b = await getB();
+const c = await getC();
+
+// fast: ~the slowest one
+const [a, b, c] = await Promise.all([getA(), getB(), getC()]);
+```
+
+A call whose "wait" is large but "body" is small is a slow upstream service; a large "body" is a slow or oversized response.
+
+## Waiting by function
+
+The waterfall above covers outbound HTTP. But a render also waits on things HTTP never sees — a file read, a `setTimeout`, a DNS lookup, a raw socket. This table times that non-HTTP I/O with `async_hooks` and attributes each wait to the nearest frame in *your* code, so a slow `readManifest` reads as **which function waited** instead of a featureless slice of "idle."
+
+Each row is a function, its kind of wait (timer, fs, dns, tcp), how many times it waited, and the total — sortable, with bars. When the budget bar is mostly idle but the network waterfall looks clean, the missing time is usually here.
+
+## Memory
+
+Top allocators (who creates the objects, and therefore the garbage), RSS over the window, and precise GC pauses from the runtime. A long single GC pause freezes every request at once, so if GC is a big slice of busy time, the allocators table tells you who to blame.
+
+## Flame graph and raw profile
+
+A flame graph of the merged call tree for the whole window, and a **download** of the raw `.cpuprofile`. Open that file in Chrome DevTools → Performance, or at speedscope.app, if you want their tooling on the same data.
+
+## What the common slow patterns look like
+
+- **Waiting, not computing** — budget bar mostly idle, low CPU, high wall time. The answer is in the network waterfall, or the waiting-by-function table for non-HTTP I/O like files and timers (or a database/socket driver the profiler can't see into, which the report will say).
+- **One heavy component** — a single large box in the treemap; that component tops the table sorted by self.
+- **Death by a thousand cuts** — the treemap is a field of small same-colored boxes; sort the component table by total to find the parent that renders them all.
+- **Allocation pressure** — GC is a visible slice of busy time; the allocators table names the culprit.

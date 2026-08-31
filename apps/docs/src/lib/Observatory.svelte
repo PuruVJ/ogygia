@@ -1,0 +1,3436 @@
+<script lang="ts">
+	import { mount, unmount, untrack } from 'svelte';
+	// The FULL svelte public API (getContext/setContext/onMount/tick/…) — a bundled CDN component keeps
+	// `import … from 'svelte'` external, so the eval's require hands it THIS shared instance.
+	import * as svelteRuntime from 'svelte';
+	// The devtools event bus — in "islands" mode the page's REAL runtime emits hydration events for our
+	// injected regions; we tap the bus to show the true lifecycle story (Rung-0 layer → an instrument).
+	import { add_sink } from 'ogygia/devtools';
+	import CodeMirror from './CodeMirror.svelte';
+	import FormattedCode from './FormattedCode.svelte';
+	import FileTree from './observatory/FileTree.svelte';
+	import { SplitPane } from '@neodrag/svelte/splitpane';
+	import { warmPrettier, formatCode } from './prettier';
+	import { parse as devalue_parse } from 'devalue';
+	import { format_console_args } from './repl/console-format';
+	import { encode_hash, decode_hash } from './repl/hash';
+	import ReplPassthrough from './repl/ReplPassthrough.svelte';
+	// REAL ogygia runtime pieces (NOT stubs): the docs build resolves ogygia's `virtual:ogygia/*` modules,
+	// so — like svelte — we hand the sandboxed eval the host's own linked ogygia. `og_html_region` +
+	// `Region` make the `import.meta.og.code`/`.md` macros render for real. Unknown ogygia named imports
+	// (content wrappers) still fall back to the passthrough.
+	import { Region, region, Provide, setContext as og_setContext, createContext } from 'ogygia';
+	// `og_html_region` for `.code`/`.md`; `__og_$` / `__og_store` / `__og_boundary` are the runtime the
+	// `import.meta.og.$` / `.store` macro rewrites call — provided so the live preview mounts macro code
+	// (single tree, so the fn/store are used directly; no cross-island manifest needed). Window-safe here.
+	import { og_html_region, __og_$, __og_store, __og_boundary } from 'ogygia/internal';
+	import './observatory-canvas.css'; // gentle, overridable native-element defaults (.og-canvas), shared with the iframe
+	import type { Analysis, Island } from './observatory.worker';
+	// svelte forbids STATIC `svelte/internal/*` imports in app code; load it at runtime for the linker.
+
+	// Regexes at script top level (created once for this singleton island, never per call).
+	const OBS_DEFER_URL = /\/__obs_defer\/([^/?#]+)/;
+	const PAGE_SVELTE = /(^|\/)\+page\.(svelte|md|svx)$/;
+
+	/** A REPL project: a map of filename → source. */
+	type FileMap = Record<string, string>;
+	/** A component the linker builds from compiled client JS (raw svelte component fn). */
+	type SvelteComp = (...args: unknown[]) => unknown;
+	/** A linked module's exports (default is the component). */
+	type Linked = { default?: SvelteComp } & Record<string, unknown>;
+	/** A require() the linker feeds compiled modules (resolves bare + relative specifiers). */
+	type Require = (spec: string) => Linked;
+	/** One real-runtime lifecycle event, tapped off the devtools bus (islands mode). */
+	type RuntimeEvent = { name: string; label: string; t?: number; ms?: number; when?: string };
+
+	/**
+	 * OBSERVATORY v0 — the browser compiler, first rung (internal/notes/devtools.md, Rung 1: "the
+	 * observatory, no execution"). You type an ogygia component; a Web WORKER parses it with
+	 * `svelte/compiler` (the same parser the Svelte REPL runs in-browser), finds the REAL marked-island
+	 * imports, resolves the two dials to a strategy, and returns the ISLAND MAP + the transformed host.
+	 * All heavy work is off the main thread, so the editor never blocks — and the worker is the seam the
+	 * later rungs grow into (it becomes the in-browser SERVER realm). This component is itself an ogygia
+	 * island, running under the playground's csr=false.
+	 *
+	 * SCOPE: marks + host rewrite are real (svelte/compiler + MagicString). The FULL ogygia transform
+	 * (macros, `.ts` registries, free-var capture) additionally needs the oxc parser in-browser (native
+	 * today — WASM / parser injection is the next step); region ids shown are an illustrative hash.
+	 */
+	// The all-strategies host — every island kind in one file (imports stub on render, but the transform
+	// shows them all). Kept as a preset.
+	// ogygia is SvelteKit-only, so presets are shaped like real apps: a route `+page.svelte` entry, a
+	// `+layout.ts` that opts the route into server-HTML (csr=false), and components under `$lib`.
+	const LAYOUT_CSR = `// ogygia renders pages as server HTML; only marked islands ship JS.\nexport const csr = false;`;
+	const ALL_STRATEGIES = `<scr${''}ipt>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Menu from '$lib/Menu.svelte' with { wake: 'interaction' };
+  import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
+  import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
+  import Prose from '$lib/Prose.svelte' with { wake: 'none' };
+  import Row from '$lib/Row.svelte' with { region: 'raw' };
+
+  // unmarked = free server HTML, ships no JS
+  import Header from '$lib/Header.svelte';
+
+  const points = [3, 1, 4, 1, 5];
+  const article = '<p>rendered prose</p>';
+</scr${''}ipt>
+
+<Header />
+<Counter start={0} />
+<Menu />
+<Chart data={points} />
+<Greeting />
+<Prose>{@html article}</Prose>`;
+
+	// The default MULTI-FILE app — renders for real (its imported components are provided).
+	const FILES_DEMO = {
+		'App.svelte': `<scr${''}ipt>
+  import Header from './Header.svelte';
+  import Counter from './Counter.svelte' with { wake: 'load' };
+  import Prose from './Prose.svelte' with { wake: 'none' };
+</scr${''}ipt>
+
+<Header title="My ogygia app" />
+<p>An interactive island (ships JS), then a frozen lake (no JS):</p>
+<Counter start={3} />
+<Prose>a server-only prose block</Prose>`,
+		'Header.svelte': `<scr${''}ipt>
+	let { title = 'Hi' } = $props();
+</scr${''}ipt>
+
+<h1>{title}</h1>
+`,
+		'Counter.svelte': `<scr${''}ipt>
+	let { start = 0 } = $props();
+	let n = $state(start);
+</scr${''}ipt>
+
+<button onclick={() => n++}>count is {n}</button>
+`,
+		'Prose.svelte': `<scr${''}ipt>
+	let { children } = $props();
+</scr${''}ipt>
+
+<div class="prose">
+	{@render children?.()}
+</div>
+`
+	};
+
+	// A multi-file app with EVERY wake schedule, so the x-ray wake visualizer has something to show:
+	// Counter wakes on load, Menu on interaction (click), Chart on scroll-into-view, Prose is a frozen lake.
+	const FILES_WAKE = {
+		'App.svelte': `<scr${''}ipt>
+  import Header from './Header.svelte';
+  import Counter from './Counter.svelte' with { wake: 'load' };
+  import Menu from './Menu.svelte' with { wake: 'interaction' };
+  import Chart from './Chart.svelte' with { wake: 'visible' };
+  import Prose from './Prose.svelte' with { wake: 'none' };
+</scr${''}ipt>
+
+<Header title="Wake schedules" />
+<p>Each island wakes on its own schedule. In x-ray: watch load fire, click Menu, scroll to Chart.</p>
+<Counter start={0} />
+<Menu />
+<Chart data={[3, 1, 4, 1, 5, 9, 2, 6, 5, 3]} />
+<Prose>a frozen lake — never ships JS, never wakes</Prose>`,
+		'Header.svelte': FILES_DEMO['Header.svelte'],
+		'Counter.svelte': FILES_DEMO['Counter.svelte'],
+		'Prose.svelte': FILES_DEMO['Prose.svelte'],
+		'Menu.svelte': `<scr${''}ipt>
+	let open = $state(false);
+</scr${''}ipt>
+
+<button onclick={() => (open = !open)}>
+	Menu {open ? '▲' : '▼'}
+</button>
+
+{#if open}
+	<ul>
+		<li>Profile</li>
+		<li>Settings</li>
+		<li>Log out</li>
+	</ul>
+{/if}
+`,
+		'Chart.svelte': `<scr${''}ipt>
+	let { data = [] } = $props();
+</scr${''}ipt>
+
+<div class="chart">
+	{#each data as v}
+		<span style="height: {v * 6}px"></span>
+	{/each}
+</div>
+
+<style>
+	.chart {
+		display: flex;
+		gap: 3px;
+		align-items: flex-end;
+		height: 60px;
+	}
+	.chart span {
+		width: 12px;
+		background: #14b8a6;
+		border-radius: 2px;
+	}
+</style>
+`
+	};
+
+	// Presets are file MAPS (Rung 6 multi-file). Most are single-file (their imports stub on render).
+	// A content page — ogygia's REAL markdown pipeline (mdsvex + Shiki + admonitions + heading ids) runs
+	// in the browser here, the same transform the shipped site uses. `\`` / `\${}` are escaped for the
+	// template literal; they reach the editor as plain markdown.
+	const CONTENT_MD = `---
+title: Content pages
+---
+<scr${''}ipt>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+</scr${''}ipt>
+
+# Markdown, live
+
+ogygia's **real** content pipeline runs right here — mdsvex, Shiki-highlighted
+fences, \`::: admonitions\`, heading ids + hover anchors, frontmatter. Edit the
+markdown and watch it recompile.
+
+A **live island** right in the prose — marked imports work in \`.md\`/\`.svx\`, so a
+demo lives next to the words describing it:
+
+<Counter start={3} />
+
+::: tip
+This is a tip admonition. Try \`::: warning\`, \`::: danger\`, or \`::: details\` too.
+:::
+
+## A highlighted code fence
+
+Fences support the \`+++\`/\`--- \` diff dialect and inline \`+++marks+++\`:
+
+\`\`\`js
+const greet = (name) => \`hello \${name}\`;
+--- console.log('old output');
++++ console.log(greet('ogygia'));
+\`\`\`
+
+## A table
+
+| dial     | decides                     |
+| -------- | --------------------------- |
+| \`wake\`   | when an island's JS runs    |
+| \`render\` | where the HTML comes from   |
+
+Prose, [links](/docs), and \`inline code\` all render through the same pipeline
+your shipped site uses — no bespoke REPL markdown.
+`;
+
+	// The workspace's vite.config — every template shows one, because this is exactly how a real ogygia
+	// project is wired: `ogygia()` BEFORE `sveltekit()`. The base config below is the minimal, honest
+	// wiring shared by all the interactive templates. (Loaders / router / regions are configured here in
+	// a full app too, but they're build-time and don't affect a single-page preview, so they're omitted.)
+	const VITE_CONFIG_BASE = `import { sveltekit } from '@sveltejs/kit/vite';
+import { ogygia } from 'ogygia/vite';
+
+export default {
+	plugins: [
+		// ogygia() MUST come before sveltekit(). SSR islands on stock SvelteKit — no Kit patches.
+		ogygia(),
+		sveltekit(),
+	],
+};
+`;
+	// The CONTENT template adds markdown options — and the REPL actually READS them: edit
+	// `containers`/`tabs`/`themes` and watch the preview recompile (see repl-config.ts + apply_content_config).
+	const VITE_CONFIG_CONTENT = `import { sveltekit } from '@sveltejs/kit/vite';
+import { ogygia } from 'ogygia/vite';
+import { diff_markers, inline_markers } from 'ogygia/content/markdown';
+
+export default {
+	plugins: [
+		ogygia({
+			content: {
+				markdown: {
+					containers: true,      // ::: tip / warning / danger callouts
+					tabs: true,            // ::: tabs and ::: code-group
+					headingAnchors: true,  // hover permalink on each heading
+					themes: { light: 'github-light', dark: 'github-dark' },
+					code: { transformers: [diff_markers(), inline_markers()] },
+				},
+			},
+		}),
+		sveltekit(),
+	],
+};
+`;
+
+	const PRESETS = {
+		'demo app': {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Header from '$lib/Header.svelte';
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Prose from '$lib/Prose.svelte' with { wake: 'none' };
+</scr${''}ipt>
+
+<Header title="My ogygia app" />
+<p>An interactive island (ships JS), then a frozen lake (no JS):</p>
+<Counter start={3} />
+<Prose>a server-only prose block</Prose>`,
+			'src/lib/Header.svelte': FILES_DEMO['Header.svelte'],
+			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
+			'src/lib/Prose.svelte': FILES_DEMO['Prose.svelte'],
+		},
+		'wake demo': {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Header from '$lib/Header.svelte';
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Menu from '$lib/Menu.svelte' with { wake: 'interaction' };
+  import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
+  import Prose from '$lib/Prose.svelte' with { wake: 'none' };
+</scr${''}ipt>
+
+<Header title="Wake schedules" />
+<p>Each island wakes on its own schedule. In x-ray: watch load fire, click Menu, scroll to Chart.</p>
+<Counter start={0} />
+<Menu />
+<Chart data={[3, 1, 4, 1, 5, 9, 2, 6, 5, 3]} />
+<Prose>a frozen lake — never ships JS, never wakes</Prose>`,
+			'src/lib/Header.svelte': FILES_WAKE['Header.svelte'],
+			'src/lib/Counter.svelte': FILES_WAKE['Counter.svelte'],
+			'src/lib/Menu.svelte': FILES_WAKE['Menu.svelte'],
+			'src/lib/Chart.svelte': FILES_WAKE['Chart.svelte'],
+			'src/lib/Prose.svelte': FILES_WAKE['Prose.svelte'],
+		},
+		'all strategies': { 'src/routes/+layout.ts': LAYOUT_CSR, 'src/routes/+page.svelte': ALL_STRATEGIES },
+		counter: {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>\n  import Counter from '$lib/Counter.svelte' with { wake: 'load' };\n</scr${''}ipt>\n\n<h1>Hello</h1>\n<Counter start={0} />`,
+			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
+		},
+		'server island': {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Header from '$lib/Header.svelte';
+  import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
+</scr${''}ipt>
+
+<Header title="Server islands" />
+<p>The greeting is a server island: its HTML is FETCHED from a signed endpoint after load (not
+inlined). In "islands" mode, watch the fallback swap for the real content.</p>
+<Greeting name="Ada" unread={3} />`,
+			'src/lib/Header.svelte': FILES_DEMO['Header.svelte'],
+			'src/lib/Greeting.svelte': `<scr${''}ipt>
+	let { name = 'friend', unread = 0 } = $props();
+</scr${''}ipt>
+
+<div class="greeting">
+	👋 Welcome back, {name}. You have {unread} unread
+	{unread === 1 ? 'message' : 'messages'}.
+</div>
+`
+		},
+		'live region': {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Header from '$lib/Header.svelte';
+  import Ticker from '$lib/Ticker.svelte' with { render: 'live' };
+</scr${''}ipt>
+
+<Header title="Live regions" />
+<p>The box below is a live region: its HTML re-renders and MORPHS in place (~every 1.5s). Type in the
+input — your text and focus SURVIVE each update (that's the morph, not a re-mount).</p>
+<Ticker />`,
+			'src/lib/Header.svelte': FILES_DEMO['Header.svelte'],
+			'src/lib/Ticker.svelte': `<scr${''}ipt>
+	let { n = 0 } = $props();
+</scr${''}ipt>
+
+<div class="ticker">
+	<div class="live">
+		🔴 LIVE · re-rendered <b>{n}</b>
+		{n === 1 ? 'time' : 'times'} on the server, morphed in place
+	</div>
+	<label>
+		your text + caret survive every update →
+		<input placeholder="click here and type…" />
+	</label>
+</div>
+
+<style>
+	.ticker {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 14px;
+		border: 1px solid var(--obs-border);
+		border-radius: 10px;
+		background: var(--obs-panel);
+	}
+	.live {
+		font-weight: 600;
+	}
+	.live b {
+		color: var(--obs-accent);
+	}
+	label {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--obs-muted);
+		font-size: 13px;
+	}
+	input {
+		padding: 5px 9px;
+		border: 1px solid var(--obs-border);
+		border-radius: 6px;
+	}
+</style>
+`
+		},
+		'keep · nav': {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load', keep: 'counter' };
+  import HomeWidget from '$lib/HomeWidget.svelte' with { wake: 'load' };
+</scr${''}ipt>
+
+<nav style="display:flex; gap:12px; align-items:center; padding-bottom:8px; border-bottom:1px solid #e2e8f0;">
+  <b>🏠 Home</b>
+  <a href="/about" data-obs-nav="src/routes/about/+page.svelte">Go to About →</a>
+</nav>
+<p>The counter has <b>keep</b>. Bump it, then navigate — reconcile RELOCATES the live island, so its count survives. The widget below is page-specific (mounts/removes on nav).</p>
+<Counter start={0} />
+<HomeWidget />`,
+			'src/routes/about/+page.svelte': `<scr${''}ipt>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load', keep: 'counter' };
+  import AboutWidget from '$lib/AboutWidget.svelte' with { wake: 'load' };
+</scr${''}ipt>
+
+<nav style="display:flex; gap:12px; align-items:center; padding-bottom:8px; border-bottom:1px solid #e2e8f0;">
+  <a href="/" data-obs-nav="src/routes/+page.svelte">← Back to Home</a>
+  <b>ℹ️ About</b>
+</nav>
+<p>Same kept counter — its count survived the nav (the live island was relocated, not remounted). The widget is a different island now.</p>
+<Counter start={0} />
+<AboutWidget />`,
+			'src/lib/Counter.svelte': `<scr${''}ipt>
+	let { start = 0 } = $props();
+	let n = $state(start);
+</scr${''}ipt>
+
+<button onclick={() => n++}>
+	kept count: {n} — click me, then navigate
+</button>
+`,
+			'src/lib/HomeWidget.svelte': `<scr${''}ipt>
+	let n = $state(0);
+</scr${''}ipt>
+
+<div class="widget">
+	🏠 Home widget (this island remounts per page) ·
+	<button onclick={() => n++}>clicked {n}</button>
+</div>
+
+<style>
+	.widget {
+		margin-top: 8px;
+		padding: 8px 12px;
+		background: var(--obs-panel);
+		border: 1px solid var(--obs-border);
+		border-radius: 8px;
+	}
+</style>
+`,
+			'src/lib/AboutWidget.svelte': `<scr${''}ipt>
+	let n = $state(0);
+</scr${''}ipt>
+
+<div class="widget">
+	ℹ️ About widget (a different island) ·
+	<button onclick={() => n++}>clicked {n}</button>
+</div>
+
+<style>
+	.widget {
+		margin-top: 8px;
+		padding: 8px 12px;
+		background: var(--obs-panel);
+		border: 1px solid var(--obs-border);
+		border-radius: 8px;
+	}
+</style>
+`
+		},
+		// A realistic Kit codebase — FOLDERS (the tree earns its keep) — showing a held-raw region next to
+		// an interactive island. `region: 'raw'` renders the component's HTML on the server and ships ZERO
+		// JS for it (a registry the transform can't see into); the Counter beside it is a normal island.
+		'raw region': {
+			'src/routes/+layout.ts': `// ogygia renders pages as server HTML; only islands ship JS.\nexport const csr = false;`,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import { Region, region } from 'ogygia';
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  // region: 'raw' marks Badge as a HELD region — a component a registry hands to region(). It is
+  // NEVER placed as <Badge/>; you render it through <Region of={region(Badge, props)}/>.
+  import Badge from '$lib/Badge.svelte' with { region: 'raw' };
+</scr${''}ipt>
+
+<h1>Held-raw region</h1>
+<p>The badge is a <b>held-raw</b> region: the server picks it, it renders as HTML and ships
+<b>no client module</b>. The counter beside it is a normal island (ships JS, interactive).
+Switch to <b>islands</b> mode to see the server render it.</p>
+
+<Counter start={0} />
+<Region of={region(Badge, { label: 'raw', note: 'server HTML · zero JS' })} />`,
+			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
+			'src/lib/Badge.svelte': `<scr${''}ipt>
+	let { label = '', note = '' } = $props();
+</scr${''}ipt>
+
+<span class="badge">
+	<b>🔒 {label}</b>
+	<small>{note}</small>
+</span>
+
+<style>
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		margin-top: 10px;
+		padding: 6px 12px;
+		border: 1px solid var(--obs-border);
+		border-radius: 999px;
+		background: var(--obs-panel);
+	}
+	small {
+		color: var(--obs-muted);
+	}
+</style>
+`
+		},
+		// A CONTENT page — the real ogygia markdown pipeline (mdsvex + Shiki + admonitions), live in-browser.
+		// Includes a vite.config.ts: edit its `content.markdown` options to reconfigure the preview.
+		content: {
+			'vite.config.ts': VITE_CONFIG_CONTENT,
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.md': CONTENT_MD,
+			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte']
+		},
+		// import.meta.og.* MACROS — the compiler's real macro pass runs in-browser. `code`/`md` bake a
+		// highlighted snippet / rendered markdown at BUILD (through the app's own Shiki + mdsvex pipeline)
+		// and inline it as a static, zero-JS region.
+		macros: {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  import { Region } from 'ogygia';
+
+  // import.meta.og.code(source, lang) — highlighted at BUILD via the app's Shiki config, inlined as a
+  // static region. Zero client JS: the colours are baked into the HTML.
+  const snippet = import.meta.og.code('const answer = 6 * 7;\\nconsole.log(answer); // 42', 'ts');
+
+  // import.meta.og.md(text) — static prose + fenced code rendered at build (mdsvex), also a region.
+  const note = import.meta.og.md('## Baked at build\\n\\nThis **markdown** compiled through the same pipeline your pages use — and ships as plain HTML.');
+</scr${''}ipt>
+
+<h1>import.meta.og macros</h1>
+<p>The compiler's macro pass runs right here in your browser. Both blocks below are baked at build and ship as static HTML:</p>
+
+<h2>A highlighted snippet</h2>
+<Region of={snippet} />
+
+<h2>Rendered markdown</h2>
+<Region of={note} />`
+		},
+		// CROSS-ISLAND CONTEXT — the real ogygia primitives. `setContext` (drop-in) seeds the page root;
+		// `<Provide>` scopes a subtree; both read back with an unchanged `getContext`. On a real csr=false
+		// page these bridge across island roots; here (one live tree) they run through svelte's own context.
+		context: {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': `<scr${''}ipt>
+  // drop-in: swap 'svelte' → 'ogygia' and setContext reaches child ISLANDS (not just the tree).
+  import { setContext, Provide } from 'ogygia';
+  import Badge from '$lib/Badge.svelte' with { wake: 'load' };
+
+  setContext('theme', 'midnight');
+</scr${''}ipt>
+
+<h1>Cross-island context</h1>
+<p>The page seeds <code>theme</code> in context; the island below reads it with a plain <code>getContext</code> — no props drilled through:</p>
+<Badge />
+
+<p>A scoped <code>&lt;Provide&gt;</code> shadows it for just this subtree:</p>
+<Provide values={{ theme: 'sunrise' }}>
+  <Badge />
+</Provide>`,
+			'src/lib/Badge.svelte': `<scr${''}ipt>
+  import { getContext } from 'svelte';
+  const theme = getContext('theme');
+</scr${''}ipt>
+
+<span class="badge">theme in this island: <b>{theme}</b></span>
+
+<style>
+  .badge {
+    display: inline-block;
+    margin: 6px 0;
+    padding: 6px 12px;
+    border: 1px solid var(--obs-border);
+    border-radius: 999px;
+    background: var(--obs-panel);
+  }
+</style>`
+		}
+	};
+
+	// Every template shows a vite.config.ts in the file tree (the content one ships its own richer
+	// config above). Injected here so the presets don't each repeat the boilerplate.
+	for (const preset of Object.values(PRESETS)) {
+		const map = preset as Record<string, string>;
+		if (!('vite.config.ts' in map)) map['vite.config.ts'] = VITE_CONFIG_BASE;
+	}
+
+	// Share via URL (Rung 6): the whole workspace round-trips through the URL HASH — which browsers never
+	// send to a server, so a shared REPL (or one an agent hands the user) stays client-only. The codec
+	// (base64url(gzip(json)), legacy-format reads, and the untrusted-input sanitizer) lives in the pure,
+	// unit-tested ./repl/hash module — see hash.test.mjs.
+
+	let files = $state<FileMap>(structuredClone(PRESETS['demo app']));
+	let active = $state<string>('src/routes/+page.svelte');
+	let hash_loaded = $state(false);
+	let cursor = $state(0); // the editor's cursor offset — round-trips in the URL
+	let initial_cursor = $state(0); // applied to the editor once, on load
+
+	// Load the whole workspace from the single hash string on mount (async — gzip decode). Runs ONCE from
+	// the init attachment; kicks a first analysis + bundle once the incoming link is read.
+	function restore_from_hash() {
+		const hash = typeof location !== 'undefined' ? location.hash : '';
+		if (!hash || hash === '#') {
+			hash_loaded = true;
+			request_analysis();
+			request_bundle();
+			return;
+		}
+		decode_hash(hash)
+			.then((w) => {
+				if (!w) return;
+				const map = w.files;
+				if (map && Object.keys(map).length) {
+					files = map;
+					active = w.active && w.active in map ? w.active : 'App.svelte' in map ? 'App.svelte' : Object.keys(map)[0];
+				}
+				if (w.tab && ['preview', 'islands', 'bytes', 'wire', 'output'].includes(w.tab)) inspectorTab = w.tab as InspectorTab;
+				if (w.mode === 'live' || w.mode === 'xray' || w.mode === 'islands') previewMode = w.mode;
+				initial_cursor = Number(w.cursor) || 0;
+				cursor = initial_cursor;
+			})
+			.finally(() => {
+				hash_loaded = true;
+				request_analysis();
+				request_bundle();
+			});
+	}
+	let analysis = $state<Analysis>({ ok: true, islands: [], output: '', real: false, realIslands: null });
+	let busy = $state(false);
+	let shared = $state(false);
+
+	function load_preset(map: FileMap) {
+		files = structuredClone(map);
+		active = entry_of(files); // open the page the preview renders, not the first file alphabetically
+		request_all();
+	}
+	function add_file() {
+		const raw = prompt('New file path (folders allowed, e.g. lib/Widget.svelte)');
+		if (raw == null) return;
+		// Normalize to a real workspace path: trim each segment, drop empty / `.` / `..` (no path escape,
+		// no whitespace-only name). An empty result or a duplicate is a no-op.
+		const name = raw
+			.split('/')
+			.map((s) => s.trim())
+			.filter((s) => s && s !== '.' && s !== '..')
+			.join('/');
+		if (!name || files[name]) return;
+		const base = name.split('/').pop() || name;
+		files[name] = /\.svelte$/.test(name) ? `<h1>${base.replace(/\.svelte$/, '')}</h1>` : '';
+		active = name;
+		request_all();
+	}
+	function remove_file(name: string) {
+		if (name === entryFile) return; // never remove the render entry — nothing would render
+		delete files[name];
+		if (active === name) active = entryFile in files ? entryFile : Object.keys(files)[0];
+		request_all();
+	}
+	/** Drag-and-drop move: relocate a file's basename into `toDir` ('' = root). No-op on collision. */
+	function move_file(from: string, toDir: string) {
+		const base = from.split('/').pop() || from;
+		const to = toDir ? `${toDir}/${base}` : base;
+		if (to === from || files[to] != null) return; // already there, or a name collision → don't clobber
+		files[to] = files[from];
+		delete files[from];
+		if (active === from) active = to;
+		request_all();
+	}
+
+	// Prettify the active file (the Format button). The formatter is the shared lazy prettier ($lib/prettier).
+	let formatting = $state(false);
+	const warm_prettier = warmPrettier;
+	async function prettify() {
+		if (formatting) return;
+		const name = active;
+		formatting = true;
+		try {
+			const out = await formatCode(files[name], name);
+			if (typeof out === 'string' && out !== files[name]) files[name] = out;
+		} catch {
+			/* a syntax error mid-edit — leave the source untouched */
+		} finally {
+			formatting = false;
+		}
+	}
+
+	// The "rendered HTML source (SSR)" shows the REAL ogygia SSR shape — so rewrite the Observatory's own
+	// x-ray instrumentation (`<ogygia-obs-island data-obs-* …>`) into the real `<ogygia-region …>` shell,
+	// per KIND (not a blanket `wake="…"` — that printed a meaningless `wake=""` for a raw held region and
+	// mislabelled lakes / server holes / live regions). Then drop svelte's SSR hydration anchors.
+	function clean_ssr(html: string): string {
+		return html
+			.replace(/<ogygia-obs-island\b([^>]*)>/g, (_m, attrs: string) => {
+				const kind = (attrs.match(/\bdata-kind="([^"]*)"/) || [])[1] || '';
+				const wake = (attrs.match(/\bdata-wake="([^"]*)"/) || [])[1] || '';
+				// A held-raw region ships server HTML and no schedule → a plain, inert boundary (zero JS).
+				if (kind === 'held (raw)') return '<ogygia-region>';
+				// A lake is frozen: SSR DOM kept, no client module.
+				if (kind === 'lake') return '<ogygia-region wake="none">';
+				// A server island fetches its HTML later from a signed endpoint on its schedule.
+				if (kind === 'server hole') return `<ogygia-region render="defer" when="${wake || 'load'}">`;
+				// A live region's baked HTML revalidates + morphs in place.
+				if (kind === 'live') return '<ogygia-region live>';
+				// island / preset → a hydrating shell that wakes on its schedule.
+				return `<ogygia-region wake="${wake || 'load'}">`;
+			})
+			.replace(/<\/ogygia-obs-island>/g, '</ogygia-region>')
+			.replace(/<!--\[[0-9-]*-->/g, '')
+			.replace(/<!--\]-->/g, '')
+			.replace(/<!---->/g, '');
+	}
+	let ssr_source = $state(''); // updated by update_ssr_source() when a fresh analysis lands (on_analysis)
+
+	// Test seam: drive the active file's source without the editor widget. Set triggers a recompile
+	// (no effect watches `files` any more). Installed once at init; removed on teardown.
+	function setup_test_seam() {
+		(window as unknown as Record<string, unknown>).__OBS_SOURCE = {
+			get: () => files[active],
+			set: (t: string) => {
+				files[active] = t;
+				request_all();
+			}
+		};
+		// Test/dev seam: run the FULL compiler driver in the worker directly and get its three legs back
+		// (the plain analyze() below now folds these in for a `.svelte` entry; this stays for isolating the
+		// driver from the rest of the analyze pipeline).
+		(window as unknown as Record<string, unknown>).__OBS_DRIVETEST = (f?: FileMap, entry?: string) =>
+			new Promise((resolve) => {
+				const id = --liveSeq;
+				drive_waiters.set(id, resolve);
+				worker?.postMessage({ id, type: 'drivetest', files: $state.snapshot(f ?? files), entry: entry ?? entryFile });
+			});
+		// Test/dev seam: the last Analysis the worker returned — so a probe can assert the Output view's
+		// three legs are the COMPLETE (full-driver) transform (`driverComplete`, `import.meta.og.$` rewritten).
+		(window as unknown as Record<string, unknown>).__OBS_ANALYSIS = () => $state.snapshot(analysis);
+		// Test/dev seam: the DRIVER-sourced preview SSR (real <ogygia-region> HTML from the real transform).
+		(window as unknown as Record<string, unknown>).__OBS_DRIVERENDER = (f?: FileMap, entry?: string) =>
+			new Promise((resolve) => {
+				const id = --liveSeq;
+				drive_waiters.set(id, resolve);
+				worker?.postMessage({ id, type: 'driverender', files: $state.snapshot(f ?? files), entry: entry ?? entryFile });
+			});
+	}
+
+	async function share() {
+		try {
+			await navigator.clipboard.writeText(location.href);
+			shared = true;
+			setTimeout(() => (shared = false), 1200);
+		} catch {
+			/* clipboard blocked */
+		}
+	}
+	let leg = $state('ssr'); // 'ssr' | 'client'
+	let everWarmed = $state(false); // the WASM compiler needs ~1-2s to warm on first load
+
+	// Byte ledger helpers — the ogygia thesis, weighed live.
+	const fmt_bytes = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
+	// Tie a region's STRATEGY to its COST: the client JS it ships (from the byte ledger), matched by
+	// component basename. A lake / held-raw / server-hole ships nothing — that's the ogygia thesis, per row.
+	function ship_info(component: string): { bytes: number; ships: boolean } | null {
+		const base = component.split('/').pop();
+		const f = analysis.ledger?.files.find((x) => x.name.split('/').pop() === base);
+		return f ? { bytes: f.bytes, ships: f.ships } : null;
+	}
+
+	// When (in plain words) a client island's JS runs, from its `wake` dial.
+	function hydrate_phrase(wake: string | undefined): string {
+		if (wake === 'visible') return 'once it scrolls into view';
+		if (wake === 'idle') return 'once the browser goes idle';
+		if (wake === 'interaction') return 'only after you first interact with it — zero JS until then';
+		if (wake && wake.startsWith('(')) return `once the media query ${wake} matches`;
+		return 'as soon as the page loads';
+	}
+
+	// The "why" behind a row: the mark that made it this kind, then whether (and why) it ships JS, then
+	// what crosses to it. Plain language — the diagnostics half of the Observatory: turn the raw output
+	// into understanding. Reads the island's own `with { … }` attrs + the byte ledger + the wire capture.
+	function why_island(i: Island, s: { bytes: number; ships: boolean } | null): string[] {
+		const a = (i.attrs ?? {}) as Record<string, unknown>;
+		const wake = a.wake as string | undefined;
+		const kind = i.strategy.kind;
+		const lines: string[] = [];
+		if (kind === 'lake')
+			lines.push(`It's a lake: marked with { wake: 'none' }. A lake stays frozen server HTML inside its parent island and ships no client module of its own — the way to keep a heavy static subtree (prose, a chart) out of the island's bundle.`);
+		else if (kind === 'held (raw)')
+			lines.push(`It's a held region: marked with { region: 'raw' }. The server decides its HTML (a registry the transform can't see into), so zero JS crosses — the component's scoped CSS rides along with the response.`);
+		else if (kind === 'server hole')
+			lines.push(`It's a server island: marked with { render: 'deferred' }. It renders on the server per request, and the client fetches its HTML from a signed endpoint ${hydrate_phrase(wake)}. Request-specific but not interactive.`);
+		else if (kind === 'live')
+			lines.push(`It's a live region: marked with { render: 'live' }. Its HTML is baked and revalidates in the background, streamed over an SSE channel — the DOM morphs in place.`);
+		else if (kind === 'preset')
+			lines.push(`It uses the '${String(a.preset)}' preset: marked with { preset: '${String(a.preset)}' }, a named bundle of dials from your ogygia({ regions: { presets } }) config.`);
+		else lines.push(`It's a client island: marked with { wake: '${wake ?? 'load'}' }, so it hydrates ${hydrate_phrase(wake)} — that's why it ships its own JS.`);
+		if (s?.ships)
+			lines.push(`Ships ${fmt_bytes(s.bytes)} — its client entry plus the <Region> wrapper that mounts it. Only this subtree hydrates; the rest of the page stays server HTML.`);
+		else if (s) lines.push(`Ships zero JS — server HTML only. Nothing in this row hydrates on the client.`);
+		const w = analysis.rendered?.wire?.find((x) => x.name.split('/').pop() === i.component.split('/').pop());
+		if (w && !(w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]'))
+			lines.push(`${fmt_bytes(w.bytes)} of props cross to it by value (devalue) — see the Wire tab. Props are copied, never shared by reference; functions can't cross, they become fn refs.`);
+		return lines;
+	}
+
+	// Pretty-print a real runtime event (islands mode) into a short human line.
+	function fmt_event(e: RuntimeEvent) {
+		switch (e.name) {
+			case 'region.connected':
+				return { icon: '◻', text: 'connected', cls: 'ev-dim' };
+			case 'wake.scheduled':
+				return { icon: '⏱', text: `scheduled · ${e.when || 'load'}`, cls: 'ev-dim' };
+			case 'wake.fired':
+				return { icon: '⚡', text: `woke · ${e.when || 'load'}`, cls: 'ev-wake' };
+			case 'region.hydrate.start':
+				return { icon: '↯', text: 'hydrating…', cls: 'ev-dim' };
+			case 'region.hydrate.done':
+				return { icon: '✓', text: `hydrated${e.ms != null ? ` · ${Math.round(e.ms)}ms` : ''}`, cls: 'ev-done' };
+			case 'region.hydrate.failed':
+				return { icon: '✗', text: 'hydrate failed', cls: 'ev-fail' };
+			default:
+				return { icon: '·', text: e.name.replace(/^region\.|^runtime\./, ''), cls: 'ev-dim' };
+		}
+	}
+	const saved_pct = $derived(
+		analysis.ledger && analysis.ledger.kitBytes > 0
+			? Math.round((1 - analysis.ledger.ogygiaBytes / analysis.ledger.kitBytes) * 100)
+			: 0
+	);
+	// Server-backed regions — `render: 'deferred'` (server hole) and `render: 'live'`. Their HTML comes
+	// from the server, so the in-page LIVE mount can't drive them: a deferred hole never swaps past its
+	// fallback, a live region never ticks. The `islands` mode DOES (worker renders, main thread pushes
+	// ticks / serves the endpoint) — so when live mode holds one, we point the reader there.
+	const server_regions = $derived(
+		(analysis.islands ?? []).filter((i) => i.strategy.kind === 'server hole' || i.strategy.kind === 'live')
+	);
+
+	// csr switch: false → ogygia islands; true → the app compiled as a csr=true Kit route (islands
+	// stripped to plain, Kit hydrates the whole tree). Flips the transform output, the ledger emphasis,
+	// and the preview (islands vs a single whole-app mount).
+	let csr = $state(false);
+	const shownOutput = $derived(
+		csr && analysis.outputCsrTrue
+			? analysis.outputCsrTrue
+			: leg === 'client' && analysis.outputClient
+				? analysis.outputClient
+				: analysis.output
+	);
+
+	// ── csr=false ⇄ csr=true compare: the SAME source transformed both ways, as a line diff. It's the
+	// ogygia thesis in code — under csr=false the marked imports become lazy island wrappers; under
+	// csr=true ogygia steps aside and they're plain imports Kit hydrates. A compact LCS line diff (both
+	// outputs are ~a few dozen lines, so O(n·m) is nothing). Red = csr=false (ogygia) only, green =
+	// csr=true (plain Kit) only, dim = shared.
+	let compareCsr = $state(false);
+	function diff_lines(aStr: string, bStr: string): Array<{ t: 'same' | 'add' | 'del'; s: string }> {
+		const a = aStr.split('\n');
+		const b = bStr.split('\n');
+		const n = a.length;
+		const m = b.length;
+		const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+		for (let i = n - 1; i >= 0; i--)
+			for (let j = m - 1; j >= 0; j--)
+				dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+		const out: Array<{ t: 'same' | 'add' | 'del'; s: string }> = [];
+		let i = 0;
+		let j = 0;
+		while (i < n && j < m) {
+			if (a[i] === b[j]) {
+				out.push({ t: 'same', s: a[i] });
+				i++;
+				j++;
+			} else if (dp[i + 1][j] >= dp[i][j + 1]) {
+				out.push({ t: 'del', s: a[i++] });
+			} else {
+				out.push({ t: 'add', s: b[j++] });
+			}
+		}
+		while (i < n) out.push({ t: 'del', s: a[i++] });
+		while (j < m) out.push({ t: 'add', s: b[j++] });
+		return out;
+	}
+	const csr_diff = $derived(
+		compareCsr && analysis.output && analysis.outputCsrTrue
+			? diff_lines(analysis.output, analysis.outputCsrTrue)
+			: null
+	);
+
+	// `worker` is $state so the debounce effect re-runs (and posts the first analysis) once it's set.
+	let worker = $state<Worker | null>(null);
+	let seq = 0;
+	let want = 0;
+	// Live-region tick requests + nav page-render requests: correlate each reply back to its awaiter.
+	let liveSeq = 0;
+	const liveWaiters = new Map<number, (html: string) => void>();
+	const pageWaiters = new Map<number, (rd: NonNullable<Analysis['realDom']> | null) => void>();
+	const drive_waiters = new Map<number, (r: unknown) => void>(); // full-driver test seam replies
+
+	/** Ask the worker to render ONE component (with props) → HTML, for a live tick. */
+	function live_request(fileMap: FileMap, file: string, props: Record<string, unknown>): Promise<string> {
+		const w = worker;
+		if (!w) return Promise.resolve('');
+		const id = --liveSeq; // negative ids: a separate space from the analyze counter
+		return new Promise<string>((resolve) => {
+			liveWaiters.set(id, resolve);
+			w.postMessage({ id, type: 'live', files: fileMap, file, props });
+		});
+	}
+
+	// ── The reactive wiring is CALLBACK-driven (no $effect): an action that changes state calls the
+	// request_* helpers directly, and the worker's replies flow through on_analysis / on_bundle. Each
+	// request is debounced via its own timer (cleared + reset per call). ──
+	let analyze_timer: ReturnType<typeof setTimeout> | undefined;
+	let bundle_timer: ReturnType<typeof setTimeout> | undefined;
+	let hash_timer: ReturnType<typeof setTimeout> | undefined;
+
+	// Debounces tuned SHORT: the worker analyze is <20ms and a warm rolldown bundle ~35ms, so a long
+	// debounce was pure perceived latency. These still batch a fast-typing burst (~100ms/keystroke) while
+	// making edit→preview feel near-instant. The fetch cache + in-flight de-dup absorb any extra CDN churn.
+	const ANALYZE_DEBOUNCE_MS = 55;
+	const BUNDLE_DEBOUNCE_MS = 90;
+	/** Recompile the APP (transform + render the ENTRY) — off the main thread. Called on any content edit. */
+	function request_analysis() {
+		const w = worker;
+		if (!w) return;
+		busy = true;
+		clearTimeout(analyze_timer);
+		analyze_timer = setTimeout(() => {
+			want = ++seq;
+			w.postMessage({ id: want, files: $state.snapshot(files), active: entryFile });
+		}, ANALYZE_DEBOUNCE_MS);
+	}
+	/** Rolldown-bundle the workspace + jsdelivr CDN deps for the live mount (only in live mode, csr=false). */
+	function request_bundle() {
+		const w = worker;
+		if (!w || previewMode !== 'live' || csr) return;
+		resolving = true;
+		clearTimeout(bundle_timer);
+		bundle_timer = setTimeout(() => {
+			bundleWant = ++bundleSeq;
+			w.postMessage({ id: bundleWant, type: 'bundle', files: $state.snapshot(files), entry: entryFile });
+		}, BUNDLE_DEBOUNCE_MS);
+	}
+	/** Persist the whole workspace + UI state into the URL hash (replaceState → no history spam). */
+	function sync_hash() {
+		if (!hash_loaded) return;
+		clearTimeout(hash_timer);
+		hash_timer = setTimeout(() => {
+			encode_hash({ files: $state.snapshot(files), active, tab: inspectorTab, mode: previewMode, cursor })
+				.then((h) => history.replaceState(null, '', h))
+				.catch(() => {
+					/* noop */
+				});
+		}, 400);
+	}
+	/** A content edit / preset load / file add-remove — recompile, rebundle, and persist. */
+	function request_all() {
+		request_analysis();
+		request_bundle();
+		sync_hash();
+	}
+
+	// A fresh analysis landed from the worker — fan it out to the derived views (was 3 separate effects).
+	function on_analysis(a: Analysis) {
+		analysis = a;
+		busy = false;
+		if (a.real || a.realError) everWarmed = true;
+		update_ssr_source(a.rendered?.html);
+		if (in_frame(previewMode)) {
+			if (frameReady) render_to_frame(); // re-send to the iframe on edit
+		} else {
+			remount_preview(); // live in-page mount (the bundle reply re-mounts again when it lands)
+		}
+	}
+
+	// "rendered HTML source (SSR)" — clean the instrumentation, show immediately, then prettier-format.
+	// A token guards against an older format resolving after a newer edit.
+	let ssr_fmt_token = 0;
+	function update_ssr_source(raw?: string) {
+		if (!raw) {
+			ssr_source = '';
+			return;
+		}
+		const cleaned = clean_ssr(raw);
+		ssr_source = cleaned;
+		const token = ++ssr_fmt_token;
+		warm_prettier()
+			.then(({ format, plugins }) =>
+				format(cleaned, { parser: 'html', plugins, printWidth: 80, useTabs: true, htmlWhitespaceSensitivity: 'ignore', bracketSameLine: false })
+			)
+			.then((pretty) => {
+				if (token === ssr_fmt_token && typeof pretty === 'string') ssr_source = pretty;
+			})
+			.catch(() => {
+				/* keep the unformatted clean version */
+			});
+	}
+
+	// Load the svelte submodules a CDN component keeps external (beyond the static `svelte` public API and
+	// svelte/internal/client). LITERAL specifiers so Vite resolves them — a variable `import(s)` would
+	// leave a bare specifier the browser can't load at runtime. Called ONCE at init. Each guarded (a
+	// submodule may not exist in this svelte version → an empty stub, never a crash).
+	function load_svelte_runtime() {
+		import('svelte/internal/client')
+			.then((m) => (svelteClient = m))
+			.catch(() => {});
+		const add = (spec: string, load: Promise<unknown>) =>
+			load.then((m) => (svelteExtras = { ...svelteExtras, [spec]: m as Record<string, unknown> })).catch(() => {});
+		// @ts-expect-error internal svelte module, no published d.ts
+		add('svelte/internal/disclose-version', import('svelte/internal/disclose-version'));
+		// @ts-expect-error internal svelte module, no published d.ts
+		add('svelte/internal/flags/legacy', import('svelte/internal/flags/legacy'));
+		add('svelte/store', import('svelte/store'));
+		add('svelte/transition', import('svelte/transition'));
+		add('svelte/easing', import('svelte/easing'));
+		add('svelte/animate', import('svelte/animate'));
+		add('svelte/motion', import('svelte/motion'));
+	}
+	// ogygia's runtime is EXTERNAL in the worker bundle. The content pipeline injects `import { TabGroup,
+	// Tab } from 'ogygia/content'` for `::: tabs` / `::: code-group` — but those are ISLANDS (children cross
+	// via the region bridge), so mounting the host's real ones in the plain live mount fails. Hand the eval
+	// a passthrough (renders children + label) for ANY ogygia named import → content shows stacked instead
+	// of crashing. The real, interactive version lives in the preview's "islands" mode.
+	// The REAL context primitives too: in the live mount the page is ONE svelte tree, so ogygia's Provide /
+	// setContext / createContext just do native `setContext` (their server-only marker emission is gated on
+	// `typeof window === 'undefined'`) — read back with an unchanged `getContext` from 'svelte'. No stub.
+	const ogygia_passthrough: Record<string, unknown> = new Proxy(
+		{ default: ReplPassthrough, Region, region, Provide, setContext: og_setContext, createContext },
+		{ get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : ReplPassthrough) }
+	);
+	// `ogygia/internal` — the macro-emitted `og_html_region(…)` / `__og_$(…)` / `__og_store(…)` resolve to
+	// the REAL runtime here (so a preview using `import.meta.og.code`/`.$`/`.store` mounts for real).
+	const ogygia_internal_module: Record<string, unknown> = new Proxy(
+		{ og_html_region, __og_$, __og_store, __og_boundary },
+		{ get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : ReplPassthrough) }
+	);
+
+	// Boot the worker (called ONCE from the init attachment). Replies flow through the callbacks.
+	function boot_worker(): Worker {
+		const w = new Worker(new URL('./observatory.worker.ts', import.meta.url), { type: 'module' });
+		w.onmessage = (e: MessageEvent<{ id: number; type?: string; result?: Analysis; html?: string; realDom?: NonNullable<Analysis['realDom']>; code?: string; packages?: string[]; missing?: string[]; error?: string }>) => {
+			if (e.data.type === 'live') {
+				liveWaiters.get(e.data.id)?.(e.data.html ?? '');
+				liveWaiters.delete(e.data.id);
+				return;
+			}
+			if (e.data.type === 'drivetest' || e.data.type === 'driverender') {
+				drive_waiters.get(e.data.id)?.((e.data as { result?: unknown }).result);
+				drive_waiters.delete(e.data.id);
+				return;
+			}
+			if (e.data.type === 'page') {
+				pageWaiters.get(e.data.id)?.(e.data.realDom ?? null);
+				pageWaiters.delete(e.data.id);
+				return;
+			}
+			if (e.data.type === 'bundle') {
+				if (e.data.id !== bundleWant) return; // a stale bundle (a newer edit superseded it)
+				resolving = false;
+				previewBundle = { code: e.data.code, packages: e.data.packages, missing: e.data.missing, error: e.data.error };
+				if (previewMode === 'live') remount_preview();
+				return;
+			}
+			if (e.data.id === want && e.data.result) on_analysis(e.data.result);
+		};
+		worker = w;
+		return w;
+	}
+
+	// ── INTERACTIVE preview: the mount is a reactive attachment (preview_mount, below) on the live div —
+	// no previewEl/mounted state; the attachment owns the node + the unmount cleanup.
+	let svelteClient = $state<Record<string, unknown> | null>(null);
+	let previewMode = $state<'live' | 'xray' | 'islands'>('live');
+	// The right pane is a tabbed inspector (declutters what used to be 6 stacked sections). The compiler
+	// OUTPUT leads — seeing how ogygia compiles your code (+ the region map, byte ledger, wire) is the
+	// Observatory's whole reason to exist; the (client-only) preview is the best-effort last tab.
+	type InspectorTab = 'preview' | 'islands' | 'bytes' | 'wire' | 'output';
+	let inspectorTab = $state<InspectorTab>('output');
+	// Mobile: a single pane at a time — the file tree, the editor, or the inspector.
+	let mobilePane = $state<'files' | 'editor' | 'result'>('editor');
+	// Desktop: the file tree can collapse to a thin strip to reclaim width for code + preview.
+	let treeCollapsed = $state(false);
+
+	// The render entry — the page the preview renders. ogygia is SvelteKit-only, so a route `+page.svelte`
+	// is the entry; `App.svelte` stays as a fallback for older shared workspaces, then the first file.
+	// Mirrors the worker's pick so the tree can protect the same file from removal.
+	function entry_of(map: FileMap): string {
+		const keys = Object.keys(map);
+		return keys.find((k) => PAGE_SVELTE.test(k)) ?? (keys.includes('App.svelte') ? 'App.svelte' : keys[0]);
+	}
+	const entryFile = $derived(entry_of(files));
+
+	// The in-browser preview runs the CLIENT side only — Kit's server pipeline (server loads, remote
+	// functions, server-island data) isn't here, and can't be without shipping a fragile Kit-internals
+	// emulation. So DON'T fake it: detect server-only code and say so plainly in the preview, pointing at
+	// the compiler output (the Observatory's real value) instead of rendering something wrong or empty.
+	const preview_limits = $derived.by(() => {
+		const names = Object.keys(files);
+		const out: string[] = [];
+		if (names.some((n) => /\.server\.(ts|js)$/.test(n)))
+			out.push('Server load functions (a +page.server.ts / +layout.server.ts) run on the server — they don’t execute in the preview.');
+		if (names.some((n) => /\.remote\.(ts|js)$/.test(n)))
+			out.push('Remote functions (query / command / form) run on the server — they don’t execute in the preview.');
+		if (Object.values(files).some((s) => /from ['"]\$app\/server['"]/.test(s)))
+			out.push('$app/server is server-only — it doesn’t run in the preview.');
+		return out;
+	});
+
+	// Resizable panes (neodrag splitpane) — file tree | editor | inspector. Drag either gutter to
+	// rebalance; on mobile the CSS overrides the flex layout back to one-pane-at-a-time (data-pane).
+	// minSizes (per pane) keep a pane from collapsing to nothing.
+	const split = new SplitPane({ axis: 'x', sizes: [0.55, 2, 2], minSizes: [0.12, 0.2, 0.2] });
+
+	// Wire tab: show the DECODED props by default (devalue's [{...},ref] wire format is unreadable);
+	// toggle to the raw encoded bytes (what actually crosses). Pretty-printed (indent 2 — often not one
+	// line) and rendered in a readonly CodeMirror so it's syntax-highlighted.
+	let wireDecoded = $state(true);
+	function wire_display(payload: string): string {
+		try {
+			const v = wireDecoded ? devalue_parse(payload) : JSON.parse(payload);
+			return JSON.stringify(v, null, 2);
+		} catch {
+			return payload;
+		}
+	}
+	// REAL runtime events for the injected preview islands (islands mode), tapped off the devtools bus.
+	let runtimeEvents = $state<RuntimeEvent[]>([]);
+
+	// ── THE REAL BUNDLE (live preview): the worker rolldown-bundles the workspace + jsdelivr CDN deps
+	// into ONE CJS module, keeping svelte external; we eval it here (providing the host's svelte) and
+	// mount its default export. This is what makes `import confetti from 'canvas-confetti'` actually run.
+	let previewBundle = $state<{ code?: string; packages?: string[]; missing?: string[]; error?: string } | null>(null);
+	let resolving = $state(false);
+	let bundleSeq = 0;
+	let bundleWant = 0;
+	// The svelte submodules a compiled component can require (kept external in the bundle). Pre-imported
+	// (load_svelte_runtime, at init) so the eval's `require` is synchronous; unknowns fall back to client.
+	let svelteExtras = $state<Record<string, Record<string, unknown>>>({});
+
+	// PREVIEW CONSOLE (svelte.dev-style): the eval'd bundle's `console` is a PARAM that shadows the global
+	// (see eval_cjs), so only the PREVIEW's console.* is captured here — the Observatory's own logs stay out.
+	type ConsoleEntry = { level: 'log' | 'info' | 'debug' | 'warn' | 'error'; text: string; count: number };
+	let consoleLog = $state<ConsoleEntry[]>([]);
+	let consoleOpen = $state(false);
+	// O(1) flags for the header dots — recomputing `.some()` per log would be O(n²) under a logging flood.
+	let consoleHasError = $state(false);
+	let consoleHasWarn = $state(false);
+	const CONSOLE_LEVELS = new Set(['log', 'info', 'debug', 'warn', 'error']);
+	function clear_console() {
+		consoleLog = [];
+		consoleHasError = false;
+		consoleHasWarn = false;
+	}
+	function capture_console(level: ConsoleEntry['level'], args: unknown[]) {
+		const text = format_console_args(args);
+		const last = consoleLog[consoleLog.length - 1];
+		// Collapse consecutive identical lines into a count, like the browser console. Both branches are
+		// O(1) (deep-reactive `count++`, or `push` + an amortized trim) so a runaway logging loop can't
+		// spend O(n²) spreading the array on every call.
+		if (last && last.level === level && last.text === text) {
+			last.count++;
+		} else {
+			consoleLog.push({ level, text, count: 1 });
+			if (consoleLog.length > 260) consoleLog.splice(0, consoleLog.length - 200); // keep the last ~200
+		}
+		if (level === 'error') consoleHasError = true;
+		if (level === 'warn') consoleHasWarn = true;
+		if (level === 'error' || level === 'warn') consoleOpen = true; // surface problems automatically
+	}
+	// A `console` for the eval: capture the 5 levels (+ forward to the real console so devtools still works),
+	// pass everything else (group/table/assert/…) straight through so the preview never breaks on them.
+	const preview_console: typeof console = new Proxy(console, {
+		get(target, prop: string) {
+			if (CONSOLE_LEVELS.has(prop)) {
+				return (...a: unknown[]) => {
+					capture_console(prop as ConsoleEntry['level'], a);
+					(target as unknown as Record<string, (...x: unknown[]) => void>)[prop]?.(...a);
+				};
+			}
+			return (target as unknown as Record<string, unknown>)[prop];
+		}
+	});
+
+	function bundle_require(spec: string): Record<string, unknown> {
+		if (spec === 'svelte') return svelteRuntime as unknown as Record<string, unknown>;
+		if (spec === 'svelte/internal/client') return (svelteClient as Record<string, unknown>) ?? {};
+		if (svelteExtras[spec]) return svelteExtras[spec];
+		if (spec.startsWith('svelte/internal/')) return (svelteClient as Record<string, unknown>) ?? {};
+		// svelte/store, svelte/transition, svelte/easing, svelte/motion … → the loaded submodule, else {}.
+		if (spec.startsWith('svelte/')) return svelteExtras[spec] ?? {};
+		// ogygia runtime (external): content wrappers (TabGroup/Tab/…) → a children-rendering passthrough so
+		// the live mount shows their content instead of crashing on the island region bridge.
+		if (spec === 'ogygia/internal') return ogygia_internal_module;
+		if (spec === 'ogygia' || spec.startsWith('ogygia/')) return ogygia_passthrough;
+		return {};
+	}
+	/** Eval a CJS module string with our svelte-providing require; returns its exports. The `console` param
+	 *  SHADOWS the global inside the bundle (+ its event handlers), so the preview's logs land in our panel. */
+	function eval_cjs(code: string): Record<string, unknown> {
+		const module = { exports: {} as Record<string, unknown> };
+		// eslint-disable-next-line no-new-func
+		new Function('require', 'module', 'exports', 'console', code)(bundle_require, module, module.exports, preview_console);
+		return module.exports;
+	}
+	// The isolated iframe (islands mode) talks to us over postMessage: it's ready (→ send the page),
+	// relays a runtime event (→ the bus panel), requests a nav (→ render the target + post it back), or
+	// reports the reconcile decision (→ the readout). Reconcile + hydration all happen IN the frame.
+	// Attachment on the preview iframe (islands/x-ray): it appears only in a frame mode, so this runs when
+	// the iframe mounts + cleans up when it's gone — no $effect watching `frameEl`.
+	function frame_attach(iframe: HTMLIFrameElement) {
+		frameEl = iframe;
+		const onMsg = (e: MessageEvent) => {
+			const d = e.data;
+			if (!d || d.__obs !== true || e.source !== iframe.contentWindow) return;
+			if (d.obsType === 'ready') {
+				frameReady = true;
+				render_to_frame();
+			} else if (d.obsType === 'event') {
+				const ev = d.ev as { name?: string; fp?: string; t?: number; ms?: number; when?: string };
+				runtimeEvents = [...runtimeEvents, { name: ev.name ?? '', label: (d.label as string) || ev.fp || '', t: ev.t, ms: ev.ms, when: ev.when }].slice(-60);
+			} else if (d.obsType === 'navReq') {
+				void navigate_frame(String(d.entry || ''));
+			} else if (d.obsType === 'reconciled') {
+				navInfo = { to: currentPage.replace(/\.svelte$/, ''), kept: d.kept ?? [], mounted: d.mounted ?? [], removed: d.removed ?? [] };
+			}
+		};
+		window.addEventListener('message', onMsg);
+		return () => {
+			window.removeEventListener('message', onMsg);
+			frameReady = false;
+			clear_frame_live();
+			frameEl = null;
+		};
+	}
+	// x-ray and islands are the SAME real render in the isolated iframe — x-ray just adds the boundary
+	// lens overlay on top of the live islands (so the counter still increments, wakes fire for real).
+	const in_frame = (m: string) => m === 'islands' || m === 'xray';
+	// Switch the preview mode (live | xray | islands) — a user action, so it drives its consequences
+	// directly (no $effect): persist to the URL, and either rebundle (live) or drive the iframe. Toggling
+	// x-ray ⇄ islands is a pure lens overlay on the SAME live DOM (no re-render → hydrated state kept).
+	function set_mode(m: 'live' | 'xray' | 'islands') {
+		const was_frame = in_frame(previewMode);
+		previewMode = m;
+		sync_hash();
+		if (m === 'live') {
+			request_bundle();
+		} else if (frameReady) {
+			// entering a frame mode, or flipping x-ray ⇄ islands
+			if (was_frame) post_to_frame({ obsType: 'lens', on: m === 'xray' });
+			else render_to_frame();
+		}
+	}
+	// csr toggle: flips the transform output (islands vs plain-Kit) → re-analyze, and re-drive the preview.
+	function set_csr(v: boolean) {
+		csr = v;
+		request_analysis();
+		if (previewMode === 'live') request_bundle();
+		else if (frameReady) render_to_frame(); // csr=true → whole-app mount in the frame
+		sync_hash();
+	}
+	function set_tab(t: InspectorTab) {
+		inspectorTab = t;
+		sync_hash();
+	}
+
+	// SERVER ISLANDS: the real runtime fetches a deferred region's `endpoint` (same-origin path) and
+	// swaps in the response text. We patch fetch ONCE, scoped to `/__obs_defer/*` — everything else
+	// passes straight through — and serve the worker-rendered HTML (with a small delay so the deferred
+	// nature is visible: the fallback shows, then the content lands). This is the real defer flow.
+	// Patch fetch ONCE (guarded, process-wide) to serve `/__obs_defer/*` from the worker-rendered map —
+	// the real server-island defer flow. Called at init.
+	function patch_defer_fetch() {
+		if (typeof window === 'undefined' || window.__OBS_FETCH_PATCHED__) return;
+		window.__OBS_FETCH_PATCHED__ = true;
+		window.__OBS_DEFER__ = window.__OBS_DEFER__ || {};
+		const orig = window.fetch.bind(window);
+		window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+			const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+			const m = OBS_DEFER_URL.exec(url);
+			if (m) {
+				const html = (window.__OBS_DEFER__ || {})[m[1]];
+				if (html != null) {
+					return new Promise((res) =>
+						setTimeout(() => res(new Response(html, { status: 200, headers: { 'content-type': 'text/html' } })), 260)
+					);
+				}
+				return Promise.resolve(new Response('', { status: 404 }));
+			}
+			return orig(input, init);
+		};
+	}
+
+	// Nav (keep · nav): the reconcile decision of the last navigation, for the readout.
+	let navInfo = $state<{ to: string; kept: string[]; mounted: string[]; removed: string[] } | null>(null);
+	let currentPage = $state('App.svelte');
+
+	// ── ISOLATED IFRAME PREVIEW: "islands" mode renders in /observatory-frame — its OWN document +
+	// ogygia runtime + svelte instance. We drive it over postMessage: send the compiled page, receive
+	// runtime events, nav-link requests, and the reconcile decision. Full isolation from the host.
+	let frameEl = $state<HTMLIFrameElement | null>(null);
+	let frameReady = $state(false);
+	let frameLiveTimers: ReturnType<typeof setInterval>[] = [];
+
+	// The site ThemeToggle (in the top nav) owns the theme now — it writes `og-theme` + `data-theme`;
+	// the preview iframe re-themes from the same-origin `storage` event (its Harness listens). So the
+	// Observatory carries no theme control of its own.
+	const post_to_frame = (msg: Record<string, unknown>) =>
+		frameEl?.contentWindow?.postMessage({ __obs: true, ...msg }, location.origin);
+
+	function clear_frame_live() {
+		for (const t of frameLiveTimers) clearInterval(t);
+		frameLiveTimers = [];
+	}
+	/** Drive each live region in the frame: render the tick on the worker, post the HTML to applyLive. */
+	function arm_frame_live(rd: NonNullable<Analysis['realDom']>) {
+		const liveFiles = untrack(() => $state.snapshot(files));
+		for (const lr of rd.live || []) {
+			let n = 0;
+			const t = setInterval(async () => {
+				n++;
+				const html = await live_request(liveFiles, lr.file, { n });
+				if (html) post_to_frame({ obsType: 'liveTick', fp: lr.fp, html });
+			}, 1500);
+			frameLiveTimers.push(t);
+		}
+	}
+	// Per-island JS byte count (from the ledger), keyed by file name — the frame's lens stamps it on
+	// each region so the boundary overlay can label "· 518 B JS" without re-deriving anything.
+	function lens_bytes(): Record<string, number> {
+		const out: Record<string, number> = {};
+		for (const f of analysis.ledger?.files ?? []) if (f.ships) out[f.name] = f.bytes;
+		return out;
+	}
+	/** Send the CURRENT analysis's page to the frame (a full render). */
+	function render_to_frame() {
+		const client = analysis.client;
+		if (!frameReady || !client || client.error) return;
+		runtimeEvents = [];
+		navInfo = null;
+		currentPage = untrack(() => ('App.svelte' in files ? 'App.svelte' : active));
+		clear_frame_live();
+		// $state.snapshot → plain objects (postMessage structured-clone can't take a reactive proxy).
+		if (csr) {
+			// csr=true: mount the WHOLE app as one hydration root — Kit steps in, no islands.
+			post_to_frame({ obsType: 'renderKit', modules: $state.snapshot(client.modules), entry: client.entry });
+			return;
+		}
+		const xray = previewMode === 'xray';
+		const post_handbuilt = () => {
+			const rd = analysis.realDom;
+			if (!rd?.ok || !rd.html) return;
+			post_to_frame({ obsType: 'render', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}), xray, bytes: lens_bytes() });
+			arm_frame_live(rd);
+		};
+		// The DRIVER-sourced preview: the genuinely compiled app — the driver's real transform → real
+		// <ogygia-region> HTML + client island modules the frame's runtime hydrates. Async (a full driver
+		// run); on any failure fall back to the hand-built real_island_render shells. Content (.md/.svx)
+		// entries keep the hand-built path (the driver preview is the raw-.svelte route path).
+		if (entryFile.endsWith('.svelte')) {
+			const id = --liveSeq;
+			const snap = $state.snapshot(files);
+			drive_waiters.set(id, (r) => {
+				const res = r as { ok?: boolean; html?: string; modules?: Record<string, string> };
+				if (res?.ok && typeof res.html === 'string') {
+					post_to_frame({ obsType: 'render', html: res.html, modules: res.modules ?? {}, deferred: {}, xray, bytes: lens_bytes() });
+				} else {
+					post_handbuilt();
+				}
+			});
+			worker?.postMessage({ id, type: 'driverender', files: snap, entry: entryFile });
+			return;
+		}
+		post_handbuilt();
+	}
+
+	/** Ask the worker to render a nav TARGET page to real-island HTML. */
+	function page_request(fileMap: FileMap, entry: string): Promise<NonNullable<Analysis['realDom']> | null> {
+		const w = worker;
+		if (!w) return Promise.resolve(null);
+		const id = --liveSeq;
+		return new Promise((resolve) => {
+			pageWaiters.set(id, resolve);
+			w.postMessage({ id, type: 'page', files: fileMap, entry });
+		});
+	}
+
+	/** A nav link was clicked in the frame → render the target on the worker + post it for the frame to
+	 *  reconcile (keep islands relocated with their live state; others mount/remove). */
+	async function navigate_frame(entry: string) {
+		const client = analysis.client;
+		if (!client || client.error || entry === currentPage) return;
+		const rd = await page_request(untrack(() => $state.snapshot(files)), entry);
+		if (!rd?.ok || !rd.html) return;
+		currentPage = entry;
+		clear_frame_live();
+		post_to_frame({ obsType: 'nav', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}), xray: previewMode === 'xray', bytes: lens_bytes() });
+		arm_frame_live(rd);
+	}
+
+	function eval_client(code: string, req: Require): Linked {
+		const body = code
+			.replace(/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = __require("$2");')
+			.replace(/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const __m_$1 = __require("$3"); const $1 = __m_$1.default; const {$2} = __m_$1;')
+			.replace(/import\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = (__require("$2")).default;')
+			.replace(/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const {$1} = __require("$2");')
+			.replace(/import\s+['"][^'"]+['"]\s*;?/g, '')
+			.replace(/export\s+default\s+/g, '__exports.default = ')
+			.replace(/export\s*\{([^}]+)\}\s*;?/g, (_m: string, names: string) =>
+				names.split(',').map((n: string) => { const p = n.trim().split(/\s+as\s+/); return `__exports[${JSON.stringify((p[1] || p[0]).trim())}] = ${p[0].trim()};`; }).join(' ')
+			)
+			.replace(/export\s+(const|let|var|function|class)\s+/g, '$1 ');
+		const __exports: Linked = {};
+		new Function('__require', '__exports', body)(req, __exports);
+		return __exports;
+	}
+
+	// The live-preview MOUNT. The attachment is DELIBERATELY non-reactive — it just captures the node and
+	// does the first mount — because calling mount() inside a tracked scope loops (the mounted app shares
+	// the host svelte runtime, so its effects feed back). Re-mounts are EXPLICIT callbacks: on_analysis
+	// and the bundle reply call remount_preview(). No $effect, no reactive-attachment loop.
+	let preview_el: HTMLElement | null = null;
+	let mounted: ReturnType<typeof mount> | null = null;
+	function preview_mount(el: HTMLElement) {
+		preview_el = el;
+		// The attachment runs in an effect; mount() there loops (the mounted app shares the host runtime).
+		// Defer the first mount to a microtask so it happens OUTSIDE the reactive flush, and untrack it so
+		// this attachment never tracks analysis/bundle. All re-mounts come from the message callbacks.
+		queueMicrotask(() => untrack(() => remount_preview()));
+		return () => {
+			if (mounted) {
+				try {
+					unmount(mounted);
+				} catch {
+					/* noop */
+				}
+				mounted = null;
+			}
+			if (preview_el === el) preview_el = null;
+		};
+	}
+	// (Re)mount the live preview: prefer the REAL rolldown bundle (workspace + CDN deps, svelte external);
+	// until the first bundle lands (or if it errors) fall back to the per-file client linker, then SSR HTML.
+	function remount_preview() {
+		const el = preview_el;
+		if (!el) return;
+		clear_console(); // fresh run → fresh console (like svelte.dev's REPL)
+		const bundle = previewBundle;
+		const client = analysis.client;
+		const sc = svelteClient;
+		const rendered = analysis.rendered;
+		if (mounted) {
+			try {
+				unmount(mounted);
+			} catch {
+				/* noop */
+			}
+			mounted = null;
+		}
+		let m: ReturnType<typeof mount> | null = null;
+		const fallback = () => {
+			if (rendered?.ok && rendered.html) el.innerHTML = rendered.html;
+		};
+		el.innerHTML = '';
+		try {
+			if (bundle?.code) {
+				const App = eval_cjs(bundle.code).default;
+				if (typeof App === 'function') m = mount(App as never, { target: el });
+				else fallback();
+			} else if (bundle?.error) {
+				fallback();
+			} else if (sc && client && !client.error && client.modules?.[client.entry]) {
+				const cache = new Map<string, Linked>();
+				const resolveName = (spec: string): string | null => {
+					const clean = spec.split('?')[0];
+					const bare = clean.replace(/^\.\//, '').replace(/^\//, '');
+					if (client.modules[bare] != null) return bare;
+					const base = clean.split('/').pop();
+					if (!base) return null;
+					if (client.modules[base] != null) return base;
+					return Object.keys(client.modules).find((k) => k.split('/').pop() === base) ?? null;
+				};
+				const require: Require = (spec) => {
+					if (spec === 'svelte/internal/client') return sc as Linked;
+					const name = resolveName(spec);
+					if (name) {
+						const hit = cache.get(name);
+						if (hit) return hit;
+						const exports: Linked = {};
+						cache.set(name, exports);
+						Object.assign(exports, eval_client(client.modules[name], require));
+						return exports;
+					}
+					return { default: () => {} };
+				};
+				const App = eval_client(client.modules[client.entry], require).default;
+				m = mount(App as never, { target: el });
+			} else {
+				fallback();
+			}
+		} catch (e) {
+			console.error('[observatory] interactive mount failed:', e);
+			fallback();
+		}
+		mounted = m;
+	}
+
+	// The whole Observatory's one-time init (was 4 lifecycle effects) — run on the root element's mount,
+	// torn down on unmount. The attachment runs in an effect, and the init both WRITES and READS state
+	// (boot_worker sets `worker`; restore_from_hash → request_* read it) — untrack the whole body so it
+	// never tracks those reads (a self-referential effect loops: update_depth). Runs exactly once.
+	function init_observatory() {
+		return untrack(() => {
+			load_svelte_runtime();
+			patch_defer_fetch();
+			setup_test_seam();
+			const w = boot_worker();
+			restore_from_hash();
+			return () => {
+				w.terminate();
+				delete (window as unknown as Record<string, unknown>).__OBS_SOURCE;
+			};
+		});
+	}
+</script>
+
+<div class="obs" data-observatory {@attach init_observatory}>
+	<header class="obs-bar">
+		<!-- The `Observatory` title + tagline lived here; the shared site header's `ogygia │ Observatory`
+		     breadcrumb covers it now, so the bar carries only the presets + live controls. -->
+		<span class="presets" data-obs-presets>
+			{#each Object.entries(PRESETS) as [name, map]}
+				<button onclick={() => load_preset(map)}>{name}</button>
+			{/each}
+		</span>
+
+		<div class="obs-bar-right">
+			<span class="status" data-obs-status>
+				<span class="busy" class:show={busy}>compiling…</span>
+				{#if analysis.ms != null && analysis.real}<span class="ms" title="transform + svelte compile">{analysis.ms.toFixed(1)} ms</span>{/if}
+			</span>
+			<span class="csrswitch" data-obs-csr>
+				<button class:on={!csr} onclick={() => set_csr(false)} title="ogygia islands — only marked components ship JS">csr false</button>
+				<button class:on={csr} onclick={() => set_csr(true)} title="plain Kit — ogygia steps aside, the whole tree ships + hydrates">csr true</button>
+			</span>
+			<button class="share" data-obs-share onclick={share}>{shared ? 'copied ✓' : 'share'}</button>
+		</div>
+	</header>
+
+	<!-- Mobile: one pane at a time -->
+	<div class="obs-mobile-switch" role="tablist" aria-label="pane">
+		<button class:on={mobilePane === 'files'} onclick={() => (mobilePane = 'files')}>Files</button>
+		<button class:on={mobilePane === 'editor'} onclick={() => (mobilePane = 'editor')}>Editor</button>
+		<button class:on={mobilePane === 'result'} onclick={() => (mobilePane = 'result')}>Result</button>
+	</div>
+
+	<div class="obs-main" data-pane={mobilePane} class:tree-collapsed={treeCollapsed} {...split.container}>
+		<aside class="obs-tree-pane" class:collapsed={treeCollapsed} {...split.pane(0)}>
+			{#if treeCollapsed}
+				<button class="tree-reopen" title="show the file tree" onclick={() => (treeCollapsed = false)}>
+					<span class="tr-arrow">»</span><span class="tr-label">files</span>
+				</button>
+			{:else}
+				<FileTree
+					{files}
+					{active}
+					entry={entryFile}
+					onselect={(p) => (active = p)}
+					onremove={remove_file}
+					onadd={add_file}
+					onmove={move_file}
+					oncollapse={() => (treeCollapsed = true)}
+				/>
+			{/if}
+		</aside>
+
+		<div class="obs-gutter" {...split.gutter(0)} role="separator" aria-orientation="vertical" aria-label="resize file tree and editor"></div>
+
+		<section class="obs-editor" {...split.pane(1)}>
+			<div class="obs-editor-head" data-obs-editor-head>
+				<span class="ehead-path" title={active}>{active}</span>
+				<button
+					class="fmt"
+					data-obs-fmt
+					title="Prettify (printWidth 60)"
+					onmouseenter={warm_prettier}
+					onfocus={warm_prettier}
+					onclick={prettify}
+					disabled={formatting}>{formatting ? '…' : 'Format'}</button
+				>
+			</div>
+			<CodeMirror doc={files[active]} docKey={active} oninput={(v) => { files[active] = v; request_all(); }} oncursor={(o) => { cursor = o; sync_hash(); }} initialCursor={initial_cursor} />
+		</section>
+
+		<div class="obs-gutter" {...split.gutter(1)} role="separator" aria-orientation="vertical" aria-label="resize editor and inspector"></div>
+
+		<section class="obs-inspector" {...split.pane(2)}>
+			<div class="obs-tabs" role="tablist" aria-label="inspector">
+				<button role="tab" class:on={inspectorTab === 'output'} onclick={() => set_tab('output')}>Output</button>
+				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => set_tab('islands')}>Regions{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
+				<button role="tab" class:on={inspectorTab === 'bytes'} onclick={() => set_tab('bytes')}>Bytes</button>
+				<button role="tab" class:on={inspectorTab === 'wire'} onclick={() => set_tab('wire')}>Wire</button>
+				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => set_tab('preview')}>Preview</button>
+			</div>
+			<div class="obs-tabbody">
+			<div class="tp" class:on={inspectorTab === 'preview'} data-tab="preview">
+			{#if preview_limits.length}
+				<div class="config-notes server-note" data-obs-preview-limits>
+					<div class="cn-head">this runs on the server — not in the preview</div>
+					{#each preview_limits as msg, i (i)}
+						<div class="cn-row info" data-obs-preview-limit>
+							<span class="cn-ic">↯</span>
+							<span class="cn-body"><span class="cn-msg">{msg}</span></span>
+						</div>
+					{/each}
+					<div class="cn-row info">
+						<span class="cn-ic">→</span>
+						<span class="cn-body"><span class="cn-msg">The <b>Output</b>, <b>Regions</b> and <b>Bytes</b> tabs show how it compiles — that’s the Observatory’s real diagnostic.</span></span>
+					</div>
+				</div>
+			{/if}
+			{#if analysis.configNotes && analysis.configNotes.length}
+				<div class="config-notes" data-obs-config-notes>
+					<div class="cn-head">vite.config — what the preview can apply</div>
+					{#each analysis.configNotes as n, i (i)}
+						<div class="cn-row {n.level}" data-obs-config-note={n.level}>
+							<span class="cn-ic">{n.level === 'error' ? '✕' : n.level === 'warn' ? '!' : 'ℹ'}</span>
+							<span class="cn-body"><span class="cn-msg">{n.message}</span>{#if n.hint}<span class="cn-hint">{n.hint}</span>{/if}</span>
+						</div>
+					{/each}
+				</div>
+			{/if}
+			{#if analysis.rendered}
+				<div class="cap">
+					rendered
+					<span class="muted">· {previewMode === 'live' ? 'live, interactive — mounted in your browser' : previewMode === 'xray' ? 'x-ray — the real runtime, with the boundary lens overlaid' : 'islands — the real ogygia runtime hydrates each region'}</span>
+					{#if analysis.rendered.stubs && analysis.rendered.stubs.length}
+						<span class="stubnote" title="components not provided in this single-file REPL render as placeholders">{analysis.rendered.stubs.length} stubbed</span>
+					{/if}
+					<span class="legs" data-obs-preview-mode>
+						<button class:on={previewMode === 'live'} onclick={() => set_mode('live')}>live</button>
+						<button class:on={previewMode === 'xray'} onclick={() => set_mode('xray')}>x-ray</button>
+						<button class:on={previewMode === 'islands'} onclick={() => set_mode('islands')} title="the page's real ogygia runtime hydrates the islands">islands</button>
+					</span>
+				</div>
+				{#if previewMode === 'live'}
+					<div class="cdndeps" data-obs-cdn>
+						{#if resolving}
+							<span class="resolving" data-obs-resolving><span class="spin"></span> resolving dependencies from jsdelivr…</span>
+						{:else}
+							{#if previewBundle?.packages?.length}
+								<span class="deps-ok" title="fetched from jsdelivr, bundled into the preview">📦 {previewBundle.packages.join(', ')}</span>
+							{/if}
+							{#if previewBundle?.missing?.length}
+								<span class="deps-missing" title="couldn't resolve — rendered as an inert stub">⚠ {previewBundle.missing.join(', ')}</span>
+							{/if}
+							{#if previewBundle?.error}
+								<span class="deps-err" data-obs-bundle-err title="the live bundle failed to build — the preview shows the last server render">✗ {previewBundle.error}</span>
+							{/if}
+						{/if}
+					</div>
+				{/if}
+				{#if previewMode === 'xray'}
+					<div class="lens-legend" data-obs-legend>
+						<span class="lk island">island · ships JS</span>
+						<span class="lk hole">server hole</span>
+						<span class="lk live">live</span>
+						<span class="lk shell">the rest · free server HTML</span>
+						<button class="replay" data-obs-replay title="re-render → islands re-hydrate on their schedule" onclick={() => render_to_frame()}>⟳ replay wakes</button>
+					</div>
+					<div class="wakehint muted">the <b>real runtime</b> — islands stay interactive. <b>load</b> woke now · <b>idle</b> soon · <b>visible</b> on scroll · <b>interaction</b> on click (dashed = still asleep).</div>
+				{/if}
+				{#if previewMode === 'live' && server_regions.length}
+					<div class="wakehint srvhint" data-obs-server-hint>
+						<b>{server_regions.map((i) => i.component.replace(/^.*\//, '').replace(/\.svelte$/, '')).join(', ')}</b>
+						render on the <b>server</b> ({server_regions.some((i) => i.strategy.kind === 'live') ? 'live' : 'deferred'}).
+						The in-page <b>live</b> mount can't drive them — a deferred hole never swaps, a live region never ticks.
+						<button class="tolink" onclick={() => set_mode('islands')}>switch to islands →</button>
+						to watch the real runtime fetch and revalidate them.
+					</div>
+				{/if}
+				{#if previewMode === 'islands'}
+					<div class="wakehint muted" data-obs-islands-hint>
+						the page's <b>real ogygia runtime</b> hydrated these — genuine <b>&lt;ogygia-region&gt;</b> shells,
+						blob-linked island chunks, lazy per schedule. Try <b>keep · nav</b> (bump the counter, then navigate —
+						its state survives the real reconcile) or <b>wake demo</b> (click Menu, scroll to Chart).
+					</div>
+				{/if}
+				{#if in_frame(previewMode) && navInfo}
+					<div class="navinfo" data-obs-navinfo>
+						<span class="ni-cap">reconcile → <b>{navInfo.to}</b></span>
+						{#if navInfo.kept.length}<span class="ni kept">kept {navInfo.kept.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
+						{#if navInfo.mounted.length}<span class="ni mounted">mounted {navInfo.mounted.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
+						{#if navInfo.removed.length}<span class="ni removed">removed {navInfo.removed.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
+					</div>
+				{/if}
+				{#if in_frame(previewMode) && runtimeEvents.length}
+					<div class="rtev" data-obs-runtime-events>
+						<div class="rtev-cap">runtime events <span class="muted">· live from the devtools bus (Rung 0) as the real runtime hydrates</span></div>
+						<div class="rtev-log">
+							{#each runtimeEvents as e, i (i)}
+								{@const f = fmt_event(e)}
+								<div class="rtev-row {f.cls}">
+									<span class="rtev-island mono">{e.label.replace(/\.svelte$/, '')}</span>
+									<span class="rtev-icon">{f.icon}</span>
+									<span class="rtev-text">{f.text}</span>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
+				<!-- islands + x-ray → the ISOLATED iframe (own runtime/svelte/document), x-ray adds the lens
+					 overlay there; live → the in-page whole-app mount. -->
+				{#if in_frame(previewMode)}
+					<iframe
+						class="preview frame"
+						{@attach frame_attach}
+						src="/observatory-frame"
+						title="isolated ogygia preview"
+						data-obs-frame
+					></iframe>
+				{:else}
+					<div class="preview og-canvas" {@attach preview_mount} data-obs-preview></div>
+					<!-- Console of the running preview (svelte.dev-style) — collapsible; auto-opens on warn/error. -->
+					<div class="obs-console" data-obs-console class:open={consoleOpen}>
+						<div
+							class="oc-head"
+							role="button"
+							tabindex="0"
+							onclick={() => (consoleOpen = !consoleOpen)}
+							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); consoleOpen = !consoleOpen; } }}
+						>
+							<span class="oc-tw">{consoleOpen ? '▾' : '▸'}</span>
+							<span class="oc-title">console</span>
+							{#if consoleLog.length}<span class="oc-n">{consoleLog.length}</span>{/if}
+							{#if consoleHasError}<span class="oc-dot error" title="errors"></span>{/if}
+							{#if consoleHasWarn}<span class="oc-dot warn" title="warnings"></span>{/if}
+							<span class="oc-spacer"></span>
+							{#if consoleLog.length}<button class="oc-clear" onclick={(e) => { e.stopPropagation(); clear_console(); }}>clear</button>{/if}
+						</div>
+						{#if consoleOpen}
+							<div class="oc-body" data-obs-console-body>
+								{#if !consoleLog.length}
+									<div class="oc-empty">console.log / warn / error / info from the preview appears here</div>
+								{:else}
+									{#each consoleLog as e, i (i)}
+										<div class="oc-row {e.level}" data-obs-console-row={e.level}>
+											{#if e.count > 1}<span class="oc-badge">{e.count}</span>{/if}
+											<span class="oc-lvl">{e.level}</span>
+											<span class="oc-text">{e.text}</span>
+										</div>
+									{/each}
+								{/if}
+							</div>
+						{/if}
+					</div>
+				{/if}
+				{#if analysis.rendered.ok}
+					<details class="pipe">
+						<summary>rendered HTML source (SSR)</summary>
+						<div class="code-out" data-obs-html><CodeMirror doc={ssr_source} lang="html" readonly /></div>
+					</details>
+				{:else if !analysis.client || analysis.client.error}
+					<div class="err" data-obs-render-err>could not render: {analysis.rendered.error}</div>
+				{/if}
+			{/if}
+			</div>
+
+			<div class="tp" class:on={inspectorTab === 'bytes'} data-tab="bytes">
+			{#if analysis.ledger && analysis.ledger.kitBytes > 0}
+				<div class="cap">
+					byte ledger <span class="muted">· island JS shipped vs plain Kit (csr=true)</span>
+					{#if saved_pct > 0}<span class="saved" data-obs-saved>−{saved_pct}% JS</span>{/if}
+				</div>
+				<div class="ledger" data-obs-ledger>
+					<div class="bars">
+						<div class="barrow">
+							<span class="blabel">ogygia</span>
+							<div class="btrack">
+								<div
+									class="bfill og"
+									style:width="{Math.max(2, (100 * analysis.ledger.ogygiaBytes) / analysis.ledger.kitBytes)}%"
+								></div>
+							</div>
+							<span class="bnum og" data-obs-og-bytes
+								>{fmt_bytes(analysis.ledger.ogygiaBytes)}
+								<span class="muted">· {analysis.ledger.ogygiaCount} island{analysis.ledger.ogygiaCount === 1 ? '' : 's'}</span></span
+							>
+						</div>
+						<div class="barrow">
+							<span class="blabel">plain Kit</span>
+							<div class="btrack">
+								<div class="bfill kit" style:width="100%"></div>
+							</div>
+							<span class="bnum kit" data-obs-kit-bytes
+								>{fmt_bytes(analysis.ledger.kitBytes)}
+								<span class="muted">· {analysis.ledger.kitCount} component{analysis.ledger.kitCount === 1 ? '' : 's'}</span></span
+							>
+						</div>
+					</div>
+					<table class="ltable">
+						<tbody>
+							{#each analysis.ledger.files as f (f.name)}
+								<tr class:ships={f.ships}>
+									<td class="lname mono">{f.name}</td>
+									<td class="lwhy muted">{f.why}</td>
+									<td class="lbytes">{f.ships ? fmt_bytes(f.bytes) : '0 B'}<span class="lraw muted"> / {fmt_bytes(f.bytes)}</span></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+					{#if analysis.regions && analysis.regions.some((r) => r.clientBytes)}
+						{@const wiringBytes = analysis.regions.reduce((s, r) => s + r.clientBytes, 0)}
+						{@const wiringCount = analysis.regions.filter((r) => r.clientBytes).length}
+						<div class="lwire">
+							<span class="ckind">island wiring</span>
+							<span class="muted"
+								>{fmt_bytes(wiringBytes)} of driver-generated client legs across {wiringCount} module{wiringCount ===
+								1
+									? ''
+									: 's'} — the real glue ogygia emits to wake your islands (measured, on top of the component JS above)</span
+							>
+						</div>
+					{/if}
+					<div class="lfoot muted">
+						uncompressed compiled JS · both share the svelte runtime (excluded) · ogygia adds its ~8&nbsp;KB
+						island runtime, plain Kit hydrates the whole tree
+					</div>
+				</div>
+			{/if}
+			</div>
+
+			<div class="tp" class:on={inspectorTab === 'wire'} data-tab="wire">
+			{#if analysis.codecs && (analysis.codecs.transportables.length || analysis.codecs.fns.length || analysis.codecs.marks.length)}
+				<div class="cap">codecs <span class="muted">· what crosses the boundary, by kind (the driver's real wire graph)</span></div>
+				<div class="codecs" data-obs-codecs>
+					{#if analysis.codecs.transportables.length}
+						<div class="crow">
+							<span class="ckind">transportable · {analysis.codecs.transportables.length}</span>
+							{#each analysis.codecs.transportables as t}<span class="mono ctag">{t}</span>{/each}
+						</div>
+						<div class="whyline">a class marked <span class="mono">static wire = import.meta.og.wire(…)</span> — it crosses as ONE live shared instance; every island holding it reunites into the same object.</div>
+					{/if}
+					{#if analysis.codecs.fns.length}
+						<div class="crow">
+							<span class="ckind">fn ref · {analysis.codecs.fns.length}</span>
+							{#each analysis.codecs.fns as f}<span class="mono ctag">{f}</span>{/each}
+						</div>
+						<div class="whyline">a function from <span class="mono">import.meta.og.$(…)</span> read into island markup — functions can't cross by value, so it's registered and crosses as a ref, rebuilt on the far side.</div>
+					{/if}
+					{#if analysis.codecs.marks.length}
+						<div class="crow">
+							<span class="ckind">runtime</span>
+							{#each analysis.codecs.marks as m}<span class="mono ctag">{m}</span>{/each}
+						</div>
+						<div class="whyline">the feature set folded into the sticky runtime chunk — the runtime ships only what this app's islands actually use.</div>
+					{/if}
+				</div>
+			{/if}
+			{#if analysis.manifests}
+				{@const mlist = [
+					{ name: 'transportables', src: analysis.manifests.transportables, desc: 'eager __register_transportable(tag, Cls) per class' },
+					{ name: 'transport', src: analysis.manifests.transport, desc: 'the devalue codec map + app transport hooks' },
+					{ name: 'fn-manifest', src: analysis.manifests.fnManifest, desc: 'import.meta.og.$ factory registrations (pre-hydration)' },
+					{ name: 'server-manifest', src: analysis.manifests.serverManifest, desc: 'region id → kind / endpoint' },
+					{ name: 'runtime-entry', src: analysis.manifests.runtimeEntry, desc: 'the feature-selected runtime the islands boot from' }
+				].filter((m) => m.src && m.src.trim())}
+				{#if mlist.length}
+					<div class="cap">manifests <span class="muted">· the real generated modules a build emits (emit())</span></div>
+					<div class="mods" data-obs-manifests>
+						{#each mlist as m (m.name)}
+							<details>
+								<summary><span class="mono">{m.name}</span> <span class="muted">{m.desc}</span></summary>
+								<div class="code-out"><FormattedCode doc={m.src} lang="js" /></div>
+							</details>
+						{/each}
+					</div>
+				{/if}
+			{/if}
+			{#if analysis.rendered?.wire && analysis.rendered.wire.length}
+				<div class="cap">
+					wire <span class="muted">· the props that cross to each island, by value (devalue)</span>
+					<span class="legs wiretoggle" data-obs-wire-toggle>
+						<button class:on={wireDecoded} onclick={() => (wireDecoded = true)} title="the props as JS values">decoded</button>
+						<button class:on={!wireDecoded} onclick={() => (wireDecoded = false)} title="the raw devalue bytes that actually cross">encoded</button>
+					</span>
+				</div>
+				<div class="wire" data-obs-wire>
+					{#each analysis.rendered.wire as w, i (w.name + i)}
+						<div class="wrow">
+							<div class="wtop">
+								<span class="wname mono">{w.name}</span>
+								{#if !(w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]')}<span class="wbytes muted">{w.bytes} B</span>{/if}
+							</div>
+							{#if w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]'}
+								<span class="muted wempty">no props cross — nothing to serialize</span>
+							{:else}
+								<div class="code-out"><CodeMirror doc={wire_display(w.payload)} lang="js" readonly /></div>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{/if}
+			</div>
+
+			<div class="tp" class:on={inspectorTab === 'islands'} data-tab="islands">
+			{#if analysis.csr && analysis.regions}
+				{@const f_wiring = analysis.regions.reduce((s, r) => s + r.clientBytes, 0)}
+				<div class="cap">csr=false → csr=true <span class="muted">· what the islands buy you (on csr=true, plain Kit hydrates the whole page)</span></div>
+				<div class="csr-collapse" data-obs-csr>
+					<div class="ccol">
+						<span class="chead">csr=false · islands</span>
+						<div>{analysis.regions.length} generated module{analysis.regions.length === 1 ? '' : 's'}</div>
+						<div>{analysis.codecs?.fns.length ?? 0} fn ref{(analysis.codecs?.fns.length ?? 0) === 1 ? '' : 's'}</div>
+						<div>{fmt_bytes(f_wiring)} island wiring</div>
+					</div>
+					<div class="carrow">→</div>
+					<div class="ccol">
+						<span class="chead">csr=true · plain Kit</span>
+						<div class:zero={analysis.csr.regions === 0}>{analysis.csr.regions} generated module{analysis.csr.regions === 1 ? '' : 's'}</div>
+						<div>{analysis.csr.fns} fn ref{analysis.csr.fns === 1 ? '' : 's'}</div>
+						<div class:zero={analysis.csr.wiringBytes === 0}>{fmt_bytes(analysis.csr.wiringBytes)} island wiring</div>
+					</div>
+				</div>
+				<div class="muted csr-note">
+					on csr=true ogygia stands aside — no island wrappers, no per-island hydration; Kit hydrates the
+					entire page as one tree. A page-level <span class="mono">import.meta.og.$</span> still transforms
+					(it isn't island-specific).
+				</div>
+			{/if}
+			<div class="cap">island map — {analysis.islands.length} marked {analysis.islands.length === 1 ? 'region' : 'regions'}</div>
+			{#if !analysis.ok}
+				<div class="err">parse error: {analysis.error}</div>
+			{:else if analysis.islands.length === 0}
+				<div class="muted pad">no marked imports — everything here is free server HTML.</div>
+			{:else}
+				<table data-obs-map>
+					<thead><tr><th>binding</th><th>component</th><th>strategy</th><th>ships</th><th>id</th></tr></thead>
+					<tbody>
+						{#each analysis.islands as i (i.id)}
+							{@const s = ship_info(i.component)}
+							<tr>
+								<td>{i.local}</td>
+								<td class="muted">{i.component.split('/').pop()}</td>
+								<td>
+									<span class="badge" style:--c={i.strategy.color}>{i.strategy.kind}</span>
+									<div class="detail muted">{i.strategy.detail}</div>
+									<details class="why">
+										<summary>why?</summary>
+										{#each why_island(i, s) as line}<div class="whyline">{line}</div>{/each}
+									</details>
+								</td>
+								<td class="ships" data-obs-ships>
+									{#if s?.ships}
+										<span class="ships-yes" title="client JS this island ships">{fmt_bytes(s.bytes)}</span>
+									{:else if s}
+										<span class="ships-no" title="ships no client module — server HTML only">0 · no JS</span>
+									{:else}
+										<span class="muted">–</span>
+									{/if}
+								</td>
+								<td class="muted" title={i.real ? 'real md5 region id' : 'placeholder id (transform not yet run)'}>{i.id}{#if i.real}<span class="realdot" title="real ogygia region id">●</span>{/if}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
+			</div>
+
+			<div class="tp" class:on={inspectorTab === 'output'} data-tab="output">
+			<div class="cap">
+				transformed host
+				{#if compareCsr}
+					<span class="real cmp-legend" data-obs-real
+						>the same source, both ways · <span class="dl-key del">− csr=false (ogygia)</span>
+						<span class="dl-key add">+ csr=true (plain Kit)</span></span
+					>
+				{:else if csr}
+					<span class="real csr-true" data-obs-real>csr=true · plain Kit — islands stripped to plain, Kit hydrates the whole tree</span>
+				{:else if analysis.real}
+					<span class="real" data-obs-real>real ogygia transform · {analysis.realIslands} islands</span>
+				{:else}
+					<span class="fallback" title={analysis.realError || ''}>mark-preview (real transform: {analysis.realError ? 'error' : 'n/a'})</span>
+				{/if}
+				{#if !csr && !compareCsr && analysis.outputClient && analysis.outputClient !== analysis.output}
+					<span class="legs" data-obs-legs>
+						<button class:on={leg === 'ssr'} onclick={() => (leg = 'ssr')}>SSR leg</button>
+						<button class:on={leg === 'client'} onclick={() => (leg = 'client')}>client leg</button>
+					</span>
+				{/if}
+				{#if analysis.output && analysis.outputCsrTrue && analysis.outputCsrTrue !== analysis.output}
+					<button
+						class="cmp-btn"
+						class:on={compareCsr}
+						onclick={() => (compareCsr = !compareCsr)}
+						title="diff the csr=false (ogygia) transform against csr=true (plain Kit)"
+						data-obs-cmp-csr>⇄ compare csr</button
+					>
+				{/if}
+			</div>
+			{#if !everWarmed}
+				<div class="warming" data-obs-warming>warming the in-browser compiler (rolldown WASM)…</div>
+			{/if}
+			<div class="code-out" data-obs-output>
+				{#if csr_diff}
+					<div class="csr-diff" data-obs-csr-diff>
+						{#each csr_diff as d, i (i)}
+							<div class="dl {d.t}"><span class="dm">{d.t === 'add' ? '+' : d.t === 'del' ? '−' : ' '}</span><span class="dc">{d.s || ' '}</span></div>
+						{/each}
+					</div>
+				{:else}
+					<FormattedCode doc={shownOutput} lang="svelte" />
+				{/if}
+			</div>
+
+			{#if analysis.compiledServer}
+				<details class="pipe" data-obs-compiled>
+					<summary>svelte-compiled server JS <span class="muted">· source → transform → svelte compile</span></summary>
+					<div class="code-out"><FormattedCode doc={analysis.compiledServer} lang="js" /></div>
+				</details>
+			{/if}
+			</div>
+
+			<div class="tp" class:on={inspectorTab === 'islands'} data-tab="islands">
+			{#if analysis.regions && analysis.regions.length}
+				<div class="cap">generated modules <span class="muted">· the real registry the driver minted (id · role · kind)</span></div>
+				<div class="mods" data-obs-modules>
+					{#each analysis.regions as r (r.vpath)}
+						<details>
+							<summary>
+								<span class="mono">{r.component || r.role}</span>
+								<span class="mkind">{r.role}{r.kind ? ' · ' + r.kind : ''}</span>
+								{#if r.server}<span class="rbadge">server</span>{/if}
+								{#if r.portable}<span class="rbadge">portable</span>{/if}
+								{#if r.lakes.length}<span class="rbadge">{r.lakes.length} lake{r.lakes.length > 1 ? 's' : ''}</span>{/if}
+								{#if r.clientBytes}<span class="rbadge" title="real UTF-8 size of the generated client leg">{fmt_bytes(r.clientBytes)}</span>{/if}
+								<span class="muted mono">{r.id.slice(0, 12)}</span>
+							</summary>
+							<div class="mpath">{r.vpath}</div>
+							<div class="mpath muted">
+								{r.role === 'entry'
+									? 'client hydration entry — imports/re-exports the component; the wrapper mounts it'
+									: r.role === 'wrapper'
+										? 'SSR shell — mounts <Region> with the island entry, props, and CSS (the __component wiring)'
+										: 'held-region binding — leg-split: SSR signer descriptor vs client metadata'}
+							</div>
+							{#if r.ssrSource}
+								<div class="mpath muted">— SSR leg —</div>
+								<div class="code-out"><FormattedCode doc={r.ssrSource} lang="svelte" /></div>
+							{/if}
+							{#if r.clientSource}
+								<div class="mpath muted">— client leg —</div>
+								<div class="code-out"><FormattedCode doc={r.clientSource} lang="js" /></div>
+							{/if}
+							{#if r.source && !r.ssrSource && !r.clientSource}
+								<div class="code-out"><FormattedCode doc={r.source} lang="svelte" /></div>
+							{/if}
+							{#if !r.ssrSource && !r.clientSource && !r.source}
+								<div class="muted mpath">no standalone module (rendered inline / binding-only)</div>
+							{/if}
+						</details>
+					{/each}
+				</div>
+			{:else if analysis.modules && analysis.modules.length}
+				<div class="cap">generated modules <span class="muted">· what each island compiles to</span></div>
+				<div class="mods" data-obs-modules>
+					{#each analysis.modules as m (m.id)}
+						<details>
+							<summary>
+								<span class="mono">{m.component}</span>
+								<span class="mkind">{m.kind}</span>
+								<span class="muted mono">{m.id.slice(0, 12)}</span>
+							</summary>
+							{#if m.wrapperSource}
+								<div class="mpath">{m.wrapperPath}</div>
+								<div class="code-out"><FormattedCode doc={m.wrapperSource} lang="svelte" /></div>
+							{/if}
+							{#if m.entrySource}
+								<div class="mpath">{m.entryPath}</div>
+								<div class="code-out"><FormattedCode doc={m.entrySource} lang="js" /></div>
+							{/if}
+							{#if !m.wrapperSource && !m.entrySource}
+								<div class="muted mpath">no standalone module (rendered inline / binding-only)</div>
+							{/if}
+						</details>
+					{/each}
+				</div>
+			{/if}
+			</div>
+			</div>
+		</section>
+	</div>
+</div>
+
+<style>
+	/* Full-viewport REPL, edge to edge (Svelte-REPL style). Colours come from the docs tokens
+	   (app.css) so it's light/dark theme-aware and matches the site. */
+	.obs {
+		font: 12px/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+		color: var(--text);
+		background: var(--bg);
+		/* Fills the layout's .obs-page flex column (under the site nav). 100dvh fallback if used bare. */
+		flex: 1;
+		min-height: 0;
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	.obs-bar {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 14px;
+		border-bottom: 1px solid var(--line);
+		background: var(--bg-raised);
+		flex: none;
+	}
+	.obs-brand {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		flex: none;
+	}
+	.obs-brand b {
+		color: var(--accent);
+		font-family: var(--font-display, inherit);
+		font-size: 15px;
+		font-weight: 600;
+	}
+	.obs-sub {
+		color: var(--text-faint);
+		font-size: 11px;
+	}
+	.obs-bar-right {
+		margin-left: auto;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.csrswitch {
+		display: inline-flex;
+		gap: 2px;
+		margin-left: 6px;
+		padding: 2px;
+		border-radius: 7px;
+		background: rgba(148, 163, 184, 0.1);
+	}
+	.csrswitch button {
+		padding: 2px 9px;
+		border: 0;
+		border-radius: 5px;
+		background: none;
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+	}
+	.csrswitch button.on {
+		background: #14b8a6;
+		color: #04121a;
+		font-weight: 600;
+	}
+	/* Reserved, right-aligned status slot — busy toggles via visibility (keeps its box) and the timing
+	   has a fixed min-width, so "compiling…" appearing never reflows the header. */
+	.status {
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 8px;
+		flex: none;
+	}
+	.ms {
+		color: var(--accent);
+		font-size: 11px;
+		min-width: 52px;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+	.busy {
+		color: #fbbf24;
+		visibility: hidden;
+	}
+	.busy.show {
+		visibility: visible;
+	}
+	.presets {
+		display: inline-flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+	.presets button {
+		padding: 2px 8px;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		background: var(--bg-raised);
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+		border-radius: 5px;
+	}
+	.presets button:hover {
+		color: var(--text);
+		border-color: rgba(148, 163, 184, 0.5);
+	}
+	.share {
+		padding: 3px 11px;
+		border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--line));
+		border-radius: 6px;
+		background: var(--bg);
+		color: var(--accent);
+		font: inherit;
+		font-size: 11px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.share:hover {
+		background: color-mix(in oklab, var(--accent) 12%, transparent);
+	}
+	.muted {
+		color: var(--text-faint);
+	}
+	.obs-main {
+		flex: 1;
+		min-height: 0;
+		/* SplitPane sets display:flex + per-pane flex-grow inline; this is the desktop layout. */
+	}
+	.obs-editor {
+		display: flex;
+		flex-direction: column;
+		/* CodeMirror's content has a large min-content width (long lines); the splitpane already sets
+		   min-width:0 on panes, but keep it explicit so the editor never blows past its flex track. */
+		min-width: 0;
+		min-height: 0;
+	}
+	/* The draggable divider between panes. */
+	.obs-gutter {
+		flex: 0 0 7px;
+		cursor: col-resize;
+		background: var(--line);
+		position: relative;
+		transition: background 0.15s;
+	}
+	.obs-gutter::after {
+		/* a wider invisible hit-area so the 7px gutter is easy to grab */
+		content: '';
+		position: absolute;
+		inset: 0 -4px;
+	}
+	.obs-gutter:hover,
+	.obs-gutter:active {
+		background: var(--accent);
+	}
+	/* Mobile pane switch — hidden on desktop, both panes visible. */
+	.obs-mobile-switch {
+		display: none;
+	}
+	/* ── File tree pane (left column) ── */
+	.obs-tree-pane {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		min-height: 0;
+		border-right: 1px solid rgba(148, 163, 184, 0.1);
+	}
+	.obs-tree-pane.collapsed {
+		/* a thin strip with a reopen button; beats the splitpane's inline flex-grow */
+		flex: 0 0 30px !important;
+	}
+	.tree-reopen {
+		width: 100%;
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 0;
+		border: 0;
+		background: var(--bg-raised);
+		color: var(--text-dim);
+		cursor: pointer;
+		font: inherit;
+	}
+	.tree-reopen:hover {
+		color: var(--accent);
+	}
+	.tree-reopen .tr-arrow {
+		font-size: 13px;
+	}
+	.tree-reopen .tr-label {
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		writing-mode: vertical-rl;
+	}
+	/* ── Editor pane header (active file path + Format) ── */
+	.obs-editor-head {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 5px 10px 5px 12px;
+		border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+	}
+	.ehead-path {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		direction: rtl; /* keep the filename (right end) visible when the path is long */
+		text-align: left;
+		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+		font-size: 11px;
+		color: var(--text-dim);
+	}
+	.fmt {
+		align-self: center;
+		padding: 3px 10px;
+		border: 1px solid var(--line);
+		border-radius: 6px;
+		background: var(--bg);
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 11px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.fmt:hover {
+		color: var(--text);
+		border-color: var(--line-strong);
+	}
+	.fmt:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	.cap {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 14px;
+		color: var(--text-dim);
+		font-weight: 600;
+		border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+		background: rgba(148, 163, 184, 0.05);
+	}
+	.obs-editor :global(.cm-host) {
+		flex: 1;
+	}
+	.obs-inspector {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
+	}
+	/* Tab bar over the inspector — turns the old 6 stacked sections into one-at-a-time views. */
+	.obs-tabs {
+		display: flex;
+		gap: 2px;
+		padding: 6px 10px 0;
+		border-bottom: 1px solid var(--line);
+		flex: none;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	.obs-tabs::-webkit-scrollbar {
+		display: none;
+	}
+	.obs-tabs button {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 6px 12px;
+		border: 0;
+		border-bottom: 2px solid transparent;
+		background: none;
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 12px;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.obs-tabs button:hover {
+		color: var(--text);
+	}
+	.obs-tabs button.on {
+		color: var(--accent);
+		border-bottom-color: var(--accent);
+	}
+	.obs-tabs .tcount {
+		padding: 0 6px;
+		border-radius: 999px;
+		background: color-mix(in oklab, var(--accent) 20%, transparent);
+		color: var(--accent);
+		font-size: 10px;
+	}
+	.obs-tabbody {
+		flex: 1;
+		min-height: 0;
+		overflow: auto;
+		display: flex;
+		flex-direction: column;
+	}
+	/* One tab visible at a time. `.tp` panels are shown only when active; a hidden panel is display:none
+	   so its (possibly interactive) preview / iframe doesn't run in the background. */
+	.tp {
+		display: none;
+		flex-direction: column;
+		min-height: 0;
+	}
+	.tp.on {
+		display: flex;
+	}
+	/* Preview tab fills the body so the iframe/preview gets real height. */
+	.tp[data-tab='preview'].on {
+		flex: 1;
+	}
+	table {
+		border-collapse: collapse;
+		width: 100%;
+	}
+	th,
+	td {
+		text-align: left;
+		padding: 5px 14px;
+		vertical-align: top;
+	}
+	thead th {
+		color: var(--text-dim);
+		border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+		font-weight: 600;
+	}
+	tbody tr + tr td {
+		border-top: 1px solid rgba(148, 163, 184, 0.08);
+	}
+	.badge {
+		padding: 1px 8px;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--c) 20%, transparent);
+		color: var(--c);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.detail {
+		margin-top: 2px;
+		font-size: 11px;
+	}
+	/* The "why?" explainer under a strategy — plain-language reasons, one per line. */
+	.why {
+		margin-top: 4px;
+	}
+	.why > summary {
+		cursor: pointer;
+		font-size: 11px;
+		color: var(--accent);
+		width: fit-content;
+	}
+	.whyline {
+		margin-top: 5px;
+		max-width: 52ch;
+		font-size: 11px;
+		line-height: 1.5;
+		color: var(--text-muted, var(--muted, currentColor));
+	}
+	.whyline::before {
+		content: '→ ';
+		color: var(--accent);
+	}
+	.realdot {
+		margin-left: 5px;
+		color: var(--accent);
+		font-size: 9px;
+		vertical-align: 1px;
+	}
+	.ships {
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+		font-size: 11px;
+	}
+	/* Shipping JS costs bytes (neutral); shipping ZERO JS is the ogygia win — make it pop green. */
+	.ships-yes {
+		color: var(--text-dim);
+		font-weight: 600;
+	}
+	.ships-no {
+		color: #10b981;
+		font-weight: 600;
+	}
+	/* Code surface for every readonly CodeMirror output (transformed host, compiled JS, modules, HTML). */
+	.code-out {
+		margin: 8px 14px 12px;
+		padding: 4px 6px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--bg-sunken);
+		overflow: auto;
+	}
+	.mods .code-out {
+		margin: 6px 0 0;
+	}
+	.real {
+		margin-left: 8px;
+		padding: 1px 8px;
+		border-radius: 999px;
+		background: rgba(20, 184, 166, 0.16);
+		color: var(--accent);
+		font-weight: 600;
+		font-size: 10px;
+	}
+	.real.csr-true {
+		background: rgba(148, 163, 184, 0.18);
+		color: var(--text-dim);
+	}
+	.fallback {
+		margin-left: 8px;
+		color: var(--text-faint);
+		font-weight: 400;
+		font-size: 10px;
+	}
+	.legs {
+		margin-left: auto;
+		display: inline-flex;
+		gap: 2px;
+	}
+	.legs button {
+		padding: 2px 8px;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		background: var(--bg-raised);
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+		border-radius: 5px;
+	}
+	.legs button.on {
+		background: #14b8a6;
+		color: #022;
+		border-color: #0d9488;
+	}
+	/* csr=false ⇄ csr=true compare toggle + the line-diff view. */
+	.cmp-btn {
+		margin-left: auto;
+		padding: 2px 8px;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		background: var(--bg-raised);
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+		border-radius: 5px;
+	}
+	.cmp-btn.on {
+		background: #14b8a6;
+		color: #022;
+		border-color: #0d9488;
+	}
+	.cmp-legend .dl-key {
+		font-weight: 600;
+	}
+	.dl-key.del {
+		color: #f87171;
+	}
+	.dl-key.add {
+		color: #34d399;
+	}
+	.csr-diff {
+		overflow: auto;
+		max-height: 100%;
+		padding: 8px 0;
+		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+		font-size: 12px;
+		line-height: 1.5;
+		background: var(--bg, #0a0f0d);
+	}
+	.dl {
+		display: flex;
+		white-space: pre;
+		padding: 0 10px;
+	}
+	.dl .dm {
+		width: 1.2em;
+		flex: none;
+		color: var(--text-dim);
+		user-select: none;
+	}
+	.dl .dc {
+		flex: 1;
+		min-width: 0;
+	}
+	.dl.same {
+		color: var(--text-dim);
+		opacity: 0.75;
+	}
+	.dl.add {
+		background: color-mix(in oklab, #10b981 14%, transparent);
+	}
+	.dl.add .dm,
+	.dl.add .dc {
+		color: #34d399;
+	}
+	.dl.del {
+		background: color-mix(in oklab, #ef4444 12%, transparent);
+	}
+	.dl.del .dm,
+	.dl.del .dc {
+		color: #f87171;
+	}
+	.preview {
+		flex: 1;
+		min-height: 220px;
+		margin: 10px 14px 14px;
+		padding: 14px;
+		border: 1px dashed var(--line-strong);
+		border-radius: 8px;
+		overflow: auto;
+		/* The live/x-ray demos use --obs-* tokens (defined inside the iframe for islands mode); map them to
+		   the SITE tokens here so the canvas is neutral + theme-aware (not a bespoke navy) and matches docs. */
+		--obs-bg: var(--bg-raised);
+		--obs-panel: var(--bg-sunken);
+		--obs-text: var(--text);
+		--obs-muted: var(--text-dim);
+		--obs-border: var(--line);
+		--obs-accent: var(--accent);
+		background: var(--obs-bg);
+		color: var(--obs-text);
+	}
+	.preview.frame {
+		flex: 1;
+		min-height: 240px;
+		padding: 0;
+		border-style: solid;
+		border-color: var(--line);
+		width: auto;
+		height: auto;
+	}
+
+	/* ── Mobile: one pane at a time, toggled by the Editor/Result switch (Svelte-REPL style) ── */
+	@media (max-width: 820px) {
+		.obs-bar {
+			flex-wrap: wrap;
+			gap: 6px 8px;
+			padding: 8px 10px;
+		}
+		.obs-sub {
+			display: none;
+		}
+		.presets {
+			order: 3;
+			width: 100%;
+			overflow-x: auto;
+			scrollbar-width: none;
+			flex-wrap: nowrap;
+			padding-bottom: 2px;
+		}
+		.presets::-webkit-scrollbar {
+			display: none;
+		}
+		.obs-bar-right {
+			gap: 6px;
+		}
+		.obs-mobile-switch {
+			display: flex;
+			gap: 4px;
+			padding: 6px 10px;
+			border-bottom: 1px solid var(--line);
+			background: var(--bg-raised);
+			flex: none;
+		}
+		.obs-mobile-switch button {
+			flex: 1;
+			padding: 8px;
+			border: 1px solid var(--line);
+			border-radius: 7px;
+			background: var(--bg);
+			color: var(--text-dim);
+			font: inherit;
+			font-size: 12px;
+			font-weight: 600;
+			cursor: pointer;
+		}
+		.obs-mobile-switch button.on {
+			background: var(--accent);
+			color: var(--text-on-invert, #04121a);
+			border-color: var(--accent);
+		}
+		/* Mobile ignores the splitpane: override its inline display:flex back to a single-pane stack, and
+		   hide the gutter. The panes' inline flex-grow is inert under display:block. !important beats the
+		   inline styles the splitpane sets. */
+		.obs-main {
+			display: block !important;
+		}
+		.obs-gutter {
+			display: none !important;
+		}
+		/* The tree pane's collapse strip is a desktop affordance — full tree on mobile. */
+		.obs-tree-pane.collapsed {
+			flex: none !important;
+		}
+		/* Only the selected pane is shown; the tree pane takes the full width on mobile. */
+		.obs-main[data-pane='files'] .obs-editor,
+		.obs-main[data-pane='files'] .obs-inspector,
+		.obs-main[data-pane='editor'] .obs-tree-pane,
+		.obs-main[data-pane='editor'] .obs-inspector,
+		.obs-main[data-pane='result'] .obs-tree-pane,
+		.obs-main[data-pane='result'] .obs-editor {
+			display: none !important;
+		}
+		.obs-tree-pane {
+			border-right: 0;
+		}
+	}
+	.preview :global(.og-stub) {
+		display: inline-block;
+		padding: 0 6px;
+		border-radius: 4px;
+		background: rgba(20, 184, 166, 0.15);
+		color: #0d9488;
+		font: 11px ui-monospace, Menlo, monospace;
+	}
+	.preview :global(.obs-fallback) {
+		display: inline-block;
+		padding: 1px 8px;
+		border-radius: 4px;
+		background: rgba(139, 92, 246, 0.15);
+		color: #8b5cf6;
+		font-size: 11px;
+		animation: obs-pulse 1s ease-in-out infinite;
+	}
+	@keyframes obs-pulse {
+		0%,
+		100% {
+			opacity: 0.5;
+		}
+		50% {
+			opacity: 1;
+		}
+	}
+	/* The x-ray boundary lens now lives in the isolated iframe (observatory-frame/+page.svelte), overlaid
+	   on the REAL islands — see there. The in-page preview only ever renders `live` mode now. */
+	.lens-legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		padding: 8px 14px 2px;
+	}
+	.lens-legend .lk {
+		padding: 1px 8px;
+		border-radius: 999px;
+		font-size: 10px;
+		font-weight: 600;
+	}
+	.lens-legend .lk.island {
+		background: rgba(20, 184, 166, 0.16);
+		color: var(--accent);
+	}
+	.lens-legend .lk.hole {
+		background: rgba(139, 92, 246, 0.18);
+		color: #c4b5fd;
+	}
+	.lens-legend .lk.live {
+		background: rgba(139, 92, 246, 0.18);
+		color: #c4b5fd;
+	}
+	.lens-legend .lk.shell {
+		background: rgba(148, 163, 184, 0.14);
+		color: var(--text-dim);
+	}
+	.lens-legend .replay {
+		margin-left: auto;
+		padding: 1px 9px;
+		border: 1px solid rgba(20, 184, 166, 0.4);
+		border-radius: 999px;
+		background: var(--bg-raised);
+		color: var(--accent);
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+	}
+	.lens-legend .replay:hover {
+		background: rgba(20, 184, 166, 0.14);
+	}
+	.wakehint {
+		padding: 0 14px 6px;
+		font-size: 10px;
+	}
+	.wakehint b {
+		color: var(--text-dim);
+	}
+	/* Server/live-region notice in LIVE mode — a warm tint, since it's telling you why nothing moves. */
+	.srvhint {
+		margin: 2px 14px 8px;
+		padding: 7px 10px;
+		font-size: 11px;
+		line-height: 1.5;
+		color: var(--text-dim);
+		background: color-mix(in oklab, #f59e0b 9%, transparent);
+		border: 1px solid color-mix(in oklab, #f59e0b 26%, transparent);
+		border-radius: 8px;
+	}
+	/* CDN dependency readout (live mode): resolving spinner, then the packages pulled / stubbed. */
+	/* Preview console (svelte.dev-style) — collapsible strip under the live preview. */
+	/* vite.config feedback — deliberate notes on what the preview can't apply. */
+	.config-notes {
+		margin: 0 0 10px;
+		border: 1px solid color-mix(in srgb, #f59e0b 32%, var(--obs-border));
+		border-radius: 8px;
+		background: color-mix(in srgb, #f59e0b 6%, var(--obs-panel));
+		overflow: hidden;
+	}
+	/* The server-side notice reads as info (it's expected), not a config warning — tint it accent. */
+	.config-notes.server-note {
+		border-color: color-mix(in srgb, var(--obs-accent, #14b8a6) 32%, var(--obs-border));
+		background: color-mix(in srgb, var(--obs-accent, #14b8a6) 6%, var(--obs-panel));
+	}
+	.config-notes.server-note .cn-head {
+		border-bottom-color: color-mix(in srgb, var(--obs-accent, #14b8a6) 20%, var(--obs-border));
+	}
+	.config-notes.server-note .cn-row.info .cn-ic {
+		background: var(--obs-accent, #14b8a6);
+	}
+	.cn-head {
+		padding: 5px 10px;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--obs-muted);
+		border-bottom: 1px solid color-mix(in srgb, #f59e0b 20%, var(--obs-border));
+	}
+	.cn-row {
+		display: flex;
+		gap: 8px;
+		padding: 6px 10px;
+		font-size: 12px;
+		line-height: 1.4;
+	}
+	.cn-row + .cn-row {
+		border-top: 1px solid color-mix(in srgb, var(--obs-border) 60%, transparent);
+	}
+	.cn-ic {
+		flex: none;
+		width: 16px;
+		height: 16px;
+		display: grid;
+		place-items: center;
+		border-radius: 50%;
+		font-size: 10px;
+		font-weight: 700;
+		color: #fff;
+	}
+	.cn-row.warn .cn-ic {
+		background: #f59e0b;
+	}
+	.cn-row.error .cn-ic {
+		background: #ef4444;
+	}
+	.cn-row.info .cn-ic {
+		background: #64748b;
+	}
+	.cn-body {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
+	}
+	.cn-msg {
+		color: var(--obs-text, inherit);
+	}
+	.cn-hint {
+		color: var(--obs-muted);
+		font-size: 11px;
+	}
+
+	.obs-console {
+		border-top: 1px solid var(--obs-border);
+		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+		font-size: 11px;
+		flex: 0 0 auto;
+		background: var(--obs-panel);
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+	.obs-console.open {
+		max-height: 40%;
+	}
+	.oc-head {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 12px;
+		cursor: pointer;
+		user-select: none;
+		color: var(--obs-muted);
+		font-size: 10px;
+		letter-spacing: 0.03em;
+		text-transform: uppercase;
+	}
+	.oc-head:hover {
+		color: var(--obs-text, inherit);
+	}
+	.oc-tw {
+		width: 0.8em;
+		opacity: 0.7;
+	}
+	.oc-title {
+		font-weight: 600;
+	}
+	.oc-n {
+		background: color-mix(in oklab, var(--obs-muted) 22%, transparent);
+		border-radius: 999px;
+		padding: 0 6px;
+		font-size: 9px;
+	}
+	.oc-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+	}
+	.oc-dot.error {
+		background: #ef4444;
+	}
+	.oc-dot.warn {
+		background: #f59e0b;
+	}
+	.oc-spacer {
+		flex: 1;
+	}
+	.oc-clear {
+		border: 0;
+		background: none;
+		color: var(--obs-muted);
+		cursor: pointer;
+		font: inherit;
+		text-transform: none;
+		letter-spacing: 0;
+		opacity: 0.75;
+	}
+	.oc-clear:hover {
+		opacity: 1;
+		color: var(--obs-accent);
+	}
+	.oc-body {
+		overflow: auto;
+		padding: 2px 0 6px;
+		min-height: 0;
+	}
+	.oc-empty {
+		padding: 6px 14px;
+		color: var(--obs-muted);
+		opacity: 0.7;
+		font-style: italic;
+	}
+	.oc-row {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		padding: 2px 12px;
+		border-bottom: 1px solid color-mix(in oklab, var(--obs-border) 40%, transparent);
+		white-space: pre-wrap;
+		word-break: break-word;
+		line-height: 1.5;
+	}
+	.oc-row.warn {
+		background: color-mix(in oklab, #f59e0b 8%, transparent);
+	}
+	.oc-row.error {
+		background: color-mix(in oklab, #ef4444 9%, transparent);
+	}
+	.oc-badge {
+		flex: 0 0 auto;
+		background: color-mix(in oklab, var(--obs-muted) 28%, transparent);
+		border-radius: 999px;
+		padding: 0 5px;
+		font-size: 9px;
+		align-self: center;
+	}
+	.oc-lvl {
+		flex: 0 0 auto;
+		font-size: 9px;
+		text-transform: uppercase;
+		opacity: 0.55;
+		min-width: 3.2em;
+	}
+	.oc-row.error .oc-lvl,
+	.oc-row.error .oc-text {
+		color: #ef4444;
+	}
+	.oc-row.warn .oc-lvl,
+	.oc-row.warn .oc-text {
+		color: #d98a00;
+	}
+	.oc-text {
+		flex: 1;
+	}
+
+	.cdndeps {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 12px;
+		align-items: center;
+		min-height: 16px;
+		padding: 0 14px 2px;
+		font-size: 10px;
+		font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+	}
+	.cdndeps .resolving {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-dim);
+	}
+	.cdndeps .spin {
+		width: 9px;
+		height: 9px;
+		border: 1.5px solid color-mix(in oklab, var(--accent) 35%, transparent);
+		border-top-color: var(--accent);
+		border-radius: 50%;
+		animation: obs-spin 0.7s linear infinite;
+	}
+	@keyframes obs-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	.cdndeps .deps-ok {
+		color: var(--accent);
+	}
+	.cdndeps .deps-missing {
+		color: #f59e0b;
+	}
+	.cdndeps .deps-err {
+		color: #ef4444;
+		flex-basis: 100%;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.srvhint b {
+		color: var(--text);
+	}
+	.tolink {
+		border: 0;
+		background: none;
+		padding: 0;
+		font: inherit;
+		font-weight: 600;
+		color: var(--accent);
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.tolink:hover {
+		text-decoration: underline;
+	}
+	.navinfo {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		margin: 2px 14px 8px;
+		font-size: 11px;
+	}
+	.navinfo .ni-cap {
+		color: var(--text-dim);
+		font-weight: 600;
+	}
+	.navinfo .ni {
+		padding: 1px 8px;
+		border-radius: 999px;
+		font-weight: 600;
+	}
+	.navinfo .kept {
+		background: rgba(20, 184, 166, 0.16);
+		color: var(--accent);
+	}
+	.navinfo .mounted {
+		background: rgba(139, 92, 246, 0.18);
+		color: #c4b5fd;
+	}
+	.navinfo .removed {
+		background: rgba(148, 163, 184, 0.14);
+		color: var(--text-dim);
+		text-decoration: line-through;
+	}
+	.rtev {
+		margin: 4px 14px 8px;
+		border: 1px solid rgba(148, 163, 184, 0.15);
+		border-radius: 6px;
+		overflow: hidden;
+	}
+	.rtev-cap {
+		padding: 5px 10px;
+		background: rgba(148, 163, 184, 0.05);
+		color: var(--text-dim);
+		font-weight: 600;
+		font-size: 11px;
+	}
+	.rtev-log {
+		max-height: 140px;
+		overflow: auto;
+		padding: 4px 0;
+	}
+	.rtev-row {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		padding: 1px 12px;
+		font-size: 11px;
+	}
+	.rtev-island {
+		width: 110px;
+		flex: none;
+		color: var(--accent);
+		text-align: right;
+	}
+	.rtev-icon {
+		width: 12px;
+		flex: none;
+		text-align: center;
+	}
+	.rtev-row.ev-dim {
+		color: var(--text-faint);
+	}
+	.rtev-row.ev-wake .rtev-icon,
+	.rtev-row.ev-wake .rtev-text {
+		color: #fbbf24;
+	}
+	.rtev-row.ev-done .rtev-icon,
+	.rtev-row.ev-done .rtev-text {
+		color: var(--accent);
+		font-weight: 600;
+	}
+	.rtev-row.ev-fail .rtev-icon,
+	.rtev-row.ev-fail .rtev-text {
+		color: #fca5a5;
+	}
+	.stubnote {
+		padding: 1px 8px;
+		border-radius: 999px;
+		background: rgba(148, 163, 184, 0.12);
+		color: var(--text-dim);
+		font-size: 10px;
+	}
+	.saved {
+		margin-left: auto;
+		padding: 1px 9px;
+		border-radius: 999px;
+		background: rgba(20, 184, 166, 0.18);
+		color: var(--accent);
+		font-weight: 700;
+		font-size: 11px;
+	}
+	.ledger {
+		padding: 10px 14px 6px;
+	}
+	.bars {
+		display: flex;
+		flex-direction: column;
+		gap: 7px;
+		margin-bottom: 10px;
+	}
+	.barrow {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.blabel {
+		width: 62px;
+		flex: none;
+		color: var(--text-dim);
+		text-align: right;
+	}
+	.btrack {
+		flex: 1;
+		height: 14px;
+		border-radius: 4px;
+		background: rgba(148, 163, 184, 0.1);
+		overflow: hidden;
+	}
+	.bfill {
+		height: 100%;
+		border-radius: 4px;
+		transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+	.bfill.og {
+		background: linear-gradient(90deg, #0d9488, var(--accent));
+	}
+	.bfill.kit {
+		background: rgba(148, 163, 184, 0.35);
+	}
+	.bnum {
+		width: 130px;
+		flex: none;
+	}
+	.bnum.og {
+		color: var(--accent);
+		font-weight: 700;
+	}
+	.bnum.kit {
+		color: var(--text-dim);
+	}
+	.ltable {
+		width: 100%;
+		border-collapse: collapse;
+	}
+	.ltable td {
+		padding: 3px 0;
+		vertical-align: top;
+	}
+	.ltable tr + tr td {
+		border-top: 1px solid rgba(148, 163, 184, 0.07);
+	}
+	.lname {
+		color: var(--text-faint);
+		width: 130px;
+	}
+	.ltable tr.ships .lname {
+		color: var(--accent);
+	}
+	.lwhy {
+		font-size: 11px;
+	}
+	.lbytes {
+		text-align: right;
+		white-space: nowrap;
+		color: var(--text-faint);
+	}
+	.ltable tr.ships .lbytes {
+		color: var(--text-dim);
+	}
+	.lraw {
+		font-size: 10px;
+	}
+	.ltable tr.ships .lraw {
+		display: none;
+	}
+	.lfoot {
+		margin-top: 8px;
+		font-size: 10px;
+		line-height: 1.5;
+	}
+	/* Driver-generated island-wiring total (Bytes tab) — the real client-leg glue ogygia emits. */
+	.lwire {
+		display: flex;
+		align-items: baseline;
+		gap: 7px;
+		margin-top: 10px;
+		padding-top: 8px;
+		border-top: 1px solid var(--border);
+		font-size: 11px;
+	}
+	.wire {
+		padding: 6px 14px 4px;
+	}
+	.wrow {
+		padding: 6px 0;
+	}
+	.wrow + .wrow {
+		border-top: 1px solid rgba(148, 163, 184, 0.07);
+	}
+	.wtop {
+		display: flex;
+		align-items: baseline;
+		gap: 10px;
+		padding: 0 14px 2px;
+	}
+	.wname {
+		flex: 1;
+		color: var(--accent);
+	}
+	.wpay {
+		flex: 1;
+		color: var(--text-dim);
+		word-break: break-word;
+		background: rgba(148, 163, 184, 0.08);
+		padding: 1px 7px;
+		border-radius: 4px;
+		font-size: 11px;
+	}
+	.wbytes {
+		flex: none;
+		font-size: 10px;
+	}
+	.wempty {
+		flex: 1;
+		font-size: 11px;
+	}
+	.pipe {
+		margin: 4px 14px;
+		border: 1px solid rgba(148, 163, 184, 0.15);
+		border-radius: 6px;
+		overflow: hidden;
+	}
+	.pipe summary {
+		cursor: pointer;
+		padding: 6px 10px;
+		background: rgba(148, 163, 184, 0.05);
+		user-select: none;
+		color: var(--text-dim);
+	}
+	.mods {
+		padding: 4px 14px 14px;
+	}
+	.mods details {
+		border: 1px solid rgba(148, 163, 184, 0.15);
+		border-radius: 6px;
+		margin: 6px 0;
+		overflow: hidden;
+	}
+	.mods summary {
+		cursor: pointer;
+		padding: 6px 10px;
+		display: flex;
+		gap: 10px;
+		align-items: center;
+		background: rgba(148, 163, 184, 0.05);
+		user-select: none;
+	}
+	.mono {
+		font-family: ui-monospace, Menlo, monospace;
+	}
+	.mkind {
+		padding: 0 7px;
+		border-radius: 999px;
+		background: rgba(20, 184, 166, 0.14);
+		color: var(--accent);
+		font-size: 10px;
+	}
+	/* Registry facet chips (server island / portable / lakes) on a generated-module row. */
+	.rbadge {
+		padding: 0 6px;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+		background: var(--bg-subtle, rgba(127, 127, 127, 0.1));
+		color: var(--text-muted, var(--muted, currentColor));
+		font-size: 10px;
+	}
+	/* csr=false → csr=true collapse comparison (Regions tab) — two cards + an arrow. */
+	.csr-collapse {
+		display: flex;
+		align-items: stretch;
+		gap: 12px;
+		padding: 8px 12px 4px;
+	}
+	.ccol {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 8px 10px;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		font-size: 11px;
+	}
+	.chead {
+		font-size: 10px;
+		color: var(--text-muted, var(--muted, currentColor));
+		margin-bottom: 2px;
+	}
+	.carrow {
+		align-self: center;
+		color: var(--accent);
+		font-size: 16px;
+	}
+	.ccol .zero {
+		color: var(--accent);
+	}
+	.csr-note {
+		padding: 0 12px 8px;
+		font-size: 11px;
+		max-width: 62ch;
+		line-height: 1.5;
+	}
+	/* Wire codec graph — one row per kind (transportable / fn ref / runtime), each with its tags. */
+	.codecs {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 8px 10px 12px;
+	}
+	.crow {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+	}
+	.ckind {
+		padding: 0 7px;
+		border-radius: 999px;
+		background: rgba(20, 184, 166, 0.14);
+		color: var(--accent);
+		font-size: 10px;
+		white-space: nowrap;
+	}
+	.ctag {
+		padding: 0 6px;
+		border-radius: 4px;
+		border: 1px solid var(--border);
+		background: var(--bg-subtle, rgba(127, 127, 127, 0.1));
+		font-size: 11px;
+	}
+	.mpath {
+		padding: 6px 10px 2px;
+		color: var(--text-dim);
+		font-size: 10px;
+	}
+	.msrc {
+		margin: 0;
+		padding: 6px 10px 10px;
+		white-space: pre-wrap;
+		word-break: break-word;
+		color: var(--text-dim);
+		font-size: 11px;
+		max-height: 220px;
+		overflow: auto;
+	}
+	.warming {
+		padding: 10px 14px;
+		color: #fbbf24;
+	}
+	.err {
+		padding: 12px 14px;
+		color: #fca5a5;
+	}
+	.pad {
+		padding: 12px 14px;
+	}
+</style>

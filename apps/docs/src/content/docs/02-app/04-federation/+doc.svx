@@ -1,0 +1,203 @@
+---
+title: Fragment federation
+summary: Microfrontends over the wire — independent SvelteKit+ogygia apps composing into one page. A shell mounts whole remote apps or stitches single widgets; hops are Ed25519-signed, identity and experiments carry, traces continue.
+related:
+  - app/server-router
+  - app/experiments
+  - reference/packaging
+---
+
+::: warning Experimental
+This surface is new and may still change shape. The mechanics below are e2e-tested (see `examples/mfe` in the repo for a running three-team demo), but treat the API as pre-1.0.
+:::
+
+Three teams, three repos, three deploys — one page. Fragment federation composes independent SvelteKit + ogygia apps **over HTTP at render time**: another team's server answers with a fragment document, the shell bakes its HTML into the first paint, and the islands inside wake in the shell's page with chunks loaded from the owning team's origin.
+
+## Not module federation
+
+Module federation shares **JS modules** between builds at runtime — which couples bundlers, versions, and upgrade schedules. Fragment federation shares **finished HTML plus self-contained islands**. Each team ships its own complete build, including its own Svelte copy (~12 kB gz per extra build on a page); a foreign island hydrates through a function the *producing* build exports, closed over its own Svelte. That's why version skew between teams just works, and why one team's broken dependency can't take down another's code. The price of independence is a few kB; the payoff is that "independent" is real.
+
+## MFE side: `expose()`
+
+An MFE is a normal app whose [route table](/docs/app/server-router) is additionally served as a fragment endpoint:
+
+```ts title="src/routes/og/fragment/page/+server.ts (the cms app)"
+import { expose } from 'ogygia/router';
+import { cms_router } from '$lib/router';
+
+export const { GET, POST, PUT, PATCH, DELETE } = expose(cms_router, {
+  base: '/cms',                                                // the mount base it renders under
+  verify: { publicKeys: [env.SHELL_PUBLIC_KEY] },              // Ed25519 gate — see Security
+});
+```
+
+Any method forwards into the router — nested layouts, loads, form actions, redirects, the app's own 404 page all translate. The answer is a wire **document**: `{ status, location?, title, css[], body, runtime? }` with asset URLs absolutized to the MFE's origin. The same app still serves its own standalone front door; `expose` is one extra route.
+
+## Shell side: one `client()` per MFE
+
+All transport policy for talking to one MFE lives in one place:
+
+```ts title=src/lib/clients.server.ts
+import { client } from 'ogygia/router';
+
+export const cms = client('http://cms.internal', {
+  timeout: 800,                   // an UNCACHED miss past this → 504 boundary card
+  cache: { ttl: 30_000 },         // stale-while-revalidate document cache
+  sign: { privateKey: env.SHELL_SIGNING_KEY },
+});
+```
+
+The client owns signing, bounded latency, the SWR cache, request coalescing (concurrent misses share one upstream call), and mutation-safe invalidation (a POST clears the cache *and* makes still-in-flight pre-mutation fetches unable to repopulate it).
+
+**Failover**: pass replicas — `client(['http://cms-1', 'http://cms-2'])` — and READS try them in order when an earlier one is unreachable or answers 5xx. A 404 is an answer, not an outage (no second attempt), and mutations stay pinned to the primary (a retried POST risks a double write). Each attempt signs for its own target host automatically.
+
+Three consumers share it:
+
+### Mount a whole app
+
+```ts
+'/cms/[...rest]': mount(cms),
+```
+
+One table entry. GET loads the document; the MFE's redirects re-throw as shell redirects; POSTs forward the form body and follow the MFE's PRG redirect. A dead or slow MFE renders the shell's error boundary card — the shell's page is never held hostage by another team.
+
+**Canary / blue-green** is a per-request resolver instead of a fixed client — [A/B testing](/docs/app/experiments) of infrastructure itself:
+
+```ts
+const v2 = flag('cms-v2', 10);
+'/cms/[...rest]': mount(v2.pick({ off: cms_v1, on: cms_v2 })),
+```
+
+The same `pick` verb that [chooses components and values](/docs/app/experiments) chooses infrastructure. And a **per-cohort fragment rollout** is `when()` — off means the route doesn't exist for that visitor:
+
+```ts
+'/cms/[...rest]': when(cmsRollout, mount(cms)),
+```
+
+Clients stay prebuilt singletons (each keeps its own cache and coalescing); the resolver only chooses between them, and stickiness comes from the flag.
+
+**Streamed mounts**: `mount(cms, { stream: true })` flushes the shell's page immediately with a skeleton in the slot (`fallback` takes an html string or a component — a component bakes as an inline region), and the fragment swaps in down the same response when the MFE answers — a slow team stops delaying the shell's first byte entirely. The hop stays buffered and signed exactly as ever; only the browser-facing leg streams. Trades (GET only): the status and title flush before the document arrives, a late redirect degrades to a link card, and per-team Server-Timing is lost — which is why buffered stays the default.
+
+Two channels ride the document beyond the body: **status** — the MFE's own 404/500 page renders under shell chrome and the shell *answers with that status* (a 200-wrapped error page poisons caches and SEO) — and **head** — the MFE page's SEO/social meta (`description`, `og:*`, canonical links) joins the shell's document head, while `charset`/`viewport`/`http-equiv` stay the shell's own.
+
+### Mount from plain SvelteKit: `mount.kit`
+
+The shell doesn't have to use ogygia's router. From an ordinary Kit catchall (`src/routes/cms/[...rest]/`):
+
+```ts title=+page.server.ts
+import { mount } from 'ogygia/router';
+import { cms } from '$lib/clients.server';
+
+const m = mount.kit(cms, { user: (e) => session_from(e) });
+export const load = m.load;
+export const actions = m.actions;
+```
+
+```svelte title=+page.svelte
+<script>
+  let { data } = $props();
+</script>
+<svelte:head>
+  {#if data.doc.title}<title>{data.doc.title}</title>{/if}
+  {@html data.doc.css.join('') + (data.doc.head ?? '')}
+</svelte:head>
+{@html data.doc.body}
+```
+
+Same client, same signing, same reliability dials. Two honest differences: identity is read off the event (no `c.visitor` outside the router), and a Kit load can't set a response status — an upstream 4xx becomes Kit's `error(status)`, so the status is right but the *shell's* error page renders (the router's `mount()` keeps the MFE's error body too).
+
+### Stitch a widget (SSR)
+
+MFEs can also publish a **named catalog** of single fragments. `catalog()` owns the whole endpoint — signature gate, per-request bake, asset absolutizing, trace continuation:
+
+```ts title="src/routes/og/fragment/[name]/+server.ts (the dash app)"
+import { catalog } from 'ogygia/router';
+import { region } from 'ogygia';
+import Kpis from '$lib/Kpis.svelte' with { region: 'raw' };
+
+export const { GET } = catalog(
+  { kpis: (props, { user }) => region(Kpis, { org: props.org, viewer: user ?? null }) },
+  { verify: { publicKeys: [env.SHELL_PUBLIC_KEY] } }
+);
+```
+
+The reserved name `__catalog` answers a manifest — deliberately **unsigned** (it's inventory, not data; the widgets themselves stay gated). Declare a widget as `{ props: ['org'], make }` and its prop names ride the manifest too. `npx ogygia fragments <origin> --out widgets.ts` turns it into a typed stub (`WidgetName` union + per-widget `WidgetProps`), and `--check widgets.ts` in CI exits non-zero when the live catalog drifts — a renamed widget or changed prop becomes a build-time conversation between teams, not a production 404. The shell stitches a widget during its own render:
+
+```ts
+const doc = await dash.widget('kpis', { org: 'acme' }, { claims: session() });
+// → { html, origin, trace?, server_ms? } — bake it into your page
+```
+
+`widget()` throws a plain `Error` on failure so *you* choose the degrade card; one paint, no client fetch for the pixels.
+
+### Lazy client-stitch: `proxy()`
+
+For below-the-fold fragments, the browser fetches **the shell** — never an MFE server (no CORS, no exposed internal hosts, one cookie domain):
+
+```ts title="src/routes/og/frag/[name]/+server.ts"
+import { proxy } from 'ogygia/router';
+import { dash } from '$lib/clients.server';
+
+export const { GET } = proxy(
+  { dash },
+  { user: () => session(), widgets: { dash: ['kpis'] } }   // allowlist reachable widget names
+);
+```
+
+The hole fetches `/og/frag/dash:kpis`; `proxy` forwards through the named app's client (its signing and timeout), and a dead MFE answers `{ failed: true }` for the hole's failed card. Because this endpoint turns **browser input** (the widget name and query props) into a shell-signed, claims-bearing MFE call, pass `widgets: { dash: ['kpis'] }` to allowlist reachable names — without it, it's an open proxy to any `/og/fragment/*` on every configured MFE — and make each widget authorize what it returns against `c.visitor`, never against a prop (props are attacker-chosen, claims are not).
+
+## Security: signed hops, carried identity
+
+Every server-to-server hop is **Ed25519-signed by the caller**. MFEs hold only public keys — no shared secret to distribute, rotate, or leak. The signature covers timestamp + method + path/query + body hash + **audience** + the claims + a random **nonce** (Ed25519 is deterministic — without the nonce, two identical concurrent requests would produce byte-identical signatures and the replay guard would reject the second); an unsigned or invalid call is a 401 **before any routing runs**. Mint a pair with:
+
+```sh
+npx ogygia keys shell   # prints SHELL_SIGNING_KEY / SHELL_PUBLIC_KEY env lines
+```
+
+Three things the signature buys beyond authenticity:
+
+- **Audience binding.** The target host is signed in, so a hop signed for `cms.internal` is rejected at `dash.internal` even though both trust the same shell key — the confused-deputy that a shared key plus a fixed fragment path would otherwise allow. The audience defaults to the destination host; when a reverse proxy rewrites `Host` between the hops, set a matching label on both ends (`client({ audience })` / `expose({ verify: { audience } })`).
+- **Replay rejection.** A byte-identical redelivery of a captured signed hop is refused within its freshness window (±120 s) — a mutating POST can't be replayed. (Protection is per-process; audience binding is the cross-instance guarantee.)
+- **Fail-closed.** `expose()` with no `verify` warns loudly and — if you mean it — takes `verify: false` to acknowledge an intentionally open endpoint (behind mTLS/a mesh). It never silently serves unauthenticated.
+
+Claims are **signed, not encrypted** (integrity, not confidentiality) — run the hops over TLS so visitor ids and roles aren't readable on the wire.
+
+Visitor identity rides **inside** the signature (on-behalf-of): the shell declares it once on its table —
+
+```ts
+routes(table, {
+  visitor: (c) => session_from(c.cookies),
+  experiments: [csrExp],            // buckets auto-carry into every hop
+})
+```
+
+— and every mount signs `c.visitor` plus the table's [experiment buckets](/docs/app/experiments) into its hops. Claims never transit the browser. On the MFE, verified claims surface as `c.visitor` (and `user(c)`), attached in-process via a Symbol — an HTTP caller can't set a JS symbol, so the MFE's public front door can never smuggle identity through a header. Forging identity means forging the signature. Teams chain: an MFE stitching a third team re-signs with its **own** key, forwarding the same claims — the third team's key list simply trusts both callers.
+
+## Observability
+
+The W3C `traceparent` continues through every hop — one trace-id from the browser through shell → cms → dash. Each mounted response carries per-team `Server-Timing` (`<name>;dur=` for the hop, `<name>-render;dur=` for the MFE's own render), so "which team made the page slow" is a DevTools glance, not a three-team argument.
+
+## Serving the chunks: CORS
+
+A foreign island's JS is loaded by **another origin's page** via dynamic `import()` — a CORS request. The MFE's immutable assets (`/_app/immutable/*`) must answer with `Access-Control-Allow-Origin` (typically `*` — they're content-hashed public files), or every foreign island silently degrades with "Failed to fetch dynamically imported module". In production this header belongs on the MFE's CDN or reverse proxy; a bare adapter-node server does **not** set it (the demo's `serve.mjs` shows the wrapper shape). HTML checks can't catch this class of failure — keep a real-browser check in your gauntlet.
+
+## Key rotation
+
+`verify.publicKeys` is a **list** precisely so rotation is overlap, not downtime:
+
+1. Mint the new pair: `npx ogygia keys shell-2026q4`.
+2. **Add** the new public key to every MFE's `publicKeys` (old key stays) — deploy the MFEs.
+3. Switch the shell's `SHELL_SIGNING_KEY` to the new private key — deploy the shell.
+4. **Remove** the old public key from the MFEs — deploy the MFEs.
+
+Each step is independently safe to pause on; at no point does a valid caller get a 401. The same list is how a second authorized caller (a sibling team's re-signing stitch) coexists.
+
+## Buffered by design (v1)
+
+Fragment responses are buffered, not streamed: `expose()` renders the full document, the client reads the full JSON. That's a deliberate v1 trade — buffering is what makes the SWR cache, request coalescing, signature-over-body, replay defense, and the 504 boundary card possible in their current shapes, and the payloads are bounded (`timeout`, `maxBodyBytes`). Streaming fragments (progressive body into a streaming shell render) changes the wire format and the caching story — it's a designed-for-later, not an oversight.
+
+## What crosses, what doesn't
+
+Fragment props are **plain data**. Snippets/children don't cross the boundary, and a wired class arriving from another *build* throws loudly instead of half-reviving into a foreign Svelte instance. For state shared between teams' islands on one page, a tiny contracts package exporting a `SharedState` works across builds — values cross as devalue snapshots (live references never do), and any server that can print a JSON script tag can seed it.
+
+One more consequence of self-contained fragments: the document advertises the MFE's own runtime URL, so a **non-ogygia host** — a PHP page, a bare `node:http` server, anything that can print HTML — can mount an ogygia app's fragment and its islands still wake, hydrated end-to-end by the build that produced them.

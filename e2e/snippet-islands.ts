@@ -33,6 +33,17 @@ check('SSR: awaited island content resolved server-side', /data-resolved-greetin
 check('SSR: awaited remote data baked in (name crossed)', /in-snippet/.test(frame));
 // The interactive island's seed is server-rendered too.
 check('SSR: nested interactive island seeded (3)', /data-bumper-n[^>]*>3</.test(frame));
+// Each snippet-nested island's entry chunk gets a <head> modulepreload — the portable's inline SSR
+// threads its `<svelte:head>` into the document head, so islands forwarded through a PLAIN host are
+// discovered early too (not only when a host ISLAND's props carry the descriptor).
+const headStr = raw.split('</head>')[0];
+const entryHashes = [...frame.matchAll(/entry="([^"]*og-region\.[0-9a-f]+\.js)"/g)].map((m) => m[1]);
+const hintedInHead = entryHashes.filter((h) => headStr.includes(`modulepreload" href="${h}"`));
+check(
+	'SSR: snippet-nested island entries are modulepreloaded in <head>',
+	entryHashes.length > 0 && hintedInHead.length === entryHashes.length,
+	`${hintedInHead.length}/${entryHashes.length} hinted`
+);
 
 // ---------- Browser ----------
 const browser = await chromium.launch();

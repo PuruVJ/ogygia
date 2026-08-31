@@ -21,6 +21,9 @@ declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
 	 *  region response so a server-picked component styles a page that never imported it. */
 	export function islandCss(entry: string): string[];
+	/** og.$ hoisted factories (tag → self-contained source) for the page-inline registration
+	 *  script — prod SSR only; null in dev/client (dev uses the fn-manifest virtual). */
+	export function fnManifest(): Record<string, string> | null;
 }
 declare module 'virtual:ogygia/manifest' {
 	export const dev: boolean;
@@ -106,16 +109,16 @@ interface ImportMeta {
 			 *  `meta.headings` comes for free. */
 			markdown(
 				glob: string,
-				opts?: { id?: (key: string) => string }
+				opts?: { id?: (key: string) => string } & { preset?: string }
 			): import('ogygia/content').Source<import('ogygia/content').MarkdownMeta>;
 			/** A filesystem-CONVENTION collection from a LITERAL glob (e.g.
 			 *  `'../content/**​/{+doc.svx,+meta.json}'`) — `NN-` ordering, `+meta.json` labels. */
 			folder<Meta = Record<string, never>>(
 				glob: string,
-				opts?: import('ogygia/content').FolderOptions<Meta>
+				opts?: import('ogygia/content').FolderOptions<Meta> & { preset?: string }
 			): import('ogygia/content').Source<Meta>;
 			/** A JSON-data collection from a LITERAL glob (e.g. `'./authors/*.json'`). */
-			json(glob: string, opts?: { id?: (key: string) => string }): import('ogygia/content').Source;
+			json(glob: string, opts?: { id?: (key: string) => string } & { preset?: string }): import('ogygia/content').Source;
 			/**
 			 * Source a collection straight from another git repository — no committed copy, no sync
 			 * script. `spec` is a LITERAL `owner/repo[@ref][:path]`; `opts` forwards to `folder`.
@@ -123,7 +126,7 @@ interface ImportMeta {
 			 */
 			git<Meta = Record<string, never>>(
 				spec: string,
-				opts?: import('ogygia/content').FolderOptions<Meta>
+				opts?: import('ogygia/content').FolderOptions<Meta> & { preset?: string }
 			): import('ogygia/content').Source<Meta>;
 		};
 		/**
@@ -171,6 +174,16 @@ interface ImportMeta {
 		 * client code.
 		 */
 		bake<T>(fn: () => T | Promise<T>): T;
+		/**
+		 * Brand a value as TRANSPORTABLE so it crosses an island boundary LIVE — most often a closure
+		 * (the wire's fn kind: the plugin hoists it to a self-contained factory, its captured locals
+		 * becoming bound params), but also a store or an `og.wire` class instance the drop-in
+		 * `setContext`/`og_derived` should carry live rather than freeze. Returns the SAME value (and
+		 * type) — at the call site it reads as identity; the transform does the branding/hoisting. A
+		 * branded closure must be self-contained (only its own captured locals + module imports, no
+		 * `$app/*`).
+		 */
+		$<T>(value: T): T;
 		/**
 		 * Mark an imported component as a region — the macro alternative to `import X from '…' with
 		 * { … }`, and the escape hatch for BARRELS. The import-attribute form only reaches a DEFAULT

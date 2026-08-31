@@ -100,7 +100,9 @@ export function links(opts: LinkOptions = {}): Check {
 			if (!warned.has(hit.collection)) {
 				warned.add(hit.collection);
 				if (import.meta.env?.DEV) {
-					console.warn(`[ogygia/content] links() check is on, but '${slug}' comes from a collection whose entries carry no 'meta.links' (only markdown collects them). Link checking is a NO-OP for this corpus — fill 'meta.links' in the format to enable it.`);
+					console.warn(
+						`[ogygia/content] links() check is on, but '${slug}' comes from a collection whose entries carry no 'meta.links' (only markdown collects them). Link checking is a NO-OP for this corpus — fill 'meta.links' in the format to enable it.`
+					);
 				}
 			}
 			return [];
@@ -132,13 +134,22 @@ export function links(opts: LinkOptions = {}): Check {
 				continue; // relative (colocated asset etc.) — not judged
 			}
 
-			const at = { check: 'links', slug, ...(file ? { file } : {}), ...(link.line !== undefined ? { line: link.line } : {}) };
+			const at = {
+				check: 'links',
+				slug,
+				...(file ? { file } : {}),
+				...(link.line !== undefined ? { line: link.line } : {})
+			};
 			const hit2 = await cx.outline.resolve(path, cx.ctx);
 			if (hit2) {
 				if (frag && anchors) {
 					const target = await hit2.collection.get(hit2.record.entryId, cx.ctx);
 					if (!headings_of(target?.meta).some((h) => h.id === frag)) {
-						findings.push({ ...at, severity: 'error', message: `'${href}': missing anchor #${frag}${link.text ? ` — link text "${link.text}"` : ''}` });
+						findings.push({
+							...at,
+							severity: 'error',
+							message: `'${href}': missing anchor #${frag}${link.text ? ` — link text "${link.text}"` : ''}`
+						});
 					}
 				}
 				continue;
@@ -146,11 +157,19 @@ export function links(opts: LinkOptions = {}): Check {
 			const canonical = await cx.outline.alias(path, cx.ctx);
 			if (canonical) {
 				if (redirected_policy !== 'ok') {
-					findings.push({ ...at, severity: redirected_policy === 'error' ? 'error' : 'warn', message: `'${href}' works via redirect_from → update to ${href_of(b, canonical)}` });
+					findings.push({
+						...at,
+						severity: redirected_policy === 'error' ? 'error' : 'warn',
+						message: `'${href}' works via redirect_from → update to ${href_of(b, canonical)}`
+					});
 				}
 				continue;
 			}
-			findings.push({ ...at, severity: 'error', message: `'${href}': missing page${link.text ? ` — link text "${link.text}"` : ''}` });
+			findings.push({
+				...at,
+				severity: 'error',
+				message: `'${href}': missing page${link.text ? ` — link text "${link.text}"` : ''}`
+			});
 		}
 		return findings;
 	};
@@ -160,7 +179,8 @@ export function links(opts: LinkOptions = {}): Check {
 		page: check_page,
 		async site(cx) {
 			const out: Finding[] = [];
-			for (const slug of await cx.outline.addresses(cx.ctx)) out.push(...(await check_page(slug, cx)));
+			for (const slug of await cx.outline.addresses(cx.ctx))
+				out.push(...(await check_page(slug, cx)));
 			return out;
 		}
 	};
@@ -169,7 +189,11 @@ export function links(opts: LinkOptions = {}): Check {
 // ── runners (used by ogygia: load throws on errors, site.check() returns data) ──
 
 /** Run every check's `page` pass for one slug. */
-export async function run_page_checks(checks: Check[], slug: string, cx: CheckContext): Promise<Finding[]> {
+export async function run_page_checks(
+	checks: Check[],
+	slug: string,
+	cx: CheckContext
+): Promise<Finding[]> {
 	const out: Finding[] = [];
 	for (const c of checks) if (c.page) out.push(...(await c.page(slug, cx)));
 	return out;
@@ -180,13 +204,20 @@ export async function run_site_checks(checks: Check[], cx: CheckContext): Promis
 	const out: Finding[] = [];
 	for (const c of checks) {
 		if (c.site) out.push(...(await c.site(cx)));
-		else if (c.page) for (const slug of await cx.outline.addresses(cx.ctx)) out.push(...(await c.page(slug, cx)));
+		else if (c.page)
+			for (const slug of await cx.outline.addresses(cx.ctx)) out.push(...(await c.page(slug, cx)));
 	}
 	return out;
 }
 
 /** Format a page's error findings into ONE thrown message — file-anchored, every finding named. */
-export function format_findings(slug: string, findings: Finding[], file: string | undefined): string {
-	const rows = findings.map((f) => `  - [${f.check}] ${f.message}${f.line !== undefined ? ` (line ~${f.line})` : ''}`);
+export function format_findings(
+	slug: string,
+	findings: Finding[],
+	file: string | undefined
+): string {
+	const rows = findings.map(
+		(f) => `  - [${f.check}] ${f.message}${f.line !== undefined ? ` (line ~${f.line})` : ''}`
+	);
 	return `[ogygia/content] check failure${findings.length === 1 ? '' : 's'} on '${slug}'${file ? ` (${file})` : ''}:\n${rows.join('\n')}`;
 }

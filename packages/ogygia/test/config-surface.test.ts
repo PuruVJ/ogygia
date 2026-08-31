@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ogygia } from '../src/vite/index.js';
-import { rewrite_loaders, extract_preset } from '../src/vite/loaders.js';
+import { rewrite_loaders, extract_preset } from '../src/compiler/content/loaders.js';
 import { islandBridge } from '../src/vite/island-bridge.js';
 
 const saved: Partial<typeof islandBridge> = {};
@@ -28,10 +28,14 @@ describe('legacy option renames — errors with the new spelling, never silent a
 		expect(() => ogygia({ visible: { margin: '200px' } } as never)).toThrow(/regions: \{ visible/);
 	});
 	it('rejects top-level presets', () => {
-		expect(() => ogygia({ presets: { a: { wake: 'load' } } } as never)).toThrow(/regions: \{ presets/);
+		expect(() => ogygia({ presets: { a: { wake: 'load' } } } as never)).toThrow(
+			/regions: \{ presets/
+		);
 	});
 	it('rejects continuity', () => {
-		expect(() => ogygia({ continuity: { forms: false } } as never)).toThrow(/router: \{ forms: false \}/);
+		expect(() => ogygia({ continuity: { forms: false } } as never)).toThrow(
+			/router: \{ forms: false \}/
+		);
 	});
 });
 

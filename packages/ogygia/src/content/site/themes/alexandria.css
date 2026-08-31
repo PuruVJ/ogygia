@@ -21,7 +21,8 @@
 		--og-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 		/* the editorial display face — system serifs, deliberately NOT overridable by the app's
 		 * body-font repoint (it targets --og-font/--og-mono only) */
-		--og-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
+		--og-display:
+			'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
 		--og-text-xs: 0.75rem;
 		--og-text-sm: 0.8125rem;
 		--og-text-base: 0.9375rem;
@@ -80,13 +81,22 @@
 		/* warm sepia shadows — lamplight, not fluorescent */
 		--og-shadow-sm: 0 1px 2px rgba(72, 52, 24, 0.06), 0 1px 1px rgba(72, 52, 24, 0.04);
 		--og-shadow-md: 0 4px 16px -4px rgba(72, 52, 24, 0.12), 0 2px 6px -3px rgba(72, 52, 24, 0.07);
-		--og-shadow-lg: 0 20px 48px -14px rgba(72, 52, 24, 0.2), 0 8px 18px -10px rgba(72, 52, 24, 0.11);
+		--og-shadow-lg:
+			0 20px 48px -14px rgba(72, 52, 24, 0.2), 0 8px 18px -10px rgba(72, 52, 24, 0.11);
 		--og-ring: 0 0 0 3px color-mix(in oklab, var(--og-accent) 30%, transparent);
 
 		/* the dawn wash — warm light entering from the top */
 		--og-aurora:
-			radial-gradient(70rem 40rem at 20% 0%, color-mix(in oklab, var(--og-glow-a) 4%, transparent), transparent 70%),
-			radial-gradient(54rem 32rem at 82% -4%, color-mix(in oklab, var(--og-glow-b) 3%, transparent), transparent 58%);
+			radial-gradient(
+				70rem 40rem at 20% 0%,
+				color-mix(in oklab, var(--og-glow-a) 4%, transparent),
+				transparent 70%
+			),
+			radial-gradient(
+				54rem 32rem at 82% -4%,
+				color-mix(in oklab, var(--og-glow-b) 3%, transparent),
+				transparent 58%
+			);
 		--og-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
 		--og-depth: radial-gradient(120% 95% at 50% 0%, transparent 55%, rgba(64, 44, 18, 0.06) 100%);
 		--og-code-bg: #f4efe5;
@@ -123,10 +133,18 @@
 			--og-shadow-lg: 0 24px 56px -14px rgba(0, 0, 0, 0.7), 0 8px 20px -10px rgba(0, 0, 0, 0.55);
 
 			--og-aurora:
-				radial-gradient(72rem 42rem at 20% 0%, color-mix(in oklab, var(--og-glow-a) 5%, transparent), transparent 70%),
-				radial-gradient(56rem 34rem at 82% -4%, color-mix(in oklab, var(--og-glow-b) 3%, transparent), transparent 56%);
-		--og-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
-		--og-depth: radial-gradient(120% 95% at 50% 0%, transparent 50%, rgba(0, 0, 0, 0.3) 100%);
+				radial-gradient(
+					72rem 42rem at 20% 0%,
+					color-mix(in oklab, var(--og-glow-a) 5%, transparent),
+					transparent 70%
+				),
+				radial-gradient(
+					56rem 34rem at 82% -4%,
+					color-mix(in oklab, var(--og-glow-b) 3%, transparent),
+					transparent 56%
+				);
+			--og-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+			--og-depth: radial-gradient(120% 95% at 50% 0%, transparent 50%, rgba(0, 0, 0, 0.3) 100%);
 			--og-code-bg: #100e0c;
 			--og-code-line: #2a241c;
 			--og-sheen: rgba(255, 240, 210, 0.05);
@@ -155,10 +173,19 @@
 		--og-line-soft: #efe9de;
 		--og-shadow-sm: 0 1px 2px rgba(72, 52, 24, 0.06), 0 1px 1px rgba(72, 52, 24, 0.04);
 		--og-shadow-md: 0 4px 16px -4px rgba(72, 52, 24, 0.12), 0 2px 6px -3px rgba(72, 52, 24, 0.07);
-		--og-shadow-lg: 0 20px 48px -14px rgba(72, 52, 24, 0.2), 0 8px 18px -10px rgba(72, 52, 24, 0.11);
+		--og-shadow-lg:
+			0 20px 48px -14px rgba(72, 52, 24, 0.2), 0 8px 18px -10px rgba(72, 52, 24, 0.11);
 		--og-aurora:
-			radial-gradient(70rem 40rem at 20% 0%, color-mix(in oklab, var(--og-glow-a) 4%, transparent), transparent 70%),
-			radial-gradient(54rem 32rem at 82% -4%, color-mix(in oklab, var(--og-glow-b) 3%, transparent), transparent 58%);
+			radial-gradient(
+				70rem 40rem at 20% 0%,
+				color-mix(in oklab, var(--og-glow-a) 4%, transparent),
+				transparent 70%
+			),
+			radial-gradient(
+				54rem 32rem at 82% -4%,
+				color-mix(in oklab, var(--og-glow-b) 3%, transparent),
+				transparent 58%
+			);
 		--og-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
 		--og-depth: radial-gradient(120% 95% at 50% 0%, transparent 55%, rgba(64, 44, 18, 0.06) 100%);
 		--og-code-bg: #f4efe5;
@@ -190,8 +217,16 @@
 		--og-shadow-md: 0 4px 18px -4px rgba(0, 0, 0, 0.55), 0 2px 6px -3px rgba(0, 0, 0, 0.45);
 		--og-shadow-lg: 0 24px 56px -14px rgba(0, 0, 0, 0.7), 0 8px 20px -10px rgba(0, 0, 0, 0.55);
 		--og-aurora:
-			radial-gradient(72rem 42rem at 20% 0%, color-mix(in oklab, var(--og-glow-a) 5%, transparent), transparent 70%),
-			radial-gradient(56rem 34rem at 82% -4%, color-mix(in oklab, var(--og-glow-b) 3%, transparent), transparent 56%);
+			radial-gradient(
+				72rem 42rem at 20% 0%,
+				color-mix(in oklab, var(--og-glow-a) 5%, transparent),
+				transparent 70%
+			),
+			radial-gradient(
+				56rem 34rem at 82% -4%,
+				color-mix(in oklab, var(--og-glow-b) 3%, transparent),
+				transparent 56%
+			);
 		--og-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
 		--og-depth: radial-gradient(120% 95% at 50% 0%, transparent 50%, rgba(0, 0, 0, 0.3) 100%);
 		--og-code-bg: #100e0c;
@@ -904,7 +939,13 @@
 		margin: 2.5rem 0;
 		border: 0;
 		height: 1px;
-		background: linear-gradient(90deg, transparent, var(--og-line) 20%, var(--og-line) 80%, transparent);
+		background: linear-gradient(
+			90deg,
+			transparent,
+			var(--og-line) 20%,
+			var(--og-line) 80%,
+			transparent
+		);
 	}
 	.og-body img {
 		max-width: 100%;
@@ -1256,7 +1297,16 @@
 	}
 
 	:is(.og-shell, .og-shell, [class*='og-search'], [class*='og-sw-'], .og-sheet)
-		:is(a, button, [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='option'], input, summary):focus-visible {
+		:is(
+			a,
+			button,
+			[role='menuitem'],
+			[role='menuitemradio'],
+			[role='tab'],
+			[role='option'],
+			input,
+			summary
+		):focus-visible {
 		outline: 2px solid var(--og-accent);
 		outline-offset: 2px;
 		border-radius: var(--og-radius-sm);

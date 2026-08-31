@@ -21,10 +21,14 @@ export default defineConfig({
 			'$app/paths': fileURLToPath(new URL('./test/_stubs/app-paths.ts', import.meta.url)),
 			'$app/environment': fileURLToPath(new URL('./test/_stubs/app-environment.ts', import.meta.url)),
 			'virtual:ogygia/runtime-url': fileURLToPath(new URL('./test/_stubs/virtual-runtime-url.ts', import.meta.url)),
+			'virtual:ogygia/router-config': fileURLToPath(new URL('./test/_stubs/virtual-router-config.ts', import.meta.url)),
+			'virtual:ogygia/profiler-config': fileURLToPath(new URL('./test/_stubs/virtual-profiler-config.ts', import.meta.url)),
 			'virtual:ogygia/dev-hmr-url': fileURLToPath(new URL('./test/_stubs/virtual-dev-hmr-url.ts', import.meta.url)),
 			'virtual:ogygia/island-deps': fileURLToPath(new URL('./test/_stubs/virtual-island-deps.ts', import.meta.url)),
+			'virtual:ogygia/kit-wire': fileURLToPath(new URL('./test/_stubs/virtual-kit-wire.ts', import.meta.url)),
 			'virtual:ogygia/region-endpoint': fileURLToPath(new URL('./test/_stubs/virtual-region-endpoint.ts', import.meta.url)),
-			'virtual:ogygia/request-event': fileURLToPath(new URL('./test/_stubs/virtual-request-event.ts', import.meta.url))
+			'virtual:ogygia/request-event': fileURLToPath(new URL('./test/_stubs/virtual-request-event.ts', import.meta.url)),
+			'virtual:ogygia/route-csr': fileURLToPath(new URL('./test/_stubs/virtual-route-csr.ts', import.meta.url))
 		}
 	},
 	test: {

@@ -1,0 +1,160 @@
+---
+title: The Boundary
+summary: Every island is a serialization boundary. import.meta.og.$ is the one mark that carries anything across it — functions included — into context or props. Stores cross automatically; refusals fail at your line, not in a serializer.
+related:
+  - data-state/state-context
+  - macros/wire
+  - regions/client-islands
+---
+
+Every island is its own hydration root, so anything that travels from a server-rendered host
+into an island — a prop, a context value — crosses a **serialization boundary**. Plain data
+crosses for free. Everything else needs a way to travel, and ogygia's rule for it is one
+sentence:
+
+> **Mark the boundary with `import.meta.og.$()`. Everything that crosses is either data, or
+> something that knows how to rebuild itself on the other side.**
+
+## `import.meta.og.$` — the one mark
+
+`og.$` wraps a value at the exact place it heads for a boundary. What it does depends on what
+you hand it:
+
+### A function — it crosses *alive*
+
+```svelte
+<script>
+	import { setContext } from 'ogygia';
+
+	const tax = 0.19; // a local — captured by VALUE
+
+	setContext('fmt', import.meta.og.$((n) => `€${(n * (1 + tax)).toFixed(2)}`));
+</script>
+```
+
+```svelte
+<!-- inside any island, plain svelte: -->
+<script>
+	import { getContext } from 'svelte';
+	const fmt = getContext('fmt'); // a REAL, callable function
+</script>
+<p>{fmt(100)}</p> <!-- €119.00 — synchronous, no eval in production -->
+```
+
+The compiler hoists the function, turns each captured local into a bound value that crosses
+as data, and the island rebinds it. The function itself is **never serialized** — its code
+ships as a build artifact, its captures ship like any prop. Captures follow prop law: they
+must serialize (a captured store crosses live and stays shared — see below).
+
+Two things are build errors, at your file:line:
+
+- capturing anything from a **server-only module** (`$env/static/private`, `$app/server`,
+  `*.server.ts`) — the value would ship into client HTML;
+- marking something that can never cross (a DOM node, a bare function inside an object) —
+  the error fires at the mark, not later inside a serializer.
+
+### Anything else — an explicit, checked crossing
+
+```svelte
+<Cart
+	items={import.meta.og.$(cartStore)}
+	onCheckout={import.meta.og.$((id) => `/checkout/${id}`)}
+/>
+```
+
+For a non-function value, `og.$` is a **boundary assertion**: the value is classified right
+there — a store passes (and will auto-wire), plain data passes, a live DOM node or an
+un-codec'd class instance **throws at that line** with the path inside the value that
+offended. The value itself is returned untouched, so there is no wrapper to unlearn.
+
+You never *need* `og.$` for values that cross on their own (see the table below) — but
+marking the boundary is the recommended style: the next reader sees exactly where the page
+splits, and mistakes surface at the mark instead of at serialize time.
+
+## What crosses, and how
+
+| You pass | How it travels | Needs a mark? |
+| --- | --- | --- |
+| plain data, `Map`/`Set`/`Date` | serialized (devalue) | no |
+| a **store** (`subscribe`-shaped) | value crosses; islands **reunite to ONE live instance** — `set` in island A repaints island B | no — automatic |
+| a **factory store** (custom methods) | value crosses; methods **rebuilt from the factory** on the other side | usually no — provable factories auto-brand; assert with `og.store` (below) otherwise |
+| a **class instance** | via its own codec: [`import.meta.og.wire`](/docs/macros/wire) | once, on the class |
+| a **function** | hoisted code + bound captures (`og.$`) | yes — `og.$` |
+| a **snippet** | freezes to HTML, or crosses live (`{#snippet}`) | no |
+| a component / UI | it's a [region](/docs/regions/held-regions) — a different noun on purpose | `region()` / `<Region>` |
+| a DOM node, a bare callback in an object, a secret | **refused**, with the path and a fix | — |
+
+## Stores: automatic, shared, live
+
+```svelte
+<script>
+	import { setContext } from 'ogygia';
+	import { writable } from 'svelte/store';
+	setContext('theme', writable('dark'));
+</script>
+```
+
+Every island that reads `getContext('theme')` gets **the same live store** — not a copy. The
+current value crosses at render time; identity is reunified client-side, so writes propagate
+between islands through plain Svelte reactivity. The same store provided under two keys stays
+one instance.
+
+### Factory stores
+
+A store with custom methods needs its **factory** on the other side (methods are code — they
+never serialize). Factories the compiler can prove are branded automatically:
+
+```ts
+// auto-branded: the body provably returns a store
+export const createCart = (seed = []) => {
+	const { subscribe, set, update } = writable(seed);
+	return { subscribe, set, update, add: (item) => update((x) => [...x, item]) };
+};
+```
+
+For a factory it can't prove (it returns a helper's result), assert it:
+
+```ts
+export const createCart = import.meta.og.store((seed = []) => makeStore(seed));
+```
+
+The factory's **first parameter is the seed** — the crossing value. If a branded store
+reaches an island whose bundle never loaded the factory, it degrades to a plain writable
+(value intact, methods absent) with a console warning naming the one-import fix — never a
+crash.
+
+Two store shapes deserve care: a **`derived`** crosses as a frozen seed (the derivation
+can't travel — re-derive client-side or share the sources), and store **values** follow prop
+law (a callback inside a store's value is still a bare function).
+
+## Keeping things home: `{ islands: false }`
+
+Not everything should cross. Context that only the server-rendered host reads — a bag of
+element refs, a host-only callback, a huge config object — stays native with one option:
+
+```js
+setContext('scrollRefs', refs, { islands: false });
+```
+
+Same-tree `getContext` works as always; nothing is serialized. In dev, ogygia warns when the
+island context payload grows past 32kB and names the heaviest keys — this option is usually
+the fix.
+
+## Policy and errors
+
+The boundary refuses secret-looking keys (`token`, `apiKey`, …) so credentials don't ride
+into client HTML. Tune it once, server-side:
+
+```ts
+// hooks.server.ts
+import { configure_boundary } from 'ogygia/internal';
+
+configure_boundary({
+	allow: ['tokenColor'],   // a false positive the sniff should let through
+	deny: ['sessionBlob']    // a semantic secret the sniff can't see
+});
+```
+
+Everything the boundary declines is **explained**: dropped context keys log the key, the
+dot-path to the offending leaf, and what to do instead. The design goal is that nothing
+crosses — or fails to cross — silently.

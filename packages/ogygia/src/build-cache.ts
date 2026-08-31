@@ -11,8 +11,11 @@
  * Everything is best-effort: any FS error disables the cache for the session rather than failing a
  * build — a cache must never be the reason a build breaks.
  */
-import fs from 'node:fs';
-import path from 'node:path';
+// fs/path come through the compiler HOST SEAM (not `node:*` directly) so this module — and the whole
+// content/markdown pipeline that rides it — loads in a BROWSER realm (the Observatory REPL) with no
+// node shims. The host defaults to Node, so the shipped Vite plugin is byte-identical + full-speed; a
+// browser installs a virtual host + calls `__set_build_cache_root(null)` to disable the on-disk cache.
+import { fs, path } from './compiler/host.js';
 
 // The shared root — module state, not part of any store's surface. Resolved lazily; before any
 // configure it falls back to `process.cwd()`.

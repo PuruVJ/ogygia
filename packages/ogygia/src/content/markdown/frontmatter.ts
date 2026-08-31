@@ -559,11 +559,11 @@ function parse_mapping(ctx: Ctx, indent: number): Record<string, unknown> {
 		if (kc === -1) break;
 
 		const key = parse_key(content.slice(0, kc));
-			// An empty key (a line that is just `:` or `: : :`) is malformed, not a valid mapping —
-			// surface it so callers reject broken frontmatter instead of silently keying on "".
-			if (key === '') {
-				throw new Error(`[ogygia/content] empty mapping key in line: ${JSON.stringify(line.trim())}`);
-			}
+		// An empty key (a line that is just `:` or `: : :`) is malformed, not a valid mapping —
+		// surface it so callers reject broken frontmatter instead of silently keying on "".
+		if (key === '') {
+			throw new Error(`[ogygia/content] empty mapping key in line: ${JSON.stringify(line.trim())}`);
+		}
 		const value_part = content.slice(kc + 1);
 		ctx.i++;
 		const clean = strip_comment(value_part).trim();
@@ -608,7 +608,6 @@ export function parse_yaml(source: string): unknown {
 	const result = parse_block(ctx, base);
 	return result === undefined ? {} : result;
 }
-
 
 const BOM = /^\uFEFF/;
 const LEADING_NEWLINE = /^\r?\n/;

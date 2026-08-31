@@ -1,6 +1,6 @@
 {
 	"name": "ogygia",
-	"version": "0.7.0",
+	"version": "0.8.0",
 	"type": "module",
 	"sideEffects": [
 		"**/*.css"
@@ -48,6 +48,25 @@
 			"types": "./dist/internal-server.d.ts",
 			"default": "./src/internal-server.ts"
 		},
+		"./internal/register": {
+			"svelte": "./src/internal-register.ts",
+			"types": "./dist/internal-register.d.ts",
+			"default": "./src/internal-register.ts"
+		},
+		"./internal/compiler-ids": {
+			"svelte": "./src/compiler/ids.ts",
+			"types": "./dist/compiler/ids.d.ts",
+			"default": "./src/compiler/ids.ts"
+		},
+		"./internal/region-core": {
+			"types": "./dist/region-core.d.ts",
+			"default": "./dist/region-core.js"
+		},
+		"./internal/reconcile": {
+			"svelte": "./src/internal-reconcile.ts",
+			"types": "./dist/internal-reconcile.d.ts",
+			"default": "./src/internal-reconcile.ts"
+		},
 		"./internal/compiler": {
 			"types": "./dist/compiler/index.d.ts",
 			"default": "./dist/compiler/index.js"
@@ -81,9 +100,25 @@
 			"types": "./dist/hooks.d.ts",
 			"default": "./src/hooks.ts"
 		},
-		"./profiler": {
-			"types": "./dist/profiler/index.d.ts",
-			"default": "./src/profiler/index.ts"
+		"./router": {
+			"types": "./dist/router/index.d.ts",
+			"default": "./src/router/index.ts"
+		},
+		"./router/client": {
+			"types": "./dist/router/client-api.d.ts",
+			"default": "./src/router/client-api.ts"
+		},
+		"./flag": {
+			"types": "./dist/flags.d.ts",
+			"default": "./src/flags.ts"
+		},
+		"./flag/openfeature": {
+			"types": "./dist/flags/openfeature.d.ts",
+			"default": "./src/flags/openfeature.ts"
+		},
+		"./devtools": {
+			"types": "./dist/devtools/index.d.ts",
+			"default": "./src/devtools/index.ts"
 		},
 		"./types": {
 			"types": "./ambient.d.ts"
@@ -93,6 +128,14 @@
 			"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
 			"svelte": "./src/content/site/components/DocsShell.svelte",
 			"default": "./src/content/site/components/DocsShell.svelte"
+		},
+		"./internal/compiler-browser": {
+			"types": "./dist/compiler/browser.d.ts",
+			"default": "./dist/compiler/browser.js"
+		},
+		"./internal/compiler-browser-full": {
+			"types": "./dist/compiler/browser-full.d.ts",
+			"default": "./dist/compiler/browser-full.js"
 		}
 	},
 	"bin": {
@@ -100,6 +143,7 @@
 	},
 	"files": [
 		"dist",
+		"ai",
 		"README.md",
 		"LICENSE",
 		"CHANGELOG.md",
@@ -109,22 +153,25 @@
 		"build": "tsdown",
 		"test": "vitest run",
 		"lint": "oxlint -c .oxlintrc.json src",
-		"check": "tsc --noEmit && vitest run && pnpm run lint",
+		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json && vitest run && pnpm run lint",
 		"prepublishOnly": "pnpm run build && pnpm run verify:package",
 		"verify:package": "node scripts/verify-package.mjs"
 	},
 	"dependencies": {
+		"@neodrag/svelte": "3.0.0-next.12",
 		"devalue": "^5.9.0",
 		"esm-env": "^1.2.2",
 		"estree-walker": "^3.0.3",
 		"magic-string": "^1.1.0",
-		"rolldown": "^1.0.0"
+		"rolldown": ">=1.0.0",
+		"tinyglobby": "^0.2.17"
 	},
 	"peerDependencies": {
 		"@orama/orama": "^3.0.0",
 		"@sveltejs/kit": ">=2.70.2 <3",
 		"bits-ui": "^2.0.0",
 		"mdsvex": "^0.12.0",
+		"playwright": "^1.40.0",
 		"shiki": "^3.0.0 || ^4.0.0",
 		"svelte": "^5.40.0",
 		"vite": "^7.0.0 || ^8.0.0"
@@ -137,6 +184,9 @@
 			"optional": true
 		},
 		"mdsvex": {
+			"optional": true
+		},
+		"playwright": {
 			"optional": true
 		},
 		"shiki": {
@@ -152,6 +202,7 @@
 		"mdsvex": "^0.12.8",
 		"oxlint": "^1.77.0",
 		"shiki": "^4.4.1",
+		"svelte-check": "^4.7.4",
 		"svelte2tsx": "^0.7.60",
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",
@@ -192,6 +243,26 @@
 				"svelte": "./dist/internal-server.js",
 				"default": "./dist/internal-server.js"
 			},
+			"./internal/register": {
+				"types": "./dist/internal-register.d.ts",
+				"svelte": "./dist/internal-register.js",
+				"default": "./dist/internal-register.js"
+			},
+			"./internal/compiler-ids": {
+				"types": "./dist/compiler/ids.d.ts",
+				"svelte": "./dist/compiler/ids.js",
+				"default": "./dist/compiler/ids.js"
+			},
+			"./internal/region-core": {
+				"types": "./dist/region-core.d.ts",
+				"svelte": "./dist/region-core.js",
+				"default": "./dist/region-core.js"
+			},
+			"./internal/reconcile": {
+				"types": "./dist/internal-reconcile.d.ts",
+				"svelte": "./dist/internal-reconcile.js",
+				"default": "./dist/internal-reconcile.js"
+			},
 			"./content": {
 				"types": "./dist/content/index.d.ts",
 				"svelte": "./dist/content/index.js",
@@ -216,9 +287,25 @@
 				"types": "./dist/hooks.d.ts",
 				"default": "./dist/hooks.js"
 			},
-			"./profiler": {
-				"types": "./dist/profiler/index.d.ts",
-				"default": "./dist/profiler/index.js"
+			"./router": {
+				"types": "./dist/router/index.d.ts",
+				"default": "./dist/router/index.js"
+			},
+			"./router/client": {
+				"types": "./dist/router/client-api.d.ts",
+				"default": "./dist/router/client-api.js"
+			},
+			"./flag": {
+				"types": "./dist/flags.d.ts",
+				"default": "./dist/flags.js"
+			},
+			"./flag/openfeature": {
+				"types": "./dist/flags/openfeature.d.ts",
+				"default": "./dist/flags/openfeature.js"
+			},
+			"./devtools": {
+				"types": "./dist/devtools/index.d.ts",
+				"default": "./dist/devtools/index.js"
 			},
 			"./internal/compiler": {
 				"types": "./dist/compiler/index.d.ts",
@@ -237,6 +324,14 @@
 				"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
 				"svelte": "./dist/content/site/components/DocsShell.svelte",
 				"default": "./dist/content/site/components/DocsShell.svelte"
+			},
+			"./internal/compiler-browser": {
+				"types": "./dist/compiler/browser.d.ts",
+				"default": "./dist/compiler/browser.js"
+			},
+			"./internal/compiler-browser-full": {
+				"types": "./dist/compiler/browser-full.d.ts",
+				"default": "./dist/compiler/browser-full.js"
 			}
 		}
 	}

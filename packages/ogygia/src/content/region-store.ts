@@ -19,7 +19,9 @@
  * rides the shared {@link BuildCache} (`node_modules/.ogygia/<namespace>/`), so build platforms that
  * cache `node_modules` keep every baked region across builds.
  */
-import crypto from 'node:crypto';
+// createHash via the compiler HOST SEAM (defaults to Node; a browser installs a JS sha impl) so the
+// content/markdown pipeline runs in the Observatory REPL with no node:crypto. Vite plugin unchanged.
+import { createHash } from '../compiler/host.js';
 import { BuildCache } from '../build-cache.js';
 
 /** A region in its serialized form — what crosses caches, wires, and builds. `html` is the whole
@@ -42,7 +44,7 @@ export class RegionStore {
 
 	/** A stable address from the parts that shape a region's content. */
 	key(parts: ReadonlyArray<string>): string {
-		const h = crypto.createHash('sha256');
+		const h = createHash('sha256');
 		h.update(this.#version);
 		for (const p of parts) {
 			h.update('\0');

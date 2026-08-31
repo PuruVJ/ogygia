@@ -2,7 +2,12 @@ import { describe, expect, it, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fence_key, fence_cache_get, fence_cache_set, __set_fence_cache_dir } from '../src/content/markdown/fence-cache.js';
+import {
+	fence_key,
+	fence_cache_get,
+	fence_cache_set,
+	__set_fence_cache_dir
+} from '../src/content/markdown/fence-cache.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'og-fence-'));
 __set_fence_cache_dir(tmp);

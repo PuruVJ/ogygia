@@ -13,7 +13,8 @@ const labels = (src: string) => [...run(src).matchAll(/<Tab label="([^"]*)">/g)]
 /** The `group` attribute of the first emitted `<TabGroup>`. */
 const group = (src: string) => run(src).match(/<TabGroup group="([^"]*)">/)?.[1];
 /** Every emitted group attribute, in order. */
-const groups = (src: string) => [...run(src).matchAll(/<TabGroup group="([^"]*)">/g)].map((m) => m[1]);
+const groups = (src: string) =>
+	[...run(src).matchAll(/<TabGroup group="([^"]*)">/g)].map((m) => m[1]);
 /** True when every ``` / ~~~ fence in the emitted code is balanced (even count of run-starts). */
 const fences_balanced = (code: string) => {
 	let bt = 0;
@@ -113,7 +114,9 @@ describe('code-group — grouping / sync', () => {
 		expect(group(src)).toBe('pm');
 	});
 	it('two blocks with the same labels get the same auto group', () => {
-		const block = [`::: code-group`, `${F}b [npm]`, 'x', F, `${F}b [pnpm]`, 'y', F, ':::'].join('\n');
+		const block = [`::: code-group`, `${F}b [npm]`, 'x', F, `${F}b [pnpm]`, 'y', F, ':::'].join(
+			'\n'
+		);
 		const src = `${block}\n\n${block}`;
 		const groups = [...run(src).matchAll(/<TabGroup group="([^"]*)">/g)].map((m) => m[1]);
 		expect(groups).toEqual(['cg:npm~pnpm', 'cg:npm~pnpm']);
@@ -154,7 +157,14 @@ describe('code-group — fence robustness', () => {
 });
 
 describe('tabs — basics', () => {
-	const src = ['::: tabs', '== macOS', 'brew install node', '== Linux', 'apt install node', ':::'].join('\n');
+	const src = [
+		'::: tabs',
+		'== macOS',
+		'brew install node',
+		'== Linux',
+		'apt install node',
+		':::'
+	].join('\n');
 	it('emits one Tab per == marker', () => {
 		expect(labels(src)).toEqual(['macOS', 'Linux']);
 	});
@@ -369,7 +379,9 @@ describe('CRLF line endings', () => {
 		expect(labels(src)).toEqual(['macOS', 'Linux']);
 	});
 	it('is fence-aware under CRLF (a fenced == is content)', () => {
-		const src = ['::: tabs', '== A', `${F}sh`, '== not a marker', F, '== B', 'x', ':::'].join('\r\n');
+		const src = ['::: tabs', '== A', `${F}sh`, '== not a marker', F, '== B', 'x', ':::'].join(
+			'\r\n'
+		);
 		expect(labels(src)).toEqual(['A', 'B']);
 		expect(run(src)).toContain('== not a marker');
 	});

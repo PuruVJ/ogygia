@@ -23,10 +23,8 @@ describe('fouc-css collector', () => {
 
 	test('walks child .svelte + plain css without emitting component JS', () => {
 		const files: Record<string, string> = {
-			'/app/src/lib/Hero.svelte':
-				`<script>\nimport Demo from './Demo.svelte';\nimport './x.css';\n</script>\n<Demo />\n`,
-			'/app/src/lib/Demo.svelte':
-				`<script></script>\n<style>.d { color: red }</style>\n<div class="d"></div>\n`,
+			'/app/src/lib/Hero.svelte': `<script>\nimport Demo from './Demo.svelte';\nimport './x.css';\n</script>\n<Demo />\n`,
+			'/app/src/lib/Demo.svelte': `<script></script>\n<style>.d { color: red }</style>\n<div class="d"></div>\n`,
 			'/app/src/lib/x.css': `.x { color: blue }`
 		};
 		const src = buildFoucCssModuleSource('/app/src/lib/Hero.svelte', {

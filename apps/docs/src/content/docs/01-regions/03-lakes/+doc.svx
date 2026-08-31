@@ -54,7 +54,7 @@ By default a lake is baked once and restored untouched. When its content should 
 
 `wake` is the revalidate schedule (`load` / `idle` / `visible` / media); `maxAge` and `onExpire` (set in a preset) tune staleness. `render: 'live'` serves the baked content immediately and refreshes it in the background through the signed island endpoint.
 
-> A lake restored inside persisted layout chrome is re-marked as settled after an SPA navigation, so an island nested in a lake can still wake. See [SPA router](/docs/app/router).
+> A lake restored inside persisted layout chrome is re-marked as settled after an SPA navigation, so an island nested in a lake can still wake. See [SPA router](/docs/app/spa-router).
 
 ## Do / don't
 

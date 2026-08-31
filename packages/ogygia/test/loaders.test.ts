@@ -9,13 +9,23 @@ import {
 	git_checkout_dir,
 	read_sha,
 	write_sha
-} from '../src/vite/git.js';
-import { find_loader_calls, rewrite_loaders, expand_braces, loader_patterns } from '../src/vite/loaders.js';
+} from '../src/compiler/content/git.js';
+import {
+	find_loader_calls,
+	rewrite_loaders,
+	expand_braces,
+	loader_patterns
+} from '../src/compiler/content/loaders.js';
 import { __set_build_cache_root } from '../src/build-cache.js';
 
 describe('parse_git_spec', () => {
 	it('owner/repo → default ref HEAD, empty sub', () => {
-		expect(parse_git_spec('sveltejs/svelte')).toEqual({ owner: 'sveltejs', repo: 'svelte', ref: 'HEAD', sub: '' });
+		expect(parse_git_spec('sveltejs/svelte')).toEqual({
+			owner: 'sveltejs',
+			repo: 'svelte',
+			ref: 'HEAD',
+			sub: ''
+		});
 	});
 	it('owner/repo:path → sub, default ref', () => {
 		expect(parse_git_spec('sveltejs/svelte:documentation/docs')).toEqual({
@@ -54,10 +64,14 @@ describe('git_glob_pattern', () => {
 		);
 	});
 	it('omits the sub segment when there is none', () => {
-		expect(git_glob_pattern(parse_git_spec('a/b'))).toBe('/node_modules/.ogygia/content/a-b/**/*.md');
+		expect(git_glob_pattern(parse_git_spec('a/b'))).toBe(
+			'/node_modules/.ogygia/content/a-b/**/*.md'
+		);
 	});
 	it('honors a custom extension', () => {
-		expect(git_glob_pattern(parse_git_spec('a/b:docs'), 'svx')).toBe('/node_modules/.ogygia/content/a-b/docs/**/*.svx');
+		expect(git_glob_pattern(parse_git_spec('a/b:docs'), 'svx')).toBe(
+			'/node_modules/.ogygia/content/a-b/docs/**/*.svx'
+		);
 	});
 });
 
@@ -84,17 +98,26 @@ describe('find_loader_calls', () => {
 			`c(import.meta.og.loader.json('./authors/*.json'))`,
 			`d(import.meta.og.loader.git('a/b'))`
 		].join('\n');
-		expect(find_loader_calls(src).map((c) => c.method)).toEqual(['markdown', 'folder', 'json', 'git']);
+		expect(find_loader_calls(src).map((c) => c.method)).toEqual([
+			'markdown',
+			'folder',
+			'json',
+			'git'
+		]);
 	});
 	it('captures verbatim options that contain regex literals with slashes in char classes', () => {
 		const src = `loader: import.meta.og.loader.git('sveltejs/svelte:documentation/docs', { page: /\\d+-[^/]*\\.md$/, meta: /index\\.md$/ })`;
 		const calls = find_loader_calls(src);
 		expect(calls).toHaveLength(1);
 		// the `)` inside the regex char class `[^/]` must NOT close the call early
-		expect(calls[0]!.args).toBe(`'sveltejs/svelte:documentation/docs', { page: /\\d+-[^/]*\\.md$/, meta: /index\\.md$/ }`);
+		expect(calls[0]!.args).toBe(
+			`'sveltejs/svelte:documentation/docs', { page: /\\d+-[^/]*\\.md$/, meta: /index\\.md$/ }`
+		);
 	});
 	it('is not fooled by a close-paren inside a string option', () => {
-		const calls = find_loader_calls(`x = import.meta.og.loader.git('a/b', { note: 'has ) paren' })`);
+		const calls = find_loader_calls(
+			`x = import.meta.og.loader.git('a/b', { note: 'has ) paren' })`
+		);
 		expect(calls[0]!.args).toBe(`'a/b', { note: 'has ) paren' }`);
 	});
 	it('AST path: ignores the marker inside a comment or string (only real call nodes count)', () => {
@@ -127,12 +150,16 @@ describe('rewrite_loaders', () => {
 			`export const src = import.meta.og.loader.git('sveltejs/svelte:documentation/docs', { page: /\\.md$/ });`
 		);
 		expect(code).toContain("import { folder as __og_folder } from 'ogygia/content';");
-		expect(code).toContain('__og_folder(import.meta.glob("/node_modules/.ogygia/content/sveltejs-svelte/documentation/docs/**/*.md", { eager: false }), { page: /\\.md$/ })');
+		expect(code).toContain(
+			'__og_folder(import.meta.glob("/node_modules/.ogygia/content/sveltejs-svelte/documentation/docs/**/*.md", { eager: false }), { page: /\\.md$/ })'
+		);
 		expect(specs).toHaveLength(1);
 		expect(specs[0]!.owner).toBe('sveltejs');
 	});
 	it('markdown → markdown(import.meta.glob(<literal glob>, { eager: false }))', () => {
-		const { code, specs } = rewrite_loaders(`export const d = import.meta.og.loader.markdown('./docs/**/*.svx');`);
+		const { code, specs } = rewrite_loaders(
+			`export const d = import.meta.og.loader.markdown('./docs/**/*.svx');`
+		);
 		expect(code).toContain("import { markdown as __og_markdown } from 'ogygia/content';");
 		expect(code).toContain(`__og_markdown(import.meta.glob("./docs/**/*.svx", { eager: false }))`);
 		expect(specs).toHaveLength(0);
@@ -141,7 +168,9 @@ describe('rewrite_loaders', () => {
 		const { code } = rewrite_loaders(
 			`const a = import.meta.og.loader.json('./x/*.json'); const b = import.meta.og.loader.folder('../c/**');`
 		);
-		expect(code).toContain("import { folder as __og_folder, json as __og_json } from 'ogygia/content';");
+		expect(code).toContain(
+			"import { folder as __og_folder, json as __og_json } from 'ogygia/content';"
+		);
 		expect(code).not.toContain('markdown as __og_markdown');
 	});
 	it('leaves a source with no loader calls untouched (no injected import)', () => {
@@ -204,7 +233,10 @@ describe('loader_patterns — the opinionated directory form', () => {
 	});
 
 	it('markdown(dir) derives *.svx + *.md; json(dir) derives *.json; trailing slash normalized', () => {
-		expect(loader_patterns('markdown', './posts/')).toEqual(['./posts/**/*.svx', './posts/**/*.md']);
+		expect(loader_patterns('markdown', './posts/')).toEqual([
+			'./posts/**/*.svx',
+			'./posts/**/*.md'
+		]);
 		expect(loader_patterns('json', './authors')).toEqual(['./authors/**/*.json']);
 	});
 
@@ -228,7 +260,9 @@ describe('loader_patterns — the opinionated directory form', () => {
 		const { code } = rewrite_loaders(
 			`export const docs = import.meta.og.loader.folder('../content/docs', { convention: numbered() });`
 		);
-		expect(code).toContain(`import.meta.glob(["../content/docs/**/+doc.svx","../content/docs/**/+meta.json"], { eager: false })`);
+		expect(code).toContain(
+			`import.meta.glob(["../content/docs/**/+doc.svx","../content/docs/**/+meta.json"], { eager: false })`
+		);
 		expect(code).toContain(`{ convention: numbered() }`);
 	});
 });
