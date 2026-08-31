@@ -16,6 +16,17 @@ On top of the islands, this release also ships a whole tooling layer: a drop-in 
 
 ### Added
 
+- **The ogygia MCP server grew to eleven tools.** `ogygia_flags` inventories every `flag()` /
+  `experiment()` call site with the build's own AST collector and diffs against the build
+  manifest to surface dead or renamed flags; `ogygia_fragment` probes a federation MFE origin —
+  signature posture (401 without a signature = verified; 200 = open) plus the `__catalog` widget
+  manifest with the typed-stub command.
+
+- **The bundled AI skill rewritten** against the whole current surface: server router
+  (routes-as-values, `$infer`, streamed pages), fragment federation, experiments & flags,
+  `ogygia.files` packaging, the full plugin-config/CLI/env reference, and the store-snapshot
+  boundary law.
+
 - **The Ref hub — one identity layer for everything that crosses a boundary.** Every value that leaves
   a component and reappears inside an island — a `[import.meta.og.wire]` class, a Svelte store, an
   `import.meta.og.$` function, a region snippet, a resumable `$derived`, a held region — is now a `Ref`
@@ -160,6 +171,26 @@ On top of the islands, this release also ships a whole tooling layer: a drop-in 
   whole-graph render pass is gone. `inject_csr_reset` argument handling was corrected along the way.
 
 ### Fixed
+
+- **PAGE-CSR invariant — a layout's csr world now derives from the pages it serves.** Declaring
+  `csr = false` only in a deep route (a catch-all `+page.ts`, say) used to leave the ROOT layout
+  reading as csr=true: its `wake:` chrome (header, boot islands) was stripped to plain components
+  while Kit shipped no client for those pages — dead chrome everywhere. Now every `+page.svelte`
+  leaf's Kit-effective csr (option-file chain, deepest declaration wins) is computed once and
+  every decision derives from it: a page uses its own entry; a layout folds the pages at/below it
+  (all true → strip, all false → island world, mixed → islands kept, degraded per document at
+  runtime); the runtime `csr_true_routes` set comes from the same map. Guarded by a
+  declaration × chain × fold unit matrix and a self-building real-app fixture e2e
+  (`internal/repro-deep-csr`). See PAGE-CSR in `internal/notes/INVARIANTS.md`.
+
+- **Store auto-subscriptions in crossing snippets hoist as value snapshots.** A `{#snippet}`
+  crossing into an island whose body read `$store` re-emitted the `$`-identifier verbatim into
+  the runes-mode island entry — the build died inside `virtual:ogygia/island/…` with
+  "illegal variable name". The compiler now captures the subscription's VALUE at the host (where
+  the sugar is legal), rewrites every body occurrence (props, template literals, member chains),
+  and always warns with per-site `file:line:col` traces that the crossed copy is a frozen
+  render-time snapshot. A host-declared store crossing as an OBJECT warns too (its functions
+  don't serialize); `$$props` in a crossing snippet is a hard build error.
 
 - **A csr=true page under a csr=false layout wiped the layout's chrome.** `wake:`-marked chrome (a
   header/footer) in a csr=false layout, rendered on a child page that opts into `csr = true`, painted

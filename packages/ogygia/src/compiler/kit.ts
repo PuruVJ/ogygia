@@ -85,16 +85,11 @@ const OPTION_FILES_PAGE = ['+page.js', '+page.ts', '+page.server.js', '+page.ser
 const OPTION_FILES_LAYOUT = ['+layout.js', '+layout.ts', '+layout.server.js', '+layout.server.ts'];
 
 /**
- * Kit-effective `csr === false` for a `+page.svelte` / `+layout.svelte` host (layout chain +
- * page options). `undefined` in sources means Kit's default (`true`).
- * @param hostFile abs path to a route `.svelte`
- * @param routesDir abs `src/routes`
+ * Own-chain Kit-effective `csr === false` for one route host — Kit's per-PAGE rule verbatim:
+ * walk the layout option files root → host dir (then the page's own option files), deepest
+ * declaration wins. `undefined` in sources means Kit's default (`true`).
  */
-export function routeCsrIsFalse(hostFile: string, routesDir: string) {
-	if (!hostFile.startsWith(routesDir)) return false;
-	const base = path.basename(hostFile);
-	if (base !== '+page.svelte' && base !== '+layout.svelte') return false;
-
+function own_chain_csr_false(hostFile: string, routesDir: string) {
 	let csr; // undefined => Kit default (true)
 	const dir = path.dirname(hostFile);
 	const rel = path.relative(routesDir, dir);
@@ -111,7 +106,7 @@ export function routeCsrIsFalse(hostFile: string, routesDir: string) {
 			if (v !== undefined) csr = v;
 		}
 	}
-	if (base === '+page.svelte') {
+	if (path.basename(hostFile) === '+page.svelte') {
 		for (const f of OPTION_FILES_PAGE) {
 			const v = read_csr(path.join(dir, f));
 			if (v !== undefined) csr = v;
@@ -120,17 +115,79 @@ export function routeCsrIsFalse(hostFile: string, routesDir: string) {
 	return csr === false;
 }
 
+// ── PAGE-CSR invariant (see internal/notes/INVARIANTS.md) ────────────────────────────────────
+// ONE source of truth for csr topology: every `+page.svelte` leaf's Kit-effective csr, computed
+// with Kit's own rule (option-file chain, deepest wins — layout criss-crossing included), walked
+// ONCE per routesDir and memoized. Everything else DERIVES from this map:
+//   · a PAGE host's world = its own entry;
+//   · a LAYOUT host has NO world of its own — it serves the pages at/below its dir
+//     (all csr=true → Kit hydrates everywhere, strip; all csr=false → island world;
+//      mixed → shared world: keep islands, the runtime degrades per document);
+//   · the runtime `csr_true_routes` set = the map's csr=true entries.
+// Judging a layout by its own partial chain is the bug this exists to prevent: `csr = false`
+// declared BELOW the root layout used to flip the root chrome into the strip path while Kit
+// shipped no client for those pages — dead Header/BootEffects.
+const _page_worlds = new Map<string, Map<string, boolean>>(); // routesDir → (pageDir → csrIsFalse)
+
+function page_worlds(routesDir: string): Map<string, boolean> {
+	let m = _page_worlds.get(routesDir);
+	if (!m) {
+		m = new Map();
+		for (const page of pageLeaves(routesDir))
+			m.set(path.dirname(page), own_chain_csr_false(page, routesDir));
+		_page_worlds.set(routesDir, m);
+	}
+	return m;
+}
+
+/** The worlds of the pages a layout serves (its dir + everything below). */
+function layout_page_worlds(layoutDir: string, routesDir: string) {
+	let any_false = false;
+	let any_true = false;
+	const prefix = layoutDir + path.sep;
+	for (const [dir, is_false] of page_worlds(routesDir)) {
+		if (dir !== layoutDir && !dir.startsWith(prefix)) continue;
+		if (is_false) any_false = true;
+		else any_true = true;
+	}
+	return { any_false, any_true };
+}
+
 /**
- * True when `hostFile` is a route host (`+page.svelte` / `+layout.svelte`) whose effective csr is
- * TRUE (Kit's default, or an explicit `csr = true` that beats a `false` up the chain). On such a host
- * ogygia steps aside — Kit hydrates the page itself. `false` for non-route files (shared components):
- * their csr depends on which page renders them, so they keep their islands.
+ * Kit-effective `csr === false` for a `+page.svelte` / `+layout.svelte` host. Pages use Kit's
+ * own-chain rule; a LAYOUT is csr=false exactly when EVERY page it serves is csr=false (a layout
+ * with no pages below — endpoint-only subtree — falls back to its own chain).
+ * @param hostFile abs path to a route `.svelte`
+ * @param routesDir abs `src/routes`
+ */
+export function routeCsrIsFalse(hostFile: string, routesDir: string) {
+	if (!hostFile.startsWith(routesDir)) return false;
+	const base = path.basename(hostFile);
+	if (base === '+page.svelte') return own_chain_csr_false(hostFile, routesDir);
+	if (base !== '+layout.svelte') return false;
+	const { any_false, any_true } = layout_page_worlds(path.dirname(hostFile), routesDir);
+	if (any_false && !any_true) return true; // every page it serves is csr=false
+	if (any_false || any_true) return false; // mixed (or pure-true) → not the false world
+	return own_chain_csr_false(hostFile, routesDir); // no pages below — own chain
+}
+
+/**
+ * True when `hostFile` is a route host whose islands ogygia must STRIP (Kit hydrates every page
+ * this host serves). Pages: Kit's own-chain rule (default true, or an explicit `csr = true` that
+ * beats a `false` up the chain). LAYOUTS: strippable ONLY when no page at/below them is
+ * csr=false — on a mixed layout both this and {@link routeCsrIsFalse} are false (shared world:
+ * islands kept, `documentIsCsrTrue` degrades them per document). `false` for non-route files
+ * (shared components): their csr depends on which page renders them, so they keep their islands.
  */
 export function routeCsrIsTrue(hostFile: string, routesDir: string) {
 	const base = path.basename(hostFile);
 	if (base !== '+page.svelte' && base !== '+layout.svelte') return false;
 	if (!hostFile.startsWith(routesDir)) return false;
-	return !routeCsrIsFalse(hostFile, routesDir);
+	if (base === '+page.svelte') return !own_chain_csr_false(hostFile, routesDir);
+	const { any_false, any_true } = layout_page_worlds(path.dirname(hostFile), routesDir);
+	if (any_false) return false; // some page below gets no Kit client — never strip its chrome
+	if (any_true) return true; // every page below is Kit-hydrated
+	return !own_chain_csr_false(hostFile, routesDir); // no pages below — own chain
 }
 
 function pageLeaves(routesDir: string) {
@@ -166,9 +223,10 @@ export function normalize_route_id(id: string): string {
  */
 export function csrTrueRouteIds(routesDir: string): string[] {
 	const ids = new Set<string>();
-	for (const page of pageLeaves(routesDir)) {
-		if (routeCsrIsFalse(page, routesDir)) continue; // Kit does NOT hydrate → keep islands
-		const rel = path.relative(routesDir, path.dirname(page));
+	// Derived from the SAME per-page map the compile-side world decisions use (PAGE-CSR invariant).
+	for (const [dir, is_false] of page_worlds(routesDir)) {
+		if (is_false) continue; // Kit does NOT hydrate → keep islands
+		const rel = path.relative(routesDir, dir);
 		const raw = '/' + (rel ? rel.split(path.sep).join('/') : '');
 		ids.add(normalize_route_id(raw));
 	}
@@ -195,9 +253,10 @@ export function hasAnyCsrTrueRoute(routesDir: string): boolean {
 	return v;
 }
 
-/** Drop the memoized csr-topology answer (a route/`csr`-export add/remove invalidates it). */
+/** Drop the memoized csr-topology answers (a route/`csr`-export add/remove invalidates them). */
 export function clear_route_csr_cache(): void {
 	_has_csr_true.clear();
+	_page_worlds.clear();
 }
 
 // The build-time keepalive route ogygia injects to defeat Kit's skip (see index.ts). It must be
