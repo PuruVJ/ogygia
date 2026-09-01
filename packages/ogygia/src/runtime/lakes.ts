@@ -1,6 +1,7 @@
 import { relocate_trailing_empty_comments } from './lake-anchors.js';
 import {
 	FROZEN_SELECTOR,
+	document_is_artifact,
 	is_frozen,
 	region_is_vacant,
 	region_max_age_ms,
@@ -84,7 +85,22 @@ export function restore(parent: Element, lifted: LiftedLake[]) {
 export function on_frozen_connect(el: HTMLElement, arm: LakeArm): boolean {
 	if (!is_frozen(el)) return false;
 	const id = el.getAttribute('entry') || '';
-	if (!runtime_session.initialized_lakes.has(id)) return true;
+	if (!runtime_session.initialized_lakes.has(id)) {
+		// FIRST mount. On a normal document the SSR DOM is fresh — nothing to do. On a document
+		// SERVED FROM THE ARTIFACT STORE it is a cached render by definition, so an swr lake
+		// treats this exactly like a stale remount: paint what's there, then revalidate on its
+		// schedule — a fresh SERVER render carrying the visitor's cookies. This is how a stored
+		// page's `render: 'live'` regions self-freshen (internal/notes/artifact.md).
+		if (region_remount(el) === 'swr' && el.getAttribute('endpoint') && document_is_artifact()) {
+			const when = el.getAttribute('when') || 'load';
+			const fire = () => arm.fetch_revalidate();
+			if (when === 'idle') arm.idle(fire);
+			else if (when === 'visible') arm.visible(fire);
+			else if (when === 'load') fire();
+			else arm.media(when, fire);
+		}
+		return true;
+	}
 	if (!region_is_vacant(el)) return true;
 	const policy = region_remount(el);
 	switch (policy) {

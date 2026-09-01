@@ -371,6 +371,17 @@ counters, store contents, purge logs):
   csr=true stores THE SAME (csr-agnostic, delta 5 — Kit hydrates the stored copy client-side)
 - **stampede**: 50 concurrent cold requests → render count MUST be 1 (this test DEFINES the
   single-flight requirement)
+- **live self-freshening (S13, SHIPPED mid-demo)**: the "complex cookie-reading Header, SSR'd,
+  no deferred fallback" ask — `render: 'live'` header baked into the stored bytes, hosted by a
+  small ISLAND (a live lake needs an island host; at page top level outside any island it bakes
+  and never revalidates — future dev-warn). Served-from-store documents carry
+  `<meta name="ogygia-artifact">` (stamped at serve time on hit/join, never on the fresh
+  `stored` response) and swr lakes now revalidate on FIRST mount there (runtime/lakes.ts:
+  a stored copy IS a cached mount) — fresh SERVER render with the visitor's cookies, swapped
+  in. Anonymous mints the canonical (the vary law carries it: the header's cookie read returns
+  the default during capture). Slow-network caveat: first paint can show the canonical for a
+  beat; the zero-flash-per-visitor upgrade is SERVE-TIME STITCHING (render the hole server-side
+  on a hit and splice into the stored bytes) — designed-not-built, next capability if needed.
 - **og.source precision (S12)**: three pages across two locales embed one shared doc through a
   declared source; a doc publish evicts exactly the three consumers (origin + edge url purges
   from the reverse index's returned keys) — including the en page a prefix nuke could never

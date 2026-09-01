@@ -69,6 +69,15 @@ export function region_is_vacant(el: ParentNode): boolean {
 	return true;
 }
 
+/** True when this document was SERVED FROM the artifact store (the handle stamps hit/join
+ *  copies with a head meta). A stored copy is a cached render by definition — swr lakes read
+ *  this to revalidate on FIRST mount, not only on remounts. */
+export function document_is_artifact(): boolean {
+	return (
+		typeof document !== 'undefined' && !!document.querySelector('meta[name="ogygia-artifact"]')
+	);
+}
+
 /**
  * True when the browser's HTML parser tore this placed island's SSR content OUT of the region —
  * the invalid-nesting hoist.

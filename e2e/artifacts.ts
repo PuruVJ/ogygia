@@ -31,6 +31,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const KIT_BOOT_RE = /__sveltekit_\w+/;
 const AMP_RE = /&amp;/g; // attr-escaped HTML — normalize before URL-shaped regexes
 const HOLE_ENDPOINT_RE = /__ogygia__\?id=[^"&]+&props=[^"&]+&exp=(\d+)/;
+// Served-from-store copies carry the doc marker; the ONE capture response doesn't (by design —
+// live regions read it to self-freshen). Strip before byte-identity comparisons.
+const DOC_MARKER_RE = /<meta name="ogygia-artifact"[^>]*>/;
 
 const renders = async (): Promise<Record<string, number>> =>
 	(await (await fetch(origin + '/api/state')).json()).renders ?? {};
@@ -209,7 +212,14 @@ try {
 	);
 	check('S9: all 50 answered 200', volley.every((r) => r.status === 200));
 	const bodies = await Promise.all(volley.map((r) => r.text()));
-	check('S9: all identical bytes', new Set(bodies).size === 1);
+	check(
+		'S9: all identical bytes (modulo the doc marker joins carry)',
+		new Set(bodies.map((b) => b.replace(DOC_MARKER_RE, ''))).size === 1
+	);
+	check(
+		'S9: exactly ONE capture response, the rest served copies',
+		volley.filter((r) => artifact_via(r) === 'stored').length === 1
+	);
 	check('S9: ONE render for 50 concurrent colds', (await renders())['/fr/fr/c/stampede'] === 1, String((await renders())['/fr/fr/c/stampede']));
 
 	// ── S10: csr=true page stores the same (csr-agnostic) ────────────────────────────────────
@@ -275,6 +285,46 @@ try {
 	// canonical never did — its artifact must survive the doc publish untouched.
 	const bystander = await fetch(origin + '/fr/fr/consent');
 	check('S12: a non-consumer page was untouched', artifact_via(bystander) === 'hit');
+
+	// ── S13: render:'live' inside a stored page — the self-freshening header ─────────────────
+	// The shell stores; the header is a live lake BAKED into the bytes (no fallback flash),
+	// hosted by a small island. Served-from-store documents carry the doc marker, so the lake
+	// revalidates on FIRST mount: a fresh SERVER render carrying the visitor's cookies, swapped
+	// in. Canonical for anonymous, personal for the visitor — on a page that never re-renders.
+	const lh1 = await fetch(origin + '/fr/fr/live-header');
+	check('S13: shell stored', artifact_via(lh1) === 'stored');
+	check('S13: header baked as canonical (guest) in the first bytes', (await lh1.text()).includes('Hello, guest'));
+	const lh2 = await fetch(origin + '/fr/fr/live-header');
+	const lh2_html = await lh2.text();
+	check(
+		'S13: second serve is the stored copy + carries the doc marker',
+		artifact_via(lh2) === 'hit' && lh2_html.includes('name="ogygia-artifact"')
+	);
+	{
+		const browser = await chromium.launch();
+		try {
+			const bctx = await browser.newContext();
+			await bctx.addCookies([{ name: 'user', value: 'Puru', url: origin }]);
+			const bpage = await bctx.newPage();
+			await bpage.goto(origin + '/fr/fr/live-header', { waitUntil: 'domcontentloaded' });
+			await bpage
+				.waitForFunction(
+					() => document.querySelector('[data-hello]')?.textContent?.includes('Puru'),
+					null,
+					{ timeout: 10000 }
+				)
+				.catch(() => {});
+			const hello = (await bpage.locator('[data-hello]').textContent())?.trim();
+			check(
+				'S13 browser: header self-freshened to the VISITOR (cookies, on a stored page)',
+				hello === 'Hello, Puru',
+				hello ?? ''
+			);
+			check('S13 browser: shell STILL rendered once', (await renders())['/fr/fr/live-header'] === 1);
+		} finally {
+			await browser.close();
+		}
+	}
 } finally {
 	srv.kill();
 	await akamai.close();

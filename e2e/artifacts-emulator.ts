@@ -204,9 +204,14 @@ export function start_edge_emulator(options: {
 			!cc.includes('no-store') &&
 			!headers['set-cookie'];
 		if (storable) {
+			// Strip the origin's per-request debug header from the STORED copy: it describes the
+			// fetch that filled this cache, and replaying it verbatim reads as "the origin stored
+			// again" on every edge hit. The layer's own `x-edge-<name>: hit` stamp is the truth.
+			const stored_headers = { ...headers };
+			delete stored_headers['x-ogygia-artifact'];
 			cache.set(key, {
 				status: upstream_res.status,
-				headers,
+				headers: stored_headers,
 				body,
 				tags: (headers['edge-cache-tag'] ?? '')
 					.split(',')

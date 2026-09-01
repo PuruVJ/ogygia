@@ -296,6 +296,11 @@ function emit_ogygia_script(subtype: string, escaped_payload: string, marker = '
  *  verified against @sveltejs/kit 2.70 (render.js: `blocks.push('const deferred = new Map();')`). */
 const KIT_DEFERRED_BOOT_RE = /const deferred = new Map\(\);/;
 
+/** Stamped into SERVED-FROM-STORE documents (never the fresh `stored` response): the runtime
+ *  reads it so `render: 'live'` lakes treat first mount as a STALE mount and revalidate —
+ *  the stored copy is by definition a cached render, exactly what remount:'swr' exists for. */
+const ARTIFACT_DOC_META = '<meta name="ogygia-artifact" content="hit">';
+
 /** Rebuild a Response from a stored artifact. `via` rides a debug header the harness asserts on. */
 function artifact_response(entry: ArtifactEntry, via: 'hit' | 'join' | 'stored'): Response {
 	if (entry.kind === 'redirect') {
@@ -304,7 +309,11 @@ function artifact_response(entry: ArtifactEntry, via: 'hit' | 'join' | 'stored')
 			headers: { location: entry.location, 'x-ogygia-artifact': via }
 		});
 	}
-	return new Response(entry.html, {
+	// Served-from-store copies carry the doc marker so live regions self-freshen (`stored` = the
+	// render that JUST happened — fresh by definition, no marker).
+	const html =
+		via === 'stored' ? entry.html : entry.html.replace('</head>', ARTIFACT_DOC_META + '</head>');
+	return new Response(html, {
 		status: 200,
 		headers: { ...entry.headers, 'x-ogygia-artifact': via }
 	});

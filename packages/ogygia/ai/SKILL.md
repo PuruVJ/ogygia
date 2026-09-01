@@ -289,6 +289,7 @@ CLI: `npx ogygia init` · `site init` · `keys [name]` (Ed25519 pair to stdout, 
 - Stores: `memoryStore` (default) · `valkey(client)` · `upstash({ url, token })` · `cloudflareKv(binding)`. Edges: `akamai(cfg)` · `cloudfront(cfg)` · `cloudflare(cfg)`. Fan-out is allSettled inside ogygia — one edge down never fails a publish or a request.
 - The vary law is the cookie-less CDN key, formalized: DEFAULT-valued reads still store (that render IS the canonical), and once minted everyone gets the canonical copy. Truly per-visitor content belongs in a deferred hole; A/B'd pages auto-disqualify on any flag read.
 - Eligible responses are stamped `cache-control: public, s-maxage=<ttl>` plus each edge's tags (Akamai/Cloudflare prefix tags), so CDNs follow proven per-page headers instead of blanket rules. csr=true pages store the same — Kit hydrates the stored copy.
+- **Self-freshening header on a stored page** (SSR'd, no deferred fallback): mark the component `with { render: 'live', wake: 'load' }` INSIDE a small island host — its HTML bakes into the stored bytes, and on served-from-store documents (the handle stamps a doc marker) it revalidates on first mount: a fresh server render with the visitor's cookies, swapped in. Anonymous traffic mints the canonical (default-valued reads store). A live region at page top level OUTSIDE any island bakes once and never revalidates — always give it an island host.
 
 ## How it works underneath (why the rules are what they are)
 
