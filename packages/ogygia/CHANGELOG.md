@@ -220,6 +220,16 @@ On top of the islands, this release also ships a whole tooling layer: a drop-in 
   declaration × chain × fold unit matrix and a self-building real-app fixture e2e
   (`internal/repro-deep-csr`). See PAGE-CSR in `internal/notes/INVARIANTS.md`.
 
+- **Dev: toggling a `csr` export refreshes the server's route-csr set.** The route watcher
+  cleared the compile-side memos but never invalidated `virtual:ogygia/route-csr` in the dev SSR
+  module graph, so `documentIsCsrTrue()`'s server leg kept deciding island-vs-inline from a
+  FROZEN set while Kit flipped immediately — `<ogygia-region>` shells on a Kit-booted page with
+  the runtime withheld (dead layout chrome), the exact desync the function's contract rules out.
+  Recreated on pre-fix code and locked by `e2e/dev-csr-toggle.ts` (boots a real dev server,
+  toggles the export, asserts both directions refresh); prod builds were never affected. The
+  consumer-reported route shape — a csr=true leaf at a `(group)` + `[matcher]` dynamic path under
+  csr=false chrome — is additionally pinned in `e2e/csr-chrome.ts`.
+
 - **Store auto-subscriptions in crossing snippets hoist as value snapshots.** A `{#snippet}`
   crossing into an island whose body read `$store` re-emitted the `$`-identifier verbatim into
   the runes-mode island entry — the build died inside `virtual:ogygia/island/…` with

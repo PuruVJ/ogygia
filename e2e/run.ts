@@ -72,6 +72,7 @@ const CHECKS: Array<[file: string, needsServer: boolean, note: string]> = [
 	['stream-page.ts', true, 'streamed pages (yield regions): flush-before-slow-yield timing, template chunks, late island wakes on adoption, SPA-swap twin'],
 	['csr-mixed-tree.ts', true, 'REGRESSION: csr=false subtree under csr=true ancestor layout — reset marker keeps islands islanding'],
 	['deep-csr.ts', false, 'PAGE-CSR invariant: csr=false ONLY in a deep catch-all — root-layout chrome still islands; mixed world degrades on the csr=true page (self-building fixture)'],
+	['dev-csr-toggle.ts', false, 'PAGE-CSR dev leg: a csr-export toggle refreshes virtual:ogygia/route-csr (stale set = island shells + Kit boot + no runtime = dead chrome)'],
 	['page-data.ts', true, '$page.data reaches islands + load promises STREAM in (marker seed, resolve-per-settle, Kit tail drained)'],
 	['page-data-stress.ts', true, 'ADVERSARIAL streaming: rejection/:catch, nested-promise recursion, 12 staggered, non-navigate settle no-crash'],
 	['as-region.ts', true, 'import.meta.og.asRegion: barrel/named-import islands SSR+hydrate; unused barrel exports tree-shaken'],

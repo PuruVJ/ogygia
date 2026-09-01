@@ -75,7 +75,7 @@ import { Compiler } from '../compiler/driver.js';
 import { CompileCtx, type PackageScan } from '../compiler/ctx.js';
 import { discover_package_files } from './package-files.js';
 import { flags_manifest } from '../compiler/flags.js';
-import { V_KIT_WIRE, V_ROUTER_CSS } from '../compiler/ids.js';
+import { V_KIT_WIRE, V_ROUTER_CSS, V_ROUTE_CSR, RESOLVED } from '../compiler/ids.js';
 import {
 	PKG_ROOT,
 	PROFILER_UI_DIR,
@@ -694,9 +694,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 			watchChange(id, change) {
 				// A route add/remove/rename or a `csr` export flip changes the csr topology → drop the
-				// memoized "any csr=true route?" answer that gates layout-wrapper linking (dev only).
-				if (is_dev && /[\\/]\+(page|layout)(\.server)?\.(svelte|js|ts)$/.test(id))
+				// memoized answers AND re-run the baked `virtual:ogygia/route-csr` module. The second
+				// half is load-bearing: context.ts imports `csr_true_routes` through the SSR module
+				// graph, so without invalidation the SERVER leg keeps deciding island-vs-inline from a
+				// STALE set while Kit flips immediately — `<ogygia-region>` shells on a Kit-booted page
+				// with the runtime withheld = dead chrome (hit at a consumer after toggling `csr`).
+				if (is_dev && /[\\/]\+(page|layout)(\.server)?\.(svelte|js|ts)$/.test(id)) {
 					clear_route_csr_cache();
+					if (vite_server) invalidate_module_id(vite_server, RESOLVED(V_ROUTE_CSR));
+				}
 				// Unlink often skips handleHotUpdate; drop islands that still import the deleted file.
 				if (!is_dev || change.event !== 'delete' || !vite_server) return;
 				if (!invalidate_islands_for_file(id, { deleted: true, server: vite_server })) return;

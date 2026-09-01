@@ -14,6 +14,11 @@ function check(name: string, cond: boolean, extra = '') {
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// hoisted probes for the deep-dynamic block
+const REGION_RE = /<ogygia-region[\s/>]/;
+const HEADER_RE = /data-chrome-header/;
+const RUNTIME_RE = /data-ogygia-runtime/;
+
 const browser = await chromium.launch();
 try {
 	// ── the csr=true page under the csr=false chrome layout ──────────────────────
@@ -38,6 +43,30 @@ try {
 		await hbtn.click();
 		check('csr=true: chrome island interactive via Kit hydration', (await hbtn.textContent())!.includes('h:2'));
 		check('csr=true: no page errors', errs.length === 0, errs.slice(0, 2).join('; '));
+		await page.close();
+	}
+
+	// ── consumer-reported shape: csr=true at a (group) + [matcher] DYNAMIC leaf ──
+	// The server leg matches Kit's runtime route.id (groups stripped, matcher segments verbatim)
+	// against the filesystem-derived set — a dynamic deeply-nested route must degrade like a
+	// static one, or islands ship with Kit's bootstrap and no runtime (dead chrome).
+	{
+		const page = await browser.newPage();
+		const errs: string[] = [];
+		page.on('pageerror', (e) => errs.push(e.message));
+		const html = await (await fetch(base + '/csr-chrome/deep/anything/')).text();
+		check('deep dynamic csr=true: SSR has NO <ogygia-region>', !REGION_RE.test(html));
+		check('deep dynamic csr=true: chrome rendered inline', HEADER_RE.test(html));
+		check('deep dynamic csr=true: NO ogygia runtime shipped', !RUNTIME_RE.test(html));
+
+		await page.goto(base + '/csr-chrome/deep/anything/', { waitUntil: 'networkidle' });
+		await sleep(500);
+		check('deep dynamic: ZERO ogygia-region after hydration', (await page.locator('ogygia-region').count()) === 0);
+		check('deep dynamic: header survived hydration', (await page.locator('[data-chrome-header]').count()) === 1);
+		const hbtn = page.locator('[data-chrome-header] button');
+		await hbtn.click();
+		check('deep dynamic: chrome interactive via Kit hydration', (await hbtn.textContent())!.includes('h:1'));
+		check('deep dynamic: no page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 		await page.close();
 	}
 
