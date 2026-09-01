@@ -12,6 +12,7 @@ import { path } from '../host.js';
 const performance = globalThis.performance;
 import { rewrite_wire } from './wire.js';
 import { rewrite_dollar } from './dollar.js';
+import { rewrite_source } from './source.js';
 import { rewrite_store, auto_brand_stores } from './store.js';
 import { rewrite_code } from './code.js';
 // `bake` is imported LAZILY (only inside the marker guard below) — its two dynamic imports
@@ -74,6 +75,18 @@ export async function run_module_macros(
 			out = res.code;
 			touched = true;
 			for (const h of res.hoists) ctx.dollarHoists.set(h.tag, h.factory_src);
+		}
+	}
+
+	// `import.meta.og.source(fn)` — declared data sources for the artifacts reverse index:
+	// stamps `file#export`, rewrites to `__og_source('id', fn)` + injects the runtime wrapper.
+	// AST-precise, strict-position (macros/source.ts); a no-op unless the marker is present.
+	if (out.includes('import.meta.og.source')) {
+		const rel_source = path.relative(ctx.root, id.split('?')[0]).split(path.sep).join('/');
+		const rewritten = rewrite_source(out, id, rel_source, CONSTRUCT_MARKUP_EXTS);
+		if (rewritten !== out) {
+			out = rewritten;
+			touched = true;
 		}
 	}
 

@@ -241,7 +241,7 @@ const cms = client('https://cms.internal', { sign: { privateKey: env.SHELL_SIGNI
 
 ## Macros (`import.meta.og.*`)
 
-Compile constructs — rewritten by the Vite plugin, no runtime object exists. Family: `loader.*`, `code`, `md`, `regions`, `wire`, `bake`, `asRegion`, `$`. Shared laws: **literal arguments** (a `${…}` interpolation is a build error), AST-detected, loud `[ogygia]` build errors, zero runtime cost.
+Compile constructs — rewritten by the Vite plugin, no runtime object exists. Family: `loader.*`, `code`, `md`, `regions`, `wire`, `bake`, `asRegion`, `$`, `source`. Shared laws: **literal arguments** (a `${…}` interpolation is a build error), AST-detected, loud `[ogygia]` build errors, zero runtime cost.
 - `bake(fn)` runs `fn` at build (self-contained: may use module imports, not other locals; no `$app/*`; result devalue-serializable) and inlines the answer — imports that only fed it are dropped from the output.
 - `asRegion(Comp, 'load')` marks a barrel/named import as a region where import attributes can't reach (re-exports, named exports).
 - `$(fn)` brands a function so a REF can cross context into an island and rebind on the far side (bound captures).
@@ -278,6 +278,17 @@ A dependency ships islands, marked components, or whole route tables by declarin
 Env: `OGYGIA_SECRET` (stable MACs + island-id salt across deploys; required for PPR; prod rejects short secrets) · `ORIGIN` (Kit CSRF — POSTs 403 without it) · `OGYGIA_PROFILER_SECRET` (profiler UI auth in prod) · `OGYGIA_DEVTOOLS=1` (devtools-enabled run, needed by `ogygia_debug`) · federation keys are app-chosen names from `npx ogygia keys` (passed explicitly, never auto-read).
 
 CLI: `npx ogygia init` · `site init` · `keys [name]` (Ed25519 pair to stdout, never a file) · `fragments <origin> [--out f|--check f]` (typed widget stubs; `--check` exits 1 on drift) · `ai` (installs this skill + MCP into `.claude/`) · `mcp` (stdio server).
+
+## Artifacts (render-on-write pages)
+
+`ogygia({ artifacts: true })` turns pages into build artifacts: a GET page whose render observed NO personalization (non-default cookie/header/locals/flag reads, cookie writes, set-cookie, non-200, streamed loads, query strings — each named in a dev note) is stored WHOLE (html + headers; permanent redirects too) and served as bytes until invalidated — Kit, loads, and Svelte never run on a hit. Stampedes single-flight (N concurrent colds = ONE render). Holes stay live: `render: 'deferred'` regions inside a stored shell fetch fresh per visitor (their capabilities mint prerender-grade; keep `OGYGIA_SECRET` stable).
+
+- Vite config is the switch + policy ONLY: `artifacts: true | { ttl }` (TTL backstop, ≤24h). Live objects go in hooks.server.ts: `artifacts.configure({ store, edge })` from `'ogygia/artifacts'`; no configure() = in-process LRU (drop-in survives).
+- Invalidation: `artifacts.invalidate('/fr/fr/solar/')` (exact URL — the CMS-webhook grammar), `artifacts.invalidateWhere({ prefix: '/fr/fr/' })` (subtree = locale/section nuke), `artifacts.invalidate(fn, [args])` (declared sources).
+- Declared sources (the reverse index): `export const loadDoc = import.meta.og.source(async (…) => …)` — top-level `export const` only (macro laws). Every page whose render calls it files a receipt; `invalidate(loadDoc, [args])` evicts exactly the consuming pages, at origin AND every edge. `{ key: (…args) => string }` canonicalizes exotic args.
+- Stores: `memoryStore` (default) · `valkey(client)` · `upstash({ url, token })` · `cloudflareKv(binding)`. Edges: `akamai(cfg)` · `cloudfront(cfg)` · `cloudflare(cfg)`. Fan-out is allSettled inside ogygia — one edge down never fails a publish or a request.
+- The vary law is the cookie-less CDN key, formalized: DEFAULT-valued reads still store (that render IS the canonical), and once minted everyone gets the canonical copy. Truly per-visitor content belongs in a deferred hole; A/B'd pages auto-disqualify on any flag read.
+- Eligible responses are stamped `cache-control: public, s-maxage=<ttl>` plus each edge's tags (Akamai/Cloudflare prefix tags), so CDNs follow proven per-page headers instead of blanket rules. csr=true pages store the same — Kit hydrates the stored copy.
 
 ## How it works underneath (why the rules are what they are)
 

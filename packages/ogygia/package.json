@@ -112,6 +112,14 @@
 			"types": "./dist/flags.d.ts",
 			"default": "./src/flags.ts"
 		},
+		"./artifacts": {
+			"types": "./dist/artifacts/index.d.ts",
+			"default": "./src/artifacts/index.ts"
+		},
+		"./artifacts/source": {
+			"types": "./dist/artifacts/source-runtime.d.ts",
+			"default": "./src/artifacts/source-runtime.ts"
+		},
 		"./flag/openfeature": {
 			"types": "./dist/flags/openfeature.d.ts",
 			"default": "./src/flags/openfeature.ts"
@@ -298,6 +306,14 @@
 			"./flag": {
 				"types": "./dist/flags.d.ts",
 				"default": "./dist/flags.js"
+			},
+			"./artifacts": {
+				"types": "./dist/artifacts/index.d.ts",
+				"default": "./dist/artifacts/index.js"
+			},
+			"./artifacts/source": {
+				"types": "./dist/artifacts/source-runtime.d.ts",
+				"default": "./dist/artifacts/source-runtime.js"
 			},
 			"./flag/openfeature": {
 				"types": "./dist/flags/openfeature.d.ts",

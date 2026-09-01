@@ -1,4 +1,13 @@
-# materialize — render-on-write pages (design draft)
+# artifacts — pages as build artifacts (design draft)
+
+> **NAMING: SETTLED — `artifacts` (user pick, 2026-09-01).** Pages as build artifacts: an output
+> built from inputs, stored, rebuilt only when an input changes, served from a store — the concept
+> every dev already holds from CI/build systems, and it unifies v1 with the compiler ladder (L3
+> render-by-hash IS content-addressed artifacts, Turborepo/Bazel theory). Request-time SSR is the
+> JIT; this is the AOT lane. Rejection trail, for the record: *materialize* (confusing noun),
+> *edition/shelf/pin/once* (too non-technical), *derived/projection/memo* (don't describe the
+> mechanism), *render\** (「render」implies client rendering; unit must be page/doc-explicit),
+> *snapshot* (Kit page export collision), *cache* (wrong mental model, vetoed early).
 
 > STATUS: design, not built. Grounded against se-web-platform (bcms) — see §Grounding.
 > One sentence: **prerendering's cost model, with data mutations instead of deploys as the
@@ -8,28 +17,28 @@
 
 > **What the store holds — say it twice: THE RENDER.** The full rendered response (HTML, head,
 > page seed, hole shells). A hit skips the data fetch AND the Svelte execution. `og.source()`
-> caches no data — it is eviction bookkeeping: it answers "when must this stored RENDER die".
-> Layer map (bcms): Akamai caches bytes at the edge (no invalidation today) · materialize caches
+> caches no data — it is eviction bookkeeping: it answers "when must this stored ARTIFACT die".
+> Layer map (bcms): Akamai caches bytes at the edge (no invalidation today) · artifacts cache
 > the render at ORIGIN (bytes + tags — turns every Akamai miss/expiry/POP-fanout into a byte
 > read; origin SSR count drops from O(misses) to O(publishes)) · Redis/Mongo/Builder cache DATA ·
 > render-by-hash caches the render GIVEN fresh data (loads run, execution skipped on hash match).
 
 Client islands made hydration opt-in per region; the server mirror makes EXECUTION opt-in per
 request. A page whose render is a pure function of (route, params, declared vary bits) renders
-ONCE per data change and is stored; requests concatenate bytes. Cost moves from O(requests) to
-O(writes). Prerender is the special case where the only write is a deploy.
+ONCE per data change and is stored as an artifact; requests concatenate bytes. Cost moves from
+O(requests) to O(writes). Prerender is the special case where the only write is a deploy.
 
 ## Drop-in surface (classic Kit vocabulary — no remote functions required)
 
 ```ts
 // vite.config — the SWITCH + policy: serializable data ONLY, baked into
-// virtual:ogygia/materialize-config (the profiler-config pipe). This is the whole adoption:
-ogygia({ materialize: true })          // tier-1 in-process store by default
+// virtual:ogygia/artifacts-config (the profiler-config pipe). This is the whole adoption:
+ogygia({ artifacts: true })            // tier-1 in-process store by default
 
 // hooks.server.ts — LIVE OBJECTS (clients, creds from env): the decide({source}) grammar.
 // Optional — only for tier 2/3. Functions/clients can't ride a virtual module, so runtime
 // adapters can never live in vite config; hooks is guaranteed server-only + pre-first-request.
-materialized.configure({ store: valkey(client), edge: [akamai(creds), cloudfront(cfg)] });
+artifacts.configure({ store: valkey(client), edge: [akamai(creds), cloudfront(cfg)] });
 ```
 
 - **What gets stored — observed purity, not annotations.** The handle wraps the event it already
@@ -47,8 +56,8 @@ materialized.configure({ store: valkey(client), edge: [akamai(creds), cloudfront
      actions-invalidate-loads semantics). Zero new lines.
   2. `requested(query).refreshAll()` / `query.refresh()` — the single-flight law apps already
      follow — evicts by query tag. Zero new lines.
-  3. Explicit: `materialized.invalidate(tag)` from any server code (CMS webhook endpoints).
-- **Per-component opt-out = the existing dial.** Inside a materialized page, a component that
+  3. Explicit: `artifacts.invalidate(tag)` from any server code (CMS webhook endpoints).
+- **Per-component opt-out = the existing dial.** Inside an artifact page, a component that
   must stay per-visitor/per-request is a `render: 'deferred'` hole — PPR semantics, unchanged.
   The page is the storage unit (Svelte SSR is one pass); regions are the later granularity
   (identity + props-hash keys — the wire law pays out again), reachable once held regions /
@@ -58,7 +67,7 @@ materialized.configure({ store: valkey(client), edge: [akamai(creds), cloudfront
 
 | Tier | Where | When |
 | --- | --- | --- |
-| 1 (default) | in-process bounded LRU + optional disk (`.ogygia/materialized/`) | single-instance adapter-node; zero infra |
+| 1 (default) | in-process bounded LRU + optional disk (`.ogygia/artifacts/`) | single-instance adapter-node; zero infra |
 | 2 | pluggable KV `{ get, put(key, html, tags), evictByTag }` | replicas / serverless (shared store solves storage AND cross-instance invalidation) |
 | 3 | the CDN itself: `Cache-Tag` headers from recorded deps + a purge-by-tag adapter | zero origin CPU *and* traffic; per-host purge adapters (least drop-in) |
 
@@ -78,7 +87,7 @@ rules into the store": the handle's eligibility verdict stamps per-response head
 ineligible pages get `no-store` from the same verdict), the Akamai property shrinks to ONE rule
 (honor origin), and `invalidate()` fans out: Valkey evict + Akamai Fast Purge **by tag** +
 CloudFront **path** invalidation (no tag support there, but the Builder identity carries the
-urlPath — precise per publish). Config: `materialize: { store, edge: [akamai(creds),
+urlPath — precise per publish). Config: `artifacts: { store, edge: [akamai(creds),
 cloudfront({distributionId})] }`. Kills the blanket-bet problem: today's 7-day rule caches
 everything and hand-maintained exception code (`applyPreferenceCenterCacheHeaders`) guards the
 dangerous pages; with per-page proven headers those lists die. Costs: infra-team flips the
@@ -88,14 +97,38 @@ creds; tags stay coarse (header/tag-count limits).
 Keys: page = `route-id + params-hash (+ vary bits: locale…)`; region = `identity + props-hash`.
 Dependency index: inverted `tag → keys` in the same store (native on tier 3).
 
-**Adapter contracts (v1)** — two tiny interfaces; each impl ≈ a page of code:
-- `MaterializeStore { get(key), put(key, Entry, {locale}), evict(url), evictWhere({locale}) }`
-  with `Entry = page{html,headers} | redirect{status,location}`; valkey impl = key `og:m:<url>` +
-  a per-locale index SET for the nuke + EX TTL backstop.
-- `EdgeAdapter { headers(meta) — the edge's storage instructions (akamai adds cache-control +
-  the one built-in `edge-cache-tag: locale:<x>`; cloudfront returns {}), purgeUrl(url) (Akamai
-  Fast Purge /ccu/v3/invalidate/url; CloudFront CreateInvalidation by pathname),
-  purgeWhere({locale}) (Akamai tag purge; CloudFront `/xx/yy/*` wildcard) }`.
+**Adapter contracts (v1)** — two tiny interfaces; each impl ≈ a page of code. Bulk eviction is
+**PREFIX-shaped, not locale-shaped** (user ruling mid-build: locale is a path prefix in disguise
+— hardcoding it made the contract weaker than what it derives from; `{ prefix: '/fr/fr/' }` IS
+the locale nuke, `{ prefix: '/docs' }` a section nuke, and header/domain-locale apps lose
+nothing the URL-derived locale ever gave them):
+- `ArtifactStore { get(key), put(key, Entry, {ttl}), evict(url), evictWhere({prefix}) }`
+  with `Entry = page{html,headers} | redirect{status,location}`; keys ARE pathnames, so prefix
+  eviction is a native scan — valkey = `SCAN MATCH og:a:<prefix>*` (NO index set needed) + EX
+  TTL backstop; memory = startsWith sweep.
+- `EdgeAdapter { headers(meta) — the edge's storage instructions (akamai stamps depth-capped
+  PREFIX tags `p:/fr, p:/fr/fr, p:/fr/fr/x` since Fast Purge can't take an arbitrary prefix —
+  depth cap 3, deeper purges fall back to origin evict + edge TTL; cloudfront returns {}),
+  purgeUrl(url) (Akamai Fast Purge /ccu/v3/invalidate/url; CloudFront CreateInvalidation by
+  pathname), purgeWhere({prefix}) (Akamai tag purge `p:<prefix>`; CloudFront `<prefix>/*`
+  wildcard) }`.
+
+**SHIPPED adapter roster** (all BYO clients/creds, zero new deps; every request/auth shape
+unit-asserted through a stubbed fetch, akamai+cloudfront additionally e2e'd against the
+emulators): STORES — `memoryStore` (tier 1, built-in default) · `valkey(client)` (ioredis OR
+node-redis v4 structurally; SCAN-MATCH prefix eviction, per-tag SETs) · `upstash({url, token})`
+(REST, serverless-native, same key scheme) · `cloudflareKv(binding)` (Workers KV: list-by-prefix
+subtree eviction, SENTINEL-KEY tag index `og:t:<tag>:<key>`, 60s min-TTL clamp, eventual
+consistency documented). EDGES — `akamai` (EdgeGrid-signed Fast Purge url+tag) · `cloudfront`
+(SigV4-signed CreateInvalidation path+wildcard) · `cloudflare({zoneId, apiToken, site})`
+(bearer zone purge: `files` for urls, `prefixes` for subtrees, `cache-tag` prefix stamps).
+
+**The vary law as SHIPPED (S4, the cookie-less-CDN-key semantics formalized)**: a page whose
+render read only DEFAULTS stores the canonical copy — and once minted, EVERYONE gets it,
+cookied visitors included (exactly what a cookie-less CDN key does today, bcms's explicit
+design). Cookied-FIRST traffic on a cold URL never stores (non-default read → per-request);
+the first anonymous render mints the canonical. A page that must truly vary per cookie keeps
+the personalization in a `render:'deferred'` hole.
 - Fan-out lives in ogygia, not adapters: `invalidate(url)` = store.evict + allSettled purgeUrl
   across edges (one edge down ≠ request down); serve path merges every edge's `headers(meta)`
   onto the response AND into the stored entry.
@@ -104,9 +137,9 @@ Dependency index: inverted `tag → keys` in the same store (native on tier 3).
 
 The server-cost ladder already shipped: build-time (prerender/PPR, content prebake, `og.bake`),
 TTL (deferred `maxAge` + the R6 endpoint render memo, `live`/SWR), per-nav delta (`serverDelta`),
-per-request (default). Materialize is the missing rung: **write-time** — invalidated by data,
+per-request (default). Artifacts are the missing rung: **write-time** — invalidated by data,
 never by clock or traffic. R6 explicitly stopped short of page-granular compute ("off-limits
-compiler"); materialize sidesteps that: the page stays monolithic, stored whole, with holes.
+compiler"); artifacts sidestep that: the page stays monolithic, stored whole, with holes.
 
 ## Grounding: se-web-platform (bcms)
 
@@ -123,8 +156,8 @@ for an invalidation endpoint, but for API responses, **not pages**.
 **Akamai edge config OUTSIDE the repo** (cookie-less cache key; the app deliberately emits
 audience-independent SSR — loader.ts:150 says so in words), fronting AWS Amplify (CloudFront).
 No webhook, no purge, no surrogate keys, no revalidation — a Builder publish today waits out the
-TTL. So materialize here is not an optimization, it is **the missing correctness layer**:
-Builder publish webhook → `materialized.invalidate('builder:<model>:<urlPath>:<locale>')` →
+TTL. So artifacts here are not an optimization, they are **the missing correctness layer**:
+Builder publish webhook → `artifacts.invalidate('builder:<model>:<urlPath>:<locale>')` →
 fresh render — content latency drops from "up to 7 days" to seconds, while KEEPING the 7-day
 cheap-read economics.
 
@@ -139,22 +172,22 @@ serving bytes. The design's tag flow maps 1:1 onto their stack with no new infra
 via the component factory (landing-pages.ts), the `(pes)` subtree `csr=true` (mixed world). They
 use ZERO `deferred`/`live`/held regions today — meaning nothing currently escapes the cached
 document per-visitor; anything personalized that later appears must become a `deferred` hole for
-materialize (and for their existing Akamai cache!) to stay correct. `render: 'live'` regions are
+artifacts (and for their existing Akamai cache!) to stay correct. `render: 'live'` regions are
 the self-freshening option inside the 7-day-cached pages until tag-purge lands.
 
 **Loads / purity census (route families → verdicts).** No load in the tree calls `setHeaders`;
 none stream (explicit "do not stream" comment); ONE form action exists in the whole app
 (preference-center) — mutations live in BFF `+server` endpoints and external CMS publishes.
-- **Materialize cleanly, keyed (urlPath, locale) + Builder content id**: the `[...catchall]`
+- **Store cleanly, keyed (urlPath, locale) + Builder content id**: the `[...catchall]`
   landing pages (the primary CMS renderer), FAQ, se_brand, Wiztopic newsroom, partner-channel,
   insights v1+v2 (v2 already Redis-memoizes its model resolution), techcomm (which ALREADY has
   publish webhooks — `_server/webhook/tc/publish-catalog-page` — the cleanest first wiring), and
   the locale layout data (header/footer/taxonomy/dictionary — pure per locale).
-- **Materializable with a coarse vary bucket**: PES range/category listings — impure only via a
+- **Storable with a coarse vary bucket**: PES range/category listings — impure only via a
   consent cookie (gates hyperPES/Amazon Personalize) and a reverse-proxy header; variation is
   (locale, id, consent-bucket), never per-user. PDP `product/[id]` always 301s → store the
   REDIRECT, not HTML.
-- **Never materialize** (correctly detected by observed reads): myschneider (~280 authed SPA
+- **Never store** (correctly detected by observed reads): myschneider (~280 authed SPA
   routes), preference-center, digital-entitlement, carts, auth flows, builder-preview
   (unpublished by intent), ups-charts, PDF generators.
 - **The detector nuance their code forces**: the PRIME family reads the session cookie
@@ -166,20 +199,20 @@ none stream (explicit "do not stream" comment); ONE form action exists in the wh
 
 1. **Vary-bucket keying replaces binary purity.** The store key extends to the FINGERPRINT OF
    OBSERVED INPUT VALUES: a cookie/locals read that resolved to its anonymous/default value
-   (user=null, knownUserId=undefined) still materializes — that IS the canonical render (their
+   (user=null, knownUserId=undefined) still stores — that IS the canonical render (their
    CDN's cookie-less key, formalized). Non-default observed values → per-request in v1; bounded
    declared buckets later (`vary: ['consent']` for the PES case — two stored variants).
 2. **The store holds redirects** (status + location), not just HTML — permanent-canonical 301s
    (their PDP) are the hottest cheap wins.
 3. **Auto-tags from app-recorded render context, not only `depends()`.** Their loader already
    calls `updateRenderContext({ contentId, model, locale })` per render — apps that announce
-   content identity get tagging for free via a tiny `materialized.tag()` (or an adapter reading
+   content identity get tagging for free via a tiny `artifacts.tag()` (or an adapter reading
    such a context). `depends()` and queries remain the other two automatic sources.
 4. **Layout-dependency tags for mass eviction.** The stored unit is the whole document, so the
    locale layout's inputs (header/footer Builder ids) tag every page in that locale — a header
    publish evicts the locale in one tag (`builder:header:fr-FR`); exactly what tier-3
    `Edge-Cache-Tag` purge is for.
-5. **csr-agnostic.** Materialization is a render-layer concern; the `(pes)` csr=true subtree's
+5. **csr-agnostic.** Artifact storage is a render-layer concern; the `(pes)` csr=true subtree's
    pages store the same way (Kit hydrates them client-side regardless).
 
 **Adoption path for bcms**: tier 2 on their existing Valkey → techcomm first (webhooks already
@@ -194,7 +227,7 @@ BEFORE `resolve()` — Kit/loads/svelte never run. Miss path: hand `resolve()` a
 (proxied cookies/locals/headers recording reads + values), render normally, gate on
 response (set-cookie/private/non-200/streamed) + observations (non-default read → skip), then
 `store.put(key, html, bag.tags)`. Tags accumulate in the existing `request_als` RequestBag
-(`materialized.tag()` + the flicker-fix query capture; `depends()` capture may need a shim —
+(`artifacts.tag()` + the flicker-fix query capture; `depends()` capture may need a shim —
 Kit builds load events itself). Store = R6's shape + inverted tag index + redirect entries.
 **Capability subtlety**: stored pages must mint PRERENDER-GRADE (effectively-forever)
 capabilities for their deferred/live holes — normal `regionTtl` mints would expire in-store;
@@ -205,14 +238,21 @@ stored render's own snapshot — consistent by construction.
 
 The store's key IS the URL, and a Builder publish payload CARRIES its urlPath — so:
 - **v1, zero markers**: `invalidate('/fr/fr/<urlPath>/')` for one-doc-one-URL publishes (the
-  primary case: landing/insights/faq/se_brand); `invalidateWhere({ locale })` coarse nuke for
-  shared content (header/footer — rare publishes, lazy re-render); a TTL backstop (≤24h) so
-  nothing is stale forever. The flag + the webhook = the whole feature.
-- **`og.source()` demoted to the v2 PRECISION upgrade**: it buys exactly ONE thing — the
-  reverse index for one-document-on-many-unknown-pages (bcms reals: `enrichBuilderContent`
-  referenced docs; insights "latest posts" carousels). Without it: locale nuke (over-evict) or
-  TTL backstop (bounded staleness). With it: evict exactly the pages whose receipts name the doc.
-  Adopt only if the embedded-content staleness window hurts in practice.
+  primary case: landing/insights/faq/se_brand); `invalidateWhere({ prefix: '/fr/fr/' })` coarse
+  subtree nuke for shared content (header/footer — rare publishes, lazy re-render); a TTL
+  backstop (≤24h) so nothing is stale forever. The flag + the webhook = the whole feature.
+- **`og.source()` — PULLED BACK INTO v1 (user, 2026-09-01: "we need it done now as well") and
+  SHIPPED**: the reverse index for one-document-on-many-unknown-pages (bcms reals:
+  `enrichBuilderContent` referenced docs; insights "latest posts" carousels). The macro
+  (`compiler/macros/source.ts`, wire-law strict: `export const X = import.meta.og.source(fn)`
+  top-level only, AST-precise, id = `file#export`) rewrites to `__og_source('id', fn, opts?)` +
+  injects `ogygia/artifacts/source` (isomorphic, client-safe: fnv1a from runtime/fingerprint —
+  the house hash, never re-rolled). During a capture render every wrapped call files a receipt
+  tag `s:<id>:<fp(args)>` into the bag (capture.ts seam); the entry stores its tags; the store's
+  `evictByTag(tag) → keys` answers `artifacts.invalidate(fn, args)` — evicted at origin AND
+  fanned out as edge `purgeUrl` per returned key. `{ key }` option canonicalizes exotic args;
+  default fingerprint is structural (event-shaped args collapse to route+path). Zero-marker
+  v1 invalidation (URL + prefix) remains the primary grammar; sources are the precision layer.
 
 ## Compiler-native design (user: "we're a compiler — full rights; make it vanish")
 
@@ -220,7 +260,7 @@ The runtime design asks "can we skip the render?" and needs observation + tags t
 The compiler inverts it: PROVE what every render depends on at build; address renders by inputs.
 
 - **L1 — purity as a compile-time proof.** AST-walk the loads + their import graphs (the flag
-  collector's machinery) → per-route manifest (`virtual:ogygia/materialize-manifest`, the
+  collector's machinery) → per-route manifest (`virtual:ogygia/artifacts-manifest`, the
   route-csr pattern): `mode: store|never` with a SOURCE LOCATION for every "never", and `vary`
   dimensions DERIVED from seen `cookies.get(...)` calls. Observation proxies deleted; blind
   spots (Date.now in a load) become dev notes pointing at the line.
@@ -231,7 +271,7 @@ The compiler inverts it: PROVE what every render depends on at build; address re
   ```ts
   export const loadBuilderContent = import.meta.og.source(async (event, category) => {…});
   // loads: untouched plain TS, forever.
-  materialized.invalidate(loadBuilderContent, ['landing-pages', { urlPath, locale }]);
+  artifacts.invalidate(loadBuilderContent, ['landing-pages', { urlPath, locale }]);
   ```
   Macro semantics (same laws as wire/asRegion): literal `export const X = og.source(fn)` only,
   AST-detected, loud error otherwise. The compiler stamps the id from THIS definition's
@@ -253,10 +293,92 @@ The compiler inverts it: PROVE what every render depends on at build; address re
   the held-region out-of-band render we already emit, splicing stored HTML. One level up:
   **render-by-hash** for the page shell — run loads (data always fresh), hash the data, look up
   the rendered document by hash. Skips component execution (the profiler-dominant cost) with
-  NOTHING to invalidate. True load-skipping materialize then shrinks to an opt-in crust on
+  NOTHING to invalidate. True load-skipping artifacts then shrink to an opt-in crust on
   L1-proven routes with L2 invalidation.
 - **Build order**: L3 render-by-hash (zero-risk, immediate CPU win) → L1 manifest → L2 + load
   skipping.
+
+## Interplay: server router · fragments · A/B (user question, answered during the build)
+
+- **Server router.** Same store + verdict at the same handle seam; router-rendered documents key
+  by URL like Kit pages. Routes-as-values makes the router the CLEANEST citizen: a route
+  definition can declare its purity statically (no observation proxies needed) — the L1 manifest,
+  arriving early for free. Streamed router pages: never stored (the global stream rule).
+- **Fragments (MFE).** Each fragment URL is its OWN artifact key — hosts and fragments
+  invalidate independently, so a per-request host stitches stored fragments and a stored host
+  embeds per-request fragments. Signed federation calls read auth/nonce headers → the verdict
+  auto-disqualifies them; PUBLIC fragments are prime wins (shared chrome served as bytes to N
+  host apps). Late-region/streamed fragment responses: excluded like any stream.
+- **A/B testing (flags).** A flag read during a render personalizes the page → v1 adds a seam in
+  the flags module (`set_flag_observer`): any flag read during an eligible render DISQUALIFIES
+  the page, named in the dev note (`flag:<name>`) exactly like cookie reads. (Priming alone must
+  NOT disqualify — `prime_flags` touches cookies on every request; only actual reads count.)
+  **v2: per-variant artifacts** — assignments are a BOUNDED vary dimension (unlike users), so
+  key = url + assignment-fingerprint and store one copy per variant; edges can't key on it
+  without property work, so variant pages are origin-store-only. **Exposure law**: a stored
+  page's render is SKIPPED — exposures must ride the client/hole leg (decide({ exposure })
+  already supports batching), never the render, or experiments undercount.
+
+## Test harness — one deck, four lanes (design)
+
+The same scenario deck runs against memory, real Valkey, emulated CDNs, and (gated) real CDNs.
+Only the lane changes, never the tests. House plumbing throughout: detached spawns + process-group
+kill, `--host 127.0.0.1` pinned ports, hoisted regexes, verdict lines, one runner script per lane.
+
+**Lanes 1–2 — the store contract.** `ArtifactStore` is four calls (get / put / evict /
+evictWhere) → ONE shared contract spec. Lane 1 runs it against the built-in memory store (zero
+infra, every PR). Lane 2 runs the identical spec against real Valkey when `REDIS_URL` is set
+(CI service container). Any future store adapter must pass the same spec to exist.
+
+**Lane 3 — the edge emulator (the heart).** A small proxy we write once, worn with a personality
+per CDN:
+
+- Behaves like a CDN: obeys `Cache-Control`, keys by URL cookie-less, remembers `Edge-Cache-Tag`s.
+- **Personalities expose the REAL CDN purge API shape** — Akamai: Fast Purge url+tag endpoints
+  (EdgeGrid auth verified structurally, no-verify mode); CloudFront: CreateInvalidation with path
+  wildcards, NO tags. Our real `EdgeAdapter`s run UNCHANGED, just pointed at the emulator's base
+  URL — e2e exercises the actual adapter code, not a mock of it.
+- **Chainable to the bcms topology**: user → akamai-emu → cloudfront-emu → origin.
+- Every layer stamps a hit/miss debug header and exposes `/__edge/state` (stored keys, hit
+  counters, purge log) for assertions.
+- **Failure injection built in**: purge endpoint 500s/timeouts (assert the allSettled fan-out
+  never fails a publish), slow origin, origin DOWN while edges keep serving.
+
+**The fixture app.** One self-building playground fixture carrying the whole complexity matrix:
+pure pages, locale routes, a consent cookie WITH a default, a session cookie WITHOUT one,
+deferred holes, form actions, redirects, streamed loads, one csr=true page — plus a **fake CMS
+stub** (versioned content + a publish endpoint that bumps it and fires the webhook). The origin
+counts REAL renders per route (`/__artifacts/state`) — the strongest assertion in the harness
+is "second request: render count still 1".
+
+**The scenario deck** (each = request sequence + assertions on which layer answered, render
+counters, store contents, purge logs):
+
+- cold → warm → edge: req 1 renders, req 2 hits the store, req 3 hits the edge (origin untouched)
+- publish: webhook → purge log shows the URL on BOTH personalities → next req re-renders ONCE
+- locale nuke: one tag purge (akamai) + one wildcard (cloudfront); every `fr` page misses once
+- vary-bucket: consent default read → two stored copies; edge keeps neither long
+- never-store rules, one test each: session read / set-cookie / POST / non-200 / stream → store
+  stays EMPTY after each. The stream guard is TWO-LAYER (found by the harness): island-ful pages
+  disqualify via the recorded page snapshot (`has_pending` at seed time — streaming is per-request
+  BY INTENT even when the non-navigate path settles promises into a complete document); pages
+  with NO regions record no snapshot, so a belt-and-braces sniff refuses any buffered html where
+  Kit's boot declares its deferred map (`const deferred = new Map();` — Kit 2.70 emits it ONLY on
+  streamed pages; storing such a copy would bake one settle's inline resolve scripts forever)
+- holes: shell frozen, hole content changes per request, capability still valid after a restart
+  with the same `OGYGIA_SECRET`
+- action self-evict · stored redirects · TTL expiry (unit-level, shared contract spec) ·
+  csr=true stores THE SAME (csr-agnostic, delta 5 — Kit hydrates the stored copy client-side)
+- **stampede**: 50 concurrent cold requests → render count MUST be 1 (this test DEFINES the
+  single-flight requirement)
+- **og.source precision (S12)**: three pages across two locales embed one shared doc through a
+  declared source; a doc publish evicts exactly the three consumers (origin + edge url purges
+  from the reverse index's returned keys) — including the en page a prefix nuke could never
+  reach precisely — and a non-consumer bystander's artifact survives
+
+**Lane 4 — real CDNs, gated.** Same deck, smoke subset only (`--real akamai|cloudfront`),
+against a deployed fixture + env creds. Manual/nightly, never PR CI; propagation asserted with
+polling windows, not sleeps. The emulator keeps PR CI hermetic.
 
 ## Open questions
 
@@ -264,7 +386,7 @@ The compiler inverts it: PROVE what every render depends on at build; address re
   lives in a CDN we can't purge by tag (bcms's 7-day cache today), let the whole document re-SSR
   once after load and MORPH changed regions (the router/live-partial morph machinery exists).
   Region-level already exists as `render: 'live'`; page-level would bridge until (or instead of)
-  materialize where invalidation can't be owned. Decide: worth a `page`-level dial, or is
+  artifacts where invalidation can't be owned. Decide: worth a `page`-level dial, or is
   marking the drifting regions `live` always enough?
 
 - Eager re-render on evict (hot paths) vs lazy render-on-next-read (default)?

@@ -37,6 +37,20 @@ import {
 	speculationRules as mpa_speculation_rules
 } from 'virtual:ogygia/router-config';
 import { profilerConfig } from 'virtual:ogygia/profiler-config';
+import { artifactsConfig } from 'virtual:ogygia/artifacts-config';
+import {
+	artifact_get,
+	artifact_put,
+	join_flight,
+	begin_flight,
+	self_evict,
+	current_edges,
+	type FlightOutcome
+} from './artifacts/registry.js';
+import { observe_event, type Observation } from './artifacts/observe.js';
+import { set_artifact_capture_reader, set_source_recorder } from './artifacts/capture.js';
+import type { ArtifactEntry } from './artifacts/types.js';
+import { building, dev } from '$app/environment';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import { asset } from '$app/paths';
@@ -45,7 +59,7 @@ import { verify, region_mac_message } from './server/hmac.js';
 import { render_cache_key, cached_render } from './server/render-cache.js';
 import { B64Url } from './server/payload.js';
 import { REF_WIRE_KEY, ref_reviver } from './ref.js';
-import { prime_flags, flush_exposures } from './flags.js';
+import { prime_flags, flush_exposures, set_flag_observer } from './flags.js';
 // PULL-registration at decode time (idempotent; no import-time side effects).
 import { register_wire_kind } from './live-transport.js';
 import { register_store_kind, register_derived_kind } from './store-transport.js';
@@ -124,6 +138,15 @@ type RequestBag = {
 	late_next: number;
 	/** devalue reducers for streamed resolve scripts (app transport encoders + defer marker). */
 	seed_reducers: Record<string, (v: unknown) => unknown> | null;
+	/** ARTIFACTS: this render may be stored (capture in flight) — region capabilities minted
+	 *  during it go prerender-grade (the stored HTML outlives `regionTtl`). */
+	artifact_capture: boolean;
+	/** ARTIFACTS: the live personalization-read observation for the verdict (flag reads mark it
+	 *  through `set_flag_observer`); null when this render is not a capture candidate. */
+	artifact_obs: Observation | null;
+	/** ARTIFACTS: og.source receipts recorded during a capture render (`s:<id>:<fp>`) — stored
+	 *  with the entry as the reverse index; null when not capturing. */
+	artifact_tags: string[] | null;
 };
 const request_als = new AsyncLocalStorage<RequestBag>();
 set_ctx_recorder((key, value) => {
@@ -149,6 +172,22 @@ set_late_taker(() => {
 	const list = bag.late;
 	bag.late = null;
 	return list;
+});
+// ARTIFACTS: region capabilities minted during a may-be-stored render go prerender-grade — the
+// region-endpoint mint reads this per-request flag (see artifacts/capture.ts for why it's a seam).
+set_artifact_capture_reader(() => request_als.getStore()?.artifact_capture === true);
+// ARTIFACTS: a flag read during an eligible render personalizes the page — disqualify it, named
+// like a cookie read (`flag:<name>`). Priming alone never disqualifies; only actual reads do.
+set_flag_observer((name) => {
+	const obs = request_als.getStore()?.artifact_obs;
+	if (obs && obs.disqualified_by === null) obs.disqualified_by = `flag:${name}`;
+});
+// ARTIFACTS: og.source receipts — every `__og_source`-wrapped call during a capture render files
+// its `(id, fingerprint)` tag here; stored with the entry as the reverse index for
+// `artifacts.invalidate(fn, args)`.
+set_source_recorder((tag) => {
+	const bag = request_als.getStore();
+	if (bag?.artifact_capture) (bag.artifact_tags ??= []).push(tag);
 });
 // DEVTOOLS: per-request event buffers, keyed off the request bag by a side WeakMap so RequestBag stays
 // pristine (and free) when devtools is off. GC'd with the bag; never a global ring (which would mix
@@ -251,6 +290,91 @@ function emit_ogygia_script(subtype: string, escaped_payload: string, marker = '
 	return `<script type="application/ogygia-${subtype}"${marker ? ' ' + marker : ''}>${escaped_payload}</script>`;
 }
 
+// ── ARTIFACTS (render-on-write) ────────────────────────────────────────────────────────────────
+
+/** Kit's boot declares its deferred map ONLY on pages with pending (streamed) load promises —
+ *  verified against @sveltejs/kit 2.70 (render.js: `blocks.push('const deferred = new Map();')`). */
+const KIT_DEFERRED_BOOT_RE = /const deferred = new Map\(\);/;
+
+/** Rebuild a Response from a stored artifact. `via` rides a debug header the harness asserts on. */
+function artifact_response(entry: ArtifactEntry, via: 'hit' | 'join' | 'stored'): Response {
+	if (entry.kind === 'redirect') {
+		return new Response(null, {
+			status: entry.status,
+			headers: { location: entry.location, 'x-ogygia-artifact': via }
+		});
+	}
+	return new Response(entry.html, {
+		status: 200,
+		headers: { ...entry.headers, 'x-ogygia-artifact': via }
+	});
+}
+
+/**
+ * The write-path verdict + store. Returns the stored entry AND a fresh Response (reading the
+ * body consumes the original) — or null when the page must stay per-request. Pre-body guards
+ * run FIRST so an ineligible response's stream is never consumed.
+ */
+async function capture_artifact(
+	response: Response,
+	path: string,
+	bag: RequestBag,
+	obs: Observation
+): Promise<{ entry: ArtifactEntry; response: Response } | null> {
+	const ttl = artifactsConfig!.ttl;
+	// Personalization observed (cookie/header/locals/flag read, or a cookie write) → per-request.
+	if (obs.disqualified_by || obs.wrote_cookie) {
+		if (dev && obs.disqualified_by) {
+			console.warn(
+				`[ogygia] artifacts: ${path} stays per-request — the render read ${obs.disqualified_by}. ` +
+					`Personalize inside a render:'deferred' hole to make the shell storable.`
+			);
+		}
+		return null;
+	}
+	// Permanent redirects are the hottest cheap wins (canonical 301s) — store status + location.
+	if (response.status === 301 || response.status === 308) {
+		const location = response.headers.get('location');
+		if (!location) return null;
+		const entry: ArtifactEntry = {
+			kind: 'redirect',
+			status: response.status,
+			location,
+			created: Date.now()
+		};
+		await artifact_put(path, entry, { ttl, tags: bag.artifact_tags ?? [] });
+		return { entry, response };
+	}
+	if (response.status !== 200) return null;
+	if (response.headers.has('set-cookie')) return null;
+	const content_type = response.headers.get('content-type') ?? '';
+	if (!content_type.includes('text/html')) return null;
+	const app_cc = response.headers.get('cache-control') ?? '';
+	if (app_cc.includes('private') || app_cc.includes('no-store')) return null;
+	if (bag.deferred && bag.deferred.length) return null; // streamed page — always per-request
+	const html = await response.text();
+	// Belt and braces for streamed pages WITHOUT regions (no page snapshot to probe): Kit's boot
+	// only declares its deferred-map when the page carries pending promises — buffering such a
+	// response bakes ONE settle's inline resolve scripts into the copy. Never store it.
+	if (KIT_DEFERRED_BOOT_RE.test(html)) return null;
+	// The verdict's storage instructions: ours first, then each edge's (an edge may grant its own
+	// cache-control — later wins). Merged into the STORED entry too, so hits replay them.
+	const headers: Record<string, string> = {
+		'content-type': content_type,
+		'cache-control': `public, s-maxage=${ttl}`
+	};
+	for (const edge of current_edges()) {
+		try {
+			Object.assign(headers, edge.headers({ url: path, ttl }));
+		} catch {
+			/* an edge adapter must never fail a render */
+		}
+	}
+	const entry: ArtifactEntry = { kind: 'page', html, headers, created: Date.now() };
+	await artifact_put(path, entry, { ttl, tags: bag.artifact_tags ?? [] });
+	return { entry, response: artifact_response(entry, 'stored') };
+}
+
 class OgygiaHandle {
 	readonly #endpoint: string;
 	readonly render_rate: RateLimiter;
@@ -317,6 +441,32 @@ class OgygiaHandle {
 		// (not `===`) so it works under any `paths.base` without needing the base at all: the request
 		// arrives at `<base>/__ogygia__`, and the endpoint is a leading-slash, clash-safe path.
 		if (!path.endsWith(this.#endpoint)) {
+			// ARTIFACTS read path (render-on-write): GET, no query string, not prerendering. A hit
+			// serves the stored bytes — Kit, loads, and Svelte never run. A concurrent cold miss
+			// JOINS the in-flight render (the stampede law: N concurrent requests, ONE render).
+			let artifact_settle: ((outcome: FlightOutcome) => void) | null = null;
+			let artifact_obs: Observation | null = null;
+			if (
+				artifactsConfig !== null &&
+				!building &&
+				event.request.method.toUpperCase() === 'GET' &&
+				event.url.search === '' &&
+				!path.endsWith('__data.json')
+			) {
+				const hit = await artifact_get(path);
+				if (hit) return artifact_response(hit, 'hit');
+				const flight = join_flight(path);
+				if (flight) {
+					const outcome = await flight;
+					if (outcome.stored) return artifact_response(outcome.stored, 'join');
+					// The flight proved the page ineligible — render per-request, no new flight
+					// (a chain of flights would serialize renders of a page that never stores).
+				} else {
+					// First cold request: open the flight + observe the render for the verdict.
+					artifact_settle = begin_flight(path);
+					artifact_obs = observe_event(event);
+				}
+			}
 			// Flicker fix: on csr=false pages Kit resolves top-level `await query()` calls during
 			// SSR (populating the internal request store's `remote.implicit`) but only serializes
 			// them into the page when csr===true. We capture the resolved query responses and emit
@@ -335,7 +485,10 @@ class OgygiaHandle {
 				defer_next_id: 0,
 				late: null,
 				late_next: 0,
-				seed_reducers: null
+				seed_reducers: null,
+				artifact_capture: artifact_settle !== null,
+				artifact_obs,
+				artifact_tags: artifact_settle !== null ? [] : null
 			};
 			// DEVTOOLS: attach a request-scoped event buffer via a side WeakMap (keeps RequestBag — and
 			// its cost — untouched when devtools is off; the map + this line DCE out then).
@@ -350,6 +503,26 @@ class OgygiaHandle {
 				);
 			} finally {
 				flush_exposures(); // drain queued exposures at the request's end (serverless-safe tail)
+			}
+			// ARTIFACTS: action self-evict — a successful mutation on a page URL evicts its artifact
+			// (mirrors Kit's actions-invalidate-loads semantics; origin store only, fire-and-forget).
+			if (
+				artifactsConfig !== null &&
+				event.request.method.toUpperCase() !== 'GET' &&
+				response.status < 400
+			) {
+				self_evict(path);
+			}
+			// ARTIFACTS write path: verdict + store. A failed flight ALWAYS settles (joiners in the
+			// stampede must never hang), and a store problem never fails the request.
+			if (artifact_settle) {
+				try {
+					const stored = await capture_artifact(response, path, bag, artifact_obs!);
+					artifact_settle({ stored: stored?.entry ?? null });
+					if (stored) return stored.response;
+				} catch {
+					artifact_settle({ stored: null });
+				}
 			}
 			// Stream captured `$page.data` promises into islands (csr=false, real browser load). The doc
 			// — with the pending seed + resolve-global bootstrap — is fully built now (transformPageChunk
@@ -572,6 +745,12 @@ class OgygiaHandle {
 		// Gated on `has_deferred` so the common (no-promise) seed pays only a cheap probe walk.
 		const has_pending =
 			!!page_snap && (has_deferred(page_snap.data) || has_deferred(page_snap.form));
+		// ARTIFACTS: a page with streaming promises is per-request BY INTENT — even on the
+		// non-navigate path where the promises get settled into a complete document (storing
+		// that copy would freeze one settle forever while browser loads stream live).
+		if (has_pending && bag?.artifact_obs && bag.artifact_obs.disqualified_by === null) {
+			bag.artifact_obs.disqualified_by = 'streamed load (promise in page data)';
+		}
 		const can_stream = event?.request.headers.get('sec-fetch-mode') === 'navigate';
 		if (has_pending && can_stream) {
 			const staged_data = stage_deferred(page_snap!.data, 0);

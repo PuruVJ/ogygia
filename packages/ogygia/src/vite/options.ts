@@ -200,6 +200,17 @@ export interface OgygiaOptions {
 	profiler?: boolean | ProfilerOptions;
 
 	/**
+	 * Pages as build artifacts (render-on-write) — the SWITCH + serializable policy, nothing else.
+	 * `true` turns the handle's artifact read/write path on with the tier-1 in-process store: a
+	 * page whose render observed no personalization is stored whole and served as bytes until
+	 * `artifacts.invalidate(url)` / `artifacts.invalidateWhere({ prefix })` or the TTL backstop.
+	 * Live adapters (a valkey client, CDN purge creds) can never ride a virtual module — they are
+	 * configured in hooks.server.ts via `artifacts.configure({ store, edge })` from
+	 * `'ogygia/artifacts'`. `{ ttl }` overrides the backstop seconds (clamped to [1, 86400]).
+	 */
+	artifacts?: boolean | { ttl?: number };
+
+	/**
 	 * @internal Recreate this plugin instance inside the standalone client build.
 	 * App authors should not set this.
 	 */

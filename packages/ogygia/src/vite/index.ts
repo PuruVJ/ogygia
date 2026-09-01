@@ -167,6 +167,22 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				? {}
 				: { ...options.profiler }
 			: null;
+	// `ogygia({ artifacts })` — the render-on-write switch + serializable policy, baked into
+	// `virtual:ogygia/artifacts-config` (the profiler-config pipe). Live adapters (store clients,
+	// purge creds) can never ride a virtual module — they enter via `artifacts.configure()` in
+	// hooks.server.ts. TTL backstop clamped to [1, 86400]: nothing is stale forever.
+	const artifacts_config: { ttl: number } | null =
+		!standalone && options.artifacts
+			? {
+					ttl: Math.min(
+						86400,
+						Math.max(
+							1,
+							Math.floor(options.artifacts === true ? 86400 : (options.artifacts.ttl ?? 86400))
+						)
+					)
+				}
+			: null;
 	// Compile surfaces beyond the app's src — ONE mechanism for ogygia's own profiler UI and for
 	// dependencies that declare `"ogygia": { "files": […] }` in their package.json (discovered in
 	// the config hook, where root is known; the array is captured by reference into the CompileCtx
@@ -538,6 +554,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						libDir,
 						pkg_scan,
 						profiler_config,
+						artifacts_config,
 						is_dev,
 						id_salt,
 						visibleMargin,

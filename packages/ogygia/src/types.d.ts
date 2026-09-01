@@ -90,6 +90,11 @@ declare module 'virtual:ogygia/profiler-config' {
 	 *  `ogygia.handle()` reads this and dynamically imports + mounts the profiler when non-null. */
 	export const profilerConfig: Record<string, unknown> | null;
 }
+declare module 'virtual:ogygia/artifacts-config' {
+	/** Artifacts policy from `ogygia({ artifacts })`, or `null` when off. SERVER only (client: null).
+	 *  Non-null turns the handle's artifact (render-on-write) read/write path on. */
+	export const artifactsConfig: { ttl: number } | null;
+}
 declare module 'virtual:ogygia/session-cookie' {
 	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ sessionCookie })`. */
 	export const sessionCookie: string;

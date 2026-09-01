@@ -57,6 +57,19 @@ export function profiler_config_module(
 	return `export const profilerConfig = ${JSON.stringify(profiler_config)};`;
 }
 
+/**
+ * `virtual:ogygia/artifacts-config` — SERVER only: the artifacts policy from `ogygia({ artifacts })`,
+ * or `null` when off. Non-null turns the handle's artifact read/write path on (the switch +
+ * serializable policy; live store/edge adapters enter via `artifacts.configure()` in hooks).
+ */
+export function artifacts_config_module(
+	ssr: boolean,
+	artifacts_config: { ttl: number } | null
+): string {
+	if (!ssr) return `export const artifactsConfig = null;`;
+	return `export const artifactsConfig = ${JSON.stringify(artifacts_config)};`;
+}
+
 /** `virtual:ogygia/rate-limit` — SERVER only; the region handle is the only consumer. */
 export function rate_limit_module(
 	ssr: boolean,

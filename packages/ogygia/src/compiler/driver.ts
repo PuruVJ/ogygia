@@ -49,6 +49,7 @@ import {
 	secret_module,
 	sign_module,
 	profiler_config_module,
+	artifacts_config_module,
 	rate_limit_module,
 	session_cookie_module,
 	region_ttl_module,
@@ -91,7 +92,8 @@ import {
 	V_REGION_TTL,
 	V_SERVER_MANIFEST,
 	V_MANIFEST,
-	V_TRANSPORTABLES
+	V_TRANSPORTABLES,
+	V_ARTIFACTS_CONFIG
 } from './ids.js';
 import { strip_id, host_key } from './program.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
@@ -747,6 +749,9 @@ export class Compiler {
 		if (id === RESOLVED(V_PROFILER_CONFIG)) {
 			return profiler_config_module(ssr, ctx.profiler_config);
 		}
+		if (id === RESOLVED(V_ARTIFACTS_CONFIG)) {
+			return artifacts_config_module(ssr, ctx.artifacts_config);
+		}
 		if (id === RESOLVED(V_ROUTER_CONFIG)) {
 			return router_config_module(ctx.router_enabled, ctx.router_view_transitions);
 		}
@@ -862,6 +867,7 @@ export class Compiler {
 		}
 		if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 		if (source === V_TRANSPORTABLES) return RESOLVED(V_TRANSPORTABLES);
+		if (source === V_ARTIFACTS_CONFIG) return RESOLVED(V_ARTIFACTS_CONFIG);
 
 		// Island CLIENT graph: shim `$app/*` for the virtual module AND every module it
 		// pulls in (e.g. `$lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias

@@ -42,8 +42,9 @@ dist/
 # local experiments — not part of the published library
 /experiment/
 
-# self-building e2e fixture (e2e/deep-csr.ts builds it every run)
+# self-building e2e fixtures (their e2e scripts build them every run)
 /internal/repro-deep-csr/build/
+/internal/repro-artifacts/build/
 
 # examples: generated signing keys + build artifacts
 /examples/mfe/keys.env

@@ -50,6 +50,9 @@ export interface CompileCtxInit {
 	 *  so `ogygia.handle()` dynamically imports + mounts the profiler with no hooks/handler wiring. The
 	 *  secret is NOT baked: it reads OGYGIA_PROFILER_SECRET at runtime unless overridden here. */
 	profiler_config: Record<string, unknown> | null;
+	/** `ogygia({ artifacts })` normalized (or `null` when off) — baked into
+	 *  `virtual:ogygia/artifacts-config`; non-null turns the handle's artifact read/write path on. */
+	artifacts_config: { ttl: number } | null;
 	/** Dependency packages that DECLARED their ogygia compile surface (`"ogygia": { "files": […] }`
 	 *  in THEIR package.json) — prescanned + transformed like app source, node_modules gates lifted
 	 *  for exactly these paths. Optional (default none): standalone/browser hosts have no
@@ -104,6 +107,7 @@ export class CompileCtx {
 	readonly libDir: string;
 	readonly pkg_scan: PackageScan[];
 	readonly profiler_config: Record<string, unknown> | null;
+	readonly artifacts_config: { ttl: number } | null;
 	readonly is_dev: boolean;
 	readonly id_salt: string;
 	readonly visibleMargin: string | undefined;
@@ -143,6 +147,7 @@ export class CompileCtx {
 		this.libDir = init.libDir;
 		this.pkg_scan = init.pkg_scan ?? [];
 		this.profiler_config = init.profiler_config;
+		this.artifacts_config = init.artifacts_config;
 		this.is_dev = init.is_dev;
 		this.id_salt = init.id_salt;
 		this.visibleMargin = init.visibleMargin;

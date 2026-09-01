@@ -1,0 +1,95 @@
+---
+title: Artifacts
+summary: Pages as build artifacts — a pure page renders once per content change, is stored whole, and is served as bytes until a publish invalidates it. Render-on-write, not render-per-request.
+related:
+  - regions/server-islands
+  - data-state/page-data
+  - app/experiments
+---
+
+Client islands made hydration opt-in per region. Artifacts are the server mirror: **execution
+becomes opt-in per request**. A page whose render is a pure function of its URL renders once,
+is stored whole — HTML, headers, permanent redirects — and every later request is a byte read.
+Kit, your loads, and Svelte never run on a hit. Cost moves from O(requests) to O(publishes);
+prerendering is the special case where the only publish is a deploy.
+
+```ts title=vite.config.ts
+ogygia({ artifacts: true })
+```
+
+That is the whole adoption. The default store is an in-process LRU with a 24-hour TTL backstop
+(`artifacts: { ttl }` to shorten it). Stampedes single-flight: fifty concurrent cold requests
+produce exactly one render.
+
+## What gets stored — observed purity, not annotations
+
+The handle watches each eligible render. A page **stays per-request** when the render:
+
+- reads a cookie, personal header, or `locals` value that returned a **non-default** value,
+- reads a [feature flag](/docs/app/experiments) (an A/B'd page must never freeze one variant),
+- writes a cookie, sets `set-cookie`, answers non-200, or streams load promises,
+- or was requested with a query string.
+
+Every disqualification is **named in a dev note** (`cookie:session`, `locals.user`,
+`flag:hero`), so an almost-pure page tells you exactly which line keeps it hot. Default-valued
+reads still store: an anonymous visitor's render — `cookies.get('consent')` returning
+`undefined`, an empty `locals.user` — **is** the canonical copy. That is the cookie-less CDN
+cache key, formalized; once minted, everyone receives the canonical. Content that must truly
+differ per visitor belongs in a `render: 'deferred'` hole — the shell freezes, the hole fetches
+fresh per visitor, and its signed URL is minted prerender-grade so a warm artifact never
+carries expired holes (set a stable `OGYGIA_SECRET`).
+
+## Invalidation — three grammars
+
+```ts title=hooks.server.ts (or any server module)
+import { artifacts } from 'ogygia/artifacts';
+
+await artifacts.invalidate('/fr/fr/solar/');             // exact URL — the CMS-webhook case
+await artifacts.invalidateWhere({ prefix: '/fr/fr/' });  // subtree — a locale or section nuke
+await artifacts.invalidate(loadDoc, ['promo']);          // declared source — see below
+```
+
+A successful form action additionally evicts its own page automatically, mirroring Kit's
+actions-invalidate-loads semantics.
+
+**Declared sources** solve one-document-on-many-pages. Wrap the definition — loads stay plain:
+
+```ts title=src/lib/server/cms.ts
+export const loadDoc = import.meta.og.source(async (slug: string) => fetchDoc(slug));
+```
+
+Every stored page whose render called `loadDoc('promo')` files a receipt.
+`artifacts.invalidate(loadDoc, ['promo'])` evicts exactly those pages — at the origin **and**
+at every edge — however many there are, whatever locale they live in. The macro follows the
+[macro laws](/docs/macros): top-level `export const` only, AST-verified, loud build errors.
+Pass `{ key: (…args) => string }` to canonicalize exotic argument shapes.
+
+## Stores and edges
+
+Live objects can't ride vite config — they are wired once in hooks:
+
+```ts title=src/hooks.server.ts
+import { artifacts, valkey, akamai, cloudfront } from 'ogygia/artifacts';
+
+artifacts.configure({
+	store: valkey(client),                             // or upstash({ url, token }),
+	edge: [akamai(creds), cloudfront(cfg)]             //    cloudflareKv(platform.env.KV)
+});
+```
+
+Stores: `memoryStore` (default) · `valkey(client)` (ioredis or node-redis) ·
+`upstash({ url, token })` (REST, serverless-native) · `cloudflareKv(binding)` (Workers KV).
+Edges: `akamai` (EdgeGrid-signed Fast Purge) · `cloudfront` (SigV4 invalidations) ·
+`cloudflare` (zone purge). Eligible responses are stamped
+`cache-control: public, s-maxage=<ttl>` plus each edge's tags, so your CDN follows proven
+per-page headers instead of a blanket rule — and `invalidate()` fans out to the store and every
+edge at once. One edge being down never fails a publish, or a request.
+
+## Notes
+
+- **csr-agnostic**: a `csr = true` page stores the same way; Kit hydrates the stored copy.
+- **The store holds the render**, not data: a hit skips data fetching *and* component
+  execution. Your data caches stay useful underneath for the misses.
+- Store failures never fail a request — a broken store means renders, not errors.
+- Blind spot, same contract as prerender: `Date.now()`/randomness inside a load is "true at
+  render time".

@@ -14,6 +14,7 @@ import {
 	MAX_REGION_PROPS_LEN,
 	PRERENDER_REGION_TTL_SEC
 } from './endpoint.js';
+import { artifact_capture_active } from '../artifacts/capture.js';
 import { encode_region_props } from './region-props.js';
 import { stringify } from 'devalue';
 import { record_server_event } from '../devtools/server-registry.js';
@@ -100,8 +101,12 @@ export function mint_region_capability(entry: string, payload: string, ttl = 0):
 	const session = region_session();
 	// Prerendered (real PPR): the capability lives in a static file that outlives any TTL — mint it
 	// effectively-forever (props are public in the HTML; session sealed empty). Dynamic pages keep
-	// the short `regionTtl` window so harvested URLs age out.
-	const exp = Math.floor(Date.now() / 1000) + (building ? PRERENDER_REGION_TTL_SEC : regionTtl);
+	// the short `regionTtl` window so harvested URLs age out. An ARTIFACT-eligible render is the
+	// prerender case at request time — the stored HTML outlives `regionTtl`, so its holes mint
+	// prerender-grade too (a warm artifact must never carry expired hole URLs).
+	const exp =
+		Math.floor(Date.now() / 1000) +
+		(building || artifact_capture_active() ? PRERENDER_REGION_TTL_SEC : regionTtl);
 	warn_unstable_secret();
 	// A hole is dynamic by default (`ttl` 0 → the handle answers `no-store`); a positive `ttl` opts
 	// into a `private, max-age=ttl` browser cache. Empty string when 0 keeps the MAC field stable.
