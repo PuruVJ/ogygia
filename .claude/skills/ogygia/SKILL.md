@@ -56,6 +56,7 @@ Marked on a component import: `import X from './X.svelte' with { … }`.
 - `src/hooks.ts`: `export const transport = { ...ogygia.transport }` — needed only when a held region crosses the wire (remotes, live content).
 - `src/ogygia.d.ts`: `/// <reference types="ogygia/types" />` — or svelte-check flags `virtual:ogygia/*`.
 - Markdown: `ogygia({ content: { markdown: {} } })` in vite config; `extensions: ogygia.extensions()` + `preprocess: [vitePreprocess(), ...ogygia.preprocess()]` in **svelte.config.js** (never inline on `sveltekit()` — Kit would ignore svelte.config.js and hide them from svelte-check). No separate mdsvex plugin ever.
+- A server island (`render: 'deferred'`) that takes a loading snippet DECLARES it in its own props: `ogygiaFallback?: Snippet`. This is unavoidable ceremony — svelte-check/language-tools type the ORIGINAL source and ignore preprocessor output for diagnostics (probe-proven; do NOT attempt a preprocessor/type-rewrite workaround, it cannot work at this seam).
 - Production env: `ORIGIN` (server-island/command/form POSTs go through Kit CSRF), `OGYGIA_SECRET` (stable HMAC across deploys; required in practice for PPR so old static pages' holes keep verifying).
 - `npx ogygia init` does the whole wiring; `npx ogygia site init` scaffolds a docs site.
 - `npx ogygia ai` installs this skill + registers the MCP server (below) into the app's `.claude/` — run it once so any agent on the repo gets both.

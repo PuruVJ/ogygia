@@ -63,7 +63,14 @@ A deferred region fetches on the `wake` schedule (the same timing words, minus `
 
 ## A fallback while it loads
 
-Pass an `ogygiaFallback` snippet. It shows in the placeholder until the real HTML lands:
+Pass an `ogygiaFallback` snippet. It shows in the placeholder until the real HTML lands. One line of ceremony: **declare the reserved snippet in the server island's own props** so svelte-check accepts it at call sites (the language tools type your original source, so nothing can inject it for you):
+
+```svelte
+<script lang="ts">
+  import type { Snippet } from 'svelte';
+  let { name, ogygiaFallback }: { name: string; ogygiaFallback?: Snippet } = $props();
+</script>
+```
 
 ```svelte
 <Greeting name="Ada">

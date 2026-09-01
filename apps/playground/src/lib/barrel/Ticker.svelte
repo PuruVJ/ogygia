@@ -2,8 +2,7 @@
 	import type { Snippet } from 'svelte';
 	let {
 		start = 0,
-		label = 'Ticker',
-		ogygiaFallback
+		label = 'Ticker'
 	}: { start?: number; label?: string; ogygiaFallback?: Snippet } = $props();
 	// svelte-ignore state_referenced_locally
 	let count = $state(start);

@@ -1024,6 +1024,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
  * `ogygia({ content: { markdown } })` must appear earlier in the plugins array so its config is
  * registered before this reads it (it does, being before `sveltekit()`).
  */
+// NOTE(deferred-types, 2026-09-01): a preprocessor that rewrote `render:'deferred'` imports to
+// type the reserved `ogygiaFallback` snippet was built and REVERTED — svelte-check/language-tools
+// type the ORIGINAL source and ignore script preprocessors' output for diagnostics (probe-proven),
+// so no preprocessor can augment call-site types. Server islands hand-declare the prop instead.
 ogygia.preprocess = (): PreprocessorGroup[] =>
 	islandBridge.markdownConfig ? [ogygiaPresetPreprocess()] : [];
 
