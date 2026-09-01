@@ -202,6 +202,23 @@ describe('artifacts/registry', () => {
 		await expect(artifact_put('/x/', page_entry(), { ttl: 10 })).resolves.toBeUndefined();
 	});
 
+	it('warns ONCE when edges are configured over the per-instance memory default', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const edge: EdgeAdapter = {
+			name: 'e',
+			headers: () => ({}),
+			purgeUrl: async () => {},
+			purgeWhere: async () => {}
+		};
+		configure({ edge: [edge] });
+		const first = warn.mock.calls.filter((c) => String(c[0]).includes('other replicas')).length;
+		configure({ edge: [edge] });
+		const second = warn.mock.calls.filter((c) => String(c[0]).includes('other replicas')).length;
+		expect(first).toBe(1);
+		expect(second).toBe(1); // once per process, never nagging
+		warn.mockRestore();
+	});
+
 	it('invalidate fans out to store + every edge; one edge down never throws', async () => {
 		const calls: string[] = [];
 		const edge = (name: string, fail = false): EdgeAdapter => ({

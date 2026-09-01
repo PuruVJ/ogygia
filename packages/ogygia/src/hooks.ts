@@ -93,6 +93,7 @@ import {
 import { PAGE_DEFER_BOOTSTRAP, PAGE_DEFER_GLOBAL } from './page-defer.js';
 import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrency.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash } from 'node:crypto';
 import { stringify } from 'devalue';
 import { serialize_provided_context } from './context-bridge.js';
 import { escape_script_text } from './escape.js';
@@ -301,13 +302,38 @@ const KIT_DEFERRED_BOOT_RE = /const deferred = new Map\(\);/;
  *  the stored copy is by definition a cached render, exactly what remount:'swr' exists for. */
 const ARTIFACT_DOC_META = '<meta name="ogygia-artifact" content="hit">';
 
-/** Rebuild a Response from a stored artifact. `via` rides a debug header the harness asserts on. */
-function artifact_response(entry: ArtifactEntry, via: 'hit' | 'join' | 'stored'): Response {
+/** Rebuild a Response from a stored artifact. `via` rides a debug header the harness asserts on.
+ *  With the incoming `request`, a matching validator answers 304 — plain-HTTP conditional
+ *  requests (RFC 9110), which is what makes an Akamai/CloudFront/browser revalidation of a
+ *  stored page cost zero body bytes. Validators live on the ENTRY (artifact level), never in
+ *  edge adapters: they are the render's identity, not a CDN dialect. */
+function artifact_response(
+	entry: ArtifactEntry,
+	via: 'hit' | 'join' | 'stored',
+	request?: Request
+): Response {
 	if (entry.kind === 'redirect') {
 		return new Response(null, {
 			status: entry.status,
 			headers: { location: entry.location, 'x-ogygia-artifact': via }
 		});
+	}
+	if (request) {
+		const etag = entry.headers.etag;
+		const inm = request.headers.get('if-none-match');
+		const ims = request.headers.get('if-modified-since');
+		const last_modified = entry.headers['last-modified'];
+		const etag_match = !!etag && !!inm && inm.split(',').some((t) => t.trim() === etag);
+		// If-None-Match wins when present (RFC 9110 §13.1.3); IMS compares against store time.
+		const ims_match =
+			!inm && !!ims && !!last_modified && Date.parse(ims) >= Date.parse(last_modified);
+		if (etag_match || ims_match) {
+			const headers: Record<string, string> = { 'x-ogygia-artifact': via };
+			for (const h of ['etag', 'last-modified', 'cache-control'] as const) {
+				if (entry.headers[h]) headers[h] = entry.headers[h];
+			}
+			return new Response(null, { status: 304, headers });
+		}
 	}
 	// Served-from-store copies carry the doc marker so live regions self-freshen (`stored` = the
 	// render that JUST happened — fresh by definition, no marker).
@@ -317,6 +343,54 @@ function artifact_response(entry: ArtifactEntry, via: 'hit' | 'join' | 'stored')
 		status: 200,
 		headers: { ...entry.headers, 'x-ogygia-artifact': via }
 	});
+}
+
+/** The verdict's other word: a REFUSED page gets `private, no-store` when the app set nothing —
+ *  per-page proven headers replace blanket CDN rules in both directions. Best-effort (some
+ *  platforms hand out immutable headers). */
+function stamp_no_store(response: Response): void {
+	try {
+		if (response.status !== 200) return;
+		if (!(response.headers.get('content-type') ?? '').includes('text/html')) return;
+		if (response.headers.get('cache-control')) return;
+		response.headers.set('cache-control', 'private, no-store');
+	} catch {
+		/* immutable headers — the app's platform wins */
+	}
+}
+
+/** DEV teaching leg: the verdict runs but never stores/serves. Eligible → a `would-store`
+ *  header to read in the network panel; refused → ONE console note per path naming the read. */
+const dev_noted_paths = new Set<string>();
+function dev_artifact_note(
+	response: Response,
+	path: string,
+	bag: RequestBag,
+	obs: Observation
+): void {
+	const refusal =
+		obs.disqualified_by ??
+		(obs.wrote_cookie ? 'a cookie write' : null) ??
+		(response.status !== 200 ? `status ${response.status}` : null) ??
+		(response.headers.has('set-cookie') ? 'a set-cookie response header' : null) ??
+		(!(response.headers.get('content-type') ?? '').includes('text/html')
+			? 'a non-html response'
+			: null) ??
+		(bag.deferred && bag.deferred.length ? 'streamed load promises' : null);
+	if (!refusal) {
+		try {
+			response.headers.set('x-ogygia-artifact', 'would-store');
+		} catch {
+			/* immutable headers */
+		}
+		return;
+	}
+	if (dev_noted_paths.has(path)) return;
+	dev_noted_paths.add(path);
+	console.warn(
+		`[ogygia] artifacts: ${path} stays per-request — the render read ${refusal}. ` +
+			`Personalize inside a render:'deferred' hole to make the shell storable.`
+	);
 }
 
 /**
@@ -366,11 +440,16 @@ async function capture_artifact(
 	// only declares its deferred-map when the page carries pending promises — buffering such a
 	// response bakes ONE settle's inline resolve scripts into the copy. Never store it.
 	if (KIT_DEFERRED_BOOT_RE.test(html)) return null;
+	const created = Date.now();
 	// The verdict's storage instructions: ours first, then each edge's (an edge may grant its own
 	// cache-control — later wins). Merged into the STORED entry too, so hits replay them.
+	// Validators ride the entry: the etag IS the render's identity, `last-modified` its store
+	// time — every later revalidation (Akamai prefresh, browser reload) can answer 304.
 	const headers: Record<string, string> = {
 		'content-type': content_type,
-		'cache-control': `public, s-maxage=${ttl}`
+		'cache-control': `public, s-maxage=${ttl}`,
+		etag: `"${createHash('sha256').update(html).digest('hex').slice(0, 32)}"`,
+		'last-modified': new Date(created).toUTCString()
 	};
 	for (const edge of current_edges()) {
 		try {
@@ -379,7 +458,7 @@ async function capture_artifact(
 			/* an edge adapter must never fail a render */
 		}
 	}
-	const entry: ArtifactEntry = { kind: 'page', html, headers, created: Date.now() };
+	const entry: ArtifactEntry = { kind: 'page', html, headers, created };
 	await artifact_put(path, entry, { ttl, tags: bag.artifact_tags ?? [] });
 	return { entry, response: artifact_response(entry, 'stored') };
 }
@@ -455,19 +534,27 @@ class OgygiaHandle {
 			// JOINS the in-flight render (the stampede law: N concurrent requests, ONE render).
 			let artifact_settle: ((outcome: FlightOutcome) => void) | null = null;
 			let artifact_obs: Observation | null = null;
-			if (
+			const artifact_page_request =
 				artifactsConfig !== null &&
 				!building &&
 				event.request.method.toUpperCase() === 'GET' &&
 				event.url.search === '' &&
-				!path.endsWith('__data.json')
-			) {
+				!path.endsWith('__data.json');
+			if (artifact_page_request && !dev) {
 				const hit = await artifact_get(path);
-				if (hit) return artifact_response(hit, 'hit');
+				if (hit) {
+					if (DEVTOOLS)
+						record_server_event({ domain: 'server', name: 'server.artifact', op: 'hit', url: path });
+					return artifact_response(hit, 'hit', event.request);
+				}
 				const flight = join_flight(path);
 				if (flight) {
 					const outcome = await flight;
-					if (outcome.stored) return artifact_response(outcome.stored, 'join');
+					if (outcome.stored) {
+						if (DEVTOOLS)
+							record_server_event({ domain: 'server', name: 'server.artifact', op: 'join', url: path });
+						return artifact_response(outcome.stored, 'join', event.request);
+					}
 					// The flight proved the page ineligible — render per-request, no new flight
 					// (a chain of flights would serialize renders of a page that never stores).
 				} else {
@@ -475,6 +562,12 @@ class OgygiaHandle {
 					artifact_settle = begin_flight(path);
 					artifact_obs = observe_event(event);
 				}
+			} else if (artifact_page_request && dev) {
+				// DEV: never serve from (or fill) the store — an edited page must always re-render,
+				// HMR truth beats byte reuse. The OBSERVATION still runs so the purity verdict can
+				// teach: eligible pages get an `x-ogygia-artifact: would-store` header, refusals a
+				// once-per-path console note naming the disqualifying read.
+				artifact_obs = observe_event(event);
 			}
 			// Flicker fix: on csr=false pages Kit resolves top-level `await query()` calls during
 			// SSR (populating the internal request store's `remote.implicit`) but only serializes
@@ -528,10 +621,35 @@ class OgygiaHandle {
 				try {
 					const stored = await capture_artifact(response, path, bag, artifact_obs!);
 					artifact_settle({ stored: stored?.entry ?? null });
+					if (DEVTOOLS) {
+						record_server_event(
+							stored
+								? {
+										domain: 'server',
+										name: 'server.artifact',
+										op: 'stored',
+										url: path,
+										bytes: stored.entry.kind === 'page' ? stored.entry.html.length : 0
+									}
+								: {
+										domain: 'server',
+										name: 'server.artifact',
+										op: 'skip',
+										url: path,
+										reason: artifact_obs!.disqualified_by ?? 'response-ineligible'
+									}
+						);
+					}
 					if (stored) return stored.response;
+					// Refused → per-request forever (until inputs change). Stamp `no-store` when the
+					// app set nothing: the verdict's word replaces blanket CDN rules in BOTH directions
+					// (a personal page must never be edge-cached by a property-wide TTL).
+					stamp_no_store(response);
 				} catch {
 					artifact_settle({ stored: null });
 				}
+			} else if (dev && artifact_obs && artifact_page_request) {
+				dev_artifact_note(response, path, bag, artifact_obs);
 			}
 			// Stream captured `$page.data` promises into islands (csr=false, real browser load). The doc
 			// — with the pending seed + resolve-global bootstrap — is fully built now (transformPageChunk

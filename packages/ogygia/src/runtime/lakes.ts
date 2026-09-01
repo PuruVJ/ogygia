@@ -98,6 +98,19 @@ export function on_frozen_connect(el: HTMLElement, arm: LakeArm): boolean {
 			else if (when === 'visible') arm.visible(fire);
 			else if (when === 'load') fire();
 			else arm.media(when, fire);
+		} else if (
+			import.meta.env.DEV &&
+			region_remount(el) === 'swr' &&
+			!el.parentElement?.closest('ogygia-region')
+		) {
+			// A live region with NO island host: nothing ever drives its remount revalidation on a
+			// regular page (it works on artifact-served documents via the doc marker, and inside an
+			// island host via lift/restore + remount). Say so instead of silently baking forever.
+			console.warn(
+				`[ogygia] render:'live' region "${id}" has no island host — on regular pages it will ` +
+					`never revalidate (only on artifact-served documents). Wrap it in a wake:'load' ` +
+					`island to drive remount revalidation.`
+			);
 		}
 		return true;
 	}

@@ -153,6 +153,15 @@ try {
 		check(`S5 ${why}: never stored`, artifact_via(second) === '', artifact_via(second) || '(none)');
 		check(`S5 ${why}: re-rendered`, ((await renders())[path] ?? 0) === 2);
 	}
+	// The verdict's OTHER word: refused pages (where the app set no cache-control of its own)
+	// are stamped `private, no-store` — per-page proven headers replace blanket CDN rules in
+	// both directions. (The setcookie page carries a Set-Cookie, so no shared cache may keep it.)
+	const refused = await fetch(origin + '/fr/fr/flagged');
+	check(
+		'S5: refused page stamped private, no-store',
+		refused.headers.get('cache-control') === 'private, no-store',
+		refused.headers.get('cache-control') ?? '(none)'
+	);
 
 	// ── S6: holes — frozen shell, fresh hole, prerender-grade capability ─────────────────────
 	const hole1 = await fetch(origin + '/fr/fr/hole');
@@ -325,6 +334,25 @@ try {
 			await browser.close();
 		}
 	}
+
+	// ── S14: validators — a revalidation of a stored page costs ZERO body bytes ──────────────
+	// The etag/last-modified live on the ENTRY (artifact level, minted at store time), and the
+	// handle answers plain-HTTP conditionals — which is exactly what makes an Akamai prefresh
+	// (If-Modified-Since) or a browser reload against a stored page a 304, not a re-send.
+	const v1 = await fetch(origin + '/fr/fr/c/home');
+	const etag = v1.headers.get('etag');
+	const last_modified = v1.headers.get('last-modified');
+	check('S14: stored page carries etag + last-modified', !!etag && !!last_modified, `${etag} / ${last_modified}`);
+	const v2 = await fetch(origin + '/fr/fr/c/home', { headers: { 'if-none-match': etag ?? '' } });
+	check('S14: If-None-Match answers 304', v2.status === 304, String(v2.status));
+	check('S14: 304 body is EMPTY', (await v2.text()).length === 0);
+	check('S14: 304 keeps the validators', v2.headers.get('etag') === etag);
+	const v3 = await fetch(origin + '/fr/fr/c/home', {
+		headers: { 'if-modified-since': last_modified ?? '' }
+	});
+	check('S14: If-Modified-Since answers 304 (the Akamai prefresh shape)', v3.status === 304, String(v3.status));
+	const v4 = await fetch(origin + '/fr/fr/c/home', { headers: { 'if-none-match': '"nope"' } });
+	check('S14: a stale validator gets the full 200', v4.status === 200 && (await v4.text()).length > 0);
 } finally {
 	srv.kill();
 	await akamai.close();

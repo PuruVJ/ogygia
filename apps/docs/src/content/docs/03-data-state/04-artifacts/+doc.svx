@@ -87,6 +87,14 @@ edge at once. One edge being down never fails a publish, or a request.
 
 ## Notes
 
+- **In dev, the store never serves or fills** — your edits always re-render. The verdict still
+  teaches: an eligible page answers `x-ogygia-artifact: would-store` (check the network panel),
+  a refused one prints a single console note naming the disqualifying read.
+- **Revalidations are free**: stored entries carry an `etag` and `last-modified`, and the handle
+  answers `If-None-Match` / `If-Modified-Since` with a bodiless 304 — a CDN prefresh or browser
+  reload of a stored page costs zero body bytes.
+- **Refused pages get `private, no-store`** when your app set no cache-control of its own — the
+  verdict's headers replace blanket CDN rules in both directions.
 - **csr-agnostic**: a `csr = true` page stores the same way; Kit hydrates the stored copy.
 - **The store holds the render**, not data: a hit skips data fetching *and* component
   execution. Your data caches stay useful underneath for the misses.

@@ -16,6 +16,10 @@ import type {
 import { memory_store } from './memory-store.js';
 import { normalize_prefix } from './key.js';
 import { SOURCE_ID, SOURCE_KEY, fingerprint_args, source_tag } from './source-runtime.js';
+import { record_server_event } from '../devtools/server-registry.js';
+
+// DEVTOOLS gate — server realm; off → every emit folds out.
+const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
 let store: ArtifactStore | null = null;
 let edges: EdgeAdapter[] = [];
@@ -24,10 +28,23 @@ function current_store(): ArtifactStore {
 	return (store ??= memory_store());
 }
 
+let warned_replica_blindspot = false;
+
 /** `artifacts.configure({ store, edge })` — hooks.server.ts, before the first request. */
 export function configure(config: ArtifactsRuntimeConfig): void {
 	if (config.store) store = config.store;
 	if (config.edge) edges = [...config.edge];
+	// Edges without a SHARED store: each replica keeps its own memory LRU, so an invalidation
+	// evicts THIS instance + purges the CDN, while sibling replicas keep serving their stale
+	// copy to the CDN's refills. Say it once — multi-instance deploys want valkey/upstash/KV.
+	if (edges.length && !config.store && !store && !warned_replica_blindspot) {
+		warned_replica_blindspot = true;
+		console.warn(
+			'[ogygia] artifacts: edge adapters are configured but the store is the per-instance ' +
+				'memory default — invalidations cannot reach other replicas. Use a shared store ' +
+				'(valkey / upstash / cloudflareKv) in multi-instance deploys.'
+		);
+	}
 }
 
 export function current_edges(): readonly EdgeAdapter[] {
@@ -118,6 +135,8 @@ export async function invalidate(
 	args?: unknown[]
 ): Promise<void> {
 	if (typeof target === 'string') {
+		if (DEVTOOLS)
+			record_server_event({ domain: 'server', name: 'server.artifact', op: 'invalidate', url: target });
 		const jobs: Promise<unknown>[] = [current_store().evict(target)];
 		for (const edge of edges) jobs.push(edge.purgeUrl(target));
 		await settle_all('invalidate', jobs);
@@ -152,6 +171,8 @@ export async function invalidate(
  *  Cloudflare: prefix purge). */
 export async function invalidateWhere(filter: { prefix: string }): Promise<void> {
 	const prefix = normalize_prefix(filter.prefix);
+	if (DEVTOOLS)
+		record_server_event({ domain: 'server', name: 'server.artifact', op: 'invalidate-where', url: prefix });
 	const jobs: Promise<unknown>[] = [current_store().evictWhere({ prefix })];
 	for (const edge of edges) jobs.push(edge.purgeWhere({ prefix }));
 	await settle_all('invalidateWhere', jobs);
@@ -160,6 +181,8 @@ export async function invalidateWhere(filter: { prefix: string }): Promise<void>
 /** Action self-evict: a successful non-GET on a page URL evicts that URL (origin only — the
  *  edge copy follows via its s-maxage or the app's explicit invalidate; fire-and-forget). */
 export function self_evict(pathname: string): void {
+	if (DEVTOOLS)
+		record_server_event({ domain: 'server', name: 'server.artifact', op: 'self-evict', url: pathname });
 	void current_store()
 		.evict(pathname)
 		.catch(() => {});

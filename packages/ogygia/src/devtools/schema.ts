@@ -110,6 +110,18 @@ export type ServerEventInput =
 			/** page | remote — which document side-channel seed the handle wrote. */
 			kind: 'page' | 'remote';
 			bytes: number;
+	  }
+	| {
+			domain: 'server';
+			name: 'server.artifact';
+			/** hit | join | stored | skip | invalidate | invalidate-where | self-evict. */
+			op: string;
+			/** Store key (URL pathname), or the prefix for the bulk op. */
+			url?: string;
+			/** Named refusal for `skip` — the same string the dev note prints. */
+			reason?: string;
+			/** Stored html size (bytes) for `stored`. */
+			bytes?: number;
 	  };
 
 // ── wire domain ──────────────────────────────────────────────────────────────

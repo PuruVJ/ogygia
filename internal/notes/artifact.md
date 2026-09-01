@@ -387,6 +387,27 @@ counters, store contents, purge logs):
   from the reverse index's returned keys) — including the en page a prefix nuke could never
   reach precisely — and a non-consumer bystander's artifact survives
 
+**The finish-well batch (user-ordered, everything-but-stitching, 2026-09-01):**
+- **DEV never serves/fills the store** — an edited page must always re-render (HMR truth beats
+  byte reuse). The verdict still runs and TEACHES: eligible pages carry
+  `x-ogygia-artifact: would-store`; refusals print ONE named console note per path. Locked by
+  `e2e/artifacts-dev.ts` (self-booting fixture dev server).
+- **Validators at the ARTIFACT level** (never in edge adapters — they're the render's identity,
+  not a CDN dialect): store-time `etag` (sha-256 of the html) + `last-modified` on the entry;
+  the handle answers `if-none-match` / `if-modified-since` with a bodiless 304 — an Akamai
+  prefresh (IMS) or browser reload of a stored page costs zero body bytes (S14).
+- **The verdict's other word**: refused 200-html pages with NO app cache-control get
+  `private, no-store` — per-page proven headers replace blanket CDN rules in BOTH directions.
+- **Dev warn** (runtime): a `render:'live'` region with no island host never revalidates on
+  regular pages — say so instead of silently baking forever.
+- **Replica warn** (configure): edges + the per-instance memory default = invalidation blind
+  spots across replicas; warn once, point at valkey/upstash/cloudflareKv.
+- **Devtools**: one `server.artifact` event (op: hit/join/stored/skip/invalidate/
+  invalidate-where/self-evict, url, named skip reason, stored bytes) in the existing
+  fp-correlated stream; `__OGYGIA_DEVTOOLS__`-gated, folds out otherwise.
+- **Serve-time stitching**: deliberately NOT in this batch — the user wants it as its own next
+  round (render per-visitor holes server-side on a hit and splice into the stored bytes).
+
 **Lane 4 — real CDNs, gated.** Same deck, smoke subset only (`--real akamai|cloudfront`),
 against a deployed fixture + env creds. Manual/nightly, never PR CI; propagation asserted with
 polling windows, not sleeps. The emulator keeps PR CI hermetic.
