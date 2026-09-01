@@ -6,8 +6,16 @@
 // which `$app/*` each copy got: the header bundled Kit's REAL client store — whose page store
 // never populates under csr=false — while its siblings got the shim. `$page.url.pathname` threw
 // "Cannot read properties of undefined (reading 'pathname')" during hydrate and the header was
-// torn out of the page. `?og-region` identity makes membership ride in the module id, so the
-// region copy ALWAYS gets the shim and the csr=true copy ALWAYS keeps Kit's real store.
+// torn out of the page. The EAGER transitive island-graph walk makes membership deterministic
+// (the `?og-region` module-id fork was tried and reverted — it broke scoped-CSS emission), so a
+// shared module is shimmed EVERYWHERE, including the csr=true copy.
+//
+// SECOND LEG (the bcms all-products outage): a shared component reading `$page.data.x.method()`
+// in onMount. The shimmed csr=true copy read `data: {}` (the island seed never runs on a
+// Kit-booted document), threw inside Kit's synchronous hydrate flush, and killed every mount
+// after it. The KIT-WORLD PAGE THREAD fixes this: Kit's generated client entry publishes its
+// REAL reactive `page` on `Symbol.for('ogygia.kit-page')` (two appended lines, zero bytes —
+// see KIT_PAGE_THREAD in vite/index.ts), and the shims read through it whenever it exists.
 //
 //   node e2e/split-brain.ts http://localhost:3051
 
@@ -57,13 +65,19 @@ try {
 	// exact shape that broke in production. The walk marks it up front, so it always reads the shim.
 	const sharedPath = ((await page.locator('[data-shared-url]').textContent()) ?? '').trim();
 	check('csr=false: shared TRANSITIVE dep (also imported by /kit) reads the shim, not the race', sharedPath === '/split-brain', sharedPath);
+	// PAGE DATA leg (the bcms all-products crash): `$page.data.<field>.method()` in onMount.
+	// Island world: the document seed populates the shim, so the load's value comes through.
+	const sharedData = ((await page.locator('[data-shared-data]').textContent()) ?? '').trim();
+	check("csr=false: shared component's $page.data via the seeded shim", sharedData === 'islandworld', sharedData);
 	const regionErrs = errs.filter((e) => !/favicon/.test(e));
 	check('csr=false: zero page errors (the bug threw a TypeError here)', regionErrs.length === 0, regionErrs[0] ?? '');
 
 	// ── csr=true page: the same header renders and reads its own pathname ─────────────────
-	// No module-id fork: the header is ONE (shimmed) module. On csr=true the shim falls back to
-	// `location`, so it still reads `/kit` correctly (a static read; the accepted trade-off is that a
-	// shared island+route component uses the shim's snapshot rather than Kit's reactive store there).
+	// No module-id fork: the header is ONE (shimmed) module. On csr=true the kit-world page thread
+	// hands the shim Kit's REAL reactive `page` (url, params, and — the bcms crash — DATA), so the
+	// shared copy reads Kit's truth. `$app/state` reads stay live through the thread's getters;
+	// `$app/stores` subscribers get a fresh snapshot per notification (island set_page events),
+	// which on a Kit page means effectively per-subscription — the documented static-read trade-off.
 	const kit = await browser.newPage();
 	const kitErrs: string[] = [];
 	kit.on('pageerror', (e) => kitErrs.push(e.message));
@@ -72,8 +86,16 @@ try {
 	await sleep(300);
 	const kitPath = ((await kit.locator('[data-split-path]').textContent()) ?? '').trim();
 	check('csr=true: the same header reads its own pathname (/kit)', kitPath === '/kit', kitPath);
+	// PAGE DATA leg (the bcms all-products crash, verbatim shape): the shared component calls a
+	// method on `$page.data.<field>` in onMount. The island shim starts with `data: {}` and is
+	// NEVER seeded on a Kit-booted document — without the kit-page bridge the read returns
+	// undefined, the method call throws inside Kit's synchronous hydrate flush, and every
+	// component mount after it dies (the bcms header never added `client-mounted`; its CSS cap
+	// then clipped the open mega menu). The bridge hands the shim Kit's REAL page data.
+	const kitSharedData = ((await kit.locator('[data-shared-data]').textContent()) ?? '').trim();
+	check("csr=true: shared component's $page.data reads KIT's real page data", kitSharedData === 'kitworld', kitSharedData);
 	const kitFatal = kitErrs.filter((e) => !/favicon/.test(e));
-	check('csr=true: zero page errors', kitFatal.length === 0, kitFatal[0] ?? '');
+	check('csr=true: zero page errors (the bcms crash threw here)', kitFatal.length === 0, kitFatal[0] ?? '');
 
 	// ── Build output: the header never bundles Kit's real (empty-under-csr=false) client store ──
 	// `$app/stores`'s real client reads `getContext('__svelte__')`; on a csr=false island that store

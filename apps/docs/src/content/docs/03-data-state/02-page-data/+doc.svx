@@ -72,6 +72,7 @@ export const transport = {
 
 ## Notes
 
+- **A component shared with a `csr = true` page** reads the right page object in both worlds. On an island page the seed feeds it; on a Kit-hydrated page ogygia threads Kit's own live `page` through to it. Reading `page.data` in a shared header/footer is safe everywhere — no guards needed.
 - **A `form` action result** (`page.form`) and `page.error` reach islands the same way, so an island can render the outcome of a `<form method="POST">` without a prop.
 - **Client navigation** (the [SPA router](/docs/app/spa-router)) can't run streamed scripts mid-swap, so on those loads a promise is awaited on the server and handed to the island already settled — `page.data.x` is still a promise you `{#await}`, so your island code is identical either way.
 - **Treat load data as client-visible**, exactly as on a `csr = true` page: it is serialized into the HTML. Don't put secrets in `load` data you wouldn't ship to the browser.

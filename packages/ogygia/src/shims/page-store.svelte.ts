@@ -76,6 +76,29 @@ export class PageState {
 	}
 }
 
+// KIT-WORLD PAGE THREAD (read side). On a Kit-booted (csr=true) document the ogygia runtime never
+// runs, so nothing ever seeds `page_state` — a module SHARED between an island and a Kit page then
+// read `data: {}` through the shims, and a real app's `page.data._locale.toLowerCase()` in onMount
+// threw inside Kit's synchronous hydrate flush, killing every mount after it (the bcms all-products
+// outage). The fix is a thread between the two worlds: two lines appended to Kit's generated client
+// app entry (see KIT_PAGE_THREAD in vite/index.ts) publish Kit's REAL reactive `page` on this
+// well-known symbol, and the shims prefer it whenever it exists. Kit's entry evaluates exactly when
+// Kit boots and never ships to csr=false pages — so on csr=false documents the symbol is never set
+// and the seeded shim path is untouched.
+export interface KitPageBridge {
+	page: PageSnapshot;
+	navigating: { current: unknown };
+	/** Kit's real `$page` store — `$app/stores` shim subscribers delegate here so they stay
+	 *  LIVE through Kit navigations (the state getters above are already live by delegation). */
+	page_store?: { subscribe(run: (value: PageSnapshot) => void): () => void };
+}
+const KIT_PAGE_KEY = Symbol.for('ogygia.kit-page');
+export function kit_bridge(): KitPageBridge | null {
+	return (
+		(globalThis as unknown as Record<symbol, KitPageBridge | undefined>)[KIT_PAGE_KEY] ?? null
+	);
+}
+
 // One instance across EVERY bundle. In production the runtime and island entries share a single
 // `page-store` chunk, so a module-local `new PageState()` was already a singleton — but `vite dev`
 // serves this module as two instances (the runtime imports it relatively; islands reach it through

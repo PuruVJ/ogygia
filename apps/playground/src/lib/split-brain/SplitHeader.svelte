@@ -5,15 +5,18 @@
 	// lazy island-graph membership, build order decided which copy of `$app/stores` this file
 	// got: reached first through the Kit graph it bundled Kit's REAL client store (never
 	// populated under csr=false) while the later siblings got the shim — `$page.url.pathname`
-	// threw at hydrate and the header was torn out of the page. With `?og-region` identity the
-	// island copy always gets the shim and the /kit copy always gets the real store.
+	// threw at hydrate and the header was torn out of the page. The eager island-graph walk
+	// shims this file EVERYWHERE (deterministic); on /kit the kit-world page thread hands the
+	// shimmed copy Kit's real `page`, so both worlds read their own truth from ONE module.
 	import { page } from '$app/stores';
 	import SplitChild from './SplitChild.svelte';
 	import SharedUrl from './SharedUrl.svelte';
+	import SharedData from './SharedData.svelte';
 </script>
 
 <header class="island" data-split-header data-marker="og-e2e-split-brain">
 	<span data-split-path>{$page.url.pathname}</span>
 	<SplitChild />
 	<SharedUrl />
+	<SharedData />
 </header>

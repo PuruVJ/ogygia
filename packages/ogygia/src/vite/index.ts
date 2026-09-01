@@ -76,6 +76,25 @@ import { CompileCtx, type PackageScan } from '../compiler/ctx.js';
 import { discover_package_files } from './package-files.js';
 import { flags_manifest } from '../compiler/flags.js';
 import { V_KIT_WIRE, V_ROUTER_CSS, V_ROUTE_CSR, RESOLVED } from '../compiler/ids.js';
+
+// Kit's generated CLIENT app entry — dev serves `generated/client/app.js`, build inputs
+// `generated/client-optimized/app.js` (`kit.outDir` is configurable, so match from `generated/`).
+// The one module that evaluates exactly when Kit's client boots and NEVER on a csr=false page —
+// the append target for the kit-world page thread (see the transform hook).
+const KIT_CLIENT_APP_RE = /\/generated\/client(-optimized)?\/app\.js$/;
+// Appended INLINE (no extra module): publishes Kit's REAL reactive `page`/`navigating` (and the
+// real `$page` store, so shim subscribers stay LIVE through Kit navigations) on the well-known
+// slot the island `$app/*` shims read through (`kit_bridge()` in shims/page-store). Importer is
+// Kit's own entry — never island-graph — so `$app/state`/`$app/stores` here are KIT'S REAL
+// modules, already in (or a few bytes atop) Kit's client graph. Runs at module-eval, BEFORE
+// `kit.start()`'s synchronous hydrate flush, so a shared component's first `page.data` read
+// already sees Kit's truth (the bcms all-products crash read `{}` from the never-seeded island
+// store there).
+const KIT_PAGE_THREAD =
+	`\nimport { page as __og_kit_page, navigating as __og_kit_nav } from '$app/state';\n` +
+	`import { page as __og_kit_page_store } from '$app/stores';\n` +
+	`globalThis[Symbol.for('ogygia.kit-page')] = ` +
+	`{ page: __og_kit_page, navigating: __og_kit_nav, page_store: __og_kit_page_store };\n`;
 import {
 	PKG_ROOT,
 	PROFILER_UI_DIR,
@@ -908,6 +927,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						/import\((['"])\.\/profiler\/index\.js\1\)/,
 						'import(/* @vite-ignore */ ((s) => s)($1./profiler/index.js$1))'
 					);
+				}
+
+				// KIT-WORLD PAGE THREAD: append the two publish lines to Kit's generated client app
+				// entry (see KIT_PAGE_THREAD above). Client leg only — the SSR graph renders islands
+				// against Kit's real modules already, and this file is client-world by construction.
+				if (!options?.ssr && KIT_CLIENT_APP_RE.test(id)) {
+					source += KIT_PAGE_THREAD;
 				}
 
 				// The whole per-file pass — content-preset tag ▸ macros ▸ host-island transform ▸ ts-region
