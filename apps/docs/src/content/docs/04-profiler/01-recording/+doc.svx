@@ -129,3 +129,12 @@ ogygia({
   },
 });
 ```
+
+**Serverless hosts (Amplify, Lambda).** Those hosts hand console variables to the *build* only.
+The running function does not see them. So pass the secret through the vite config, as above,
+and keep the option unconditional. A guard like `profiler: env.SECRET && { secret }` turns the
+whole profiler off when the variable is missing at build time. Then `/__profiler` falls through
+to your own routing, typically an i18n redirect to the home page, which looks like a broken
+profiler. A configured profiler with an empty secret answers `/__profiler` with a plain
+"installed but disabled" 404 instead, and the build prints a warning, so the two are easy to
+tell apart.

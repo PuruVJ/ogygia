@@ -8,11 +8,13 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0] - 2026-08-21
+## [0.8.0] - 2026-09-03
 
 The **passage** release. The runtime and the compiler are both rebuilt from the studs, with byte-identical output the full way. The runtime collapses onto ONE identity primitive. Serialization, resumability, cross-island sharing, and navigation reconciliation all become operations on the same `Ref`. A live class, a store, a function, a snippet, and a held region cross the island boundary, and join again to a single live instance across each island that reads them. A navigation now MOVES regions, and does not reset them. And the server can be told to render again only what changed. Separately, the Vite plugin is carved into a real, bundler-agnostic compiler that you can run without Vite at all.
 
 On top of the islands, this release also ships a full tool layer: a drop-in production **SSR profiler** (`ogygia({ profiler })`), an island-graph **devtools** dock (`ogygia({ devtools })`), a fully-typed programmatic **router** (`ogygia/router`), and priority-aware preloading. Thus lazy islands warm in the background, and do not fight the first paint.
+
+And two capabilities sit next to the islands, on the server. **Frozen pages** make server execution opt-in per request: a page whose render is a pure function of its URL renders one time, on write, is stored whole, and is served as bytes until a publish thaws it. **Fragment federation** lets independent ogygia apps borrow each other's live regions across a signed boundary, and a publish in one app thaws the stitched fragment in the others.
 
 ### Changed (breaking)
 
@@ -34,6 +36,50 @@ On top of the islands, this release also ships a full tool layer: a drop-in prod
   `+page.server.ts`). The same behavior, the same options.
 
 ### Added
+
+- **Frozen pages: render once, on write, and serve the file.** `ogygia({ freeze: true })` is the
+  whole adoption. A page whose render is a pure function of its URL renders one time, then freezes:
+  the HTML, the headers, and any permanent redirect are stored WHOLE, and each later request is a
+  byte read. Kit, your loads, and Svelte never run on a hit. Cost moves from O(requests) to
+  O(publishes), and prerendering is the special case whose only publish is a deploy. Opt in or out
+  per page or layout with `export const freeze = true | false` (it cascades like `csr`, and is
+  stripped before Kit), or per route in the programmatic router (`page(C, { freeze })`,
+  `layout(name, C, { freeze })`, `routes(table, { freeze })` — page wins over the nearest layout
+  wins over the table wins over the config default). `ogygia/freeze` gives `freeze.invalidate(url |
+  fn, args)` and `freeze.invalidateWhere({ prefix })` to thaw on write, and `freeze.configure({
+  store, edge })` to choose where the bytes live: an in-process LRU with a 24-hour backstop by
+  default, or Valkey/Redis, Upstash, and Cloudflare KV, and the edge caches of Akamai, CloudFront,
+  and Cloudflare. A **live region inside a frozen shell self-freshens** — the page is bytes, but a
+  marked region re-renders per request over the frozen body — and `stitch: 'edge'` lifts that hole
+  to an ESI include the CDN assembles. Purity is OBSERVED, not asserted: a render that reads a
+  cookie or a request header taints itself and is served fresh, so freezing is safe to turn on
+  globally. The header `x-ogygia-freeze: hit | join | stored | would-store` reports each decision.
+
+- **Fragment federation: one `federate()`, a remote fragment IS a region, and a publish thaws it
+  across apps.** A single `federate({ name, key, peers, … })` in `hooks.server.ts` turns a SvelteKit
+  app into a federation peer and returns typed handles for the others: `const { cms, dash } =
+  federate(...)`. A remote fragment is a region value — `peer.page(path)` and `peer.widget(name,
+  props)` return one, and you drop it into `<Region of={…} />`. `render: 'static'` (the default)
+  awaits the hop and bakes the fragment's HTML into this render, adopting its source tags into the
+  freeze capture; `render: 'deferred'` mints a SHELL-signed hole the browser fills, so the client
+  chooses nothing and there is no open proxy. The `peers` map is symmetric: a peer's public key
+  verifies what comes FROM it, your private key signs what goes out, and Ed25519 with an audience, a
+  replay cap, and key rotation guards the boundary (`open: true` declares an intentionally public
+  fragment). `mount(peer)` still mounts a whole app under your shell chrome, with a canary
+  (`mount(pick)`), a rollout (`when(...)`), and streaming. The headline is **cross-app thaw**: a
+  `freeze.invalidate()` in one app sends a signed notice to its peers; each maps the tags into its
+  own namespace, drops the stitched fragment, and forwards the notice up the chain — so a publish in
+  the CMS refreshes every shell that embeds it.
+
+- **Accessible SPA navigation, and a reason on every page fetch.** A body-swap navigation now does
+  the two things a full page load gives for free. A visually-hidden `aria-live` region announces the
+  new `<title>` to screen readers. And focus resets to the top of the new page — an `[autofocus]`
+  element, else a `#hash` target, else `<body>` — leaving a focused `data-ogygia-keep` /
+  `data-persist` control alone, so a persistent search box or player keeps focus across the nav.
+  Separately, each page fetch carries `x-ogygia-purpose`: `prefetch` for a hover / press / viewport
+  warm, `history` for a back/forward restore, and absent for a real navigation — so a server can
+  skip a speculative or restorative side effect (an analytics beacon, a "last seen" write, a
+  one-time banner) that a real visit should fire.
 
 - **`when()`: flags gate routes, and `pick` chooses infrastructure.** `when(flag, entry)` wraps
   a table entry (a page, an endpoint object, a `mount()`). OFF means that the route DOES NOT
@@ -224,6 +270,30 @@ On top of the islands, this release also ships a full tool layer: a drop-in prod
   along the way.
 
 ### Fixed
+
+- **A live morph no longer wipes an unfocused field the visitor had edited.** A form control's
+  `value` / `checked` / `selected` now follows the server only when its ATTRIBUTE changed between
+  renders — the browser's own dirty-value rule. A live tick (or a nav reconcile) that re-sends the
+  same default leaves typed-in text alone whether or not the field holds focus; the focused control
+  was already safe, and the fix extends that to a field the visitor typed in and then tabbed away
+  from.
+
+- **An unkeyed wrapper around an island survives a sibling inserted above it.** The nav reconcile
+  matches a key-less wrapper by the keyed region INSIDE it (idiomorph's "id sets"), so a banner
+  added at the top of a page moves the wrapper into place and keeps the live island, instead of
+  morphing the wrapper into the banner and re-mounting the island (which reset its state).
+
+- **A server redirect during an SPA navigation corrects the address bar.** The router optimistically
+  shows the destination, then follows the redirect (reading `response.url`), corrects the address
+  bar to where it actually landed, and replaces the intermediate history entry so the Back button
+  skips it. A cross-origin redirect hands off to a full navigation. Previously the pre-redirect URL
+  sat over the redirected content.
+
+- **The fallback body swap keeps the live `<body>` element.** When the reconcile cannot run (a
+  region trapped in a shadow root, or the reconciler off), the swap now syncs the body's attributes
+  and replaces its children instead of discarding the `<body>` node — so listeners and observers
+  attached to `document.body` survive. The reconcile path syncs body attributes too, so a route that
+  changes `<body class>` / `data-*` (a theme, a layout flag) takes effect on navigation.
 
 - **PAGE-CSR invariant: the csr world of a layout now derives from the pages that it serves.** A
   `csr = false` declared only in a deep route (a catch-all `+page.ts`, say) used to leave the ROOT

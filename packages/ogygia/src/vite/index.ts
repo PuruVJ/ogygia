@@ -181,6 +181,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				? {}
 				: { ...options.profiler }
 			: null;
+	// An explicit `profiler.secret` that is EMPTY at build time is the serverless footgun (Amplify,
+	// Lambda): the author meant to bake it, the build env lacked the var, and the UI silently ends up
+	// disabled in production (the runtime env is empty there too). Named here, warned in `config`
+	// below where the command is known.
+	const profiler_secret_empty =
+		profiler_config !== null &&
+		typeof options.profiler === 'object' &&
+		'secret' in options.profiler &&
+		!options.profiler.secret;
 	// `ogygia({ freeze })` — the render-on-write switch + serializable policy, baked into
 	// `virtual:ogygia/freeze-config` (the profiler-config pipe). Live adapters (store clients,
 	// purge creds) can never ride a virtual module — they enter via `freeze.configure()` in
@@ -409,6 +418,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 									'(it never ships to production). Enable it for the dev server alone: ' +
 									'`ogygia({ devtools: command === "serve" })`.'
 							);
+					}
+
+					if (profiler_secret_empty && env.command === 'build' && isMainThread) {
+						console.warn(
+							'[ogygia] profiler: `profiler.secret` is EMPTY in this build — the variable it ' +
+								'reads is not set in the BUILD environment. The UI will be DISABLED in production ' +
+								'unless OGYGIA_PROFILER_SECRET exists at runtime (on Amplify / Lambda it does ' +
+								'not): /__profiler will answer "installed but disabled". Set the variable where ' +
+								'the build runs, and keep the `profiler` option unconditional.'
+						);
 					}
 
 					// Keep Kit's client build alive on all-csr=false apps: inject a URL-less keepalive
