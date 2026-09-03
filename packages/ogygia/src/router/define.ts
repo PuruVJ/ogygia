@@ -125,6 +125,11 @@ export interface PageServer {
 	 *  fills the pattern (`/posts/[id]` + `{ id: '1' }` → `/posts/1`) and joins the router's
 	 *  `entries()` crawl list; a dynamic page without this is skipped (crawled or SSR'd live). */
 	entries?: () => Array<Record<string, string>> | Promise<Array<Record<string, string>>>;
+	/** FREEZE opt-in/out for this page — the programmatic twin of `export const freeze` in a
+	 *  `+page.server.ts`. Cascades: page > innermost layout > … > `routes(table, { freeze })`;
+	 *  undeclared everywhere = the vite config's `freeze.default`. Only makes the page ELIGIBLE —
+	 *  observed purity still decides per render. */
+	freeze?: boolean;
 }
 
 /** A page route def, generic over its layout chain / load / actions so `$infer` reads them. `L` is
@@ -150,6 +155,8 @@ export interface PageDef<
 	readonly fallback?: AnyComponent;
 	/** prerender param sets for a dynamic pattern — see {@link PageServer.entries} */
 	readonly entries?: PageServer['entries'];
+	/** declared FREEZE opt-in/out — see {@link PageServer.freeze} */
+	readonly freeze?: boolean;
 	readonly layouts: L;
 	/** phantom — carries the authored load/actions/schema types to `$infer`; never read at runtime */
 	readonly __types?: { load: Load; actions: Actions; params: ParamsSchema; search: SearchSchema };
@@ -218,6 +225,7 @@ export function page<S extends PageServer>(
 		params_schema: server?.params,
 		search_schema: server?.search,
 		entries: server?.entries,
+		freeze: server?.freeze,
 		layouts: []
 	} as never;
 }
@@ -238,6 +246,8 @@ export interface LayoutDef<Name extends string = string, Load = unknown> {
 	readonly component: AnyComponent;
 	readonly load: LoadDef | undefined;
 	readonly error?: AnyComponent;
+	/** FREEZE opt-in/out for every page under this layout (a page's own value wins) */
+	readonly freeze?: boolean;
 	/** phantom — carries the authored load type to `$infer`; never read at runtime */
 	readonly __loadType?: Load;
 }
@@ -253,22 +263,22 @@ export interface LayoutFn<Def extends LayoutDef> {
 	<const T extends RouteTable>(table: T): { [K in keyof T]: WithLayout<T[K], Def> };
 }
 
-/** `layout(name, Component, { load?, error? })` — a named table→table wrapper. Applying it PREPENDS
+/** `layout(name, Component, { load?, error?, freeze? })` — a named table→table wrapper. Applying it PREPENDS
  *  this layout to every entry's chain and returns a table with the SAME KEYS, so `...admin({...})`
  *  spreads the tagged entries into the parent (a wrapped table nested in another accumulates the
  *  chain — Kit's nested layouts). `load` may be a `load()` wrapper or a bare typed fn. The name keys
  *  the layout's `{ data, children }` type as `App['(name)']`; duplicate names are a build error. */
-export function layout<Name extends string, S extends { load?: LoadInput; error?: AnyComponent }>(
-	name: Name,
-	component: AnyComponent,
-	opts?: S
-): LayoutFn<LayoutDef<Name, S['load']>> {
+export function layout<
+	Name extends string,
+	S extends { load?: LoadInput; error?: AnyComponent; freeze?: boolean }
+>(name: Name, component: AnyComponent, opts?: S): LayoutFn<LayoutDef<Name, S['load']>> {
 	const def: LayoutDef = {
 		__ogkind: 'layout',
 		name,
 		component,
 		load: to_load(opts?.load),
-		error: opts?.error
+		error: opts?.error,
+		freeze: opts?.freeze
 	};
 	const fn = (<T extends RouteTable>(table: T) => {
 		const out = {} as Record<string, RouteDef>;

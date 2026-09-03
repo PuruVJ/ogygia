@@ -9,6 +9,9 @@ import { router_css_of } from '../router-css.js';
 import { claim_region_css } from '../context.js';
 import type { AnyComponent } from './define.js';
 
+// ── regexes
+const STYLE_CLOSE_G = /<\/style/gi;
+
 // The generated virtual only resolves under the app's Vite pipeline; anywhere else (bare node,
 // `ogygia mcp`) the import rejects and CSS linking is a silent no-op — those realms render data.
 const rcss_ready: Promise<unknown> | null = (() => {
@@ -42,7 +45,7 @@ export async function router_css_head(components: AnyComponent[]): Promise<strin
 		fresh.delete(e.key); // shared child CSS can repeat across components — link once
 		if (e.href) head += `<link rel="stylesheet" href="${e.href}" data-ogygia-region-css>`;
 		else if (e.css)
-			head += `<style data-ogygia-rcss>${e.css.replace(/<\/style/gi, '<\\/style')}</style>`;
+			head += `<style data-ogygia-rcss>${e.css.replace(STYLE_CLOSE_G, '<\\/style')}</style>`;
 	}
 	return head;
 }

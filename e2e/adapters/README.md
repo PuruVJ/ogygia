@@ -18,15 +18,15 @@ For each adapter it:
 4. Boots the real output on the closest **offline** emulator and drives a real browser (island
    hydrates and is interactive, the runtime script serves `200`, no console/hydration errors).
 
-| adapter    | emulator                                             |
-| ---------- | ---------------------------------------------------- |
-| node       | real Node server (`node build/index.js`)             |
-| bun        | node output run under the **Bun** runtime            |
-| static     | static file server over `build/`                     |
+| adapter    | emulator                                              |
+| ---------- | ----------------------------------------------------- |
+| node       | real Node server (`node build/index.js`)              |
+| bun        | node output run under the **Bun** runtime             |
+| static     | static file server over `build/`                      |
 | cloudflare | real **Workers runtime (workerd)** via `wrangler dev` |
-| netlify    | the deployed artifact (`build/`)                     |
-| vercel     | the deployed artifact (`.vercel/output/static`)      |
-| auto       | build-verify only (no server without a platform)     |
+| netlify    | the deployed artifact (`build/`)                      |
+| vercel     | the deployed artifact (`.vercel/output/static`)       |
+| auto       | build-verify only (no server without a platform)      |
 
 No vendor accounts required. `bun` skips if Bun isn't installed; `cloudflare` skips unless `wrangler`
 is on PATH or `OGYGIA_E2E_WRANGLER=1` is set (CI sets it).

@@ -1,6 +1,6 @@
 ---
 title: State & Context
-summary: Share one live object across islands. A class with static wire = import.meta.og.wire({…}) crosses island boundaries as a prop; a drop-in setContext or <Provide> reaches a whole subtree without prop drilling.
+summary: Share one live object across islands. A class with static wire = import.meta.og.wire({…}) crosses island boundaries as a prop. A drop-in setContext or <Provide> reaches a full subtree without prop drilling.
 related:
   - data-state/boundary
   - regions/held-regions
@@ -8,12 +8,12 @@ related:
 ---
 
 ::: tip When to use
-Each island is its own hydration root, so a value handed between islands crosses a **serialization** boundary, not a reference. This page covers the two ways to share anyway: **sharing state** hands one live object to specific islands as a prop, and **context** provides a value to a whole subtree so any island below can read it. For state used *inside* one island, a plain `$state` is enough. For app-wide state, a plain module-level `$state` already shares across islands with no ceremony. The tools here are for when the instance is **born on the server** and must reach other islands.
+Each island is its own hydration root. Thus a value passed between islands crosses a **serialization** boundary, not a reference. This page covers the two ways to share in that condition. **Sharing state** gives one live object to specific islands as a prop. **Context** provides a value to a full subtree, and each island below can read it. For state *inside* one island, a plain `$state` is sufficient. For app-wide state, a plain module-level `$state` already shares across islands, with no setup. The tools here are for an instance that is **born on the server** and must reach other islands.
 :::
 
 ## Sharing state
 
-A prop crosses a serialization boundary. A plain object copies fine; a live class instance (a store, an orchestrator) does not. A class opts in by declaring **how it travels**, with the [`wire` macro](/docs/macros/wire):
+A prop crosses a serialization boundary. A plain object copies correctly. A live class instance (a store, an orchestrator) does not. A class opts in when it declares **how it travels**, with the [`wire` macro](/docs/macros/wire):
 
 ```ts title=cart.svelte.ts
 export class Cart {
@@ -28,9 +28,9 @@ export class Cart {
 }
 ```
 
-`encode` says what leaves. `decode` says how to rebuild. Both are yours, so nothing is hidden. `import.meta.og.wire` is a compile construct: no import, and the macro mints the codec key. See the **[`wire` macro](/docs/macros/wire)** for the full contract, the strict rules, and session continuity (`id` / `merge`).
+`encode` says what leaves. `decode` says how to rebuild. Both are yours. Thus nothing is hidden. `import.meta.og.wire` is a compile construct: there is no import, and the macro makes the codec key. See the **[`wire` macro](/docs/macros/wire)** for the full contract, the strict rules, and session continuity (`id` / `merge`).
 
-Make one instance and hand it to as many islands as you like:
+Make one instance, and give it to as many islands as you want:
 
 ```svelte
 <script>
@@ -45,9 +45,9 @@ Make one instance and hand it to as many islands as you like:
 <AddButton {cart} />
 ```
 
-They are separate bundles, but they share **one live object**. Click Add and the count island repaints: `$state` inside the instance is reactive across every island holding it. No store library, no manual events.
+They are separate bundles. But they share **one live object**. Click Add, and the count island repaints. `$state` inside the instance is reactive across each island that holds it. There is no store library and no manual event.
 
-The two widgets below are two separate islands sharing one `Cart` passed as a prop:
+The two widgets below are two separate islands. They share one `Cart`, passed as a prop:
 
 <script>
   import SharedCount from '$lib/demos/SharedCount.svelte' with { wake: 'load' };
@@ -65,17 +65,17 @@ The two widgets below are two separate islands sharing one `Cart` passed as a pr
 
 ### How it stays live
 
-Liveness is **identity**, not the codec. Each instance mints one wire id; the browser rebuilds it once and memoizes by that id, so every copy of the prop reunites into the same object. A late-hydrating island (`visible`, `idle`) joins the current instance when it wakes.
+Liveness is **identity**, not the codec. Each instance makes one wire id. The browser rebuilds it one time and memoizes by that id. Thus each copy of the prop joins into the same object. An island that hydrates late (`visible`, `idle`) joins the current instance when it wakes.
 
 ### Server-safe by construction
 
-The browser remembers decoded instances; the **server never does**. Each request, and each deferred-island render, decodes fresh, so one visitor's state can't render into another's HTML. Build the instance per request (in your page or `load`), exactly like any other prop. The `encode` snapshot rides inside the props, so the server HTML and the client's first paint agree: no flicker.
+The browser remembers decoded instances. The **server never does**. Each request, and each deferred-island render, decodes fresh. Thus the state of one visitor cannot render into the HTML of another. Make the instance per request, in your page or in `load`, the same as any other prop. The `encode` snapshot rides inside the props. Thus the server HTML and the first client paint agree: no flicker.
 
 ## Context
 
-Passing one object to two known islands is a prop. But when a value must reach **many islands scattered down a subtree** (a cart shared by a header badge and a page-body button, a theme, a current user), threading it through every prop is noise. Provide it once; any island below reads it with plain `getContext`.
+To pass one object to two known islands, use a prop. But sometimes a value must reach **many islands spread down a subtree**: a cart shared by a header badge and a page-body button, a theme, a current user. To thread it through each prop is noise. Provide it one time. Each island below reads it with plain `getContext`.
 
-Svelte's own `getContext` / `setContext` work down a **component tree**. Islands break that tree: a `setContext` above an island never reaches inside it on the client. Ogygia bridges the **same `getContext('key')`** across the split, through the thing that *does* survive it: the **DOM**. There are two ways to provide — a drop-in `setContext`, or `<Provide>`. What may cross, how stores stay live across islands, and how to pass **functions** is the boundary's contract — see **[The Boundary](/docs/data-state/boundary)**.
+Svelte's own `getContext` / `setContext` operate down a **component tree**. Islands break that tree. A `setContext` above an island never reaches inside it on the client. ogygia bridges the **same `getContext('key')`** across the split, through the thing that *does* continue: the **DOM**. There are two ways to provide: a drop-in `setContext`, or `<Provide>`. What can cross, how stores stay live across islands, and how to pass **functions** is the contract of the boundary. See **[The Boundary](/docs/data-state/boundary)**.
 
 ### Drop-in `setContext`
 
@@ -88,11 +88,11 @@ import { setContext } from 'ogygia';
 setContext('user', currentUser);   // now reaches child islands too
 ```
 
-It does exactly what Svelte's `setContext` does, and on the server also records each **string-keyed** value so every island can seed its own `getContext('user')` from it — one flat **page root** that every island on the page inherits. Symbol keys and function values stay Svelte-only (they can't serialize, so they don't cross). For a value scoped to only part of the tree, reach for `<Provide>`, which shadows the page root on the same key.
+It does exactly what Svelte's `setContext` does. On the server, it also records each **string-keyed** value. Each island can then seed its own `getContext('user')` from it: one flat **page root** that each island on the page inherits. Symbol keys and function values stay Svelte-only. They cannot serialize, so they do not cross. For a value scoped to only a part of the tree, use `<Provide>`. It shadows the page root on the same key.
 
 ### Define a typed context
 
-`createContext(key)` is optional TYPED sugar over a string key: **callable** to make a provider entry, `.get()` to read (typed). The key is the same string plain `getContext` uses, so typed and untyped code read the same value.
+`createContext(key)` is optional TYPED sugar over a string key. It is **callable** to make a provider entry, and `.get()` reads (typed). The key is the same string that plain `getContext` uses. Thus typed and untyped code read the same value.
 
 ```ts title=cart.svelte.ts
 import { createContext } from 'ogygia';
@@ -104,7 +104,7 @@ export const theme = createContext<'light' | 'dark'>('theme', 'light');   // has
 
 ### Provide it
 
-`<Provide values={…}>` wraps a subtree and provides its values to every island inside. Pass a typed handle **called with its value** (`cartCtx(cart)` → `{ cart }`), a plain object, or an array of them merged left→right (falsy entries skipped):
+`<Provide values={…}>` wraps a subtree and provides its values to each island inside. Pass a typed handle **called with its value** (`cartCtx(cart)` → `{ cart }`), a plain object, or an array of them, merged left to right (falsy entries skipped):
 
 ```svelte
 <script>
@@ -123,11 +123,11 @@ export const theme = createContext<'light' | 'dark'>('theme', 'light');   // has
 </Provide>
 ```
 
-There is no `.set()`: `<Provide>` *is* the provider, because it has to wrap a subtree. To change the value, mutate the live object you provided; every reader sees it.
+There is no `.set()`. `<Provide>` *is* the provider, because it must wrap a subtree. To change the value, mutate the live object that you provided. Each reader sees it.
 
 ### Read it
 
-Any island under the provider reads it during setup — either the typed handle or plain `getContext`, they are the same value:
+An island under the provider reads it during setup. Use the typed handle or plain `getContext`. They are the same value:
 
 ```svelte
 <script>
@@ -141,37 +141,37 @@ Any island under the provider reads it during setup — either the typed handle 
 <span>{cart?.count ?? 0}</span>
 ```
 
-Read during the island's setup, exactly like Svelte's `getContext`. Keep the reference: for a wired value it *is* the one live instance, shared and reactive across every island that read it.
+Read during the setup of the island, exactly like Svelte's `getContext`. Keep the reference. For a wired value, it *is* the one live instance, shared and reactive across each island that read it.
 
-`getContext` is re-exported from `ogygia` purely for symmetry — it **is** Svelte's own, unchanged (ogygia seeds each island's context at hydrate, so a plain read already sees bridged values). Import it from wherever reads best; `import { setContext, getContext } from 'ogygia'` keeps the pair together.
+`getContext` is re-exported from `ogygia` only for symmetry. It **is** Svelte's own function, unchanged. ogygia seeds the context of each island at hydrate. Thus a plain read already sees bridged values. Import it from the location that reads best. `import { setContext, getContext } from 'ogygia'` keeps the pair together.
 
-The two widgets below are separate island bundles. Neither receives a prop: both call `cartCtx.get()` and reach the same live `Cart`. Click Add; the count island repaints:
+The two widgets below are separate island bundles. Neither receives a prop. Both call `cartCtx.get()` and reach the same live `Cart`. Click Add. The count island repaints:
 
 <ContextDemo />
 
 ### How it crosses the boundary
 
-Both providers do two things at once:
+Both providers do two things at the same time:
 
-- On the **server**, islands render nested in the page's SSR tree, so the provider calls Svelte's native `setContext`: nested islands see the value in the server pass, and the first paint is correct.
-- It also writes the values into the DOM as a small `<script>` (a `<Provide>` wraps its subtree; a drop-in `setContext` emits one page-level marker), serialized with the **same codec as island props**. On the **client**, each island — a separate root — reads the providers standing above where it hydrates and seeds its own `getContext` from them.
+- On the **server**, islands render nested in the SSR tree of the page. Thus the provider calls the native `setContext` of Svelte. Nested islands see the value in the server pass, and the first paint is correct.
+- It also writes the values into the DOM as a small `<script>`. A `<Provide>` wraps its subtree. A drop-in `setContext` emits one page-level marker. The values serialize with the **same codec as island props**. On the **client**, each island is a separate root. It reads the providers that stand above where it hydrates, and seeds its own `getContext` from them.
 
-::: tip On a `csr = true` page it's just Svelte context
-When Kit hydrates the whole document, ogygia's islands degrade to plain components in **one** tree — there's no root split to bridge. There, `setContext` / `createContext` / `<Provide>` behave **exactly** like Svelte's native context: same-tree reads, no DOM bridge, no error. The drop-in is safe to leave imported from `ogygia` on mixed apps — a `csr = true` route pays nothing for it and works as expected; the bridge only engages where islands actually split the tree.
+::: tip On a `csr = true` page it is just Svelte context
+When Kit hydrates the full document, the ogygia islands degrade to plain components in **one** tree. There is no root split to bridge. There, `setContext` / `createContext` / `<Provide>` behave **exactly** like the native context of Svelte: same-tree reads, no DOM bridge, no error. The drop-in is safe to keep imported from `ogygia` on mixed apps. A `csr = true` route pays nothing for it, and it operates as expected. The bridge engages only where islands split the tree.
 :::
 
 ## Live objects vs plain values
 
-Both sharing and context accept **any serializable value**: a string, a number, a plain object, an array. The difference is what the reader gets back:
+Sharing and context both accept **any serializable value**: a string, a number, a plain object, an array. The difference is what the reader gets back:
 
-- A **plain value** comes back as a **snapshot**: a copy taken when you provided it. Two islands each get their own copy, so a change in one is not seen by the other. Perfect for a theme, a user name, config.
-- A **wired class** comes back as **one live instance**: the wire id reunites every decode into the same object, shared and reactive. Use this when islands must react to each other's changes.
+- A **plain value** comes back as a **snapshot**: a copy taken when you provided it. Two islands each get their own copy. A change in one is not seen by the other. This is good for a theme, a user name, config.
+- A **wired class** comes back as **one live instance**. The wire id joins each decode into the same object, shared and reactive. Use this when islands must react to the changes of each other.
 
-So `value={'dark'}` gives each island the string `'dark'`; `value={new Cart()}` gives every island the same live cart.
+Thus `value={'dark'}` gives each island the string `'dark'`. `value={new Cart()}` gives each island the same live cart.
 
 ## Continuity: surviving navigation
 
-By default state has **page lifetime**: a navigation mints a fresh instance and the visitor's cart is gone. Give a codec a **name** and it gains **session lifetime**: the same live object follows the visitor across every page in the tab.
+By default, state has **page lifetime**. A navigation makes a fresh instance, and the cart of the visitor is gone. Give a codec a **name**, and it gets **session lifetime**: the same live object follows the visitor across each page in the tab.
 
 ```ts
 static wire = import.meta.og.wire({
@@ -184,40 +184,40 @@ static wire = import.meta.og.wire({
 });
 ```
 
-- On the next page the server still sends a fresh snapshot. Because the codec is named, the client reunites it with the cart the visitor already had, runs `merge`, and hands every island the **same live instance**: identity never resets.
-- **Default is live-wins**: with no `merge`, the visitor's in-progress cart beats the server re-read. Override `merge` to pull server truth in.
-- **Tab-scoped, not server-wide.** The name lives in memory in the browser tab (the "Keep"). Another visitor never sees it; the server never remembers; a reload starts fresh. For a cart that survives reloads or follows a login, that is real storage: a database plus a `load`, and `merge` is where the two meet.
+- On the next page, the server still sends a fresh snapshot. The codec is named. Thus the client joins it with the cart that the visitor already had, runs `merge`, and gives each island the **same live instance**. Identity never resets.
+- **The default is live-wins.** With no `merge`, the in-progress cart of the visitor beats the fresh server read. Write `merge` to pull server truth in.
+- **Tab-scoped, not server-wide.** The name lives in memory in the browser tab (the "Keep"). Another visitor never sees it. The server never remembers. A reload starts fresh. A cart that must continue through reloads, or follow a login, needs real storage: a database plus a `load`. `merge` is where the two meet.
 
-A context whose value is a named codec is continuous for free, with no context change needed.
+A context whose value is a named codec is continuous with no extra work. No context change is necessary.
 
 ### Persistent islands
 
-An island can keep its **whole live self** across navigation, not just an object:
+An island can keep its **full live self** across navigation, not only an object:
 
 ```svelte
 import Player from '$lib/Player.svelte' with { wake: 'load', keep: 'player' };
 ```
 
-Same `keep` name on the next page → the live node and its mounted app **relocate** onto the new slot instead of remounting. A music player keeps playing through navigation, mid-scroll position and all. The new page's props are pushed into the live component, so a `track` that changes per route still updates: only the app (and its `$state`) is kept, not the props.
+The same `keep` name on the next page → the live node and its mounted app **move** onto the new slot. They do not remount. A music player continues to play through navigation, with its scroll position. The props of the new page push into the live component. Thus a `track` that changes per route still updates. Only the app and its `$state` are kept, not the props.
 
-`keep` needs the [SPA router](/docs/app/spa-router): a full-page navigation replaces the whole DOM, so there is nothing to relocate. In dev, a `keep` island on a router-less page warns.
+`keep` needs the [SPA router](/docs/app/spa-router). A full-page navigation replaces the full DOM. Then there is nothing to move. In dev, a `keep` island on a page without the router warns.
 
 ### Half-filled forms
 
-Ambient and on by default: an island form you were filling survives navigation and back within the tab session, restored with `bind:` resynced. Opt one field out with `data-ogygia-no-keep` (a one-time code, a fresh-message box), or turn it all off with `ogygia({ router: { forms: false } })`.
+Ambient and on by default: an island form that you filled part of continues through navigation and back, inside the tab session. It restores with `bind:` synced again. Set one field off with `data-ogygia-no-keep` (a one-time code, a fresh-message box). Or set all of it off with `ogygia({ router: { forms: false } })`.
 
-> Two continuity IDs must be unique per class: name two different classes `'cart'` and they clobber each other in the session Keep (dev warns).
+> Two continuity IDs must be unique per class. Name two different classes `'cart'`, and they overwrite each other in the session Keep. Dev warns.
 
 ## Constraints
 
-- A **wire codec** needs a **top-level `export class`** in your app source (the build tags it by module path plus name; no default exports or class expressions). A **context** needs an explicit string `key` — `createContext('key')`, or the string you pass `setContext` / `<Provide>` — that the provider and every reader share.
-- A receiving island must import a wire **class** as a value (not `import type`) only if it constructs one; to merely *receive* it (as a prop or via context) nothing extra is needed: the build auto-registers the codec.
-- A default `decode` that calls `new Cls()` needs a zero-argument constructor. Otherwise write `decode` yourself (as above).
-- Read context during island **setup** (like `getContext`). Called later (in an event handler), there is no island being hydrated to anchor the read, so read once and keep the reference.
-- A provider must sit **above** the consuming islands: `<Provide>` above them in the DOM, or a drop-in `setContext` anywhere on the page (the flat page root). No provider above → the default (or `undefined`).
-- Context values must be **serializable**, like island props — plain data, a `[ogygia.wire]` live value, a region snippet; never a function or a live store (those are dropped, never crash the page).
-- A **server island** (`render: 'deferred'`) renders in isolation on the endpoint, so it sees only a context's default, never the page's provider. If it must read the live context, put the reader in a nested `wake` island that hydrates on the client and joins the provider.
-- `import.meta.og.wire` is a compile construct: the macro mints the reserved codec key at build, so there is nothing to import and no runtime symbol to manage.
+- A **wire codec** needs a **top-level `export class`** in your app source. The build tags it by module path plus name. No default exports, and no class expressions. A **context** needs an explicit string `key` — `createContext('key')`, or the string you pass to `setContext` / `<Provide>` — that the provider and each reader share.
+- A receiving island must import a wire **class** as a value (not `import type`) only if it constructs one. To only *receive* it (as a prop or through context), nothing extra is necessary. The build registers the codec automatically.
+- A default `decode` that calls `new Cls()` needs a constructor with zero arguments. In other cases, write `decode` yourself (as above).
+- Read context during island **setup**, like `getContext`. A later call (in an event handler) has no island in hydration to anchor the read. Thus read one time and keep the reference.
+- A provider must sit **above** the consuming islands: `<Provide>` above them in the DOM, or a drop-in `setContext` anywhere on the page (the flat page root). No provider above → the default, or `undefined`.
+- Context values must be **serializable**, like island props: plain data, a `[ogygia.wire]` live value, a region snippet. Never a function or a live store. Those are dropped. They never crash the page.
+- A **server island** (`render: 'deferred'`) renders in isolation on the endpoint. Thus it sees only the default of a context, never the provider of the page. If it must read the live context, put the reader in a nested `wake` island. That island hydrates on the client and joins the provider.
+- `import.meta.og.wire` is a compile construct. The macro makes the reserved codec key at build. There is nothing to import, and no runtime symbol to manage.
 
 See [Constraints](/docs/reference/constraints) for the full boundary rules.
 

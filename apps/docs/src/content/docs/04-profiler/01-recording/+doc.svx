@@ -1,39 +1,39 @@
 ---
 title: Recording
-summary: The two ways to capture a profile — profile a page by URL, or profile a single request with a header — plus curated JSON, viewing a profile on serverless via dump and upload, the production secret, sharper names with source maps, and every option.
+summary: The two ways to capture a profile. Profile a page by URL, or profile a single request with a header. Plus curated JSON, a profile view on serverless through dump and upload, the production secret, sharper names with source maps, and each option.
 related:
   - profiler/overview
   - profiler/reading-reports
   - start/install
 ---
 
-There are two ways to capture a profile. The main one lives on the dashboard at `/__profiler` — type a path and profile it; the other is a header you can send from anywhere.
+There are two ways to capture a profile. The main one lives on the dashboard at `/__profiler`: type a path and profile it. The other is a header that you can send from anywhere.
 
 ## Profile a page
 
-Type a path, and the profiler renders it several times back to back and profiles just those renders. This is the main way in — reach for it whenever you know **which page** is slow, which is almost always.
+Type a path. The profiler renders it several times, one after the other, and profiles only those renders. This is the main way in. Use it when you know **which page** is slow. That is almost always the case.
 
-It does one un-profiled warm-up render first, so the one-time cost of loading modules and filling caches lands outside the measured window and the median stays steady.
+It does one warm-up render first, without a profile. Thus the one-time cost of module loads and cache fills lands outside the measured window, and the median stays steady.
 
 ```
 /__profiler → Profile a page → /some/slow/page
 ```
 
-The page renders through your real server, so anything it needs — a session, cookies, a `load` — runs exactly as in production.
+The page renders through your real server. Thus all things it needs — a session, cookies, a `load` — run exactly as in production.
 
 ## Profile a single request
 
-Send any request with the header `x-profile: <secret>` and get a profile of exactly that request. The report URL comes back in the `x-profile-report` response header.
+Send a request with the header `x-profile: <secret>`, and get a profile of exactly that request. The report URL comes back in the `x-profile-report` response header.
 
 ```bash
 curl -sD - 'https://example.com/slow/page' -H 'x-profile: your-secret' | grep x-profile-report
 ```
 
-This starts a fresh CPU profile for the one request, so it adds the profiler's start-up cost to that request's latency. Use it to catch a specific slow request, not for steady measurement.
+This starts a fresh CPU profile for the one request. Thus it adds the start-up cost of the profiler to the latency of that request. Use it to catch one specific slow request, not for steady measurement.
 
 ## For agents and scripts
 
-Every report is also available as curated JSON — not the raw V8 profile, but the analyzed result: self/total per component, network attribution, memory, GC, and the same findings the human report shows.
+Each report is also available as curated JSON. This is not the raw V8 profile. It is the analyzed result: self and total per component, network attribution, memory, GC, and the same findings that the human report shows.
 
 ```bash
 # an existing report
@@ -43,7 +43,7 @@ GET /__profiler/report/<id>.json
 GET /__profiler/page?p=/slow/page&runs=6&format=json&key=<secret>
 ```
 
-Sending `Accept: application/json` to `/record` or `/page` does the same. The payload is self-describing (`schema`, `version`, and units), so an agent can read it directly:
+`Accept: application/json` on `/record` or `/page` does the same. The payload describes itself (`schema`, `version`, and units). Thus an agent can read it directly:
 
 ```jsonc
 {
@@ -59,9 +59,9 @@ Sending `Accept: application/json` to `/record` or `/page` does the same. The pa
 
 ## Serverless and edge
 
-The live dashboard wants a long-lived Node server: the V8 inspector, and memory that survives between requests. Serverless Node platforms (Lambda, Amplify) can *record* — the inspector runs in-process — but the report lives in memory on an instance that may be gone before you can browse to it. True edge runtimes (Workers) have no inspector at all, so there is nothing to record beyond the always-on request log.
+The live dashboard wants a long-lived Node server: the V8 inspector, and memory that continues between requests. Serverless Node platforms (Lambda, Amplify) can *record*. The inspector runs in-process. But the report lives in memory, on an instance that can be gone before you open it. True edge runtimes (Workers) have no inspector. There, nothing records beyond the always-on request log.
 
-For the serverless case, take the report with you. Any report downloads as a **self-contained JSON dump** — everything needed to render it, no inspector required to read it back:
+For the serverless case, take the report with you. Each report downloads as a **self-contained JSON dump**: everything necessary to render it, with no inspector to read it back:
 
 ```bash
 # a one-shot page profile, straight to a dump
@@ -71,21 +71,21 @@ GET /__profiler/page?p=/slow/page&runs=6&format=dump&key=<secret>
 GET /__profiler/report/<id>/dump
 ```
 
-Then open **`/__profiler/view`** anywhere — your production route, or the same app on `localhost` — and upload the file. The full HTML report renders from the dump alone, because the renderer is a pure function of it.
+Then open **`/__profiler/view`** anywhere — your production route, or the same app on `localhost` — and upload the file. The full HTML report renders from the dump alone. The renderer is a pure function of it.
 
 ## In production
 
-Set a secret. Without one, the UI is disabled and 404s.
+Set a secret. Without one, the UI is off and 404s.
 
 ```bash
 OGYGIA_PROFILER_SECRET=some-long-random-string
 ```
 
-Then open the dashboard and **log in** with the secret. The profiler sets a session cookie, so links inside a report work for the rest of the session without repeating it. Matching is timing-safe, and the key never rides in a URL — where it would be logged, cached, or shared. (The profiler is also reachable programmatically over MCP with `ogygia mcp` / `ogygia ai`.)
+Then open the dashboard and **log in** with the secret. The profiler sets a session cookie. Thus links inside a report operate for the remainder of the session, without the secret again. The match is timing-safe, and the key never rides in a URL, where a log, a cache, or a share would hold it. The profiler is also reachable programmatically over MCP, with `ogygia mcp` / `ogygia ai`.
 
 ## Sharper names with source maps
 
-Production bundles rename and inline code, so some frames show as `(anonymous)` or point at a chunk file. Build with server source maps and the profiler maps every frame back to its source file and recovers the original names:
+Production bundles rename and inline code. Thus some frames show as `(anonymous)`, or point at a chunk file. Build with server source maps, and the profiler maps each frame back to its source file and recovers the original names:
 
 ```ts
 // vite.config.ts
@@ -101,18 +101,18 @@ Then build with the flag set:
 PROFILER_SOURCEMAPS=1 vite build
 ```
 
-The report header shows **sourcemapped** when it worked. Leave it off for normal builds; turn it on when you are hunting.
+The report header shows **sourcemapped** when it operated. Keep it off for normal builds. Set it on when you hunt a problem.
 
 ## Cost and safety
 
-- **Idle cost is almost nothing.** The CPU is only sampled while recording (~1–3% during a recording). Between recordings there is no sampling.
-- **Always-on work** per request is wall timing, a capped in-memory request log, and — unless you turn network capture off — one `AsyncLocalStorage` wrap plus a `fetch`/`http` patch to attribute outbound calls. Pass `{ network: false }` for the leanest path.
-- **`Server-Timing` headers** expose internal timings to every client, so they are **on in dev, off in production** by default. Pass `{ serverTiming: true }` to force them on.
-- Recorded profiles are kept in memory only (the last few, gzipped), never written to disk.
+- **Idle cost is almost nothing.** The CPU is sampled only during a recording (about 1–3% then). Between recordings, there is no sampling.
+- **Always-on work** per request: wall timing, a capped in-memory request log, and — unless you set network capture off — one `AsyncLocalStorage` wrap plus a `fetch`/`http` patch, to attribute outbound calls. Pass `{ network: false }` for the leanest path.
+- **`Server-Timing` headers** show internal timings to each client. Thus they are **on in dev, off in production** by default. Pass `{ serverTiming: true }` to force them on.
+- Recorded profiles stay in memory only (the last few, gzipped). They are never written to disk.
 
 ## Options
 
-Pass an object instead of `true` to the vite plugin's `profiler` option:
+Pass an object in place of `true` to the `profiler` option of the vite plugin:
 
 ```ts
 // vite.config.ts

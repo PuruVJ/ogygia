@@ -4,7 +4,7 @@
  * front-end as one call: `transform(source, id)` → parse ▸ analyze ▸ lower ▸ emit (today fused inside
  * `transformHost`), memoized. It is bundler-agnostic by construction — it imports no Vite; the adapter
  * drives it. That independence is the design goal: a future REPL is just a second adapter over the
- * same driver, feeding a `CompileCtx` + source and rendering the returned artifacts.
+ * same driver, feeding a `CompileCtx` + source and rendering the returned freeze.
  *
  * The transform cache is content-keyed (`hit.code === source`), so a changed source misses and
  * recomputes on its own; the linker's `unregister_host` deliberately does NOT clear it.
@@ -49,11 +49,12 @@ import {
 	secret_module,
 	sign_module,
 	profiler_config_module,
-	artifacts_config_module,
+	freeze_config_module,
 	rate_limit_module,
 	session_cookie_module,
 	region_ttl_module,
-	route_csr_module
+	route_csr_module,
+	freeze_routes_module
 } from './link/caps.js';
 import { router_config_module } from './link/router-config.js';
 import {
@@ -93,7 +94,8 @@ import {
 	V_SERVER_MANIFEST,
 	V_MANIFEST,
 	V_TRANSPORTABLES,
-	V_ARTIFACTS_CONFIG
+	V_FREEZE_CONFIG,
+	V_FREEZE_ROUTES
 } from './ids.js';
 import { strip_id, host_key } from './program.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
@@ -121,6 +123,17 @@ export interface Profiler {
 }
 
 const LEADING_SLASH = /^\//;
+const BACKSLASH_G = /\\/g;
+const COMPONENT_EXT_RE = /\.(svelte|js|ts)$/;
+const SOURCE_EXT_RE = /\.(svelte|ts|js|mjs|cjs)$/;
+const CONTENT_CALL_RE = /\bcontent\s*\(/;
+const SERVER_MODULE_EXT_RE = /\.(server|remote)\.(ts|js|mjs)$/;
+const SERVER_DIR_RE = /\/(src\/lib\/server|server)\//;
+const OG_PRESET_QUERY_RE = /[?&]og_preset=([\w-]+)/;
+/** Static import / export-from / `import()` specifiers, for the island-graph dep walk (shared `g`
+ *  regex — `walk_dep` resets `lastIndex` before each scan). */
+const IMPORT_SPEC_G =
+	/\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\bimport\s*\(\s*['"]([^'"\n]+)['"]/g;
 
 // Import/export-from specifier extraction for the router-css closure (link/router-css.ts). A cheap
 // regex over raw source — a stray match in a comment/string just fails to resolve later, harmless.
@@ -197,7 +210,7 @@ export class Compiler {
 			const cp = this.program.registry.get(vpath)?.componentPath;
 			if (!cp) continue;
 			const base = (cp.split('?')[0].split('#')[0].split('/').pop() || '').replace(
-				/\.(svelte|js|ts)$/,
+				COMPONENT_EXT_RE,
 				''
 			);
 			if (base && base !== iid) names[iid] = base;
@@ -485,19 +498,17 @@ export class Compiler {
 				}
 				return null;
 			};
-			const IMPORT_SPEC =
-				/\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\bimport\s*\(\s*['"]([^'"\n]+)['"]/g;
 			const walk_dep = (abs: string) => {
 				const norm = strip_id(abs);
 				if (seen_dep.has(norm)) return;
 				seen_dep.add(norm);
 				island_graph.add(norm);
-				if (!/\.(svelte|ts|js|mjs|cjs)$/.test(norm)) return;
+				if (!SOURCE_EXT_RE.test(norm)) return;
 				const src = ctx.read_file(norm);
 				if (src == null) return;
-				IMPORT_SPEC.lastIndex = 0;
+				IMPORT_SPEC_G.lastIndex = 0;
 				let m: RegExpExecArray | null;
-				while ((m = IMPORT_SPEC.exec(src))) {
+				while ((m = IMPORT_SPEC_G.exec(src))) {
 					const spec = m[1] || m[2] || m[3];
 					if (
 						!spec ||
@@ -676,7 +687,7 @@ export class Compiler {
 			// dock renders a "csr=true here — open a csr=false page" notice, since a Kit-hydrated page
 			// has no ogygia islands to inspect. Empty when devtools is off (never injected then).
 			if (!ctx.devtools) return `export {}`;
-			const ui_path = `${ctx.runtime_dir}/../devtools/ui.js`.replace(/\\/g, '/');
+			const ui_path = `${ctx.runtime_dir}/../devtools/ui.js`.replace(BACKSLASH_G, '/');
 			return (
 				`import { install_devtools_ui } from ${JSON.stringify(ui_path)};\n` +
 				`install_devtools_ui({ csr_true: true });\n`
@@ -700,7 +711,7 @@ export class Compiler {
 			// Kit's wire (wire mark, or a remote/region/content producer); an empty map for a pure-island
 			// app. transport.js sits one level up from the runtime dir (dist/transport.js).
 			const crosses = this.program.runtime_marks.wire === true || this.program.crosses_wire;
-			const transport_spec = `${ctx.runtime_dir}/../transport.js`.replace(/\\/g, '/');
+			const transport_spec = `${ctx.runtime_dir}/../transport.js`.replace(BACKSLASH_G, '/');
 			return kit_transport_module(crosses, transport_spec);
 		}
 		if (id === RESOLVED(V_ROUTER_CSS)) {
@@ -749,8 +760,8 @@ export class Compiler {
 		if (id === RESOLVED(V_PROFILER_CONFIG)) {
 			return profiler_config_module(ssr, ctx.profiler_config);
 		}
-		if (id === RESOLVED(V_ARTIFACTS_CONFIG)) {
-			return artifacts_config_module(ssr, ctx.artifacts_config);
+		if (id === RESOLVED(V_FREEZE_CONFIG)) {
+			return freeze_config_module(ssr, ctx.freeze_config);
 		}
 		if (id === RESOLVED(V_ROUTER_CONFIG)) {
 			return router_config_module(ctx.router_enabled, ctx.router_view_transitions);
@@ -763,6 +774,13 @@ export class Compiler {
 		}
 		if (id === RESOLVED(V_ROUTE_CSR)) {
 			return route_csr_module(ssr, path.join(ctx.root, 'src', 'routes'));
+		}
+		if (id === RESOLVED(V_FREEZE_ROUTES)) {
+			return freeze_routes_module(
+				ssr,
+				path.join(ctx.root, 'src', 'routes'),
+				ctx.freeze_config?.default ?? false
+			);
 		}
 		if (id === RESOLVED(V_SERVER_MANIFEST)) {
 			// Populated in BOTH dev and build (unlike the client manifest, which dev fills from URLs).
@@ -856,6 +874,7 @@ export class Compiler {
 		if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);
 		if (source === V_REGION_TTL) return RESOLVED(V_REGION_TTL);
 		if (source === V_ROUTE_CSR) return RESOLVED(V_ROUTE_CSR);
+		if (source === V_FREEZE_ROUTES) return RESOLVED(V_FREEZE_ROUTES);
 		if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
 		if (source === V_REQUEST_EVENT) return RESOLVED(V_REQUEST_EVENT);
 		if (source === V_REGION_ENDPOINT) return RESOLVED(V_REGION_ENDPOINT);
@@ -867,7 +886,7 @@ export class Compiler {
 		}
 		if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 		if (source === V_TRANSPORTABLES) return RESOLVED(V_TRANSPORTABLES);
-		if (source === V_ARTIFACTS_CONFIG) return RESOLVED(V_ARTIFACTS_CONFIG);
+		if (source === V_FREEZE_CONFIG) return RESOLVED(V_FREEZE_CONFIG);
 
 		// Island CLIENT graph: shim `$app/*` for the virtual module AND every module it
 		// pulls in (e.g. `$lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias
@@ -948,12 +967,11 @@ export class Compiler {
 		const root = this.#ctx!.root;
 		// APP source only — never library code (a workspace-linked ogygia sits outside node_modules).
 		if (!bare.startsWith(path.join(root, 'src') + path.sep)) return;
-		const defines_collection = source.includes('ogygia/content') && /\bcontent\s*\(/.test(source);
+		const defines_collection = source.includes('ogygia/content') && CONTENT_CALL_RE.test(source);
 		const defines_loader = source.includes('import.meta.og.loader.');
 		if (!defines_collection && !defines_loader) return;
 		const server_only =
-			/\.(server|remote)\.(ts|js|mjs)$/.test(bare) ||
-			/\/(src\/lib\/server|server)\//.test(bare.slice(root.length));
+			SERVER_MODULE_EXT_RE.test(bare) || SERVER_DIR_RE.test(bare.slice(root.length));
 		if (server_only) return;
 		this.#content_placement_warned.add(bare);
 		console.warn(
@@ -1010,7 +1028,7 @@ export class Compiler {
 		// it, strips it, and compiles with the preset's merged config. Appended at the END so
 		// frontmatter stays on line one; mdsvex never sees it (stripped first).
 		if (ctx.content_presets && id.includes('og_preset=')) {
-			const m = /[?&]og_preset=([\w-]+)/.exec(id);
+			const m = OG_PRESET_QUERY_RE.exec(id);
 			const md_exts = ((ctx.markdown_config as MarkdownOptions | null)?.extensions as
 				| string[]
 				| undefined) ?? ['.svx', '.md'];

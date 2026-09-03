@@ -17,6 +17,24 @@ import type { Heading, LinkRef } from '../index.js';
 import { href_of, type Collection, type Outline } from './outline.js';
 import { is_dimensioned } from './dimensions.js';
 
+// ── regexes
+const FRONTMATTER_BLOCK_RE = /^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/;
+const SCRIPT_BLOCK_G = /<script[\s\S]*?<\/script>/gi;
+const STYLE_BLOCK_G = /<style[\s\S]*?<\/style>/gi;
+const CODE_FENCE_G = /```[\s\S]*?```/g;
+const INLINE_CODE_G = /`([^`]*)`/g;
+const MD_IMAGE_G = /!\[[^\]]*\]\([^)]*\)/g;
+const MD_LINK_G = /\[([^\]]*)\]\([^)]*\)/g;
+const HTML_TAG_G = /<[^>]+>/g;
+const HEADING_HASHES_G = /^#{1,6}\s+/gm;
+const MD_MARKS_G = /[*_~>]/g;
+const WS_G = /\s+/g;
+const WS_RE = /\s+/;
+const SECTION_HEADING_RE = /^#{2,4}\s+(.+?)\s*(\{#[^}]+\})?\s*$/;
+const AMP_G = /&/g;
+const LT_G = /</g;
+const GT_G = />/g;
+
 /** One searchable document — a page SECTION (split by heading), or the page lead. Mount-independent:
  *  stores `slug` + `anchor`, so href is computed per query with the caller's `base`. */
 export type SearchDoc = {
@@ -72,17 +90,17 @@ export type SearchOptions = {
  *  enough for tokenization. */
 export function strip_prose(src: string): string {
 	return src
-		.replace(/^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/, '') // frontmatter
-		.replace(/<script[\s\S]*?<\/script>/gi, '')
-		.replace(/<style[\s\S]*?<\/style>/gi, '')
-		.replace(/```[\s\S]*?```/g, ' ')
-		.replace(/`([^`]*)`/g, '$1')
-		.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-		.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-		.replace(/<[^>]+>/g, ' ')
-		.replace(/^#{1,6}\s+/gm, '')
-		.replace(/[*_~>]/g, ' ')
-		.replace(/\s+/g, ' ')
+		.replace(FRONTMATTER_BLOCK_RE, '') // frontmatter
+		.replace(SCRIPT_BLOCK_G, '')
+		.replace(STYLE_BLOCK_G, '')
+		.replace(CODE_FENCE_G, ' ')
+		.replace(INLINE_CODE_G, '$1')
+		.replace(MD_IMAGE_G, ' ')
+		.replace(MD_LINK_G, '$1')
+		.replace(HTML_TAG_G, ' ')
+		.replace(HEADING_HASHES_G, '')
+		.replace(MD_MARKS_G, ' ')
+		.replace(WS_G, ' ')
 		.trim();
 }
 
@@ -91,14 +109,14 @@ export function split_sections(
 	source: string,
 	headings: Heading[]
 ): { heading: Heading | null; text: string }[] {
-	const body = source.replace(/^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+	const body = source.replace(FRONTMATTER_BLOCK_RE, '');
 	const lines = body.split('\n');
 	const chunks: { heading: Heading | null; text: string }[] = [];
 	let current: { heading: Heading | null; lines: string[] } = { heading: null, lines: [] };
 	let next_heading = 0;
 
 	const heading_text = (line: string): string | null => {
-		const m = line.match(/^#{2,4}\s+(.+?)\s*(\{#[^}]+\})?\s*$/);
+		const m = line.match(SECTION_HEADING_RE);
 		return m ? m[1].trim() : null;
 	};
 
@@ -208,7 +226,7 @@ async function load_orama(): Promise<OramaModule> {
 
 const ESC_RX = /[.*+?^${}()|[\]\\]/g;
 const esc_html = (s: string) =>
-	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	s.replace(AMP_G, '&amp;').replace(LT_G, '&lt;').replace(GT_G, '&gt;');
 
 /**
  * A match-centered excerpt with the query terms wrapped in `<mark>` — the window starts just before
@@ -237,7 +255,7 @@ export function excerpt_of(text: string, terms: string[], span = 150): string {
  *  feel — searching "snippet" puts the `{#snippet …}` page first, sections after). */
 export function rerank(hits: SearchHit[], query: string): SearchHit[] {
 	const q = query.toLowerCase();
-	const terms = q.split(/\s+/).filter(Boolean);
+	const terms = q.split(WS_RE).filter(Boolean);
 	const scored = hits.map((h) => {
 		const title = h.title.toLowerCase();
 		const heading = (h.heading ?? '').toLowerCase();
@@ -289,7 +307,7 @@ export function orama_engine(): SearchEngine {
 						boost: { title: 3, heading: 2, text: 1 },
 						tolerance: 1
 					});
-					const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+					const terms = q.toLowerCase().split(WS_RE).filter(Boolean);
 					const hits: SearchHit[] = [];
 					for (const h of res.hits) {
 						const doc = by_id.get(String(h.id));

@@ -28,6 +28,20 @@ import { collect_flag_sites, flags_manifest, type FlagSite } from './compiler/fl
 import { ogp_decode, is_ogp } from './profiler/crypto.js';
 import { report_json, is_dump } from './profiler/report.js';
 
+// ── regexes
+const TRAILING_SLASH_RE = /\/$/;
+const HTTP_URL_RE = /^https?:\/\//i;
+const LOGIN_FORM_RE = /id="og-login"/;
+const HTML_TAG_G = /<[^>]+>/g;
+const WS_G = /\s+/g;
+const PLUS_G = /\+/g;
+const SLASH_G = /\//g;
+const TRAILING_EQUALS_RE = /=+$/;
+const HASH_SUFFIX_RE = /#.*$/;
+const BACKSLASH_G = /\\/g;
+const UNKNOWN_PRESET_RE = /unknown preset/i;
+const SVELTE_EXT_RE = /\.svelte$/;
+
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
 
@@ -384,10 +398,10 @@ const TOOLS = [
 	{
 		name: 'ogygia_fragment',
 		description:
-			'Probe a federation MFE origin. Reports whether its fragment routes endpoint verifies signatures ' +
+			'Probe a federated ogygia app origin. Reports whether its fragment endpoint verifies signatures ' +
 			'(an unsigned request should get 401 — a 200 means the endpoint is OPEN) and fetches the unsigned ' +
 			'__catalog widget manifest (names + props, plus the typed-stub command). Use it BEFORE writing ' +
-			'mount()/proxy() code against an MFE, or to sanity-check an exposed fragment in review.',
+			'mount(peer) / peer.page() / peer.widget() code against a peer, or to sanity-check an exposed app in review.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -889,17 +903,19 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 		return fail(
 			'`url` is required — a route path like `/fr/fr` (profiles your local running server), or a full URL like `https://app.com/fr/fr` (profiles that host).'
 		);
-	const profiler_base = String(args.base ?? '/__profiler').replace(/\/$/, '');
+	const profiler_base = String(args.base ?? '/__profiler').replace(TRAILING_SLASH_RE, '');
 	const runs = typeof args.runs === 'number' ? Math.min(Math.max(Math.round(args.runs), 1), 50) : 5;
 	const key = typeof args.key === 'string' ? args.key : '';
 	const explicit_origin =
-		typeof args.origin === 'string' && args.origin ? args.origin.replace(/\/$/, '') : '';
+		typeof args.origin === 'string' && args.origin
+			? args.origin.replace(TRAILING_SLASH_RE, '')
+			: '';
 
 	// Resolve WHERE to profile. Full URL → that host. Bare path → the given `origin`, else ASK the user
 	// for the URL (they would rather name the host than have us guess) — offering any local server we see.
 	let origin: string;
 	let route: string;
-	if (/^https?:\/\//i.test(raw)) {
+	if (HTTP_URL_RE.test(raw)) {
 		const u = new URL(raw);
 		origin = u.origin;
 		route = u.pathname + u.search;
@@ -938,7 +954,7 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 		}
 		if (pre.status === 404) return fail(NOT_MOUNTED(profiler_base, origin));
 		const pre_body = await pre.text().catch(() => '');
-		if (/id="og-login"/.test(pre_body))
+		if (LOGIN_FORM_RE.test(pre_body))
 			return fail(
 				key
 					? `The profiler on ${origin} rejected that \`key\` (still locked). Confirm its secret with the user.`
@@ -985,11 +1001,7 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 	if ((res.headers.get('content-type') ?? '').includes('application/json')) {
 		return text(render_profile(origin, (await res.json()) as ProfileReport));
 	}
-	const body = (await res.text())
-		.replace(/<[^>]+>/g, ' ')
-		.replace(/\s+/g, ' ')
-		.trim()
-		.slice(0, 300);
+	const body = (await res.text()).replace(HTML_TAG_G, ' ').replace(WS_G, ' ').trim().slice(0, 300);
 	if (res.status === 409)
 		return fail(
 			`A profile is already running on ${origin} and /reset didn’t clear it. It auto-heals after ~2 min — wait and retry.`
@@ -1051,8 +1063,12 @@ const DEFAULT_OBSERVATORY = 'https://ogygia.puruvj.dev/observatory';
  *  The payload is `{ f: files }` (files only; the app fills in default UI state). */
 function observatory_link(files: Record<string, string>, base: string): string {
 	const gz = gzipSync(Buffer.from(JSON.stringify({ f: files }), 'utf8'));
-	const b64url = gz.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-	return `${base.replace(/#.*$/, '')}#${b64url}`;
+	const b64url = gz
+		.toString('base64')
+		.replace(PLUS_G, '-')
+		.replace(SLASH_G, '_')
+		.replace(TRAILING_EQUALS_RE, '');
+	return `${base.replace(HASH_SUFFIX_RE, '')}#${b64url}`;
 }
 
 function tool_observatory(args: Attrs): ToolResult {
@@ -1162,16 +1178,16 @@ function tool_scan(args: Attrs): ToolResult {
 		try {
 			const r = transformHost(
 				source,
-				'/' + rel(f).replace(/\\/g, '/'),
+				'/' + rel(f).replace(BACKSLASH_G, '/'),
 				build_ctx(true)
 			) as HostResult;
 			for (const isl of r?.islands ?? [])
 				if (isl.componentPath) kind_by_component.set(base(isl.componentPath), isl.kind ?? '');
 		} catch (e) {
-			const raw = (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').trim();
+			const raw = (e instanceof Error ? e.message : String(e)).replace(WS_G, ' ').trim();
 			// "unknown preset" is a scan limitation (we don't load the app's ogygia({ regions: { presets } })
 			// config), not a real violation — count it for a footnote instead of flagging it.
-			if (/unknown preset/i.test(raw)) preset_marks++;
+			if (UNKNOWN_PRESET_RE.test(raw)) preset_marks++;
 			else violations.push({ file: rel(f), severity: 'error', msg: raw });
 		}
 
@@ -1208,7 +1224,7 @@ function tool_scan(args: Attrs): ToolResult {
 
 	// ── cross-file lint: island-in-island — a file that IS used as an island AND marks its own islands.
 	for (const { marks, file } of per_file) {
-		const this_base = base(file).replace(/\.svelte$/, '');
+		const this_base = base(file).replace(SVELTE_EXT_RE, '');
 		if (!island_components.has(base(file))) continue; // this component isn't used as an island anywhere
 		for (const m of marks) {
 			if (m.attrs.wake === 'none' || m.attrs.region === 'raw') continue;
@@ -1305,7 +1321,7 @@ function tool_flags(args: Attrs): ToolResult {
 		} catch {
 			continue;
 		}
-		const rel = path.relative(root, f).replace(/\\/g, '/');
+		const rel = path.relative(root, f).replace(BACKSLASH_G, '/');
 		sites.push(...collect_flag_sites(source, rel, rel));
 	}
 	const live = flags_manifest(sites);
@@ -1367,22 +1383,22 @@ async function tool_fragment(args: Attrs): Promise<ToolResult> {
 		}
 	};
 
-	// The fixed page endpoint expose() serves — keep in sync with FRAGMENT_ROUTES_PATH
-	// (router/fragment.ts). Deliberately not imported: the MCP must not pull the router graph.
+	// The fixed page endpoint a `federate({ expose })` serves — keep in sync with FRAGMENT_ROUTES_PATH
+	// (federation/wire.ts). Deliberately not imported: the MCP must not pull the handle graph.
 	const page_res = await get(`${origin}/og/fragment/page?path=${encodeURIComponent('/')}`);
 	const posture = !page_res
 		? '❌ unreachable (network error / timeout)'
 		: page_res.status === 401
 			? '🔒 signature-verified — an unsigned request is rejected (good)'
 			: page_res.status === 200
-				? '⚠️ OPEN — served an UNSIGNED request. Unless this origin is private-network-only, pass `verify: { publicKeys: […] }` to expose().'
+				? '⚠️ OPEN — served an UNSIGNED request. Unless this origin is private-network-only, add each caller as a peer with its public `key` in federate({ peers }) (or `open: true` on purpose).'
 				: page_res.status === 404
 					? 'not exposed here (no /og/fragment/page — page mounting unavailable)'
 					: `HTTP ${page_res.status}`;
 
 	const cat_res = await get(`${origin}/og/fragment/__catalog`);
 	let widgets_block =
-		'No widget catalog (catalog() not mounted, or not an ogygia fragment origin).';
+		'No widget catalog (federate({ widgets }) not declared, or not an ogygia fragment origin).';
 	if (cat_res?.ok) {
 		try {
 			const manifest = (await cat_res.json()) as {

@@ -30,7 +30,9 @@ await page.setContent('<!doctype html><html><head></head><body></body></html>');
 await page.addScriptTag({ content: code });
 
 console.log(`\n▸ morph bench — REAL CHROMIUM  [${label}]\n`);
-const results = (await page.evaluate(() => (window as any).MorphBench.runBench({ samples: 15 }))) as {
+const results = (await page.evaluate(() =>
+	(window as any).MorphBench.runBench({ samples: 15 })
+)) as {
 	name: string;
 	us: number;
 	hz: number;
@@ -42,7 +44,7 @@ let total = 0;
 for (const r of results) {
 	total += r.us;
 	console.log(
-		`  ${r.name.padEnd(30)} ${r.us.toFixed(2).padStart(9)} µs/morph   (${Math.round(r.hz).toLocaleString()} morphs/s)`,
+		`  ${r.name.padEnd(30)} ${r.us.toFixed(2).padStart(9)} µs/morph   (${Math.round(r.hz).toLocaleString()} morphs/s)`
 	);
 }
 console.log(`  ${'Σ median'.padEnd(30)} ${total.toFixed(1).padStart(9)} µs\n`);

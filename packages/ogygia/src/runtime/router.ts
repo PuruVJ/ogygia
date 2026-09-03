@@ -10,7 +10,7 @@ import { html_has_kit_bootstrap, document_has_kit_bootstrap } from './kit-boot.j
 import { PageCache } from './page-cache.js';
 import { slots } from './slots.js';
 import { dispose_scope } from '../ref.js';
-import { reconcile_body, region_in_shadow } from './reconcile.js';
+import { reconcile_body, region_in_shadow, swap_body } from './reconcile.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
@@ -41,15 +41,29 @@ const SERVER_DELTA =
 	typeof __OGYGIA_SERVER_DELTA__ !== 'undefined' ? __OGYGIA_SERVER_DELTA__ : false;
 
 /**
- * SERVER-DELTA NAV (D2): headers for a nav/prefetch fetch. Always `x-ogygia-spa`. Plus, when the
- * current document has HYDRATED islands carrying a `data-og-fp`, `x-ogygia-known` lists their
- * fingerprints so the server can SKIP re-rendering the ones this page already has live. Only
- * data-hydrated regions are claimed (never assert a region we don't actually have), and the header
- * is omitted past a size cap → the server renders everything (progressive enhancement: the header
- * is an optimization the server may ignore, and its absence is always correct).
+ * Why a page fetch is happening — sent to the server so it can skip side effects a speculative or
+ * restorative fetch must not fire (analytics beacons, "last seen" writes, one-time banners):
+ *  • `nav`      — a real, user-driven navigation (default). No purpose header.
+ *  • `prefetch` — warmed on hover / press / viewport, BEFORE any intent to visit. Marked so the
+ *                 server can treat it as a dry run (htmx's `HX-Preloaded`).
+ *  • `history`  — a back/forward restore, re-fetched because we snapshot no DOM (htmx's
+ *                 `HX-History-Restore-Request`). The visitor has seen this page already.
+ * The header is advisory: a server that ignores it still renders correctly.
  */
-function nav_headers(): Record<string, string> {
+export type NavPurpose = 'nav' | 'prefetch' | 'history';
+
+/**
+ * SERVER-DELTA NAV (D2): headers for a nav/prefetch fetch. Always `x-ogygia-spa`. When `purpose` is
+ * not a plain nav, `x-ogygia-purpose` names it (see {@link NavPurpose}). Plus, when the current
+ * document has HYDRATED islands carrying a `data-og-fp`, `x-ogygia-known` lists their fingerprints so
+ * the server can SKIP re-rendering the ones this page already has live. Only data-hydrated regions
+ * are claimed (never assert a region we don't actually have), and the header is omitted past a size
+ * cap → the server renders everything (progressive enhancement: every header here is an optimization
+ * the server may ignore, and its absence is always correct).
+ */
+function nav_headers(purpose: NavPurpose = 'nav'): Record<string, string> {
 	const headers: Record<string, string> = { 'x-ogygia-spa': '1' };
+	if (purpose !== 'nav') headers['x-ogygia-purpose'] = purpose;
 	if (!SERVER_DELTA || typeof document === 'undefined') return headers;
 	const seen = new Set<string>();
 	for (const el of document.querySelectorAll('ogygia-region[data-og-fp][data-hydrated]')) {
@@ -158,6 +172,8 @@ const STYLESHEET_WAIT_MS = 2_000;
 const CC_UNCACHEABLE = /(?:^|,)\s*(?:private|no-store|no-cache)\b/i;
 /** Kit remote-function POSTs live under `…/_app/remote/…` (or custom `appDir`). */
 const REMOTE_MUTATION_PATH = /\/remote(?:\/|$|\?)/;
+/** `entry="…"` on an `<ogygia-region>` open tag (shared `g` regex — reset `lastIndex` per scan). */
+const REGION_ENTRY_ATTR_G = /<ogygia-region\b[^>]*?\bentry="([^"]+)"/g;
 
 // In this router a page's "code" is delivered by the HTML body swap (+ island chunks fetched on
 // connect), so BOTH `data-sveltekit-preload-data` and `-code` warm the SAME page-HTML cache. We
@@ -315,6 +331,30 @@ function jump_to_hash(hash: string) {
 	}
 }
 
+/**
+ * Move keyboard focus to `el` without scrolling (so it never fights the post-nav scroll restore),
+ * making it momentarily focusable via `tabindex=-1` and then cleaning that up so the target does not
+ * linger in the tab order. For `<body>` the attribute is removed immediately (body stays the active
+ * element regardless). For a normal element — a `#hash` heading — removing `tabindex` while it is
+ * focused would BLUR it back to `<body>`, so the cleanup is deferred to the element's next `blur`.
+ */
+function focus_reset(el: HTMLElement) {
+	const is_body = el === document.body || el === document.documentElement;
+	const had = el.hasAttribute('tabindex');
+	const prev = el.getAttribute('tabindex');
+	const restore = () => {
+		if (had) el.setAttribute('tabindex', prev as string);
+		else el.removeAttribute('tabindex');
+	};
+	el.tabIndex = -1; // focusable for this one call
+	el.focus({ preventScroll: true });
+	if (is_body) {
+		restore(); // body keeps focus even without the attribute
+	} else {
+		el.addEventListener('blur', () => restore(), { once: true });
+	}
+}
+
 /** Head nodes that must never be adopted from SPA HTML (rewrite relative fetches / CSP). */
 function is_dangerous_head_node(node: Element): boolean {
 	const tag = node.tagName;
@@ -342,9 +382,18 @@ class SpaRouter {
 		maxBytes: PAGE_CACHE_MAX_BYTES
 	});
 	#inflight = new Map<string, Promise<string | null>>();
+	/** requested href → the FINAL href a fetch landed on after following server redirects, when it
+	 *  differs. One-shot: `navigate()` reads it to correct the address bar (a redirect is invisible to
+	 *  `fetch` beyond `response.url`), then deletes it. See {@link SpaRouter.fetch_page}. */
+	#final_url = new Map<string, string>();
 	/** Hrefs whose prefetched HTML was already scanned for island entries — parse once. (URL-level
 	 *  import dedupe lives in the shared `warm_island_module`.) */
 	#warmed_pages = new Set<string>();
+	/** The visually-hidden `aria-live` region that announces each navigation to screen readers. Created
+	 *  lazily on the first nav and reused (a live region must persist so assistive tech observes its
+	 *  mutations). It lives in `<body>` but is DETACHED before each body swap so the reconcile never
+	 *  removes it, then re-attached. See {@link SpaRouter.announce} / {@link SpaRouter.reset_focus}. */
+	#announcer: HTMLElement | null = null;
 	#remote_bust_installed = false;
 	/** Hard SPA navigations only — never shared with soft invalidate. */
 	#nav_gen = 0;
@@ -389,6 +438,7 @@ class SpaRouter {
 	bust_page_cache() {
 		this.#page_cache.clear();
 		this.#inflight.clear();
+		this.#final_url.clear();
 	}
 
 	_page_cache_size() {
@@ -428,7 +478,7 @@ class SpaRouter {
 		};
 	}
 
-	fetch_page(href: string, signal?: AbortSignal) {
+	fetch_page(href: string, signal?: AbortSignal, purpose: NavPurpose = 'nav') {
 		// Warm cache hit (a prefetched page, or an in-flight prefetch): serving it is instant, so
 		// even an abortable navigation uses it — there is nothing to abort on a resolved cache hit
 		// or a shared prefetch promise. Without this, a click after a hover-prefetch would re-fetch
@@ -439,13 +489,22 @@ class SpaRouter {
 		const pending = this.#inflight.get(href);
 		if (pending) return pending;
 
+		// A fresh fetch is about to define this href's redirect fate — drop any stale mapping from an
+		// earlier (now cache-expired) prefetch so a non-redirecting response isn't shadowed by it.
+		this.#final_url.delete(href);
+
 		const settled = fetch(href, {
 			signal,
-			headers: nav_headers()
+			headers: nav_headers(purpose)
 		})
 			.then(async (res) => {
 				const ct = res.headers.get('content-type') || '';
 				if (!ct.includes('text/html')) return { html: null as string | null, cacheable: false };
+				// A server redirect (a Kit `redirect()` in load, a trailing-slash canonicalization) is
+				// followed transparently by `fetch`; the only trace is `response.url`. Record the landing
+				// href so `navigate()` can correct the address bar it optimistically pushed BEFORE the
+				// fetch — otherwise the old URL sits over the redirected content.
+				if (res.redirected && res.url && res.url !== href) this.#final_url.set(href, res.url);
 				// NOTE: we intentionally swap even non-2xx HTML (e.g. Kit's SSR'd 404/500
 				// +error.svelte page) so error pages render without a full reload.
 				const html = await res.text();
@@ -493,9 +552,9 @@ class SpaRouter {
 		// Match `entry="…"` on ogygia-region open tags in our own SSR output (module URLs never contain
 		// a double-quote), collecting the distinct client-island module specifiers. URL-level dedupe +
 		// failure-retry live in the shared warmer (one scheme for router/visible/interaction warms).
-		const re = /<ogygia-region\b[^>]*?\bentry="([^"]+)"/g;
+		REGION_ENTRY_ATTR_G.lastIndex = 0; // shared `g` regex — start each scan at 0
 		let m: RegExpExecArray | null;
-		while ((m = re.exec(html))) warm_island_module(m[1], href);
+		while ((m = REGION_ENTRY_ATTR_G.exec(html))) warm_island_module(m[1], href);
 	}
 
 	// NOTE: the library does NO script processing. Scripts inserted via a client-side body swap do
@@ -562,9 +621,13 @@ class SpaRouter {
 			push_state({ ogygia: true }, url.href);
 		}
 
+		// A back/forward restore re-fetches (we hold no DOM snapshot); mark it so the server can skip
+		// side effects the visitor already triggered on the first visit. A plain click is `nav`.
+		const purpose: NavPurpose = type === 'popstate' ? 'history' : 'nav';
+
 		let html: string | null;
 		try {
-			html = await this.fetch_page(url.href, signal);
+			html = await this.fetch_page(url.href, signal, purpose);
 		} catch (err) {
 			if ((err as { name?: string })?.name === 'AbortError' || gen !== this.#nav_gen) return;
 			location.href = url.href;
@@ -577,10 +640,33 @@ class SpaRouter {
 		}
 		this.#page_cache.delete(url.href); // one-shot; always fresh on real navigation
 
+		// REDIRECT: the fetch may have landed on a different href (a Kit `redirect()` in load, a
+		// canonical trailing-slash bounce). `dest` is the address the content actually belongs to —
+		// used from here on for the address bar, doc key, current URL, and hash scroll. A cross-origin
+		// redirect can't be a body swap, so hand it to the browser. `dest` === `url` in the common case.
+		let dest = url;
+		const landed = this.#final_url.get(url.href);
+		this.#final_url.delete(url.href); // one-shot, like the page cache
+		if (landed) {
+			let final_url: URL;
+			try {
+				final_url = new URL(landed, url);
+			} catch {
+				final_url = url;
+			}
+			if (final_url.origin !== location.origin) {
+				location.href = final_url.href;
+				return;
+			}
+			dest = final_url;
+			// A redirect REPLACES the intermediate URL (browser semantics), so the back button skips it.
+			replace_state({ ...(history.state || {}), ogygia: true }, dest.href);
+		}
+
 		// csr=true Kit pages boot via inline/module scripts that cloneNode will NOT execute.
 		// Hand off to a full navigation instead of a half-broken SPA swap (BRK-HEAD).
 		if (html_has_kit_bootstrap(html)) {
-			location.href = url.href;
+			location.href = dest.href;
 			return;
 		}
 
@@ -591,7 +677,7 @@ class SpaRouter {
 		// (and stop SPA behaviour from here on).
 		const marker = doc.querySelector('meta[name="ogygia-router"]');
 		if (!marker) {
-			location.href = url.href;
+			location.href = dest.href;
 			return;
 		}
 		// Same-document hash jumps already returned above (no VT). Cross-route swaps keep VT
@@ -616,6 +702,9 @@ class SpaRouter {
 		const swap = () => {
 			// Stale nav: do not mutate the DOM (view-transition can otherwise commit a superseded swap).
 			if (gen !== this.#nav_gen) return;
+			// Pull the a11y announcer out of the body before the reconcile — it isn't in the incoming
+			// HTML, so a body morph would remove it. Re-attached (with the new title) by `#announce`.
+			this.#announcer?.remove();
 			// LIFECYCLE (Astro-parity DOM events): last chance to read the OUTGOING page's DOM.
 			document.dispatchEvent(new Event('og:before-swap'));
 			this.#merge_head(doc.head); // keeps our runtime module script alive across swaps
@@ -647,7 +736,8 @@ class SpaRouter {
 				runtime_session.settle_lakes_in(document.body);
 			} else {
 				// FALLBACK (reconcile off, or a region nested in an open shadow root morph can't pierce):
-				// a plain full-body swap. Correct and safe, but keep-continuity does NOT survive here —
+				// an outerSync body swap — keep the live <body> node (and everything attached to it),
+				// sync its attributes, replace its children. keep-continuity does NOT survive here —
 				// islands re-mount like a hard nav. This path is rare; the reconcile path above is the norm.
 				if (DEVTOOLS)
 					dt_emit({
@@ -655,7 +745,7 @@ class SpaRouter {
 						name: 'nav.fallback',
 						reason: !slots.morph ? 'no-morph' : 'shadow-region'
 					});
-				document.body.replaceWith(doc.body);
+				swap_body(document.body, doc.body);
 				document.title = doc.title;
 				runtime_session.settle_lakes_in(document.body);
 				dispose_scope('page');
@@ -693,13 +783,15 @@ class SpaRouter {
 		}
 		if (gen !== this.#nav_gen) return;
 
-		this.#doc_key = document_key(url);
-		this.#current_url = url;
+		// From here on, `dest` is the address the swapped content belongs to (== `url` unless a
+		// server redirect moved it).
+		this.#doc_key = document_key(dest);
+		this.#current_url = dest;
 		if (DEVTOOLS)
 			dt_emit({
 				domain: 'nav',
 				name: 'nav.finish',
-				to: url.pathname + url.search,
+				to: dest.pathname + dest.search,
 				ms: dt_now() - dt_t0,
 				reconciled: dt_reconciled,
 				vt: !!(use_vt && document.startViewTransition)
@@ -718,10 +810,16 @@ class SpaRouter {
 				html_el.style.scrollBehavior = prev;
 			}
 		} else {
-			jump_to_hash(url.hash);
+			jump_to_hash(dest.hash);
 		}
 
-		this.#run_after(from, url, type);
+		// ACCESSIBILITY (scroll has settled): announce the new page to screen readers, then reset
+		// keyboard focus to the top of it — the two things a full navigation gives for free and a body
+		// swap does not.
+		this.#announce(dest);
+		this.#reset_focus(dest.hash);
+
+		this.#run_after(from, dest, type);
 		// LIFECYCLE: the navigation is COMPLETE (head merged, body in place, scroll settled) — the
 		// per-navigation hook for code that a body swap's inert <script> tags can never run. Also
 		// fired once on initial load by the runtime boot, so ONE listener covers every page view.
@@ -795,7 +893,7 @@ class SpaRouter {
 		const target = new URL(url, location.href);
 		if (target.origin !== location.origin)
 			return Promise.resolve({ type: 'loaded', status: 200, data: {} });
-		this.fetch_page(target.href);
+		this.fetch_page(target.href, undefined, 'prefetch');
 		return Promise.resolve({ type: 'loaded', status: 200, data: {} });
 	}
 
@@ -852,11 +950,69 @@ class SpaRouter {
 				return;
 			}
 			const pop_scroll = history.state?.scroll || null;
-			this.navigate(url, { push: false, pop_scroll });
+			// `popstate` type → the fetch is marked a history restore (x-ogygia-purpose: history).
+			this.navigate(url, { push: false, pop_scroll, type: 'popstate' });
 		});
 
 		// seed initial history entry so scroll is restored on the first back
 		replace_state({ ...(history.state || {}), ogygia: true });
+	}
+
+	/**
+	 * ACCESSIBILITY — announce the new page. A body swap is invisible to assistive tech: no document
+	 * `load`, so a screen reader is never told the page changed. Mirror what a full navigation (and
+	 * SvelteKit) give for free — a visually-hidden `aria-live` region whose text becomes the new
+	 * `<title>`, so the page is spoken on arrival. The region is created once and reused (it must
+	 * already be in the DOM when its text changes for AT to observe it); it was detached before the
+	 * swap so the reconcile couldn't remove it, and is re-attached here before its text is set.
+	 */
+	#announce(dest: URL) {
+		let el = this.#announcer;
+		if (!el) {
+			el = document.createElement('div');
+			el.setAttribute('data-ogygia-announcer', '');
+			el.setAttribute('aria-live', 'assertive');
+			el.setAttribute('aria-atomic', 'true');
+			// Visually hidden but readable by AT (the standard sr-only recipe — NOT display:none).
+			el.style.cssText =
+				'position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;' +
+				'clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0';
+			this.#announcer = el;
+		}
+		if (el.parentNode !== document.body) document.body.appendChild(el);
+		el.textContent = document.title || dest.pathname;
+	}
+
+	/**
+	 * ACCESSIBILITY — reset keyboard focus after a navigation, so a keyboard or screen-reader user
+	 * lands at the top of the new page instead of wherever focus was on the old one (a full navigation
+	 * does this natively; a body swap does not). SvelteKit's algorithm: a `[autofocus]` element wins;
+	 * else a `#hash` target; else focus falls back to `<body>` (made momentarily focusable). The one
+	 * ogygia twist: a control INSIDE kept/persisted chrome (`data-ogygia-keep` / `data-persist`) that
+	 * survived the nav is left focused — the visitor is still using that persistent widget.
+	 */
+	#reset_focus(hash: string) {
+		const active = document.activeElement as HTMLElement | null;
+		if (
+			active &&
+			active !== document.body &&
+			active.isConnected &&
+			active.closest('[data-ogygia-keep],[data-persist]')
+		) {
+			return; // focus is on surviving persistent chrome — don't yank it to the top
+		}
+
+		if (hash) {
+			const id = decodeURIComponent(hash.slice(1));
+			const target = id ? document.getElementById(id) : null;
+			if (target) return focus_reset(target);
+		}
+		const autofocus = document.querySelector<HTMLElement>('[autofocus]');
+		if (autofocus) {
+			autofocus.focus();
+			return;
+		}
+		focus_reset(document.body);
 	}
 
 	/** Merge <head>: keep nodes present in both, remove stale, add new. Keeps runtime scripts alive. */
@@ -1052,7 +1208,8 @@ class SpaRouter {
 		if (!url) return;
 		// Same document — nothing to prefetch (hash links / self links).
 		if (same_document(url, new URL(location.href))) return;
-		if (url.href !== location.href) this.fetch_page(url.href);
+		// A warm is speculative — marked `prefetch` so the server can treat it as a dry run.
+		if (url.href !== location.href) this.fetch_page(url.href, undefined, 'prefetch');
 	}
 
 	/** Rank of the most-eager preload trigger that applies to `anchor` (5 = none). */

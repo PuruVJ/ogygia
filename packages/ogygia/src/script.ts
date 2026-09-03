@@ -1,3 +1,6 @@
+// ── regexes
+const SCRIPT_CLOSE_G = /<\/(script)/gi;
+
 /**
  * Serialize a self-contained function into a blocking inline `<script>` string.
  *
@@ -45,6 +48,6 @@
 export function script<A extends unknown[]>(fn: (...args: A) => void, ...args: A): string {
 	const call = args.map((a) => JSON.stringify(a)).join(',');
 	// Escape any `</script` in the body so it cannot break out of the tag it lives in.
-	const body = `(${fn.toString()})(${call});`.replace(/<\/(script)/gi, '<\\/$1');
+	const body = `(${fn.toString()})(${call});`.replace(SCRIPT_CLOSE_G, '<\\/$1');
 	return `<script>${body}</script>`;
 }

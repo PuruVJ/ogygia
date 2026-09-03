@@ -113,7 +113,7 @@ export type ServerEventInput =
 	  }
 	| {
 			domain: 'server';
-			name: 'server.artifact';
+			name: 'server.freeze';
 			/** hit | join | stored | skip | invalidate | invalidate-where | self-evict. */
 			op: string;
 			/** Store key (URL pathname), or the prefix for the bulk op. */

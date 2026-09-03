@@ -13,6 +13,7 @@ import { region } from '../region.js';
 import LayoutChain from './LayoutChain.svelte';
 import RawHtml from '../RawHtml.svelte';
 import { compile_all, match_path, fill, type CompiledPattern } from './match.js';
+import { register_freeze_router } from '../freeze/routers.js';
 import { make_ctx, type Ctx, type Visitor } from './ctx.js';
 import {
 	compile_endpoint,
@@ -78,6 +79,11 @@ export interface RoutesOptions {
 	 *  travel). Any flag a page DOES read auto-carries without being listed here — this is just for
 	 *  the decide-but-don't-render case. `flags: [csr]`. */
 	flags?: ReadonlyArray<(c: Ctx) => unknown>;
+	/** Table-wide FREEZE default for pages that declare nothing themselves (a layout's or a page's
+	 *  own `freeze` wins). Undeclared here too = the vite config's `freeze.default`. The handle
+	 *  consults this table for any request Kit's file router did not claim — keep `ogygiaHandle()`
+	 *  OUTERMOST in the `sequence()` so a hit is served before the table runs. */
+	freeze?: boolean;
 }
 
 /** The router value. `$infer` is a type-only phantom read as `typeof app.$infer`. */
@@ -130,11 +136,12 @@ const HEAD_AS_GET = (m: string) => (m === 'HEAD' ? 'GET' : m);
 const AMP_RE = /&/g;
 const LT_RE = /</g;
 const GT_RE = />/g;
+const LAST_SLASH_RE = /\/$/;
 const escape_text = (s: string) =>
 	s.replace(AMP_RE, '&amp;').replace(LT_RE, '&lt;').replace(GT_RE, '&gt;');
 
 export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions = {}): Router<T> {
-	const base = (opts.base ?? '').replace(/\/$/, '');
+	const base = (opts.base ?? '').replace(LAST_SLASH_RE, '');
 	const slash = opts.slash ?? 'ignore';
 	const root_load = to_load(opts.load);
 
@@ -167,6 +174,31 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 	});
 	const compiled: CompiledPattern[] = compile_all(leaves.map((l) => l.pattern));
 	const by_pattern = new Map(leaves.map((l) => [l.pattern, l]));
+
+	// FREEZE opt-in, cascaded like the file world: page > innermost … outermost layout > table
+	// (`layouts` is OUTERMOST-first, so scan from the end). Endpoints are never pages → null
+	// ("mine, undeclared" — the handle applies the config default). Registered under a key so a
+	// dev re-evaluation of hooks.server.ts REPLACES this table's matcher instead of shadowing it.
+	const freeze_of = (leaf: Leaf): boolean | null => {
+		if (!is_page(leaf.def)) return null;
+		if (leaf.def.freeze !== undefined) return leaf.def.freeze;
+		for (let i = leaf.def.layouts.length - 1; i >= 0; i--) {
+			const f = leaf.def.layouts[i].freeze;
+			if (f !== undefined) return f;
+		}
+		return opts.freeze ?? null;
+	};
+	register_freeze_router(base + '|' + leaves.map((l) => l.pattern).join(','), (pathname) => {
+		let path = pathname;
+		if (base) {
+			if (path === base) path = '/';
+			else if (path.startsWith(base + '/')) path = path.slice(base.length);
+			else return undefined; // not under our base → not ours
+		}
+		path = canonical_slash(path, slash) ?? path;
+		const hit = match_path(compiled, path);
+		return hit ? freeze_of(by_pattern.get(hit.pattern)!) : undefined;
+	});
 
 	const href_fn = (pattern: string, params?: Record<string, string | number>) =>
 		base + fill(pattern, params ?? {});

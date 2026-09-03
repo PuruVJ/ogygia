@@ -12,6 +12,9 @@
 	import type { Site } from '../site.js';
 	import type { NavLeaf, NavTree } from '../types.js';
 
+	// ── regexes
+	const NON_IDENT_CHARS_G = /[^a-zA-Z0-9_-]+/g;
+
 	let {
 		site,
 		base,
@@ -54,7 +57,7 @@
 	 * key (href/label) is, so we sanitise it to a valid custom-ident and prefix by row kind.
 	 */
 	function vt_name(prefix: string, key: string): string {
-		return `${prefix}-${key.replace(/[^a-zA-Z0-9_-]+/g, '-')}`;
+		return `${prefix}-${key.replace(NON_IDENT_CHARS_G, '-')}`;
 	}
 
 	/**

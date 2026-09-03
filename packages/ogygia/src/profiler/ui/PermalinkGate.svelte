@@ -12,9 +12,12 @@
 	import type { Analysis } from '../analyze.js';
 	import type { ReportMeta, ReportExtras } from '../report.js';
 
+	// ── regexes
+	const LEADING_HASH_RE = /^#/;
+
 	let { base }: { base: string } = $props();
 
-	const blob = typeof location !== 'undefined' ? location.hash.replace(/^#/, '') : '';
+	const blob = typeof location !== 'undefined' ? location.hash.replace(LEADING_HASH_RE, '') : '';
 	let password = $state('');
 	let busy = $state(false);
 	let error = $state('');

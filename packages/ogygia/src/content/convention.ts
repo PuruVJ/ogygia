@@ -5,14 +5,19 @@
  * RESULT — `order`/`groups` as data — so it never parses a filename.
  */
 
+// ── regexes
+const ORDER_PREFIX_RE = /^\d+-/;
+const ORDER_PREFIX_DIGITS_RE = /^(\d+)-/;
+const REGEX_SPECIAL_G = /[.*+?^${}()|[\]\\]/g;
+
 /** Strip a leading `NN-` ordering prefix from one path segment. `00-start` → `start`. */
 export function strip_order_prefix(segment: string): string {
-	return segment.replace(/^\d+-/, '');
+	return segment.replace(ORDER_PREFIX_RE, '');
 }
 
 /** Read a leading `NN-` prefix as a number; missing prefix sorts last. `00-start` → 0. */
 export function order_of(segment: string): number {
-	const m = segment.match(/^(\d+)-/);
+	const m = segment.match(ORDER_PREFIX_DIGITS_RE);
 	return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
 }
 
@@ -94,19 +99,21 @@ export function numbered(opts: NumberedOptions = {}): Convention {
 		verify(dir, segments, meta) {
 			if (meta?.ordered === false) return [];
 			const at = dir || '(root)';
-			const prefixed = segments.filter((s) => /^\d+-/.test(s));
+			const prefixed = segments.filter((s) => ORDER_PREFIX_RE.test(s));
 			if (prefixed.length === 0) return []; // unordered directory — the convention isn't in use here
 			const issues: string[] = [];
-			const bare = segments.filter((s) => !/^\d+-/.test(s));
+			const bare = segments.filter((s) => !ORDER_PREFIX_RE.test(s));
 			if (bare.length) {
 				issues.push(
 					`ordering in ${at}: mixed prefixed and unprefixed siblings — prefix ${bare.slice(0, 4).join(', ')}${bare.length > 4 ? ', …' : ''} (or opt out with "ordered": false in +meta.json)`
 				);
 			}
-			const digits = prefixed.map((s) => s.match(/^(\d+)-/)![1]);
+			const digits = prefixed.map((s) => s.match(ORDER_PREFIX_DIGITS_RE)![1]);
 			const widths = new Set(digits.map((d) => d.length));
 			if (opts.pad !== undefined ? [...widths].some((w) => w !== opts.pad) : widths.size > 1) {
-				const seen = [...new Set(prefixed.map((s) => s.match(/^\d+-/)![0]))].slice(0, 6).join(', ');
+				const seen = [...new Set(prefixed.map((s) => s.match(ORDER_PREFIX_RE)![0]))]
+					.slice(0, 6)
+					.join(', ');
 				issues.push(
 					`ordering in ${at}: inconsistent prefix padding (${seen})${opts.pad !== undefined ? ` — expected ${opts.pad} digits` : ''}`
 				);
@@ -160,7 +167,7 @@ function compile_format(format: string): CompiledFormat {
 			order.push('D');
 			i += 2;
 		} else {
-			re += format[i]!.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+			re += format[i]!.replace(REGEX_SPECIAL_G, String.raw`\$&`);
 			i += 1;
 		}
 	}

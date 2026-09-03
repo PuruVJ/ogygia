@@ -23,6 +23,10 @@ import { parse_module } from '../parse/oxc.js';
 import { og_js_regions } from '../parse/scan.js';
 import { BuildCache } from '../../build-cache.js';
 
+// ── regexes
+const REGEX_SPECIAL_G = /[.*+?^${}()|[\]\\]/g;
+const LEADING_SLASH_RE = /^\//;
+
 /** bake's corner of the shared build cache — the transient eval bundles live here (never committed;
  *  written and deleted per bake). All writes go through the cache interface, like the git checkouts. */
 const bake_cache = new BuildCache<never>('bake');
@@ -122,7 +126,7 @@ function eval_imports(imports: ImportDecl[], calls: BakeCall[]): ImportDecl[] {
 	const fnText = calls.map((c) => c.fn).join('\n');
 	return imports.filter((imp) =>
 		imp.names.some((name) =>
-			new RegExp(`(?<![\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`).test(fnText)
+			new RegExp(`(?<![\\w$])${name.replace(REGEX_SPECIAL_G, '\\$&')}(?![\\w$])`).test(fnText)
 		)
 	);
 }
@@ -154,9 +158,7 @@ function dead_imports(src: string, imports: ImportDecl[], calls: BakeCall[]): Im
 		(imp) =>
 			imp.names.length > 0 &&
 			imp.names.every((name) => {
-				const re = new RegExp(
-					`(?<![\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`
-				);
+				const re = new RegExp(`(?<![\\w$])${name.replace(REGEX_SPECIAL_G, '\\$&')}(?![\\w$])`);
 				return !re.test(remainder);
 			})
 	);
@@ -212,7 +214,7 @@ function bake_plugin(
 			// SvelteKit conventions, as a fallback (config aliases may be unset this early).
 			if (source === '$lib' || source.startsWith('$lib/')) {
 				return resolve_file(
-					path.join(root, 'src', 'lib', source.slice('$lib'.length).replace(/^\//, ''))
+					path.join(root, 'src', 'lib', source.slice('$lib'.length).replace(LEADING_SLASH_RE, ''))
 				);
 			}
 			// The entry's relative imports resolve against the real module's directory.

@@ -26,7 +26,8 @@ export interface CompiledPattern {
 	score: number;
 }
 
-const escape_re = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const REGEX_SPECIAL_G = /[.*+?^${}()|[\]\\]/g;
+const escape_re = (s: string) => s.replace(REGEX_SPECIAL_G, '\\$&');
 
 const REST = /^\[\.\.\.([a-zA-Z_$][\w$]*)\]$/;
 const OPTIONAL = /^\[\[([a-zA-Z_$][\w$]*)\]\]$/;

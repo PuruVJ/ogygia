@@ -26,6 +26,7 @@ import { createRawSnippet, hydrate, unmount, type Component, type Snippet } from
 import { render as ssr_render } from 'svelte/server';
 import { BROWSER } from 'esm-env';
 import { register_kind, mint } from './ref.js';
+import { kit_render_context } from './server/kit-context.js';
 
 /**
  * A hand-written SERVER component that renders a bare snippet: svelte has no public API to
@@ -109,12 +110,14 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 				!!live_entry && renderer?.global?.mode === 'async' && typeof renderer.child === 'function';
 			if (can_async) {
 				renderer.child(async (r) => {
-					const out = await ssr_render(live_entry!, { props });
+					const out = await ssr_render(live_entry!, { props, context: kit_render_context() });
 					thread_head(r, out.head);
 					r.push(WRAP_OPEN + out.body + WRAP_CLOSE);
 				});
 			} else {
-				const out = live_entry ? ssr_render(live_entry, { props }) : { head: '', body: '' };
+				const out = live_entry
+					? ssr_render(live_entry, { props, context: kit_render_context() })
+					: { head: '', body: '' };
 				thread_head(renderer, out.head);
 				renderer.push(WRAP_OPEN + out.body + WRAP_CLOSE);
 			}
@@ -137,7 +140,9 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 				// live: inline the entry's SSR on the server; empty on the client (setup hydrates it).
 				return (
 					WRAP_OPEN +
-					(BROWSER || !live_entry ? '' : ssr_render(live_entry, { props: live_props() }).body) +
+					(BROWSER || !live_entry
+						? ''
+						: ssr_render(live_entry, { props: live_props(), context: kit_render_context() }).body) +
 					WRAP_CLOSE
 				);
 			},
@@ -170,7 +175,7 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 function capture_static(snippet: Snippet, label?: string): RegionSnippet {
 	let body: string;
 	try {
-		body = ssr_render(RenderSnippet, { props: { s: snippet } }).body;
+		body = ssr_render(RenderSnippet, { props: { s: snippet }, context: kit_render_context() }).body;
 	} catch (e) {
 		// A Svelte snippet is just a function, so ogygia can't tell a real snippet from a plain
 		// callback until it tries to render it — which is HERE. Lead with "function" (not "snippet"):

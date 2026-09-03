@@ -1,15 +1,15 @@
 ---
 title: Lakes
-summary: Static HTML inside an island. A frozen region that ships zero client JS even though it lives in an interactive tree.
+summary: Static HTML inside an island. A frozen region that ships zero client JS, although it lives in an interactive tree.
 related:
   - regions/timing-nesting
   - regions/client-islands
 ---
 
-A **lake** is static HTML *inside* an island. The island around it is interactive, but the lake itself never ships JS. It is marked with `wake: 'none'`, used within an island's own `.svelte` file.
+A **lake** is static HTML *inside* an island. The island around it is interactive. The lake itself never ships JS. You mark it with `wake: 'none'`, inside the `.svelte` file of an island.
 
 ::: tip When to use
-A lake is for a **big, static subtree that lives inside something interactive** (prose, a pre-rendered chart, a highlighted code block, an image gallery) that you do not want compiled into the island's client bundle. If the static content is *not* inside an island, it is already free (unmarked markup on a Page ships no JS); lakes matter only within a hydrating tree.
+Use a lake for a **large static subtree inside an interactive component**: prose, a prerendered chart, a highlighted code block, an image gallery. The lake keeps that subtree out of the client bundle of the island. If the static content is *not* inside an island, it costs nothing already. Unmarked markup on a Page ships no JS. Lakes matter only inside a tree that hydrates.
 :::
 
 ```svelte
@@ -24,13 +24,13 @@ A lake is for a **big, static subtree that lives inside something interactive** 
 </section>
 ```
 
-The lake renders on the server, and its DOM is lifted out and preserved when the surrounding island hydrates, then dropped back in place. So a costly, non-interactive subtree stays free of JS even inside a live component.
+The lake renders on the server. When the island around it hydrates, ogygia lifts the DOM of the lake out, keeps it safe, and puts it back in place. Thus a costly static subtree stays free of JS inside a live component.
 
-## Why not just render it inline?
+## Why not render it inline?
 
-Inside a hydrating island, ordinary markup is compiled into the island's client bundle. A lake opts a subtree out of that bundle entirely. Use it for anything expensive to ship but static: prose, a big pre-rendered chart, a syntax-highlighted code block.
+Inside an island that hydrates, ordinary markup compiles into the client bundle of the island. A lake removes a subtree from that bundle. Use it for content that is costly to ship but static: prose, a large prerendered chart, a code block with syntax colors.
 
-The island below is interactive: the counter increments. The snapshot inside it is a lake: server HTML, lifted out and restored around the island's hydration, shipping no JS of its own.
+The island below is interactive: the counter counts. The snapshot inside it is a lake: server HTML, lifted out and restored around the hydration of the island. It ships no JS of its own.
 
 <script>
   import LakeDemo from '$lib/demos/LakeDemo.svelte' with { wake: 'load' };
@@ -42,7 +42,7 @@ The island below is interactive: the counter increments. The snapshot inside it 
 
 ## Keeping a lake fresh: render: live
 
-By default a lake is baked once and restored untouched. When its content should refresh in the background, make it `render: 'live'`, which serves baked static content that revalidates:
+By default, a lake is baked one time and restored unchanged. When its content must refresh in the background, make it `render: 'live'`. A live lake serves baked static content, then revalidates:
 
 ```svelte
 <script>
@@ -52,14 +52,14 @@ By default a lake is baked once and restored untouched. When its content should 
 <HeavyChart data={rows} />
 ```
 
-`wake` is the revalidate schedule (`load` / `idle` / `visible` / media); `maxAge` and `onExpire` (set in a preset) tune staleness. `render: 'live'` serves the baked content immediately and refreshes it in the background through the signed island endpoint.
+`wake` is the revalidate schedule (`load` / `idle` / `visible` / media). `maxAge` and `onExpire`, set in a preset, control staleness. `render: 'live'` serves the baked content immediately. It refreshes the content in the background through the signed island endpoint.
 
-> A lake restored inside persisted layout chrome is re-marked as settled after an SPA navigation, so an island nested in a lake can still wake. See [SPA router](/docs/app/spa-router).
+> After an SPA navigation, a lake restored inside kept layout chrome is marked as settled again. Thus an island nested in that lake can wake. See [SPA router](/docs/app/spa-router).
 
 ## Do / don't
 
-- **Do** put your heaviest static content (long prose, big charts, code) in a lake when it sits inside an island.
-- **Do** reach for `render: 'live'` when a lake's server HTML should refresh in the background.
-- **Don't** put interactive UI in a lake. It ships no JS, so buttons and inputs are inert. That is a nested [client island](/docs/regions/client-islands) instead.
+- **Do** put your heaviest static content (long prose, large charts, code) in a lake when it is inside an island.
+- **Do** use `render: 'live'` when the server HTML of a lake must refresh in the background.
+- **Don't** put interactive UI in a lake. A lake ships no JS. Buttons and inputs in it are inert. Use a nested [client island](/docs/regions/client-islands) instead.
 
 

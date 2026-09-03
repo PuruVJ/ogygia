@@ -28,6 +28,15 @@ import Region from './Region.svelte';
 import { PageSeed } from './server/page-seed.js';
 import { page_seed_reducers } from './server/page-stream.js';
 import runtime_url from 'virtual:ogygia/runtime-url';
+import { freeze_capture_active } from './freeze/capture.js';
+import { try_get_request_store } from '@sveltejs/kit/internal/server';
+import { kit_render_context, type KitPage } from './server/kit-context.js';
+import { record_page } from './page-seed-registry.js';
+
+const AMP_G = /&/g;
+const LT_G = /</g;
+const GT_G = />/g;
+const TITLE_TAG_RE = /<title[\s>]/i;
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import {
 	enabled as router_enabled,
@@ -47,7 +56,8 @@ export interface DocumentOptions {
 	head?: string;
 	/** HTTP status (default 200). */
 	status?: number;
-	/** Extra/override response headers. `content-type` and `cache-control: no-store` are the defaults. */
+	/** Extra/override response headers. `content-type` and `cache-control: no-store` are the defaults
+	 *  (under an eligible FREEZE request the cache-control default is left to the verdict). */
 	headers?: HeadersInit;
 	/** `<html lang>` (default 'en'). */
 	lang?: string;
@@ -66,7 +76,38 @@ export interface DocumentOptions {
 }
 
 const escape_text = (s: string) =>
-	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	s.replace(AMP_G, '&amp;').replace(LT_G, '&lt;').replace(GT_G, '&gt;');
+
+/** The `page` object Kit's server `$app/state` answers from (Kit's `props.page` shape), built from
+ *  the caller's seed when the router passed one, else from the live request (URL, status) with
+ *  empty data — so `page.url`/`page.status` are always true and `page.data` never throws on any
+ *  ogygia-rendered document. Also RECORDED into the request's page snapshot, so the nested island
+ *  renders under this document rebuild the same context (see server/kit-context.ts). */
+function kit_page_context(options: DocumentOptions): KitPage {
+	const s = options.pageState;
+	const store = try_get_request_store() as { event?: { url?: URL } } | undefined;
+	const href = s?.url?.href ?? store?.event?.url?.href;
+	const page: KitPage = {
+		url: href ? new URL(href) : undefined,
+		params: s?.params ?? {},
+		route: s?.route ?? { id: null },
+		status: s?.status ?? options.status ?? 200,
+		data: s?.data ?? {},
+		form: s?.form ?? null,
+		error: s?.error ?? null,
+		state: {}
+	};
+	record_page({
+		url: href ? { href } : undefined,
+		params: page.params,
+		route: page.route,
+		status: page.status,
+		data: page.data,
+		form: page.form,
+		error: page.error
+	});
+	return page;
+}
 
 /**
  * Render a region into a complete ogygia document and return it as a `Response`.
@@ -85,7 +126,8 @@ export async function document(
 	// `<Region of>` accepts exactly what callers hold — a region value or its promise. Rendered inside
 	// the current request so css-claiming and props capture key off the live RequestEvent.
 	const r = await render(Region as unknown as Component<{ of: unknown }>, {
-		props: { of: await of }
+		props: { of: await of },
+		context: kit_render_context(kit_page_context(options))
 	});
 
 	const head: string[] = [];
@@ -94,7 +136,7 @@ export async function document(
 	head.push(r.head);
 	if (options.head) head.push(options.head);
 	const head_so_far = () => head.join('');
-	if (options.title && !/<title[\s>]/i.test(head_so_far())) {
+	if (options.title && !TITLE_TAG_RE.test(head_so_far())) {
 		head.push(`<title>${escape_text(options.title)}</title>`);
 	}
 	// The same three injections the handle makes into a Kit page, presence-checked the same way
@@ -135,11 +177,12 @@ export async function document(
 		head.join('') +
 		`</head><body>${r.body}</body></html>`;
 
-	const headers = new Headers({
-		'content-type': 'text/html; charset=utf-8',
-		// Programmatic documents are rendered per request — cacheable ones can override.
-		'cache-control': 'no-store'
-	});
+	const headers = new Headers({ 'content-type': 'text/html; charset=utf-8' });
+	// Programmatic documents are rendered per request — `no-store` by default, cacheable ones
+	// override via `headers`. Under an eligible FREEZE request the verdict owns this header
+	// instead (frozen → `public, s-maxage`; refused → `private, no-store`): stamping it here
+	// would read as the APP refusing, and no router page could ever freeze.
+	if (!freeze_capture_active()) headers.set('cache-control', 'no-store');
 	if (options.headers) {
 		for (const [k, v] of new Headers(options.headers)) headers.set(k, v);
 	}

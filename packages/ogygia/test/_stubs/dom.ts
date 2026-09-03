@@ -107,6 +107,10 @@ class DomNode {
 	appendChild(node: DomNode): DomNode {
 		return this.insertBefore(node, null);
 	}
+	replaceChildren(...nodes: DomNode[]): void {
+		while (this._first) this._detach(this._first);
+		for (const n of nodes) this.appendChild(n);
+	}
 	removeChild(node: DomNode): DomNode {
 		this._detach(node);
 		return node;
@@ -232,6 +236,29 @@ class DomElement extends DomNode {
 	}
 	set selected(v: boolean) {
 		this._selected = !!v;
+	}
+
+	/** Minimal selectors — a comma list of `tag`, `[attr]`, `tag[attr]` — what `morph.ts` needs. */
+	querySelectorAll(selector: string): DomElement[] {
+		const tests = selector.split(',').map((part) => {
+			const m = part.trim().match(/^([a-zA-Z][\w-]*)?(?:\[([\w-]+)\])?$/);
+			if (!m || (!m[1] && !m[2])) throw new Error('dom shim: unsupported selector ' + part);
+			const tag = m[1] ? m[1].toUpperCase() : null;
+			const attr = m[2] ?? null;
+			return (e: DomElement) =>
+				(tag === null || e.tagName === tag) && (attr === null || e.hasAttribute(attr));
+		});
+		const out: DomElement[] = [];
+		const walk = (n: DomNode): void => {
+			for (let c = n._first; c; c = c._next) {
+				if (c.nodeType !== 1) continue;
+				const e = c as DomElement;
+				if (tests.some((t) => t(e))) out.push(e);
+				walk(c);
+			}
+		};
+		walk(this);
+		return out;
 	}
 
 	private querySelectorOptions(): DomElement[] {

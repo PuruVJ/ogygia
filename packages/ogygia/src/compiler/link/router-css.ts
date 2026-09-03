@@ -34,6 +34,7 @@ import {
 const PATH_SEP = /[/\\]/;
 const SVELTE_RE = /\.svelte$/;
 const BARREL_RE = /\.(?:ts|js|mjs)$/;
+const CSS_EXT_RE = /\.css$/;
 /** Candidate suffixes for an extensionless spec, Vite resolution order-ish. */
 const RESOLVE_SUFFIXES = ['', '.ts', '.js', '.mjs', '.svelte', '/index.ts', '/index.js'];
 
@@ -134,7 +135,7 @@ export function router_css_module(
 				} else {
 					// Plain stylesheet import: raw file text. Preprocessor dialects (.scss/…) can't be
 					// compiled here — skipped in dev inline (they load normally once built).
-					if (!/\.css$/.test(e.abs)) continue;
+					if (!CSS_EXT_RE.test(e.abs)) continue;
 					const css = opts.read_file(e.abs);
 					if (css) entries.push({ key: `rcss-dev:${e_rel}`, css });
 				}

@@ -1,3 +1,7 @@
+// ── regexes
+const CRLF_G = /\r\n?/g;
+const LEADING_INDENT_RE = /^[\t ]*/;
+
 /**
  * Strip the common leading indentation from a block of source, and trim leading/trailing blank
  * lines. Source embedded in a call (`import.meta.og.code(\`…\`, …)`) is indented to match where the
@@ -11,7 +15,7 @@
  */
 export function dedent(text: string): string {
 	// Normalize CRLF so line handling is uniform; the renderer emits LF anyway.
-	const lines = text.replace(/\r\n?/g, '\n').split('\n');
+	const lines = text.replace(CRLF_G, '\n').split('\n');
 
 	// Drop leading and trailing blank lines (the newline right after the opening backtick, etc.).
 	while (lines.length && lines[0]!.trim() === '') lines.shift();
@@ -22,7 +26,7 @@ export function dedent(text: string): string {
 	let common: string | null = null;
 	for (const line of lines) {
 		if (line.trim() === '') continue; // blank lines don't constrain the indent
-		const lead = /^[\t ]*/.exec(line)![0];
+		const lead = LEADING_INDENT_RE.exec(line)![0];
 		if (common === null) {
 			common = lead;
 		} else {

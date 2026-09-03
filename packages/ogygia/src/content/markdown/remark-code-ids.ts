@@ -20,6 +20,9 @@
  * is on `code.meta` by the time the highlighter sees the node.
  */
 
+// ── regexes
+const WS_G = /\s+/g;
+
 type MdNode = {
 	type?: string;
 	depth?: number;
@@ -66,7 +69,7 @@ export function remarkCodeIds() {
 /** Compute `slug-code-<hash>` (or `code-<hash>` outside any section) and stash it on `code.meta`. */
 function assign(node: MdNode, heading: string | null, seen: Set<string>): void {
 	// Normalize whitespace so trivial reformatting (indent tweaks, trailing spaces) keeps the same hash.
-	const text = (node.value ?? '').replace(/\s+/g, ' ').trim();
+	const text = (node.value ?? '').replace(WS_G, ' ').trim();
 	const h = hash_code(text);
 	const base = heading ? `${heading}-code-${h}` : `code-${h}`;
 	let id = base;

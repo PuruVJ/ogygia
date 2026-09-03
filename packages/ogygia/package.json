@@ -112,13 +112,17 @@
 			"types": "./dist/flags.d.ts",
 			"default": "./src/flags.ts"
 		},
-		"./artifacts": {
-			"types": "./dist/artifacts/index.d.ts",
-			"default": "./src/artifacts/index.ts"
+		"./freeze": {
+			"types": "./dist/freeze/index.d.ts",
+			"default": "./src/freeze/index.ts"
 		},
-		"./artifacts/source": {
-			"types": "./dist/artifacts/source-runtime.d.ts",
-			"default": "./src/artifacts/source-runtime.ts"
+		"./freeze/source": {
+			"types": "./dist/freeze/source-runtime.d.ts",
+			"default": "./src/freeze/source-runtime.ts"
+		},
+		"./federation": {
+			"types": "./dist/federation/index.d.ts",
+			"default": "./src/federation/index.ts"
 		},
 		"./flag/openfeature": {
 			"types": "./dist/flags/openfeature.d.ts",
@@ -160,6 +164,8 @@
 	"scripts": {
 		"build": "tsdown",
 		"test": "vitest run",
+		"test:node": "vitest run --project node",
+		"test:browser": "vitest run --project browser",
 		"lint": "oxlint -c .oxlintrc.json src",
 		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json && vitest run && pnpm run lint",
 		"prepublishOnly": "pnpm run build && pnpm run verify:package",
@@ -206,6 +212,8 @@
 		"@sveltejs/sv-utils": "^0.3.3",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/node": "^26.1.2",
+		"@vitest/browser": "4.1.10",
+		"@vitest/browser-playwright": "4.1.10",
 		"bits-ui": "^2.18.1",
 		"mdsvex": "^0.12.8",
 		"oxlint": "^1.77.0",
@@ -307,13 +315,17 @@
 				"types": "./dist/flags.d.ts",
 				"default": "./dist/flags.js"
 			},
-			"./artifacts": {
-				"types": "./dist/artifacts/index.d.ts",
-				"default": "./dist/artifacts/index.js"
+			"./freeze": {
+				"types": "./dist/freeze/index.d.ts",
+				"default": "./dist/freeze/index.js"
 			},
-			"./artifacts/source": {
-				"types": "./dist/artifacts/source-runtime.d.ts",
-				"default": "./dist/artifacts/source-runtime.js"
+			"./freeze/source": {
+				"types": "./dist/freeze/source-runtime.d.ts",
+				"default": "./dist/freeze/source-runtime.js"
+			},
+			"./federation": {
+				"types": "./dist/federation/index.d.ts",
+				"default": "./dist/federation/index.js"
 			},
 			"./flag/openfeature": {
 				"types": "./dist/flags/openfeature.d.ts",

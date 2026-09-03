@@ -26,6 +26,9 @@ import { render_markdown } from '../../content/markdown/render-md.js';
 import type { MarkdownOptions } from '../../content/markdown/index.js';
 import type { Profiler } from '../driver.js';
 
+// ── regexes
+const EXPORT_CONST_RE = /export\s+const/;
+
 const CONSTRUCT_MARKUP_EXTS = ['.svelte'] as const;
 
 export interface MacroPipelineCtx {
@@ -78,7 +81,7 @@ export async function run_module_macros(
 		}
 	}
 
-	// `import.meta.og.source(fn)` — declared data sources for the artifacts reverse index:
+	// `import.meta.og.source(fn)` — declared data sources for the freeze reverse index:
 	// stamps `file#export`, rewrites to `__og_source('id', fn)` + injects the runtime wrapper.
 	// AST-precise, strict-position (macros/source.ts); a no-op unless the marker is present.
 	if (out.includes('import.meta.og.source')) {
@@ -104,7 +107,7 @@ export async function run_module_macros(
 	// AUTO-BRAND provable store factories (export const x = (seed) => store-shape) so the
 	// registered-factory tier needs zero authoring for the common shapes. App source only —
 	// never node_modules (their factories can't self-register on the client anyway).
-	if (!id.includes('node_modules') && !id.startsWith(ctx.pkgRoot) && /export\s+const/.test(out)) {
+	if (!id.includes('node_modules') && !id.startsWith(ctx.pkgRoot) && EXPORT_CONST_RE.test(out)) {
 		const rel_auto = path.relative(ctx.root, id.split('?')[0]).split(path.sep).join('/');
 		const branded = auto_brand_stores(out, id, rel_auto, CONSTRUCT_MARKUP_EXTS);
 		if (branded !== out) {

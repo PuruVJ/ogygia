@@ -57,32 +57,12 @@ export { compile, match_path, type CompiledPattern } from './match.js';
 export { anonymousVisitor, type AnonymousVisitorOptions } from './visitor.js';
 export { api, ApiError, type ApiClient, type ApiClientOptions } from './client-api.js';
 
-// EXPERIMENTAL — fragment federation: an MFE `expose()`s its route tree; the shell makes ONE
-// `client()` per MFE (signing / timeout / SWR cache / coalescing / generation-safe invalidation)
-// and consumes it three ways — `mount(client)` as one table entry, `client.widget()` in its own
-// SSR stitch, `proxy({ app })` as the lazy client-stitch endpoint. Ed25519 caller signing +
-// signature-bound visitor claims (`user(c)`, auto-built from `c.visitor` + every flag the
-// request decided) + W3C trace continuity ride the same hop. Design + POC log: internal/notes/mfe.md.
-export {
-	expose,
-	catalog,
-	client,
-	mount,
-	proxy,
-	sign_headers,
-	verify_fragment_request,
-	user,
-	child_traceparent,
-	FRAGMENT_ROUTES_PATH,
-	type FragmentDocument,
-	type FragmentClient,
-	type ClientOptions,
-	type WidgetDocument,
-	type MountOptions,
-	type KitMountOptions,
-	type ProxyOptions,
-	type Widget,
-	type WidgetInfo,
-	type Claims,
-	type VerifyConfig
-} from './fragment.js';
+// Fragment federation v2 lives in `ogygia/federation` (`federate()` — one identity per app, remote
+// fragments as region values, cross-app thaw). `mount()` is router glue, so it (and `user`) are
+// re-exported here for the shell's route table. Imported from the leaf modules (NOT the federation
+// barrel) so the router graph never pulls the handle-only `serve.js` + its server virtuals. Design:
+// internal/notes/federation.md.
+export { mount, type MountOptions, type KitMountOptions } from '../federation/mount.js';
+export { user, sign_headers, child_traceparent } from '../federation/wire.js';
+export type { Peer } from '../federation/types.js';
+export type { Claims, FragmentDocument, WidgetDocument, VerifyConfig } from '../federation/wire.js';

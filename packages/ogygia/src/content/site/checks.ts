@@ -65,6 +65,8 @@ function has_link_data(meta: unknown): boolean {
 }
 
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+const TRAILING_SLASHES_RE = /\/+$/;
+const EDGE_SLASHES_G = /^\/+|\/+$/g;
 
 /** Tuning for the {@link links} check — the old `audit` options, now on the value. */
 export type LinkOptions = {
@@ -109,7 +111,7 @@ export function links(opts: LinkOptions = {}): Check {
 		}
 		const file = hit.record.filePath;
 		const findings: Finding[] = [];
-		const b = (cx.base || '').replace(/\/+$/, '');
+		const b = (cx.base || '').replace(TRAILING_SLASHES_RE, '');
 
 		for (const link of links_of(entry?.meta)) {
 			const href = link.href;
@@ -128,7 +130,7 @@ export function links(opts: LinkOptions = {}): Check {
 				else if (!b) rest = href;
 				else continue; // absolute but outside the mount — the app's business
 				const [p, f] = rest.split('#');
-				path = p.replace(/^\/+|\/+$/g, '');
+				path = p.replace(EDGE_SLASHES_G, '');
 				frag = f;
 			} else {
 				continue; // relative (colocated asset etc.) — not judged

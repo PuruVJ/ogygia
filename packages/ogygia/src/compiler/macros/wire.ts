@@ -33,6 +33,9 @@ import { og_js_regions, type JsRegion } from '../parse/scan.js';
 import { find_og_calls } from '../parse/scan.js';
 import { parse_module } from '../parse/oxc.js';
 
+// ── regexes
+const STATIC_WIRE_TAIL_RE = /\bstatic\s+wire\s*=\s*$/;
+
 /** The key expression a wire member rewrites to — the same symbol the runtime registry uses. */
 export const WIRE_EXPR = "Symbol.for('ogygia.wire')";
 const MARKER = 'import.meta.og.wire';
@@ -166,7 +169,7 @@ function scan_edits(src: string, region: JsRegion): Edit[] {
 		// before it (whitespace allowed). This anchored test can't match across a string/comment on its
 		// own, and the call itself was already proven to be in code context by find_og_calls.
 		const before = code.slice(0, call.start);
-		const m = /\bstatic\s+wire\s*=\s*$/.exec(before);
+		const m = STATIC_WIRE_TAIL_RE.exec(before);
 		if (!m) continue;
 		const inner = call.args.trim();
 		if (!inner) continue;

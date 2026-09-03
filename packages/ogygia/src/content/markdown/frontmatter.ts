@@ -45,6 +45,22 @@
  * @module
  */
 
+// ── regexes
+const HEX4_RE = /^[0-9a-fA-F]{4}$/;
+const YAML_INF_RE = /^[-+]?\.(inf|Inf|INF)$/;
+const YAML_NAN_RE = /^\.(nan|NaN|NAN)$/;
+const YAML_HEX_RE = /^[-+]?0x[0-9a-fA-F]+$/;
+const SIGN_RE = /^[-+]/;
+const YAML_OCTAL_RE = /^[-+]?0o[0-7]+$/;
+const SIGN_OCTAL_PREFIX_RE = /^[-+]?0o/;
+const YAML_INT_RE = /^[-+]?[0-9]+$/;
+const YAML_FLOAT_RE = /^[-+]?(?:\.[0-9]+|[0-9]+\.[0-9]*|[0-9]+)(?:[eE][-+]?[0-9]+)?$/;
+const FLOAT_MARK_RE = /[.eE]/;
+const CHOMP_THEN_INDENT_RE = /^[+-]?[0-9]*$/;
+const INDENT_THEN_CHOMP_RE = /^[0-9]*[+-]?$/;
+const LEADING_SPACES_RE = /^ */;
+const CRLF_G = /\r\n?/g;
+
 type Ctx = { lines: string[]; i: number };
 type Cursor = { s: string; i: number };
 
@@ -187,7 +203,7 @@ function read_double_quoted(s: string, i: number): { value: string; i: number } 
 					break;
 				case 'u': {
 					const hex = s.slice(i + 2, i + 6);
-					if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+					if (HEX4_RE.test(hex)) {
 						out += String.fromCharCode(parseInt(hex, 16));
 						i += 6;
 						continue;
@@ -234,24 +250,21 @@ function parse_plain(text: string): unknown {
 	if (text === 'true' || text === 'True' || text === 'TRUE') return true;
 	if (text === 'false' || text === 'False' || text === 'FALSE') return false;
 
-	if (/^[-+]?\.(inf|Inf|INF)$/.test(text)) return text[0] === '-' ? -Infinity : Infinity;
-	if (/^\.(nan|NaN|NAN)$/.test(text)) return NaN;
+	if (YAML_INF_RE.test(text)) return text[0] === '-' ? -Infinity : Infinity;
+	if (YAML_NAN_RE.test(text)) return NaN;
 
-	if (/^[-+]?0x[0-9a-fA-F]+$/.test(text)) {
+	if (YAML_HEX_RE.test(text)) {
 		const neg = text[0] === '-';
-		const n = Number(text.replace(/^[-+]/, ''));
+		const n = Number(text.replace(SIGN_RE, ''));
 		return neg ? -n : n;
 	}
-	if (/^[-+]?0o[0-7]+$/.test(text)) {
+	if (YAML_OCTAL_RE.test(text)) {
 		const neg = text[0] === '-';
-		const n = parseInt(text.replace(/^[-+]?0o/, ''), 8);
+		const n = parseInt(text.replace(SIGN_OCTAL_PREFIX_RE, ''), 8);
 		return neg ? -n : n;
 	}
-	if (/^[-+]?[0-9]+$/.test(text)) return parseInt(text, 10);
-	if (
-		/^[-+]?(?:\.[0-9]+|[0-9]+\.[0-9]*|[0-9]+)(?:[eE][-+]?[0-9]+)?$/.test(text) &&
-		/[.eE]/.test(text)
-	) {
+	if (YAML_INT_RE.test(text)) return parseInt(text, 10);
+	if (YAML_FLOAT_RE.test(text) && FLOAT_MARK_RE.test(text)) {
 		return Number(text);
 	}
 	return text;
@@ -422,7 +435,7 @@ function parse_key(raw: string): string {
 function is_block_scalar_indicator(s: string): boolean {
 	if (s[0] !== '|' && s[0] !== '>') return false;
 	const rest = s.slice(1);
-	return /^[+-]?[0-9]*$/.test(rest) || /^[0-9]*[+-]?$/.test(rest);
+	return CHOMP_THEN_INDENT_RE.test(rest) || INDENT_THEN_CHOMP_RE.test(rest);
 }
 
 /**
@@ -535,7 +548,7 @@ function parse_sequence(ctx: Ctx, indent: number): unknown[] {
 				arr.push(null);
 			}
 		} else {
-			const leading = rest.length - rest.replace(/^ */, '').length;
+			const leading = rest.length - rest.replace(LEADING_SPACES_RE, '').length;
 			const item_indent = col + 1 + leading;
 			// Blank the dash so the inline content keeps its column, then reparse.
 			ctx.lines[ctx.i] = ' '.repeat(col + 1) + rest;
@@ -600,7 +613,7 @@ function parse_block(ctx: Ctx, indent: number): unknown {
  * never null.
  */
 export function parse_yaml(source: string): unknown {
-	const normalized = source.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+	const normalized = source.replace(BOM, '').replace(CRLF_G, '\n');
 	const ctx: Ctx = { lines: normalized.split('\n'), i: 0 };
 	skip_blank_comments(ctx);
 	if (ctx.i >= ctx.lines.length) return {};

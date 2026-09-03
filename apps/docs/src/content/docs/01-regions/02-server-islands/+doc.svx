@@ -1,16 +1,16 @@
 ---
 title: Server islands
-summary: HTML fetched from the server after the page loads. Placeholder first, then real HTML. No JS required.
+summary: HTML fetched from the server after the page loads. Placeholder first, then real HTML. No JS is necessary.
 related:
   - regions/timing-nesting
   - app/spa-router
   - regions/held-regions
 ---
 
-A **server island** is a hole in the page whose HTML is fetched from the server *after* the initial load. The page ships a placeholder; the real HTML swaps in on a schedule. No JS hydrates it: it is server HTML, just delivered late.
+A **server island** is a hole in the page. Its HTML comes from the server *after* the first load. The page ships a placeholder. The real HTML swaps in on a schedule. No JS hydrates it. It is server HTML that arrives late.
 
 ::: tip When to use
-A server island fits when a piece of the page is **request-specific but not interactive**: a personalized greeting, a "you have 3 unread" count, a slow upstream you don't want to block first paint. It needs no client JS, so it is cheaper than a client island. If part of it needs interactivity, nest a client island inside it (see below). If it can be prerendered, it does not need to be deferred at all.
+Use a server island when a part of the page is **request-specific but not interactive**: a personal greeting, a "you have 3 unread" count, a slow upstream that must not block first paint. It needs no client JS. Thus it costs less than a client island. If a part of it must be interactive, nest a client island inside it (see below). If you can prerender it, you do not need to defer it.
 :::
 
 Mark the import with `render: 'deferred'`:
@@ -23,9 +23,9 @@ Mark the import with `render: 'deferred'`:
 <Greeting name="Ada" />
 ```
 
-`Greeting` renders on the server, signed per request, and its HTML fills the hole. This is the right tool when a held region depends on the request (cookies, headers, a slow upstream) but needs no interactivity.
+`Greeting` renders on the server, signed on each request. Its HTML fills the hole. Use this tool when a hole depends on the request (cookies, headers, a slow upstream) but needs no interactivity.
 
-The demo below is a real server island on this page. Its timestamp is stamped when the island's HTML is fetched (*after* the page loaded), not at page render. That is how you can tell it came from the server later.
+The demo below is a real server island on this page. Its timestamp is set when the HTML of the island arrives, *after* the page loads. It is not set at page render. That shows the HTML came from the server later.
 
 <script>
   import ServerGreeting from './ServerGreeting.svelte' with { render: 'deferred' };
@@ -40,13 +40,13 @@ The demo below is a real server island on this page. Its timestamp is stamped wh
   </ServerGreeting>
 </div>
 
-Want to watch the round-trip itself? Hit **Fetch again**. The hole drops back to its fallback, fetches fresh server HTML, and swaps it in. The timestamp is new each time because a deferred hole is dynamic by default.
+To see the round-trip, click **Fetch again**. The hole goes back to its fallback. It fetches fresh server HTML and swaps it in. The timestamp is new each time, because a deferred hole is dynamic by default.
 
 <DeferredFrame />
 
 ## When it fetches: the `wake` schedule
 
-A deferred region fetches on the `wake` schedule (the same timing words, minus `interaction`). `render: 'deferred'` alone fetches on load; add `wake` to defer the *fetch itself*. A below-the-fold hole need not cost a request until you reach it:
+A deferred region fetches on the `wake` schedule. The timing words are the same, without `interaction`. `render: 'deferred'` alone fetches on load. Add `wake` to make the *fetch itself* later. A hole below the fold does not cost a request until you scroll to it:
 
 ```svelte
 <script>
@@ -56,14 +56,14 @@ A deferred region fetches on the `wake` schedule (the same timing words, minus `
 
 | `wake` | HTML arrives |
 | --- | --- |
-| `load` (default) | right away |
+| `load` (default) | immediately |
 | `idle` | when the browser is idle |
 | `visible` | when scrolled into view |
 | `'(max-width: 600px)'` | when the media query matches |
 
 ## A fallback while it loads
 
-Pass an `ogygiaFallback` snippet. It shows in the placeholder until the real HTML lands. One line of ceremony: **declare the reserved snippet in the server island's own props** so svelte-check accepts it at call sites (the language tools type your original source, so nothing can inject it for you):
+Pass an `ogygiaFallback` snippet. It shows in the placeholder until the real HTML arrives. One line of setup is necessary: **declare the reserved snippet in the props of the server island itself**. Then svelte-check accepts it at call sites. The language tools type your original source. Thus no tool can inject the declaration for you:
 
 ```svelte
 <script lang="ts">
@@ -82,9 +82,7 @@ Pass an `ogygiaFallback` snippet. It shows in the placeholder until the real HTM
 
 ## Caching: dynamic by default
 
-A server island is **fresh on every request**: its endpoint is served `Cache-Control: no-store`, so a
-reload re-renders it. That's the right default for a hole (a per-request clock, cookie-personalized
-data). To let a hole sit in the browser cache, give it a `maxAge` in a [preset](/docs/reference/api#ogygiavite-regionspresets):
+A server island is **fresh on each request**. Its endpoint is served with `Cache-Control: no-store`. A reload renders it again. That is the correct default for a hole (a per-request clock, cookie-personal data). To let a hole stay in the browser cache, give it a `maxAge` in a [preset](/docs/reference/api#ogygiavite-regionspresets):
 
 ```ts title=vite.config.ts
 ogygia({ regions: { presets: { pricing: { render: 'deferred', wake: 'load', maxAge: '1h' } } } })
@@ -96,12 +94,11 @@ ogygia({ regions: { presets: { pricing: { render: 'deferred', wake: 'load', maxA
 </script>
 ```
 
-Now that hole is served `Cache-Control: private, max-age=3600`. The `maxAge` is signed into the hole's
-URL, so a harvested capability can't be re-pointed at a longer cache.
+Now that hole is served with `Cache-Control: private, max-age=3600`. The `maxAge` is signed into the URL of the hole. Thus a harvested capability cannot point at a longer cache.
 
 ## Adding interactivity: nest an island
 
-A deferred region is **content only**: it never ships JS. When part of that fetched HTML needs to be interactive, put a normal `wake` island *inside* the server island's own component. The hole delivers the content; the island inside turns on the buttons:
+A deferred region is **content only**. It never ships JS. When a part of the fetched HTML must be interactive, put a normal `wake` island *inside* the component of the server island. The hole delivers the content. The island inside turns on the buttons:
 
 ```svelte title=Cart.svelte
 <!-- the server island (personalized, fetched) -->
@@ -114,16 +111,16 @@ A deferred region is **content only**: it never ships JS. When part of that fetc
 <CartButtons {cart} />   <!-- the interactive part, its own island -->
 ```
 
-That keeps the split clean. `render` decides how the HTML arrives, `wake` decides when JS runs, and the two live on different components.
+That keeps the split clean. `render` decides how the HTML arrives. `wake` decides when JS runs. The two live on different components.
 
-Server islands need the [server handle](/docs/start/install) installed, since they load through the signed island endpoint.
+Server islands need the [server handle](/docs/start/install). They load through the signed island endpoint.
 
 ## Do / don't
 
-- **Do** give a server island an `ogygiaFallback` so the placeholder is not an empty gap while its HTML loads.
-- **Do** lean on server islands when a page has several holes. Each fills on load, and a SPA navigation batches them all into one request (no waterfall), no config. See [SPA router](/docs/app/spa-router#single-flight).
-- **Don't** use a server island for interactive UI. That is a [client island](/docs/regions/client-islands). For content that is *both* personalized and interactive, nest a `wake` island inside the server island.
-- **Do** remember `render: 'deferred'` ships no JS: the fetched HTML is inert until an island inside it wakes.
+- **Do** give a server island an `ogygiaFallback`. Then the placeholder is not an empty gap while the HTML loads.
+- **Do** use server islands when a page has several holes. Each hole fills on load. A SPA navigation sends all holes in one request, with no waterfall and no config. See [SPA router](/docs/app/spa-router#single-flight).
+- **Don't** use a server island for interactive UI. That is a [client island](/docs/regions/client-islands). For content that is personal *and* interactive, nest a `wake` island inside the server island.
+- **Do** know that `render: 'deferred'` ships no JS. The fetched HTML is inert until an island inside it wakes.
 
 
 <style>

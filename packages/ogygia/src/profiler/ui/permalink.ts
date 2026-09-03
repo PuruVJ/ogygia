@@ -12,6 +12,15 @@
  * Layout (pre-base64url):  'OGL1' (4) · salt (16) · iv (12) · AES-GCM ciphertext+tag.
  */
 
+// ── regexes
+const PLUS_G = /\+/g;
+const SLASH_G = /\//g;
+const TRAILING_EQUALS_RE = /=+$/;
+const DASH_G = /-/g;
+const UNDERSCORE_G = /_/g;
+const IOS_UA_RE = /iP(hone|ad|od)/;
+const SAFARI_UA_RE = /^((?!chrome|chromium|android|crios|fxios|edg).)*safari/i;
+
 const MAGIC = new Uint8Array([0x4f, 0x47, 0x4c, 0x31]); // 'OGL1'
 const PBKDF2_ITERS = 210_000; // OWASP 2023 floor for PBKDF2-SHA256
 const subtle = (): SubtleCrypto => globalThis.crypto.subtle;
@@ -55,10 +64,10 @@ async function derive_key(password: string, salt: Uint8Array, usage: KeyUsage): 
 function b64url_encode(bytes: Uint8Array): string {
 	let s = '';
 	for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-	return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+	return btoa(s).replace(PLUS_G, '-').replace(SLASH_G, '_').replace(TRAILING_EQUALS_RE, '');
 }
 function b64url_decode(str: string): Uint8Array {
-	const s = str.replace(/-/g, '+').replace(/_/g, '/');
+	const s = str.replace(DASH_G, '+').replace(UNDERSCORE_G, '/');
 	const bin = atob(s + '==='.slice((s.length + 3) % 4));
 	const out = new Uint8Array(bin.length);
 	for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
@@ -107,8 +116,8 @@ export async function decode_permalink(blob: string, password: string): Promise<
  *  for a real report — so universal links are disabled there. Chromium (~2 MB) and Firefox handle it. */
 export function is_webkit_capped(): boolean {
 	const ua = navigator.userAgent;
-	const ios = /iP(hone|ad|od)/.test(ua);
-	const safari = /^((?!chrome|chromium|android|crios|fxios|edg).)*safari/i.test(ua);
+	const ios = IOS_UA_RE.test(ua);
+	const safari = SAFARI_UA_RE.test(ua);
 	return ios || safari;
 }
 

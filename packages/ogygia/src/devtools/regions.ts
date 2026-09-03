@@ -6,6 +6,9 @@
 import { snapshot } from './bus.js';
 import type { DevtoolsEvent } from './schema.js';
 
+// ── regexes
+const JS_EXT_RE = /\.js$/;
+
 /** Region kind, from the two dials the compiler stamps. */
 export type RegionKind = 'island' | 'lake' | 'hole';
 
@@ -69,14 +72,14 @@ export function basename(url: string): string {
 /** basename without a trailing `.js`, for a compact chunk label. */
 export function short_chunk(url: string | null): string {
 	if (!url) return '';
-	const b = basename(url).replace(/\.js$/, '');
+	const b = basename(url).replace(JS_EXT_RE, '');
 	return b.length > 24 ? b.slice(0, 23) + '…' : b;
 }
 
 /** The island id (`<hash>` in `virtual:ogygia/island/<hash>.js`) from an entry URL, or ''. */
 export function island_id(entry: string | null | undefined): string {
 	if (!entry) return '';
-	return basename(entry).replace(/\.js$/, '');
+	return basename(entry).replace(JS_EXT_RE, '');
 }
 
 /**

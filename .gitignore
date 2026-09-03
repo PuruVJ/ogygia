@@ -44,9 +44,14 @@ dist/
 
 # self-building e2e fixtures (their e2e scripts build them every run)
 /internal/repro-deep-csr/build/
-/internal/repro-artifacts/build/
+/internal/repro-freeze/build/
 
-# examples: generated signing keys + build artifacts
+# Playwright runner output (traces on failure, html report) + Vitest browser-mode failure screenshots
+/test-results/
+/playwright-report/
+**/__screenshots__/
+
+# examples: generated signing keys + build freeze
 /examples/mfe/keys.env
 /examples/mfe/*/build/
 /examples/mfe/*/.svelte-kit/

@@ -4,6 +4,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { document, el, frag, DomElement, NS_SVG } from './_stubs/dom.js';
 import { morph_children, install } from '../src/runtime/morph.js';
+import { swap_body } from '../src/runtime/reconcile.js';
 import { slots } from '../src/runtime/slots.js';
 
 beforeEach(() => {
@@ -266,6 +267,36 @@ describe('form DOM properties', () => {
 		expect(document.activeElement).toBe(input); // focus preserved (node identity kept)
 	});
 
+	test('does NOT clobber a dirty UNFOCUSED input when the server re-sends the same default', () => {
+		// The htmx-4 rule: an unfocused control only follows the server when the server *changed* its
+		// default. Type in a field, move focus elsewhere, a live tick re-renders the SAME default —
+		// the typed value must survive (the old rule wiped it because the incoming node had a `value`).
+		const parent = el('<form><input name="a" value="default"><input name="b" value=""></form>');
+		const a = parent.children[0] as DomElement;
+		const b = parent.children[1] as DomElement;
+		a.value = 'typed by user';
+		b.focus(); // focus moved OFF a and onto b — a is now unfocused but dirty
+		morph_children(parent, frag('<input name="a" value="default"><input name="b" value="">'));
+		expect(parent.children[0]).toBe(a); // same node
+		expect(a.value).toBe('typed by user'); // unchanged default → typed text kept
+	});
+
+	test('a changed default DOES move an unfocused dirty value (server changed its mind)', () => {
+		const parent = el('<form><input name="a" value="v1"></form>');
+		const a = parent.firstElementChild as DomElement;
+		a.value = 'typed';
+		morph_children(parent, frag('<input name="a" value="v2">')); // default v1 → v2
+		expect(a.value).toBe('v2'); // server changed the default → property follows
+	});
+
+	test('does NOT clobber an unfocused dirty checkbox when the server re-sends the same state', () => {
+		const parent = el('<form><input type="checkbox"></form>');
+		const box = parent.firstElementChild as DomElement;
+		box.checked = true; // user toggled on; default stays unchecked
+		morph_children(parent, frag('<input type="checkbox">')); // same default (no `checked`)
+		expect(box.checked).toBe(true); // user toggle survives an unchanged default
+	});
+
 	test('syncs checked property from the incoming attribute', () => {
 		const parent = el('<form><input type="checkbox"></form>');
 		const box = parent.firstElementChild as DomElement;
@@ -296,6 +327,54 @@ describe('form DOM properties', () => {
 			frag('<select><option value="a">A</option><option value="b" selected>B</option></select>')
 		);
 		expect(optB.selected).toBe(true);
+	});
+});
+
+describe('id-set wrapper matching', () => {
+	test('a banner inserted above a key-less wrapper keeps the keyed node inside it', () => {
+		// The nav bug: an unkeyed layout wrapper holds a keyed region (an island). A new page inserts
+		// a sibling ABOVE the wrapper. Positional matching morphs the wrapper toward the banner and
+		// destroys the island; id-set matching moves the wrapper (island intact) and inserts the banner.
+		const parent = el(
+			'<main><div class="content"><section data-key="r1">island</section></div></main>'
+		);
+		const content = parent.firstElementChild as DomElement;
+		const island = content.firstElementChild as DomElement;
+		morph_children(
+			parent,
+			frag(
+				'<div class="banner">New</div><div class="content"><section data-key="r1">island</section></div>'
+			)
+		);
+		expect(parent.children.length).toBe(2);
+		expect(parent.children[0].getAttribute('class')).toBe('banner'); // banner inserted
+		expect(parent.children[1]).toBe(content); // SAME wrapper node, moved down
+		expect(parent.children[1].firstElementChild).toBe(island); // island identity preserved
+	});
+
+	test('a wrapper is not consumed by an earlier sibling that a later one needs', () => {
+		// Two key-less wrappers, each holding a distinct keyed node, reordered. Neither may be eaten
+		// positionally by the wrong new sibling.
+		const parent = el(
+			'<main><div><i data-key="a">A</i></div><div><i data-key="b">B</i></div></main>'
+		);
+		const wrapA = parent.children[0] as DomElement;
+		const wrapB = parent.children[1] as DomElement;
+		morph_children(
+			parent,
+			frag('<div><i data-key="b">B</i></div><div><i data-key="a">A</i></div>')
+		);
+		expect(parent.children[0]).toBe(wrapB); // b-wrapper first now
+		expect(parent.children[1]).toBe(wrapA); // a-wrapper second — both reused, none destroyed
+	});
+
+	test('key-less wrappers with no keyed descendants stay positional (no id-set overhead)', () => {
+		const parent = el('<ul><li>one</li><li>two</li></ul>');
+		const first = parent.children[0] as DomElement;
+		morph_children(parent, frag('<li>one</li><li>two</li><li>three</li>'));
+		expect(parent.children.length).toBe(3);
+		expect(parent.children[0]).toBe(first); // positional reuse unchanged
+		expect(parent.children[2].textContent).toBe('three');
 	});
 });
 
@@ -376,5 +455,32 @@ describe('preserved / hydrated island subtrees', () => {
 		);
 		expect(parent.children[0]).toBe(island); // moved to front, same node
 		expect(island.firstChild).toBe(inner); // still intact
+	});
+});
+
+describe('swap_body (outerSync fallback)', () => {
+	test('keeps the live body node, syncs its attributes, replaces its children', () => {
+		const live = el('<body class="old" data-theme="light"><p>gone</p></body>');
+		const old_child = live.firstElementChild;
+		const next = el('<body class="new" data-theme="dark"><span>fresh</span></body>');
+		swap_body(live as unknown as HTMLElement, next as unknown as HTMLElement);
+		// attributes synced onto the SAME live body node
+		expect(live.getAttribute('class')).toBe('new');
+		expect(live.getAttribute('data-theme')).toBe('dark');
+		// children replaced: old <p> dropped, incoming <span> adopted in order
+		expect(live.children.length).toBe(1);
+		expect((live.firstElementChild as DomElement).tagName).toBe('SPAN');
+		expect(live.firstElementChild).not.toBe(old_child);
+		expect(live.textContent).toBe('fresh');
+		// the incoming body was emptied (its children were MOVED, not cloned)
+		expect(next.firstChild).toBeNull();
+	});
+
+	test('removes a body attribute the incoming page dropped', () => {
+		const live = el('<body class="x" data-stale="1"></body>');
+		const next = el('<body class="y"></body>');
+		swap_body(live as unknown as HTMLElement, next as unknown as HTMLElement);
+		expect(live.getAttribute('class')).toBe('y');
+		expect(live.hasAttribute('data-stale')).toBe(false);
 	});
 });

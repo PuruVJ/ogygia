@@ -1,13 +1,13 @@
 ---
 title: wire
-summary: The transportable mark. A class declares how its instances cross an island boundary with static wire = import.meta.og.wire({ encode, decode }). One strict contract. The macro mints the codec key, so there's nothing to import or leak.
+summary: The transportable mark. A class declares how its instances cross an island boundary, with static wire = import.meta.og.wire({ encode, decode }). One strict contract. The macro mints the codec key. Thus there is nothing to import or leak.
 related:
   - data-state/state-context
   - reference/constraints
   - macros/overview
 ---
 
-A prop crosses a **serialization** boundary between islands, not a reference. A plain object copies fine; a live class instance (a store, an orchestrator) does not. A class opts in by declaring **how it travels**:
+A prop crosses a **serialization** boundary between islands, not a reference. A plain object copies correctly. A live class instance (a store, an orchestrator) does not. A class opts in when it declares **how it travels**:
 
 ```ts title=cart.svelte.ts
 export class Cart {
@@ -21,28 +21,28 @@ export class Cart {
 }
 ```
 
-`encode` says what leaves. `decode` says how to rebuild. Both are yours, so nothing is hidden. Now a `Cart` instance can be handed to islands as a prop. Every island holding it shares **one live object**; `$state` inside is reactive across all of them.
+`encode` says what leaves. `decode` says how to rebuild. Both are yours. Thus nothing is hidden. Now a `Cart` instance can be given to islands as a prop. Each island that holds it shares **one live object**. `$state` inside is reactive across all of them.
 
 ## Why a call, not a key
 
-You might expect `static [import.meta.og.wire]` as a computed key. TypeScript's grammar forbids it. A computed class key must be a plain dotted name, and `import.meta.og.wire` is meta-syntax, so it can never typecheck. The call form is the strict, typechecked equivalent: the macro **consumes the whole member** and mints the real symbol key in the compiled output.
+You could expect `static [import.meta.og.wire]` as a computed key. The grammar of TypeScript forbids it. A computed class key must be a plain dotted name, and `import.meta.og.wire` is meta-syntax. Thus it can never typecheck. The call form is the strict, typechecked equivalent. The macro **consumes the whole member**, and mints the real symbol key in the compiled output.
 
 ```ts
 static [Symbol.for('ogygia.wire')] = { encode, decode };
 ```
 
-The key never exists in your source. Nothing to import, nothing to alias, nothing to leak. The static's name is convention (`wire`); the call is the mark.
+The key never exists in your source. Nothing to import, nothing to alias, nothing to leak. The name of the static is convention (`wire`). The call is the mark.
 
 ## One contract, strictly enforced
 
-`wire` is legal in exactly one position: a **static member named `wire`**, initialized with the call, inside a class body, taking exactly one argument, the codec. Every other use is a build error that names the file, the line, and the fix:
+`wire` is legal in exactly one position: a **static member named `wire`**, initialized with the call, inside a class body, with exactly one argument, the codec. Each other use is a build error that names the file, the line, and the fix:
 
 - a bare value (`const k = import.meta.og.wire`)
 - a call outside a static member (an object property, a spread, an argument)
-- a wrongly-named or non-static member
-- an arg-less call, or more than one argument
+- a member with a wrong name, or a non-static member
+- a call with no argument, or with more than one argument
 
-Nothing is inferred from the class shape. You always say what leaves and how it comes back, so nothing breaks silently.
+Nothing is inferred from the class shape. You always say what leaves and how it comes back. Thus nothing breaks silently.
 
 ## Continuity across navigation
 
@@ -58,8 +58,8 @@ static wire = import.meta.og.wire({
 });
 ```
 
-Naming the codec (`id`) makes the instance survive SPA navigations. The same live object follows the visitor across pages, tab-scoped. `merge` reconciles when a new page's server snapshot arrives: apply what should carry over into the live instance; by default the live one wins (a cart mid-edit beats a re-read).
+A name on the codec (`id`) makes the instance survive SPA navigations. The same live object follows the visitor across pages, tab-scoped. `merge` reconciles when the server snapshot of a new page arrives: apply what must carry over into the live instance. By default, the live one wins (a cart in the middle of an edit beats a re-read).
 
-Liveness is **identity**, not the codec. Each instance mints one wire id; the browser rebuilds it once and memoizes by that id, so every copy of the prop reunites into the same object. The **server never memoizes**: each request and each deferred-island render decodes fresh, so one visitor's state can't render into another's HTML.
+Liveness is **identity**, not the codec. Each instance mints one wire id. The browser rebuilds it one time, and memoizes by that id. Thus each copy of the prop joins again into the same object. The **server never memoizes**: each request, and each deferred-island render, decodes fresh. Thus the state of one visitor cannot render into the HTML of another.
 
-See [state & context](/docs/data-state/state-context) for the full picture: sharing one instance across islands, and providing it to a subtree with `<Provide>` or a drop-in `setContext`.
+See [state & context](/docs/data-state/state-context) for the full picture: share one instance across islands, and provide it to a subtree with `<Provide>` or a drop-in `setContext`.

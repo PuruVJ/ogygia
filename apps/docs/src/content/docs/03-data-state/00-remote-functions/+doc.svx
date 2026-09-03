@@ -1,15 +1,15 @@
 ---
 title: Data & remote functions
-summary: All six Kit remote primitives work inside islands: query, command, form, and more.
+summary: All six Kit remote primitives operate inside islands: query, command, form, and more.
 related:
   - regions/held-regions
   - app/spa-router
 ---
 
-Islands are real Svelte components (see the [last chapter](/docs/regions/regions)), so Kit's remote functions work inside them unchanged. All six primitives (`query`, `query.batch`, `query.live`, `command`, `form`, and `prerender`) run in an island exactly as they do in a Kit page.
+Islands are real Svelte components (see the [last chapter](/docs/regions/regions)). Thus the remote functions of Kit operate inside them, without changes. All six primitives (`query`, `query.batch`, `query.live`, `command`, `form`, and `prerender`) run in an island exactly as they do in a Kit page.
 
 ::: tip When to use
-Remote functions are how an island talks to the server: read data (`query`), mutate it (`command` / `form`), or stream it (`query.live`). Use them whenever an island needs server data or has to persist a change. They replace the fetch-and-endpoint boilerplate you would otherwise write, and the server validates every call.
+Remote functions are how an island speaks to the server: read data (`query`), change it (`command` / `form`), or stream it (`query.live`). Use them when an island needs server data, or must keep a change. They replace the fetch-and-endpoint boilerplate that you would write, and the server validates each call.
 :::
 
 ```svelte
@@ -21,11 +21,11 @@ Remote functions are how an island talks to the server: read data (`query`), mut
 <p>{who}</p>
 ```
 
-SSR query results are seeded into the client cache, so an island that reads a query during server render does not refetch on hydrate in production. (Dev degrades to a refetch; see the note below.)
+SSR query results are seeded into the client cache. Thus an island that reads a query during the server render does not fetch again on hydrate, in production. Dev degrades to a refetch. See the note below.
 
 ## Try it
 
-This counter is a client island reading a `query` and mutating through two `command`s. The value lives on the server; every button is a real round-trip, then a `.refresh()` re-reads it. It is shared state: open this page in a second tab and watch both move.
+This counter is a client island. It reads a `query` and mutates through two `command`s. The value lives on the server. Each button is a real round-trip. A `.refresh()` then reads the value again. It is shared state: open this page in a second tab, and both tabs move.
 
 <script>
   import CounterDemo from './CounterDemo.svelte' with { wake: 'load' };
@@ -43,7 +43,7 @@ export const bump = command(async () => (count += 1));
 
 ## Forms and commands
 
-`form()` and `command()` POST to their endpoints and work from inside an island. On success, `form()` runs Kit's `invalidateAll`, which ogygia treats as a **soft seed refresh**: it re-fetches the current page, merges `<head>`, and refreshes the in-place data seeds: no view transition, no body swap, no island remount, no live-query clear.
+`form()` and `command()` POST to their endpoints, and operate from inside an island. On success, `form()` runs `invalidateAll` from Kit. ogygia treats that as a **soft seed refresh**: it fetches the current page again, merges `<head>`, and refreshes the in-place data seeds. There is no view transition, no body swap, no island remount, and no clear of live queries.
 
 ```svelte
 <script>
@@ -56,21 +56,21 @@ export const bump = command(async () => (count += 1));
 </form>
 ```
 
-If an island needs a query to update after a mutation, call `.refresh()` on it, or pair `submit().updates(query)` with server-side `requested(query).refreshAll()`. `updates` alone does not populate the response.
+If an island needs a query to update after a mutation, call `.refresh()` on it. Or pair `submit().updates(query)` with server-side `requested(query).refreshAll()`. `updates` alone does not fill the response.
 
 ## Mutation guards
 
-Writing to a captured host variable from island markup is a mistake: the value is a serialized snapshot, not live state. In dev, ogygia wraps every snapshot in a **deep proxy** that `console.warn`s (naming the offending prop path) when you mutate one. The write still applies (it is only a warning), so treat it as the signal to move that state into the island.
+A write to a captured host variable from island markup is a mistake. The value is a serialized snapshot, not live state. In dev, ogygia wraps each snapshot in a **deep proxy**. The proxy does a `console.warn`, with the path of the prop, when you mutate one. The write still applies. It is only a warning. Treat it as the signal to move that state into the island.
 
 ::: warning Dev is not prod
-In dev, SSR query seeding degrades to a refetch, and the mutation proxy only runs in dev. Verify data flows against a production build.
+In dev, SSR query seeding degrades to a refetch, and the mutation proxy runs only in dev. Check data flows against a production build.
 :::
 
 ## Do / don't
 
-- **Do** call `.refresh()` (or `submit().updates(q)` + server `requested(q).refreshAll()`) when a mutation should update a query. `updates` alone does not populate the response.
-- **Do** test data flows against a production build, since dev seeding and the mutation guard behave differently.
-- **Don't** mutate a captured host prop from island markup. It is a serialized snapshot; move mutable state inside the island.
+- **Do** call `.refresh()` (or `submit().updates(q)` plus server `requested(q).refreshAll()`) when a mutation must update a query. `updates` alone does not fill the response.
+- **Do** test data flows against a production build. Dev seeding and the mutation guard behave differently.
+- **Don't** mutate a captured host prop from island markup. It is a serialized snapshot. Move mutable state inside the island.
 
 ---
 

@@ -3,7 +3,8 @@
 // without), a boolean flag() slots straight in as the gate, and the same `pick` verb that chooses
 // components and values chooses INFRASTRUCTURE (mount(v2.pick({ off, on }))).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { routes, when, mount, client } from '../src/router/index.js';
+import { routes, when, mount } from '../src/router/index.js';
+import { make_peer } from '../src/federation/peer.js';
 import { flag, decide } from '../src/flags.js';
 
 beforeEach(() => decide({ overrides: () => true, source: undefined, exposure: undefined }));
@@ -29,7 +30,12 @@ describe('when() — a gated-off route does not exist', () => {
 		});
 		const rollout = flag('when-cms'); // off
 		const app = routes(
-			{ '/cms/[...rest]': when(rollout, mount('http://never.test')) },
+			{
+				'/cms/[...rest]': when(
+					rollout,
+					mount(make_peer('cms', { origin: 'http://never.test' }, 'shell'))
+				)
+			},
 			{ base: '/app' }
 		);
 		const res = await app.fetch(new Request('http://s/app/cms/hello'));
@@ -64,10 +70,10 @@ describe('mount(pick) — the flag-picked canary', () => {
 			return new Response(doc_json());
 		});
 		const v2 = flag('cms-v2-canary'); // off by default; forced per-request via ?og-exp
-		const v1_client = client('http://a.test');
-		const v2_client = client('http://b.test');
+		const v1_peer = make_peer('cms', { origin: 'http://a.test' }, 'shell');
+		const v2_peer = make_peer('cms', { origin: 'http://b.test' }, 'shell');
 		const app = routes({
-			'/cms/[...rest]': mount(v2.pick({ off: v1_client, on: v2_client }))
+			'/cms/[...rest]': mount(v2.pick({ off: v1_peer, on: v2_peer }))
 		});
 		const on = await app.fetch(new Request('http://shell/cms/x?og-exp=cms-v2-canary:on'));
 		expect(on!.status).toBe(200);
@@ -84,8 +90,6 @@ describe('mount(pick) — the flag-picked canary', () => {
 		});
 		// the throw happens inside the page load → the host's 500 pipeline (a rejection, not a
 		// silently-wrong hop), with the fix in the message
-		await expect(app.fetch(new Request('http://shell/cms/x'))).rejects.toThrow(
-			/must yield a FragmentClient/
-		);
+		await expect(app.fetch(new Request('http://shell/cms/x'))).rejects.toThrow(/must yield a peer/);
 	});
 });

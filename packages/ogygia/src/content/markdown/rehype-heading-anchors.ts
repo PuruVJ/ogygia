@@ -8,6 +8,9 @@
  * so the heading element already carries `properties.id`.
  */
 
+// ── regexes
+const DOUBLE_QUOTE_G = /"/g;
+
 type HastNode = {
 	type?: string;
 	tagName?: string;
@@ -39,7 +42,7 @@ export function rehypeHeadingAnchors() {
 					// `` `<script lang="ts">` `` code span) — mdsvex's serializer escapes `<`/`>` but NOT quotes,
 					// so a raw `"` would close the attribute and break compilation. Fold straight double-quotes
 					// to typographic ones: attribute-safe, still readable to a screen reader.
-					const label = text_of(child).trim().replace(/"/g, '”');
+					const label = text_of(child).trim().replace(DOUBLE_QUOTE_G, '”');
 					// mark the heading so CSS can anchor the absolutely-positioned link
 					const cls = child.properties.className;
 					child.properties.className = Array.isArray(cls)

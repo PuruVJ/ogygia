@@ -10,6 +10,9 @@
  */
 import type { FlagSource, FlagQuery, Resolved, CtxLike } from '../flags.js';
 
+// ── regexes
+const TRAILING_SLASH_RE = /\/$/;
+
 export interface OfrepOptions {
 	/** OFREP base URL (the adapter calls `<url>/ofrep/v1/evaluate/flags/bulk`). */
 	url: string;
@@ -40,7 +43,7 @@ function default_context(c: CtxLike): Record<string, unknown> {
 export function ofrep(opts: OfrepOptions): FlagSource {
 	const ctx_of = opts.context ?? default_context;
 	const f = opts.fetch ?? fetch;
-	const endpoint = opts.url.replace(/\/$/, '') + '/ofrep/v1/evaluate/flags/bulk';
+	const endpoint = opts.url.replace(TRAILING_SLASH_RE, '') + '/ofrep/v1/evaluate/flags/bulk';
 	const timeout = opts.timeout ?? 800;
 	return async (queries: FlagQuery[], c: CtxLike): Promise<Record<string, Resolved>> => {
 		const out: Record<string, Resolved> = {};

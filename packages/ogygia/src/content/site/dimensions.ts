@@ -28,6 +28,10 @@ import {
 } from './outline.js';
 import type { NavRef, NavTree } from './types.js';
 
+// ── regexes
+const EDGE_SLASHES_G = /^\/+|\/+$/g;
+const TRAILING_SLASHES_RE = /\/+$/;
+
 /** One axis of the content matrix. */
 export type Axis = {
 	/** All values, in switcher order. The first is used if `default` is omitted. */
@@ -79,12 +83,12 @@ export interface Dimensioned extends Outline {
 }
 
 const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-const clean = (s: string) => s.replace(/^\/+|\/+$/g, '');
+const clean = (s: string) => s.replace(EDGE_SLASHES_G, '');
 /** Join slug-ish parts into a BARE slug (no leading slash — `href_of` adds the base). */
 const join = (...parts: string[]) => parts.map(clean).filter(Boolean).join('/');
 /** Append a coordinate prefix to a mount base, PRESERVING the base's leading slash. */
 const base_join = (base: string, prefix: string) =>
-	prefix ? `${base.replace(/\/+$/, '')}/${prefix}` : base;
+	prefix ? `${base.replace(TRAILING_SLASHES_RE, '')}/${prefix}` : base;
 
 class Dimensions implements Dimensioned {
 	readonly __dimensioned = true as const;

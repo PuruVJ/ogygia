@@ -18,6 +18,9 @@
 	import type { SearchHit } from '../search.js';
 	import type SearchPaletteT from './SearchPalette.svelte';
 
+	// ── regexes
+	const TEXT_FIELD_TAG_RE = /^(input|textarea|select)$/i;
+
 	let {
 		base,
 		endpoint,
@@ -69,7 +72,7 @@
 			// A bare `/` must NOT hijack search while the user is typing — including in a contenteditable
 			// EDITOR (CodeMirror and friends are `contenteditable` divs, not <input>/<textarea>), where `/`
 			// is a real character (division, comments, closing tags, regex).
-			const typing = /^(input|textarea|select)$/i.test(el?.tagName ?? '') || el?.isContentEditable === true;
+			const typing = TEXT_FIELD_TAG_RE.test(el?.tagName ?? '') || el?.isContentEditable === true;
 			if ((e.metaKey || e.ctrlKey) && k === 'k') {
 				e.preventDefault();
 				if (open) open = false;

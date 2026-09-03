@@ -12,7 +12,7 @@ import { json_response, redirect_response } from './respond.js';
 /** The visitor's identity — plain claims (`sub`, roles, whatever the app's session carries). */
 export type Visitor = Record<string, unknown> & { sub?: string };
 
-/** Signature-bound claims attached by `expose()` after verification (fragment federation). */
+/** Signature-bound claims attached by the federation handle after verification (fragment federation). */
 const CLAIMS = Symbol.for('ogygia.claims.v1');
 
 export interface Ctx<

@@ -28,6 +28,8 @@ const STYLE_EXT = /\.(css|scss|sass|less|styl|stylus|pcss)(?:\?|$)/i;
 const SVELTE_EXT = /\.svelte(?:\?|$)/i;
 const IMPORT_SPEC =
 	/import\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+\.(?:svelte|css|scss|sass|less|styl|pcss)(?:\?[^"']*)?)["']/g;
+const WIN_DRIVE_RE = /^[a-zA-Z]:/;
+const PARENT_TRAVERSAL_RE = /(^|[\\/])\.\.([\\/]|$)/;
 
 /** @param relPosix */
 export function foucCssVirtualId(relPosix: string) {
@@ -75,8 +77,8 @@ export function foucRelFromId(id: string) {
 	if (
 		rel.startsWith('/') ||
 		rel.startsWith('\\') ||
-		/^[a-zA-Z]:/.test(rel) ||
-		/(^|[\\/])\.\.([\\/]|$)/.test(rel)
+		WIN_DRIVE_RE.test(rel) ||
+		PARENT_TRAVERSAL_RE.test(rel)
 	) {
 		return null;
 	}

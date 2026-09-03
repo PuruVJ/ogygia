@@ -44,9 +44,13 @@ export const V_TRANSPORT = 'virtual:ogygia/transport';
  *  app crosses regions/wired-values over the wire, an empty map for a pure-island app (no dead codecs). */
 export const V_KIT_TRANSPORT = 'virtual:ogygia/kit-transport';
 export const V_TRANSPORTABLES = 'virtual:ogygia/transportables';
-/** `ogygia({ artifacts })` policy (SERVER only; client: null) — the switch for the artifact
- *  read/write path in `ogygia.handle()`. Live adapters enter via `artifacts.configure()`. */
-export const V_ARTIFACTS_CONFIG = 'virtual:ogygia/artifacts-config';
+/** `ogygia({ freeze })` policy (SERVER only; client: null) — the switch for the freeze
+ *  read/write path in `ogygia.handle()`. Live adapters enter via `freeze.configure()`. */
+export const V_FREEZE_CONFIG = 'virtual:ogygia/freeze-config';
+/** The route ids (group-stripped) whose effective `export const freeze` opt-in is true, given the
+ *  config `default` — the handle gates the render-on-write store/serve path on membership. SERVER
+ *  only (empty set on the client; the route list never ships to the browser). */
+export const V_FREEZE_ROUTES = 'virtual:ogygia/freeze-routes';
 
 /** Resolve a virtual id to its `\0`-prefixed resolved form (Vite/rollup convention). */
 export const RESOLVED = (id: string) => '\0' + id;

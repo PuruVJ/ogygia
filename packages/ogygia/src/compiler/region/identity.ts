@@ -24,6 +24,10 @@ export function strategyKey(mark: { strategy: string; options?: Record<string, u
 		// wrapper — else a cached hole (maxAge) dedupes onto a plain no-store wrapper of the same
 		// component+schedule and silently loses its `ttl`.
 		if (o.cacheTtlSec != null) k += `:ttl:${o.cacheTtlSec}`;
+		// The stitch MODE is baked into the wrapper (it emits the hole's `stitch="serve|edge"`), so it
+		// MUST fingerprint the wrapper — else a `stitch: 'edge'` hole dedupes onto the `'serve'`
+		// wrapper of the same component+schedule (or vice versa) and the whole page flips mode.
+		if (o.stitch) k += `:stitch:${o.stitch}`;
 		if (o.hydrate) {
 			k += `+hydrate:${o.hydrate}`;
 			if (o.hydrateMargin != null) k += `:hmargin:${o.hydrateMargin}`;

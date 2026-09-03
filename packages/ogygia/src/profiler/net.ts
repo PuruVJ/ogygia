@@ -10,6 +10,11 @@
 
 import type { AsyncLocalStorage } from 'node:async_hooks';
 
+// ── regexes
+const INTERNAL_OR_NODE_MODULES_RE = /node:internal|[/\\]node_modules[/\\]/;
+const DIR_PREFIX_RE = /^.*[/\\]/;
+const QUERY_SUFFIX_RE = /\?.*$/;
+
 export interface NetCall {
 	/** performance.now() at call start */
 	start: number;
@@ -112,7 +117,7 @@ export function nearest_app_site(): CallerSite | undefined {
 			profiler_files.has(file) ||
 			file.includes('/profiler/') ||
 			file.startsWith('node:') ||
-			/node:internal|[/\\]node_modules[/\\]/.test(file)
+			INTERNAL_OR_NODE_MODULES_RE.test(file)
 		) {
 			continue;
 		}
@@ -130,7 +135,7 @@ export function nearest_app_site(): CallerSite | undefined {
 export function nearest_app_frame(): string | undefined {
 	const s = nearest_app_site();
 	if (!s) return undefined;
-	const base = s.file.replace(/^.*[/\\]/, '').replace(/\?.*$/, '');
+	const base = s.file.replace(DIR_PREFIX_RE, '').replace(QUERY_SUFFIX_RE, '');
 	return `${s.fn} (${base}:${s.line})`;
 }
 

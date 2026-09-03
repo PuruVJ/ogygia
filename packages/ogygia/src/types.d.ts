@@ -90,10 +90,20 @@ declare module 'virtual:ogygia/profiler-config' {
 	 *  `ogygia.handle()` reads this and dynamically imports + mounts the profiler when non-null. */
 	export const profilerConfig: Record<string, unknown> | null;
 }
-declare module 'virtual:ogygia/artifacts-config' {
-	/** Artifacts policy from `ogygia({ artifacts })`, or `null` when off. SERVER only (client: null).
-	 *  Non-null turns the handle's artifact (render-on-write) read/write path on. */
-	export const artifactsConfig: { ttl: number } | null;
+declare module 'virtual:ogygia/freeze-config' {
+	/** Freeze policy from `ogygia({ freeze })`, or `null` when off. SERVER only (client: null).
+	 *  Non-null turns the handle's freeze (render-on-write) read/write path on. `default` is the
+	 *  app-wide opt-in (true = auto by observed purity, false = per-route opt-in). */
+	export const freezeConfig: { ttl: number; default: boolean } | null;
+}
+declare module 'virtual:ogygia/freeze-routes' {
+	/** Route ids (group-stripped) whose effective `export const freeze` opt-in is true, given the
+	 *  config `default` — the handle gates the store/serve path on membership. SSR leg only; the
+	 *  client leg is an empty set (the route list never ships to the browser). */
+	export const freeze_routes: ReadonlySet<string>;
+	/** EVERY page route id (group-stripped), opted in or not — lets the handle tell "a page whose
+	 *  cascaded value is false" from "not a page" (endpoint / unclaimed → config `default`). */
+	export const freeze_pages: ReadonlySet<string>;
 }
 declare module 'virtual:ogygia/session-cookie' {
 	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ sessionCookie })`. */

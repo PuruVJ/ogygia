@@ -43,6 +43,10 @@ import {
 } from './search.js';
 import type { BaseOption, PageView, Heading, NavRef, NavTree, PrevNext } from './types.js';
 
+// ── regexes
+const TRAILING_SLASHES_RE = /\/+$/;
+const EDGE_SLASHES_G = /^\/+|\/+$/g;
+
 /** Site-level facts, surfaced as `site.data` and used as the default for every emission. */
 export type SiteData = {
 	/** Site name — llms.txt header, `<title>` suffix, shell brand default. */
@@ -458,10 +462,11 @@ function choose_suggested(policy: PrevNext, related: NavRef[], next: NavRef | un
  */
 export function mountBase(url: URL | string | { pathname: string }, slug: string): string {
 	const pathname = typeof url === 'string' ? url : url.pathname;
-	const path = pathname.replace(/\/+$/, '');
-	const s = slug.replace(/^\/+|\/+$/g, '');
+	const path = pathname.replace(TRAILING_SLASHES_RE, '');
+	const s = slug.replace(EDGE_SLASHES_G, '');
 	if (!s) return path; // index page: the whole path is the base
 	if (path.endsWith('/' + s)) return path.slice(0, path.length - s.length - 1);
-	if (path.endsWith(s)) return path.slice(0, path.length - s.length).replace(/\/+$/, '');
+	if (path.endsWith(s))
+		return path.slice(0, path.length - s.length).replace(TRAILING_SLASHES_RE, '');
 	return path;
 }

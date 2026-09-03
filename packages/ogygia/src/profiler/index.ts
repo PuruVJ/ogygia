@@ -159,6 +159,12 @@ const MAX_BACKGROUND_NET = 300;
 const RECORDING_MAX_MS = 120_000;
 /** an inspector-unavailable recording error (edge runtimes) vs a real profiling failure */
 const INSPECTOR_ERR = /inspector/;
+const WIN_DRIVE_RE = /^[A-Za-z]:[\\/]/;
+const QUERY_SUFFIX_RE = /\?.*$/;
+const SRC_RELATIVE_RE = /(?:^|[/\\])src[/\\](.*)$/;
+const BACKSLASH_G = /\\/g;
+const PATH_SEP_RE = /[/\\]/;
+const TRAILING_SLASH_RE = /\/$/;
 
 // Serverless page-profile budget. On a managed host the whole `/page` request must return before the
 // platform's gateway kills it, so we cap all profiling work (warm-up + CPU runs + coverage pass) and
@@ -514,7 +520,7 @@ class Profiler {
 			// resolver caches per chunk, so the extra attempts cost once per file.
 			const entry = process.argv[1] ? path.dirname(process.argv[1]) : undefined;
 			const bases = entry ? [entry, path.dirname(entry), '.'] : ['.'];
-			const is_abs = (p: string) => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
+			const is_abs = (p: string) => p.startsWith('/') || WIN_DRIVE_RE.test(p);
 			return sourcemap_resolver((p) => {
 				for (const base of is_abs(p) ? [''] : bases) {
 					try {
@@ -554,10 +560,10 @@ class Profiler {
 		// Keep the path relative to `src/` (not just the basename) — `+page.server.ts`
 		// alone is ambiguous when many routes have one.
 		const rel_src = (f: string) => {
-			const clean = f.replace(/\?.*$/, '');
-			const m = /(?:^|[/\\])src[/\\](.*)$/.exec(clean);
-			if (m) return m[1].replace(/\\/g, '/');
-			return clean.split(/[/\\]/).slice(-3).join('/');
+			const clean = f.replace(QUERY_SUFFIX_RE, '');
+			const m = SRC_RELATIVE_RE.exec(clean);
+			if (m) return m[1].replace(BACKSLASH_G, '/');
+			return clean.split(PATH_SEP_RE).slice(-3).join('/');
 		};
 		const resolve_caller = (site?: CallerSite): string | undefined => {
 			if (!site) return undefined;
@@ -718,7 +724,7 @@ class Profiler {
 	// programmatic access uses the `x-profiler-key` header. The /login POST seats the cookie; this guard
 	// never touches the response.
 	async #auth_guard(ctx: RouteCtx): Promise<Response | undefined> {
-		const rel = ctx.url.pathname.slice(this.base.length).replace(/\/$/, '') || '/';
+		const rel = ctx.url.pathname.slice(this.base.length).replace(TRAILING_SLASH_RE, '') || '/';
 		// `/login` + `/logout` manage the session. The BARE report page (`/report/<id>`, no `.json`/
 		// `.dump`/`/raw` suffix) is PUBLIC: a recipient with a share link renders it entirely client-side
 		// from the URL `#fragment` (no account). Its SERVER data is still gated — the page's own load

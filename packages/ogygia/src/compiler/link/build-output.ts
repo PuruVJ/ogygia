@@ -11,6 +11,11 @@ import { islandDepsHandoffPath } from './island-deps.js';
 const CORPUS_RE = /\.(svx|md)(\?|$)/;
 /** A `?…type=style…` / `lang.css` sub-import id — a CSS face, never a corpus JS leak. */
 const CONTENT_STYLE_QUERY_RE = /[?&](?:type=style|lang\.css)/;
+const BACKSLASH_G = /\\/g;
+const SINGLE_QUOTE_G = /'/g;
+const DOUBLE_QUOTE_G = /"/g;
+const LINE_SEPARATOR_G = /\u2028/g;
+const PARAGRAPH_SEPARATOR_G = /\u2029/g;
 
 /**
  * Guardrail: a content collection must never reach a CLIENT chunk. Ground truth is the finished
@@ -85,11 +90,11 @@ export function emit_island_deps_handoff(root: string, json: string) {
 		// Escape for BOTH quote styles: the SSR bundler may emit the slot in single OR double
 		// quotes, and an escaped quote is valid in either literal — so this is safe regardless.
 		const inline = json
-			.replace(/\\/g, '\\\\')
-			.replace(/'/g, "\\'")
-			.replace(/"/g, '\\"')
-			.replace(/\u2028/g, '\\u2028')
-			.replace(/\u2029/g, '\\u2029');
+			.replace(BACKSLASH_G, '\\\\')
+			.replace(SINGLE_QUOTE_G, "\\'")
+			.replace(DOUBLE_QUOTE_G, '\\"')
+			.replace(LINE_SEPARATOR_G, '\\u2028')
+			.replace(PARAGRAPH_SEPARATOR_G, '\\u2029');
 		const patch_server = (dir: string) => {
 			let entries;
 			try {

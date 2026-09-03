@@ -105,8 +105,8 @@ let _queue: ExposureEvent[] = [];
 let _timer: ReturnType<typeof setTimeout> | null = null;
 let _flag_observer: ((name: string) => void) | null = null;
 
-/** ARTIFACTS seam: every flag READ (fresh or memoized — a cached read is still a read) reports
- *  its name here. The artifacts handle installs an observer that disqualifies the in-flight
+/** FREEZE seam: every flag READ (fresh or memoized — a cached read is still a read) reports
+ *  its name here. The freeze handle installs an observer that disqualifies the in-flight
  *  render (`flag:<name>`, like a cookie read): an A/B'd page must never freeze ONE variant for
  *  everyone. Priming (`prime_flags`) deliberately does NOT report — it touches cookies on every
  *  request whether or not the page reads a flag. */
@@ -366,7 +366,7 @@ export function flag(
 	};
 
 	const bucket = (c: CtxLike): string => {
-		_flag_observer?.(name); // artifacts: a read personalizes the render, memoized or not
+		_flag_observer?.(name); // freeze: a read personalizes the render, memoized or not
 		const cached = memo.get(c.request);
 		if (cached !== undefined) return cached;
 		const variant = compute(c);

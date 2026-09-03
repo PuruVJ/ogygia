@@ -1,13 +1,13 @@
 ---
 title: code
-summary: A highlighted code snippet, rendered at build through your app's own Shiki pipeline and inlined as a static region. Same themes, transformers, and meta infostring a markdown fence gets, for a snippet that lives in a component.
+summary: A highlighted code snippet, rendered at build through the own Shiki pipeline of your app, and inlined as a static region. The same themes, transformers, and meta infostring that a markdown fence gets, for a snippet that lives in a component.
 related:
   - macros/md
   - content/collections
   - macros/overview
 ---
 
-`import.meta.og.code(source, lang, meta?)` highlights a code snippet **at build** and inlines it as a static region. It runs the snippet through your app's own Shiki configuration: the same themes, transformers, and meta parsers a markdown fence uses. A snippet in a component and the same snippet in a `.svx` document render identically.
+`import.meta.og.code(source, lang, meta?)` highlights a code snippet **at build**, and inlines it as a static region. It runs the snippet through the own Shiki configuration of your app: the same themes, transformers, and meta parsers that a markdown fence uses. A snippet in a component, and the same snippet in a `.svx` document, render identically.
 
 ```svelte
 <script>
@@ -22,22 +22,22 @@ related:
 <Region of={example} />
 ```
 
-The result is a region. Render it with `<Region of={…} />`. It ships as HTML and carries no client JS of its own.
+The result is a region. Render it with `<Region of={…} />`. It ships as HTML, and carries no client JS of its own.
 
 ## The three arguments
 
-- **`source`**: the code, as a static string or template literal. A template literal is the ergonomic choice: code is full of quotes and `<`, and a template needs none of them escaped. A `${…}` interpolation is a build error (it's a runtime value).
-- **`lang`**: the language, exactly as a fence infostring's first word: `'ts'`, `'svelte'`, `'bash'`, whatever your Shiki langs include.
-- **`meta`**: optional, the **raw fence infostring**. So `'twoslash {2-4} file=app.ts'` behaves exactly as it would after the language in a markdown fence. Line highlighting, filename bars, twoslash, diff markers: anything your fence pipeline understands, `code()` understands, because it *is* your fence pipeline.
+- **`source`**: the code, as a static string or template literal. A template literal is the ergonomic choice: code is full of quotes and `<`, and a template needs none of them escaped. A `${…}` interpolation is a build error (it is a runtime value).
+- **`lang`**: the language, exactly as the first word of a fence infostring: `'ts'`, `'svelte'`, `'bash'`, whatever your Shiki langs include.
+- **`meta`**: optional, the **raw fence infostring**. Thus `'twoslash {2-4} file=app.ts'` behaves exactly as it would after the language in a markdown fence. Line highlighting, filename bars, twoslash, diff markers: all that your fence pipeline understands, `code()` understands, because it *is* your fence pipeline.
 
 ## Dedent is automatic
 
-Code embedded in a call is indented to match where the call sits. That indentation is an artifact of the surrounding code, not part of the snippet, so `code()` strips the common leading whitespace and trims the surrounding blank lines. The rendered `<pre>` shows the snippet's own logical indentation, flush-left. Write your snippet naturally nested; it comes out clean.
+Code embedded in a call is indented to match where the call sits. That indentation is an artifact of the surrounding code, not part of the snippet. Thus `code()` strips the common leading whitespace, and trims the surrounding blank lines. The rendered `<pre>` shows the own logical indentation of the snippet, flush-left. Write your snippet naturally nested. It comes out clean.
 
 ## Cached, once per build
 
-Rendering runs through the content-addressed fence cache, the same one markdown fences use. The same snippet (same source, lang, meta, and config) renders once across an entire build, and a warm cache skips the work entirely.
+Rendering runs through the content-addressed fence cache, the same one that markdown fences use. The same snippet (the same source, lang, meta, and config) renders one time across a full build. A warm cache skips the work fully.
 
 ## Where it fits
 
-`code()` is for a snippet that lives in a **component**: a landing page feature, a UI that shows an example, a doc kit. For code inside prose, write a fenced block in your markdown; for a whole Markdown string, reach for [`md`](/docs/macros/md). All three produce a region, so they render through one `<Region>`.
+`code()` is for a snippet that lives in a **component**: a landing page feature, a UI that shows an example, a doc kit. For code inside prose, write a fenced block in your markdown. For a full Markdown string, use [`md`](/docs/macros/md). All three make a region. Thus they render through one `<Region>`.

@@ -8,6 +8,9 @@ import type { ProfilerOptions } from '../profiler/index.js';
 import type { ContentPluginOptions } from '../content/vite/plugin.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
 
+// ── regexes
+const IDENT_NAME_RE = /^[\w-]+$/;
+
 /**
  * Named strategy bundle referenced from source via `with { preset: 'name' }`
  * (or the renamed `importKeys.preset` key).
@@ -200,15 +203,22 @@ export interface OgygiaOptions {
 	profiler?: boolean | ProfilerOptions;
 
 	/**
-	 * Pages as build artifacts (render-on-write) — the SWITCH + serializable policy, nothing else.
-	 * `true` turns the handle's artifact read/write path on with the tier-1 in-process store: a
+	 * Frozen pages (render-on-write) — the SWITCH + serializable policy, nothing else.
+	 * `true` turns the handle's freeze read/write path on with the tier-1 in-process store: a
 	 * page whose render observed no personalization is stored whole and served as bytes until
-	 * `artifacts.invalidate(url)` / `artifacts.invalidateWhere({ prefix })` or the TTL backstop.
+	 * `freeze.invalidate(url)` / `freeze.invalidateWhere({ prefix })` or the TTL backstop.
 	 * Live adapters (a valkey client, CDN purge creds) can never ride a virtual module — they are
-	 * configured in hooks.server.ts via `artifacts.configure({ store, edge })` from
-	 * `'ogygia/artifacts'`. `{ ttl }` overrides the backstop seconds (clamped to [1, 86400]).
+	 * configured in hooks.server.ts via `freeze.configure({ store, edge })` from
+	 * `'ogygia/freeze'`. `{ ttl }` overrides the backstop seconds (clamped to [1, 86400]).
+	 *
+	 * `{ default }` sets the app-wide opt-in: `true` (the default, and what a bare `true` gives)
+	 * keeps the auto behaviour — every eligible page is stored, observed-purity refuses the rest,
+	 * and a route opts OUT with `export const freeze = false`. `false` flips the whole app to
+	 * OPT-IN: nothing is stored unless a page or a layout it sits under declares
+	 * `export const freeze = true` (it cascades like `csr`, deepest declaration wins). The export
+	 * is read and stripped by ogygia before Kit sees it, so Kit never rejects the non-Kit option.
 	 */
-	artifacts?: boolean | { ttl?: number };
+	freeze?: boolean | { ttl?: number; default?: boolean };
 
 	/**
 	 * @internal Recreate this plugin instance inside the standalone client build.
@@ -245,7 +255,8 @@ const REGION_PRESET_KEYS = new Set([
 	'maxAge',
 	'onExpire',
 	'revalidate',
-	'keep'
+	'keep',
+	'stitch'
 ]);
 
 /**
@@ -283,7 +294,7 @@ export function validate_content_presets(
 		);
 	}
 	for (const [name, bag] of Object.entries(content_presets)) {
-		if (!/^[\w-]+$/.test(name)) {
+		if (!IDENT_NAME_RE.test(name)) {
 			throw new Error(
 				`[ogygia] content.presets: '${name}' — preset names are identifiers ([A-Za-z0-9_-]).`
 			);

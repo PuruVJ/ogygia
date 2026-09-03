@@ -37,6 +37,11 @@ import { match_close } from '../parse/scan.js';
 import { parse_module } from '../parse/oxc.js';
 import { og_member } from './wire.js';
 
+// ── regexes
+const SERVER_MODULE_RE = /\.server(\.|$|\/)/;
+const IDENT_CHAR_RE = /[A-Za-z0-9_$.]/;
+const WS_RE = /\s/;
+
 const MARKER = 'import.meta.og.$';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -299,7 +304,7 @@ export function rewrite_dollar(
 				src_val === '$app/server' ||
 				src_val.startsWith('$env/static/private') ||
 				src_val.startsWith('$env/dynamic/private') ||
-				/\.server(\.|$|\/)/.test(src_val);
+				SERVER_MODULE_RE.test(src_val);
 			if (!is_server) continue;
 			for (const sp of node.specifiers ?? []) {
 				if (sp.local?.name) server_only.set(sp.local.name, src_val);
@@ -406,12 +411,12 @@ export function rewrite_dollar(
 		while ((at = src.indexOf(M, at + 1)) !== -1) {
 			if (in_region(at)) continue;
 			const after = at + M.length;
-			if (/[A-Za-z0-9_$.]/.test(src[after] ?? '')) continue; // .store / other methods
+			if (IDENT_CHAR_RE.test(src[after] ?? '')) continue; // .store / other methods
 			let open = after;
-			while (open < src.length && /\s/.test(src[open]!)) open++;
+			while (open < src.length && WS_RE.test(src[open]!)) open++;
 			if (src[open] !== '(') continue;
 			let before = at - 1;
-			while (before >= 0 && /\s/.test(src[before]!)) before--;
+			while (before >= 0 && WS_RE.test(src[before]!)) before--;
 			if (src[before] !== '{' && src[before] !== '(') continue; // must open an expression
 			const close = match_close(src, open);
 			if (close < 0) continue;

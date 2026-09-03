@@ -1,9 +1,17 @@
 {
 	"name": "@corp/contracts",
-	"private": true,
 	"version": "0.0.1",
+	"private": true,
 	"type": "module",
-	"exports": { ".": "./src/index.js" },
-	"ogygia": { "files": ["./src"] },
-	"peerDependencies": { "ogygia": "workspace:*" }
+	"exports": {
+		".": "./src/index.js"
+	},
+	"peerDependencies": {
+		"ogygia": "workspace:*"
+	},
+	"ogygia": {
+		"files": [
+			"./src"
+		]
+	}
 }

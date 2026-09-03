@@ -17,6 +17,12 @@ import {
 	type VariantGenerator
 } from './code.js';
 
+// ── regexes
+const AMP_G = /&/g;
+const LT_G = /</g;
+const GT_G = />/g;
+const DOUBLE_QUOTE_G = /"/g;
+
 /** The configured fence pipeline (from `markdown({ code })`). */
 export type CodePipeline = {
 	meta: MetaParser[];
@@ -39,7 +45,11 @@ export type FenceRender = {
 };
 
 const esc = (s: string) =>
-	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	s
+		.replace(AMP_G, '&amp;')
+		.replace(LT_G, '&lt;')
+		.replace(GT_G, '&gt;')
+		.replace(DOUBLE_QUOTE_G, '&quot;');
 
 /**
  * Run the pipeline for one fence. `highlight(source, lang, rawMeta)` produces the Shiki HTML for a

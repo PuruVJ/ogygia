@@ -1,14 +1,14 @@
 {
-  "compilerOptions": {
-    "target": "esnext",
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "strict": false,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "types": ["node"],
-    "lib": ["esnext", "dom", "dom.iterable"]
-  },
-  "include": ["*.ts"]
+	"compilerOptions": {
+		"target": "esnext",
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"allowImportingTsExtensions": true,
+		"strict": false,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"types": ["node"],
+		"lib": ["esnext", "dom", "dom.iterable"]
+	},
+	"include": ["*.ts"]
 }

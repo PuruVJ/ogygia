@@ -36,8 +36,17 @@ const KIND: Record<string, string> = {
 	details: 'details'
 };
 
+const AMP_G = /&/g;
+const LT_G = /</g;
+const GT_G = />/g;
+const DOUBLE_QUOTE_G = /"/g;
+
 const esc = (s: string) =>
-	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	s
+		.replace(AMP_G, '&amp;')
+		.replace(LT_G, '&lt;')
+		.replace(GT_G, '&gt;')
+		.replace(DOUBLE_QUOTE_G, '&quot;');
 
 const OPEN = /^:::\s*([A-Za-z][\w-]*)\s*(.*)$/;
 const CLOSE = /^:::\s*$/;

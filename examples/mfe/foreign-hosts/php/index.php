@@ -3,9 +3,14 @@
  * A PHP page mounting an ogygia app — no JavaScript toolchain on this host at all.
  * The MFE's fragment endpoint answers a JSON document {status, title, css[], body, runtime};
  * this page prints it and loads the MFE's OWN runtime script, which wakes the islands.
- * Run: php -S 127.0.0.1:5185 (with the cms app running on :5182)
+ * Run: php -S 127.0.0.1:5185 (with the cms app running on :5192)
+ *
+ * NOTE: this host does NOT sign its calls (PHP Ed25519 over a PKCS8-DER key is out of scope for
+ * the demo), so it needs a cms whose fragment endpoint is reachable UNSIGNED — i.e. a cms started
+ * with `federate({ …, open: true })` (behind a mesh / mTLS in real life). The plain-node host next
+ * to this one shows the SIGNED path.
  */
-$CMS = getenv('CMS_ORIGIN') ?: 'http://127.0.0.1:5182';
+$CMS = getenv('CMS_ORIGIN') ?: 'http://127.0.0.1:5192';
 $path = $_GET['p'] ?? '/';
 
 $ctx = stream_context_create(['http' => ['timeout' => 3]]);

@@ -5,7 +5,6 @@
  */
 import { routes, page, layout, error, redirect } from 'ogygia/router';
 import { csr_flag } from '@corp/contracts';
-import { stitch_dash_kpis } from './nested-stitch.js';
 import CmsShell from './CmsShell.svelte';
 import PostsShell from './PostsShell.svelte';
 import Home from './Home.svelte';
@@ -41,12 +40,7 @@ export const cms_router = routes(
 	{
 		...shell({
 			'/': page(Home, {
-				load: async (c) => ({
-					posts: POSTS.map(({ id, title }) => ({ id, title })),
-					// THREE TEAMS, ONE PAGE: the cms itself stitches dash's widget, signed with the
-					// CMS's key, forwarding the visitor's claims AND the trace onward
-					dash_html: await stitch_dash_kpis(c.visitor, c.request.headers.get('traceparent'))
-				})
+				load: async () => ({ posts: POSTS.map(({ id, title }) => ({ id, title })) })
 			}),
 			'/lab': page(csr_flag.pick({ static: Lab, hydrated: LabLive }), {
 				load: (c) => ({ mode: csr_flag(c), stamp: csr_flag.stamp(c) })

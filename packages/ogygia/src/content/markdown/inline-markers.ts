@@ -18,6 +18,9 @@
  */
 import type { ShikiTransformer } from 'shiki';
 
+// ── regexes
+const LF_G = /\n/g;
+
 type Marker = '+++' | '---';
 // Distinct, improbable-in-real-code lengths so the postprocess pattern can't false-match. The
 // delimiter becomes this many spaces; the content keeps its own length.
@@ -72,7 +75,7 @@ function highlight_all_spans(html: string, sub: string, classname: string): stri
 			adjusted = `${adjusted}</span>`;
 		}
 		// a multi-line highlight must close/re-open at every newline (spans can't cross lines)
-		return adjusted.replace(/\n/g, `</span>\n${open}`);
+		return adjusted.replace(LF_G, `</span>\n${open}`);
 	});
 }
 

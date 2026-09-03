@@ -1,15 +1,15 @@
 ---
 title: The import.meta.og surface
-summary: One compile-time namespace for the things ogygia can settle at build. Each call looks like runtime code but runs when you build, sees the module graph, and inlines its result. This page is the shared grammar; each macro has its own.
+summary: One compile-time namespace for the things that ogygia can settle at build. Each call looks like runtime code, but runs when you build, sees the module graph, and inlines its result. This page is the shared grammar. Each macro has its own.
 related:
   - macros/loaders
   - macros/wire
   - macros/bake
 ---
 
-Some of what an app does never changes between requests. Which markdown files exist. How a class crosses an island boundary. What a code sample looks like highlighted. The nav tree computed from a corpus. That work belongs at **build**, not in every request. `import.meta.og.*` is where ogygia puts it.
+Some of what an app does never changes between requests. Which markdown files exist. How a class crosses an island boundary. What a code sample looks like highlighted. The nav tree computed from a corpus. That work belongs at **build**, not in each request. `import.meta.og.*` is where ogygia puts it.
 
-Everything under `import.meta.og` is a **compile construct**. It reads like a normal call, but the ogygia Vite plugin rewrites it at build time, before your code ever runs. There is no `import.meta.og` object at runtime. If a construct ever reached the browser unrewritten, it would throw on the first line instead of half-working.
+All under `import.meta.og` is a **compile construct**. It reads like a normal call. But the ogygia Vite plugin rewrites it at build time, before your code runs. There is no `import.meta.og` object at runtime. If a construct reached the browser unrewritten, it would throw on the first line, and not half-work.
 
 ## The family
 
@@ -25,19 +25,19 @@ Everything under `import.meta.og` is a **compile construct**. It reads like a no
 
 ## Why it looks like `import.meta.glob`
 
-Because it behaves like it. Vite's own `import.meta.glob` is the same idea: a call that never runs, that the bundler resolves at build. Living on `import.meta` inherits the intuition everyone already has for that: the arguments are **literals**, you don't alias it, you don't pass it around, it's the build talking. One namespace, one autocomplete entry, collision-proof by ownership.
+Because it behaves like it. The own `import.meta.glob` of Vite is the same idea: a call that never runs, and that the bundler resolves at build. A home on `import.meta` inherits the intuition that all people already have for that: the arguments are **literals**, you do not alias it, you do not pass it around, it is the build that talks. One namespace, one autocomplete entry, collision-proof by ownership.
 
-The rule for what belongs here is simple: **literal inputs, a build-determined result.** A runtime wrapper around `import.meta.glob` is the smell these constructs remove.
+The rule for what belongs here is simple: **literal inputs, a build-determined result.** A runtime wrapper around `import.meta.glob` is the smell that these constructs remove.
 
 ## What they share
 
-- **Literal arguments.** A glob, a language, a repo spec: a plain string the build can read. A template literal with `${…}` interpolation is a runtime value, so it's a build error, with the offending expression named.
-- **AST-precise detection.** A construct is found by parsing, not by text search, so the same words inside a comment or a string are never mistaken for a call.
+- **Literal arguments.** A glob, a language, a repo spec: a plain string that the build can read. A template literal with `${…}` interpolation is a runtime value. Thus it is a build error, with the offending expression named.
+- **AST-precise detection.** A construct is found by parsing, not by text search. Thus the same words inside a comment or a string are never mistaken for a call.
 - **Build-voice errors.** Misuse fails at build with an `[ogygia]` message that names the file, the line, and the fix. Never a silent no-op, never a runtime surprise.
-- **No runtime cost.** The rewrite happens once, at build. What ships is the result: a source, a region, a registry, a codec key, a constant.
+- **No runtime cost.** The rewrite occurs one time, at build. What ships is the result: a source, a region, a registry, a codec key, a constant.
 
-Each construct has its own page with its full contract. Start with [loaders](/docs/macros/loaders) if you have content, [`wire`](/docs/macros/wire) if you share state across islands, or [`bake`](/docs/macros/bake) for the "run at build, ship the answer" trick.
+Each construct has its own page, with its full contract. Start with [loaders](/docs/macros/loaders) when you have content, with [`wire`](/docs/macros/wire) when you share state across islands, or with [`bake`](/docs/macros/bake) for the "run at build, ship the answer" trick.
 
 ---
 
-*Every macro above respects one boundary. [The constraints](/docs/reference/constraints) are the rules.*
+*Each macro above respects one boundary. [The constraints](/docs/reference/constraints) are the rules.*

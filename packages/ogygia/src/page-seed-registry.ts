@@ -15,6 +15,11 @@ export type PageSnapshot = {
 	form?: unknown;
 	error?: unknown;
 	status?: number;
+	/** Set by the routeless document root (the router's seed) so nested island renders under the
+	 *  server router see the page's real url/params/route, not the request's bare event. */
+	url?: { href?: string };
+	params?: Record<string, string | undefined>;
+	route?: { id: string | null };
 };
 
 type Recorder = (snapshot: PageSnapshot) => void;

@@ -6,6 +6,9 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { routes, page, mount } from '../src/router/index.js';
+import { make_peer } from '../src/federation/peer.js';
+
+const peer = (o = {}) => make_peer('cms', { origin: 'http://mfe.test', ...o }, 'shell');
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -111,7 +114,7 @@ describe('mount({ stream: true }) — the sugar', () => {
 					})
 				)
 		);
-		const app = routes({ '/cms/[...rest]': mount('http://mfe.test', { stream: true }) });
+		const app = routes({ '/cms/[...rest]': mount(peer(), { stream: true }) });
 		const html = await (await app.fetch(new Request('http://shell/cms/p')))!.text();
 		const i_fb = html.indexOf('data-og-mount-fallback');
 		const i_tpl = html.indexOf('<template data-og-late');
@@ -128,7 +131,7 @@ describe('mount({ stream: true }) — the sugar', () => {
 			throw new TypeError('fetch failed');
 		});
 		const app = routes({
-			'/cms/[...rest]': mount('http://mfe.test', { stream: true, timeout: 50 })
+			'/cms/[...rest]': mount(peer({ timeout: 50 }), { stream: true })
 		});
 		const html = await (await app.fetch(new Request('http://shell/cms/p')))!.text();
 		expect(html).toContain('data-og-mount-fallback');
@@ -139,7 +142,7 @@ describe('mount({ stream: true }) — the sugar', () => {
 		vi.stubGlobal('fetch', async () => new Response(doc_json('late-body')));
 		const { default: RawHtml } = await import('../src/RawHtml.svelte');
 		const app = routes({
-			'/cms/[...rest]': mount('http://mfe.test', {
+			'/cms/[...rest]': mount(peer(), {
 				stream: { fallback: RawHtml as never }
 			})
 		});
@@ -160,7 +163,7 @@ describe('mount({ stream: true }) — the sugar', () => {
 					JSON.stringify({ status: 303, location: '/cms/posts/1', title: '', css: [], body: '' })
 				)
 		);
-		const app = routes({ '/cms/[...rest]': mount('http://mfe.test', { stream: true }) });
+		const app = routes({ '/cms/[...rest]': mount(peer(), { stream: true }) });
 		const html = await (await app.fetch(new Request('http://shell/cms/old')))!.text();
 		expect(html).toContain('data-og-mount-moved');
 		expect(html).toContain('href="/cms/posts/1"');

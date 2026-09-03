@@ -1,16 +1,16 @@
 ---
 title: Quickstart
-summary: A static page with one interactive island, from empty route to working demo, in five minutes.
+summary: A static page with one interactive island. From empty route to a demo that operates, in five minutes.
 related:
   - start/install
   - regions/client-islands
 ---
 
-This is the shortest path to a working page: pure HTML with a single island that hydrates. If you have not added the package yet, do [Install](/docs/start/install) first.
+This is the shortest path to a page that operates: pure HTML with one island that hydrates. If the package is not installed, do [Install](/docs/start/install) first.
 
 ## 1. Turn the page into a Page
 
-Opt the route out of the Kit client so it ships no framework JS.
+Remove the Kit client from the route. Then the route ships no framework JS.
 
 ```ts title=src/routes/+layout.ts
 export const csr = false;
@@ -18,7 +18,7 @@ export const csr = false;
 
 ## 2. Write a normal Svelte component
 
-Nothing ogygia-specific here. It is just a component.
+There is nothing ogygia-specific here. It is only a component.
 
 ```svelte title=src/lib/Counter.svelte
 <script>
@@ -31,7 +31,7 @@ Nothing ogygia-specific here. It is just a component.
 
 ## 3. Mark the import to make it an island
 
-The import attribute is the whole opt-in. The rest of the page stays static HTML.
+The import attribute is the full opt-in. The remainder of the page stays static HTML.
 
 ```svelte title=src/routes/+page.svelte
 <script>
@@ -44,11 +44,11 @@ The import attribute is the whole opt-in. The rest of the page stays static HTML
 <Counter start={3} />
 ```
 
-That is a working islands page. The heading and paragraph are server HTML forever; only `Counter` downloads JS, and only because you marked it.
+That is an islands page that operates. The heading and the paragraph are server HTML always. Only `Counter` downloads JS, because you marked it.
 
 ## 4. See it live
 
-The counter below is a real island on this very page, hydrated on `load` exactly like the code above:
+The counter below is a real island on this page. It hydrates on `load`, the same as the code above:
 
 <script>
   import LoadLive from '$lib/demos/LoadLive.svelte' with { wake: 'load' };
@@ -71,7 +71,7 @@ The counter below is a real island on this very page, hydrated on `load` exactly
 
 ## 5. Change when it wakes
 
-Swap the strategy and the island hydrates later. Nothing else changes:
+Change the strategy word, and the island hydrates later. Nothing else changes:
 
 ```svelte
 import Counter from '$lib/Counter.svelte' with { wake: 'idle' };     // when the browser is idle
@@ -81,7 +81,7 @@ import Counter from '$lib/Counter.svelte' with { wake: '(max-width: 600px)' }; /
 
 ## Where to go next
 
-- [Client islands](/docs/regions/client-islands): every hydrate option in depth.
-- [Timing & nesting](/docs/regions/timing-nesting): schedules and the nesting rule.
-- [Server islands](/docs/regions/server-islands): HTML from the server, no JS.
-- [Adoption](/docs/start/install): bring this into an existing Kit app one route at a time.
+- [Client islands](/docs/regions/client-islands): each hydrate option, in depth.
+- [Timing & nesting](/docs/regions/timing-nesting): schedules and the rule for nested regions.
+- [Server islands](/docs/regions/server-islands): HTML from the server, with no JS.
+- [Adoption](/docs/start/install): add this to an applicable Kit app, one route at a time.

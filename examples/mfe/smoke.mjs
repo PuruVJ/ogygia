@@ -104,8 +104,12 @@ const check = (label, ok, detail = '') => {
 {
 	const res = await fetch(SHELL + '/cms/definitely-missing-page');
 	const html = await res.text();
-	check('status channel: mounted 404 answers 404 (not 200-wrapped)', res.status === 404, 'got ' + res.status);
-	check('status channel: the MFE\'s OWN error page renders', html.includes('does not exist'));
+	check(
+		'status channel: mounted 404 answers 404 (not 200-wrapped)',
+		res.status === 404,
+		'got ' + res.status
+	);
+	check("status channel: the MFE's OWN error page renders", html.includes('does not exist'));
 	// boundary chrome nesting: the error page renders INSIDE its own layout's chrome (the cms
 	// shell), not floating bare — a page-load failure keeps every working layout
 	check('boundary renders INSIDE its layout chrome', html.includes('data-testid="cms-shell"'));
@@ -118,7 +122,11 @@ const check = (label, ok, detail = '') => {
 	check('kitMount: cms home through a plain Kit catchall', html.includes('data-testid="cms-home"'));
 	check('kitMount: identity flows (session claims signed in)', html.includes('salut puru'));
 	const miss = await fetch(SHELL + '/cms-kit/definitely-missing-page');
-	check('kitMount: upstream 404 → Kit error(404), right status', miss.status === 404, 'got ' + miss.status);
+	check(
+		'kitMount: upstream 404 → Kit error(404), right status',
+		miss.status === 404,
+		'got ' + miss.status
+	);
 }
 
 // 3) experiments: sticky assignment auto-carried into the mounted app + QA override
@@ -132,15 +140,26 @@ const check = (label, ok, detail = '') => {
 	check('experiment: assigned + carried through the mount', !!a && a.startsWith('csr-mode:'), a);
 	check('experiment: sticky across requests', a === b, `${a} vs ${b}`);
 	const forced = await read_stamp('?og-exp=csr-mode:static');
-	check('experiment: ?og-exp override rides the signed claims', forced === 'csr-mode:static', forced);
+	check(
+		'experiment: ?og-exp override rides the signed claims',
+		forced === 'csr-mode:static',
+		forced
+	);
 }
 
-// 4) the lazy client-stitch proxy (browser-facing seam)
+// 4) a deferred remote widget: the shell home emits a shell-signed hole; fetching it returns dash
 {
-	const doc = await (await fetch(SHELL + '/og/frag/dash:kpis?org=acme')).json();
-	check('proxy: fragment JSON through the shell', !doc.failed && /dash-fragment/.test(doc.html ?? ''));
-	const miss = await fetch(SHELL + '/og/frag/nope:x');
-	check('proxy: unknown app answers a failed card, not a 500', miss.status === 404);
+	const home = await (await fetch(SHELL + '/')).text();
+	const hole = home.match(/\/og\/frag\?[^"]+/)?.[0]?.replace(/&amp;/g, '&');
+	check('deferred: the home emitted an /og/frag hole', !!hole);
+	if (hole) {
+		const frag = await (await fetch(SHELL + hole)).text();
+		check('deferred: the hole rendered the dash widget', /dash-fragment/.test(frag));
+	}
+	const forged = await fetch(
+		SHELL + '/og/frag?peer=dash&kind=widget&target=kpis&search=&exp=9999999999999&sig=bad'
+	);
+	check('deferred: a forged hole capability is rejected', forged.status === 403);
 }
 
 // 5) the signature gate: unsigned callers learn nothing
@@ -169,7 +188,11 @@ const check = (label, ok, detail = '') => {
 	await counter.click().catch(() => {});
 	await bpage.waitForTimeout(120);
 	const after = await counter.innerText().catch(() => '');
-	check('browser: FOREIGN island interactive (dash counter clicks)', before !== after && after !== '', `${before} -> ${after}`);
+	check(
+		'browser: FOREIGN island interactive (dash counter clicks)',
+		before !== after && after !== '',
+		`${before} -> ${after}`
+	);
 	check('browser: zero hydration failures / page errors', bad.length === 0, bad.join(' | '));
 	await b.close();
 }

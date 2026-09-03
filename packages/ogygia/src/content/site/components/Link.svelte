@@ -10,6 +10,9 @@
 	import { get_shell_context } from '../context.js';
 	import { href_of } from '../outline.js';
 
+	// ── regexes
+	const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
+
 	let {
 		href = '',
 		children,
@@ -19,7 +22,7 @@
 	const ctx = get_shell_context();
 
 	function is_bare(h: string): boolean {
-		return !!h && !/^[a-z][a-z0-9+.-]*:/i.test(h) && !h.startsWith('/') && !h.startsWith('#') && !h.startsWith('.') && !h.startsWith('//');
+		return !!h && !URL_SCHEME_RE.test(h) && !h.startsWith('/') && !h.startsWith('#') && !h.startsWith('.') && !h.startsWith('//');
 	}
 
 	async function resolve(h: string): Promise<string> {

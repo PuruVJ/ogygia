@@ -60,7 +60,7 @@ export const LATE_BOOT_SCRIPT =
 
 /** Bake ANY yielded value to html: a string passes through, an inline region carries its html,
  *  a component/held region AWAITS into its bake (island shells + prefixed CSS links included —
- *  the same path `catalog()` widgets take). */
+ *  the same path federated widgets take). */
 export async function bake_yield(v: unknown): Promise<string> {
 	if (typeof v === 'string') return v;
 	if (v && typeof v === 'object') {
@@ -97,6 +97,7 @@ export function is_stream_slot(v: unknown): v is (...args: never[]) => AsyncGene
 }
 
 const HEAD_CLOSE_RE = /<\/head>/i;
+const NO_TRANSFORM_RE = /no-transform/i;
 
 /**
  * Turn a fully-rendered document (first yield in place) + the generator's REMAINING yields into
@@ -157,7 +158,7 @@ export function stream_document(
 	// point of this response. The standard header tells them to pass bytes through as-is.
 	const cc = headers.get('cache-control');
 	if (!cc) headers.set('cache-control', 'no-transform');
-	else if (!/no-transform/i.test(cc)) headers.set('cache-control', `${cc}, no-transform`);
+	else if (!NO_TRANSFORM_RE.test(cc)) headers.set('cache-control', `${cc}, no-transform`);
 	return new Response(body, { status: res.status, headers });
 }
 

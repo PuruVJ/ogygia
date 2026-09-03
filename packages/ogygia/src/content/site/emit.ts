@@ -9,14 +9,20 @@
  */
 import type { NavItem, NavLeaf, NavTree } from './types.js';
 
+// ── regexes
+const FRONTMATTER_BLOCK_RE = /^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/;
+const LEADING_WS_RE = /^\s+/;
+const XML_SPECIAL_G = /[&<>"']/g;
+const EXCESS_BLANK_LINES_G = /\n{3,}/g;
+
 /** Strip a leading YAML frontmatter block (and a leading BOM) so the `.md` is clean prose+script. */
 export function strip_frontmatter(src: string): string {
-	return src.replace(/^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').replace(/^\s+/, '');
+	return src.replace(FRONTMATTER_BLOCK_RE, '').replace(LEADING_WS_RE, '');
 }
 
 function xml_escape(s: string): string {
 	return s.replace(
-		/[&<>"']/g,
+		XML_SPECIAL_G,
 		(c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!
 	);
 }
@@ -87,12 +93,7 @@ export function build_llms(tree: NavTree, origin: string, opts: LlmsOptions = {}
 		lines.push('');
 	}
 
-	return (
-		lines
-			.join('\n')
-			.replace(/\n{3,}/g, '\n\n')
-			.trimEnd() + '\n'
-	);
+	return lines.join('\n').replace(EXCESS_BLANK_LINES_G, '\n\n').trimEnd() + '\n';
 }
 
 // ── RSS — the blog genre's emission ──────────────────────────────────────────────

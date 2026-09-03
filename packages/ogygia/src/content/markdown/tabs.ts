@@ -44,9 +44,20 @@ const CLOSE = /^\s*:::\s*$/;
 const TAB_MARK = /^\s*==[ \t]+(.+?)[ \t]*$/;
 // A fence opener: optional indent, 3+ of ` or ~, then an info string (may be empty).
 const FENCE = /^(\s*)(`{3,}|~{3,})(.*)$/;
+const TAB_OPENER_RE = /(^|\n)\s*:::\s*(code-group|tabs)\b/;
+const LINE_BREAK_RE = /\r\n|\r|\n/;
+const BRACKET_LABEL_RE = /\[([^\]]*)\]/;
+const AMP_G = /&/g;
+const DOUBLE_QUOTE_G = /"/g;
+const LT_G = /</g;
+const GT_G = />/g;
 
 const attr = (s: string) =>
-	s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	s
+		.replace(AMP_G, '&amp;')
+		.replace(DOUBLE_QUOTE_G, '&quot;')
+		.replace(LT_G, '&lt;')
+		.replace(GT_G, '&gt;');
 
 /** An open fence's identity: its char (` or ~) and length, so we only close on a matching-or-longer run. */
 type Fence = { char: string; len: number };
@@ -69,7 +80,7 @@ export type TabsResult = { code: string; used: boolean };
 
 /** True if the source contains a tab-group opener (cheap gate to skip the pass). */
 export function has_tabs(src: string): boolean {
-	return /(^|\n)\s*:::\s*(code-group|tabs)\b/.test(src);
+	return TAB_OPENER_RE.test(src);
 }
 
 /**
@@ -82,7 +93,7 @@ export function transform_tabs(src: string): TabsResult {
 	// Normalize line endings up front: split on CRLF / lone CR / LF so every downstream regex sees a
 	// clean line (a trailing `\r` would defeat the `$`-anchored fence + marker patterns). The join is
 	// always LF — mdsvex is line-ending agnostic, so canonicalizing here costs nothing.
-	const lines = src.split(/\r\n|\r|\n/);
+	const lines = src.split(LINE_BREAK_RE);
 	const out: string[] = [];
 	let top_fence: Fence | null = null; // a fence at the TOP level — pass its lines through untouched
 	let auto = 0; // per-block group counter for `::: tabs`
@@ -162,7 +173,7 @@ function group_key(tabs: ParsedTab[]): string {
 
 /** Pull the `[label]` out of a fence info string; return the label (or null) and the leftover language. */
 function split_label(info: string): { label: string | null; lang: string } {
-	const m = /\[([^\]]*)\]/.exec(info);
+	const m = BRACKET_LABEL_RE.exec(info);
 	if (!m) return { label: null, lang: info.trim() };
 	const label = m[1].trim();
 	const lang = (info.slice(0, m.index) + info.slice(m.index + m[0].length)).trim();

@@ -3,6 +3,9 @@ const ESCAPE_BACKTICK = /`/g;
 const ESCAPE_INTERPOLATION = /\$\{/g;
 const LEADING_LF = /^\n/;
 const TRAILING_LF = /\n$/;
+const CODE_ID_META_RE = /ogygia-code-id=(\S+)/;
+const CODE_ID_META_STRIP_RE = /\s*ogygia-code-id=\S+/;
+const DOUBLE_QUOTE_G = /"/g;
 
 /**
  * Shiki dual-theme highlighter for markdown fences + remotes.
@@ -237,7 +240,7 @@ export async function highlight(
  *  `slug-code-<hash>` permalink id (see `remark-code-ids.ts`). Matches an unquoted, space-free id. */
 function pluck_code_id(meta: string | undefined | null): string | null {
 	if (!meta) return null;
-	const m = /ogygia-code-id=(\S+)/.exec(meta);
+	const m = CODE_ID_META_RE.exec(meta);
 	return m ? m[1]! : null;
 }
 
@@ -308,7 +311,7 @@ export async function render_code_region(
 	// Strip our internal `ogygia-code-id=…` token from the meta before handing the REST to Shiki as
 	// `__raw`, so meta transformers (`{1-3,5}` line highlight, word highlight, `// [!code …]`) read
 	// the author's infostring without our bookkeeping leaking in.
-	const shiki_meta = (meta ?? '').replace(/\s*ogygia-code-id=\S+/, '').trim();
+	const shiki_meta = (meta ?? '').replace(CODE_ID_META_STRIP_RE, '').trim();
 	const hl = (source: string, l: string, rm: string) =>
 		highlight(
 			source,
@@ -339,7 +342,7 @@ export async function render_code_region(
 		let attrs = '';
 		if (lang && lang !== 'text') attrs += `data-lang="${lang}" `;
 		if (id) attrs += `id="${id}" `;
-		if (file) attrs += `data-file="${file.replace(/"/g, '&quot;')}" `;
+		if (file) attrs += `data-file="${file.replace(DOUBLE_QUOTE_G, '&quot;')}" `;
 		const tagged = attrs ? html.replace('<pre ', `<pre ${attrs}`) : html;
 		plain = wrap_html(tagged, cfg.wrapperClass);
 	}

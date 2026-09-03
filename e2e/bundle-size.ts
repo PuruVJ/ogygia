@@ -18,7 +18,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rolldown } from 'rolldown';
-import { generateRuntimeEntrySource, resolveFeatures } from '../packages/ogygia/dist/compiler/link/runtime-entry.js';
+import {
+	generateRuntimeEntrySource,
+	resolveFeatures
+} from '../packages/ogygia/dist/compiler/link/runtime-entry.js';
 import type { RuntimeMarks } from '../packages/ogygia/dist/compiler/link/runtime-entry.js';
 
 const RUNTIME_DIR = fileURLToPath(new URL('../packages/ogygia/dist/runtime', import.meta.url));
@@ -30,20 +33,58 @@ const asJson = process.argv.includes('--json');
 // App profiles → the runtime marks a real app of that shape produces. `wire` + `remote-seeds` are
 // always on (props/seeds decode); `forms` is on by default for progressively-enhanced actions.
 const PROFILES: Array<{ name: string; blurb: string; marks: RuntimeMarks }> = [
-	{ name: 'Static content', blurb: 'load-hydrated islands', marks: { complete: true, hydrate: ['load'], forms: false } },
-	{ name: 'Interactive', blurb: 'interaction-hydrated widgets', marks: { complete: true, hydrate: ['interaction'], forms: false } },
-	{ name: 'Forms', blurb: 'progressively-enhanced actions', marks: { complete: true, hydrate: ['load'], forms: true } },
-	{ name: 'SPA router', blurb: 'client-side navigation', marks: { complete: true, hydrate: ['load'], router: true, forms: true } },
-	{ name: 'Frozen regions', blurb: 'lakes', marks: { complete: true, hydrate: ['none'], lakes: true, forms: false } },
-	{ name: 'Live regions', blurb: 'streaming held regions', marks: { complete: true, hydrate: ['load'], live: true, morph: true } },
-	{ name: 'Context', blurb: 'cross-island Provide / setContext', marks: { complete: true, hydrate: ['load'], context: true, forms: false } },
+	{
+		name: 'Static content',
+		blurb: 'load-hydrated islands',
+		marks: { complete: true, hydrate: ['load'], forms: false }
+	},
+	{
+		name: 'Interactive',
+		blurb: 'interaction-hydrated widgets',
+		marks: { complete: true, hydrate: ['interaction'], forms: false }
+	},
+	{
+		name: 'Forms',
+		blurb: 'progressively-enhanced actions',
+		marks: { complete: true, hydrate: ['load'], forms: true }
+	},
+	{
+		name: 'SPA router',
+		blurb: 'client-side navigation',
+		marks: { complete: true, hydrate: ['load'], router: true, forms: true }
+	},
+	{
+		name: 'Frozen regions',
+		blurb: 'lakes',
+		marks: { complete: true, hydrate: ['none'], lakes: true, forms: false }
+	},
+	{
+		name: 'Live regions',
+		blurb: 'streaming held regions',
+		marks: { complete: true, hydrate: ['load'], live: true, morph: true }
+	},
+	{
+		name: 'Context',
+		blurb: 'cross-island Provide / setContext',
+		marks: { complete: true, hydrate: ['load'], context: true, forms: false }
+	},
 	{
 		name: 'Everything',
 		blurb: 'kitchen sink',
 		marks: {
-			complete: true, hydrate: ['load', 'interaction', 'none'], defer: ['load'], router: true,
-			live: true, morph: true, lakes: true, persist: true, persistKeys: ['x'], forms: true,
-			wire: true, remoteSeeds: true, context: true
+			complete: true,
+			hydrate: ['load', 'interaction', 'none'],
+			defer: ['load'],
+			router: true,
+			live: true,
+			morph: true,
+			lakes: true,
+			persist: true,
+			persistKeys: ['x'],
+			forms: true,
+			wire: true,
+			remoteSeeds: true,
+			context: true
 		}
 	}
 ];
@@ -79,7 +120,10 @@ async function measure(marks: RuntimeMarks): Promise<{ raw: number; brotli: numb
 	});
 	const { output } = await bundle.generate({ format: 'es', minify: true });
 	await bundle.close();
-	const js = output.filter((o: any) => o.type === 'chunk').map((o: any) => o.code).join('\n');
+	const js = output
+		.filter((o: any) => o.type === 'chunk')
+		.map((o: any) => o.code)
+		.join('\n');
 	const buf = Buffer.from(js);
 	return { raw: buf.length, brotli: brotliCompressSync(buf).length };
 }
@@ -116,7 +160,9 @@ console.log(`\nogygia runtime (brotli) — isolated rolldown build, svelte exter
 console.log('  ' + 'profile'.padEnd(16) + 'brotli'.padEnd(12) + 'Δ (vs baseline)');
 console.log('  ' + '─'.repeat(48));
 for (const r of rows) {
-	console.log('  ' + r.name.padEnd(16) + kb(r.brotli).padEnd(12) + delta(r.brotli, base[r.name]?.brotli));
+	console.log(
+		'  ' + r.name.padEnd(16) + kb(r.brotli).padEnd(12) + delta(r.brotli, base[r.name]?.brotli)
+	);
 }
 const avg = Math.round(rows.reduce((a, r) => a + r.brotli, 0) / rows.length);
 console.log('  ' + '─'.repeat(48));

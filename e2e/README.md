@@ -53,7 +53,6 @@ node verify/dedup.ts                                   # same-component-two-stra
 node verify/portable-bindings.ts http://localhost:3051 # portable bindings: static/dynamic/list + shared entry dedupe
 ```
 
-
 ### single-flight navigation (navigation OOO batch)
 
 On a SPA navigation the router pulls all of the incoming page's `defer: 'load'` holes down **one**

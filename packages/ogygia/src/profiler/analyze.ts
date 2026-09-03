@@ -106,6 +106,9 @@ export interface Analysis {
 // categorization
 
 const component_name_re = /^[A-Z][A-Za-z0-9_]*$/;
+const ROUTE_FILE_FN_RE = /^_(page|layout|error)$/;
+const SVELTE_BASENAME_RE = /([^/\\]+)\.svelte$/;
+const SVELTE_MODULE_EXT_RE = /\.svelte\.[jt]s$/;
 
 /** SvelteKit endpoint/handler exports — capitalized, but not components. */
 const handler_names = new Set([
@@ -123,13 +126,13 @@ const handler_names = new Set([
  * Header, +page.svelte → _page. Helper closures inside a component keep the
  * file's url but not a component-shaped name. */
 const is_component_name = (name: string): boolean =>
-	!handler_names.has(name) && (component_name_re.test(name) || /^_(page|layout|error)$/.test(name));
+	!handler_names.has(name) && (component_name_re.test(name) || ROUTE_FILE_FN_RE.test(name));
 
 /** The component name a `.svelte` source file compiles to — used to name the
  * anonymous inline-code frame that V8 samples inside a component. Returns
  * undefined for non-component files. */
 function component_name_from_file(url: string): string | undefined {
-	const m = /([^/\\]+)\.svelte$/.exec(url);
+	const m = SVELTE_BASENAME_RE.exec(url);
 	if (!m) return undefined;
 	const base = m[1];
 	if (base.startsWith('+')) {
@@ -183,7 +186,7 @@ export function categorize(frame: CallFrame): { category: FrameCategory; pkg?: s
 	if (pkg === 'svelte') return { category: 'svelte', pkg };
 	if (pkg) return { category: 'dependency', pkg };
 
-	if (url.endsWith('.svelte') || /\.svelte\.[jt]s$/.test(url)) {
+	if (url.endsWith('.svelte') || SVELTE_MODULE_EXT_RE.test(url)) {
 		// only the file's root render function is "the component" — inner
 		// closures share the url but land in app code
 		return { category: is_component_name(name) ? 'component' : 'app' };

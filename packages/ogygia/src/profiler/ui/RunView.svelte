@@ -9,6 +9,9 @@
 	import { onMount } from 'svelte';
 	import { fake_progress } from './fake-progress.svelte.js';
 
+	// ── regexes
+	const NON_WORD_G = /\W+/g;
+
 	let {
 		base,
 		path,
@@ -35,7 +38,7 @@
 				const a = document.createElement('a');
 				const href = URL.createObjectURL(blob);
 				a.href = href;
-				a.download = `profile-${path.replace(/\W+/g, '_') || 'page'}.ogp`;
+				a.download = `profile-${path.replace(NON_WORD_G, '_') || 'page'}.ogp`;
 				a.click();
 				URL.revokeObjectURL(href);
 				done_ogp = true;

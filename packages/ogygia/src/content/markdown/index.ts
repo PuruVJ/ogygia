@@ -46,6 +46,11 @@ export { inline_markers } from './inline-markers.js';
 export type { InlineMarkerOptions } from './inline-markers.js';
 export type { Fence, MetaParser, VariantGenerator, Variant } from './code.js';
 
+// ── regexes
+const BACKSLASH_G = /\\/g;
+const MODULE_SCRIPT_OPEN_RE = /<script\b[^>]*\b(?:context\s*=\s*(["'])module\1|module)\b[^>]*>/;
+const TAB_IMPORT_RE = /^\s*import\b[^\n]*\bTab(?:Group)?\b[^\n]*\bfrom\b/m;
+
 /**
  * The CODE fence pipeline config — one bag for the whole fence dialect. Core knows CONTRACTS, not
  * features: each slot takes imported adapter VALUES, never feature flags. (Stages `meta` and
@@ -232,7 +237,7 @@ function transform_islands(content: string, filename: string): string | null {
  * `emit.raw`, "copy as markdown", llms-full, …) with no parallel `?raw` glob in app code.
  */
 function source_line(filename: string): string | null {
-	const base = filename.replace(/\\/g, '/').split('/').pop() ?? '';
+	const base = filename.replace(BACKSLASH_G, '/').split('/').pop() ?? '';
 	if (!base) return null;
 	return `export const __ogygia_source = () => import(${JSON.stringify('./' + base + '?raw')}).then((m) => m.default);`;
 }
@@ -243,7 +248,7 @@ function inject_module(code: string, lines: string[]): string {
 	const block = lines.join('\n');
 	// Inject into the existing module script (Svelte 5 `<script module>` or legacy `context="module"`),
 	// else prepend a fresh one. Never two module scripts (illegal).
-	const open = /<script\b[^>]*\b(?:context\s*=\s*(["'])module\1|module)\b[^>]*>/.exec(code);
+	const open = MODULE_SCRIPT_OPEN_RE.exec(code);
 	if (open) {
 		const at = open.index + open[0].length;
 		return code.slice(0, at) + '\n' + block + code.slice(at);
@@ -482,7 +487,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			let doc_key: string | null = null;
 			if (isContent) {
 				await Promise.all(pipeline.variants.map((g) => g.ready?.()));
-				const base_name = path.replace(/\\/g, '/').split('/').pop() ?? '';
+				const base_name = path.replace(BACKSLASH_G, '/').split('/').pop() ?? '';
 				doc_key = docs_store.key([doc_sig(), base_name, input.content]);
 				const hit = doc_cache.get(doc_key);
 				if (hit) return { code: hit.code, map: undefined, dependencies: hit.deps };
@@ -497,7 +502,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 					// Only inject when the author hasn't already imported TabGroup. Match a real import STATEMENT
 					// (line-anchored, `import … TabGroup … from`), so prose like "the ability to import …" pairing
 					// with the injected `<TabGroup>` tag can't be mistaken for an existing import.
-					inject_tabs = t.used && !/^\s*import\b[^\n]*\bTab(?:Group)?\b[^\n]*\bfrom\b/m.test(raw);
+					inject_tabs = t.used && !TAB_IMPORT_RE.test(raw);
 				}
 				if (containers) raw = transform_containers(raw);
 			}

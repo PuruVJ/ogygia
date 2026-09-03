@@ -26,6 +26,7 @@ export type ByteGraphModule = {
 
 /** An island entry module — `virtual:ogygia/island/<id>.js` (dev url carries the id). */
 const ISLAND_RE = /virtual:ogygia\/island\/([0-9a-f]+)\.js/;
+const OGYGIA_PKG_PATH_RE = /[\\/]ogygia[\\/](src|dist)[\\/]/;
 
 /** Shared framework / prebundled deps — pruned so per-island totals reflect app code, not Svelte. */
 function is_framework(mod: ByteGraphModule): boolean {
@@ -36,7 +37,7 @@ function is_framework(mod: ByteGraphModule): boolean {
 		s.includes('/.vite/deps/') ||
 		// the ogygia package runtime — its modules resolve to `packages/ogygia/src` in dev and
 		// `.../ogygia/dist` in prod; both are shared once per page, not part of an island's cost.
-		/[\\/]ogygia[\\/](src|dist)[\\/]/.test(s) ||
+		OGYGIA_PKG_PATH_RE.test(s) ||
 		// SHARED ogygia registries — `virtual:ogygia/transportables` (every wire/store class app-wide),
 		// `.../transport`, `.../fn-manifest`, the manifests. One island importing the transportable
 		// registry would otherwise drag in EVERY transportable-defining module (the whole app). These

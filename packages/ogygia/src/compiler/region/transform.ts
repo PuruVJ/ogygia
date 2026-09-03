@@ -73,6 +73,13 @@ const PATH_SEP = /[/\\]/;
 const DURATION = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i;
 const JS_EXT = /\.js$/;
 const WRAP_QUOTES = /^['"]|['"]$/g;
+/** One `key: 'value'` pair of an import-attributes clause (shared `g` regex — reset `lastIndex`
+ *  before each scan). */
+const IMPORT_ATTR_PAIR_G = /([A-Za-z_$][\w$]*|'[^']*'|"[^"]*")\s*:\s*('[^']*'|"[^"]*")/g;
+/** `import X from '…' with { … }` — the one held-region import form in a `.ts`/`.js` module
+ *  (shared `g` regex — reset `lastIndex` before each scan). */
+const HELD_IMPORT_G =
+	/import\s+([A-Za-z_$][\w$]*)\s+from\s+(['"])([^'"]+)\2\s+with\s*\{([^}]*)\}\s*;?/g;
 
 export { foucCssVirtualId } from '../fouc-css.js';
 
@@ -163,7 +170,7 @@ const KNOWN_STRATEGIES = new Set(['load', 'idle', 'visible']);
 // replay) — a wake-only schedule, never a deferred fetch timing.
 const HYDRATE_STRATEGIES = new Set([...KNOWN_STRATEGIES, 'interaction']);
 /** Inline attribute keys accepted after normalization (canonical internal names). */
-const ATTR_SCHEMA = new Set(['hydrate', 'defer', 'margin', 'keep']);
+const ATTR_SCHEMA = new Set(['hydrate', 'defer', 'margin', 'keep', 'stitch']);
 /** AST fragment child-key names walked when descending the template. */
 const CHILD_KEYS = [
 	'consequent',
@@ -1037,23 +1044,41 @@ class FileCompilation {
 				else if (k === import_keys.wake) wake_val = String(v);
 				else if (k === 'maxAge' || k === 'onExpire' || k === 'revalidate') live_opts[k] = v;
 				else if (k === 'margin' || k === 'keep') attrs.set(k, String(v));
-				else {
+				else if (k === 'stitch') {
+					if (v !== true && v !== 'serve' && v !== 'edge') {
+						throw fail(
+							`preset '${from_preset}': \`stitch\` takes \`true\` / 'serve' (the hole fills at ORIGIN on every serve) or 'edge' (an ESI include the CDN fills — the shell stays edge-cached).`
+						);
+					}
+					attrs.set('stitch', v === 'edge' ? 'edge' : 'serve');
+				} else {
 					throw fail(
-						`unknown key \`${k}\` in preset '${from_preset}'. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`margin\`, \`maxAge\`, \`onExpire\`, \`revalidate\`.`
+						`unknown key \`${k}\` in preset '${from_preset}'. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`margin\`, \`maxAge\`, \`onExpire\`, \`revalidate\`, \`stitch\`.`
 					);
 				}
 			}
 		} else {
 			for (const k of inline.keys()) {
-				if (k !== import_keys.wake && k !== import_keys.render && k !== 'keep') {
+				if (k !== import_keys.wake && k !== import_keys.render && k !== 'keep' && k !== 'stitch') {
 					throw fail(
-						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
+						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, \`stitch\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
 					);
 				}
 			}
 			if (inline.has(import_keys.render)) render_mode = inline.get(import_keys.render);
 			if (inline.has(import_keys.wake)) wake_val = inline.get(import_keys.wake);
 			if (inline.has('keep')) attrs.set('keep', inline.get('keep')!);
+			if (inline.has('stitch')) {
+				// Import-attribute values are STRINGS by grammar — `stitch: 'serve' | 'edge'` are the
+				// spellings (presets, being plugin config, also take `stitch: true` = 'serve').
+				const mode = inline.get('stitch');
+				if (mode !== 'serve' && mode !== 'edge') {
+					throw fail(
+						`\`stitch: '${mode}'\` — the inline values are \`stitch: 'serve'\` (the hole fills at ORIGIN on every serve) or \`stitch: 'edge'\` (an ESI include the CDN fills — the shell stays edge-cached).`
+					);
+				}
+				attrs.set('stitch', mode);
+			}
 		}
 
 		if (render_mode != null && !RENDER_MODES.has(render_mode)) {
@@ -1076,6 +1101,11 @@ class FileCompilation {
 			attrs.set('defer', wake_val ?? 'load');
 		} else if (wake_val != null) {
 			attrs.set('hydrate', wake_val);
+		}
+		if (attrs.has('stitch') && !attrs.has('defer')) {
+			throw fail(
+				`\`stitch\` is only valid with \`${import_keys.render}: 'deferred'\` — it says WHERE a hole fills on artifact serves; there is no hole without 'deferred'.`
+			);
 		}
 		if (from_preset && !attrs.has('hydrate') && !attrs.has('defer')) {
 			throw fail(
@@ -1106,13 +1136,19 @@ class FileCompilation {
 				throw fail(
 					`\`${import_keys.render}: 'deferred'\` fetches on the \`${import_keys.wake}\` schedule, but '${dval}' is not one. Use \`${import_keys.wake}: 'load' | 'idle' | 'visible'\` or a media query (not 'none'/'interaction' — a hole must fetch).`
 				);
-			const options: { when: string; margin?: string; cacheTtlSec?: number } = { when };
+			const options: {
+				when: string;
+				margin?: string;
+				cacheTtlSec?: number;
+				stitch?: 'serve' | 'edge';
+			} = { when };
 			if (when === 'visible')
 				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
 			if (live_opts.maxAge != null) {
 				const ttl = parse_cache_ttl_sec(live_opts.maxAge, err_shim, '');
 				if (ttl != null && ttl > 0) options.cacheTtlSec = ttl;
 			}
+			if (attrs.has('stitch')) options.stitch = attrs.get('stitch') as 'serve' | 'edge';
 			return { strategy: 'server', options };
 		}
 
@@ -2214,9 +2250,9 @@ class FileCompilation {
  */
 function parse_import_attrs(raw: string) {
 	const attrs = new Map();
-	const re = /([A-Za-z_$][\w$]*|'[^']*'|"[^"]*")\s*:\s*('[^']*'|"[^"]*")/g;
+	IMPORT_ATTR_PAIR_G.lastIndex = 0; // shared `g` regex — start each scan at 0
 	let m;
-	while ((m = re.exec(raw))) {
+	while ((m = IMPORT_ATTR_PAIR_G.exec(raw))) {
 		const key = m[1].replace(WRAP_QUOTES, '');
 		const val = m[2].slice(1, -1);
 		attrs.set(key, val);
@@ -2524,9 +2560,9 @@ class TsRegionCompilation {
 				? literal_ranges.some(([a, b]) => pos >= a && pos < b)
 				: odd_unescaped_backticks_before(source, pos);
 		// Default import + import-attributes clause: `import X from '…' with { … }` (the only form).
-		const re = /import\s+([A-Za-z_$][\w$]*)\s+from\s+(['"])([^'"]+)\2\s+with\s*\{([^}]*)\}\s*;?/g;
+		HELD_IMPORT_G.lastIndex = 0; // shared `g` regex — a throw mid-loop would leave it mid-string
 		let m;
-		while ((m = re.exec(source))) {
+		while ((m = HELD_IMPORT_G.exec(source))) {
 			const [full, local, , spec, attrsRaw] = m;
 			const attrs = parse_import_attrs(attrsRaw);
 			const has_render = attrs.has(renderKey);

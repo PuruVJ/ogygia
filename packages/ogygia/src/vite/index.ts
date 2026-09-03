@@ -49,7 +49,9 @@ import {
 	clear_route_csr_cache,
 	keep_client_dir,
 	inject_keep_client_route,
-	resolve_kit_paths
+	resolve_kit_paths,
+	is_route_option_file,
+	strip_freeze_export
 } from '../compiler/kit.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.js';
@@ -75,13 +77,22 @@ import { Compiler } from '../compiler/driver.js';
 import { CompileCtx, type PackageScan } from '../compiler/ctx.js';
 import { discover_package_files } from './package-files.js';
 import { flags_manifest } from '../compiler/flags.js';
-import { V_KIT_WIRE, V_ROUTER_CSS, V_ROUTE_CSR, RESOLVED } from '../compiler/ids.js';
+import {
+	V_KIT_WIRE,
+	V_ROUTER_CSS,
+	V_ROUTE_CSR,
+	V_FREEZE_ROUTES,
+	RESOLVED
+} from '../compiler/ids.js';
 
 // Kit's generated CLIENT app entry — dev serves `generated/client/app.js`, build inputs
 // `generated/client-optimized/app.js` (`kit.outDir` is configurable, so match from `generated/`).
 // The one module that evaluates exactly when Kit's client boots and NEVER on a csr=false page —
 // the append target for the kit-world page thread (see the transform hook).
 const KIT_CLIENT_APP_RE = /\/generated\/client(-optimized)?\/app\.js$/;
+// A route host (`+page`/`+layout.svelte`) or option file (`.js`/`.ts`, `.server` too): a dev change
+// to any of these can shift the csr topology OR the `export const freeze` opt-in set.
+const ROUTE_HOST_OR_OPTION_RE = /[\\/]\+(page|layout)(\.server)?\.(svelte|js|ts)$/;
 // Appended INLINE (no extra module): publishes Kit's REAL reactive `page`/`navigating` (and the
 // real `$page` store, so shim subscribers stay LIVE through Kit navigations) on the well-known
 // slot the island `$app/*` shims read through (`kit_bridge()` in shims/page-store). Importer is
@@ -128,6 +139,9 @@ const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
 
 /** Windows separators → posix. */
 const WIN_SEP_RE = /\\/g;
+const CSS_EXT_RE = /\.css$/;
+const STYLE_BEARING_FILE_RE = /\.(svelte|css|scss|sass|less|styl)$/;
+const PROFILER_DYNAMIC_IMPORT_RE = /import\((['"])\.\/profiler\/index\.js\1\)/;
 /** realpath + posix — declared-surface paths must match Vite's symlink-resolved module ids. */
 function real_posix(p: string): string {
 	try {
@@ -160,27 +174,27 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// null when off) and baked into `virtual:ogygia/profiler-config`; `ogygia.handle()` reads it and
 	// dynamically imports + mounts the profiler, so hooks.server.ts never mentions it. The SECRET is
 	// left out of the bake unless the author passes one — it defaults to the OGYGIA_PROFILER_SECRET env
-	// var at runtime, so it's never frozen into a build artifact by default.
+	// var at runtime, so it's never baked into a frozen page by default.
 	const profiler_config: Record<string, unknown> | null =
 		!standalone && options.profiler
 			? options.profiler === true
 				? {}
 				: { ...options.profiler }
 			: null;
-	// `ogygia({ artifacts })` — the render-on-write switch + serializable policy, baked into
-	// `virtual:ogygia/artifacts-config` (the profiler-config pipe). Live adapters (store clients,
-	// purge creds) can never ride a virtual module — they enter via `artifacts.configure()` in
+	// `ogygia({ freeze })` — the render-on-write switch + serializable policy, baked into
+	// `virtual:ogygia/freeze-config` (the profiler-config pipe). Live adapters (store clients,
+	// purge creds) can never ride a virtual module — they enter via `freeze.configure()` in
 	// hooks.server.ts. TTL backstop clamped to [1, 86400]: nothing is stale forever.
-	const artifacts_config: { ttl: number } | null =
-		!standalone && options.artifacts
+	const freeze_config: { ttl: number; default: boolean } | null =
+		!standalone && options.freeze
 			? {
 					ttl: Math.min(
 						86400,
-						Math.max(
-							1,
-							Math.floor(options.artifacts === true ? 86400 : (options.artifacts.ttl ?? 86400))
-						)
-					)
+						Math.max(1, Math.floor(options.freeze === true ? 86400 : (options.freeze.ttl ?? 86400)))
+					),
+					// `true` / `{ }` / `{ ttl }` → default ON (auto by observed purity, opt OUT per route).
+					// `{ default: false }` → OPT-IN (a route/layout opts IN with `export const freeze = true`).
+					default: options.freeze === true ? true : (options.freeze.default ?? true)
 				}
 			: null;
 	// Compile surfaces beyond the app's src — ONE mechanism for ogygia's own profiler UI and for
@@ -554,7 +568,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						libDir,
 						pkg_scan,
 						profiler_config,
-						artifacts_config,
+						freeze_config,
 						is_dev,
 						id_salt,
 						visibleMargin,
@@ -646,7 +660,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 								if (src == null) continue;
 								const css = compileFoucScopedCss(e.abs, src);
 								if (css) parts.push(css);
-							} else if (/\.css$/.test(e.abs)) {
+							} else if (CSS_EXT_RE.test(e.abs)) {
 								// Plain `.css` import — ship verbatim. Preprocessor dialects (.scss/…) can't be
 								// compiled here; they're skipped (a router page wanting those is a future case).
 								const css = readFile(e.abs);
@@ -735,9 +749,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// graph, so without invalidation the SERVER leg keeps deciding island-vs-inline from a
 				// STALE set while Kit flips immediately — `<ogygia-region>` shells on a Kit-booted page
 				// with the runtime withheld = dead chrome (hit at a consumer after toggling `csr`).
-				if (is_dev && /[\\/]\+(page|layout)(\.server)?\.(svelte|js|ts)$/.test(id)) {
+				if (is_dev && ROUTE_HOST_OR_OPTION_RE.test(id)) {
 					clear_route_csr_cache();
-					if (vite_server) invalidate_module_id(vite_server, RESOLVED(V_ROUTE_CSR));
+					if (vite_server) {
+						invalidate_module_id(vite_server, RESOLVED(V_ROUTE_CSR));
+						// FREEZE: an `export const freeze` add/flip changes the opt-in route set too.
+						invalidate_module_id(vite_server, RESOLVED(V_FREEZE_ROUTES));
+					}
 				}
 				// Unlink often skips handleHotUpdate; drop islands that still import the deleted file.
 				if (!is_dev || change.event !== 'delete' || !vite_server) return;
@@ -770,7 +788,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// Server-router CSS: the dev `virtual:ogygia/router-css` INLINES compiled css at emit
 				// time, so any style-bearing source change must invalidate it — the next SSR re-emits
 				// with fresh css. Cheap (module-graph lookup), so no root-membership check.
-				if (/\.(svelte|css|scss|sass|less|styl)$/.test(file)) {
+				if (STYLE_BEARING_FILE_RE.test(file)) {
 					const mod = server.moduleGraph.getModuleById('\0' + V_ROUTER_CSS);
 					if (mod) server.moduleGraph.invalidateModule(mod);
 				}
@@ -941,7 +959,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				let source = code;
 				if (is_dev && options?.ssr && id === OGYGIA_HOOKS_MODULE) {
 					source = source.replace(
-						/import\((['"])\.\/profiler\/index\.js\1\)/,
+						PROFILER_DYNAMIC_IMPORT_RE,
 						'import(/* @vite-ignore */ ((s) => s)($1./profiler/index.js$1))'
 					);
 				}
@@ -951,6 +969,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// against Kit's real modules already, and this file is client-world by construction.
 				if (!options?.ssr && KIT_CLIENT_APP_RE.test(id)) {
 					source += KIT_PAGE_THREAD;
+				}
+
+				// FREEZE opt-in: strip `export const freeze = true|false` from a route option file
+				// before Kit imports the module — Kit's export validators reject any non-Kit page
+				// option, in all three legs (server node analysis, client runtime, build analyse). We
+				// run enforce:'pre', so Kit only ever sees the stripped module; the VALUE is read from
+				// disk into `virtual:ogygia/freeze-routes`, independent of this in-memory strip.
+				if (freeze_config && is_route_option_file(id, path.join(root, 'src', 'routes'))) {
+					source = strip_freeze_export(source);
 				}
 
 				// The whole per-file pass — content-preset tag ▸ macros ▸ host-island transform ▸ ts-region

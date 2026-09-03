@@ -1,13 +1,13 @@
 ---
 title: Overview
-summary: SSR islands for SvelteKit. Pages ship as server HTML with no Kit client bootstrap. JavaScript arrives only for the components you mark, on a ~7.6 KB runtime.
+summary: SSR islands for SvelteKit. Pages ship as server HTML with no Kit client bootstrap. JavaScript loads only for the components you mark, on a runtime of about 7.6 KB.
 related:
   - regions/regions
   - start/quickstart
   - start/install
 ---
 
-ogygia is an islands architecture for SvelteKit. A page ships as **server HTML with no framework on it**. The only JavaScript that loads is a small shared runtime plus the code for the specific components you mark as interactive.
+ogygia is an islands architecture for SvelteKit. A page ships as **server HTML with no framework on it**. Only two things load: a small shared runtime, and the code for the components you mark as interactive.
 
 ```svelte
 <script>
@@ -18,13 +18,13 @@ ogygia is an islands architecture for SvelteKit. A page ships as **server HTML w
 <Cart />   <!-- hydrates only when it scrolls into view -->
 ```
 
-That is the whole idea: opt the route out of the Kit client with `csr = false`, then mark the imports you want interactive. The heading ships zero JS. `Cart` ships its own, and only when it is needed.
+That is the full idea. Set `csr = false` to remove the Kit client from the route. Then mark the imports that you want interactive. The heading ships zero JS. `Cart` ships its own JS, and only when the page needs it.
 
 ::: tip When to use
-Reach for ogygia on content-heavy or mostly-static pages with pockets of interactivity: marketing, docs, blogs, dashboards, storefronts. Anywhere you feel you are shipping a whole framework to run one widget. If your page is a single large interactive app, plain SvelteKit with `csr = true` is the simpler tool, and ogygia [coexists](/docs/start/install) with those pages route by route.
+Use ogygia on content pages that have small interactive parts: marketing, docs, blogs, dashboards, storefronts. Use it when you ship a full framework to run one widget. If your page is one large interactive application, plain SvelteKit with `csr = true` is the simpler tool. ogygia [operates together](/docs/start/install) with those pages, route by route.
 :::
 
-The island below is real. It lives on this page, marked `wake: 'load'`, while the prose around it stays HTML:
+The island below is real. It lives on this page with the mark `wake: 'load'`. The text around it stays HTML:
 
 <script>
   import Counter from '$lib/demos/Counter.svelte' with { wake: 'load' };
@@ -34,63 +34,63 @@ The island below is real. It lives on this page, marked `wake: 'load'`, while th
   <Counter start={10} label="A live island" note="Everything else on this page is static HTML." />
 </div>
 
-## Why you'd want this
+## Why you want this
 
-- **Ship far less JavaScript.** No app-wide hydration. A mostly-static page stays mostly static, so most pages cost the runtime and nothing else.
-- **Keep writing normal Svelte.** Islands are ordinary components. The import attribute is the only new syntax; there is no special island API to learn.
-- **It is still SvelteKit.** Remote functions, form actions, the router, content — the Kit features you rely on work inside islands. No forked framework, no patched Kit.
-- **One vocabulary.** Client islands, server islands, lakes, and held regions are the same handful of ideas combined, not four unrelated systems.
+- **Ship much less JavaScript.** There is no hydration of the full page. A static page stays static. Most pages cost only the runtime.
+- **Write normal Svelte.** Islands are ordinary components. The import attribute is the only new syntax. There is no special island API.
+- **It is still SvelteKit.** Remote functions, form actions, the router, and content operate inside islands. There is no forked framework and no patched Kit.
+- **One vocabulary.** Client islands, server islands, lakes, and held regions are the same small set of ideas. They are not four unrelated systems.
 
-## How it works
+## How it operates
 
-A normal SvelteKit page boots the Kit client: it hydrates the whole tree, so every page carries the framework whether it needs it or not. ogygia flips that. You set `csr = false`, and the page is **just HTML**: no Kit client, no app-wide hydration.
+A normal SvelteKit page starts the Kit client. The client hydrates the full tree. Thus each page carries the framework. ogygia inverts this. You set `csr = false`, and the page is **only HTML**. There is no Kit client and no hydration of the full page.
 
 ```ts title=src/routes/+layout.ts
 // the whole page opts out of the Kit client
 export const csr = false;
 ```
 
-What ships instead is a **~7.6 KB runtime**: a custom element (`<ogygia-region>`) plus an optional router. It sits and waits. JS arrives only for the components you explicitly mark, and it attaches to the HTML that is already there rather than replacing it.
+A **runtime of about 7.6 KB** ships instead. It is a custom element (`<ogygia-region>`) plus an optional router. It waits. JS loads only for the components you mark. The JS attaches to the HTML that is already there. It does not replace that HTML.
 
-## When things happen
+## When events occur
 
-Marking an import takes two attributes: `wake` (does this ship client JS, and when does it run?) and `render` (where does the HTML come from, and when?). The `wake` schedule is one small set of words:
+You mark an import with two attributes. `wake` says if the component ships client JS, and when the JS runs. `render` says where the HTML comes from, and when. The `wake` schedule is one small set of words:
 
 | Value | Meaning |
 | --- | --- |
-| `load` | Right away |
-| `idle` | When the browser goes idle |
-| `visible` | When scrolled into view |
+| `load` | Immediately |
+| `idle` | When the browser becomes idle |
+| `visible` | When the component scrolls into view |
 | `'(max-width: 600px)'` | When the media query matches |
 
-On an **island** the word says *when JS runs*. On a **server island** it says *when the HTML arrives*. Same words, two axes. The full schedule, `visible` margins, and what happens when regions nest live in [Timing & nesting](/docs/regions/timing-nesting).
+On an **island**, the word says *when the JS runs*. On a **server island**, it says *when the HTML arrives*. The words are the same. The axes are different. For the full schedule, `visible` margins, and nested regions, see [Timing & nesting](/docs/regions/timing-nesting).
 
 ## One primitive, four kinds
 
-Islands, server islands, lakes, and held regions are not four features. They are four settings of one `<Region>` envelope. That canonical table, and the two dials behind it, live on the [Regions](/docs/regions/regions) landing page.
+Islands, server islands, lakes, and held regions are not four features. They are four settings of one `<Region>` envelope. The canonical table and the two dials are on the [Regions](/docs/regions/regions) page.
 
 ## How the docs are organized
 
-The sections build on each other. Read them in order:
+The sections build on each other. Read them in this sequence:
 
-1. **[Regions](/docs/regions/regions).** Mark a component and part of the page becomes interactive.
+1. **[Regions](/docs/regions/regions).** Mark a component, and a part of the page becomes interactive.
    Islands, server islands, lakes, and held regions are four settings of one primitive.
-2. **[Data and state](/docs/data-state/remote-functions).** Remote functions give islands a server,
-   and [shared state](/docs/data-state/state-context) lets one live object span them.
-3. **[Content](/docs/content/collections).** A collection turns markdown, JSON, or a CMS into typed
+2. **[Data and state](/docs/data-state/remote-functions).** Remote functions give islands a server.
+   [Shared state](/docs/data-state/state-context) lets one live object span many islands.
+3. **[Content](/docs/content/collections).** A collection changes markdown, JSON, or a CMS into typed
    entries. [`site()`](/docs/content/site) arranges collections into a nav tree, search, emissions,
-   and a shell. These docs are built with it.
-4. **[The app layer](/docs/app/spa-router).** The router swaps pages without a reload, batches server
-   islands into one request, and prerenders what you will click next.
-5. **[Macros](/docs/macros/overview).** `import.meta.og.*` settles at compile time everything that
-   never changes between requests.
-6. **[Constraints](/docs/reference/constraints).** The rules that keep all of this honest.
+   and a shell. These docs use it.
+4. **[The app layer](/docs/app/spa-router).** The router swaps pages without a reload. It sends all
+   server islands in one request. It prerenders the page you will click next.
+5. **[Macros](/docs/macros/overview).** `import.meta.og.*` calculates at compile time each value
+   that does not change between requests.
+6. **[Constraints](/docs/reference/constraints).** The rules that keep all of this correct.
 
 ## Start here
 
-- [Install](/docs/start/install): add the package and wire the plugin.
-- [Quickstart](/docs/start/quickstart): your first island, end to end.
-- [Regions](/docs/regions/regions): the primitive everything compiles to.
+- [Install](/docs/start/install): add the package and the plugin.
+- [Quickstart](/docs/start/quickstart): your first island, complete.
+- [Regions](/docs/regions/regions): the primitive that all marks compile to.
 
 <style>
   .doc-demo {

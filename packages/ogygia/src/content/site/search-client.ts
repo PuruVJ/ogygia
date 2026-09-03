@@ -9,6 +9,9 @@
  */
 import type { SearchHit } from './search.js';
 
+// ── regexes
+const TRAILING_SLASHES_RE = /\/+$/;
+
 export type SearchClient = {
 	/** Ranked hits for a query (empty string → []). */
 	query(q: string): Promise<SearchHit[]>;
@@ -34,7 +37,7 @@ export type SearchClientOptions = {
  * `<Shell>` it needs no arguments at all.)
  */
 export function search(opts: SearchClientOptions = {}): SearchClient {
-	const base = (opts.base ?? '').replace(/\/+$/, '');
+	const base = (opts.base ?? '').replace(TRAILING_SLASHES_RE, '');
 	const url = opts.endpoint ?? `${base}/search.json`;
 	const worker = new Worker(new URL('./search-worker.js', import.meta.url), { type: 'module' });
 	let seq = 0;

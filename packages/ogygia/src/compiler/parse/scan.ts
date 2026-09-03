@@ -15,6 +15,11 @@
  * that scanner, generalized so all constructs share one code path.
  */
 
+// ── regexes
+const REGEX_FLAG_RE = /[a-z]/i;
+const WS_RE = /\s/;
+const TEMPLATE_INTERPOLATION_RE = /\$\{/;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // LEXER — one hand-rolled scanner shared by every compile construct.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,7 +65,7 @@ export function match_close(src: string, open: number): number {
 				else if (r === ']') in_class = false;
 				else if (r === '/' && !in_class) break;
 			}
-			while (i + 1 < src.length && /[a-z]/i.test(src[i + 1]!)) i++; // regex flags
+			while (i + 1 < src.length && REGEX_FLAG_RE.test(src[i + 1]!)) i++; // regex flags
 			prev = '/';
 			continue;
 		}
@@ -74,7 +79,7 @@ export function match_close(src: string, open: number): number {
 			prev = c;
 			continue;
 		}
-		if (!/\s/.test(c)) prev = c;
+		if (!WS_RE.test(c)) prev = c;
 	}
 	return -1;
 }
@@ -124,7 +129,7 @@ export function find_og_calls(src: string, prefix: string): OgCall[] {
 				else if (r === ']') in_class = false;
 				else if (r === '/' && !in_class) break;
 			}
-			while (i + 1 < src.length && /[a-z]/i.test(src[i + 1]!)) i++;
+			while (i + 1 < src.length && REGEX_FLAG_RE.test(src[i + 1]!)) i++;
 			prev = '/';
 			continue;
 		}
@@ -135,7 +140,7 @@ export function find_og_calls(src: string, prefix: string): OgCall[] {
 			while (p < src.length && IDENT.test(src[p]!)) p++;
 			const method = src.slice(name_start, p);
 			let q = p;
-			while (q < src.length && /\s/.test(src[q]!)) q++;
+			while (q < src.length && WS_RE.test(src[q]!)) q++;
 			if (method && src[q] === '(') {
 				const close = match_close(src, q);
 				if (close >= 0) {
@@ -149,7 +154,7 @@ export function find_og_calls(src: string, prefix: string): OgCall[] {
 			prev = 't';
 			continue;
 		}
-		if (!/\s/.test(c)) prev = c;
+		if (!WS_RE.test(c)) prev = c;
 	}
 	return calls;
 }
@@ -159,7 +164,7 @@ export function find_og_calls(src: string, prefix: string): OgCall[] {
  *  bare identifier, or a template literal with `${…}` interpolation (not build-determinable). */
 export function split_first_string(args: string, who: string): { value: string; rest: string } {
 	let i = 0;
-	while (i < args.length && /\s/.test(args[i]!)) i++;
+	while (i < args.length && WS_RE.test(args[i]!)) i++;
 	const q = args[i];
 	if (q !== "'" && q !== '"' && q !== '`') {
 		throw new Error(
@@ -173,13 +178,13 @@ export function split_first_string(args: string, who: string): { value: string; 
 	}
 	const value = args.slice(i + 1, j);
 	// A template literal with interpolation is a runtime value, not a build-time literal.
-	if (q === '`' && /\$\{/.test(value)) {
+	if (q === '`' && TEMPLATE_INTERPOLATION_RE.test(value)) {
 		throw new Error(
 			`[ogygia] ${who}: the first argument must be a static string literal — a template literal with \${…} interpolation is a runtime value the build cannot resolve.`
 		);
 	}
 	let k = j + 1;
-	while (k < args.length && /\s/.test(args[k]!)) k++;
+	while (k < args.length && WS_RE.test(args[k]!)) k++;
 	// After the closing quote the ONLY things that may follow are `,` (the next argument) or the end.
 	// Anything else means the string is part of a larger expression (`"./" + dir`, a tagged template,
 	// a `.concat(…)` call) — a runtime value the build can't resolve. Fail loudly, don't mis-slice.

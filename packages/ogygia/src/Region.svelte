@@ -59,7 +59,7 @@
 	 *   visible?: string | boolean; idle?: boolean; media?: string; load?: boolean; interaction?: boolean;
 	 *   __keep?: string; __entry?: string; __component?: import('svelte').Component; __css?: unknown;
 	 *   __props?: Record<string, unknown>; __defer?: string; __margin?: string; __hydrate?: string;
-	 *   __hydrateMargin?: string; __module?: string; __cacheTtl?: number;
+	 *   __hydrateMargin?: string; __module?: string; __cacheTtl?: number; __stitch?: string;
 	 *   ogygiaFallback?: import('svelte').Snippet;
 	 *   __remount?: string; __when?: string; __maxAge?: number; __onExpire?: 'empty' | 'fetch';
 	 * }}
@@ -94,6 +94,10 @@
 		__module = '',
 		// Response cache max-age in seconds for this deferred hole (absent/0 → no-store). Signed at mint.
 		__cacheTtl,
+		// Stitching mark: `'serve'` (the freeze serve path fills the hole at origin, per visitor,
+		// fail-open) or `'edge'` (the freeze capture rewrites it into an ESI include the CDN
+		// fills — the shell stays edge-cached). Emitted as the hole's `stitch` attribute.
+		__stitch = '',
 		ogygiaFallback,
 		// lake
 		__remount = 'cache',
@@ -615,6 +619,7 @@
 	{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region
 			entry={server_region_entry}
 			render="defer"
+			stitch={__stitch || undefined}
 			when={__defer}
 			wake={__hydrate || undefined}
 			margin={__margin || undefined}

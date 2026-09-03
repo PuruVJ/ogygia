@@ -4,7 +4,7 @@
 	import Marker from '$lib/Marker.svelte' with { wake: 'load' };
 </script>
 
-<h1 data-static-shell>About</h1>
+<h1 id="about-heading" data-static-shell>About</h1>
 <p data-static-shell>Different page, more islands. Navigating here from Home is a SPA swap.</p>
 
 <Clock />

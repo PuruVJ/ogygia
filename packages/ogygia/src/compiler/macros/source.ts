@@ -1,13 +1,13 @@
 /**
- * `import.meta.og.source(fn)` — declared data sources, as a compile construct (the artifacts
- * reverse index; internal/notes/artifact.md §L2):
+ * `import.meta.og.source(fn)` — declared data sources, as a compile construct (the freeze
+ * reverse index; internal/notes/freeze.md §L2):
  *
  *   export const loadBuilderContent = import.meta.og.source(async (event, category) => { … });
  *
  * The macro stamps the id from THIS definition's `file#export` (root-relative; the ogygia.files
  * identity rail applies to package paths upstream) and rewrites to
  * `__og_source('<id>', fn, opts?)` with the runtime-wrapper import injected. Loads stay
- * untouched plain TS forever; `artifacts.invalidate(loadBuilderContent, [args])` reads the stamp
+ * untouched plain TS forever; `freeze.invalidate(loadBuilderContent, [args])` reads the stamp
  * off the function — no strings anywhere.
  *
  * STRICT BY CONSTRUCTION — legal in exactly ONE position:
@@ -20,8 +20,11 @@ import { og_js_regions, find_og_calls, type JsRegion } from '../parse/scan.js';
 import { parse_module } from '../parse/oxc.js';
 import { og_member } from './wire.js';
 
+// ── regexes
+const EXPORT_CONST_TAIL_RE = /\bexport\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*$/;
+
 const MARKER = 'import.meta.og.source';
-const IMPORT_LINE = `import { __og_source } from 'ogygia/artifacts/source';\n`;
+const IMPORT_LINE = `import { __og_source } from 'ogygia/freeze/source';\n`;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Node = Record<string, any>;
@@ -81,7 +84,12 @@ function ast_edits(src: string, region: JsRegion, id: string, rel: string): Edit
 			}
 			const args = (init.arguments ?? []) as Node[];
 			if (args.length < 1 || args.length > 2) {
-				misuse(id, src, abs, `source() takes the function (+ optional { key }) — got ${args.length} args`);
+				misuse(
+					id,
+					src,
+					abs,
+					`source() takes the function (+ optional { key }) — got ${args.length} args`
+				);
 			}
 			claimed.add(init);
 			claimed.add(init.callee as Node);
@@ -103,7 +111,11 @@ function ast_edits(src: string, region: JsRegion, id: string, rel: string): Edit
 
 	// Strictness sweep: any unclaimed appearance is a build error.
 	walk(program, (n) => {
-		if (n.type === 'CallExpression' && og_member(n.callee as Node) === 'source' && !claimed.has(n)) {
+		if (
+			n.type === 'CallExpression' &&
+			og_member(n.callee as Node) === 'source' &&
+			!claimed.has(n)
+		) {
 			misuse(id, src, region.offset + n.start, `source() outside an \`export const\` initializer`);
 		}
 		if (og_member(n) === 'source' && !claimed.has(n)) {
@@ -122,7 +134,7 @@ function scan_edits(src: string, region: JsRegion, rel: string): Edit[] {
 	for (const call of find_og_calls(code, 'import.meta.og.')) {
 		if (call.method !== 'source') continue;
 		const before = code.slice(0, call.start);
-		const m = /\bexport\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*$/.exec(before);
+		const m = EXPORT_CONST_TAIL_RE.exec(before);
 		if (!m) continue;
 		const inner = call.args.trim();
 		if (!inner) continue;
@@ -151,7 +163,8 @@ export function rewrite_source(
 	if (!regions) return src;
 
 	const edits: Edit[] = [];
-	for (const region of regions) edits.push(...(ast_edits(src, region, id, rel) ?? scan_edits(src, region, rel)));
+	for (const region of regions)
+		edits.push(...(ast_edits(src, region, id, rel) ?? scan_edits(src, region, rel)));
 	if (!edits.length) return src;
 
 	edits.sort((a, b) => a.start - b.start);

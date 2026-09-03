@@ -102,6 +102,12 @@ function glob_arg_list(patterns: string[]): string {
 
 /** Glob magic that marks an argument as an explicit pattern rather than a directory. */
 const GLOB_MAGIC = /[*?{}[\]]/;
+const PRESET_WORD_RE = /\bpreset\b/;
+const TRAILING_COMMA_RE = /,\s*$/;
+const LEADING_COMMA_RE = /^\s*,/;
+const EMPTY_OBJECT_RE = /^\{\s*\}$/;
+const TRAILING_SLASHES_RE = /\/+$/;
+const DOTS_ONLY_RE = /^\.+$/;
 
 /**
  * Extract (and STRIP) a `preset: 'name'` property from a loader call's trailing options text.
@@ -120,7 +126,7 @@ export function extract_preset(
 	args: string,
 	context: string
 ): { preset: string | null; args: string } {
-	if (!/\bpreset\b/.test(args)) return { preset: null, args };
+	if (!PRESET_WORD_RE.test(args)) return { preset: null, args };
 	const wrapped = `__og(${args})`;
 	const { program, ok } = parse_module(wrapped, 'loader-args.ts');
 	if (!ok || !program) {
@@ -154,11 +160,11 @@ export function extract_preset(
 			let to = prop.end - off;
 			const before = args.slice(0, from);
 			const after = args.slice(to);
-			if (/,\s*$/.test(before)) from = before.lastIndexOf(',');
-			else if (/^\s*,/.test(after)) to += after.indexOf(',') + 1;
+			if (TRAILING_COMMA_RE.test(before)) from = before.lastIndexOf(',');
+			else if (LEADING_COMMA_RE.test(after)) to += after.indexOf(',') + 1;
 			const remaining = (args.slice(0, from) + args.slice(to)).trim();
 			// `{ preset: 'x' }` was the WHOLE options object → drop it rather than emit `{ }`.
-			return { preset: literal, args: /^\{\s*\}$/.test(remaining) ? '' : remaining };
+			return { preset: literal, args: EMPTY_OBJECT_RE.test(remaining) ? '' : remaining };
 		}
 	}
 	return { preset: null, args };
@@ -193,9 +199,9 @@ const OPINIONATED: Record<'markdown' | 'folder' | 'json', string[]> = {
  */
 export function loader_patterns(builder: 'markdown' | 'folder' | 'json', raw: string): string[] {
 	if (GLOB_MAGIC.test(raw)) return expand_braces(raw);
-	const dir = raw.replace(/\/+$/, '');
+	const dir = raw.replace(TRAILING_SLASHES_RE, '');
 	const base = dir.slice(dir.lastIndexOf('/') + 1);
-	if (base.includes('.') && !/^\.+$/.test(base)) return [raw]; // a single file — leave it alone
+	if (base.includes('.') && !DOTS_ONLY_RE.test(base)) return [raw]; // a single file — leave it alone
 	return OPINIONATED[builder].map((p) => `${dir}/${p}`);
 }
 

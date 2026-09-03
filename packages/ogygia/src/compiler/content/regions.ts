@@ -22,6 +22,9 @@
 import { fs, path } from '../host.js';
 import { find_og_calls, split_first_string } from '../parse/scan.js';
 
+// ── regexes
+const FILE_EXT_RE = /\.[^.]+$/;
+
 const PREFIX = 'import.meta.og.regions';
 
 /** The registry key for a block file — its basename, VERBATIM (minus extension). No normalization:
@@ -29,7 +32,7 @@ const PREFIX = 'import.meta.og.regions';
  *  the author controls both the filename and the type. `Hero.svelte` → `Hero`; `hero-banner.svelte`
  *  → `hero-banner`. Predictable beats clever — a guessed PascalCase would silently miss the type. */
 export function region_key(file: string): string {
-	return path.basename(file).replace(/\.[^.]+$/, '');
+	return path.basename(file).replace(FILE_EXT_RE, '');
 }
 
 /**

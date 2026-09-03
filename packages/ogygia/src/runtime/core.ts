@@ -1,7 +1,7 @@
 import { hydrate, unmount } from 'svelte';
 import { parse } from 'devalue';
 import { frameAddress } from '../frame.js';
-import { set_current_region } from '../current-region.js';
+import { set_current_region, set_foreign_hydrate } from '../current-region.js';
 import { capture_region_ids } from './reconcile.js';
 import { set_page, reset_page } from '../shims/page-store.svelte.js';
 import { install_page_defer, page_defer_revivers } from './page-defer.js';
@@ -991,6 +991,11 @@ class OgygiaRegion extends HTMLElement {
 					const mod_h = (
 						mod as unknown as { __og_hydrate: (t: Element, p: Record<string, unknown>) => unknown }
 					).__og_hydrate;
+					// FOREIGN PAGE READS: the `$app/state` shim inside this island reads the SHELL's page
+					// store (one singleton per document — the MFE's own seed never crosses the fragment
+					// boundary). Mark the hydrate so that shim can warn (dev) when the island reads
+					// page.data/params/route/form/error: its SSR HTML was rendered with the MFE's own load.
+					set_foreign_hydrate({ origin: new URL(entry).origin, entry });
 					this.#app = mod_h(this, wrapped) as ReturnType<typeof hydrate>;
 					this.#foreign_unmount =
 						(mod as { __og_unmount?: (app: unknown) => void }).__og_unmount ?? null;
@@ -1028,6 +1033,7 @@ class OgygiaRegion extends HTMLElement {
 				} // end local-island path (foreign delegation branch above)
 			} finally {
 				set_current_region(null);
+				set_foreign_hydrate(null);
 			}
 
 			// Restore each frozen region's SSR DOM AFTER hydrate. An inner waking region whose

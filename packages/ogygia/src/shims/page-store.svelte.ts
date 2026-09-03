@@ -94,9 +94,7 @@ export interface KitPageBridge {
 }
 const KIT_PAGE_KEY = Symbol.for('ogygia.kit-page');
 export function kit_bridge(): KitPageBridge | null {
-	return (
-		(globalThis as unknown as Record<symbol, KitPageBridge | undefined>)[KIT_PAGE_KEY] ?? null
-	);
+	return (globalThis as unknown as Record<symbol, KitPageBridge | undefined>)[KIT_PAGE_KEY] ?? null;
 }
 
 // One instance across EVERY bundle. In production the runtime and island entries share a single
@@ -106,6 +104,8 @@ export function kit_bridge(): KitPageBridge | null {
 // updated one instance while an island read the other → stale `page.url`/`params` after SPA nav
 // (e.g. a sidebar's active link stuck on the old page in dev). A `globalThis` + `Symbol.for` handle
 // is one instance regardless of how many times the module is evaluated. PAGE-STATE-SINGLETON.
+import { foreign_hydrate } from '../current-region.js';
+
 const PAGE_STATE_KEY = Symbol.for('ogygia.page-state');
 const global_scope = globalThis as unknown as Record<symbol, PageState | undefined>;
 export const page_state: PageState = (global_scope[PAGE_STATE_KEY] ??= new PageState());
@@ -122,4 +122,31 @@ export function reset_page(): void {
 
 export function subscribe_page(fn: () => void): () => void {
 	return page_state.subscribe(fn);
+}
+
+// FOREIGN PAGE READ (dev warning, fragment federation). Inside a mounted MFE island this store is
+// the SHELL's: one singleton per document, seeded from the shell's page script — the MFE's own seed
+// sits in its `<head>`, which the fragment boundary drops. So a read of page.data / params / route
+// / form / error during that island's hydrate sees the shell's values, while the island's SSR HTML
+// was rendered with the MFE's own load: it will repaint with different values (often `undefined`).
+// The shell runtime marks the foreign hydrate (`set_foreign_hydrate`); this warns once per island
+// entry. `page.url` / `status` / `state` stay silent — the URL is the same on both sides.
+// The once-set lives on `globalThis` for the same reason `page_state` does (PAGE-STATE-SINGLETON):
+// `vite dev` evaluates this module more than once per document, and a module-local set printed
+// the same island twice.
+const WARNED_FOREIGN_KEY = Symbol.for('ogygia.foreign-page-warned');
+const warned_foreign_entries: Set<string> = ((
+	globalThis as unknown as Record<symbol, Set<string> | undefined>
+)[WARNED_FOREIGN_KEY] ??= new Set<string>());
+export function warn_foreign_page_read(expr: string): void {
+	if (!import.meta.env.DEV) return;
+	const f = foreign_hydrate();
+	if (!f || warned_foreign_entries.has(f.entry)) return;
+	warned_foreign_entries.add(f.entry);
+	console.warn(
+		`[ogygia] ${expr} was read inside a mounted MFE island (${f.entry}, from ${f.origin}).\n` +
+			`In the browser this is the SHELL's page, not the MFE's. The HTML you see was rendered with ` +
+			`the MFE's own load data, so this island will repaint with different values after hydrate.\n` +
+			`Pass the value as a prop, or read it with a remote function.`
+	);
 }

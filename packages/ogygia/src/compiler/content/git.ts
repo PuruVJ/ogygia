@@ -22,6 +22,8 @@ const content_cache = new BuildCache<never>('content');
 export type GitSpec = { owner: string; repo: string; ref: string; sub: string };
 
 const SPEC_RE = /^([^/\s]+)\/([^@:\s]+)(?:@([^:\s]+))?(?::(.+))?$/;
+const EDGE_SLASHES_G = /^\/+|\/+$/g;
+const NON_SLUG_CHARS_G = /[^\w.-]/g;
 
 /** Parse `owner/repo[@ref][:path]` → its parts. Default ref `HEAD`, default sub `''`. Throws on garbage. */
 export function parse_git_spec(spec: string): GitSpec {
@@ -34,13 +36,13 @@ export function parse_git_spec(spec: string): GitSpec {
 		owner: m[1]!,
 		repo: m[2]!,
 		ref: m[3] ?? 'HEAD',
-		sub: (m[4] ?? '').replace(/^\/+|\/+$/g, '')
+		sub: (m[4] ?? '').replace(EDGE_SLASHES_G, '')
 	};
 }
 
 /** Stable cache slug for a spec (ref-agnostic — the checkout is updated in place, lock pins the sha). */
 export function git_slug(s: GitSpec): string {
-	return `${s.owner}-${s.repo}`.replace(/[^\w.-]/g, '_');
+	return `${s.owner}-${s.repo}`.replace(NON_SLUG_CHARS_G, '_');
 }
 
 /** Absolute checkout dir for a spec — the `content` cache namespace + slug. Throws when the build

@@ -35,6 +35,8 @@ const WIRE_STATIC_MEMBER = /\bstatic\s+#?\w+\s*=\s*import\.meta\.og\.wire\b/;
 const MODULE_KW = /\bmodule\b/;
 const CONTEXT_MODULE_ATTR = /context\s*=\s*["']module["']/;
 const SVELTE_EXT = /\.svelte$/;
+/** Every `<script …>…</script>` block (shared `g` regex — reset `lastIndex` per scan). */
+const SCRIPT_BLOCK_G = /<script\b([^>]*)>([\s\S]*?)<\/script>/g;
 
 /** Marker that a module already carries generated registrations (idempotence). */
 const GENERATED_MARK =
@@ -298,13 +300,13 @@ function registrationBlock(rel: string, classes: string[], contexts: string[]): 
  * the component to run that registration on the client.
  */
 function moduleScriptOf(code: string): { body: string; injectAt: number } | null {
-	const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/g;
+	SCRIPT_BLOCK_G.lastIndex = 0; // shared `g` regex — the early return below leaves it mid-string
 	let m: RegExpExecArray | null;
-	while ((m = re.exec(code)) !== null) {
+	while ((m = SCRIPT_BLOCK_G.exec(code)) !== null) {
 		const attrs = m[1];
 		if (MODULE_KW.test(attrs) || CONTEXT_MODULE_ATTR.test(attrs)) {
 			const bodyStart = m.index + m[0].indexOf('>', 0) + 1;
-			const bodyEnd = re.lastIndex - '</script>'.length;
+			const bodyEnd = SCRIPT_BLOCK_G.lastIndex - '</script>'.length;
 			return { body: code.slice(bodyStart, bodyEnd), injectAt: bodyEnd };
 		}
 	}

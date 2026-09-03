@@ -329,6 +329,10 @@ export function server_wrapper_source(
 	const deferred_hydrate = !!options?.hydrate;
 	const fetch_when = options?.when || 'load';
 	let server_attrs = `__defer={${JSON.stringify(fetch_when)}}`;
+	// Stitching mark — the emitted hole carries `stitch="serve"` (the freeze serve path fills it at
+	// origin on every serve) or `stitch="edge"` (the freeze capture rewrites it into an ESI include
+	// the CDN fills; the shell stays edge-cached). See freeze/stitch.ts.
+	if (options?.stitch) server_attrs += ` __stitch={${JSON.stringify(options.stitch)}}`;
 	if (options?.margin != null) server_attrs += ` __margin={${JSON.stringify(options.margin)}}`;
 	// Signed at mint into the hole's endpoint → the handle answers `private, max-age=cacheTtlSec`.
 	if (options?.cacheTtlSec != null)

@@ -95,6 +95,7 @@ export function infostring(): MetaParser {
 
 const SLASH_META =
 	/(?:^|\n)[ \t]*(?:\/\/\/|<!---|###)\s*(file|copy|link|title)\s*:\s*(.*?)\s*(?:--->)?(?=\n|$)/g;
+const LEADING_LFS_RE = /^\n+/;
 
 /**
  * svelte.dev's magic-comment fence meta: `/// file: App.svelte`, `/// copy: false`, `/// link: false`
@@ -114,7 +115,7 @@ export function slash_meta(): MetaParser {
 			const val = m[2]!;
 			meta[key] = val === 'true' ? true : val === 'false' ? false : val;
 		}
-		if (found) src = fence.source.replace(SLASH_META, '').replace(/^\n+/, '');
+		if (found) src = fence.source.replace(SLASH_META, '').replace(LEADING_LFS_RE, '');
 		return found ? { ...fence, meta, source: src } : fence;
 	};
 }

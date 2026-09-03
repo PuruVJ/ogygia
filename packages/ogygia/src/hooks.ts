@@ -37,19 +37,28 @@ import {
 	speculationRules as mpa_speculation_rules
 } from 'virtual:ogygia/router-config';
 import { profilerConfig } from 'virtual:ogygia/profiler-config';
-import { artifactsConfig } from 'virtual:ogygia/artifacts-config';
+import { freezeConfig } from 'virtual:ogygia/freeze-config';
+import { freeze_routes, freeze_pages } from 'virtual:ogygia/freeze-routes';
+import { router_freeze_verdict } from './freeze/routers.js';
+import { set_kit_page_reader, kit_render_context } from './server/kit-context.js';
+import { serve_federation, install_federation } from './federation/serve.js';
+
+// Install the deferred-hole signer once (it holds the region secret); a no-op until a `federate()`
+// registers. Cheap and idempotent, at module eval like the other seams.
+install_federation();
 import {
-	artifact_get,
-	artifact_put,
+	freeze_get,
+	freeze_put,
 	join_flight,
 	begin_flight,
 	self_evict,
 	current_edges,
 	type FlightOutcome
-} from './artifacts/registry.js';
-import { observe_event, type Observation } from './artifacts/observe.js';
-import { set_artifact_capture_reader, set_source_recorder } from './artifacts/capture.js';
-import type { ArtifactEntry } from './artifacts/types.js';
+} from './freeze/registry.js';
+import { observe_event, type Observation } from './freeze/observe.js';
+import { stitch_html, stitch_modes, esi_rewrite } from './freeze/stitch.js';
+import { set_freeze_capture_reader, set_source_recorder } from './freeze/capture.js';
+import type { FreezeEntry } from './freeze/types.js';
 import { building, dev } from '$app/environment';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
@@ -139,15 +148,15 @@ type RequestBag = {
 	late_next: number;
 	/** devalue reducers for streamed resolve scripts (app transport encoders + defer marker). */
 	seed_reducers: Record<string, (v: unknown) => unknown> | null;
-	/** ARTIFACTS: this render may be stored (capture in flight) — region capabilities minted
+	/** FREEZE: this render may be stored (capture in flight) — region capabilities minted
 	 *  during it go prerender-grade (the stored HTML outlives `regionTtl`). */
-	artifact_capture: boolean;
-	/** ARTIFACTS: the live personalization-read observation for the verdict (flag reads mark it
+	freeze_capture: boolean;
+	/** FREEZE: the live personalization-read observation for the verdict (flag reads mark it
 	 *  through `set_flag_observer`); null when this render is not a capture candidate. */
-	artifact_obs: Observation | null;
-	/** ARTIFACTS: og.source receipts recorded during a capture render (`s:<id>:<fp>`) — stored
+	freeze_obs: Observation | null;
+	/** FREEZE: og.source receipts recorded during a capture render (`s:<id>:<fp>`) — stored
 	 *  with the entry as the reverse index; null when not capturing. */
-	artifact_tags: string[] | null;
+	freeze_tags: string[] | null;
 };
 const request_als = new AsyncLocalStorage<RequestBag>();
 set_ctx_recorder((key, value) => {
@@ -156,7 +165,29 @@ set_ctx_recorder((key, value) => {
 });
 set_page_recorder((snapshot) => {
 	const bag = request_als.getStore();
-	if (bag) bag.page = snapshot;
+	// MERGE: the routeless document root records url/params/route from the router's seed first;
+	// Region.svelte's data/form/error/status record must not wipe them (and vice versa).
+	if (bag) bag.page = { ...bag.page, ...snapshot };
+});
+// Kit's `__request__` context for every server render root ogygia starts (document root, inline
+// island, deferred endpoint, snippet body): rebuilt from the recorded page snapshot, with the live
+// event filling url/params/route when the snapshot has none (a Kit page: Kit's own values; a
+// deferred endpoint: the endpoint's request — an island rendering in isolation sees no page).
+set_kit_page_reader(() => {
+	const bag = request_als.getStore();
+	const event = (try_get_request_store() as { event?: RequestEvent } | undefined)?.event;
+	if (!bag && !event) return null;
+	const snap = bag?.page ?? {};
+	return {
+		url: snap.url?.href ? new URL(snap.url.href) : event?.url,
+		params: snap.params ?? event?.params ?? {},
+		route: snap.route ?? { id: event?.route.id ?? null },
+		status: snap.status ?? 200,
+		data: snap.data ?? {},
+		form: snap.form ?? null,
+		error: snap.error ?? null,
+		state: {}
+	};
 });
 // LATE REGIONS: a promise `of` registers per request; the id keys the region's slot wrapper AND
 // its later template chunk. The taker DRAINS (the router reads once, post-render).
@@ -174,21 +205,21 @@ set_late_taker(() => {
 	bag.late = null;
 	return list;
 });
-// ARTIFACTS: region capabilities minted during a may-be-stored render go prerender-grade — the
-// region-endpoint mint reads this per-request flag (see artifacts/capture.ts for why it's a seam).
-set_artifact_capture_reader(() => request_als.getStore()?.artifact_capture === true);
-// ARTIFACTS: a flag read during an eligible render personalizes the page — disqualify it, named
+// FREEZE: region capabilities minted during a may-be-stored render go prerender-grade — the
+// region-endpoint mint reads this per-request flag (see freeze/capture.ts for why it's a seam).
+set_freeze_capture_reader(() => request_als.getStore()?.freeze_capture === true);
+// FREEZE: a flag read during an eligible render personalizes the page — disqualify it, named
 // like a cookie read (`flag:<name>`). Priming alone never disqualifies; only actual reads do.
 set_flag_observer((name) => {
-	const obs = request_als.getStore()?.artifact_obs;
+	const obs = request_als.getStore()?.freeze_obs;
 	if (obs && obs.disqualified_by === null) obs.disqualified_by = `flag:${name}`;
 });
-// ARTIFACTS: og.source receipts — every `__og_source`-wrapped call during a capture render files
+// FREEZE: og.source receipts — every `__og_source`-wrapped call during a capture render files
 // its `(id, fingerprint)` tag here; stored with the entry as the reverse index for
-// `artifacts.invalidate(fn, args)`.
+// `freeze.invalidate(fn, args)`.
 set_source_recorder((tag) => {
 	const bag = request_als.getStore();
-	if (bag?.artifact_capture) (bag.artifact_tags ??= []).push(tag);
+	if (bag?.freeze_capture) (bag.freeze_tags ??= []).push(tag);
 });
 // DEVTOOLS: per-request event buffers, keyed off the request bag by a side WeakMap so RequestBag stays
 // pristine (and free) when devtools is off. GC'd with the bag; never a global ring (which would mix
@@ -219,6 +250,38 @@ const RENDER_TIMEOUT_MS = 10_000;
 
 /** Process-local cap on concurrent region SSR (M1 CPU amp under valid MAC). */
 const render_gate = new ConcurrencyGate(REGION_RENDER_CONCURRENCY);
+
+/** Drop Kit's `(group)` segments from a `route.id`, matching the compiler's `normalize_route_id` so
+ *  a request matches the group-stripped `freeze_routes` set. Pure string ops — no regex. */
+function strip_route_groups(id: string): string {
+	const segs = id
+		.split('/')
+		.filter(Boolean)
+		.filter((s) => !(s.startsWith('(') && s.endsWith(')')));
+	return '/' + segs.join('/');
+}
+
+/**
+ * FREEZE opt-in for a request: is this route's effective `freeze` true? Three worlds, in the order
+ * dispatch itself resolves them:
+ * 1. A mounted programmatic `routes()` table that CLAIMS the pathname (it answers inside this
+ *    handle, ahead of any file route): its declared page > layout > table value; claimed but
+ *    undeclared (`null`) = the config `default`.
+ * 2. A Kit PAGE route (`event.route.id` in `freeze_pages`): its compile-time cascaded value —
+ *    membership in `freeze_routes`.
+ * 3. Anything else — an endpoint route (`+server.ts`, catch-all or not) or a request no file
+ *    route claimed (`route.id` null): the config `default`. A null id must NEVER be normalized to
+ *    `/` and matched against the root page's entry — that is a different route.
+ */
+function freeze_route_optin(route_id: string | null | undefined, pathname: string): boolean {
+	const verdict = router_freeze_verdict(pathname);
+	if (typeof verdict === 'boolean') return verdict;
+	if (verdict === undefined && route_id != null) {
+		const id = strip_route_groups(route_id);
+		if (freeze_pages.has(id)) return freeze_routes.has(id);
+	}
+	return freezeConfig?.default === true;
+}
 
 /**
  * Anti-framing + MIME + Referrer on every region response.
@@ -291,31 +354,32 @@ function emit_ogygia_script(subtype: string, escaped_payload: string, marker = '
 	return `<script type="application/ogygia-${subtype}"${marker ? ' ' + marker : ''}>${escaped_payload}</script>`;
 }
 
-// ── ARTIFACTS (render-on-write) ────────────────────────────────────────────────────────────────
+// ── FREEZE (render-on-write) ────────────────────────────────────────────────────────────────
 
 /** Kit's boot declares its deferred map ONLY on pages with pending (streamed) load promises —
  *  verified against @sveltejs/kit 2.70 (render.js: `blocks.push('const deferred = new Map();')`). */
 const KIT_DEFERRED_BOOT_RE = /const deferred = new Map\(\);/;
+const DOUBLE_QUOTE_G = /"/g;
 
 /** Stamped into SERVED-FROM-STORE documents (never the fresh `stored` response): the runtime
  *  reads it so `render: 'live'` lakes treat first mount as a STALE mount and revalidate —
  *  the stored copy is by definition a cached render, exactly what remount:'swr' exists for. */
-const ARTIFACT_DOC_META = '<meta name="ogygia-artifact" content="hit">';
+const FREEZE_DOC_META = '<meta name="ogygia-freeze" content="hit">';
 
-/** Rebuild a Response from a stored artifact. `via` rides a debug header the harness asserts on.
+/** Rebuild a Response from a stored freeze. `via` rides a debug header the harness asserts on.
  *  With the incoming `request`, a matching validator answers 304 — plain-HTTP conditional
  *  requests (RFC 9110), which is what makes an Akamai/CloudFront/browser revalidation of a
- *  stored page cost zero body bytes. Validators live on the ENTRY (artifact level), never in
+ *  stored page cost zero body bytes. Validators live on the ENTRY (freeze level), never in
  *  edge adapters: they are the render's identity, not a CDN dialect. */
-function artifact_response(
-	entry: ArtifactEntry,
+function freeze_response(
+	entry: FreezeEntry,
 	via: 'hit' | 'join' | 'stored',
 	request?: Request
 ): Response {
 	if (entry.kind === 'redirect') {
 		return new Response(null, {
 			status: entry.status,
-			headers: { location: entry.location, 'x-ogygia-artifact': via }
+			headers: { location: entry.location, 'x-ogygia-freeze': via }
 		});
 	}
 	if (request) {
@@ -328,7 +392,7 @@ function artifact_response(
 		const ims_match =
 			!inm && !!ims && !!last_modified && Date.parse(ims) >= Date.parse(last_modified);
 		if (etag_match || ims_match) {
-			const headers: Record<string, string> = { 'x-ogygia-artifact': via };
+			const headers: Record<string, string> = { 'x-ogygia-freeze': via };
 			for (const h of ['etag', 'last-modified', 'cache-control'] as const) {
 				if (entry.headers[h]) headers[h] = entry.headers[h];
 			}
@@ -338,10 +402,10 @@ function artifact_response(
 	// Served-from-store copies carry the doc marker so live regions self-freshen (`stored` = the
 	// render that JUST happened — fresh by definition, no marker).
 	const html =
-		via === 'stored' ? entry.html : entry.html.replace('</head>', ARTIFACT_DOC_META + '</head>');
+		via === 'stored' ? entry.html : entry.html.replace('</head>', FREEZE_DOC_META + '</head>');
 	return new Response(html, {
 		status: 200,
-		headers: { ...entry.headers, 'x-ogygia-artifact': via }
+		headers: { ...entry.headers, 'x-ogygia-freeze': via }
 	});
 }
 
@@ -362,7 +426,7 @@ function stamp_no_store(response: Response): void {
 /** DEV teaching leg: the verdict runs but never stores/serves. Eligible → a `would-store`
  *  header to read in the network panel; refused → ONE console note per path naming the read. */
 const dev_noted_paths = new Set<string>();
-function dev_artifact_note(
+function dev_freeze_note(
 	response: Response,
 	path: string,
 	bag: RequestBag,
@@ -379,7 +443,7 @@ function dev_artifact_note(
 		(bag.deferred && bag.deferred.length ? 'streamed load promises' : null);
 	if (!refusal) {
 		try {
-			response.headers.set('x-ogygia-artifact', 'would-store');
+			response.headers.set('x-ogygia-freeze', 'would-store');
 		} catch {
 			/* immutable headers */
 		}
@@ -388,7 +452,7 @@ function dev_artifact_note(
 	if (dev_noted_paths.has(path)) return;
 	dev_noted_paths.add(path);
 	console.warn(
-		`[ogygia] artifacts: ${path} stays per-request — the render read ${refusal}. ` +
+		`[ogygia] freeze: ${path} stays per-request — the render read ${refusal}. ` +
 			`Personalize inside a render:'deferred' hole to make the shell storable.`
 	);
 }
@@ -398,18 +462,18 @@ function dev_artifact_note(
  * body consumes the original) — or null when the page must stay per-request. Pre-body guards
  * run FIRST so an ineligible response's stream is never consumed.
  */
-async function capture_artifact(
+async function capture_freeze(
 	response: Response,
 	path: string,
 	bag: RequestBag,
 	obs: Observation
-): Promise<{ entry: ArtifactEntry; response: Response } | null> {
-	const ttl = artifactsConfig!.ttl;
+): Promise<{ entry: FreezeEntry; response: Response } | null> {
+	const ttl = freezeConfig!.ttl;
 	// Personalization observed (cookie/header/locals/flag read, or a cookie write) → per-request.
 	if (obs.disqualified_by || obs.wrote_cookie) {
 		if (dev && obs.disqualified_by) {
 			console.warn(
-				`[ogygia] artifacts: ${path} stays per-request — the render read ${obs.disqualified_by}. ` +
+				`[ogygia] freeze: ${path} stays per-request — the render read ${obs.disqualified_by}. ` +
 					`Personalize inside a render:'deferred' hole to make the shell storable.`
 			);
 		}
@@ -419,13 +483,13 @@ async function capture_artifact(
 	if (response.status === 301 || response.status === 308) {
 		const location = response.headers.get('location');
 		if (!location) return null;
-		const entry: ArtifactEntry = {
+		const entry: FreezeEntry = {
 			kind: 'redirect',
 			status: response.status,
 			location,
 			created: Date.now()
 		};
-		await artifact_put(path, entry, { ttl, tags: bag.artifact_tags ?? [] });
+		await freeze_put(path, entry, { ttl, tags: bag.freeze_tags ?? [] });
 		return { entry, response };
 	}
 	if (response.status !== 200) return null;
@@ -441,26 +505,49 @@ async function capture_artifact(
 	// response bakes ONE settle's inline resolve scripts into the copy. Never store it.
 	if (KIT_DEFERRED_BOOT_RE.test(html)) return null;
 	const created = Date.now();
+	// STITCH holes, two modes (freeze/stitch.ts):
+	//  - `stitch="serve"` flips the entry's nature: the SHELL stores (renders once), but every
+	//    serve is per-visitor (holes re-render + splice at ORIGIN). So: no shared-cache headers, no
+	//    edge instructions, no validators — a 304 would skip the re-stitch. Edge policy: BYPASS.
+	//    One serve hole taints the whole page (edge holes on it are served-stitched too).
+	//  - `stitch="edge"` (only): the page stays a NORMAL edge-cacheable entry — its holes are
+	//    rewritten into ESI includes the CDN fills per request (shell from cache, origin renders
+	//    one region), and the entry is stamped `Surrogate-Control: content="ESI/1.0"` so an
+	//    ESI-capable edge processes them. Validators are minted over the REWRITTEN bytes.
+	const modes = stitch_modes(html);
+	const has_serve = modes.serve;
+	const stored_html = !has_serve && modes.edge ? esi_rewrite(html, path) : html;
 	// The verdict's storage instructions: ours first, then each edge's (an edge may grant its own
 	// cache-control — later wins). Merged into the STORED entry too, so hits replay them.
 	// Validators ride the entry: the etag IS the render's identity, `last-modified` its store
 	// time — every later revalidation (Akamai prefresh, browser reload) can answer 304.
-	const headers: Record<string, string> = {
-		'content-type': content_type,
-		'cache-control': `public, s-maxage=${ttl}`,
-		etag: `"${createHash('sha256').update(html).digest('hex').slice(0, 32)}"`,
-		'last-modified': new Date(created).toUTCString()
-	};
-	for (const edge of current_edges()) {
-		try {
-			Object.assign(headers, edge.headers({ url: path, ttl }));
-		} catch {
-			/* an edge adapter must never fail a render */
+	const headers: Record<string, string> = has_serve
+		? { 'content-type': content_type, 'cache-control': 'private, no-store' }
+		: {
+				'content-type': content_type,
+				'cache-control': `public, s-maxage=${ttl}`,
+				etag: `"${createHash('sha256').update(stored_html).digest('hex').slice(0, 32)}"`,
+				'last-modified': new Date(created).toUTCString(),
+				...(modes.edge ? { 'surrogate-control': 'content="ESI/1.0"' } : {})
+			};
+	if (!has_serve) {
+		for (const edge of current_edges()) {
+			try {
+				Object.assign(headers, edge.headers({ url: path, ttl }));
+			} catch {
+				/* an edge adapter must never fail a render */
+			}
 		}
 	}
-	const entry: ArtifactEntry = { kind: 'page', html, headers, created };
-	await artifact_put(path, entry, { ttl, tags: bag.artifact_tags ?? [] });
-	return { entry, response: artifact_response(entry, 'stored') };
+	const entry: FreezeEntry = {
+		kind: 'page',
+		html: stored_html,
+		headers,
+		created,
+		...(has_serve ? { stitch: true } : {})
+	};
+	await freeze_put(path, entry, { ttl, tags: bag.freeze_tags ?? [] });
+	return { entry, response: freeze_response(entry, 'stored') };
 }
 
 class OgygiaHandle {
@@ -524,50 +611,65 @@ class OgygiaHandle {
 		// (deferred/live holes — the per-visitor leg of a CDN-cached page, where flag reads matter
 		// most) all see the same primed decisions. Sync reads after; no-op without a source.
 		await prime_flags({ request: event.request, url: event.url, cookies: event.cookies });
+		// FRAGMENT FEDERATION: a `federate()` in hooks.server.ts serves `/og/fragment/*`, `/og/thaw`,
+		// and the deferred-hole endpoint straight from the handle (no route files). Null = not a
+		// federation path → fall through. Above the freeze/page split: these are their own protocol.
+		const fed_res = await serve_federation(event);
+		if (fed_res) return fed_res;
 		// Compare against the DECODED request pathname so the percent-encoded UTF-8 the browser
 		// sends matches our raw-emoji literal regardless of how Kit hands us the URL. Suffix match
 		// (not `===`) so it works under any `paths.base` without needing the base at all: the request
 		// arrives at `<base>/__ogygia__`, and the endpoint is a leading-slash, clash-safe path.
 		if (!path.endsWith(this.#endpoint)) {
-			// ARTIFACTS read path (render-on-write): GET, no query string, not prerendering. A hit
+			// FREEZE read path (render-on-write): GET, no query string, not prerendering. A hit
 			// serves the stored bytes — Kit, loads, and Svelte never run. A concurrent cold miss
 			// JOINS the in-flight render (the stampede law: N concurrent requests, ONE render).
-			let artifact_settle: ((outcome: FlightOutcome) => void) | null = null;
-			let artifact_obs: Observation | null = null;
-			const artifact_page_request =
-				artifactsConfig !== null &&
+			let freeze_settle: ((outcome: FlightOutcome) => void) | null = null;
+			let freeze_obs: Observation | null = null;
+			const freeze_page_request =
+				freezeConfig !== null &&
 				!building &&
 				event.request.method.toUpperCase() === 'GET' &&
 				event.url.search === '' &&
-				!path.endsWith('__data.json');
-			if (artifact_page_request && !dev) {
-				const hit = await artifact_get(path);
+				!path.endsWith('__data.json') &&
+				freeze_route_optin(event.route?.id, path);
+			if (freeze_page_request && !dev) {
+				const hit = await freeze_get(path);
 				if (hit) {
 					if (DEVTOOLS)
-						record_server_event({ domain: 'server', name: 'server.artifact', op: 'hit', url: path });
-					return artifact_response(hit, 'hit', event.request);
+						record_server_event({ domain: 'server', name: 'server.freeze', op: 'hit', url: path });
+					return hit.kind === 'page' && hit.stitch
+						? await this.#serve_stitched(hit, 'hit', event)
+						: freeze_response(hit, 'hit', event.request);
 				}
 				const flight = join_flight(path);
 				if (flight) {
 					const outcome = await flight;
 					if (outcome.stored) {
 						if (DEVTOOLS)
-							record_server_event({ domain: 'server', name: 'server.artifact', op: 'join', url: path });
-						return artifact_response(outcome.stored, 'join', event.request);
+							record_server_event({
+								domain: 'server',
+								name: 'server.freeze',
+								op: 'join',
+								url: path
+							});
+						return outcome.stored.kind === 'page' && outcome.stored.stitch
+							? await this.#serve_stitched(outcome.stored, 'join', event)
+							: freeze_response(outcome.stored, 'join', event.request);
 					}
 					// The flight proved the page ineligible — render per-request, no new flight
 					// (a chain of flights would serialize renders of a page that never stores).
 				} else {
 					// First cold request: open the flight + observe the render for the verdict.
-					artifact_settle = begin_flight(path);
-					artifact_obs = observe_event(event);
+					freeze_settle = begin_flight(path);
+					freeze_obs = observe_event(event);
 				}
-			} else if (artifact_page_request && dev) {
+			} else if (freeze_page_request && dev) {
 				// DEV: never serve from (or fill) the store — an edited page must always re-render,
 				// HMR truth beats byte reuse. The OBSERVATION still runs so the purity verdict can
-				// teach: eligible pages get an `x-ogygia-artifact: would-store` header, refusals a
+				// teach: eligible pages get an `x-ogygia-freeze: would-store` header, refusals a
 				// once-per-path console note naming the disqualifying read.
-				artifact_obs = observe_event(event);
+				freeze_obs = observe_event(event);
 			}
 			// Flicker fix: on csr=false pages Kit resolves top-level `await query()` calls during
 			// SSR (populating the internal request store's `remote.implicit`) but only serializes
@@ -588,9 +690,9 @@ class OgygiaHandle {
 				late: null,
 				late_next: 0,
 				seed_reducers: null,
-				artifact_capture: artifact_settle !== null,
-				artifact_obs,
-				artifact_tags: artifact_settle !== null ? [] : null
+				freeze_capture: freeze_settle !== null,
+				freeze_obs,
+				freeze_tags: freeze_settle !== null ? [] : null
 			};
 			// DEVTOOLS: attach a request-scoped event buffer via a side WeakMap (keeps RequestBag — and
 			// its cost — untouched when devtools is off; the map + this line DCE out then).
@@ -606,50 +708,54 @@ class OgygiaHandle {
 			} finally {
 				flush_exposures(); // drain queued exposures at the request's end (serverless-safe tail)
 			}
-			// ARTIFACTS: action self-evict — a successful mutation on a page URL evicts its artifact
+			// FREEZE: action self-evict — a successful mutation on a page URL evicts its freeze
 			// (mirrors Kit's actions-invalidate-loads semantics; origin store only, fire-and-forget).
 			if (
-				artifactsConfig !== null &&
+				freezeConfig !== null &&
 				event.request.method.toUpperCase() !== 'GET' &&
 				response.status < 400
 			) {
 				self_evict(path);
 			}
-			// ARTIFACTS write path: verdict + store. A failed flight ALWAYS settles (joiners in the
+			// FREEZE write path: verdict + store. A failed flight ALWAYS settles (joiners in the
 			// stampede must never hang), and a store problem never fails the request.
-			if (artifact_settle) {
+			if (freeze_settle) {
 				try {
-					const stored = await capture_artifact(response, path, bag, artifact_obs!);
-					artifact_settle({ stored: stored?.entry ?? null });
+					const stored = await capture_freeze(response, path, bag, freeze_obs!);
+					freeze_settle({ stored: stored?.entry ?? null });
 					if (DEVTOOLS) {
 						record_server_event(
 							stored
 								? {
 										domain: 'server',
-										name: 'server.artifact',
+										name: 'server.freeze',
 										op: 'stored',
 										url: path,
 										bytes: stored.entry.kind === 'page' ? stored.entry.html.length : 0
 									}
 								: {
 										domain: 'server',
-										name: 'server.artifact',
+										name: 'server.freeze',
 										op: 'skip',
 										url: path,
-										reason: artifact_obs!.disqualified_by ?? 'response-ineligible'
+										reason: freeze_obs!.disqualified_by ?? 'response-ineligible'
 									}
 						);
 					}
-					if (stored) return stored.response;
+					if (stored) {
+						return stored.entry.kind === 'page' && stored.entry.stitch
+							? await this.#serve_stitched(stored.entry, 'stored', event)
+							: stored.response;
+					}
 					// Refused → per-request forever (until inputs change). Stamp `no-store` when the
 					// app set nothing: the verdict's word replaces blanket CDN rules in BOTH directions
 					// (a personal page must never be edge-cached by a property-wide TTL).
 					stamp_no_store(response);
 				} catch {
-					artifact_settle({ stored: null });
+					freeze_settle({ stored: null });
 				}
-			} else if (dev && artifact_obs && artifact_page_request) {
-				dev_artifact_note(response, path, bag, artifact_obs);
+			} else if (dev && freeze_obs && freeze_page_request) {
+				dev_freeze_note(response, path, bag, freeze_obs);
 			}
 			// Stream captured `$page.data` promises into islands (csr=false, real browser load). The doc
 			// — with the pending seed + resolve-global bootstrap — is fully built now (transformPageChunk
@@ -830,7 +936,7 @@ class OgygiaHandle {
 				// a changed stylesheet joins this page only when the plugin derives the same scope
 				// among its owners — two route-group sub-apps never paint each other in dev.
 				const scope = (event?.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
-				head.push(`<meta name="ogygia-dev-scope" content="${scope.replace(/"/g, '')}">`);
+				head.push(`<meta name="ogygia-dev-scope" content="${scope.replace(DOUBLE_QUOTE_G, '')}">`);
 			}
 			if (head.length && html.includes('</head>')) {
 				html = html.replace('</head>', head.join('') + '</head>');
@@ -872,11 +978,11 @@ class OgygiaHandle {
 		// Gated on `has_deferred` so the common (no-promise) seed pays only a cheap probe walk.
 		const has_pending =
 			!!page_snap && (has_deferred(page_snap.data) || has_deferred(page_snap.form));
-		// ARTIFACTS: a page with streaming promises is per-request BY INTENT — even on the
+		// FREEZE: a page with streaming promises is per-request BY INTENT — even on the
 		// non-navigate path where the promises get settled into a complete document (storing
 		// that copy would freeze one settle forever while browser loads stream live).
-		if (has_pending && bag?.artifact_obs && bag.artifact_obs.disqualified_by === null) {
-			bag.artifact_obs.disqualified_by = 'streamed load (promise in page data)';
+		if (has_pending && bag?.freeze_obs && bag.freeze_obs.disqualified_by === null) {
+			bag.freeze_obs.disqualified_by = 'streamed load (promise in page data)';
 		}
 		const can_stream = event?.request.headers.get('sec-fetch-mode') === 'navigate';
 		if (has_pending && can_stream) {
@@ -1177,7 +1283,10 @@ class OgygiaHandle {
 				() =>
 					render_gate.run(async () => {
 						const mod = await load();
-						const rendered = render(mod.default as Component<Record<string, unknown>>, { props });
+						const rendered = render(mod.default as Component<Record<string, unknown>>, {
+							props,
+							context: kit_render_context()
+						});
 						return await Promise.race([
 							Promise.resolve(rendered).then((out) => out.body as string),
 							new Promise<never>((_, rej) =>
@@ -1197,6 +1306,31 @@ class OgygiaHandle {
 	 *  configured) — the same read the MAC verify uses, and the per-user part of the render-cache key. */
 	#region_session(event: RequestEvent): string {
 		return session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
+	}
+
+	/**
+	 * FREEZE serve-time stitching: fill every `stitch` hole in the stored shell with a fresh
+	 * SERVER render — `#render_capability` verifies the hole's own signed MAC and renders with
+	 * THIS request's event, so the visitor's cookies ride in and the splice is personalized in
+	 * the first response. FAIL-OPEN per hole (a null render keeps the fallback + client fetch).
+	 * hit/join serves still carry the doc marker first, so live regions inside keep
+	 * self-freshening.
+	 */
+	async #serve_stitched(
+		entry: Extract<FreezeEntry, { kind: 'page' }>,
+		via: 'hit' | 'join' | 'stored',
+		event: RequestEvent
+	): Promise<Response> {
+		const base =
+			via === 'stored' ? entry.html : entry.html.replace('</head>', FREEZE_DOC_META + '</head>');
+		const html = await stitch_html(
+			base,
+			async (endpoint) => (await this.#render_capability(endpoint, event))?.html ?? null
+		);
+		return new Response(html, {
+			status: 200,
+			headers: { ...entry.headers, 'x-ogygia-freeze': via }
+		});
 	}
 
 	// ── Shared capability core ──────────────────────────────────────────────────────────────────

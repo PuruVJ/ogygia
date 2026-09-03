@@ -1,27 +1,27 @@
 ---
 title: Timing & nesting
-summary: The schedules that decide when JS runs or HTML arrives, and the one rule that governs islands inside islands.
+summary: The schedules that decide when JS runs or HTML arrives, and the one rule for islands inside islands.
 related:
   - regions/client-islands
   - regions/server-islands
   - regions/lakes
 ---
 
-Two small systems cover a lot of ground: **when** a region wakes, and **what happens** when regions nest. Both are deliberately tiny.
+Two small systems cover much ground: **when** a region wakes, and **what occurs** when regions nest. Both are small by intent.
 
 ## The schedules
 
-One key, `wake`, carries the schedule for both islands (`wake`) and server islands (`render: 'deferred'`), so you learn the words once:
+One key, `wake`, carries the schedule for islands (`wake`) and for server islands (`render: 'deferred'`). Thus you learn the words one time:
 
 | Value | When it fires | Good for |
 | --- | --- | --- |
-| `load` | Immediately after the runtime boots | Above-the-fold, interactive-now UI |
-| `idle` | On `requestIdleCallback` | Nice-to-have widgets that can wait |
-| `visible` | When scrolled into the viewport | Anything below the fold |
-| `interaction` | On the first pointer / key / focus inside it (islands only) | Anything most visitors never touch |
-| `'(media query)'` | When the CSS media query matches | Mobile-only or desktop-only UI |
+| `load` | Immediately after the runtime starts | UI above the fold that must be interactive now |
+| `idle` | On `requestIdleCallback` | Widgets that can wait |
+| `visible` | When scrolled into the viewport | All content below the fold |
+| `interaction` | On the first pointer, key, or focus inside it (islands only) | UI that most visitors never touch |
+| `'(media query)'` | When the CSS media query matches | UI for mobile only or desktop only |
 
-On an **island** (`render` defaults to `static`) `wake` says *when JS runs*. On a **server island** (`render: 'deferred'`) `wake` says *when the HTML is fetched*. Same words either way. (`interaction` is islands-only: fetching HTML on interaction would mean interacting with a fallback.)
+On an **island** (`render` defaults to `static`), `wake` says *when the JS runs*. On a **server island** (`render: 'deferred'`), `wake` says *when the HTML is fetched*. The words are the same for both. `interaction` is for islands only. A fetch on interaction would mean interaction with a fallback.
 
 ```svelte
 <script>
@@ -32,7 +32,7 @@ On an **island** (`render` defaults to `static`) `wake` says *when JS runs*. On 
 </script>
 ```
 
-Each of the four below is a real island using exactly that schedule:
+Each of the four demos below is a real island with that schedule:
 
 <script>
   import LoadLive from '$lib/demos/LoadLive.svelte' with { wake: 'load' };
@@ -48,22 +48,15 @@ Each of the four below is a real island using exactly that schedule:
   <div class="doc-demo"><MediaLive /></div>
 </div>
 
-### `interaction`: JS only for what people actually use
+### `interaction`: JS only for what people use
 
-`wake: 'interaction'` is the laziest schedule: the island ships **zero JS until someone uses
-it**. A pointer press, a keystroke, or focus landing inside the region wakes it. The
-interaction that woke it is not lost:
+`wake: 'interaction'` is the laziest schedule. The island ships **zero JS until a person uses it**. A pointer press, a keystroke, or focus inside the region wakes it. The interaction that woke it is not lost:
 
-- **The first click counts.** It is captured while the island wakes and replayed the moment it is
-  live. A button, checkbox, or link activates exactly once.
-- **Typing survives.** Characters land in the field natively (it is real HTML); after hydration
-  the typed value, selection, and focus are restored and `bind:` syncs up.
-- **Hover warms it.** The pointer entering the region prefetches the chunk, so by the time the
-  press lands the wake is usually instant.
+- **The first click counts.** ogygia captures it while the island wakes, and replays it when the island is live. A button, a checkbox, or a link activates exactly one time.
+- **Typed text stays.** Characters land in the field natively, because it is real HTML. After hydration, the typed value, the selection, and the focus are restored, and `bind:` syncs.
+- **Hover warms it.** When the pointer enters the region, the chunk prefetches. Thus, when the press lands, the wake is usually immediate.
 
-One caveat: the replayed first event is not a *trusted* browser gesture, so gesture-gated
-APIs (`window.open`, clipboard, fullscreen) will be blocked if called from it. A component can
-detect this and adapt:
+One caution: the replayed first event is not a *trusted* browser gesture. Gesture-gated APIs (`window.open`, clipboard, fullscreen) are blocked if called from it. A component can find this condition and adapt:
 
 ```svelte
 <script>
@@ -79,12 +72,11 @@ detect this and adapt:
 {/if}
 ```
 
-Don't put gesture-gated actions behind `interaction`; everything else (counters, carts, menus,
-forms, editors) just works, and costs nothing until it is touched.
+Do not put gesture-gated actions behind `interaction`. All other UI (counters, carts, menus, forms, editors) operates correctly, and costs nothing until a person touches it.
 
 ### Tuning `visible`
 
-`visible` uses an IntersectionObserver. Widen its trigger margin per-import, or set a default for the whole app:
+`visible` uses an IntersectionObserver. Make its trigger margin wider per import, or set a default for the full app:
 
 ```svelte
 import Chart from '$lib/Chart.svelte' with { wake: 'visible', margin: '200px' };
@@ -97,23 +89,23 @@ ogygia({ regions: { visible: { margin: '0px' } } });
 
 ### How the bytes arrive
 
-Waking decides when JS *runs*; the *bytes* are prepaid in the background so a wake never stalls on a cold fetch. The server emits `<link rel="modulepreload">` for each island's full static dependency closure — the facade, every chunk it imports (transitively), and their CSS — at a priority that matches the schedule:
+The wake decides when JS *runs*. The *bytes* download in the background before that. Thus a wake never stops on a cold fetch. The server emits `<link rel="modulepreload">` for the full static dependency closure of each island: the facade, each chunk it imports (transitively), and their CSS. The priority matches the schedule:
 
-- **`load`** islands preload at normal priority — their JS is needed at first paint.
-- **`visible`** and **`interaction`** islands preload at **`fetchpriority="low"`**: the bytes ride in the background, never contending with the runtime, `load` islands, or the LCP image, so the wake (scroll-in, or the tap / hover) evaluates from the warm module map instead of fetching cold.
-- **media-query** wakes preload nothing — the server can't know the viewport, so downloading would be a blind bet; the chunk fetches when the query matches.
+- **`load`** islands preload at normal priority. Their JS is necessary at first paint.
+- **`visible`** and **`interaction`** islands preload at **`fetchpriority="low"`**. The bytes ride in the background. They do not compete with the runtime, the `load` islands, or the LCP image. Thus the wake (scroll-in, tap, hover) evaluates from the warm module map. It does not fetch cold.
+- **media-query** wakes preload nothing. The server cannot know the viewport. A download would be a blind bet. The chunk fetches when the query matches.
 
-A chunk shared by two islands takes the **highest** priority any of them asked for, so a low-priority background hint can never demote a chunk a `load` island needs at first paint.
+A chunk shared by two islands takes the **highest** priority that one of them asked for. Thus a low-priority hint can never demote a chunk that a `load` island needs at first paint.
 
 ## Deferred content that is also interactive
 
-A `render: 'deferred'` region is content only: it never ships JS. On it, `wake` is the *fetch* schedule (below, the hole waits until it scrolls into view before it even costs a request):
+A `render: 'deferred'` region is content only. It never ships JS. On it, `wake` is the *fetch* schedule. In the example below, the hole waits until it scrolls into view. Before that, it does not cost a request:
 
 ```svelte
 import Panel from '$lib/Panel.svelte' with { render: 'deferred', wake: 'visible' };
 ```
 
-When a fetched hole *also* needs interactivity, you do not stack two schedules on one import. You nest a normal `wake` island inside the server island's own component. `render` decides how the HTML arrives; `wake` on the inner island decides when its JS runs. See [Server islands → nesting an island](/docs/regions/server-islands).
+Sometimes a fetched hole *also* needs interactivity. Do not stack two schedules on one import. Nest a normal `wake` island inside the component of the server island. `render` decides how the HTML arrives. `wake` on the inner island decides when its JS runs. See [Server islands → nesting an island](/docs/regions/server-islands).
 
 ## Nesting: one rule
 
@@ -122,8 +114,8 @@ Walk up the tree. The **closest marked parent decides**.
 | Nesting | What happens |
 | --- | --- |
 | Island on the page | Gets its own JS |
-| Island inside an island | Shares the parent's JS: one interactive tree, not two |
-| Lake inside an island | Stays static HTML; the lake's JS never ships |
+| Island inside an island | Shares the JS of its parent: one interactive tree, not two |
+| Lake inside an island | Stays static HTML. The JS of the lake never ships |
 | Island inside a lake | Gets its own JS again |
 | Server island inside an island | Renders inline with the parent (`render: 'deferred'` ignored) |
 
@@ -131,13 +123,13 @@ Walk up the tree. The **closest marked parent decides**.
 page → island → lake → island → …
 ```
 
-Because an island-in-an-island shares one tree, a child island's schedule is ignored: it hydrates with its parent. Dev warns when it drops a redundant strategy.
+An island in an island shares one tree. Thus the schedule of the child is ignored. It hydrates with its parent. Dev warns when it drops an unnecessary strategy.
 
 ## Do / don't
 
-- **Do** default below-the-fold islands to `visible`. It is free performance.
-- **Do** use `idle` for anything the user will not touch immediately.
-- **Don't** try to make a `render: 'deferred'` region interactive on its own. It ships no JS. Nest a `wake` island inside it instead.
+- **Do** set islands below the fold to `visible`. This performance gain has no cost.
+- **Do** use `idle` for UI that the user does not touch immediately.
+- **Don't** try to make a `render: 'deferred'` region interactive alone. It ships no JS. Nest a `wake` island inside it.
 
 
 <style>

@@ -28,6 +28,12 @@ import {
 	transforms
 } from '@sveltejs/sv-utils';
 
+// ── regexes
+const JSON_INDENT_RE = /\n(\t| +)/;
+const TRAILING_LFS_RE = /\n*$/;
+const BACKSLASH_G = /\\/g;
+const CONTENT_SHELL_IMPORT_RE = /from ['"]ogygia\/content(\/docs-shell)?['"]/;
+
 const require = createRequire(import.meta.url);
 // This CLI ships inside `ogygia`, so our own version IS the version to pin the user's dependency to.
 const { version } = require('../package.json') as { version: string };
@@ -175,7 +181,7 @@ function preflight(): Preflight {
 function addOgygiaDep(pf: Preflight): void {
 	if (!pf.pkg.dependencies?.['ogygia']) {
 		pf.pkg.dependencies = { ...(pf.pkg.dependencies ?? {}), ogygia: `^${version}` };
-		const indent = /\n(\t| +)/.exec(pf.pkgRaw)?.[1] ?? '\t';
+		const indent = JSON_INDENT_RE.exec(pf.pkgRaw)?.[1] ?? '\t';
 		saveFile(cwd, 'package.json', JSON.stringify(pf.pkg, null, indent) + '\n');
 	}
 }
@@ -327,7 +333,7 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 		if (c.includes('.ogygia-keep-client')) return c;
 		const line =
 			'# ogygia build-time keep-client route (auto-removed; only survives a crashed build)\n**/.ogygia-keep-client/\n';
-		return c.trim() ? c.replace(/\n*$/, '\n\n') + line : line;
+		return c.trim() ? c.replace(TRAILING_LFS_RE, '\n\n') + line : line;
 	});
 
 	// 5. Ambient types — one reference line so `svelte-check` / `tsc` resolve the `virtual:ogygia/*`
@@ -336,7 +342,8 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 		editFile('src/ogygia.d.ts', (c) =>
 			c.includes('ogygia/types')
 				? c
-				: (c.trim() ? c.replace(/\n*$/, '\n\n') : '') + '/// <reference types="ogygia/types" />\n'
+				: (c.trim() ? c.replace(TRAILING_LFS_RE, '\n\n') : '') +
+					'/// <reference types="ogygia/types" />\n'
 		);
 		stdout.write(`  ${ok('✓')} src/ogygia.d.ts ${dim('(types)')}\n`);
 	}
@@ -474,7 +481,7 @@ async function site_init(): Promise<void> {
 
 	// The layout — the ONE file you own. Its DIRECTORY is where the docs mount; a nested layout
 	// (e.g. src/routes/docs/+layout.svelte) mounts the site under that URL prefix.
-	const layoutRel = (flagLayout || 'src/routes/+layout.svelte').replace(/\\/g, '/');
+	const layoutRel = (flagLayout || 'src/routes/+layout.svelte').replace(BACKSLASH_G, '/');
 	if (!layoutRel.startsWith('src/routes/') || path.basename(layoutRel) !== '+layout.svelte') {
 		die(`--layout must be a +layout.svelte under src/routes (got ${strong(layoutRel)}).`);
 	}
@@ -644,7 +651,7 @@ export const prerender = true;
 	const layoutExisted = fileExists(cwd, layoutRel);
 	const layoutIsOurs =
 		layoutExisted &&
-		/from ['"]ogygia\/content(\/docs-shell)?['"]/.test(loadFile(cwd, layoutRel)) &&
+		CONTENT_SHELL_IMPORT_RE.test(loadFile(cwd, layoutRel)) &&
 		loadFile(cwd, layoutRel).includes('Shell');
 
 	if (!layoutExisted || force) {
@@ -806,8 +813,8 @@ function keys_mint(): void {
 	);
 	process.stderr.write(
 		`\n${ok('✓')} minted an Ed25519 pair for caller ${strong(name)}\n` +
-			`  ${dim('SIGNING (private)')} — stays with the caller; hand it to ${accent('client(origin, { sign })')}\n` +
-			`  ${dim('PUBLIC')} — give to the apps it calls; list it in ${accent('expose(router, { verify: { publicKeys } })')}\n` +
+			`  ${dim('SIGNING (private)')} — stays with this app; pass it as ${accent('federate({ key })')}\n` +
+			`  ${dim('PUBLIC')} — give to every app it talks to; list it as ${accent('federate({ peers: { <name>: { key } } })')}\n` +
 			`  keep the private key in your secret store — never commit it\n`
 	);
 }
