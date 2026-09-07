@@ -83,7 +83,8 @@ import {
 	V_ROUTER_CSS,
 	V_ROUTE_CSR,
 	V_FREEZE_ROUTES,
-	RESOLVED
+	RESOLVED,
+	V_SERVER_MANIFEST
 } from '../compiler/ids.js';
 
 // Kit's generated CLIENT app entry — dev serves `generated/client/app.js`, build inputs
@@ -1053,6 +1054,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						this.emitFile(chunk);
 					}
 				});
+				// DEV: a host edit dropped its server islands from the manifest the handle already
+				// re-imported (empty of them); this transform just registered them again — invalidate the
+				// manifest once more so the NEXT endpoint request sees the ids (driver: server_manifest_stale).
+				if (is_dev && vite_server && compiler.server_manifest_stale()) {
+					invalidate_module_id(vite_server, RESOLVED(V_SERVER_MANIFEST));
+				}
 				if (result) return result as { code: string; map: Rolldown.SourceMapInput | null };
 				// The driver saw nothing to do, but the edge rewrite above must still ship.
 				return source === code ? null : { code: source, map: null };

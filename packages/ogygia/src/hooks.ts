@@ -1337,6 +1337,9 @@ class OgygiaHandle {
 			// `keepFallback()` ends a render on purpose: the page's fallback is right for this
 			// visitor. Carried as a marker string so the cache/batch/endpoint seams stay string-typed.
 			if (is_keep_fallback(e)) return KEEP_FALLBACK_HTML;
+			// The response is an opaque 500 ("Region render failed"); the reason belongs in the dev
+			// terminal — a hole that throws only on the dev server is otherwise a blind hunt.
+			if (import.meta.env.DEV) console.warn('[ogygia] region render failed:', e);
 			return null;
 		}
 	}
@@ -1424,7 +1427,8 @@ class OgygiaHandle {
 			props = devalue.parse(B64Url.decode(payload), {
 				[REF_WIRE_KEY]: ref_reviver(false)
 			} as Parameters<typeof devalue.parse>[1]);
-		} catch {
+		} catch (e) {
+			if (import.meta.env.DEV) console.warn('[ogygia] region endpoint 403: island module load / props decode failed', e);
 			return null;
 		}
 		if (props === null || typeof props !== 'object' || Array.isArray(props)) return null;
@@ -1527,6 +1531,9 @@ class OgygiaHandle {
 		// Verify (session-bound) before consulting the manifest — bad MAC never distinguishes unknown
 		// vs known id.
 		if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) {
+			// Server-side only (the response stays an opaque 403 — SEC-01): a dev seeing every hole
+			// fail deserves the reason in the terminal.
+			if (import.meta.env.DEV) console.warn(`[ogygia] region endpoint 403: bad signature for id "${id}"`);
 			return region_response('Forbidden', { status: 403 });
 		}
 
@@ -1540,6 +1547,10 @@ class OgygiaHandle {
 		}
 
 		if (!Object.hasOwn(island_modules, id)) {
+			if (import.meta.env.DEV)
+				console.warn(
+					`[ogygia] region endpoint 403: id "${id}" is not in the server manifest (${Object.keys(island_modules).length} known)`
+				);
 			return region_response('Forbidden', { status: 403 });
 		}
 		const load = island_modules[id];

@@ -248,9 +248,38 @@ export function svelteHasStyle(source: string) {
 	return STYLE_OPEN.test(source);
 }
 
+/**
+ * Unwrap `:global(SELECTOR)` → `SELECTOR`. `:global(...)` is a Svelte construct, not CSS — left
+ * literal in a raw style body (the fallback below never runs the Svelte compiler) the browser drops
+ * the whole rule. This fallback already ships styles UNSCOPED, so a global-wrapped selector is just
+ * the selector. Balanced-paren scan so `:global(x:not(.y))` unwraps to `x:not(.y)`, not `x:not(.y`.
+ */
+function unwrap_global(css: string) {
+	let out = '';
+	let i = 0;
+	while (i < css.length) {
+		const at = css.indexOf(':global(', i);
+		if (at === -1) {
+			out += css.slice(i);
+			break;
+		}
+		out += css.slice(i, at);
+		let depth = 1;
+		let j = at + 8; // past ':global('
+		for (; j < css.length && depth > 0; j++) {
+			if (css[j] === '(') depth++;
+			else if (css[j] === ')') depth--;
+		}
+		// css.slice(inner) excludes the closing ')' consumed by the loop.
+		out += css.slice(at + 8, j - 1);
+		i = j;
+	}
+	return out;
+}
+
 /** @param source */
 function extractRawStyleBodies(source: string) {
-	return [...source.matchAll(STYLE_BODY)].map((m) => m[1]).join('\n');
+	return unwrap_global([...source.matchAll(STYLE_BODY)].map((m) => m[1]).join('\n'));
 }
 
 /**

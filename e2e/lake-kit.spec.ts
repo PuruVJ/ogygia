@@ -21,6 +21,9 @@ const LAKE_STATIC_RE = /data-lake-static/;
 // The header island inside the lake as a REAL region (its shell precedes its markup), not inline.
 const HEADER_REGION_RE = /<ogygia-region entry="[^"]+" wake="load"[^>]*>[^<]*(?:<!--[^>]*-->)*<header data-chrome-header/;
 const HOLE_RE = /<ogygia-region entry="[^"]*" render="defer"/;
+// The Kept hole's fallback holds a `wake: 'interaction'` island — it must be emitted as its own
+// region INSIDE the hole's shell (a fallback belongs to the page, not to the server island).
+const KEPT_FALLBACK_REGION_RE = /render="defer"[^>]*>(?:<!--[^>]*-->)*<ogygia-region entry="[^"]+" wake="interaction"[^>]*>(?:<!--[^>]*-->)*<button data-kept-btn/;
 const HYDRATION_MISMATCH_RE = /hydration_mismatch/;
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
@@ -60,8 +63,13 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 		check('header island inside the lake is a REAL region (not inlined)', HEADER_REGION_RE.test(html));
 		check('greeting hole inside the lake is a real deferred region', HOLE_RE.test(html));
 		check(
-			'lake + header + hole: ≥ 3 regions',
-			(html.match(REGION_TAG_G_RE) ?? []).length >= 3,
+			'island inside a hole’s ogygiaFallback is a REAL region (was flattened inline before)',
+			KEPT_FALLBACK_REGION_RE.test(html)
+		);
+		check('the kept hole’s own markup never reaches the page', !html.includes('data-kept-never'));
+		check(
+			'lake + header + hole + kept hole + its fallback island: ≥ 5 regions',
+			(html.match(REGION_TAG_G_RE) ?? []).length >= 5,
 			`count=${(html.match(REGION_TAG_G_RE) ?? []).length}`
 		);
 		check('runtime shipped (the lake’s regions are ours to wake)', RUNTIME_SCRIPT_RE.test(html));
@@ -80,6 +88,12 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 		await page.goto('/lake-kit/kit/', { waitUntil: 'networkidle' });
 		await sleep(500);
 
+		check(
+			'lake scoped CSS linked on the csr=true page (its own chunk never loads — the compiler must link it)',
+			(await page
+				.locator('[data-lake-static]')
+				.evaluate((el) => getComputedStyle(el).letterSpacing)) === '7px'
+		);
 		check('lake SURVIVED Kit hydration (did not vanish)', (await page.locator('[data-lake-static]').count()) === 1);
 		check('still exactly one frozen region', (await page.locator('ogygia-region[wake="none"]').count()) === 1);
 		check(
@@ -100,6 +114,13 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 		check('header island interactive', (await hbtn.textContent())!.includes('h:1'));
 		check('greeting hole fetched and swapped in', (await page.locator('[data-server-greeting]').count()) === 1);
 		check('hole fallback gone', (await page.locator('[data-lake-fallback]').count()) === 0);
+		// The kept hole answered keepFallback(): its fallback stands, and the interaction island INSIDE
+		// that fallback must still be a live region — one click hydrates it and replays (k:1).
+		check('kept hole marked kept', (await page.locator('ogygia-region[data-og-kept]').count()) === 1);
+		const keptBtn = page.locator('[data-kept-btn]');
+		await keptBtn.click();
+		await sleep(300); // interaction wake: chunk load + replay one frame after hydration
+		check('island inside the KEPT fallback woke on interaction', (await keptBtn.textContent())!.includes('k:1'));
 		const kbtn = page.locator('[data-kit-btn]');
 		await kbtn.click();
 		check('Kit’s own client is alive next to the lake', (await kbtn.textContent())!.includes('kit:1'));
@@ -117,10 +138,25 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 		page.on('pageerror', (e) => errs.push(e.message));
 		await page.goto('/lake-kit/', { waitUntil: 'networkidle' });
 		await sleep(500);
+		// The regression this suite guards: this layout also serves a csr=true page, which forces its
+		// chrome lake onto the real-wrapper client leg. That leg still stubs the lake's inner to
+		// render-nothing, so its scoped CSS reaches the client graph ONLY via the compiler's fouc-css
+		// link — which was gated to the stub leg and dropped here. Read the value back to prove it holds.
+		check(
+			'csr=false: lake scoped CSS linked (letter-spacing applied, not dropped with the lake chunk)',
+			(await page
+				.locator('[data-lake-static]')
+				.evaluate((el) => getComputedStyle(el).letterSpacing)) === '7px'
+		);
 		const hbtn = page.locator('[data-chrome-header] button');
 		await hbtn.click();
 		check('csr=false: header island interactive', (await hbtn.textContent())!.includes('h:1'));
 		check('csr=false: greeting hole filled', (await page.locator('[data-server-greeting]').count()) === 1);
+		check('csr=false: kept hole marked kept', (await page.locator('ogygia-region[data-og-kept]').count()) === 1);
+		const keptBtn = page.locator('[data-kept-btn]');
+		await keptBtn.click();
+		await sleep(300);
+		check('csr=false: island inside the KEPT fallback woke', (await keptBtn.textContent())!.includes('k:1'));
 		check('csr=false: no page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 	});
 

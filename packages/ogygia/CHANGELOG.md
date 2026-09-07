@@ -24,11 +24,12 @@ Found while rebuilding a large production site header (static mega menu, per-vis
   anonymous visitors on csr=false AND csr=true pages. A lake mounted fresh during a Kit
   client-side navigation has no server HTML and renders empty (dev warns).
 - **On-demand server islands: `render: 'deferred'` + `wake: 'interaction'`.** The hole fetches
-  nothing until the visitor shows intent inside it (pointer enters, focus lands, a touch or a
-  key arrives), then fetches once and **morphs** the HTML in — whatever the visitor already
-  opened in the static fallback stays open. Hover is the trigger, not a warm, so a mega menu
-  that opens on hover has its server-rendered L3/L4 by the time the pointer reaches them; the
-  initial HTML carries only the fallback (the same menu, L1/L2). No click capture or replay (an
+  nothing until the visitor shows intent inside it — the first hover (`pointerover`, which fires
+  before any click and bubbles up through the boxless `display:contents` wrapper from whatever
+  child the pointer moves over), focus, touch, or key — then fetches once and **morphs** the HTML
+  in, so whatever the visitor already opened in the static fallback stays open. Hover is the
+  trigger, so a mega menu has its server-rendered L3/L4 by the time the pointer reaches a submenu;
+  the initial HTML carries only the fallback (the same menu, L1/L2). No click capture or replay (an
   island's `interaction` wake keeps that); the fallback handles the gesture natively.
 - **`keepFallback()`** from `'ogygia'`: a server island's answer that the page's `ogygiaFallback`
   is right for this visitor. The endpoint replies `204 No Content` (a batch parcel carries a
@@ -45,6 +46,15 @@ Found while rebuilding a large production site header (static mega menu, per-vis
 
 ### Fixed
 
+- **Dev: every server island answered 403 after one HMR edit of its host file, until the dev
+  server was restarted.** Editing a host dropped its islands from the registry and invalidated
+  `virtual:ogygia/server-manifest`; Kit re-imported the handle before the page transform
+  re-registered them, so the handle held a manifest without those ids — and nothing invalidated it
+  again. The transform now re-invalidates the manifest when it registers a server-island id the last
+  emit lacked. Only holes hosted by the edited file alone were affected (shared ids are refcounted),
+  which is exactly a site header hosting all of its personal holes. The handle now also logs the
+  reason for a region 403 in dev (bad signature / unknown id / module load or props decode failure);
+  the response stays an opaque 403.
 - `$app/stores` `$page` threw "Region render failed" inside every ogygia render root (server
   islands, inline islands, snippet captures): the render context now carries Kit's `__svelte__`
   stores key next to `__request__`.
@@ -57,6 +67,27 @@ Found while rebuilding a large production site header (static mega menu, per-vis
   that derives its locale from the URL matches the page that placed it.
 - `wake: 'interaction'` replays the waking click on the next frame and into the deepest
   composed-path target, so handlers inside web-component shadow roots receive it.
+- A `wake: 'none'` lake in a `+layout.svelte` shipped its scoped CSS on no stylesheet — the
+  layout rendered unstyled — when the app also had a `csr = true` route. That case forces the
+  layout's chrome onto the real-wrapper client leg (so it can hydrate under a csr=true child),
+  and the fouc-css link that carries a lake's CSS to the client graph was gated to the other
+  (stub) leg. A lake's inner is client-stubbed on EVERY client leg, so it now links its CSS on
+  both. (The per-file transform memo also now keys on `ssr`, since the two legs now differ.)
+- The fouc-css raw fallback shipped INVALID CSS. When a component's scoped stylesheet is linked
+  without its JS (a lake, a `csr=false` island), ogygia recompiles just its `<style>`; if that
+  compile throws (a template reads a script-declared name after the `<script>` is stripped) it
+  falls back to the raw `<style>` bodies — which still carried literal `:global(...)`, a Svelte
+  construct the browser drops, taking the whole rule with it. The fallback now unwraps
+  `:global(sel)` to `sel` (balanced-paren, so `:global(x:not(.y))` survives). Fixes a header
+  lake silently losing its `:global(qds-web-header…)` height reservation.
+- An island authored inside a server island's `ogygiaFallback` was flattened to a plain inline
+  component (the server island marks its subtree nested; the fallback rendered inside it). Fine
+  while the hole replaces the fallback, wrong once `keepFallback()` KEEPS it: a login button
+  (`wake: 'interaction'`) in an anonymous actions fallback never woke — no region, no dropdown, no
+  sign-in — for every anonymous visitor. The fallback now renders through the same nested-context
+  reset an island's slot children get, so islands inside it emit their real `<ogygia-region>` and
+  wake on their own; a kept fallback stays interactive. Adds no wrapper element and no anchors
+  beyond a standard block, verified under Kit hydration (lake-kit e2e).
 
 ## [0.8.0] - 2026-09-03
 

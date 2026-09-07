@@ -420,6 +420,37 @@ describe('lakes', () => {
 		expect(r.code).toMatch(/virtual:ogygia\/wrapper\//);
 	});
 
+	// Regression: a lake's inner is client-stubbed to render-nothing on EVERY client leg, so its
+	// scoped CSS never rides the binding — it must always get the fouc-css side-effect link on a
+	// client build, INCLUDING the real-wrapper leg (linkVirtualIsland: true) a layout that also
+	// serves a csr=true page is forced onto. That leg once skipped it and the lake shipped unstyled.
+	const L_FOUC = foucCssVirtualId('src/routes/L.svelte');
+	test('lake on the real-wrapper client leg (linkVirtualIsland: true) still links its CSS (fouc-css)', () => {
+		const r = run(
+			wrap(`import L from './L.svelte' with { wake: 'none' };`, '<L />'),
+			makeCtx({ linkVirtualIsland: true, ssr: false })
+		)!;
+		// real wrapper (this leg can hydrate under a csr=true child) AND the CSS link.
+		expect(r.code).toMatch(/virtual:ogygia\/wrapper\//);
+		expect(r.code).toContain(L_FOUC);
+	});
+
+	test('lake on the stub client leg (linkVirtualIsland: false) links its CSS too', () => {
+		const r = run(
+			wrap(`import L from './L.svelte' with { wake: 'none' };`, '<L />'),
+			makeCtx({ linkVirtualIsland: false, ssr: false })
+		)!;
+		expect(r.code).toContain(L_FOUC);
+	});
+
+	test('lake on the SSR build does NOT link fouc-css (the real component renders + collects CSS)', () => {
+		const r = run(
+			wrap(`import L from './L.svelte' with { wake: 'none' };`, '<L />'),
+			makeCtx({ linkVirtualIsland: true, ssr: true })
+		)!;
+		expect(r.code).not.toContain('virtual:ogygia/fouc-css/');
+	});
+
 	test('render: live gets a server entry module (baked + revalidate)', () => {
 		const r = run(
 			wrap(`import L from './L.svelte' with { preset: 'liveBox' };`, '<L />'),
@@ -588,15 +619,6 @@ describe('interaction schedule', () => {
 		expect(r.islands[0].wrapperSource).toMatch(/__mode="server"/);
 		expect(r.islands[0].wrapperSource).toMatch(/__defer=\{?"interaction"\}?/);
 		expect(r.islands[0].wrapperSource).not.toMatch(/__margin/);
-	});
-
-	test('an on-demand hole takes its INTENT RADIUS from a preset `margin` (inline margin stays config-only)', () => {
-		const ctx = makeCtx({
-			presets: { menu: { render: 'deferred', wake: 'interaction', margin: '120px' } }
-		});
-		const r = run(wrap(`import G from './G.svelte' with { preset: 'menu' };`, '<G />'), ctx)!;
-		expect(r.islands[0].wrapperSource).toMatch(/__defer=\{?"interaction"\}?/);
-		expect(r.islands[0].wrapperSource).toMatch(/__margin=\{"120px"\}/);
 	});
 
 	test("render: deferred + wake: 'none' is still rejected (a hole must fetch)", () => {

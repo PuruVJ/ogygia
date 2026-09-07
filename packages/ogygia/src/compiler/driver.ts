@@ -63,7 +63,7 @@ import {
 	kit_transport_module,
 	source_crosses_wire
 } from './link/transport.js';
-import { server_manifest_module } from './link/server-manifest.js';
+import { server_manifest_module, server_island_ids } from './link/server-manifest.js';
 import { manifest_module } from './link/manifest.js';
 import { dev_hmr_client_source } from './dev/dev-hmr.js';
 import { same_module_path, island_vpaths_affected_by_file } from './dev/hmr.js';
@@ -184,6 +184,29 @@ export class Compiler {
 	readonly dollar_hoists = new Map<string, string>();
 	/** `prescan()` is once-per-session — guarded so the adapter can call it from any hook. */
 	#scanned = false;
+
+	/**
+	 * DEV: the server-island ids the last emitted `virtual:ogygia/server-manifest` carried. A HOST edit
+	 * drops its islands' rows (`invalidate_for_file`) and invalidates the manifest; Kit re-imports the
+	 * handle BEFORE the page transform re-registers them, so that manifest is emitted WITHOUT the ids —
+	 * and nothing re-invalidated it afterwards: every hole answered 403 until a restart. The adapter
+	 * asks `server_manifest_stale()` after each transform and invalidates again when a registered
+	 * server id is missing from this set. `null` until the first emit (nothing to compare).
+	 */
+	#emitted_server_ids: Set<string> | null = null;
+
+	/** True (once) when a server island registered since the last manifest emit — re-invalidate it. */
+	server_manifest_stale(): boolean {
+		const emitted = this.#emitted_server_ids;
+		if (!emitted) return false;
+		for (const id of server_island_ids(this.program)) {
+			if (!emitted.has(id)) {
+				this.#emitted_server_ids = null; // the next emit records the fresh set
+				return true;
+			}
+		}
+		return false;
+	}
 	/** Hosts already warned about a mis-placed `content()` collection (warn once per file). */
 	readonly #content_placement_warned = new Set<string>();
 	#ctx: CompileCtx | null = null;
@@ -260,7 +283,7 @@ export class Compiler {
 	/**
 	 * Lower one file: run the fused parse ▸ analyze ▸ lower ▸ emit front-end and register nothing —
 	 * the caller registers the returned descriptors into the `Program`. Memoized per
-	 * `(id, linkVirtual, routeCsr)` triple, content-gated on the source.
+	 * `(id, ssr, linkVirtual, routeCsr)`, content-gated on the source.
 	 */
 	transform(source: string, id: string, opts: { ssr?: boolean; linkVirtual?: boolean } = {}) {
 		const ctx = this.#ctx!;
@@ -297,7 +320,11 @@ export class Compiler {
 			: routeCsrIsFalse(id, routesDir)
 				? false
 				: undefined;
-		const cache_key = `${id}\0${link_virtual ? '1' : '0'}\0${route_csr === true ? 't' : route_csr === false ? 'f' : 'n'}`;
+		// `ssr` joins the key because transformHost output legitimately differs by pass — the client
+		// build side-effect-imports fouc-css for a lake binding (its scoped CSS is on no client chunk),
+		// the SSR build must not. Without `ssr` here a layout+csr=true host (where ssr and client share
+		// `link_virtual`) would reuse the SSR result on the client and drop that CSS link.
+		const cache_key = `${id}\0${ssr ? 's' : 'c'}\0${link_virtual ? '1' : '0'}\0${route_csr === true ? 't' : route_csr === false ? 'f' : 'n'}`;
 		const hit = this.transform_cache.get(cache_key);
 		if (hit && hit.code === source) {
 			if (P) prof.transformHit++;
@@ -808,6 +835,7 @@ export class Compiler {
 		if (id === RESOLVED(V_SERVER_MANIFEST)) {
 			// Populated in BOTH dev and build (unlike the client manifest, which dev fills from URLs).
 			if (ssr) this.prescan();
+			if (ssr && is_dev) this.#emitted_server_ids = new Set(server_island_ids(program));
 			return server_manifest_module(
 				ssr,
 				program,

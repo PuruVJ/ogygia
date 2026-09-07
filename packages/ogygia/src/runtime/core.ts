@@ -117,39 +117,12 @@ function read_region_props(region: Element, foreign = false): Record<string, unk
 	return {};
 }
 
+/** What counts as intent for an ON-DEMAND hole (`render: 'deferred'` + `wake: 'interaction'`).
+ *  `pointerover` (not `pointerenter`) so it fires on hover AND bubbles through the boxless
+ *  `display: contents` wrapper from a descendant the pointer actually moves over. */
+const ON_DEMAND_EVENTS = ['pointerover', 'focusin', 'pointerdown', 'touchstart', 'keydown'] as const;
+
 /** Load a hydrate island module from `<ogygia-region entry>` (dev + prod). */
-/** What counts as intent for an ON-DEMAND hole (`render: 'deferred'` + `wake: 'interaction'`). */
-const ON_DEMAND_EVENTS = [
-	'pointerenter',
-	'focusin',
-	'pointerdown',
-	'touchstart',
-	'keydown'
-] as const;
-
-/** The box a region occupies on screen. `<ogygia-region>` is `display: contents` (no box of its
- *  own), so this is the union of its element children's boxes; `null` when nothing is laid out. */
-function region_box(
-	el: Element
-): { left: number; top: number; right: number; bottom: number } | null {
-	const own = el.getBoundingClientRect();
-	if (own.width > 0 || own.height > 0) return own;
-	let box: { left: number; top: number; right: number; bottom: number } | null = null;
-	for (const child of el.children) {
-		const r = child.getBoundingClientRect();
-		if (r.width === 0 && r.height === 0) continue;
-		box = box
-			? {
-					left: Math.min(box.left, r.left),
-					top: Math.min(box.top, r.top),
-					right: Math.max(box.right, r.right),
-					bottom: Math.max(box.bottom, r.bottom)
-				}
-			: { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
-	}
-	return box;
-}
-
 const load_island = (entry: string) => {
 	const url = island_module_url(entry);
 	return import(/* @vite-ignore */ url) as Promise<{
@@ -672,26 +645,21 @@ class OgygiaRegion extends HTMLElement {
 
 	/**
 	 * `when="interaction"` on a DEFERRED region — an ON-DEMAND hole. Nothing is fetched until the
-	 * visitor shows intent inside it (the pointer enters, focus lands, a touch or a key arrives);
-	 * then the HTML is fetched once and MORPHED in (#apply), so whatever the visitor already opened
+	 * visitor shows intent inside it: the pointer moves over it (`pointerover`, which fires on hover
+	 * — before any click — and BUBBLES, so it reaches this element even though the hole's wrapper is
+	 * `display: contents` and has no box of its own), focus lands, a touch begins, or a key arrives.
+	 * Then the HTML is fetched once and MORPHED in (#apply), so whatever the visitor already opened
 	 * in the static fallback stays open. Unlike an island's `interaction` wake there is no click
-	 * capture or replay: the fallback keeps handling the gesture natively, and hover is the
-	 * trigger itself, not a warm — a mega menu that opens on hover has its L3/L4 by the time the
-	 * pointer reaches them.
+	 * capture or replay — the fallback handles the gesture natively; the fetch just rides the hover,
+	 * so a mega menu that opens on hover has its L3/L4 by the time the pointer reaches a submenu.
 	 */
 	#on_demand(fire: () => void) {
 		let fired = false;
-		// `margin` on an on-demand hole is its INTENT RADIUS: the pointer coming this close (px)
-		// counts as intent — the fetch starts while the pointer is still travelling to the region.
-		const radius = Number.parseFloat(this.getAttribute('margin') || '') || 0;
-		let near: ((e: PointerEvent) => void) | null = null;
 		const region = this;
-		function disarm() {
+		const disarm = () => {
 			for (const type of ON_DEMAND_EVENTS) region.removeEventListener(type, once, true);
-			if (near) document.removeEventListener('pointermove', near);
-			near = null;
 			region.#disarm_on_demand = null;
-		}
+		};
 		function once() {
 			if (fired) return;
 			fired = true;
@@ -700,29 +668,6 @@ class OgygiaRegion extends HTMLElement {
 		}
 		for (const type of ON_DEMAND_EVENTS)
 			this.addEventListener(type, once, { capture: true, passive: true });
-		if (radius > 0) {
-			let pending = false;
-			near = (e) => {
-				if (pending || fired) return;
-				pending = true;
-				const x = e.clientX;
-				const y = e.clientY;
-				requestAnimationFrame(() => {
-					pending = false;
-					if (fired) return;
-					const r = region_box(region);
-					if (!r) return;
-					if (
-						x >= r.left - radius &&
-						x <= r.right + radius &&
-						y >= r.top - radius &&
-						y <= r.bottom + radius
-					)
-						once();
-				});
-			};
-			document.addEventListener('pointermove', near, { passive: true });
-		}
 		this.#disarm_on_demand = disarm;
 	}
 

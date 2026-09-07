@@ -37,6 +37,21 @@ describe('fouc-css collector', () => {
 		expect(src).not.toMatch(/from ["'].*\.svelte["']/);
 	});
 
+	test('raw-fallback CSS is valid: :global(...) is unwrapped, not left literal', () => {
+		// Stripping the <script> (the default) makes svelte.compile throw on a template that reads a
+		// script-declared name, so compileFoucScopedCss falls back to the raw <style> bodies. Those
+		// carry `:global(...)`, which is a Svelte construct — left literal the browser drops the whole
+		// rule (a header lake once lost its `:global(qds-web-header.scrolled-top)` height reservation).
+		const css = compileFoucScopedCss(
+			'/app/src/lib/Header.svelte',
+			`<script>import { s } from './s.js';</script>\n<p>{$s}</p>\n` +
+				`<style>@media (min-width: 1025px) { :global(qds-web-header.scrolled-top:not(.client-mounted)) { min-height: 161px } }</style>`
+		);
+		expect(css).not.toContain(':global(');
+		expect(css).toContain('qds-web-header.scrolled-top:not(.client-mounted)');
+		expect(css).toContain('161px');
+	});
+
 	test('compileFoucScopedCss keeps filename-scoped output', () => {
 		const abs = '/app/src/lib/Side.svelte';
 		const css = compileFoucScopedCss(

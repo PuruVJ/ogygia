@@ -71,7 +71,7 @@ test('an on-demand hole fetches on pointer intent and morphs its HTML in (fallba
 		await new Promise((r) => setTimeout(r, 300));
 		expect(calls).toHaveLength(0); // no intent, no request
 		expect(region.hasAttribute('data-hydrated')).toBe(false);
-		region.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false }));
+		region.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
 		await expect.poll(() => region.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
 		expect(calls).toHaveLength(1);
 		expect(document.querySelector('[data-testid="l3"]')).not.toBeNull(); // L3 arrived
@@ -82,45 +82,37 @@ test('an on-demand hole fetches on pointer intent and morphs its HTML in (fallba
 	}
 });
 
-// INTENT RADIUS: `margin` on an on-demand hole fetches when the pointer comes that close to the
-// region's box — the region is `display: contents`, so the box is its children's.
-const RADIUS_ENDPOINT = '/__ogygia__?id=cafebabe0002&props=W3t9XQ&exp=9999999999&sig=stub';
+// HOVER via a DESCENDANT: `pointerover` bubbles, so hovering a child of the boxless
+// (`display: contents`) wrapper triggers the fetch — before any click. This is the mega-menu case:
+// the wrapper has no box of its own, the nav items inside do.
+const HOVER_ENDPOINT = '/__ogygia__?id=cafebabe0002&props=W3t9XQ&exp=9999999999&sig=stub';
 
-test('an on-demand hole with a margin fetches when the pointer approaches its content', async () => {
+test('an on-demand hole fetches on hover of a descendant (pointerover bubbles through display:contents)', async () => {
 	const calls: string[] = [];
 	const real_fetch = window.fetch;
 	window.fetch = async (input) => {
 		calls.push(String(input));
-		const res = new Response(
-			'<div id="box" style="position:fixed;top:0;left:0;width:200px;height:40px">menu with L3</div>',
-			{
-				status: 200,
-				headers: { 'content-type': 'text/html' }
-			}
-		);
-		Object.defineProperty(res, 'url', { value: location.origin + RADIUS_ENDPOINT });
+		const res = new Response('<a id="item">Products — with L3</a>', {
+			status: 200,
+			headers: { 'content-type': 'text/html' }
+		});
+		Object.defineProperty(res, 'url', { value: location.origin + HOVER_ENDPOINT });
 		return res;
 	};
 	document.body.innerHTML =
-		`<ogygia-region render="defer" when="interaction" margin="150px" style="display:contents" endpoint="${RADIUS_ENDPOINT}">` +
-		`<div id="box" style="position:fixed;top:0;left:0;width:200px;height:40px">menu</div></ogygia-region>`;
+		`<nav><ogygia-region render="defer" when="interaction" style="display:contents" endpoint="${HOVER_ENDPOINT}">` +
+		`<a id="item">Products</a></ogygia-region></nav>`;
 	const region = document.querySelector('ogygia-region')!;
+	const item = document.getElementById('item')!;
 	try {
 		bootDev();
 		await new Promise((r) => setTimeout(r, 200));
-		// far away: 400px below the box — no intent
-		document.dispatchEvent(
-			new PointerEvent('pointermove', { clientX: 100, clientY: 440, bubbles: true })
-		);
-		await new Promise((r) => setTimeout(r, 200));
-		expect(calls).toHaveLength(0);
-		// within 150px below the box — intent
-		document.dispatchEvent(
-			new PointerEvent('pointermove', { clientX: 100, clientY: 150, bubbles: true })
-		);
+		expect(calls).toHaveLength(0); // no hover yet
+		// hover the descendant <a>; pointerover bubbles up through the boxless wrapper
+		item.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
 		await expect.poll(() => region.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
 		expect(calls).toHaveLength(1);
-		expect(document.getElementById('box')!.textContent).toBe('menu with L3');
+		expect(document.getElementById('item')!.textContent).toBe('Products — with L3');
 	} finally {
 		window.fetch = real_fetch;
 	}

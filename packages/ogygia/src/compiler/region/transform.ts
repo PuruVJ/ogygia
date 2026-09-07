@@ -1146,8 +1146,6 @@ class FileCompilation {
 			} = { when };
 			if (when === 'visible')
 				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
-			// on-demand hole: `margin` is the INTENT RADIUS — fetch when the pointer comes this close
-			if (when === 'interaction' && attrs.has('margin')) options.margin = attrs.get('margin');
 			if (live_opts.maxAge != null) {
 				const ttl = parse_cache_ttl_sec(live_opts.maxAge, err_shim, '');
 				if (ttl != null && ttl > 0) options.cacheTtlSec = ttl;
@@ -1657,18 +1655,32 @@ class FileCompilation {
 		const fouc_css_specs = new Set();
 
 		/**
-		 * csr=false CLIENT: stub replaces the portable wrapper binding, but Kit only links CSS from
-		 * the *client* page graph. Side-effect-import `virtual:ogygia/fouc-css/<entry>` (CSS graph
-		 * only — not the component JS) so stylesheets still ship without dual-owning the module
-		 * that emitFile registers as `og-region.*`.
+		 * Kit links CSS only from the *client* page graph, so a marked component whose scoped CSS is
+		 * NOT in that graph must side-effect-import `virtual:ogygia/fouc-css/<entry>` (the CSS graph
+		 * only — not the component JS) to ship its stylesheet without dual-owning the module emitFile
+		 * registers as `og-region.*`. When the CSS *is* absent from the client graph depends on the
+		 * binding, not on `link_virtual` alone:
+		 *   - island STUB leg (`!link_virtual`): no component in the graph → needs the link.
+		 *   - island real-wrapper leg (`link_virtual`, a csr=true-capable page/layout): the wrapper
+		 *     pulls the hydrate entry, which carries the CSS → no link needed.
+		 *   - LAKE (`always_link_css`): its inner is client-stubbed to render-nothing on EVERY client
+		 *     leg — including the real-wrapper leg a csr=true-capable layout takes — so its CSS never
+		 *     reaches the client graph on its own and it always needs the link on a client build.
+		 * `ctx.ssr` guards the server build (it renders the real component and collects CSS directly).
 		 */
-		const binding_rewrite = (local: string, bindingPath: string, componentPathAbs: string) => {
+		const binding_rewrite = (
+			local: string,
+			bindingPath: string,
+			componentPathAbs: string,
+			always_link_css = false
+		) => {
 			let text = `import ${local} from ${JSON.stringify(bindingPath)};`;
 			// fouc-css needs a real on-disk path (its virtual id is root-relative); a PACKAGE-specifier
 			// component skips it — its styles are global package CSS (e.g. a theme.css import), not a
 			// root-relative scoped stylesheet the fouc virtual could read.
 			if (
-				!link_virtual &&
+				!ctx.ssr &&
+				(always_link_css || !link_virtual) &&
 				typeof componentPathAbs === 'string' &&
 				componentPathAbs &&
 				path.isAbsolute(componentPathAbs) &&
@@ -1782,7 +1794,9 @@ class FileCompilation {
 					s.overwrite(
 						info.node.start,
 						info.node.end,
-						binding_rewrite(local, bindingPath, componentPath)
+						// A lake's inner is client-stubbed on every client leg, so its CSS never rides the
+						// binding — always link it (see binding_rewrite).
+						binding_rewrite(local, bindingPath, componentPath, true)
 					);
 					rewritten_import_nodes.add(info.node);
 				}

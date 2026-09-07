@@ -288,6 +288,10 @@
 	// resets the nested context so an island INSIDE the children renders as a full region (own
 	// `<ogygia-region>` + payload) and wakes independently after adoption. Server-only by construction:
 	// on a csr=false page the client never renders Region, it revives the payload's slot pointer.
+	// The SAME reset wraps a server island's `ogygiaFallback` (markup below): the fallback is the
+	// PAGE's markup rendered inside the hole's shell, not the island's tree — an island in it (a login
+	// dropdown inside an actions hole) must be a full region, or a `keepFallback()`-kept fallback
+	// would stand forever with a dead, flattened component inside it (e2e/lake-kit.spec.ts).
 	const slot_children = (renderer) => {
 		renderer.push(slot_marker_open(slot_id));
 		SlotBoundary(renderer, { children: island_children });
@@ -685,7 +689,7 @@
 			margin={__margin || undefined}
 			hydrate-margin={__hydrateMargin || undefined}
 			endpoint={server_endpoint}
-		>{#if ogygiaFallback}{@render ogygiaFallback()}{/if}</ogygia-region>{@html server_props_script}{/if}
+		>{#if ogygiaFallback}<SlotBoundary>{@render ogygiaFallback()}</SlotBoundary>{/if}</ogygia-region>{@html server_props_script}{/if}
 {:else if is_lake}
 	{#if is_csr}{@render lake_adopt()}{:else if lake_inside}
 		<ogygia-region
