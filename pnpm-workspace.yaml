@@ -4,6 +4,8 @@ packages:
   # Non-library projects (talk deck, benchmark harness, repros) — workspace members so they share
   # the root install instead of each spawning its own node_modules.
   - 'internal/*'
+  # the bcms header lab is NOT a workspace member: gitignored, installs standalone (no lockfile importer)
+  - '!internal/repro-bcms-header'
   # Runnable demos (the MFE federation trio + contracts) — consume the live packages/ogygia.
   - 'examples/mfe/*'
 allowBuilds:
