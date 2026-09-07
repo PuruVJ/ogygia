@@ -34,6 +34,11 @@ export { preload } from './preload.js';
 // Serialize a self-contained function into a blocking inline `<script>` string — a theme setter (no
 // dark-mode flash), a deferred font, an early flag. `{@html script(fn)}`, put the tag where you like.
 export { script } from './script.js';
+// The request a server island renders for — `locals`, `cookies`, `url` — without `$app/server`
+// (client-guarded) or remote functions. `null` on the client. See request-event.ts.
+export { requestEvent } from './request-event.js';
+// A server island answering "the page's fallback is right for this visitor": 204, no swap.
+export { keepFallback } from './keep-fallback.js';
 export { preference } from './preference.js';
 export type { Preference, PreferenceSpec } from './preference.js';
 

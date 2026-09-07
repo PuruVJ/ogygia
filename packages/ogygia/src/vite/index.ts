@@ -63,6 +63,7 @@ import {
 	isFoucCssId,
 	isFoucScopedId
 } from '../compiler/fouc-css.js';
+import { preprocess_component_for_css } from './style-preprocess.js';
 import {
 	needs_csr_false_full_reload,
 	needs_island_entry_full_reload
@@ -276,6 +277,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	/** router-css `rcss:<rel>` key → emitted CSS asset referenceId (client leg). A server router page
 	 *  component's whole-tree scoped CSS, compiled + emitted as a dedicated asset (link/router-css.ts). */
 	const router_css_refs = new Map<string, string>();
+	/** server-island id → emitted tree-CSS asset referenceId (client leg). Resolved in writeBundle. */
+	const hole_css_refs = new Map<string, string>();
 	// tag → self-contained factory source from og.$ rewrites (served by the fn-manifest virtual so
 	// client bundles can register factories pre-hydration; the payload-source fallback covers bundles
 	// that miss it) now lives on the driver as `compiler.dollar_hoists` — the macro leg fills it.
@@ -694,6 +697,47 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						});
 						router_css_refs.set(router_css_key(root, abs), ref);
 					}
+					// SERVER-ISLAND CSS: a `render: 'deferred'` island with no client chunk is a subtree the
+					// client graph never sees, so no page stylesheet carries its (or its children's) scoped
+					// CSS — a hole styled by a sub-component's `<style>` arrived unstyled. Compile each such
+					// component's whole tree CSS into ONE asset (same primitives as the router leg above,
+					// plus `<style lang="scss">` compiled first) and hand it off under the island's public
+					// URL key — the key `region_css_links` already resolves through `islandCss()`, so the
+					// hole response links it and the client hoists it into <head>.
+					hole_css_refs.clear();
+					const hole_css_by_abs = new Map<string, string>();
+					for (const { iid, abs } of compiler.server_island_css_roots()) {
+						let ref = hole_css_by_abs.get(abs);
+						if (ref === undefined) {
+							const parts: string[] = [];
+							for (const e of collectFoucCssReachable(abs, {
+								root,
+								libDir,
+								readFile,
+								alias: resolve_alias
+							})) {
+								if (e.kind === 'scoped') {
+									const src = readFile(e.abs);
+									if (src == null) continue;
+									// Script kept (TS stripped) so a template reading `$store` compiles → scoped.
+									const css = compileFoucScopedCss(
+										e.abs,
+										await preprocess_component_for_css(src, e.abs, root),
+										{ keepScript: true }
+									);
+									if (css) parts.push(css);
+								} else if (CSS_EXT_RE.test(e.abs)) {
+									const css = readFile(e.abs);
+									if (css) parts.push(css);
+								}
+							}
+							ref = parts.length
+								? this.emitFile({ type: 'asset', name: 'og-hole.css', source: parts.join('\n') })
+								: '';
+							hole_css_by_abs.set(abs, ref);
+						}
+						if (ref) hole_css_refs.set(iid, ref);
+					}
 					// Content CSS: a content module's OWN scoped `<style>` compiles into the SERVER bundle
 					// only (the leak-free corpus never enters the client graph), so on a csr=false doc page it
 					// ships on no stylesheet. Extract that scoped CSS here and emit it as a client asset.
@@ -1074,6 +1118,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						map.css[key] = [file.startsWith('/') ? file : '/' + file];
 					} catch {
 						/* asset dropped — skip; the page just goes unstyled rather than 404 a link */
+					}
+				}
+
+				// Server-island CSS handoff: island id → its tree-CSS asset, keyed by the island's public
+				// URL (`island_url[id]` in the server manifest) so `region_css_links(id)` finds it through
+				// the same `islandCss()` lookup a hydrating island's chunk CSS uses.
+				for (const [iid, ref] of hole_css_refs) {
+					try {
+						const file = this.getFileName(ref);
+						const key = compiler.island_public_url(iid);
+						(map.css[key] ??= []).push(file.startsWith('/') ? file : '/' + file);
+					} catch {
+						/* asset dropped — the hole just goes unstyled rather than 404 a link */
 					}
 				}
 

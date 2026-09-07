@@ -243,8 +243,11 @@ export const page = D;`;
 		expect(String(isl.wrapperSource)).toContain('__margin');
 	});
 
-	test('render: deferred rejects a non-fetch schedule (interaction/none)', () => {
-		const bad = `import D from './D.svelte' with { render: 'deferred', wake: 'interaction' };`;
+	test('render: deferred accepts interaction (an on-demand hole) and rejects none', () => {
+		const ok = `import D from './D.svelte' with { render: 'deferred', wake: 'interaction' };`;
+		const r = transformTsRegions(ok, id, makeCtx());
+		expect((r!.islands[0] as Record<string, unknown>).fetchWhen).toBe('interaction');
+		const bad = `import D from './D.svelte' with { render: 'deferred', wake: 'none' };`;
 		expect(() => transformTsRegions(bad, id, makeCtx())).toThrow(/fetch/i);
 	});
 

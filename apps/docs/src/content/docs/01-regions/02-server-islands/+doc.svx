@@ -46,7 +46,7 @@ To see the round-trip, click **Fetch again**. The hole goes back to its fallback
 
 ## When it fetches: the `wake` schedule
 
-A deferred region fetches on the `wake` schedule. The timing words are the same, without `interaction`. `render: 'deferred'` alone fetches on load. Add `wake` to make the *fetch itself* later. A hole below the fold does not cost a request until you scroll to it:
+A deferred region fetches on the `wake` schedule. The timing words are the same as for an island. `render: 'deferred'` alone fetches on load. Add `wake` to make the *fetch itself* later. A hole below the fold does not cost a request until you scroll to it:
 
 ```svelte
 <script>
@@ -59,7 +59,23 @@ A deferred region fetches on the `wake` schedule. The timing words are the same,
 | `load` (default) | immediately |
 | `idle` | when the browser is idle |
 | `visible` | when scrolled into view |
+| `interaction` | on the first hover, focus, touch or key inside the region — an **on-demand** hole |
 | `'(max-width: 600px)'` | when the media query matches |
+
+An on-demand hole is for content that is large, server-rendered, and only needed once the visitor reaches for it: the L3/L4 levels of a mega menu, a filter panel, a details drawer. The fallback is what the page shows meanwhile — for a menu, the L1/L2 levels. Hover is the trigger, so the HTML is usually there before the visitor opens anything, and it is **morphed** in rather than swapped: a menu that is already open stays open, and focus stays where it is. To fetch earlier, when the pointer comes *close* to the region, give the hole an intent radius with `margin` in a [preset](/docs/reference/api#ogygiavite-regionspresets), the same way `visible` takes its margin: `ogygia({ regions: { presets: { menu: { render: 'deferred', wake: 'interaction', margin: '160px' } } } })`, then `with { preset: 'menu' }`.
+
+```svelte
+<script>
+  import MegaMenu from './MegaMenu.svelte';
+  import MegaMenuFull from './MegaMenuFull.svelte' with { render: 'deferred', wake: 'interaction' };
+</script>
+
+<nav>
+  <MegaMenuFull>
+    {#snippet ogygiaFallback()}<MegaMenu levels={2} />{/snippet}
+  </MegaMenuFull>
+</nav>
+```
 
 ## A fallback while it loads
 
@@ -114,6 +130,41 @@ A deferred region is **content only**. It never ships JS. When a part of the fet
 That keeps the split clean. `render` decides how the HTML arrives. `wake` decides when JS runs. The two live on different components.
 
 Server islands need the [server handle](/docs/start/install). They load through the signed island endpoint.
+
+## Reading the request: requestEvent()
+
+A server island renders in its own request. It often needs the visitor: the session in `locals`, a cookie, the URL. `requestEvent()` from `'ogygia'` returns the `RequestEvent` of Kit for the render in progress. It needs no import of `$app/server`, which the client guard of Kit rejects in a component that a `csr = true` page also renders. It needs no remote function either.
+
+```svelte title=AccountMenu.svelte
+<script lang="ts">
+  import { requestEvent } from 'ogygia';
+  import type { RequestEvent } from '@sveltejs/kit';
+
+  // call it during setup, BEFORE the first await
+  const event = requestEvent<RequestEvent>();
+  const user = event?.locals.user ?? null;
+  const cart = await getCart(event?.cookies.get('cart_id'));
+</script>
+```
+
+Call it during setup, before the first `await`. It reads Svelte context, which is only available then. In the browser it returns `null`. The same call works inside a lake and inside an island during the server pass. Note that the request of a hole is not the request of the page: its URL carries no page path. When a hole needs the locale or the id of the page, pass it as a prop.
+
+## When the fallback is already right: keepFallback()
+
+Often the `ogygiaFallback` *is* the common case. An actions slot shows the login button to everyone who is not logged in; the hole exists for the visitors who are. Rendering the same markup again for every anonymous visitor, and swapping it over itself, is waste. Call `keepFallback()` from `'ogygia'` and the hole ends with no content: the endpoint answers `204`, the runtime keeps the fallback the page rendered and marks the region done. No bytes, no swap, no flash.
+
+```svelte title=AccountMenu.svelte
+<script lang="ts">
+  import { requestEvent, keepFallback } from 'ogygia';
+  const user = requestEvent()?.locals.user ?? null;
+  if (!user) keepFallback(); // the page already shows the anonymous slot
+  const account = await getAccount(user);
+</script>
+
+<UserMenu {account} />
+```
+
+Call it as soon as you know, before any work the hole would otherwise do. It throws a signal the server handle recognises, so nothing after it runs. In a batch, the hole's parcel carries a marker instead of HTML; a page served from the freeze store keeps its stored fallback the same way.
 
 ## Do / don't
 

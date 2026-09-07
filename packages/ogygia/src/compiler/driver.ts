@@ -582,6 +582,29 @@ export class Compiler {
 	 *  `hasAnyCsrFalseRoute` only inspects Kit PAGE leaves — an app whose islands live solely in
 	 *  router-rendered components (a pure-router / fragment-only service has ZERO `+page` files)
 	 *  answers "no csr=false page" while its documents still `<script src>` the runtime. */
+	/**
+	 * Server-only islands — `render: 'deferred'` with no client chunk — and the component file each
+	 * renders. Nothing on any page links such a component's CSS (Kit collects stylesheets from the
+	 * client graph; this subtree is never in it), so the client leg compiles each one's whole tree
+	 * CSS into a dedicated asset the hole response links (vite/index.ts, `region_css_links`).
+	 * Sorted for determinism; a component shared by several ids is emitted once (by `abs`).
+	 */
+	server_island_css_roots(): Array<{ iid: string; abs: string }> {
+		const out: Array<{ iid: string; abs: string }> = [];
+		for (const [iid, vpath] of this.program.by_id) {
+			const entry = this.program.registry.get(vpath);
+			if (!entry?.server || !entry.componentPath) continue;
+			if (this.program.region_kinds.get(iid) === 'hydrate') continue;
+			out.push({ iid, abs: host_key(entry.componentPath) });
+		}
+		return out.sort((a, b) => (a.iid < b.iid ? -1 : a.iid > b.iid ? 1 : 0));
+	}
+
+	/** The public URL key a server island's CSS is handed off under (matches `island_url[id]`). */
+	island_public_url(iid: string): string {
+		return this.#ctx!.island_public_url(iid);
+	}
+
 	has_hydrate_regions(): boolean {
 		for (const kind of this.program.region_kinds.values()) if (kind === 'hydrate') return true;
 		return false;

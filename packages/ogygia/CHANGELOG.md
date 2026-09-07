@@ -8,6 +8,56 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Found while rebuilding a large production site header (static mega menu, per-visitor holes, a
+`wake: 'interaction'` search) on top of a Kit app that also has `csr = true` pages.
+
+### Added
+
+- **A lake survives Kit hydration.** On a `csr = true` page, a `wake: 'none'` region is now
+  ADOPTED by Kit's hydration pass instead of hydrated: the wrapper renders the lake through a raw
+  snippet, so Kit keeps the server element as opaque DOM (no mismatch, no re-render, the lake's
+  code in no client chunk — not even Kit's). Everything authored inside the lake stays in
+  ogygia's world on every page: islands and server islands there emit their real regions and the
+  runtime wakes them. This is what makes a site header a lake in the layout: zero header JS for
+  anonymous visitors on csr=false AND csr=true pages. A lake mounted fresh during a Kit
+  client-side navigation has no server HTML and renders empty (dev warns).
+- **On-demand server islands: `render: 'deferred'` + `wake: 'interaction'`.** The hole fetches
+  nothing until the visitor shows intent inside it (pointer enters, focus lands, a touch or a
+  key arrives), then fetches once and **morphs** the HTML in — whatever the visitor already
+  opened in the static fallback stays open. Hover is the trigger, not a warm, so a mega menu
+  that opens on hover has its server-rendered L3/L4 by the time the pointer reaches them; the
+  initial HTML carries only the fallback (the same menu, L1/L2). No click capture or replay (an
+  island's `interaction` wake keeps that); the fallback handles the gesture natively.
+- **`keepFallback()`** from `'ogygia'`: a server island's answer that the page's `ogygiaFallback`
+  is right for this visitor. The endpoint replies `204 No Content` (a batch parcel carries a
+  marker; a freeze-served page keeps its stored fallback), the runtime keeps the fallback DOM
+  and marks the region done — no bytes, no swap, no phase-2 wake. For personal holes whose
+  fallback is the anonymous markup, the anonymous majority now costs a 204 instead of a render.
+- **`requestEvent()`** from `'ogygia'`: Kit's `RequestEvent` (`locals`, `cookies`, `url`) inside
+  any region's component during SSR — a server island on its endpoint, a lake, an island's server
+  pass — without `$app/server` (Kit's client guard rejects it in a component a csr=true page
+  shares) and without a remote function. Call it before the first `await`; `null` in the browser.
+- **Server islands ship their component tree's CSS.** A `render: 'deferred'` island whose
+  sub-components carry scoped styles now gets one `og-hole.css` per hole (alias-aware, SCSS and
+  TS preprocessed), linked with the hole's HTML — sub-components inside a hole render styled.
+
+### Fixed
+
+- `$app/stores` `$page` threw "Region render failed" inside every ogygia render root (server
+  islands, inline islands, snippet captures): the render context now carries Kit's `__svelte__`
+  stores key next to `__request__`.
+- On a `csr = true` page, Kit's hydration reconciled a server island's server-minted `endpoint`
+  attribute to `''` (the client leg cannot mint) after the runtime had seen it — holes stayed on
+  their fallback with no request. The runtime keeps the minted endpoint and restores it.
+- Server-island HTML is absolutized (`entry`/`endpoint` on nested regions, `href` on region CSS
+  links), so a hole's nested islands work under nested page paths.
+- A server island's `page.url` is the referring page's URL (same-origin Referer), so a hole
+  that derives its locale from the URL matches the page that placed it.
+- `wake: 'interaction'` replays the waking click on the next frame and into the deepest
+  composed-path target, so handlers inside web-component shadow roots receive it.
+
 ## [0.8.0] - 2026-09-03
 
 The **passage** release. The runtime and the compiler are both rebuilt from the studs, with byte-identical output the full way. The runtime collapses onto ONE identity primitive. Serialization, resumability, cross-island sharing, and navigation reconciliation all become operations on the same `Ref`. A live class, a store, a function, a snippet, and a held region cross the island boundary, and join again to a single live instance across each island that reads them. A navigation now MOVES regions, and does not reset them. And the server can be told to render again only what changed. Separately, the Vite plugin is carved into a real, bundler-agnostic compiler that you can run without Vite at all.

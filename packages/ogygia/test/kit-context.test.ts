@@ -12,13 +12,17 @@ import type { Component } from 'svelte';
 import {
 	kit_render_context,
 	set_kit_page_reader,
+	set_kit_event_reader,
 	empty_kit_page,
 	KIT_REQUEST_CONTEXT,
+	KIT_STORES_CONTEXT,
 	type KitPage
 } from '../src/server/kit-context.js';
 import PageProbe from './_fixtures/PageProbe.svelte';
+import EventProbe from './_fixtures/EventProbe.svelte';
 
 const probe = PageProbe as unknown as Component;
+const event_probe = EventProbe as unknown as Component;
 
 const page_of = (over: Partial<KitPage>): KitPage => ({ ...empty_kit_page(), ...over });
 
@@ -60,5 +64,65 @@ describe('kit_render_context', () => {
 	it('the empty page never throws on any getter Kit’s $app/state exposes', () => {
 		const out = render(probe, { props: {}, context: kit_render_context() });
 		expect(out.body).toContain('200|-|-|{}');
+	});
+});
+
+describe('kit_render_context — Kit’s `__svelte__` stores context ($app/stores)', () => {
+	// The deprecated-but-everywhere `$page` store: Kit's server `$app/stores` destructures
+	// `getContext('__svelte__')` into `{ page, navigating, updated }`. Found on a real header whose
+	// every component reads `$page`: inside a server island it died with "Region render failed".
+	it('carries page/navigating/updated stores that answer synchronously', () => {
+		const page = page_of({ status: 404, data: { site: 'ACME' } });
+		const stores = kit_render_context(page).get(KIT_STORES_CONTEXT) as {
+			page: { subscribe(fn: (v: KitPage) => void): () => void };
+			navigating: { subscribe(fn: (v: unknown) => void): () => void };
+			updated: { subscribe(fn: (v: boolean) => void): () => void; check(): Promise<boolean> };
+		};
+		let seen: KitPage | undefined;
+		const unsub = stores.page.subscribe((v) => (seen = v));
+		expect(seen?.status).toBe(404);
+		expect(seen?.data).toEqual({ site: 'ACME' });
+		expect(typeof unsub).toBe('function');
+		let nav: unknown = 'unset';
+		stores.navigating.subscribe((v) => (nav = v));
+		expect(nav).toBeNull();
+		let up: boolean | undefined;
+		stores.updated.subscribe((v) => (up = v));
+		expect(up).toBe(false);
+		return expect(stores.updated.check()).resolves.toBe(false);
+	});
+
+	it('the same page object feeds both contexts', () => {
+		const page = page_of({ url: new URL('http://localhost/x/') });
+		const ctx = kit_render_context(page);
+		const via_state = (ctx.get(KIT_REQUEST_CONTEXT) as { page: KitPage }).page;
+		let via_store: KitPage | undefined;
+		(
+			ctx.get(KIT_STORES_CONTEXT) as { page: { subscribe(fn: (v: KitPage) => void): void } }
+		).page.subscribe((v) => (via_store = v));
+		expect(via_store).toBe(via_state);
+	});
+});
+
+describe('requestEvent() — the live RequestEvent for a server island (no $app/server import)', () => {
+	// A `render: 'deferred'` component renders under the app's hooks, in the request that fetches
+	// it. Kit's `getRequestEvent()` needs `$app/server`, which the client guard rejects the moment
+	// a csr=true page shares the layout; remote functions are the other channel. This is the third:
+	// the event rides the `__request__` context every ogygia render root already carries.
+	it('reads the event the render context carries, and answers null without one', () => {
+		const event = { locals: { user: 'ada' }, url: new URL('http://localhost/docs/') };
+		const out = render(event_probe, { props: {}, context: kit_render_context(undefined, event) });
+		expect(out.body).toContain('ada|/docs/');
+		expect(render(event_probe, { props: {} }).body).toContain('NO EVENT');
+	});
+
+	it('falls back to the installed event reader (hooks.ts) when no explicit event is passed', () => {
+		set_kit_event_reader(() => ({ locals: { user: null }, url: new URL('http://localhost/x/') }));
+		const out = render(event_probe, { props: {}, context: kit_render_context() });
+		expect(out.body).toContain('guest|/x/');
+		set_kit_event_reader(null);
+		expect(render(event_probe, { props: {}, context: kit_render_context() }).body).toContain(
+			'NO EVENT'
+		);
 	});
 });

@@ -10,8 +10,12 @@
 // So every HTML string is provided base64-encoded; `inject_html()` in the test decodes it.
 import type { TestProject } from 'vitest/node';
 import { render } from 'svelte/server';
+import type { Component } from 'svelte';
 import { stringify } from 'devalue';
 import Counter from './fixtures/Counter.svelte';
+import LakeKitHost from './fixtures/LakeKitHost.svelte';
+import { set_request_event_stub } from '../_stubs/virtual-request-event.js';
+import { csr_true_routes } from '../_stubs/virtual-route-csr.js';
 
 /** The island shell a page carries: the runtime reads `wake` + `entry`, then the props sidecar. */
 function island(entry: string, body: string, props: Record<string, unknown>, wake = 'load') {
@@ -34,6 +38,21 @@ declare module 'vitest' {
 	export interface ProvidedContext {
 		/** A `wake: 'load'` Counter island, SSR'd with `start: 3` — base64 of the HTML. */
 		counter_ssr_b64: string;
+		/** LakeKitHost SSR'd on a csr=true document (a lake wrapping a Counter island) — base64. */
+		lake_kit_ssr_b64: string;
+	}
+}
+
+/** SSR `comp` inside a request for a csr=true route, so Region takes its Kit-hydrated paths.
+ *  `render()`'s body is a LAZY getter (the component runs on first read) — read it in here. */
+function render_on_kit_page(comp: Component): string {
+	set_request_event_stub(() => ({ route: { id: '/kit' } }));
+	csr_true_routes.add('/kit');
+	try {
+		return render(comp).body;
+	} finally {
+		csr_true_routes.delete('/kit');
+		set_request_event_stub(null);
 	}
 }
 
@@ -46,4 +65,7 @@ export default function setup(project: TestProject) {
 		'counter_ssr_b64',
 		b64(island('/test/browser/fixtures/Counter.svelte', nested(body), props))
 	);
+	// The real wrapper (Region.svelte) renders the lake + the island's shell here — the browser test
+	// hydrates the same component over it, so both legs are the library's own code.
+	project.provide('lake_kit_ssr_b64', b64(render_on_kit_page(LakeKitHost as unknown as Component)));
 }

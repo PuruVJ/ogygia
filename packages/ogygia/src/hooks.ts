@@ -40,7 +40,13 @@ import { profilerConfig } from 'virtual:ogygia/profiler-config';
 import { freezeConfig } from 'virtual:ogygia/freeze-config';
 import { freeze_routes, freeze_pages } from 'virtual:ogygia/freeze-routes';
 import { router_freeze_verdict } from './freeze/routers.js';
-import { set_kit_page_reader, kit_render_context } from './server/kit-context.js';
+import {
+	set_kit_page_reader,
+	set_kit_event_reader,
+	kit_render_context
+} from './server/kit-context.js';
+import { absolutize_hole_html } from './server/hole-urls.js';
+import { KEEP_FALLBACK_HTML, is_keep_fallback } from './keep-fallback.js';
 import { serve_federation, install_federation } from './federation/serve.js';
 
 // Install the deferred-hole signer once (it holds the region secret); a no-op until a `federate()`
@@ -173,13 +179,42 @@ set_page_recorder((snapshot) => {
 // island, deferred endpoint, snippet body): rebuilt from the recorded page snapshot, with the live
 // event filling url/params/route when the snapshot has none (a Kit page: Kit's own values; a
 // deferred endpoint: the endpoint's request — an island rendering in isolation sees no page).
+/** The islands endpoint path the handle serves (the constructor updates it when configured). */
+let islands_endpoint_path: string = DEFAULT_ISLANDS_ENDPOINT;
+
+/**
+ * The PAGE a render belongs to. A hole renders in its own request (`/__ogygia__?…`); a component
+ * inside it reading `$page.url` — for the locale, a country name, a cookie prefix — must see the
+ * page, not the endpoint. The runtime's same-origin fetch carries the page as `Referer`
+ * (`strict-origin-when-cross-origin` sends the full URL same-origin), so the endpoint request
+ * answers with it; anything else (no referer, cross-origin, an ESI subrequest) keeps its own URL.
+ */
+function page_url_of(event: RequestEvent | undefined): URL | undefined {
+	if (!event) return undefined;
+	if (!event.url.pathname.endsWith(islands_endpoint_path)) return event.url;
+	const referer = event.request.headers.get('referer');
+	if (!referer) return event.url;
+	try {
+		const page = new URL(referer);
+		if (page.origin === event.url.origin) return page;
+	} catch {
+		/* malformed referer — fall through */
+	}
+	return event.url;
+}
+
+// The live event for `requestEvent()` (public): what a server island reads its `locals` /
+// `cookies` / `url` from, in the request that renders it — no `$app/server` in the component.
+set_kit_event_reader(
+	() => (try_get_request_store() as { event?: RequestEvent } | undefined)?.event ?? null
+);
 set_kit_page_reader(() => {
 	const bag = request_als.getStore();
 	const event = (try_get_request_store() as { event?: RequestEvent } | undefined)?.event;
 	if (!bag && !event) return null;
 	const snap = bag?.page ?? {};
 	return {
-		url: snap.url?.href ? new URL(snap.url.href) : event?.url,
+		url: snap.url?.href ? new URL(snap.url.href) : page_url_of(event),
 		params: snap.params ?? event?.params ?? {},
 		route: snap.route ?? { id: event?.route.id ?? null },
 		status: snap.status ?? 200,
@@ -562,6 +597,7 @@ class OgygiaHandle {
 		// pathname by SUFFIX (see `handle`). The endpoint is a clash-safe path, so a suffix match is
 		// unambiguous regardless of `paths.base`.
 		this.#endpoint = options.endpoint || DEFAULT_ISLANDS_ENDPOINT;
+		islands_endpoint_path = this.#endpoint;
 		this.render_rate = new RateLimiter({
 			max: rate_limit_cfg.max,
 			windowMs: rate_limit_cfg.windowMs
@@ -1297,7 +1333,10 @@ class OgygiaHandle {
 				cache,
 				Date.now()
 			);
-		} catch {
+		} catch (e) {
+			// `keepFallback()` ends a render on purpose: the page's fallback is right for this
+			// visitor. Carried as a marker string so the cache/batch/endpoint seams stay string-typed.
+			if (is_keep_fallback(e)) return KEEP_FALLBACK_HTML;
 			return null;
 		}
 	}
@@ -1323,10 +1362,11 @@ class OgygiaHandle {
 	): Promise<Response> {
 		const base =
 			via === 'stored' ? entry.html : entry.html.replace('</head>', FREEZE_DOC_META + '</head>');
-		const html = await stitch_html(
-			base,
-			async (endpoint) => (await this.#render_capability(endpoint, event))?.html ?? null
-		);
+		const html = await stitch_html(base, async (endpoint) => {
+			const out = await this.#render_capability(endpoint, event);
+			// a "keep the fallback" answer keeps the stored fallback in place (same as fail-open)
+			return out && out.html !== KEEP_FALLBACK_HTML ? out.html : null;
+		});
 		return new Response(html, {
 			status: 200,
 			headers: { ...entry.headers, 'x-ogygia-freeze': via }
@@ -1427,10 +1467,13 @@ class OgygiaHandle {
 				: undefined;
 		const body = await this.#render_component(load, props, cache);
 		if (body === null || body.length > MAX_REGION_BODY) return null;
+		// "Keep the fallback": the parcel carries the marker alone (no CSS links, nothing to hoist).
+		if (body === KEEP_FALLBACK_HTML) return { slot: sig, html: KEEP_FALLBACK_HTML };
 		// CSS links ride in the parcel; the client hoists them to <head> (a body/parcel link is inert
 		// inside the `<template>` box), so a batched server-island still styles a page that never
-		// imported its component.
-		return { slot: sig, html: region_css_links(id) + body };
+		// imported its component. URLs inside are made root-absolute: `asset()` made them relative
+		// to THIS request, and the parcel lands in a page at any depth (server/hole-urls.ts).
+		return { slot: sig, html: absolutize_hole_html(region_css_links(id) + body, event.url) };
 	}
 
 	/**
@@ -1519,13 +1562,17 @@ class OgygiaHandle {
 		if (body === null) {
 			return region_response('Region render failed', { status: 500 });
 		}
+		// `keepFallback()`: no content — the runtime keeps the page's fallback and marks the hole done.
+		if (body === KEEP_FALLBACK_HTML) return region_response(null, { status: 204 });
 
 		if (body.length > MAX_REGION_BODY) {
 			return region_response('Forbidden', { status: 403 });
 		}
 
 		// Ship the component's stylesheet links ahead of its HTML (the client hoists them to <head>).
-		const html = region_css_links(id) + body;
+		// Root-absolute URLs inside: the hole's HTML is spliced into a page at any depth — by the
+		// runtime, or by a CDN (ESI) — where a `./_app/…` entry would 404 (server/hole-urls.ts).
+		const html = absolutize_hole_html(region_css_links(id) + body, event.url);
 
 		if (method === 'HEAD') {
 			return region_response(null, {

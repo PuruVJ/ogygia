@@ -129,6 +129,10 @@ function restore_fields(region: Element, fields: FieldSnapshot[]) {
 
 type QueuedClick = {
 	addr: number[];
+	/** The deepest node of the click's composed path when it lies INSIDE a web component's shadow
+	 *  tree (a design-system button's inner <button>): a host-level replay never reaches the shadow-internal
+	 *  handler that actually toggles the component, so the replay lands here instead. */
+	deep: EventTarget | null;
 	tag: string;
 	init: MouseEventInit;
 };
@@ -157,8 +161,12 @@ export function arm_interaction(
 			if (addr) {
 				const me = e as MouseEvent;
 				e.preventDefault();
+				// `e.target` is already retargeted to the shadow HOST; keep the real deepest node too.
+				const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+				const deep = path.length && path[0] !== e.target ? path[0] : null;
 				queued.push({
 					addr,
+					deep,
 					tag: e.target.tagName,
 					init: {
 						bubbles: true,
@@ -195,12 +203,26 @@ export function arm_interaction(
 				}
 				// Replay in arrival order at each click's address (tag-checked against drift).
 				const replayed = queued.length;
-				for (const q of queued) {
-					const t = resolve_address(region, q.addr);
-					if (!t || t.tagName !== q.tag) continue;
-					t.dispatchEvent(new MouseEvent('click', q.init));
-				}
-				queued.length = 0;
+				// One frame later: hydration just (re)bound the island's web-component wiring (a
+				// a dropdown web component's `target` element, set by a reactive statement) and many
+				// components apply such changes in their own render tick. A synchronous replay lands
+				// before that tick and toggles nothing; after a frame the component is settled.
+				const replay = () => {
+					for (const q of queued) {
+						const t = resolve_address(region, q.addr);
+						if (!t || t.tagName !== q.tag) continue;
+						// A web component's shadow-internal handler (a design-system button's inner <button>) sits
+						// BELOW the host: a click dispatched on the host never reaches it. Hydration claims
+						// the host node and never touches its shadow tree, so the captured deep node is
+						// still live — replay there (composed, so the host's listeners hear it too).
+						const deep = q.deep as Node | null;
+						const target = deep && deep.isConnected && t.shadowRoot?.contains(deep) ? deep : t;
+						target.dispatchEvent(new MouseEvent('click', q.init));
+					}
+					queued.length = 0;
+				};
+				if (typeof requestAnimationFrame === 'function') requestAnimationFrame(replay);
+				else replay();
 				if (DEVTOOLS)
 					dt_emit({
 						domain: 'runtime',
@@ -216,12 +238,26 @@ export function arm_interaction(
 				// clicks — native behavior (links, form posts, checkboxes) must keep working on the
 				// dead-but-real HTML. Replay the swallowed clicks so the failed one still acts.
 				disarm();
-				for (const q of queued) {
-					const t = resolve_address(region, q.addr);
-					if (!t || t.tagName !== q.tag) continue;
-					t.dispatchEvent(new MouseEvent('click', q.init));
-				}
-				queued.length = 0;
+				// One frame later: hydration just (re)bound the island's web-component wiring (a
+				// a dropdown web component's `target` element, set by a reactive statement) and many
+				// components apply such changes in their own render tick. A synchronous replay lands
+				// before that tick and toggles nothing; after a frame the component is settled.
+				const replay = () => {
+					for (const q of queued) {
+						const t = resolve_address(region, q.addr);
+						if (!t || t.tagName !== q.tag) continue;
+						// A web component's shadow-internal handler (a design-system button's inner <button>) sits
+						// BELOW the host: a click dispatched on the host never reaches it. Hydration claims
+						// the host node and never touches its shadow tree, so the captured deep node is
+						// still live — replay there (composed, so the host's listeners hear it too).
+						const deep = q.deep as Node | null;
+						const target = deep && deep.isConnected && t.shadowRoot?.contains(deep) ? deep : t;
+						target.dispatchEvent(new MouseEvent('click', q.init));
+					}
+					queued.length = 0;
+				};
+				if (typeof requestAnimationFrame === 'function') requestAnimationFrame(replay);
+				else replay();
 				console.error('[ogygia] interaction island failed to hydrate — leaving it static.', err);
 			}
 		);

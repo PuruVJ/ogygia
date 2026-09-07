@@ -20,12 +20,14 @@ import { foreign_region_prop_revivers } from './foreign-props.js';
 import {
 	is_awake,
 	is_deferred,
+	inside_frozen,
 	phase2_hydrate_schedule,
 	region_hydrate_schedule,
 	region_schedule,
 	region_ssr_truncated
 } from './region-attrs.js';
 import { slots, type LiftedLake } from './slots.js';
+import { KEEP_FALLBACK_HTML } from '../keep-fallback.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 import {
 	install_window_sink as dt_install_window_sink,
@@ -116,6 +118,38 @@ function read_region_props(region: Element, foreign = false): Record<string, unk
 }
 
 /** Load a hydrate island module from `<ogygia-region entry>` (dev + prod). */
+/** What counts as intent for an ON-DEMAND hole (`render: 'deferred'` + `wake: 'interaction'`). */
+const ON_DEMAND_EVENTS = [
+	'pointerenter',
+	'focusin',
+	'pointerdown',
+	'touchstart',
+	'keydown'
+] as const;
+
+/** The box a region occupies on screen. `<ogygia-region>` is `display: contents` (no box of its
+ *  own), so this is the union of its element children's boxes; `null` when nothing is laid out. */
+function region_box(
+	el: Element
+): { left: number; top: number; right: number; bottom: number } | null {
+	const own = el.getBoundingClientRect();
+	if (own.width > 0 || own.height > 0) return own;
+	let box: { left: number; top: number; right: number; bottom: number } | null = null;
+	for (const child of el.children) {
+		const r = child.getBoundingClientRect();
+		if (r.width === 0 && r.height === 0) continue;
+		box = box
+			? {
+					left: Math.min(box.left, r.left),
+					top: Math.min(box.top, r.top),
+					right: Math.max(box.right, r.right),
+					bottom: Math.max(box.bottom, r.bottom)
+				}
+			: { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+	}
+	return box;
+}
+
 const load_island = (entry: string) => {
 	const url = island_module_url(entry);
 	return import(/* @vite-ignore */ url) as Promise<{
@@ -451,6 +485,12 @@ export function finish_spa_document() {
 
 class OgygiaRegion extends HTMLElement {
 	#scheduled = false;
+	/** The server-minted `endpoint` of a deferred hole, captured at connect. On a Kit-hydrated
+	 *  (csr=true) document the wrapper's client leg cannot mint (the virtual is stubbed to ''), so
+	 *  Kit's hydration pass reconciles the attribute to '' — after the runtime saw it at parse time.
+	 *  The fetch reads this copy and restores the attribute (lakes, devtools and the router's
+	 *  next-page warm all read the DOM). */
+	#minted_endpoint: string | null = null;
 	/** True after a successful HTML swap — failures leave this false so a later schedule can retry. */
 	#done = false;
 	/** In-flight `#apply` run. `#apply` awaits the region's stylesheet before swapping, so anyone
@@ -493,6 +533,10 @@ class OgygiaRegion extends HTMLElement {
 		}
 	}
 	#mql: { mql: MediaQueryList; on: (e: MediaQueryListEvent) => void } | null = null;
+	/** Drop an on-demand hole's intent listeners (region + document) when it leaves before firing. */
+	#disarm_on_demand: (() => void) | null = null;
+	/** The hole answered `keepFallback()`: the page's fallback stands, no phase-2 wake. */
+	#kept = false;
 	/** Abort in-flight region HTML fetch on disconnect (P-ABORT). */
 	#fetch_abort: AbortController | null = null;
 	/** Cancel idle schedule when disconnected. */
@@ -507,6 +551,12 @@ class OgygiaRegion extends HTMLElement {
 		// HTML. Region.svelte drives it through `applyLive` (swap → morph / keep-alive); the element
 		// does nothing automatic here — no fetch, no self-hydrate.
 		if (this.hasAttribute('live')) return;
+		// A deferred hole's signed endpoint is only ever minted on the server — keep the copy Kit's
+		// hydration cannot reach (see #minted_endpoint). Parse-time connect runs before Kit's start().
+		if (this.#minted_endpoint === null && is_deferred(this)) {
+			const minted = this.getAttribute('endpoint');
+			if (minted) this.#minted_endpoint = minted;
+		}
 		const lake_arm = {
 			idle: (fire: () => void) => this.#on_idle(fire),
 			visible: (fire: () => void, margin?: string) => this.#on_visible(fire, margin),
@@ -614,8 +664,66 @@ class OgygiaRegion extends HTMLElement {
 		if (when === 'idle') this.#on_idle(fire);
 		else if (when === 'visible') this.#on_visible(fire, visible_margin);
 		else if (when === 'load') fire();
-		else if (when === 'interaction') this.#on_interaction(fire);
-		else this.#on_media(when, fire); // a media query string
+		else if (when === 'interaction') {
+			if (is_deferred(this)) this.#on_demand(fire);
+			else this.#on_interaction(fire);
+		} else this.#on_media(when, fire); // a media query string
+	}
+
+	/**
+	 * `when="interaction"` on a DEFERRED region — an ON-DEMAND hole. Nothing is fetched until the
+	 * visitor shows intent inside it (the pointer enters, focus lands, a touch or a key arrives);
+	 * then the HTML is fetched once and MORPHED in (#apply), so whatever the visitor already opened
+	 * in the static fallback stays open. Unlike an island's `interaction` wake there is no click
+	 * capture or replay: the fallback keeps handling the gesture natively, and hover is the
+	 * trigger itself, not a warm — a mega menu that opens on hover has its L3/L4 by the time the
+	 * pointer reaches them.
+	 */
+	#on_demand(fire: () => void) {
+		let fired = false;
+		// `margin` on an on-demand hole is its INTENT RADIUS: the pointer coming this close (px)
+		// counts as intent — the fetch starts while the pointer is still travelling to the region.
+		const radius = Number.parseFloat(this.getAttribute('margin') || '') || 0;
+		let near: ((e: PointerEvent) => void) | null = null;
+		const region = this;
+		function disarm() {
+			for (const type of ON_DEMAND_EVENTS) region.removeEventListener(type, once, true);
+			if (near) document.removeEventListener('pointermove', near);
+			near = null;
+			region.#disarm_on_demand = null;
+		}
+		function once() {
+			if (fired) return;
+			fired = true;
+			disarm();
+			fire();
+		}
+		for (const type of ON_DEMAND_EVENTS)
+			this.addEventListener(type, once, { capture: true, passive: true });
+		if (radius > 0) {
+			let pending = false;
+			near = (e) => {
+				if (pending || fired) return;
+				pending = true;
+				const x = e.clientX;
+				const y = e.clientY;
+				requestAnimationFrame(() => {
+					pending = false;
+					if (fired) return;
+					const r = region_box(region);
+					if (!r) return;
+					if (
+						x >= r.left - radius &&
+						x <= r.right + radius &&
+						y >= r.top - radius &&
+						y <= r.bottom + radius
+					)
+						once();
+				});
+			};
+			document.addEventListener('pointermove', near, { passive: true });
+		}
+		this.#disarm_on_demand = disarm;
 	}
 
 	/**
@@ -623,10 +731,11 @@ class OgygiaRegion extends HTMLElement {
 	 * hydrate and replay what arrived meanwhile (see runtime/interaction.ts). `pointerenter` warms
 	 * the module so the wake is usually served from cache. On a csr=true page Kit already hydrated
 	 * this island — do not arm (our click-cancel would eat live clicks); #hydrate's own guard
-	 * handles the marking if it ever fires.
+	 * handles the marking if it ever fires. Unless the island sits inside a lake: Kit adopts a lake
+	 * as opaque DOM and never hydrates its inside, so that island is ours to arm.
 	 */
 	#on_interaction(fire: () => void) {
-		if (kit_hydrates_page() && !is_deferred(this)) {
+		if (kit_hydrates_page() && !is_deferred(this) && !inside_frozen(this)) {
 			this.setAttribute('data-kit-hydrated', '');
 			return;
 		}
@@ -644,11 +753,20 @@ class OgygiaRegion extends HTMLElement {
 	 * Deferred hole: get its HTML and swap it in. When `hydrate` is also set (deferred client
 	 * island), schedule phase-2 hydrate — coalescing matching schedules to immediate load.
 	 */
+	/** The hole's endpoint: the attribute, or the server-minted copy when Kit's hydration wiped it
+	 *  (restored on the element so every other DOM reader agrees). */
+	#endpoint(): string | null {
+		const attr = this.getAttribute('endpoint');
+		if (attr) return attr;
+		if (!this.#minted_endpoint) return null;
+		this.setAttribute('endpoint', this.#minted_endpoint);
+		return this.#minted_endpoint;
+	}
 	async #server() {
 		// Bind to the store: this region applies whatever frame lands at its address — from its own
 		// fetch, a navigation batch stream, or (later) a mutation. subscribe() replays current
 		// content immediately, so a late-mounting twin catches up free.
-		const endpoint = this.getAttribute('endpoint');
+		const endpoint = this.#endpoint();
 		if (endpoint && !this.#frame_unsub) {
 			const address = (this.#frame_address = frameAddress(endpoint));
 			this.#frame_unsub =
@@ -661,6 +779,8 @@ class OgygiaRegion extends HTMLElement {
 		// (an interactive deferred leaf would swap in and stay dead).
 		await this.#applying;
 		if (!this.#done || !this.isConnected) return;
+		// A kept fallback is the page's own static markup — there is no fetched island to wake.
+		if (this.#kept) return;
 		const hydrate = region_hydrate_schedule(this);
 		if (!hydrate) return;
 		const defer_when = this.getAttribute('when') || 'load';
@@ -686,6 +806,17 @@ class OgygiaRegion extends HTMLElement {
 	 */
 	async #apply(html: string) {
 		if (!this.isConnected) return;
+		// The hole answered "the fallback is right" (`keepFallback()` on the server — a 204, or the
+		// marker parcel in a batch): keep what the page rendered, mark the region done, wake nothing.
+		if (html === KEEP_FALLBACK_HTML) {
+			this.#revalidating = false;
+			this.#done = true;
+			this.#kept = true;
+			if (!is_awake(this)) this.setAttribute('data-hydrated', '');
+			this.setAttribute('data-og-kept', '');
+			this.dispatchEvent(new CustomEvent('ogygia:server', { bubbles: true }));
+			return;
+		}
 		// A refresh is either an explicit SWR revalidate or a later frame after the first swap.
 		const revalidate = this.#revalidating || this.#done;
 		this.#revalidating = false;
@@ -694,7 +825,13 @@ class OgygiaRegion extends HTMLElement {
 		if (!this.isConnected) return;
 		slots.lakes.settle_in(frag);
 		slots.lakes.mark_frozen_settled(this);
-		this.replaceChildren(frag);
+		// An ON-DEMAND hole (`when="interaction"`) swaps under the visitor's pointer: MORPH the HTML
+		// in, so the nodes its static fallback rendered — and whatever the visitor already opened in
+		// them — survive; a plain swap would re-create a menu that is open right now. Every other
+		// hole replaces: its fallback is a placeholder with nothing worth keeping.
+		const morph = this.getAttribute('when') === 'interaction' ? slots.morph : undefined;
+		if (morph) morph(this, Array.from(frag.childNodes));
+		else this.replaceChildren(frag);
 		this.#done = true;
 		if (revalidate) this.setAttribute('data-revalidated', '');
 		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
@@ -752,7 +889,7 @@ class OgygiaRegion extends HTMLElement {
 	async #fetch_html(opts: { revalidate?: boolean } = {}) {
 		// A revalidate re-fetches even after the first swap; a plain fetch is one-shot.
 		if (this.#fetching || (this.#done && !opts.revalidate)) return;
-		const endpoint = this.getAttribute('endpoint');
+		const endpoint = this.#endpoint();
 		// Don't start a fetch without an endpoint (would block a later remount retry on the same
 		// element if one were ever scheduled).
 		if (!endpoint) return;
@@ -794,6 +931,8 @@ class OgygiaRegion extends HTMLElement {
 						});
 						if (!is_same_origin_response(res)) throw new Error('cross-origin redirect');
 						if (!res.ok) throw new Error('status ' + res.status);
+						// 204: the hole said keepFallback() — the page's fallback stands, nothing to swap.
+						if (res.status === 204) return KEEP_FALLBACK_HTML;
 						return res.text();
 					}),
 				{ force: opts.revalidate }
@@ -919,8 +1058,10 @@ class OgygiaRegion extends HTMLElement {
 			// Mixed mode: on a csr=true page Kit already hydrates this component — skip. EXCEPT a
 			// deferred region (server island / <Region>): its HTML was FETCHED after load and swapped
 			// in, so it was never part of Kit's SSR tree — Kit didn't hydrate it and won't. We must.
-			// (connectedCallback carries the same is_deferred exception for the fetch phase.)
-			if (kit_hydrates_page() && !is_deferred(this)) {
+			// (connectedCallback carries the same is_deferred exception for the fetch phase.) And
+			// EXCEPT a region INSIDE A LAKE: the lake wrapper adopts its SSR element under Kit as
+			// opaque DOM, so Kit never hydrates the islands in there either — those are ours.
+			if (kit_hydrates_page() && !is_deferred(this) && !inside_frozen(this)) {
 				this.setAttribute('data-kit-hydrated', '');
 				if (import.meta.env.DEV) {
 					console.warn(
@@ -1246,6 +1387,7 @@ class OgygiaRegion extends HTMLElement {
 		}
 		this.#io?.disconnect();
 		this.#io = null;
+		this.#disarm_on_demand?.();
 		this.#disarm_interaction?.();
 		this.#disarm_interaction = null;
 		if (this.#mql) {

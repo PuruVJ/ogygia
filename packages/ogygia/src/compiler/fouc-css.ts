@@ -91,12 +91,32 @@ export function foucRelFromId(id: string) {
  * @param importerAbs
  * @param libDir
  */
-export function resolveFoucImportSpec(spec: string, importerAbs: string, libDir: string) {
+/** One resolved Vite alias (`resolve.alias`, normalized) — Kit's `kit.alias` entries arrive here. */
+export interface FoucAlias {
+	find: string | RegExp;
+	replacement: string;
+}
+
+export function resolveFoucImportSpec(
+	spec: string,
+	importerAbs: string,
+	libDir: string,
+	alias: readonly FoucAlias[] = []
+) {
 	if (spec === '$lib' || spec.startsWith('$lib/')) {
 		return path.join(libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
 	}
 	if (spec.startsWith('.')) {
 		return path.resolve(path.dirname(importerAbs), spec);
+	}
+	// App aliases (`$lib_x`, `@scope/pkg` → a source dir): the same table Vite resolves with.
+	for (const a of alias) {
+		if (typeof a.find === 'string') {
+			if (spec === a.find) return a.replacement;
+			if (spec.startsWith(a.find + '/')) return a.replacement + spec.slice(a.find.length);
+		} else if (a.find.test(spec)) {
+			return spec.replace(a.find, a.replacement);
+		}
 	}
 	return null;
 }
@@ -138,6 +158,8 @@ export function collectFoucCssReachable(
 		root: string;
 		libDir: string;
 		readFile?: (p: string) => string | null;
+		/** app aliases to follow (`$lib_x/…`, `@scope/pkg/…` → source dirs) */
+		alias?: readonly FoucAlias[];
 	}
 ): Array<{ kind: 'scoped' | 'css'; abs: string }> {
 	const read =
@@ -166,7 +188,7 @@ export function collectFoucCssReachable(
 		}
 
 		for (const spec of listStaticImportSpecs(source, norm)) {
-			const resolved = resolveFoucImportSpec(spec, norm, opts.libDir);
+			const resolved = resolveFoucImportSpec(spec, norm, opts.libDir, opts.alias);
 			if (!resolved) continue;
 			const clean = resolved.split('?')[0];
 			if (STYLE_EXT.test(clean)) {
@@ -189,17 +211,34 @@ export function collectFoucCssReachable(
  * @param abs
  * @param source
  */
-export function compileFoucScopedCss(abs: string, source: string) {
-	const stripped = source.replace(SCRIPT_TAG, '');
+export function compileFoucScopedCss(
+	abs: string,
+	source: string,
+	opts: {
+		/** Keep the `<script>` (already free of TS/dialects): a template reading `$store` from an
+		 *  imported store, or any script-declared name, only compiles WITH its script. Stripping it
+		 *  (the default, for sources that may still carry TypeScript) throws on such a template and
+		 *  falls back to UNSCOPED style bodies — which match nothing the SSR'd markup carries. */
+		keepScript?: boolean;
+	} = {}
+) {
+	const input = opts.keepScript ? source : source.replace(SCRIPT_TAG, '');
 	try {
-		const result = compile(stripped, {
+		const result = compile(input, {
 			filename: abs,
 			generate: 'client',
 			css: 'external',
-			discloseVersion: false
+			discloseVersion: false,
+			// a hole component may `await` at the top level (async Svelte); the CSS is the same either way
+			experimental: { async: true }
 		});
 		return result.css?.code ?? '';
-	} catch {
+	} catch (err) {
+		if (opts.keepScript) {
+			console.warn(
+				`[ogygia] scoped CSS for ${abs} could not be compiled (${(err as Error).message.split('\n')[0]}) — shipping its style bodies unscoped`
+			);
+		}
 		return extractRawStyleBodies(source);
 	}
 }

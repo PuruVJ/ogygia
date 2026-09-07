@@ -125,6 +125,8 @@ function strategy_label(attrs: Attrs): string {
 		return `server island (deferred, fetched on ${attrs.wake ?? 'load'})`;
 	if (attrs.render === 'live') return 'live region (baked, revalidates in background)';
 	if (attrs.wake === 'none') return 'lake (frozen server HTML, ships no JS)';
+	if (attrs.render === 'deferred' && attrs.wake === 'interaction')
+		return 'on-demand server island (HTML fetched on the first hover/focus/touch inside, morphed in; ships no JS)';
 	const wake = (attrs.wake as string) ?? 'load';
 	return `island (interactive, wakes on ${wake})${attrs.keep ? `, kept across nav as "${attrs.keep}"` : ''}`;
 }
@@ -1212,12 +1214,6 @@ function tool_scan(args: Attrs): ToolResult {
 					file: rel(f),
 					severity: 'warn',
 					msg: `${m.component}: wake:'none' + render:'deferred' is nonsense (HTML later, no JS) — dev treats it as defer-only. Drop one.`
-				});
-			if (m.attrs.wake === 'interaction' && m.attrs.render === 'deferred')
-				violations.push({
-					file: rel(f),
-					severity: 'warn',
-					msg: `${m.component}: render:'deferred' ignores wake:'interaction' (a server island renders inline in an island). Nest a wake island inside it instead.`
 				});
 		}
 	}

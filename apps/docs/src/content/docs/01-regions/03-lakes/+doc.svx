@@ -56,6 +56,28 @@ By default, a lake is baked one time and restored unchanged. When its content mu
 
 > After an SPA navigation, a lake restored inside kept layout chrome is marked as settled again. Thus an island nested in that lake can wake. See [SPA router](/docs/app/spa-router).
 
+## A lake on a Kit page (csr = true)
+
+A lake also works at the top of a page, as site chrome, and it survives a page that Kit hydrates. Mark the header import in a layout with `wake: 'none'`. On a `csr = false` page the header is plain server HTML. On a `csr = true` page Kit hydrates the document, but it **adopts** the lake: the server element stays as it is, byte for byte, and the code of the header ships in no bundle, not even the bundle of Kit.
+
+```svelte title=+layout.svelte
+<script>
+  import Header from '$lib/Header.svelte' with { wake: 'none' };
+  let { children } = $props();
+</script>
+
+<Header />
+{@render children()}
+```
+
+Everything *inside* the lake stays in the world of ogygia on both kinds of page. A [server island](/docs/regions/server-islands) inside the header (the account menu, the cart count) still fetches. A `wake: 'interaction'` search box inside it still wakes on the first click. Kit never hydrates the inside of a lake, so the runtime of ogygia does.
+
+That is the shape of a static site header: static markup for the menu, holes for the personal parts, one small island for the search. Anonymous visitors download none of the header JS, and the same header keeps working on the few pages that need `csr = true`.
+
+::: warning A lake needs server HTML
+A lake that Kit mounts fresh during a client-side navigation has no server HTML to adopt. It renders empty, and dev mode warns. Keep chrome lakes in a layout that persists across navigations, or serve that route with `csr = false`.
+:::
+
 ## Do / don't
 
 - **Do** put your heaviest static content (long prose, large charts, code) in a lake when it is inside an island.

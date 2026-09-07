@@ -2,6 +2,7 @@ import { relocate_trailing_empty_comments } from './lake-anchors.js';
 import {
 	FROZEN_SELECTOR,
 	document_is_freeze,
+	is_awake,
 	is_frozen,
 	region_is_vacant,
 	region_max_age_ms,
@@ -112,6 +113,14 @@ export function on_frozen_connect(el: HTMLElement, arm: LakeArm): boolean {
 					`island to drive remount revalidation.`
 			);
 		}
+		// A lake with no AWAKE region host is settled as it stands: nothing will ever lift/restore
+		// it (that is the host island's hydrate), so the regions authored inside must self-run now
+		// instead of waiting on `wait_for_boundary`. The shapes: a lake ADOPTED under Kit hydration
+		// (csr=true page — the wrapper keeps the SSR element as opaque DOM, so its islands are ours),
+		// and a lake inside an inline (Kit-hydrated) island. A lake inside a real island keeps
+		// waiting: that island's hydrate lifts, restores and settles it.
+		const host = el.parentElement?.closest('ogygia-region');
+		if (!host || !is_awake(host)) runtime_session.settled_lakes.add(el);
 		return true;
 	}
 	if (!region_is_vacant(el)) return true;

@@ -34,6 +34,24 @@ export function isNested(): boolean {
 	return getContext(NESTED_KEY) === true;
 }
 
+// Context key marking "this subtree is INSIDE A LAKE" (a `wake: 'none'` region). Same `Symbol.for`
+// rule as NESTED_KEY. A lake is server HTML that Kit's hydration never enters — on a csr=true page
+// the lake wrapper ADOPTS its element as opaque DOM (Region.svelte, lake branch) — so the regions
+// authored inside a lake belong to ogygia's world on EVERY page: the server must emit their real
+// `<ogygia-region>` even when the document is Kit-hydrated. Region reads this to switch its csr=true
+// inline degradation off; the runtime mirrors it with `inside_frozen` (region-attrs.ts).
+const LAKE_KEY = Symbol.for('ogygia.lake-subtree');
+
+/** Mark the current subtree as a lake's inside (LakeBoundary). */
+export function setInLake(): void {
+	setContext(LAKE_KEY, true);
+}
+
+/** True when an ancestor lake boundary marked the subtree. */
+export function isInLake(): boolean {
+	return getContext(LAKE_KEY) === true;
+}
+
 /** Kit `route.id`, GROUP segments (`(app)`) stripped — mirrors the compiler's `normalize_route_id`
  *  so both sides match whether or not Kit keeps groups in `route.id`. Root → `/`. */
 function normalize_route_id(id: string): string {

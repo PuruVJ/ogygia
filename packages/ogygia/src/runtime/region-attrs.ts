@@ -26,6 +26,13 @@ export function is_frozen(el: Element): boolean {
 	return el.getAttribute('wake') === 'none';
 }
 
+/** True if this region sits INSIDE a frozen region (a lake). Its subtree is ogygia's world even on
+ *  a Kit-hydrated document: the lake wrapper adopts its element there as opaque DOM, so Kit never
+ *  hydrates the inside — the runtime must (the server-side twin is `isInLake()` in context.ts). */
+export function inside_frozen(el: Element): boolean {
+	return !!el.parentElement?.closest(FROZEN_SELECTOR);
+}
+
 /** True if this region fetches HTML later (`render="defer"`). */
 export function is_deferred(el: Element): boolean {
 	return el.getAttribute('render') === 'defer';

@@ -19,7 +19,8 @@
 	 * into the browser. The runtime custom element (`core.ts`) is unchanged; only the `.svelte` wrappers
 	 * collapsed into this file.
 	 */
-	import { untrack } from 'svelte';
+	import { untrack, getContext, setContext, createRawSnippet } from 'svelte';
+	import { KIT_REQUEST_CONTEXT, kit_request_event } from './server/kit-context.js';
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
@@ -30,7 +31,7 @@
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';
-	import { isNested, setNested, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
+	import { isNested, setNested, isInLake, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { REF_WIRE_KEY, ref_reducer } from './ref.js';
 	// PULL-registration inside stringify_props (idempotent; no import-time side effects)
 	import { register_wire_kind } from './live-transport.js';
@@ -191,6 +192,19 @@
 	// Nested rule (islands/server): a region inside an already-awake region hydrates with its parent,
 	// so it degrades to a plain inline render. Read once at init (a wrapper's mode is fixed per usage).
 	const nested = isNested();
+
+	// `requestEvent()` inside a region rendered by Kit's OWN page pass: Kit's `__request__` context
+	// carries `{ page }` only (ogygia's render roots add `event` themselves). Re-set the same key
+	// for this region's subtree with the live event, so a component inside any island / lake /
+	// server island reads the request the same way wherever it renders. Server only, once per
+	// region, and only when no ancestor already did.
+	if (typeof window === 'undefined') {
+		const req = /** @type {{ page?: unknown; event?: unknown } | undefined} */ (getContext(KIT_REQUEST_CONTEXT));
+		if (req && req.event == null) {
+			const event = kit_request_event();
+			if (event) setContext(KIT_REQUEST_CONTEXT, { ...req, event });
+		}
+	}
 	// csr=true rule (ISLANDS only): on a Kit-hydrated page an interactive region should render its
 	// component INLINE in the Kit tree — no `<ogygia-region>`, no runtime — because Kit already
 	// hydrates it. Same degradation as `nested`, gated by the csr context the transform injects into
@@ -200,7 +214,11 @@
 	// it.) If so, every island degrades to a plain inline component on both legs: no `<ogygia-region>`,
 	// no runtime claim, no FOUC. Server reads the build-time csr=true route map; client reads Kit's
 	// bootstrap. Identical both legs, so the inline/island choice can never desync at hydrate.
-	const is_csr = documentIsCsrTrue();
+	// INSIDE A LAKE the answer is always false: under Kit hydration a lake is adopted as opaque DOM
+	// (the lake branch below), so Kit never reaches the regions authored inside it — they stay real
+	// `<ogygia-region>`s on every page and the runtime wakes them. Server-side in practice (a lake's
+	// inside is never rendered on the client); the runtime mirrors it with `inside_frozen`.
+	const is_csr = documentIsCsrTrue() && !isInLake();
 	// The island branch renders inline when nested OR on a csr=true page.
 	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();
@@ -441,6 +459,48 @@
 	const lake_endpoint = $derived(
 		lake_inside && lake_swr ? makeRegionEndpoint(__entry || '', __props || {}) : ''
 	);
+	// A lake on a KIT-HYDRATED document (a csr=true page). Kit's client hydrates this wrapper too,
+	// but the lake's component is the render-nothing placeholder on the client (its JS ships to no
+	// browser), so a normal template here would MISMATCH — Svelte then discards the SSR DOM and
+	// re-renders, and the lake vanishes (found on a site header under a csr=true page). Instead the
+	// lake renders through ONE snippet whose SERVER form emits exactly one element (the frozen region
+	// with the lake's HTML inside) and whose CLIENT form is a raw snippet: hydration ADOPTS the
+	// element at the render position verbatim — no diff, no mismatch, the server HTML stays. (The same
+	// adoption an island's slot children get.) It is a real frozen region: LakeBoundary resets
+	// `nested` and marks the lake's inside, so the islands and holes authored in there emit their
+	// real regions and wake on the runtime, which Kit never touches.
+	const lake_attrs = $derived.by(() => {
+		const esc = (v) =>
+			String(v).split('&').join('&amp;').split('"').join('&quot;').split(LT).join('&lt;');
+		let s = ' entry="' + esc(__entry || '') + '" wake="none" remount="' + esc(__remount) + '"';
+		if (lake_swr) s += ' when="' + esc(__when) + '"';
+		if (__maxAge != null) s += ' max-age="' + esc(String(__maxAge)) + '"';
+		if (__onExpire) s += ' on-expire="' + esc(__onExpire) + '"';
+		if (lake_swr && __margin) s += ' margin="' + esc(__margin) + '"';
+		if (lake_endpoint) s += ' endpoint="' + esc(lake_endpoint) + '"';
+		return s;
+	});
+	const lake_adopt =
+		typeof window === 'undefined'
+			? // SERVER: a server-convention snippet (`(renderer) => …`) — one element, the lake inside.
+				/** @param {{ push(html: string): void }} renderer */
+				(renderer) => {
+					renderer.push(LT + 'ogygia-region' + lake_attrs + GT);
+					LakeBoundary(/** @type {never} */ (renderer), /** @type {never} */ ({ children }));
+					renderer.push(LT + '/ogygia-region' + GT);
+				}
+			: createRawSnippet(() => ({
+					render: () => LT + 'ogygia-region' + lake_attrs + GT + LT + '/ogygia-region' + GT,
+					/** @param {Element} el */
+					setup: (el) => {
+						// Created fresh on the client (a Kit client-side navigation mounted this lake), so
+						// there was no SSR element to adopt: a lake is server HTML, and there is none here.
+						if (!el.firstChild && import.meta.env && import.meta.env.DEV)
+							console.warn(
+								`[ogygia] lake "${__entry}" was mounted by Kit on the client with no server HTML to adopt (a client-side navigation?) — it renders empty. A lake is server HTML: keep chrome lakes in a layout that persists across navigations, or serve that route csr=false.`
+							);
+					}
+				}));
 
 	// ─────────────────────────────────────────────── head (runtime + preload) ──
 	// The runtime bootstrap for this page. Claim once, only for a top-level island/server placement
@@ -627,7 +687,7 @@
 			endpoint={server_endpoint}
 		>{#if ogygiaFallback}{@render ogygiaFallback()}{/if}</ogygia-region>{@html server_props_script}{/if}
 {:else if is_lake}
-	{#if lake_inside}
+	{#if is_csr}{@render lake_adopt()}{:else if lake_inside}
 		<ogygia-region
 			entry={__entry}
 			wake="none"

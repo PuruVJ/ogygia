@@ -166,9 +166,11 @@ function warn_once(key: string, msg: string): void {
 
 // Invariant per-build — hoisted to module scope so they aren't reallocated on every transformHost.
 const KNOWN_STRATEGIES = new Set(['load', 'idle', 'visible']);
-// `interaction` is a wake-only schedule (first pointer/key/focus inside the region, with click
-// replay) — a wake-only schedule, never a deferred fetch timing.
+// `interaction` on an island: first pointer/key/focus inside the region wakes it (with click
+// replay). On a deferred region it is an ON-DEMAND hole: the first hover/focus/touch/key inside
+// fetches the HTML, which is morphed in (the runtime's #on_demand). `none` is never a fetch timing.
 const HYDRATE_STRATEGIES = new Set([...KNOWN_STRATEGIES, 'interaction']);
+const DEFER_STRATEGIES = HYDRATE_STRATEGIES;
 /** Inline attribute keys accepted after normalization (canonical internal names). */
 const ATTR_SCHEMA = new Set(['hydrate', 'defer', 'margin', 'keep', 'stitch']);
 /** AST fragment child-key names walked when descending the template. */
@@ -1130,11 +1132,11 @@ class FileCompilation {
 		if (attrs.has('defer')) {
 			const dval = attrs.get('defer')!;
 			let when: string;
-			if (KNOWN_STRATEGIES.has(dval)) when = dval;
+			if (DEFER_STRATEGIES.has(dval)) when = dval;
 			else if (is_media_query(dval)) when = dval;
 			else
 				throw fail(
-					`\`${import_keys.render}: 'deferred'\` fetches on the \`${import_keys.wake}\` schedule, but '${dval}' is not one. Use \`${import_keys.wake}: 'load' | 'idle' | 'visible'\` or a media query (not 'none'/'interaction' — a hole must fetch).`
+					`\`${import_keys.render}: 'deferred'\` fetches on the \`${import_keys.wake}\` schedule, but '${dval}' is not one. Use \`${import_keys.wake}: 'load' | 'idle' | 'visible' | 'interaction'\` or a media query (not 'none' — a hole must fetch).`
 				);
 			const options: {
 				when: string;
@@ -1144,6 +1146,8 @@ class FileCompilation {
 			} = { when };
 			if (when === 'visible')
 				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
+			// on-demand hole: `margin` is the INTENT RADIUS — fetch when the pointer comes this close
+			if (when === 'interaction' && attrs.has('margin')) options.margin = attrs.get('margin');
 			if (live_opts.maxAge != null) {
 				const ttl = parse_cache_ttl_sec(live_opts.maxAge, err_shim, '');
 				if (ttl != null && ttl > 0) options.cacheTtlSec = ttl;
@@ -2429,11 +2433,11 @@ class TsRegionCompilation {
 			}
 			const dval = marker.wake ?? 'load';
 			let when: string;
-			if (KNOWN_STRATEGIES.has(dval)) when = dval;
+			if (DEFER_STRATEGIES.has(dval)) when = dval;
 			else if (is_media_query(dval)) when = dval;
 			else
 				throw new Error(
-					`[ogygia] ${this.#rel_host}: \`${renderKey}: 'deferred'\` fetches on the \`${this.#wakeKey}\` schedule, but '${dval}' is not one. Use \`${this.#wakeKey}: 'load' | 'idle' | 'visible'\` or a media query (a hole must fetch — not 'none'/'interaction').`
+					`[ogygia] ${this.#rel_host}: \`${renderKey}: 'deferred'\` fetches on the \`${this.#wakeKey}\` schedule, but '${dval}' is not one. Use \`${this.#wakeKey}: 'load' | 'idle' | 'visible' | 'interaction'\` or a media query (a hole must fetch — not 'none').`
 				);
 			const options: { when: string; margin?: string } = { when };
 			if (when === 'visible' && this.#ctx.visibleMargin != null)

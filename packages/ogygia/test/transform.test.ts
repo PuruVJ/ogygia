@@ -581,15 +581,28 @@ describe('interaction schedule', () => {
 		);
 	});
 
-	test("render: deferred + wake: 'interaction' is rejected (a hole can't fetch on interaction)", () => {
+	test("render: deferred + wake: 'interaction' is an ON-DEMAND hole (fetch on intent)", () => {
+		const r = run(
+			wrap(`import G from './G.svelte' with { render: 'deferred', wake: 'interaction' };`, '<G />')
+		)!;
+		expect(r.islands[0].wrapperSource).toMatch(/__mode="server"/);
+		expect(r.islands[0].wrapperSource).toMatch(/__defer=\{?"interaction"\}?/);
+		expect(r.islands[0].wrapperSource).not.toMatch(/__margin/);
+	});
+
+	test('an on-demand hole takes its INTENT RADIUS from a preset `margin` (inline margin stays config-only)', () => {
+		const ctx = makeCtx({
+			presets: { menu: { render: 'deferred', wake: 'interaction', margin: '120px' } }
+		});
+		const r = run(wrap(`import G from './G.svelte' with { preset: 'menu' };`, '<G />'), ctx)!;
+		expect(r.islands[0].wrapperSource).toMatch(/__defer=\{?"interaction"\}?/);
+		expect(r.islands[0].wrapperSource).toMatch(/__margin=\{"120px"\}/);
+	});
+
+	test("render: deferred + wake: 'none' is still rejected (a hole must fetch)", () => {
 		expectThrows(
 			() =>
-				run(
-					wrap(
-						`import G from './G.svelte' with { render: 'deferred', wake: 'interaction' };`,
-						'<G />'
-					)
-				),
+				run(wrap(`import G from './G.svelte' with { render: 'deferred', wake: 'none' };`, '<G />')),
 			/fetches on the .*wake.* schedule/
 		);
 	});
