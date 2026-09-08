@@ -67,3 +67,5 @@ scratch-*.mjs
 
 # bcms header lab — copied Schneider source + captured feeds; NEVER committed
 internal/repro-bcms-header/
+# PES (product catalog) lab — same rule: copied Schneider source, se.com captures, vendored bundles
+internal/repro-pes/

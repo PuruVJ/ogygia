@@ -26,7 +26,8 @@ import {
 	routeCsrIsFalse,
 	routeCsrIsTrue,
 	hasAnyCsrTrueRoute,
-	clean_stale_ogygia_dirs
+	clean_stale_ogygia_dirs,
+	kit_dirs
 } from './kit.js';
 import { run_module_macros } from './macros/pipeline.js';
 import { generateRuntimeEntrySource, resolveFeatures } from './link/runtime-entry.js';
@@ -98,6 +99,7 @@ import {
 	V_FREEZE_ROUTES
 } from './ids.js';
 import { strip_id, host_key } from './program.js';
+import { island_host_loaded } from './link/emit-gate.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
 import type { Program, RegisterResult } from './program.js';
 import type { CompileCtx } from './ctx.js';
@@ -294,7 +296,7 @@ export class Compiler {
 		// the emitFile module with the page graph forces Rolldown thin `og-region.*`
 		// facades. SSR keeps real wrappers for HTML; csr=true client keeps them so Kit can
 		// hydrate islands as normal components. Hydration always uses `import(entry)`.
-		const routesDir = path.join(ctx.root, 'src', 'routes');
+		const routesDir = kit_dirs(ctx.root).routes_dir;
 		// A csr=false LAYOUT can wrap a csr=true child page — there Kit hydrates the layout, so its
 		// chrome islands must be REAL wrappers on the client (Region degrades them inline via
 		// `documentIsCsrTrue`), NOT the thin stub. Only when the app actually has a csr=true route,
@@ -637,23 +639,40 @@ export class Compiler {
 		return false;
 	}
 
+	/** The server leg's real module graph, for the client-leg handoff (link/emit-gate.ts). */
+	ssr_transformed_hosts(): string[] {
+		return [...this.program.ssr_transformed].sort();
+	}
+
+	/**
+	 * Client leg: the runtime chunk + one deterministic chunk per deduped hydrate region. `loaded` —
+	 * the server leg's transformed-module set (the handoff the plugin reads) — gates the emit to
+	 * islands whose HOST the server bundle actually contains; `null` (no handoff: standalone, or a
+	 * client-only build) keeps every prescanned island, as before. Returns how many were skipped.
+	 */
 	emit_build_chunks(
 		emitFile: (chunk: { type: 'chunk'; id: string; fileName: string }) => void,
-		{ emitRuntime }: { emitRuntime: boolean }
-	): void {
+		{ emitRuntime, loaded = null }: { emitRuntime: boolean; loaded?: Set<string> | null }
+	): number {
 		if (emitRuntime) {
 			// Unresolved virtual id — resolve_id/emit synthesize the feature-selected entry.
 			emitFile({ type: 'chunk', id: V_RUNTIME_ENTRY, fileName: this.runtime_chunk_filename() });
 		}
-		const { region_kinds, by_id, emitted_island_chunks } = this.program;
+		const { region_kinds, by_id, emitted_island_chunks, registry } = this.program;
+		let skipped = 0;
 		for (const [rid, kind] of region_kinds) {
 			if (kind !== 'hydrate') continue;
 			const virtualPath = by_id.get(rid);
 			if (!virtualPath) continue;
 			if (emitted_island_chunks.has(rid)) continue;
+			if (!island_host_loaded(registry.get(virtualPath)?.hostPath, loaded)) {
+				skipped++;
+				continue;
+			}
 			emitted_island_chunks.add(rid);
 			emitFile({ type: 'chunk', id: virtualPath, fileName: this.#ctx!.island_chunk_filename(rid) });
 		}
+		return skipped;
 	}
 
 	/**
@@ -751,7 +770,7 @@ export class Compiler {
 			return `export default ${JSON.stringify('/@id/__x00__' + V_DEVTOOLS_BOOT)};`;
 		}
 		if (id === RESOLVED(V_ISLAND_DEPS)) {
-			return island_deps_module(ssr, is_dev);
+			return island_deps_module(ssr, is_dev, path.relative(ctx.root, kit_dirs(ctx.root).out_dir));
 		}
 		if (id === RESOLVED(V_TRANSPORT)) {
 			return transport_module(universalHooks);
@@ -823,12 +842,12 @@ export class Compiler {
 			return region_ttl_module(ssr, ctx.region_ttl);
 		}
 		if (id === RESOLVED(V_ROUTE_CSR)) {
-			return route_csr_module(ssr, path.join(ctx.root, 'src', 'routes'));
+			return route_csr_module(ssr, kit_dirs(ctx.root).routes_dir);
 		}
 		if (id === RESOLVED(V_FREEZE_ROUTES)) {
 			return freeze_routes_module(
 				ssr,
-				path.join(ctx.root, 'src', 'routes'),
+				kit_dirs(ctx.root).routes_dir,
 				ctx.freeze_config?.default ?? false
 			);
 		}
@@ -1061,6 +1080,9 @@ export class Compiler {
 		this.prescan();
 
 		const id_n = strip_id(id);
+		// server leg of a build: this module is in the server bundle's real graph (see
+		// Program.ssr_transformed / link/emit-gate.ts)
+		if (ssr && ctx.is_build) program.ssr_transformed.add(host_key(id_n));
 
 		// (There is deliberately NO csr=false route-client stripping here. Kit collects a route's
 		// CSS manifest from the CLIENT graph — stubbing those modules silently drops every component

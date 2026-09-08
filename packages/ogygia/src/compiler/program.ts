@@ -96,6 +96,13 @@ export class Program {
 	 *  buildStart prescan emit AND the transform-time emit that catches islands prescan can't see —
 	 *  those declared inside LIBRARY components, where the host lives outside the app's `src`). */
 	readonly emitted_island_chunks = new Set<string>();
+	/** BUILD, server leg: every module id Vite actually transformed (`host_key`-normalised) — the
+	 *  server bundle's real graph. Handed to the client leg, which emits island chunks only for
+	 *  islands whose HOST is in it: the prescan registers every marked import under `src/`, but a
+	 *  host nothing imports (a second route tree's pages, a retired component) must not cost a
+	 *  chunk — or drag its imports into a client build whose server pass never saw them (a
+	 *  `.remote.ts` there fails Kit's "expected to find metadata" check). */
+	readonly ssr_transformed = new Set<string>();
 	/** Absolute paths of app modules that define a transportable class (built during prescan). */
 	readonly transportable_modules = new Set<string>();
 

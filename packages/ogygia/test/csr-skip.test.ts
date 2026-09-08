@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { clientBuildWillSkip, read_csr, KEEP_CLIENT_DIR } from '../src/compiler/kit.js';
@@ -110,6 +110,42 @@ describe('clientBuildWillSkip — chain-resolved csr (Kit parity)', () => {
 
 	it('missing routes dir → never predicts a skip', () => {
 		expect(clientBuildWillSkip(join(tmpdir(), 'og-csr-definitely-missing'))).toBe(false);
+	});
+});
+
+describe('clientBuildWillSkip — symlinked route files and dirs (Kit follows links)', () => {
+	// Kit discovers routes by name + statSync, so a linked `+layout.ts` / a linked route dir is a
+	// real node to it. ogygia's walkers used dirent types (false for links): a linked root
+	// `+layout.ts` with csr=false was invisible → "build stays" predicted while Kit skipped → 404s.
+	// Regression: an app sharing route files between two trees (src/routes ↔ src/routes-v2).
+	it('a linked root +layout.ts (csr=false) + option-less pages → skip', () => {
+		const dir = routes({
+			'shared/+layout.ts': 'export const csr = false;',
+			'tree/+page.svelte': '<h1>home</h1>',
+			'tree/about/+page.svelte': '<h1>about</h1>'
+		});
+		symlinkSync(join(dir, 'shared/+layout.ts'), join(dir, 'tree/+layout.ts'));
+		expect(clientBuildWillSkip(join(dir, 'tree'))).toBe(true);
+	});
+
+	it('a linked route DIRECTORY holding a csr=true page keeps the build alive', () => {
+		const dir = routes({
+			'shared/kit/+page.svelte': '<h1>kit</h1>',
+			'shared/kit/+page.ts': 'export const csr = true;',
+			'tree/+layout.ts': 'export const csr = false;',
+			'tree/+page.svelte': '<h1>home</h1>'
+		});
+		symlinkSync(join(dir, 'shared/kit'), join(dir, 'tree/kit'));
+		expect(clientBuildWillSkip(join(dir, 'tree'))).toBe(false);
+	});
+
+	it('a dangling link is ignored, as Kit ignores it', () => {
+		const dir = routes({
+			'tree/+layout.ts': 'export const csr = false;',
+			'tree/+page.svelte': '<h1>home</h1>'
+		});
+		symlinkSync(join(dir, 'nowhere'), join(dir, 'tree/gone'));
+		expect(clientBuildWillSkip(join(dir, 'tree'))).toBe(true);
 	});
 });
 

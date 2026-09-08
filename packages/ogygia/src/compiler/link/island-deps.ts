@@ -84,9 +84,10 @@ export function collectIslandDepModulepreloads(
 	return { js, css };
 }
 
-/** Stable handoff path: client `generateBundle` writes; SSR reads at render (Kit is SSR-first). */
-export function islandDepsHandoffPath(root: string) {
-	return path.join(root, '.svelte-kit', 'og-region-deps.json');
+/** Stable handoff path under Kit's `outDir`: client `generateBundle` writes; SSR reads at render
+ *  (Kit is SSR-first). */
+export function islandDepsHandoffPath(out_dir: string) {
+	return path.join(out_dir, 'og-region-deps.json');
 }
 
 /**
@@ -95,8 +96,10 @@ export function islandDepsHandoffPath(root: string) {
  * builds the server bundle before the client, so baking at `load()` would always be empty;
  * prerender/live SSR run after client generateBundle. Resolve via import.meta.url walk (not absolute
  * build-machine paths) so adapters find `output/server/og-region-deps.json` next to the server bundle.
+ * `out_dir_rel` — Kit's `outDir` relative to the app root (`.svelte-kit` by default) — is the cwd
+ * fallback for adapter-node / preview run from the app root.
  */
-export function island_deps_module(ssr: boolean, is_dev: boolean): string {
+export function island_deps_module(ssr: boolean, is_dev: boolean, out_dir_rel = '.svelte-kit'): string {
 	if (!ssr)
 		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
@@ -134,8 +137,8 @@ export function island_deps_module(ssr: boolean, is_dev: boolean): string {
 		`  } catch {}\n` +
 		`  if (typeof process !== 'undefined' && process.cwd) {\n` +
 		`    const cwd = process.cwd();\n` +
-		`    out.push(path.join(cwd, '.svelte-kit', 'og-region-deps.json'));\n` +
-		`    out.push(path.join(cwd, '.svelte-kit', 'output', 'server', 'og-region-deps.json'));\n` +
+		`    out.push(path.join(cwd, ${JSON.stringify(out_dir_rel)}, 'og-region-deps.json'));\n` +
+		`    out.push(path.join(cwd, ${JSON.stringify(out_dir_rel)}, 'output', 'server', 'og-region-deps.json'));\n` +
 		`  }\n` +
 		`  return out;\n` +
 		`}\n` +

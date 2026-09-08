@@ -108,7 +108,8 @@ describe('collectIslandDepModulepreloads', () => {
 });
 
 describe('islandDepsHandoffPath', () => {
-	test('is under .svelte-kit at the app root', () => {
-		expect(islandDepsHandoffPath('/app')).toBe('/app/.svelte-kit/og-region-deps.json');
+	test('is under Kit outDir (`.svelte-kit` by default, whatever the app configured otherwise)', () => {
+		expect(islandDepsHandoffPath('/app/.svelte-kit')).toBe('/app/.svelte-kit/og-region-deps.json');
+		expect(islandDepsHandoffPath('/app/.svelte-kit-v2')).toBe('/app/.svelte-kit-v2/og-region-deps.json');
 	});
 });

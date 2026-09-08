@@ -4,6 +4,7 @@
  * whose sub-app actually owns it. Pure over the graph nodes it is handed; reads, never mutates.
  */
 import { path } from '../host.js';
+import { kit_dirs } from '../kit.js';
 
 /** Structural shape of a Vite dev module-graph node (the two fields the owner walk reads). */
 export type DevGraphModule = { file?: string | null; importers?: Iterable<DevGraphModule> };
@@ -23,7 +24,7 @@ export function derive_css_scope_owners(
 		{ getModulesByFile?: (f: string) => Set<DevGraphModule> | undefined } | undefined | null
 	>
 ): string[] {
-	const routes_dir = path.join(root, 'src', 'routes') + path.sep;
+	const routes_dir = kit_dirs(root).routes_dir + path.sep;
 	const owners = new Set<string>();
 	const seen = new Set<DevGraphModule>();
 	const stack: DevGraphModule[] = [];

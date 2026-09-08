@@ -64,19 +64,20 @@ export function warn_content_leaks(
 }
 
 /**
- * Write the island-deps handoff JSON (the map SSR reads at render): the stable `.svelte-kit` path,
- * an adapter-friendly copy next to the server bundle, AND an in-place inline into every server chunk
- * that carries the token slot — inlining is what makes it survive serverless tracing (@vercel/nft
- * only bundles *imported* files, not runtime fs reads, so the co-located JSON is dropped there; that
- * is why held/dual regions that cross the wire rendered unstyled on Vercel/Netlify). Unpatched builds
- * keep the fs fallback (adapter-node, dev-preview).
+ * Write the island-deps handoff JSON (the map SSR reads at render): the stable path under Kit's
+ * `outDir` (`.svelte-kit` unless the app configured `kit.outDir`), an adapter-friendly copy next
+ * to the server bundle, AND an in-place inline into every server chunk that carries the token slot
+ * — inlining is what makes it survive serverless tracing (@vercel/nft only bundles *imported*
+ * files, not runtime fs reads, so the co-located JSON is dropped there; that is why held/dual
+ * regions that cross the wire rendered unstyled on Vercel/Netlify). Unpatched builds keep the fs
+ * fallback (adapter-node, dev-preview).
  */
-export function emit_island_deps_handoff(root: string, json: string) {
-	const handoff = islandDepsHandoffPath(root);
+export function emit_island_deps_handoff(root: string, json: string, out_dir: string) {
+	const handoff = islandDepsHandoffPath(out_dir);
 	fs.mkdirSync(path.dirname(handoff), { recursive: true });
 	fs.writeFileSync(handoff, json);
 	// Adapter-friendly copy next to the server bundle (Kit SSR out already exists).
-	const server_copy = path.join(root, '.svelte-kit', 'output', 'server', 'og-region-deps.json');
+	const server_copy = path.join(out_dir, 'output', 'server', 'og-region-deps.json');
 	try {
 		fs.mkdirSync(path.dirname(server_copy), { recursive: true });
 		fs.writeFileSync(server_copy, json);
@@ -85,7 +86,7 @@ export function emit_island_deps_handoff(root: string, json: string) {
 	}
 
 	try {
-		const server_dir = path.join(root, '.svelte-kit', 'output', 'server');
+		const server_dir = path.join(out_dir, 'output', 'server');
 		const token = '__OGYGIA_ISLAND_DEPS_INLINE__';
 		// Escape for BOTH quote styles: the SSR bundler may emit the slot in single OR double
 		// quotes, and an escaped quote is valid in either literal — so this is safe regardless.

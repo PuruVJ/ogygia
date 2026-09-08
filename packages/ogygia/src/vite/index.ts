@@ -51,8 +51,10 @@ import {
 	inject_keep_client_route,
 	resolve_kit_paths,
 	is_route_option_file,
-	strip_freeze_export
+	strip_freeze_export,
+	kit_dirs
 } from '../compiler/kit.js';
+import { load_kit_dirs } from './kit-dirs.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.js';
 import {
@@ -72,6 +74,7 @@ import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/cs
 import { island_subgraph_bytes } from '../compiler/dev/region-bytes.js';
 import { collectIslandDepModulepreloads } from '../compiler/link/island-deps.js';
 import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.js';
+import { ssr_hosts_handoff_path, parse_ssr_hosts } from '../compiler/link/emit-gate.js';
 import { router_css_key } from '../compiler/link/router-css.js';
 import { Program, strip_id } from '../compiler/program.js';
 import { Compiler } from '../compiler/driver.js';
@@ -409,7 +412,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// (and computes `skip_client_build`). The injected keep-client route must be on disk first.
 			config: {
 				order: 'pre',
-				handler(userConfig, env) {
+				async handler(userConfig, env) {
+					// Kit's `files.routes` / `outDir` from the app's svelte.config.js — resolved BEFORE
+					// anything below walks the routes tree or picks an output path (compiler/kit.ts
+					// `kit_dirs`). An app building a second route tree from one source configures both.
+					await load_kit_dirs(path.resolve(userConfig.root ?? '.'));
+
 					// DEVTOOLS is dev-server-only, ENFORCED — a `devtools: true` left on for a build must
 					// never ship instrumentation to production (a consumer did exactly that: prod pages
 					// carried the server event side-channel + the dock). Coerce here, where the command is
@@ -438,7 +446,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// route BEFORE Kit reads the routes. Main build thread only; removed at process exit.
 					if (env.command === 'build' && !standalone && isMainThread) {
 						const r = path.resolve(userConfig.root ?? '.');
-						const routes = path.join(r, 'src', 'routes');
+						const routes = kit_dirs(r).routes_dir;
 						// `clientBuildWillSkip` ignores our own keepalive dir, so it reflects the user's
 						// real routes: inject only when Kit really would skip, else sweep any stale dir.
 						if (clientBuildWillSkip(routes)) {
@@ -621,6 +629,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			},
 
 			async buildStart() {
+				// SERVER leg of a build: a stale handoff from an earlier build must never gate THIS
+				// build's client leg — remove it here, where the leg is certain (the environment), not in
+				// configResolved, which the client environment runs again AFTER the server leg wrote it.
+				{
+					const env = (this as unknown as { environment?: { name?: string; config?: { consumer?: string } } })
+						.environment;
+					const server_leg = env ? env.name === 'ssr' || env.config?.consumer === 'server' : is_ssr;
+					if (is_build && server_leg)
+						fs.rmSync(ssr_hosts_handoff_path(kit_dirs(root).out_dir), { force: true });
+				}
 				// CLIENT build (Kit-driven): emit the runtime chunk. Kit builds the SERVER bundle FIRST,
 				// then the client, so the server can't learn a hash the LATER client build produces — a
 				// forward handoff is impossible. Instead the filename is a deterministic SOURCE-content
@@ -659,13 +677,26 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// cms app shipped documents pointing at a runtime chunk that was never emitted).
 					const emit_runtime =
 						!standalone &&
-						(hasAnyCsrFalseRoute(path.join(root, 'src', 'routes')) ||
+						(hasAnyCsrFalseRoute(kit_dirs(root).routes_dir) ||
 							compiler.has_hydrate_regions());
 					// The runtime entry (feature-selected) + one deterministic chunk per deduped hydrate
 					// region — the driver owns the naming + dedup; `this.emitFile` is the injected primitive.
-					compiler.emit_build_chunks((chunk) => this.emitFile(chunk), {
-						emitRuntime: emit_runtime
+					// Gated on the SERVER leg's real module graph (link/emit-gate.ts): an island whose host
+					// the server bundle never loaded gets no chunk. No handoff → every prescanned island.
+					let loaded: Set<string> | null = null;
+					try {
+						loaded = parse_ssr_hosts(fs.readFileSync(ssr_hosts_handoff_path(kit_dirs(root).out_dir), 'utf8'));
+					} catch {
+						/* no server-leg handoff (standalone / client-only build) */
+					}
+					const skipped = compiler.emit_build_chunks((chunk) => this.emitFile(chunk), {
+						emitRuntime: emit_runtime,
+						loaded
 					});
+					if (skipped && isMainThread)
+						console.log(
+							`[ogygia] ${skipped} island chunk(s) not emitted: their host modules are not in the server bundle (unreachable from this build's routes).`
+						);
 					// SERVER-ROUTER CSS (link/router-css.ts): a router page component is a runtime value, not
 					// a Kit route, so nothing links its scoped `<style>`. Compile each router-reachable
 					// component's whole tree CSS (its own scoped styles + every child's + plain style
@@ -828,6 +859,22 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			},
 
 			buildEnd() {
+				// SERVER leg of a build: hand the real module graph to the client leg (emit gate). The
+				// leg is read off the ENVIRONMENT (Vite's environment API builds `ssr` then `client` in one
+				// app build; `config.build.ssr` is false for both there).
+				const env = (this as unknown as { environment?: { name?: string; config?: { consumer?: string } } })
+					.environment;
+				const server_leg = env ? env.name === 'ssr' || env.config?.consumer === 'server' : is_ssr;
+				if (is_build && server_leg && !standalone) {
+					try {
+						const handoff = ssr_hosts_handoff_path(kit_dirs(root).out_dir);
+						fs.mkdirSync(path.dirname(handoff), { recursive: true });
+						fs.writeFileSync(handoff, JSON.stringify(compiler.ssr_transformed_hosts()));
+					} catch (e) {
+						// best effort — without it the client leg emits every prescanned island
+						if (isMainThread) console.warn('[ogygia] could not write the server-leg island handoff:', e);
+					}
+				}
 				if (__P) {
 					const keys = [...__outHash.keys()].sort();
 					let d = 0x811c9dc5;
@@ -1040,7 +1087,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// option, in all three legs (server node analysis, client runtime, build analyse). We
 				// run enforce:'pre', so Kit only ever sees the stripped module; the VALUE is read from
 				// disk into `virtual:ogygia/freeze-routes`, independent of this in-memory strip.
-				if (freeze_config && is_route_option_file(id, path.join(root, 'src', 'routes'))) {
+				if (freeze_config && is_route_option_file(id, kit_dirs(root).routes_dir)) {
 					source = strip_freeze_export(source);
 				}
 
@@ -1161,7 +1208,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					content_css,
 					fn_manifest: Object.fromEntries(compiler.dollar_hoists)
 				});
-				emit_island_deps_handoff(root, json);
+				emit_island_deps_handoff(root, json, kit_dirs(root).out_dir);
 			}
 		},
 		island_sourcemaps_plugin({ program, is_island_path })

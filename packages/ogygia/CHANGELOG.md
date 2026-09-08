@@ -10,6 +10,47 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`kit.files.routes` and `kit.outDir` are honoured.** ogygia assumed `src/routes` and
+  `.svelte-kit` everywhere it scans the routes tree (csr worlds, the client-build keepalive, route
+  option files, the dev CSS-scope owners) and wherever it writes or reads the island-deps handoff.
+  An app that builds a second route tree from one source (`files.routes: 'src/routes-v2'` +
+  `outDir: '.svelte-kit-v2'`, selected by an env var) had its all-csr=false tree read as "no routes":
+  no keepalive was injected, Kit skipped its client build, the runtime chunk was never emitted and
+  every island 404'd — while the handoff JSON landed in the other tree's `.svelte-kit`. The plugin
+  now reads both from `svelte.config.js` in its `config` hook (before Kit discovers routes) and the
+  compiler resolves every path through that answer. Regression test: `test/kit-dirs.test.ts`.
+- **Island chunks are emitted only for islands the server bundle can reach.** The prescan registers
+  every marked import under `src/` (both build legs, so ids agree) and the client leg emitted a
+  chunk for each — including islands whose host module nothing in the app imports (a second route
+  tree's pages built from the same source, a retired component). Dead chunks at best; at worst the
+  build stops: such an island importing a `.remote.ts` drags it into the client build, and Kit's
+  remote plugin fails with "Expected to find metadata for remote file" because the server pass
+  never analysed it. The server leg (Kit builds it first) now records every module it transformed
+  and hands the set to the client leg under `kit.outDir` (`og-ssr-hosts.json`); the client leg
+  emits an island's chunk only when its host is in the set, and reports how many it skipped. No
+  handoff (standalone / client-only build) keeps the previous behaviour. `test/emit-gate.test.ts`.
+- **Router: links inside web components navigate in place.** A click that starts inside a
+  component's shadow root (a design-system `<qds-standalone-link>`, a `<qds-button href>`, a
+  breadcrumb item) reaches `document` with `event.target` retargeted to the host, so the router's
+  `closest('a')` found nothing and the browser navigated natively — a full reload for every such
+  link, where Kit's router (which reads the composed path) swapped in place. The router now resolves
+  the anchor through `event.composedPath()` (click, hover-warm, press-warm). Found on the PES
+  product page's "show all" back link. `test/browser/router-anchor.test.ts`.
+  Second half of the same finding: those components also handle the click themselves and
+  re-dispatch one on their inner anchor. The router had already pushed the new URL for the first
+  click, so the second arrived as a link to the CURRENT document and was left to the browser —
+  which reloaded the page while the swap was in flight. A same-document click is now decided by
+  `same_document_link`: a fragment jump stays the browser's; the address already in flight is
+  swallowed; a real click on the current page refreshes in place (as Kit re-runs the navigation)
+  — a same-origin link never reloads. `test/router-same-document.test.ts`.
+- **Route walkers follow symlinks, as Kit does.** Kit discovers routes by name + `statSync`; ogygia's
+  csr-world / keepalive / freeze walkers used dirent types, which are false for a link — a symlinked
+  root `+layout.ts` (csr=false) was invisible, so ogygia predicted "client build stays" while Kit
+  skipped it, and every island 404'd. Same app as above (two route trees sharing files by link).
+  Regression cases in `test/csr-skip.test.ts`.
+
 Found while rebuilding a large production site header (static mega menu, per-visitor holes, a
 `wake: 'interaction'` search) on top of a Kit app that also has `csr = true` pages.
 

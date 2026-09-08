@@ -51,6 +51,38 @@ export function resolve_kit_paths(root: string): KitPaths {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Kit's configurable directories — `kit.files.routes` and `kit.outDir`.
+//
+// Everything below that walks the routes tree, and every handoff written under Kit's output dir,
+// resolves through `kit_dirs(root)`, never through a literal `src/routes` / `.svelte-kit`. The
+// Vite plugin fills the cache from the app's svelte.config.js in its `config` hook (see
+// vite/kit-dirs.ts — Node-only, hence not here); an unfilled root answers the defaults, so a
+// standalone (no-Kit) compile and the tests keep working.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface KitDirs {
+	/** absolute `kit.files.routes` (default `<root>/src/routes`) */
+	routes_dir: string;
+	/** absolute `kit.outDir` (default `<root>/.svelte-kit`) */
+	out_dir: string;
+}
+export const DEFAULT_KIT_DIRS = { routes: 'src/routes', out: '.svelte-kit' } as const;
+const _kit_dirs = new Map<string, KitDirs>();
+
+export function set_kit_dirs(root: string, dirs: KitDirs): void {
+	_kit_dirs.set(root, dirs);
+}
+
+export function kit_dirs(root: string): KitDirs {
+	return (
+		_kit_dirs.get(root) ?? {
+			routes_dir: path.join(root, DEFAULT_KIT_DIRS.routes),
+			out_dir: path.join(root, DEFAULT_KIT_DIRS.out)
+		}
+	);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // csr detection.
 //
 // When every route NODE is csr=false, Kit skips its client build entirely, so the ogygia runtime chunk
@@ -232,12 +264,38 @@ export function routeCsrIsTrue(hostFile: string, routesDir: string) {
 	return !own_chain_csr_false(hostFile, routesDir); // no pages below — own chain
 }
 
+/**
+ * A routes directory's entries with SYMLINKS RESOLVED — Kit parity. Kit discovers routes by name +
+ * `statSync` (which follows links), so a symlinked `+layout.ts` or a symlinked route directory is a
+ * real node to Kit; a dirent's `isFile()` / `isDirectory()` is false for a link, which made a
+ * linked root `+layout.ts` (csr=false) invisible here → "client build stays" predicted while Kit
+ * skipped it → the runtime 404'd. (An app sharing routes between two trees links them.)
+ */
+function route_entries(dir: string): Array<{ name: string; is_dir: boolean; is_file: boolean }> {
+	const out: Array<{ name: string; is_dir: boolean; is_file: boolean }> = [];
+	for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+		let is_dir = e.isDirectory();
+		let is_file = e.isFile();
+		if (!is_dir && !is_file) {
+			try {
+				const st = fs.statSync(path.join(dir, e.name));
+				is_dir = st.isDirectory();
+				is_file = st.isFile();
+			} catch {
+				continue; // dangling link — Kit ignores it too
+			}
+		}
+		out.push({ name: e.name, is_dir, is_file });
+	}
+	return out;
+}
+
 function pageLeaves(routesDir: string) {
 	const leaves: string[] = [];
 	const walk = (dir: string) => {
-		for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+		for (const e of route_entries(dir)) {
 			const full = path.join(dir, e.name);
-			if (e.isDirectory()) walk(full);
+			if (e.is_dir) walk(full);
 			else if (e.name === '+page.svelte') leaves.push(full);
 		}
 	};
@@ -296,9 +354,9 @@ const PAGE_FILE_RE = /^\+page(\.server)?\.(svelte|js|ts)$/;
 function freeze_page_dirs(routesDir: string): string[] {
 	const dirs = new Set<string>();
 	const walk = (dir: string) => {
-		for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+		for (const e of route_entries(dir)) {
 			const full = path.join(dir, e.name);
-			if (e.isDirectory()) walk(full);
+			if (e.is_dir) walk(full);
 			else if (PAGE_FILE_RE.test(e.name)) dirs.add(dir);
 		}
 	};
@@ -435,8 +493,8 @@ function collectNodeEffectiveCsr(routesDir: string) {
 	const nodes = [];
 	let saw_root_layout = false;
 	const walk = (dir: string, is_root: boolean, inherited: boolean | undefined) => {
-		const entries = fs.readdirSync(dir, { withFileTypes: true });
-		const names = new Set(entries.filter((e) => e.isFile()).map((e) => e.name));
+		const entries = route_entries(dir);
+		const names = new Set(entries.filter((e) => e.is_file).map((e) => e.name));
 		const has = (list: string[]) => list.some((f) => names.has(f));
 
 		// This dir's layout value carries down the chain whether or not a layout NODE exists here
@@ -455,7 +513,7 @@ function collectNodeEffectiveCsr(routesDir: string) {
 			nodes.push(page_own !== undefined ? page_own : chain);
 		}
 		for (const e of entries) {
-			if (!e.isDirectory()) continue;
+			if (!e.is_dir) continue;
 			if (e.name === KEEP_CLIENT_DIR) continue; // ignore our own injected keepalive
 			walk(path.join(dir, e.name), false, chain);
 		}
@@ -503,7 +561,7 @@ export function hasAnyCsrFalseRoute(routesDir: string) {
 
 /** On-disk path of the injected keepalive route for a given app root. */
 export function keep_client_dir(r: string): string {
-	return path.join(r, 'src', 'routes', KEEP_CLIENT_DIR);
+	return path.join(kit_dirs(r).routes_dir, KEEP_CLIENT_DIR);
 }
 
 /** Write the URL-less `csr = true` keepalive layout into the app's routes (removed at process exit). */

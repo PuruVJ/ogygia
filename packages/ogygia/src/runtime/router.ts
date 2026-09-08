@@ -29,6 +29,22 @@ import { speculate_url } from './speculate-hint.js';
 
 const WS = /\s+/;
 
+/**
+ * The `<a>` a pointer event is about — through SHADOW ROOTS. A click inside a web component's
+ * shadow tree (a design-system `<qds-standalone-link>`, `<qds-button href>`, a breadcrumb item)
+ * reaches the document with `event.target` retargeted to the host, so `target.closest('a')` finds
+ * nothing and the browser navigates natively — a full reload instead of a body swap. The composed
+ * path still holds the real anchor; Kit's own router reads it the same way.
+ */
+export function anchor_of(event: Event): HTMLAnchorElement | null {
+	const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+	for (const n of path) {
+		if (n instanceof Element && n.tagName === 'A') return n as HTMLAnchorElement;
+	}
+	const t = event.target;
+	return t instanceof Element ? t.closest('a') : null;
+}
+
 /** Max bytes for the `x-ogygia-known` header — past this we OMIT it, so the server renders every
  *  region (the safe full-render fallback). Keeps request headers well under proxy/server limits. */
 const KNOWN_HEADER_CAP = 6144;
@@ -302,6 +318,21 @@ function same_document(a: URL, b: URL) {
 	return a.pathname === b.pathname && a.search === b.search;
 }
 
+/**
+ * What a click on a link to the CURRENT document means. `hash`: a fragment jump — the browser's.
+ * `swallow`: the navigation to this exact address is already in flight — a design-system link
+ * (`<qds-standalone-link>`, `<qds-button href>`) handles the click itself and re-dispatches one on
+ * its inner anchor; the router pushed the URL for the first click, so the second one looks like a
+ * link to the current page — left to the browser it would RELOAD the document mid-swap. `refresh`:
+ * a real click on a link to the page one is on — re-render in place (Kit re-runs the navigation
+ * too; a full reload is never the answer for a same-origin link).
+ */
+export function same_document_link(url: URL, current: URL, in_flight: string | null): 'hash' | 'swallow' | 'refresh' {
+	if (url.hash && url.href !== current.href) return 'hash';
+	if (in_flight === url.href) return 'swallow';
+	return 'refresh';
+}
+
 function document_key(url: URL) {
 	return url.pathname + url.search;
 }
@@ -398,6 +429,8 @@ class SpaRouter {
 	/** Hard SPA navigations only — never shared with soft invalidate. */
 	#nav_gen = 0;
 	#nav_abort: AbortController | null = null;
+	/** href of the navigation in flight (set before the fetch, cleared when applied or aborted) */
+	#nav_target: string | null = null;
 	/** Soft invalidate fetches only — aborting these must not cancel a real click nav. */
 	#soft_gen = 0;
 	#soft_abort: AbortController | null = null;
@@ -610,6 +643,9 @@ class SpaRouter {
 		this.#nav_abort = new AbortController();
 		const { signal } = this.#nav_abort;
 		const gen = ++this.#nav_gen;
+		// the address being navigated to, while the fetch + swap are in flight (click listener)
+		this.#nav_target = url.href;
+		signal.addEventListener('abort', () => { if (this.#nav_target === url.href) this.#nav_target = null; });
 
 		// Update history SYNCHRONOUSLY (before any await) so the URL is correct and
 		// races between overlapping navigations can't drop the pushState.
@@ -787,6 +823,7 @@ class SpaRouter {
 		// server redirect moved it).
 		this.#doc_key = document_key(dest);
 		this.#current_url = dest;
+		this.#nav_target = null; // applied — a later same-address click is a refresh, not a duplicate
 		if (DEVTOOLS)
 			dt_emit({
 				domain: 'nav',
@@ -930,11 +967,19 @@ class SpaRouter {
 		this.install_remote_mutation_cache_bust();
 
 		document.addEventListener('click', (event) => {
-			const anchor = event.target instanceof Element ? event.target.closest('a') : null;
+			const anchor = anchor_of(event);
 			const url = this.#should_intercept(event, anchor);
 			if (!url) return;
-			// Same document (incl. #hash-only): let the browser handle — never SPA-swap.
-			if (same_document(url, new URL(location.href))) return;
+			// Same document: a hash jump is the browser's; anything else must never reload —
+			// see `same_document_link` (the re-dispatched click of a design-system link, or a real
+			// click on the current page, which refreshes in place).
+			if (same_document(url, new URL(location.href))) {
+				const kind = same_document_link(url, new URL(location.href), this.#nav_target);
+				if (kind === 'hash') return;
+				event.preventDefault();
+				if (kind === 'refresh') this.navigate(url, { push: false, replace: true });
+				return;
+			}
 			event.preventDefault();
 			this.navigate(url, { push: true });
 		});
@@ -1150,15 +1195,14 @@ class SpaRouter {
 		document.addEventListener(
 			'mouseover',
 			(event) => {
-				const anchor = event.target instanceof Element ? event.target.closest('a') : null;
+				const anchor = anchor_of(event);
 				if (anchor && this.#preload_rank(anchor) <= PRELOAD_RANK.hover) this.#warm_anchor(anchor);
 			},
 			{ passive: true }
 		);
 		// tap -> warm on the press (mousedown + touchstart), for links whose trigger is tap-or-eager
 		const on_press = (event: Event) => {
-			const t = event.target;
-			const anchor = t instanceof Element ? t.closest('a') : null;
+			const anchor = anchor_of(event);
 			if (anchor && this.#preload_rank(anchor) <= PRELOAD_RANK.tap) this.#warm_anchor(anchor);
 		};
 		document.addEventListener('mousedown', on_press, { passive: true });
