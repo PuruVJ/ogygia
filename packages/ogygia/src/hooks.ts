@@ -114,7 +114,11 @@ import { stringify } from 'devalue';
 import { serialize_provided_context } from './context-bridge.js';
 import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
-import { set_page_recorder, type PageSnapshot } from './page-seed-registry.js';
+import {
+	set_page_recorder,
+	set_seed_wanted_reader,
+	type PageSnapshot
+} from './page-seed-registry.js';
 import { DocumentTail, set_tail_reader } from './server/document-tail.js';
 import { set_late_recorder, set_late_taker, type LateRegion } from './late-region-registry.js';
 import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
@@ -191,6 +195,8 @@ set_page_recorder((snapshot, seed) => {
 // `request_als.run` — a Kit page — sees it, so a hole endpoint, a remote-function render or a
 // router document keeps its hints in the head and its sidecars adjacent.
 set_tail_reader(() => request_als.getStore()?.tail ?? null);
+// "Will the seed ship?" — what lets an island serialize its props as references into it.
+set_seed_wanted_reader(() => request_als.getStore()?.seed_wanted === true);
 // Kit's `__request__` context for every server render root ogygia starts (document root, inline
 // island, deferred endpoint, snippet body): rebuilt from the recorded page snapshot, with the live
 // event filling url/params/route when the snapshot has none (a Kit page: Kit's own values; a

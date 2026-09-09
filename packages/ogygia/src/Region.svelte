@@ -30,8 +30,9 @@
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
-	import { record_page } from './page-seed-registry.js';
+	import { record_page, seed_wanted } from './page-seed-registry.js';
 	import { document_tail } from './server/document-tail.js';
+	import { index_seed, seed_ref_reducer, SEED_REF_KEY } from './seed-refs.js';
 	import { isNested, setNested, isInLake, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { REF_WIRE_KEY, ref_reducer } from './ref.js';
 	// PULL-registration inside stringify_props (idempotent; no import-time side effects)
@@ -201,6 +202,10 @@
 			if (event) setContext(KIT_REQUEST_CONTEXT, { ...req, event });
 		}
 	}
+	// THE DOCUMENT TAIL (server/document-tail.ts) for this render — non-null only inside Kit's page
+	// pass with a request tail installed. What the hints, the props sidecar and the seed-relative
+	// props codec all key on (see each site below).
+	const tail = typeof window === 'undefined' && kit_page_pass ? document_tail() : null;
 	// csr=true rule (ISLANDS only): on a Kit-hydrated page an interactive region should render its
 	// component INLINE in the Kit tree — no `<ogygia-region>`, no runtime — because Kit already
 	// hydrates it. Same degradation as `nested`, gated by the csr context the transform injects into
@@ -222,15 +227,21 @@
 	/** Island props cross classes, stores, snippets, og.$ fns and resumable deriveds. */
 	const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
 
-	/** @param {unknown} value @param {string} entry */
-	function stringify_props(value, entry) {
+	/**
+	 * @param {unknown} value @param {string} entry
+	 * @param {((v: unknown) => unknown) | null} [seed_refs] the seed-reference reducer for THIS
+	 *   island's props (seed-refs.ts), when its props may point into the page seed
+	 */
+	function stringify_props(value, entry, seed_refs = null) {
 		register_wire_kind();
 		register_store_kind();
 		register_snippet_kind();
 		register_fn_kind();
 		register_derived_kind();
 		try {
-			return stringify(value, { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) });
+			const reducers = { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) };
+			if (seed_refs) reducers[SEED_REF_KEY] = seed_refs;
+			return stringify(value, reducers);
 		} catch (e) {
 			const detail = e instanceof Error ? e.message : String(e);
 			throw new Error(
@@ -377,8 +388,22 @@
 	// base, and `asset()` supplies that prefix — so we never special-case dev URLs.)
 	const island_module_url = $derived(nested || !island_entry ? '' : asset(island_entry));
 
+	// SEED REFERENCES (seed-refs.ts): inside Kit's page pass, once the request knows the seed will
+	// ship, this island's props are serialized RELATIVE to `page.data` — any plain subtree that is
+	// also a seed node (by identity, or by structure when the app cloned it) becomes a short path
+	// instead of a second copy of the same JSON. Decided at init, like the tail: the answer only
+	// ever flips from "no seed yet" to "seed", in document order, so a page's fingerprints are
+	// stable across renders.
+	const seed_refs = (() => {
+		if (!tail || !is_island || island_inline || !seed_wanted()) return null;
+		try {
+			return seed_ref_reducer(index_seed(untrack(() => page.data)), untrack(() => island_props_wire));
+		} catch {
+			return null; // no live page (isolated render) — copies, as before
+		}
+	})();
 	const island_payload = $derived(
-		nested ? '' : stringify_props(island_props_wire, island_entry).split(LT).join('\\u003C')
+		nested ? '' : stringify_props(island_props_wire, island_entry, seed_refs).split(LT).join('\\u003C')
 	);
 	// SERVER-DELTA parity: the island's fingerprint, IDENTICAL to the client reconciler's
 	// region_props_fp (entry attr + '' endpoint + props-seed text). Emitted as data-og-fp so the
@@ -414,7 +439,6 @@
 	// ticket, a router document keep their hints in the head and their sidecar adjacent, so the HTML
 	// stays self-contained wherever it is spliced. Decided once at init — the SSR pass renders each
 	// region exactly once.
-	const tail = typeof window === 'undefined' && kit_page_pass ? document_tail() : null;
 	const island_props_tail =
 		!!tail &&
 		is_island &&

@@ -18,6 +18,7 @@ import {
 } from './region-endpoint-url.js';
 import { foreign_region_prop_revivers } from './foreign-props.js';
 import { props_sidecar_of } from './sidecar.js';
+import { SEED_REF_KEY, seed_ref_reviver } from '../seed-refs.js';
 import {
 	is_awake,
 	is_deferred,
@@ -102,11 +103,43 @@ function region_prop_revivers(): Record<string, (d: never) => unknown> | undefin
 	return cached_revivers;
 }
 
+/**
+ * The parsed `data` of the page seed in the document a sidecar came from — what a seed REFERENCE
+ * in island props resolves against (seed-refs.ts). Keyed by the seed's own `<script>` element: the
+ * live document's seed, or the seed inside a freshly fetched navigation document (a kept island's
+ * props are pushed from the incoming document BEFORE the router applies its seed, so they must
+ * resolve against that document's seed, not the current one). Parsed once per element.
+ */
+const seed_data_cache = new WeakMap<Element, unknown>();
+function seed_data_of(sidecar: Element): unknown {
+	const doc = sidecar.ownerDocument;
+	const el = doc?.querySelector('script[type="application/ogygia-page"]');
+	if (!el) return undefined;
+	if (seed_data_cache.has(el)) return seed_data_cache.get(el);
+	let data: unknown;
+	try {
+		const raw = parse(
+			el.textContent ?? '',
+			page_defer_revivers(transport_decoders) as Parameters<typeof parse>[1]
+		) as { data?: unknown } | null;
+		data = raw?.data;
+	} catch {
+		data = undefined;
+	}
+	seed_data_cache.set(el, data);
+	return data;
+}
+
 function read_region_props(region: Element, foreign = false): Record<string, unknown> {
 	// Keyed (end-of-body, by fingerprint) or adjacent — see runtime/sidecar.ts.
 	const sidecar = props_sidecar_of(region);
 	if (!sidecar) return {};
-	const revivers = foreign ? foreign_region_prop_revivers() : region_prop_revivers();
+	const base = foreign ? foreign_region_prop_revivers() : region_prop_revivers();
+	// A foreign fragment never carries seed references (its props are self-contained by
+	// construction); a local island's may point into this document's seed.
+	const revivers = foreign
+		? base
+		: { ...base, [SEED_REF_KEY]: seed_ref_reviver(() => seed_data_of(sidecar)) };
 	return parse(sidecar.textContent, revivers as Parameters<typeof parse>[1]);
 }
 

@@ -44,8 +44,28 @@ function island_tail(entry: string, body: string, props: Record<string, unknown>
 	);
 }
 
+/** SEED REFERENCES: the region's props sidecar is ONE reference into the page seed (the whole
+ *  props object is a seed node), and the seed script sits at the end of the body — the page-pass
+ *  shape once an island's props come from `page.data`. */
+function island_seed_ref(entry: string, body: string, seed_data: Record<string, unknown>, path: string[], fp: string) {
+	// The props root itself is the seed node: devalue writes it as `["OgygiaSeedRef", <path>]` —
+	// produced by the real encoder (a hand-written form is easy to get wrong: devalue arrays hold
+	// INDICES, so a literal string inside one reads as a type tag).
+	const root = {};
+	const props_text = stringify(root, { OgygiaSeedRef: (v: unknown) => (v === root ? path : undefined) });
+	return (
+		`<ogygia-region wake="load" entry="${entry}" data-og-fp="${fp}">${body}</ogygia-region>` +
+		`<p data-filler>content</p>` +
+		`<script type="application/ogygia-props" data-ogygia-props="${fp}">${props_text}</script>` +
+		`<script type="application/ogygia-page" data-ogygia-page>${stringify({ url: 'http://localhost/', params: {}, route: { id: '/' }, status: 200, data: seed_data })}</script>`
+	);
+}
+
 declare module 'vitest' {
 	export interface ProvidedContext {
+		/** Counter whose props sidecar is a seed REFERENCE (`["OgygiaSeedRef", ["counter"]]`) and
+		 *  whose page seed carries `data.counter = { start: 3, … }` — base64. */
+		counter_seedref_ssr_b64: string;
 		/** A `wake: 'load'` Counter island, SSR'd with `start: 3` — base64 of the HTML. */
 		counter_ssr_b64: string;
 		/** The same Counter with its props sidecar KEYED and moved to the end of the body — base64. */
@@ -76,6 +96,18 @@ export default function setup(project: TestProject) {
 	project.provide(
 		'counter_ssr_b64',
 		b64(island('/test/browser/fixtures/Counter.svelte', nested(body), props))
+	);
+	project.provide(
+		'counter_seedref_ssr_b64',
+		b64(
+			island_seed_ref(
+				'/test/browser/fixtures/Counter.svelte',
+				nested(body),
+				{ counter: { start: 3, pad: 'seed data the island does not read '.repeat(4) } },
+				['counter'],
+				'0123456789abcdef'
+			)
+		)
 	);
 	project.provide(
 		'counter_tail_ssr_b64',

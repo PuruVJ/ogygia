@@ -12,6 +12,22 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Island props reference the page seed instead of copying it.** A csr=false page ships
+  `page.data` once as the page seed and every island's props again as its own sidecar; a CMS page
+  hands each block island its slice of the same tree, so the same JSON crossed twice — one measured
+  landing page: 674 KB of seed and 481 KB of props, 94% of them verbatim seed subtrees, serialized
+  twice on the server. Inside Kit's page pass, once the request knows the seed will ship, an
+  island's props are now serialized RELATIVE to it (`seed-refs.ts`): any plain object or array that
+  is also a seed node — by identity, or by structure when the app cloned it (a JSON round-trip, a
+  spread; the Builder SDK does) — is written as `["OgygiaSeedRef", <path>]`, largest matching
+  ancestor first. The client resolves the reference against the seed of the document the sidecar
+  came from and hands the island its own deep copy, so nothing an island does to its props reaches
+  the seed or another island. Only plain data qualifies (no class instances, Maps, Sets, cycles);
+  nodes under ~100 bytes are not worth a reference and stay inline. Islands rendered before the
+  page's first `$page` reader keep full copies (deterministic per page, so fingerprints are
+  stable); every other render root (holes, tickets, foreign fragments) always copies. The fixture
+  `/seed-refs` reproduces the CMS shape (12 blocks, half cloned): props drop from a second copy of
+  the tree to under a tenth of the seed.
 - **Module-preload hints ride at the end of the body, ahead of the props.** In the head a hint
   fires while the HTML is still streaming: on a slow line the pipe is idle until the parser reaches
   the hero, so every island chunk starts downloading first and the LCP image then shares the line

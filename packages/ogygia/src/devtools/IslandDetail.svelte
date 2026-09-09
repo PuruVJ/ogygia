@@ -26,7 +26,9 @@
 	// Every transportable crosses under ONE devalue custom type ('OgygiaRef'). Decode it to a labelled
 	// placeholder — NOT the live instance (`wire.resolve` has side effects) — so the viewer stays inert.
 	const REVIVERS = {
-		OgygiaRef: (d) => ({ __ogRef: true, kind: d && d.k, id: d && d.i, tag: d && d.t })
+		OgygiaRef: (d) => ({ __ogRef: true, kind: d && d.k, id: d && d.i, tag: d && d.t }),
+		// A seed reference (seed-refs.ts): shown as the path it points at, not resolved — inert.
+		OgygiaSeedRef: (p) => ({ __ogSeedRef: true, path: Array.isArray(p) ? p.join('.') : String(p) })
 	};
 	function decode_props(text) {
 		if (!text || text.length < 3) return null;

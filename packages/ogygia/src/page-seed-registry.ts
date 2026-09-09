@@ -43,3 +43,23 @@ export function record_page(snapshot: PageSnapshot, seed = true): void {
 	recorder?.(snapshot, seed);
 }
 
+/**
+ * Will this request's page seed ship? The request answers (`hooks.ts` installs the reader over the
+ * bag's `seed_wanted`); Region.svelte asks before serializing an island's props RELATIVE to the
+ * seed (seed-refs.ts) — a reference into a seed that never arrives would be a hole in the props.
+ * Monotonic within a request: once a `$page` reader recorded, it stays true. `false` wherever no
+ * request is around (client, endpoint, test).
+ */
+type SeedWantedReader = () => boolean;
+
+let seed_wanted_reader: SeedWantedReader | null = null;
+
+/** Server (`hooks.ts`) installs a request-scoped reader; `null` uninstalls. */
+export function set_seed_wanted_reader(fn: SeedWantedReader | null): void {
+	seed_wanted_reader = fn;
+}
+
+export function seed_wanted(): boolean {
+	return seed_wanted_reader ? seed_wanted_reader() : false;
+}
+
