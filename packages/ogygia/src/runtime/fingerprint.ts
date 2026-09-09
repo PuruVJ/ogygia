@@ -10,20 +10,26 @@
  *   • fingerprint — DID ITS INPUTS CHANGE (hash of entry + endpoint + the props seed).
  */
 
-/** FNV-1a 64-bit over a string → 16-char hex. Widened from 32-bit deliberately: the server-delta
- *  SKIPS a region on a fingerprint match, so a collision would keep stale/wrong content silently —
- *  64 bits makes that a non-risk on any real page. Canonical FNV-1a-64 via BigInt; the volume is a
- *  few short strings per region per render, negligible next to the component render it guards. */
-const FNV64_OFFSET = 0xcbf29ce484222325n;
-const FNV64_PRIME = 0x100000001b3n;
-const U64 = 0xffffffffffffffffn;
+/** 64-bit fingerprint over a string → 16-char hex. Two independent 32-bit lanes (FNV-1a-32 and an
+ *  FNV-style lane with murmur's mixing constant + an xorshift), concatenated. 64 bits on purpose:
+ *  the server-delta SKIPS a region on a fingerprint match, so a collision would keep stale/wrong
+ *  content silently — 64 bits makes that a non-risk on any real page. NOT canonical FNV-1a-64: the
+ *  previous BigInt implementation cost 20 ms per island on a CMS page whose props run to 480 KB
+ *  (one BigInt allocation per character — 0.4 s of a 3.7 s server render, seen in the profiler);
+ *  this loop is pure int32 arithmetic and hashes the same page in about a millisecond. Parity is by
+ *  construction — the same function runs on both legs — so the algorithm is free to change. */
 export function fnv1a(s: string): string {
-	let h = FNV64_OFFSET;
+	let a = 0x811c9dc5;
+	let b = 0x811c9dc5 ^ 0x9e3779b9;
 	for (let i = 0; i < s.length; i++) {
-		h ^= BigInt(s.charCodeAt(i));
-		h = (h * FNV64_PRIME) & U64;
+		const c = s.charCodeAt(i);
+		a ^= c;
+		a = Math.imul(a, 0x01000193);
+		b ^= c;
+		b = Math.imul(b, 0x27d4eb2f);
+		b ^= b >>> 15;
 	}
-	return h.toString(16).padStart(16, '0');
+	return (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
 }
 
 /** FNV-1a 32-bit over a string → uint32. The NUMERIC sibling for callers that bucket/mod rather

@@ -72,6 +72,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Region fingerprints no longer cost 20 ms per island.** `fnv1a` (the `data-og-fp` hash over
+  entry + props text) was canonical FNV-1a-64 through BigInt — one BigInt allocation per character,
+  written for "a few short strings". A CMS page whose 21 islands carry 480 KB of props spent 0.43 s
+  of a 3.7 s server render in it (profiler, Lambda). It is now two int32 lanes (FNV-1a-32 + a
+  murmur-mixed lane), still 64 bits / 16 hex chars, about ten times faster; the algorithm is shared
+  by both legs so parity holds by construction.
 - **A csr=false page links only the island CSS it renders.** Two leaks made Kit link the CSS of
   every marked component a page's module graph could reach, rendered or not, all of it
   render-blocking. (1) A `.ts` **region registry** (`import Card from './Card.svelte' with { wake:
