@@ -72,6 +72,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The profiler is free when it is not profiling.** With `network` on (the default) every
+  production request ran inside the profiler's own AsyncLocalStorage so outbound calls could be
+  attributed to it — and on Node 20 every ALS in flight costs a store copy per async hop. A CMS
+  page with 475k hops paid about 0.2 s per request to that one ALS while nothing was being
+  recorded. In production the per-request context now exists only while a profile is actually
+  being taken (a page-mode recording, or the request's own `x-profile` header), and the ALS is
+  detached when the recording ends; an idle request is wall time + CPU usage and nothing else. Dev
+  keeps attribution always on (Server-Timing's outbound breakdown is a dev tool). The fetch/http
+  patch itself stays installed — a call-through with no context is a null check.
 - **Region fingerprints no longer cost 20 ms per island.** `fnv1a` (the `data-og-fp` hash over
   entry + props text) was canonical FNV-1a-64 through BigInt — one BigInt allocation per character,
   written for "a few short strings". A CMS page whose 21 islands carry 480 KB of props spent 0.43 s

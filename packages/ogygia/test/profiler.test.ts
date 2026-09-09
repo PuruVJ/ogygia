@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
 	analyze,
 	analyze_heap,
@@ -14,6 +14,11 @@ import { io_kind } from '../src/profiler/async-io.js';
 import { report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.js';
 import { budget_segments, build_treemap, waiting_rows } from '../src/profiler/ui/report-data.js';
 import type { RequestEvent } from '@sveltejs/kit';
+
+// The profiler reads dev-vs-prod from `detect_dev()` (a compile-time constant under Vite). Mock it
+// through a switch so ONE test can run the production request path (idle requests unattributed).
+const dev_switch = vi.hoisted(() => ({ dev: true }));
+vi.mock('../src/profiler/env.js', () => ({ detect_dev: () => dev_switch.dev }));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The SSR profiler. The analyzer turns a raw V8 .cpuprofile into readable
@@ -665,6 +670,42 @@ describe('profiler handle', () => {
 			expect(html).toContain('/[slug]');
 		} finally {
 			globalThis.fetch = orig_fetch;
+		}
+	});
+
+	// PAY ONLY WHEN PROFILING: in production an idle request runs in no AsyncLocalStorage — its
+	// outbound calls are not attributed (no `net;` timing) — while a request carrying a valid
+	// `x-profile` header is attributed and reported. Dev (the test above) attributes always.
+	it('production: an idle request is not attributed; a header-profiled one is', async () => {
+		dev_switch.dev = false;
+		const orig_fetch = globalThis.fetch;
+		globalThis.fetch = (async () =>
+			new Response('data', { headers: { 'content-length': '4' } })) as typeof fetch;
+		try {
+			const handle = profiler({ secret: 'prof-key', serverTiming: true });
+			const idle = await handle({
+				event: make_event('/prod/page'),
+				resolve: async () => {
+					await fetch('https://api.example.com/data');
+					return new Response('page');
+				}
+			});
+			const idle_timing = idle.headers.get('Server-Timing') ?? '';
+			expect(idle_timing).toContain('ssr;'); // wall timing is always on
+			expect(idle_timing).not.toContain('net;'); // the fetch was NOT attributed: no ALS ran
+
+			const profiled = await handle({
+				event: make_event('/prod/page', { 'x-profile': 'prof-key' }),
+				resolve: async () => {
+					await fetch('https://api.example.com/data');
+					return new Response('page');
+				}
+			});
+			expect(profiled.headers.get('x-profile-report')).toMatch(/\/__profiler\/report\//);
+			expect(profiled.headers.get('Server-Timing') ?? '').toContain('net;'); // attributed while recording
+		} finally {
+			globalThis.fetch = orig_fetch;
+			dev_switch.dev = true;
 		}
 	});
 

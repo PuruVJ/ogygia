@@ -11,8 +11,10 @@
  *
  * What you get, with zero per-component wrapping:
  *
- * - Always on (near-zero cost): wall time + outbound network per request,
- *   per-route p50/p95, Server-Timing headers.
+ * - Always on (free in production): wall time + CPU per request, per-route p50/p95.
+ *   Outbound-network attribution and Server-Timing headers are always on in DEV; in
+ *   production they exist only while a profile is being recorded (page-mode or the
+ *   `x-profile` header) — an idle request runs in no AsyncLocalStorage and pays nothing.
  * - On demand: a V8 sampling CPU profile of the live server. Svelte compiles
  *   every component to a function named after its file, so the profile
  *   attributes SSR time to components by itself.
@@ -51,6 +53,7 @@ import {
 import { ogp_encode, ogp_decode, is_ogp, recover_ogp_bytes } from './crypto.js';
 import { error, type Router, type Ctx as RouteCtx } from '../router/index.js';
 import { build_profiler_router } from './profiler-router.js';
+import { detect_dev } from './env.js';
 
 export interface ProfilerOptions {
 	/**
@@ -68,9 +71,10 @@ export interface ProfilerOptions {
 	/** How many requests the rolling log keeps. Default 500. */
 	recentRequests?: number;
 	/**
-	 * Patch fetch/http to attribute outbound calls, and wrap each request in an
-	 * AsyncLocalStorage. Default true. Set false for the leanest always-on path:
-	 * wall timing only, no per-request context and no global patches.
+	 * Patch fetch/http to attribute outbound calls. Default true. In production the
+	 * per-request AsyncLocalStorage that does the attributing exists only while a profile
+	 * is being recorded (idle requests pay nothing); in dev it is always on. Set false to
+	 * skip the global fetch/http patch entirely: wall timing only, never any network view.
 	 */
 	network?: boolean;
 	/**
@@ -265,11 +269,7 @@ class Profiler {
 		this.ring_size = options.recentRequests ?? 500;
 		this.want_network = options.network !== false;
 		this.want_heap = options.heap !== false;
-		this.dev =
-			// replaced by Vite when the app is built; falls back to NODE_ENV
-			(typeof import.meta !== 'undefined' &&
-				(import.meta as { env?: { DEV?: boolean } }).env?.DEV === true) ||
-			process.env.NODE_ENV === 'development';
+		this.dev = detect_dev(); // replaced by Vite when the app is built; falls back to NODE_ENV
 		// Server-Timing exposes internal render/network timings to every client, so
 		// default it ON in dev but OFF in production unless explicitly enabled.
 		this.want_server_timing = options.serverTiming ?? this.dev;
@@ -318,6 +318,13 @@ class Profiler {
 	 *  serverless invocation ages out after the cap instead of wedging the profiler forever. */
 	#recording_active(): boolean {
 		return this.#recording_since > 0 && Date.now() - this.#recording_since < RECORDING_MAX_MS;
+	}
+
+	/** Production: detach the profiler's AsyncLocalStorage once a recording ends. An ALS that has
+	 *  run once stays enabled — every async hop in the process keeps paying a store copy for it — until
+	 *  `disable()`; the next `run()` re-enables it. Dev keeps it on (attribution is always on there). */
+	#release_als(): void {
+		if (!this.dev) this.#als?.disable();
 	}
 
 	async #capture_window(interval_us: number, work: () => Promise<void>): Promise<WindowCapture> {
@@ -966,6 +973,7 @@ class Profiler {
 			);
 		} finally {
 			this.#recording_since = 0;
+			this.#release_als();
 		}
 	}
 
@@ -1164,8 +1172,26 @@ class Profiler {
 			internal: event.request.headers.get('x-og-profiler-internal') === '1' || undefined
 		};
 
+		// Header-triggered single-request profile? Decided FIRST, because it is one of the three
+		// reasons a request gets a network-attribution context at all.
+		const profile_header = event.request.headers.get('x-profile');
+		const header_profile =
+			!!profile_header &&
+			!this.#recording_active() &&
+			this.ui_enabled &&
+			(await this.#key_matches(profile_header));
+
+		// PAY ONLY WHEN PROFILING. Attributing outbound calls to a request means running it inside
+		// an AsyncLocalStorage, and on Node 20 every ALS in flight costs a store copy per async hop —
+		// a page with 475k hops paid ~0.2 s to this one ALS while nothing was being recorded. So in
+		// production the context exists only while a profile is actually being taken (a page-mode
+		// recording, or this request's own header profile); an idle request is wall time + CPU usage
+		// and nothing else. Dev keeps it always on: Server-Timing's outbound breakdown is a dev tool,
+		// and dev latency is nobody's metric.
+		const attribute =
+			!!this.#als && (this.dev || this.#recording_active() || header_profile);
 		const self = this;
-		const ctx: Ctx | null = this.#als
+		const ctx: Ctx | null = attribute
 			? {
 					entry,
 					net: [],
@@ -1204,14 +1230,8 @@ class Profiler {
 			return res;
 		};
 
-		// header-triggered single-request profile
-		const profile_header = event.request.headers.get('x-profile');
-		if (
-			profile_header &&
-			!this.#recording_active() &&
-			(await this.#key_matches(profile_header)) &&
-			this.ui_enabled
-		) {
+		// header-triggered single-request profile (decided above)
+		if (header_profile) {
 			this.#recording_since = Date.now();
 			try {
 				let res: Response | undefined;
@@ -1231,6 +1251,7 @@ class Profiler {
 				return res!;
 			} finally {
 				this.#recording_since = 0;
+				this.#release_als();
 			}
 		}
 
