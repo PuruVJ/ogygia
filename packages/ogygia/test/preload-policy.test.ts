@@ -31,16 +31,18 @@ function hints(wake: 'load' | 'visible' | 'interaction' | 'idle') {
 afterEach(() => set_preload_policy('load'));
 
 describe('regions.preload — placed islands', () => {
-	it("'load' (default): a load island is hinted at normal priority, nothing else is", () => {
-		expect(hints('load')).toMatchObject({ count: 1, low: false });
+	it("'load' (default): a load island is hinted — at LOW priority, like every hint — nothing else is", () => {
+		// Low even for `load`: island code is never needed for first paint (the server painted the
+		// content), so the hint must not outrank the CSS and the LCP image on a slow line.
+		expect(hints('load')).toMatchObject({ count: 1, low: true });
 		expect(hints('visible').count).toBe(0);
 		expect(hints('interaction').count).toBe(0);
 		expect(hints('idle').count).toBe(0);
 	});
 
-	it("'all': every island is hinted — load at normal priority, visible/interaction at fetchpriority=low", () => {
+	it("'all': every island is hinted, all at fetchpriority=low", () => {
 		set_preload_policy('all');
-		expect(hints('load')).toMatchObject({ count: 1, low: false });
+		expect(hints('load')).toMatchObject({ count: 1, low: true });
 		expect(hints('visible')).toMatchObject({ count: 1, low: true });
 		expect(hints('interaction')).toMatchObject({ count: 1, low: true });
 		// idle was never hinted (its wake is soon anyway; a hint would be a blind bet on timing)

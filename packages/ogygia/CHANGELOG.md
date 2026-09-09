@@ -38,6 +38,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   as a real wrapper (a csr=true-capable layout) was linked twice — two render-blocking fetches of one
   asset (16 doubled sheets on one measured page). The handle's head pass now keeps the first
   `<link rel="stylesheet">` per href (`dedupe_stylesheet_links`, next to the modulepreload dedupe).
+- **Every island hint is `fetchpriority="low"`, the `load` island's included.** A hint's job is
+  discovery, not priority: nothing an island downloads is needed for first paint (the server
+  painted the content), so island code must never outrank the CSS and the LCP image. At normal
+  priority a header island with a 1.7 MB chunk closure pushed a 79 KB hero image from 1 s to 5 s on
+  a 1.6 Mbps line, and FCP/LCP with it. At low the chunk still lands before the runtime (which
+  waits for the document to parse) asks for it on any normal line; on a slow one the island wakes
+  a little later and the page paints seconds sooner.
 - **Module-preload hints are emitted for `load` islands only — `regions.preload`.** The SSR HTML
   used to hint the full code closure of EVERY island on the page: `load` islands at normal
   priority, `visible` / `interaction` ones at `fetchpriority="low"`. A CMS page with fifteen

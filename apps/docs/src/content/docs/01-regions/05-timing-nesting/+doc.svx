@@ -91,14 +91,14 @@ ogygia({ regions: { visible: { margin: '0px' } } });
 
 The wake decides when JS *runs*. The *bytes* download in the background before that. Thus a wake never stops on a cold fetch. The server emits `<link rel="modulepreload">` for the full static dependency closure of each island: the facade, each chunk it imports (transitively), and their CSS. The priority matches the schedule:
 
-- **`load`** islands preload at normal priority. Their JS is necessary at first paint.
+- **`load`** islands preload at low priority (`fetchpriority="low"`). Their JS is needed soon after paint, never for the paint itself: the server already painted the content, so the hint must not outrank the CSS and the hero image. On a normal line the chunk is there before the runtime asks for it; on a slow one the island wakes a little later and the page paints seconds sooner.
 - **`visible`**, **`idle`** and **`interaction`** islands preload nothing by default. A `visible` island fetches its chunk when it intersects (`regions.visible.margin` is the lead time), an `idle` one in idle time, an `interaction` one on the first pointer-over, focus or touch inside it — the hover warm-up, with the waking click replayed. No bytes move before there is a reason to.
 - **media-query** wakes preload nothing. The server cannot know the viewport. A download would be a blind bet. The chunk fetches when the query matches.
 
 That is `regions.preload: 'load'`, the default. Two other policies exist:
 
 ```ts title=vite.config.ts
-ogygia({ regions: { preload: 'all' } })  // every island's closure hinted at load — load islands normally, the rest at fetchpriority="low"
+ogygia({ regions: { preload: 'all' } })  // every island's closure hinted at load, all at fetchpriority="low"
 ogygia({ regions: { preload: 'none' } }) // no code hints at all — a load island fetches on import (one extra round trip before it wakes)
 ```
 

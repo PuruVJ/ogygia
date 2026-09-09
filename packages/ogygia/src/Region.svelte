@@ -420,13 +420,13 @@
 	const island_props_inline = $derived(island_props_tail ? '' : island_props_script);
 
 	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
-	// `wake: 'visible'` / `wake: 'interaction'` — the SAME hints at `fetchpriority="low"`: the bytes
-	// ride in the background (never contending with critical work), the module map is warm, and the
-	// later `import()` (visible's idle warm, interaction's hover warm, or the real wake) is a pure
-	// cache hit — modulepreload compiles into the module map with module CORS semantics, never a
-	// double fetch. Execution still waits for the schedule; only bytes move early. Only SSR can do
-	// this: the client knows just the facade URL; the dep closure lives in the islandDeps manifest.
-	// Browsers without fetchpriority ignore the attribute (hints degrade to normal priority).
+	// `wake: 'visible'` / `wake: 'interaction'` (under `preload: 'all'`) — the SAME hints. All of
+	// them ride at `fetchpriority="low"`: the bytes never contend with critical work, the module map
+	// is warm, and the later `import()` (visible's idle warm, interaction's hover warm, or the real
+	// wake) is a pure cache hit — modulepreload compiles into the module map with module CORS
+	// semantics, never a double fetch. Execution still waits for the schedule; only bytes move early.
+	// Only SSR can do this: the client knows just the facade URL; the dep closure lives in the
+	// islandDeps manifest. Browsers without fetchpriority ignore the attribute (normal priority).
 	// Media-query wakes stay unhinted — the server can't know the viewport, so downloading would be
 	// a blind bet.
 	// `ogygia({ regions: { preload } })` — 'load' (the default) hints only load-woken islands: a
@@ -439,7 +439,16 @@
 		if (hydrate_attr !== 'load' && hydrate_attr !== 'visible' && hydrate_attr !== 'interaction')
 			return '';
 		if (preloadPolicy !== 'all' && hydrate_attr !== 'load') return '';
-		const low = hydrate_attr === 'load' ? '' : ' fetchpriority="low"';
+		// EVERY hint is `fetchpriority="low"`, the `load` island's included. A hint's job is discovery
+		// (no parse-then-import waterfall), not priority: nothing an island downloads is needed for
+		// first paint — the server painted the content — so island code must never outrank the CSS
+		// and the LCP image. At normal priority a header island with a 1.7 MB closure pushed a 79 KB
+		// hero from 1 s to 5 s on a 1.6 Mbps line; at low the chunk still lands before the runtime
+		// (which waits for the document to parse) asks for it on any normal line.
+		// TODO(preload-priority): with everything low the load/background split below and in
+		// `server_modulepreload` is dead machinery — collapse it (and `dedupe_modulepreload_links`'s
+		// low-vs-normal shadowing) once this has proven out on a real page.
+		const low = ' fetchpriority="low"';
 		const hrefs = [island_module_url];
 		const add_with_deps = (entry, url) => {
 			const own = url ? asset(url) : '';
@@ -507,7 +516,8 @@
 		const background =
 			(__hydrate === 'visible' || __hydrate === 'interaction') && __hydrate !== __defer;
 		if (background && preloadPolicy !== 'all') return '';
-		const low = background ? ' fetchpriority="low"' : '';
+		// Low for every hint — see `island_preload` (and its TODO(preload-priority)).
+		const low = ' fetchpriority="low"';
 		const hrefs = [server_region_entry];
 		for (const dep of islandDeps(__module)) {
 			const href = asset(dep);
