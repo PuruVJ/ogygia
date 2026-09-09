@@ -70,11 +70,17 @@ test.describe('SSR island HTML, no Kit bootstrap', () => {
 			`${count(html, RUNTIME_BOOTSTRAP_G_RE)}`
 		);
 		{
+			// Hints ride the DOCUMENT TAIL on a Kit page (after the content, before the seeds), never
+			// the head — a head hint fires while the HTML streams and competes with the hero image.
 			const head = html.slice(0, html.indexOf('</head>'));
+			const body_end = html.lastIndexOf('</body>');
+			const last_region = html.lastIndexOf('</ogygia-region>');
+			const first_hint = html.search(MODULEPRELOAD_RE);
+			check('/ NO modulepreload hint in <head>', !MODULEPRELOAD_RE.test(head));
 			check(
-				'/ hydrate=load modulepreload(s) in <head>',
-				MODULEPRELOAD_RE.test(head),
-				MODULEPRELOAD_RE.test(head) ? 'in head' : 'missing from head'
+				'/ hydrate=load modulepreload(s) in the document tail (after the last island, before </body>)',
+				first_hint > last_region && first_hint < body_end,
+				`hint at ${first_hint}, last region at ${last_region}, body end at ${body_end}`
 			);
 		}
 		check('/ NO Kit __sveltekit bootstrap', !KIT_MARKER_RE.test(html));

@@ -12,6 +12,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Module-preload hints ride at the end of the body, ahead of the props.** In the head a hint
+  fires while the HTML is still streaming: on a slow line the pipe is idle until the parser reaches
+  the hero, so every island chunk starts downloading first and the LCP image then shares the line
+  with all of them — priority cannot help, it orders the queue but does not stop what is already in
+  flight (measured on a 1.6 Mbps profile: hero 6.4 s with 179 low-priority hints in the head, 2.7 s
+  with none; FCP 10.3 s vs 5.5 s). At the end of the body the hints fire once the content is parsed,
+  after the CSS and the hero are requested, and still flatten the runtime's import waterfall (it
+  waits for the document to parse before it wakes anything). One channel owns everything ogygia
+  appends before `</body>` on a Kit page — `server/document-tail.ts`: hints first, deduped per href
+  across the page, then the props sidecars, then the seeds. A `render: 'deferred'` hole's
+  `<link rel="preload" as="fetch">` stays in the head: that one fetches content, not island code.
+  Every other render root (a hole response, a baked ticket, a router document, a foreign fragment)
+  keeps its hints in the head and its sidecars adjacent.
 - **Island props ride at the end of the body.** Each island's devalue props sidecar
   (`<script type="application/ogygia-props">`) sat right after its `<ogygia-region>`, so on a page
   whose header is an island the browser downloaded the props (136 KB on one measured page, 480 KB

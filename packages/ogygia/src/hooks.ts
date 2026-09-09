@@ -114,7 +114,8 @@ import { stringify } from 'devalue';
 import { serialize_provided_context } from './context-bridge.js';
 import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
-import { set_page_recorder, set_props_recorder, type PageSnapshot } from './page-seed-registry.js';
+import { set_page_recorder, type PageSnapshot } from './page-seed-registry.js';
+import { DocumentTail, set_tail_reader } from './server/document-tail.js';
 import { set_late_recorder, set_late_taker, type LateRegion } from './late-region-registry.js';
 import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
 import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './devtools/schema.js';
@@ -149,9 +150,9 @@ type RequestBag = {
 	/** Some region on the page reads `$page` on the client (Region.svelte × `islandReadsPage`), so
 	 *  the `application/ogygia-page` seed must ship. The snapshot itself is recorded regardless. */
 	seed_wanted: boolean;
-	/** Island props sidecars deferred to the end of the body (fingerprint → `<script>` tag), recorded
-	 *  by Region.svelte during Kit's page pass; null until the first island records. */
-	props: Map<string, string> | null;
+	/** THE DOCUMENT TAIL (server/document-tail.ts): the module-preload hints and props sidecars the
+	 *  regions of this Kit page render defer to the end of the body. Emitted once, before the seeds. */
+	tail: DocumentTail;
 	deferred: Deferred[] | null;
 	/** Next free defer id after data+form staging — re-staging (nested promises) continues from here. */
 	defer_next_id: number;
@@ -185,15 +186,11 @@ set_page_recorder((snapshot, seed) => {
 	// SEED ONLY WHEN READ: one island whose client code reads `$page` is enough to ship the seed.
 	if (seed) bag.seed_wanted = true;
 });
-// Island props sidecars → the end of the body (`inject_client_seeds`), one per fingerprint. Only a
-// request with a bag — a Kit page render inside `request_als.run` — records; a hole endpoint, a
-// remote-function render or a router document has none and keeps its sidecars adjacent.
-set_props_recorder((fp, script) => {
-	const bag = request_als.getStore();
-	if (!bag) return false;
-	(bag.props ??= new Map()).set(fp, script);
-	return true;
-});
+// THE DOCUMENT TAIL (server/document-tail.ts): hints + props sidecars a Kit page render defers to
+// the end of the body. One per request, created with the bag; only a render inside
+// `request_als.run` — a Kit page — sees it, so a hole endpoint, a remote-function render or a
+// router document keeps its hints in the head and its sidecars adjacent.
+set_tail_reader(() => request_als.getStore()?.tail ?? null);
 // Kit's `__request__` context for every server render root ogygia starts (document root, inline
 // island, deferred endpoint, snippet body): rebuilt from the recorded page snapshot, with the live
 // event filling url/params/route when the snapshot has none (a Kit page: Kit's own values; a
@@ -741,7 +738,7 @@ class OgygiaHandle {
 				ctx: new Map(),
 				page: null,
 				seed_wanted: false,
-				props: null,
+				tail: new DocumentTail(),
 				deferred: null,
 				defer_next_id: 0,
 				late: null,
@@ -1012,11 +1009,11 @@ class OgygiaHandle {
 
 		const scripts: string[] = [];
 
-		// Island props sidecars, deferred here from each island's render (Region.svelte →
-		// `record_island_props`): after the content, before the seeds, one `<script>` per fingerprint —
-		// so the hero and the text stream before the props bytes, and the runtime (which waits for
-		// DOMContentLoaded before hydrating) finds them by `data-og-fp` (runtime/sidecar.ts).
-		if (bag?.props) for (const script of bag.props.values()) scripts.push(script);
+		// THE DOCUMENT TAIL (server/document-tail.ts): the regions' module-preload hints, then their
+		// props sidecars — after the content, before the seeds. The tail owns the order and the dedupe;
+		// this is the one place it is written out.
+		const tail_html = bag?.tail.render() ?? '';
+		if (tail_html) scripts.push(tail_html);
 
 		// Single page seed (PAGE-DUP) — islands read it through the `$app/state` shim. url/params/route
 		// come from the RequestEvent (reading `$app/state`'s `page` in a hook throws

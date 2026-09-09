@@ -57,6 +57,23 @@ test.describe('PROPS TAIL: island props ride at the end of the body, keyed by fi
 		check('every region fp has a sidecar', fps.every((fp) => keys.includes(fp)), `fps ${fps} keys ${keys}`);
 		check('identical islands share one sidecar (3 sidecars for 4 regions)', sidecars.length === 3, String(sidecars.length));
 		check('no duplicate sidecar keys', new Set(keys).size === keys.length);
+
+		// (1d) the module-preload hints ride the tail too: none in the head, all after the content,
+		// BEFORE the first sidecar (they must fire before the parser chews through the props), one per
+		// href across the whole page, every one at low priority
+		const head = html.slice(0, html.indexOf('</head>'));
+		check('no modulepreload hint in the head', !/rel="modulepreload"/.test(head));
+		const hints = [...html.matchAll(/<link\b[^>]*rel="modulepreload"[^>]*>/g)];
+		check('hints present in the document (load islands on the page)', hints.length > 0, String(hints.length));
+		check('hints come after the page content', hints.every((h) => (h.index ?? 0) > content_at));
+		check(
+			'hints come before the first props sidecar',
+			hints.every((h) => (h.index ?? 0) < first_sidecar_at),
+			`last hint ${hints[hints.length - 1]?.index} vs first sidecar ${first_sidecar_at}`
+		);
+		const hint_hrefs = hints.map((h) => h[0].match(/href="([^"]+)"/)?.[1] ?? '');
+		check('hints deduped per href across islands', new Set(hint_hrefs).size === hint_hrefs.length);
+		check('every hint is fetchpriority="low"', hints.every((h) => /fetchpriority="low"/.test(h[0])));
 	});
 
 	test('browser: islands hydrate from the tail; SPA nav swaps tails; the kept island survives', async ({ page }) => {
@@ -68,6 +85,20 @@ test.describe('PROPS TAIL: island props ride at the end of the body, keyed by fi
 			'all 4 islands hydrated',
 			(await page.locator('ogygia-region[data-hydrated]').count()) === 4,
 			String(await page.locator('ogygia-region[data-hydrated]').count())
+		);
+		// The tail hints actually preloaded the chunks: the island entry's resource entry was
+		// initiated by the hint (Chromium reports a modulepreload fetch as `other`; a `<link
+		// rel=preload>` as `link`), never by the runtime's `import()` (`script`) — no waterfall.
+		const initiators = await page.evaluate(() =>
+			performance
+				.getEntriesByType('resource')
+				.filter((e) => /og-region\.[0-9a-f]+\.js$/.test(e.name))
+				.map((e) => (e as PerformanceResourceTiming).initiatorType)
+		);
+		check(
+			'island entries were fetched by the tail hints, not by import()',
+			initiators.length > 0 && initiators.every((i) => i === 'other' || i === 'link'),
+			initiators.join(',')
 		);
 		const solo = page.locator('[data-tally="solo"] [data-tally-btn]');
 		check('props arrived: solo starts at 20', (await solo.innerText()).includes('20'), await solo.innerText());

@@ -21,6 +21,14 @@ test.describe('streamed pages (yield regions): flush-before-slow-yield timing, t
 		);
 		check('wire: boot script present once', raw.split('data-og-late-boot').length === 2);
 		check('wire: slot wrapper present', raw.includes('og-late-slot'));
+		// A late chunk is its own render root (not Kit's page pass): any island inside it must be
+		// SELF-CONTAINED — its props sidecar adjacent inside the same template, never deferred to a
+		// document tail that was already sent.
+		for (const tpl of raw.match(/<template data-og-late[\s\S]*?<\/template>/g) ?? []) {
+			const regions = (tpl.match(/<ogygia-region\b/g) ?? []).length;
+			const sidecars = (tpl.match(/data-ogygia-props/g) ?? []).length;
+			check('wire: islands in a late chunk carry their sidecar inside the chunk', sidecars >= regions, `${regions} regions, ${sidecars} sidecars`);
+		}
 	});
 
 	// 2) TIMING truth: the first chunk does NOT wait for the slow yield. Assert the DELTA on one

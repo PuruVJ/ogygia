@@ -30,7 +30,8 @@
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
-	import { record_page, record_island_props } from './page-seed-registry.js';
+	import { record_page } from './page-seed-registry.js';
+	import { document_tail } from './server/document-tail.js';
 	import { isNested, setNested, isInLake, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { REF_WIRE_KEY, ref_reducer } from './ref.js';
 	// PULL-registration inside stringify_props (idempotent; no import-time side effects)
@@ -405,18 +406,24 @@
 		is_island && !island_inline && !has_slot_children && (__cacheTtl ?? 0) <= 0 && !!island_fp
 			&& known_region_fps().has(island_fp)
 	);
-	// PROPS AFTER THE CONTENT: in Kit's page pass the sidecar is recorded into the request and the
-	// handle emits it before `</body>` (one script per fingerprint — identical islands share it),
-	// so the hero and the text stream before the props bytes (480 KB above the LCP image on one
-	// measured page). Any other render root keeps it adjacent (`record_island_props` → false): a
-	// hole response, a baked ticket, a router document stay self-contained. Decided once at init —
-	// the SSR pass renders each region exactly once.
+	// THE DOCUMENT TAIL (server/document-tail.ts): in Kit's page pass this region's module-preload
+	// hints and its props sidecar go to the end of the body — the handle emits the tail once, after
+	// the content, before the seeds — so the CSS and the hero are requested before a single island
+	// byte moves (480 KB of props and 1.7 MB of hinted chunks sat above the LCP image on one measured
+	// page). Any other render root has no tail (`document_tail()` → null): a hole response, a baked
+	// ticket, a router document keep their hints in the head and their sidecar adjacent, so the HTML
+	// stays self-contained wherever it is spliced. Decided once at init — the SSR pass renders each
+	// region exactly once.
+	const tail = typeof window === 'undefined' && kit_page_pass ? document_tail() : null;
 	const island_props_tail =
-		typeof window === 'undefined' &&
-		kit_page_pass &&
+		!!tail &&
 		is_island &&
 		!island_inline &&
-		untrack(() => !!island_fp && record_island_props(island_fp, island_props_script));
+		untrack(() => {
+			if (!island_fp) return false;
+			tail.props(island_fp, island_props_script);
+			return true;
+		});
 	const island_props_inline = $derived(island_props_tail ? '' : island_props_script);
 
 	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
@@ -472,6 +479,16 @@
 		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + low + GT;
 		return html;
 	});
+	// Hints ride the document tail on a Kit page (see `tail` above); in the head everywhere else.
+	const island_preload_tail =
+		!!tail &&
+		untrack(() => {
+			const html = island_preload;
+			if (!html) return false;
+			tail.hint(html);
+			return true;
+		});
+	const island_preload_head = $derived(island_preload_tail ? '' : island_preload);
 
 	// ─────────────────────────────────────────────────────────── server branch ──
 	const server_endpoint = $derived.by(() => {
@@ -533,7 +550,19 @@
 		const href_attr = server_endpoint.split('&').join('&amp;');
 		return LT + 'link rel="preload" as="fetch" crossorigin="anonymous" href="' + href_attr + '"' + GT;
 	});
-	const server_preload = $derived(server_fetch_preload + server_modulepreload);
+	// The fetch preload STAYS in the head: it starts the hole's content request during the HTML parse
+	// (content, not island code). Only the module hints ride the tail.
+	const server_modulepreload_tail =
+		!!tail &&
+		untrack(() => {
+			const html = server_modulepreload;
+			if (!html) return false;
+			tail.hint(html);
+			return true;
+		});
+	const server_preload = $derived(
+		server_fetch_preload + (server_modulepreload_tail ? '' : server_modulepreload)
+	);
 
 	// ───────────────────────────────────────────────────────────── lake branch ──
 	// Lakes matter only inside an island (freeze + lift/restore). In the shell they render bare.
@@ -654,7 +683,7 @@
 
 	const head_html = $derived(
 		(is_island
-			? runtime_script + island_preload + island_css_html
+			? runtime_script + island_preload_head + island_css_html
 			: is_server
 				? runtime_script + server_preload
 				: '') +

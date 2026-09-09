@@ -1,0 +1,159 @@
+/**
+ * THE DOCUMENT TAIL (server/document-tail.ts) — what a Kit page render defers to the end of the
+ * body: every region's module-preload hints (deduped per href), then every island's props sidecar
+ * (one per fingerprint). Region.svelte writes to it only inside Kit's page pass with a tail
+ * installed; every other render root keeps hints in the head and the sidecar adjacent.
+ */
+import { afterEach, describe, expect, it } from 'vitest';
+import { render } from 'svelte/server';
+import type { Component } from 'svelte';
+import Region from '../src/Region.svelte';
+import Tiny from './_fixtures/Tiny.svelte';
+import KitPagePass from './_fixtures/KitPagePass.svelte';
+import { DocumentTail, set_tail_reader, document_tail } from '../src/server/document-tail.js';
+
+const region = Region as unknown as Component<Record<string, unknown>>;
+const kit_pass = KitPagePass as unknown as Component<Record<string, unknown>>;
+
+const SIDECAR_G = /<script type="application\/ogygia-props" data-ogygia-props="([0-9a-f]+)">([^<]*)<\/script>/g;
+const FP_ATTR_G = /data-og-fp="([0-9a-f]+)"/g;
+const HINT_G = /<link rel="modulepreload" href="([^"]+)" fetchpriority="low">/g;
+
+const island = (props: Record<string, unknown> = {}, entry = '/islands/tiny.js') => ({
+	__mode: 'island',
+	__entry: entry,
+	__component: Tiny,
+	__props: props,
+	load: true
+});
+
+/** Render islands inside the Kit page-pass stand-in (snippet children of KitPagePass). */
+function render_in_kit_pass(list: Array<Record<string, unknown>>) {
+	const children = (renderer: { push(html: string): void }) => {
+		for (const props of list) (region as unknown as (r: unknown, p: unknown) => void)(renderer, props);
+	};
+	return render(kit_pass, { props: { children } });
+}
+
+let tail: DocumentTail;
+function install_tail() {
+	tail = new DocumentTail();
+	set_tail_reader(() => tail);
+}
+afterEach(() => set_tail_reader(null));
+
+describe('DocumentTail', () => {
+	it('hints dedupe per href (first wins), props dedupe per fingerprint, render is hints then props', () => {
+		const t = new DocumentTail();
+		expect(t.empty).toBe(true);
+		t.hint('<link rel="modulepreload" href="/a.js" fetchpriority="low"><link rel="modulepreload" href="/b.js" fetchpriority="low">');
+		t.hint('<link rel="modulepreload" href="/b.js" fetchpriority="low"><link rel="modulepreload" href="/c.js" fetchpriority="low">');
+		t.props('f1', '<script data-ogygia-props="f1">1</script>');
+		t.props('f1', '<script data-ogygia-props="f1">DUPLICATE</script>');
+		t.props('f2', '<script data-ogygia-props="f2">2</script>');
+		expect(t.size).toEqual({ hints: 3, props: 2 });
+		expect(t.empty).toBe(false);
+		expect(t.render()).toBe(
+			'<link rel="modulepreload" href="/a.js" fetchpriority="low">' +
+				'<link rel="modulepreload" href="/b.js" fetchpriority="low">' +
+				'<link rel="modulepreload" href="/c.js" fetchpriority="low">' +
+				'<script data-ogygia-props="f1">1</script>' +
+				'<script data-ogygia-props="f2">2</script>'
+		);
+	});
+
+	it('ignores tags that are not modulepreload links and links without href', () => {
+		const t = new DocumentTail();
+		t.hint('<link rel="stylesheet" href="/x.css"><link rel="modulepreload"><link rel="preload" as="fetch" href="/h">');
+		expect(t.size.hints).toBe(0);
+		expect(t.render()).toBe('');
+	});
+
+	it('document_tail() is null until a reader is installed', () => {
+		expect(document_tail()).toBeNull();
+		install_tail();
+		expect(document_tail()).toBe(tail);
+	});
+});
+
+describe('Region.svelte × the tail', () => {
+	it('no tail (a test / standalone render): hints in the head, sidecar adjacent and keyed', () => {
+		const out = render(region, { props: island({ n: 1 }) });
+		expect([...out.head.matchAll(HINT_G)].map((m) => m[1])).toEqual(['/islands/tiny.js']);
+		const fps = [...out.body.matchAll(FP_ATTR_G)].map((m) => m[1]);
+		const sidecars = [...out.body.matchAll(SIDECAR_G)];
+		expect(fps).toHaveLength(1);
+		expect(sidecars).toHaveLength(1);
+		expect(sidecars[0][1]).toBe(fps[0]);
+		expect(out.body.indexOf('</ogygia-region>')).toBeLessThan(out.body.indexOf('<script type="application/ogygia-props"'));
+	});
+
+	it('tail installed but NOT a Kit page pass (an ogygia render root): head + adjacent, tail untouched', () => {
+		install_tail();
+		const out = render(region, { props: island({ n: 1 }) });
+		expect([...out.head.matchAll(HINT_G)]).toHaveLength(1);
+		expect([...out.body.matchAll(SIDECAR_G)]).toHaveLength(1);
+		expect(tail.empty).toBe(true);
+	});
+
+	it('Kit page pass + tail: hints and sidecar go to the tail, nothing in the head or inline', () => {
+		install_tail();
+		const out = render_in_kit_pass([island({ n: 1 })]);
+		expect(out.head).not.toContain('modulepreload');
+		expect(out.body).not.toContain('data-ogygia-props');
+		const fps = [...out.body.matchAll(FP_ATTR_G)].map((m) => m[1]);
+		expect(fps).toHaveLength(1);
+		expect(tail.size).toEqual({ hints: 1, props: 1 });
+		const html = tail.render();
+		expect(html.indexOf('modulepreload')).toBeLessThan(html.indexOf('data-ogygia-props'));
+		expect(html).toContain(`<script type="application/ogygia-props" data-ogygia-props="${fps[0]}">`);
+		expect(html).toContain('<link rel="modulepreload" href="/islands/tiny.js" fetchpriority="low">');
+	});
+
+	it('three islands: identical ones share a sidecar, the shared entry is hinted once', () => {
+		install_tail();
+		const out = render_in_kit_pass([island({ n: 1 }), island({ n: 1 }), island({ n: 2 })]);
+		const fps = [...out.body.matchAll(FP_ATTR_G)].map((m) => m[1]);
+		expect(fps).toHaveLength(3);
+		expect(new Set(fps).size).toBe(2);
+		expect(tail.size).toEqual({ hints: 1, props: 2 });
+	});
+
+	it('a server island that hydrates: its module hints ride the tail, its FETCH preload stays in the head', () => {
+		install_tail();
+		const hole = {
+			__mode: 'server',
+			__entry: 'hole-1',
+			__component: Tiny,
+			__props: {},
+			__defer: 'load',
+			__hydrate: 'load',
+			__module: '/islands/hole.js'
+		};
+		const out = render_in_kit_pass([hole]);
+		expect(out.head).not.toContain('modulepreload');
+		// (the fetch preload needs a minted endpoint — the unit stub mints none; e2e/server-islands
+		// asserts it stays in the head on a real page)
+		expect(tail.size.hints).toBe(1);
+		expect(tail.render()).toContain('<link rel="modulepreload" href="/islands/hole.js" fetchpriority="low">');
+		// a hole's props sidecar is small and stays adjacent (only ISLAND sidecars move)
+		expect(out.body).toContain('data-ogygia-props');
+		expect(tail.size.props).toBe(0);
+	});
+
+	it('outside the page pass the same server island keeps both hints in the head', () => {
+		install_tail();
+		const out = render(region, {
+			props: { __mode: 'server', __entry: 'hole-1', __component: Tiny, __props: {}, __defer: 'load', __hydrate: 'load', __module: '/islands/hole.js' }
+		});
+		expect(out.head).toContain('modulepreload');
+		expect(tail.empty).toBe(true);
+	});
+
+	it('a visible island under the default policy: no hint at all, sidecar still in the tail', () => {
+		install_tail();
+		const out = render_in_kit_pass([{ ...island({ n: 7 }), load: undefined, visible: true }]);
+		expect(out.head).not.toContain('modulepreload');
+		expect(tail.size).toEqual({ hints: 0, props: 1 });
+	});
+});
