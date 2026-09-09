@@ -47,8 +47,17 @@ interface SeedNode {
 export interface SeedIndex {
 	/** node → its path (identity matches: the app passed the seed's own object). */
 	readonly by_identity: WeakMap<object, SeedPath>;
-	/** structural hash → the first seed node with that shape (structure matches: a clone). */
-	readonly by_hash: Map<string, SeedNode>;
+	/** node → its byte estimate (the threshold check, without hashing). */
+	readonly bytes: WeakMap<object, number>;
+	/**
+	 * The seed nodes with exactly this byte estimate — the only ones a props node of that size can
+	 * be a clone of. Structure matching hashes just those few candidates (memoised per seed node)
+	 * instead of the whole seed, so an app that passes the seed's own objects never hashes a seed
+	 * node at all, and a cloning app hashes only what it has to.
+	 */
+	candidates(bytes: number): readonly SeedNode[];
+	/** Structural hash of a seed node, memoised for the request. */
+	hash_of(node: SeedNode): string | null;
 	/** nodes indexed (for tests / devtools). */
 	readonly size: number;
 }
@@ -160,36 +169,117 @@ export function deep_equal_plain(a: unknown, b: unknown): boolean {
 const index_cache = new WeakMap<object, SeedIndex>();
 
 /**
+ * Byte estimate + referenceability of a plain subtree WITHOUT hashing: one post-order pointer
+ * walk (`null` = not referenceable: a non-plain value inside, or a cycle). Memoised per node.
+ */
+function measure_subtree(
+	v: unknown,
+	memo: Map<object, number | null>,
+	on_stack: Set<object>
+): number | null {
+	// Leaves are sized without building a string for each (a CMS tree is mostly string leaves).
+	if (typeof v === 'string') return v.length + 2;
+	if (v === null || v === undefined || typeof v === 'boolean') return 4;
+	if (typeof v === 'number' || typeof v === 'bigint') return 8;
+	if (v instanceof Date) return 24;
+	if (!is_plain(v)) return null;
+	const cached = memo.get(v);
+	if (cached !== undefined) return cached;
+	if (on_stack.has(v)) return null;
+	on_stack.add(v);
+	let bytes = 0;
+	let ok = true;
+	// Every child is measured even after one disqualifies the parent: a clean sibling deeper in
+	// the tree must still get its own entry (the index walk reads the memo).
+	if (Array.isArray(v)) {
+		for (const item of v) {
+			const b = measure_subtree(item, memo, on_stack);
+			if (b === null) ok = false;
+			else bytes += b + 1;
+		}
+	} else {
+		for (const key in v) {
+			const b = measure_subtree((v as Record<string, unknown>)[key], memo, on_stack);
+			if (b === null) ok = false;
+			else bytes += key.length + b + 3;
+		}
+	}
+	on_stack.delete(v);
+	const result = ok ? bytes : null;
+	memo.set(v, result);
+	return result;
+}
+
+/**
  * Index the seed's `data` for referencing: every referenceable node at or above `min_bytes`, by
- * identity and by structural hash (first occurrence wins — the shortest path is not guaranteed,
- * the first in key order is, which is deterministic). Cached per `data` object: one index per
- * request, however many islands ask.
+ * identity now and by structural hash on demand (first occurrence wins — the shortest path is not
+ * guaranteed, the first in key order is, which is deterministic). Cached per `data` object: one
+ * index per request, however many islands ask. The identity pass is a pointer walk with a byte
+ * count — no hashing, no string building — so on an app that passes the seed's own objects the
+ * whole cost of referencing is this walk.
  */
 export function index_seed(data: unknown, min_bytes = 96): SeedIndex {
-	if (!is_plain(data)) return { by_identity: new WeakMap(), by_hash: new Map(), size: 0 };
+	if (!is_plain(data))
+		return {
+			by_identity: new WeakMap(),
+			bytes: new WeakMap(),
+			candidates: () => [],
+			hash_of: () => null,
+			size: 0
+		};
 	const hit = index_cache.get(data);
 	if (hit) return hit;
 	const by_identity = new WeakMap<object, SeedPath>();
-	const by_hash = new Map<string, SeedNode>();
-	const memo = new Map<object, { hash: string; bytes: number } | null>();
-	let size = 0;
+	const bytes = new WeakMap<object, number>();
+	const measured = new Map<object, number | null>();
+	const nodes: SeedNode[] = [];
+	// One measuring pass over the whole tree (memoised), then a pruned walk: a node below the
+	// threshold cannot hold a child above it, so its subtree is skipped entirely — on a CMS tree
+	// that is most of the nodes. Paths are shared prefixes (parent array + one key), materialised
+	// only for the nodes that qualify.
+	measure_subtree(data, measured, new Set());
 	const visit = (v: unknown, path: SeedPath, seen: Set<object>) => {
 		if (!is_plain(v) || seen.has(v)) return;
+		const b = measured.get(v);
+		if (b === undefined) return;
+		// A small clean node cannot hold a large child: prune. A node that is NOT referenceable
+		// (null: a class instance / Map / cycle inside) may still hold clean children: descend.
+		if (b !== null && b < min_bytes) return;
 		seen.add(v);
-		const h = hash_subtree(v, memo, new Set());
-		if (h && h.bytes >= min_bytes) {
-			if (!by_identity.has(v)) by_identity.set(v, path);
-			if (!by_hash.has(h.hash)) by_hash.set(h.hash, { node: v, path });
-			size++;
+		if (b !== null) {
+			by_identity.set(v, path);
+			bytes.set(v, b);
+			nodes.push({ node: v, path });
 		}
 		if (Array.isArray(v)) {
-			for (let i = 0; i < v.length; i++) visit(v[i], [...path, i], seen);
+			for (let i = 0; i < v.length; i++) {
+				const c = v[i];
+				if (is_plain(c)) visit(c, [...path, i], seen);
+			}
 		} else {
-			for (const key of Object.keys(v)) visit((v as Record<string, unknown>)[key], [...path, key], seen);
+			for (const key in v) {
+				const c = (v as Record<string, unknown>)[key];
+				if (is_plain(c)) visit(c, [...path, key], seen);
+			}
 		}
 	};
 	visit(data, [], new Set());
-	const index: SeedIndex = { by_identity, by_hash, size };
+	// Size buckets for structure matching; hashes memoised per seed node, computed on first ask.
+	const by_bytes = new Map<number, SeedNode[]>();
+	for (const n of nodes) {
+		const b = bytes.get(n.node)!;
+		const bucket = by_bytes.get(b);
+		if (bucket) bucket.push(n);
+		else by_bytes.set(b, [n]);
+	}
+	const hash_memo = new Map<object, { hash: string; bytes: number } | null>();
+	const index: SeedIndex = {
+		by_identity,
+		bytes,
+		candidates: (b) => by_bytes.get(b) ?? [],
+		hash_of: (n) => hash_subtree(n.node, hash_memo, new Set())?.hash ?? null,
+		size: nodes.length
+	};
 	index_cache.set(data, index);
 	return index;
 }
@@ -210,7 +300,11 @@ export function seed_ref_reducer(
 	const walk = () => {
 		walked = true;
 		if (index.size === 0) return;
-		const memo = new Map<object, { hash: string; bytes: number } | null>();
+		// Identity first: a pointer lookup per node, no hashing. Structure only for a large plain
+		// node the seed does not own — and only against the seed nodes of exactly the same byte
+		// size (usually none, or one), hashed on first ask and memoised for the request.
+		const measured = new Map<object, number | null>();
+		const hashed = new Map<object, { hash: string; bytes: number } | null>();
 		const seen = new Set<object>();
 		const visit = (v: unknown) => {
 			if (!is_plain(v) || seen.has(v)) return;
@@ -220,16 +314,20 @@ export function seed_ref_reducer(
 				matched.set(v, by_id);
 				return;
 			}
-			const h = hash_subtree(v, memo, new Set());
-			if (h && h.bytes >= min_bytes) {
-				const cand = index.by_hash.get(h.hash);
-				if (cand && deep_equal_plain(cand.node, v)) {
-					matched.set(v, cand.path);
-					return;
+			const b = measure_subtree(v, measured, new Set());
+			if (b !== null && b >= min_bytes) {
+				const cands = index.candidates(b);
+				if (cands.length) {
+					const h = hash_subtree(v, hashed, new Set())?.hash ?? null;
+					const cand = h ? cands.find((c) => index.hash_of(c) === h) : undefined;
+					if (cand && deep_equal_plain(cand.node, v)) {
+						matched.set(v, cand.path);
+						return;
+					}
 				}
 			}
 			if (Array.isArray(v)) for (const item of v) visit(item);
-			else for (const key of Object.keys(v)) visit((v as Record<string, unknown>)[key]);
+			else for (const key in v) visit((v as Record<string, unknown>)[key]);
 		};
 		visit(props);
 	};
