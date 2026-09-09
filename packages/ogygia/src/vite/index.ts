@@ -172,6 +172,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	assert_no_legacy_options(options);
 
 	const visibleMargin = options.regions?.visible?.margin;
+	const preload_policy = options.regions?.preload ?? 'load';
+	if (preload_policy !== 'all' && preload_policy !== 'load' && preload_policy !== 'none')
+		throw new Error(
+			`[ogygia] regions.preload must be 'all', 'load' or 'none' (got ${JSON.stringify(preload_policy)}).`
+		);
 	const presets = options.regions?.presets || {};
 	validate_region_presets(presets);
 	const import_keys = normalize_import_keys(options.importKeys);
@@ -603,6 +608,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						is_dev,
 						id_salt,
 						visibleMargin,
+						preload_policy,
 						presets,
 						import_keys,
 						resolve_alias,

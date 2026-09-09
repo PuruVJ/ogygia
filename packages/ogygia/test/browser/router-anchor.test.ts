@@ -5,7 +5,7 @@
 // items). `anchor_of` reads the composed path instead. Regression: the PES product page's "show
 // all" back link and breadcrumb reloaded the document on ogygia while Kit swapped in place.
 import { expect, test } from 'vitest';
-import { anchor_of } from '../../src/runtime/router.js';
+import { anchor_of, reload_opt_out } from '../../src/runtime/router.js';
 
 /** Click `target`; run `anchor_of` INSIDE the document-level listener, as the router does — the
  *  composed path is only readable while the event dispatches. Prevented there too: a real anchor
@@ -44,4 +44,27 @@ test('a light-DOM anchor (and a click on its descendant) still resolves', () => 
 test('a click on nothing link-like is null, not an ancestor anchor of the host', () => {
 	document.body.innerHTML = '<div><span id="s">plain</span></div>';
 	expect(click_and_resolve(document.getElementById('s')!).anchor).toBeNull();
+});
+
+// `data-sveltekit-reload` — Kit's grammar, nearest ancestor wins. Regression: presence alone forced
+// a full load, so a subtree opted back IN with `="false"` (an app's insights section under a
+// `="true"` layout) reloaded on every link.
+test('data-sveltekit-reload: bare and "true" opt out of the SPA; "off" and "false" opt in', () => {
+	const anchor_in = (html: string) => {
+		document.body.innerHTML = html;
+		return document.querySelector('a')!;
+	};
+	expect(reload_opt_out(anchor_in('<a href="/x">x</a>'))).toBe(false);
+	expect(reload_opt_out(anchor_in('<a href="/x" data-sveltekit-reload>x</a>'))).toBe(true);
+	expect(reload_opt_out(anchor_in('<div data-sveltekit-reload="true"><a href="/x">x</a></div>'))).toBe(true);
+	expect(reload_opt_out(anchor_in('<div data-sveltekit-reload="off"><a href="/x">x</a></div>'))).toBe(false);
+	expect(reload_opt_out(anchor_in('<div data-sveltekit-reload="false"><a href="/x">x</a></div>'))).toBe(false);
+});
+
+test('data-sveltekit-reload: the nearest ancestor decides, either direction', () => {
+	document.body.innerHTML =
+		'<div data-sveltekit-reload="true"><section data-sveltekit-reload="false"><a id="in" href="/a">a</a><p data-sveltekit-reload><a id="out" href="/b">b</a></p></section><a id="top" href="/c">c</a></div>';
+	expect(reload_opt_out(document.getElementById('in')!)).toBe(false); // layout says reload, section opts back in
+	expect(reload_opt_out(document.getElementById('out')!)).toBe(true); // …and a bare attr below it opts out again
+	expect(reload_opt_out(document.getElementById('top')!)).toBe(true); // only the layout applies here
 });

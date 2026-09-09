@@ -74,6 +74,20 @@ export interface RegionsOptions {
 		margin?: string;
 	};
 	/**
+	 * Which islands get `<link rel="modulepreload">` hints for their code closure in the SSR HTML.
+	 *
+	 * - `'load'` (default): only islands that wake at load. `visible` islands fetch their code when
+	 *   they intersect (`visible.margin` is the lead time), `idle` ones in idle time, `interaction`
+	 *   ones on the first pointer-over / focus / touch inside them (the hover warm-up, with the
+	 *   waking click replayed) — nothing downloads before there is a reason to.
+	 * - `'all'`: every island's closure is hinted at load — `load` islands at normal priority, the
+	 *   rest at `fetchpriority="low"`. Instant wakes far below the fold, at the cost of downloading
+	 *   every island's bytes on every page (a 15-island page can hint several MB).
+	 * - `'none'`: no code hints at all; every island, `load` included, fetches its code when the
+	 *   runtime imports it. The leanest HTML, one extra round trip before a load island wakes.
+	 */
+	preload?: 'all' | 'load' | 'none';
+	/**
 	 * Named strategy bundles. Reference one from an import:
 	 * `import Chart from '$lib/Chart.svelte' with { preset: 'chart' };`
 	 */

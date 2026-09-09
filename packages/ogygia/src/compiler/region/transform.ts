@@ -1660,7 +1660,13 @@ class FileCompilation {
 		 * only — not the component JS) to ship its stylesheet without dual-owning the module emitFile
 		 * registers as `og-region.*`. When the CSS *is* absent from the client graph depends on the
 		 * binding, not on `link_virtual` alone:
-		 *   - island STUB leg (`!link_virtual`): no component in the graph → needs the link.
+		 *   - island STUB leg (`!link_virtual`), DEV only: no component in the graph → needs the link
+		 *     (Vite serves component CSS as modules; the graph is the only way it reaches the page).
+		 *     In a BUILD the link is dropped: Kit would link the CSS of every marked import the host
+		 *     declares, rendered or not, while Region.svelte already links exactly the islands that
+		 *     render (`island_css_html`, from the chunk closure `islandCss()` records) — the render
+		 *     pass decides, not the import list. See link/registry-stub.ts for the same rule applied
+		 *     to a `.ts` registry the host imports.
 		 *   - island real-wrapper leg (`link_virtual`, a csr=true-capable page/layout): the wrapper
 		 *     pulls the hydrate entry, which carries the CSS → no link needed.
 		 *   - LAKE (`always_link_css`): its inner is client-stubbed to render-nothing on EVERY client
@@ -1680,7 +1686,7 @@ class FileCompilation {
 			// root-relative scoped stylesheet the fouc virtual could read.
 			if (
 				!ctx.ssr &&
-				(always_link_css || !link_virtual) &&
+				(always_link_css || (!link_virtual && ctx.dev)) &&
 				typeof componentPathAbs === 'string' &&
 				componentPathAbs &&
 				path.isAbsolute(componentPathAbs) &&

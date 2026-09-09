@@ -10,8 +10,49 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Module-preload hints are emitted for `load` islands only — `regions.preload`.** The SSR HTML
+  used to hint the full code closure of EVERY island on the page: `load` islands at normal
+  priority, `visible` / `interaction` ones at `fetchpriority="low"`. A CMS page with fifteen
+  `visible` blocks therefore downloaded several megabytes of island code before anyone scrolled
+  (one measured page: 280 hints, 2.4 MB). The default is now `'load'`: only islands that wake at
+  load are hinted; a `visible` island fetches its chunk when it intersects (`visible.margin` is the
+  lead time), `idle` in idle time, `interaction` on the pointer-over / focus / touch warm-up it
+  already had (the waking click is still replayed). `ogygia({ regions: { preload: 'all' } })`
+  restores the previous behaviour; `'none'` emits no code hints at all (a load island fetches on
+  import). Far-below-the-fold wakes on slow networks are the one thing that gets later under the
+  default — set `'all'` if that matters more than the bytes.
+
 ### Fixed
 
+- **A csr=false page links only the island CSS it renders.** Two leaks made Kit link the CSS of
+  every marked component a page's module graph could reach, rendered or not, all of it
+  render-blocking. (1) A `.ts` **region registry** (`import Card from './Card.svelte' with { wake:
+  'visible' }` × N, the Builder / CMS block-factory shape) is a plain module to Kit: a csr=false
+  route host importing it pulled every mark's wrapper — the real component, its scoped CSS, its chunk
+  closure — into that page node's client graph, and Kit linked `node.stylesheets` for the whole
+  registry. One landing page linked 163 stylesheets for 21 rendered islands (337 registry marks);
+  FCP/LCP roughly doubled against the same page without islands. On the client leg of a build a
+  csr=false `+page` / `+layout` host's import of a registry now resolves to a names-only stub
+  (`virtual:ogygia/registry-stub/…`, `link/registry-stub.ts`); the registry module itself stays real
+  for csr=true hosts and the island world. (2) The csr=false client stub for a `.svelte` host's marked
+  import side-effect-imported the component's CSS graph (`virtual:ogygia/fouc-css/…`) so Kit would
+  link it — for every marked import, placed or not. In a build that link is dropped for islands
+  (lakes keep it: their inner never has a client chunk); Region.svelte already links exactly the
+  islands that render, from the chunk closure, and the client never runs a csr=false page's node. The
+  rule is the one the render pass always had: **what a page needs is decided at SSR, by what
+  renders**. Dev keeps the module graph (Vite serves component CSS as modules there). A new
+  head-budget e2e (`e2e/head-budget.spec.ts`) fetches every linked sheet on a fixture page — a
+  six-block registry rendering one, a placed island, an unplaced mark — and fails on any unrendered
+  mark's CSS, a duplicated href, or growth past a fixed link budget; the CSS tests before it asserted
+  presence only, which is why this went unnoticed.
+- **Router: `data-sveltekit-reload` follows Kit's value grammar.** The router treated the
+  attribute's presence as "full-page load", ignoring its value; Kit reads `""` / `"true"` as
+  reload and `"off"` / `"false"` as SPA, nearest ancestor wins. An app that wraps a layout in
+  `data-sveltekit-reload="true"` and opts a section back in with `data-sveltekit-reload="false"`
+  got full loads for every link in that section. `reload_opt_out()` now reads the value
+  (`test/browser/router-anchor.test.ts`).
 - **`kit.files.routes` and `kit.outDir` are honoured.** ogygia assumed `src/routes` and
   `.svelte-kit` everywhere it scans the routes tree (csr worlds, the client-build keepalive, route
   option files, the dev CSS-scope owners) and wherever it writes or reads the island-deps handoff.

@@ -24,7 +24,7 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
-	import { islandDeps, islandCss, contentCss } from 'virtual:ogygia/island-deps';
+	import { islandDeps, islandCss, contentCss, preloadPolicy } from 'virtual:ogygia/island-deps';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of } from './runtime/fingerprint.js';
 	import { asset } from '$app/paths';
@@ -368,10 +368,16 @@
 	// Browsers without fetchpriority ignore the attribute (hints degrade to normal priority).
 	// Media-query wakes stay unhinted — the server can't know the viewport, so downloading would be
 	// a blind bet.
+	// `ogygia({ regions: { preload } })` — 'load' (the default) hints only load-woken islands: a
+	// `visible` island fetches when it intersects (its margin is the lead time), `interaction` on
+	// the hover/focus/touch warm-up, so no bytes move before there is a reason to. 'all' restores
+	// the background hints for every island; 'none' hints nothing (a load island fetches on import).
 	const island_preload = $derived.by(() => {
 		if (island_inline || !is_island || !island_module_url) return '';
+		if (preloadPolicy === 'none') return '';
 		if (hydrate_attr !== 'load' && hydrate_attr !== 'visible' && hydrate_attr !== 'interaction')
 			return '';
+		if (preloadPolicy !== 'all' && hydrate_attr !== 'load') return '';
 		const low = hydrate_attr === 'load' ? '' : ' fetchpriority="low"';
 		const hrefs = [island_module_url];
 		const add_with_deps = (entry, url) => {
@@ -433,12 +439,14 @@
 	);
 	const server_modulepreload = $derived.by(() => {
 		if (nested || !server_wants_modulepreload || !server_region_entry) return '';
+		if (preloadPolicy === 'none') return '';
 		// Same low-priority background hints as `island_preload` for a phase-2 `visible`/`interaction`
-		// hydrate.
-		const low =
-			(__hydrate === 'visible' || __hydrate === 'interaction') && __hydrate !== __defer
-				? ' fetchpriority="low"'
-				: '';
+		// hydrate — and the same `regions.preload` policy: under 'load' only a phase-2 that wakes as
+		// soon as the HTML lands (`load`, or matching the fetch schedule) is hinted.
+		const background =
+			(__hydrate === 'visible' || __hydrate === 'interaction') && __hydrate !== __defer;
+		if (background && preloadPolicy !== 'all') return '';
+		const low = background ? ' fetchpriority="low"' : '';
 		const hrefs = [server_region_entry];
 		for (const dep of islandDeps(__module)) {
 			const href = asset(dep);

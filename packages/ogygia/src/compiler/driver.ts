@@ -99,6 +99,14 @@ import {
 	V_FREEZE_ROUTES
 } from './ids.js';
 import { strip_id, host_key } from './program.js';
+import {
+	export_names,
+	imported_names,
+	is_registry_stub_id,
+	registry_stub_id,
+	registry_stub_names,
+	registry_stub_source
+} from './link/registry-stub.js';
 import { island_host_loaded } from './link/emit-gate.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
 import type { Program, RegisterResult } from './program.js';
@@ -127,6 +135,10 @@ export interface Profiler {
 const LEADING_SLASH = /^\//;
 const BACKSLASH_G = /\\/g;
 const COMPONENT_EXT_RE = /\.(svelte|js|ts)$/;
+/** A Kit route host file (`+page.svelte`, `+layout.ts`, …) — the page node's own client modules. */
+const ROUTE_HOST_FILE_RE = /^\+(page|layout)\.(svelte|ts|js|mjs)$/;
+/** A `.ts`/`.js` module that can be a region registry (a minted `.ts` region host). */
+const TS_REGISTRY_EXT_RE = /\.(ts|js|mjs)$/;
 const SOURCE_EXT_RE = /\.(svelte|ts|js|mjs|cjs)$/;
 const CONTENT_CALL_RE = /\bcontent\s*\(/;
 const SERVER_MODULE_EXT_RE = /\.(server|remote)\.(ts|js|mjs)$/;
@@ -695,6 +707,10 @@ export class Compiler {
 		const program = this.program;
 		const is_dev = ctx.is_dev;
 
+		// A csr=false route host's registry import on the client leg (link/registry-stub.ts): the
+		// registry's export names as `undefined`, so the host links and ships none of the registry.
+		if (is_registry_stub_id(id)) return registry_stub_source(registry_stub_names(id));
+
 		if (id === RESOLVED(V_RUNTIME_URL)) {
 			// dev: the vite dev URL. build: the CONTENT-HASHED runtime URL — from this
 			// instance (standalone) or the handoff file the client build wrote (Kit-driven);
@@ -770,7 +786,12 @@ export class Compiler {
 			return `export default ${JSON.stringify('/@id/__x00__' + V_DEVTOOLS_BOOT)};`;
 		}
 		if (id === RESOLVED(V_ISLAND_DEPS)) {
-			return island_deps_module(ssr, is_dev, path.relative(ctx.root, kit_dirs(ctx.root).out_dir));
+			return island_deps_module(
+				ssr,
+				is_dev,
+				path.relative(ctx.root, kit_dirs(ctx.root).out_dir),
+				ctx.preload_policy
+			);
 		}
 		if (id === RESOLVED(V_TRANSPORT)) {
 			return transport_module(universalHooks);
@@ -957,6 +978,15 @@ export class Compiler {
 		if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 		if (source === V_TRANSPORTABLES) return RESOLVED(V_TRANSPORTABLES);
 		if (source === V_FREEZE_CONFIG) return RESOLVED(V_FREEZE_CONFIG);
+		if (is_registry_stub_id(source)) return RESOLVED(source);
+
+		// csr=false CLIENT leg of a BUILD: a route host's import of a `.ts`/`.js` REGION REGISTRY
+		// resolves to a names-only stub (link/registry-stub.ts). The registry's marked wrappers would
+		// otherwise drag every component + its CSS into the page node's client graph, and Kit links
+		// `node.stylesheets` for all of it, rendered or not — the render pass already links what
+		// renders. The registry module itself stays real for csr=true hosts and the island world.
+		const registry_stub = await this.#registry_stub_for(source, importer, { ssr, resolve });
+		if (registry_stub) return registry_stub;
 
 		// Island CLIENT graph: shim `$app/*` for the virtual module AND every module it
 		// pulls in (e.g. `$lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias
@@ -1024,6 +1054,61 @@ export class Compiler {
 			return resolved;
 		}
 		return null;
+	}
+
+	/**
+	 * The registry-stub decision for one import edge (see link/registry-stub.ts). Fires only on the
+	 * client leg of a build, only for an importer that is a csr=false ROUTE host (`+page`/`+layout`
+	 * `.svelte`/`.ts`/`.js` — the page node's own files, whose client JS never runs), and only when
+	 * the resolved target is a `.ts`/`.js` module the prescan registered as a region host. Returns the
+	 * resolved stub id, or `null` to let resolution continue.
+	 */
+	async #registry_stub_for(
+		source: string,
+		importer: string | undefined,
+		{
+			ssr,
+			resolve
+		}: {
+			ssr: boolean;
+			resolve: (
+				source: string,
+				importer: string,
+				opts: { skipSelf: boolean }
+			) => Promise<{ id: string } | null>;
+		}
+	): Promise<string | null> {
+		const ctx = this.#ctx!;
+		if (ssr || ctx.is_dev || !ctx.is_build || !importer) return null;
+		if (source.startsWith('\0') || source.startsWith('virtual:') || source.startsWith('$app/'))
+			return null;
+		const importer_abs = strip_id(importer);
+		const routes_dir = kit_dirs(ctx.root).routes_dir;
+		if (!importer_abs.startsWith(routes_dir + path.sep)) return null;
+		const base = path.basename(importer_abs);
+		const m = ROUTE_HOST_FILE_RE.exec(base);
+		if (!m) return null;
+		// A `+page.ts` / `+layout.ts` shares its route's world with the sibling `.svelte` host.
+		const svelte_host = path.join(importer_abs, '..', `+${m[1]}.svelte`);
+		if (!routeCsrIsFalse(svelte_host, routes_dir)) return null;
+		let resolved: { id: string } | null = null;
+		try {
+			resolved = await resolve(source, importer, { skipSelf: true });
+		} catch {
+			return null;
+		}
+		if (!resolved?.id || resolved.id.startsWith('\0')) return null;
+		const target = strip_id(resolved.id);
+		if (!TS_REGISTRY_EXT_RE.test(target)) return null;
+		this.prescan();
+		if (!this.program.host_index.has(host_key(target))) return null;
+		const registry_src = ctx.read_file(target);
+		const importer_src = ctx.read_file(importer_abs);
+		if (registry_src == null || importer_src == null) return null;
+		const names = export_names(registry_src);
+		for (const n of imported_names(importer_src, source)) names.add(n);
+		const rel = path.relative(ctx.root, target).split(path.sep).join('/');
+		return RESOLVED(registry_stub_id(rel, names));
 	}
 
 	/**

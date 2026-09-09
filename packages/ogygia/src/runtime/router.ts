@@ -327,6 +327,20 @@ function same_document(a: URL, b: URL) {
  * a real click on a link to the page one is on — re-render in place (Kit re-runs the navigation
  * too; a full reload is never the answer for a same-origin link).
  */
+/**
+ * Kit's `data-sveltekit-reload` grammar, nearest ancestor wins (Kit walks up from the anchor and
+ * takes the first element that carries the attribute): `""` / `"true"` = full-page load, `"off"` /
+ * `"false"` = SPA navigation — so a layout can opt a whole subtree OUT of the SPA and a child
+ * subtree can opt back IN. Presence alone used to force a reload, which turned a
+ * `data-sveltekit-reload="false"` subtree (an app's way of saying "SPA here") into full loads.
+ */
+export function reload_opt_out(anchor: Element): boolean {
+	const holder = anchor.closest('[data-sveltekit-reload]');
+	if (!holder) return false;
+	const v = holder.getAttribute('data-sveltekit-reload');
+	return v !== 'off' && v !== 'false';
+}
+
 export function same_document_link(url: URL, current: URL, in_flight: string | null): 'hash' | 'swallow' | 'refresh' {
 	if (url.hash && url.href !== current.href) return 'hash';
 	if (in_flight === url.href) return 'swallow';
@@ -1148,7 +1162,7 @@ class SpaRouter {
 		if (anchor.target && anchor.target !== '_self') return false;
 		if (anchor.hasAttribute('download')) return false;
 		if (anchor.hasAttribute('data-no-spa')) return false;
-		if (anchor.closest('[data-sveltekit-reload]')) return false; // SPA opt-out
+		if (reload_opt_out(anchor)) return false; // Kit's `data-sveltekit-reload` grammar
 		const rel = (anchor.getAttribute('rel') || '').split(WS);
 		if (rel.includes('external')) return false;
 		const url = new URL(anchor.href);

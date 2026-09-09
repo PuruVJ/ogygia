@@ -92,10 +92,19 @@ ogygia({ regions: { visible: { margin: '0px' } } });
 The wake decides when JS *runs*. The *bytes* download in the background before that. Thus a wake never stops on a cold fetch. The server emits `<link rel="modulepreload">` for the full static dependency closure of each island: the facade, each chunk it imports (transitively), and their CSS. The priority matches the schedule:
 
 - **`load`** islands preload at normal priority. Their JS is necessary at first paint.
-- **`visible`** and **`interaction`** islands preload at **`fetchpriority="low"`**. The bytes ride in the background. They do not compete with the runtime, the `load` islands, or the LCP image. Thus the wake (scroll-in, tap, hover) evaluates from the warm module map. It does not fetch cold.
+- **`visible`**, **`idle`** and **`interaction`** islands preload nothing by default. A `visible` island fetches its chunk when it intersects (`regions.visible.margin` is the lead time), an `idle` one in idle time, an `interaction` one on the first pointer-over, focus or touch inside it — the hover warm-up, with the waking click replayed. No bytes move before there is a reason to.
 - **media-query** wakes preload nothing. The server cannot know the viewport. A download would be a blind bet. The chunk fetches when the query matches.
 
-A chunk shared by two islands takes the **highest** priority that one of them asked for. Thus a low-priority hint can never demote a chunk that a `load` island needs at first paint.
+That is `regions.preload: 'load'`, the default. Two other policies exist:
+
+```ts title=vite.config.ts
+ogygia({ regions: { preload: 'all' } })  // every island's closure hinted at load — load islands normally, the rest at fetchpriority="low"
+ogygia({ regions: { preload: 'none' } }) // no code hints at all — a load island fetches on import (one extra round trip before it wakes)
+```
+
+`'all'` makes a far-below-the-fold wake instant at the cost of downloading every island's bytes on every page: a page with fifteen `visible` blocks hints several megabytes before anyone scrolls. Under `'all'`, a chunk shared by two islands takes the **highest** priority that one of them asked for, so a low-priority hint never demotes a chunk that a `load` island needs at first paint.
+
+**CSS follows the same rule: the render decides.** On a csr=false page the server pass links a stylesheet for each island that actually renders (`<link rel="stylesheet" data-ogygia-region-css>`, one per sheet per request) and nothing for the rest. A marked import the page never places, or the other blocks of a registry that rendered one, cost no stylesheet and no chunk hint. Kit's own links cover the page's static CSS (the page and layout components' styles); island CSS is not in that graph on purpose, so a 300-block registry does not become 300 render-blocking sheets.
 
 ## Deferred content that is also interactive
 

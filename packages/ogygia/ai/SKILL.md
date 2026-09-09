@@ -278,7 +278,7 @@ A dependency ships islands, marked components, or whole route tables by declarin
 
 `ogygia({ … })` keys — legacy top-level keys (`visible`, `presets`, `continuity`) are hard errors, not aliases:
 
-- `regions: { visible: { margin }, presets: { name: { render, wake, margin, maxAge, onExpire, revalidate, keep } } }`
+- `regions: { visible: { margin }, preload: 'load' | 'all' | 'none', presets: { name: { render, wake, margin, maxAge, onExpire, revalidate, keep } } }` — `preload` (default `'load'`): which islands get modulepreload hints in the SSR HTML; `'all'` hints every island's closure (non-load at low priority), `'none'` hints nothing
 - `router: false | { viewTransitions?, forms?, serverDelta? }` (defaults true/true/false)
 - `content: { markdown?, presets? }`
 - `profiler: boolean | { secret?, path = '/__profiler', sampleInterval, maxReports, network, heap, … }` — the ONLY profiler wiring (the handle auto-mounts it; nothing in hooks)

@@ -99,9 +99,18 @@ export function islandDepsHandoffPath(out_dir: string) {
  * `out_dir_rel` — Kit's `outDir` relative to the app root (`.svelte-kit` by default) — is the cwd
  * fallback for adapter-node / preview run from the app root.
  */
-export function island_deps_module(ssr: boolean, is_dev: boolean, out_dir_rel = '.svelte-kit'): string {
+export function island_deps_module(
+	ssr: boolean,
+	is_dev: boolean,
+	out_dir_rel = '.svelte-kit',
+	preload_policy: 'all' | 'load' | 'none' = 'load'
+): string {
+	// `ogygia({ regions: { preload } })`, read by Region.svelte when it emits an island's hints:
+	// 'load' hints only load-woken islands; 'all' hints every island (the rest at low priority);
+	// 'none' hints nothing.
+	const policy = `export const preloadPolicy = ${JSON.stringify(preload_policy)};\n`;
 	if (!ssr)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -109,8 +118,9 @@ export function island_deps_module(ssr: boolean, is_dev: boolean, out_dir_rel = 
 	// Content bodies need no dev entry here: a content module is in the SSR module graph, so
 	// Vite dev already injects its scoped CSS (the leak only bites the PROD client build).
 	if (is_dev)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
 	return (
+		policy +
 		`import fs from 'node:fs';\n` +
 		`import path from 'node:path';\n` +
 		`import { fileURLToPath } from 'node:url';\n` +

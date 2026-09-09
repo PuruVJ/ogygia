@@ -43,6 +43,8 @@ declare module 'virtual:ogygia/island-deps' {
 	/** og.$ hoisted factories (tag → self-contained source) for the page-inline registration
 	 *  script — prod SSR only; null in dev/client (dev uses the fn-manifest virtual). */
 	export function fnManifest(): Record<string, string> | null;
+	/** `ogygia({ regions: { preload } })`: which islands get modulepreload hints in the SSR HTML. */
+	export const preloadPolicy: 'all' | 'load' | 'none';
 }
 declare module 'virtual:ogygia/dev-hmr' {
 	/* side-effect only — CSS HMR bridge under csr=false */
