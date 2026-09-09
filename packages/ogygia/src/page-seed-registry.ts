@@ -22,7 +22,13 @@ export type PageSnapshot = {
 	route?: { id: string | null };
 };
 
-type Recorder = (snapshot: PageSnapshot) => void;
+/**
+ * `seed` — does this record WANT the client seed shipped? Region.svelte passes the build's answer
+ * for its island (`islandReadsPage`); the snapshot itself is always recorded (the handle also
+ * reads it for the freeze verdict — a load with a streaming promise is per-request by intent — and
+ * for server-side page reads), only the serialized seed is gated on it.
+ */
+type Recorder = (snapshot: PageSnapshot, seed: boolean) => void;
 
 let recorder: Recorder | null = null;
 
@@ -31,7 +37,32 @@ export function set_page_recorder(fn: Recorder | null): void {
 	recorder = fn;
 }
 
-/** Region.svelte calls this during SSR with Kit's real page; the client is a no-op. */
-export function record_page(snapshot: PageSnapshot): void {
-	recorder?.(snapshot);
+/** Region.svelte calls this during SSR with Kit's real page; the client is a no-op. `seed: false`
+ *  records the snapshot without asking for the client seed (no island on the page reads it). */
+export function record_page(snapshot: PageSnapshot, seed = true): void {
+	recorder?.(snapshot, seed);
+}
+
+/**
+ * Props sidecars deferred to the END of the body. An island rendered in Kit's own page pass hands
+ * its `<script data-ogygia-props="<fp>">` here instead of emitting it next to the region; the handle
+ * appends every recorded sidecar before `</body>` (after the content, before the page seed), one per
+ * fingerprint. Same recorder shape as the page snapshot: `hooks.ts` installs a request-scoped one,
+ * so any other render root (a hole endpoint, a baked held region, a router document, a test render)
+ * gets `false` back and keeps the sidecar adjacent — the HTML stays self-contained wherever it is
+ * spliced (runtime/sidecar.ts is the matching lookup).
+ */
+type PropsRecorder = (fp: string, script: string) => boolean;
+
+let props_recorder: PropsRecorder | null = null;
+
+/** Server (`hooks.ts`) installs a request-scoped recorder; `null` uninstalls. */
+export function set_props_recorder(fn: PropsRecorder | null): void {
+	props_recorder = fn;
+}
+
+/** Region.svelte, SSR, Kit page pass only. `true` → recorded (emit nothing inline); `false` → no
+ *  recorder for this render (emit the sidecar adjacent). */
+export function record_island_props(fp: string, script: string): boolean {
+	return props_recorder ? props_recorder(fp, script) : false;
 }

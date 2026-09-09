@@ -58,7 +58,7 @@ describe('fingerprint_of — the change key (did inputs change)', () => {
 });
 
 // R1 stamping + shadow guard use a DOM. Skip if jsdom-less; these run under the happy-dom/jsdom env.
-import { stamp_region_keys, region_in_shadow } from '../src/runtime/reconcile.js';
+import { stamp_region_keys, region_in_shadow, region_props_text } from '../src/runtime/reconcile.js';
 
 const hasDOM = typeof document !== 'undefined';
 (hasDOM ? describe : describe.skip)('R1 stamping + shadow guard', () => {
@@ -79,6 +79,29 @@ const hasDOM = typeof document !== 'undefined';
 		const keep = b.querySelector('[data-ogygia-keep]')!;
 		expect(region.getAttribute('data-key')).toMatch(/^r[\x00 ][0-9a-f]{16}$/); // one identity: 'r' + 64-bit fp
 		expect(keep.getAttribute('data-key')).toBe('k side');
+	});
+
+	it('reads a KEYED sidecar from the end of the body (data-og-fp ↔ data-ogygia-props="fp")', () => {
+		// The page pass moves island props after the content; the region still fingerprints by its
+		// props text, found by key — not by the (absent) next sibling.
+		const b = body(
+			'<ogygia-region entry="./a.js" data-og-fp="0123456789abcdef"></ogygia-region>' +
+				'<p>lots of content</p>' +
+				'<script type="application/ogygia-props" data-ogygia-props="0123456789abcdef">["p",1]</script>'
+		);
+		const region = b.querySelector('ogygia-region')!;
+		expect(region_props_text(region)).toBe('["p",1]');
+		stamp_region_keys(b);
+		expect(region.getAttribute('data-key')).toBe('r 0123456789abcdef');
+	});
+
+	it('an unkeyed adjacent sidecar still resolves (holes, tickets, router documents)', () => {
+		const b = body(
+			'<ogygia-region entry="./a.js"></ogygia-region>' +
+				'<link rel="stylesheet" href="/x.css">' +
+				'<script type="application/ogygia-props" data-ogygia-props>["p",2]</script>'
+		);
+		expect(region_props_text(b.querySelector('ogygia-region')!)).toBe('["p",2]');
 	});
 
 	it('does not clobber an authored data-key or id', () => {

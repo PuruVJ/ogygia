@@ -81,7 +81,53 @@ describe('collectIslandDepModulepreloads', () => {
 					imports: ['_app/immutable/x.js']
 				}
 			})
-		).toEqual({ js: {}, css: {} });
+		).toEqual({ js: {}, css: {}, page: {} });
+	});
+
+	// `page[entry]` — does the island's chunk closure bundle a page-reading shim? Decides whether the
+	// handle ships the page seed (Region.svelte → `islandReadsPage`).
+	describe('page-reader map', () => {
+		const SHIM = '/pkg/shims/app-state.svelte.js';
+		const bundle = (facade_ids: string[], dep_ids: string[]) => ({
+			'_app/immutable/og-region.aaaaaaaaaaaa.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js',
+				imports: ['_app/immutable/chunks/dep.js'],
+				moduleIds: facade_ids
+			},
+			'_app/immutable/chunks/dep.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/chunks/dep.js',
+				imports: [],
+				moduleIds: dep_ids
+			}
+		});
+		test('shim in the facade itself → reads', () => {
+			const r = collectIslandDepModulepreloads(bundle([SHIM, '/app/src/lib/A.svelte'], []), [SHIM]);
+			expect(r.page['/_app/immutable/og-region.aaaaaaaaaaaa.js']).toBe(true);
+		});
+		test('shim in a transitive dep chunk → reads', () => {
+			const r = collectIslandDepModulepreloads(bundle(['/app/src/lib/A.svelte'], [SHIM]), [SHIM]);
+			expect(r.page['/_app/immutable/og-region.aaaaaaaaaaaa.js']).toBe(true);
+		});
+		test('no shim anywhere in the closure → does not read (false, present in the map)', () => {
+			const r = collectIslandDepModulepreloads(
+				bundle(['/app/src/lib/A.svelte'], ['/app/src/lib/B.svelte']),
+				[SHIM]
+			);
+			expect(r.page['/_app/immutable/og-region.aaaaaaaaaaaa.js']).toBe(false);
+		});
+		test('module ids with a query suffix or Windows separators still match', () => {
+			const r = collectIslandDepModulepreloads(
+				bundle(['C:\\pkg\\shims\\app-state.svelte.js?og-region'], []),
+				['C:/pkg/shims/app-state.svelte.js']
+			);
+			expect(r.page['/_app/immutable/og-region.aaaaaaaaaaaa.js']).toBe(true);
+		});
+		test('no reader files given → every entry false (the map still lists it)', () => {
+			const r = collectIslandDepModulepreloads(bundle([SHIM], [SHIM]));
+			expect(r.page['/_app/immutable/og-region.aaaaaaaaaaaa.js']).toBe(false);
+		});
 	});
 
 	test('collects CSS from the facade + dep chunks (viteMetadata.importedCss)', () => {

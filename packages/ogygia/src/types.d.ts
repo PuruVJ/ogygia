@@ -40,6 +40,10 @@ declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
 	 *  region response so a server-picked component styles a page that never imported it. */
 	export function islandCss(entry: string): string[];
+	/** Does this island entry's client code read `$page` (the `$app/state` / `$app/stores` shim is
+	 *  in its chunk closure)? Decides whether the page seed ships. Fail-open: true in dev and for an
+	 *  entry the build handoff does not know. */
+	export function islandReadsPage(entry: string): boolean;
 	/** og.$ hoisted factories (tag → self-contained source) for the page-inline registration
 	 *  script — prod SSR only; null in dev/client (dev uses the fn-manifest virtual). */
 	export function fnManifest(): Record<string, string> | null;

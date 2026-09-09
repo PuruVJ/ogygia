@@ -62,6 +62,27 @@ const FETCHPRIORITY_LOW_RE = /\bfetchpriority=["']low["']/;
  * must never demote a chunk the first paint needs. Called by the handle's head transform on the
  * chunk carrying `</head>`.
  */
+const STYLESHEET_LINK_RE = /<link\b[^>]*\brel=["']stylesheet["'][^>]*>/g;
+
+/**
+ * Drop duplicate `<link rel="stylesheet">` tags (same href) — first occurrence wins, everything
+ * else passes through byte-identical. Kit links a route's client-graph CSS and Region.svelte links a
+ * rendered island's CSS from the render pass; a layout island compiled as a real wrapper (a
+ * csr=true-capable layout host) is in both, so its sheet was linked twice — two render-blocking
+ * fetches of one asset. `<style>` tags and non-stylesheet links are untouched.
+ */
+export function dedupe_stylesheet_links(html: string): string {
+	if (!html.includes('stylesheet')) return html;
+	const seen = new Set<string>();
+	return html.replace(STYLESHEET_LINK_RE, (tag) => {
+		const href = LINK_HREF_RE.exec(tag)?.[1];
+		if (href === undefined) return tag;
+		if (seen.has(href)) return '';
+		seen.add(href);
+		return tag;
+	});
+}
+
 export function dedupe_modulepreload_links(html: string): string {
 	if (!html.includes('modulepreload')) return html;
 	// Pass 1: hrefs that have at least one normal-priority hint.

@@ -24,13 +24,13 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
-	import { islandDeps, islandCss, contentCss, preloadPolicy } from 'virtual:ogygia/island-deps';
+	import { islandDeps, islandCss, contentCss, islandReadsPage, preloadPolicy } from 'virtual:ogygia/island-deps';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of } from './runtime/fingerprint.js';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
-	import { record_page } from './page-seed-registry.js';
+	import { record_page, record_island_props } from './page-seed-registry.js';
 	import { isNested, setNested, isInLake, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { REF_WIRE_KEY, ref_reducer } from './ref.js';
 	// PULL-registration inside stringify_props (idempotent; no import-time side effects)
@@ -113,6 +113,8 @@
 
 	const LT = String.fromCharCode(60); // <
 	const GT = String.fromCharCode(62); // >
+	/** Context mark: "this subtree renders inside Kit's own page pass" (see `kit_page_pass`). */
+	const KIT_PAGE_PASS = Symbol.for('ogygia.kit-page-pass');
 
 	// ─────────────────────────────────────────────── held: resolve (Promise `of`) ──
 	// `of` may be a Promise<RegionValue> (a remote call). Note an awaitable dual IS thenable too —
@@ -172,23 +174,6 @@
 	// svelte-ignore state_referenced_locally
 	const is_lake = __mode === 'lake';
 
-	// Capture the page snapshot for the island seed. On SSR this reads Kit's REAL `$app/state` page —
-	// the only place the resolved load `data` is reachable (Kit merges it locally in render.js, never
-	// on RequestState, and reading page in a hook throws). The handle records it into the
-	// `application/ogygia-page` seed, so a hydrated island's `$page.data` / `.form` / `.error` /
-	// `.status` are populated (boundary law: page.data crosses). No-op on the client (recorder unset;
-	// the client `page` is already the shim seed), and a harmless no-op in an isolated server-island
-	// endpoint render (no recorder installed there either). `untrack` — one snapshot read, no dep.
-	if (typeof window === 'undefined') {
-		untrack(() => {
-			try {
-				record_page({ data: page.data, form: page.form, error: page.error, status: page.status });
-			} catch {
-				/* isolated render without a live page — the recorder is unset there anyway */
-			}
-		});
-	}
-
 	// Nested rule (islands/server): a region inside an already-awake region hydrates with its parent,
 	// so it degrades to a plain inline render. Read once at init (a wrapper's mode is fixed per usage).
 	const nested = isNested();
@@ -198,8 +183,18 @@
 	// for this region's subtree with the live event, so a component inside any island / lake /
 	// server island reads the request the same way wherever it renders. Server only, once per
 	// region, and only when no ancestor already did.
+	//
+	// The same fact — `{ page }` with no `event` — is what tells a KIT PAGE PASS apart from every
+	// other render root (a hole endpoint, a baked held region, a router document, a late region):
+	// only in Kit's own pass does the whole document flow through the handle's `transformPageChunk`,
+	// so only there can an island's props sidecar be deferred to the end of the body. The outermost
+	// region stamps the fact into context for its subtree (its own re-set of the request context
+	// hides the bare `{ page }` from nested regions).
+	let kit_page_pass = false;
 	if (typeof window === 'undefined') {
 		const req = /** @type {{ page?: unknown; event?: unknown } | undefined} */ (getContext(KIT_REQUEST_CONTEXT));
+		kit_page_pass = getContext(KIT_PAGE_PASS) === true || !!(req && req.event == null);
+		if (kit_page_pass && getContext(KIT_PAGE_PASS) !== true) setContext(KIT_PAGE_PASS, true);
 		if (req && req.event == null) {
 			const event = kit_request_event();
 			if (event) setContext(KIT_REQUEST_CONTEXT, { ...req, event });
@@ -258,6 +253,50 @@
 	const island_component = $derived(as_dual ? as_dual.component : __component);
 	const island_props = $derived(as_dual ? as_dual.props : __props);
 	const island_children = $derived(children);
+
+	// Capture the page snapshot for the island seed. On SSR this reads Kit's REAL `$app/state` page —
+	// the only place the resolved load `data` is reachable (Kit merges it locally in render.js, never
+	// on RequestState, and reading page in a hook throws). The handle records it into the
+	// `application/ogygia-page` seed, so a hydrated island's `$page.data` / `.form` / `.error` /
+	// `.status` are populated (boundary law: page.data crosses). No-op on the client (recorder unset;
+	// the client `page` is already the shim seed), and a harmless no-op in an isolated server-island
+	// endpoint render (no recorder installed there either). `untrack` — one snapshot read, no dep.
+	//
+	// THE SEED SHIPS ONLY FOR A REGION WHOSE CLIENT CODE READS IT: `islandReadsPage(entry)` is the
+	// build's answer (the `$app/state` / `$app/stores` shim in the entry's chunk closure; fail-open for
+	// an entry the handoff does not know, and in dev). The snapshot is recorded either way — the
+	// handle also reads it for the freeze verdict and for server-side page reads — with `seed:false`
+	// when this region has no reader. A page whose islands take everything as props asks for no
+	// seed, and the handle then ships none: the whole `page.data` (hundreds of KB on a CMS page)
+	// neither serialized nor downloaded twice. A nested region hydrates with its parent, whose
+	// closure already includes it; a promise `of` resolves later with a module SSR cannot see, so it
+	// asks (fail-open).
+	if (typeof window === 'undefined') {
+		untrack(() => {
+			const entry = nested
+				? ''
+				: is_island
+					? island_entry
+					: is_server
+						? __hydrate
+							? __module
+							: ''
+						: of_is_promise
+							? '?'
+							: of_init && of_init.kind === 'deferred'
+								? of_init.module
+								: '';
+			const seed = !!entry && (entry === '?' || islandReadsPage(entry));
+			try {
+				record_page(
+					{ data: page.data, form: page.form, error: page.error, status: page.status },
+					seed
+				);
+			} catch {
+				/* isolated render without a live page — the recorder is unset there anyway */
+			}
+		});
+	}
 
 	// DEV diagnostic (declared HERE, after `island_entry`, so it never reads it in its temporal dead
 	// zone): a nested island can't wake independently — warn that its strategy is ignored. Dead-code
@@ -340,14 +379,23 @@
 	const island_payload = $derived(
 		nested ? '' : stringify_props(island_props_wire, island_entry).split(LT).join('\\u003C')
 	);
-	const island_props_script = $derived(
-		LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + island_payload + LT + '/script' + GT
-	);
 	// SERVER-DELTA parity: the island's fingerprint, IDENTICAL to the client reconciler's
 	// region_props_fp (entry attr + '' endpoint + props-seed text). Emitted as data-og-fp so the
 	// client can send it back on nav and the server can skip re-rendering an unchanged island.
 	const island_fp = $derived(
 		is_island && !island_inline ? fingerprint_of(island_module_url, '', island_payload) : ''
+	);
+	// The sidecar is KEYED by the same fingerprint (`data-ogygia-props="<fp>"`), so the runtime finds
+	// it wherever it sits — adjacent, or at the end of the body (runtime/sidecar.ts).
+	const island_props_script = $derived(
+		LT +
+			'script type="application/ogygia-props" data-ogygia-props' +
+			(island_fp ? '="' + island_fp + '"' : '') +
+			GT +
+			island_payload +
+			LT +
+			'/script' +
+			GT
 	);
 	// SERVER-DELTA (D3): SKIP rendering a NON-cached island the client already has live (its fp is
 	// in the SPA nav's x-ogygia-known set). Emit the region's identifying attrs + props script but NO
@@ -357,6 +405,19 @@
 		is_island && !island_inline && !has_slot_children && (__cacheTtl ?? 0) <= 0 && !!island_fp
 			&& known_region_fps().has(island_fp)
 	);
+	// PROPS AFTER THE CONTENT: in Kit's page pass the sidecar is recorded into the request and the
+	// handle emits it before `</body>` (one script per fingerprint — identical islands share it),
+	// so the hero and the text stream before the props bytes (480 KB above the LCP image on one
+	// measured page). Any other render root keeps it adjacent (`record_island_props` → false): a
+	// hole response, a baked ticket, a router document stay self-contained. Decided once at init —
+	// the SSR pass renders each region exactly once.
+	const island_props_tail =
+		typeof window === 'undefined' &&
+		kit_page_pass &&
+		is_island &&
+		!island_inline &&
+		untrack(() => !!island_fp && record_island_props(island_fp, island_props_script));
+	const island_props_inline = $derived(island_props_tail ? '' : island_props_script);
 
 	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
 	// `wake: 'visible'` / `wake: 'interaction'` — the SAME hints at `fetchpriority="low"`: the bytes
@@ -679,13 +740,13 @@
 			data-ogygia-keep={__keep || undefined}
 			data-og-fp={island_fp || undefined}
 			data-og-skipped
-		></ogygia-region>{@html island_props_script}{:else}<ogygia-region
+		></ogygia-region>{@html island_props_inline}{:else}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}
 			data-ogygia-keep={__keep || undefined}
 			data-og-fp={island_fp || undefined}
-		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region>{@html island_props_script}{/if}
+		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region>{@html island_props_inline}{/if}
 {:else if is_server}
 	{@const Component = __component}
 	{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region

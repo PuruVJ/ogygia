@@ -10,3 +10,11 @@ export let preloadPolicy: 'all' | 'load' | 'none' = 'load';
 export function set_preload_policy(p: 'all' | 'load' | 'none') {
 	preloadPolicy = p;
 }
+// `islandReadsPage(entry)` — the build's per-entry "reads `$page`" flag (fail-open true). A test
+// flips it with `set_reads_page(...)` to check that Region records the page snapshot only for
+// islands whose client code reads it.
+let reads_page = true;
+export const islandReadsPage = (_entry: string): boolean => reads_page;
+export function set_reads_page(v: boolean) {
+	reads_page = v;
+}

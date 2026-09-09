@@ -34,10 +34,22 @@ const b64 = (s: string) => Buffer.from(s, 'utf-8').toString('base64');
 // in ONE anchor pair, which stands in for the dynamic-component pair; add the if-branch pair around it.
 const nested = (body: string) => `<!--[0-->${body}<!--]-->`;
 
+/** The page-pass shape: the region carries `data-og-fp`, its KEYED sidecar sits at the END of the
+ *  body (after unrelated content), not next to the region — how the handle emits island props. */
+function island_tail(entry: string, body: string, props: Record<string, unknown>, fp: string) {
+	return (
+		`<ogygia-region wake="load" entry="${entry}" data-og-fp="${fp}">${body}</ogygia-region>` +
+		`<p data-filler>content between the island and its props</p>` +
+		`<script type="application/ogygia-props" data-ogygia-props="${fp}">${stringify(props)}</script>`
+	);
+}
+
 declare module 'vitest' {
 	export interface ProvidedContext {
 		/** A `wake: 'load'` Counter island, SSR'd with `start: 3` — base64 of the HTML. */
 		counter_ssr_b64: string;
+		/** The same Counter with its props sidecar KEYED and moved to the end of the body — base64. */
+		counter_tail_ssr_b64: string;
 		/** LakeKitHost SSR'd on a csr=true document (a lake wrapping a Counter island) — base64. */
 		lake_kit_ssr_b64: string;
 	}
@@ -64,6 +76,10 @@ export default function setup(project: TestProject) {
 	project.provide(
 		'counter_ssr_b64',
 		b64(island('/test/browser/fixtures/Counter.svelte', nested(body), props))
+	);
+	project.provide(
+		'counter_tail_ssr_b64',
+		b64(island_tail('/test/browser/fixtures/Counter.svelte', nested(body), props, 'feedfacecafebeef'))
 	);
 	// The real wrapper (Region.svelte) renders the lake + the island's shell here — the browser test
 	// hydrates the same component over it, so both legs are the library's own code.

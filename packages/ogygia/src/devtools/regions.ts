@@ -4,6 +4,7 @@
  * No Svelte, no styling: the `.svelte` components own all presentation.
  */
 import { snapshot } from './bus.js';
+import { props_sidecar_of } from '../runtime/sidecar.js';
 import type { DevtoolsEvent } from './schema.js';
 
 // ── regexes
@@ -51,17 +52,8 @@ export function all_regions(): RegionInfo[] {
  * TEXT so this module stays devalue-free; the detail view decodes it.
  */
 export function region_props_sidecar(el: Element): string | null {
-	let sib = el.nextElementSibling;
-	while (sib) {
-		if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]'))
-			return sib.textContent;
-		if (sib.tagName === 'LINK') {
-			sib = sib.nextElementSibling;
-			continue;
-		}
-		break;
-	}
-	return null;
+	// Keyed at the end of the body (by `data-og-fp`) or adjacent — the runtime's own lookup.
+	return props_sidecar_of(el)?.textContent ?? null;
 }
 
 /** basename of a URL/path (drops query + directory). */

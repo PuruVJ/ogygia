@@ -12,6 +12,32 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Island props ride at the end of the body.** Each island's devalue props sidecar
+  (`<script type="application/ogygia-props">`) sat right after its `<ogygia-region>`, so on a page
+  whose header is an island the browser downloaded the props (136 KB on one measured page, 480 KB
+  across all islands on another) before it reached the hero image and the text. In Kit's page pass
+  Region.svelte now records the sidecar into the request and the handle emits every sidecar before
+  `</body>` — after the content, before the page seed — one `<script>` per fingerprint, so identical
+  islands (same component, same props) share one. The sidecar is keyed by the region's fingerprint
+  (`data-og-fp` on the element ↔ `data-ogygia-props="<fp>"` on the script) and the runtime looks it
+  up by key first, then falls back to the adjacent sibling — which every other render root still
+  emits (a hole response, a baked ticket, a streamed late region, a router document, a foreign
+  fragment stay self-contained). Hydration timing is unchanged: the runtime already waited for
+  DOMContentLoaded. `runtime/sidecar.ts` is the one lookup the hydrator, the SPA reconciler and
+  devtools share.
+- **The page seed ships only when an island reads it.** The `application/ogygia-page` seed (the
+  whole `page.data`, serialized again so islands can read `$page`) was emitted on every page. The
+  client build now records, per island entry, whether its chunk closure bundles the `$app/state` /
+  `$app/stores` shim (`islandReadsPage`, in the island-deps handoff); Region.svelte records the page
+  snapshot only for such islands and the handle emits the seed only when something recorded. A CMS
+  page whose islands take everything as props (674 KB of seed on one measured page) ships none and
+  no longer serializes it on the server. Fail-open: dev always seeds; an entry the handoff does not
+  know (a foreign fragment's island), a promise `of`, and a stale handoff all seed.
+- **Duplicate stylesheet links are dropped.** Kit links a route's client-graph CSS after the rendered
+  head and Region.svelte links a rendered island's CSS from the render pass; a layout island compiled
+  as a real wrapper (a csr=true-capable layout) was linked twice — two render-blocking fetches of one
+  asset (16 doubled sheets on one measured page). The handle's head pass now keeps the first
+  `<link rel="stylesheet">` per href (`dedupe_stylesheet_links`, next to the modulepreload dedupe).
 - **Module-preload hints are emitted for `load` islands only — `regions.preload`.** The SSR HTML
   used to hint the full code closure of EVERY island on the page: `load` islands at normal
   priority, `visible` / `interaction` ones at `fetchpriority="low"`. A CMS page with fifteen

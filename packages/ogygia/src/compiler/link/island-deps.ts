@@ -25,13 +25,32 @@ export function collectIslandDepModulepreloads(
 			fileName?: string;
 			imports?: string[];
 			dynamicImports?: string[];
+			/** The source module ids bundled into this chunk (Rollup/rolldown `OutputChunk`). */
+			moduleIds?: string[];
 			/** Vite/rolldown-vite chunk metadata — `importedCss` lists the CSS assets a chunk owns. */
 			viteMetadata?: { importedCss?: Set<string> | string[] };
 		}
-	>
-): { js: Record<string, string[]>; css: Record<string, string[]> } {
+	>,
+	/**
+	 * Source files whose presence in an island's chunk closure means the island READS THE PAGE
+	 * (the `$app/state` / `$app/stores` shims). Per entry, `page[entryUrl]` says whether any chunk
+	 * in its closure bundles one of them — what lets the handle skip the page seed on a page whose
+	 * islands never read it. Absolute paths, either separator.
+	 */
+	page_reader_files: readonly string[] = []
+): { js: Record<string, string[]>; css: Record<string, string[]>; page: Record<string, boolean> } {
 	const js: Record<string, string[]> = {};
 	const css: Record<string, string[]> = {};
+	const page: Record<string, boolean> = {};
+	const norm = (p: string) => p.split('\\').join('/');
+	const readers = new Set(page_reader_files.map(norm));
+	const reads_page = (fileName: string): boolean => {
+		if (!readers.size) return false;
+		for (const id of bundle[fileName]?.moduleIds ?? []) {
+			if (readers.has(norm(id.split('?')[0]))) return true;
+		}
+		return false;
+	};
 
 	const css_of = (fileName: string): string[] => {
 		const chunk = bundle[fileName];
@@ -80,8 +99,12 @@ export function collectIslandDepModulepreloads(
 		}
 		js[entryUrl] = uniq;
 		css[entryUrl] = [...new Set(css_acc)];
+		// The facade + every chunk in its closure: does any of them bundle a page-reading shim?
+		let reads = reads_page(fileName);
+		if (!reads) for (const s of seen) if (s !== fileName && reads_page(s)) reads = true;
+		page[entryUrl] = reads;
 	}
-	return { js, css };
+	return { js, css, page };
 }
 
 /** Stable handoff path under Kit's `outDir`: client `generateBundle` writes; SSR reads at render
@@ -110,15 +133,16 @@ export function island_deps_module(
 	// 'none' hints nothing.
 	const policy = `export const preloadPolicy = ${JSON.stringify(preload_policy)};\n`;
 	if (!ssr)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
 	// channel as prod's `<link>`, resolved for dev. `islandDeps` (JS modulepreload) is prod-only.
 	// Content bodies need no dev entry here: a content module is in the SSR module graph, so
 	// Vite dev already injects its scoped CSS (the leak only bites the PROD client build).
+	// DEV always seeds the page (no chunk closure to consult) — the conservative side.
 	if (is_dev)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function fnManifest() { return null; }`;
 	return (
 		policy +
 		`import fs from 'node:fs';\n` +
@@ -176,6 +200,16 @@ export function island_deps_module(
 		`}\n` +
 		`export function contentCss(id) {\n` +
 		`  return id ? pick('content_css', id) : [];\n` +
+		`}\n` +
+		// Does this island's client closure read `$page`? FAIL-OPEN: no map (a pre-page handoff), or
+		// an entry the build never saw (a foreign fragment's island mounted from another app) → true,
+		// so the seed ships and nothing that might read it finds it missing.
+		`export function islandReadsPage(entry) {\n` +
+		`  const all = load();\n` +
+		`  const map = all && typeof all.page === 'object' && all.page ? all.page : null;\n` +
+		`  if (!map || !entry) return true;\n` +
+		`  const v = map[entry];\n` +
+		`  return v === undefined ? true : !!v;\n` +
 		`}\n` +
 		// og.$ factories for the page-inline registration script (CSP-clean prod path):
 		// written by the CLIENT build's writeBundle, read here at SSR render time — the

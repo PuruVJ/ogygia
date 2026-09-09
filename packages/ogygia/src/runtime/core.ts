@@ -17,6 +17,7 @@ import {
 	warm_island_module
 } from './region-endpoint-url.js';
 import { foreign_region_prop_revivers } from './foreign-props.js';
+import { props_sidecar_of } from './sidecar.js';
 import {
 	is_awake,
 	is_deferred,
@@ -102,19 +103,11 @@ function region_prop_revivers(): Record<string, (d: never) => unknown> | undefin
 }
 
 function read_region_props(region: Element, foreign = false): Record<string, unknown> {
-	let sib = region.nextElementSibling;
-	while (sib) {
-		if (sib.tagName === 'SCRIPT' && sib.matches('script[data-ogygia-props]')) {
-			const revivers = foreign ? foreign_region_prop_revivers() : region_prop_revivers();
-			return parse(sib.textContent, revivers as Parameters<typeof parse>[1]);
-		}
-		if (sib.tagName === 'LINK') {
-			sib = sib.nextElementSibling;
-			continue;
-		}
-		break;
-	}
-	return {};
+	// Keyed (end-of-body, by fingerprint) or adjacent — see runtime/sidecar.ts.
+	const sidecar = props_sidecar_of(region);
+	if (!sidecar) return {};
+	const revivers = foreign ? foreign_region_prop_revivers() : region_prop_revivers();
+	return parse(sidecar.textContent, revivers as Parameters<typeof parse>[1]);
 }
 
 /** What counts as intent for an ON-DEMAND hole (`render: 'deferred'` + `wake: 'interaction'`).

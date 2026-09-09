@@ -1154,6 +1154,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					}
 				}
 
+				// `page`: per island entry, whether its chunk closure bundles the `$app/state` /
+				// `$app/stores` shim — the handle seeds `page.data` only for islands that read it.
 				const map = collectIslandDepModulepreloads(
 					bundle as Record<
 						string,
@@ -1162,9 +1164,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							fileName?: string;
 							imports?: string[];
 							dynamicImports?: string[];
+							moduleIds?: string[];
 							viteMetadata?: { importedCss?: Set<string> | string[] };
 						}
-					>
+					>,
+					[APP_SHIMS['$app/state'], APP_SHIMS['$app/stores']]
 				);
 				// SERVER-ROUTER CSS handoff: each root's whole component-tree CSS was compiled + emitted as
 				// ONE dedicated asset in buildStart (router_css_refs). Resolve each referenceId to its

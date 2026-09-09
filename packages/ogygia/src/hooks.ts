@@ -92,7 +92,8 @@ import {
 	page_declares_runtime_script,
 	page_declares_dev_hmr_script,
 	page_declares_speculation_rules,
-	dedupe_modulepreload_links
+	dedupe_modulepreload_links,
+	dedupe_stylesheet_links
 } from './server/head-presence.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
@@ -113,7 +114,7 @@ import { stringify } from 'devalue';
 import { serialize_provided_context } from './context-bridge.js';
 import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
-import { set_page_recorder, type PageSnapshot } from './page-seed-registry.js';
+import { set_page_recorder, set_props_recorder, type PageSnapshot } from './page-seed-registry.js';
 import { set_late_recorder, set_late_taker, type LateRegion } from './late-region-registry.js';
 import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
 import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './devtools/schema.js';
@@ -145,6 +146,12 @@ const dt_now = () =>
 type RequestBag = {
 	ctx: Map<string, unknown>;
 	page: PageSnapshot | null;
+	/** Some region on the page reads `$page` on the client (Region.svelte × `islandReadsPage`), so
+	 *  the `application/ogygia-page` seed must ship. The snapshot itself is recorded regardless. */
+	seed_wanted: boolean;
+	/** Island props sidecars deferred to the end of the body (fingerprint → `<script>` tag), recorded
+	 *  by Region.svelte during Kit's page pass; null until the first island records. */
+	props: Map<string, string> | null;
 	deferred: Deferred[] | null;
 	/** Next free defer id after data+form staging — re-staging (nested promises) continues from here. */
 	defer_next_id: number;
@@ -169,11 +176,23 @@ set_ctx_recorder((key, value) => {
 	const bag = request_als.getStore();
 	if (bag) bag.ctx.set(key, value);
 });
-set_page_recorder((snapshot) => {
+set_page_recorder((snapshot, seed) => {
 	const bag = request_als.getStore();
+	if (!bag) return;
 	// MERGE: the routeless document root records url/params/route from the router's seed first;
 	// Region.svelte's data/form/error/status record must not wipe them (and vice versa).
-	if (bag) bag.page = { ...bag.page, ...snapshot };
+	bag.page = { ...bag.page, ...snapshot };
+	// SEED ONLY WHEN READ: one island whose client code reads `$page` is enough to ship the seed.
+	if (seed) bag.seed_wanted = true;
+});
+// Island props sidecars → the end of the body (`inject_client_seeds`), one per fingerprint. Only a
+// request with a bag — a Kit page render inside `request_als.run` — records; a hole endpoint, a
+// remote-function render or a router document has none and keeps its sidecars adjacent.
+set_props_recorder((fp, script) => {
+	const bag = request_als.getStore();
+	if (!bag) return false;
+	(bag.props ??= new Map()).set(fp, script);
+	return true;
 });
 // Kit's `__request__` context for every server render root ogygia starts (document root, inline
 // island, deferred endpoint, snippet body): rebuilt from the recorded page snapshot, with the live
@@ -721,6 +740,8 @@ class OgygiaHandle {
 			const bag: RequestBag = {
 				ctx: new Map(),
 				page: null,
+				seed_wanted: false,
+				props: null,
 				deferred: null,
 				defer_next_id: 0,
 				late: null,
@@ -928,7 +949,11 @@ class OgygiaHandle {
 		// `head-presence.ts` for why that dropped documented pages to full-page navigation.
 		// Dedupe the region-emitted modulepreload hints (each island instance emits its own dep block,
 		// so shared deps repeat). Head hints all live in the chunk that carries `</head>`.
-		if (html.includes('</head>')) html = dedupe_modulepreload_links(html);
+		// …and the stylesheet links: a layout's real-wrapper island (a csr=true-capable layout host)
+		// is linked by Kit from the client graph AND by Region.svelte from the render (16 doubled
+		// sheets on one measured page). Same href → one tag; first occurrence wins.
+		if (html.includes('</head>'))
+			html = dedupe_stylesheet_links(dedupe_modulepreload_links(html));
 
 		const has_router_meta = page_declares_router_meta(html);
 		const has_runtime_script = page_declares_runtime_script(html);
@@ -987,6 +1012,12 @@ class OgygiaHandle {
 
 		const scripts: string[] = [];
 
+		// Island props sidecars, deferred here from each island's render (Region.svelte →
+		// `record_island_props`): after the content, before the seeds, one `<script>` per fingerprint —
+		// so the hero and the text stream before the props bytes, and the runtime (which waits for
+		// DOMContentLoaded before hydrating) finds them by `data-og-fp` (runtime/sidecar.ts).
+		if (bag?.props) for (const script of bag.props.values()) scripts.push(script);
+
 		// Single page seed (PAGE-DUP) — islands read it through the `$app/state` shim. url/params/route
 		// come from the RequestEvent (reading `$app/state`'s `page` in a hook throws
 		// `lifecycle_outside_component`). data/form/error/status come from the page snapshot
@@ -1021,7 +1052,10 @@ class OgygiaHandle {
 			bag.freeze_obs.disqualified_by = 'streamed load (promise in page data)';
 		}
 		const can_stream = event?.request.headers.get('sec-fetch-mode') === 'navigate';
-		if (has_pending && can_stream) {
+		// No reader → no seed → nothing to stage or settle (the freeze verdict above still saw the
+		// promise: that page stays per-request).
+		const seed_wanted = !!bag?.seed_wanted;
+		if (has_pending && can_stream && seed_wanted) {
 			const staged_data = stage_deferred(page_snap!.data, 0);
 			const staged_form = stage_deferred(page_snap!.form, staged_data.next_id);
 			seed_data = staged_data.staged;
@@ -1032,11 +1066,18 @@ class OgygiaHandle {
 				bag.seed_reducers = seed_reducers; // resolve scripts encode with the same transport + defer
 			}
 			scripts.push(`<script>${PAGE_DEFER_BOOTSTRAP}</script>`);
-		} else if (has_pending) {
+		} else if (has_pending && seed_wanted) {
 			seed_data = await settle_deferred(page_snap!.data);
 			seed_form = await settle_deferred(page_snap!.form);
 		}
-		const page_payload = event
+		// SEED ONLY WHEN READ: the seed exists so islands can read `$page` through the shim. A region
+		// asks for it (`seed_wanted`) only when its client code reaches the `$app/state` / `$app/stores`
+		// shim (`islandReadsPage`, from the build's chunk closure; fail-open for an entry the handoff
+		// does not know, e.g. a foreign fragment's island). No reader → no seed: a CMS page whose 20
+		// islands take everything as props stops shipping its whole `page.data` again (674 KB on one
+		// measured page) and stops serializing it on the server.
+		const page_payload =
+			event && page_snap && seed_wanted
 			? PageSeed.serialize(
 					{
 						url: event.url,

@@ -104,6 +104,8 @@ ogygia({ regions: { preload: 'none' } }) // no code hints at all — a load isla
 
 `'all'` makes a far-below-the-fold wake instant at the cost of downloading every island's bytes on every page: a page with fifteen `visible` blocks hints several megabytes before anyone scrolls. Under `'all'`, a chunk shared by two islands takes the **highest** priority that one of them asked for, so a low-priority hint never demotes a chunk that a `load` island needs at first paint.
 
+**Props and the page seed come after the content.** Each island's serialized props ride in one `<script type="application/ogygia-props">` per distinct island at the end of the body, keyed by the region's fingerprint, never next to the island. The page seed (`page.data` for islands that read `$page`) follows them, and it is emitted only when an island on the page actually reads it. The hero image and the text stream before either. Hydration is unchanged: the runtime waits for the document to finish parsing before it wakes anything.
+
 **CSS follows the same rule: the render decides.** On a csr=false page the server pass links a stylesheet for each island that actually renders (`<link rel="stylesheet" data-ogygia-region-css>`, one per sheet per request) and nothing for the rest. A marked import the page never places, or the other blocks of a registry that rendered one, cost no stylesheet and no chunk hint. Kit's own links cover the page's static CSS (the page and layout components' styles); island CSS is not in that graph on purpose, so a 300-block registry does not become 300 render-blocking sheets.
 
 ## Deferred content that is also interactive
