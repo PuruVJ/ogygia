@@ -47,7 +47,7 @@ dist/
 /internal/repro-freeze/build/
 
 # Playwright runner output (traces on failure, html report) + Vitest browser-mode failure screenshots
-/test-results/
+test-results/
 /playwright-report/
 **/__screenshots__/
 
