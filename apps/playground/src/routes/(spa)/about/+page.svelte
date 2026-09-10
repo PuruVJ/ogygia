@@ -13,4 +13,4 @@
 
 <Marker />
 
-<p><a href="/">Back home</a> — click it to prove SPA nav keeps <code>window.__marker</code> stable.</p>
+<p><a href="/">Back home</a> — click it to prove SPA nav keeps the document stamp above stable.</p>

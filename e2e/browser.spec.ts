@@ -1,10 +1,8 @@
 // Playwright browser checks. Usage: pnpm exec playwright test browser
-import { test, check, sleep } from './fixtures/index.ts';
+import { test, check, sleep, stamp_document, document_stamp } from './fixtures/index.ts';
 
 const COUNT_100_RE = /count is 100/;
 const ABOUT_URL_RE = /\/about$/;
-
-type MarkerWindow = Window & { __marker?: number };
 
 test.describe('hydration, load/idle/visible/media, devalue, SPA', () => {
 	// ---------- Home: load-strategy hydration + interactivity ----------
@@ -128,11 +126,14 @@ test.describe('hydration, load/idle/visible/media, devalue, SPA', () => {
 		await wide.close();
 	});
 
-	// ---------- SPA navigation: marker persists, no full reload ----------
-	test('SPA navigation: marker persists, no full reload', async ({ page }) => {
+	// ---------- SPA navigation: the document stamp persists, no full reload ----------
+	test('SPA navigation: document stamp persists, no full reload', async ({ page }) => {
 		await page.goto('/', { waitUntil: 'networkidle' });
-		const marker1 = await page.evaluate(() => (window as MarkerWindow).__marker);
-		check('spa: runtime set window.__marker', typeof marker1 === 'number');
+		check(
+			'spa: runtime booted (ogygia-region defined)',
+			await page.evaluate(() => !!customElements.get('ogygia-region'))
+		);
+		const marker1 = await stamp_document(page);
 
 		let fullReload = false;
 		page.on('load', () => {
@@ -140,32 +141,32 @@ test.describe('hydration, load/idle/visible/media, devalue, SPA', () => {
 		});
 		await page.click('nav a[href="/about"]');
 		await page.waitForSelector('[data-clock-island]', { timeout: 3000 });
-		const marker2 = await page.evaluate(() => (window as MarkerWindow).__marker);
+		const marker2 = await document_stamp(page);
 		check(
 			'spa: navigated to /about (Clock island present)',
 			(await page.locator('[data-clock-island]').count()) === 1
 		);
 		check('spa: URL updated to /about', page.url().endsWith('/about'));
 		check(
-			'spa: window.__marker PERSISTED (no full reload)',
+			'spa: document stamp PERSISTED (no full reload)',
 			marker1 === marker2,
 			`${marker1} vs ${marker2}`
 		);
 		check('spa: no full page load event fired', fullReload === false);
 
-		// nav back home via SPA, marker still same
+		// nav back home via SPA, stamp still same
 		await page.click('nav a[href="/"]');
 		await page.waitForSelector('[data-counter]', { timeout: 3000 });
-		const marker3 = await page.evaluate(() => (window as MarkerWindow).__marker);
-		check('spa: back to home, marker still persisted', marker1 === marker3);
+		const marker3 = await document_stamp(page);
+		check('spa: back to home, stamp still persisted', marker1 === marker3);
 
 		// back/forward (SPA popstate — history.back() so we don't wait on a load event)
 		await page.evaluate(() => history.back());
 		await page.waitForURL(ABOUT_URL_RE, { timeout: 3000 }).catch(() => {});
 		await page.waitForSelector('[data-clock-island]', { timeout: 3000 }).catch(() => {});
 		check('spa: history back returns to /about', page.url().endsWith('/about'));
-		const marker4 = await page.evaluate(() => (window as MarkerWindow).__marker);
-		check('spa: marker persists through back/forward', marker1 === marker4);
+		const marker4 = await document_stamp(page);
+		check('spa: stamp persists through back/forward', marker1 === marker4);
 	});
 
 	// ---------- Remote functions in islands (SSR works; client refetch is a KNOWN LIMITATION) ----------

@@ -4,7 +4,7 @@
 //
 // Locks the `$state.raw` page-store fix: `page.url.pathname` must not be empty / undefined
 // after hydrate, and must track SPA navigations (island remount + fresh set_page).
-import { test, check, sleep } from './fixtures/index.ts';
+import { test, check, sleep, stamp_document, document_stamp } from './fixtures/index.ts';
 
 test.describe('page.url/params/route/status/data/form/error/state in islands', () => {
 	test('the shim exposes every page.* field after hydrate and tracks an SPA nav', async ({
@@ -59,7 +59,7 @@ test.describe('page.url/params/route/status/data/form/error/state in islands', (
 		check('no page errors reading page.url.*', errs.length === 0, errs.slice(0, 2).join('; '));
 
 		// SPA nav → remount → fresh set_page → pathname / params update
-		const m1 = await page.evaluate(() => window.__marker);
+		const m1 = await stamp_document(page);
 		await page.click('[data-order-nav] a[href="/dashboard/orders/6"]');
 		await page
 			.waitForFunction(
@@ -77,10 +77,7 @@ test.describe('page.url/params/route/status/data/form/error/state in islands', (
 			pathname2
 		);
 		check('SPA nav updates page.params.id inside island', paramId2 === '6', paramId2);
-		check(
-			'SPA nav kept marker (no full reload)',
-			(await page.evaluate(() => window.__marker)) === m1
-		);
+		check('SPA nav kept the document stamp (no full reload)', (await document_stamp(page)) === m1);
 
 		// Query string via FilterBar goto on list page
 		await page.goto('/dashboard/orders?status=shipped', { waitUntil: 'networkidle' });

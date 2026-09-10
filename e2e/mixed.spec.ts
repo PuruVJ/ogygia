@@ -1,7 +1,7 @@
 // Mixed-mode (islands on a csr=true page) + opt-in router (MPA handoff) checks.
 //
 //   pnpm exec playwright test mixed
-import { test, check, sleep } from './fixtures/index.ts';
+import { test, check, sleep, stamp_document, document_stamp } from './fixtures/index.ts';
 
 test.describe('csr=true coexistence + opt-in router', () => {
 	test('Mixed mode: island on the csr=true /kit page', async ({ page }) => {
@@ -41,11 +41,11 @@ test.describe('csr=true coexistence + opt-in router', () => {
 		page
 	}) => {
 		await page.goto('/', { waitUntil: 'networkidle' });
-		const m1 = await page.evaluate(() => window.__marker);
-		// SPA nav keeps the runtime marker (no full document reload)
+		const m1 = await stamp_document(page);
+		// SPA nav keeps the document stamp (no full document reload)
 		await page.click('nav a[href="/about"]');
 		await page.waitForSelector('[data-clock-island]', { timeout: 3000 });
-		check('router: SPA nav keeps the marker', (await page.evaluate(() => window.__marker)) === m1);
+		check('router: SPA nav keeps the stamp', (await document_stamp(page)) === m1);
 
 		// nav to /plain -> still SPA (router is global); the page only opts out of view transitions
 		let loaded: boolean = false;
@@ -55,8 +55,8 @@ test.describe('csr=true coexistence + opt-in router', () => {
 		await sleep(200);
 		check('router: nav to /plain stayed SPA (no document reload)', !loaded);
 		check('router: at /plain', page.url().endsWith('/plain'));
-		const m2 = await page.evaluate(() => window.__marker);
-		check('router: SPA nav to /plain kept the runtime marker', m2 === m1);
+		const m2 = await document_stamp(page);
+		check('router: SPA nav to /plain kept the document stamp', m2 === m1);
 		// island on /plain still hydrates
 		await page.waitForSelector('ogygia-region[data-hydrated]', { timeout: 3000 });
 		const pbtn = page.locator('[data-counter] button');

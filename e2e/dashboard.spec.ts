@@ -1,5 +1,5 @@
 // Playwright checks for the dashboard testbed (Part A shims + Part B patterns).
-import { test, check, sleep } from './fixtures/index.ts';
+import { test, check, sleep, stamp_document, document_stamp } from './fixtures/index.ts';
 
 const LINE_ITEMS_MAP_RE = /Line items \(Map\): 6/;
 const STATUS_SHIPPED_RE = /status shipped/;
@@ -40,7 +40,7 @@ test.describe('page shim, island goto, client table, chart', () => {
 		);
 
 		// prev/next SPA nav updates the page-shim island content
-		const m1 = await page.evaluate(() => window.__marker);
+		const m1 = await stamp_document(page);
 		await page.click('[data-order-nav] a[href="/dashboard/orders/6"]');
 		await page.waitForFunction(
 			() => document.querySelector('[data-orderdetail] h2')?.textContent.includes('#6'),
@@ -61,10 +61,7 @@ test.describe('page shim, island goto, client table, chart', () => {
 			'pagedata-probe: $derived over page.data updates after SPA nav to #6 (remount -> fresh)',
 			(await probe.textContent()).includes('#6')
 		);
-		check(
-			'orderdetail: SPA nav kept marker (no reload)',
-			(await page.evaluate(() => window.__marker)) === m1
-		);
+		check('orderdetail: SPA nav kept the document stamp (no reload)', (await document_stamp(page)) === m1);
 	});
 
 	// ---------- Orders list: FilterBar goto() shim + DataTable client sort ----------
@@ -94,7 +91,7 @@ test.describe('page shim, island goto, client table, chart', () => {
 		);
 
 		// FilterBar island calls goto() (navigation shim) -> SPA nav changes ?status
-		const m1 = await page.evaluate(() => window.__marker);
+		const m1 = await stamp_document(page);
 		await page.click('[data-filterbar] button[data-status="shipped"]');
 		await page
 			.waitForFunction(() => location.search.includes('status=shipped'), { timeout: 4000 })
@@ -103,10 +100,7 @@ test.describe('page shim, island goto, client table, chart', () => {
 			'filterbar: island goto() changed URL to ?status=shipped',
 			page.url().includes('status=shipped')
 		);
-		check(
-			'filterbar: goto() was SPA (marker kept)',
-			(await page.evaluate(() => window.__marker)) === m1
-		);
+		check('filterbar: goto() was SPA (stamp kept)', (await document_stamp(page)) === m1);
 		// wait for the SPA body swap to bring in the server-re-rendered meta
 		await page
 			.waitForFunction(
@@ -134,13 +128,10 @@ test.describe('page shim, island goto, client table, chart', () => {
 			page
 		}) => {
 			await page.goto('/dashboard/orders', { waitUntil: 'networkidle' });
-			const m1 = await page.evaluate(() => window.__marker);
+			const m1 = await stamp_document(page);
 			await page.click('aside nav a[href="/dashboard/analytics"]');
 			await page.waitForSelector('.spacer', { timeout: 4000 });
-			check(
-				'sidebar: SPA nav to analytics (marker kept)',
-				(await page.evaluate(() => window.__marker)) === m1
-			);
+			check('sidebar: SPA nav to analytics (stamp kept)', (await document_stamp(page)) === m1);
 			const chart = page.locator('ogygia-region[wake="visible"]');
 			await sleep(300);
 			check(

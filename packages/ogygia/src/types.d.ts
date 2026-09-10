@@ -231,11 +231,6 @@ declare module '@sveltejs/kit/internal/server' {
 }
 
 interface Window {
-	// Test-only observability marker: set once per full document load, unchanged across SPA
-	// navigations (the module is not re-evaluated), so the browser suites can prove a swap was a
-	// client-side nav vs a real reload. Read by Playwright `page.evaluate` (a separate script
-	// boundary), so it must be a string-keyed global. NOT used by any library logic.
-	__marker?: number;
 	// Dev-only devtools maps the dock fetches from the plugin's `/__ogygia_devtools_meta` middleware.
 	// `names`: island id → component name (tab labels). `bytes`: island id → transitive dev-module
 	// size (the Bytes tab's real-cost estimate). Absent off a devtools build.

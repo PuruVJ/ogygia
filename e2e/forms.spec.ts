@@ -1,6 +1,6 @@
 // Classic form-actions checks (no-JS + JS), on a csr=false page with the SPA router active.
 // Usage: pnpm exec playwright test forms
-import { test, check } from './fixtures/index.ts';
+import { test, check, stamp_document, document_stamp } from './fixtures/index.ts';
 
 const GUESTBOOK_FORM_RE = /data-guestbook-form/;
 const METHOD_POST_RE = /method="POST"/i;
@@ -74,8 +74,12 @@ test.describe('classic form actions (no-JS + JS)', () => {
 		const errs: string[] = [];
 		page.on('pageerror', (e) => errs.push(e.message));
 		await page.goto('/forms', { waitUntil: 'domcontentloaded' });
-		// prove the runtime is present (SPA marker) and capture its per-load marker
-		const markerBefore = await page.evaluate(() => window.__marker);
+		// prove the runtime is present, and stamp this document (a real load replaces the window)
+		check(
+			'JS: runtime present (ogygia-region defined)',
+			await page.evaluate(() => !!customElements.get('ogygia-region'))
+		);
+		const markerBefore = await stamp_document(page);
 
 		const unique = 'js-' + Date.now();
 		await page.fill('[data-input-name]', 'Ada2');
@@ -98,12 +102,12 @@ test.describe('classic form actions (no-JS + JS)', () => {
 			(await page.locator('[data-form-ok]').count()) >= 0 && OK_QUERY_RE.test(page.url()) === true,
 			page.url()
 		);
-		const markerAfter = await page.evaluate(() => window.__marker);
-		// A native form POST is a REAL document navigation (not an SPA swap) — the runtime module
-		// re-evaluates, so __marker changes. Proves the SPA router did NOT intercept the submit.
+		const markerAfter = await document_stamp(page);
+		// A native form POST is a REAL document navigation (not an SPA swap) — the window is
+		// replaced, so the stamp is gone. Proves the SPA router did NOT intercept the submit.
 		check(
 			'JS: form submit was a real navigation, not an SPA swap (router did not intercept)',
-			markerBefore !== undefined && markerAfter !== undefined && markerBefore !== markerAfter,
+			markerBefore !== undefined && markerAfter === undefined,
 			`${markerBefore} -> ${markerAfter}`
 		);
 		check('JS: no page errors', errs.length === 0, errs.slice(0, 2).join('; '));
@@ -135,7 +139,7 @@ test.describe('classic form actions (no-JS + JS)', () => {
 			)
 		);
 		// valid submit -> result, NO reload (enhanced)
-		const m1 = await page.evaluate(() => window.__marker);
+		const m1 = await stamp_document(page);
 		const uniq = 'rf-' + Date.now();
 		await page.fill('[data-rf-name]', 'Ada');
 		await page.fill('[data-rf-message]', uniq);
@@ -148,7 +152,7 @@ test.describe('classic form actions (no-JS + JS)', () => {
 					.locator('[data-rf-result]')
 					.textContent()
 					.catch(() => '')) || ''
-			) && (await page.evaluate(() => window.__marker)) === m1
+			) && (await document_stamp(page)) === m1
 		);
 		check('remote form: no page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 	});

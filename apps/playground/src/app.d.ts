@@ -9,8 +9,6 @@ declare global {
 	}
 
 	interface Window {
-		/** Set once per full page load by the ogygia runtime; survives SPA navigations. */
-		__marker?: number;
 		/** Per-page `$app/state` snapshot the ogygia shims seed from. */
 		__ogygiaPage?: unknown;
 	}
