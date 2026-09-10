@@ -168,13 +168,23 @@ const REGION_ONLY = new Set(['region']);
  *  object order so regions still ENCODE through it (legacy `EncodedRegion` wire shape kept). */
 const ALL_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived', 'region']);
 
-function ensure_all_kinds(): void {
-	register_wire_kind();
-	register_store_kind();
-	register_snippet_kind();
-	register_fn_kind();
-	register_derived_kind();
-	register_region_kind();
+// Kit calls the transport's `encode` for EVERY value it serializes (each node of a 700 KB load
+// tree), so the per-call work here is what a whole page pays thousands of times: register the
+// kinds once per module instance (the registry is idempotent, but each call allocated six kind
+// objects), and build the family reducer once.
+let all_kinds_ready = false;
+let all_families_reducer: ((value: unknown) => Ref | undefined) | null = null;
+function ensure_all_kinds(): (value: unknown) => Ref | undefined {
+	if (!all_kinds_ready) {
+		all_kinds_ready = true;
+		register_wire_kind();
+		register_store_kind();
+		register_snippet_kind();
+		register_fn_kind();
+		register_derived_kind();
+		register_region_kind();
+	}
+	return (all_families_reducer ??= ref_reducer(ALL_FAMILIES));
 }
 
 /**
@@ -192,9 +202,10 @@ export const ogygiaTransport = {
 	// `EncodedRegion` wire shape + `hi` reunification. OgygiaRef below never sees a region on encode.
 	Region: {
 		encode(value: unknown): false | EncodedRegion {
-			register_region_kind();
+			// the cheap rejections first — this runs once per value of the app's load data
 			if (typeof value !== 'object' || value === null) return false;
 			if ((value as Record<PropertyKey, unknown>)[REGION_BRAND] !== true) return false;
+			register_region_kind();
 			const ref = mint(value, REGION_ONLY);
 			if (ref === undefined) return false;
 			// carry the hub id: same live region instance → same `hi` in every payload
@@ -215,8 +226,9 @@ export const ogygiaTransport = {
 	// one hub codec. Regions are already claimed above, so this only fires for the other kinds.
 	[REF_WIRE_KEY]: {
 		encode(value: unknown): Ref | false {
-			ensure_all_kinds();
-			return ref_reducer(ALL_FAMILIES)(value) ?? false;
+			// primitives never mint — answer before touching the registry
+			if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return false;
+			return ensure_all_kinds()(value) ?? false;
 		},
 		decode(ref: Ref) {
 			ensure_all_kinds();

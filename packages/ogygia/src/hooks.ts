@@ -92,14 +92,16 @@ import {
 	page_declares_runtime_script,
 	page_declares_dev_hmr_script,
 	page_declares_speculation_rules,
-	dedupe_modulepreload_links,
-	dedupe_stylesheet_links
+	dedupe_head_links
 } from './server/head-presence.js';
+import { locate, assemble } from './server/document-assembly.js';
+import { route_is_csr_true } from './context.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
+import { analyze, index_seed } from './seed-refs.js';
+import { WIRE_FORMAT_ATTR, WIRE_FORMAT_JSON } from './server/props-wire.js';
 import {
-	has_deferred,
 	stage_deferred,
 	settle_deferred,
 	resolve_script,
@@ -108,7 +110,6 @@ import {
 } from './server/page-stream.js';
 import { PAGE_DEFER_BOOTSTRAP, PAGE_DEFER_GLOBAL } from './page-defer.js';
 import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrency.js';
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { stringify } from 'devalue';
 import { serialize_provided_context } from './context-bridge.js';
@@ -116,7 +117,6 @@ import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
 import {
 	set_page_recorder,
-	set_seed_wanted_reader,
 	type PageSnapshot
 } from './page-seed-registry.js';
 import { DocumentTail, set_tail_reader } from './server/document-tail.js';
@@ -138,8 +138,8 @@ const dt_now = () =>
 // key into this per-request bag during SSR; `inject_client_seeds` reads it back and emits ONE
 // `<script data-ogygia-provide-page>` before `</body>` that every island seeds `getContext` from —
 // so a plain `setContext` in a csr=false layout reaches child islands (separate hydration roots).
-// Server-only (this file never ships to the browser), so `node:async_hooks` stays out of the client
-// bundle; on the client the recorder is never installed and `record_ctx` is a no-op.
+// Server-only (this file never ships to the browser); on the client the recorder is never installed
+// and `record_ctx` is a no-op.
 // One per-request bag holds every SSR-time ogygia capture the handle needs back at seed time:
 //   ctx  — drop-in `setContext(key, value)` values (see above).
 //   page — the page snapshot ($page.data / form / error / status). The handle can't read the
@@ -176,13 +176,28 @@ type RequestBag = {
 	 *  with the entry as the reverse index; null when not capturing. */
 	freeze_tags: string[] | null;
 };
-const request_als = new AsyncLocalStorage<RequestBag>();
+// ONE REQUEST STORE: Kit's. Kit runs every request inside its own AsyncLocalStorage
+// (`with_request_store`): the handle, every `await` of the Svelte render, the streamed tail chunks
+// all see it. Kit re-enters a NEW store object for the render (`render_response` wraps the render
+// in `{ event, state }` of its own, with a traced copy of the event), so the one identity that is
+// stable across the whole request is the `Request` itself — the bag hangs off it in a WeakMap, and
+// every reader below resolves it through `try_get_request_store().event.request`. No second ALS:
+// on Node 20/22 each ALS in flight copies its store on every async hop, and a 2.6 MB async Svelte
+// render is hundreds of thousands of hops (~0.2 s measured for one ALS on such a page). The bag
+// dies with the request (WeakMap), so nothing is deleted or leaked.
+const bags = new WeakMap<Request, RequestBag>();
+/** This request's bag, or `undefined` outside a Kit page request (a hole endpoint, a remote-function
+ *  call, a render with no Kit store around it). */
+function bag_of(): RequestBag | undefined {
+	const request = (try_get_request_store() as { event?: RequestEvent } | undefined)?.event?.request;
+	return request ? bags.get(request) : undefined;
+}
 set_ctx_recorder((key, value) => {
-	const bag = request_als.getStore();
+	const bag = bag_of();
 	if (bag) bag.ctx.set(key, value);
 });
 set_page_recorder((snapshot, seed) => {
-	const bag = request_als.getStore();
+	const bag = bag_of();
 	if (!bag) return;
 	// MERGE: the routeless document root records url/params/route from the router's seed first;
 	// Region.svelte's data/form/error/status record must not wipe them (and vice versa).
@@ -191,12 +206,10 @@ set_page_recorder((snapshot, seed) => {
 	if (seed) bag.seed_wanted = true;
 });
 // THE DOCUMENT TAIL (server/document-tail.ts): hints + props sidecars a Kit page render defers to
-// the end of the body. One per request, created with the bag; only a render inside
-// `request_als.run` — a Kit page — sees it, so a hole endpoint, a remote-function render or a
-// router document keeps its hints in the head and its sidecars adjacent.
-set_tail_reader(() => request_als.getStore()?.tail ?? null);
-// "Will the seed ship?" — what lets an island serialize its props as references into it.
-set_seed_wanted_reader(() => request_als.getStore()?.seed_wanted === true);
+// the end of the body. One per request, created with the bag; only a render inside a Kit PAGE
+// request has a bag, so a hole endpoint, a remote-function render or a router document keeps its
+// hints in the head and its sidecars adjacent.
+set_tail_reader(() => bag_of()?.tail ?? null);
 // Kit's `__request__` context for every server render root ogygia starts (document root, inline
 // island, deferred endpoint, snippet body): rebuilt from the recorded page snapshot, with the live
 // event filling url/params/route when the snapshot has none (a Kit page: Kit's own values; a
@@ -231,7 +244,7 @@ set_kit_event_reader(
 	() => (try_get_request_store() as { event?: RequestEvent } | undefined)?.event ?? null
 );
 set_kit_page_reader(() => {
-	const bag = request_als.getStore();
+	const bag = bag_of();
 	const event = (try_get_request_store() as { event?: RequestEvent } | undefined)?.event;
 	if (!bag && !event) return null;
 	const snap = bag?.page ?? {};
@@ -249,14 +262,14 @@ set_kit_page_reader(() => {
 // LATE REGIONS: a promise `of` registers per request; the id keys the region's slot wrapper AND
 // its later template chunk. The taker DRAINS (the router reads once, post-render).
 set_late_recorder((promise) => {
-	const bag = request_als.getStore();
+	const bag = bag_of();
 	if (!bag) return null;
 	const id = `r${bag.late_next++}`;
 	(bag.late ??= []).push({ id, promise });
 	return id;
 });
 set_late_taker(() => {
-	const bag = request_als.getStore();
+	const bag = bag_of();
 	if (!bag?.late?.length) return null;
 	const list = bag.late;
 	bag.late = null;
@@ -264,18 +277,18 @@ set_late_taker(() => {
 });
 // FREEZE: region capabilities minted during a may-be-stored render go prerender-grade — the
 // region-endpoint mint reads this per-request flag (see freeze/capture.ts for why it's a seam).
-set_freeze_capture_reader(() => request_als.getStore()?.freeze_capture === true);
+set_freeze_capture_reader(() => bag_of()?.freeze_capture === true);
 // FREEZE: a flag read during an eligible render personalizes the page — disqualify it, named
 // like a cookie read (`flag:<name>`). Priming alone never disqualifies; only actual reads do.
 set_flag_observer((name) => {
-	const obs = request_als.getStore()?.freeze_obs;
+	const obs = bag_of()?.freeze_obs;
 	if (obs && obs.disqualified_by === null) obs.disqualified_by = `flag:${name}`;
 });
 // FREEZE: og.source receipts — every `__og_source`-wrapped call during a capture render files
 // its `(id, fingerprint)` tag here; stored with the entry as the reverse index for
 // `freeze.invalidate(fn, args)`.
 set_source_recorder((tag) => {
-	const bag = request_als.getStore();
+	const bag = bag_of();
 	if (bag?.freeze_capture) (bag.freeze_tags ??= []).push(tag);
 });
 // DEVTOOLS: per-request event buffers, keyed off the request bag by a side WeakMap so RequestBag stays
@@ -285,7 +298,7 @@ const dt_buffers = new WeakMap<RequestBag, { events: DevtoolsEvent[]; seq: numbe
 // Stamp the envelope with THIS request's own seq/clock and push into its buffer.
 if (DEVTOOLS)
 	set_server_devtools_recorder((input) => {
-		const bag = request_als.getStore();
+		const bag = bag_of();
 		if (!bag) return;
 		const buf = dt_buffers.get(bag);
 		if (!buf) return;
@@ -403,9 +416,10 @@ function region_css_links(id: string): string {
 }
 
 /**
- * Wrap a devalue payload as an `application/ogygia-*` side-channel `<script>` the runtime reads. The
- * `payload` MUST already be escaped by its serializer (via `escape_script_text`) — every serializer
- * here does — so this only builds the tag. One spot for the side-channel shape (page / remote / ctx).
+ * Wrap a payload as an `application/ogygia-*` side-channel `<script>` the runtime reads. The
+ * `payload` MUST be `<`-safe already: devalue output is by construction (it writes `<`), a
+ * JSON payload goes through `escape_script_text` first — so this only builds the tag. One spot for
+ * the side-channel shape (page / remote / ctx / devtools).
  */
 function emit_ogygia_script(subtype: string, escaped_payload: string, marker = ''): string {
 	return `<script type="application/ogygia-${subtype}"${marker ? ' ' + marker : ''}>${escaped_payload}</script>`;
@@ -417,6 +431,9 @@ function emit_ogygia_script(subtype: string, escaped_payload: string, marker = '
  *  verified against @sveltejs/kit 2.70 (render.js: `blocks.push('const deferred = new Map();')`). */
 const KIT_DEFERRED_BOOT_RE = /const deferred = new Map\(\);/;
 const DOUBLE_QUOTE_G = /"/g;
+/** Stamped into the head of a csr=true document: the runtime reads it (`kit_hydrates_page`)
+ *  instead of scanning the page's inline scripts for Kit's bootstrap. */
+const CSR_META = '<meta name="ogygia-csr" content="true">';
 
 /** Stamped into SERVED-FROM-STORE documents (never the fresh `stored` response): the runtime
  *  reads it so `render: 'live'` lakes treat first mount as a STALE mount and revalidate —
@@ -456,14 +473,20 @@ function freeze_response(
 			return new Response(null, { status: 304, headers });
 		}
 	}
-	// Served-from-store copies carry the doc marker so live regions self-freshen (`stored` = the
-	// render that JUST happened — fresh by definition, no marker).
-	const html =
-		via === 'stored' ? entry.html : entry.html.replace('</head>', FREEZE_DOC_META + '</head>');
-	return new Response(html, {
+	return new Response(served_html(entry, via), {
 		status: 200,
 		headers: { ...entry.headers, 'x-ogygia-freeze': via }
 	});
+}
+
+/** The stored page as served: copies served FROM the store carry the doc marker so live regions
+ *  self-freshen (`stored` = the render that JUST happened — fresh by definition, no marker). The
+ *  marker goes in by slicing at the entry's `</head>` (recorded at capture; found once for an
+ *  entry written before the field existed) — never a `replace` over a multi-MB page per hit. */
+function served_html(entry: Extract<FreezeEntry, { kind: 'page' }>, via: string): string {
+	if (via === 'stored') return entry.html;
+	const at = entry.head_end ?? entry.html.indexOf('</head>');
+	return at === -1 ? entry.html : entry.html.slice(0, at) + FREEZE_DOC_META + entry.html.slice(at);
 }
 
 /** The verdict's other word: a REFUSED page gets `private, no-store` when the app set nothing —
@@ -599,6 +622,7 @@ async function capture_freeze(
 	const entry: FreezeEntry = {
 		kind: 'page',
 		html: stored_html,
+		head_end: stored_html.indexOf('</head>'),
 		headers,
 		created,
 		...(has_serve ? { stitch: true } : {})
@@ -738,8 +762,8 @@ class OgygiaHandle {
 			// the SAME object reference Kit mutates during the render inside `resolve`.
 			const store = try_get_request_store();
 			// Per-request capture bag: `setContext` values + the page snapshot are recorded during the
-			// render (inside this `run`, so `getStore()` works) and read back in `inject_client_seeds`
-			// via the SAME bag reference passed through as a closure.
+			// render (the readers above find it through Kit's store) and read back in
+			// `inject_client_seeds` via the SAME bag reference passed through as a closure.
 			const bag: RequestBag = {
 				ctx: new Map(),
 				page: null,
@@ -757,14 +781,16 @@ class OgygiaHandle {
 			// DEVTOOLS: attach a request-scoped event buffer via a side WeakMap (keeps RequestBag — and
 			// its cost — untouched when devtools is off; the map + this line DCE out then).
 			if (DEVTOOLS) dt_buffers.set(bag, { events: [], seq: 0 });
+			// Hang the bag off the request for the rest of it — the render's own Kit store and the
+			// streamed tail chunks (late regions, resolve scripts, after `resolve()` returned) all
+			// carry this same `Request` and find it.
+			bags.set(event.request, bag);
 			let response: Response;
 			try {
-				response = await request_als.run(bag, () =>
-					resolve(event, {
-						transformPageChunk: async ({ html }) =>
-							this.inject_client_seeds(html, store?.state, event, bag)
-					})
-				);
+				response = await resolve(event, {
+					transformPageChunk: async ({ html }) =>
+						this.inject_client_seeds(html, store?.state, event, bag)
+				});
 			} finally {
 				flush_exposures(); // drain queued exposures at the request's end (serverless-safe tail)
 			}
@@ -916,25 +942,36 @@ class OgygiaHandle {
 		event?: RequestEvent,
 		bag?: RequestBag
 	): Promise<string> {
-		// csr=true page — Kit serializes its own remotes and hydrates the whole tree; skip seeds.
-		if (html_has_kit_bootstrap(html)) {
-			// The ogygia runtime never boots here (Kit owns the page), so it can't mount the devtools
-			// dock. When devtools is compiled in (`devtools_boot_url` is non-empty only then, dev-only),
-			// inject a standalone dock boot so the launcher is on EVERY dev page — on this csr=true page
-			// it renders a "csr=true — open a csr=false page" notice, since there are no islands here.
-			if (
-				devtools_boot_url &&
-				html.includes('</head>') &&
-				!html.includes('data-ogygia-devtools-boot')
-			) {
-				html = html.replace(
-					'</head>',
-					`<script type="module" data-ogygia-devtools-boot src="${devtools_boot_url}"></script></head>`
-				);
+		// Kit hands one chunk at a time (ONE chunk for a non-streamed page). Two facts about a chunk
+		// decide everything below, each found with one bounded scan (server/document-assembly.ts):
+		// `</head>` from the front, `</body>` from the back. The chunk is assembled ONCE at the end.
+		const spans = locate(html);
+		const head = spans.head_end === -1 ? null : html.slice(0, spans.head_end);
+
+		// csr=true page — Kit serializes its own remotes and hydrates the whole tree; skip seeds. A
+		// build-time ROUTE FACT (context.ts, the PAGE-CSR invariant), never a scan of the document;
+		// the bounded string probe covers only a routeless response (`route.id` null), where Kit's
+		// boot sits in the last bytes before `</body>`.
+		const csr_page =
+			event?.route?.id != null
+				? route_is_csr_true(event.route.id)
+				: spans.body_end !== -1 && html_has_kit_bootstrap(html, spans.body_end);
+		if (csr_page) {
+			if (head === null) return html;
+			// Stamp the fact for the runtime (it boots here only for the regions inside lakes, and
+			// reads this meta instead of scanning inline scripts for Kit's bootstrap).
+			let head_inject = CSR_META;
+			// The ogygia runtime never mounts the devtools dock here (Kit owns the page). When
+			// devtools is compiled in (`devtools_boot_url` is non-empty only then, dev-only), inject a
+			// standalone dock boot so the launcher is on EVERY dev page — on this csr=true page it
+			// renders a "csr=true — open a csr=false page" notice, since there are no islands here.
+			if (devtools_boot_url && !head.includes('data-ogygia-devtools-boot')) {
+				head_inject += `<script type="module" data-ogygia-devtools-boot src="${devtools_boot_url}"></script>`;
 			}
-			return html;
+			return assemble(html, spans, null, head_inject, '');
 		}
 
+		// ── HEAD (the chunk carrying `</head>`) ──
 		// Router (global, opt out with `ogygia({ router: false })`). The handle owns the runtime
 		// bootstrap + the `ogygia-router` meta the client router reads per-navigation, so no
 		// `<Router/>` component is needed. Every injection is presence-checked, so it composes with
@@ -950,85 +987,71 @@ class OgygiaHandle {
 		// DOCUMENTS one of these tags in a code block (the changelog does) renders it escaped, which a
 		// bare `html.includes('name="ogygia-router"')` false-matches, suppressing the injection. See
 		// `head-presence.ts` for why that dropped documented pages to full-page navigation.
-		// Dedupe the region-emitted modulepreload hints (each island instance emits its own dep block,
-		// so shared deps repeat). Head hints all live in the chunk that carries `</head>`.
-		// …and the stylesheet links: a layout's real-wrapper island (a csr=true-capable layout host)
-		// is linked by Kit from the client graph AND by Region.svelte from the render (16 doubled
-		// sheets on one measured page). Same href → one tag; first occurrence wins.
-		if (html.includes('</head>'))
-			html = dedupe_stylesheet_links(dedupe_modulepreload_links(html));
-
-		const has_router_meta = page_declares_router_meta(html);
-		const has_runtime_script = page_declares_runtime_script(html);
-		const has_dev_hmr_script = page_declares_dev_hmr_script(html);
-		const has_speculation_rules = page_declares_speculation_rules(html);
-		// MPA mode (`router: false`): no SPA machinery ships — the browser owns navigation, so the
-		// handle injects static Speculation Rules instead. Chromium prerenders likely next pages,
-		// Firefox prefetches them, everything else ignores the JSON. Presence-checked so a page
-		// authoring its own rules wins; per-link opt-out via `data-ogygia-speculate="off"`.
-		if (
-			!router_enabled &&
-			mpa_speculation_rules &&
-			!has_speculation_rules &&
-			html.includes('</head>')
-		) {
-			html = html.replace(
-				'</head>',
-				`<script type="speculationrules" data-ogygia-speculate>${mpa_speculation_rules}</script></head>`
-			);
-		}
-		if (router_enabled) {
-			const head: string[] = [];
-			if (!has_router_meta) {
-				head.push(
-					`<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`
-				);
+		// Every check and the link dedupe run on the HEAD SLICE only: that is where the hints, the
+		// sheets and the tags they look for live, so the body is never scanned.
+		let head_out: string | null = null;
+		let head_inject = '';
+		if (head !== null) {
+			// Dedupe the region-emitted modulepreload hints (each island instance emits its own dep
+			// block, so shared deps repeat) and the stylesheet links (a layout's real-wrapper island is
+			// linked by Kit from the client graph AND by Region.svelte from the render — 16 doubled
+			// sheets on one measured page). Same href → one tag; first occurrence wins.
+			const deduped = dedupe_head_links(head);
+			if (deduped !== head) head_out = deduped;
+			const probe = head_out ?? head;
+			// MPA mode (`router: false`): no SPA machinery ships — the browser owns navigation, so the
+			// handle injects static Speculation Rules instead. Chromium prerenders likely next pages,
+			// Firefox prefetches them, everything else ignores the JSON. Presence-checked so a page
+			// authoring its own rules wins; per-link opt-out via `data-ogygia-speculate="off"`.
+			if (!router_enabled && mpa_speculation_rules && !page_declares_speculation_rules(probe)) {
+				head_inject += `<script type="speculationrules" data-ogygia-speculate>${mpa_speculation_rules}</script>`;
 			}
-			// Base-resolve the same way Region does — `asset()` is the sole base/assets authority, and
-			// every ogygia URL (prod `/${appDir}/…`, dev `/@id/…`) is baked base-LESS — so an island-LESS
-			// page under a non-root `base` loads the runtime too (the follow-up the old injection deferred).
-			if (runtime_url && !has_runtime_script) {
-				head.push(
-					`<script type="module" data-ogygia-runtime src="${asset(runtime_url)}"></script>`
-				);
-			}
-			if (dev_hmr_url && !has_dev_hmr_script) {
-				head.push(
-					`<script type="module" data-ogygia-dev-hmr src="${asset(dev_hmr_url)}"></script>`
-				);
-				// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:
-				// a changed stylesheet joins this page only when the plugin derives the same scope
-				// among its owners — two route-group sub-apps never paint each other in dev.
-				const scope = (event?.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
-				head.push(`<meta name="ogygia-dev-scope" content="${scope.replace(DOUBLE_QUOTE_G, '')}">`);
-			}
-			if (head.length && html.includes('</head>')) {
-				html = html.replace('</head>', head.join('') + '</head>');
+			if (router_enabled) {
+				if (!page_declares_router_meta(probe)) {
+					head_inject += `<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`;
+				}
+				// Base-resolve the same way Region does — `asset()` is the sole base/assets authority,
+				// and every ogygia URL (prod `/${appDir}/…`, dev `/@id/…`) is baked base-LESS — so an
+				// island-LESS page under a non-root `base` loads the runtime too.
+				if (runtime_url && !page_declares_runtime_script(probe)) {
+					head_inject += `<script type="module" data-ogygia-runtime src="${asset(runtime_url)}"></script>`;
+				}
+				if (dev_hmr_url && !page_declares_dev_hmr_script(probe)) {
+					head_inject += `<script type="module" data-ogygia-dev-hmr src="${asset(dev_hmr_url)}"></script>`;
+					// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:
+					// a changed stylesheet joins this page only when the plugin derives the same scope
+					// among its owners — two route-group sub-apps never paint each other in dev.
+					const scope = (event?.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
+					head_inject += `<meta name="ogygia-dev-scope" content="${scope.replace(DOUBLE_QUOTE_G, '')}">`;
+				}
 			}
 		}
 
+		// ── BODY (the chunk carrying `</body>`) ──
 		// Body-level seeds (page / remote / setContext) go in the FINAL chunk only. Under a streamed
 		// render the early chunks have no `</body>` AND no rendered island yet — so the captured page
 		// data (Region records it during the island render) isn't ready. Gating here means the seed is
-		// built once, after the render, with the real `data`. Head injections above already ran.
-		if (!html.includes('</body>')) return html;
+		// built once, after the render, with the real `data`.
+		if (spans.body_end === -1) return assemble(html, spans, head_out, head_inject, '');
 
+		// A page on which NO region rendered has no island to feed: no tail, no seed, no remote seed,
+		// no fn manifest, no context bridge — it pays nothing below. `bag.page` is recorded by every
+		// Region render (islands, holes, lakes, held regions alike), so it is the one fact to read.
+		const rendered = !!bag && bag.page !== null;
 		const scripts: string[] = [];
-
-		// THE DOCUMENT TAIL (server/document-tail.ts): the regions' module-preload hints, then their
-		// props sidecars — after the content, before the seeds. The tail owns the order and the dedupe;
-		// this is the one place it is written out.
-		const tail_html = bag?.tail.render() ?? '';
-		if (tail_html) scripts.push(tail_html);
+		if (!rendered) {
+			this.append_devtools_seed(scripts, bag);
+			return assemble(html, spans, head_out, head_inject, scripts.join(''));
+		}
 
 		// Single page seed (PAGE-DUP) — islands read it through the `$app/state` shim. url/params/route
 		// come from the RequestEvent (reading `$app/state`'s `page` in a hook throws
 		// `lifecycle_outside_component`). data/form/error/status come from the page snapshot
 		// Region.svelte records during SSR from Kit's REAL page — the only place the resolved load data
 		// is reachable (Kit merges it locally in render.js, never on RequestState). PAGE-SEED-EVENT.
-		const page_snap = bag?.page;
-		let seed_data = page_snap?.data;
-		let seed_form = page_snap?.form;
+		const page_snap = bag!.page!;
+		let seed_data = page_snap.data;
+		let seed_form = page_snap.form;
 		// Merge the app's universal `transport` ENCODERS (custom types the app teaches Kit) with the
 		// DeferRef/SettledRef marker reducers, so a load's custom types round-trip into islands — not
 		// just built-in devalue types. A no-op for the common promise-free / transport-free seed.
@@ -1037,6 +1060,11 @@ class OgygiaHandle {
 		);
 		const seed_reducers = { ...transport_encoders, ...page_seed_reducers };
 		const seed_stringify = ((v: unknown) => stringify(v, seed_reducers)) as typeof stringify;
+		// ONE walk of the seed tree (seed-refs.ts `analyze`, memoised per `page.data` for the request)
+		// answers every question below: a streamed promise inside (stage or settle), JSON-exact (the
+		// native lane), and — through the same memo — the seed index the props sidecars reference.
+		const data_shape = analyze(page_snap.data);
+		const form_shape = analyze(page_snap.form ?? null);
 		// A load may return promises at any level (Kit streaming). csr=false can't hydrate the PAGE, so
 		// Kit's own resolve stream is dead there — but an ISLAND has a client. Two paths:
 		//  • Real browser load (`Sec-Fetch-Mode: navigate`) can consume a stream — STAGE each promise to a
@@ -1045,63 +1073,78 @@ class OgygiaHandle {
 		//    resolve global before any resolve script runs.
 		//  • Programmatic fetch (SPA/router, mode ≠ navigate) can't run streamed scripts, so SETTLE the
 		//    promises here and seed resolved values — no hang, same as before.
-		// Gated on `has_deferred` so the common (no-promise) seed pays only a cheap probe walk.
-		const has_pending =
-			!!page_snap && (has_deferred(page_snap.data) || has_deferred(page_snap.form));
+		const has_pending = data_shape.thenable || form_shape.thenable;
 		// FREEZE: a page with streaming promises is per-request BY INTENT — even on the
 		// non-navigate path where the promises get settled into a complete document (storing
 		// that copy would freeze one settle forever while browser loads stream live).
-		if (has_pending && bag?.freeze_obs && bag.freeze_obs.disqualified_by === null) {
-			bag.freeze_obs.disqualified_by = 'streamed load (promise in page data)';
+		if (has_pending && bag!.freeze_obs && bag!.freeze_obs.disqualified_by === null) {
+			bag!.freeze_obs.disqualified_by = 'streamed load (promise in page data)';
 		}
 		const can_stream = event?.request.headers.get('sec-fetch-mode') === 'navigate';
 		// No reader → no seed → nothing to stage or settle (the freeze verdict above still saw the
 		// promise: that page stays per-request).
-		const seed_wanted = !!bag?.seed_wanted;
+		const seed_wanted = bag!.seed_wanted;
 		if (has_pending && can_stream && seed_wanted) {
-			const staged_data = stage_deferred(page_snap!.data, 0);
-			const staged_form = stage_deferred(page_snap!.form, staged_data.next_id);
+			const staged_data = stage_deferred(page_snap.data, 0);
+			const staged_form = stage_deferred(page_snap.form, staged_data.next_id);
 			seed_data = staged_data.staged;
 			seed_form = staged_form.staged;
-			if (bag) {
-				bag.deferred = [...staged_data.deferred, ...staged_form.deferred];
-				bag.defer_next_id = staged_form.next_id; // real next id — do NOT recompute from array length
-				bag.seed_reducers = seed_reducers; // resolve scripts encode with the same transport + defer
-			}
+			bag!.deferred = [...staged_data.deferred, ...staged_form.deferred];
+			bag!.defer_next_id = staged_form.next_id; // real next id — do NOT recompute from array length
+			bag!.seed_reducers = seed_reducers; // resolve scripts encode with the same transport + defer
 			scripts.push(`<script>${PAGE_DEFER_BOOTSTRAP}</script>`);
 		} else if (has_pending && seed_wanted) {
-			seed_data = await settle_deferred(page_snap!.data);
-			seed_form = await settle_deferred(page_snap!.form);
+			seed_data = await settle_deferred(page_snap.data);
+			seed_form = await settle_deferred(page_snap.form);
 		}
+
+		// THE DOCUMENT TAIL (server/document-tail.ts): the regions' module-preload hints, then their
+		// props sidecars — after the content, before the seeds. Rendered NOW, once the seed decision is
+		// made: a sidecar serializes relative to the seed (seed-refs.ts) only when the seed ships —
+		// every island's, whichever rendered first. The index is a pruned second look at the one
+		// walk above; the paths it hands out are structural, so they resolve against the shipped
+		// (staged or settled) seed as well as against the original tree.
+		const tail_html = bag!.tail.render(seed_wanted ? index_seed(page_snap.data) : null);
+		if (tail_html) scripts.push(tail_html);
+
 		// SEED ONLY WHEN READ: the seed exists so islands can read `$page` through the shim. A region
 		// asks for it (`seed_wanted`) only when its client code reaches the `$app/state` / `$app/stores`
 		// shim (`islandReadsPage`, from the build's chunk closure; fail-open for an entry the handoff
 		// does not know, e.g. a foreign fragment's island). No reader → no seed: a CMS page whose 20
 		// islands take everything as props stops shipping its whole `page.data` again (674 KB on one
 		// measured page) and stops serializing it on the server.
+		// THE LANE: a JSON-exact slice (the common CMS tree, no promise staged into it) goes out as
+		// native `JSON.stringify` output; anything devalue exists for keeps devalue.
 		const page_payload =
-			event && page_snap && seed_wanted
-			? PageSeed.serialize(
-					{
-						url: event.url,
-						params: event.params,
-						route: event.route,
-						status: page_snap?.status ?? 200,
-						data: seed_data,
-						form: seed_form,
-						error: page_snap?.error
-					},
-					seed_stringify
-				)
-			: null;
+			event && seed_wanted
+				? PageSeed.serialize(
+						{
+							url: event.url,
+							params: event.params,
+							route: event.route,
+							status: page_snap.status ?? 200,
+							data: seed_data,
+							form: seed_form,
+							error: page_snap.error
+						},
+						seed_stringify,
+						!has_pending && data_shape.json && form_shape.json && analyze(page_snap.error ?? null).json
+					)
+				: null;
 		if (page_payload) {
-			scripts.push(emit_ogygia_script('page', page_payload, 'data-ogygia-page'));
+			scripts.push(
+				emit_ogygia_script(
+					'page',
+					page_payload.text,
+					'data-ogygia-page' + (page_payload.json ? ` ${WIRE_FORMAT_ATTR}="${WIRE_FORMAT_JSON}"` : '')
+				)
+			);
 			if (DEVTOOLS)
 				record_server_event({
 					domain: 'server',
 					name: 'server.seed.injected',
 					kind: 'page',
-					bytes: page_payload.length
+					bytes: page_payload.text.length
 				});
 		}
 
@@ -1143,22 +1186,22 @@ class OgygiaHandle {
 			}
 		}
 
-		// DEVTOOLS: drain this request's server-realm events (region renders, capability mints, seeds)
-		// into an `application/ogygia-devtools` side-channel the client bus ingests — one stream, both
-		// realms, correlated by fingerprint. Built LAST so seed.injected events above are included.
+		this.append_devtools_seed(scripts, bag);
+		// ONE assembly from slices — no `replace` (whose `$$` escape would also corrupt an og.$ factory
+		// source carrying a literal `$`), no intermediate copies of the body.
+		return assemble(html, spans, head_out, head_inject, scripts.join(''));
+	}
+
+	/** DEVTOOLS: drain this request's server-realm events (region renders, capability mints, seeds)
+	 *  into an `application/ogygia-devtools` side-channel the client bus ingests — one stream, both
+	 *  realms, correlated by fingerprint. Appended LAST so the seed.injected events are included. */
+	append_devtools_seed(scripts: string[], bag: RequestBag | undefined): void {
 		const dt_buf = DEVTOOLS && bag ? dt_buffers.get(bag) : undefined;
 		if (DEVTOOLS && dt_buf && dt_buf.events.length) {
 			scripts.push(
 				emit_ogygia_script('devtools', escape_script_text(JSON.stringify(dt_buf.events)))
 			);
 		}
-
-		if (scripts.length === 0) return html;
-		// FUNCTION-form replacement: seed payloads legitimately contain `$$` (e.g. an og.$ factory
-		// source with a literal `$` before a template hole) — a STRING replacement would collapse
-		// it (String.replace's `$$` escape) and silently corrupt the shipped code/data.
-		const injected = scripts.join('') + '</body>';
-		return html.replace('</body>', () => injected);
 	}
 
 	/**
@@ -1183,17 +1226,18 @@ class OgygiaHandle {
 		const stream = new ReadableStream<Uint8Array>({
 			async start(controller) {
 				// 1. Forward Kit's document through `</body></html>` (one enqueue in practice). Kit streams
-				//    its (dead) resolve scripts only AFTER this, as separate chunks. Accumulate the decoded
-				//    text ACROSS reads so a `</body>` split over a chunk boundary is still detected (the
-				//    stateful decoder alone returns only the current chunk).
-				let doc = '';
+				//    its (dead) resolve scripts only AFTER this, as separate chunks. Carry the last six
+				//    decoded characters across reads so a `</body>` split over a chunk boundary is still
+				//    detected — never the whole document (a second 2.6 MB copy, rescanned per chunk).
+				let carry = '';
 				try {
 					for (;;) {
 						const { value, done } = await reader.read();
 						if (done) break;
 						controller.enqueue(value);
-						doc += decoder.decode(value, { stream: true });
-						if (doc.includes('</body>')) break;
+						const probe = carry + decoder.decode(value, { stream: true });
+						if (probe.includes('</body>')) break;
+						carry = probe.slice(-6);
 					}
 				} catch {
 					/* fall through — resolution streaming below still runs */
@@ -1341,7 +1385,8 @@ class OgygiaHandle {
 		const reducers = Object.fromEntries(
 			Object.entries(transport).map(([name, codec]) => [name, codec.encode])
 		);
-		return emit_ogygia_script('remote', escape_script_text(devalue.stringify(data, reducers)));
+		// devalue output is `<`-safe by itself (it writes `<`), so no second pass over the payload.
+	return emit_ogygia_script('remote', devalue.stringify(data, reducers));
 	}
 
 	/**
@@ -1407,9 +1452,7 @@ class OgygiaHandle {
 		via: 'hit' | 'join' | 'stored',
 		event: RequestEvent
 	): Promise<Response> {
-		const base =
-			via === 'stored' ? entry.html : entry.html.replace('</head>', FREEZE_DOC_META + '</head>');
-		const html = await stitch_html(base, async (endpoint) => {
+		const html = await stitch_html(served_html(entry, via), async (endpoint) => {
 			const out = await this.#render_capability(endpoint, event);
 			// a "keep the fallback" answer keeps the stored fallback in place (same as fail-open)
 			return out && out.html !== KEEP_FALLBACK_HTML ? out.html : null;

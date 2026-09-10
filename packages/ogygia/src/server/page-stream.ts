@@ -114,18 +114,6 @@ export async function settle_deferred(value: unknown, depth = 0): Promise<unknow
 	return value;
 }
 
-/** Does `value` hold any promise? (cheap probe — the common no-promise seed skips staging entirely.) */
-export function has_deferred(value: unknown, depth = 0): boolean {
-	if (is_thenable(value)) return true;
-	if (depth > MAX_DEPTH || value === null || typeof value !== 'object') return false;
-	if (Array.isArray(value)) return value.some((x) => has_deferred(x, depth + 1));
-	if (Object.getPrototypeOf(value) === Object.prototype) {
-		for (const k in value as Record<string, unknown>)
-			if (has_deferred((value as Record<string, unknown>)[k], depth + 1)) return true;
-	}
-	return false;
-}
-
 /**
  * The streamed resolve `<script>` body for one settled promise. The value is encoded WITH
  * {@link defer_reducer} so a re-staged value carrying nested DeferRef markers (a promise that resolved

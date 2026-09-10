@@ -14,7 +14,8 @@ import { KIT_MARKER_RE } from './fixtures/re.ts';
 
 const REGION_OPEN_G = /<ogygia-region\b[^>]*>/g;
 const REGION_CLOSE = '</ogygia-region>';
-const SIDECAR_G = /<script type="application\/ogygia-props" data-ogygia-props(?:="([0-9a-f]+)")?>/g;
+// keyed sidecars also carry `id="og-props-<fp>"` and, on the JSON lane, `data-og-format="json"`
+const SIDECAR_G = /<script type="application\/ogygia-props" data-ogygia-props(?:="([0-9a-f]+)")?[^>]*>/g;
 const FP_ATTR = /data-og-fp="([0-9a-f]+)"/;
 
 test.describe('PROPS TAIL: island props ride at the end of the body, keyed by fingerprint', () => {

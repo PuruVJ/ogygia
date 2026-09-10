@@ -12,6 +12,12 @@ type PageLike = {
 	error?: unknown;
 };
 
+/** The seed's text and the lane it is in (`json` → the runtime reads it with `JSON.parse`). */
+export interface SeedText {
+	text: string;
+	json: boolean;
+}
+
 // Promises in `data` (Kit streaming) are handled by the handle via `page-stream.ts`: STREAMED into the
 // island on a real navigation, or awaited + settled for a programmatic fetch. By the time a value
 // reaches PageSeed it is either promise-free or carries DeferRef/SettledRef markers the caller's
@@ -22,8 +28,16 @@ export class PageSeed {
 	 * data/form/error may carry a non-serializable leaf (function/store/class) — that ONE field is
 	 * dropped, never the whole seed. Promises should already be resolved by the handle
 	 * (`resolve_promises`) before this. See INVARIANTS.md · PAGE-SEED.
+	 *
+	 * `json`: the caller proved the whole slice JSON-exact (seed-refs.ts `analyze`) — then the seed
+	 * goes out as native `JSON.stringify` output (an order of magnitude cheaper than devalue on a
+	 * CMS tree), escaped once for the `<script>`. devalue output needs no escape (it writes `<`).
 	 */
-	static serialize(page_ref: PageLike, stringify_fn: typeof stringify = stringify): string | null {
+	static serialize(
+		page_ref: PageLike,
+		stringify_fn: typeof stringify = stringify,
+		json = false
+	): SeedText | null {
 		try {
 			const base = {
 				url: page_ref.url?.href,
@@ -37,6 +51,13 @@ export class PageSeed {
 				form: page_ref.form ?? null,
 				error: page_ref.error ?? null
 			};
+			if (json) {
+				try {
+					return { text: escape_script_text(JSON.stringify(full)), json: true };
+				} catch {
+					/* the analysis was wrong about a leaf — devalue below is the safe lane */
+				}
+			}
 			let raw: string;
 			try {
 				raw = stringify_fn(full);
@@ -54,7 +75,7 @@ export class PageSeed {
 				}
 				raw = stringify_fn(safe);
 			}
-			return escape_script_text(raw);
+			return { text: raw, json: false };
 		} catch {
 			return null;
 		}

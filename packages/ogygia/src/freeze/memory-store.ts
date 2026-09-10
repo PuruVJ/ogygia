@@ -1,46 +1,36 @@
 /**
- * freeze — tier-1 store: in-process bounded LRU with TTL backstop + the tag reverse index
+ * freeze — tier-1 store: in-process byte-bounded LRU with TTL backstop + the tag reverse index
  * (og.source receipts). The zero-infra default (`ogygia({ freeze: true })` with no
  * `configure()`): single-instance adapter-node. Replicas / serverless want tier 2 (valkey /
  * upstash) — a per-instance LRU there means per-instance misses AND invalidation blind spots.
  */
 import type { FreezeEntry, FreezePutOptions, FreezeStore } from './types.js';
 import { normalize_prefix } from './key.js';
+import { SizedLru } from '../server/sized-lru.js';
 
+/** Resident budget for frozen pages (a stored page can be multi-MB; a count alone bounds nothing). */
+const DEFAULT_MAX_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_ENTRIES = 1000;
 
-export function memory_store(max_entries = DEFAULT_MAX_ENTRIES): FreezeStore {
-	// Map iteration order = insertion order → delete+set on touch makes it an LRU.
-	const entries = new Map<string, { entry: FreezeEntry; expires: number }>();
+/** What an entry costs to keep: a page is its HTML; a redirect is a few dozen bytes. */
+const entry_bytes = (entry: FreezeEntry): number =>
+	entry.kind === 'page' ? entry.html.length : 64;
+
+export function memory_store(
+	max_entries = DEFAULT_MAX_ENTRIES,
+	max_bytes = DEFAULT_MAX_BYTES
+): FreezeStore {
+	const entries = new SizedLru<FreezeEntry>(max_bytes, max_entries);
 	// tag → keys (og.source receipts). Dead keys are tolerated (evicted entries leave their tag
 	// refs behind; a later evictByTag deleting a gone key is a no-op) — no sweep bookkeeping.
 	const tag_index = new Map<string, Set<string>>();
 
-	const alive = (key: string) => {
-		const rec = entries.get(key);
-		if (!rec) return null;
-		if (Date.now() >= rec.expires) {
-			entries.delete(key);
-			return null;
-		}
-		return rec;
-	};
-
 	return {
 		async get(key) {
-			const rec = alive(key);
-			if (!rec) return null;
-			// LRU touch
-			entries.delete(key);
-			entries.set(key, rec);
-			return rec.entry;
+			return entries.get(key, Date.now());
 		},
 		async put(key, entry, options: FreezePutOptions) {
-			if (entries.size >= max_entries && !entries.has(key)) {
-				const oldest = entries.keys().next().value;
-				if (oldest !== undefined) entries.delete(oldest);
-			}
-			entries.set(key, { entry, expires: Date.now() + options.ttl * 1000 });
+			entries.set(key, entry, entry_bytes(entry), Date.now() + options.ttl * 1000);
 			for (const tag of options.tags ?? []) {
 				let set = tag_index.get(tag);
 				if (!set) tag_index.set(tag, (set = new Set()));
@@ -70,7 +60,7 @@ export function memory_store(max_entries = DEFAULT_MAX_ENTRIES): FreezeStore {
 		},
 		async size() {
 			// Sweep expired so harness counts reflect live entries only.
-			for (const key of [...entries.keys()]) alive(key);
+			entries.sweep(Date.now());
 			return entries.size;
 		}
 	};

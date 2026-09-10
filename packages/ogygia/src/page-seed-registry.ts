@@ -7,8 +7,9 @@
  * records it HERE, and the handle merges it into the `application/ogygia-page` seed. That's how
  * `$page.data` works inside islands on a csr=false page (boundary law: page.data crosses).
  *
- * Same shape as the setContext recorder: the server installs the recorder (ALS-backed in `hooks.ts`),
- * so it is universal-safe — on the client `record_page` is a no-op (no recorder installed).
+ * Same shape as the setContext recorder: the server installs the recorder (request-scoped in
+ * `hooks.ts`), so it is universal-safe — on the client `record_page` is a no-op (no recorder
+ * installed).
  */
 export type PageSnapshot = {
 	data?: unknown;
@@ -26,7 +27,8 @@ export type PageSnapshot = {
  * `seed` — does this record WANT the client seed shipped? Region.svelte passes the build's answer
  * for its island (`islandReadsPage`); the snapshot itself is always recorded (the handle also
  * reads it for the freeze verdict — a load with a streaming promise is per-request by intent — and
- * for server-side page reads), only the serialized seed is gated on it.
+ * for server-side page reads), only the serialized seed is gated on it. Whether the seed ships is
+ * read ONCE, by the handle, when the document tail renders — no region asks during the render.
  */
 type Recorder = (snapshot: PageSnapshot, seed: boolean) => void;
 
@@ -42,24 +44,3 @@ export function set_page_recorder(fn: Recorder | null): void {
 export function record_page(snapshot: PageSnapshot, seed = true): void {
 	recorder?.(snapshot, seed);
 }
-
-/**
- * Will this request's page seed ship? The request answers (`hooks.ts` installs the reader over the
- * bag's `seed_wanted`); Region.svelte asks before serializing an island's props RELATIVE to the
- * seed (seed-refs.ts) — a reference into a seed that never arrives would be a hole in the props.
- * Monotonic within a request: once a `$page` reader recorded, it stays true. `false` wherever no
- * request is around (client, endpoint, test).
- */
-type SeedWantedReader = () => boolean;
-
-let seed_wanted_reader: SeedWantedReader | null = null;
-
-/** Server (`hooks.ts`) installs a request-scoped reader; `null` uninstalls. */
-export function set_seed_wanted_reader(fn: SeedWantedReader | null): void {
-	seed_wanted_reader = fn;
-}
-
-export function seed_wanted(): boolean {
-	return seed_wanted_reader ? seed_wanted_reader() : false;
-}
-

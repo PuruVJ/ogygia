@@ -1,11 +1,12 @@
 /**
  * SEED REFERENCES (seed-refs.ts) — island props serialized relative to the page seed.
  *
- * Module level: the index (identity + structure), the reducer (largest matching ancestor, identity
+ * Module level: the index (identity + structure), the plan (largest matching ancestor, identity
  * before structure, exact comparison behind a hash hit, thresholds, cycles, non-plain values), the
  * client resolver + copy, and a real devalue round trip. Region level: inside Kit's page pass with
- * a tail and a seed on the way, props that are seed subtrees serialize as references; without a
- * seed, or outside the page pass, they stay full copies.
+ * a tail, the tail renders against the seed index when the seed ships and props that are seed
+ * subtrees serialize as references — whichever island rendered first; without a seed, or outside
+ * the page pass, they stay full copies.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { parse, stringify } from 'devalue';
@@ -17,14 +18,13 @@ import {
 	deep_equal_plain,
 	index_seed,
 	resolve_seed_ref,
-	seed_ref_reducer,
+	plan_seed_refs,
 	seed_ref_reviver
 } from '../src/seed-refs.js';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 import KitPagePass from './_fixtures/KitPagePass.svelte';
 import { DocumentTail, set_tail_reader } from '../src/server/document-tail.js';
-import { set_seed_wanted_reader } from '../src/page-seed-registry.js';
 import { page } from '$app/state';
 
 const big = (label: string, n = 4) => ({
@@ -84,13 +84,14 @@ describe('index_seed', () => {
 	});
 });
 
-describe('seed_ref_reducer', () => {
+describe('plan_seed_refs', () => {
 	const data = { catalog: { blocks: [big('one'), big('two', 6)] }, greeting: 'hi' };
 	const idx = index_seed(data);
 
 	it('identity: the seed object itself → its path, largest ancestor wins, children untouched', () => {
 		const props = { block: data.catalog.blocks[0], mode: 'identity' };
-		const r = seed_ref_reducer(idx, props);
+		const { reducer: r, count } = plan_seed_refs(idx, props);
+		expect(count).toBe(1);
 		expect(r(props.block)).toEqual(['catalog', 'blocks', 0]);
 		expect(r(props.block.meta)).toBeUndefined(); // inside a matched ancestor: never written
 		expect(r(props)).toBeUndefined(); // the props root is not a seed node
@@ -99,32 +100,35 @@ describe('seed_ref_reducer', () => {
 
 	it('structure: a JSON clone of a seed node → the same path', () => {
 		const props = { block: clone(data.catalog.blocks[1]) };
-		const r = seed_ref_reducer(idx, props);
+		const { reducer: r, count } = plan_seed_refs(idx, props);
+		expect(count).toBe(1);
 		expect(r(props.block)).toEqual(['catalog', 'blocks', 1]);
 	});
 
 	it('a near-clone (one field differs) does NOT match the parent, but its identical children do', () => {
 		const near = { ...clone(data.catalog.blocks[1]), title: 'changed' };
-		const r = seed_ref_reducer(idx, { block: near });
+		const { reducer: r } = plan_seed_refs(idx, { block: near });
 		expect(r(near)).toBeUndefined();
 		expect(r(near.meta)).toEqual(['catalog', 'blocks', 1, 'meta']);
 	});
 
 	it('a value the seed does not have, or one below the threshold, is never referenced', () => {
 		const props = { fresh: big('fresh'), small: { a: 1 } };
-		const r = seed_ref_reducer(idx, props);
+		const { reducer: r, count } = plan_seed_refs(idx, props);
+		expect(count).toBe(0);
 		expect(r(props.fresh)).toBeUndefined();
 		expect(r(props.small)).toBeUndefined();
 	});
 
 	it('an empty index never references anything (and never walks the props)', () => {
-		const r = seed_ref_reducer(index_seed({}), { block: data.catalog.blocks[0] });
+		const { reducer: r, count } = plan_seed_refs(index_seed({}), { block: data.catalog.blocks[0] });
+		expect(count).toBe(0);
 		expect(r(data.catalog.blocks[0])).toBeUndefined();
 	});
 
 	it('devalue round trip: references replace the copies and revive to equal, OWN copies', () => {
 		const props = { block: data.catalog.blocks[0], twin: clone(data.catalog.blocks[1]), n: 7 };
-		const text = stringify(props, { [SEED_REF_KEY]: seed_ref_reducer(idx, props) });
+		const text = stringify(props, { [SEED_REF_KEY]: plan_seed_refs(idx, props).reducer });
 		expect(text).toContain(SEED_REF_KEY);
 		expect(text.length).toBeLessThan(stringify(props).length / 3);
 		const revived = parse(text, { [SEED_REF_KEY]: seed_ref_reviver(() => data) }) as typeof props;
@@ -181,39 +185,62 @@ const island = (props: Record<string, unknown>) => ({
 let tail: DocumentTail;
 afterEach(() => {
 	set_tail_reader(null);
-	set_seed_wanted_reader(null);
 	for (const k of Object.keys(page.data)) delete (page.data as Record<string, unknown>)[k];
 });
 
 describe('Region.svelte × seed references', () => {
-	it('page pass + tail + seed wanted: a props subtree that is a seed node becomes a reference', () => {
+	it('page pass + tail rendered against the seed: a props subtree that is a seed node becomes a reference', () => {
 		tail = new DocumentTail();
 		set_tail_reader(() => tail);
-		set_seed_wanted_reader(() => true);
 		Object.assign(page.data, { catalog: { blocks: [big('one'), big('two')] } });
 		const data = page.data as { catalog: { blocks: ReturnType<typeof big>[] } };
 		render_in_kit_pass([
 			island({ block: data.catalog.blocks[0] }), // identity
 			island({ block: clone(data.catalog.blocks[1]) }) // clone
 		]);
-		const html = tail.render();
+		const html = tail.render(index_seed(data));
 		expect(html.split(SEED_REF_KEY).length - 1).toBe(2);
 		expect(html).not.toContain('one body');
 		expect(html).not.toContain('two body');
 		// and the reference revives to the block on the client side of the same codec
-		const script = html.match(/data-ogygia-props="[0-9a-f]+">([^<]*)</)![1];
+		const script = html.match(/data-ogygia-props="[0-9a-f]+" id="[^"]+">([^<]*)</)![1];
 		const revived = parse(script, { [SEED_REF_KEY]: seed_ref_reviver(() => data) }) as { block: unknown };
 		expect(revived.block).toEqual(data.catalog.blocks[0]);
 	});
 
-	it('seed NOT wanted (no $page reader on the page): full copies, never a reference', () => {
+	it('the FIRST island on the page references too (the decision is made when the tail renders)', () => {
 		tail = new DocumentTail();
 		set_tail_reader(() => tail);
-		set_seed_wanted_reader(() => false);
+		Object.assign(page.data, { catalog: { blocks: [big('one')] } });
+		const data = page.data as { catalog: { blocks: ReturnType<typeof big>[] } };
+		// one island, rendered before anything could have asked for the seed
+		render_in_kit_pass([island({ block: data.catalog.blocks[0] })]);
+		const html = tail.render(index_seed(data));
+		expect(html.split(SEED_REF_KEY).length - 1).toBe(1);
+		expect(html).not.toContain('one body');
+	});
+
+	it('the fingerprint does not depend on the seed: same island, referenced or copied → same data-og-fp', () => {
+		Object.assign(page.data, { catalog: { blocks: [big('one')] } });
+		const data = page.data as { catalog: { blocks: ReturnType<typeof big>[] } };
+		const fp_of = (out: { body: string }) => out.body.match(/data-og-fp="([0-9a-f]+)"/)![1];
+		tail = new DocumentTail();
+		set_tail_reader(() => tail);
+		const a = render_in_kit_pass([island({ block: data.catalog.blocks[0] })]);
+		expect(tail.render(index_seed(data))).toContain(SEED_REF_KEY);
+		tail = new DocumentTail();
+		const b = render_in_kit_pass([island({ block: data.catalog.blocks[0] })]);
+		expect(tail.render(null)).not.toContain(SEED_REF_KEY);
+		expect(fp_of(a)).toBe(fp_of(b));
+	});
+
+	it('seed NOT shipped (no $page reader on the page): full copies, never a reference', () => {
+		tail = new DocumentTail();
+		set_tail_reader(() => tail);
 		Object.assign(page.data, { catalog: { blocks: [big('one')] } });
 		const data = page.data as { catalog: { blocks: ReturnType<typeof big>[] } };
 		render_in_kit_pass([island({ block: data.catalog.blocks[0] })]);
-		const html = tail.render();
+		const html = tail.render(null);
 		expect(html).not.toContain(SEED_REF_KEY);
 		expect(html).toContain('one body');
 	});
@@ -221,7 +248,6 @@ describe('Region.svelte × seed references', () => {
 	it('outside the page pass (a hole, a ticket, a test render): full copies even with a seed', () => {
 		tail = new DocumentTail();
 		set_tail_reader(() => tail);
-		set_seed_wanted_reader(() => true);
 		Object.assign(page.data, { catalog: { blocks: [big('one')] } });
 		const data = page.data as { catalog: { blocks: ReturnType<typeof big>[] } };
 		const out = render(region, { props: island({ block: data.catalog.blocks[0] }) });
@@ -229,12 +255,13 @@ describe('Region.svelte × seed references', () => {
 		expect(out.body).toContain('one body');
 	});
 
-	it('props with no seed data in them serialize exactly as before', () => {
+	it('plain props with no seed data in them take the JSON lane', () => {
 		tail = new DocumentTail();
 		set_tail_reader(() => tail);
-		set_seed_wanted_reader(() => true);
 		Object.assign(page.data, { catalog: { blocks: [big('one')] } });
 		render_in_kit_pass([island({ n: 1, label: 'plain' })]);
-		expect(tail.render()).toContain('[{"n":1,"label":2},1,"plain"]');
+		const html = tail.render(index_seed(page.data));
+		expect(html).toContain('data-og-format="json"');
+		expect(html).toContain('>{"n":1,"label":"plain"}<');
 	});
 });

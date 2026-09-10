@@ -1,5 +1,5 @@
 import { hydrate, unmount } from 'svelte';
-import { parse } from 'devalue';
+import { parse_wire_text, wire_is_json } from './wire-format.js';
 import { frameAddress } from '../frame.js';
 import { set_current_region, set_foreign_hydrate } from '../current-region.js';
 import { capture_region_ids } from './reconcile.js';
@@ -118,9 +118,10 @@ function seed_data_of(sidecar: Element): unknown {
 	if (seed_data_cache.has(el)) return seed_data_cache.get(el);
 	let data: unknown;
 	try {
-		const raw = parse(
+		const raw = parse_wire_text(
 			el.textContent ?? '',
-			page_defer_revivers(transport_decoders) as Parameters<typeof parse>[1]
+			wire_is_json(el),
+			page_defer_revivers(transport_decoders)
 		) as { data?: unknown } | null;
 		data = raw?.data;
 	} catch {
@@ -140,7 +141,10 @@ function read_region_props(region: Element, foreign = false): Record<string, unk
 	const revivers = foreign
 		? base
 		: { ...base, [SEED_REF_KEY]: seed_ref_reviver(() => seed_data_of(sidecar)) };
-	return parse(sidecar.textContent, revivers as Parameters<typeof parse>[1]);
+	return parse_wire_text(sidecar.textContent ?? '', wire_is_json(sidecar), revivers) as Record<
+		string,
+		unknown
+	>;
 }
 
 /** What counts as intent for an ON-DEMAND hole (`render: 'deferred'` + `wake: 'interaction'`).
@@ -352,18 +356,21 @@ function apply_remote_seed_text(text: string | null | undefined) {
 	slots.remoteSeeds?.seed_query_responses(text);
 }
 
-/** Apply `application/ogygia-page` text into the `$app/state` page snapshot. */
-function apply_page_seed_text(text: string | null | undefined) {
-	if (!text) return;
+/** Apply the `application/ogygia-page` script into the `$app/state` page snapshot (`null` = no
+ *  seed on this document). */
+function apply_page_seed(el: Element | null | undefined) {
+	const text = el?.textContent;
+	if (!el || !text) return;
 	try {
 		// Install the live resolver (drains any resolve script that raced ahead) BEFORE reviving, so a
 		// defer marker becomes a pending Promise that a queued resolution can settle immediately. Both
 		// the seed and the streamed resolves revive with the app's transport decoders, so a load's
 		// CUSTOM types round-trip into islands.
 		install_page_defer(transport_decoders);
-		const raw = parse(
+		const raw = parse_wire_text(
 			text,
-			page_defer_revivers(transport_decoders) as Parameters<typeof parse>[1]
+			wire_is_json(el),
+			page_defer_revivers(transport_decoders)
 		) as Partial<{
 			url: string | URL;
 			params: Record<string, string>;
@@ -425,7 +432,7 @@ export function apply_soft_invalidate_doc(doc: Document) {
 	sync_side_channel_script(document, 'application/ogygia-remote', remote);
 
 	const page_el = doc.querySelector('script[type="application/ogygia-page"]');
-	apply_page_seed_text(page_el?.textContent);
+	apply_page_seed(page_el);
 	sync_side_channel_script(document, 'application/ogygia-page', page_el);
 }
 
@@ -445,8 +452,7 @@ function seed_page_once() {
 	if (runtime_session.page_seeded) return;
 	runtime_session.mark_page_seeded();
 	if (typeof document === 'undefined') return;
-	const el = document.querySelector('script[type="application/ogygia-page"]');
-	apply_page_seed_text(el?.textContent);
+	apply_page_seed(document.querySelector('script[type="application/ogygia-page"]'));
 }
 
 // Mixed mode: on a csr=true page, Kit boots and hydrates the whole tree (including our
