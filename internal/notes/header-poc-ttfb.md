@@ -47,6 +47,22 @@ Lambda. Splitting those exactly needs a server profile of one request (the ogygi
 wired on this branch behind `OGYGIA_PROFILER_SECRET`; it wraps `resolve`, so the downstream
 middleware is inside the profile).
 
+## Server profile of one real request on the deploy (ogygia profiler, `x-profile` header)
+
+Node 20, 11.4 s under the profiler (sampling inflates CPU ~1.5×; the same request is ~7 s
+unprofiled). CPU busy 98 % of the window (compute-bound), 6.6 s CPU + 4.8 s waiting; 180 outbound
+calls; GC 1.3 s; event-loop stall p99 2.4 s.
+
+| rank | what | evidence (profiled) | owner |
+| --- | --- | --- | --- |
+| 1 | **Stencil QDS hydrate in the post-render middleware** | `serializeNodeToHtml` 3.84 s total (`streamToHtml` 3.0 s self, MockDoc parse loop 0.5 s, `escapeString`, `getNamedItem`…) = 36 % of busy; runs per request because the header block's bytes change per request (cache miss) | app (cache key) + ogygia (stable URLs, done) |
+| 2 | **Builder `<Content>` SSR** | `Content_variants` 1.9 s total (`traverse` 1.2 s, `serializeIncludingFunctions` 0.3 s); the POC adds the country-selector panel to what the page already renders | app |
+| 3 | **GC** | 1.3 s, 45 pauses, max 56 ms — the allocation of 1 and 2 | follows 1 and 2 |
+| 4 | **Mega-menu feed fetches fired on the server by the as-is `MegaMenu` fallback** | `product-menu-items` 2.26 s + a self-call to `/_server/api/pes-mega-menu` 2.2 s that FAILS (status 0) — from `MegaMenu.svelte`'s `searchpath` store subscription running during SSR; the hole already primes these feeds (`primeMegaMenuFeeds`), so on the page this is pure waste | app (header port) |
+| 5 | **Cache reads through a Lambda proxy** | 141 invocations, ~200 ms each, 28 s combined (mostly overlapped) — the floor under the loads on both deploys | app / infra |
+| 6 | **Icons fetched during hydrate** | 30 failed relative `/icons/*.svg` fetches + 4 `data:` URL fetches (1.5 s) inside the QDS hydrate | app (middleware) |
+| 7 | ogygia | ~250 ms of 10.5 s busy (2.4 %): devalue 164 ms, late-region registry 39 ms; Kit's ETag hash 60 ms. This build predates the server perf commits on `passage`. | ogygia (done) |
+
 ## Fixes
 
 ogygia (done on `passage`):
