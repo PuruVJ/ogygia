@@ -3,7 +3,7 @@
  *
  * Module level: the index (identity + structure), the reducer (largest matching ancestor, identity
  * before structure, exact comparison behind a hash hit, thresholds, cycles, non-plain values), the
- * client resolver + copy, and a real devalue round trip. Region level: inside Kit's page pass with
+ * client resolver (by reference, lazy), and a real devalue round trip. Region level: inside Kit's page pass with
  * a tail and a seed on the way, props that are seed subtrees serialize as references; without a
  * seed, or outside the page pass, they stay full copies.
  */
@@ -13,7 +13,6 @@ import { render } from 'svelte/server';
 import type { Component } from 'svelte';
 import {
 	SEED_REF_KEY,
-	clone_plain,
 	deep_equal_plain,
 	index_seed,
 	resolve_seed_ref,
@@ -37,7 +36,7 @@ const big = (label: string, n = 4) => ({
 		links: Array.from({ length: 8 }, (_, i) => ({ href: `/${label}/${i}`, label: `Link ${i}` }))
 	}
 });
-const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
 describe('index_seed', () => {
 	it('indexes every referenceable node at or above the byte threshold, by identity and by hash', () => {
@@ -122,30 +121,39 @@ describe('seed_ref_reducer', () => {
 		expect(r(data.catalog.blocks[0])).toBeUndefined();
 	});
 
-	it('devalue round trip: references replace the copies and revive to equal, OWN copies', () => {
-		const props = { block: data.catalog.blocks[0], twin: clone(data.catalog.blocks[1]), n: 7 };
+	it('devalue round trip: references replace the copies and revive BY REFERENCE to the seed nodes', () => {
+		const props = { block: data.catalog.blocks[0], rest: clone(data.catalog.blocks[1]), n: 7 };
 		const text = stringify(props, { [SEED_REF_KEY]: seed_ref_reducer(idx, props) });
 		expect(text).toContain(SEED_REF_KEY);
 		expect(text.length).toBeLessThan(stringify(props).length / 3);
-		const revived = parse(text, { [SEED_REF_KEY]: seed_ref_reviver(() => data) }) as typeof props;
+		let reads = 0;
+		const revived = parse(text, {
+			[SEED_REF_KEY]: seed_ref_reviver(() => (reads++, data))
+		}) as typeof props;
 		expect(revived).toEqual(props);
-		expect(revived.block).not.toBe(data.catalog.blocks[0]); // a copy — the island owns it
-		revived.block.title = 'mutated';
-		expect(data.catalog.blocks[0].title).toBe('one title');
+		// BY REFERENCE: the island gets the seed's own node (the same object its `page.data` read
+		// would hand it), and the seed was resolved exactly once for the whole sidecar.
+		expect(revived.block).toBe(data.catalog.blocks[0]);
+		expect(revived.rest).toBe(data.catalog.blocks[1]);
+		expect(reads).toBe(1);
+	});
+
+	it('the reviver resolves the seed lazily — never when the sidecar carries no reference', () => {
+		let reads = 0;
+		const revived = parse(stringify({ plain: [1, 2] }), {
+			[SEED_REF_KEY]: seed_ref_reviver(() => (reads++, {}))
+		});
+		expect(revived).toEqual({ plain: [1, 2] });
+		expect(reads).toBe(0);
 	});
 });
 
-describe('resolve / clone', () => {
-	it('resolves paths and copies plain data (Dates included); a missing path is undefined', () => {
+describe('resolve', () => {
+	it('resolves paths; a missing path is undefined', () => {
 		const data = { a: [{ d: new Date(5), s: new Set([1]) }] };
 		expect(resolve_seed_ref(data, ['a', 0, 'd'])).toBe(data.a[0].d);
 		expect(resolve_seed_ref(data, ['a', 9, 'd'])).toBeUndefined();
 		expect(resolve_seed_ref(null, ['a'])).toBeUndefined();
-		const c = clone_plain(data);
-		expect(c).toEqual(data);
-		expect(c).not.toBe(data);
-		expect(c.a[0].d).not.toBe(data.a[0].d);
-		expect(c.a[0].s).toBe(data.a[0].s); // non-plain: by reference
 	});
 
 	it('deep_equal_plain: exact structural equality only', () => {
@@ -163,7 +171,8 @@ const kit_pass = KitPagePass as unknown as Component<Record<string, unknown>>;
 
 function render_in_kit_pass(list: Array<Record<string, unknown>>) {
 	const children = (renderer: { push(html: string): void }) => {
-		for (const props of list) (region as unknown as (r: unknown, p: unknown) => void)(renderer, props);
+		for (const props of list)
+			(region as unknown as (r: unknown, p: unknown) => void)(renderer, props);
 	};
 	// `render()`'s body is LAZY — read it, or nothing renders
 	const out = render(kit_pass, { props: { children } });
@@ -202,7 +211,9 @@ describe('Region.svelte × seed references', () => {
 		expect(html).not.toContain('two body');
 		// and the reference revives to the block on the client side of the same codec
 		const script = html.match(/data-ogygia-props="[0-9a-f]+">([^<]*)</)![1];
-		const revived = parse(script, { [SEED_REF_KEY]: seed_ref_reviver(() => data) }) as { block: unknown };
+		const revived = parse(script, { [SEED_REF_KEY]: seed_ref_reviver(() => data) }) as {
+			block: unknown;
+		};
 		expect(revived.block).toEqual(data.catalog.blocks[0]);
 	});
 

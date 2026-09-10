@@ -2,7 +2,7 @@ import { getContext, setContext } from 'svelte';
 import { BROWSER } from 'esm-env';
 import { getRequestEvent } from 'virtual:ogygia/request-event';
 import { csr_true_routes } from 'virtual:ogygia/route-csr';
-import { document_has_kit_bootstrap } from './runtime/kit-boot.js';
+import { kit_hydrates_page } from './runtime/kit-boot.js';
 
 // Context key marking "this subtree is already inside a hydrated island". Nested island wrappers
 // read it and degrade to a plain inline component so an island-within-an-island hydrates exactly
@@ -72,7 +72,7 @@ function normalize_route_id(id: string): string {
  * number indirectly through the context cascade.)
  */
 export function documentIsCsrTrue(): boolean {
-	if (BROWSER) return document_has_kit_bootstrap();
+	if (BROWSER) return kit_hydrates_page();
 	try {
 		const event = getRequestEvent() as { route?: { id?: string | null } };
 		const id = event.route?.id;

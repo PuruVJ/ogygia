@@ -12,10 +12,11 @@
  * plain object / array in the props that is also a node of `page.data` — by IDENTITY (the app
  * passed the same object) or by STRUCTURE (the app cloned it: a JSON round-trip, a spread — the
  * Builder SDK does) — is written as `["OgygiaSeedRef", <path>]`, a path from `page.data` to that
- * node. The client revives the reference against the parsed seed and hands the island a deep
- * copy of the plain data (each island keeps owning its props, exactly as before; only the bytes
- * and the server work change). Largest matching ancestor wins, so a block whose whole props
- * object is one seed node becomes one short reference.
+ * node. The client revives the reference against the ONE parsed seed of its document (the same
+ * graph `page.data` reads — `runtime/seeds.ts`) and hands the island the seed's own node, by
+ * reference: island props are a snapshot either way, and the DEV mutation guard warns on a write
+ * into them. Largest matching ancestor wins, so a block whose whole props object is one seed node
+ * becomes one short reference.
  *
  * WHAT MATCHES: plain objects and arrays whose subtree holds only plain objects, arrays, primitives
  * and Dates — no class instances (wired values, stores, snippets keep their own codec), no Maps or
@@ -29,8 +30,8 @@
  * render root (a hole endpoint, a baked ticket, a foreign fragment) never references: its props
  * must be self-contained wherever the HTML is spliced.
  *
- * Universal module (no Node imports): the index + reducer run on the server, the resolver + clone
- * on the client, and the unit tests exercise both ends against a real devalue round trip.
+ * Universal module (no Node imports): the index + reducer run on the server, the resolver on the
+ * client, and the unit tests exercise both ends against a real devalue round trip.
  */
 import { fnv1a } from './runtime/fingerprint.js';
 
@@ -348,30 +349,29 @@ export function resolve_seed_ref(data: unknown, path: SeedPath): unknown {
 	return cur;
 }
 
-/** Client: a deep copy of the plain data (objects, arrays, Dates); anything else by reference.
- *  Each island owns its props — a mutation inside one island never reaches the seed or another
- *  island, exactly as with the copied sidecars before. */
-export function clone_plain<T>(v: T): T {
-	if (v instanceof Date) return new Date(v.getTime()) as T;
-	if (Array.isArray(v)) return v.map(clone_plain) as T;
-	if (is_plain(v)) {
-		const out: Record<string, unknown> = {};
-		for (const key of Object.keys(v)) out[key] = clone_plain((v as Record<string, unknown>)[key]);
-		return out as T;
-	}
-	return v;
-}
-
-/** Client reviver for the devalue type: resolve + copy. A dangling path (no seed, or a seed that
- *  does not carry the node) revives to `undefined` and, in dev, says why. */
+/**
+ * Client reviver for the devalue type: resolve BY REFERENCE. The island receives the seed's own
+ * node — the same object its `page.data` read would hand it, shared exactly the way `page.data`
+ * already is between islands. A deep copy per reference (129 of them on a measured page) bought
+ * nothing: island props are a snapshot either way, and the DEV mutation guard the runtime wraps
+ * every island's props in (`PropMutationGuard`) already warns on a write into them. `get_data` is
+ * called lazily, once per reviver — the first reference resolves the seed. A dangling path (no seed,
+ * or a seed that does not carry the node) revives to `undefined` and, in dev, says why.
+ */
 export function seed_ref_reviver(get_data: () => unknown): (path: SeedPath) => unknown {
+	let data: unknown;
+	let resolved = false;
 	return (path) => {
-		const node = resolve_seed_ref(get_data(), path);
+		if (!resolved) {
+			data = get_data();
+			resolved = true;
+		}
+		const node = resolve_seed_ref(data, path);
 		if (node === undefined && typeof console !== 'undefined' && import.meta.env?.DEV) {
 			console.warn(
 				`[ogygia] island props reference page.data at ${JSON.stringify(path)} but the page seed does not carry it — the island receives undefined there.`
 			);
 		}
-		return clone_plain(node);
+		return node;
 	};
 }

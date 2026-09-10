@@ -68,3 +68,44 @@ export function warm_island_module(entry: string, base?: string): void {
 		warmed_modules.delete(url);
 	});
 }
+
+/** Has this island module already been warmed (or imported through the warmer)? `entry` resolves
+ *  the way `warm_island_module` resolves it; `base` for an href read off a foreign document. */
+export function is_warmed_module(entry: string, base?: string): boolean {
+	return warmed_modules.has(island_module_url(entry, base));
+}
+
+// ── the SSR's module-preload hints ─────────────────────────────────────────────
+// Region.svelte emits a `<link rel="modulepreload">` (always background priority) for a `visible`
+// island's full dep closure (prod). The idle warm must NOT `import()` a hinted module — that would
+// escalate a still-queued hint fetch to High, the exact contention the hints exist to avoid. One
+// page can carry ~180 hints and ~150 visible islands: resolving every hint's href per island was
+// 27k `URL`s on a real page. The hint set is built ONCE per document, lazily, and dropped when the
+// router prepares the next document (the merged head carries the next page's hints).
+let hinted_modules: Set<string> | null = null;
+
+/** Did the SSR ship a modulepreload hint for this island's module? */
+export function is_hinted_module(entry: string): boolean {
+	if (!hinted_modules) {
+		hinted_modules = new Set();
+		for (const l of document.querySelectorAll('link[rel="modulepreload"]')) {
+			const href = l.getAttribute('href');
+			if (!href) continue;
+			try {
+				hinted_modules.add(new URL(href, location.href).href);
+			} catch {
+				/* a malformed href hints nothing */
+			}
+		}
+	}
+	try {
+		return hinted_modules.has(new URL(entry, location.href).href);
+	} catch {
+		return false; // URL parse hiccup — treat as unhinted; the idle import stays the byte layer
+	}
+}
+
+/** Forget the hint set (the router, before a new document's body connects). */
+export function invalidate_hint_set(): void {
+	hinted_modules = null;
+}
