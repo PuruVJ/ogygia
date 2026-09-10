@@ -31,8 +31,14 @@ describe('analyze · what one walk says', () => {
 		expect(m.bytes).toBeGreaterThan(10);
 	});
 
+	it('an undefined PROPERTY keeps the JSON lane (JSON drops the key; a read gives undefined either way)', () => {
+		const v = { a: 1, gone: undefined, deep: [{ x: undefined, y: 2 }] };
+		expect(analyze(v)).toMatchObject({ json: true, ref: true });
+		expect(JSON.parse(JSON.stringify(v))).toEqual({ a: 1, deep: [{ y: 2 }] });
+	});
+
 	it.each([
-		['undefined', { a: undefined }],
+		['undefined array element', { a: [1, undefined, 3] }],
 		['Date', { a: new Date(0) }],
 		['bigint', { a: 1n }],
 		['NaN', { a: NaN }],

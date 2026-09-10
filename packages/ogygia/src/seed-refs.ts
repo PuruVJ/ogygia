@@ -253,7 +253,18 @@ function measure(v: unknown, memo: Map<object, Measure>, on_stack: Set<object>):
 	if (Array.isArray(v)) {
 		for (const item of v) add(item, 1);
 	} else {
-		for (const key in v) add((v as Record<string, unknown>)[key], key.length + 3);
+		for (const key in v) {
+			const c = (v as Record<string, unknown>)[key];
+			// An `undefined` PROPERTY keeps the JSON lane: `JSON.stringify` drops the key, and reading
+			// it back gives `undefined` either way (only `key in obj` would tell — nothing on the wire
+			// relies on that). One such leaf in a 690 KB CMS tree was pushing the whole seed onto the
+			// devalue lane. An `undefined` ARRAY ELEMENT stays devalue: JSON would turn it into null.
+			if (c === undefined) {
+				bytes += key.length + 4;
+				continue;
+			}
+			add(c, key.length + 3);
+		}
 	}
 	on_stack.delete(v);
 	const result: Measure = { bytes, ref, json, thenable };
