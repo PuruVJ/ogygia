@@ -34,6 +34,19 @@ real): the country-selector lake `await`s `countrySelector` → a Builder `fetch
 Redis cache (`server/header/readers.ts` `country_selector_entry`), and its result rides the page
 as a 117 KB `application/ogygia-remote` seed (baseline: 7 KB).
 
+## Timed directly (the QDS hydrate bundles from the public CDN, on the real header blocks)
+
+`hydrateQds`'s two passes on the POC's `<qds-web-header>` block (stripped back to its
+pre-hydration form, 260 KB, 148 QDS elements): **370–500 ms per run on an M-series core**
+(websites pass ~350 ms, core pass ~40–90 ms). The baseline's block (140 KB, 122 elements):
+**30–90 ms**. On a Lambda-class CPU (3–5× slower for this kind of work) the POC block is
+~1.5–2 s per cache miss — and it misses on every request. That is the largest single piece of the
+POC-only ~3 s, not all of it: the 215 KB carousel block misses too, the middleware's whole-document
+regex passes run over 2.77 MB, and a GET (unlike HEAD) also ships the 2.77 MB body through the
+Lambda. Splitting those exactly needs a server profile of one request (the ogygia profiler is
+wired on this branch behind `OGYGIA_PROFILER_SECRET`; it wraps `resolve`, so the downstream
+middleware is inside the profile).
+
 ## Fixes
 
 ogygia (done on `passage`):
