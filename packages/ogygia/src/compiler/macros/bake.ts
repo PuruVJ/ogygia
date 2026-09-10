@@ -259,7 +259,11 @@ async function evaluate(entry_code: string, id: string, opts: BakeOptions): Prom
 	// than a direct `rolldown` dependency of ogygia's own — the plugin below is a plain Rollup/Vite
 	// plugin, so it drops straight into `rollupOptions`. SSR/node build; TS in the eval entry is
 	// handled by Vite's own transform.
-	const { build } = await import('vite');
+	// The specifier is a VARIABLE (not a literal) so no bundler statically pulls `vite` — bake is
+	// Node-only, but its module sits in the compiler graph the browser Observatory worker bundles,
+	// and vite (Node-only, imports `node:module`'s `Module`/`builtinModules`) must never enter it.
+	const vite_spec = 'vite';
+	const { build } = (await import(/* @vite-ignore */ vite_spec)) as typeof import('vite');
 	const ENTRY = '\0ogygia-bake-entry.js';
 	const module_dir = path.dirname(id.split('?')[0]!);
 	const result = await build({

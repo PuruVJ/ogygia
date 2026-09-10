@@ -44,8 +44,11 @@ function node_default_parse(id: string, code: string) {
 		const require = createRequire(import.meta.url);
 		// Vite re-exports the SAME oxc parser as `rolldown/utils` (byte-identical AST — verified), so
 		// this reads through the app's required `vite` peer instead of a direct `rolldown` dependency.
-		// The browser realm still installs the WASM oxc parser via `set_parser()` (below), unchanged.
-		node_parse_sync = (require('vite') as { parseSync: RawParse }).parseSync;
+		// The browser realm still installs the WASM oxc parser via `set_parser()` (below), unchanged;
+		// a VARIABLE specifier keeps any bundler from statically pulling Node-only `vite` into the
+		// browser Observatory worker (this default is never reached there — the WASM parser is set).
+		const vite_spec = 'vite';
+		node_parse_sync = (require(vite_spec) as { parseSync: RawParse }).parseSync;
 	}
 	return node_parse_sync(id, code);
 }
