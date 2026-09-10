@@ -19,13 +19,7 @@ import { ABSOLUTE_URL_SCHEME } from './region-endpoint-url.js';
 import { foreign_region_prop_revivers } from './foreign-props.js';
 import { props_sidecar_of } from './sidecar.js';
 import { SEED_REF_KEY, seed_ref_reviver } from '../seed-refs.js';
-import {
-	parse_sidecar_text,
-	release_sidecar,
-	seed_data_of,
-	seed_page_once,
-	seed_remote_once
-} from './seeds.js';
+import { parse_sidecar_text, seed_data_of, seed_page_once, seed_remote_once } from './seeds.js';
 import { is_deferred, inside_frozen, region_ssr_truncated } from './region-attrs.js';
 import { slots, type LiftedLake } from './slots.js';
 import { emit as dt_emit } from '../devtools/bus.js';
@@ -94,9 +88,7 @@ export function read_region_props(region: Element, foreign = false): Record<stri
 	const revivers = foreign
 		? base
 		: { ...base, [SEED_REF_KEY]: seed_ref_reviver(() => seed_data_of(doc)) };
-	const props = parse_sidecar_text(sidecar, revivers) as Record<string, unknown>;
-	release_sidecar(region, sidecar);
-	return props;
+	return parse_sidecar_text(sidecar, revivers) as Record<string, unknown>;
 }
 
 /**

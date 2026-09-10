@@ -1,5 +1,5 @@
 /**
- * THE PAGE SEED (and the props sidecars) on the client — parsed ONCE per document, kept in ONE place.
+ * THE PAGE SEED on the client — parsed ONCE per document, kept in ONE place.
  *
  * The handle ships `page.data` (and url/params/route/…) as `<script type="application/ogygia-page">`
  * so islands can read `$page`, and a seed REFERENCE in an island's props (`seed-refs.ts`) points into
@@ -23,7 +23,9 @@
  * After a successful parse the seed's TEXT is blanked (router on, devtools off): the graph lives in
  * `page_state` from here on and nothing reads the script again — 690 KB of text on a CMS page has
  * no second reader, and the morph carries the next page's seed in (already blank, parsed in the
- * navigation's preflight). Devtools keeps the text: its byte ledger reads it.
+ * navigation's preflight). Devtools keeps the text: its byte ledger reads it. A props SIDECAR is
+ * never blanked: a region can read it again — an island moved by its host's snippet adoption
+ * disconnects, reconnects and hydrates anew (the island-children shape).
  */
 import { parse_wire_text, wire_is_json } from './wire-format.js';
 import { page_state, set_page, reset_page, type PageSnapshot } from '../shims/page-store.svelte.js';
@@ -32,7 +34,6 @@ import { transport_decoders } from './app-transport.js';
 import { runtime_session } from './session.js';
 import { slots } from './slots.js';
 import { invalidate_hint_set } from './region-endpoint-url.js';
-import { inside_frozen } from './region-attrs.js';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
@@ -47,36 +48,6 @@ export function parse_sidecar_text(
 	revivers?: Record<string, (d: never) => unknown>
 ): unknown {
 	return parse_wire_text(el.textContent ?? '', wire_is_json(el), revivers);
-}
-
-/**
- * KEYED SIDECAR RELEASE. A keyed props sidecar (`data-og-fp` island, page pass) has exactly as many
- * readers as the page has regions with its fingerprint — identical islands share one script — and
- * each reads it once, at hydrate. Once the last reader has parsed it the text is blanked: the props
- * live in the island now, and 300 KB of sidecar text on a CMS page had no second reader. Counted
- * from ONE walk of the live document on the first release (dropped when the router prepares the
- * next document). Never blanked: an adjacent (fingerprint-less) sidecar — a hole's, a lake's, a
- * live region's — and an island INSIDE a lake, whose `{#if}` remount re-reads it from the lake
- * cache; a foreign document's sidecar (a kept island absorbing the incoming page's props — the
- * morph carries that script in and the island never reads it again); and devtools builds, whose
- * byte ledger reads the text.
- */
-let sidecar_readers: Map<string, number> | null = null;
-export function release_sidecar(region: Element, sidecar: Element): void {
-	if (DEVTOOLS) return;
-	const fp = region.getAttribute('data-og-fp');
-	if (!fp || sidecar.getAttribute('data-ogygia-props') !== fp) return;
-	if (region.ownerDocument !== document || inside_frozen(region)) return;
-	if (!sidecar_readers) {
-		sidecar_readers = new Map();
-		for (const el of document.querySelectorAll('ogygia-region[data-og-fp]')) {
-			const f = el.getAttribute('data-og-fp') as string;
-			sidecar_readers.set(f, (sidecar_readers.get(f) ?? 0) + 1);
-		}
-	}
-	const left = (sidecar_readers.get(fp) ?? 1) - 1;
-	sidecar_readers.set(fp, left);
-	if (left <= 0) sidecar.textContent = '';
 }
 
 type PageSeed = Partial<Omit<PageSnapshot, 'url'> & { url: string | URL }>;
@@ -205,7 +176,6 @@ export function prepare_spa_document(): void {
 	runtime_session.reset();
 	slots.remoteSeeds?.clear_remote_seeds();
 	invalidate_hint_set();
-	sidecar_readers = null;
 	reset_page();
 }
 

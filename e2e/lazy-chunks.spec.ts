@@ -1,25 +1,37 @@
 // LAZY RUNTIME CHUNKS: the built runtime is three lazily loaded pieces around a small boot —
 // `hydrate-core` (Svelte's `hydrate`, the provider, the props parse) on the first island that
-// wakes, `router-nav` on the first prefetch or click, `interaction-replay` on the first arm. A page
-// whose islands all wake on `visible` / `interaction` must therefore boot WITHOUT fetching Svelte's
-// client runtime; the first wake brings it in. Proven on the network: every script fetched before
-// the wake is read and must not carry Svelte's client-runtime error namespace (present, as a string
-// literal, in any prod build of `svelte/internal/client`).
+// wakes, `router-nav` (fetch + cache, head merge, reconcile) on the first prefetch or click,
+// `interaction-replay` on the first arm. Proven on the network against the built playground: every
+// script fetched at boot is read, and none may carry a string that lives only in `hydrate-core`
+// (`data-og-recovered`, the mismatch-recovery mark) or only in `router-nav` (`x-ogygia-spa`, the
+// navigation fetch header); the first wake fetches the former, the first prefetch the latter.
+//
+// Note: the playground boots the `live`, `wire` and `context` features, whose modules (LiveHost,
+// the snippet codec, the context bridge) import Svelte statically — so on THIS app Svelte's client
+// runtime is in the boot graph regardless of the hydrate split. An app without those features
+// (the "Static content" / "Interactive" profiles of e2e/bundle-size.ts) has no Svelte in its boot.
 // Usage: pnpm exec playwright test lazy-chunks
 import { test, check } from './fixtures/index.ts';
 
-/** A string literal every production build of Svelte's client runtime carries (its error links). */
-const SVELTE_CLIENT_MARKER = 'svelte.dev/e/';
+/** A string only the hydrate core carries (the foreign-mutation detector's mark). */
+const HYDRATE_CORE_MARKER = 'data-og-recovered';
+/** A string only the navigation chunk carries (the SPA fetch header). */
+const ROUTER_NAV_MARKER = 'x-ogygia-spa';
 const RUNTIME_RE = /\/og-runtime\.[^/]+\.js$/;
 
-test.describe('lazy runtime chunks: no Svelte client runtime at boot on a visible/interaction-only page', () => {
-	test('boot fetches the runtime only; the first wake fetches the hydrate core + Svelte', async ({
+test.describe('lazy runtime chunks: hydrate core on first wake, navigation on first prefetch', () => {
+	test('boot fetches neither; the first wake fetches the hydrate core, the first hover the navigation', async ({
 		page
 	}) => {
 		const scripts: string[] = [];
 		page.on('response', (r) => {
 			if (r.request().resourceType() === 'script') scripts.push(r.url());
 		});
+		const bodies = async (urls: string[]) =>
+			Promise.all(urls.map(async (u) => ({ u, text: await (await fetch(u)).text() })));
+		const carrying = (list: Array<{ u: string; text: string }>, marker: string) =>
+			list.filter((b) => b.text.includes(marker)).map((b) => b.u);
+
 		await page.goto('/lazy-runtime', { waitUntil: 'networkidle' });
 		await page.waitForTimeout(400);
 		check('runtime booted (ogygia-region defined)', await page.evaluate(() => !!customElements.get('ogygia-region')));
@@ -29,35 +41,48 @@ test.describe('lazy runtime chunks: no Svelte client runtime at boot on a visibl
 			(await page.locator('ogygia-region[data-hydrated]').count()) === 0
 		);
 		const boot_scripts = [...scripts];
-		// Read every script fetched at boot: none may be (or import) Svelte's client runtime.
-		const bodies = await Promise.all(
-			boot_scripts.map(async (u) => ({ u, text: await (await fetch(u)).text() }))
-		);
-		const svelte_at_boot = bodies.filter((b) => b.text.includes(SVELTE_CLIENT_MARKER)).map((b) => b.u);
+		const boot = await bodies(boot_scripts);
 		check(
-			`boot: no fetched script carries Svelte's client runtime (${boot_scripts.length} scripts read)`,
-			svelte_at_boot.length === 0,
-			svelte_at_boot.join('\n')
+			`boot: no fetched script carries the hydrate core (${boot_scripts.length} scripts read)`,
+			carrying(boot, HYDRATE_CORE_MARKER).length === 0,
+			carrying(boot, HYDRATE_CORE_MARKER).join('\n')
+		);
+		check(
+			'boot: no fetched script carries the navigation',
+			carrying(boot, ROUTER_NAV_MARKER).length === 0,
+			carrying(boot, ROUTER_NAV_MARKER).join('\n')
 		);
 
-		// The first wake: click the interaction island → hydrate core + Svelte + the island's chunk.
+		// The first wake: click the interaction island → the hydrate core + the island's chunk.
 		await page.locator('[data-i-btn]').click();
 		await page.waitForSelector('ogygia-region[wake="interaction"][data-hydrated]', { timeout: 8000 });
 		await page.waitForTimeout(300);
-		const after_wake = scripts.slice(boot_scripts.length);
-		const wake_bodies = await Promise.all(
-			after_wake.map(async (u) => ({ u, text: await (await fetch(u)).text() }))
-		);
+		const after_wake = await bodies(scripts.slice(boot_scripts.length));
 		check(
-			"wake: the scripts fetched by the first wake include Svelte's client runtime",
-			wake_bodies.some((b) => b.text.includes(SVELTE_CLIENT_MARKER)),
-			after_wake.join('\n')
+			'wake: the first wake fetched the hydrate core',
+			carrying(after_wake, HYDRATE_CORE_MARKER).length === 1,
+			after_wake.map((b) => b.u).join('\n')
 		);
+		check('wake: still no navigation chunk', carrying(after_wake, ROUTER_NAV_MARKER).length === 0);
 		check('wake: the click replayed (count 1)', (await page.locator('[data-i-count]').innerText()) === '1');
 
 		// The visible island below the fold wakes on scroll, from the already-loaded core.
+		const before_scroll = scripts.length;
 		await page.locator('[data-counter]').scrollIntoViewIfNeeded();
 		await page.waitForSelector('ogygia-region[wake="visible"][data-hydrated]', { timeout: 8000 });
 		check('visible island hydrated after scroll', (await page.locator('[data-counter] button').innerText()).includes('5'));
+		const after_scroll = await bodies(scripts.slice(before_scroll));
+		check('scroll: the hydrate core was not fetched again', carrying(after_scroll, HYDRATE_CORE_MARKER).length === 0);
+
+		// The first prefetch (hover on a preload-marked link) loads the navigation chunk.
+		const before_hover = scripts.length;
+		await page.locator('[data-prefetch-link]').hover();
+		await page.waitForTimeout(600);
+		const after_hover = await bodies(scripts.slice(before_hover));
+		check(
+			'hover: the first prefetch fetched the navigation chunk',
+			carrying(after_hover, ROUTER_NAV_MARKER).length === 1,
+			after_hover.map((b) => b.u).join('\n')
+		);
 	});
 });

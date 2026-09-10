@@ -35,7 +35,6 @@ test('boot: two seed-ref islands, ONE seed parse, refs by reference into page.da
 	first.after(first.cloneNode(true));
 	expect(document.querySelectorAll('ogygia-region').length).toBe(2);
 	const seed_el = document.querySelector(PAGE_SEED_SELECTOR)!;
-	const sidecar = document.querySelector('script[data-ogygia-props]')!;
 	expect(seed_el.textContent!.length).toBeGreaterThan(0);
 	const parses_before = seed_parse_count();
 
@@ -46,7 +45,6 @@ test('boot: two seed-ref islands, ONE seed parse, refs by reference into page.da
 	expect(seed_parse_count() - parses_before).toBe(1); // ONE parse for the store AND the references
 	expect((page_state.data as { counter: { start: number } }).counter.start).toBe(3);
 	expect(seed_el.textContent).toBe(''); // the graph lives in page_state now — no second reader
-	expect(sidecar.textContent).toBe(''); // both readers done → the shared sidecar is released
 });
 
 test('reconcile navigation: the next page island reads the NEXT page seed (no stale reference)', async () => {

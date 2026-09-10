@@ -1,7 +1,7 @@
 // LONG-TASK BUDGET on the large CMS page shape (`/bench-cms`: 21 islands — a header with a ~300 KB
 // props payload, 20 blocks fed by seed references, one `$page` reader over a ~700 KB seed). The
 // runtime must never make a long task of its own: hydration is one island per task (the scheduler),
-// the seed and the sidecars are parsed once each, in those tasks. Measured with the Long Tasks API
+// the seed is parsed once and the sidecars inside those tasks. Measured with the Long Tasks API
 // under a 4× CPU throttle (a mid-range phone), from navigation start until every island is live.
 // Usage: pnpm exec playwright test long-task-budget
 import { test, check } from './fixtures/index.ts';
@@ -10,7 +10,7 @@ import { test, check } from './fixtures/index.ts';
 const TASK_BUDGET_MS = 50;
 
 test.describe('long-task budget: the large CMS page boots with no task over 50 ms from the runtime', () => {
-	test('/bench-cms: 21 islands, seed + sidecars parsed once, no long task after DOMContentLoaded', async ({
+	test('/bench-cms: 21 islands, seed parsed once, no long task after DOMContentLoaded', async ({
 		page
 	}) => {
 		// Observe from the very first script: an init script installs the observer before the runtime.
@@ -49,24 +49,11 @@ test.describe('long-task budget: the large CMS page boots with no task over 50 m
 			'all 12 load islands hydrated (header, reader, 10 blocks)',
 			(await page.locator('ogygia-region[wake="load"][data-hydrated]').count()) === 12
 		);
-		// The seed and every keyed sidecar were consumed: their text is gone from the DOM.
-		const leftover = await page.evaluate(() => {
-			const seed = document.querySelector('script[type="application/ogygia-page"]');
-			const sidecars = [...document.querySelectorAll('ogygia-region[wake="load"][data-hydrated][data-og-fp]')]
-				.map((r) => document.getElementById('og-props-' + r.getAttribute('data-og-fp')) ??
-					document.querySelector(`script[data-ogygia-props="${r.getAttribute('data-og-fp')}"]`))
-				.filter((s): s is HTMLScriptElement => !!s);
-			return {
-				seed: seed?.textContent?.length ?? 0,
-				sidecars: sidecars.map((s) => s.textContent?.length ?? 0)
-			};
-		});
-		check('the seed text is blanked after its single parse', leftover.seed === 0, String(leftover.seed));
-		check(
-			'every hydrated load island released its keyed sidecar text',
-			leftover.sidecars.length > 0 && leftover.sidecars.every((n) => n === 0),
-			leftover.sidecars.join(',')
+		// The seed was consumed: its text is gone from the DOM (the graph lives in the page store).
+		const seed_left = await page.evaluate(
+			() => document.querySelector('script[type="application/ogygia-page"]')?.textContent?.length ?? 0
 		);
+		check('the seed text is blanked after its single parse', seed_left === 0, String(seed_left));
 		// The header island (300 KB props outside the seed) is live.
 		await page.locator('[data-bench-header] nav button').first().click();
 		check('header island interactive after boot', (await page.locator('[data-bench-header] ul li').count()) > 0);

@@ -16,4 +16,4 @@
 
 <Counter label="below the fold" start={5} />
 
-<p><a href="/about" data-prefetch-link>about</a></p>
+<p><a href="/about" data-prefetch-link data-sveltekit-preload-data="hover">about</a></p>
