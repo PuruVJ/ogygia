@@ -500,7 +500,7 @@ importers:
         specifier: 6.3.6
         version: 6.3.6(@types/node@26.1.2)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.9.0)
 
-  internal/repro-freeze:
+  internal/repro-deep-csr:
     dependencies:
       ogygia:
         specifier: workspace:*
@@ -525,7 +525,7 @@ importers:
         specifier: ^8.2.0
         version: 8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
 
-  internal/repro-deep-csr:
+  internal/repro-freeze:
     dependencies:
       ogygia:
         specifier: workspace:*
@@ -582,9 +582,6 @@ importers:
 
   packages/ogygia:
     dependencies:
-      '@neodrag/svelte':
-        specifier: 3.0.0-next.12
-        version: 3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)
       '@sveltejs/kit':
         specifier: '>=2.70.2 <3'
         version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
@@ -594,25 +591,16 @@ importers:
       esm-env:
         specifier: ^1.2.2
         version: 1.2.2
-      estree-walker:
-        specifier: ^3.0.3
-        version: 3.0.3
-      magic-string:
-        specifier: ^1.1.0
-        version: 1.1.0
       playwright:
         specifier: ^1.40.0
         version: 1.62.1
-      rolldown:
-        specifier: '>=1.0.0'
-        version: 1.2.2
       svelte:
         specifier: ^5.40.0
         version: 5.56.8
-      tinyglobby:
-        specifier: ^0.2.17
-        version: 0.2.17
     devDependencies:
+      '@neodrag/svelte':
+        specifier: 3.0.0-next.12
+        version: 3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)
       '@orama/orama':
         specifier: ^3.1.18
         version: 3.1.18
@@ -634,12 +622,21 @@ importers:
       bits-ui:
         specifier: ^2.18.1
         version: 2.18.1(@internationalized/date@3.12.3)(@sveltejs/kit@2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(svelte@5.56.8)
+      estree-walker:
+        specifier: ^3.0.3
+        version: 3.0.3
+      magic-string:
+        specifier: ^1.1.0
+        version: 1.1.0
       mdsvex:
         specifier: ^0.12.8
         version: 0.12.8(svelte@5.56.8)
       oxlint:
         specifier: ^1.77.0
         version: 1.77.0
+      rolldown:
+        specifier: '>=1.0.0'
+        version: 1.2.2
       shiki:
         specifier: ^4.4.1
         version: 4.4.1
@@ -649,6 +646,9 @@ importers:
       svelte2tsx:
         specifier: ^0.7.60
         version: 0.7.60(svelte@5.56.8)(typescript@6.0.3)
+      tinyglobby:
+        specifier: ^0.2.17
+        version: 0.2.17
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(typescript@6.0.3)

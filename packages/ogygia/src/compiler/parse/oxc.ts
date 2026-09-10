@@ -4,11 +4,10 @@
  * original source, because every transform splices by span. That rules out `parseAst` (rollup's
  * parser: no TS) and type-stripping (shifts offsets).
  *
- * The parser comes straight from `rolldown` (ogygia's own dependency, not `vite`'s export), so the
- * construct family works the same on any supported Vite (7's rollup or 8's rolldown); a Vite-7 app
- * just also carries rolldown for this. The TS-capable oxc parser lives under `rolldown/utils` — NOT a
- * shaky choice: `rolldown/parseAst` is the rollup-compat parser (throws on TS), and Vite's own
- * `parseSync` is this same oxc parser re-exported. One import, one decision.
+ * The parser comes from the app's required `vite` peer: Vite 8 re-exports the TS-capable oxc parser
+ * as `parseSync` (byte-identical to `rolldown/utils`' — verified), so ogygia carries no `rolldown`
+ * dependency of its own for this. NOT a shaky choice: `parseAst` is the rollup-compat parser (throws
+ * on TS); `parseSync` is the oxc parser. One import, one decision.
  */
 import { createRequire } from 'node:module';
 
@@ -43,7 +42,10 @@ let node_parse_sync: RawParse | undefined;
 function node_default_parse(id: string, code: string) {
 	if (!node_parse_sync) {
 		const require = createRequire(import.meta.url);
-		node_parse_sync = (require('rolldown/utils') as { parseSync: RawParse }).parseSync;
+		// Vite re-exports the SAME oxc parser as `rolldown/utils` (byte-identical AST — verified), so
+		// this reads through the app's required `vite` peer instead of a direct `rolldown` dependency.
+		// The browser realm still installs the WASM oxc parser via `set_parser()` (below), unchanged.
+		node_parse_sync = (require('vite') as { parseSync: RawParse }).parseSync;
 	}
 	return node_parse_sync(id, code);
 }

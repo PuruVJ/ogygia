@@ -3,7 +3,7 @@
  *
  *   const nav = import.meta.og.bake(() => buildNav());   // → const nav = {…the computed tree…}
  *
- * At build the macro bundles `fn` together with the module's imports (rolldown, aliases resolved),
+ * At build the macro bundles `fn` together with the module's imports (via the app's vite / rolldown, aliases resolved),
  * executes the bundle in Node, `devalue.uneval`s the result, and rewrites the call to that literal.
  * At runtime there is no function and no work — just the answer, even in client code. "Run at build,
  * ship the answer." Content-addressed, so an unchanged `fn` (same source + same imports) re-bakes
@@ -255,24 +255,40 @@ function resolve_file(base: string): string | null {
  * fresh module URL each time so Node's ESM cache never serves a stale bake.
  */
 async function evaluate(entry_code: string, id: string, opts: BakeOptions): Promise<unknown[]> {
-	const { rolldown } = await import('rolldown');
+	// Bundle through the app's required `vite` peer (Vite 8 bundles with rolldown internally) rather
+	// than a direct `rolldown` dependency of ogygia's own — the plugin below is a plain Rollup/Vite
+	// plugin, so it drops straight into `rollupOptions`. SSR/node build; TS in the eval entry is
+	// handled by Vite's own transform.
+	const { build } = await import('vite');
 	const ENTRY = '\0ogygia-bake-entry.js';
 	const module_dir = path.dirname(id.split('?')[0]!);
-	const bundle = await rolldown({
-		input: ENTRY,
-		cwd: module_dir,
-		plugins: [bake_plugin(ENTRY, entry_code, module_dir, opts.root, opts.alias)],
-		platform: 'node',
+	const result = await build({
+		configFile: false,
+		logLevel: 'silent',
+		root: module_dir,
 		// Probe TS/JS extensions so an alias/tsconfig-path (`$lib/x`) or bare relative resolves to
 		// `x.ts` etc. — the app corpus is TypeScript with extensionless imports.
 		resolve: { extensions: ['.ts', '.tsx', '.mts', '.js', '.mjs', '.jsx', '.json', '.node'] },
-		// Node builtins resolve at runtime; everything else (app TS, npm deps) is bundled in, so the
-		// emitted file is self-contained and its location doesn't affect resolution.
-		external: (source: string) => source.startsWith('node:'),
-		logLevel: 'silent'
+		// Everything (app TS, npm deps) is bundled in so the emitted file is self-contained and its
+		// location doesn't affect resolution; only node: builtins stay external (runtime-resolved).
+		ssr: { noExternal: true, external: [] },
+		build: {
+			write: false,
+			minify: false,
+			target: 'esnext',
+			ssr: true,
+			rollupOptions: {
+				input: ENTRY,
+				external: (source: string) => source.startsWith('node:'),
+				plugins: [bake_plugin(ENTRY, entry_code, module_dir, opts.root, opts.alias)],
+				output: { format: 'esm', exports: 'named' }
+			}
+		}
 	});
-	try {
-		const { output } = await bundle.generate({ format: 'esm', exports: 'named' });
+	{
+		const output = Array.isArray(result)
+			? result[0]!.output
+			: (result as { output: Array<{ code: string }> }).output;
 		const code = output[0]!.code;
 		// The eval bundle is written through the cache interface (`BuildCache('bake').dir()`) — the
 		// same managed directory the git checkouts use — then imported and deleted.
@@ -298,8 +314,6 @@ async function evaluate(entry_code: string, id: string, opts: BakeOptions): Prom
 		} finally {
 			fs.rmSync(file, { force: true });
 		}
-	} finally {
-		await bundle.close();
 	}
 }
 
