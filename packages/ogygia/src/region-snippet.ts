@@ -26,7 +26,8 @@ import { createRawSnippet, hydrate, unmount, type Component, type Snippet } from
 import { render as ssr_render } from 'svelte/server';
 import { BROWSER } from 'esm-env';
 import { register_kind, mint } from './ref.js';
-import { kit_render_context } from './server/kit-context.js';
+import { kit_render_context, kit_request_event } from './server/kit-context.js';
+import { DEFAULT_ISLANDS_ENDPOINT } from './server/endpoint.js';
 
 /**
  * A hand-written SERVER component that renders a bare snippet: svelte has no public API to
@@ -269,10 +270,31 @@ export function slot_marker_open(id: string): string {
 }
 export const SLOT_MARKER_CLOSE = '</ogygia-slot>';
 
-/** Monotonic per-process id for slot markers. Page-unique within one SSR pass (all that matters — the id
- *  fences a marker to its payload pointer); cross-page repeats are harmless (separate documents). */
+/**
+ * Slot marker ids: PER REQUEST, so two renders of the same page mint the same ids and the HTML is
+ * byte-identical across requests (a host's post-render cache, a freeze store, an ETag all key on
+ * the bytes; a process-wide counter made every page differ from its previous render). Page-unique
+ * within one SSR pass is all the id must be — it fences a marker to its payload pointer. A hole
+ * response is spliced INTO a page that has its own sequence, so an endpoint render prefixes its
+ * ids with its region id and can never collide with the page's. Off-request (a test, a tool, the
+ * client) the process counter stands in. The request comes through the kit-context reader the
+ * handle installs (no Vite virtual here — this module is imported by plain-Node consumers too).
+ */
+const slot_seq_by_request = new WeakMap<object, { prefix: string; n: number }>();
 let _slot_seq = 0;
 export function next_slot_id(): string {
+	const event = kit_request_event() as { url?: URL } | null;
+	if (event && typeof event === 'object') {
+		let seq = slot_seq_by_request.get(event);
+		if (!seq) {
+			const url = event.url;
+			const hole = url?.pathname.endsWith(DEFAULT_ISLANDS_ENDPOINT)
+				? (url.searchParams.get('id') ?? '').slice(0, 6)
+				: '';
+			slot_seq_by_request.set(event, (seq = { prefix: hole ? hole + '-' : '', n: 0 }));
+		}
+		return 'og' + seq.prefix + (++seq.n).toString(36);
+	}
 	_slot_seq = (_slot_seq + 1) & 0x7fffffff;
 	return 'og' + _slot_seq.toString(36);
 }

@@ -23,6 +23,26 @@ export const DEFAULT_REGION_TTL_SEC = 3600;
  */
 export const PRERENDER_REGION_TTL_SEC = 10 * 365 * 24 * 3600;
 
+/**
+ * WHEN a capability minted now expires — aligned to a window, not `now + ttl`.
+ *
+ * Every render of the same hole (same id, props, session) in the same window mints the SAME
+ * `exp`, hence the SAME signature and URL: the hole's HTML is byte-identical across requests. That
+ * is what lets anything keyed on the page's bytes hit — a host app's post-render component cache,
+ * a CDN or freeze store comparing documents, an ETag. With `now + ttl` every request minted a new
+ * URL and a header block wrapping five holes was re-processed on every request (measured: seconds
+ * of server time per page on a Lambda-class host).
+ *
+ * The window is half the TTL: `exp` is the end of the window after the current one, so a
+ * capability is always valid for at least `ttl / 2` and at most `ttl` (harvested URLs still age
+ * out on the same order); consecutive windows overlap by construction, so a page rendered at the
+ * end of a window and fetched a moment later still verifies.
+ */
+export function capability_expiry(now_sec: number, ttl_sec: number): number {
+	const half = Math.max(1, Math.floor(ttl_sec / 2));
+	return (Math.floor(now_sec / half) + 2) * half;
+}
+
 /** Region ids are always 12 lowercase hex chars from the transform. */
 export const REGION_ID_RE = /^[0-9a-f]{12}$/;
 

@@ -52,6 +52,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - **Every module-preload hint is `fetchpriority="low"`, so the low-vs-normal machinery is
     deleted**: the head dedupe keeps the first tag per href, Region emits one kind of hint, and the
     runtime asks only whether an entry is hinted.
+- **Byte-identical HTML across renders: window-aligned capability expiry and per-request slot
+  ids.** A hole's signed endpoint minted `exp = now + ttl`, so the same hole got a new URL on
+  every render and any cache keyed on the page's bytes could never hit — a host app's post-render
+  component cache re-hydrated a 738 KB header block on every request (seconds of server time per
+  page on a Lambda-class host). `capability_expiry` now aligns `exp` to a half-TTL window: every
+  render in the same window mints the same URL, validity stays between ttl/2 and ttl. Slot marker
+  ids (`<ogygia-slot data-og-slot>`) came from a process-wide counter for the same reason; they are
+  per request now (a hole endpoint render prefixes its ids with its region id so a spliced hole
+  never collides with the page's).
 - **Island props reference the page seed instead of copying it.** A csr=false page ships
   `page.data` once as the page seed and every island's props again as its own sidecar; a CMS page
   hands each block island its slice of the same tree, so the same JSON crossed twice — one measured

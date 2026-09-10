@@ -12,7 +12,8 @@ import { getRequestEvent } from 'virtual:ogygia/request-event';
 import {
 	DEFAULT_ISLANDS_ENDPOINT,
 	MAX_REGION_PROPS_LEN,
-	PRERENDER_REGION_TTL_SEC
+	PRERENDER_REGION_TTL_SEC,
+	capability_expiry
 } from './endpoint.js';
 import { freeze_capture_active } from '../freeze/capture.js';
 import { encode_region_props } from './region-props.js';
@@ -104,9 +105,10 @@ export function mint_region_capability(entry: string, payload: string, ttl = 0):
 	// the short `regionTtl` window so harvested URLs age out. A FREEZE-eligible render is the
 	// prerender case at request time — the stored HTML outlives `regionTtl`, so its holes mint
 	// prerender-grade too (a warm freeze must never carry expired hole URLs).
-	const exp =
-		Math.floor(Date.now() / 1000) +
-		(building || freeze_capture_active() ? PRERENDER_REGION_TTL_SEC : regionTtl);
+	const exp = capability_expiry(
+		Math.floor(Date.now() / 1000),
+		building || freeze_capture_active() ? PRERENDER_REGION_TTL_SEC : regionTtl
+	);
 	warn_unstable_secret();
 	// A hole is dynamic by default (`ttl` 0 → the handle answers `no-store`); a positive `ttl` opts
 	// into a `private, max-age=ttl` browser cache. Empty string when 0 keeps the MAC field stable.
