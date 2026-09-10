@@ -15,7 +15,7 @@ import { DocumentTail, set_tail_reader, document_tail } from '../src/server/docu
 const region = Region as unknown as Component<Record<string, unknown>>;
 const kit_pass = KitPagePass as unknown as Component<Record<string, unknown>>;
 
-const SIDECAR_G = /<script type="application\/ogygia-props" data-ogygia-props="([0-9a-f]+)">([^<]*)<\/script>/g;
+const SIDECAR_G = /<script type="application\/ogygia-props" data-ogygia-props="([0-9a-f]+)"[^>]*>([^<]*)<\/script>/g;
 const FP_ATTR_G = /data-og-fp="([0-9a-f]+)"/g;
 const HINT_G = /<link rel="modulepreload" href="([^"]+)" fetchpriority="low">/g;
 
@@ -48,9 +48,9 @@ describe('DocumentTail', () => {
 		expect(t.empty).toBe(true);
 		t.hint('<link rel="modulepreload" href="/a.js" fetchpriority="low"><link rel="modulepreload" href="/b.js" fetchpriority="low">');
 		t.hint('<link rel="modulepreload" href="/b.js" fetchpriority="low"><link rel="modulepreload" href="/c.js" fetchpriority="low">');
-		t.props('f1', '<script data-ogygia-props="f1">1</script>');
-		t.props('f1', '<script data-ogygia-props="f1">DUPLICATE</script>');
-		t.props('f2', '<script data-ogygia-props="f2">2</script>');
+		t.props('f1', () => '<script data-ogygia-props="f1">1</script>');
+		t.props('f1', () => '<script data-ogygia-props="f1">DUPLICATE</script>');
+		t.props('f2', () => '<script data-ogygia-props="f2">2</script>');
 		expect(t.size).toEqual({ hints: 3, props: 2 });
 		expect(t.empty).toBe(false);
 		expect(t.render()).toBe(
@@ -106,7 +106,8 @@ describe('Region.svelte × the tail', () => {
 		expect(tail.size).toEqual({ hints: 1, props: 1 });
 		const html = tail.render();
 		expect(html.indexOf('modulepreload')).toBeLessThan(html.indexOf('data-ogygia-props'));
-		expect(html).toContain(`<script type="application/ogygia-props" data-ogygia-props="${fps[0]}">`);
+		// keyed twice: `data-ogygia-props` for the reconciler, `id` for the runtime's O(1) lookup
+		expect(html).toContain(`<script type="application/ogygia-props" data-ogygia-props="${fps[0]}" id="og-props-${fps[0]}"`);
 		expect(html).toContain('<link rel="modulepreload" href="/islands/tiny.js" fetchpriority="low">');
 	});
 

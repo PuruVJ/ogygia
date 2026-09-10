@@ -39,10 +39,21 @@ export class KitBoot {
 		return false;
 	}
 
-	/** Same check over a full HTML string (server seed injection). */
-	static html_has(html: string): boolean {
-		const stripped = html.replace(KitBoot.#SIDECHANNEL, '');
-		return KitBoot.#INLINE.test(stripped);
+	/** How far before `end` the string check looks. Kit appends its boot script at the END of the
+	 *  body (render.js), right before `</body>`, so this window holds it whenever it exists. */
+	static #WINDOW = 65_536;
+
+	/**
+	 * Same check over an HTML string, bounded to the last 64 KB before `end` (pass the index of
+	 * `</body>`; defaults to the end of the string). A 2.6 MB document is never scanned whole: Kit's
+	 * boot sits at the end of the body, so the window is exact, not a heuristic. The side-channel
+	 * strip still applies inside the window (P0 above); a side-channel script cut by the window's
+	 * start cannot false-match either — its payload never carries a literal `<script` (devalue and
+	 * JSON escape `<`), and `#INLINE` needs one.
+	 */
+	static html_has(html: string, end = html.length): boolean {
+		const window = html.slice(Math.max(0, end - KitBoot.#WINDOW), end);
+		return KitBoot.#INLINE.test(window.replace(KitBoot.#SIDECHANNEL, ''));
 	}
 }
 

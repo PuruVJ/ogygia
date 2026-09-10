@@ -2,33 +2,36 @@
  * SEED REFERENCES — island props that point into the page seed instead of copying it.
  *
  * THE DUPLICATION: on a csr=false page the handle ships `page.data` once as the page seed (so
- * islands can read `$page`), and every island ships its props as its own devalue sidecar. A CMS
- * page hands each block island its slice of the same `page.data` tree, so the same JSON crosses
- * twice — measured on one landing page: 674 KB of seed and 481 KB of props, of which 94% were
- * verbatim seed subtrees. Twice the bytes, and twice the server-side serialization (the larger
- * part of that page's remaining TTFB gap to a plain Kit render).
+ * islands can read `$page`), and every island ships its props as its own sidecar. A CMS page hands
+ * each block island its slice of the same `page.data` tree, so the same JSON crosses twice —
+ * measured on one landing page: 674 KB of seed and 481 KB of props, of which 94% were verbatim
+ * seed subtrees. Twice the bytes, and twice the server-side serialization (the larger part of that
+ * page's remaining TTFB gap to a plain Kit render).
  *
- * THE CODEC: when the seed is going to ship, an island's props are serialized RELATIVE to it. Any
- * plain object / array in the props that is also a node of `page.data` — by IDENTITY (the app
- * passed the same object) or by STRUCTURE (the app cloned it: a JSON round-trip, a spread — the
- * Builder SDK does) — is written as `["OgygiaSeedRef", <path>]`, a path from `page.data` to that
- * node. The client revives the reference against the ONE parsed seed of its document (the same
- * graph `page.data` reads — `runtime/seeds.ts`) and hands the island the seed's own node, by
- * reference: island props are a snapshot either way, and the DEV mutation guard warns on a write
- * into them. Largest matching ancestor wins, so a block whose whole props object is one seed node
- * becomes one short reference.
+ * THE CODEC: when the seed ships, an island's props are serialized RELATIVE to it. Any plain
+ * object / array in the props that is also a node of `page.data` — by IDENTITY (the app passed the
+ * same object) or by STRUCTURE (the app cloned it: a JSON round-trip, a spread — CMS SDKs do) — is
+ * written as `["OgygiaSeedRef", <path>]`, a path from `page.data` to that node. The client revives
+ * the reference against the ONE parsed seed of its document (the same graph `page.data` reads —
+ * `runtime/seeds.ts`) and hands the island the seed's own node, by reference: island props are a
+ * snapshot either way, and the DEV mutation guard warns on a write into them. Largest matching
+ * ancestor wins, so a block whose whole props object is one seed node becomes one short reference.
  *
  * WHAT MATCHES: plain objects and arrays whose subtree holds only plain objects, arrays, primitives
  * and Dates — no class instances (wired values, stores, snippets keep their own codec), no Maps or
- * Sets (the plain deep copy on the client would not reproduce them), no cycles. Small nodes are
- * skipped (`min_bytes`): a reference costs ~30 bytes, so it must save more than that.
+ * Sets, no cycles. Small nodes are skipped (`min_bytes`): a reference costs ~30 bytes, so it must
+ * save more than that.
  *
- * WHEN: only inside Kit's page pass of THIS document, and only once the request knows the seed
- * will ship (`seed_wanted`) — a reference into a seed that never arrives would be a hole in the
- * island's props. Islands rendered before the first `$page` reader on the page fall back to full
- * copies; that is deterministic per page, so fingerprints stay stable across renders. Every other
- * render root (a hole endpoint, a baked ticket, a foreign fragment) never references: its props
- * must be self-contained wherever the HTML is spliced.
+ * WHEN: only inside Kit's page pass of THIS document, and only when the seed ships — a reference
+ * into a seed that never arrives would be a hole in the island's props. The decision is made ONCE
+ * per request, when the document tail renders (server/props-wire.ts): every island on the page
+ * gets references then, whichever rendered first. Every other render root (a hole endpoint, a
+ * baked ticket, a foreign fragment) never references: its props must be self-contained wherever
+ * the HTML is spliced.
+ *
+ * ONE WALK: `analyze` measures a tree once — byte estimate, referenceability, JSON-exactness, a
+ * streamed promise inside — and memoises per node. The seed index, the props plan and the handle's
+ * lane/streaming decisions all read that one walk (three separate walks of a 690 KB tree before).
  *
  * Universal module (no Node imports): the index + reducer run on the server, the resolver on the
  * client, and the unit tests exercise both ends against a real devalue round trip.
@@ -70,6 +73,9 @@ function is_plain(v: unknown): v is Record<string, unknown> | unknown[] {
 	const proto = Object.getPrototypeOf(v);
 	return proto === Object.prototype || proto === null;
 }
+
+const is_thenable = (v: unknown): boolean =>
+	typeof (v as { then?: unknown } | null)?.then === 'function';
 
 /** Leaves that a plain deep copy reproduces exactly. */
 function is_leaf(v: unknown): boolean {
@@ -167,57 +173,127 @@ export function deep_equal_plain(a: unknown, b: unknown): boolean {
 	return true;
 }
 
-const index_cache = new WeakMap<object, SeedIndex>();
+/** What one walk learns about a subtree. */
+export interface Measure {
+	/** Byte estimate of the subtree's serialized form (a threshold input, not an exact count). */
+	readonly bytes: number;
+	/** Referenceable: plain objects / arrays / plain leaves only, no cycle — a seed ref may point
+	 *  at it and the client reads it back as the same plain data. */
+	readonly ref: boolean;
+	/** JSON-exact: `JSON.stringify` + `JSON.parse` reproduce it — no undefined, Date, bigint,
+	 *  non-finite number, -0, class instance, Map/Set, cycle. What picks the JSON lane. */
+	readonly json: boolean;
+	/** A thenable somewhere inside (a streamed load promise the handle must stage or settle). */
+	readonly thenable: boolean;
+}
+
+// Shared leaf measures — one object per leaf class, never one per leaf (a CMS tree is mostly
+// leaves; strings are sized inline by the walk).
+const M_NULLISH_JSON: Measure = { bytes: 4, ref: true, json: true, thenable: false };
+const M_UNDEFINED: Measure = { bytes: 4, ref: true, json: false, thenable: false };
+const M_NUMBER: Measure = { bytes: 8, ref: true, json: true, thenable: false };
+const M_NUMBER_NOJSON: Measure = { bytes: 8, ref: true, json: false, thenable: false };
+const M_BIGINT: Measure = { bytes: 8, ref: true, json: false, thenable: false };
+const M_DATE: Measure = { bytes: 24, ref: true, json: false, thenable: false };
+const M_OPAQUE: Measure = { bytes: 0, ref: false, json: false, thenable: false };
+const M_THENABLE: Measure = { bytes: 0, ref: false, json: false, thenable: true };
+const M_CYCLE: Measure = M_OPAQUE;
 
 /**
- * Byte estimate + referenceability of a plain subtree WITHOUT hashing: one post-order pointer
- * walk (`null` = not referenceable: a non-plain value inside, or a cycle). Memoised per node.
+ * The one walk: measure a value (post-order, memoised per plain node in `memo`). Every child is
+ * measured even after one disqualifies the parent: a clean sibling deeper in the tree must still
+ * get its own entry (the index walk reads the memo). Strings never allocate a measure.
  */
-function measure_subtree(
-	v: unknown,
-	memo: Map<object, number | null>,
-	on_stack: Set<object>
-): number | null {
-	// Leaves are sized without building a string for each (a CMS tree is mostly string leaves).
-	if (typeof v === 'string') return v.length + 2;
-	if (v === null || v === undefined || typeof v === 'boolean') return 4;
-	if (typeof v === 'number' || typeof v === 'bigint') return 8;
-	if (v instanceof Date) return 24;
-	if (!is_plain(v)) return null;
+function measure(v: unknown, memo: Map<object, Measure>, on_stack: Set<object>): Measure {
+	switch (typeof v) {
+		case 'string':
+			return { bytes: v.length + 2, ref: true, json: true, thenable: false };
+		case 'number':
+			return Number.isFinite(v) && !Object.is(v, -0) ? M_NUMBER : M_NUMBER_NOJSON;
+		case 'boolean':
+			return M_NULLISH_JSON;
+		case 'undefined':
+			return M_UNDEFINED;
+		case 'bigint':
+			return M_BIGINT;
+		case 'object':
+			break;
+		default:
+			return M_OPAQUE; // function, symbol
+	}
+	if (v === null) return M_NULLISH_JSON;
+	if (v instanceof Date) return M_DATE;
+	if (!is_plain(v)) return is_thenable(v) ? M_THENABLE : M_OPAQUE;
 	const cached = memo.get(v);
 	if (cached !== undefined) return cached;
-	if (on_stack.has(v)) return null;
+	// A plain-looking object carrying a SYMBOL key is a branded value (a held region, an og.$ fn
+	// descriptor, a hub brand) that a devalue reducer claims: JSON would drop the brand and a seed
+	// reference would copy it without one. Opaque, like a class instance.
+	if (!Array.isArray(v) && Object.getOwnPropertySymbols(v).length > 0) {
+		memo.set(v, M_OPAQUE);
+		return M_OPAQUE;
+	}
+	if (on_stack.has(v)) return M_CYCLE;
 	on_stack.add(v);
 	let bytes = 0;
-	let ok = true;
-	// Every child is measured even after one disqualifies the parent: a clean sibling deeper in
-	// the tree must still get its own entry (the index walk reads the memo).
+	let ref = true;
+	let json = true;
+	let thenable = false;
+	const add = (c: unknown, key_len: number) => {
+		if (typeof c === 'string') {
+			bytes += c.length + 2 + key_len;
+			return;
+		}
+		const m = measure(c, memo, on_stack);
+		bytes += m.bytes + key_len;
+		ref &&= m.ref;
+		json &&= m.json;
+		thenable ||= m.thenable;
+	};
 	if (Array.isArray(v)) {
-		for (const item of v) {
-			const b = measure_subtree(item, memo, on_stack);
-			if (b === null) ok = false;
-			else bytes += b + 1;
-		}
+		for (const item of v) add(item, 1);
 	} else {
-		for (const key in v) {
-			const b = measure_subtree((v as Record<string, unknown>)[key], memo, on_stack);
-			if (b === null) ok = false;
-			else bytes += key.length + b + 3;
-		}
+		for (const key in v) add((v as Record<string, unknown>)[key], key.length + 3);
 	}
 	on_stack.delete(v);
-	const result = ok ? bytes : null;
+	const result: Measure = { bytes, ref, json, thenable };
 	memo.set(v, result);
 	return result;
 }
+
+interface Analysis {
+	root: Measure;
+	memo: Map<object, Measure>;
+}
+
+const analysis_cache = new WeakMap<object, Analysis>();
+
+/** The walk, cached per plain root object: the seed's `page.data` is measured once per request
+ *  however many islands, lanes and decisions ask; a props object once per island. */
+function analysis(value: unknown): Analysis {
+	if (!is_plain(value)) return { root: measure(value, new Map(), new Set()), memo: new Map() };
+	const hit = analysis_cache.get(value);
+	if (hit) return hit;
+	const memo = new Map<object, Measure>();
+	const a = { root: measure(value, memo, new Set()), memo };
+	analysis_cache.set(value, a);
+	return a;
+}
+
+/** What one walk says about a value (see {@link Measure}). */
+export function analyze(value: unknown): Measure {
+	return analysis(value).root;
+}
+
+const index_cache = new WeakMap<object, SeedIndex>();
 
 /**
  * Index the seed's `data` for referencing: every referenceable node at or above `min_bytes`, by
  * identity now and by structural hash on demand (first occurrence wins — the shortest path is not
  * guaranteed, the first in key order is, which is deterministic). Cached per `data` object: one
- * index per request, however many islands ask. The identity pass is a pointer walk with a byte
- * count — no hashing, no string building — so on an app that passes the seed's own objects the
- * whole cost of referencing is this walk.
+ * index per request, however many islands ask. It reads the one measuring walk (`analyze`) and
+ * prunes: a small clean node cannot hold a large child, so its subtree is skipped BEFORE its path
+ * is materialised — on a CMS tree that is most of the nodes.
  */
 export function index_seed(data: unknown, min_bytes = 96): SeedIndex {
 	if (!is_plain(data))
@@ -232,39 +308,37 @@ export function index_seed(data: unknown, min_bytes = 96): SeedIndex {
 	if (hit) return hit;
 	const by_identity = new WeakMap<object, SeedPath>();
 	const bytes = new WeakMap<object, number>();
-	const measured = new Map<object, number | null>();
+	const measured = analysis(data).memo;
 	const nodes: SeedNode[] = [];
-	// One measuring pass over the whole tree (memoised), then a pruned walk: a node below the
-	// threshold cannot hold a child above it, so its subtree is skipped entirely — on a CMS tree
-	// that is most of the nodes. Paths are shared prefixes (parent array + one key), materialised
-	// only for the nodes that qualify.
-	measure_subtree(data, measured, new Set());
-	const visit = (v: unknown, path: SeedPath, seen: Set<object>) => {
-		if (!is_plain(v) || seen.has(v)) return;
-		const b = measured.get(v);
-		if (b === undefined) return;
-		// A small clean node cannot hold a large child: prune. A node that is NOT referenceable
-		// (null: a class instance / Map / cycle inside) may still hold clean children: descend.
-		if (b !== null && b < min_bytes) return;
+	const seen = new Set<object>();
+	// A node that is NOT referenceable (a class instance / Map / cycle inside) may still hold
+	// clean children: descend. A small clean node cannot hold a large child: prune (no path).
+	const prunable = (v: unknown): v is object => {
+		if (!is_plain(v) || seen.has(v)) return true;
+		const m = measured.get(v);
+		return m === undefined || (m.ref && m.bytes < min_bytes);
+	};
+	const visit = (v: Record<string, unknown> | unknown[], path: SeedPath) => {
 		seen.add(v);
-		if (b !== null) {
+		const m = measured.get(v)!;
+		if (m.ref) {
 			by_identity.set(v, path);
-			bytes.set(v, b);
+			bytes.set(v, m.bytes);
 			nodes.push({ node: v, path });
 		}
 		if (Array.isArray(v)) {
 			for (let i = 0; i < v.length; i++) {
 				const c = v[i];
-				if (is_plain(c)) visit(c, [...path, i], seen);
+				if (!prunable(c)) visit(c as Record<string, unknown> | unknown[], [...path, i]);
 			}
 		} else {
 			for (const key in v) {
-				const c = (v as Record<string, unknown>)[key];
-				if (is_plain(c)) visit(c, [...path, key], seen);
+				const c = v[key];
+				if (!prunable(c)) visit(c as Record<string, unknown> | unknown[], [...path, key]);
 			}
 		}
 	};
-	visit(data, [], new Set());
+	if (!prunable(data)) visit(data, []);
 	// Size buckets for structure matching; hashes memoised per seed node, computed on first ask.
 	const by_bytes = new Map<number, SeedNode[]>();
 	for (const n of nodes) {
@@ -285,26 +359,26 @@ export function index_seed(data: unknown, min_bytes = 96): SeedIndex {
 	return index;
 }
 
+export interface SeedRefPlan {
+	/** The devalue reducer for the `OgygiaSeedRef` type: `(value) => path | undefined`. */
+	reducer: (value: unknown) => SeedPath | undefined;
+	/** How many props nodes will cross as references (0 = serialize the canonical text instead). */
+	count: number;
+}
+
 /**
- * A devalue reducer for one island's props: `(value) => path | undefined`. On first use it walks
- * the props once, top-down, largest matching ancestor first — identity first, then structure
- * (hash + exact comparison) — and remembers which objects to write as references. Nodes under a
- * matched ancestor are never visited (they ride inside the reference).
+ * Plan one island's references: walk the props once, top-down, largest matching ancestor first —
+ * identity first (a pointer lookup per node, no hashing), then structure (hash + exact comparison,
+ * only for a large plain node the seed does not own, and only against the seed nodes of exactly the
+ * same byte size — usually none, or one). Nodes under a matched ancestor are never visited (they
+ * ride inside the reference). The props' own measure memo is reused, so the plan adds no walk of
+ * its own beyond the pointer lookups.
  */
-export function seed_ref_reducer(
-	index: SeedIndex,
-	props: unknown,
-	min_bytes = 96
-): (value: unknown) => SeedPath | undefined {
+export function plan_seed_refs(index: SeedIndex, props: unknown, min_bytes = 96): SeedRefPlan {
 	const matched = new WeakMap<object, SeedPath>();
-	let walked = false;
-	const walk = () => {
-		walked = true;
-		if (index.size === 0) return;
-		// Identity first: a pointer lookup per node, no hashing. Structure only for a large plain
-		// node the seed does not own — and only against the seed nodes of exactly the same byte
-		// size (usually none, or one), hashed on first ask and memoised for the request.
-		const measured = new Map<object, number | null>();
+	let count = 0;
+	if (index.size > 0) {
+		const measured = analysis(props).memo;
 		const hashed = new Map<object, { hash: string; bytes: number } | null>();
 		const seen = new Set<object>();
 		const visit = (v: unknown) => {
@@ -313,16 +387,18 @@ export function seed_ref_reducer(
 			const by_id = index.by_identity.get(v);
 			if (by_id) {
 				matched.set(v, by_id);
+				count++;
 				return;
 			}
-			const b = measure_subtree(v, measured, new Set());
-			if (b !== null && b >= min_bytes) {
-				const cands = index.candidates(b);
+			const m = measure(v, measured, new Set());
+			if (m.ref && m.bytes >= min_bytes) {
+				const cands = index.candidates(m.bytes);
 				if (cands.length) {
 					const h = hash_subtree(v, hashed, new Set())?.hash ?? null;
 					const cand = h ? cands.find((c) => index.hash_of(c) === h) : undefined;
 					if (cand && deep_equal_plain(cand.node, v)) {
 						matched.set(v, cand.path);
+						count++;
 						return;
 					}
 				}
@@ -331,11 +407,11 @@ export function seed_ref_reducer(
 			else for (const key in v) visit((v as Record<string, unknown>)[key]);
 		};
 		visit(props);
-	};
-	return (value) => {
-		if (value === null || typeof value !== 'object') return undefined;
-		if (!walked) walk();
-		return matched.get(value);
+	}
+	return {
+		reducer: (value) =>
+			value === null || typeof value !== 'object' ? undefined : matched.get(value),
+		count
 	};
 }
 

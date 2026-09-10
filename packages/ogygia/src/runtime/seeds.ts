@@ -25,7 +25,7 @@
  * no second reader, and the morph carries the next page's seed in (already blank, parsed in the
  * navigation's preflight). Devtools keeps the text: its byte ledger reads it.
  */
-import { parse } from 'devalue';
+import { parse_wire_text, wire_is_json } from './wire-format.js';
 import { page_state, set_page, reset_page, type PageSnapshot } from '../shims/page-store.svelte.js';
 import { install_page_defer, page_defer_revivers } from './page-defer.js';
 import { transport_decoders } from './app-transport.js';
@@ -40,14 +40,13 @@ const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS_
 export const PAGE_SEED_SELECTOR = 'script[type="application/ogygia-page"]';
 const REMOTE_SEED_SELECTOR = 'script[type="application/ogygia-remote"]';
 
-/** A seed or props script's payload: JSON lane when the server marked it plain, devalue otherwise. */
+/** A seed or props script's payload, in its lane (wire-format.ts): JSON when the server marked
+ *  it plain, devalue with `revivers` otherwise. Every seed / props read goes through here. */
 export function parse_sidecar_text(
 	el: Element,
 	revivers?: Record<string, (d: never) => unknown>
 ): unknown {
-	const text = el.textContent ?? '';
-	if (el.getAttribute('data-og-format') === 'json') return JSON.parse(text);
-	return parse(text, revivers as Parameters<typeof parse>[1]);
+	return parse_wire_text(el.textContent ?? '', wire_is_json(el), revivers);
 }
 
 /**

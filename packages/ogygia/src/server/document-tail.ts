@@ -14,6 +14,11 @@
  * the time an island asks for its chunk the hint is in flight and its sidecar is in the DOM
  * (`runtime/sidecar.ts` finds it by `data-og-fp`).
  *
+ * A sidecar is registered as a RENDER, not as text: the region hands over its props plan
+ * (server/props-wire.ts) and the tail produces the text when the handle renders it — after the
+ * whole page rendered, when the request knows whether the page seed ships. That is what lets every
+ * island's props serialize relative to the seed, whichever island rendered first.
+ *
  * Dedupe lives here too: one hint per href across every island on the page, one sidecar per
  * fingerprint (identical islands share it).
  *
@@ -26,12 +31,18 @@
  * Universal module: imported by Region.svelte on both legs, so no Node imports here. On the client
  * the reader is never installed and `document_tail()` is `null`.
  */
+import type { SeedIndex } from '../seed-refs.js';
+
 const MODULEPRELOAD_TAG_G = /<link\b[^>]*\brel=["']modulepreload["'][^>]*>/g;
 const LINK_HREF_RE = /\bhref=["']([^"']*)["']/;
 
+/** Produces one sidecar's `<script>` given the page seed's index when the seed ships (`null` when
+ *  it does not). */
+export type SidecarRender = (seed: SeedIndex | null) => string;
+
 export class DocumentTail {
 	readonly #hints = new Map<string, string>();
-	readonly #props = new Map<string, string>();
+	readonly #props = new Map<string, SidecarRender>();
 
 	/** Add a region's `<link rel="modulepreload">` block; each href is kept once (first wins). */
 	hint(html: string): void {
@@ -41,9 +52,9 @@ export class DocumentTail {
 		}
 	}
 
-	/** Add an island's props sidecar under its fingerprint; identical islands share one. */
-	props(fp: string, script: string): void {
-		if (!this.#props.has(fp)) this.#props.set(fp, script);
+	/** Register an island's props sidecar under its fingerprint; identical islands share one. */
+	props(fp: string, render: SidecarRender): void {
+		if (!this.#props.has(fp)) this.#props.set(fp, render);
 	}
 
 	get empty(): boolean {
@@ -55,11 +66,12 @@ export class DocumentTail {
 		return { hints: this.#hints.size, props: this.#props.size };
 	}
 
-	/** The tail's HTML: hints, then props. Empty string when nothing was recorded. */
-	render(): string {
+	/** The tail's HTML: hints, then props (each rendered now, against `seed`). Empty string when
+	 *  nothing was recorded. */
+	render(seed: SeedIndex | null = null): string {
 		let out = '';
 		for (const tag of this.#hints.values()) out += tag;
-		for (const script of this.#props.values()) out += script;
+		for (const render of this.#props.values()) out += render(seed);
 		return out;
 	}
 }

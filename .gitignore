@@ -17,6 +17,7 @@ dist/
 *.tmp.mjs
 *.tmp.*
 # ogygiaBench local installs / builds / packed tarballs
+/internal/bench/results/server-cost-prof/
 /internal/bench/frameworks/*/node_modules/
 /internal/bench/frameworks/*/.svelte-kit/
 /internal/bench/frameworks/*/build/

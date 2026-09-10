@@ -48,57 +48,37 @@ export function page_declares_speculation_rules(html: string): boolean {
 // Hoisted (they run on every SSR head transform). All single bounded `[^>]*`/attr runs — linear, no
 // backtracking; a documented (HTML-escaped) tag carries `&lt;`, never a literal `<link`, so prose
 // in a code block can't match (same law as the predicates above).
-const MODULEPRELOAD_LINK_RE = /<link\b[^>]*\brel=["']modulepreload["'][^>]*>/g;
+const LINK_TAG_RE = /<link\b[^>]*>/g;
+const LINK_REL_RE = /\brel=["']([^"']*)["']/;
 const LINK_HREF_RE = /\bhref=["']([^"']*)["']/;
-const FETCHPRIORITY_LOW_RE = /\bfetchpriority=["']low["']/;
 
 /**
- * Drop duplicate `<link rel="modulepreload">` tags (same href), keeping one per href. Each island's
- * SSR emits its own dep-hint block, so islands sharing dep chunks — or one island rendered N times —
- * repeat identical hints; a real page carried ~44 duplicate tags (~4 kB of dead head HTML). A
- * same-href duplicate is redundant whoever emitted it, so this pass is safe on app-authored hints
- * too. Priority tie-break: a chunk hinted BOTH normally (a `load` island's dep) and at
- * `fetchpriority="low"` (a `visible` island's background warm) keeps the normal copy — the low tag
- * must never demote a chunk the first paint needs. Called by the handle's head transform on the
- * chunk carrying `</head>`.
+ * Drop duplicate `<link>` tags in the HEAD — one pass over the head slice, two families:
+ *
+ *  - `rel="stylesheet"`: same href → first occurrence wins. Kit links a route's client-graph CSS
+ *    and Region.svelte links a rendered island's CSS from the render pass; a layout island compiled
+ *    as a real wrapper (a csr=true-capable layout host) is in both, so its sheet was linked twice —
+ *    two render-blocking fetches of one asset. `<style>` tags are untouched.
+ *  - `rel="modulepreload"`: same href → first occurrence wins. Each island's SSR emits its own
+ *    dep-hint block, so islands sharing dep chunks — or one island rendered N times — repeat
+ *    identical hints (a real page carried ~44 duplicate tags). Every hint ogygia emits is
+ *    `fetchpriority="low"` (Region.svelte), so there is no priority to arbitrate between copies.
+ *
+ * Every other `<link>` passes through byte-identical. The handle calls this on the HEAD SLICE of
+ * the document only (everything before `</head>`, tens of KB): the hints and the sheets live there,
+ * so the 2.6 MB body is never scanned for them.
  */
-const STYLESHEET_LINK_RE = /<link\b[^>]*\brel=["']stylesheet["'][^>]*>/g;
-
-/**
- * Drop duplicate `<link rel="stylesheet">` tags (same href) — first occurrence wins, everything
- * else passes through byte-identical. Kit links a route's client-graph CSS and Region.svelte links a
- * rendered island's CSS from the render pass; a layout island compiled as a real wrapper (a
- * csr=true-capable layout host) is in both, so its sheet was linked twice — two render-blocking
- * fetches of one asset. `<style>` tags and non-stylesheet links are untouched.
- */
-export function dedupe_stylesheet_links(html: string): string {
-	if (!html.includes('stylesheet')) return html;
-	const seen = new Set<string>();
-	return html.replace(STYLESHEET_LINK_RE, (tag) => {
+export function dedupe_head_links(head: string): string {
+	if (!head.includes('<link')) return head;
+	const sheets = new Set<string>();
+	const hints = new Set<string>();
+	return head.replace(LINK_TAG_RE, (tag) => {
+		const rel = LINK_REL_RE.exec(tag)?.[1];
+		const seen = rel === 'stylesheet' ? sheets : rel === 'modulepreload' ? hints : null;
+		if (seen === null) return tag;
 		const href = LINK_HREF_RE.exec(tag)?.[1];
 		if (href === undefined) return tag;
 		if (seen.has(href)) return '';
-		seen.add(href);
-		return tag;
-	});
-}
-
-export function dedupe_modulepreload_links(html: string): string {
-	if (!html.includes('modulepreload')) return html;
-	// Pass 1: hrefs that have at least one normal-priority hint.
-	const normal = new Set<string>();
-	for (const m of html.matchAll(MODULEPRELOAD_LINK_RE)) {
-		if (!FETCHPRIORITY_LOW_RE.test(m[0])) {
-			const href = LINK_HREF_RE.exec(m[0])?.[1];
-			if (href !== undefined) normal.add(href);
-		}
-	}
-	// Pass 2: emit one tag per href; a low-priority copy shadowed by a normal one is dropped.
-	const seen = new Set<string>();
-	return html.replace(MODULEPRELOAD_LINK_RE, (tag) => {
-		const href = LINK_HREF_RE.exec(tag)?.[1] ?? tag;
-		if (seen.has(href)) return '';
-		if (FETCHPRIORITY_LOW_RE.test(tag) && normal.has(href)) return '';
 		seen.add(href);
 		return tag;
 	});

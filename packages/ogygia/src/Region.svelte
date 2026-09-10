@@ -30,16 +30,10 @@
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
-	import { record_page, seed_wanted } from './page-seed-registry.js';
+	import { record_page } from './page-seed-registry.js';
 	import { document_tail } from './server/document-tail.js';
-	import { index_seed, seed_ref_reducer, SEED_REF_KEY } from './seed-refs.js';
+	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
 	import { isNested, setNested, isInLake, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
-	import { REF_WIRE_KEY, ref_reducer } from './ref.js';
-	// PULL-registration inside stringify_props (idempotent; no import-time side effects)
-	import { register_wire_kind } from './live-transport.js';
-	import { register_store_kind, register_derived_kind } from './store-transport.js';
-	import { register_snippet_kind } from './region-snippet.js';
-	import { register_fn_kind } from './fn-transport.js';
 	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
 	import { register_late_region } from './late-region-registry.js';
@@ -224,35 +218,6 @@
 	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();
 
-	/** Island props cross classes, stores, snippets, og.$ fns and resumable deriveds. */
-	const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
-
-	/**
-	 * @param {unknown} value @param {string} entry
-	 * @param {((v: unknown) => unknown) | null} [seed_refs] the seed-reference reducer for THIS
-	 *   island's props (seed-refs.ts), when its props may point into the page seed
-	 */
-	function stringify_props(value, entry, seed_refs = null) {
-		register_wire_kind();
-		register_store_kind();
-		register_snippet_kind();
-		register_fn_kind();
-		register_derived_kind();
-		try {
-			const reducers = { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) };
-			if (seed_refs) reducers[SEED_REF_KEY] = seed_refs;
-			return stringify(value, reducers);
-		} catch (e) {
-			const detail = e instanceof Error ? e.message : String(e);
-			throw new Error(
-				`[ogygia] island "${entry}": a captured prop is not serializable — ${detail}. ` +
-					`Captured host values cross the boundary via devalue; functions/Promises cannot, and a ` +
-					`class instance only can when the class declares a static [ogygia.wire] codec. ` +
-					`Pass a serializable value, add a codec, or move that logic inside the island component.`
-			);
-		}
-	}
-
 	// ─────────────────────────────────────────────────────────── island branch ──
 	// Normalized island inputs, from placement props OR a held dual. `as_dual` is the type-narrowed
 	// reactive read of the dual value (a Promise `of` never lands here — see `held_dual_island`).
@@ -388,41 +353,19 @@
 	// base, and `asset()` supplies that prefix — so we never special-case dev URLs.)
 	const island_module_url = $derived(nested || !island_entry ? '' : asset(island_entry));
 
-	// SEED REFERENCES (seed-refs.ts): inside Kit's page pass, once the request knows the seed will
-	// ship, this island's props are serialized RELATIVE to `page.data` — any plain subtree that is
-	// also a seed node (by identity, or by structure when the app cloned it) becomes a short path
-	// instead of a second copy of the same JSON. Decided at init, like the tail: the answer only
-	// ever flips from "no seed yet" to "seed", in document order, so a page's fingerprints are
-	// stable across renders.
-	const seed_refs = (() => {
-		if (!tail || !is_island || island_inline || !seed_wanted()) return null;
-		try {
-			return seed_ref_reducer(index_seed(untrack(() => page.data)), untrack(() => island_props_wire));
-		} catch {
-			return null; // no live page (isolated render) — copies, as before
-		}
-	})();
-	const island_payload = $derived(
-		nested ? '' : stringify_props(island_props_wire, island_entry, seed_refs).split(LT).join('\\u003C')
+	// THE WIRE PLAN (server/props-wire.ts): one walk of this island's props picks its lane (plain
+	// JSON, or devalue for anything devalue exists for) and yields the CANONICAL, seed-independent
+	// text the fingerprint hashes. The sidecar's final text is produced later, when the document
+	// tail renders — by then the request knows whether the page seed ships, and a props subtree
+	// that is a seed node crosses as a reference (seed-refs.ts), whichever island rendered first.
+	const island_wire = $derived(
+		nested || !is_island || island_inline ? null : plan_props_wire(island_props_wire, island_entry)
 	);
 	// SERVER-DELTA parity: the island's fingerprint, IDENTICAL to the client reconciler's
-	// region_props_fp (entry attr + '' endpoint + props-seed text). Emitted as data-og-fp so the
-	// client can send it back on nav and the server can skip re-rendering an unchanged island.
-	const island_fp = $derived(
-		is_island && !island_inline ? fingerprint_of(island_module_url, '', island_payload) : ''
-	);
-	// The sidecar is KEYED by the same fingerprint (`data-ogygia-props="<fp>"`), so the runtime finds
-	// it wherever it sits — adjacent, or at the end of the body (runtime/sidecar.ts).
-	const island_props_script = $derived(
-		LT +
-			'script type="application/ogygia-props" data-ogygia-props' +
-			(island_fp ? '="' + island_fp + '"' : '') +
-			GT +
-			island_payload +
-			LT +
-			'/script' +
-			GT
-	);
+	// region_props_fp (entry attr + '' endpoint + props text). Emitted as data-og-fp so the client
+	// can send it back on nav and the server can skip re-rendering an unchanged island. A function
+	// of the props alone: the same props give the same fingerprint with or without the seed.
+	const island_fp = $derived(island_wire ? fingerprint_of(island_module_url, '', island_wire.canonical) : '');
 	// SERVER-DELTA (D3): SKIP rendering a NON-cached island the client already has live (its fp is
 	// in the SPA nav's x-ogygia-known set). Emit the region's identifying attrs + props script but NO
 	// component content — the reconciler keeps the live node (same data-key). Safe: known_region_fps()
@@ -441,14 +384,20 @@
 	// region exactly once.
 	const island_props_tail =
 		!!tail &&
-		is_island &&
-		!island_inline &&
 		untrack(() => {
-			if (!island_fp) return false;
-			tail.props(island_fp, island_props_script);
+			const wire = island_wire;
+			const fp = island_fp;
+			if (!wire || !fp) return false;
+			// The sidecar is KEYED by the fingerprint (`data-ogygia-props` + `id`), so the runtime
+			// finds it wherever it sits — adjacent, or at the end of the body (runtime/sidecar.ts).
+			tail.props(fp, (seed) => props_sidecar(fp, wire.wire(seed)));
 			return true;
 		});
-	const island_props_inline = $derived(island_props_tail ? '' : island_props_script);
+	// Adjacent sidecar (no tail: a hole response, a baked ticket, a router document, a test render):
+	// self-contained, never seed-relative.
+	const island_props_inline = $derived(
+		island_props_tail || !island_wire ? '' : props_sidecar(island_fp, island_wire.wire(null))
+	);
 
 	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
 	// `wake: 'visible'` / `wake: 'interaction'` (under `preload: 'all'`) — the SAME hints. All of
@@ -475,11 +424,8 @@
 		// first paint — the server painted the content — so island code must never outrank the CSS
 		// and the LCP image. At normal priority a header island with a 1.7 MB closure pushed a 79 KB
 		// hero from 1 s to 5 s on a 1.6 Mbps line; at low the chunk still lands before the runtime
-		// (which waits for the document to parse) asks for it on any normal line.
-		// TODO(preload-priority): with everything low the load/background split below and in
-		// `server_modulepreload` is dead machinery — collapse it (and `dedupe_modulepreload_links`'s
-		// low-vs-normal shadowing) once this has proven out on a real page.
-		const low = ' fetchpriority="low"';
+		// (which waits for the document to parse) asks for it on any normal line. There is no other
+		// priority anywhere: the head dedupe and the runtime's hint lookup know only "hinted or not".
 		const hrefs = [island_module_url];
 		const add_with_deps = (entry, url) => {
 			const own = url ? asset(url) : '';
@@ -494,13 +440,10 @@
 		// hydrate — preload their entries (+ deps) in the same breath. RENDER-GATED by construction:
 		// the link exists iff the island that carries the snippet actually rendered (the compiler's
 		// old static-scan emission preloaded every portable candidate in the host, rendered or not).
-		// The payload embeds each descriptor's public entry URL; prod-shaped (dev has no preloads).
-		// Match any appDir (`/<appDir>/immutable/og-region.<hash>.js`), not a hardcoded `/_app/`.
-		for (const m of island_payload.match(/\/[^"\s]+\/immutable\/og-region\.[0-9a-f]+\.js/g) ?? []) {
-			add_with_deps(m, m);
-		}
+		// The wire plan found each descriptor's public entry URL in the payload (props-wire.ts).
+		for (const m of island_wire?.live_entries ?? []) add_with_deps(m, m);
 		let html = '';
-		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + low + GT;
+		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '" fetchpriority="low"' + GT;
 		return html;
 	});
 	// Hints ride the document tail on a Kit page (see `tail` above); in the head everywhere else.
@@ -531,14 +474,10 @@
 	// nav. The endpoint (which fetches the hole's HTML) is minted from `__entry` above, independently.
 	const server_region_entry = $derived(!nested && __module ? asset(__module) : '');
 
-	const server_payload = $derived(
-		nested || !__hydrate ? '' : stringify_props(__props, __entry).split(LT).join('\\u003C')
-	);
-	const server_props_script = $derived(
-		server_payload
-			? LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + server_payload + LT + '/script' + GT
-			: ''
-	);
+	// A hydrating hole's props: ADJACENT and self-contained (the hole's HTML is spliced by the
+	// runtime), unkeyed, in whichever lane the props qualify for (props-wire.ts).
+	const server_wire = $derived(nested || !__hydrate ? null : plan_props_wire(__props, __entry));
+	const server_props_script = $derived(server_wire ? props_sidecar('', server_wire.wire(null)) : '');
 
 	const server_wants_modulepreload = $derived(
 		!!__module &&
@@ -557,15 +496,14 @@
 		const background =
 			(__hydrate === 'visible' || __hydrate === 'interaction') && __hydrate !== __defer;
 		if (background && preloadPolicy !== 'all') return '';
-		// Low for every hint — see `island_preload` (and its TODO(preload-priority)).
-		const low = ' fetchpriority="low"';
+		// Low for every hint — see `island_preload`.
 		const hrefs = [server_region_entry];
 		for (const dep of islandDeps(__module)) {
 			const href = asset(dep);
 			if (href && !hrefs.includes(href)) hrefs.push(href);
 		}
 		let html = '';
-		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + low + GT;
+		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '" fetchpriority="low"' + GT;
 		return html;
 	});
 	const server_fetch_preload = $derived.by(() => {
@@ -743,10 +681,8 @@
 	}
 	const held_props_script = $derived.by(() => {
 		if (!resolved || resolved.kind !== 'deferred' || !resolved.hydrate || !resolved.url) return '';
-		const payload = stringify_devalue(resolved.props).split(LT).join('\\u003C');
-		return (
-			LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + payload + LT + '/script' + GT
-		);
+		// devalue output is `<`-safe by itself; adjacent and unkeyed, like a hole's.
+		return props_sidecar('', { text: stringify_devalue(resolved.props), json: false });
 	});
 	// DEVTOOLS (server realm): emit ONE `server.region.rendered` per real <ogygia-region> this SSR pass
 	// produces (inline/nested components ship no region, so they are skipped). Reads the already-computed
@@ -763,7 +699,7 @@
 						fp: island_fp || '',
 						mode: 'island',
 						entry: island_module_url || undefined,
-						propsBytes: island_payload.length
+						propsBytes: island_wire?.canonical.length ?? 0
 					});
 					if (island_skip)
 						record_server_event({ domain: 'server', name: 'server.delta.skip', fp: island_fp || '' });
@@ -774,7 +710,7 @@
 						fp: '',
 						mode: 'server',
 						entry: server_region_entry || undefined,
-						propsBytes: server_payload.length
+						propsBytes: server_wire?.canonical.length ?? 0
 					});
 				} else if (is_lake && lake_inside) {
 					record_server_event({

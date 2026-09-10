@@ -27,6 +27,8 @@ import type { Component } from 'svelte';
 import Region from './Region.svelte';
 import { PageSeed } from './server/page-seed.js';
 import { page_seed_reducers } from './server/page-stream.js';
+import { analyze } from './seed-refs.js';
+import { WIRE_FORMAT_ATTR, WIRE_FORMAT_JSON } from './server/props-wire.js';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import { freeze_capture_active } from './freeze/capture.js';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
@@ -155,6 +157,7 @@ export async function document(
 	// handle injects for a Kit page, built here from the caller's snapshot (router-rendered pages).
 	if (options.pageState) {
 		const s = options.pageState;
+		// Same lanes as the handle's seed: native JSON when the slice is JSON-exact, devalue otherwise.
 		const payload = PageSeed.serialize(
 			{
 				url: s.url,
@@ -165,10 +168,16 @@ export async function document(
 				form: s.form,
 				error: s.error
 			},
-			(v: unknown) => stringify(v, page_seed_reducers)
+			(v: unknown) => stringify(v, page_seed_reducers),
+			// (form/error absent → serialized as null, which is JSON)
+			analyze(s.data).json && analyze(s.form ?? null).json && analyze(s.error ?? null).json
 		);
-		if (payload)
-			head.push(`<script type="application/ogygia-page" data-ogygia-page>${payload}</script>`);
+		if (payload) {
+			const format = payload.json ? ` ${WIRE_FORMAT_ATTR}="${WIRE_FORMAT_JSON}"` : '';
+			head.push(
+				`<script type="application/ogygia-page" data-ogygia-page${format}>${payload.text}</script>`
+			);
+		}
 	}
 
 	const html =

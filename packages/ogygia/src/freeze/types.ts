@@ -16,6 +16,10 @@ export type FreezeEntry =
 	| {
 			kind: 'page';
 			html: string;
+			/** Index of `</head>` in `html` — where a served-from-store copy gets its doc marker
+			 *  stamped by slicing (no copy of the page per hit). Absent on entries written before
+			 *  the field existed; the read side then finds it once. */
+			head_end?: number;
 			/** Headers to replay on a hit (content-type + the verdict's cache-control + edge extras). */
 			headers: Record<string, string>;
 			/** Epoch ms at store time — TTL backstop math on the read side for stores without EX. */

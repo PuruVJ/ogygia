@@ -75,11 +75,16 @@ export function documentIsCsrTrue(): boolean {
 	if (BROWSER) return kit_hydrates_page();
 	try {
 		const event = getRequestEvent() as { route?: { id?: string | null } };
-		const id = event.route?.id;
-		return id != null && csr_true_routes.has(normalize_route_id(id));
+		return route_is_csr_true(event.route?.id);
 	} catch {
 		return false; // off-request (prerender helper, etc.) → not a Kit-hydrated document
 	}
+}
+
+/** The same fact from a route id in hand (the handle has the event): is this route's leaf page
+ *  csr=true? A build-time answer — never a scan of the rendered document. */
+export function route_is_csr_true(id: string | null | undefined): boolean {
+	return id != null && csr_true_routes.has(normalize_route_id(id));
 }
 
 /** Per-request: only one `data-ogygia-runtime` script should be emitted (the first island). */
