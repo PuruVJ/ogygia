@@ -14,12 +14,12 @@ export {
 	invalidateAll,
 	preloadData,
 	preloadCode,
-	beforeNavigate,
-	afterNavigate,
 	disableScrollHandling,
 	bust_page_cache,
 	spa_html_cacheable
 } from './runtime/router.js';
+// Lifecycle-bound (unsubscribe on component destroy), like Kit's.
+export { beforeNavigate, afterNavigate } from './runtime/nav-hooks.js';
 
 export type {
 	NavTarget,

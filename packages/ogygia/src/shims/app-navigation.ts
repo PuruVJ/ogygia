@@ -6,12 +6,12 @@ export {
 	invalidateAll,
 	preloadData,
 	preloadCode,
-	beforeNavigate,
-	afterNavigate,
 	disableScrollHandling,
 	pushState,
 	replaceState
 } from '../runtime/router.js';
+// Lifecycle-bound (unsubscribe on component destroy), like Kit's.
+export { beforeNavigate, afterNavigate } from '../runtime/nav-hooks.js';
 
 // `onNavigate` (view-transition hook) — accept + no-op (VT already handled by router).
 export function onNavigate() {

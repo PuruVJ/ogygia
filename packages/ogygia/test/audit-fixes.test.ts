@@ -227,7 +227,7 @@ describe('audit fixes — concurrency gate', () => {
 
 describe('audit fixes — head_node_key', () => {
 	it('keys link/meta without full outerHTML when possible', async () => {
-		const { head_node_key } = await import('../dist/runtime/router.js');
+		const { head_node_key } = await import('../dist/runtime/router-nav.js');
 		const attr = (map: Record<string, string>) => (n: string) => map[n] ?? null;
 		const link = {
 			tagName: 'LINK',
@@ -246,7 +246,8 @@ describe('audit fixes — head_node_key', () => {
 	});
 
 	it('keys Kit FOUC and Vite HMR styles by role, not content length', async () => {
-		const { head_node_key, keep_head_node_across_spa } = await import('../dist/runtime/router.js');
+		const { head_node_key, keep_head_node_across_spa } =
+			await import('../dist/runtime/router-nav.js');
 		const fouc = {
 			tagName: 'STYLE',
 			getAttribute: (n: string) => (n === 'data-sveltekit' ? '' : null),
