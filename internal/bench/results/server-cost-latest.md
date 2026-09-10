@@ -18,5 +18,14 @@ before) is gone from the seed/props path (JSON lane). What remains in ogygia's o
 Kit's rope), `measure` 216 ms (the one seed/props walk), `plan_props_wire` 165 ms (native
 `JSON.stringify`), the transform body 255 ms.
 
+## client-boot (`node internal/bench/client-boot.mjs`, same page, Chromium, 4× CPU throttle, median of 3)
+
+| | server half only (88ebaa2) | merged client half (784eb95) |
+| --- | --- | --- |
+| long tasks after DCL | 0 | 0 (the page is light; the guard is `e2e/long-task-budget`) |
+| all 12 `wake:'load'` islands hydrated | 331 ms | 351 ms (one island per task — the scheduler's yields) |
+| og-runtime self time | 13 ms | 5 ms (hydrate core + navigation are lazy chunks now) |
+| seed text left in the DOM | 299 KB | 0 (parsed once, blanked) |
+
 Kit's own, paid by both routes: `devalue.uneval` of every load node on csr=false (1.4 s, the result
 is discarded) and the ETag `hash()` over the whole HTML (0.8 s) — ~1.8 ms per request here.
