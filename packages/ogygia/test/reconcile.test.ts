@@ -58,7 +58,11 @@ describe('fingerprint_of — the change key (did inputs change)', () => {
 });
 
 // R1 stamping + shadow guard use a DOM. Skip if jsdom-less; these run under the happy-dom/jsdom env.
-import { stamp_region_keys, region_in_shadow, region_props_text } from '../src/runtime/reconcile.js';
+import {
+	NO_RECONCILE_SELECTOR,
+	stamp_region_keys,
+	region_props_text
+} from '../src/runtime/reconcile.js';
 
 const hasDOM = typeof document !== 'undefined';
 (hasDOM ? describe : describe.skip)('R1 stamping + shadow guard', () => {
@@ -127,16 +131,11 @@ const hasDOM = typeof document !== 'undefined';
 		expect(key(a)).not.toBe(key(c)); // PATCH
 	});
 
-	it('region_in_shadow flags an open shadow root containing a region + the opt-out attr', () => {
+	it('the explicit opt-out is one selector the router checks on either document', () => {
 		const b = body('<div></div>');
-		expect(region_in_shadow(b)).toBe(false); // plain light DOM
-		const host = document.createElement('wds-card');
-		const sr = host.attachShadow({ mode: 'open' });
-		sr.innerHTML = '<ogygia-region entry="./x.js"></ogygia-region>';
-		b.appendChild(host);
-		expect(region_in_shadow(b)).toBe(true); // region inside shadow → fall back
+		expect(b.querySelector(NO_RECONCILE_SELECTOR)).toBeNull();
 		const b2 = body('<div data-og-no-reconcile></div>');
-		expect(region_in_shadow(b2)).toBe(true); // explicit opt-out
+		expect(b2.querySelector(NO_RECONCILE_SELECTOR)).not.toBeNull(); // explicit opt-out → fall back
 	});
 });
 

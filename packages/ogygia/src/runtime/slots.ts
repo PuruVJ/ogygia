@@ -95,16 +95,6 @@ export type FrameOps = {
 	stream(endpoints: string[]): Promise<void>;
 };
 
-/**
- * Per-document lifecycle, filled by {@link ./core.js core} in `boot()` (not by a feature). The
- * router reads it around a body swap so router modules never import core's Svelte component graph.
- */
-export type SpaLifecycle = {
-	prepare(): void;
-	finish(): void;
-	softInvalidate(doc: Document): void;
-};
-
 // ── nav ──────────────────────────────────────────────────────────────────
 /**
  * SPA navigation, filled by the router feature. Read by the kit-remote client stub (used by the
@@ -125,7 +115,6 @@ export type Slots = {
 	wire: WireOps | null;
 	remoteSeeds: RemoteSeedOps | null;
 	frames: FrameOps | null;
-	spaLifecycle: SpaLifecycle | null;
 	nav: NavOps | null;
 	/**
 	 * Cross-island context bridge, filled by the `context` feature. Walks the DOM from an island up
@@ -159,7 +148,6 @@ export const slots: Slots = {
 	wire: null,
 	remoteSeeds: null,
 	frames: null,
-	spaLifecycle: null,
 	nav: null,
 	context: null
 };

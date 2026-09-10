@@ -2,9 +2,14 @@
  * `hydrate: 'interaction'` — the island sleeps until someone actually uses it, and the interaction
  * that woke it is not lost.
  *
- * WAKE (capture-phase, on the region): `pointerdown` | `keydown` | `focusin` | `click`. The first
- * of these starts hydration. WARM (not a wake): `pointerenter` prefetches the island module, so by
- * the time the press lands the chunk is usually cached and the wake is one microtask.
+ * WAKE (capture-phase): `pointerdown` | `keydown` | `focusin` | `click`. The first of these starts
+ * hydration. WARM (not a wake): the pointer moving over the region prefetches the island module, so
+ * by the time the press lands the chunk is usually cached and the wake is one microtask.
+ *
+ * DELEGATED: the listeners live on the DOCUMENT, once — five per armed island used to be five
+ * hundred on a page of interaction islands. An event resolves to the nearest ARMED region above its
+ * target (`closest`, walking up past nested regions that are not armed) and that region's state
+ * handles it exactly as its own capture listener did.
  *
  * HYDRATION REPLACES NODES. Svelte's hydrate pass may recreate the region's DOM, so nothing
  * captured before the wake can be replayed/restored by node reference — the original elements are
@@ -27,14 +32,14 @@
  * Replayed events are NOT trusted user gestures (`event.isTrusted === false`): `window.open`,
  * clipboard, fullscreen from the first interaction will be blocked by the browser. Components can
  * detect the situation via `hydratedBy() === 'interaction'`.
+ *
+ * The capture (this module) is what must run synchronously inside the first event. The RESTORE +
+ * REPLAY half (./interaction-replay.ts) is only needed once an island has woken, so it loads when
+ * the first region arms — off the boot path, ahead of the first wake.
  */
 
 import { slots } from './slots.js';
 import { warm_island_module } from './region-endpoint-url.js';
-import { emit as dt_emit } from '../devtools/bus.js';
-
-// DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
-const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
 /** Feature entry: fill the `interaction` slot — wake a cold island on first use, warm on hover. */
 export function install() {
@@ -48,6 +53,7 @@ export function install() {
 }
 
 const WAKE_EVENTS = ['pointerdown', 'keydown', 'focusin', 'click'] as const;
+const ARMED_SELECTOR = 'ogygia-region[wake="interaction"]';
 
 /** Form controls whose typed value must survive hydration. */
 const VALUE_SELECTOR = 'input, textarea, select';
@@ -76,7 +82,7 @@ export function resolve_address(region: Element, addr: number[]): Element | null
 	return node;
 }
 
-type FieldSnapshot = {
+export type FieldSnapshot = {
 	/** The PRE-hydration node. Values are read from it AT RESTORE TIME: the wake fires on the very
 	 * first keydown — BEFORE that key's character has landed — and more keystrokes land in this
 	 * node while the island loads. A detached node keeps its `.value`, so at restore it holds
@@ -96,38 +102,7 @@ function snapshot_fields(region: Element): FieldSnapshot[] {
 	return out;
 }
 
-/** Re-apply what the user typed while the island was waking, at each field's ADDRESS; sync `bind:`. */
-function restore_fields(region: Element, fields: FieldSnapshot[]) {
-	for (const s of fields) {
-		const el = resolve_address(region, s.addr);
-		if (!el || el.tagName !== s.tag) continue;
-		const f = el as HTMLInputElement;
-		if (f === s.el) continue; // hydration reused the node — nothing was lost
-		let changed = false;
-		if (f.value !== s.el.value) {
-			f.value = s.el.value;
-			changed = true;
-		}
-		if (s.el instanceof HTMLInputElement && f.checked !== s.el.checked) {
-			f.checked = s.el.checked;
-			changed = true;
-		}
-		if (changed) {
-			try {
-				const { selectionStart, selectionEnd } = s.el;
-				if (selectionStart != null && selectionEnd != null) {
-					f.setSelectionRange(selectionStart, selectionEnd);
-				}
-			} catch {
-				// non-text input types reject selection access
-			}
-			f.dispatchEvent(new Event('input', { bubbles: true }));
-			f.dispatchEvent(new Event('change', { bubbles: true }));
-		}
-	}
-}
-
-type QueuedClick = {
+export type QueuedClick = {
 	addr: number[];
 	/** The deepest node of the click's composed path when it lies INSIDE a web component's shadow
 	 *  tree (a design-system button's inner <button>): a host-level replay never reaches the shadow-internal
@@ -137,146 +112,135 @@ type QueuedClick = {
 	init: MouseEventInit;
 };
 
+/** One armed region's state — what its own capture listeners used to close over. */
+type Armed = {
+	region: Element;
+	warm: () => void;
+	fire: () => Promise<void> | void;
+	woken: boolean;
+	warmed: boolean;
+	queued: QueuedClick[];
+};
+
+const armed = new Map<Element, Armed>();
+let installed = false;
+
+/** THE REPLAY HALF, loaded once, when the first region arms. */
+type Replay = typeof import('./interaction-replay.js');
+let replay_promise: Promise<Replay> | null = null;
+function replay(): Promise<Replay> {
+	return (replay_promise ??= import('./interaction-replay.js'));
+}
+
+/** The nearest ARMED region above an event's target (past nested regions that are not armed). */
+function armed_region_of(target: EventTarget | null): Armed | null {
+	let el = target instanceof Element ? target.closest(ARMED_SELECTOR) : null;
+	while (el) {
+		const a = armed.get(el);
+		if (a) return a;
+		el = el.parentElement?.closest(ARMED_SELECTOR) ?? null;
+	}
+	return null;
+}
+
+function on_wake_event(e: Event): void {
+	if (armed.size === 0) return;
+	const a = armed_region_of(e.target);
+	if (a) wake(a, e);
+}
+
+/** `pointerover` bubbles (unlike `pointerenter`) — the pointer crossing INTO an armed region, from
+ *  any descendant, warms its module once. */
+function on_warm_event(e: Event): void {
+	if (armed.size === 0) return;
+	const a = armed_region_of(e.target);
+	if (!a || a.warmed) return;
+	a.warmed = true;
+	a.warm();
+}
+
+function install_listeners(): void {
+	if (installed) return;
+	installed = true;
+	for (const type of WAKE_EVENTS) document.addEventListener(type, on_wake_event, { capture: true });
+	document.addEventListener('pointerover', on_warm_event, { capture: true, passive: true });
+}
+
+function wake(a: Armed, e: Event): void {
+	const { region, queued } = a;
+	// While waking (and before), clicks are canceled + queued: their activation happens once,
+	// on the replay, when the island's handlers exist. Everything else passes through natively.
+	if (e.type === 'click' && e.target instanceof Element) {
+		const addr = element_address(region, e.target);
+		if (addr) {
+			const me = e as MouseEvent;
+			e.preventDefault();
+			// `e.target` is already retargeted to the shadow HOST; keep the real deepest node too.
+			const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+			const deep = path.length && path[0] !== e.target ? path[0] : null;
+			queued.push({
+				addr,
+				deep,
+				tag: e.target.tagName,
+				init: {
+					bubbles: true,
+					cancelable: true,
+					composed: true,
+					clientX: me.clientX,
+					clientY: me.clientY,
+					button: me.button,
+					ctrlKey: me.ctrlKey,
+					metaKey: me.metaKey,
+					shiftKey: me.shiftKey,
+					altKey: me.altKey,
+					detail: me.detail
+				}
+			});
+		}
+	}
+	if (a.woken) return;
+	a.woken = true;
+
+	// Typed-so-far values + focus, captured as ADDRESSES (hydration may replace the nodes).
+	const fields = snapshot_fields(region);
+	const active = document.activeElement;
+	const active_addr =
+		active instanceof Element && region.contains(active) ? element_address(region, active) : null;
+
+	const disarm = () => armed.delete(region);
+	Promise.all([replay(), Promise.resolve(a.fire())]).then(
+		([r]) => {
+			disarm();
+			r.after_wake(region, fields, active_addr, queued);
+		},
+		(err) => {
+			// Hydration FAILED (chunk 404, network drop). Disarm so the region stops canceling
+			// clicks — native behavior (links, form posts, checkboxes) must keep working on the
+			// dead-but-real HTML. Replay the swallowed clicks so the failed one still acts.
+			disarm();
+			replay().then((r) => r.replay_clicks(region, queued));
+			console.error('[ogygia] interaction island failed to hydrate — leaving it static.', err);
+		}
+	);
+}
+
 /**
  * Arm a cold `wake="interaction"` region.
  *
  * @param region the `<ogygia-region>` element
- * @param warm   prefetch the island module (no hydrate) — wired to `pointerenter`
+ * @param warm   prefetch the island module (no hydrate) — wired to the pointer entering the region
  * @param fire   begin hydration; resolves when the island is live
- * @returns disarm() — remove every listener (region disconnected before any interaction)
+ * @returns disarm() — forget the region (disconnected before any interaction)
  */
 export function arm_interaction(
 	region: Element,
 	warm: () => void,
 	fire: () => Promise<void> | void
 ): () => void {
-	let woken = false;
-	const queued: QueuedClick[] = [];
-
-	const on_event = (e: Event) => {
-		// While waking (and before), clicks are canceled + queued: their activation happens once,
-		// on the replay, when the island's handlers exist. Everything else passes through natively.
-		if (e.type === 'click' && e.target instanceof Element) {
-			const addr = element_address(region, e.target);
-			if (addr) {
-				const me = e as MouseEvent;
-				e.preventDefault();
-				// `e.target` is already retargeted to the shadow HOST; keep the real deepest node too.
-				const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
-				const deep = path.length && path[0] !== e.target ? path[0] : null;
-				queued.push({
-					addr,
-					deep,
-					tag: e.target.tagName,
-					init: {
-						bubbles: true,
-						cancelable: true,
-						composed: true,
-						clientX: me.clientX,
-						clientY: me.clientY,
-						button: me.button,
-						ctrlKey: me.ctrlKey,
-						metaKey: me.metaKey,
-						shiftKey: me.shiftKey,
-						altKey: me.altKey,
-						detail: me.detail
-					}
-				});
-			}
-		}
-		if (woken) return;
-		woken = true;
-
-		// Typed-so-far values + focus, captured as ADDRESSES (hydration may replace the nodes).
-		const fields = snapshot_fields(region);
-		const active = document.activeElement;
-		const active_addr =
-			active instanceof Element && region.contains(active) ? element_address(region, active) : null;
-
-		Promise.resolve(fire()).then(
-			() => {
-				disarm();
-				restore_fields(region, fields);
-				if (active_addr) {
-					const el = resolve_address(region, active_addr);
-					if (el instanceof HTMLElement && document.activeElement !== el) el.focus();
-				}
-				// Replay in arrival order at each click's address (tag-checked against drift).
-				const replayed = queued.length;
-				// One frame later: hydration just (re)bound the island's web-component wiring (a
-				// a dropdown web component's `target` element, set by a reactive statement) and many
-				// components apply such changes in their own render tick. A synchronous replay lands
-				// before that tick and toggles nothing; after a frame the component is settled.
-				const replay = () => {
-					for (const q of queued) {
-						const t = resolve_address(region, q.addr);
-						if (!t || t.tagName !== q.tag) continue;
-						// A web component's shadow-internal handler (a design-system button's inner <button>) sits
-						// BELOW the host: a click dispatched on the host never reaches it. Hydration claims
-						// the host node and never touches its shadow tree, so the captured deep node is
-						// still live — replay there (composed, so the host's listeners hear it too).
-						const deep = q.deep as Node | null;
-						const target = deep && deep.isConnected && t.shadowRoot?.contains(deep) ? deep : t;
-						target.dispatchEvent(new MouseEvent('click', q.init));
-					}
-					queued.length = 0;
-				};
-				if (typeof requestAnimationFrame === 'function') requestAnimationFrame(replay);
-				else replay();
-				if (DEVTOOLS)
-					dt_emit({
-						domain: 'runtime',
-						name: 'interaction.replay',
-						entry: region.getAttribute('entry') || undefined,
-						fp: region.getAttribute('data-og-fp') || undefined,
-						clicks: replayed,
-						fields: fields.length
-					});
-			},
-			(err) => {
-				// Hydration FAILED (chunk 404, network drop). Disarm so the region stops canceling
-				// clicks — native behavior (links, form posts, checkboxes) must keep working on the
-				// dead-but-real HTML. Replay the swallowed clicks so the failed one still acts.
-				disarm();
-				// One frame later: hydration just (re)bound the island's web-component wiring (a
-				// a dropdown web component's `target` element, set by a reactive statement) and many
-				// components apply such changes in their own render tick. A synchronous replay lands
-				// before that tick and toggles nothing; after a frame the component is settled.
-				const replay = () => {
-					for (const q of queued) {
-						const t = resolve_address(region, q.addr);
-						if (!t || t.tagName !== q.tag) continue;
-						// A web component's shadow-internal handler (a design-system button's inner <button>) sits
-						// BELOW the host: a click dispatched on the host never reaches it. Hydration claims
-						// the host node and never touches its shadow tree, so the captured deep node is
-						// still live — replay there (composed, so the host's listeners hear it too).
-						const deep = q.deep as Node | null;
-						const target = deep && deep.isConnected && t.shadowRoot?.contains(deep) ? deep : t;
-						target.dispatchEvent(new MouseEvent('click', q.init));
-					}
-					queued.length = 0;
-				};
-				if (typeof requestAnimationFrame === 'function') requestAnimationFrame(replay);
-				else replay();
-				console.error('[ogygia] interaction island failed to hydrate — leaving it static.', err);
-			}
-		);
+	armed.set(region, { region, warm, fire, woken: false, warmed: false, queued: [] });
+	install_listeners();
+	void replay(); // ahead of the first wake, off the boot path
+	return () => {
+		armed.delete(region);
 	};
-
-	const listeners: Array<[string, EventListener]> = [];
-	for (const type of WAKE_EVENTS) {
-		const l = on_event as EventListener;
-		region.addEventListener(type, l, { capture: true });
-		listeners.push([type, l]);
-	}
-	const on_warm = () => warm();
-	region.addEventListener('pointerenter', on_warm, { once: true });
-	listeners.push(['pointerenter', on_warm]);
-
-	const disarm = () => {
-		for (const [type, l] of listeners) {
-			region.removeEventListener(type, l, { capture: type !== 'pointerenter' });
-		}
-	};
-	return disarm;
 }

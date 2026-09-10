@@ -1,35 +1,34 @@
-import { hydrate, unmount } from 'svelte';
-import { parse } from 'devalue';
 import { frameAddress } from '../frame.js';
-import { set_current_region, set_foreign_hydrate } from '../current-region.js';
-import { capture_region_ids } from './reconcile.js';
-import { set_page, reset_page } from '../shims/page-store.svelte.js';
-import { install_page_defer, page_defer_revivers } from './page-defer.js';
-import { transport_decoders } from './app-transport.js';
-import NestedProvider from '../NestedProvider.svelte';
-import { document_has_kit_bootstrap } from './kit-boot.js';
+import { kit_hydrates_page } from './kit-boot.js';
 import { runtime_session } from './session.js';
 import {
-	ABSOLUTE_URL_SCHEME,
+	is_hinted_module,
 	is_allowed_region_endpoint,
 	is_same_origin_response,
 	island_module_url,
 	warm_island_module
 } from './region-endpoint-url.js';
-import { foreign_region_prop_revivers } from './foreign-props.js';
-import { props_sidecar_of } from './sidecar.js';
-import { SEED_REF_KEY, seed_ref_reviver } from '../seed-refs.js';
 import {
 	is_awake,
 	is_deferred,
+	is_frozen,
 	inside_frozen,
 	phase2_hydrate_schedule,
 	region_hydrate_schedule,
-	region_schedule,
-	region_ssr_truncated
+	region_schedule
 } from './region-attrs.js';
-import { slots, type LiftedLake } from './slots.js';
+import { slots } from './slots.js';
 import { KEEP_FALLBACK_HTML } from '../keep-fallback.js';
+import {
+	hydrate_settled,
+	hydrate_started,
+	hydrate_turn,
+	register_region,
+	unregister_region
+} from './schedule.js';
+import { once_visible } from './observe.js';
+import { connected_regions } from './connected.js';
+import type { IslandHandle, IslandModule } from './hydrate-core.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 import {
 	install_window_sink as dt_install_window_sink,
@@ -55,211 +54,65 @@ function now_ms(): number {
 }
 
 /**
- * Did the SSR ship this island's bytes as background `fetchpriority="low"` modulepreload hints?
- * (Region.svelte emits them for `visible`/`interaction` wakes in prod — full dep closure.) When it
- * did, the idle warm must NOT `import()` — that would escalate still-queued hint fetches to High.
- * Hrefs are resolved against the document so `./_app/…` hints match the element's `entry` attr.
+ * THE HYDRATE CORE, loaded once, lazily (./hydrate-core.ts): Svelte's `hydrate`, the provider
+ * host, the props parse, the page seed. Nothing in this always-on module imports Svelte — a page
+ * whose islands all wake on `visible` / `interaction` boots without fetching its client runtime.
+ * `loaded_core` is the synchronous view once it has arrived (a kept island's props absorb runs
+ * inside the reconciler, synchronously, and only ever for an island that already hydrated).
  */
-function has_low_priority_hint(entry: string): boolean {
-	try {
-		const abs = new URL(entry, location.href).href;
-		for (const l of document.querySelectorAll('link[rel="modulepreload"][fetchpriority="low"]')) {
-			const href = l.getAttribute('href');
-			if (href && new URL(href, location.href).href === abs) return true;
-		}
-	} catch {
-		// URL parse hiccup — treat as unhinted; the idle import stays the byte layer
+type HydrateCore = typeof import('./hydrate-core.js');
+let core_promise: Promise<HydrateCore> | null = null;
+let loaded_core: HydrateCore | null = null;
+function hydrate_core(): Promise<HydrateCore> {
+	if (!core_promise) {
+		core_promise = import('./hydrate-core.js').then((m) => (loaded_core = m));
 	}
-	return false;
-}
-
-/**
- * Parse the `<script data-ogygia-props>` that follows a region (skipping `<link>` hints). Uses the
- * client reviver (`remember: true`) so a named/shared transportable reunites with its live instance.
- * Returns `{}` when there is no props sibling.
- */
-// The devalue revivers only depend on `slots.wire`, which is set once at boot and never changes.
-// Building this object (plus its two closures) fresh for every island was pure per-hydrate GC churn;
-// memoize it against the wire identity so N islands share ONE revivers object.
-let cached_wire: (typeof slots)['wire'] | undefined;
-let cached_revivers: Record<string, (d: never) => unknown> | undefined;
-function region_prop_revivers(): Record<string, (d: never) => unknown> | undefined {
-	const wire = slots.wire;
-	if (wire === cached_wire) return cached_revivers;
-	cached_wire = wire;
-	cached_revivers = wire
-		? { [wire.REF_WIRE_KEY]: (d: never) => wire.resolve(d, true) }
-		: {
-				// Insurance against a feature-detection miss: the server encoded a wired value but this
-				// build's runtime omitted the wire feature. Say so instead of devalue's bare "Unknown
-				// type OgygiaRef" — the opaque form cost a real debugging session (the factory-registry
-				// placement the detector used to miss). Short on purpose: this string ships in core.
-				OgygiaRef: () => {
-					throw new Error(
-						'wired prop but no wire feature in this build — ogygia detection bug, please report'
-					);
-				}
-			};
-	return cached_revivers;
-}
-
-/**
- * The parsed `data` of the page seed in the document a sidecar came from — what a seed REFERENCE
- * in island props resolves against (seed-refs.ts). Keyed by the seed's own `<script>` element: the
- * live document's seed, or the seed inside a freshly fetched navigation document (a kept island's
- * props are pushed from the incoming document BEFORE the router applies its seed, so they must
- * resolve against that document's seed, not the current one). Parsed once per element.
- */
-const seed_data_cache = new WeakMap<Element, unknown>();
-function seed_data_of(sidecar: Element): unknown {
-	const doc = sidecar.ownerDocument;
-	const el = doc?.querySelector('script[type="application/ogygia-page"]');
-	if (!el) return undefined;
-	if (seed_data_cache.has(el)) return seed_data_cache.get(el);
-	let data: unknown;
-	try {
-		const raw = parse(
-			el.textContent ?? '',
-			page_defer_revivers(transport_decoders) as Parameters<typeof parse>[1]
-		) as { data?: unknown } | null;
-		data = raw?.data;
-	} catch {
-		data = undefined;
-	}
-	seed_data_cache.set(el, data);
-	return data;
-}
-
-function read_region_props(region: Element, foreign = false): Record<string, unknown> {
-	// Keyed (end-of-body, by fingerprint) or adjacent — see runtime/sidecar.ts.
-	const sidecar = props_sidecar_of(region);
-	if (!sidecar) return {};
-	const base = foreign ? foreign_region_prop_revivers() : region_prop_revivers();
-	// A foreign fragment never carries seed references (its props are self-contained by
-	// construction); a local island's may point into this document's seed.
-	const revivers = foreign
-		? base
-		: { ...base, [SEED_REF_KEY]: seed_ref_reviver(() => seed_data_of(sidecar)) };
-	return parse(sidecar.textContent, revivers as Parameters<typeof parse>[1]);
+	return core_promise;
 }
 
 /** What counts as intent for an ON-DEMAND hole (`render: 'deferred'` + `wake: 'interaction'`).
  *  `pointerover` (not `pointerenter`) so it fires on hover AND bubbles through the boxless
  *  `display: contents` wrapper from a descendant the pointer actually moves over. */
-const ON_DEMAND_EVENTS = ['pointerover', 'focusin', 'pointerdown', 'touchstart', 'keydown'] as const;
+const ON_DEMAND_EVENTS = [
+	'pointerover',
+	'focusin',
+	'pointerdown',
+	'touchstart',
+	'keydown'
+] as const;
+const ON_DEMAND_SELECTOR = 'ogygia-region[render="defer"][when="interaction"]';
+
+/**
+ * ON-DEMAND holes, delegated: ONE set of capture listeners on the document for every armed hole
+ * (five listeners per hole used to be five hundred on a page of mega-menus). Intent lands anywhere
+ * inside a hole; the nearest ARMED hole above the target fires once and is forgotten.
+ */
+const on_demand_armed = new Map<Element, () => void>();
+let on_demand_installed = false;
+function on_demand_event(e: Event): void {
+	if (on_demand_armed.size === 0) return;
+	let region = e.target instanceof Element ? e.target.closest(ON_DEMAND_SELECTOR) : null;
+	while (region && !on_demand_armed.has(region)) {
+		region = region.parentElement?.closest(ON_DEMAND_SELECTOR) ?? null;
+	}
+	if (!region) return;
+	const fire = on_demand_armed.get(region)!;
+	on_demand_armed.delete(region);
+	fire();
+}
+function arm_on_demand(region: Element, fire: () => void): void {
+	on_demand_armed.set(region, fire);
+	if (on_demand_installed) return;
+	on_demand_installed = true;
+	for (const type of ON_DEMAND_EVENTS)
+		document.addEventListener(type, on_demand_event, { capture: true, passive: true });
+}
 
 /** Load a hydrate island module from `<ogygia-region entry>` (dev + prod). */
 const load_island = (entry: string) => {
 	const url = island_module_url(entry);
-	return import(/* @vite-ignore */ url) as Promise<{
-		default: import('svelte').Component<Record<string, unknown>>;
-	}>;
+	return import(/* @vite-ignore */ url) as Promise<IslandModule>;
 };
-
-/**
- * DEV-ONLY captured-snapshot mutation guard. Captured host props cross the boundary as a
- * serialized devalue snapshot; writing to them inside the island updates nothing.
- */
-class PropMutationGuard {
-	#warned = new Set<string>();
-
-	#warn(entry: string, prop_path: string) {
-		const key = entry + '' + prop_path;
-		if (this.#warned.has(key)) return;
-		this.#warned.add(key);
-		console.warn(
-			`[ogygia] mutating captured host snapshot '${prop_path}' inside island ${entry} — this updates nothing ` +
-				`(captured host state is a serialized snapshot; move mutable state inside the island component).`
-		);
-	}
-
-	#guard_map(map: Map<unknown, unknown>, entry: string, prop_path: string) {
-		const mutators = new Set(['set', 'delete', 'clear']);
-		return new Proxy(map, {
-			get: (target, prop) => {
-				const value = Reflect.get(target, prop);
-				if (typeof value !== 'function') return value;
-				if (typeof prop === 'string' && mutators.has(prop)) {
-					return (...args: unknown[]) => {
-						this.#warn(entry, `${prop_path}.${prop}()`);
-						return (value as (...a: unknown[]) => unknown).apply(target, args);
-					};
-				}
-				return (value as (...a: unknown[]) => unknown).bind(target);
-			}
-		});
-	}
-
-	#guard_set(set: Set<unknown>, entry: string, prop_path: string) {
-		const mutators = new Set(['add', 'delete', 'clear']);
-		return new Proxy(set, {
-			get: (target, prop) => {
-				const value = Reflect.get(target, prop);
-				if (typeof value !== 'function') return value;
-				if (typeof prop === 'string' && mutators.has(prop)) {
-					return (...args: unknown[]) => {
-						this.#warn(entry, `${prop_path}.${prop}()`);
-						return (value as (...a: unknown[]) => unknown).apply(target, args);
-					};
-				}
-				return (value as (...a: unknown[]) => unknown).bind(target);
-			}
-		});
-	}
-
-	#guard_value(value: unknown, entry: string, prop_path: string): unknown {
-		if (value === null || typeof value !== 'object') return value;
-		if (value instanceof Map)
-			return this.#guard_map(value as Map<unknown, unknown>, entry, prop_path);
-		if (value instanceof Set) return this.#guard_set(value as Set<unknown>, entry, prop_path);
-		if (value instanceof Date || value instanceof RegExp || value instanceof URL) return value;
-		// A class INSTANCE must never be wrapped. A wired live object (e.g. a `Cart` whose `$state`
-		// fields Svelte compiles to private `#fields`) breaks under a Proxy: private-field access and
-		// `this`-dependent getters/methods run against the proxy, not the real instance, and throw
-		// ("cannot read private member … from an object whose class did not declare it"). The guard
-		// only needs to catch mutation of captured SNAPSHOT props, which are always plain data —
-		// devalue serializes exactly plain objects, arrays, Map/Set/Date. So guard those; pass class
-		// instances (the intentionally-live wired objects) straight through.
-		const proto = Object.getPrototypeOf(value);
-		if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) return value;
-		return new Proxy(value as Record<string | symbol, unknown>, {
-			get: (target, prop, receiver) => {
-				const child = Reflect.get(target, prop, receiver);
-				if (typeof prop === 'symbol') return child;
-				return this.#guard_value(
-					child,
-					entry,
-					prop_path ? `${prop_path}.${String(prop)}` : String(prop)
-				);
-			},
-			set: (target, prop, next, receiver) => {
-				if (typeof prop !== 'symbol') {
-					this.#warn(entry, prop_path ? `${prop_path}.${String(prop)}` : String(prop));
-				}
-				return Reflect.set(target, prop, next, receiver);
-			},
-			deleteProperty: (target, prop) => {
-				if (typeof prop !== 'symbol') {
-					this.#warn(entry, prop_path ? `${prop_path}.${String(prop)}` : String(prop));
-				}
-				return Reflect.deleteProperty(target, prop);
-			},
-			defineProperty: (target, prop, descriptor) => {
-				if (typeof prop !== 'symbol') {
-					this.#warn(entry, prop_path ? `${prop_path}.${String(prop)}` : String(prop));
-				}
-				return Reflect.defineProperty(target, prop, descriptor);
-			}
-		});
-	}
-
-	wrap(props: Record<string, unknown>, entry: string): Record<string, unknown> {
-		if (!(import.meta.env && import.meta.env.DEV)) return props;
-		return this.#guard_value(props, entry, '') as Record<string, unknown>;
-	}
-}
-
-const prop_guard = new PropMutationGuard();
 
 function dom_ready() {
 	if (typeof document === 'undefined' || document.readyState !== 'loading')
@@ -346,142 +199,6 @@ function region_fragment(html: string): { frag: DocumentFragment; ready: Promise
 	return { frag, ready };
 }
 
-/** Apply `application/ogygia-remote` text into the reused Kit query seed bag. */
-function apply_remote_seed_text(text: string | null | undefined) {
-	if (!text) return;
-	slots.remoteSeeds?.seed_query_responses(text);
-}
-
-/** Apply `application/ogygia-page` text into the `$app/state` page snapshot. */
-function apply_page_seed_text(text: string | null | undefined) {
-	if (!text) return;
-	try {
-		// Install the live resolver (drains any resolve script that raced ahead) BEFORE reviving, so a
-		// defer marker becomes a pending Promise that a queued resolution can settle immediately. Both
-		// the seed and the streamed resolves revive with the app's transport decoders, so a load's
-		// CUSTOM types round-trip into islands.
-		install_page_defer(transport_decoders);
-		const raw = parse(
-			text,
-			page_defer_revivers(transport_decoders) as Parameters<typeof parse>[1]
-		) as Partial<{
-			url: string | URL;
-			params: Record<string, string>;
-			route: { id: string | null };
-			status: number;
-			data: Record<string, unknown>;
-			form: unknown;
-			error: { message: string } | null;
-			state: Record<string, unknown>;
-		}>;
-		let url: URL | undefined;
-		if (raw.url instanceof URL) url = raw.url;
-		else if (typeof raw.url === 'string') {
-			try {
-				url = new URL(raw.url);
-			} catch {
-				url = undefined;
-			}
-		}
-		set_page({ ...raw, url });
-	} catch {
-		/* ignore malformed seed */
-	}
-}
-
-/** Keep the live document's side-channel `<script>` in sync with a freshly fetched doc. */
-function sync_side_channel_script(
-	live_doc: Document,
-	type: 'application/ogygia-remote' | 'application/ogygia-page',
-	from: Element | null
-) {
-	const existing = live_doc.querySelector(`script[type="${type}"]`);
-	if (from?.textContent != null) {
-		if (existing) {
-			existing.textContent = from.textContent;
-		} else {
-			const clone = live_doc.importNode(from, true);
-			(live_doc.body || live_doc.documentElement).appendChild(clone);
-		}
-	} else {
-		existing?.remove();
-	}
-}
-
-/**
- * Soft invalidate: refresh document-level page + remote **seeds** from a fetched HTML
- * document without replacing `<body>`, remounting islands, or clearing live query/live
- * instance maps. Used by `invalidateAll` so Kit remote `form()` success does not
- * view-transition wipe live island state. Does **not** auto-refresh live queries —
- * callers that need that use `.refresh()`, or `submit().updates(q)` with server
- * `requested(q).refreshAll()` (updates alone does not populate response `q`).
- */
-export function apply_soft_invalidate_doc(doc: Document) {
-	if (typeof document === 'undefined') return;
-	// Seed bag only — never clear_remote_instances() here (live Query/LiveQuery stay mounted).
-	slots.remoteSeeds?.clear_remote_seeds();
-	const remote = doc.querySelector('script[type="application/ogygia-remote"]');
-	apply_remote_seed_text(remote?.textContent);
-	sync_side_channel_script(document, 'application/ogygia-remote', remote);
-
-	const page_el = doc.querySelector('script[type="application/ogygia-page"]');
-	apply_page_seed_text(page_el?.textContent);
-	sync_side_channel_script(document, 'application/ogygia-page', page_el);
-}
-
-// Flicker fix: seed the reused Kit client query cache from the server's side-channel script
-// (emitted by `ogygiaHandle` on csr=false pages) exactly ONCE per document, before any island's
-// reused `Query` constructor reads `query_responses`. Cleared on SPA body swap.
-function seed_remote_once() {
-	if (runtime_session.remote_seeded) return;
-	runtime_session.mark_remote_seeded();
-	if (typeof document === 'undefined') return;
-	const el = document.querySelector('script[type="application/ogygia-remote"]');
-	apply_remote_seed_text(el?.textContent);
-}
-
-/** Document-level page seed (one script from ogygiaHandle) — once per document. */
-function seed_page_once() {
-	if (runtime_session.page_seeded) return;
-	runtime_session.mark_page_seeded();
-	if (typeof document === 'undefined') return;
-	const el = document.querySelector('script[type="application/ogygia-page"]');
-	apply_page_seed_text(el?.textContent);
-}
-
-// Mixed mode: on a csr=true page, Kit boots and hydrates the whole tree (including our
-// island components). Detect Kit bootstrap only in non-ogygia inline scripts (P0: side-channel
-// payloads can reflect `__sveltekit_` from the URL). Cached per document; cleared on SPA swap.
-function kit_hydrates_page() {
-	if (runtime_session.kit_page === undefined) {
-		runtime_session.kit_page = typeof document !== 'undefined' && document_has_kit_bootstrap();
-	}
-	return runtime_session.kit_page;
-}
-
-/**
- * Reset per-document session + SSR remote seeds before a new body connects.
- *
- * Do **not** clear `query_map` / `live_query_map` here — old islands are still
- * mounted, and Kit's LiveQueryProxy throws if its cache entry vanishes mid-render.
- * Instance sweep happens in {@link finish_spa_document} after `replaceWith`.
- */
-export function prepare_spa_document() {
-	runtime_session.reset();
-	slots.remoteSeeds?.clear_remote_seeds();
-	reset_page();
-}
-
-/**
- * After `body.replaceWith`: old islands have disconnected; new ones have only
- * scheduled `#hydrate` (first `await` yields). Sweep Kit query/live instance
- * maps so the next page cannot reuse a LiveQuery whose `#start` is already
- * spent (`once`) — that reuse never opens SSE again and leaves "connecting…".
- */
-export function finish_spa_document() {
-	slots.remoteSeeds?.clear_remote_instances();
-}
-
 class OgygiaRegion extends HTMLElement {
 	#scheduled = false;
 	/** The server-minted `endpoint` of a deferred hole, captured at connect. On a Kit-hydrated
@@ -507,33 +224,13 @@ class OgygiaRegion extends HTMLElement {
 	/** Set while an SWR revalidate is in flight, so the next apply marks `data-revalidated`. */
 	#revalidating = false;
 	#hydrating = false;
-	#app: ReturnType<typeof hydrate> | null = null;
-	#io: IntersectionObserver | null = null;
+	/** The hydrated island (hydrate core handle): dispose, and for a kept island, props push. */
+	#app: IslandHandle | null = null;
+	/** Stops the shared `visible` observation (set while armed, cold). */
+	#stop_visible: (() => void) | null = null;
 	/** Removes the `wake="interaction"` wake listeners (set while armed, cold). */
 	#disarm_interaction: (() => void) | null = null;
-	/** A persist island's LiveHost app — lets the next page push fresh props into the relocated app. */
-	#keep_host: { setProps?: (p: Record<string, unknown>) => void } | null = null;
-	/** A FOREIGN island (another build's entry — fragment federation) must be unmounted by ITS OWN
-	 *  svelte instance; this holds the entry's `__og_unmount`. null = local island, use ours. */
-	#foreign_unmount: ((app: unknown) => void) | null = null;
-
-	/**
-	 * CONTINUITY: this persisted island is relocating onto `next` (the incoming page's SSR region).
-	 * Push the new page's props into the live app so a `persist`ed component reflects the new route
-	 * (e.g. a player's `track` changes) instead of freezing at first-mount props. Called by the
-	 * router just before `next` is discarded.
-	 */
-	absorbKeptProps(next: Element): void {
-		if (!this.#keep_host?.setProps) return;
-		try {
-			this.#keep_host.setProps(read_region_props(next));
-		} catch {
-			/* malformed incoming props — keep the current live props */
-		}
-	}
 	#mql: { mql: MediaQueryList; on: (e: MediaQueryListEvent) => void } | null = null;
-	/** Drop an on-demand hole's intent listeners (region + document) when it leaves before firing. */
-	#disarm_on_demand: (() => void) | null = null;
 	/** The hole answered `keepFallback()`: the page's fallback stands, no phase-2 wake. */
 	#kept = false;
 	/** Abort in-flight region HTML fetch on disconnect (P-ABORT). */
@@ -542,10 +239,32 @@ class OgygiaRegion extends HTMLElement {
 	#idle_handle: number | null = null;
 	/** Live region (`<ogygia-region live>`): driven imperatively by Region.svelte's applyLive. */
 	#live_ready = false;
-	#live_app: { setProps?: (p: Record<string, unknown>) => void } | null = null;
+	#live_app: IslandHandle | null = null;
 	#live_module = '';
+	// The two wake targets, bound once per element (not per connect): `#arm` hands them to a
+	// schedule, and `load` calls them straight — no closure built on the connect path. Each returns
+	// its promise: the interaction feature awaits it to know when the island is live (replay).
+	#fire_hydrate = () => this.#hydrate();
+	#fire_server = () => this.#server();
+
+	/**
+	 * CONTINUITY: this persisted island is relocating onto `next` (the incoming page's SSR region).
+	 * Push the new page's props into the live app so a `persist`ed component reflects the new route
+	 * (e.g. a player's `track` changes) instead of freezing at first-mount props. Called by the
+	 * router just before `next` is discarded. Synchronous by contract — a kept island has hydrated,
+	 * so the hydrate core is loaded.
+	 */
+	absorbKeptProps(next: Element): void {
+		if (!this.#app?.set_props || !loaded_core) return;
+		try {
+			this.#app.set_props(loaded_core.read_region_props(next));
+		} catch {
+			/* malformed incoming props — keep the current live props */
+		}
+	}
 
 	connectedCallback() {
+		connected_regions.add(this); // the navigation's shadow-root check counts these (connected.ts)
 		// Live region: a `<Region of={liveQuery.current}>` whose ticket carries server-rendered
 		// HTML. Region.svelte drives it through `applyLive` (swap → morph / keep-alive); the element
 		// does nothing automatic here — no fetch, no self-hydrate.
@@ -556,14 +275,9 @@ class OgygiaRegion extends HTMLElement {
 			const minted = this.getAttribute('endpoint');
 			if (minted) this.#minted_endpoint = minted;
 		}
-		const lake_arm = {
-			idle: (fire: () => void) => this.#on_idle(fire),
-			visible: (fire: () => void, margin?: string) => this.#on_visible(fire, margin),
-			media: (when: string, fire: () => void) => this.#on_media(when, fire),
-			fetch_revalidate: () => void this.#fetch_html({ revalidate: true }),
-			wake_children: () => this.#wake_waiting_regions()
-		};
-		if (slots.lakes.on_frozen_connect(this, lake_arm)) return;
+		// A frozen region (lake) settles through the lakes feature; the arm hooks it needs are built
+		// only for one (five closures per region at upgrade was the cost of building them for all).
+		if (is_frozen(this) && slots.lakes.on_frozen_connect(this, this.#lake_arm())) return;
 		if (this.#scheduled) return;
 		// Region rule (DESIGN.md): a nested region rides its awake ancestor's hydration — its SSR DOM
 		// is already inside that parent, so self-running would double-hydrate. Two exceptions self-run:
@@ -579,7 +293,9 @@ class OgygiaRegion extends HTMLElement {
 		// else will ever wake it. It always self-runs.
 		const entry_attr = this.getAttribute('entry') || '';
 		const foreign_entry =
-			ABSOLUTE_URL_SCHEME.test(entry_attr) && new URL(entry_attr).origin !== location.origin;
+			entry_attr.indexOf(':') > 0 && // an absolute URL has a scheme; relative / root paths never do
+			/^[a-z][a-z0-9+.-]*:/i.test(entry_attr) &&
+			new URL(entry_attr).origin !== location.origin;
 		if (
 			boundary &&
 			is_awake(boundary) &&
@@ -620,81 +336,65 @@ class OgygiaRegion extends HTMLElement {
 			});
 			dt_emit({ domain: 'runtime', name: 'wake.scheduled', ...dt_ids(this), when });
 		}
-		const raw_fire = deferred ? () => this.#server() : () => this.#hydrate();
-		// Wrap so the schedule FIRING is observable (interaction/visible/idle "when did it actually
-		// wake, and why" is the story a timeline instrument tells). Off → `raw_fire` is used directly.
-		const fire = DEVTOOLS
-			? () => {
-					dt_emit({ domain: 'runtime', name: 'wake.fired', ...dt_ids(this), when });
-					return raw_fire();
-				}
-			: raw_fire;
+		// The hydration scheduler: order stamp + viewport snapshot, so when this island's turn comes
+		// the queue knows where it stands (schedule.ts).
+		if (!deferred) register_region(this);
 		// A `visible` island won't hydrate until it scrolls into view — and only THEN fetches its JS
 		// chunk, stalling hydration on a real network. Warm the module during idle so the scroll-in is
-		// instant. In prod the BYTES mostly ride the SSR-emitted `fetchpriority="low"` modulepreload
-		// hints (background priority, full dep closure — see Region.svelte's island_preload); this
-		// idle `import()` then evaluates from the warm module map (near-zero network) so the wake is a
-		// pure cache hit. In dev (no hints) it is also the byte layer. `interaction` islands get the
-		// SAME low-priority byte hints but no idle import — evaluation waits for the gesture (the
-		// hover warm / wake import hits the cache). Media-query wakes get neither: the server can't
-		// know the viewport, so downloading would be a blind bet. Idle warm kept to `visible` on
-		// purpose — `idle` fires imminently anyway.
+		// instant. In prod the BYTES mostly ride the SSR-emitted modulepreload hints (background
+		// priority, full dep closure — see Region.svelte's island_preload); this idle `import()` then
+		// evaluates from the warm module map (near-zero network) so the wake is a pure cache hit. In
+		// dev (no hints) it is also the byte layer. `interaction` islands get the SAME byte hints but
+		// no idle import — evaluation waits for the gesture (the hover warm / wake import hits the
+		// cache). Media-query wakes get neither: the server can't know the viewport, so downloading
+		// would be a blind bet. Idle warm kept to `visible` on purpose — `idle` fires imminently anyway.
 		if (!deferred && when === 'visible') this.#warm_module();
-		this.#arm(when, fire);
+		this.#arm(when, deferred ? this.#fire_server : this.#fire_hydrate);
+	}
+
+	/** The schedule hooks a frozen region (lake) drives its revalidation through. */
+	#lake_arm() {
+		return {
+			idle: (fire: () => void) => this.#on_idle(fire),
+			visible: (fire: () => void, margin?: string) => this.#on_visible(fire, margin),
+			media: (when: string, fire: () => void) => this.#on_media(when, fire),
+			fetch_revalidate: () => void this.#fetch_html({ revalidate: true }),
+			wake_children: () => this.#wake_waiting_regions()
+		};
 	}
 
 	/** Idle-import this island's JS so a later `visible` wake hydrates without a cold chunk fetch. */
 	#warm_module() {
 		const entry = this.getAttribute('entry');
 		if (!entry) return;
-		// Prod: the SSR already shipped this island's bytes as `fetchpriority="low"` modulepreload
-		// hints (full dep closure). An `import()` here would ESCALATE any still-queued hint fetch to
-		// High — the exact contention the low hints exist to avoid — so leave the bytes in the
-		// background and pay only module evaluation at the real wake. Dev has no hints; the idle
-		// import stays the byte layer there.
-		if (has_low_priority_hint(entry)) return;
+		// Prod: the SSR already shipped this island's bytes as background modulepreload hints (full dep
+		// closure). An `import()` here would ESCALATE any still-queued hint fetch to High — the exact
+		// contention the hints exist to avoid — so leave the bytes in the background and pay only
+		// module evaluation at the real wake. Dev has no hints; the idle import stays the byte layer.
+		if (is_hinted_module(entry)) return;
 		const warm = () => warm_island_module(entry);
 		if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 2000 });
 		else setTimeout(warm, 200);
 	}
 
 	/** Arm idle / visible / load / interaction / media for a schedule callback. */
-	#arm(when: string, fire: () => void, visible_margin?: string) {
+	#arm(when: string, fire: () => unknown, visible_margin?: string) {
+		if (DEVTOOLS) {
+			// Wrap so the schedule FIRING is observable (interaction/visible/idle "when did it actually
+			// wake, and why" is the story a timeline instrument tells). Off → `fire` is used directly.
+			const raw = fire;
+			fire = () => {
+				dt_emit({ domain: 'runtime', name: 'wake.fired', ...dt_ids(this), when });
+				return raw();
+			};
+		}
 		if (when === 'idle') this.#on_idle(fire);
 		else if (when === 'visible') this.#on_visible(fire, visible_margin);
 		else if (when === 'load') fire();
 		else if (when === 'interaction') {
-			if (is_deferred(this)) this.#on_demand(fire);
+			if (is_deferred(this)) arm_on_demand(this, fire);
 			else this.#on_interaction(fire);
 		} else this.#on_media(when, fire); // a media query string
-	}
-
-	/**
-	 * `when="interaction"` on a DEFERRED region — an ON-DEMAND hole. Nothing is fetched until the
-	 * visitor shows intent inside it: the pointer moves over it (`pointerover`, which fires on hover
-	 * — before any click — and BUBBLES, so it reaches this element even though the hole's wrapper is
-	 * `display: contents` and has no box of its own), focus lands, a touch begins, or a key arrives.
-	 * Then the HTML is fetched once and MORPHED in (#apply), so whatever the visitor already opened
-	 * in the static fallback stays open. Unlike an island's `interaction` wake there is no click
-	 * capture or replay — the fallback handles the gesture natively; the fetch just rides the hover,
-	 * so a mega menu that opens on hover has its L3/L4 by the time the pointer reaches a submenu.
-	 */
-	#on_demand(fire: () => void) {
-		let fired = false;
-		const region = this;
-		const disarm = () => {
-			for (const type of ON_DEMAND_EVENTS) region.removeEventListener(type, once, true);
-			region.#disarm_on_demand = null;
-		};
-		function once() {
-			if (fired) return;
-			fired = true;
-			disarm();
-			fire();
-		}
-		for (const type of ON_DEMAND_EVENTS)
-			this.addEventListener(type, once, { capture: true, passive: true });
-		this.#disarm_on_demand = disarm;
 	}
 
 	/**
@@ -720,10 +420,6 @@ class OgygiaRegion extends HTMLElement {
 		this.#disarm_interaction = typeof disarm === 'function' ? disarm : null;
 	}
 
-	/**
-	 * Deferred hole: get its HTML and swap it in. When `hydrate` is also set (deferred client
-	 * island), schedule phase-2 hydrate — coalescing matching schedules to immediate load.
-	 */
 	/** The hole's endpoint: the attribute, or the server-minted copy when Kit's hydration wiped it
 	 *  (restored on the element so every other DOM reader agrees). */
 	#endpoint(): string | null {
@@ -733,6 +429,11 @@ class OgygiaRegion extends HTMLElement {
 		this.setAttribute('endpoint', this.#minted_endpoint);
 		return this.#minted_endpoint;
 	}
+
+	/**
+	 * Deferred hole: get its HTML and swap it in. When `hydrate` is also set (deferred client
+	 * island), schedule phase-2 hydrate — coalescing matching schedules to immediate load.
+	 */
 	async #server() {
 		// Bind to the store: this region applies whatever frame lands at its address — from its own
 		// fetch, a navigation batch stream, or (later) a mutation. subscribe() replays current
@@ -744,7 +445,7 @@ class OgygiaRegion extends HTMLElement {
 				slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ??
 				null;
 		}
-		await this.#deliver_html();
+		await this.#fetch_html();
 		// The subscribe callback fired #apply, but #apply awaits the stylesheet before swapping —
 		// wait for it, or `#done` below reads stale `false` and phase-2 hydrate is never armed
 		// (an interactive deferred leaf would swap in and stay dead).
@@ -760,12 +461,8 @@ class OgygiaRegion extends HTMLElement {
 			phase2 === 'visible'
 				? this.getAttribute('hydrate-margin') || this.getAttribute('margin') || undefined
 				: undefined;
-		this.#arm(phase2, () => void this.#hydrate(), margin);
-	}
-
-	/** Get the hole's HTML by fetching its signed capability endpoint. */
-	async #deliver_html() {
-		await this.#fetch_html();
+		register_region(this);
+		this.#arm(phase2, this.#fire_hydrate, margin);
 	}
 
 	/**
@@ -960,22 +657,13 @@ class OgygiaRegion extends HTMLElement {
 		}
 	}
 
+	/** `visible`: the shared observer for this margin (observe.ts) — fires once, on first entry. */
 	#on_visible(fire: () => void, root_margin?: string) {
 		const rootMargin = root_margin || this.getAttribute('margin') || '0px';
-		const io = new IntersectionObserver(
-			(entries) => {
-				for (const e of entries) {
-					if (e.isIntersecting) {
-						io.disconnect();
-						this.#io = null;
-						fire();
-					}
-				}
-			},
-			{ rootMargin }
-		);
-		io.observe(this);
-		this.#io = io;
+		this.#stop_visible = once_visible(this, rootMargin, () => {
+			this.#stop_visible = null;
+			fire();
+		});
 	}
 
 	#on_media(q: string, fire: () => void) {
@@ -993,202 +681,34 @@ class OgygiaRegion extends HTMLElement {
 		this.#mql = { mql, on };
 	}
 
+	/**
+	 * Wake this island: load its module and the hydrate core in parallel, then take a SCHEDULER
+	 * TURN (one island per task, viewport first — schedule.ts) and run the synchronous hydrate step
+	 * (hydrate-core.ts) inside it.
+	 */
 	async #hydrate() {
 		if (this.#app || this.#hydrating) return;
 		this.#hydrating = true;
 		const dt_t0 = DEVTOOLS ? now_ms() : 0;
 		if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.hydrate.start', ...dt_ids(this) });
-		let lifted: Array<LiftedLake> | null = null;
 		try {
-			// wait for full parse so we can reliably detect a Kit-booted (csr=true) page.
-			// On an SPA swap (and any post-load hydrate) the document is already parsed, so skip the
-			// await entirely — no need to burn a microtask turn before every island wakes.
+			// wait for full parse so the end-of-body props sidecars (and the seed) are in the DOM. On an
+			// SPA swap (and any post-load hydrate) the document is already parsed, so skip the await
+			// entirely — no need to burn a microtask turn before every island wakes.
 			if (typeof document !== 'undefined' && document.readyState === 'loading') await dom_ready();
 			// SWR remount (and SPA swaps) can disconnect an island-in-lake while its module load is
 			// in flight — abort rather than hydrate into a detached tree (SWR-ORPHAN-HYDRATE).
 			if (!this.isConnected) return;
-			// Seed SSR-resolved remote queries + document page snapshot once before hydrate.
-			seed_remote_once();
-			seed_page_once();
 			const entry = this.getAttribute('entry');
 			if (!entry) return;
-			const mod = await load_island(entry);
+			hydrate_started(this); // a viewport island in flight holds ready islands below the fold
+			const [core, mod] = await Promise.all([hydrate_core(), load_island(entry)]);
 			if (!this.isConnected) return;
-			const Component = mod.default;
-
-			// FOREIGN origin (fragment federation)? Decided from the ENTRY alone — a foreign
-			// island's props must parse plain (membrane) whether or not its module carries the
-			// hydrate contract.
-			const is_foreign_entry =
-				ABSOLUTE_URL_SCHEME.test(entry) && new URL(entry).origin !== location.origin;
-
-			// R3 ownership: capture which page hub ids this island resolves from its props, so a
-			// reconcile nav can dispose exactly this region's ids if it is later removed.
-			const props = capture_region_ids(this, () => read_region_props(this, is_foreign_entry));
-
-			// Mixed mode: on a csr=true page Kit already hydrates this component — skip. EXCEPT a
-			// deferred region (server island / <Region>): its HTML was FETCHED after load and swapped
-			// in, so it was never part of Kit's SSR tree — Kit didn't hydrate it and won't. We must.
-			// (connectedCallback carries the same is_deferred exception for the fetch phase.) And
-			// EXCEPT a region INSIDE A LAKE: the lake wrapper adopts its SSR element under Kit as
-			// opaque DOM, so Kit never hydrates the islands in there either — those are ours.
-			if (kit_hydrates_page() && !is_deferred(this) && !inside_frozen(this)) {
-				this.setAttribute('data-kit-hydrated', '');
-				if (import.meta.env.DEV) {
-					console.warn(
-						`[ogygia] island "${entry}" is on a csr=true page; Kit hydrates it, so the island directive is redundant here (it behaves as a normal component).`
-					);
-				}
-				return;
-			}
-
-			// INVALID-NESTING GUARD: the browser parser hoists a BLOCK island rendered inline inside a
-			// `<p>` out of its region before any JS runs (see region_ssr_truncated). The region is now
-			// empty, so the hydrate below fresh-mounts a SECOND copy while the server copy lingers as an
-			// orphan sibling of the paragraph. This is invalid HTML the framework cannot un-parse — warn
-			// loudly (dev) instead of silently duplicating; the real fix lives in authoring (render an
-			// inline element, or place the island in block context).
-			if (import.meta.env.DEV && !is_deferred(this) && region_ssr_truncated(this)) {
-				console.warn(
-					`[ogygia] island "${entry}" rendered a BLOCK element inline inside a <p> (or other ` +
-						`phrasing-only context). The browser's HTML parser hoisted that block out of the ` +
-						`paragraph before hydration, so this region is empty and a SECOND copy is about to mount ` +
-						`here — the server-rendered copy is now an orphaned sibling of the paragraph. Fix: make ` +
-						`the component render an inline element (e.g. <span> instead of <div>), or place the ` +
-						`island on its own line (block context) rather than inside a sentence.`
-				);
-			}
-
-			lifted = slots.lakes.lift(this);
-			if (!this.isConnected) return;
-
-			// FOREIGN-MUTATION DETECTOR (arm): a successful hydration CLAIMS the server-rendered
-			// nodes — they stay in the region. Svelte 5's mismatch recovery instead silently discards
-			// them and re-renders fresh, which reads as success here while the SSR content (and
-			// anything a post-SSR transform injected into it — declarative shadow DOM, A/B edits) is
-			// destroyed. Remember the SSR element children (post-lake-lift) so the check below can
-			// tell a claim from a recovery. See internal/notes/foreign-dom.md (the se.com incident).
-			const ssr_children = Array.from(this.children);
-
-			// FOREIGN delegation (fragment federation): the entry came from another build/origin and
-			// exports its own `__og_hydrate` — envelope preparation belongs to the svelte that
-			// compiled the entry, so the consumer must not shape it. Computed here so the envelope
-			// insertion below can stand down.
-			const foreign_delegate =
-				is_foreign_entry && typeof (mod as { __og_hydrate?: unknown }).__og_hydrate === 'function';
-
-			// Hydration envelope: `hydrate()` anchors on a top-level `<!--[-->` comment and then
-			// expects the component's OWN region envelope — but embedded SSR (Region.svelte)
-			// emits only the inner layer. `render()` (region endpoint / deferred swap) has BOTH
-			// layers — do not wrap again or hydration mismatches. (Verified against svelte 5.56.)
-			if (!is_deferred(this) && !foreign_delegate) {
-				this.insertBefore(document.createComment('['), this.firstChild);
-				this.appendChild(document.createComment(']'));
-			}
-
-			// Hydrate through NestedProvider so descendants see the "inside a hydrated island"
-			// context — any nested island wrapper then degrades to a plain inline component
-			// (single hydration with this parent). The provider adds no DOM, so this matches SSR.
-			set_current_region(this);
-			try {
-				// Foreign islands take RAW props: the dev mutation-guard proxy is THIS build's code
-				// running inside another build's render — harmless, but it's a wire, and we don't
-				// cross wires. (Plain data either way; the parse membrane already enforced that.)
-				const wrapped = is_foreign_entry ? props : prop_guard.wrap(props, entry || '');
-				// FOREIGN island (fragment federation): its module-level svelte state is not ours, so
-				// delegate the whole hydrate to the entry's own `__og_hydrate` (and remember its
-				// unmounter). No NestedProvider, no context capture — context deliberately does not
-				// cross a team boundary.
-				if (foreign_delegate) {
-					const mod_h = (
-						mod as unknown as { __og_hydrate: (t: Element, p: Record<string, unknown>) => unknown }
-					).__og_hydrate;
-					// FOREIGN PAGE READS: the `$app/state` shim inside this island reads the SHELL's page
-					// store (one singleton per document — the MFE's own seed never crosses the fragment
-					// boundary). Mark the hydrate so that shim can warn (dev) when the island reads
-					// page.data/params/route/form/error: its SSR HTML was rendered with the MFE's own load.
-					set_foreign_hydrate({ origin: new URL(entry).origin, entry });
-					this.#app = mod_h(this, wrapped) as ReturnType<typeof hydrate>;
-					this.#foreign_unmount =
-						(mod as { __og_unmount?: (app: unknown) => void }).__og_unmount ?? null;
-				} else {
-					// Seed this island's context from any `<Provide>` above it in the DOM, so a child's plain
-					// `getContext('key')` reads a (csr=false) layout's context across the island-root split.
-					// Undefined when there is no provider above — the common case pays only a short DOM walk.
-					const provided_ctx = capture_region_ids(this, () => slots.context?.(this));
-					// A PERSIST island hydrates through LiveHost (same no-DOM render as NestedProvider) so
-					// that when it relocates onto the next page its props can be pushed in reactively.
-					const LiveHost = slots.live;
-					if (this.hasAttribute('data-ogygia-keep') && LiveHost) {
-						// Keep needs SPA navigation — a full-page load throws the DOM away, so there is
-						// nothing to relocate. Warn (dev) when the router is off on this page.
-						if (import.meta.env.DEV && !document.querySelector('meta[name="ogygia-router"]')) {
-							console.warn(
-								`[ogygia] island "${entry}" has keep:'${this.getAttribute('data-ogygia-keep')}' but the SPA router is off (ogygia({ router: false })) — keep relies on SPA navigation; a full-page load replaces the DOM, so the attribute is a no-op here.`
-							);
-						}
-						this.#app = hydrate(LiveHost, {
-							target: this,
-							props: { component: Component, initialProps: wrapped },
-							...(provided_ctx ? { context: provided_ctx } : {})
-						});
-						this.#keep_host = this.#app as unknown as {
-							setProps?: (p: Record<string, unknown>) => void;
-						};
-					} else {
-						this.#app = hydrate(NestedProvider, {
-							target: this,
-							props: { component: Component, props: wrapped },
-							...(provided_ctx ? { context: provided_ctx } : {})
-						});
-					}
-				} // end local-island path (foreign delegation branch above)
-			} finally {
-				set_current_region(null);
-				set_foreign_hydrate(null);
-			}
-
-			// Restore each frozen region's SSR DOM AFTER hydrate. An inner waking region whose
-			// `<ogygia-region wake="…">` (re)connects then self-runs — the freeze made its
-			// subtree dead again, so the nearest-boundary rule wakes that inner region.
-			slots.lakes.restore(this, lifted);
-			lifted = null; // ownership transferred
-
-			// Region was torn out during hydrate (SWR replaceChildren on an ancestor lake) — drop
-			// the orphan app; disconnectedCallback may have run before `#app` was assigned.
-			if (!this.isConnected) {
-				try {
-					if (this.#app) (this.#foreign_unmount ?? unmount)(this.#app);
-				} catch {
-					/* noop */
-				}
-				this.#app = null;
-				this.#foreign_unmount = null;
-				return;
-			}
-
-			// FOREIGN-MUTATION DETECTOR (check): if EVERY SSR element child was discarded during
-			// hydrate, Svelte's silent mismatch recovery threw the server DOM away and re-rendered
-			// this island client-side. The usual cause is something mutating the region's HTML
-			// between SSR and wake — a post-SSR transform (`transformPageChunk`, a DSD-injecting
-			// middleware), an A/B tool, an edge rewriter. A legitimate claim keeps the nodes (a
-			// browser-only `{#if}` may drop SOME, so only zero survivors trips this).
-			if (ssr_children.length > 0 && !ssr_children.some((el) => this.contains(el))) {
-				this.setAttribute('data-og-recovered', '');
-				if (DEVTOOLS)
-					dt_emit({ domain: 'runtime', name: 'region.hydrate.recovered', ...dt_ids(this) });
-				console.warn(
-					`[ogygia] island "${entry}" discarded its ENTIRE server-rendered DOM during hydration ` +
-						`and re-rendered client-side (Svelte hydration-mismatch recovery). Something changed this ` +
-						`region's HTML between SSR and wake — a post-SSR transform (transformPageChunk / an ` +
-						`HTML-rewriting middleware), an A/B-testing snippet, or an edge rewriter. Whatever that ` +
-						`step injected (e.g. declarative shadow DOM) was just destroyed, and the swap is ` +
-						`timing-dependent, so symptoms look erratic. Fix: make the mutation invisible to hydration ` +
-						`(mutate only <head>, attributes, or shadow templates — never the region's light DOM), or ` +
-						`freeze the foreign-owned subtree with a wake:'none' (lake) boundary.`
-				);
-			}
-
+			await hydrate_turn(this);
+			if (!this.isConnected || this.#app) return;
+			// ── the turn: everything below is one synchronous step ──
+			this.#app = core.hydrate_island(this, entry, mod);
+			if (!this.#app) return; // not ours (Kit-hydrated page) or torn out mid-hydrate
 			this.setAttribute('data-hydrated', '');
 			if (DEVTOOLS)
 				dt_emit({
@@ -1208,9 +728,8 @@ class OgygiaRegion extends HTMLElement {
 				});
 			console.error('[ogygia] hydration failed for', this.getAttribute('entry'), err);
 		} finally {
-			// If hydrate threw after lift, put lake DOM back so the page isn't permanently blank.
-			if (lifted) slots.lakes.restore(this, lifted);
 			this.#hydrating = false;
+			hydrate_settled(this);
 		}
 	}
 
@@ -1261,18 +780,14 @@ class OgygiaRegion extends HTMLElement {
 
 		// Keep-alive: same interactive module, already mounted → reactive prop push, no DOM churn.
 		if (this.#live_ready && interactive && this.#live_app && desc.module === this.#live_module) {
-			this.#live_app.setProps?.(prop_guard.wrap(desc.props, desc.module));
+			this.#live_app.set_props?.(desc.props);
 			this.dispatchEvent(new CustomEvent('ogygia:live', { bubbles: true }));
 			return;
 		}
 
 		// First tick, or the interactive module changed: (unmount and) swap + maybe hydrate.
 		if (this.#live_app) {
-			try {
-				unmount(this.#live_app);
-			} catch {
-				/* noop */
-			}
+			this.#live_app.dispose();
 			this.#live_app = null;
 		}
 		this.#live_ready = true;
@@ -1292,56 +807,35 @@ class OgygiaRegion extends HTMLElement {
 		}
 	}
 
-	/** Hydrate a live region's swapped-in HTML through {@link LiveHost} (props-pushable). */
+	/** Hydrate a live region's swapped-in HTML through the hydrate core's LiveHost path. */
 	async #live_hydrate(props: Record<string, unknown>) {
 		await dom_ready();
 		if (!this.isConnected) return;
-		seed_remote_once();
-		seed_page_once();
 		const entry = this.getAttribute('entry');
 		if (!entry) return;
-		const mod = await load_island(entry);
+		const [core, mod] = await Promise.all([hydrate_core(), load_island(entry)]);
 		if (!this.isConnected) return;
-		// A live region's HTML comes from svelte `render()` (both envelope layers) — same as the
-		// deferred swap path, so we do NOT wrap it in extra `[..]` hydration comments.
-		const LiveHost = slots.live;
-		if (!LiveHost) {
-			if (import.meta.env.DEV) {
-				console.warn('[ogygia] live region needs the live feature plugin (LiveHost missing)');
-			}
-			return;
-		}
-		const provided_ctx = capture_region_ids(this, () => slots.context?.(this));
-		this.#live_app = hydrate(LiveHost, {
-			target: this,
-			props: {
-				component: mod.default,
-				initialProps: prop_guard.wrap(props, entry || '')
-			},
-			...(provided_ctx ? { context: provided_ctx } : {})
-		}) as { setProps?: (p: Record<string, unknown>) => void };
+		this.#live_app = core.hydrate_live(this, entry, mod, props);
+		if (!this.#live_app) return;
 		this.setAttribute('data-hydrated', '');
 		this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		this.dispatchEvent(new CustomEvent('ogygia:live', { bubbles: true }));
 	}
 
 	disconnectedCallback() {
+		connected_regions.delete(this);
+		unregister_region(this);
 		// A disconnect now always means the island is gone: the reconcile nav MOVES kept nodes with
 		// insertBefore (no detach, no disconnect), and the fallback is a full swap where old islands
-		// genuinely leave. (The old persist-relocate detached nodes and needed a suppression guard here;
-		// persist is gone.)
+		// genuinely leave.
 		if (this.#live_app) {
-			try {
-				unmount(this.#live_app);
-			} catch {
-				/* noop */
-			}
+			this.#live_app.dispose();
 			this.#live_app = null;
 		}
 		this.#fetch_abort?.abort();
 		this.#fetch_abort = null;
 		// Unbind from the store + release our stake in the shared fetch (aborted only if we were the
-		// last waiter). A persist move returns early above, so a relocating island keeps its binding.
+		// last waiter).
 		this.#frame_unsub?.();
 		this.#frame_unsub = null;
 		if (this.#frame_address) {
@@ -1356,9 +850,9 @@ class OgygiaRegion extends HTMLElement {
 			}
 			this.#idle_handle = null;
 		}
-		this.#io?.disconnect();
-		this.#io = null;
-		this.#disarm_on_demand?.();
+		this.#stop_visible?.();
+		this.#stop_visible = null;
+		on_demand_armed.delete(this);
 		this.#disarm_interaction?.();
 		this.#disarm_interaction = null;
 		if (this.#mql) {
@@ -1366,13 +860,8 @@ class OgygiaRegion extends HTMLElement {
 			this.#mql = null;
 		}
 		if (this.#app) {
-			try {
-				(this.#foreign_unmount ?? unmount)(this.#app);
-			} catch {
-				/* noop */
-			}
+			this.#app.dispose();
 			this.#app = null;
-			this.#foreign_unmount = null;
 		}
 		this.#scheduled = false;
 	}
@@ -1385,13 +874,6 @@ class OgygiaRegion extends HTMLElement {
  * load-bearing: `live` needs `morph` present first.
  */
 export function boot(installers: Array<() => void> = []): void {
-	// Core owns the per-document lifecycle; the router reads it through this slot so router modules
-	// never import core (and its Svelte component graph). Set before features install.
-	slots.spaLifecycle = {
-		prepare: prepare_spa_document,
-		finish: finish_spa_document,
-		softInvalidate: apply_soft_invalidate_doc
-	};
 	for (const install of installers) install();
 
 	if (DEVTOOLS) {
@@ -1420,9 +902,5 @@ export function boot(installers: Array<() => void> = []): void {
 
 	if (typeof customElements !== 'undefined' && !customElements.get('ogygia-region')) {
 		customElements.define('ogygia-region', OgygiaRegion);
-	}
-
-	if (typeof window !== 'undefined' && window.__marker === undefined) {
-		window.__marker = Math.random();
 	}
 }
