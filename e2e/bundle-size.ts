@@ -147,6 +147,7 @@ async function measure(marks: RuntimeMarks): Promise<Pick<Row, 'boot' | 'total' 
 		code: string;
 		isEntry: boolean;
 		fileName: string;
+		name: string;
 		imports: string[];
 	}>;
 	// BOOT is the entry chunk plus everything it imports STATICALLY (a module the entry shares with
@@ -163,7 +164,7 @@ async function measure(marks: RuntimeMarks): Promise<Pick<Row, 'boot' | 'total' 
 	const total = size(chunks.map((c) => c.code).join('\n'));
 	const lazy = chunks
 		.filter((c) => !boot_set.has(c.fileName))
-		.map((c) => ({ name: c.fileName.replace(/-[A-Za-z0-9_]+\.js$/, ''), ...size(c.code) }));
+		.map((c) => ({ name: c.name, ...size(c.code) }));
 	return { boot, total, lazy };
 }
 
