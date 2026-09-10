@@ -12,6 +12,46 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Server request path: one request store, one document pass, one walk, native JSON where it
+  can be.** A performance program over the handle and Region's SSR branch, measured on a large
+  CMS page shape (21 islands, a 300 KB-props header, a 690 KB seed) with `internal/bench/
+  server-cost.mjs` (the page vs a twin rendering the same components without ogygia): ogygia's
+  per-request overhead went from +28 ms to +12–17 ms at p50 (+41 → +21–30 ms at p95), the islands
+  page from 683 KB to 629 KB, and memory stays flat. What changed, each replacing what it obsoletes:
+  - **No second AsyncLocalStorage.** The request bag hangs off Kit's own request store (a
+    WeakMap); on Node 20/22 every ALS in flight copies its store per async hop, and a multi-MB
+    async render is hundreds of thousands of hops. `ogygia/hooks` no longer imports
+    `node:async_hooks`.
+  - **The document is located once and assembled once** (`server/document-assembly.ts`):
+    `</head>` from the front, `</body>` from the back, every presence check and the link dedupe on
+    the head slice only, one concatenation of slices at the end. Before: eight to nine whole-document
+    regex/replace passes and four to five full copies per request. Whether the page is csr=true is
+    a build-time route fact now, never a scan; the only string probe left (a routeless response)
+    reads the last 64 KB before `</body>`, where Kit's boot sits. A page on which no region
+    rendered skips the body side of the transform entirely.
+  - **Native JSON lane** (`server/props-wire.ts`, `data-og-format="json"`): a props sidecar or a
+    page seed that is plain JSON — no Date, undefined, bigint, class, Map, cycle, promise — goes out
+    as `JSON.stringify` output and is read with `JSON.parse`; devalue stays for everything devalue
+    exists for. devalue's per-character escaping in JavaScript was the single hottest thing in the
+    profiled render; devalue output is `<`-safe by itself, so the second escape pass over every
+    payload is gone too.
+  - **Props serialize when the document tail renders**, once the request knows whether the seed
+    ships — so EVERY island's props reference the seed, the first one included (the "islands before
+    the first `$page` reader ship copies" limitation is gone), and `data-og-fp` hashes the
+    canonical, seed-independent text: the same props give the same fingerprint with or without
+    the seed. The keyed sidecar also carries `id="og-props-<fp>"` for an O(1) runtime lookup.
+  - **One walk of the seed tree** (`seed-refs.ts` `analyze`, memoised per `page.data`) answers the
+    streaming probe, the JSON-lane check and the seed index (three walks before); the index prunes
+    before it materialises a path.
+  - Live region-snippet entries are found with `indexOf` hops, not a backtracking regex over a
+    300 KB payload; the region render cache and the freeze memory store are bounded in BYTES
+    (`server/sized-lru.ts`, 64 MB) on top of their entry counts; the HKDF MAC key is derived once
+    per secret; a streamed page's tail no longer accumulates a second copy of the document; a
+    freeze hit stamps its doc marker by slicing, not by re-scanning the stored page; Kit's transport
+    `encode` (called for every value of the load data) registers the hub kinds once.
+  - **Every module-preload hint is `fetchpriority="low"`, so the low-vs-normal machinery is
+    deleted**: the head dedupe keeps the first tag per href, Region emits one kind of hint, and the
+    runtime asks only whether an entry is hinted.
 - **Island props reference the page seed instead of copying it.** A csr=false page ships
   `page.data` once as the page seed and every island's props again as its own sidecar; a CMS page
   hands each block island its slice of the same tree, so the same JSON crossed twice — one measured
@@ -23,9 +63,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ancestor first. The client resolves the reference against the seed of the document the sidecar
   came from and hands the island its own deep copy, so nothing an island does to its props reaches
   the seed or another island. Only plain data qualifies (no class instances, Maps, Sets, cycles);
-  nodes under ~100 bytes are not worth a reference and stay inline. Islands rendered before the
-  page's first `$page` reader keep full copies (deterministic per page, so fingerprints are
-  stable); every other render root (holes, tickets, foreign fragments) always copies. The fixture
+  nodes under ~100 bytes are not worth a reference and stay inline. Every other render root
+  (holes, tickets, foreign fragments) always copies. The fixture
   `/seed-refs` reproduces the CMS shape (12 blocks, half cloned): props drop from a second copy of
   the tree to under a tenth of the seed.
 - **Module-preload hints ride at the end of the body, ahead of the props.** In the head a hint
