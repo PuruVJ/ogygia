@@ -299,6 +299,36 @@ export class Compiler {
 	 * the caller registers the returned descriptors into the `Program`. Memoized per
 	 * `(id, ssr, linkVirtual, routeCsr)`, content-gated on the source.
 	 */
+	/**
+	 * The REAL source file a module derives from. A real file is its own origin. A generated entry
+	 * (a portable-snippet synth, re-processed under its `virtual:ogygia/island/<iid>.svelte` id)
+	 * resolves through the registry's `hostPath` — transitively, so an entry minted while re-processing
+	 * another entry still lands on the file the outermost slice was cut from. This is the ONE rule
+	 * `resolve_id` already applies to an entry's plain imports; threading it into the transform keeps
+	 * a re-minted marked import (whose resolved path is BAKED into a region module's source, bypassing
+	 * resolveId) on the same base. Normalized like `transform_module`'s gate (`strip_id`, `/@id/`).
+	 */
+	#origin_of(id: string): string {
+		const { registry } = this.program;
+		const bare = (s: string) => {
+			const n = strip_id(s);
+			return n.startsWith('/@id/') ? n.slice(5) : n;
+		};
+		let cur = bare(id);
+		// No depth ceiling — snippet-in-snippet nests as deep as an app cares to go. The only thing to
+		// guard against is a registry cycle, and a visited set does that exactly.
+		const seen = new Set<string>([cur]);
+		for (;;) {
+			const host = registry.get(cur)?.hostPath;
+			if (!host) break;
+			const next = bare(host);
+			if (seen.has(next)) break;
+			seen.add(next);
+			cur = next;
+		}
+		return cur;
+	}
+
 	transform(source: string, id: string, opts: { ssr?: boolean; linkVirtual?: boolean } = {}) {
 		const ctx = this.#ctx!;
 		const { prof, P, outHash } = this.profiler;
@@ -354,6 +384,7 @@ export class Compiler {
 			virtualPathFor: (_hostId: string, iid: string) => ctx.island_virtual_id(iid),
 			wrapperPathFor: (_hostId: string, iid: string) => wrapperVirtualId(iid),
 			devUrlFor: (virtualPath: string) => ctx.dev_url_for(virtualPath),
+			originOf: (host: string) => this.#origin_of(host),
 			appDir: ctx.app_dir,
 			visibleMargin: ctx.visibleMargin,
 			presets: ctx.presets,

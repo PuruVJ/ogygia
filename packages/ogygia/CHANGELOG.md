@@ -8,7 +8,35 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] - 2026-09-03
+
+The **passage** release. The runtime and the compiler are both rebuilt from the studs, with byte-identical output the full way. The runtime collapses onto ONE identity primitive. Serialization, resumability, cross-island sharing, and navigation reconciliation all become operations on the same `Ref`. A live class, a store, a function, a snippet, and a held region cross the island boundary, and join again to a single live instance across each island that reads them. A navigation now MOVES regions, and does not reset them. And the server can be told to render again only what changed. Separately, the Vite plugin is carved into a real, bundler-agnostic compiler that you can run without Vite at all.
+
+On top of the islands, this release also ships a full tool layer: a drop-in production **SSR profiler** (`ogygia({ profiler })`), an island-graph **devtools** dock (`ogygia({ devtools })`), a fully-typed programmatic **router** (`ogygia/router`), and priority-aware preloading. Thus lazy islands warm in the background, and do not fight the first paint.
+
+And two capabilities sit next to the islands, on the server. **Frozen pages** make server execution opt-in per request: a page whose render is a pure function of its URL renders one time, on write, is stored whole, and is served as bytes until a publish thaws it. **Fragment federation** lets independent ogygia apps borrow each other's live regions across a signed boundary, and a publish in one app thaws the stitched fragment in the others.
+
+### Fixed
+
+- **A relative `with { wake }` import inside a `{#snippet}` no longer breaks the build.** A snippet
+  that carries an island into a component portable-izes into its own entry — a slice of the host's
+  source re-processed under a `virtual:ogygia/island/<iid>.svelte` id, which is how the island inside
+  it gets minted. That id has no directory, so a relative specifier in the slice (`'../Inner.svelte'`)
+  resolved against `virtual:ogygia/island/` and baked a cwd-relative phantom into the region module:
+  `UNRESOLVED_IMPORT: Could not resolve '<root>/virtual:ogygia/Inner.svelte'`. The driver's
+  `resolve_id` already rebased an entry's *plain* imports against its real origin (`hostPath`); a
+  re-minted *marked* import bypasses resolveId (its path is written into generated source), so the
+  transform now resolves it against that same origin (`HostCtx.originOf`, threaded from the
+  registry), and every record minted while re-processing an entry stamps the real origin as its
+  `hostPath` — so a snippet nested inside a snippet inherits the file the outermost slice was cut
+  from, however deep. `$lib/…` and package specifiers were never affected (host-independent), which
+  is why this only surfaced with a relative import. A relative specifier reaching a virtual host with
+  no origin threaded now throws a named `[ogygia]` error instead of producing a silent phantom path.
+  Regression coverage: unit (`portable-snippet-origin.test.ts` — `../`, `./`, plain and island
+  sites, parameterized, nested-in-nested, `$lib`/package parity, identity dedupe, machine-independent
+  ids, the loud guard), the playground `/nested-hole` fixture (a deferred hole in `lib/holes/`
+  carrying every permutation through snippets), and `e2e/nested-hole.spec.ts` (each carried island
+  hydrates on the far side).
 
 ### Changed
 
@@ -313,14 +341,6 @@ Found while rebuilding a large production site header (static mega menu, per-vis
   reset an island's slot children get, so islands inside it emit their real `<ogygia-region>` and
   wake on their own; a kept fallback stays interactive. Adds no wrapper element and no anchors
   beyond a standard block, verified under Kit hydration (lake-kit e2e).
-
-## [0.8.0] - 2026-09-03
-
-The **passage** release. The runtime and the compiler are both rebuilt from the studs, with byte-identical output the full way. The runtime collapses onto ONE identity primitive. Serialization, resumability, cross-island sharing, and navigation reconciliation all become operations on the same `Ref`. A live class, a store, a function, a snippet, and a held region cross the island boundary, and join again to a single live instance across each island that reads them. A navigation now MOVES regions, and does not reset them. And the server can be told to render again only what changed. Separately, the Vite plugin is carved into a real, bundler-agnostic compiler that you can run without Vite at all.
-
-On top of the islands, this release also ships a full tool layer: a drop-in production **SSR profiler** (`ogygia({ profiler })`), an island-graph **devtools** dock (`ogygia({ devtools })`), a fully-typed programmatic **router** (`ogygia/router`), and priority-aware preloading. Thus lazy islands warm in the background, and do not fight the first paint.
-
-And two capabilities sit next to the islands, on the server. **Frozen pages** make server execution opt-in per request: a page whose render is a pure function of its URL renders one time, on write, is stored whole, and is served as bytes until a publish thaws it. **Fragment federation** lets independent ogygia apps borrow each other's live regions across a signed boundary, and a publish in one app thaws the stitched fragment in the others.
 
 ### Changed (breaking)
 

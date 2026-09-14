@@ -28,6 +28,14 @@ interface HostCtx {
 	virtualPathFor: (hostId: string, iid: string) => string;
 	wrapperPathFor: (hostId: string, iid: string) => string;
 	devUrlFor: (virtualPath: string) => string;
+	/**
+	 * The REAL source file a module derives from — the resolution base for its relative specifiers.
+	 * A generated entry (a portable-snippet synth is authored markup re-processed under a
+	 * `virtual:ogygia/…` id) has no directory of its own: every `./x` / `../x` inside it must resolve
+	 * against the file the slice was cut from, exactly as the driver's `resolve_id` already rebases
+	 * that entry's plain imports. Identity for a real file. Optional for legacy callers (= identity).
+	 */
+	originOf?: (id: string) => string;
 	/** Install-independent identity (`<pkg-name>/<rel>`) for files under a declared `ogygia.files`
 	 *  package — `null`/absent falls back to root-relative (see CompileCtx.pkg_identity). */
 	pkg_identity?: (abs: string) => string | null;
@@ -72,6 +80,8 @@ const REGEXP_META = /[.*+?^${}()|[\]\\]/g;
 const PATH_SEP = /[/\\]/;
 const DURATION = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i;
 const JS_EXT = /\.js$/;
+/** A generated module id (`virtual:ogygia/…`, optionally `\0`-resolved) — it has no directory. */
+const VIRTUAL_HOST_RE = /^\0?virtual:/;
 const WRAP_QUOTES = /^['"]|['"]$/g;
 /** One `key: 'value'` pair of an import-attributes clause (shared `g` regex — reset `lastIndex`
  *  before each scan). */
@@ -793,6 +803,16 @@ function assert_swr_lake_crossable(node: SvelteNode, err: (node: SvelteNode, msg
  */
 function resolve_component_path(spec: string, host_id: string, ctx: HostCtx) {
 	if (typeof spec !== 'string' || !spec.trim()) return null;
+	// A relative specifier needs a real directory. A `virtual:ogygia/…` host has none — resolving
+	// against it used to yield a cwd-relative phantom (`<root>/virtual:ogygia/X.svelte`) that only
+	// surfaced later as an opaque UNRESOLVED_IMPORT out of a region module. The origin host is
+	// threaded via `ctx.originOf`; reaching here with a virtual host means that thread is missing.
+	if (spec.startsWith('.') && VIRTUAL_HOST_RE.test(host_id)) {
+		throw new Error(
+			`[ogygia] ${host_id}: cannot resolve the relative import '${spec}' from a generated module — ` +
+				`it has no directory. Its real origin must be threaded (HostCtx.originOf); this is an ogygia bug, please report it.`
+		);
+	}
 	if (spec === '$lib' || spec.startsWith('$lib/')) {
 		return ctx.pathModule.join(ctx.libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
 	}
@@ -1632,6 +1652,12 @@ class FileCompilation {
 		const path = ctx.pathModule;
 
 		const s = new MagicString(source);
+		// The resolution base for this host's relative specifiers. For a real file it IS the file.
+		// For a generated entry (a portable-snippet synth re-processed under its virtual id) it is the
+		// file the slice was cut from — and it is what every record minted here stamps as `hostPath`,
+		// so a nested snippet's own entry inherits the real origin instead of the outer virtual id
+		// (the driver's `resolve_id` rebases an entry's imports against that same `hostPath`).
+		const origin = typeof ctx.originOf === 'function' ? ctx.originOf(id) || id : id;
 		const islands_by_id = new Map();
 		const salt = ctx.idSalt || '';
 		const wrapperPathFor =
@@ -1759,7 +1785,7 @@ class FileCompilation {
 			}
 
 			const entry_spec = info.node.source?.value;
-			const componentPath = resolve_component_path(entry_spec, id, ctx);
+			const componentPath = resolve_component_path(entry_spec, origin, ctx);
 			if (!componentPath) {
 				throw new Error(
 					`[ogygia] ${rel_host}: region import '${local}' needs a module specifier ($lib/…, relative, or a package specifier like 'pkg/component').`
@@ -1788,7 +1814,7 @@ class FileCompilation {
 						source: swr ? island_entry_source(componentPath, iid, exportName) : undefined,
 						wrapperPath: wrapPath,
 						wrapperSource: lake_wrapper_source(iid, componentPath, mark.options, exportName, lang),
-						hostPath: id,
+						hostPath: origin,
 						componentPath,
 						server: swr,
 						kind: 'lake',
@@ -1823,7 +1849,7 @@ class FileCompilation {
 							iid,
 							componentPath,
 							entryPath,
-							hostPath: id,
+							hostPath: origin,
 							moduleUrl: ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir),
 							exportName,
 							identity
@@ -1877,7 +1903,7 @@ class FileCompilation {
 									lang
 								),
 								source: island_entry_source(componentPath, iid, exportName),
-								hostPath: id,
+								hostPath: origin,
 								componentPath,
 								server: true,
 								kind: deferred_hydrate ? 'hydrate' : 'defer',
@@ -1897,7 +1923,7 @@ class FileCompilation {
 								strategy: mark.strategy,
 								options: mark.options,
 								exportName,
-								hostPath: id,
+								hostPath: origin,
 								identity,
 								lang
 							})
@@ -2186,7 +2212,7 @@ class FileCompilation {
 					wrapperPath: wrapperPathFor(id, iid),
 					wrapperSource: '',
 					source: synth,
-					hostPath: id,
+					hostPath: origin,
 					componentPath: entryPath,
 					server: false,
 					kind: 'hydrate',
