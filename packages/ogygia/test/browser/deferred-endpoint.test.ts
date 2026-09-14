@@ -4,8 +4,79 @@
 // saw it at parse time. The runtime keeps its own copy and restores the attribute; the hole still
 // fetches. Found on a real header whose personal bits are server islands under a csr=true page:
 // every hole stayed on its fallback, with no request at all.
-import { expect, test } from 'vitest';
+import { beforeEach, expect, test } from 'vitest';
+import { userEvent } from 'vitest/browser';
 import { bootDev } from '../../src/runtime/full.js';
+
+/**
+ * Park the REAL pointer in the bottom-right corner before every test. An on-demand hole warms on
+ * `pointerover`, and Chromium fires a TRUSTED `pointerover` on content that appears under a resting
+ * cursor (its post-layout fake mouse move) — so a fixture inserted at the top-left while the
+ * runner's pointer rests there is "hovered" the instant `innerHTML` lands, and the hole fetches
+ * before the test's own hover. That is correct runtime behaviour (a real cursor IS over the nav)
+ * and a wrong test assumption; it only ever showed on CI, where the pointer rests at (0,0), and
+ * read as an "upstream break" on the weekly watcher twice. Proven by parking the pointer over the
+ * fixture on a passing machine: same trusted event, same early fetch.
+ */
+async function park_pointer(): Promise<void> {
+	// A real, hoverable target: Playwright's actionability check rejects a 1px box flush at the
+	// viewport edge (its hover point rounds outside the viewport) and waits out the action timeout —
+	// every test then dies in this hook. 24px, inset 24px from the corner, is unambiguous and still
+	// hundreds of pixels from any top-left fixture (and any warm margin).
+	const corner = document.createElement('div');
+	corner.style.cssText = 'position:fixed;right:24px;bottom:24px;width:24px;height:24px';
+	document.body.appendChild(corner);
+	await userEvent.hover(corner);
+	corner.remove();
+}
+beforeEach(park_pointer);
+
+// REGRESSION for the mechanism above, self-contained: put the real pointer exactly where the
+// on-demand fixture will render (the CI resting position), apply the park, insert the fixture. With
+// the pointer parked, no trusted `pointerover` reaches the hole and nothing is fetched; without it,
+// this fixture fetched before any hover on every scheduled CI run.
+const RESTING_ENDPOINT = '/__ogygia__?id=cafebabe0009&props=W3t9XQ&exp=9999999999&sig=stub';
+
+test('an on-demand hole is not warmed by a pointer that merely RESTS where its content appears', async () => {
+	// the adversarial condition: the real pointer over the spot the fixture's first element lands
+	const over_fixture = document.createElement('div');
+	over_fixture.style.cssText = 'position:fixed;left:6px;top:6px;width:12px;height:12px';
+	document.body.appendChild(over_fixture);
+	await userEvent.hover(over_fixture);
+	over_fixture.remove();
+	await park_pointer(); // the defence every test in this file gets from beforeEach
+
+	const calls: string[] = [];
+	// Only a trusted pointerover INSIDE the region can warm the hole. (Chromium does fire one on the
+	// body under the parked pointer when the DOM changes — that is the mechanism, and it is harmless
+	// there; the defence is that it never lands inside the region.)
+	const trusted_overs: string[] = [];
+	const on_over = (e: Event) => {
+		const target = e.target as Element;
+		if (e.isTrusted && target.closest?.('ogygia-region')) trusted_overs.push(target.tagName);
+	};
+	document.addEventListener('pointerover', on_over, true);
+	const real_fetch = window.fetch;
+	window.fetch = async (input) => {
+		calls.push(String(input));
+		return new Response('<a id="rest">served</a>', {
+			status: 200,
+			headers: { 'content-type': 'text/html' }
+		});
+	};
+	document.body.innerHTML =
+		`<nav><ogygia-region render="defer" when="interaction" style="display:contents" endpoint="${RESTING_ENDPOINT}">` +
+		`<a id="rest">Products</a></ogygia-region></nav>`;
+	try {
+		bootDev();
+		await new Promise((r) => setTimeout(r, 200));
+		expect(trusted_overs, `trusted pointerover inside the region on: ${trusted_overs.join(', ')}`).toHaveLength(0);
+		expect(calls, `fetched with no hover: ${calls.join(' | ')}`).toHaveLength(0);
+	} finally {
+		document.removeEventListener('pointerover', on_over, true);
+		window.fetch = real_fetch;
+	}
+});
 
 const ENDPOINT = '/__ogygia__?id=deadbeef0000&props=W3t9XQ&exp=9999999999&sig=stub';
 
@@ -69,7 +140,7 @@ test('an on-demand hole fetches on pointer intent and morphs its HTML in (fallba
 	try {
 		bootDev();
 		await new Promise((r) => setTimeout(r, 300));
-		expect(calls).toHaveLength(0); // no intent, no request
+		expect(calls, `fetched before any intent: ${calls.join(' | ')}`).toHaveLength(0); // no intent, no request
 		expect(region.hasAttribute('data-hydrated')).toBe(false);
 		region.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
 		await expect.poll(() => region.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
@@ -107,7 +178,7 @@ test('an on-demand hole fetches on hover of a descendant (pointerover bubbles th
 	try {
 		bootDev();
 		await new Promise((r) => setTimeout(r, 200));
-		expect(calls).toHaveLength(0); // no hover yet
+		expect(calls, `fetched before the hover: ${calls.join(' | ')}`).toHaveLength(0); // no hover yet
 		// hover the descendant <a>; pointerover bubbles up through the boxless wrapper
 		item.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
 		await expect.poll(() => region.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);

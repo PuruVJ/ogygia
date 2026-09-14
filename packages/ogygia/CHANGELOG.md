@@ -713,6 +713,17 @@ Found while rebuilding a large production site header (static mega menu, per-vis
 
 ### Internal
 
+- **The on-demand-hole browser tests are immune to where the runner's real pointer rests.**
+  Chromium fires a TRUSTED `pointerover` on content that appears under a resting cursor (its
+  post-layout fake mouse move), so a fixture inserted at the top-left while the CI runner's pointer
+  rested there was "hovered" the instant it landed — the hole warmed and fetched before the test's
+  own hover. Correct runtime behaviour, wrong test assumption; it only ever showed on CI and was
+  filed twice as an "upstream break" by the weekly watcher. Every test in the file now parks the
+  real pointer in a corner first, the failing assertions name the URLs they saw, and a
+  self-contained regression test creates the adversarial resting position itself. The watcher
+  gained a **baseline leg** (the same suites on the PINNED lockfile, before bumping svelte/kit): a
+  red baseline files under `suite-red`, never as an upstream break.
+
 - **Full TypeScript `strict` at the library level.** `strict: true`, with all resulting errors
   fixed. Each JSDoc `@type`/`@param` annotation is converted to real TypeScript. The 10 core
   runtime components moved to `<script lang="ts">`. `svelte-check` now runs in the library `check`
