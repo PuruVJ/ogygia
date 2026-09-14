@@ -229,6 +229,22 @@ button:hover {
 .btn.primary:hover {
 	background: #2b5f96;
 }
+/* Reset — clears a running or stuck recording. Amber so it reads as "recovery", not a primary action;
+ * gets a live outline while a profile is actually running so it's obvious what to hit if the site drags. */
+.btn.danger {
+	background: #3a2519;
+	border-color: #6b3f28;
+	color: #f2ddcd;
+}
+.btn.danger:hover {
+	background: #4a2f1f;
+	border-color: #86502f;
+}
+.btn.danger.recording {
+	border-color: #c9782f;
+	color: #ffe7d3;
+	box-shadow: 0 0 0 1px #c9782f66;
+}
 .btn[disabled] {
 	opacity: 0.6;
 	cursor: default;

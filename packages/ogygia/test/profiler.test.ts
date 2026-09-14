@@ -709,6 +709,36 @@ describe('profiler handle', () => {
 		}
 	});
 
+	it('serializes recordings: a second profile while one is running renders un-profiled', async () => {
+		dev_switch.dev = false;
+		try {
+			const handle = profiler({ secret: 'prof-key' });
+			// A holds the recorder slot until we release it (its render parks on the gate).
+			let release_a: () => void = () => {};
+			const a_gate = new Promise<void>((r) => (release_a = r));
+			const a = handle({
+				event: make_event('/prod/a', { 'x-profile': 'prof-key' }),
+				resolve: async () => {
+					await a_gate;
+					return new Response('a');
+				}
+			});
+			// give A time to take the slot and enter the capture window before B arrives
+			await new Promise((r) => setTimeout(r, 50));
+			const b = await handle({
+				event: make_event('/prod/b', { 'x-profile': 'prof-key' }),
+				resolve: async () => new Response('b')
+			});
+			// the process-wide inspector is busy with A, so B is served un-profiled (no report header)
+			expect(b.headers.get('x-profile-report')).toBeNull();
+			release_a();
+			const a_res = await a;
+			expect(a_res.headers.get('x-profile-report')).toMatch(/\/__profiler\/report\//);
+		} finally {
+			dev_switch.dev = true;
+		}
+	});
+
 	it('runs a lean path with network off: still logs requests, no Server-Timing', async () => {
 		const handle = profiler({ network: false, serverTiming: false });
 		const res = await handle({

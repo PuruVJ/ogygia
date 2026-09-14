@@ -12,6 +12,24 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Profiler: a slow or hung page can no longer wedge the whole site, and recordings coordinate
+  across workers without shared storage.** While a page-mode recording runs, every request on the
+  site is attributed through an AsyncLocalStorage — so a recording that hangs (a page whose own
+  upstream never returns) used to keep the whole site paying that tax for up to two minutes. Now:
+  - Each render is raced against a per-render timeout, the whole recording is hard-capped even on a
+    real server (no gateway kill), and a watchdog force-clears the site-wide attribution context at
+    the cap — so a wedged run stops taxing the site in seconds, not minutes, and returns a clean 504
+    instead of hanging. A run that partly completes keeps its good renders.
+  - Recordings serialize **per worker** (one process-wide V8 inspector). There is deliberately no
+    in-memory server queue: a serverless worker is recycled within ~30 s, so a parked waiter is
+    unreliable — and unneeded, because a retry lands on a different, free worker. A busy worker
+    returns `409` immediately and the run page **polls** until one is free, showing an "in queue"
+    state; it then measures automatically. Same behaviour on Amplify (isolated workers) and on a
+    single long-lived server.
+  - The dashboard's **Reset** is now a real button in the top-right (amber, highlighted while a run
+    is active), not a tiny inline link — the escape hatch when a run gets stuck.
+
+
 - **Server request path: one request store, one document pass, one walk, native JSON where it
   can be.** A performance program over the handle and Region's SSR branch, measured on a large
   CMS page shape (21 islands, a 300 KB-props header, a 690 KB seed) with `internal/bench/

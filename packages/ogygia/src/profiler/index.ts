@@ -52,6 +52,7 @@ import {
 } from './report.js';
 import { ogp_encode, ogp_decode, is_ogp, recover_ogp_bytes } from './crypto.js';
 import { error, type Router, type Ctx as RouteCtx } from '../router/index.js';
+import { is_http_error, is_redirect } from '../router/respond.js';
 import { build_profiler_router } from './profiler-router.js';
 import { detect_dev } from './env.js';
 
@@ -158,9 +159,28 @@ const MAX_NET_PER_REQUEST = 100;
 const MAX_WINDOW_NET = 2000;
 const MAX_BACKGROUND_NET = 300;
 // A recording that started longer ago than this is treated as abandoned (a frozen/timed-out
-// serverless invocation whose cleanup never ran), so the profiler unwedges itself. Longer than any
-// real profile: a serverless request is capped well under this anyway.
-const RECORDING_MAX_MS = 120_000;
+// serverless invocation whose cleanup never ran), so the profiler unwedges itself. Kept just above
+// the hard cap below so a legit run never trips it, but a truly wedged one self-heals fast — while a
+// recording is active EVERY request on the site runs inside the attribution AsyncLocalStorage, so a
+// stuck run is a site-wide tax until this elapses.
+const RECORDING_MAX_MS = 35_000;
+// The absolute wall-time a single page recording may run, even on a real server with no gateway kill.
+// A hung upstream on the profiled page must never keep the site-wide attribution context alive: past
+// this the run is abandoned, its state cleared, and the request returns. Well above a legit multi-run
+// recording (5 renders of a 3 s page + coverage ≈ 20 s); on serverless the platform budget is smaller
+// and wins.
+const RECORDING_HARD_CAP_MS = 30_000;
+// One render (a warm-up hop or a run) that outlives this is treated as hung: the recording stops
+// waiting on it and finishes with what it has, rather than pinning the whole recording — and the site —
+// on a page whose own upstream never returns.
+const PER_RENDER_TIMEOUT_MS = 15_000;
+// Recordings SERIALIZE PER WORKER — the V8 inspector CPU/heap sampler and the attribution
+// AsyncLocalStorage are both process-global, so two at once on one process would cross-pollute each
+// other's samples. There is deliberately NO in-memory server queue: on serverless a worker is recycled
+// within ~30 s (memory wiped), so a parked waiter is unreliable — and unnecessary, because a retry
+// lands on a different, free worker. When a worker is busy it returns 409 immediately and the CLIENT
+// polls (RunView) until some worker says yes. That "queue" needs no shared storage, so it works the
+// same on Amplify (isolated workers) and on a single long-lived server.
 /** an inspector-unavailable recording error (edge runtimes) vs a real profiling failure */
 const INSPECTOR_ERR = /inspector/;
 const WIN_DRIVE_RE = /^[A-Za-z]:[\\/]/;
@@ -257,6 +277,11 @@ class Profiler {
 	// that clears it never runs — leaving a boolean flag `true` forever, which is exactly the "previous
 	// session is still running, can't profile again" bug. Past RECORDING_MAX_MS a stale run is ignored.
 	#recording_since = 0;
+	// The recorder lock: held for the life of a recording (the inspector session is only free once it
+	// ends), independent of `#recording_since` (which the watchdog may clear earlier to unblock the site).
+	// Non-blocking — a second recording on the same worker is refused, not queued (the client retries onto
+	// another worker). See #try_acquire_recorder.
+	#recorder_busy = false;
 	#als: import('node:async_hooks').AsyncLocalStorage<Ctx> | null = null;
 	#init_done: Promise<void> | null = null;
 	/** Re-assert the `globalThis.fetch` patch before a profile (self-heal if it was replaced). */
@@ -318,6 +343,25 @@ class Profiler {
 	 *  serverless invocation ages out after the cap instead of wedging the profiler forever. */
 	#recording_active(): boolean {
 		return this.#recording_since > 0 && Date.now() - this.#recording_since < RECORDING_MAX_MS;
+	}
+
+	/** Take the recorder slot without waiting: true if it was free (now ours), false if busy. Recordings
+	 *  serialize PER WORKER — one V8 inspector CPU/heap sampler + one attribution context per process — so
+	 *  a second recording on the same process is refused, NOT queued in memory: on serverless the process
+	 *  can be recycled at any moment (Amplify freezes a worker after ~30 s), so a waiter parked in memory
+	 *  is unreliable, and it isn't needed — a retry lands on a different, free worker. The "queue" is the
+	 *  CLIENT polling `/page` until a worker says yes (see RunView). */
+	#try_acquire_recorder(): boolean {
+		if (this.#recorder_busy) return false;
+		this.#recorder_busy = true;
+		return true;
+	}
+
+	/** Free the recorder slot. Called only when the recording is truly finished (its inspector session
+	 *  closed) — never from the site-unblock watchdog, which may fire while an orphaned run still holds
+	 *  the inspector. */
+	#release_recorder(): void {
+		this.#recorder_busy = false;
 	}
 
 	/** Production: detach the profiler's AsyncLocalStorage once a recording ends. An ALS that has
@@ -797,7 +841,7 @@ class Profiler {
 			recent: this.#ring,
 			routes: route_aggregates(this.#ring),
 			reports: [...this.#reports.values()].map((r) => r.meta).reverse(),
-			recording: this.#recording_active(),
+			recording: this.#recorder_busy || this.#recording_active(),
 			dev: this.dev,
 			rss_mb: Math.round(process.memoryUsage().rss / 1048576),
 			inflight: this.#inflight
@@ -819,8 +863,12 @@ class Profiler {
 	}
 
 	// Manually clear a wedged recording flag (belt-and-suspenders with the time-based auto-heal).
+	// The dashboard's Reset: the escape hatch for a wedged recording. Clears the site-wide attribution tax
+	// AND frees the recorder lock so a new profile can start on this worker.
 	#reset(ctx: RouteCtx): Response {
 		this.#recording_since = 0;
+		this.#release_als();
+		this.#recorder_busy = false;
 		return ctx.redirect(this.base);
 	}
 
@@ -828,14 +876,38 @@ class Profiler {
 	// always-on coverage pass. Redirects to the report (or ?format=json / ?format=ogp).
 	async #record_page(ctx: RouteCtx): Promise<Response> {
 		const event = ctx.event!; // event.fetch (Kit's internal SSR render) is the one thing only Kit gives
-		if (this.#recording_active()) {
-			return error(
-				409,
-				'A profile is already running. It clears itself within a couple of minutes if a run was abandoned — or hit Reset on the dashboard.'
+		// One recording per worker (shared inspector). If this worker is busy, refuse immediately with a
+		// 409 the client retries — don't hold a waiter in memory (unreliable on a worker that may be
+		// recycled within 30 s). The retry lands on a free worker (serverless) or comes back once this one
+		// finishes (single server). Reset on the dashboard clears a wedged one.
+		if (!this.#try_acquire_recorder()) {
+			return new Response(
+				JSON.stringify({
+					busy: true,
+					message:
+						'A profile is already running on this worker. Waiting for it to finish (or for a free worker).'
+				}),
+				{
+					status: 409,
+					headers: {
+						'content-type': 'application/json; charset=utf-8',
+						'retry-after': '2',
+						'cache-control': 'no-store'
+					}
+				}
 			);
 		}
 		const q = ctx.url.searchParams;
 		this.#recording_since = Date.now();
+		// Backstop for a wedged run: if the profiled page (or one of its upstream calls) hangs and this
+		// method never reaches its `finally`, force-clear the recording state at the hard cap so the whole
+		// site stops paying the attribution tax now — don't wait out RECORDING_MAX_MS. An orphaned run that
+		// later settles finds recording already cleared and simply drops its result.
+		const watchdog = setTimeout(() => {
+			this.#recording_since = 0;
+			this.#release_als();
+		}, RECORDING_HARD_CAP_MS + 2_000);
+		watchdog.unref?.();
 		// Re-assert the fetch patch right before profiling — `globalThis.fetch` may have been replaced
 		// since install, which is why runs sometimes missed network. Self-heals to reliable capture.
 		this.#ensure_net?.();
@@ -850,9 +922,23 @@ class Profiler {
 			// Netlify 10s, Vercel 300s, …). Start the budget clock now — warm-up, CPU runs, AND the
 			// coverage pass all live inside it. Infinity on a real server.
 			const work_budget = serverless_work_budget_ms();
-			const deadline = Number.isFinite(work_budget) ? Date.now() + work_budget : Infinity;
-			const fetch_render = (p: string) =>
-				event.fetch(p, { headers: { 'x-og-profiler-internal': '1' } });
+			// Cap the run at the hard limit even on a real server (Infinity budget): a page recording must
+			// never outlive RECORDING_HARD_CAP_MS, because it holds the site-wide attribution context open.
+			const budget_deadline = Number.isFinite(work_budget) ? Date.now() + work_budget : Infinity;
+			const deadline = Math.min(budget_deadline, Date.now() + RECORDING_HARD_CAP_MS);
+			// Each render is raced against a timeout so a single hung upstream can't pin the recording (and
+			// the site) — the smaller of PER_RENDER_TIMEOUT_MS and whatever budget is left.
+			const fetch_render = (p: string) => {
+				const left = deadline - Date.now();
+				const ms = Number.isFinite(left)
+					? Math.max(1, Math.min(PER_RENDER_TIMEOUT_MS, left))
+					: PER_RENDER_TIMEOUT_MS;
+				return with_timeout(
+					event.fetch(p, { headers: { 'x-og-profiler-internal': '1' } }),
+					ms,
+					'render timed out (the page or one of its upstream calls did not return in time)'
+				);
+			};
 
 			// Warm-up + redirect resolve. `/fr/fr` may 308 → `/fr/fr/` (trailing slash), or i18n-redirect;
 			// profiling the 3xx measures nothing (the classic "3 ms window, no components" report). Follow
@@ -914,7 +1000,20 @@ class Profiler {
 						break;
 					}
 					const t = performance.now();
-					const res = await fetch_render(target);
+					let res: Response;
+					try {
+						res = await fetch_render(target);
+					} catch {
+						// A render timed out (hung page/upstream). Stop the loop and finish with the runs we
+						// already have rather than failing the whole recording — and let the outer finally
+						// clear the recording state so the site is not held hostage to this page.
+						budget_note =
+							i > 0
+								? `Ran ${i} of ${runs} renders — stopped early, a later render hung ` +
+									`(the page or an upstream call did not return within ${Math.round(PER_RENDER_TIMEOUT_MS / 1000)}s).`
+								: undefined;
+						break;
+					}
 					const body = await res.text();
 					const done = performance.now();
 					run_status = res.status;
@@ -927,6 +1026,15 @@ class Profiler {
 					await new Promise((r) => setImmediate(r));
 				}
 			});
+			// Every render hung/failed → nothing to report. Don't build an empty report; tell the user.
+			if (run_ms.length === 0) {
+				return error(
+					504,
+					'The page did not return in time to profile it. It (or an upstream call it makes) is ' +
+						'either hung or slower than the recording budget — try a lighter path, or check that ' +
+						'page for a stuck request.'
+				);
+			}
 			// N identical renders → N copies of the same outbound calls. Keep one render's worth so
 			// the waterfall shows one request + its leaf calls, not the same handful ×N.
 			scope_net_to_one_run(cap, run_windows);
@@ -965,6 +1073,9 @@ class Profiler {
 			// the session cookie is seated by the gate in #ui, not here
 			return ctx.redirect(ctx.href('/report/[id]', { id }));
 		} catch (e) {
+			// A deliberate `error()`/`redirect()` from inside the try (bad path 400, empty-runs 504, …) is a
+			// control-flow throw the router renders — let it through. Only a REAL exception becomes a 500.
+			if (is_http_error(e) || is_redirect(e)) throw e;
 			return error(
 				500,
 				e instanceof Error && INSPECTOR_ERR.test(e.message)
@@ -972,8 +1083,10 @@ class Profiler {
 					: `Profiling failed: ${e instanceof Error ? e.message : String(e)}`
 			);
 		} finally {
+			clearTimeout(watchdog);
 			this.#recording_since = 0;
 			this.#release_als();
+			this.#release_recorder();
 		}
 	}
 
@@ -1175,11 +1288,12 @@ class Profiler {
 		// Header-triggered single-request profile? Decided FIRST, because it is one of the three
 		// reasons a request gets a network-attribution context at all.
 		const profile_header = event.request.headers.get('x-profile');
-		const header_profile =
-			!!profile_header &&
-			!this.#recording_active() &&
-			this.ui_enabled &&
-			(await this.#key_matches(profile_header));
+		const key_ok =
+			!!profile_header && this.ui_enabled && (await this.#key_matches(profile_header));
+		// Take the recorder slot atomically (no await between the check and the take): two concurrent
+		// header-profiled requests must not both start a recording and collide on the one process-wide
+		// inspector. If it's busy, this request just renders un-profiled rather than waiting.
+		const header_profile = key_ok && this.#try_acquire_recorder();
 
 		// PAY ONLY WHEN PROFILING. Attributing outbound calls to a request means running it inside
 		// an AsyncLocalStorage, and on Node 20 every ALS in flight costs a store copy per async hop —
@@ -1233,6 +1347,13 @@ class Profiler {
 		// header-triggered single-request profile (decided above)
 		if (header_profile) {
 			this.#recording_since = Date.now();
+			// Same site-unblock backstop as the page path: if this request wedges inside the capture, don't
+			// leave the whole site paying the attribution tax past the hard cap.
+			const watchdog = setTimeout(() => {
+				this.#recording_since = 0;
+				this.#release_als();
+			}, RECORDING_HARD_CAP_MS + 2_000);
+			watchdog.unref?.();
 			try {
 				let res: Response | undefined;
 				const cap = await this.#capture_window(100, async () => {
@@ -1250,8 +1371,10 @@ class Profiler {
 				}
 				return res!;
 			} finally {
+				clearTimeout(watchdog);
 				this.#recording_since = 0;
 				this.#release_als();
+				this.#release_recorder();
 			}
 		}
 
@@ -1325,6 +1448,19 @@ function pct(sorted: number[], p: number): number {
 
 function clamp(n: number, lo: number, hi: number): number {
 	return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
+}
+
+/** Race a promise against a wall-time so a hung render can never pin a recording (and, through the
+ *  attribution AsyncLocalStorage, the whole site). Rejects with `label` on timeout; the underlying work
+ *  is left to settle on its own — the caller has already moved on. */
+function with_timeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+	if (!Number.isFinite(ms) || ms <= 0) return p;
+	let timer: ReturnType<typeof setTimeout>;
+	const timeout = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new Error(label)), ms);
+		timer.unref?.();
+	});
+	return Promise.race([p.finally(() => clearTimeout(timer)), timeout]);
 }
 
 function round2(n: number): number {

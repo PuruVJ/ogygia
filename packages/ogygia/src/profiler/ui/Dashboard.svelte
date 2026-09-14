@@ -24,13 +24,20 @@
 	<div class="actions">
 		<a class="btn" href="{base}/view">Import<span class="sub">.ogp</span></a>
 		<span class="sub">open an encrypted <code>.ogp</code> exported from any run</span>
-		{#if !dev}<a class="btn" href="{base}/logout" style="margin-left:auto">Lock</a>{/if}
+		<a
+			class="btn danger"
+			class:recording
+			href="{base}/reset"
+			style="margin-left:auto"
+			title="Stop any running or stuck recording and clear the profiler's state. Use this if the site feels slow after profiling — a recording holds a site-wide timing context open until it ends."
+			>Reset</a
+		>
+		{#if !dev}<a class="btn" href="{base}/logout">Lock</a>{/if}
 	</div>
 
 	{#if recording}
 		<p class="verdict">
-			A profile is running right now. Refresh in a moment — or <a href="{base}/reset">reset</a> if a run
-			got stuck.
+			A profile is running right now. Refresh in a moment — or hit <b>Reset</b> above if a run got stuck.
 		</p>
 	{/if}
 

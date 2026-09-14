@@ -19,20 +19,47 @@
 		format
 	}: { base: string; path: string; runs: number; format: string } = $props();
 
+	// A busy worker answers /page with 409 (one recording per worker — the V8 profiler is process-wide).
+	// There's no server-side queue to rely on (a serverless worker is recycled within ~30s), so the QUEUE
+	// LIVES HERE: poll until a worker accepts. On serverless the retry lands on a free worker; on a single
+	// server it comes back once the run ahead finishes. Give up after QUEUE_MAX_MS and point at Reset.
+	const QUEUE_POLL_MS = 2000;
+	const QUEUE_MAX_MS = 120_000;
+
 	const p = fake_progress();
 	let phase = $state('Starting the profiler…');
 	let error = $state('');
 	let done_ogp = $state(false);
+	let queued = $state(false);
+	let waited_s = $state(0);
+
+	/** Fetch /page, polling while any worker we reach is busy. Returns the first non-409 response, or the
+	 *  last 409 if we waited past QUEUE_MAX_MS (the caller surfaces that as an error). */
+	async function fetch_page(url: string): Promise<Response> {
+		const started = Date.now();
+		for (;;) {
+			queued = false;
+			p.start();
+			phase = `Rendering ${path} ${runs}× and sampling the server…`;
+			const res = await fetch(url);
+			if (res.status !== 409) return res;
+			// busy — enter/stay in the queue
+			if (Date.now() - started > QUEUE_MAX_MS) return res;
+			queued = true;
+			const retry_after = Number(res.headers.get('retry-after')) * 1000;
+			const delay = Number.isFinite(retry_after) && retry_after > 0 ? retry_after : QUEUE_POLL_MS;
+			waited_s = Math.round((Date.now() - started) / 1000);
+			phase = 'In queue — a profile is already running. Waiting for a free worker…';
+			await new Promise((r) => setTimeout(r, delay));
+		}
+	}
 
 	async function run() {
-		p.start();
-		phase = `Rendering ${path} ${runs}× and sampling the server…`;
 		try {
+			const suffix = format === 'ogp' ? '&format=ogp' : '';
+			const res = await fetch_page(`${base}/page?p=${encodeURIComponent(path)}&runs=${runs}${suffix}`);
+			if (!res.ok) throw new Error(String(res.status));
 			if (format === 'ogp') {
-				const res = await fetch(
-					`${base}/page?p=${encodeURIComponent(path)}&runs=${runs}&format=ogp`
-				);
-				if (!res.ok) throw new Error(String(res.status));
 				const blob = await res.blob();
 				await p.finish();
 				const a = document.createElement('a');
@@ -45,8 +72,6 @@
 				phase = 'Downloaded the encrypted .ogp.';
 			} else {
 				// /page renders N times then 303s to /report/<id>; fetch follows it → res.url is the report
-				const res = await fetch(`${base}/page?p=${encodeURIComponent(path)}&runs=${runs}`);
-				if (!res.ok) throw new Error(String(res.status));
 				const url = res.url;
 				await p.finish();
 				phase = 'Opening the report…';
@@ -59,10 +84,12 @@
 			}
 		} catch (e) {
 			p.fail();
+			queued = false;
 			const code = e instanceof Error ? e.message : 'error';
 			error =
 				`Profiling failed (${code}). If the page is slow, the host's request timeout may have cut it ` +
-				`off — try fewer renders, or tick the .ogp download and open it via Import.`;
+				`off — try fewer renders, or tick the .ogp download and open it via Import. If a run got ` +
+				`stuck, hit Reset on the dashboard.`;
 		}
 	}
 
@@ -70,9 +97,16 @@
 </script>
 
 <div class="run">
-	<p class="phase">{phase}</p>
-	<div class="track"><div class="fill" style="width:{p.value}%"></div></div>
-	<p class="pct">{Math.round(p.value)}%</p>
+	<p class="phase">{queued ? '⏳ ' : ''}{phase}</p>
+	{#if queued}
+		<p class="hint">
+			Waited {waited_s}s. Recordings run one at a time per worker (the V8 profiler is process-wide) —
+			this keeps polling until one is free, then measures automatically.
+		</p>
+	{:else}
+		<div class="track"><div class="fill" style="width:{p.value}%"></div></div>
+		<p class="pct">{Math.round(p.value)}%</p>
+	{/if}
 
 	{#if error}
 		<p class="verdict">{error}</p>
