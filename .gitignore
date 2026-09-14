@@ -71,3 +71,5 @@ scratch-*.mjs
 internal/repro-bcms-header/
 # PES (product catalog) lab — same rule: copied Schneider source, se.com captures, vendored bundles
 internal/repro-pes/
+# footer lab (the main ogygia PR's footer → remote functions + lake) — same rule, never committed
+internal/repro-ogygia-footer/

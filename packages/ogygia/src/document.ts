@@ -99,15 +99,21 @@ function kit_page_context(options: DocumentOptions): KitPage {
 		error: s?.error ?? null,
 		state: {}
 	};
-	record_page({
-		url: href ? { href } : undefined,
-		params: page.params,
-		route: page.route,
-		status: page.status,
-		data: page.data,
-		form: page.form,
-		error: page.error
-	});
+	// The document root has no client code of its own: it can call no remote (`[]`); the regions
+	// inside it record what theirs can.
+	record_page(
+		{
+			url: href ? { href } : undefined,
+			params: page.params,
+			route: page.route,
+			status: page.status,
+			data: page.data,
+			form: page.form,
+			error: page.error
+		},
+		true,
+		[]
+	);
 	return page;
 }
 

@@ -44,6 +44,11 @@ declare module 'virtual:ogygia/island-deps' {
 	 *  in its chunk closure)? Decides whether the page seed ships. Fail-open: true in dev and for an
 	 *  entry the build handoff does not know. */
 	export function islandReadsPage(entry: string): boolean;
+	/** The Kit remote-function modules (by id-hash, the prefix of `internals.id`) an island entry's
+	 *  client code can call — static + dynamic imports in its chunk closure. Decides which
+	 *  SSR-resolved remotes the page seeds (`application/ogygia-remote`). Fail-open: `null` ("may
+	 *  call anything") in dev and for an entry the build handoff does not know. */
+	export function islandRemotes(entry: string): string[] | null;
 	/** og.$ hoisted factories (tag → self-contained source) for the page-inline registration
 	 *  script — prod SSR only; null in dev/client (dev uses the fn-manifest virtual). */
 	export function fnManifest(): Record<string, string> | null;

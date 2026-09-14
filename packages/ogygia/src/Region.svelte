@@ -24,7 +24,7 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
-	import { islandDeps, islandCss, contentCss, islandReadsPage, preloadPolicy } from 'virtual:ogygia/island-deps';
+	import { islandDeps, islandCss, contentCss, islandReadsPage, islandRemotes, preloadPolicy } from 'virtual:ogygia/island-deps';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of } from './runtime/fingerprint.js';
 	import { asset } from '$app/paths';
@@ -248,6 +248,13 @@
 	// neither serialized nor downloaded twice. A nested region hydrates with its parent, whose
 	// closure already includes it; a promise `of` resolves later with a module SSR cannot see, so it
 	// asks (fail-open).
+	//
+	// THE REMOTE SEED SHIPS ONLY FOR REMOTES SOME REGION'S CLIENT CAN CALL: `islandRemotes(entry)` is
+	// the build's list for this entry (the remote modules in its chunk closure). A region with no
+	// client entry (a lake, a static hole, an inline held value) records `[]`; the fail-open cases
+	// above record `null` ("may call anything"). The handle unions the records and seeds an
+	// SSR-resolved remote only when it is in that union — a lake or a page script awaiting a query
+	// no island imports (a whole CMS footer entry, measured 12.5 KB) no longer ships it as seed.
 	if (typeof window === 'undefined') {
 		untrack(() => {
 			const entry = nested
@@ -264,10 +271,12 @@
 								? of_init.module
 								: '';
 			const seed = !!entry && (entry === '?' || islandReadsPage(entry));
+			const remotes = !entry ? [] : entry === '?' ? null : islandRemotes(entry);
 			try {
 				record_page(
 					{ data: page.data, form: page.form, error: page.error, status: page.status },
-					seed
+					seed,
+					remotes
 				);
 			} catch {
 				/* isolated render without a live page — the recorder is unset there anyway */

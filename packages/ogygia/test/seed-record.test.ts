@@ -11,21 +11,22 @@ import type { Component } from 'svelte';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 import { set_page_recorder } from '../src/page-seed-registry.js';
-import { set_reads_page } from './_stubs/virtual-island-deps.js';
+import { set_reads_page, set_island_remotes } from './_stubs/virtual-island-deps.js';
 import { region as make_region } from '../src/region.js';
 
 // `render()`'s body is a LAZY getter — the component runs on first read, so every render here reads it.
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 
-let records: Array<{ snap: unknown; seed: boolean }>;
+let records: Array<{ snap: unknown; seed: boolean; remotes: readonly string[] | null }>;
 beforeEach(() => {
 	records = [];
-	set_page_recorder((snap, seed) => records.push({ snap, seed }));
+	set_page_recorder((snap, seed, remotes) => records.push({ snap, seed, remotes }));
 });
 afterEach(() => {
 	set_page_recorder(null);
 	set_reads_page(true);
+	set_island_remotes(null);
 });
 
 const island = (extra: Record<string, unknown> = {}) => ({
@@ -92,5 +93,58 @@ describe('page snapshot recording', () => {
 		set_reads_page(false);
 		void render(region, { props: { of: new Promise(() => {}), placeholder: undefined } }).body;
 		expect(seeds()).toEqual([true]);
+	});
+});
+
+// REMOTE SEED ONLY WHEN REACHABLE — the same record carries which remote modules (Kit id-hashes)
+// this region's client code can call (`islandRemotes(entry)`, the build's chunk-closure answer).
+// `[]` = none, `null` = "may call anything" (fail-open). The handle unions the records and seeds an
+// SSR-resolved remote only when some region can reach it.
+describe('callable-remotes recording', () => {
+	const remotes = () => records.map((r) => r.remotes);
+
+	it('an island records the build’s list for its entry', () => {
+		set_island_remotes(['bjveep', '1rczqrp']);
+		void render(region, { props: island() }).body;
+		expect(remotes()).toEqual([['bjveep', '1rczqrp']]);
+	});
+
+	it('an island whose closure imports no remote records [] — not null', () => {
+		set_island_remotes([]);
+		void render(region, { props: island() }).body;
+		expect(remotes()).toEqual([[]]);
+	});
+
+	it('an entry the build does not know (foreign fragment, dev) records null — fail-open', () => {
+		set_island_remotes(null);
+		void render(region, { props: island() }).body;
+		expect(remotes()).toEqual([null]);
+	});
+
+	it('a lake, a static hole and a plain inline held region record [] (no client at all)', () => {
+		set_island_remotes(['bjveep']); // whatever the build would say — these have no entry to ask for
+		void render(region, { props: { __mode: 'lake', __entry: '/lake.js' } }).body;
+		void render(region, { props: hole() }).body;
+		void render(region, { props: { of: make_region(Tiny as never, {}) } }).body;
+		expect(remotes()).toEqual([[], [], []]);
+	});
+
+	it('a server island that hydrates follows its client module', () => {
+		set_island_remotes(['bjveep']);
+		void render(region, { props: hole({ __hydrate: 'load', __module: '/islands/hole.js' }) }).body;
+		expect(remotes()).toEqual([['bjveep']]);
+	});
+
+	it('a promise `of` (module unknown until it resolves) records null — fail-open', () => {
+		set_island_remotes([]);
+		void render(region, { props: { of: new Promise(() => {}), placeholder: undefined } }).body;
+		expect(remotes()).toEqual([null]);
+	});
+
+	it('the wake does not matter (visible / interaction record the same list)', () => {
+		set_island_remotes(['bjveep']);
+		void render(region, { props: island({ load: undefined, visible: true }) }).body;
+		void render(region, { props: island({ load: undefined, interaction: true }) }).body;
+		expect(remotes()).toEqual([['bjveep'], ['bjveep']]);
 	});
 });

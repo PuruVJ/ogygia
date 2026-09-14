@@ -18,6 +18,17 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **An island with props inside a lake now hydrates on a csr=true page.** The handle skips the
+  page / remote / context seeds on a Kit-hydrated page (Kit serializes its own), and it skipped the
+  whole document tail with them — the tail that carries every region's props sidecar and preload
+  hints since props moved to the end of the body. The regions inside a lake are ogygia's on a
+  csr=true page too (their real `<ogygia-region>` is emitted and the runtime boots for them), so an
+  island there hydrated with `undefined` props and threw (a footer's subscription form, measured in
+  the footer lab; the lake-kit fixture's islands took no props and never saw it). The tail now ships
+  before `</body>` on csr=true pages as well, rendered against no seed (sidecars carry their values
+  whole); the seeds stay off. The lake-kit fixture gains a props-carrying island inside the lake and
+  `e2e/lake-kit.spec.ts` asserts its sidecar on the csr=true page and its hydration with the SSR
+  props.
 - **A relative `with { wake }` import inside a `{#snippet}` no longer breaks the build.** A snippet
   that carries an island into a component portable-izes into its own entry — a slice of the host's
   source re-processed under a `virtual:ogygia/island/<iid>.svelte` id, which is how the island inside
@@ -40,6 +51,25 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Changed
 
+- **The remote seed ships only for remotes an island on the page can call.** On a csr=false page
+  the handle seeds every remote function resolved during the render into
+  `<script type="application/ogygia-remote">`, so a hydrating island that re-runs the same query
+  resolves it from the document instead of fetching (the zero-flash rule). It seeded *every* such
+  call — including a lake's, a hole's fallback's, or a page script's `await query()` made for the
+  server render alone, whose result is already the page's HTML and which no client code re-runs.
+  One measured CMS footer, rendered as a lake off a remote, shipped its whole 12.5 KB entry as
+  seed on every page. The seed is now gated the way the page seed already is (SEED ONLY WHEN READ):
+  the client build records, per island entry, the remote modules anywhere in its chunk closure
+  (static and dynamic imports, named by the id-hash Kit mints — `og-region-deps.json` gains a
+  `remotes` map), every rendered region records what its client can call (`islandRemotes`, next to
+  `islandReadsPage`), and the handle seeds a remote only when it is in that union. Lakes, static
+  holes and inline held regions record nothing; a promise `of`, an entry the handoff does not know
+  (a foreign fragment's island) and dev record "anything" — fail-open, exactly the old behaviour.
+  Islands that call a query keep their seed and still hydrate without a fetch. csr=true pages are
+  Kit's (`__sveltekit_*.data`) and unchanged. Coverage: unit (`island-deps` remotes map + Kit hash
+  parity vectors, `seed-record` per-region records, `remote-seed-gate`), the playground
+  `/remote-seed-gate` pair and `e2e/remote-seed-gate.spec.ts` (no seed next to a non-calling island;
+  seed + zero hydrate fetch next to a calling one); `e2e/flicker.spec.ts` holds.
 - **Profiler: a slow or hung page can no longer wedge the whole site, and recordings coordinate
   across workers without shared storage.** While a page-mode recording runs, every request on the
   site is attributed through an AsyncLocalStorage — so a recording that hangs (a page whose own

@@ -18,3 +18,10 @@ export const islandReadsPage = (_entry: string): boolean => reads_page;
 export function set_reads_page(v: boolean) {
 	reads_page = v;
 }
+// `islandRemotes(entry)` — the build's per-entry list of callable remote id-hashes (fail-open
+// null). A test sets it with `set_island_remotes(...)` to check what Region records per region.
+let island_remotes: string[] | null = null;
+export const islandRemotes = (_entry: string): string[] | null => island_remotes;
+export function set_island_remotes(v: string[] | null) {
+	island_remotes = v;
+}

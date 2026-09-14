@@ -119,6 +119,7 @@ import {
 	set_page_recorder,
 	type PageSnapshot
 } from './page-seed-registry.js';
+import { collect_remote_seed } from './server/remote-seed-gate.js';
 import { DocumentTail, set_tail_reader } from './server/document-tail.js';
 import { set_late_recorder, set_late_taker, type LateRegion } from './late-region-registry.js';
 import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
@@ -154,6 +155,11 @@ type RequestBag = {
 	/** Some region on the page reads `$page` on the client (Region.svelte × `islandReadsPage`), so
 	 *  the `application/ogygia-page` seed must ship. The snapshot itself is recorded regardless. */
 	seed_wanted: boolean;
+	/** The remote modules (Kit id-hashes) some region's client code on this page can call — the
+	 *  union of every `record_page` (Region.svelte × `islandRemotes`). Gates the
+	 *  `application/ogygia-remote` seed: an SSR-resolved remote outside the set ships no seed.
+	 *  `null` once any region answered fail-open ("may call anything") → every remote seeds. */
+	remotes_wanted: Set<string> | null;
 	/** THE DOCUMENT TAIL (server/document-tail.ts): the module-preload hints and props sidecars the
 	 *  regions of this Kit page render defer to the end of the body. Emitted once, before the seeds. */
 	tail: DocumentTail;
@@ -196,7 +202,7 @@ set_ctx_recorder((key, value) => {
 	const bag = bag_of();
 	if (bag) bag.ctx.set(key, value);
 });
-set_page_recorder((snapshot, seed) => {
+set_page_recorder((snapshot, seed, remotes) => {
 	const bag = bag_of();
 	if (!bag) return;
 	// MERGE: the routeless document root records url/params/route from the router's seed first;
@@ -204,6 +210,10 @@ set_page_recorder((snapshot, seed) => {
 	bag.page = { ...bag.page, ...snapshot };
 	// SEED ONLY WHEN READ: one island whose client code reads `$page` is enough to ship the seed.
 	if (seed) bag.seed_wanted = true;
+	// REMOTE SEED ONLY WHEN REACHABLE: union the remotes this region's client can call; one
+	// fail-open record (`null`) opens the whole set for the request.
+	if (remotes === null) bag.remotes_wanted = null;
+	else if (bag.remotes_wanted) for (const h of remotes) bag.remotes_wanted.add(h);
 });
 // THE DOCUMENT TAIL (server/document-tail.ts): hints + props sidecars a Kit page render defers to
 // the end of the body. One per request, created with the bag; only a render inside a Kit PAGE
@@ -768,6 +778,7 @@ class OgygiaHandle {
 				ctx: new Map(),
 				page: null,
 				seed_wanted: false,
+				remotes_wanted: new Set(),
 				tail: new DocumentTail(),
 				deferred: null,
 				defer_next_id: 0,
@@ -957,18 +968,29 @@ class OgygiaHandle {
 				? route_is_csr_true(event.route.id)
 				: spans.body_end !== -1 && html_has_kit_bootstrap(html, spans.body_end);
 		if (csr_page) {
-			if (head === null) return html;
-			// Stamp the fact for the runtime (it boots here only for the regions inside lakes, and
-			// reads this meta instead of scanning inline scripts for Kit's bootstrap).
-			let head_inject = CSR_META;
-			// The ogygia runtime never mounts the devtools dock here (Kit owns the page). When
-			// devtools is compiled in (`devtools_boot_url` is non-empty only then, dev-only), inject a
-			// standalone dock boot so the launcher is on EVERY dev page — on this csr=true page it
-			// renders a "csr=true — open a csr=false page" notice, since there are no islands here.
-			if (devtools_boot_url && !head.includes('data-ogygia-devtools-boot')) {
-				head_inject += `<script type="module" data-ogygia-devtools-boot src="${devtools_boot_url}"></script>`;
+			let head_inject = '';
+			if (head !== null) {
+				// Stamp the fact for the runtime (it boots here only for the regions inside lakes, and
+				// reads this meta instead of scanning inline scripts for Kit's bootstrap).
+				head_inject = CSR_META;
+				// The ogygia runtime never mounts the devtools dock here (Kit owns the page). When
+				// devtools is compiled in (`devtools_boot_url` is non-empty only then, dev-only), inject a
+				// standalone dock boot so the launcher is on EVERY dev page — on this csr=true page it
+				// renders a "csr=true — open a csr=false page" notice, since there are no islands here.
+				if (devtools_boot_url && !head.includes('data-ogygia-devtools-boot')) {
+					head_inject += `<script type="module" data-ogygia-devtools-boot src="${devtools_boot_url}"></script>`;
+				}
 			}
-			return assemble(html, spans, null, head_inject, '');
+			// THE TAIL STILL SHIPS. The regions INSIDE A LAKE are ogygia's on this page too (their real
+			// `<ogygia-region>` is emitted, the runtime boots for them), and like on any page their props
+			// sidecars and preload hints were deferred into the document tail — so the tail goes out
+			// before `</body>` here as well, or an island inside a lake hydrates with `undefined`
+			// props and dies (a footer's subscription form did). Rendered against NO seed: the page /
+			// remote / context seeds stay off a csr=true page — Kit hydrates the tree and serializes
+			// its own remotes — and a sidecar written without a seed carries its values whole.
+			const tail = spans.body_end !== -1 && bag ? bag.tail.render(null) : '';
+			if (head === null && !tail) return html;
+			return assemble(html, spans, null, head_inject, tail);
 		}
 
 		// ── HEAD (the chunk carrying `</head>`) ──
@@ -1149,7 +1171,7 @@ class OgygiaHandle {
 		}
 
 		if (state?.remote?.implicit) {
-			const remote_script = await this.build_remote_seed_script(state);
+			const remote_script = await this.build_remote_seed_script(state, bag!.remotes_wanted);
 			if (remote_script) {
 				scripts.push(remote_script);
 				if (DEVTOOLS)
@@ -1330,54 +1352,23 @@ class OgygiaHandle {
 		return false;
 	}
 
-	async build_remote_seed_script(state: RequestState): Promise<string | null> {
+	async build_remote_seed_script(
+		state: RequestState,
+		/** REMOTE SEED ONLY WHEN REACHABLE: the id-hashes some region's client on this page can call
+		 *  (`bag.remotes_wanted`); `null` = unknown → seed every implicit remote (the pre-gate rule). */
+		wanted: ReadonlySet<string> | null = null
+	): Promise<string | null> {
 		const implicit = state.remote?.implicit;
 		if (!implicit) return null;
 
-		// Mirror Kit's OWN seed bucketing (server/remote.js) over the side-channel — Kit only serializes
-		// remote data inline when csr===true, so on csr=false pages we do it here. Bucket every implicit
-		// remote by type: q(query) / p(prerender) / l(query.live) / f(form). Seeding PRERENDER remotes
-		// (not only queries) is the fix for the async-island FOUC: a prerender remote awaited inside an
-		// island otherwise re-fetches on hydrate, so the component re-renders and Svelte RE-MOUNTS the
-		// subtree — a frame of unstyled DOM. With the seed in `prerender_responses`, the client resolves
-		// it synchronously and never re-fetches. Keys use `create_remote_key`, exactly like Kit's client.
-		const data: Record<'q' | 'p' | 'l' | 'f', Record<string, { v: unknown }>> = {
-			q: {},
-			p: {},
-			l: {},
-			f: {}
-		};
-		for (const [internals, record] of implicit) {
-			// Private (non-exported) remotes have no id and must never be serialized.
-			if (!internals.id) continue;
-			const type = internals.type as string;
-			const bucket = type === 'query_live' ? 'l' : (type[0] as 'q' | 'p' | 'l' | 'f');
-			if (bucket !== 'q' && bucket !== 'p' && bucket !== 'l' && bucket !== 'f') continue;
-			for (const key in record) {
-				// form outputs are keyed by the client-side action id directly (Kit parity).
-				const remote_key = type === 'form' ? key : create_remote_key(internals.id, key);
-				const promise = state.remote.data?.get(internals)?.[key] ?? record[key]();
-				let resolved = true;
-				await Promise.race([
-					Promise.resolve(promise).then(
-						(v) => {
-							// A seed is DATA; a value carrying a BAKED region (SSR HTML in the ticket — a
-							// page body from a `doc`-style remote) is a page-sized RENDER, and the page that
-							// awaited it server-side has already rendered it. Seeding it would ship the body
-							// twice (measured ~130kb/page on a docs site); skip it — a client consumer that
-							// ever needs the value just fetches the remote.
-							if (resolved && !this.has_baked_region(v)) data[bucket][remote_key] = { v };
-						},
-						() => {
-							/* errored/pending remotes are omitted → the client fetches them itself */
-						}
-					),
-					Promise.resolve().then(() => {
-						resolved = false;
-					})
-				]);
-			}
-		}
+		// The bucketing (Kit parity: q / p / l / f, `create_remote_key` keys) and the skips — private
+		// remote, no region's client can call it (`wanted`), errored/pending, baked-region value —
+		// live in server/remote-seed-gate.ts, pure and unit-tested; this serializes what comes back.
+		const data = await collect_remote_seed(implicit, wanted, {
+			memo: (internals) => state.remote.data?.get(internals as never),
+			skip_value: (v) => this.has_baked_region(v),
+			key: create_remote_key
+		});
 
 		if (!Object.values(data).some((b) => Object.keys(b).length > 0)) return null;
 

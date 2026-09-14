@@ -23,6 +23,8 @@ Remote functions are how an island speaks to the server: read data (`query`), ch
 
 SSR query results are seeded into the client cache. Thus an island that reads a query during the server render does not fetch again on hydrate, in production. Dev degrades to a refetch. See the note below.
 
+The seed is sized to its readers. A query result is seeded only when some island on the page can call that remote (its built chunks import the module). A lake, a server island, or the page's own script that awaits a query for the server render alone ships HTML, not a seed. So a whole CMS entry rendered through a lake costs the page nothing twice.
+
 ## Try it
 
 This counter is a client island. It reads a `query` and mutates through two `command`s. The value lives on the server. Each button is a real round-trip. A `.refresh()` then reads the value again. It is shared state: open this page in a second tab, and both tabs move.

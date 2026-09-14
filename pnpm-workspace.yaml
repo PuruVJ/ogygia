@@ -7,6 +7,7 @@ packages:
   # the bcms header lab is NOT a workspace member: gitignored, installs standalone (no lockfile importer)
   - '!internal/repro-bcms-header'
   - '!internal/repro-pes'
+  - '!internal/repro-ogygia-footer'
   # Runnable demos (the MFE federation trio + contracts) — consume the live packages/ogygia.
   - 'examples/mfe/*'
 allowBuilds:

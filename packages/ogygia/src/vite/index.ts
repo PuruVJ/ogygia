@@ -72,7 +72,7 @@ import {
 } from '../compiler/dev/hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
 import { island_subgraph_bytes } from '../compiler/dev/region-bytes.js';
-import { collectIslandDepModulepreloads } from '../compiler/link/island-deps.js';
+import { collectIslandDepModulepreloads, remote_hash_of } from '../compiler/link/island-deps.js';
 import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.js';
 import { ssr_hosts_handoff_path, parse_ssr_hosts } from '../compiler/link/emit-gate.js';
 import { router_css_key } from '../compiler/link/router-css.js';
@@ -1156,6 +1156,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 				// `page`: per island entry, whether its chunk closure bundles the `$app/state` /
 				// `$app/stores` shim — the handle seeds `page.data` only for islands that read it.
+				// `remotes`: per island entry, the Kit remote modules in that closure (by the id-hash Kit
+				// mints them with — relative to `process.cwd()`, as Kit's own transform hashes them) —
+				// the handle seeds an SSR-resolved remote only for a page with an island that can call it.
+				const remote_hash = (id: string) => remote_hash_of(id, process.cwd());
 				const map = collectIslandDepModulepreloads(
 					bundle as Record<
 						string,
@@ -1168,7 +1172,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							viteMetadata?: { importedCss?: Set<string> | string[] };
 						}
 					>,
-					[APP_SHIMS['$app/state'], APP_SHIMS['$app/stores']]
+					[APP_SHIMS['$app/state'], APP_SHIMS['$app/stores']],
+					remote_hash
 				);
 				// SERVER-ROUTER CSS handoff: each root's whole component-tree CSS was compiled + emitted as
 				// ONE dedicated asset in buildStart (router_css_refs). Resolve each referenceId to its

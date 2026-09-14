@@ -29,8 +29,15 @@ export type PageSnapshot = {
  * reads it for the freeze verdict — a load with a streaming promise is per-request by intent — and
  * for server-side page reads), only the serialized seed is gated on it. Whether the seed ships is
  * read ONCE, by the handle, when the document tail renders — no region asks during the render.
+ *
+ * `remotes` — the same question for the REMOTE seed (`application/ogygia-remote`): which remote
+ * modules (Kit id-hashes) this region's client code can call (`islandRemotes`, the build's chunk-
+ * closure answer). `[]` = none (a lake, a static hole, the routeless document root); `null` =
+ * fail-open, "may call anything" (a promise `of` whose module SSR cannot see, an entry the handoff
+ * does not know, dev). The handle unions every record and seeds only the remotes some region can
+ * reach — REMOTE SEED ONLY WHEN REACHABLE.
  */
-type Recorder = (snapshot: PageSnapshot, seed: boolean) => void;
+type Recorder = (snapshot: PageSnapshot, seed: boolean, remotes: readonly string[] | null) => void;
 
 let recorder: Recorder | null = null;
 
@@ -40,7 +47,12 @@ export function set_page_recorder(fn: Recorder | null): void {
 }
 
 /** Region.svelte calls this during SSR with Kit's real page; the client is a no-op. `seed: false`
- *  records the snapshot without asking for the client seed (no island on the page reads it). */
-export function record_page(snapshot: PageSnapshot, seed = true): void {
-	recorder?.(snapshot, seed);
+ *  records the snapshot without asking for the client seed (no island on the page reads it);
+ *  `remotes` names the remote modules this region's client can call (`null` = any). */
+export function record_page(
+	snapshot: PageSnapshot,
+	seed = true,
+	remotes: readonly string[] | null = null
+): void {
+	recorder?.(snapshot, seed, remotes);
 }

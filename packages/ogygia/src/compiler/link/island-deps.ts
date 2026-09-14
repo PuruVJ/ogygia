@@ -8,6 +8,40 @@ import { path } from '../host.js';
 
 /** Deterministic island facade filename (content-hashed Vite deps are separate). */
 const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;
+/** A Kit remote-function module (`*.remote.js` / `.ts`, Kit's `moduleExtensions` defaults), once
+ *  its `?query` is stripped. In the CLIENT graph Kit swaps its body for fetching stubs, but the
+ *  module keeps its file id — which is how an island's chunk closure names the remotes it can call. */
+const REMOTE_MODULE_RE = /\.remote\.[cm]?[jt]s$/;
+const BACKSLASH_G = /\\/g;
+
+/**
+ * Kit's own `hash()` (`@sveltejs/kit/src/utils/hash.js`: djb2 ×33 xor, unsigned, base36) — the
+ * function a remote's id is minted with: `${hash(file)}/${exportName}`, `file` the module's path
+ * relative to `process.cwd()`, posix. Mirrored here (Kit does not export it) so the build can
+ * name a remote by the same id the server sees on `internals.id` at render time. Covered by a
+ * vector test against ids observed from a real Kit build.
+ */
+export function kit_remote_hash(file: string): string {
+	let hash = 5381;
+	let i = file.length;
+	while (i) hash = (hash * 33) ^ file.charCodeAt(--i);
+	return (hash >>> 0).toString(36);
+}
+
+/**
+ * The Kit remote id-hash of a CLIENT module id, or `null` for a module that is not a remote file.
+ * `cwd` is what Kit hashed the file against (`process.cwd()` at build), either separator.
+ *
+ * @internal Exported for the plugin and unit tests.
+ */
+export function remote_hash_of(module_id: string, cwd: string): string | null {
+	const id = module_id.split('?')[0].replace(BACKSLASH_G, '/');
+	if (!REMOTE_MODULE_RE.test(id)) return null;
+	const root = cwd.replace(BACKSLASH_G, '/').replace(TRAILING_SLASH_RE, '');
+	const rel = id.startsWith(root + '/') ? id.slice(root.length + 1) : path.posix.relative(root, id);
+	return kit_remote_hash(rel);
+}
+const TRAILING_SLASH_RE = /\/+$/;
 
 /**
  * From a client `generateBundle` output, collect transitive static `imports` for each
@@ -37,11 +71,25 @@ export function collectIslandDepModulepreloads(
 	 * in its closure bundles one of them — what lets the handle skip the page seed on a page whose
 	 * islands never read it. Absolute paths, either separator.
 	 */
-	page_reader_files: readonly string[] = []
-): { js: Record<string, string[]>; css: Record<string, string[]>; page: Record<string, boolean> } {
+	page_reader_files: readonly string[] = [],
+	/**
+	 * Names a bundled module's Kit remote id-hash (`remote_hash_of`), or `null` for a module that is
+	 * no remote file. Per entry, `remotes[entryUrl]` lists every remote module in the island's chunk
+	 * closure — static AND dynamic imports, since a remote called after an `await import()` is still
+	 * this island's call — which is what lets the handle seed a remote's SSR result only when some
+	 * island on the page can call it (REMOTE SEED ONLY WHEN REACHABLE). Absent → every entry `[]`.
+	 */
+	remote_hash: ((module_id: string) => string | null) | null = null
+): {
+	js: Record<string, string[]>;
+	css: Record<string, string[]>;
+	page: Record<string, boolean>;
+	remotes: Record<string, string[]>;
+} {
 	const js: Record<string, string[]> = {};
 	const css: Record<string, string[]> = {};
 	const page: Record<string, boolean> = {};
+	const remotes: Record<string, string[]> = {};
 	const norm = (p: string) => p.split('\\').join('/');
 	const readers = new Set(page_reader_files.map(norm));
 	const reads_page = (fileName: string): boolean => {
@@ -50,6 +98,32 @@ export function collectIslandDepModulepreloads(
 			if (readers.has(norm(id.split('?')[0]))) return true;
 		}
 		return false;
+	};
+	const remotes_in = (fileName: string, acc: Set<string>): void => {
+		if (!remote_hash) return;
+		for (const id of bundle[fileName]?.moduleIds ?? []) {
+			const h = remote_hash(id);
+			if (h) acc.add(h);
+		}
+	};
+	// Every EMITTED chunk reachable from `fileName` through static or dynamic imports (the facade
+	// included) — the remotes scan's closure. Wider than the preload walk on purpose: a preload hint
+	// for a dynamic chunk would be waste, a remote called from one is still this island's call.
+	const closure_all = (fileName: string): Set<string> => {
+		const seen = new Set<string>([fileName]);
+		const queue = [fileName];
+		while (queue.length) {
+			const chunk = bundle[queue.pop()!];
+			if (!chunk || chunk.type !== 'chunk') continue;
+			for (const imp of [...(chunk.imports ?? []), ...(chunk.dynamicImports ?? [])]) {
+				if (seen.has(imp)) continue;
+				const dep = bundle[imp];
+				if (!dep || dep.type !== 'chunk') continue;
+				seen.add(imp);
+				queue.push(imp);
+			}
+		}
+		return seen;
 	};
 
 	const css_of = (fileName: string): string[] => {
@@ -103,8 +177,13 @@ export function collectIslandDepModulepreloads(
 		let reads = reads_page(fileName);
 		if (!reads) for (const s of seen) if (s !== fileName && reads_page(s)) reads = true;
 		page[entryUrl] = reads;
+		// The remotes this island's client code can call: every remote module bundled anywhere in
+		// its closure (static + dynamic). Sorted so the handoff is byte-stable across builds.
+		const found = new Set<string>();
+		for (const s of closure_all(fileName)) remotes_in(s, found);
+		remotes[entryUrl] = [...found].sort();
 	}
-	return { js, css, page };
+	return { js, css, page, remotes };
 }
 
 /** Stable handoff path under Kit's `outDir`: client `generateBundle` writes; SSR reads at render
@@ -133,16 +212,17 @@ export function island_deps_module(
 	// 'none' hints nothing.
 	const policy = `export const preloadPolicy = ${JSON.stringify(preload_policy)};\n`;
 	if (!ssr)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
 	// channel as prod's `<link>`, resolved for dev. `islandDeps` (JS modulepreload) is prod-only.
 	// Content bodies need no dev entry here: a content module is in the SSR module graph, so
 	// Vite dev already injects its scoped CSS (the leak only bites the PROD client build).
-	// DEV always seeds the page (no chunk closure to consult) — the conservative side.
+	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
+	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
 	return (
 		policy +
 		`import fs from 'node:fs';\n` +
@@ -210,6 +290,16 @@ export function island_deps_module(
 		`  if (!map || !entry) return true;\n` +
 		`  const v = map[entry];\n` +
 		`  return v === undefined ? true : !!v;\n` +
+		`}\n` +
+		// Which remotes (Kit id-hashes) this island's client closure can call — REMOTE SEED ONLY WHEN
+		// REACHABLE. FAIL-OPEN as `null` ("may call anything"): no map (a pre-remotes handoff), or an
+		// entry the build never saw (a foreign fragment's island) → every SSR-resolved remote seeds.
+		`export function islandRemotes(entry) {\n` +
+		`  const all = load();\n` +
+		`  const map = all && typeof all.remotes === 'object' && all.remotes ? all.remotes : null;\n` +
+		`  if (!map || !entry) return null;\n` +
+		`  const v = map[entry];\n` +
+		`  return Array.isArray(v) ? v : null;\n` +
 		`}\n` +
 		// og.$ factories for the page-inline registration script (CSP-clean prod path):
 		// written by the CLIENT build's writeBundle, read here at SSR render time — the

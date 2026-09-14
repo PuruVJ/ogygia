@@ -10,6 +10,10 @@
 	// could never wake (a kept hole has no phase-2 hydration of its own).
 	import Kept from '../Kept.svelte' with { render: 'deferred', wake: 'load' };
 	import KeptFallbackButton from '../KeptFallbackButton.svelte' with { wake: 'interaction' };
+	// An island WITH PROPS inside the lake: its props sidecar rides the document tail, which the
+	// handle must still emit on a csr=true page (it once skipped the whole tail there, and an island
+	// like this hydrated with `undefined` props and died — lake-kit e2e).
+	import Counter from '../Counter.svelte' with { wake: 'load' };
 
 	// Distinctive string the lake-kit suite greps for — it must appear in NO emitted client chunk.
 	const LAKE_CHROME_MARKER = 'LAKE_CHROME_CODE_MARKER_5c1e';
@@ -24,6 +28,9 @@
 	<Kept>
 		{#snippet ogygiaFallback()}<KeptFallbackButton />{/snippet}
 	</Kept>
+	<div data-lake-props-island>
+		<Counter start={7} label="in-lake" />
+	</div>
 </div>
 
 <style>

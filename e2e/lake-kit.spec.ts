@@ -25,6 +25,8 @@ const HOLE_RE = /<ogygia-region entry="[^"]*" render="defer"/;
 // region INSIDE the hole's shell (a fallback belongs to the page, not to the server island).
 const KEPT_FALLBACK_REGION_RE = /render="defer"[^>]*>(?:<!--[^>]*-->)*<ogygia-region entry="[^"]+" wake="interaction"[^>]*>(?:<!--[^>]*-->)*<button data-kept-btn/;
 const HYDRATION_MISMATCH_RE = /hydration_mismatch/;
+// The in-lake Counter's props sidecar (tail form, keyed by the region fingerprint), carrying start=7.
+const PROPS_SIDECAR_RE = /<script type="application\/ogygia-props"[^>]*>[^<]*"start"[^<]*7/;
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const client_dir = join(repo, 'apps/playground', '.svelte-kit', 'output', 'client');
@@ -73,6 +75,10 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 			`count=${(html.match(REGION_TAG_G_RE) ?? []).length}`
 		);
 		check('runtime shipped (the lake’s regions are ours to wake)', RUNTIME_SCRIPT_RE.test(html));
+		check(
+			'the document tail shipped: the props sidecar of the island inside the lake is on the csr=true page',
+			PROPS_SIDECAR_RE.test(html)
+		);
 	});
 
 	test('browser: Kit hydrates the page; the lake survives, its island wakes, its hole fills', async ({
@@ -103,7 +109,7 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 		);
 		check(
 			'header island inside the lake hydrated on the RUNTIME',
-			(await page.locator('ogygia-region[wake="none"] ogygia-region[wake="load"][data-hydrated]').count()) === 1
+			(await page.locator('ogygia-region[wake="none"] ogygia-region[wake="load"][data-hydrated]:has([data-chrome-header])').count()) === 1
 		);
 		check(
 			'nothing inside the lake was left to Kit',
@@ -112,6 +118,12 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 		const hbtn = page.locator('[data-chrome-header] button');
 		await hbtn.click();
 		check('header island interactive', (await hbtn.textContent())!.includes('h:1'));
+		// An island WITH PROPS inside the lake: its sidecar rides the document tail, which must still
+		// ship on a csr=true page (skipped with the seeds once → `undefined` props → dead island).
+		const pbtn = page.locator('[data-lake-props-island] [data-counter] button');
+		check('props island inside the lake hydrated with its SSR props (start=7)', (await pbtn.textContent())!.includes('count is 7'));
+		await pbtn.click();
+		check('props island inside the lake interactive (7 → 8)', (await pbtn.textContent())!.includes('count is 8'));
 		check('greeting hole fetched and swapped in', (await page.locator('[data-server-greeting]').count()) === 1);
 		check('hole fallback gone', (await page.locator('[data-lake-fallback]').count()) === 0);
 		// The kept hole answered keepFallback(): its fallback stands, and the interaction island INSIDE
