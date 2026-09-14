@@ -47,6 +47,24 @@ jobs:
       - name: Install workspace deps (baseline lockfile)
         run: pnpm install --frozen-lockfile
 
+      # Playwright before the baseline: the baseline runs the browser project too.
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # BASELINE — the same unit + browser suites the upstream leg runs, on the versions the
+      # lockfile PINS. A failure here is suite rot or a flake in this repo, NOT upstream, and the
+      # report says so instead of blaming the latest svelte/kit. (This watcher filed "upstream
+      # break" twice for a browser test that failed on the pinned versions just the same — a
+      # pointer resting over the fixture on the runner.) `continue-on-error` keeps the upstream
+      # leg running; the verdict rides in BASELINE for the report step.
+      - name: Baseline — unit + browser suites on the PINNED lockfile
+        id: baseline
+        continue-on-error: true
+        run: pnpm -C packages/ogygia test
+
+      - name: Record the baseline verdict
+        run: echo "BASELINE=${{ steps.baseline.outcome }}" >> "$GITHUB_ENV"
+
       - name: Bump svelte + @sveltejs/kit to latest across the workspace
         run: |
           # `--latest` ignores the semver ranges and jumps to the newest published versions. Runs in
@@ -62,9 +80,6 @@ jobs:
         run: |
           echo "svelte      = ${SVELTE_VERSION}"
           echo "@sveltejs/kit = ${KIT_VERSION}"
-
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
 
       # wrangler (Cloudflare workerd) is fetched on demand by the suite via npx; warm it so the
       # cloudflare adapter boots the real Workers runtime instead of skipping.
@@ -86,7 +101,7 @@ jobs:
 
       # ── Report ─────────────────────────────────────────────────────────────────────────────────
       # On failure, open (or comment on) a single tracking issue so a green upstream never spams and a
-      # broken one is loud. De-duped by the `upstream-break` label.
+      # broken one is loud. De-duped per verdict label (`upstream-break` / `suite-red`).
       - name: File an issue on failure
         if: failure()
         env:
@@ -94,24 +109,42 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          TITLE="upstream break: svelte ${SVELTE_VERSION:-?} / @sveltejs/kit ${KIT_VERSION:-?}"
+          # The baseline leg decides what this failure IS. Red on the pinned lockfile too → the repo's
+          # own suite is rot/flaky and upstream is not implicated: file it under `suite-red`, never
+          # as an upstream break. Green baseline + red upstream leg → a real upstream change.
+          if [ "${BASELINE:-}" = "failure" ]; then
+            LABEL=suite-red
+            TITLE="suite red on PINNED versions (not upstream) — run of $(date -u +%Y-%m-%d)"
+            VERDICT='The **baseline** leg (the same unit + browser suites on the PINNED lockfile) failed in this same run. This is suite rot or a flake in this repo — the latest `svelte` / `@sveltejs/kit` are **not** implicated. Fix the suite.'
+          else
+            LABEL=upstream-break
+            TITLE="upstream break: svelte ${SVELTE_VERSION:-?} / @sveltejs/kit ${KIT_VERSION:-?}"
+            VERDICT='The baseline leg (same suites on the pinned lockfile) **passed** in this run, so the failure is specific to the bumped versions — something changed upstream.'
+          fi
           # Build the body without a heredoc (YAML-safe) and write it to a file for --body-file.
           {
             printf '%s\n\n' 'The scheduled **upstream-watch** run failed against the latest published upstream:'
             printf -- '- `svelte` = `%s`\n' "${SVELTE_VERSION:-unknown}"
-            printf -- '- `@sveltejs/kit` = `%s`\n\n' "${KIT_VERSION:-unknown}"
-            printf '%s\n\n' 'The suite (`pnpm run check` + `pnpm run e2e`) is red on these versions while the pinned lockfile is green — something changed upstream. Reproduce locally:'
+            printf -- '- `@sveltejs/kit` = `%s`\n' "${KIT_VERSION:-unknown}"
+            printf -- '- baseline (pinned lockfile) = `%s`\n\n' "${BASELINE:-unknown}"
+            printf '%s\n\n' "${VERDICT}"
+            printf '%s\n\n' 'Reproduce locally:'
             printf '%s\n' '```sh'
             printf '%s\n' 'pnpm -r update --latest svelte @sveltejs/kit'
             printf '%s\n' 'pnpm run check && pnpm run e2e'
             printf '%s\n\n' '```'
             printf 'Failing run: %s\n' "${RUN_URL}"
           } > /tmp/upstream-issue.md
-          # One open tracking issue at a time: comment if it exists, else create it.
-          EXISTING=$(gh issue list --state open --label upstream-break --json number --jq '.[0].number' || echo "")
+          # One open tracking issue PER VERDICT at a time: comment if it exists, else create it. The
+          # two labels never share an issue — a flake must not pile onto a real upstream thread.
+          EXISTING=$(gh issue list --state open --label "${LABEL}" --json number --jq '.[0].number' || echo "")
           if [ -n "${EXISTING}" ]; then
             gh issue comment "${EXISTING}" --body-file /tmp/upstream-issue.md
           else
-            gh label create upstream-break --color b60205 --description "Suite red against latest svelte/kit" 2>/dev/null || true
-            gh issue create --title "${TITLE}" --body-file /tmp/upstream-issue.md --label upstream-break
+            if [ "${LABEL}" = "suite-red" ]; then
+              gh label create suite-red --color d93f0b --description "Suite red on the PINNED lockfile (rot/flake, not upstream)" 2>/dev/null || true
+            else
+              gh label create upstream-break --color b60205 --description "Suite red against latest svelte/kit" 2>/dev/null || true
+            fi
+            gh issue create --title "${TITLE}" --body-file /tmp/upstream-issue.md --label "${LABEL}"
           fi
