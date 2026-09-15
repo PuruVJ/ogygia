@@ -51,7 +51,7 @@ Marked on a component import: `import X from './X.svelte' with { … }`.
 ## Wiring (once per app)
 
 - `vite.config.ts`: `plugins: [ogygia(), sveltekit()]` — **ogygia() must come before sveltekit()**.
-- `src/routes/+layout.ts`: `export const csr = false;` (per route or app-wide; islands also work on `csr = true` Kit pages — there Kit owns navigation and ogygia's router stays out of the way).
+- `src/routes/+layout.ts`: `export const csr = false;` (per route or app-wide; islands also work on `csr = true` Kit pages — there Kit owns navigation and hydrates them inline, and a marked component's client wrapper is LAZY: only islands the document rendered load before Kit hydrates, so a block registry imported by a csr=true route links only what it rendered).
 - `hooks.server.ts`: `export const handle = ogygia.handle()` from `'ogygia/server'` — serves the signed endpoint for `deferred`/`live`. Compose with `sequence()`.
 - `src/hooks.ts`: `export const transport = { ...ogygia.transport }` — needed only when a held region crosses the wire (remotes, live content).
 - `src/ogygia.d.ts`: `/// <reference types="ogygia/types" />` — or svelte-check flags `virtual:ogygia/*`.

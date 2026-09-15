@@ -65,3 +65,12 @@ export const islandVirtualId = (iid: string) => `virtual:ogygia/island/${iid}.js
  * code crosses into the browser bundle).
  */
 export const regionBindingVirtualId = (iid: string) => `virtual:ogygia/region/${iid}.js`;
+
+/**
+ * The wake island wrapper's CLIENT-leg component source — the leg-split twin of the wrapper: the SSR
+ * wrapper imports the island entry (it must render), the client wrapper imports THIS, a module that
+ * imports the entry only when the document rendered the island (emit.ts `lazy_entry_source`). It is
+ * how a csr=true host's page graph stops at the wrapper, the same rule the csr=false registry stub
+ * applies one level up: what a page ships is decided by what it RENDERED, never by its import graph.
+ */
+export const lazyEntryVirtualId = (iid: string) => `virtual:ogygia/lazy/${iid}.js`;

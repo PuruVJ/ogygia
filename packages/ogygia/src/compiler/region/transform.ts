@@ -104,6 +104,7 @@ export function is_island_path(id: string): boolean {
 			(bare.endsWith('.js') || bare.endsWith('.svelte'))) ||
 		(bare.startsWith('virtual:ogygia/wrapper/') && bare.endsWith('.svelte')) ||
 		(bare.startsWith('virtual:ogygia/region/') && bare.endsWith('.js')) ||
+		(bare.startsWith('virtual:ogygia/lazy/') && bare.endsWith('.js')) ||
 		// legacy on-disk path shape (pre-virtual ids); still recognize for resolve/HMR edge cases
 		(bare.includes('/' + ISLAND_DIR + '/') && bare.endsWith('.svelte'))
 	);

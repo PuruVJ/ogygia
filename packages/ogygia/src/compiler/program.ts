@@ -32,7 +32,7 @@ export interface RegistryEntry {
 	server?: boolean;
 	lakes?: string[];
 	componentPath?: string | null;
-	role?: 'entry' | 'wrapper' | 'region';
+	role?: 'entry' | 'wrapper' | 'region' | 'lazy';
 	portable?: boolean;
 }
 
@@ -57,6 +57,11 @@ export interface IslandDescriptor {
 	portable?: boolean;
 	wrapperPath?: string;
 	wrapperSource?: string;
+	/** the wrapper's client leg (lazy component; see emit.ts `island_wrapper_client_source`) */
+	wrapperClientSource?: string;
+	/** the lazy component module the client wrapper imports (`lazyEntryVirtualId`) */
+	lazyPath?: string;
+	lazySource?: string;
 	bindingPath?: string;
 	bindingSsrSource?: string;
 	bindingClientSource?: string;
@@ -252,6 +257,9 @@ export class Program {
 			if (isl.wrapperPath && isl.wrapperSource) {
 				registry.set(isl.wrapperPath, {
 					source: isl.wrapperSource,
+					// A wake island's wrapper is leg-split: the client leg reaches its component
+					// through the lazy module (served by leg at load(), like a region binding).
+					clientSource: isl.wrapperClientSource,
 					hostPath: isl.hostPath,
 					id: isl.id,
 					server: false,
@@ -261,6 +269,19 @@ export class Program {
 				});
 				idx.vpaths.add(isl.wrapperPath);
 				island_graph.add(isl.wrapperPath);
+			}
+			if (isl.lazyPath && isl.lazySource) {
+				registry.set(isl.lazyPath, {
+					source: isl.lazySource,
+					hostPath: isl.hostPath,
+					id: isl.id,
+					server: false,
+					lakes: [],
+					componentPath: isl.componentPath ?? null,
+					role: 'lazy'
+				});
+				idx.vpaths.add(isl.lazyPath);
+				island_graph.add(isl.lazyPath);
 			}
 			// Region binding: the host imports this JS module; its source is leg-split at load()
 			// (SSR carries the signer, client is metadata-only). Not a svelte wrapper.

@@ -33,7 +33,7 @@
 	import { record_page } from './page-seed-registry.js';
 	import { document_tail } from './server/document-tail.js';
 	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
-	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
+	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
 	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
 	import { register_late_region } from './late-region-registry.js';
@@ -55,6 +55,7 @@
 	 *   __mode?: 'island' | 'server' | 'lake';
 	 *   visible?: string | boolean; idle?: boolean; media?: string; load?: boolean; interaction?: boolean;
 	 *   __keep?: string; __entry?: string; __component?: import('svelte').Component; __css?: unknown;
+	 *   __load?: () => Promise<import('svelte').Component>;
 	 *   __props?: Record<string, unknown>; __defer?: string; __margin?: string; __hydrate?: string;
 	 *   __hydrateMargin?: string; __module?: string; __cacheTtl?: number; __stitch?: string; __prefetch?: string;
 	 *   ogygiaFallback?: import('svelte').Snippet;
@@ -82,6 +83,9 @@
 		__entry = '',
 		__component,
 		__css,
+		// The client wrapper's on-demand component fetch (its lazy module answered `undefined`: a
+		// Kit document that did not render this island). See `late_component`.
+		__load,
 		__props,
 		// server
 		__defer = 'load',
@@ -234,6 +238,18 @@
 	);
 	const island_entry = $derived(as_dual ? as_dual.module : __mode === 'island' ? __entry : '');
 	const island_component = $derived(as_dual ? as_dual.component : __component);
+	// An inline island whose wrapper Kit CREATED on the client (a client-side navigation mounted it:
+	// no SSR, so no rendered stamp, so its lazy module answered `undefined`) has no component yet.
+	// Fetch it through `__load` and render when it lands — a client render, nothing to mismatch.
+	// Never on the server (the SSR wrapper imports the entry) and never at hydration (a stamped
+	// island arrives with its component in hand).
+	/** @type {import('svelte').Component | undefined} */
+	let late_component = $state(undefined);
+	// svelte-ignore state_referenced_locally
+	if (typeof window !== 'undefined' && island_inline && !__component && __load)
+		__load().then((c) => {
+			late_component = c;
+		});
 	const island_props = $derived(as_dual ? as_dual.props : __props);
 	const island_children = $derived(children);
 
@@ -429,7 +445,9 @@
 	// the hover/focus/touch warm-up, so no bytes move before there is a reason to. 'all' restores
 	// the background hints for every island; 'none' hints nothing (a load island fetches on import).
 	const island_preload = $derived.by(() => {
-		if (island_inline || !is_island || !island_module_url) return '';
+		// Inline on a csr=true document too: the client wrapper imports the entry lazily there (Kit's
+		// static graph no longer reaches it), so the hint is what keeps the wake off the critical path.
+		if (nested || !is_island || !island_module_url) return '';
 		if (preloadPolicy === 'none') return '';
 		if (hydrate_attr !== 'load' && hydrate_attr !== 'visible' && hydrate_attr !== 'interaction')
 			return '';
@@ -638,11 +656,24 @@
 	// `island_preload`'s `islandDeps` — not the asset URL. Server-only; dev routes through the same
 	// module-import hoist (`islandCss` returns the dev module URL there).
 	const island_css_html = $derived.by(() => {
-		if (island_inline || __mode !== 'island' || !island_entry) return '';
+		// A csr=true document's inline island links its CSS here as well: the client wrapper imports
+		// the component lazily there, so Kit's route stylesheets no longer carry it (that static
+		// reach is what linked every registry block's sheet on every page). Nested stays out — its
+		// CSS rides the parent island's closure.
+		if (nested || __mode !== 'island' || !island_entry) return '';
 		let html = '';
 		for (const href of claim_region_css(islandCss(island_entry)))
 			html += LT + 'link rel="stylesheet" href="' + asset(href) + '" data-ogygia-region-css' + GT;
 		return html;
+	});
+	// The RENDERED stamp for an inline island (a csr=true document, or nested in a woken island):
+	// `<meta name="ogygia-kit-island" content="<entry>">`, once per entry per request. The client
+	// wrapper's lazy component module (emit.ts `lazy_entry_source`) reads it before Kit hydrates and
+	// imports the entry only for stamped islands — an unrendered registry block ships nothing.
+	const kit_island_meta = $derived.by(() => {
+		if (!is_island || !island_inline || !island_entry || !claim_kit_island(island_entry)) return '';
+		const content = String(island_entry).split('&').join('&amp;').split('"').join('&quot;');
+		return LT + 'meta name="ogygia-kit-island" content="' + content + '"' + GT;
 	});
 
 	// A content BODY (an inline region from a `.svx`/`.md`) carries its own scoped `<style>`, but the
@@ -660,7 +691,7 @@
 
 	const head_html = $derived(
 		(is_island
-			? runtime_script + island_preload_head + island_css_html
+			? runtime_script + island_preload_head + island_css_html + kit_island_meta
 			: is_server
 				? runtime_script + server_preload
 				: '') +
@@ -746,7 +777,7 @@
 <!-- svelte:head must be top-level (not inside {#if}); non-island/server modes leave it empty. -->
 <svelte:head>{@html head_html}</svelte:head>
 {#if is_island}
-	{@const Component = island_component}
+	{@const Component = island_component ?? late_component}
 	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else if island_skip}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}

@@ -18,6 +18,23 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **A csr=true route that imports a block registry no longer links every block's CSS and chunk.**
+  Kit links a route's stylesheets and preloads from the page's STATIC client graph, and a marked
+  component's client wrapper reached its component statically — so a `.ts` registry of 337 marks
+  imported by a client-on route (a newsroom page) linked 172 stylesheets (base: 55) for 4 islands,
+  doubled its requests and blocking time. The csr=false registry stub could not apply there: Kit
+  hydrates those islands inline and needs the components. The wrapper is now leg-split like a
+  region binding: the SSR wrapper still imports the entry, the CLIENT wrapper imports a lazy
+  component module (`virtual:ogygia/lazy/<id>.js`) that top-level-awaits the island entry only when
+  the document RENDERED the island — Region stamps `<meta name="ogygia-kit-island">` once per
+  rendered inline island — so Kit hydrates with the component in hand and an unrendered block
+  ships nothing; a wrapper Kit creates on a client-side navigation loads its component on demand
+  through `__load` and renders when it lands. Inline islands on a csr=true document now link their
+  CSS and hint their entry through Region's own channels (Kit's route sheets no longer reach them).
+  Same rule as the csr=false stub, one level down: what a page ships is decided by what it rendered,
+  never by its import graph. Guarded by `e2e/head-budget-kit` (the csr=true twin of head-budget:
+  stylesheet budget, token greps, one stamp per rendered island, Kit hydration, a client navigation
+  to an unrendered block) and unit tests for the leg split and the stamp.
 - **`keepFallback()` from a server island rendered inline now fails with the reason.** A server
   island nested inside a `wake` island renders its component inline (the nested rule: the deferred
   mark is ignored there), so its `keepFallback()` signal had nothing to catch it and surfaced as

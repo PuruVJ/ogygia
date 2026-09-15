@@ -149,7 +149,7 @@ The SPA router is on by default, for the full app. There is no component to rend
 
 ### Islands on a normal Kit page
 
-An island does not need `csr = false`. Marked imports operate on a `csr = true` Kit page also. The component becomes an island. The remainder of the page hydrates the Kit way.
+An island does not need `csr = false`. Marked imports operate on a `csr = true` Kit page also. The component becomes an island. The remainder of the page hydrates the Kit way. What such a page ships is decided by what it rendered, not by what it imports: a marked component's client wrapper loads its component only when the server rendered that island (a stamp in the head says so), so a registry of many marked blocks imported by a `csr = true` route links the stylesheet and chunk of the blocks on the page, not of every block in the registry. A block that first appears after a client-side navigation loads on demand.
 
 ### All-islands apps
 

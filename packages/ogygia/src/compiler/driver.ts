@@ -929,7 +929,9 @@ export class Compiler {
 			return ssr ? srcEntry.ssrSource! : srcEntry.clientSource!;
 		}
 		if (srcEntry) {
-			let src = srcEntry.source!;
+			// A wake island's WRAPPER is leg-split too: the client leg imports its component through
+			// the lazy module (emit.ts `island_wrapper_client_source`), the SSR leg the real entry.
+			let src = !ssr && srcEntry.clientSource ? srcEntry.clientSource : srcEntry.source!;
 			// CLIENT build: rewrite `$app/*` in the GENERATED virtual source to absolute
 			// shim paths (defense in depth alongside resolveId island-graph shimming).
 			// SSR keeps the real Kit modules (correct server-rendered page.data).

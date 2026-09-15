@@ -8,7 +8,7 @@
  *   - the BINDING legs (`make_region_binding` / `wrapper_attach_binding` / `make_wake_island`) — the
  *     leg-split descriptor (SSR carries the signer + server render; client is metadata-only).
  */
-import { regionBindingVirtualId } from '../ids.js';
+import { regionBindingVirtualId, lazyEntryVirtualId } from '../ids.js';
 
 /**
  * Source of the generated `__renderHtml(props)` for a binding's SSR leg. The returned HTML must be
@@ -126,6 +126,66 @@ export function island_wrapper_source(
 		// site — Region's `island_children != null` gate would then serialize a pointless empty slot.
 		`<OgygiaRegion__Wrapper __mode="island" ${strategy_attrs}${persist_attr} __entry={${JSON.stringify(entry_url)}} ` +
 		`__component={__OgygiaEntry} __css={__OgygiaCss} {__props} {children} />\n`
+	);
+}
+
+/**
+ * The island wrapper's CLIENT leg (a csr=true-capable host imports it; Kit hydrates the island
+ * inline as a normal component). The SSR wrapper imports the component statically — it must
+ * render. The client wrapper must NOT: Kit links a route's `node.stylesheets` and preloads from the
+ * page's STATIC client graph, so a registry of N marked blocks imported by a csr=true route linked
+ * every block's CSS + chunk on every page (a newsroom page: 172 stylesheets for 4 islands). The
+ * component therefore comes through `lazy_entry_source` — a top-level-await module that imports
+ * the real entry only for the islands this document RENDERED (the SSR stamped a
+ * `<meta name="ogygia-kit-island">` per rendered island), so Kit still hydrates them in place with
+ * the component in hand, and a block nobody rendered costs nothing. Mounted fresh on a Kit
+ * client-side navigation (no SSR, no stamp), the wrapper loads the entry on demand and renders once
+ * it lands — a client render, so no hydration to mismatch.
+ */
+export function island_wrapper_client_source(
+	iid: string,
+	lazyPath: string,
+	strategy: string,
+	options: Record<string, unknown> | undefined,
+	entry_url: string,
+	lang: string
+): string {
+	const strategy_attrs = strategy_to_attr(strategy, options);
+	const persist_attr = options?.keep ? ` __keep={${JSON.stringify(options.keep)}}` : '';
+	return (
+		`<script${lang}>\n` +
+		`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
+		`\timport __OgygiaEntry, { load as __OgygiaLoad } from ${JSON.stringify(lazyPath)};\n` +
+		`\tlet { children, ...__props } = $props();\n` +
+		`</script>\n` +
+		// `__component` is the entry when the document rendered this island (Kit hydrates it in
+		// place), else undefined — then `__load` is how Region fetches it for a client render.
+		`<OgygiaRegion__Wrapper __mode="island" ${strategy_attrs}${persist_attr} __entry={${JSON.stringify(entry_url)}} ` +
+		`__component={__OgygiaEntry} __load={__OgygiaLoad} {__props} {children} />\n`
+	);
+}
+
+/**
+ * The client wrapper's component source (`lazyEntryVirtualId`). Decides ONCE, at module
+ * evaluation — before Kit hydrates, because Kit awaits the page node's import and a top-level
+ * await holds it. The two facts it reads are the document's own: `documentIsCsrTrue()` (the ONE
+ * csr fact Region reads on both legs) and the `<meta name="ogygia-kit-island">` stamp Region
+ * emits per rendered inline island (context.ts `claim_kit_island`).
+ *   - not a Kit-hydrated document (the runtime woke this island's parent; no stamp exists there):
+ *     import the entry now — a nested island must be in hand when its parent hydrates;
+ *   - a Kit document that rendered this island: import the entry now, Kit hydrates it in place;
+ *   - a Kit document that did NOT render it (an unrendered registry block): `undefined`, nothing
+ *     fetched, nothing linked — `load()` is the on-demand path a client-side navigation takes.
+ * `entry_url` is the same string Region bakes into the stamp (`__entry`), on both legs.
+ */
+export function lazy_entry_source(entryPath: string, entry_url: string): string {
+	const entry = JSON.stringify(entryPath);
+	const stamp = JSON.stringify(`meta[name="ogygia-kit-island"][content=${JSON.stringify(entry_url)}]`);
+	return (
+		`import { documentIsCsrTrue } from 'ogygia/internal';\n` +
+		`const rendered = typeof document !== 'undefined' && !!document.querySelector(${stamp});\n` +
+		`export default documentIsCsrTrue() && !rendered ? undefined : (await import(${entry})).default;\n` +
+		`export const load = () => import(${entry}).then((m) => m.default);\n`
 	);
 }
 
@@ -277,6 +337,7 @@ export function make_wake_island(opts: {
 		hydrateMargin: margin,
 		exportName: opts.exportName
 	});
+	const lazyPath = lazyEntryVirtualId(opts.iid);
 	return {
 		id: opts.iid,
 		virtualPath: opts.entryPath,
@@ -291,6 +352,18 @@ export function make_wake_island(opts: {
 			opts.moduleUrl,
 			opts.lang
 		),
+		// The CLIENT leg of the wrapper takes its component through the lazy module (see
+		// `island_wrapper_client_source`): a csr=true host's page graph stops at the wrapper.
+		wrapperClientSource: island_wrapper_client_source(
+			opts.iid,
+			lazyPath,
+			opts.strategy,
+			opts.options,
+			opts.moduleUrl,
+			opts.lang
+		),
+		lazyPath,
+		lazySource: lazy_entry_source(opts.entryPath, opts.moduleUrl),
 		// The host imports THIS attach binding (placeable + holdable), not the bare wrapper.
 		bindingPath: regionBindingVirtualId(opts.iid),
 		bindingSsrSource: attach.ssr,

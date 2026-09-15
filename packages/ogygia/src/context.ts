@@ -110,6 +110,30 @@ const runtime_claimed = new WeakMap<object, true>();
 /** Per-request: stylesheet hrefs already linked for held regions rendered in this SSR pass. */
 const region_css_claimed = new WeakMap<object, Set<string>>();
 
+/** Per-request: island entries already stamped `<meta name="ogygia-kit-island">` in this pass. */
+const kit_island_claimed = new WeakMap<object, Set<string>>();
+
+/**
+ * Claim an INLINE-rendered island's entry for this SSR request — true the first time, so the page
+ * stamps one `<meta name="ogygia-kit-island" content="<entry>">` per rendered island, however many
+ * instances render. The client wrapper's lazy component module reads the stamp before Kit hydrates
+ * (emit.ts `lazy_entry_source`): a stamped island's entry is imported, an unstamped one costs
+ * nothing. Client / no-request → false (nothing to stamp there).
+ */
+export function claim_kit_island(entry: string): boolean {
+	if (!entry) return false;
+	try {
+		const event = getRequestEvent() as object;
+		let seen = kit_island_claimed.get(event);
+		if (!seen) kit_island_claimed.set(event, (seen = new Set()));
+		if (seen.has(entry)) return false;
+		seen.add(entry);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 /**
  * Claim stylesheet hrefs for this SSR request, returning only the not-yet-claimed ones. A held
  * region's component is server-picked, so its CSS is on no page stylesheet (Kit links CSS from the
