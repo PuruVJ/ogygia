@@ -87,7 +87,7 @@ describe('collectIslandDepModulepreloads', () => {
 					imports: ['_app/immutable/x.js']
 				}
 			})
-		).toEqual({ js: {}, css: {}, page: {}, remotes: {} });
+		).toEqual({ js: {}, css: {}, page: {}, page_keys: {}, remotes: {} });
 	});
 
 	// `page[entry]` — does the island's chunk closure bundle a page-reading shim? Decides whether the
@@ -133,6 +133,53 @@ describe('collectIslandDepModulepreloads', () => {
 		test('no reader files given → every entry false (the map still lists it)', () => {
 			const r = collectIslandDepModulepreloads(bundle([SHIM], [SHIM]));
 			expect(r.page['/_app/immutable/og-region.aaaaaaaaaaaa.js']).toBe(false);
+		});
+	});
+
+	// SEED SHAPING — `page_keys[entry]`: the union of the `page.data` keys every module in the
+	// closure reads (the transform's per-module answer), or null = ship all.
+	describe('page-keys map', () => {
+		const SHIM = '/pkg/shims/app-state.svelte.js';
+		const ENTRY = '/_app/immutable/og-region.aaaaaaaaaaaa.js';
+		const bundle = (facade_ids: string[], dep_ids: string[]) => ({
+			'_app/immutable/og-region.aaaaaaaaaaaa.js': { type: 'chunk', fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js', imports: ['_app/immutable/chunks/dep.js'], moduleIds: facade_ids },
+			'_app/immutable/chunks/dep.js': { type: 'chunk', fileName: '_app/immutable/chunks/dep.js', imports: [], moduleIds: dep_ids }
+		});
+		const keys_of = (table: Record<string, Set<string> | 'all'>) => (id: string) => table[id] ?? null;
+
+		test('keys union across the facade and a dep chunk, sorted', () => {
+			const r = collectIslandDepModulepreloads(
+				bundle([SHIM, '/app/src/lib/A.svelte'], ['/app/src/lib/util.ts']),
+				[SHIM],
+				null,
+				keys_of({ '/app/src/lib/A.svelte': new Set(['user', '_locale']), '/app/src/lib/util.ts': new Set(['flags']) })
+			);
+			expect(r.page[ENTRY]).toBe(true);
+			expect(r.page_keys[ENTRY]).toEqual(['_locale', 'flags', 'user']);
+		});
+		test('one unpinned module → null (ship all)', () => {
+			const r = collectIslandDepModulepreloads(
+				bundle([SHIM, '/app/src/lib/A.svelte'], ['/app/src/lib/util.ts']),
+				[SHIM],
+				null,
+				keys_of({ '/app/src/lib/A.svelte': new Set(['user']), '/app/src/lib/util.ts': 'all' })
+			);
+			expect(r.page_keys[ENTRY]).toBeNull();
+		});
+		test('a reader whose keys no module recorded → null (the page reached through unseen code)', () => {
+			const r = collectIslandDepModulepreloads(bundle([SHIM, '/app/src/lib/A.svelte'], []), [SHIM], null, keys_of({}));
+			expect(r.page[ENTRY]).toBe(true);
+			expect(r.page_keys[ENTRY]).toBeNull();
+		});
+		test('a non-reader has no page_keys entry; query suffixes are stripped for the lookup', () => {
+			const r = collectIslandDepModulepreloads(
+				bundle(['/app/src/lib/A.svelte?og-region'], ['/app/src/lib/B.svelte']),
+				[SHIM],
+				null,
+				keys_of({ '/app/src/lib/A.svelte': new Set(['x']) })
+			);
+			expect(r.page[ENTRY]).toBe(false);
+			expect(ENTRY in r.page_keys).toBe(false);
 		});
 	});
 

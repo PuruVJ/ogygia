@@ -78,6 +78,8 @@ import {
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
 import { island_subgraph_bytes } from '../compiler/dev/region-bytes.js';
 import { collectIslandDepModulepreloads, remote_hash_of } from '../compiler/link/island-deps.js';
+import { report_seed_shaping } from '../compiler/link/build-output.js';
+import { follow_pending_page_calls } from '../compiler/link/page-keys.js';
 import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.js';
 import { ssr_hosts_handoff_path, parse_ssr_hosts } from '../compiler/link/emit-gate.js';
 import { router_css_key } from '../compiler/link/router-css.js';
@@ -1142,7 +1144,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				return compiler.patch_fn_manifest(code);
 			},
 
-			writeBundle(_options, bundle) {
+			async writeBundle(_options, bundle) {
 				// Client only — Kit builds SSR first, so Region.svelte reads this JSON at render
 				// (prerender / live SSR), not at SSR-bundle `load()` time.
 				//
@@ -1178,6 +1180,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// `remotes`: per island entry, the Kit remote modules in that closure (by the id-hash Kit
 				// mints them with — relative to `process.cwd()`, as Kit's own transform hashes them) —
 				// the handle seeds an SSR-resolved remote only for a page with an island that can call it.
+				// SEED SHAPING, the calls to follow: `helper(page)` into an IMPORTED helper. Resolve the
+				// specifier from the calling module, summarize what the helper's export reads of its page
+				// parameter (through barrel re-exports, a few hops), and fold it into the caller's keys.
+				// Anything unresolvable answers 'all' with a reason naming the call.
+				await follow_pending_page_calls(program, (s, importer) => this.resolve(s, importer));
+
 				const remote_hash = (id: string) => remote_hash_of(id, process.cwd());
 				const map = collectIslandDepModulepreloads(
 					bundle as Record<
@@ -1192,8 +1200,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						}
 					>,
 					[APP_SHIMS['$app/state'], APP_SHIMS['$app/stores']],
-					remote_hash
+					remote_hash,
+					// SEED SHAPING: the transform recorded, per module, the `page.data` keys it reads
+					// (Program.page_keys); the collector unions them over each island's closure.
+					(module_id) => program.page_keys.get(module_id) ?? null
 				);
+				report_seed_shaping(map, bundle as Record<string, { type: string; moduleIds?: string[]; imports?: string[] }>, program, root);
 				// SERVER-ROUTER CSS handoff: each root's whole component-tree CSS was compiled + emitted as
 				// ONE dedicated asset in buildStart (router_css_refs). Resolve each referenceId to its
 				// hashed URL under `rcss:<rel>`, the key `virtual:ogygia/router-css` reads via `islandCss()`

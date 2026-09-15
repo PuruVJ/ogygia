@@ -24,7 +24,7 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
-	import { islandDeps, islandCss, contentCss, islandReadsPage, islandRemotes, preloadPolicy } from 'virtual:ogygia/island-deps';
+	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, preloadPolicy } from 'virtual:ogygia/island-deps';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of } from './runtime/fingerprint.js';
 	import { asset } from '$app/paths';
@@ -303,7 +303,16 @@
 							: of_init && of_init.kind === 'deferred'
 								? of_init.module
 								: '';
-			const seed = !!entry && (entry === '?' || islandReadsPage(entry));
+			// SEED SHAPING: not a flag but an ask — which `page.data` keys this region's client reads
+			// (`islandPageKeys`, the build's AST answer over the chunk closure), `'all'` when the build
+			// could not pin them or does not know the entry, `false` when nothing in it reads the page.
+			const seed = !entry
+				? false
+				: entry === '?' || !islandReadsPage(entry)
+					? entry === '?'
+						? 'all'
+						: false
+					: (islandPageKeys(entry) ?? 'all');
 			const remotes = !entry ? [] : entry === '?' ? null : islandRemotes(entry);
 			try {
 				record_page(

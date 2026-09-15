@@ -37,7 +37,16 @@ export type PageSnapshot = {
  * does not know, dev). The handle unions every record and seeds only the remotes some region can
  * reach — REMOTE SEED ONLY WHEN REACHABLE.
  */
-type Recorder = (snapshot: PageSnapshot, seed: boolean, remotes: readonly string[] | null) => void;
+/**
+ * `seed` is now an ASK, not a flag (SEED SHAPING): `false` — this region's client never reads the
+ * page (record the snapshot, ship nothing for it); `'all'` — it reads the page and the build could
+ * not pin its `page.data` reads to literal keys (or does not know the entry: a promise `of`, a
+ * foreign fragment, dev); a `string[]` — exactly these top-level `page.data` keys. The handle
+ * unions the asks: any `'all'` ships the whole `page.data`, otherwise the union of keys.
+ */
+export type SeedAsk = import('./server/seed-shape.js').SeedAsk;
+
+type Recorder = (snapshot: PageSnapshot, seed: SeedAsk, remotes: readonly string[] | null) => void;
 
 let recorder: Recorder | null = null;
 
@@ -51,7 +60,7 @@ export function set_page_recorder(fn: Recorder | null): void {
  *  `remotes` names the remote modules this region's client can call (`null` = any). */
 export function record_page(
 	snapshot: PageSnapshot,
-	seed = true,
+	seed: SeedAsk = 'all',
 	remotes: readonly string[] | null = null
 ): void {
 	recorder?.(snapshot, seed, remotes);

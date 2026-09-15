@@ -125,3 +125,57 @@ export function emit_island_deps_handoff(root: string, json: string, out_dir: st
 		/* ignore — fs fallback still serves adapter-node / preview */
 	}
 }
+
+/**
+ * SEED SHAPING report (client `writeBundle`): which islands read `page.data` through the shim, how
+ * many keys they were pinned to, and — the actionable part — the modules whose reads could not be
+ * pinned, each with its line and why, since one such module makes every page carrying that island
+ * ship its whole `page.data`. Same shape as the barrels report: a few lines, a count for the rest.
+ */
+export function report_seed_shaping(
+	map: { page: Record<string, boolean>; page_keys: Record<string, string[] | null> },
+	bundle: Record<string, { type: string; moduleIds?: string[]; imports?: string[] }>,
+	program: { page_key_reasons: Map<string, { why: string; line: number | null }> },
+	root: string
+): void {
+	const readers = Object.keys(map.page).filter((e) => map.page[e]);
+	if (!readers.length) return;
+	const pinned = readers.filter((e) => Array.isArray(map.page_keys[e]));
+	const unpinned = readers.filter((e) => !Array.isArray(map.page_keys[e]));
+	const key_count = new Set(pinned.flatMap((e) => map.page_keys[e] ?? [])).size;
+	const rel = (p: string) => (p.startsWith(root) ? p.slice(root.length).replace(/^\//, '') : p);
+	const lines: string[] = [];
+	lines.push(
+		`[ogygia] page seed: ${readers.length} island${readers.length === 1 ? '' : 's'} read page.data — ` +
+			`${pinned.length} pinned to ${key_count} key${key_count === 1 ? '' : 's'}, ${unpinned.length} ship all of it`
+	);
+	if (unpinned.length) {
+		// The modules to blame: every recorded reason reachable from an unpinned island's closure.
+		const closure = (entry: string): Set<string> => {
+			const seen = new Set<string>();
+			const queue = [entry.replace(/^\//, '')];
+			while (queue.length) {
+				const f = queue.pop()!;
+				if (seen.has(f)) continue;
+				seen.add(f);
+				for (const i of bundle[f]?.imports ?? []) queue.push(i);
+			}
+			return seen;
+		};
+		const blamed = new Map<string, { why: string; line: number | null }>();
+		for (const e of unpinned) {
+			for (const chunk of closure(e)) {
+				for (const id of bundle[chunk]?.moduleIds ?? []) {
+					const clean = id.split('?')[0].split('\\').join('/');
+					const r = program.page_key_reasons.get(clean);
+					if (r && !blamed.has(clean)) blamed.set(clean, r);
+				}
+			}
+		}
+		const rows = [...blamed].slice(0, 8);
+		for (const [file, r] of rows) lines.push(`  ${rel(file)}${r.line === null ? '' : ':' + r.line} — ${r.why}`);
+		if (blamed.size > rows.length) lines.push(`  … and ${blamed.size - rows.length} more module${blamed.size - rows.length === 1 ? '' : 's'}`);
+		if (!blamed.size) lines.push(`  (read through code the build never saw — a dependency, or a foreign fragment)`);
+	}
+	console.log(lines.join('\n'));
+}

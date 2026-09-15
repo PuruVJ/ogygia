@@ -99,6 +99,7 @@ import {
 	V_FREEZE_ROUTES
 } from './ids.js';
 import { strip_id, host_key } from './program.js';
+import { mentions_page_store, page_data_keys_answer } from './link/page-keys.js';
 import {
 	export_names,
 	imported_names,
@@ -139,6 +140,8 @@ const COMPONENT_EXT_RE = /\.(svelte|js|ts)$/;
 const ROUTE_HOST_FILE_RE = /^\+(page|layout)\.(svelte|ts|js|mjs)$/;
 /** A `.ts`/`.js` module that can be a region registry (a minted `.ts` region host). */
 const TS_REGISTRY_EXT_RE = /\.(ts|js|mjs)$/;
+/** A script module the seed-shaping analysis parses with oxc (`.svelte.ts` included). */
+const SCRIPT_MODULE_RE = /\.(?:[cm]?[jt]sx?)$/;
 const SOURCE_EXT_RE = /\.(svelte|ts|js|mjs|cjs)$/;
 const CONTENT_CALL_RE = /\bcontent\s*\(/;
 const SERVER_MODULE_EXT_RE = /\.(server|remote)\.(ts|js|mjs)$/;
@@ -1201,6 +1204,22 @@ export class Compiler {
 		// server leg of a build: this module is in the server bundle's real graph (see
 		// Program.ssr_transformed / link/emit-gate.ts)
 		if (ssr && ctx.is_build) program.ssr_transformed.add(host_key(id_n));
+
+		// SEED SHAPING: a module that imports Kit's page store is read ONCE here, on the compiler's
+		// parsers, for the top-level `page.data` keys it can reach (link/page-keys.ts). Recorded by
+		// the query-less id so the client `writeBundle` can find it from a chunk's `moduleIds`; the
+		// source form is what this pre-transform sees, before the `$app/*` shim rewrite below.
+		if (ctx.is_build && mentions_page_store(code)) {
+			const clean = id.split('?')[0].split('\\').join('/');
+			const kind = clean.endsWith('.svelte') ? 'svelte' : SCRIPT_MODULE_RE.test(clean) ? 'script' : null;
+			if (kind) {
+				const { keys, reason, pending } = page_data_keys_answer(code, clean, kind);
+				if (keys !== null) program.page_keys.set(clean, keys);
+				if (reason) program.page_key_reasons.set(clean, reason);
+				if (pending.length) program.page_pending.set(clean, pending);
+				else program.page_pending.delete(clean);
+			}
+		}
 
 		// (There is deliberately NO csr=false route-client stripping here. Kit collects a route's
 		// CSS manifest from the CLIENT graph — stubbing those modules silently drops every component

@@ -18,6 +18,13 @@ export const islandReadsPage = (_entry: string): boolean => reads_page;
 export function set_reads_page(v: boolean) {
 	reads_page = v;
 }
+// `islandPageKeys(entry)` — the build's per-entry `page.data` keys the island reads (fail-open
+// null = ship all). A test sets it with `set_page_keys(...)`.
+let page_keys: string[] | null = null;
+export const islandPageKeys = (_entry: string): string[] | null => page_keys;
+export function set_page_keys(v: string[] | null) {
+	page_keys = v;
+}
 // `islandRemotes(entry)` — the build's per-entry list of callable remote id-hashes (fail-open
 // null). A test sets it with `set_island_remotes(...)` to check what Region records per region.
 let island_remotes: string[] | null = null;

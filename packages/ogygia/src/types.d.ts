@@ -44,6 +44,11 @@ declare module 'virtual:ogygia/island-deps' {
 	 *  in its chunk closure)? Decides whether the page seed ships. Fail-open: true in dev and for an
 	 *  entry the build handoff does not know. */
 	export function islandReadsPage(entry: string): boolean;
+	/** SEED SHAPING: the top-level `page.data` keys this island entry's client code reads (the
+	 *  build's AST analysis over its chunk closure — link/page-keys.ts), so the handle ships only
+	 *  those. `null` = ship all: dev, an entry the handoff does not know, or a closure whose reads
+	 *  could not be pinned to literal keys. */
+	export function islandPageKeys(entry: string): string[] | null;
 	/** The Kit remote-function modules (by id-hash, the prefix of `internals.id`) an island entry's
 	 *  client code can call — static + dynamic imports in its chunk closure. Decides which
 	 *  SSR-resolved remotes the page seeds (`application/ogygia-remote`). Fail-open: `null` ("may

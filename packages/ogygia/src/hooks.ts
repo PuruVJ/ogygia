@@ -96,6 +96,7 @@ import {
 } from './server/head-presence.js';
 import { locate, assemble } from './server/document-assembly.js';
 import { error_route_is_csr_true, route_is_csr_true } from './context.js';
+import { merge_seed_ask, shape_page_data } from './server/seed-shape.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
@@ -155,6 +156,9 @@ type RequestBag = {
 	/** Some region on the page reads `$page` on the client (Region.svelte × `islandReadsPage`), so
 	 *  the `application/ogygia-page` seed must ship. The snapshot itself is recorded regardless. */
 	seed_wanted: boolean;
+	/** SEED SHAPING: the union of the regions' asks — the `page.data` keys to ship, or `'all'`
+	 *  (some region's reads could not be pinned). `null` until a region asks (then `seed_wanted`). */
+	seed_keys: import('./server/seed-shape.js').SeedKeys | null;
 	/** The remote modules (Kit id-hashes) some region's client code on this page can call — the
 	 *  union of every `record_page` (Region.svelte × `islandRemotes`). Gates the
 	 *  `application/ogygia-remote` seed: an SSR-resolved remote outside the set ships no seed.
@@ -208,8 +212,12 @@ set_page_recorder((snapshot, seed, remotes) => {
 	// MERGE: the routeless document root records url/params/route from the router's seed first;
 	// Region.svelte's data/form/error/status record must not wipe them (and vice versa).
 	bag.page = { ...bag.page, ...snapshot };
-	// SEED ONLY WHEN READ: one island whose client code reads `$page` is enough to ship the seed.
-	if (seed) bag.seed_wanted = true;
+	// SEED ONLY WHEN READ, AND ONLY WHAT IS READ: one island whose client code reads `$page` is
+	// enough to ship the seed; the union of the islands' key asks decides how much of `page.data`.
+	if (seed !== false) {
+		bag.seed_wanted = true;
+		bag.seed_keys = merge_seed_ask(bag.seed_keys, seed);
+	}
 	// REMOTE SEED ONLY WHEN REACHABLE: union the remotes this region's client can call; one
 	// fail-open record (`null`) opens the whole set for the request.
 	if (remotes === null) bag.remotes_wanted = null;
@@ -778,6 +786,7 @@ class OgygiaHandle {
 				ctx: new Map(),
 				page: null,
 				seed_wanted: false,
+				seed_keys: null,
 				remotes_wanted: new Set(),
 				tail: new DocumentTail(),
 				deferred: null,
@@ -1077,7 +1086,21 @@ class OgygiaHandle {
 		// Region.svelte records during SSR from Kit's REAL page — the only place the resolved load data
 		// is reachable (Kit merges it locally in render.js, never on RequestState). PAGE-SEED-EVENT.
 		const page_snap = bag!.page!;
-		let seed_data = page_snap.data;
+		// SEED SHAPING: the slice of `page.data` the page's islands read (server/seed-shape.ts) — every
+		// step below (streaming, settling, the seed index, the payload) sees the shaped tree, so a
+		// props sidecar referencing `page.data` nodes and the shipped seed agree. The freeze verdict
+		// above read the whole snapshot (a streamed promise anywhere keeps the page per-request).
+		let seed_keys = bag!.seed_keys;
+		if (bag!.seed_wanted && seed_keys !== 'all' && seed_keys !== null && !bag!.tail.empty) {
+			// A props sidecar may POINT INTO the seed (seed-refs.ts) at a node under a key no island's
+			// code reads. Plan the sidecars once against the full index — the plan records the keys it
+			// referenced — and ship those keys too; the real render below runs against the shaped seed.
+			const full = index_seed(page_snap.data);
+			bag!.tail.render(full);
+			for (const k of full.touched) seed_keys.add(k);
+		}
+		const shaped_data = shape_page_data(page_snap.data, seed_keys);
+		let seed_data = shaped_data;
 		let seed_form = page_snap.form;
 		// Merge the app's universal `transport` ENCODERS (custom types the app teaches Kit) with the
 		// DeferRef/SettledRef marker reducers, so a load's custom types round-trip into islands — not
@@ -1090,7 +1113,7 @@ class OgygiaHandle {
 		// ONE walk of the seed tree (seed-refs.ts `analyze`, memoised per `page.data` for the request)
 		// answers every question below: a streamed promise inside (stage or settle), JSON-exact (the
 		// native lane), and — through the same memo — the seed index the props sidecars reference.
-		const data_shape = analyze(page_snap.data);
+		const data_shape = analyze(shaped_data);
 		const form_shape = analyze(page_snap.form ?? null);
 		// A load may return promises at any level (Kit streaming). csr=false can't hydrate the PAGE, so
 		// Kit's own resolve stream is dead there — but an ISLAND has a client. Two paths:
@@ -1112,7 +1135,7 @@ class OgygiaHandle {
 		// promise: that page stays per-request).
 		const seed_wanted = bag!.seed_wanted;
 		if (has_pending && can_stream && seed_wanted) {
-			const staged_data = stage_deferred(page_snap.data, 0);
+			const staged_data = stage_deferred(shaped_data, 0);
 			const staged_form = stage_deferred(page_snap.form, staged_data.next_id);
 			seed_data = staged_data.staged;
 			seed_form = staged_form.staged;
@@ -1121,7 +1144,7 @@ class OgygiaHandle {
 			bag!.seed_reducers = seed_reducers; // resolve scripts encode with the same transport + defer
 			scripts.push(`<script>${PAGE_DEFER_BOOTSTRAP}</script>`);
 		} else if (has_pending && seed_wanted) {
-			seed_data = await settle_deferred(page_snap.data);
+			seed_data = await settle_deferred(shaped_data);
 			seed_form = await settle_deferred(page_snap.form);
 		}
 
@@ -1131,7 +1154,7 @@ class OgygiaHandle {
 		// every island's, whichever rendered first. The index is a pruned second look at the one
 		// walk above; the paths it hands out are structural, so they resolve against the shipped
 		// (staged or settled) seed as well as against the original tree.
-		const tail_html = bag!.tail.render(seed_wanted ? index_seed(page_snap.data) : null);
+		const tail_html = bag!.tail.render(seed_wanted ? index_seed(shaped_data) : null);
 		if (tail_html) scripts.push(tail_html);
 
 		// SEED ONLY WHEN READ: the seed exists so islands can read `$page` through the shim. A region

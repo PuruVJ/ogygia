@@ -16,6 +16,38 @@ On top of the islands, this release also ships a full tool layer: a drop-in prod
 
 And two capabilities sit next to the islands, on the server. **Frozen pages** make server execution opt-in per request: a page whose render is a pure function of its URL renders one time, on write, is stored whole, and is served as bytes until a publish thaws it. **Fragment federation** lets independent ogygia apps borrow each other's live regions across a signed boundary, and a publish in one app thaws the stitched fragment in the others.
 
+### Changed
+
+- **The page seed ships only the `page.data` keys the page's islands read (seed shaping).** The
+  seed already shipped only when some island read `$page`; it was still all-or-nothing — one island
+  reading `page.data._locale` shipped the whole `page.data`, 368 KB on a measured CMS home page,
+  199 KB of it a header entry no island ever touched, serialized on the server and parsed in the
+  browser on every view. The compiler now reads every module that imports Kit's page store ONCE at
+  transform time, on its own parsers (oxc for scripts, Svelte's for components — scripts and
+  template expressions alike), resolves the `page` binding through aliases (`const p = page`,
+  `const v = get(page)`, `derived(page, ($p) => …)`, `derived([a, page], ([$a, $p]) => …)`) and
+  records the top-level `page.data` keys it reads (`page.data.x`, `$page?.data?.x`,
+  `page.data['x']`, `const { x } = page.data`). The client build unions them over each island's
+  chunk closure into the deps handoff (`islandPageKeys`), Region records the ask per island, and
+  the handle ships that union. Doubt goes to all: `page.data` handed to a function, aliased whole,
+  spread, indexed with a variable, `page.subscribe(…)`, a namespace import, the whole page passed
+  on, an entry the build does not know, dev — any of these ships the whole `page.data` exactly as
+  before. Reading only `page.url` / `params` ships the seed with an empty `data`. A node an
+  island's PROPS point into (seed references) is kept too, whatever the island's code reads.
+  **Calls are followed one level**: `helper(page)` into a function of the same module is read
+  through its parameter at transform time; into an IMPORTED helper the build resolves the
+  specifier at `writeBundle`, summarizes what that export reads of its page parameter (through
+  barrel re-exports, a few hops) and folds it in — a CMS app handed the page to one url-reading
+  helper from 149 modules, and every one of them is now pinned. **The build reports it**: how
+  many islands read `page.data`, how many are pinned to how many keys, and — for the islands that
+  ship all of it — the module, line and construct to blame (`[ogygia] page seed: …`), the way
+  the barrels report names its bypasses. Unit coverage of the analysis (every pattern above,
+  TypeScript wrappers, function-scoped aliases, template constructs, SCSS blocks, a 2 000-line
+  module), the following (barrels, fan-outs, leaks), the union, the shaping, the recording;
+  `e2e/seed-shape` proves a 300 KB load key never reaches the seed while the island still reads
+  its key after hydration, and the control island that hands `page.data` to a helper ships
+  everything; `e2e/seed-refs` proves props references survive shaping.
+
 ### Fixed
 
 - **A hole answer that is not the region's is refused.** `ogygia.handle()` answers a region request

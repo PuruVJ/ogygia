@@ -64,6 +64,14 @@ export interface SeedIndex {
 	hash_of(node: SeedNode): string | null;
 	/** nodes indexed (for tests / devtools). */
 	readonly size: number;
+	/**
+	 * SEED SHAPING: the top-level `page.data` keys under which a props node was matched
+	 * (`plan_seed_refs` records the first path segment of every reference it plans). The handle
+	 * dry-runs the tail against the FULL index before shaping, so a key no island's code reads but
+	 * whose node an island's props point into still ships — a reference must have something to
+	 * point at.
+	 */
+	readonly touched: Set<string>;
 }
 
 /** A node the codec may reference: a plain object or an array (own prototype only). */
@@ -311,6 +319,7 @@ export function index_seed(data: unknown, min_bytes = 96): SeedIndex {
 		return {
 			by_identity: new WeakMap(),
 			bytes: new WeakMap(),
+			touched: new Set(),
 			candidates: () => [],
 			hash_of: () => null,
 			size: 0
@@ -362,6 +371,7 @@ export function index_seed(data: unknown, min_bytes = 96): SeedIndex {
 	const index: SeedIndex = {
 		by_identity,
 		bytes,
+		touched: new Set(),
 		candidates: (b) => by_bytes.get(b) ?? [],
 		hash_of: (n) => hash_subtree(n.node, hash_memo, new Set())?.hash ?? null,
 		size: nodes.length
@@ -398,6 +408,7 @@ export function plan_seed_refs(index: SeedIndex, props: unknown, min_bytes = 96)
 			const by_id = index.by_identity.get(v);
 			if (by_id) {
 				matched.set(v, by_id);
+				index.touched.add(String(by_id[0]));
 				count++;
 				return;
 			}
@@ -409,6 +420,7 @@ export function plan_seed_refs(index: SeedIndex, props: unknown, min_bytes = 96)
 					const cand = h ? cands.find((c) => index.hash_of(c) === h) : undefined;
 					if (cand && deep_equal_plain(cand.node, v)) {
 						matched.set(v, cand.path);
+						index.touched.add(String(cand.path[0]));
 						count++;
 						return;
 					}

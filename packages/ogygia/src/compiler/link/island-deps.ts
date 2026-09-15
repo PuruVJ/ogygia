@@ -5,6 +5,7 @@
  * Pure over the bundle it is handed. Covered by unit tests.
  */
 import { path } from '../host.js';
+import { merge_page_keys, type PageKeys } from './page-keys.js';
 
 /** Deterministic island facade filename (content-hashed Vite deps are separate). */
 const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;
@@ -79,19 +80,43 @@ export function collectIslandDepModulepreloads(
 	 * this island's call — which is what lets the handle seed a remote's SSR result only when some
 	 * island on the page can call it (REMOTE SEED ONLY WHEN REACHABLE). Absent → every entry `[]`.
 	 */
-	remote_hash: ((module_id: string) => string | null) | null = null
+	remote_hash: ((module_id: string) => string | null) | null = null,
+	/**
+	 * SEED SHAPING: the top-level `page.data` keys a bundled module reads (link/page-keys.ts, recorded
+	 * by the transform), `'all'` when its reads could not be pinned, `null` for a module that never
+	 * imports the page. Per entry, `page_keys[entryUrl]` is the union over its chunk closure — the
+	 * keys the handle ships — or `null` (ship all) when any module said `'all'`, or when the closure
+	 * reads the page through a module the transform never saw. Absent → every reader `null`.
+	 */
+	page_keys_of: ((module_id: string) => PageKeys | null) | null = null
 ): {
 	js: Record<string, string[]>;
 	css: Record<string, string[]>;
 	page: Record<string, boolean>;
+	page_keys: Record<string, string[] | null>;
 	remotes: Record<string, string[]>;
 } {
 	const js: Record<string, string[]> = {};
 	const css: Record<string, string[]> = {};
 	const page: Record<string, boolean> = {};
+	const page_keys: Record<string, string[] | null> = {};
 	const remotes: Record<string, string[]> = {};
 	const norm = (p: string) => p.split('\\').join('/');
 	const readers = new Set(page_reader_files.map(norm));
+	// The keys every module of a chunk reads, unioned; `undefined` = no module in it reads the page.
+	const keys_in = (fileName: string): PageKeys | null | undefined => {
+		if (!page_keys_of) return undefined;
+		let acc: PageKeys | null = null;
+		let any = false;
+		for (const id of bundle[fileName]?.moduleIds ?? []) {
+			const k = page_keys_of(norm(id.split('?')[0]));
+			if (k === null) continue;
+			any = true;
+			acc = merge_page_keys(acc, k);
+			if (acc === 'all') break;
+		}
+		return any ? acc : undefined;
+	};
 	const reads_page = (fileName: string): boolean => {
 		if (!readers.size) return false;
 		for (const id of bundle[fileName]?.moduleIds ?? []) {
@@ -177,13 +202,27 @@ export function collectIslandDepModulepreloads(
 		let reads = reads_page(fileName);
 		if (!reads) for (const s of seen) if (s !== fileName && reads_page(s)) reads = true;
 		page[entryUrl] = reads;
+		// SEED SHAPING: which `page.data` keys the closure reads. A reader whose keys no module
+		// recorded (the page reached through a module the transform never saw) ships all.
+		if (reads) {
+			let acc: PageKeys | null = null;
+			let saw_reader = false;
+			for (const s of seen) {
+				const k = keys_in(s);
+				if (k === undefined) continue;
+				saw_reader = true;
+				acc = merge_page_keys(acc, k);
+				if (acc === 'all') break;
+			}
+			page_keys[entryUrl] = !saw_reader || acc === 'all' || acc === null ? null : [...acc].sort();
+		}
 		// The remotes this island's client code can call: every remote module bundled anywhere in
 		// its closure (static + dynamic). Sorted so the handoff is byte-stable across builds.
 		const found = new Set<string>();
 		for (const s of closure_all(fileName)) remotes_in(s, found);
 		remotes[entryUrl] = [...found].sort();
 	}
-	return { js, css, page, remotes };
+	return { js, css, page, page_keys, remotes };
 }
 
 /** Stable handoff path under Kit's `outDir`: client `generateBundle` writes; SSR reads at render
@@ -212,7 +251,7 @@ export function island_deps_module(
 	// 'none' hints nothing.
 	const policy = `export const preloadPolicy = ${JSON.stringify(preload_policy)};\n`;
 	if (!ssr)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -222,7 +261,7 @@ export function island_deps_module(
 	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
 	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
 	return (
 		policy +
 		`import fs from 'node:fs';\n` +
@@ -290,6 +329,16 @@ export function island_deps_module(
 		`  if (!map || !entry) return true;\n` +
 		`  const v = map[entry];\n` +
 		`  return v === undefined ? true : !!v;\n` +
+		`}\n` +
+		// SEED SHAPING: which top-level \`page.data\` keys this island's closure reads. FAIL-OPEN as
+		// \`null\` ("ship all"): no map (a pre-shaping handoff), an entry the build never saw, or a
+		// closure whose reads could not be pinned to literal keys.
+		`export function islandPageKeys(entry) {\n` +
+		`  const all = load();\n` +
+		`  const map = all && typeof all.page_keys === 'object' && all.page_keys ? all.page_keys : null;\n` +
+		`  if (!map || !entry) return null;\n` +
+		`  const v = map[entry];\n` +
+		`  return Array.isArray(v) ? v : null;\n` +
 		`}\n` +
 		// Which remotes (Kit id-hashes) this island's client closure can call — REMOTE SEED ONLY WHEN
 		// REACHABLE. FAIL-OPEN as `null` ("may call anything"): no map (a pre-remotes handoff), or an

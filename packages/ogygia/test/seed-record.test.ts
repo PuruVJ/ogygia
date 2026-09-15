@@ -11,14 +11,14 @@ import type { Component } from 'svelte';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 import { set_page_recorder } from '../src/page-seed-registry.js';
-import { set_reads_page, set_island_remotes } from './_stubs/virtual-island-deps.js';
+import { set_reads_page, set_island_remotes, set_page_keys } from './_stubs/virtual-island-deps.js';
 import { region as make_region } from '../src/region.js';
 
 // `render()`'s body is a LAZY getter — the component runs on first read, so every render here reads it.
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 
-let records: Array<{ snap: unknown; seed: boolean; remotes: readonly string[] | null }>;
+let records: Array<{ snap: unknown; seed: import("../src/server/seed-shape.js").SeedAsk; remotes: readonly string[] | null }>;
 beforeEach(() => {
 	records = [];
 	set_page_recorder((snap, seed, remotes) => records.push({ snap, seed, remotes }));
@@ -27,6 +27,7 @@ afterEach(() => {
 	set_page_recorder(null);
 	set_reads_page(true);
 	set_island_remotes(null);
+	set_page_keys(null);
 });
 
 const island = (extra: Record<string, unknown> = {}) => ({
@@ -51,7 +52,7 @@ describe('page snapshot recording', () => {
 	it('an island whose closure reads $page → snapshot recorded AND the seed asked for', () => {
 		set_reads_page(true);
 		void render(region, { props: island() }).body;
-		expect(seeds()).toEqual([true]);
+		expect(seeds()).toEqual(["all"]);
 		expect(records[0].snap).toMatchObject({ status: 200 });
 		expect(records[0].snap).toHaveProperty('data');
 	});
@@ -70,7 +71,7 @@ describe('page snapshot recording', () => {
 		expect(seeds()).toEqual([false, false]);
 		set_reads_page(true);
 		void render(region, { props: island({ load: undefined, visible: true }) }).body;
-		expect(seeds()).toEqual([false, false, true]);
+		expect(seeds()).toEqual([false, false, "all"]);
 	});
 
 	it('a server island that hydrates follows its client module; a static hole never asks', () => {
@@ -79,7 +80,7 @@ describe('page snapshot recording', () => {
 		void render(region, { props: hole({ __hydrate: 'load', __module: '/islands/hole.js' }) }).body;
 		set_reads_page(false);
 		void render(region, { props: hole({ __hydrate: 'load', __module: '/islands/hole.js' }) }).body;
-		expect(seeds()).toEqual([false, true, false]);
+		expect(seeds()).toEqual([false, "all", false]);
 	});
 
 	it('a lake and a plain inline held region never ask (no client at all)', () => {
@@ -89,10 +90,24 @@ describe('page snapshot recording', () => {
 		expect(seeds().some(Boolean)).toBe(false);
 	});
 
+	// SEED SHAPING: the ask carries the KEYS the build pinned for the entry; `null` (unpinned) → all.
+	it('an island whose closure reads pinned keys asks for exactly those', () => {
+		set_reads_page(true);
+		set_page_keys(['_locale', 'user']);
+		void render(region, { props: island() }).body;
+		expect(seeds()).toEqual([['_locale', 'user']]);
+		set_page_keys(null);
+		void render(region, { props: island() }).body;
+		expect(seeds()).toEqual([['_locale', 'user'], 'all']);
+		set_page_keys([]); // reads only url / params: an empty ask still ships the seed, data empty
+		void render(region, { props: island() }).body;
+		expect(seeds()).toEqual([['_locale', 'user'], 'all', []]);
+	});
+
 	it('a promise `of` (module unknown until it resolves) asks — fail-open', () => {
 		set_reads_page(false);
 		void render(region, { props: { of: new Promise(() => {}), placeholder: undefined } }).body;
-		expect(seeds()).toEqual([true]);
+		expect(seeds()).toEqual(["all"]);
 	});
 });
 

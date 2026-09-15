@@ -111,7 +111,7 @@ function kit_page_context(options: DocumentOptions): KitPage {
 			form: page.form,
 			error: page.error
 		},
-		true,
+		'all', // the routeless document root: its islands' reads are not known here — ship whole
 		[]
 	);
 	return page;
