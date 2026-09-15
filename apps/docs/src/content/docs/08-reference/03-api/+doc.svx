@@ -149,7 +149,7 @@ What it does and does not do:
 - **Islands are untouched.** An import carrying region marks (`with { wake }`, `render`, `preset`, `region`, or the app's `importKeys`) is never rewritten, so a marked import means exactly what it meant before. A barrel binding is marked through `asRegion` or a mark in the barrel, as before.
 - `import * as ns from 'barrel'`, `import 'barrel'` and dynamic imports are left as written.
 
-Options: `packages`, `force`, `keep` (matchers: a package name or specifier prefix, a `*` glob, a regex, or a function of the resolved id), `importers: { include, exclude }` (which files are rewritten; default project files), `followPackages` (walk `export *` into dependencies while mapping a barrel; default `true`), `report` (a one-line summary at the end of a build), `debug` (log every rewrite).
+Options: `packages`, `force`, `keep` (matchers: a package name or specifier prefix, a `*` glob, a regex, or a function of the resolved id), `importers: { include, exclude }` (which files are rewritten; default project files), `followPackages` (walk `export *` into dependencies while mapping a barrel; default `true`), `report` (the end-of-build report: `true` = the eight biggest barrels and a count of the rest, `'all'` = every barrel, `false` = silent), `debug` (log every rewrite).
 
 The same pass is exported as a standalone Vite plugin for any app, ogygia or not:
 

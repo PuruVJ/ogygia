@@ -106,10 +106,34 @@ describe('vite build', () => {
 		expect(report).toContain('names  node_modules/@scope/ui/index.js  ← 1 importer');
 		expect(lines.filter((l) => l.startsWith('[ogygia] barrels: src/main.ts:'))).toHaveLength(2);
 		expect(lines).toContainEqual(expect.stringContaining('[ogygia] barrels: src/App.svelte: Card ← lib/index.ts → lib/Card.svelte'));
+		expect(report, 'two barrels fit under the default cut, so no "more" line').not.toContain('more barrel');
 		// `report: false` silences the block
 		lines.length = 0;
 		await build_ids({ ...config(f, { report: false }), customLogger: logger as never, logLevel: 'info' as const });
 		expect(lines.some((l) => /^\[ogygia\] barrels: \d/.test(l))).toBe(false);
+	});
+
+	it('the default report shows the eight biggest barrels and counts the rest; `report: "all"` lists every one', async () => {
+		const files = app();
+		// twelve more tiny barrels, each used by one file
+		for (let i = 0; i < 12; i++) {
+			files[`lib/b${i}/leaf.ts`] = `export const v${i} = ${i};`;
+			files[`lib/b${i}/index.ts`] = `export { v${i} } from './leaf';`;
+			files['src/main.ts'] += `\nimport { v${i} } from '$lib/b${i}';\nconsole.log(v${i});`;
+		}
+		f = fixture(files);
+		const lines: string[] = [];
+		const logger = { info: (m: string) => lines.push(m), warn() {}, warnOnce() {}, error() {}, clearScreen() {}, hasErrorLogged: () => false, hasWarned: false };
+		await build_ids({ ...config(f), customLogger: logger as never, logLevel: 'info' as const });
+		const short = lines.find((l) => /^\[ogygia\] barrels: \d/.test(l))!;
+		expect(short).toContain('14 barrels bypassed');
+		expect(short.split('\n').filter((l) => / names  /.test(l))).toHaveLength(8);
+		expect(short).toContain("… and 6 more barrels (`barrels: { report: 'all' }` lists every one)");
+		lines.length = 0;
+		await build_ids({ ...config(f, { report: 'all' }), customLogger: logger as never, logLevel: 'info' as const });
+		const full = lines.find((l) => /^\[ogygia\] barrels: \d/.test(l))!;
+		expect(full.split('\n').filter((l) => / names  /.test(l))).toHaveLength(14);
+		expect(full).not.toContain('more barrel');
 	});
 });
 

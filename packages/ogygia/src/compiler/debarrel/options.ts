@@ -42,9 +42,10 @@ export interface DebarrelOptions {
 	 *  (default true). A star that reaches something unparsable (CJS, JSON) makes the barrel
 	 *  OPAQUE for the names it cannot see: those stay on the barrel import. */
 	followPackages?: boolean;
-	/** A short report at the end of each build leg — files rewritten, imports and names moved, barrels
-	 *  bypassed, time spent in the pass, the top barrels. Default true; `false` silences it. */
-	report?: boolean;
+	/** A report at the end of each build leg — files rewritten, imports and names moved, barrels
+	 *  bypassed, time spent in the pass, then the barrels by names moved. Default `true`: the eight
+	 *  biggest and a count of the rest; `'all'`: every barrel; `false`: nothing. */
+	report?: boolean | 'all';
 	/** Log every rewrite as it happens (dev + build). */
 	debug?: boolean;
 }
@@ -56,7 +57,7 @@ export interface NormalizedOptions {
 	importer_include: Matcher[];
 	importer_exclude: Matcher[];
 	follow_packages: boolean;
-	report: boolean;
+	report: false | true | 'all';
 	debug: boolean;
 }
 
@@ -69,7 +70,7 @@ export function normalize_options(o: DebarrelOptions | true = {}): NormalizedOpt
 		importer_include: opts.importers?.include ?? [],
 		importer_exclude: opts.importers?.exclude ?? [],
 		follow_packages: opts.followPackages ?? true,
-		report: opts.report !== false,
+		report: opts.report === false ? false : opts.report === 'all' ? 'all' : true,
 		debug: !!opts.debug
 	};
 }

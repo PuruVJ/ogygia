@@ -336,7 +336,7 @@ Found while rebuilding a large production site header (static mega menu, per-vis
   **Islands are untouched:** an import carrying region marks (the app's `importKeys`) is never
   rewritten — a barrel binding is marked through `asRegion` or a mark in the barrel, as before. A
   report prints at the end of each build leg (files rewritten, names moved, time in the pass, the
-  top barrels and their importer counts; `report: false` silences it, `debug: true` narrates every
+  top barrels and their importer counts, `report: 'all'` lists every barrel; `report: false` silences it, `debug: true` narrates every
   rewrite). The same pass is `debarrel()` from `'ogygia/vite'` for any Vite app. Parses with the
   compiler's oxc parser and the Svelte parser (script blocks by range, never a regex over markup).
   Dry-run over three ~8,500-file monorepos: ~4,100 importers rewritten each, ~17,700 names moved

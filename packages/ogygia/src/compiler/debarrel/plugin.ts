@@ -180,7 +180,7 @@ export function debarrel(options: DebarrelOptions | true = {}, internal: Debarre
 		// The report, once per build leg (Kit builds client then server; each gets its own). Dev
 		// prints nothing here — `debug` narrates rewrites as they happen.
 		closeBundle() {
-			if (o.report && command === 'build') log(format_report(report, root));
+			if (o.report && command === 'build') log(format_report(report, root, o.report === 'all' ? Infinity : 8));
 			report = fresh_report();
 		}
 	};
@@ -192,20 +192,24 @@ function short(id: string, root: string): string {
 
 const n = (v: number) => v.toLocaleString('en-US');
 
-/** The build-time report: totals, time spent in the pass, and the barrels that mattered most. */
-export function format_report(r: ReturnType<typeof debarrel_report_shape>, root: string): string {
+/** The build-time report: totals, time spent in the pass, and the barrels by names moved — the
+ *  `limit` biggest and a count of the rest (`Infinity` for every one). */
+export function format_report(r: ReturnType<typeof debarrel_report_shape>, root: string, limit: number): string {
 	const span_s = ((r.last_ms - r.first_ms) / 1000).toFixed(2);
 	if (r.importers === 0)
 		return `[ogygia] barrels: ${n(r.files)} files scanned, no barrel imports to rewrite (${span_s} s)`;
 	const head =
 		`[ogygia] barrels: ${n(r.importers)} of ${n(r.files)} files rewritten — ${n(r.imports)} barrel imports → leaves ` +
 		`(${n(r.names)} names), ${n(r.barrels.size)} barrels bypassed, ${span_s} s first to last transform`;
-	const top = [...r.barrels.entries()].sort((a, b) => b[1].names - a[1].names).slice(0, 8);
+	const sorted = [...r.barrels.entries()].sort((a, b) => b[1].names - a[1].names);
+	const top = sorted.slice(0, limit);
 	const width = Math.max(...top.map(([, b]) => n(b.names).length));
 	const rows = top.map(
 		([id, b]) =>
 			`  ${n(b.names).padStart(width)} names  ${short(id, root)}  ← ${n(b.importers.size)} importer${b.importers.size === 1 ? '' : 's'}`
 	);
+	const rest = sorted.length - top.length;
+	if (rest > 0) rows.push(`  … and ${n(rest)} more barrel${rest === 1 ? '' : 's'} (\`barrels: { report: 'all' }\` lists every one)`);
 	return [head, ...rows].join('\n');
 }
 
