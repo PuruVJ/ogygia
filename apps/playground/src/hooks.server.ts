@@ -1,5 +1,5 @@
 import { sequence } from '@sveltejs/kit/hooks';
-import type { Handle } from '@sveltejs/kit';
+import { redirect, type Handle } from '@sveltejs/kit';
 import { handle as ogygiaHandle, document } from 'ogygia/server';
 import { region } from 'ogygia';
 import DocTest from '$lib/doctest/DocTest.svelte';
@@ -36,7 +36,34 @@ const corrupt_detector_region: Handle = async ({ event, resolve }) => {
 	});
 };
 
+// AUTH-WALL fixture (e2e/hole-wall.spec.ts): an app handle IN FRONT of ogygia.handle() that takes
+// a region request away from it — the way a customer's sign-in redirect bounced every locale-less
+// URL of a signed-in visitor (the islands endpoint included) to the account area, and the browser
+// followed it: each hole then held the account page. `og-auth-wall=redirect` answers a hole request
+// with a 302 to a page; `og-auth-wall=document` answers it with a whole document directly (a 404
+// handler's shape). The runtime must refuse both and keep the fallback.
+const auth_wall: Handle = async ({ event, resolve }) => {
+	const mode = event.cookies.get('og-auth-wall');
+	if (mode && event.url.pathname.startsWith('/__ogygia__')) {
+		if (mode === 'redirect') redirect(302, '/hole-wall/account/');
+		if (mode === 'document') {
+			return new Response(
+				'<!DOCTYPE html>\n<html><head><meta name="ogygia-csr" content="true"></head>' +
+					'<body><div data-wall-skeleton class="skeleton">…</div></body></html>',
+				{ status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }
+			);
+		}
+	}
+	return resolve(event);
+};
+
 // The SSR profiler is NOT wired here — it's configured entirely in vite.config.ts (`profiler: true`)
 // and ogygia.handle() dynamically imports + mounts it internally. UI at /__profiler (dev = open;
 // prod needs ?key=<OGYGIA_PROFILER_SECRET>).
-export const handle = sequence(doc_test, ogygiaHandle(), corrupt_detector_region, passthrough);
+export const handle = sequence(
+	doc_test,
+	auth_wall,
+	ogygiaHandle(),
+	corrupt_detector_region,
+	passthrough
+);

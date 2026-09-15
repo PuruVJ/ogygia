@@ -26,6 +26,39 @@ export function is_allowed_region_endpoint(
 	}
 }
 
+/** A whole HTML document starts with a doctype or `<html>`; a region answer never does. */
+const DOCUMENT_START_RE = /^\s*(?:<!doctype\b|<html\b)/i;
+
+/**
+ * Is this hole answer a WHOLE DOCUMENT rather than the region's fragment? ogygia's handle answers a
+ * region request in place — a fragment, a 204, an error status — never with a page. A page here
+ * means a handle in front of `ogygia.handle()` took the request instead (an auth wall, a locale
+ * bounce, a 404 handler) and the browser followed it: a customer's signed-in visitors had every
+ * hole of the header filled with the account area's page — its scripts, its skeletons, a second
+ * header. Refused, the fallback stands; the redirect twin is {@link is_redirected_answer}.
+ */
+export function is_document_answer(text: string): boolean {
+	return DOCUMENT_START_RE.test(text.slice(0, 256));
+}
+
+/** A region request that was redirected (same origin — cross-origin is refused earlier) did not
+ *  reach the endpoint it named: whatever answered is not the region. */
+export function is_redirected_answer(res: Response): boolean {
+	return res.redirected === true;
+}
+
+/** The error a refused answer throws: the fetch loop does not retry it (the answer is
+ *  deterministic — a redirect rule, not a flaky network) and DEV names the culprit. */
+export class RegionAnswerRefused extends Error {
+	override name = 'RegionAnswerRefused';
+	constructor(
+		public readonly reason: 'redirected' | 'document',
+		public readonly final_url: string
+	) {
+		super(`region answer refused: ${reason} (${final_url})`);
+	}
+}
+
 /** After fetch: reject opaque redirects that left the page origin. */
 export function is_same_origin_response(res: Response, page_origin = location.origin): boolean {
 	if (!res.url) return true; // older environments — rely on request URL check

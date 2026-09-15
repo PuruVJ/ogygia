@@ -18,6 +18,15 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **A hole answer that is not the region's is refused.** `ogygia.handle()` answers a region request
+  in place — a fragment, a 204, an error status — and never redirects. An app handle in front of it
+  (an auth wall, a locale bounce, a 404 handler) can still take the request, and the browser follows
+  the redirect: what comes back is that handler's page. The runtime swapped it in — on a customer
+  site every hole of the header held the account area's page for signed-in visitors (its skeletons,
+  its scripts requested from the wrong path, a header three screens tall). The fetcher now refuses
+  a redirected response and a body that is a whole document (doctype / `<html>`), keeps the
+  fallback, does not retry (the rule is deterministic), and in dev names the URL that answered
+  instead. Two browser tests (a redirected answer, a document answer: fallback stands, one request).
 - **An error page under a csr=false page is rendered as the Kit-hydrated document it is.** Kit
   renders a route's `+error.svelte` from the LAYOUT branch alone (`PageNodes(layouts)` in its
   server renderer): the page node, and with it the page's `csr = false`, is dropped, so a 404 / 500

@@ -310,3 +310,64 @@ test('an on-demand hole with prefetch="idle" warms at idle, keeps its fallback, 
 		window.fetch = real_fetch;
 	}
 });
+
+// THE ANSWER MUST BE THE REGION'S. A handle in front of ogygia.handle() (an auth wall, a locale
+// bounce, a 404 handler) can take a region request and the browser follows the redirect: what comes
+// back is that handler's PAGE, not the fragment. Swapped in, it put a site's account page — its
+// scripts, its skeletons, a second header — into every hole of the header for signed-in visitors.
+// Refused: the fallback stands, no retry (the rule is deterministic), DEV names the culprit.
+const REFUSED_REDIRECT_ENDPOINT = '/__ogygia__?id=cafebabe0101&props=W3t9XQ&exp=9999999999&sig=stub';
+const REFUSED_DOCUMENT_ENDPOINT = '/__ogygia__?id=cafebabe0102&props=W3t9XQ&exp=9999999999&sig=stub';
+const ACCOUNT_PAGE = '<!DOCTYPE html>\n<html><head><meta name="ogygia-csr" content="true"></head><body><div class="skeleton">…</div><script>window.__sveltekit_x = {}</script></body></html>';
+
+test('a hole answer that was REDIRECTED is refused: the fallback stands, no retry', async () => {
+	document.body.innerHTML =
+		`<ogygia-region render="defer" when="load" endpoint="${REFUSED_REDIRECT_ENDPOINT}">` +
+		`<p data-testid="fallback">fallback</p></ogygia-region>`;
+	const region = document.querySelector('ogygia-region')!;
+	const calls: string[] = [];
+	const real_fetch = window.fetch;
+	window.fetch = async (input) => {
+		calls.push(String(input));
+		const res = new Response('<p data-testid="served">not the region</p>', { status: 200, headers: { 'content-type': 'text/html' } });
+		Object.defineProperty(res, 'url', { value: location.origin + '/account/' });
+		Object.defineProperty(res, 'redirected', { value: true });
+		return res;
+	};
+	try {
+		bootDev();
+		await new Promise((r) => setTimeout(r, 1500)); // past the retry delays (500 ms, 1000 ms)
+		expect(calls, 'no retry for a refused answer').toHaveLength(1);
+		expect(document.querySelector('[data-testid="fallback"]')).not.toBeNull();
+		expect(document.querySelector('[data-testid="served"]')).toBeNull();
+		expect(region.hasAttribute('data-hydrated')).toBe(false);
+	} finally {
+		window.fetch = real_fetch;
+	}
+});
+
+test('a hole answer that is a WHOLE DOCUMENT is refused: nothing of it enters the page', async () => {
+	document.body.innerHTML =
+		`<ogygia-region render="defer" when="load" endpoint="${REFUSED_DOCUMENT_ENDPOINT}">` +
+		`<p data-testid="fallback">fallback</p></ogygia-region>`;
+	const region = document.querySelector('ogygia-region')!;
+	const calls: string[] = [];
+	const real_fetch = window.fetch;
+	window.fetch = async (input) => {
+		calls.push(String(input));
+		const res = new Response(ACCOUNT_PAGE, { status: 200, headers: { 'content-type': 'text/html' } });
+		Object.defineProperty(res, 'url', { value: location.origin + REFUSED_DOCUMENT_ENDPOINT });
+		return res;
+	};
+	try {
+		bootDev();
+		await new Promise((r) => setTimeout(r, 1500));
+		expect(calls).toHaveLength(1);
+		expect(document.querySelector('[data-testid="fallback"]')).not.toBeNull();
+		expect(document.querySelector('.skeleton')).toBeNull();
+		expect(document.querySelector('meta[name="ogygia-csr"]')).toBeNull();
+		expect(region.hasAttribute('data-hydrated')).toBe(false);
+	} finally {
+		window.fetch = real_fetch;
+	}
+});

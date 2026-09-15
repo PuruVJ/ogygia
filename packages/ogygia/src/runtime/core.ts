@@ -4,8 +4,11 @@ import { runtime_session } from './session.js';
 import {
 	is_hinted_module,
 	is_allowed_region_endpoint,
+	is_document_answer,
+	is_redirected_answer,
 	is_same_origin_response,
 	island_module_url,
+	RegionAnswerRefused,
 	warm_island_module
 } from './region-endpoint-url.js';
 import {
@@ -395,10 +398,19 @@ class OgygiaRegion extends HTMLElement {
 					signal
 				});
 				if (!is_same_origin_response(res)) throw new Error('cross-origin redirect');
+				// THE ANSWER MUST BE THE REGION'S. ogygia's handle answers a region request in place —
+				// a fragment, a 204, an error status — and never redirects; a redirected response, or a
+				// body that is a whole document, means a handle in front of `ogygia.handle()` took the
+				// request (an auth wall, a locale bounce, a 404 handler) and the browser followed it.
+				// Swapping that in put a site's account page — scripts, skeletons, a second header —
+				// into every hole of its header for signed-in visitors. Refused: the fallback stands.
+				if (is_redirected_answer(res)) throw new RegionAnswerRefused('redirected', res.url);
 				if (!res.ok) throw new Error('status ' + res.status);
 				// 204: the hole said keepFallback() — the page's fallback stands, nothing to swap.
 				if (res.status === 204) return KEEP_FALLBACK_HTML;
-				return res.text();
+				const text = await res.text();
+				if (is_document_answer(text)) throw new RegionAnswerRefused('document', res.url);
+				return text;
 			});
 	}
 
@@ -650,13 +662,23 @@ class OgygiaRegion extends HTMLElement {
 			void html;
 		} catch (err) {
 			if ((err as { name?: string })?.name === 'AbortError' || outer.aborted) return;
+			// A refused answer is deterministic (a redirect rule in front of the handle, not a flaky
+			// network): say what answered instead and do not retry.
+			const refused = err instanceof RegionAnswerRefused;
 			if (import.meta.env.DEV) {
-				console.warn('[ogygia] region fetch failed for', endpoint, err);
+				if (refused) {
+					console.warn(
+						`[ogygia] region answer refused for ${endpoint}: the request was ${err.reason === 'redirected' ? 'redirected to' : 'answered with a whole document at'} ${err.final_url}. ` +
+							`A handle in front of ogygia.handle() (an auth redirect, a locale bounce, a 404 handler) took the region request — exempt the islands endpoint there. The fallback stands.`
+					);
+				} else {
+					console.warn('[ogygia] region fetch failed for', endpoint, err);
+				}
 			}
 			this.#fetch_attempts++;
 			// Allow connectedCallback / a delayed retry to schedule again.
 			this.#scheduled = false;
-			if (this.isConnected && this.#fetch_attempts < 3) {
+			if (!refused && this.isConnected && this.#fetch_attempts < 3) {
 				const delay = 500 * this.#fetch_attempts;
 				setTimeout(() => {
 					if (!this.isConnected || this.#done || this.#fetching) return;
