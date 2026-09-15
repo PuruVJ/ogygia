@@ -9,6 +9,14 @@ export default defineConfig({
 	// ogygia MUST run before sveltekit() (enforce:'pre' also guarantees ordering)
 	plugins: [
 		ogygia({
+			// The debarrel pass, ON for the whole playground: every e2e run builds and serves the app the
+			// way a customer with `barrels: true` does. REGRESSION (customer build, 2026-09-15): the pass
+			// rewrote `import { Ticker } from '$lib/barrel'` fed to `asRegion(Ticker)` into a leaf import,
+			// the transform minted a different island id from the one the prescan derived from the raw
+			// file, and the server manifest imported a virtual entry nobody registered ("Rolldown failed
+			// to resolve import virtual:ogygia/island/<id>.js from virtual:ogygia/server-manifest"). The
+			// /as-region and /ts-registry fixtures are that shape; with this on, the build is the test.
+			barrels: true,
 			// The SSR profiler — configured ONLY here. Builds its UI islands + auto-mounts in
 			// ogygia.handle() (no profiler() hook). Secret from OGYGIA_PROFILER_SECRET env at runtime.
 			profiler: true,

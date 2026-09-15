@@ -12,6 +12,7 @@ import { ogygiaPresetPreprocess } from '../content/markdown/index.js';
 import {
 	is_island_path,
 	normalize_import_keys,
+	asRegionLocals,
 	type ImportKeys
 } from '../compiler/region/transform.js';
 
@@ -411,10 +412,18 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 	return [
 		// `ogygia({ barrels })` — the debarrel pass, FIRST in the array so the region transform below
-		// sees leaf imports. It leaves any import carrying a region mark alone (the app's configured
-		// attribute keys): islands are marked exactly as without it. Off unless asked for.
+		// sees leaf imports. It leaves alone every import that carries an island identity: one with
+		// a region mark (the app's configured attribute keys) and one whose binding feeds
+		// `import.meta.og.asRegion(X)` — the prescan keys that island on the raw import, so the
+		// transform must see the same import. Islands are marked exactly as without it. Off unless
+		// asked for.
 		...(options.barrels
-			? [debarrel(options.barrels, { skip_attribute_keys: Object.values(import_keys) })]
+			? [
+					debarrel(options.barrels, {
+						skip_attribute_keys: Object.values(import_keys),
+						skip_locals: asRegionLocals
+					})
+				]
 			: []),
 		// Content-collection dev HMR (full reload when a `src/content` file changes). Inert when the
 		// app doesn't use content collections. Folded in so `ogygia()` is the only plugin to add.

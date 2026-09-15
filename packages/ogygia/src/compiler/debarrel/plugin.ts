@@ -43,13 +43,22 @@ interface Resolver {
 export interface DebarrelInternal {
 	/** Import-attribute keys that mark an import as ogygia's: such an import is never rewritten. */
 	skip_attribute_keys?: string[];
+	/** Local bindings of a file that carry an island identity without an attribute (ogygia:
+	 *  `import.meta.og.asRegion(X)`): a declaration binding one of them is never rewritten, so
+	 *  the id the compiler's prescan derives from the raw source is the id the transform sees. */
+	skip_locals?: (code: string) => ReadonlySet<string>;
 }
 
 export function debarrel(options: DebarrelOptions | true = {}, internal: DebarrelInternal = {}): Plugin {
 	const o = normalize_options(options);
 	const skip_keys = new Set(internal.skip_attribute_keys ?? []);
-	const policy: RewritePolicy = {
-		skip: (decl) => decl.attribute_keys.some((k) => skip_keys.has(k))
+	const policy_for = (code: string): RewritePolicy => {
+		const locals = internal.skip_locals?.(code);
+		return {
+			skip: (decl) =>
+				decl.attribute_keys.some((k) => skip_keys.has(k)) ||
+				(!!locals && locals.size > 0 && decl.specs.some((s) => locals.has(s.local)))
+		};
 	};
 	let root = process.cwd().replace(BACKSLASH_G, '/');
 	let resolver: Resolver | null = null;
@@ -150,6 +159,7 @@ export function debarrel(options: DebarrelOptions | true = {}, internal: Debarre
 				if (map) seen.push(map);
 				return map;
 			};
+			const policy = policy_for(code);
 			const result = importer.endsWith('.svelte')
 				? await rewrite_svelte(code, importer, lookup, policy)
 				: await rewrite_module(code, importer, lookup, policy);

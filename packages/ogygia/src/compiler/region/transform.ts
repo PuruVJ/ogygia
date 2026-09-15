@@ -296,6 +296,24 @@ export function wrapperVirtualId(iid: string) {
 	return `virtual:ogygia/wrapper/${iid}.svelte`;
 }
 
+const AS_REGION_ARG_G = /import\.meta\.og\.asRegion\(\s*([A-Za-z_$][\w$]*)/g;
+
+/**
+ * The local bindings a file hands to `import.meta.og.asRegion(X)`. An island's identity is keyed on
+ * the import that binds `X` (`'<specifier>#<export>'`), and the prescan derives it from the raw
+ * source on disk — so no pass that runs before the transform may rewrite that import (the debarrel
+ * pass leaves declarations binding these names alone, as it does marked imports). A textual scan on
+ * purpose: it runs before any parse, on every transformed file.
+ */
+export function asRegionLocals(code: string): Set<string> {
+	const out = new Set<string>();
+	if (!code.includes('asRegion(')) return out;
+	AS_REGION_ARG_G.lastIndex = 0;
+	let m: RegExpExecArray | null;
+	while ((m = AS_REGION_ARG_G.exec(code))) out.add(m[1]);
+	return out;
+}
+
 // `regionBindingVirtualId` now lives in ../ids.js (the naming vocabulary) — imported for the lowering
 // below and re-exported (with the join key) so the public `ogygia/internal/compiler` surface holds.
 

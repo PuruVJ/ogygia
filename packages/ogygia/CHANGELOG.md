@@ -351,7 +351,7 @@ Found while rebuilding a large production site header (static mega menu, per-vis
   JSON / CommonJS / `?raw` stays on the barrel. Import attributes and `type` modifiers ride along;
   sourcemaps are emitted; an edit to a barrel re-transforms its former importers (`addWatchFile`).
   **Islands are untouched:** an import carrying region marks (the app's `importKeys`) is never
-  rewritten — a barrel binding is marked through `asRegion` or a mark in the barrel, as before. A
+  rewritten, and neither is an import whose binding feeds `import.meta.og.asRegion(X)` (the island is keyed on that import; rewriting it minted a second id and broke a customer build) — a barrel binding is marked through `asRegion` or a mark in the barrel, as before. A
   report prints at the end of each build leg (files rewritten, names moved, time in the pass, the
   top barrels and their importer counts, `report: 'all'` lists every barrel; `report: false` silences it, `debug: true` narrates every
   rewrite). The same pass is `debarrel()` from `'ogygia/vite'` for any Vite app. Parses with the
