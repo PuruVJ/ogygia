@@ -151,7 +151,23 @@ ogygia({
 </script>
 ```
 
-Fields: `render` (`'static'` | `'deferred'` | `'live'`), `wake` (schedule), `margin`, `maxAge`, `onExpire`, `revalidate`, `keep`.
+Fields: `render` (`'static'` | `'deferred'` | `'live'`), `wake` (schedule), `margin`, `maxAge`, `onExpire`, `revalidate`, `keep`, `prefetch`.
+
+#### `prefetch`: warm a `deferred` hole before it swaps
+
+A hole's `wake` is one moment: when its HTML is fetched **and** swapped in. `prefetch` splits them. The HTML is warmed into the frame store on the `prefetch` schedule (`'load'` | `'idle'` | `'visible'` | a media query); the swap still waits for `wake`. An on-demand hole (`wake: 'interaction'`) thus has its bytes before the first hover, and the gesture joins the warm frame instead of paying the origin round trip:
+
+```ts
+ogygia({ regions: { presets: { menu: { render: 'deferred', wake: 'interaction', prefetch: 'idle', maxAge: '1h' } } } })
+```
+
+```svelte
+<script>
+  import CountryPanel from './CountryPanel.svelte' with { render: 'deferred', wake: 'interaction', prefetch: 'idle' };
+</script>
+```
+
+`prefetch` rides inline or in a preset. It is `deferred`-only (an island's JS is warmed by the `regions.preload` hints, not by this). Never `'interaction'`: that is the swap, `wake`'s job. Never the hole's own `wake` schedule: it would add nothing. Without `prefetch`, an `interaction` hole keeps its default warm: the first hover fetches and swaps in one go.
 
 #### `maxAge`: caching a `deferred` hole
 

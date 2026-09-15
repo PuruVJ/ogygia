@@ -402,6 +402,23 @@ function is_preserved(el: Element): boolean {
 }
 
 /**
+ * An element whose attributes are partly ITS OWN doing, not the render's: an upgraded custom element
+ * (a web component writes `popover`, `role`, `aria-*`, its `hydrated` class onto its own host at
+ * upgrade — QDS's dropdown opens through `popover="manual"` + `showPopover()`, the top layer), or a
+ * `<dialog>` / `<details>` whose `open` the browser flips. A morph toward server HTML that never
+ * carried those attributes must ADD and UPDATE on such an element, never REMOVE: a hole that morphed
+ * in around a live QDS dropdown deleted its `popover` and dropped it out of the top layer, under
+ * the header's search bar (the country selector). Upgraded = a shadow root, or a defined name.
+ */
+function is_self_owned(el: Element): boolean {
+	const name = el.localName;
+	if (name === 'dialog' || name === 'details') return true;
+	if (!name.includes('-')) return false;
+	if (el.shadowRoot) return true;
+	return typeof customElements !== 'undefined' && customElements.get(name) !== undefined;
+}
+
+/**
  * Reconcile a single old node toward a single new node, replacing only when it cannot be morphed.
  * Used by keyed matches, where `from` and `to` may be different tags (the reason the tag/namespace
  * replace check lives here). Positional/lockstep callers have already proven compatibility via
@@ -429,7 +446,7 @@ function morph_node(from: Node, to: Node, sets: IdSets): void {
 	// Form props BEFORE attributes: the rule compares the previous render's attribute to the incoming
 	// one, so it must read `ef`'s attributes while they are still the previous render's.
 	sync_form_props(ef, et);
-	sync_attributes(ef, et);
+	sync_attributes(ef, et, is_self_owned(ef));
 	// `et` is never mutated by the recursion (misses clone, keyed moves come from the OLD tree), so
 	// its live `childNodes` is handed straight down — no per-level snapshot array.
 	reconcile_children(ef, et.childNodes, sets);
@@ -451,12 +468,14 @@ function morph_same(from: Node, to: Node, sets: IdSets): void {
 	if (is_preserved(ef)) return;
 	const et = to as Element;
 	sync_form_props(ef, et); // before attributes — see morph_node
-	sync_attributes(ef, et);
+	sync_attributes(ef, et, is_self_owned(ef));
 	reconcile_children(ef, et.childNodes, sets);
 }
 
-/** Add + update + remove attributes so `from` matches `to` exactly. Boolean attrs are attr presence. */
-export function sync_attributes(from: Element, to: Element): void {
+/** Add + update + remove attributes so `from` matches `to` exactly. Boolean attrs are attr presence.
+ *  `keep_extra` (a self-owned element, {@link is_self_owned}): add + update only — an attribute the
+ *  element gave itself is not the render's to take away. */
+export function sync_attributes(from: Element, to: Element, keep_extra = false): void {
 	const to_attrs = to.attributes;
 	const to_len = to_attrs.length;
 	// Add / update everything `to` wants. After this, `from`'s attribute names are a superset of
@@ -468,6 +487,7 @@ export function sync_attributes(from: Element, to: Element): void {
 	// `from` can only carry a stale attribute if it has MORE attributes than `to` — otherwise the
 	// superset above is an exact match and the whole removal scan (+ its hasAttribute probes) is
 	// skipped, which is the common "same attribute set, values churn" tick.
+	if (keep_extra) return;
 	const from_attrs = from.attributes;
 	if (from_attrs.length > to_len) {
 		// Iterate backwards — removal shifts the live list.

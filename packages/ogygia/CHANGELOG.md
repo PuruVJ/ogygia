@@ -18,6 +18,26 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **`keepFallback()` from a server island rendered inline now fails with the reason.** A server
+  island nested inside a `wake` island renders its component inline (the nested rule: the deferred
+  mark is ignored there), so its `keepFallback()` signal had nothing to catch it and surfaced as
+  Kit's error page — a whole site went 500 on a footer hole placed inside an island, with a message
+  that named nothing ("the page fallback stands"). Region.svelte now marks the inline subtree
+  (`setHoleInline`), and `keepFallback()` read there throws a plain error that says the island is
+  nested, that its fallback never shows, and where to move it. On the endpoint the branded signal is
+  unchanged. Unit coverage for the three placements (endpoint root, top-level hole in the page pass,
+  nested inline).
+- **A morph no longer strips the attributes a web component gave itself.** The hole/live morph made
+  every element match the incoming server HTML exactly, removing any attribute the HTML lacked. An
+  upgraded custom element writes attributes onto its own host at upgrade — QDS's dropdown opens
+  through `popover="manual"` + `showPopover()`, the browser's top layer — and a `<dialog>`'s
+  `open` is the browser's. A hover-fetched hole that morphed in around a live QDS dropdown deleted
+  its `popover`: the country selector fell out of the top layer, under the header's search bar,
+  and its later `showPopover()` threw. The morph now treats an upgraded custom element (a shadow
+  root, or a name in `customElements`) and `<dialog>`/`<details>` as self-owned: attributes from the
+  incoming HTML are added and updated, none are removed (`sync_attributes(from, to, keep_extra)`,
+  `is_self_owned`). Plain elements are unchanged. Unit + browser coverage (a defined element that
+  sets `popover` in `connectedCallback` keeps it and stays `:popover-open` through a hole morph).
 - **An island with props inside a lake now hydrates on a csr=true page.** The handle skips the
   page / remote / context seeds on a Kit-hydrated page (Kit serializes its own), and it skipped the
   whole document tail with them — the tail that carries every region's props sidecar and preload
@@ -298,6 +318,21 @@ Found while rebuilding a large production site header (static mega menu, per-vis
 
 ### Added
 
+- **`prefetch` — warm a deferred hole's HTML before it swaps.** A hole's `wake` was one moment:
+  fetch and swap. For an on-demand hole (`wake: 'interaction'`) that meant the first hover paid the
+  whole origin round trip (0.35 s on a warm instance, seconds on a cold one — a site's country
+  selector, measured). `prefetch: 'load' | 'idle' | 'visible' | <media query>` arms a second,
+  earlier schedule that only warms the frame store (no subscription, nothing applied); the swap
+  still waits for `wake`, whose `ensure` joins the warm frame instead of fetching. Inline
+  (`with { render: 'deferred', wake: 'interaction', prefetch: 'idle' }`) or in a preset, with
+  `maxAge` alongside. Deferred-only; `'interaction'` and the hole's own `wake` schedule are refused
+  at compile time with the reason. Threaded through: `regions.presets` (type + closed key set), the
+  transform (`ATTR_SCHEMA`, inline + preset, validation, `options.prefetch`), the wrapper identity
+  (a prefetching placement never dedupes onto a plain one), the emitted `__prefetch` → `prefetch`
+  attribute (Region.svelte), the runtime (`#prefetch_html` + one shared `#frame_fetcher` for the
+  wake and the warm), a `region.prefetch` devtools event, docs (reference + timing), the skill.
+  Coverage: transform (9 cases), browser (idle warm keeps the fallback, hover joins with no second
+  request), playground `/defer-timing` `prefetch` variant + `e2e/defer-timing.spec.ts`.
 - **A lake survives Kit hydration.** On a `csr = true` page, a `wake: 'none'` region is now
   ADOPTED by Kit's hydration pass instead of hydrated: the wrapper renders the lake through a raw
   snippet, so Kit keeps the server element as opaque DOM (no mismatch, no re-render, the lake's

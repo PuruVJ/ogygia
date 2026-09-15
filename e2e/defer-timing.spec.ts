@@ -41,16 +41,22 @@ test.describe('server-island fetch timing load/idle/visible/media', () => {
 				(await page.getAttribute(`[data-defer="${variant}"] ogygia-region`, 'endpoint')) || '';
 			return ep.match(ENDPOINT_ID_RE)?.[1] || '';
 		};
-		const [idLoad, idIdle, idVisible, idMedia] = await Promise.all([
+		const [idLoad, idIdle, idVisible, idMedia, idPrefetch] = await Promise.all([
 			idOf('load'),
 			idOf('idle'),
 			idOf('visible'),
-			idOf('media')
+			idOf('media'),
+			idOf('prefetch')
 		]);
 		check(
-			'four distinct server-island holes present',
-			new Set([idLoad, idIdle, idVisible, idMedia]).size === 4,
-			`${idLoad},${idIdle},${idVisible},${idMedia}`
+			'five distinct server-island holes present',
+			new Set([idLoad, idIdle, idVisible, idMedia, idPrefetch]).size === 5,
+			`${idLoad},${idIdle},${idVisible},${idMedia},${idPrefetch}`
+		);
+		check(
+			'the prefetch hole is emitted with prefetch="idle" and when="interaction"',
+			(await page.getAttribute('[data-defer="prefetch"] ogygia-region', 'prefetch')) === 'idle' &&
+				(await page.getAttribute('[data-defer="prefetch"] ogygia-region', 'when')) === 'interaction'
 		);
 
 		// --- let load / idle / media fill (no scroll) ---
@@ -89,6 +95,33 @@ test.describe('server-island fetch timing load/idle/visible/media', () => {
 		check(
 			'load hole DID fetch (network)',
 			islandReqs.some((u) => u.includes('id=' + idLoad))
+		);
+
+		// PREFETCH: warmed at idle (one request, no intent), NOT swapped (fallback stands); the hover
+		// then swaps from the frame store with no second request.
+		check(
+			'prefetch hole fetched at idle, before any hover (network)',
+			islandReqs.some((u) => u.includes('id=' + idPrefetch)),
+			islandReqs.map((u) => u.match(ENDPOINT_ID_RE)?.[1]).join(',')
+		);
+		check(
+			'prefetch hole still shows its fallback (a warm is not a swap)',
+			(await page.locator('[data-fallback-prefetch]').count()) > 0
+		);
+		const prefetch_requests_before = islandReqs.filter((u) => u.includes('id=' + idPrefetch)).length;
+		await page.locator('[data-defer="prefetch"] ogygia-region').hover();
+		await page
+			.waitForSelector('[data-defer="prefetch"] [data-server-greeting]', { timeout: 6000 })
+			.catch(() => {});
+		await sleep(300);
+		check(
+			'prefetch hole swapped in on hover',
+			(await page.locator('[data-defer="prefetch"] [data-server-greeting]').count()) > 0
+		);
+		check(
+			'the hover joined the warm frame — no second request',
+			islandReqs.filter((u) => u.includes('id=' + idPrefetch)).length === prefetch_requests_before,
+			`${prefetch_requests_before} → ${islandReqs.filter((u) => u.includes('id=' + idPrefetch)).length}`
 		);
 
 		// --- scroll the visible hole into view -> it fetches + fills ---

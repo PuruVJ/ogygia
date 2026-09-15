@@ -484,3 +484,52 @@ describe('swap_body (outerSync fallback)', () => {
 		expect(live.hasAttribute('data-stale')).toBe(false);
 	});
 });
+
+// SELF-OWNED ELEMENTS — an upgraded custom element (a shadow root / a defined name) and a
+// <dialog>/<details> write attributes onto themselves (`popover`, `open`, their `hydrated` class).
+// A morph toward server HTML that never carried them adds + updates, never removes. A plain element
+// still matches the incoming HTML exactly (the tests above).
+describe('self-owned attributes (upgraded custom elements, dialog/details)', () => {
+	const upgraded = (parent: DomElement) => {
+		const x = parent.firstChild as DomElement & { shadowRoot?: object };
+		x.shadowRoot = {}; // what an upgraded web component has
+		return x;
+	};
+
+	test('an upgraded custom element keeps the attribute it gave itself when the new HTML lacks it', () => {
+		const parent = el('<div><x-pop id="p" popover="manual" class="hydrated"></x-pop></div>');
+		const x = upgraded(parent);
+		morph_children(parent, frag('<x-pop id="p" class="a" data-x="1"><span>content</span></x-pop>'));
+		expect(parent.firstChild).toBe(x); // morphed in place
+		expect(x.getAttribute('popover')).toBe('manual'); // kept: not the render's to remove
+		expect(x.getAttribute('class')).toBe('a'); // updated: the render's value wins where it has one
+		expect(x.getAttribute('data-x')).toBe('1'); // added
+		expect(x.innerHTML).toContain('content');
+	});
+
+	test('a custom element that is NOT upgraded (no shadow root, no definition) still matches exactly', () => {
+		const parent = el('<div><x-plain popover="manual" class="hydrated"></x-plain></div>');
+		const x = parent.firstChild as DomElement;
+		morph_children(parent, frag('<x-plain class="a"></x-plain>'));
+		expect(x.hasAttribute('popover')).toBe(false);
+		expect(x.getAttribute('class')).toBe('a');
+	});
+
+	test('<dialog open> stays open through a morph whose HTML has it closed', () => {
+		const parent = el('<div><dialog id="d" open class="m-0"><p>old</p></dialog></div>');
+		const d = parent.firstChild as DomElement;
+		morph_children(parent, frag('<dialog id="d" class="m-0 z-10"><p>new</p></dialog>'));
+		expect(parent.firstChild).toBe(d);
+		expect(d.hasAttribute('open')).toBe(true);
+		expect(d.getAttribute('class')).toBe('m-0 z-10');
+		expect(d.innerHTML).toContain('new');
+	});
+
+	test('<details open> likewise; a plain sibling still loses its stale attribute', () => {
+		const parent = el('<div><details open><summary>s</summary></details><a data-stale="1">x</a></div>');
+		const details = parent.firstChild as DomElement;
+		morph_children(parent, frag('<details><summary>s</summary></details><a>x</a>'));
+		expect(details.hasAttribute('open')).toBe(true);
+		expect((parent.lastChild as DomElement).hasAttribute('data-stale')).toBe(false);
+	});
+});

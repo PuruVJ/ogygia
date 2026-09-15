@@ -424,6 +424,77 @@ describe('defer / server islands', () => {
 	});
 });
 
+// PREFETCH — a deferred hole warms its HTML on an EARLIER schedule than its `wake` (the swap).
+// The on-demand case: `wake: 'interaction', prefetch: 'idle'` — bytes in the frame store before
+// the first hover, the gesture joins the warm frame. Rides inline or in a preset; deferred-only;
+// never 'interaction' (that is the swap) and never the hole's own `wake` (adds nothing).
+describe('deferred `prefetch` (the warm schedule)', () => {
+	test('inline: prefetch: idle on an interaction hole → __prefetch on the wrapper, when stays interaction', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { render: 'deferred', wake: 'interaction', prefetch: 'idle' };`, '<C />')
+		)!;
+		expect(r.islands[0].wrapperSource).toMatch(/__defer=\{"interaction"\}/);
+		expect(r.islands[0].wrapperSource).toMatch(/__prefetch=\{"idle"\}/);
+	});
+
+	test('preset: the same, with maxAge alongside', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { preset: 'menu' };`, '<C />'),
+			makeCtx({ presets: { menu: { render: 'deferred', wake: 'interaction', prefetch: 'idle', maxAge: '1h' } } })
+		)!;
+		expect(r.islands[0].wrapperSource).toMatch(/__prefetch=\{"idle"\}/);
+		expect(r.islands[0].wrapperSource).toMatch(/__cacheTtl=\{3600\}/);
+	});
+
+	test('prefetch: visible carries the margin (its IntersectionObserver lead), a media query is a schedule too', () => {
+		const r = run(
+			wrap(`import C from './C.svelte' with { preset: 'menu' };`, '<C />'),
+			makeCtx({ presets: { menu: { render: 'deferred', wake: 'interaction', prefetch: 'visible', margin: '300px' } } })
+		)!;
+		expect(r.islands[0].wrapperSource).toMatch(/__prefetch=\{"visible"\}/);
+		expect(r.islands[0].wrapperSource).toMatch(/__margin=\{"300px"\}/);
+		const m = run(
+			wrap(`import C from './C.svelte' with { render: 'deferred', wake: 'interaction', prefetch: '(min-width: 900px)' };`, '<C />')
+		)!;
+		expect(m.islands[0].wrapperSource).toMatch(/__prefetch=\{"\(min-width: 900px\)"\}/);
+	});
+
+	test('no prefetch → no __prefetch (the default is the hover warm an interaction hole already has)', () => {
+		const r = run(wrap(`import C from './C.svelte' with { render: 'deferred', wake: 'interaction' };`, '<C />'))!;
+		expect(r.islands[0].wrapperSource).not.toMatch(/__prefetch/);
+	});
+
+	test("prefetch: 'interaction' is refused — that is the swap, wake's job", () => {
+		expect(() =>
+			run(wrap(`import C from './C.svelte' with { render: 'deferred', wake: 'load', prefetch: 'interaction' };`, '<C />'))
+		).toThrow(/Never 'interaction'/);
+	});
+
+	test('prefetch equal to the wake schedule is refused — it adds nothing', () => {
+		expect(() =>
+			run(wrap(`import C from './C.svelte' with { render: 'deferred', wake: 'idle', prefetch: 'idle' };`, '<C />'))
+		).toThrow(/adds nothing/);
+	});
+
+	test('prefetch without render: deferred is refused (an island has modulepreload hints for its JS)', () => {
+		expect(() => run(wrap(`import C from './C.svelte' with { wake: 'visible', prefetch: 'idle' };`, '<C />'))).toThrow(
+			/only valid with `render: 'deferred'`/
+		);
+	});
+
+	test('an unknown prefetch value is refused with the vocabulary', () => {
+		expect(() =>
+			run(wrap(`import C from './C.svelte' with { render: 'deferred', wake: 'interaction', prefetch: 'hover' };`, '<C />'))
+		).toThrow(/'load' \| 'idle' \| 'visible' \| a media query/);
+	});
+
+	test('identity: the same component with and without a prefetch are two wrappers, not one', () => {
+		const a = idFor('src/lib/C.svelte', { strategy: 'server', options: { when: 'interaction' } });
+		const b = idFor('src/lib/C.svelte', { strategy: 'server', options: { when: 'interaction', prefetch: 'idle' } });
+		expect(a).not.toBe(b);
+	});
+});
+
 describe('lakes', () => {
 	test('hydrate:none → lake wrapper binding', () => {
 		const r = run(wrap(`import L from './L.svelte' with { wake: 'none' };`, '<L />'))!;

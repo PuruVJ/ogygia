@@ -28,6 +28,9 @@ export function strategyKey(mark: { strategy: string; options?: Record<string, u
 		// MUST fingerprint the wrapper — else a `stitch: 'edge'` hole dedupes onto the `'serve'`
 		// wrapper of the same component+schedule (or vice versa) and the whole page flips mode.
 		if (o.stitch) k += `:stitch:${o.stitch}`;
+		// The warm schedule is part of the wrapper: the same component placed once with an idle
+		// prefetch and once without must not dedupe onto one region (the attribute is emitted).
+		if (o.prefetch) k += `:prefetch:${o.prefetch}`;
 		if (o.hydrate) {
 			k += `+hydrate:${o.hydrate}`;
 			if (o.hydrateMargin != null) k += `:hmargin:${o.hydrateMargin}`;

@@ -9,6 +9,10 @@
 	import GIdle from '$lib/Greeting.svelte' with { render: 'deferred', wake: 'idle' };
 	import GVisible from '$lib/Greeting.svelte' with { render: 'deferred', wake: 'visible' };
 	import GMedia from '$lib/Greeting.svelte' with { render: 'deferred', wake: '(min-width: 300px)' };
+	//   prefetch -> an ON-DEMAND hole (swaps on first hover) whose HTML is warmed at idle: the request
+	//               goes out at idle with no intent, the fallback stays, the hover swaps with no
+	//               second request (e2e/defer-timing.spec.ts)
+	import GPrefetch from '$lib/Greeting.svelte' with { render: 'deferred', wake: 'interaction', prefetch: 'idle' };
 </script>
 
 <h1 data-static-shell>Defer timing variants</h1>
@@ -30,6 +34,11 @@
 <section data-defer="media">
 	<h2 data-static-shell>media</h2>
 	<GMedia salutation="Media">{#snippet ogygiaFallback()}<p class="fb" data-fallback-media>loading (media)…</p>{/snippet}</GMedia>
+</section>
+
+<section data-defer="prefetch">
+	<h2 data-static-shell>interaction + prefetch: idle</h2>
+	<GPrefetch salutation="Prefetch">{#snippet ogygiaFallback()}<p class="fb" data-fallback-prefetch>hover me (prefetched at idle)…</p>{/snippet}</GPrefetch>
 </section>
 
 <!-- big spacer so the visible hole starts well below the fold -->

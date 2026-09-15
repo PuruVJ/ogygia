@@ -54,7 +54,7 @@ Each of the four demos below is a real island with that schedule:
 
 - **The first click counts.** ogygia captures it while the island wakes, and replays it when the island is live. A button, a checkbox, or a link activates exactly one time.
 - **Typed text stays.** Characters land in the field natively, because it is real HTML. After hydration, the typed value, the selection, and the focus are restored, and `bind:` syncs.
-- **Hover warms it.** When the pointer enters the region, the chunk prefetches. Thus, when the press lands, the wake is usually immediate.
+- **Hover warms it.** When the pointer enters the region, the chunk prefetches. Thus, when the press lands, the wake is usually immediate. For an on-demand *hole* (`render: 'deferred', wake: 'interaction'`) the hover fetches and swaps in one go; add `prefetch: 'idle'` to warm its HTML at page idle instead, so the first hover finds it already there (see [`prefetch`](/docs/reference/api#prefetch-warm-a-deferred-hole-before-it-swaps)).
 
 One caution: the replayed first event is not a *trusted* browser gesture. Gesture-gated APIs (`window.open`, clipboard, fullscreen) are blocked if called from it. A component can find this condition and adapt:
 

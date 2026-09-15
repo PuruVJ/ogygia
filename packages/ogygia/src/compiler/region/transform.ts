@@ -182,7 +182,10 @@ const KNOWN_STRATEGIES = new Set(['load', 'idle', 'visible']);
 const HYDRATE_STRATEGIES = new Set([...KNOWN_STRATEGIES, 'interaction']);
 const DEFER_STRATEGIES = HYDRATE_STRATEGIES;
 /** Inline attribute keys accepted after normalization (canonical internal names). */
-const ATTR_SCHEMA = new Set(['hydrate', 'defer', 'margin', 'keep', 'stitch']);
+const ATTR_SCHEMA = new Set(['hydrate', 'defer', 'margin', 'keep', 'stitch', 'prefetch']);
+/** A deferred hole's `prefetch` schedule: the warm happens on one of these (never `interaction`,
+ *  which is the swap — `wake`'s job — and never `none`, which is no schedule). */
+const PREFETCH_STRATEGIES = KNOWN_STRATEGIES;
 /** AST fragment child-key names walked when descending the template. */
 const CHILD_KEYS = [
 	'consequent',
@@ -1065,7 +1068,7 @@ class FileCompilation {
 				if (k === import_keys.render) render_mode = String(v);
 				else if (k === import_keys.wake) wake_val = String(v);
 				else if (k === 'maxAge' || k === 'onExpire' || k === 'revalidate') live_opts[k] = v;
-				else if (k === 'margin' || k === 'keep') attrs.set(k, String(v));
+				else if (k === 'margin' || k === 'keep' || k === 'prefetch') attrs.set(k, String(v));
 				else if (k === 'stitch') {
 					if (v !== true && v !== 'serve' && v !== 'edge') {
 						throw fail(
@@ -1075,21 +1078,30 @@ class FileCompilation {
 					attrs.set('stitch', v === 'edge' ? 'edge' : 'serve');
 				} else {
 					throw fail(
-						`unknown key \`${k}\` in preset '${from_preset}'. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`margin\`, \`maxAge\`, \`onExpire\`, \`revalidate\`, \`stitch\`.`
+						`unknown key \`${k}\` in preset '${from_preset}'. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`margin\`, \`maxAge\`, \`onExpire\`, \`revalidate\`, \`stitch\`, \`prefetch\`.`
 					);
 				}
 			}
 		} else {
 			for (const k of inline.keys()) {
-				if (k !== import_keys.wake && k !== import_keys.render && k !== 'keep' && k !== 'stitch') {
+				if (
+					k !== import_keys.wake &&
+					k !== import_keys.render &&
+					k !== 'keep' &&
+					k !== 'stitch' &&
+					k !== 'prefetch'
+				) {
 					throw fail(
-						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, \`stitch\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
+						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, \`stitch\`, \`prefetch\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
 					);
 				}
 			}
 			if (inline.has(import_keys.render)) render_mode = inline.get(import_keys.render);
 			if (inline.has(import_keys.wake)) wake_val = inline.get(import_keys.wake);
 			if (inline.has('keep')) attrs.set('keep', inline.get('keep')!);
+			// A schedule dial like `wake`, so it may ride inline (`with { render: 'deferred', wake:
+			// 'interaction', prefetch: 'idle' }`) as well as in a preset.
+			if (inline.has('prefetch')) attrs.set('prefetch', inline.get('prefetch')!);
 			if (inline.has('stitch')) {
 				// Import-attribute values are STRINGS by grammar — `stitch: 'serve' | 'edge'` are the
 				// spellings (presets, being plugin config, also take `stitch: true` = 'serve').
@@ -1129,6 +1141,11 @@ class FileCompilation {
 				`\`stitch\` is only valid with \`${import_keys.render}: 'deferred'\` — it says WHERE a hole fills on artifact serves; there is no hole without 'deferred'.`
 			);
 		}
+		if (attrs.has('prefetch') && !attrs.has('defer')) {
+			throw fail(
+				`\`prefetch\` is only valid with \`${import_keys.render}: 'deferred'\` — it warms a hole's HTML ahead of its \`${import_keys.wake}\` schedule; an island's JS is warmed by the modulepreload hints (regions.preload), not by \`prefetch\`.`
+			);
+		}
 		if (from_preset && !attrs.has('hydrate') && !attrs.has('defer')) {
 			throw fail(
 				`${import_keys.preset} '${from_preset}' must set \`${import_keys.render}\` or \`${import_keys.wake}\` — a margin-only (or empty) preset is a no-op.`
@@ -1163,8 +1180,24 @@ class FileCompilation {
 				margin?: string;
 				cacheTtlSec?: number;
 				stitch?: 'serve' | 'edge';
+				prefetch?: string;
 			} = { when };
-			if (when === 'visible')
+			if (attrs.has('prefetch')) {
+				// The warm schedule. Validated here (not at the preset) so the error names the import.
+				const p = attrs.get('prefetch')!;
+				if (p === 'interaction' || !(PREFETCH_STRATEGIES.has(p) || is_media_query(p))) {
+					throw fail(
+						`\`prefetch: '${p}'\` — a hole prefetches its HTML on 'load' | 'idle' | 'visible' | a media query. Never 'interaction': that is the SWAP, \`${import_keys.wake}\`'s job; prefetch only warms the bytes ahead of it.`
+					);
+				}
+				if (p === when) {
+					throw fail(
+						`\`prefetch: '${p}'\` is this hole's own \`${import_keys.wake}\` schedule — it adds nothing. Prefetch EARLIER than the swap ('load' | 'idle' | 'visible' for an 'interaction' hole), or drop it.`
+					);
+				}
+				options.prefetch = p;
+			}
+			if (when === 'visible' || options.prefetch === 'visible')
 				options.margin = attrs.get('margin') ?? ctx.visibleMargin ?? undefined;
 			if (live_opts.maxAge != null) {
 				const ttl = parse_cache_ttl_sec(live_opts.maxAge, err_shim, '');

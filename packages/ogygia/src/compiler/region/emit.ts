@@ -333,6 +333,9 @@ export function server_wrapper_source(
 	// origin on every serve) or `stitch="edge"` (the freeze capture rewrites it into an ESI include
 	// the CDN fills; the shell stays edge-cached). See freeze/stitch.ts.
 	if (options?.stitch) server_attrs += ` __stitch={${JSON.stringify(options.stitch)}}`;
+	// The warm schedule — the emitted hole carries `prefetch="idle"` etc.; the runtime arms it next
+	// to `when` and fills the frame store early, the swap still waits for `when`.
+	if (options?.prefetch) server_attrs += ` __prefetch={${JSON.stringify(options.prefetch)}}`;
 	if (options?.margin != null) server_attrs += ` __margin={${JSON.stringify(options.margin)}}`;
 	// Signed at mint into the hole's endpoint → the handle answers `private, max-age=cacheTtlSec`.
 	if (options?.cacheTtlSec != null)

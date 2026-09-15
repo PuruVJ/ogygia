@@ -192,6 +192,14 @@ export type RuntimeEventInput =
 	  }
 	| {
 			domain: 'runtime';
+			/** A deferred hole's `prefetch` schedule fired: its HTML is being warmed into the frame
+			 *  store ahead of its `when` (no swap yet — the wake joins this frame later). */
+			name: 'region.prefetch';
+			entry?: string;
+			fp?: string;
+	  }
+	| {
+			domain: 'runtime';
 			name: 'region.hydrate.start';
 			entry?: string;
 			fp?: string;

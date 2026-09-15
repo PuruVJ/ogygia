@@ -52,6 +52,23 @@ export function isInLake(): boolean {
 	return getContext(LAKE_KEY) === true;
 }
 
+// Context key marking "this server island is rendering INLINE in the page pass" — it sits inside a
+// `wake` island, where `render: 'deferred'` is ignored (the nested rule) and its component renders
+// as a plain child instead of on the endpoint. `keepFallback()` reads it: thrown here its signal
+// would not reach the handle's catch but Kit's error page (a whole site went 500 on a footer hole
+// placed inside an island). Same `Symbol.for` discipline as the keys above.
+const HOLE_INLINE_KEY = Symbol.for('ogygia.hole-inline');
+
+/** Region.svelte marks the subtree of a server island it is rendering inline (nested). */
+export function setHoleInline(): void {
+	setContext(HOLE_INLINE_KEY, true);
+}
+
+/** Is this render a server island's component rendering INLINE (nested in an island)? */
+export function isHoleInline(): boolean {
+	return getContext(HOLE_INLINE_KEY) === true;
+}
+
 /** Kit `route.id`, GROUP segments (`(app)`) stripped — mirrors the compiler's `normalize_route_id`
  *  so both sides match whether or not Kit keeps groups in `route.id`. Root → `/`. */
 function normalize_route_id(id: string): string {

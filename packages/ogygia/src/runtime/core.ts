@@ -246,6 +246,7 @@ class OgygiaRegion extends HTMLElement {
 	// its promise: the interaction feature awaits it to know when the island is live (replay).
 	#fire_hydrate = () => this.#hydrate();
 	#fire_server = () => this.#server();
+	#fire_prefetch = () => this.#prefetch_html();
 
 	/**
 	 * CONTINUITY: this persisted island is relocating onto `next` (the incoming page's SSR region).
@@ -350,6 +351,55 @@ class OgygiaRegion extends HTMLElement {
 		// would be a blind bet. Idle warm kept to `visible` on purpose — `idle` fires imminently anyway.
 		if (!deferred && when === 'visible') this.#warm_module();
 		this.#arm(when, deferred ? this.#fire_server : this.#fire_hydrate);
+		// `prefetch="<schedule>"`: a deferred hole warms its HTML on a second, EARLIER schedule
+		// (load / idle / visible / media) while `when` still decides the swap — an on-demand menu
+		// whose bytes sit in the frame store before the first hover, so the gesture joins the warm
+		// frame instead of paying the origin round trip. Never `interaction` (that is `when`'s job:
+		// arming it here would replace the hole's own on-demand fire) and never the same schedule
+		// as `when` (nothing to gain) — the compiler refuses both; the guard keeps a hand-written
+		// attribute harmless.
+		const prefetch = deferred ? this.getAttribute('prefetch') : null;
+		if (prefetch && prefetch !== when && prefetch !== 'interaction') {
+			this.#arm(prefetch, this.#fire_prefetch, this.getAttribute('margin') || undefined);
+		}
+	}
+
+	/**
+	 * Warm this hole's HTML into the frame store ahead of its `when` — the `prefetch` schedule. No
+	 * subscription is taken, so nothing is applied now; the later wake (`#server`) subscribes, the
+	 * store replays the warm frame at once, and its `ensure` joins instead of fetching. A failed
+	 * warm is harmless: the wake falls back to its own fetch. A hole already done or fetching has
+	 * nothing left to warm.
+	 */
+	#prefetch_html() {
+		if (this.#done || this.#fetching || !this.isConnected) return;
+		const endpoint = this.#endpoint();
+		if (!endpoint || !is_allowed_region_endpoint(endpoint)) return;
+		const address = frameAddress(endpoint);
+		if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.prefetch', ...dt_ids(this) });
+		void slots.frames?.ensure(address, this.#frame_fetcher(endpoint, false))?.catch(() => {});
+	}
+
+	/**
+	 * The one network fetch for this hole's HTML — its own wake and a `prefetch` warm share it, so
+	 * the frame store sees one fetcher shape per address. The endpoint's text, or the keep-fallback
+	 * marker on a 204 (`keepFallback()` on the server). A revalidate bypasses the browser cache
+	 * (the endpoint may answer `private, max-age`, and stale is the whole point of revalidating).
+	 */
+	#frame_fetcher(endpoint: string, revalidate: boolean) {
+		return (signal: AbortSignal) =>
+			runtime_session.server_gate.run(async () => {
+				const res = await fetch(endpoint, {
+					credentials: 'same-origin',
+					cache: revalidate ? 'no-store' : 'default',
+					signal
+				});
+				if (!is_same_origin_response(res)) throw new Error('cross-origin redirect');
+				if (!res.ok) throw new Error('status ' + res.status);
+				// 204: the hole said keepFallback() — the page's fallback stands, nothing to swap.
+				if (res.status === 204) return KEEP_FALLBACK_HTML;
+				return res.text();
+			});
 	}
 
 	/** The schedule hooks a frozen region (lake) drives its revalidation through. */
@@ -590,19 +640,7 @@ class OgygiaRegion extends HTMLElement {
 			// a stale response can't overwrite a newer one (the store tickets at request time).
 			const html = await slots.frames?.ensure(
 				address,
-				(signal) =>
-					runtime_session.server_gate.run(async () => {
-						const res = await fetch(endpoint, {
-							credentials: 'same-origin',
-							cache: opts.revalidate ? 'no-store' : 'default',
-							signal
-						});
-						if (!is_same_origin_response(res)) throw new Error('cross-origin redirect');
-						if (!res.ok) throw new Error('status ' + res.status);
-						// 204: the hole said keepFallback() — the page's fallback stands, nothing to swap.
-						if (res.status === 204) return KEEP_FALLBACK_HTML;
-						return res.text();
-					}),
+				this.#frame_fetcher(endpoint, !!opts.revalidate),
 				{ force: opts.revalidate }
 			);
 			// Network went to the STORE, not the DOM: the write notifies our subscriber (set in

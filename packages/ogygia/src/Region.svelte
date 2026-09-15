@@ -33,7 +33,7 @@
 	import { record_page } from './page-seed-registry.js';
 	import { document_tail } from './server/document-tail.js';
 	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
-	import { isNested, setNested, isInLake, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
+	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
 	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
 	import { register_late_region } from './late-region-registry.js';
@@ -56,7 +56,7 @@
 	 *   visible?: string | boolean; idle?: boolean; media?: string; load?: boolean; interaction?: boolean;
 	 *   __keep?: string; __entry?: string; __component?: import('svelte').Component; __css?: unknown;
 	 *   __props?: Record<string, unknown>; __defer?: string; __margin?: string; __hydrate?: string;
-	 *   __hydrateMargin?: string; __module?: string; __cacheTtl?: number; __stitch?: string;
+	 *   __hydrateMargin?: string; __module?: string; __cacheTtl?: number; __stitch?: string; __prefetch?: string;
 	 *   ogygiaFallback?: import('svelte').Snippet;
 	 *   __remount?: string; __when?: string; __maxAge?: number; __onExpire?: 'empty' | 'fetch';
 	 * }}
@@ -95,6 +95,9 @@
 		// fail-open) or `'edge'` (the freeze capture rewrites it into an ESI include the CDN
 		// fills — the shell stays edge-cached). Emitted as the hole's `stitch` attribute.
 		__stitch = '',
+		// Warm schedule for a deferred hole (`prefetch` attribute): the runtime fills the frame store
+		// on it, ahead of `__defer` (the swap). Absent → the hole fetches on `__defer` only.
+		__prefetch = '',
 		ogygiaFallback,
 		// lake
 		__remount = 'cache',
@@ -217,6 +220,9 @@
 	// The island branch renders inline when nested OR on a csr=true page.
 	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();
+	// A server island nested in an island renders its component INLINE (deferred ignored): mark the
+	// subtree so a `keepFallback()` inside it fails with the reason instead of Kit's 500 page.
+	if (is_server && nested) setHoleInline();
 
 	// ─────────────────────────────────────────────────────────── island branch ──
 	// Normalized island inputs, from placement props OR a held dual. `as_dual` is the type-narrowed
@@ -761,6 +767,7 @@
 			entry={server_region_entry}
 			render="defer"
 			stitch={__stitch || undefined}
+			prefetch={__prefetch || undefined}
 			when={__defer}
 			wake={__hydrate || undefined}
 			margin={__margin || undefined}

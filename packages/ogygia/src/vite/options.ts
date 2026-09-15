@@ -44,6 +44,14 @@ export interface OgygiaPreset {
 	maxAge?: number | string;
 	/** `render: 'live'` — past `maxAge`, whether to clear the hole (`'empty'`) or refetch (`'fetch'`). */
 	onExpire?: 'empty' | 'fetch';
+	/**
+	 * `render: 'deferred'` — warm the hole's HTML into the frame store on this schedule (`'load'` |
+	 * `'idle'` | `'visible'` | a media query) while `wake` still decides when it swaps in. An
+	 * on-demand hole (`wake: 'interaction'`) then has its bytes before the first hover: the gesture
+	 * joins the warm frame instead of paying the origin round trip. Never `'interaction'` — that is
+	 * the swap schedule, `wake`'s job.
+	 */
+	prefetch?: string;
 	/** `render: 'live'` — the revalidate schedule (`false` disables). Defaults to `wake`. */
 	revalidate?: false | string;
 	/** Continuity name (the `keep` import attribute): the live island relocates across SPA
@@ -270,7 +278,8 @@ const REGION_PRESET_KEYS = new Set([
 	'onExpire',
 	'revalidate',
 	'keep',
-	'stitch'
+	'stitch',
+	'prefetch'
 ]);
 
 /**

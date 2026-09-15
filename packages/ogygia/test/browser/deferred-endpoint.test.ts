@@ -217,3 +217,96 @@ test('a hole answering 204 keeps the page fallback and marks the region done', a
 		window.fetch = real_fetch;
 	}
 });
+
+// SELF-OWNED ATTRIBUTES through a hole morph: a web component writes `popover="manual"` onto its
+// own host at upgrade and opens through `showPopover()` (the top layer). The fetched HTML never
+// carried `popover`; the morph must not take it away — the country selector's dropdown fell out of
+// the top layer this way. Real custom element, real popover API, real on-demand hole.
+// its own id: the frame store keeps a fetched frame per address, and 0003 above is a stored 204.
+const POPOVER_ENDPOINT = '/__ogygia__?id=cafebabe0004&props=W3t9XQ&exp=9999999999&sig=stub';
+
+test('a hole morph keeps the attributes a web component gave itself (popover stays open)', async () => {
+	if (!customElements.get('x-pop')) {
+		customElements.define(
+			'x-pop',
+			class extends HTMLElement {
+				connectedCallback() {
+					this.setAttribute('popover', 'manual'); // what QDS's dropdown does at upgrade
+				}
+			}
+		);
+	}
+	const calls: string[] = [];
+	const real_fetch = window.fetch;
+	window.fetch = async (input) => {
+		calls.push(String(input));
+		const res = new Response(
+			'<div><button id="t">France</button><x-pop id="p" class="qds-related" data-x="1"><ul id="list"><li>Albania</li></ul></x-pop></div>',
+			{ status: 200, headers: { 'content-type': 'text/html' } }
+		);
+		Object.defineProperty(res, 'url', { value: location.origin + POPOVER_ENDPOINT });
+		return res;
+	};
+	document.body.innerHTML =
+		`<ogygia-region render="defer" when="interaction" endpoint="${POPOVER_ENDPOINT}">` +
+		`<div><button id="t">France</button><x-pop id="p" class="qds-related"></x-pop></div></ogygia-region>`;
+	const region = document.querySelector('ogygia-region')!;
+	const pop = document.getElementById('p') as HTMLElement;
+	try {
+		bootDev();
+		expect(pop.getAttribute('popover'), 'the element gave itself popover at upgrade').toBe('manual');
+		pop.showPopover();
+		expect(pop.matches(':popover-open')).toBe(true);
+		region.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+		await expect.poll(() => region.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
+		expect(calls).toHaveLength(1);
+		expect(document.getElementById('p')).toBe(pop); // morphed in place
+		expect(pop.getAttribute('popover'), 'the morph took the attribute the element gave itself').toBe('manual');
+		expect(pop.matches(':popover-open'), 'the popover fell out of the top layer').toBe(true);
+		expect(pop.getAttribute('data-x')).toBe('1'); // the render's attributes still land
+		expect(document.getElementById('list')).not.toBeNull(); // and its content
+	} finally {
+		try { pop.hidePopover(); } catch { /* already hidden */ }
+		window.fetch = real_fetch;
+	}
+});
+
+// PREFETCH: `prefetch="idle"` on an on-demand hole warms its HTML at idle — one request, NOTHING
+// applied (the fallback stands, no `data-hydrated`) — and the first hover then swaps from the store
+// without a second request. The country selector's "5 s hover": the bytes are already there.
+const PREFETCH_ENDPOINT = '/__ogygia__?id=cafebabe0005&props=W3t9XQ&exp=9999999999&sig=stub';
+
+test('an on-demand hole with prefetch="idle" warms at idle, keeps its fallback, and swaps on hover with no second request', async () => {
+	const calls: string[] = [];
+	const real_fetch = window.fetch;
+	window.fetch = async (input) => {
+		calls.push(String(input));
+		const res = new Response('<ul data-testid="menu"><li id="l1">Products<ul><li data-testid="l3">Drives</li></ul></li></ul>', {
+			status: 200,
+			headers: { 'content-type': 'text/html' }
+		});
+		Object.defineProperty(res, 'url', { value: location.origin + PREFETCH_ENDPOINT });
+		return res;
+	};
+	document.body.innerHTML =
+		`<ogygia-region render="defer" when="interaction" prefetch="idle" endpoint="${PREFETCH_ENDPOINT}">` +
+		`<ul data-testid="menu"><li id="l1">Products</li></ul></ogygia-region>`;
+	const region = document.querySelector('ogygia-region')!;
+	const l1_before = document.getElementById('l1')!;
+	try {
+		bootDev();
+		// idle fires within the rIC timeout: the warm request goes out with no intent at all
+		await expect.poll(() => calls.length, { timeout: 10_000 }).toBe(1);
+		await new Promise((r) => setTimeout(r, 300));
+		expect(region.hasAttribute('data-hydrated'), 'a prefetch must not swap').toBe(false);
+		expect(document.querySelector('[data-testid="l3"]'), 'a prefetch must not swap').toBeNull();
+		// intent: the swap joins the warm frame — no second request
+		region.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+		await expect.poll(() => region.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
+		expect(calls, 'the hover must join the warm frame, not fetch again').toHaveLength(1);
+		expect(document.querySelector('[data-testid="l3"]')).not.toBeNull();
+		expect(document.getElementById('l1')).toBe(l1_before); // still a morph: the fallback's node survived
+	} finally {
+		window.fetch = real_fetch;
+	}
+});
