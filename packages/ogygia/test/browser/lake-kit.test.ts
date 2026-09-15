@@ -63,3 +63,39 @@ test('Kit hydration adopts the lake verbatim; the island inside wakes on the run
 		console.warn = real_warn;
 	}
 });
+
+// A KIT HYDRATION FAILURE (a component threw during hydration, or the markup mismatched): Svelte
+// discards the server DOM and mounts fresh — and the lake wrapper's client form renders the lake
+// element EMPTY (a lake is server HTML; the client has none). REGRESSION (customer deploy,
+// 2026-09-15): a site header authored as a lake vanished on every client-on page where an app
+// component threw inside Kit's hydration. The runtime must bring the lake back: it remembered the
+// SSR children when the lake first connected, so the fresh vacant element repaints from that copy,
+// and the island authored inside reconnects and wakes again.
+test('a lake re-created empty after a Kit hydration failure is repainted from its server HTML; its island wakes again', async () => {
+	document.body.innerHTML =
+		'<script>__sveltekit_lab = {};</script>' +
+		'<div data-mount>' +
+		inject_html('lake_kit_ssr_b64') +
+		'</div>';
+	const mount = document.querySelector('[data-mount]') as HTMLElement;
+	const lake_id = document.querySelector(LAKE)!.getAttribute('entry')!;
+	const app = hydrate(LakeKitHost, { target: mount });
+	bootDev();
+	await expect
+		.poll(() => document.querySelector(ISLAND_HYDRATED) !== null, { timeout: 10_000 })
+		.toBe(true);
+	// what Svelte's fallback does: the old tree goes, a fresh client render lands — the lake empty
+	unmount(app);
+	mount.innerHTML = `<ogygia-region entry="${lake_id}" wake="none" remount="cache"></ogygia-region>`;
+	const fresh = document.querySelector(LAKE) as HTMLElement;
+	// the repaint is synchronous at connect (the copy is already in the session cache)
+	await expect
+		.poll(() => fresh.querySelector('[data-frozen]') !== null, { timeout: 10_000 })
+		.toBe(true);
+	await expect
+		.poll(() => fresh.querySelector(ISLAND_HYDRATED) !== null, { timeout: 10_000 })
+		.toBe(true);
+	await expect.element(page.getByTestId('count')).toHaveTextContent('3');
+	await page.getByRole('button', { name: 'add' }).click();
+	await expect.element(page.getByTestId('count')).toHaveTextContent('4');
+});

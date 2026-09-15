@@ -138,6 +138,12 @@ declare module 'virtual:ogygia/route-csr' {
 	/** Route ids (Kit `route.id`, group-stripped) whose effective csr is true — SSR leg only; the
 	 *  client leg is an empty set (it reads `kit_hydrates_page()` instead). */
 	export const csr_true_routes: ReadonlySet<string>;
+	/** Route ids whose ERROR render (`+error.svelte`, rendered by Kit from the layout branch alone)
+	 *  is hydrated — the layouts' effective csr, the page's option ignored. SSR leg only. */
+	export const error_csr_true_routes: ReadonlySet<string>;
+	/** The routeless error render (no route matched → root layout + root error page): the root
+	 *  layout's own csr, Kit's default `true` when unset. SSR leg only. */
+	export const root_layout_csr_true: boolean;
 }
 /** CONTINUITY compile-time constants (Vite `define`; typeof-guarded so node dist import is safe). */
 declare const __OGYGIA_CONTINUITY_FORMS__: boolean;

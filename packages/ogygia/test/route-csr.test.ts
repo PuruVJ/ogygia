@@ -16,6 +16,8 @@ import {
 	routeCsrIsFalse,
 	routeCsrIsTrue,
 	csrTrueRouteIds,
+	errorCsrTrueRouteIds,
+	rootLayoutCsrTrue,
 	hasAnyCsrTrueRoute,
 	read_csr,
 	clear_route_csr_cache
@@ -271,6 +273,69 @@ describe('csrTrueRouteIds + cache', () => {
 		clear_route_csr_cache();
 		expect(world(routes, '+layout.svelte')).toBe('shared');
 		expect(csrTrueRouteIds(routes)).toEqual(['/landing']);
+	});
+});
+
+// ── error renders — Kit's `+error.svelte` is rendered from the LAYOUT branch alone ───────────
+// Kit's server renderer builds an error page's options from `PageNodes(layouts)`: the page node,
+// and with it the page's `csr = false`, is dropped. So a 404 under a client-off page is hydrated
+// whenever the layouts say so — the map ogygia keys the document on must have an error twin, or the
+// chrome lakes render bare into a document Kit then hydrates (mismatch → the header vanished on
+// every error page of a customer deploy).
+describe('errorCsrTrueRouteIds / rootLayoutCsrTrue — the layout branch decides', () => {
+	it('THE BUG: csr=false pages under a default (csr=true) layout — pages off, their error pages ON', () => {
+		const routes = tree({
+			'+layout.svelte': '<slot />',
+			'+error.svelte': '<h1>err</h1>',
+			'+page.ts': 'export const csr = false;\n',
+			'+page.svelte': '<h1>home</h1>',
+			'products/+page.ts': 'export const csr = false;\n',
+			'products/+page.svelte': '<h1>p</h1>'
+		});
+		expect(csrTrueRouteIds(routes)).toEqual([]); // the pages themselves: client-off
+		expect(errorCsrTrueRouteIds(routes).sort()).toEqual(['/', '/products']); // their 404s: Kit's
+		expect(rootLayoutCsrTrue(routes)).toBe(true); // no route matched → root layout default
+	});
+
+	it('csr=false declared on the layout chain turns the error pages off too', () => {
+		const routes = tree({
+			'+layout.ts': 'export const csr = false;\n',
+			'+layout.svelte': '<slot />',
+			'+page.svelte': '<h1>home</h1>',
+			'admin/+page.ts': 'export const csr = true;\n',
+			'admin/+page.svelte': '<h1>admin</h1>'
+		});
+		expect(csrTrueRouteIds(routes)).toEqual(['/admin']); // the page's own override holds for the page
+		expect(errorCsrTrueRouteIds(routes)).toEqual([]); // but its error page is the layouts' (false)
+		expect(rootLayoutCsrTrue(routes)).toBe(false);
+	});
+
+	it('deepest LAYOUT declaration wins, page files ignored, groups stripped', () => {
+		const routes = tree({
+			'+layout.ts': 'export const csr = false;\n',
+			'+layout.svelte': '<slot />',
+			'(app)/shop/+layout.ts': 'export const csr = true;\n',
+			'(app)/shop/+layout.svelte': '<slot />',
+			'(app)/shop/+page.ts': 'export const csr = false;\n',
+			'(app)/shop/+page.svelte': '<h1>shop</h1>',
+			'(app)/shop/cart/+page.svelte': '<h1>cart</h1>',
+			'docs/+page.svelte': '<h1>docs</h1>'
+		});
+		expect(errorCsrTrueRouteIds(routes).sort()).toEqual(['/shop', '/shop/cart']);
+		expect(csrTrueRouteIds(routes).sort()).toEqual(['/shop/cart']);
+	});
+
+	it('cache: a new layout declaration is picked up after clear_route_csr_cache', () => {
+		const routes = tree({
+			'+layout.svelte': '<slot />',
+			'spa/+page.ts': 'export const csr = false;\n',
+			'spa/+page.svelte': '<h1>spa</h1>'
+		});
+		expect(errorCsrTrueRouteIds(routes)).toEqual(['/spa']);
+		writeFileSync(at(routes, '+layout.ts'), 'export const csr = false;\n');
+		clear_route_csr_cache();
+		expect(errorCsrTrueRouteIds(routes)).toEqual([]);
+		expect(rootLayoutCsrTrue(routes)).toBe(false);
 	});
 });
 

@@ -66,21 +66,41 @@ export function restore(parent: Element, lifted: LiftedLake[]) {
 		runtime_session.initialized_lakes.add(id);
 		lake.appendChild(frag);
 		if (endpoint && !lake.getAttribute('endpoint')) lake.setAttribute('endpoint', endpoint);
-		const policy = region_remount(lake);
-		if ((policy === 'cache' || policy === 'swr') && id && !runtime_session.lake_cache.has(id)) {
-			const cached = document.createDocumentFragment();
-			for (const child of Array.from(lake.childNodes)) {
-				cached.appendChild(child.cloneNode(true));
-			}
-			runtime_session.set_lake_cache(id, {
-				frag: cached,
-				endpoint,
-				when,
-				cachedAt: Date.now(),
-				maxAgeMs: maxAgeMs || region_max_age_ms(lake)
-			});
-		}
+		remember(lake, id, { endpoint, when, maxAgeMs });
 	}
+}
+
+/** A lake with no AWAKE region host: nothing will ever lift/restore it (that is a host island's
+ *  hydrate), so it settles itself and remembers itself. The shapes: a lake ADOPTED under Kit
+ *  hydration (csr=true page), a lake inside an inline (Kit-hydrated) island, a top-level lake. */
+function unhosted(el: Element): boolean {
+	const host = el.parentElement?.closest('ogygia-region');
+	return !host || !is_awake(host);
+}
+
+/**
+ * Snapshot a lake's current children into the session cache — the copy a later VACANT connect of
+ * the same lake id repaints from (`remount="cache"` / `"swr"`). First snapshot wins: the SSR HTML
+ * (or the freshest revalidation, which replaces it in `after_html_swap`).
+ */
+function remember(
+	lake: Element,
+	id: string,
+	meta: { endpoint: string; when: string; maxAgeMs: number }
+) {
+	const policy = region_remount(lake);
+	if (!((policy === 'cache' || policy === 'swr') && id && !runtime_session.lake_cache.has(id))) return;
+	const cached = document.createDocumentFragment();
+	for (const child of Array.from(lake.childNodes)) {
+		cached.appendChild(child.cloneNode(true));
+	}
+	runtime_session.set_lake_cache(id, {
+		frag: cached,
+		endpoint: meta.endpoint,
+		when: meta.when,
+		cachedAt: Date.now(),
+		maxAgeMs: meta.maxAgeMs || region_max_age_ms(lake)
+	});
 }
 
 export function on_frozen_connect(el: HTMLElement, arm: LakeArm): boolean {
@@ -119,11 +139,33 @@ export function on_frozen_connect(el: HTMLElement, arm: LakeArm): boolean {
 		// (csr=true page — the wrapper keeps the SSR element as opaque DOM, so its islands are ours),
 		// and a lake inside an inline (Kit-hydrated) island. A lake inside a real island keeps
 		// waiting: that island's hydrate lifts, restores and settles it.
-		const host = el.parentElement?.closest('ogygia-region');
-		if (!host || !is_awake(host)) runtime_session.settled_lakes.add(el);
+		if (unhosted(el)) {
+			runtime_session.settled_lakes.add(el);
+			// Such a lake is also the one nobody else can bring back. Under Kit hydration the wrapper
+			// adopts the SSR element — until Kit gives up on the document (a component threw or the
+			// markup mismatched: Svelte discards the server DOM and mounts fresh), and then the wrapper
+			// renders the lake's element EMPTY (a lake is server HTML; the client has none) — a site
+			// header vanishing on a client-on page, found on a customer deploy. So remember the SSR
+			// children now and mark the id initialized: a later vacant connect of the same lake takes
+			// the remount path below and repaints from this copy, its own regions reconnecting with it.
+			if (!region_is_vacant(el)) {
+				remember(el, id, {
+					endpoint: el.getAttribute('endpoint') || '',
+					when: el.getAttribute('when') || 'load',
+					maxAgeMs: region_max_age_ms(el)
+				});
+				runtime_session.initialized_lakes.add(id);
+			}
+		}
 		return true;
 	}
-	if (!region_is_vacant(el)) return true;
+	if (!region_is_vacant(el)) {
+		// A known lake id connecting WITH content: a second instance of the same lake on the page
+		// (two same-component lakes share one entry id), or the SSR element connecting again. An
+		// unhosted one is settled as it stands, exactly like its first mount — nothing else will.
+		if (unhosted(el)) runtime_session.settled_lakes.add(el);
+		return true;
+	}
 	const policy = region_remount(el);
 	switch (policy) {
 		case 'empty':

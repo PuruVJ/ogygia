@@ -95,7 +95,7 @@ import {
 	dedupe_head_links
 } from './server/head-presence.js';
 import { locate, assemble } from './server/document-assembly.js';
-import { route_is_csr_true } from './context.js';
+import { error_route_is_csr_true, route_is_csr_true } from './context.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
@@ -962,10 +962,15 @@ class OgygiaHandle {
 		// csr=true page — Kit serializes its own remotes and hydrates the whole tree; skip seeds. A
 		// build-time ROUTE FACT (context.ts, the PAGE-CSR invariant), never a scan of the document;
 		// the bounded string probe covers only a routeless response (`route.id` null), where Kit's
-		// boot sits in the last bytes before `</body>`.
+		// boot sits in the last bytes before `</body>`. An ERROR RENDER reads the error twin of the
+		// map: Kit renders `+error.svelte` from the layout branch alone (the page's `csr = false` is
+		// dropped), and the regions recorded Kit's `page.error` into the bag as they rendered — the
+		// same fact Region.svelte decided its own inline/island form on, so the two cannot disagree.
 		const csr_page =
 			event?.route?.id != null
-				? route_is_csr_true(event.route.id)
+				? bag?.page?.error != null
+					? error_route_is_csr_true(event.route.id)
+					: route_is_csr_true(event.route.id)
 				: spans.body_end !== -1 && html_has_kit_bootstrap(html, spans.body_end);
 		if (csr_page) {
 			let head_inject = '';

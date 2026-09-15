@@ -163,7 +163,7 @@ const OPTION_FILES_LAYOUT = ['+layout.js', '+layout.ts', '+layout.server.js', '+
  * walk the layout option files root → host dir (then the page's own option files), deepest
  * declaration wins. `undefined` in sources means Kit's default (`true`).
  */
-function own_chain_csr_false(hostFile: string, routesDir: string) {
+function own_chain_csr_false(hostFile: string, routesDir: string, layouts_only = false) {
 	let csr; // undefined => Kit default (true)
 	const dir = path.dirname(hostFile);
 	const rel = path.relative(routesDir, dir);
@@ -180,13 +180,38 @@ function own_chain_csr_false(hostFile: string, routesDir: string) {
 			if (v !== undefined) csr = v;
 		}
 	}
-	if (path.basename(hostFile) === '+page.svelte') {
+	if (!layouts_only && path.basename(hostFile) === '+page.svelte') {
 		for (const f of OPTION_FILES_PAGE) {
 			const v = read_csr(path.join(dir, f));
 			if (v !== undefined) csr = v;
 		}
 	}
 	return csr === false;
+}
+
+/**
+ * The ERROR-RENDER csr of every page route: Kit renders a page's `+error.svelte` with the LAYOUT
+ * branch only (`PageNodes(layouts)` in its server renderer — the page node is dropped), so `csr`
+ * for a 404 / 500 under a `csr = false` page is the layouts' answer, usually `true`. A document
+ * keyed on the page's csr there is rendered client-off while Kit hydrates it: the lakes came out
+ * in their bare form, Kit's hydration mismatched, and a site's header vanished on every error page
+ * (customer deploy, 2026-09-15). Same walk as {@link csrTrueRouteIds}, page option files ignored.
+ */
+export function errorCsrTrueRouteIds(routesDir: string): string[] {
+	const ids = new Set<string>();
+	for (const page of pageLeaves(routesDir)) {
+		if (own_chain_csr_false(page, routesDir, true)) continue;
+		const rel = path.relative(routesDir, path.dirname(page));
+		const raw = '/' + (rel ? rel.split(path.sep).join('/') : '');
+		ids.add(normalize_route_id(raw));
+	}
+	return [...ids];
+}
+
+/** The error-render csr of a ROUTELESS response (no route matched: Kit renders the root layout and
+ *  the root error page) — the root layout's own option, Kit's default `true` when unset. */
+export function rootLayoutCsrTrue(routesDir: string): boolean {
+	return !own_chain_csr_false(path.join(routesDir, '+page.svelte'), routesDir, true);
 }
 
 // ── PAGE-CSR invariant (see internal/notes/INVARIANTS.md) ────────────────────────────────────

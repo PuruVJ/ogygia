@@ -5,7 +5,13 @@
  * the client leg gets an inert stub (a browser never mints). The driver's `emit` dispatch calls these.
  */
 
-import { csrTrueRouteIds, freezeRouteIds, pageRouteIds } from '../kit.js';
+import {
+	csrTrueRouteIds,
+	errorCsrTrueRouteIds,
+	freezeRouteIds,
+	pageRouteIds,
+	rootLayoutCsrTrue
+} from '../kit.js';
 
 /**
  * `virtual:ogygia/secret` — SERVER only: the signing key. CLIENT build: empty string (never mint in
@@ -93,8 +99,19 @@ export function region_ttl_module(ssr: boolean, region_ttl: number): string {
  *  is an empty set — the client reads the identical signal from `kit_hydrates_page()`, and the route
  *  list never ships to the browser. */
 export function route_csr_module(ssr: boolean, routesDir: string): string {
-	if (!ssr) return `export const csr_true_routes = new Set();`;
-	return `export const csr_true_routes = new Set(${JSON.stringify(csrTrueRouteIds(routesDir))});`;
+	if (!ssr)
+		return (
+			`export const csr_true_routes = new Set();\n` +
+			`export const error_csr_true_routes = new Set();\n` +
+			`export const root_layout_csr_true = true;`
+		);
+	// The error-render map beside the page map: Kit renders a route's error page with its LAYOUT
+	// branch only, so a 404 under a csr=false page is hydrated whenever the layouts say so.
+	return (
+		`export const csr_true_routes = new Set(${JSON.stringify(csrTrueRouteIds(routesDir))});\n` +
+		`export const error_csr_true_routes = new Set(${JSON.stringify(errorCsrTrueRouteIds(routesDir))});\n` +
+		`export const root_layout_csr_true = ${rootLayoutCsrTrue(routesDir)};`
+	);
 }
 
 /** `virtual:ogygia/freeze-routes` — SERVER only: the route ids whose effective `export const

@@ -220,7 +220,18 @@
 	// (the lake branch below), so Kit never reaches the regions authored inside it — they stay real
 	// `<ogygia-region>`s on every page and the runtime wakes them. Server-side in practice (a lake's
 	// inside is never rendered on the client); the runtime mirrors it with `inside_frozen`.
-	const is_csr = documentIsCsrTrue() && !isInLake();
+	// AN ERROR RENDER (`page.error` set — Kit sets it only when rendering `+error.svelte`; a form
+	// action's `fail(400)` renders the page itself, status ≥ 400 and error null) is Kit's LAYOUT-branch
+	// decision: the page node — and its `csr = false` — is dropped, so a 404 under a client-off page is
+	// hydrated whenever the layouts say so. The server map has a twin for exactly that.
+	function page_error_render() {
+		try {
+			return page.error != null;
+		} catch {
+			return false; // isolated render without a live page (a hole endpoint, a remote's region)
+		}
+	}
+	const is_csr = documentIsCsrTrue(page_error_render()) && !isInLake();
 	// The island branch renders inline when nested OR on a csr=true page.
 	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();
@@ -600,11 +611,14 @@
 					render: () => LT + 'ogygia-region' + lake_attrs + GT + LT + '/ogygia-region' + GT,
 					/** @param {Element} el */
 					setup: (el) => {
-						// Created fresh on the client (a Kit client-side navigation mounted this lake), so
-						// there was no SSR element to adopt: a lake is server HTML, and there is none here.
+						// Created fresh on the client (a Kit client-side navigation mounted this lake, or Kit
+						// gave up hydrating the document and mounted fresh), so there was no SSR element to
+						// adopt: a lake is server HTML, and there is none here. The runtime repaints it from
+						// the copy it took of the SSR children when the lake first connected (lakes.ts), if
+						// this document had them; a route Kit client-renders from scratch has nothing.
 						if (!el.firstChild && import.meta.env && import.meta.env.DEV)
 							console.warn(
-								`[ogygia] lake "${__entry}" was mounted by Kit on the client with no server HTML to adopt (a client-side navigation?) — it renders empty. A lake is server HTML: keep chrome lakes in a layout that persists across navigations, or serve that route csr=false.`
+								`[ogygia] lake "${__entry}" was mounted by Kit on the client with no server HTML to adopt (a client-side navigation, or a hydration failure — look for an error above). The runtime restores it from its server HTML when this document rendered it; otherwise it stays empty. A lake is server HTML: keep chrome lakes in a layout that persists across navigations, or serve that route csr=false.`
 							);
 					}
 				}));

@@ -18,6 +18,33 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **An error page under a csr=false page is rendered as the Kit-hydrated document it is.** Kit
+  renders a route's `+error.svelte` from the LAYOUT branch alone (`PageNodes(layouts)` in its
+  server renderer): the page node, and with it the page's `csr = false`, is dropped, so a 404 / 500
+  under a client-off page is hydrated whenever the layouts say so — and a real app's root layout
+  usually leaves csr at Kit's default, true. ogygia keyed the document on the page's csr there: the
+  chrome lake rendered bare into a document Kit then hydrated, the markup mismatched, Svelte
+  discarded the SSR DOM and re-rendered, and a site's header vanished on every 404/500 of a customer
+  deploy. The route-csr module now carries an error twin of the map (`error_csr_true_routes`, the
+  layout chain's effective csr per page route, plus `root_layout_csr_true` for a routeless response),
+  `documentIsCsrTrue(error_render)` reads it when Region sees Kit's `page.error` set (the one signal
+  Kit gives only to an error render — a form action's `fail(400)` renders the page itself, error
+  null), and the handle stamps `<meta name="ogygia-csr">` off the same recorded fact, so the two
+  legs cannot disagree. Unit coverage for the maps (default layouts, layout-declared false, deepest
+  layout wins, cache) and the server leg (lake adoptable on the 404, inline island outside a lake,
+  csr=false layouts, action fail control); `e2e/error-kit` renders a 404 and a 500 under a csr=false
+  page and proves the lake survives Kit's hydration with its island awake and Kit's client alive.
+- **A lake with no island host survives Kit giving up on the document.** Under Kit hydration a lake's
+  wrapper adopts the SSR element as opaque DOM — until a component throws or the markup mismatches
+  during Kit's hydration: Svelte then discards the server DOM and mounts fresh, and the wrapper
+  renders the lake's element EMPTY (a lake is server HTML; the client has none). A site header
+  vanished on a customer's client-on pages when a post-render middleware's design-system markup
+  made Kit's hydration fail on every one of them. The runtime now
+  treats an unhosted lake's first connect as its own settle: it remembers the SSR children in the
+  session lake cache and marks the id initialized, so the vacant element Kit mounts afterwards takes
+  the `remount="cache"` path and repaints from that copy, its regions reconnecting with it. Browser
+  coverage (`test/browser/lake-kit`): hydrate, unmount, re-insert the lake empty → restored, its
+  island hydrated and counting on.
 - **A csr=true route that imports a block registry no longer links every block's CSS and chunk.**
   Kit links a route's stylesheets and preloads from the page's STATIC client graph, and a marked
   component's client wrapper reached its component statically — so a `.ts` registry of 337 marks

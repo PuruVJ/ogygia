@@ -1,7 +1,7 @@
 import { getContext, setContext } from 'svelte';
 import { BROWSER } from 'esm-env';
 import { getRequestEvent } from 'virtual:ogygia/request-event';
-import { csr_true_routes } from 'virtual:ogygia/route-csr';
+import { csr_true_routes, error_csr_true_routes, root_layout_csr_true } from 'virtual:ogygia/route-csr';
 import { kit_hydrates_page } from './runtime/kit-boot.js';
 
 // Context key marking "this subtree is already inside a hydrated island". Nested island wrappers
@@ -88,11 +88,16 @@ function normalize_route_id(id: string): string {
  * hydrate. (Replaces the old `CSR_TRUE_KEY` marker + `csr=false` reset, which only re-derived this
  * number indirectly through the context cascade.)
  */
-export function documentIsCsrTrue(): boolean {
+export function documentIsCsrTrue(error_render = false): boolean {
 	if (BROWSER) return kit_hydrates_page();
 	try {
 		const event = getRequestEvent() as { route?: { id?: string | null } };
-		return route_is_csr_true(event.route?.id);
+		// An ERROR render (a 404 / 500 page) is Kit's layout-branch decision, not the page's: the
+		// caller (Region) passes what it reads off Kit's page state, and the handle passes the
+		// response status — the same map answers both.
+		return error_render
+			? error_route_is_csr_true(event.route?.id)
+			: route_is_csr_true(event.route?.id);
 	} catch {
 		return false; // off-request (prerender helper, etc.) → not a Kit-hydrated document
 	}
@@ -102,6 +107,14 @@ export function documentIsCsrTrue(): boolean {
  *  csr=true? A build-time answer — never a scan of the rendered document. */
 export function route_is_csr_true(id: string | null | undefined): boolean {
 	return id != null && csr_true_routes.has(normalize_route_id(id));
+}
+
+/** The ERROR-page twin: does Kit hydrate this route's `+error.svelte`? Kit renders an error page
+ *  with the layout branch only (the page node — and its `csr = false` — is dropped), so this reads
+ *  the layouts' answer; a routeless response (no route matched) is the root layout's. */
+export function error_route_is_csr_true(id: string | null | undefined): boolean {
+	if (id == null) return root_layout_csr_true;
+	return error_csr_true_routes.has(normalize_route_id(id));
 }
 
 /** Per-request: only one `data-ogygia-runtime` script should be emitted (the first island). */
