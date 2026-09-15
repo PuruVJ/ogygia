@@ -318,6 +318,35 @@ Found while rebuilding a large production site header (static mega menu, per-vis
 
 ### Added
 
+- **`ogygia({ barrels })` — barrel imports become leaf imports at transform time.** A barrel (an
+  `index.ts` that only re-exports, a package's `components.ts`, an `export *` fan-out) makes every
+  importer pay for the whole graph: dev transforms and serves every module behind it, build follows
+  the import graph before tree-shaking, and a package that is not `sideEffects: false` keeps all of
+  it. The pass rewrites `import { Button } from '$lib/components'` to
+  `import Button from '…/Button.svelte'` before Svelte or ogygia see the file, so the graph holds
+  only the leaves a file uses. Every pure project barrel is bypassed with `barrels: true` (purity
+  = nothing but imports, re-exports, types, `export {}`); dependencies are opt-in through
+  `packages` (dev pre-bundling makes a bypassed dependency leaf a second module instance);
+  `force` rewrites an impure barrel and keeps a bare `import 'barrel'` for its own code; `keep`
+  pins a module. Nested barrels, `export *` fan-outs, rename chains, `import … ; export { … }`
+  bindings, `export * as ns`, `export { default as X }` and type-only exports are followed to the
+  real leaf; a name two stars disagree on, a name the barrel does not export, and anything behind
+  JSON / CommonJS / `?raw` stays on the barrel. Import attributes and `type` modifiers ride along;
+  sourcemaps are emitted; an edit to a barrel re-transforms its former importers (`addWatchFile`).
+  **Islands are untouched:** an import carrying region marks (the app's `importKeys`) is never
+  rewritten — a barrel binding is marked through `asRegion` or a mark in the barrel, as before. A
+  report prints at the end of each build leg (files rewritten, names moved, time in the pass, the
+  top barrels and their importer counts; `report: false` silences it, `debug: true` narrates every
+  rewrite). The same pass is `debarrel()` from `'ogygia/vite'` for any Vite app. Parses with the
+  compiler's oxc parser and the Svelte parser (script blocks by range, never a regex over markup).
+  Dry-run over three ~8,500-file monorepos: ~4,100 importers rewritten each, ~17,700 names moved
+  through ~285 barrels, 0 output parse failures, 0 wrong leaf imports, 0.75 ms per file warm. A
+  real Vite build of one of them (426 page entries): 3,339 of 7,507 files rewritten, 267 barrels
+  bypassed; the median page's static download 791 → 682 KB, the 90th percentile 2,085 → 1,105 KB,
+  387 pages smaller and none meaningfully bigger — the same code, cut so a page loads its share.
+  The index shares one in-flight build per barrel across the hundreds of files a build transforms
+  at once (a re-entrancy guard meant for rings had been answering "not a barrel" to concurrent
+  askers) and detects rings against the running walk only.
 - **`prefetch` — warm a deferred hole's HTML before it swaps.** A hole's `wake` was one moment:
   fetch and swap. For an on-demand hole (`wake: 'interaction'`) that meant the first hover paid the
   whole origin round trip (0.35 s on a warm instance, seconds on a cold one — a site's country

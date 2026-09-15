@@ -30,6 +30,9 @@ export {
 } from '../compiler/region/transform.js';
 export { rewrite_lake_import_to_placeholder } from '../compiler/region/emit.js';
 export type { ImportKeys } from '../compiler/region/transform.js';
+// The debarrel pass as a standalone plugin for any Vite app (inside ogygia it rides `barrels`).
+export { debarrel } from '../compiler/debarrel/plugin.js';
+export type { DebarrelOptions, Matcher as DebarrelMatcher } from '../compiler/debarrel/options.js';
 export type {
 	OgygiaPreset,
 	OgygiaRateLimit,
@@ -55,6 +58,7 @@ import {
 	kit_dirs
 } from '../compiler/kit.js';
 import { load_kit_dirs } from './kit-dirs.js';
+import { debarrel } from '../compiler/debarrel/plugin.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.js';
 import {
@@ -406,6 +410,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	};
 
 	return [
+		// `ogygia({ barrels })` — the debarrel pass, FIRST in the array so the region transform below
+		// sees leaf imports. It leaves any import carrying a region mark alone (the app's configured
+		// attribute keys): islands are marked exactly as without it. Off unless asked for.
+		...(options.barrels
+			? [debarrel(options.barrels, { skip_attribute_keys: Object.values(import_keys) })]
+			: []),
 		// Content-collection dev HMR (full reload when a `src/content` file changes). Inert when the
 		// app doesn't use content collections. Folded in so `ogygia()` is the only plugin to add.
 		contentHmrPlugin(options.content),

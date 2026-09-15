@@ -129,6 +129,35 @@ ogygia({ router: false })                      // opt out of the SPA router enti
 
 `router: false` tree-shakes the router out of the generated runtime. Thus a load-only app never ships it. It also takes [form continuity](/docs/data-state/state-context#continuity-surviving-navigation) with it (there is no SPA navigation to survive). A single page can opt out of view transitions, with `<meta name="ogygia-router" content="plain">` in its head. The tag of the page wins over the global default.
 
+### `barrels`
+
+Barrel imports become leaf imports at transform time. A barrel is a module that only re-exports other modules (`index.ts`, a package's `components.ts`, an `export * from` fan-out). Importing one name from it drags the whole graph in: in dev every module behind it is transformed and served, in build the chunk graph follows the import graph before tree-shaking, and a package that is not `sideEffects: false` keeps all of it. With `barrels` on, `import { Button } from '$lib/components'` is rewritten to `import Button from '…/components/Button.svelte'` before Svelte or ogygia see the file, so the graph holds only the leaves the file uses.
+
+```ts
+ogygia({ barrels: true })                                  // every pure barrel in the project
+ogygia({ barrels: { packages: ['@acme/ui'] } })            // dependencies too, by name / glob / regex
+ogygia({ barrels: { force: ['$lib/registry'] } })          // an impure barrel: leaves moved, `import 'barrel'` kept
+ogygia({ barrels: { keep: [/stores\/index\.ts$/] } })      // never touch these
+```
+
+What it does and does not do:
+
+- **Project modules need no listing.** Every file outside `node_modules` is a candidate; purity decides. A barrel is *pure* when every top-level statement is an import, a re-export, a type, or `export {}`. A module with its own code next to the re-exports is left alone unless listed in `force` (then its re-exported names move and a bare `import 'barrel'` stays, so its own code still runs).
+- **Dependencies are opt-in** through `packages`, because Vite pre-bundles bare imports in dev: a leaf import that skips the optimizer while another importer gets the pre-bundled copy is two instances of one module. List a package when you know it is safe (an ESM component library, excluded from `optimizeDeps`).
+- **Nested barrels, `export *` fan-outs, rename chains and `import … ; export { … }` bindings** are followed to the real leaf. A name two stars disagree on, a name the barrel does not export, and a name behind something unparsable (JSON, CommonJS, a `?raw` import) stay on the barrel import.
+- **Import attributes and `type` modifiers ride along** (`with { type: 'json' }`, `import { type T }`). Sourcemaps are emitted.
+- **Islands are untouched.** An import carrying region marks (`with { wake }`, `render`, `preset`, `region`, or the app's `importKeys`) is never rewritten, so a marked import means exactly what it meant before. A barrel binding is marked through `asRegion` or a mark in the barrel, as before.
+- `import * as ns from 'barrel'`, `import 'barrel'` and dynamic imports are left as written.
+
+Options: `packages`, `force`, `keep` (matchers: a package name or specifier prefix, a `*` glob, a regex, or a function of the resolved id), `importers: { include, exclude }` (which files are rewritten; default project files), `followPackages` (walk `export *` into dependencies while mapping a barrel; default `true`), `report` (a one-line summary at the end of a build), `debug` (log every rewrite).
+
+The same pass is exported as a standalone Vite plugin for any app, ogygia or not:
+
+```ts
+import { debarrel } from 'ogygia/vite';
+export default defineConfig({ plugins: [debarrel({ packages: ['@acme/ui'] }), svelte()] });
+```
+
 ### `regions.presets`
 
 Named bundles of strategy + options, referenced from an import with `preset: 'name'`. A preset uses the same two-dial grammar as an inline import: `render` (the mode) and `wake` (the schedule), plus the tuning options that are not permitted inline (`margin`, `maxAge`, …):

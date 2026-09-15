@@ -4,6 +4,7 @@
  * pure type declarations (the plugin factory in index.ts imports them back).
  */
 import type { ImportKeys } from '../compiler/region/transform.js';
+import type { DebarrelOptions } from '../compiler/debarrel/options.js';
 import type { ProfilerOptions } from '../profiler/index.js';
 import type { ContentPluginOptions } from '../content/vite/plugin.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
@@ -241,6 +242,20 @@ export interface OgygiaOptions {
 	 * is read and stripped by ogygia before Kit sees it, so Kit never rejects the non-Kit option.
 	 */
 	freeze?: boolean | { ttl?: number; default?: boolean };
+
+	/**
+	 * Barrel imports become leaf imports at transform time — `import { Button } from '$lib'` (an
+	 * `index.ts` that re-exports forty files) becomes `import Button from '…/Button.svelte'`, so the
+	 * module graph (dev) and the chunk graph (build) hold only the leaves a file uses.
+	 *
+	 * - `true` — every PURE barrel in the project (outside `node_modules`) is bypassed.
+	 * - `{ packages, force, keep, … }` — opt dependencies in, force impure barrels, keep some.
+	 *
+	 * Independent of islands: an import that carries region marks (`with { wake }` …) is never
+	 * rewritten — a barrel binding is marked through `asRegion` or a mark in the barrel, as before.
+	 * The same plugin is `debarrel()` from `'ogygia/vite'` for any Vite app.
+	 */
+	barrels?: boolean | DebarrelOptions;
 
 	/**
 	 * @internal Recreate this plugin instance inside the standalone client build.
