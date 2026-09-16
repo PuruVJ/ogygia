@@ -50,6 +50,17 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **A `visible` island's code no longer downloads in idle time — it waits for the viewport.** The
+  default preload policy (`'load'`) documents that visible islands fetch their code when they
+  intersect (`visible.margin` is the lead time) and that nothing downloads before there is a
+  reason to. The runtime contradicted it: every visible island idle-imported its module a second
+  after load, so a customer home page pulled 1.1 MB of below-the-fold island code for visitors who
+  never scrolled (535 KB at the load event, 1.6 MB one second later, nothing new on scroll). The
+  idle warm is gone; a visible island's chunk is requested at intersection. A page that wants every
+  island's bytes early keeps `regions.preload: 'all'` (low-priority hints from the HTML). The hover
+  warm of `interaction` islands and the router's prefetch warm are unchanged. `e2e/visible-below`:
+  an island 4000 px down makes no request for three seconds, then fetches, hydrates and counts on
+  scroll.
 - **A hole answer that is not the region's is refused.** `ogygia.handle()` answers a region request
   in place — a fragment, a 204, an error status — and never redirects. An app handle in front of it
   (an auth wall, a locale bounce, a 404 handler) can still take the request, and the browser follows

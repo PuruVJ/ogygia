@@ -2,14 +2,12 @@ import { frameAddress } from '../frame.js';
 import { kit_hydrates_page } from './kit-boot.js';
 import { runtime_session } from './session.js';
 import {
-	is_hinted_module,
 	is_allowed_region_endpoint,
 	is_document_answer,
 	is_redirected_answer,
 	is_same_origin_response,
 	island_module_url,
-	RegionAnswerRefused,
-	warm_island_module
+	RegionAnswerRefused
 } from './region-endpoint-url.js';
 import {
 	is_awake,
@@ -343,16 +341,12 @@ class OgygiaRegion extends HTMLElement {
 		// The hydration scheduler: order stamp + viewport snapshot, so when this island's turn comes
 		// the queue knows where it stands (schedule.ts).
 		if (!deferred) register_region(this);
-		// A `visible` island won't hydrate until it scrolls into view — and only THEN fetches its JS
-		// chunk, stalling hydration on a real network. Warm the module during idle so the scroll-in is
-		// instant. In prod the BYTES mostly ride the SSR-emitted modulepreload hints (background
-		// priority, full dep closure — see Region.svelte's island_preload); this idle `import()` then
-		// evaluates from the warm module map (near-zero network) so the wake is a pure cache hit. In
-		// dev (no hints) it is also the byte layer. `interaction` islands get the SAME byte hints but
-		// no idle import — evaluation waits for the gesture (the hover warm / wake import hits the
-		// cache). Media-query wakes get neither: the server can't know the viewport, so downloading
-		// would be a blind bet. Idle warm kept to `visible` on purpose — `idle` fires imminently anyway.
-		if (!deferred && when === 'visible') this.#warm_module();
+		// A `visible` island fetches its code when it intersects — `visible.margin` is the lead time —
+		// and not before: the `'load'` preload policy promises "nothing downloads before there is a
+		// reason to", and an idle-time `import()` here broke that promise for every visible island on
+		// the page (a customer home page downloaded 1.1 MB of below-the-fold island code one second
+		// after load, for islands the visitor might never scroll to). A page that wants every island's
+		// bytes early says so: `regions.preload: 'all'` hints them from the HTML at low priority.
 		this.#arm(when, deferred ? this.#fire_server : this.#fire_hydrate);
 		// `prefetch="<schedule>"`: a deferred hole warms its HTML on a second, EARLIER schedule
 		// (load / idle / visible / media) while `when` still decides the swap — an on-demand menu
@@ -423,20 +417,6 @@ class OgygiaRegion extends HTMLElement {
 			fetch_revalidate: () => void this.#fetch_html({ revalidate: true }),
 			wake_children: () => this.#wake_waiting_regions()
 		};
-	}
-
-	/** Idle-import this island's JS so a later `visible` wake hydrates without a cold chunk fetch. */
-	#warm_module() {
-		const entry = this.getAttribute('entry');
-		if (!entry) return;
-		// Prod: the SSR already shipped this island's bytes as background modulepreload hints (full dep
-		// closure). An `import()` here would ESCALATE any still-queued hint fetch to High — the exact
-		// contention the hints exist to avoid — so leave the bytes in the background and pay only
-		// module evaluation at the real wake. Dev has no hints; the idle import stays the byte layer.
-		if (is_hinted_module(entry)) return;
-		const warm = () => warm_island_module(entry);
-		if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 2000 });
-		else setTimeout(warm, 200);
 	}
 
 	/** Arm idle / visible / load / interaction / media for a schedule callback. */
