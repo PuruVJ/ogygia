@@ -17,8 +17,22 @@
  * The keyed lookup runs first (a keyed sidecar may also sit adjacent, e.g. in dev or a fragment);
  * the sibling walk is the fallback. Server islands and held deferred regions carry no `data-og-fp`
  * and always ride adjacent.
+ *
+ * A third source, checked first: a sidecar RESTORED onto a region that has none in the DOM — a
+ * hydrating hole Kit rendered again in the browser after it gave up hydrating the document (the
+ * client leg renders no sidecar; the runtime remembered the SSR one under the hole's identity and
+ * attaches the clone here, off the DOM, so Kit's tree is never edited under it).
  */
+const restored_sidecars = new WeakMap<Element, HTMLScriptElement>();
+
+/** Attach a remembered props sidecar to a region whose DOM carries none (see above). */
+export function restore_props_sidecar(region: Element, sidecar: HTMLScriptElement): void {
+	restored_sidecars.set(region, sidecar);
+}
+
 export function props_sidecar_of(region: Element): HTMLScriptElement | null {
+	const restored = restored_sidecars.get(region);
+	if (restored) return restored;
 	const fp = region.getAttribute('data-og-fp');
 	if (fp) {
 		// The region's own tree: the live document, a foreign (fetched) document, or a shadow root.

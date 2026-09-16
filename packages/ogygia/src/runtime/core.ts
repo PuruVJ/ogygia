@@ -13,7 +13,7 @@ import {
 	is_awake,
 	is_deferred,
 	is_frozen,
-	inside_frozen,
+	ours_on_kit_document,
 	phase2_hydrate_schedule,
 	region_hydrate_schedule,
 	region_schedule
@@ -29,6 +29,8 @@ import {
 } from './schedule.js';
 import { once_visible } from './observe.js';
 import { connected_regions } from './connected.js';
+import { restore_props_sidecar } from './sidecar.js';
+import { hole_facts_of } from './hole-facts.js';
 import type { IslandHandle, IslandModule } from './hydrate-core.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 import {
@@ -40,6 +42,11 @@ import { install_devtools_ui as dt_install_ui } from '../devtools/ui.js';
 // DEVTOOLS gate — module-local const from the Vite `define` (the proven DCE pattern): when off, every
 // `if (DEVTOOLS) dt_emit({…})` folds to `if (false)` and the whole devtools graph tree-shakes away.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
+
+const HOLE_WITHOUT_ADDRESS_WARNING =
+	'[ogygia] deferred region %s was rendered in the browser with no server-minted address, and the ' +
+	'document records none for it (a client-side navigation mounted it, or its props differ from ' +
+	'the server render) — its fallback stands. A hole is server HTML: render it on the server.';
 
 /** Read the identity fields devtools events correlate on, off a region element. Cheap — attributes
  *  already in hand. Only ever called from behind an `if (DEVTOOLS)` guard, so it costs nothing off. */
@@ -276,6 +283,23 @@ class OgygiaRegion extends HTMLElement {
 		if (this.#minted_endpoint === null && is_deferred(this)) {
 			const minted = this.getAttribute('endpoint');
 			if (minted) this.#minted_endpoint = minted;
+			else {
+				// NO address: Kit rendered this hole in the browser — it gave up hydrating the document
+				// (a component threw, the markup mismatched) and mounted it fresh, and the client leg
+				// cannot mint. The same hole (same id, same props) was on the SSR document, and the
+				// handle recorded its facts in the document tail, outside Kit's root (hole-facts.ts):
+				// hand them back by identity, and the hole fetches exactly as the SSR element would
+				// have. A site header's account holes went dark this way on a customer's client-on page.
+				const identity = this.getAttribute('data-og-hole');
+				const facts = identity ? hole_facts_of(this.ownerDocument, identity) : null;
+				if (facts) {
+					this.#minted_endpoint = facts.endpoint;
+					this.setAttribute('endpoint', facts.endpoint);
+					if (facts.sidecar) restore_props_sidecar(this, facts.sidecar.cloneNode(true) as HTMLScriptElement);
+				} else if (import.meta.env.DEV && identity) {
+					console.warn(HOLE_WITHOUT_ADDRESS_WARNING, this.getAttribute('entry') || identity);
+				}
+			}
 		}
 		// A frozen region (lake) settles through the lakes feature; the arm hooks it needs are built
 		// only for one (five closures per region at upgrade was the cost of building them for all).
@@ -444,11 +468,11 @@ class OgygiaRegion extends HTMLElement {
 	 * hydrate and replay what arrived meanwhile (see runtime/interaction.ts). `pointerenter` warms
 	 * the module so the wake is usually served from cache. On a csr=true page Kit already hydrated
 	 * this island — do not arm (our click-cancel would eat live clicks); #hydrate's own guard
-	 * handles the marking if it ever fires. Unless the island sits inside a lake: Kit adopts a lake
-	 * as opaque DOM and never hydrates its inside, so that island is ours to arm.
+	 * handles the marking if it ever fires. Unless the island is ours even there: inside a lake
+	 * (Kit adopts it as opaque DOM) or inside a hole's fetched answer (Kit never sees it).
 	 */
 	#on_interaction(fire: () => void) {
-		if (kit_hydrates_page() && !is_deferred(this) && !inside_frozen(this)) {
+		if (kit_hydrates_page() && !ours_on_kit_document(this)) {
 			this.setAttribute('data-kit-hydrated', '');
 			return;
 		}

@@ -20,7 +20,7 @@ import { foreign_region_prop_revivers } from './foreign-props.js';
 import { props_sidecar_of } from './sidecar.js';
 import { SEED_REF_KEY, seed_ref_reviver } from '../seed-refs.js';
 import { parse_sidecar_text, seed_data_of, seed_page_once, seed_remote_once } from './seeds.js';
-import { is_deferred, inside_frozen, region_ssr_truncated } from './region-attrs.js';
+import { is_deferred, ours_on_kit_document, region_ssr_truncated } from './region-attrs.js';
 import { slots, type LiftedLake } from './slots.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 
@@ -249,13 +249,13 @@ export function hydrate_island(
 	// nav can dispose exactly this region's ids if it is later removed.
 	const props = capture_region_ids(region, () => read_region_props(region, foreign));
 
-	// Mixed mode: on a csr=true page Kit already hydrates this component — skip. EXCEPT a deferred
-	// region (server island / <Region>): its HTML was FETCHED after load and swapped in, so it was
-	// never part of Kit's SSR tree — Kit didn't hydrate it and won't. We must. (connectedCallback
-	// carries the same is_deferred exception for the fetch phase.) And EXCEPT a region INSIDE A
-	// LAKE: the lake wrapper adopts its SSR element under Kit as opaque DOM, so Kit never hydrates
-	// the islands in there either — those are ours.
-	if (kit_hydrates_page() && !is_deferred(region) && !inside_frozen(region)) {
+	// Mixed mode: on a csr=true page Kit already hydrates this component — skip. EXCEPT what Kit
+	// never sees (`ours_on_kit_document`): a deferred region (its HTML was FETCHED after load and
+	// swapped in, never part of Kit's SSR tree — connectedCallback carries the same exception for
+	// the fetch phase), a region INSIDE A LAKE (the lake wrapper adopts its SSR element under Kit
+	// as opaque DOM), and a region INSIDE A HOLE'S FETCHED ANSWER (an island a server island
+	// carries — a personal, interactive menu — that Kit could never hydrate). Those are ours.
+	if (kit_hydrates_page() && !ours_on_kit_document(region)) {
 		region.setAttribute('data-kit-hydrated', '');
 		if (import.meta.env.DEV) {
 			console.warn(

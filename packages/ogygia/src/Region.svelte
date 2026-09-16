@@ -531,6 +531,25 @@
 	// runtime), unkeyed, in whichever lane the props qualify for (props-wire.ts).
 	const server_wire = $derived(nested || !__hydrate ? null : plan_props_wire(__props, __entry));
 	const server_props_script = $derived(server_wire ? props_sidecar('', server_wire.wire(null)) : '');
+	// The hole's IDENTITY — the fingerprint of its region id + canonical props, the same function on
+	// both legs (fingerprint.ts), so the client leg computes the SAME value the server emitted. The
+	// runtime keys the server-minted facts (endpoint, props sidecar) on it: when Kit gives up
+	// hydrating a client-on document and mounts it fresh, the client leg renders this hole again
+	// with NO address (it cannot mint), and the runtime hands the SSR facts back by identity — never
+	// by position. Emitted on every top-level hole; costs one walk of the hole's (small) props.
+	const server_identity = $derived(
+		nested || !is_server ? '' : fingerprint_of(__entry, '', (server_wire ?? plan_props_wire(__props || {}, __entry)).canonical)
+	);
+	// On a KIT-HYDRATED document the facts ride the document tail too (server/document-tail.ts
+	// `hole()`): Kit's root can be cleared and mounted fresh, the tail outside it cannot. A csr=false
+	// document has no Kit client to rebuild it, so nothing is recorded there. Decided once at init —
+	// the SSR pass renders each region exactly once.
+	if (tail && is_csr && is_server && !nested) {
+		untrack(() => {
+			const endpoint = server_endpoint;
+			if (endpoint) tail.hole(server_identity, endpoint, server_props_script);
+		});
+	}
 
 	const server_wants_modulepreload = $derived(
 		!!__module &&
@@ -827,6 +846,7 @@
 			margin={__margin || undefined}
 			hydrate-margin={__hydrateMargin || undefined}
 			endpoint={server_endpoint}
+			data-og-hole={server_identity || undefined}
 		>{#if ogygiaFallback}<SlotBoundary>{@render ogygiaFallback()}</SlotBoundary>{/if}</ogygia-region>{@html server_props_script}{/if}
 {:else if is_lake}
 	{#if is_csr}{@render lake_adopt()}{:else if lake_inside}

@@ -38,6 +38,24 @@ export function is_deferred(el: Element): boolean {
 	return el.getAttribute('render') === 'defer';
 }
 
+/** CSS selector for deferred regions (holes). */
+const DEFERRED_SELECTOR = 'ogygia-region[render="defer"]';
+
+/** True if this region sits INSIDE a deferred region (a hole). A region element found inside a
+ *  hole on a Kit-hydrated document can only have come with the hole's FETCHED answer (the page's
+ *  own markup there — the fallback — renders its islands inline, as Kit's), and Kit never sees
+ *  fetched HTML: that island is the runtime's to wake. */
+export function inside_deferred(el: Element): boolean {
+	return !!el.parentElement?.closest(DEFERRED_SELECTOR);
+}
+
+/** Mixed mode (a csr=true document): Kit hydrates the tree, so an island there is Kit's — EXCEPT
+ *  what Kit never sees: a deferred region (its HTML is fetched after load), anything inside a lake
+ *  (adopted as opaque DOM), and anything inside a hole's fetched answer. Those are ours. */
+export function ours_on_kit_document(el: Element): boolean {
+	return is_deferred(el) || inside_frozen(el) || inside_deferred(el);
+}
+
 /** `{#if}` remount policy for `wake="none"` regions. Default `cache`. */
 export function region_remount(el: Element): 'cache' | 'empty' | 'swr' {
 	const r = el.getAttribute('remount');

@@ -51,7 +51,7 @@ describe('DocumentTail', () => {
 		t.props('f1', () => '<script data-ogygia-props="f1">1</script>');
 		t.props('f1', () => '<script data-ogygia-props="f1">DUPLICATE</script>');
 		t.props('f2', () => '<script data-ogygia-props="f2">2</script>');
-		expect(t.size).toEqual({ hints: 3, props: 2 });
+		expect(t.size).toEqual({ hints: 3, props: 2, holes: 0 });
 		expect(t.empty).toBe(false);
 		expect(t.render()).toBe(
 			'<link rel="modulepreload" href="/a.js" fetchpriority="low">' +
@@ -67,6 +67,41 @@ describe('DocumentTail', () => {
 		t.hint('<link rel="stylesheet" href="/x.css"><link rel="modulepreload"><link rel="preload" as="fetch" href="/h">');
 		expect(t.size.hints).toBe(0);
 		expect(t.render()).toBe('');
+	});
+
+	// THE HOLES RECORD: a Kit-hydrated document's deferred holes, by identity, so a hole Kit renders
+	// again after giving up on the document gets its server-minted address back (runtime/hole-facts).
+	it('hole() records endpoint + sidecar per identity (first wins), rendered last as ONE escaped JSON script', () => {
+		const t = new DocumentTail();
+		t.hole('aaaaaaaaaaaaaaaa', '/__ogygia__?id=a&props=W3t9XQ&exp=1&sig=s', '');
+		t.hole('aaaaaaaaaaaaaaaa', '/__ogygia__?id=DUPLICATE', '');
+		t.hole('bbbbbbbbbbbbbbbb', '/__ogygia__?id=b&props=W3t9XQ&exp=1&sig=s', '<script type="application/ogygia-props" data-ogygia-props>[{"n":1},1]</script>');
+		t.hole('', '/__ogygia__?id=no-identity', ''); // no identity → nothing to key on
+		t.hole('cccccccccccccccc', '', ''); // no address → nothing worth recording
+		t.props('f1', () => '<script data-ogygia-props="f1">1</script>');
+		expect(t.size).toEqual({ hints: 0, props: 1, holes: 2 });
+		expect(t.empty).toBe(false);
+		const html = t.render();
+		// after the props sidecars, one script, `<` escaped so the sidecar HTML inside cannot close it
+		expect(html.indexOf('data-ogygia-props="f1"')).toBeLessThan(html.indexOf('application/ogygia-holes'));
+		const m = /<script type="application\/ogygia-holes" data-ogygia-holes>(.*)<\/script>$/.exec(html);
+		expect(m).not.toBeNull();
+		expect(m![1]).not.toContain('<');
+		expect(JSON.parse(m![1])).toEqual({
+			aaaaaaaaaaaaaaaa: { endpoint: '/__ogygia__?id=a&props=W3t9XQ&exp=1&sig=s', sidecar: '' },
+			bbbbbbbbbbbbbbbb: {
+				endpoint: '/__ogygia__?id=b&props=W3t9XQ&exp=1&sig=s',
+				sidecar: '<script type="application/ogygia-props" data-ogygia-props>[{"n":1},1]</script>'
+			}
+		});
+	});
+
+	it('a tail with only holes is not empty; one with none renders no record script', () => {
+		const t = new DocumentTail();
+		expect(t.render()).not.toContain('ogygia-holes');
+		t.hole('dddddddddddddddd', '/__ogygia__?id=d', '');
+		expect(t.empty).toBe(false);
+		expect(t.render()).toContain('<script type="application/ogygia-holes" data-ogygia-holes>');
 	});
 
 	it('document_tail() is null until a reader is installed', () => {
@@ -103,7 +138,7 @@ describe('Region.svelte × the tail', () => {
 		expect(out.body).not.toContain('data-ogygia-props');
 		const fps = [...out.body.matchAll(FP_ATTR_G)].map((m) => m[1]);
 		expect(fps).toHaveLength(1);
-		expect(tail.size).toEqual({ hints: 1, props: 1 });
+		expect(tail.size).toEqual({ hints: 1, props: 1, holes: 0 });
 		const html = tail.render();
 		expect(html.indexOf('modulepreload')).toBeLessThan(html.indexOf('data-ogygia-props'));
 		// keyed twice: `data-ogygia-props` for the reconciler, `id` for the runtime's O(1) lookup
@@ -117,7 +152,7 @@ describe('Region.svelte × the tail', () => {
 		const fps = [...out.body.matchAll(FP_ATTR_G)].map((m) => m[1]);
 		expect(fps).toHaveLength(3);
 		expect(new Set(fps).size).toBe(2);
-		expect(tail.size).toEqual({ hints: 1, props: 2 });
+		expect(tail.size).toEqual({ hints: 1, props: 2, holes: 0 });
 	});
 
 	it('a server island that hydrates: its module hints ride the tail, its FETCH preload stays in the head', () => {
@@ -155,6 +190,6 @@ describe('Region.svelte × the tail', () => {
 		install_tail();
 		const out = render_in_kit_pass([{ ...island({ n: 7 }), load: undefined, visible: true }]);
 		expect(out.head).not.toContain('modulepreload');
-		expect(tail.size).toEqual({ hints: 0, props: 1 });
+		expect(tail.size).toEqual({ hints: 0, props: 1, holes: 0 });
 	});
 });

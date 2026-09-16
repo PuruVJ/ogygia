@@ -50,6 +50,27 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **A deferred hole survives Kit rebuilding a client-on document in the browser.** On a csr=true
+  page Kit hydrates the whole document; when a component throws while it does (a tracking SDK's
+  patched `fetch` threw inside a customer's header under a content blocker), Svelte logs `Failed to
+  hydrate`, clears Kit's root and mounts it fresh. Every hole was then rendered again by the
+  wrapper's client leg, which cannot mint a signed address: `endpoint=""`, no props sidecar, the
+  fallback standing forever — a site header's account holes went dark for signed-in visitors while
+  the same page on plain Kit merely re-rendered. Now every top-level hole carries its identity
+  (`data-og-hole`, the fingerprint of region id + canonical props, the same function on both legs),
+  and on a Kit-hydrated document the handle records each hole's minted `endpoint` (and a hydrating
+  hole's props sidecar) under it in the document tail — outside Kit's root, so the rebuild cannot
+  take it. A hole that connects with no address asks the record by identity, never by position,
+  and fetches exactly as the SSR element would have; the sidecar is attached off the DOM, so Kit's
+  tree is never edited under it. A csr=false document records nothing (no Kit client can rebuild
+  it); a hole rendered only in the browser has no record and keeps its fallback (dev warns).
+  Found next to it: on a Kit-hydrated document the runtime handed EVERY island to Kit unless it
+  sat inside a lake — including an island carried by a hole's fetched answer (a personal,
+  interactive menu), which Kit can never hydrate; it was marked `data-kit-hydrated` and stayed
+  dead. An island inside a hole's answer is now the runtime's on a Kit document too
+  (`ours_on_kit_document`: deferred, inside a lake, or inside a hole).
+  Playground `hole-kit-rebuild` (a component throws once during hydration), `e2e/hole-kit-rebuild`,
+  `test/browser/hole-rebuild`, `test/document-tail`.
 - **A `visible` island's code no longer downloads in idle time — it waits for the viewport.** The
   default preload policy (`'load'`) documents that visible islands fetch their code when they
   intersect (`visible.margin` is the lead time) and that nothing downloads before there is a

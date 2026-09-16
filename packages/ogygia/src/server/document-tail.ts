@@ -32,17 +32,31 @@
  * the reader is never installed and `document_tail()` is `null`.
  */
 import type { SeedIndex } from '../seed-refs.js';
+import { escape_script_text } from '../escape.js';
+import { HOLES_SCRIPT_TYPE } from '../holes-record.js';
 
 const MODULEPRELOAD_TAG_G = /<link\b[^>]*\brel=["']modulepreload["'][^>]*>/g;
 const LINK_HREF_RE = /\bhref=["']([^"']*)["']/;
+/** The holes record (`hole()`), read by runtime/hole-facts.ts. */
+const HOLES_SCRIPT_OPEN = `<script type="${HOLES_SCRIPT_TYPE}" data-ogygia-holes>`;
+const HOLES_SCRIPT_CLOSE = '</script>';
 
 /** Produces one sidecar's `<script>` given the page seed's index when the seed ships (`null` when
  *  it does not). */
 export type SidecarRender = (seed: SeedIndex | null) => string;
 
+/** What the server minted for one deferred hole on a Kit-hydrated document (see `hole()`). */
+export type HoleRecord = {
+	/** The signed capability URL the hole's `endpoint` attribute carries. */
+	endpoint: string;
+	/** The adjacent props sidecar HTML of a hydrating hole, or `''` for a static one. */
+	sidecar: string;
+};
+
 export class DocumentTail {
 	readonly #hints = new Map<string, string>();
 	readonly #props = new Map<string, SidecarRender>();
+	readonly #holes = new Map<string, HoleRecord>();
 
 	/** Add a region's `<link rel="modulepreload">` block; each href is kept once (first wins). */
 	hint(html: string): void {
@@ -57,21 +71,39 @@ export class DocumentTail {
 		if (!this.#props.has(fp)) this.#props.set(fp, render);
 	}
 
+	/**
+	 * Record a deferred hole's server-minted facts under its identity (`data-og-hole`), for a
+	 * KIT-HYDRATED document only. Kit can give up hydrating such a document (a component threw, the
+	 * markup mismatched): Svelte clears Kit's root and mounts it fresh, and every hole is rendered
+	 * again by the client leg — with no address, since only the server can mint one. The tail sits
+	 * OUTSIDE Kit's root, so this record survives that rebuild, and the runtime hands each rebuilt
+	 * hole its address (and a hydrating hole its props sidecar) back by identity — never by
+	 * position. Identical holes (same id + props → same identity) share one record.
+	 */
+	hole(identity: string, endpoint: string, sidecar: string): void {
+		if (identity && endpoint && !this.#holes.has(identity)) this.#holes.set(identity, { endpoint, sidecar });
+	}
+
 	get empty(): boolean {
-		return this.#hints.size === 0 && this.#props.size === 0;
+		return this.#hints.size === 0 && this.#props.size === 0 && this.#holes.size === 0;
 	}
 
-	/** Hint count + sidecar count, for tests and devtools. */
-	get size(): { hints: number; props: number } {
-		return { hints: this.#hints.size, props: this.#props.size };
+	/** Hint count + sidecar count + hole-record count, for tests and devtools. */
+	get size(): { hints: number; props: number; holes: number } {
+		return { hints: this.#hints.size, props: this.#props.size, holes: this.#holes.size };
 	}
 
-	/** The tail's HTML: hints, then props (each rendered now, against `seed`). Empty string when
-	 *  nothing was recorded. */
+	/** The tail's HTML: hints, then props (each rendered now, against `seed`), then the holes
+	 *  record (one script, JSON, `<`-escaped). Empty string when nothing was recorded. */
 	render(seed: SeedIndex | null = null): string {
 		let out = '';
 		for (const tag of this.#hints.values()) out += tag;
 		for (const render of this.#props.values()) out += render(seed);
+		if (this.#holes.size) {
+			const record: Record<string, HoleRecord> = {};
+			for (const [identity, facts] of this.#holes) record[identity] = facts;
+			out += HOLES_SCRIPT_OPEN + escape_script_text(JSON.stringify(record)) + HOLES_SCRIPT_CLOSE;
+		}
 		return out;
 	}
 }
