@@ -230,6 +230,15 @@ export type RuntimeEventInput =
 	  }
 	| {
 			domain: 'runtime';
+			/** The island's live DOM had drifted from its server markup while it slept (another
+			 *  script edited it); the runtime put the server markup back and hydrated THAT instead of
+			 *  letting Svelte re-render the island client-side. */
+			name: 'region.hydrate.healed';
+			entry?: string;
+			fp?: string;
+	  }
+	| {
+			domain: 'runtime';
 			name: 'region.server.applied';
 			entry?: string;
 			endpoint?: string;

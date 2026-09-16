@@ -81,13 +81,17 @@ export function island_entry_source(
 		// aborts mid-walk and client-re-renders ("Failed to hydrate … appendChild" per island,
 		// recovery-invisible but noisy, and the SSR claim is lost). This was round 9's intended
 		// contract; the edit that shipped hydrated the bare component instead.
-		`export function __og_hydrate(target, props) {\n` +
-		`\tif (!target.__og_env) {\n` +
-		`\t\ttarget.__og_env = true;\n` +
+		// `options.recover === false`: the consumer's self-heal (hydrate-core.ts) asks THIS svelte
+		// to throw on a mismatch instead of re-rendering; the envelope is re-checked per call because
+		// a restore from the server markup drops it.
+		`export function __og_hydrate(target, props, options) {\n` +
+		`\tconst first = target.firstChild;\n` +
+		`\tif (!(first && first.nodeType === 8 && first.data === '[')) {\n` +
 		`\t\ttarget.insertBefore(document.createComment('['), target.firstChild);\n` +
 		`\t\ttarget.appendChild(document.createComment(']'));\n` +
 		`\t}\n` +
-		`\treturn __og_h(__og_NP, { target, props: { component: __OgygiaComp_${iid}, props } });\n` +
+		`\tconst recovery = options && options.recover === false ? { recover: false } : {};\n` +
+		`\treturn __og_h(__og_NP, { target, props: { component: __OgygiaComp_${iid}, props }, ...recovery });\n` +
 		`}\n` +
 		`export function __og_unmount(app) {\n` +
 		`\treturn __og_u(app);\n` +

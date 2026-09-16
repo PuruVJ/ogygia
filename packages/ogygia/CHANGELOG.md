@@ -73,6 +73,24 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **An island edited while it slept hydrates from its own server markup instead of re-rendering.**
+  An island can sleep for a long time (`visible`, `interaction`), and other scripts edit the page
+  meanwhile: a design-system runtime stripped every whitespace text node of a customer's header
+  while it "hydrated" the components around the islands in it; A/B tools and translators do the
+  same kind of thing. Svelte's hydration walk then met a different node sequence and, left to
+  itself, discarded the server DOM and re-rendered the island client-side — a flash, foreign
+  content destroyed, and the tap that woke an `interaction` island replayed onto a discarded node
+  (a login dropdown needed two clicks, on a cold page only). The hydration source of truth is now
+  the island's server markup: the element keeps it from parse-time connect (a hydrating hole from
+  its swap), hydration runs with Svelte's recovery OFF, and on a mismatch with drift the runtime
+  puts the server markup back and hydrates that — it matches by construction, and the replayed
+  click lands on the live button (`data-og-healed`, a devtools `region.hydrate.healed` event, one
+  dev warning naming the island). Only when that fails too, or nothing drifted (the component
+  itself threw), does Svelte recover the way it always did (`data-og-recovered`, the existing
+  warning). The foreign-hydrate contract gains `__og_hydrate(target, props, { recover })` for
+  federated islands; an older entry ignores it. An island above 512K characters keeps no copy.
+  Playground `island-foreign-edit` (an inline script edits every sleeping island after load),
+  `e2e/island-foreign-edit`, `test/browser/island-self-heal`, `test/island-entry-recover`.
 - **The router keeps a destination page's inline `<style>` sheets across an SPA navigation.** The
   head merge appended a `<style>` the next document carried at the END of `<head>`, where an
   island's `<svelte:head>` hydration on the new page reclaims a trailing node range — so a sheet

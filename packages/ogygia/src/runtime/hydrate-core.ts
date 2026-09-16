@@ -34,12 +34,56 @@ export type IslandHandle = {
 	set_props?: (props: Record<string, unknown>) => void;
 };
 
-/** An island's loaded module: the component, plus a foreign build's own hydrate contract. */
+/** An island's loaded module: the component, plus a foreign build's own hydrate contract.
+ *  `options.recover === false` asks the entry's svelte to THROW on a hydration mismatch instead
+ *  of silently re-rendering (the self-heal below needs to know); an older entry ignores it. */
 export type IslandModule = {
 	default: Component<Record<string, unknown>>;
-	__og_hydrate?: (target: Element, props: Record<string, unknown>) => unknown;
+	__og_hydrate?: (
+		target: Element,
+		props: Record<string, unknown>,
+		options?: { recover?: boolean }
+	) => unknown;
 	__og_unmount?: (app: unknown) => void;
 };
+
+/** Svelte's hydrate with `recover: false` throws `hydration_failed` on a mismatch: in dev the
+ *  message starts with the code, in production it is the bare `https://svelte.dev/e/<code>` URL. */
+const HYDRATION_FAILED_RE = /hydration_failed/;
+
+/** The hydration ENVELOPE: `hydrate()` anchors on a top-level `<!--[-->` comment and then expects
+ *  the component's OWN region envelope — but embedded SSR (Region.svelte) emits only the inner
+ *  layer. Idempotent: a restore from the server markup drops it, the next attempt puts it back. */
+function ensure_envelope(region: Element): void {
+	const first = region.firstChild;
+	if (first && first.nodeType === 8 && (first as Comment).data === '[') return;
+	region.insertBefore(document.createComment('['), region.firstChild);
+	region.appendChild(document.createComment(']'));
+}
+
+/** Svelte's own line from inside its hydrate catch, printed BEFORE it throws `hydration_failed`
+ *  to us. A speculative attempt (recovery off) is ours to report — healed, or handed to Svelte's
+ *  recovery, which prints its own line then. Swallow exactly this message for the synchronous
+ *  duration of such an attempt, nothing else. */
+const SVELTE_FAILED_TO_HYDRATE = 'Failed to hydrate';
+function quietly<T>(fn: () => T): T {
+	const warn = console.warn;
+	console.warn = (...args: unknown[]) => {
+		if (typeof args[0] === 'string' && args[0].startsWith(SVELTE_FAILED_TO_HYDRATE)) return;
+		warn.apply(console, args);
+	};
+	try {
+		return fn();
+	} finally {
+		console.warn = warn;
+	}
+}
+
+const HEALED_WARNING =
+	'[ogygia] island "%s" was edited while it slept (its light DOM no longer matched the server ' +
+	'render — a design-system runtime, an A/B tool, a translator), so its server HTML was put back ' +
+	'and hydrated instead of re-rendering it client-side. Whatever the edit added is gone; the ' +
+	'script that made it should leave <ogygia-region> subtrees alone.';
 
 /** Is this entry another build's (fragment federation): absolute, different origin. */
 export function is_foreign_entry(entry: string): boolean {
@@ -234,7 +278,11 @@ function handle(
 export function hydrate_island(
 	region: HTMLElement,
 	entry: string,
-	mod: IslandModule
+	mod: IslandModule,
+	/** The island's server markup as it connected (core.ts) — the HYDRATION SOURCE OF TRUTH. When
+	 *  the live DOM drifted from it while the island slept, hydration is retried against it before
+	 *  any client render. `null` = no copy (a huge island, an older path): Svelte's own recovery. */
+	ssr_html: string | null = null
 ): IslandHandle | null {
 	// Seed SSR-resolved remote queries + document page snapshot once before hydrate.
 	seed_remote_once();
@@ -291,77 +339,129 @@ export function hydrate_island(
 		// post-SSR transform injected into it — declarative shadow DOM, A/B edits) is destroyed.
 		// Remember the SSR element children (post-lake-lift) so the check below can tell a claim
 		// from a recovery. See internal/notes/foreign-dom.md.
-		const ssr_children = Array.from(region.children);
+		let ssr_children = Array.from(region.children);
 
 		// FOREIGN delegation (fragment federation): the entry came from another build/origin and
 		// exports its own `__og_hydrate` — envelope preparation belongs to the svelte that compiled
 		// the entry, so the consumer must not shape it.
 		const foreign_delegate = foreign && typeof mod.__og_hydrate === 'function';
 
-		// Hydration envelope: `hydrate()` anchors on a top-level `<!--[-->` comment and then expects
-		// the component's OWN region envelope — but embedded SSR (Region.svelte) emits only the inner
-		// layer. `render()` (region endpoint / deferred swap) has BOTH layers — do not wrap again or
-		// hydration mismatches. (Verified against svelte 5.56.)
-		if (!is_deferred(region) && !foreign_delegate) {
-			region.insertBefore(document.createComment('['), region.firstChild);
-			region.appendChild(document.createComment(']'));
+		// Foreign islands take RAW props: the dev mutation-guard proxy is THIS build's code running
+		// inside another build's render — harmless, but it's a wire, and we don't cross wires.
+		// (Plain data either way; the parse membrane already enforced that.)
+		const wrapped = foreign ? props : prop_guard.wrap(props, entry);
+		// Keep needs SPA navigation — a full-page load throws the DOM away, so there is nothing
+		// to relocate. Warn (dev) when the router is off on this page.
+		const LiveHost = slots.live;
+		const keep = region.hasAttribute('data-ogygia-keep') && !!LiveHost;
+		if (keep && import.meta.env.DEV && !document.querySelector('meta[name="ogygia-router"]')) {
+			console.warn(
+				`[ogygia] island "${entry}" has keep:'${region.getAttribute('data-ogygia-keep')}' but the SPA router is off (ogygia({ router: false })) — keep relies on SPA navigation; a full-page load replaces the DOM, so the attribute is a no-op here.`
+			);
 		}
 
-		// Hydrate through NestedProvider so descendants see the "inside a hydrated island" context —
-		// any nested island wrapper then degrades to a plain inline component (single hydration with
-		// this parent). The provider adds no DOM, so this matches SSR.
-		let out: IslandHandle;
-		set_current_region(region);
-		try {
-			// Foreign islands take RAW props: the dev mutation-guard proxy is THIS build's code running
-			// inside another build's render — harmless, but it's a wire, and we don't cross wires.
-			// (Plain data either way; the parse membrane already enforced that.)
-			const wrapped = foreign ? props : prop_guard.wrap(props, entry);
-			if (foreign_delegate) {
-				// FOREIGN island: its module-level svelte state is not ours, so delegate the whole hydrate
-				// to the entry's own `__og_hydrate` (and remember its unmounter). No NestedProvider, no
-				// context capture — context deliberately does not cross a team boundary.
-				// FOREIGN PAGE READS: the `$app/state` shim inside this island reads the SHELL's page store
-				// (one singleton per document — the MFE's own seed never crosses the fragment boundary).
-				// Mark the hydrate so that shim can warn (dev) when the island reads page.data/params/
-				// route/form/error: its SSR HTML was rendered with the MFE's own load.
-				set_foreign_hydrate({ origin: new URL(entry).origin, entry });
-				const app = mod.__og_hydrate!(region, wrapped);
-				out = handle(app, mod.__og_unmount ?? (() => {}), entry, false);
-			} else {
+		/**
+		 * ONE hydrate attempt. `recover: false` makes Svelte THROW on a mismatch (`hydration_failed`)
+		 * instead of silently discarding the server DOM and re-rendering — that silent path is what
+		 * the self-heal below replaces; `recover: true` is that path, the last resort.
+		 *
+		 * Hydration envelope: `render()` (region endpoint / deferred swap) has BOTH anchor layers —
+		 * do not wrap again or hydration mismatches. (Verified against svelte 5.56.) Hydrate through
+		 * NestedProvider so descendants see the "inside a hydrated island" context — any nested
+		 * island wrapper then degrades to a plain inline component (single hydration with this
+		 * parent). The provider adds no DOM, so this matches SSR.
+		 */
+		const attempt = (recover: boolean): IslandHandle => {
+			if (!is_deferred(region) && !foreign_delegate) ensure_envelope(region);
+			set_current_region(region);
+			try {
+				if (foreign_delegate) {
+					// FOREIGN island: its module-level svelte state is not ours, so delegate the whole
+					// hydrate to the entry's own `__og_hydrate` (and remember its unmounter). No
+					// NestedProvider, no context capture — context deliberately does not cross a team
+					// boundary. FOREIGN PAGE READS: the `$app/state` shim inside this island reads the
+					// SHELL's page store (one singleton per document — the MFE's own seed never crosses
+					// the fragment boundary). Mark the hydrate so that shim can warn (dev) when the island
+					// reads page.data/params/route/form/error: its SSR HTML was rendered with the MFE's
+					// own load.
+					set_foreign_hydrate({ origin: new URL(entry).origin, entry });
+					const app = mod.__og_hydrate!(region, wrapped, recover ? undefined : { recover: false });
+					return handle(app, mod.__og_unmount ?? (() => {}), entry, false);
+				}
 				// Seed this island's context from any `<Provide>` above it in the DOM, so a child's plain
 				// `getContext('key')` reads a (csr=false) layout's context across the island-root split.
 				// Undefined when there is no provider above — the common case pays only a short DOM walk.
 				const provided_ctx = capture_region_ids(region, () => slots.context?.(region));
+				const recovery = recover ? {} : { recover: false as const };
 				// A PERSIST island hydrates through LiveHost (same no-DOM render as NestedProvider) so
 				// that when it relocates onto the next page its props can be pushed in reactively.
-				const LiveHost = slots.live;
-				if (region.hasAttribute('data-ogygia-keep') && LiveHost) {
-					// Keep needs SPA navigation — a full-page load throws the DOM away, so there is nothing
-					// to relocate. Warn (dev) when the router is off on this page.
-					if (import.meta.env.DEV && !document.querySelector('meta[name="ogygia-router"]')) {
-						console.warn(
-							`[ogygia] island "${entry}" has keep:'${region.getAttribute('data-ogygia-keep')}' but the SPA router is off (ogygia({ router: false })) — keep relies on SPA navigation; a full-page load replaces the DOM, so the attribute is a no-op here.`
-						);
-					}
-					const app = hydrate(LiveHost, {
+				if (keep) {
+					const app = hydrate(LiveHost!, {
 						target: region,
 						props: { component: Component, initialProps: wrapped },
-						...(provided_ctx ? { context: provided_ctx } : {})
+						...(provided_ctx ? { context: provided_ctx } : {}),
+						...recovery
 					});
-					out = handle(app, unmount_app, entry, true);
-				} else {
-					const app = hydrate(NestedProvider, {
-						target: region,
-						props: { component: Component, props: wrapped },
-						...(provided_ctx ? { context: provided_ctx } : {})
-					});
-					out = handle(app, unmount_app, entry, false);
+					return handle(app, unmount_app, entry, true);
 				}
+				const app = hydrate(NestedProvider, {
+					target: region,
+					props: { component: Component, props: wrapped },
+					...(provided_ctx ? { context: provided_ctx } : {}),
+					...recovery
+				});
+				return handle(app, unmount_app, entry, false);
+			} finally {
+				set_current_region(null);
+				set_foreign_hydrate(null);
 			}
-		} finally {
-			set_current_region(null);
-			set_foreign_hydrate(null);
+		};
+
+		// THE HYDRATION SOURCE OF TRUTH is the island's server markup, not whatever the live DOM is
+		// now. An island can sleep for a long time (`visible`, `interaction`), and other scripts edit
+		// the page meanwhile — a design-system runtime stripping whitespace text nodes while it
+		// "hydrates" the header around it, an A/B tool, a translator. Svelte's walk then meets a
+		// different node sequence and, left to itself, throws the server DOM away and re-renders the
+		// island client-side: a flash, DSD/foreign content destroyed, and the tap that woke the
+		// island replayed onto a discarded node (a login dropdown needed two clicks). So:
+		//   1. hydrate with recovery OFF;
+		//   2. on a mismatch, if the live markup differs from the server markup the element kept at
+		//      connect, put the server markup back and hydrate THAT — it matches by construction;
+		//   3. only if that fails too (or nothing drifted: the component itself threw), let Svelte
+		//      recover the way it always did, and the detector below reports the discard.
+		let out: IslandHandle;
+		let healed = false;
+		try {
+			out = quietly(() => attempt(false));
+		} catch (first) {
+			const mismatch = first instanceof Error && HYDRATION_FAILED_RE.test(first.message);
+			const drifted = ssr_html !== null && region.innerHTML !== ssr_html;
+			if (mismatch && drifted) {
+				region.innerHTML = ssr_html!;
+				// The lakes inside came back with their server children: lift them again (the earlier
+				// lift holds nodes that are no longer in the tree) so the walk sees them as before.
+				lifted = slots.lakes.lift(region);
+				ssr_children = Array.from(region.children);
+				try {
+					out = quietly(() => attempt(false));
+					healed = true;
+				} catch {
+					out = attempt(true);
+				}
+			} else {
+				out = attempt(true);
+			}
+		}
+		if (healed) {
+			region.setAttribute('data-og-healed', '');
+			if (DEVTOOLS)
+				dt_emit({
+					domain: 'runtime',
+					name: 'region.hydrate.healed',
+					entry,
+					fp: region.getAttribute('data-og-fp') || undefined
+				});
+			if (import.meta.env.DEV) console.warn(HEALED_WARNING, entry);
 		}
 
 		// Restore each frozen region's SSR DOM AFTER hydrate. An inner waking region whose

@@ -43,6 +43,18 @@ import { install_devtools_ui as dt_install_ui } from '../devtools/ui.js';
 // `if (DEVTOOLS) dt_emit({…})` folds to `if (false)` and the whole devtools graph tree-shakes away.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
+/** Above this many characters an island keeps no server copy (its hydration falls back to
+ *  Svelte's own recovery on a mismatch) — a bound on memory, not a behaviour anyone tunes. */
+const SSR_SNAPSHOT_MAX = 1 << 19;
+
+/** The island's server markup to hydrate against later (#ssr_html), or `null` when there is
+ *  nothing worth keeping: no children, or more than SSR_SNAPSHOT_MAX characters. */
+function snapshot_markup(region: Element): string | null {
+	if (!region.firstChild) return null;
+	const html = region.innerHTML;
+	return html.length > SSR_SNAPSHOT_MAX ? null : html;
+}
+
 const HOLE_WITHOUT_ADDRESS_WARNING =
 	'[ogygia] deferred region %s was rendered in the browser with no server-minted address, and the ' +
 	'document records none for it (a client-side navigation mounted it, or its props differ from ' +
@@ -240,6 +252,12 @@ class OgygiaRegion extends HTMLElement {
 	 *  The fetch reads this copy and restores the attribute (lakes, devtools and the router's
 	 *  next-page warm all read the DOM). */
 	#minted_endpoint: string | null = null;
+	/** THE HYDRATION SOURCE OF TRUTH: this island's server markup as it connected (or, for a
+	 *  hydrating hole, as its answer was swapped in). An island can sleep a long time and other
+	 *  scripts edit the page meanwhile; on wake, hydrate-core hydrates against THIS when the live
+	 *  DOM drifted, instead of letting Svelte re-render the island client-side. Dropped once the
+	 *  island is awake. `null` for a nested region (rides its parent) and above SSR_SNAPSHOT_MAX. */
+	#ssr_html: string | null = null;
 	/** True after a successful HTML swap — failures leave this false so a later schedule can retry. */
 	#done = false;
 	/** In-flight `#apply` run. `#apply` awaits the region's stylesheet before swapping, so anyone
@@ -376,6 +394,9 @@ class OgygiaRegion extends HTMLElement {
 		// Two axes: `render="defer"` + `when` fetches HTML; `wake` wakes JS (possibly after swap).
 		const deferred = is_deferred(this);
 		const when = region_schedule(this);
+		// Keep the server markup a self-running island connected with (see #ssr_html). Parse-time
+		// connect is before any other script has run; a hole's copy is taken when its answer lands.
+		if (!deferred && this.#ssr_html === null) this.#ssr_html = snapshot_markup(this);
 		if (DEVTOOLS) {
 			dt_emit({
 				domain: 'runtime',
@@ -591,6 +612,8 @@ class OgygiaRegion extends HTMLElement {
 		const morph = this.getAttribute('when') === 'interaction' ? slots.morph : undefined;
 		if (morph) morph(this, Array.from(frag.childNodes));
 		else this.replaceChildren(frag);
+		// A hydrating hole's server markup IS the answer just swapped in (see #ssr_html).
+		if (!this.#app && region_hydrate_schedule(this)) this.#ssr_html = snapshot_markup(this);
 		this.#done = true;
 		if (revalidate) this.setAttribute('data-revalidated', '');
 		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
@@ -796,7 +819,8 @@ class OgygiaRegion extends HTMLElement {
 			await hydrate_turn(this);
 			if (!this.isConnected || this.#app) return;
 			// ── the turn: everything below is one synchronous step ──
-			this.#app = core.hydrate_island(this, entry, mod);
+			this.#app = core.hydrate_island(this, entry, mod, this.#ssr_html);
+			this.#ssr_html = null; // awake (or not ours): the server copy has done its job
 			if (!this.#app) return; // not ours (Kit-hydrated page) or torn out mid-hydrate
 			this.setAttribute('data-hydrated', '');
 			if (DEVTOOLS)

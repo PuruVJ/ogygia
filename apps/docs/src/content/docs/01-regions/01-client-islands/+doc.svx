@@ -165,6 +165,12 @@ import Telemetry from '$lib/Telemetry.svelte' with { wake: 'load', keep: 'teleme
 Top-level code in a `.svelte.ts` module runs when the first island imports it. If an island reads your store, the store initializes itself. You need a boot island only for effects that must run on pages with **no** islands. Examples: site-wide analytics, a global keydown listener.
 :::
 
+## When another script edits a sleeping island
+
+An island can sleep for a long time. Other scripts run meanwhile: a design-system runtime, an A/B tool, a translator. Some of them edit the DOM inside the island, a removed whitespace node, an added comment. Svelte hydrates by walking the nodes it finds, so an edited island would be thrown away and rendered again in the browser, and the click that woke it would land on a dead node.
+
+ogygia keeps each island's server markup from the moment it connects. On wake it hydrates with recovery off. If the walk fails and the live DOM differs from that markup, it puts the server markup back and hydrates that, which matches by construction. The island gets `data-og-healed` and, in dev, one warning naming it. Only if that fails too does Svelte render it client-side, as before (`data-og-recovered`). A heal discards whatever the other script added, so scripts should still leave `<ogygia-region>` subtrees alone.
+
 ## Do / don't
 
 | Do | Don't |
