@@ -33,6 +33,7 @@
 	import { record_page } from './page-seed-registry.js';
 	import { document_tail } from './server/document-tail.js';
 	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
+	import { region_css_tag } from './server/region-css.js';
 	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
 	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
@@ -686,7 +687,7 @@
 		if (!resolved || resolved.kind !== 'dual' || !resolved.module) return '';
 		let html = '';
 		for (const href of claim_region_css(islandCss(resolved.module)))
-			html += LT + 'link rel="stylesheet" href="' + asset(href) + '" data-ogygia-region-css' + GT;
+			html += region_css_tag(href, asset(href));
 		return html;
 	});
 	// A PLACED client island's CSS is ASSUMED to already sit in the page's own stylesheet (Kit links
@@ -705,7 +706,7 @@
 		if (nested || __mode !== 'island' || !island_entry) return '';
 		let html = '';
 		for (const href of claim_region_css(islandCss(island_entry)))
-			html += LT + 'link rel="stylesheet" href="' + asset(href) + '" data-ogygia-region-css' + GT;
+			html += region_css_tag(href, asset(href));
 		return html;
 	});
 	// The RENDERED stamp for an inline island (a csr=true document, or nested in a woken island):
@@ -727,7 +728,7 @@
 		if (resolved?.kind !== 'inline' || !resolved.content_id) return '';
 		let html = '';
 		for (const href of claim_region_css(contentCss(resolved.content_id)))
-			html += LT + 'link rel="stylesheet" href="' + asset(href) + '" data-ogygia-region-css' + GT;
+			html += region_css_tag(href, asset(href));
 		return html;
 	});
 

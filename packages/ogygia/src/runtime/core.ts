@@ -129,8 +129,8 @@ function dom_ready() {
 }
 
 /**
- * Parse a fetched region's HTML into a fragment, HOISTING any `<link data-ogygia-region-css>` it
- * carries into `<head>` (deduped by href). A held / server-picked region's component was never
+ * Parse a fetched region's HTML into a fragment, HOISTING any `<link data-ogygia-region-css>` (or
+ * inlined `<style data-ogygia-region-css="href">`) it carries into `<head>` (deduped by href). A held / server-picked region's component was never
  * imported by the page, so its scoped CSS is in no stylesheet the page loaded; the region response
  * ships the links and the runtime lifts them to the head — where they load once and stick. (A link
  * left in the body would also fail to load inside a `<template>` batch parcel.)
@@ -193,6 +193,31 @@ function region_fragment(html: string): { frag: DocumentFragment; ready: Promise
 			pending.push(until_loaded(clone));
 			existing.set(href, clone);
 			document.head.appendChild(clone);
+		}
+	}
+	// An INLINED region sheet (server/region-css.ts — under Kit's `inlineStyleThreshold` the server
+	// ships `<style data-ogygia-region-css="href">` instead of a link): hoist it into <head> the same
+	// way, once per identity — the href it stands for — against the sheets the page already has in
+	// either shape. Nothing to await: the text is right here.
+	const styles = frag.querySelectorAll('style[data-ogygia-region-css]');
+	if (styles.length) {
+		const present = new Set<string>();
+		for (const n of document.head.querySelectorAll('[data-ogygia-region-css], link[rel="stylesheet"]')) {
+			const id = n.tagName === 'STYLE' ? n.getAttribute('data-ogygia-region-css') : n.getAttribute('href');
+			if (id) present.add(id);
+		}
+		for (const style of styles) {
+			const id = style.getAttribute('data-ogygia-region-css') || '';
+			style.remove();
+			if (!id || present.has(id)) continue;
+			present.add(id);
+			const el = document.createElement('style');
+			el.setAttribute('data-ogygia-region-css', id);
+			el.textContent = style.textContent || '';
+			// At the TOP of <head>, like the router's SPA sheets (router-nav.ts): an island's
+			// `<svelte:head>` hydration reclaims a trailing head-node range, and a sheet appended at
+			// the end can go with it.
+			document.head.insertBefore(el, document.head.firstChild);
 		}
 	}
 	// Cap the wait so a genuinely hung stylesheet eventually paints (unstyled) rather than blocking

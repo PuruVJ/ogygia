@@ -18,6 +18,9 @@ const REGION_TAG_G = /<ogygia-region\b[^>]*>/g;
 const REGION_URL_ATTR_G = /\b(entry|endpoint)="([^"]*)"/g;
 const REGION_CSS_LINK_G = /<link\b[^>]*data-ogygia-region-css[^>]*>/g;
 const LINK_HREF = /\bhref="([^"]*)"/;
+/** An INLINED region sheet's open tag: its identity attribute carries the href it stands for. */
+const REGION_CSS_STYLE_G = /<style\b[^>]*data-ogygia-region-css="[^"]*"[^>]*>/g;
+const STYLE_IDENTITY = /\bdata-ogygia-region-css="([^"]*)"/;
 const RELATIVE_START = /^\.{1,2}\//;
 const AMP_ENTITY_G = /&amp;/g;
 const AMP_G = /&/g;
@@ -47,5 +50,11 @@ export function absolutize_hole_html(html: string, base: URL): string {
 		)
 		.replace(REGION_CSS_LINK_G, (tag) =>
 			tag.replace(LINK_HREF, (_m, value: string) => `href="${resolve_attr(value, base)}"`)
+		)
+		.replace(REGION_CSS_STYLE_G, (tag) =>
+			tag.replace(
+				STYLE_IDENTITY,
+				(_m, value: string) => `data-ogygia-region-css="${resolve_attr(value, base)}"`
+			)
 		);
 }

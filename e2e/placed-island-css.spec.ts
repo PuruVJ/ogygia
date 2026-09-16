@@ -18,6 +18,9 @@ const REGION_OPEN_RE = /<ogygia-region\b/;
 /** The whole hoisted `<link data-ogygia-region-css …>` tag (the shared RE is the attribute alone). */
 const REGION_CSS_LINK_TAG_RE = /<link\b[^>]*data-ogygia-region-css[^>]*>/;
 const CSS_HREF_RE = /href="[^"]+\.css"/;
+/** The inlined shape (playground threshold): `<style data-ogygia-region-css="….css">`. */
+const REGION_CSS_STYLE_TAG_RE = /<style data-ogygia-region-css="[^"]*">/;
+const CSS_IDENTITY_RE = /data-ogygia-region-css="[^"]+\.css"/;
 
 test.describe('REGRESSION: placed client island ships its own CSS (chunk-split :global)', () => {
 	// ---------------------------------------------------------------- fetch/SSR --
@@ -29,13 +32,16 @@ test.describe('REGRESSION: placed client island ships its own CSS (chunk-split :
 		check('/placed-island-css returns 200', res.status === 200);
 		check('/placed-island-css ships NO Kit bootstrap (csr=false)', !KIT_MARKER_RE.test(html));
 		check('/placed-island-css SSR has the placed island region', REGION_OPEN_RE.test(html));
-		// THE FIX: the placed island's own CSS ships as a hoisted region-css link → a real `.css` in a
-		// production build. Absent before the fix (region_css_html only fired for held duals).
+		// THE FIX: the placed island's own CSS ships on the region-css channel → a real `.css` in a
+		// production build. Absent before the fix (region_css_html only fired for held duals). Two
+		// shapes, one channel: a `<link>`, or — under the playground's `kit.inlineStyleThreshold` — a
+		// `<style>` keyed by the asset's href.
 		const link = html.match(REGION_CSS_LINK_TAG_RE)?.[0] || '';
+		const inlined = html.match(REGION_CSS_STYLE_TAG_RE)?.[0] || '';
 		check(
-			'placed island emits its own CSS as <link data-ogygia-region-css>',
-			REGION_CSS_LINK_RE.test(link) && CSS_HREF_RE.test(link),
-			link || 'no region-css link in SSR'
+			'placed island emits its own CSS on the region-css channel (linked or inlined)',
+			(REGION_CSS_LINK_RE.test(link) && CSS_HREF_RE.test(link)) || CSS_IDENTITY_RE.test(inlined),
+			link || inlined || 'no region-css link or inline style in SSR'
 		);
 	});
 

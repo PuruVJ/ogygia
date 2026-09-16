@@ -40,6 +40,10 @@ declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
 	 *  region response so a server-picked component styles a page that never imported it. */
 	export function islandCss(entry: string): string[];
+	/** INLINE REGION CSS: the text of a region CSS asset (an `islandCss()` / `contentCss()` href)
+	 *  the build kept under Kit's `inlineStyleThreshold`, so the render emits it as a `<style>`
+	 *  instead of a blocking `<link>`. `null` = link it (over the threshold, no threshold, dev). */
+	export function islandCssInline(href: string): string | null;
 	/** Does this island entry's client code read `$page` (the `$app/state` / `$app/stores` shim is
 	 *  in its chunk closure)? Decides whether the page seed ships. Fail-open: true in dev and for an
 	 *  entry the build handoff does not know. */

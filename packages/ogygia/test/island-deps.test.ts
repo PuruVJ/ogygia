@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
 	collectIslandDepModulepreloads,
+	collect_inline_css,
 	islandDepsHandoffPath,
 	island_deps_module,
 	kit_remote_hash,
@@ -377,6 +378,56 @@ describe('remotes map', () => {
 			expect(src).toContain('export function islandRemotes(entry)');
 			expect(src).toContain('return Array.isArray(v) ? v : null');
 		});
+	});
+});
+
+// INLINE REGION CSS: the text of region sheets under Kit's `inlineStyleThreshold`, keyed by href.
+describe('collect_inline_css', () => {
+	const bundle = {
+		'_app/immutable/assets/Tiny.abc.css': { type: 'asset', fileName: '_app/immutable/assets/Tiny.abc.css', source: '.t{color:red}' },
+		'_app/immutable/assets/Big.def.css': { type: 'asset', fileName: '_app/immutable/assets/Big.def.css', source: '.b{' + 'x'.repeat(600) + '}' },
+		'_app/immutable/assets/Bytes.ghi.css': { type: 'asset', fileName: '_app/immutable/assets/Bytes.ghi.css', source: new TextEncoder().encode('.u{content:"é"}') },
+		'_app/immutable/assets/Closes.jkl.css': { type: 'asset', fileName: '_app/immutable/assets/Closes.jkl.css', source: '.c{content:"</style>"}' },
+		'_app/immutable/og-region.aaaaaaaaaaaa.js': { type: 'chunk', fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js' }
+	};
+	const hrefs = [
+		'/_app/immutable/assets/Tiny.abc.css',
+		'/_app/immutable/assets/Big.def.css',
+		'/_app/immutable/assets/Bytes.ghi.css',
+		'/_app/immutable/assets/Closes.jkl.css',
+		'/_app/immutable/assets/Missing.css',
+		'/_app/immutable/og-region.aaaaaaaaaaaa.js'
+	];
+
+	test('keeps the text of sheets under the threshold, keyed by their public href', () => {
+		const out = collect_inline_css(bundle, hrefs, 400);
+		expect(out).toEqual({
+			'/_app/immutable/assets/Tiny.abc.css': '.t{color:red}',
+			'/_app/immutable/assets/Bytes.ghi.css': '.u{content:"é"}'
+		});
+	});
+
+	test('over the threshold, not an asset, missing, or able to close its own <style>: linked, not inlined', () => {
+		const out = collect_inline_css(bundle, hrefs, 400);
+		expect(out).not.toHaveProperty('/_app/immutable/assets/Big.def.css');
+		expect(out).not.toHaveProperty('/_app/immutable/og-region.aaaaaaaaaaaa.js');
+		expect(out).not.toHaveProperty('/_app/immutable/assets/Missing.css');
+		expect(out).not.toHaveProperty('/_app/immutable/assets/Closes.jkl.css');
+	});
+
+	test('the threshold is Kit’s unit (String.length, strictly smaller), and 0 / absent means never inline', () => {
+		// '.u{content:"é"}' is 15 code units (16 bytes — bytes are NOT the unit)
+		expect(collect_inline_css(bundle, hrefs, 15)).not.toHaveProperty('/_app/immutable/assets/Bytes.ghi.css');
+		expect(collect_inline_css(bundle, hrefs, 16)).toHaveProperty('/_app/immutable/assets/Bytes.ghi.css');
+		expect(collect_inline_css(bundle, hrefs, 0)).toEqual({});
+		expect(collect_inline_css(bundle, hrefs, Number.NaN)).toEqual({});
+	});
+
+	test('the virtual module exposes islandCssInline on every leg (null where nothing is kept)', () => {
+		for (const src of [island_deps_module(false, false), island_deps_module(true, true), island_deps_module(true, false)]) {
+			expect(src).toContain('export function islandCssInline(');
+		}
+		expect(island_deps_module(true, false)).toContain("all.css_inline");
 	});
 });
 

@@ -14,14 +14,19 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { set_kit_dirs, type KitDirs, DEFAULT_KIT_DIRS } from '../compiler/kit.js';
+import {
+	set_kit_dirs,
+	set_kit_inline_style_threshold,
+	type KitDirs,
+	DEFAULT_KIT_DIRS
+} from '../compiler/kit.js';
 
 const CONFIG_FILES = ['svelte.config.js', 'svelte.config.mjs'];
 
 /** Resolve `{ routes_dir, out_dir }` for `root` from its svelte config (defaults when absent or
  *  unreadable) and cache it for the compiler. */
 export async function load_kit_dirs(root: string): Promise<KitDirs> {
-	let kit: { files?: { routes?: string }; outDir?: string } = {};
+	let kit: { files?: { routes?: string }; outDir?: string; inlineStyleThreshold?: number } = {};
 	const file = CONFIG_FILES.map((f) => path.join(root, f)).find((f) => existsSync(f));
 	if (file) {
 		try {
@@ -38,5 +43,11 @@ export async function load_kit_dirs(root: string): Promise<KitDirs> {
 		out_dir: path.resolve(root, kit.outDir ?? DEFAULT_KIT_DIRS.out)
 	};
 	set_kit_dirs(root, dirs);
+	// `kit.inlineStyleThreshold` — the same number governs ogygia's region CSS (compiler/kit.ts).
+	const threshold = kit.inlineStyleThreshold;
+	set_kit_inline_style_threshold(
+		root,
+		typeof threshold === 'number' && Number.isFinite(threshold) && threshold > 0 ? threshold : 0
+	);
 	return dirs;
 }

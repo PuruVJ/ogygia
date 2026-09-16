@@ -1,8 +1,21 @@
 // Test stub for `virtual:ogygia/island-deps` (real one is minted by the Vite plugin): the three
 // per-entry lookups Region.svelte reads while it emits preload/CSS hints — empty in unit tests.
 export const islandDeps = (_entry: string): string[] => [];
-export const islandCss = (_entry: string): string[] => [];
+// `islandCss(entry)` — the build's per-entry CSS hrefs. A test sets them with `set_island_css(...)`.
+let island_css: Record<string, string[]> = {};
+export const islandCss = (entry: string): string[] => island_css[entry] ?? [];
+export function set_island_css(map: Record<string, string[]>) {
+	island_css = map;
+}
 export const contentCss = (_id: string): string[] => [];
+// `islandCssInline(href)` — the text of a region CSS asset the build kept under Kit's
+// `inlineStyleThreshold` (null = link it). A test sets the map with `set_inline_css(...)`.
+let inline_css: Record<string, string> = {};
+export const islandCssInline = (href: string): string | null =>
+	typeof inline_css[href] === 'string' ? inline_css[href] : null;
+export function set_inline_css(map: Record<string, string>) {
+	inline_css = map;
+}
 // `ogygia({ regions: { preload } })` — the plugin default. A LIVE binding: a test flips it with
 // `set_preload_policy(...)` and Region.svelte (which imports this same aliased module) reads the
 // new value on its next render.

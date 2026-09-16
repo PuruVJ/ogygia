@@ -82,6 +82,22 @@ export function kit_dirs(root: string): KitDirs {
 	);
 }
 
+// Kit's `kit.inlineStyleThreshold` — the ONE number for inline-vs-link CSS. Kit inlines its own
+// route sheets under it as `<style>`; ogygia's region-CSS channel (an island's, a held dual's, a
+// content body's sheets, linked per rendered region) obeys the same number: the build keeps the
+// text of every region CSS asset under the threshold in the island-deps handoff, and the render
+// emits `<style data-ogygia-region-css="href">` instead of a blocking `<link>`. Read from the
+// app's svelte.config.js by the Vite plugin next to `kit_dirs`; `0` (Kit's default) = never inline.
+const _kit_inline_style_threshold = new Map<string, number>();
+
+export function set_kit_inline_style_threshold(root: string, bytes: number): void {
+	_kit_inline_style_threshold.set(root, bytes);
+}
+
+export function kit_inline_style_threshold(root: string): number {
+	return _kit_inline_style_threshold.get(root) ?? 0;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // csr detection.
 //

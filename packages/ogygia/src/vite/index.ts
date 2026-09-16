@@ -56,7 +56,8 @@ import {
 	resolve_kit_paths,
 	is_route_option_file,
 	strip_freeze_export,
-	kit_dirs
+	kit_dirs,
+	kit_inline_style_threshold
 } from '../compiler/kit.js';
 import { load_kit_dirs } from './kit-dirs.js';
 import { debarrel } from '../compiler/debarrel/plugin.js';
@@ -77,7 +78,11 @@ import {
 } from '../compiler/dev/hmr.js';
 import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
 import { island_subgraph_bytes } from '../compiler/dev/region-bytes.js';
-import { collectIslandDepModulepreloads, remote_hash_of } from '../compiler/link/island-deps.js';
+import {
+	collectIslandDepModulepreloads,
+	collect_inline_css,
+	remote_hash_of
+} from '../compiler/link/island-deps.js';
 import { report_seed_shaping } from '../compiler/link/build-output.js';
 import { follow_pending_page_calls } from '../compiler/link/page-keys.js';
 import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.js';
@@ -1249,9 +1254,18 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					}
 				}
 
+				// INLINE REGION CSS: the text of every region sheet under Kit's `inlineStyleThreshold`
+				// (the app's svelte.config.js, read next to `kit_dirs`), keyed by href — the render emits
+				// those as `<style data-ogygia-region-css>` instead of blocking `<link>`s.
+				const css_inline = collect_inline_css(
+					bundle as Record<string, { type: string; fileName?: string; source?: string | Uint8Array }>,
+					[...Object.values(map.css).flat(), ...Object.values(content_css).flat()],
+					kit_inline_style_threshold(root)
+				);
 				const json = JSON.stringify({
 					...map,
 					content_css,
+					css_inline,
 					fn_manifest: Object.fromEntries(compiler.dollar_hoists)
 				});
 				emit_island_deps_handoff(root, json, kit_dirs(root).out_dir);

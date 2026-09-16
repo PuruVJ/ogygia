@@ -24,6 +24,7 @@ import { test, check, sleep } from './fixtures/index.ts';
 import { KIT_MARKER_RE } from './fixtures/re.ts';
 
 const STYLESHEET_LINK_G = /<link\b[^>]*rel="stylesheet"[^>]*>/g;
+const INLINE_REGION_STYLE_G = /<style data-ogygia-region-css="[^"]*">([^<]*)<\/style>/g;
 const MODULEPRELOAD_LINK_G = /<link\b[^>]*rel="modulepreload"[^>]*>/g;
 const HREF_RE = /href="([^"]+)"/;
 const STAMP_G = /<meta name="ogygia-kit-island" content="([^"]+)">/g;
@@ -66,6 +67,9 @@ test.describe('HEAD BUDGET (csr=true): a Kit page links only what it renders, Ki
 			const r = await fetch(new URL(href, baseURL).href);
 			css += (await r.text()) + '\n';
 		}
+		// The region-css channel's other shape: a rendered island's sheet under the playground's
+		// `kit.inlineStyleThreshold` is a `<style data-ogygia-region-css>` in the head, not a link.
+		for (const m of html.matchAll(INLINE_REGION_STYLE_G)) css += m[1] + '\n';
 		const has = (tok: string) => new RegExp(`${tok}(?![a-z])`).test(css);
 		for (const tok of RENDERED)
 			check(`rendered island CSS is linked (${tok})`, has(tok), `sheets: ${sheets.join(', ')}`);

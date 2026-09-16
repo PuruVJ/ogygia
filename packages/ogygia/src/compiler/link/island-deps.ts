@@ -240,6 +240,48 @@ export function islandDepsHandoffPath(out_dir: string) {
  * `out_dir_rel` — Kit's `outDir` relative to the app root (`.svelte-kit` by default) — is the cwd
  * fallback for adapter-node / preview run from the app root.
  */
+/** A CSS text that would close its own `<style>` cannot be inlined — link it instead. */
+const STYLE_CLOSE_RE = /<\/style/i;
+
+/**
+ * INLINE REGION CSS. For every region CSS asset (`hrefs`: the union of the handoff's `css` and
+ * `content_css` lists) whose bytes are under `threshold` — Kit's `inlineStyleThreshold`, the same
+ * number Kit inlines its own route sheets under — keep the asset's text, keyed by its public href.
+ * The render then emits `<style data-ogygia-region-css="href">` in place of a blocking `<link>`:
+ * a page carrying twenty-five small island sheets (42 KB on a measured home page, twenty of them
+ * under 3 KB) stops paying twenty-five requests before first paint. `0` = keep nothing (Kit's
+ * default: never inline). Above the threshold, or not an emitted asset, → not in the map → linked.
+ *
+ * @internal Exported for unit tests.
+ */
+export function collect_inline_css(
+	bundle: Record<string, { type: string; fileName?: string; source?: string | Uint8Array }>,
+	hrefs: Iterable<string>,
+	threshold: number
+): Record<string, string> {
+	const out: Record<string, string> = {};
+	if (!(threshold > 0)) return out;
+	const by_href = new Map<string, { type: string; source?: string | Uint8Array }>();
+	for (const key in bundle) {
+		const item = bundle[key];
+		if (item.type !== 'asset') continue;
+		const file = item.fileName || key;
+		by_href.set(file.startsWith('/') ? file : '/' + file, item);
+	}
+	for (const href of hrefs) {
+		if (href in out) continue;
+		const asset = by_href.get(href);
+		if (!asset || asset.source == null) continue;
+		const text =
+			typeof asset.source === 'string' ? asset.source : new TextDecoder().decode(asset.source);
+		// Kit's unit: UTF-16 code units (`String.length`), "smaller than this value" — same rule.
+		if (text.length >= threshold) continue;
+		if (STYLE_CLOSE_RE.test(text)) continue;
+		out[href] = text;
+	}
+	return out;
+}
+
 export function island_deps_module(
 	ssr: boolean,
 	is_dev: boolean,
@@ -251,7 +293,7 @@ export function island_deps_module(
 	// 'none' hints nothing.
 	const policy = `export const preloadPolicy = ${JSON.stringify(preload_policy)};\n`;
 	if (!ssr)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -261,7 +303,7 @@ export function island_deps_module(
 	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
 	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
 	return (
 		policy +
 		`import fs from 'node:fs';\n` +
@@ -316,6 +358,16 @@ export function island_deps_module(
 		`}\n` +
 		`export function islandCss(entry) {\n` +
 		`  return entry ? pick('css', entry) : [];\n` +
+		`}\n` +
+		// INLINE REGION CSS: the text of a region CSS asset the build kept under Kit's
+		// `inlineStyleThreshold` (collect_inline_css), keyed by the same public href `islandCss`
+		// hands out. `null` = link it (over the threshold, no threshold, or a pre-inline handoff).
+		`export function islandCssInline(href) {\n` +
+		`  const all = load();\n` +
+		`  const map = all && typeof all.css_inline === 'object' && all.css_inline ? all.css_inline : null;\n` +
+		`  if (!map || !href) return null;\n` +
+		`  const v = map[href];\n` +
+		`  return typeof v === 'string' ? v : null;\n` +
 		`}\n` +
 		`export function contentCss(id) {\n` +
 		`  return id ? pick('content_css', id) : [];\n` +

@@ -17,6 +17,8 @@ const SCOPED_PROBE_RE = /cssprobe svelte-[a-z0-9]+/;
 const REGION_CSS_THEN_CONTENT_RE = /<link\b[^>]*data-ogygia-region-css[^>]*og-content[^>]*>/;
 const CONTENT_THEN_REGION_CSS_RE = /<link\b[^>]*og-content[^>]*data-ogygia-region-css[^>]*>/;
 const CONTENT_CSS_HREF_RE = /href="[^"]+og-content[^"]+\.css"/;
+/** The inlined shape: `<style data-ogygia-region-css="…og-content….css">` (playground threshold). */
+const CONTENT_CSS_INLINE_RE = /<style data-ogygia-region-css="[^"]*og-content[^"]*\.css">/;
 
 test.describe('REGRESSION: content body (.svx) ships + applies its own scoped CSS (server-only corpus)', () => {
 	// ---------------------------------------------------------------- fetch/SSR --
@@ -29,16 +31,19 @@ test.describe('REGRESSION: content body (.svx) ships + applies its own scoped CS
 		check('/content-css SSR renders the content body', CONTENT_CSS_PROBE_RE.test(html));
 		// The body's own scoped class is present (svelte-compiled), proving the corpus rendered server-side.
 		check('content body is scoped (svelte-<hash>)', SCOPED_PROBE_RE.test(html));
-		// THE FIX: the body's own scoped CSS ships as a hoisted region-css link → a real `og-content.*.css`
-		// asset. Absent before the fix (the corpus CSS never left the server bundle).
+		// THE FIX: the body's own scoped CSS ships on the region-css channel → a real `og-content.*.css`
+		// asset. Absent before the fix (the corpus CSS never left the server bundle). Two shapes, one
+		// channel: a `<link>`, or — under the playground's `kit.inlineStyleThreshold` — a `<style>`
+		// keyed by that asset's href (the identity is the href either way).
 		const link =
 			html.match(REGION_CSS_THEN_CONTENT_RE)?.[0] ||
 			html.match(CONTENT_THEN_REGION_CSS_RE)?.[0] ||
 			'';
+		const inlined = html.match(CONTENT_CSS_INLINE_RE)?.[0] || '';
 		check(
-			'content body emits its own CSS as <link data-ogygia-region-css> (og-content.*.css)',
-			REGION_CSS_LINK_RE.test(link) && CONTENT_CSS_HREF_RE.test(link),
-			link || 'no content-css link in SSR'
+			'content body emits its own CSS on the region-css channel (og-content.*.css, linked or inlined)',
+			(REGION_CSS_LINK_RE.test(link) && CONTENT_CSS_HREF_RE.test(link)) || !!inlined,
+			link || inlined || 'no content-css link or inline style in SSR'
 		);
 	});
 

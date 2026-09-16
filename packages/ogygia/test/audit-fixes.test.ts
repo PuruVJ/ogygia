@@ -258,6 +258,17 @@ describe('audit fixes — head_node_key', () => {
 		expect(head_node_key(fouc)).toBe('STYLE:data-sveltekit');
 		expect(keep_head_node_across_spa(fouc)).toBe(false);
 
+		// An INLINED region sheet (under Kit's inlineStyleThreshold) is keyed by the href it stands
+		// for — the same sheet on the next document is one node, never stacked by content length.
+		const inlined = {
+			tagName: 'STYLE',
+			getAttribute: (n: string) => (n === 'data-ogygia-region-css' ? '/_app/immutable/assets/Tiny.css' : null),
+			hasAttribute: (n: string) => n === 'data-ogygia-region-css',
+			textContent: '.a{color:red}',
+			outerHTML: '<style data-ogygia-region-css="/_app/immutable/assets/Tiny.css">.a{color:red}</style>'
+		} as unknown as Element;
+		expect(head_node_key(inlined)).toBe('STYLE:og-css:/_app/immutable/assets/Tiny.css');
+
 		const vite = {
 			tagName: 'STYLE',
 			getAttribute: (n: string) => (n === 'data-vite-dev-id' ? '/src/app.css' : null),

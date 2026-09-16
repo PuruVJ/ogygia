@@ -179,6 +179,10 @@ export function head_node_key(node: Element): string {
 			// Kit's FOUC bag is one per document — key by role so SPA swaps replace it
 			// instead of stacking length-prefixed duplicates or keeping a stale bag.
 			if (node.hasAttribute('data-sveltekit')) return 'STYLE:data-sveltekit';
+			// An INLINED region sheet (server/region-css.ts): keyed by the href it stands for, so
+			// the same sheet on the next document is one node, kept, never stacked.
+			const region_css = node.getAttribute('data-ogygia-region-css');
+			if (region_css) return `STYLE:og-css:${region_css}`;
 			const vite_id = node.getAttribute('data-vite-dev-id');
 			if (vite_id) return `STYLE:vite:${vite_id}`;
 			const text = node.textContent || '';
@@ -219,13 +223,17 @@ export function keep_head_node_across_spa(node: Element): boolean {
  * often fails to register the sheet; recreate with textContent instead.
  * @internal
  */
-export function install_head_style(source: Element, head: HTMLHeadElement = document.head) {
+export function install_head_style(
+	source: Element,
+	head: HTMLHeadElement = document.head,
+	before: Node | null = null
+) {
 	const el = document.createElement('style');
 	for (const attr of Array.from(source.attributes)) {
 		el.setAttribute(attr.name, attr.value);
 	}
 	el.textContent = source.textContent || '';
-	head.appendChild(el);
+	head.insertBefore(el, before);
 	return el;
 }
 
@@ -846,6 +854,15 @@ function merge_head(new_head: HTMLHeadElement) {
 		node.remove();
 	}
 	// add / replace nodes (skip dangerous head policy tags)
+	// A `<style>` the next document carries goes at the TOP of <head>, in document order — exactly
+	// where `preload_stylesheets` puts an SPA `<link>`, and for the same reason: an island's
+	// `<svelte:head>` hydration on the new page reclaims a TRAILING head-node range, so a sheet
+	// appended at the end goes with it. Kit inlines a route's small sheets as `<style>` under
+	// `kit.inlineStyleThreshold`, and ogygia inlines small region sheets the same way; one such
+	// destination page lost its `ogygia-region{display:block}` and the layout collapsed
+	// (e2e/context, "Context after SPA navigation"). `anchor` is the head's first child BEFORE this
+	// merge, so the new sheets land above everything old and keep their own order.
+	const anchor = current.firstChild;
 	for (const node of Array.from(new_head.children)) {
 		if (is_dangerous_head_node(node)) continue;
 		const key = head_node_key(node);
@@ -853,12 +870,12 @@ function merge_head(new_head: HTMLHeadElement) {
 		// Kit FOUC bag: always refresh content (same key every page, different CSS).
 		if (key === 'STYLE:data-sveltekit') {
 			existing?.remove();
-			install_head_style(node);
+			install_head_style(node, current, anchor);
 			continue;
 		}
 		if (existing) continue;
 		if (node.tagName === 'STYLE') {
-			install_head_style(node);
+			install_head_style(node, current, anchor);
 		} else {
 			current.appendChild(node.cloneNode(true));
 		}

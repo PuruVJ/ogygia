@@ -122,6 +122,7 @@ import {
 } from './page-seed-registry.js';
 import { collect_remote_seed } from './server/remote-seed-gate.js';
 import { DocumentTail, set_tail_reader } from './server/document-tail.js';
+import { region_css_tag } from './server/region-css.js';
 import { set_late_recorder, set_late_taker, type LateRegion } from './late-region-registry.js';
 import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
 import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './devtools/schema.js';
@@ -428,7 +429,8 @@ function region_css_links(id: string): string {
 	let out = '';
 	for (const href of islandCss(url)) {
 		// `asset()` supplies base/assets — islandCss hrefs are baked base-less (see Region.svelte).
-		out += `<link rel="stylesheet" href="${asset(href)}" data-ogygia-region-css>`;
+		// Inline under Kit's `inlineStyleThreshold`, a link otherwise (server/region-css.ts).
+		out += region_css_tag(href, asset(href));
 	}
 	return out;
 }

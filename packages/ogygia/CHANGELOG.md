@@ -48,8 +48,40 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   its key after hydration, and the control island that hands `page.data` to a helper ships
   everything; `e2e/seed-refs` proves props references survive shaping.
 
+### Added
+
+- **Region CSS obeys Kit's `inlineStyleThreshold`: small region sheets ship inline, not as
+  render-blocking links.** A region's CSS travels with the region — an island's, a held dual's, a
+  content body's, a hole answer's sheets are linked per rendered region (`data-ogygia-region-css`)
+  — and every one of them was a `<link>` before first paint: a measured CMS home page carried
+  twenty-five of them, 42 KB in all, twenty under 3 KB, each a request on the critical path. Kit
+  already has the one number for this (`kit.inlineStyleThreshold` inlines its own route sheets
+  under it as `<style>`); ogygia now reads the same number from the app's svelte.config.js, keeps
+  the text of every region sheet under it in the island-deps handoff at build, and the render emits
+  `<style data-ogygia-region-css="href">` for those and the `<link>` it always did for the rest
+  (Kit's unit and rule: a sheet whose `String.length` is smaller than the threshold).
+  Same channel, same identity (the href), two shapes: the runtime hoists an inlined sheet from a
+  hole answer into `<head>` and dedupes it against links and styles the page already has, the
+  router keys it on the href across swaps (and installs every merged `<style>` at the top of
+  `<head>`, see Fixed), and a hole answer's relative identity is absolutized like a link's. The default (`0`, Kit's) changes nothing; a sheet whose text could close its own
+  `<style>` is always linked. Trade: an inlined sheet is not cached across pages (about 7 KB
+  compressed on that home page) against a request per sheet before first paint. Known duplicate: a
+  sheet Kit links from the route graph AND ogygia links for a rendered island used to dedupe by
+  href; inlined, both carry the text (a few hundred bytes, rare layout islands).
+  `e2e/inline-css`, `test/region-css-inline`, `test/browser/region-css-inline`,
+  `test/island-deps` (`collect_inline_css`).
+
 ### Fixed
 
+- **The router keeps a destination page's inline `<style>` sheets across an SPA navigation.** The
+  head merge appended a `<style>` the next document carried at the END of `<head>`, where an
+  island's `<svelte:head>` hydration on the new page reclaims a trailing node range — so a sheet
+  Kit had inlined under `kit.inlineStyleThreshold` (its small route CSS) vanished right after the
+  swap: one page lost its `ogygia-region{display:block}` and its layout collapsed, an island's
+  button under another. SPA `<link>` sheets were already inserted at the top for exactly this
+  reason; every merged `<style>` now goes there too, in document order (the region sheets ogygia
+  inlines ride the same path). Found by the playground adopting the threshold; `e2e/context`
+  ("Context after SPA navigation") is the regression.
 - **A deferred hole survives Kit rebuilding a client-on document in the browser.** On a csr=true
   page Kit hydrates the whole document; when a component throws while it does (a tracking SDK's
   patched `fetch` threw inside a customer's header under a content blocker), Svelte logs `Failed to
