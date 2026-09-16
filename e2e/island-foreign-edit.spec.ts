@@ -27,7 +27,7 @@ test('edited-while-asleep islands: first click counts, scroll wakes clean, nothi
 	check('the foreign edit happened (whitespace nodes removed from the sleeping islands)', Number(await tap.getAttribute('data-foreign-edited')) > 0 && Number(await scroll.getAttribute('data-foreign-edited')) > 0);
 	check('interaction island still asleep', (await tap.getAttribute('data-hydrated')) === null);
 
-	const btn = page.locator('[data-interaction-island] [data-counter] button');
+	const btn = page.locator('[data-interaction-island] [data-spaced-counter] button');
 	await btn.click();
 	await page.waitForSelector('[data-interaction-island] ogygia-region[data-hydrated]', { timeout: 10_000 });
 	await sleep(300);
@@ -39,7 +39,7 @@ test('edited-while-asleep islands: first click counts, scroll wakes clean, nothi
 
 	await page.locator('[data-visible-island]').scrollIntoViewIfNeeded();
 	await page.waitForSelector('[data-visible-island] ogygia-region[data-hydrated]', { timeout: 10_000 });
-	const vbtn = page.locator('[data-visible-island] [data-counter] button');
+	const vbtn = page.locator('[data-visible-island] [data-spaced-counter] button');
 	check('visible island kept its SSR count (7)', (await vbtn.textContent())!.includes('count is 7'));
 	check('visible island healed too', (await scroll.getAttribute('data-og-healed')) !== null);
 	await vbtn.click();

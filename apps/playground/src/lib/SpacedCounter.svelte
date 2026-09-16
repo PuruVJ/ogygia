@@ -11,7 +11,7 @@
 	let count = $state(start);
 </script>
 
-<div class="island" data-counter>
+<div class="island" data-spaced-counter>
 	<strong>{label}</strong>
 	<span>:</span>
 	<button onclick={() => (count += 1)}>count is {count}</button>
