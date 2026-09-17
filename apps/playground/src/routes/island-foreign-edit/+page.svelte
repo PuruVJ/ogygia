@@ -27,7 +27,9 @@
 				const doomed = [];
 				for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!/\S/.test(n.textContent || '')) doomed.push(n);
 				for (const n of doomed) n.parentNode && n.parentNode.removeChild(n);
-				if (region.firstElementChild) region.insertBefore(document.createComment('foreign-tool'), region.firstElementChild);
+				// the stray comment goes LAST: a leading one would break the walk at its first step,
+				// before it can do the silent damage the counter's shape is there to provoke
+				region.appendChild(document.createComment('foreign-tool'));
 				region.setAttribute('data-foreign-edited', String(Number(region.getAttribute('data-foreign-edited') || 0) + doomed.length));
 				region.setAttribute('data-foreign-connects', String(Number(region.getAttribute('data-foreign-connects') || 0) + 1));
 				// when the tool ran, relative to the ogygia runtime: the e2e checks it ran FIRST

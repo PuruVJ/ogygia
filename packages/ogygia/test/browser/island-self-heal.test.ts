@@ -19,8 +19,12 @@ function foreign_edit(region: Element): number {
 	let removed = 0;
 	const walker = document.createTreeWalker(region, NodeFilter.SHOW_TEXT);
 	const doomed: Node[] = [];
-	for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!/\S/.test(n.textContent || '')) doomed.push(n);
-	for (const n of doomed) { n.parentNode?.removeChild(n); removed++; }
+	for (let n = walker.nextNode(); n; n = walker.nextNode())
+		if (!/\S/.test(n.textContent || '')) doomed.push(n);
+	for (const n of doomed) {
+		n.parentNode?.removeChild(n);
+		removed++;
+	}
 	region.insertBefore(document.createComment('ab-tool'), region.firstElementChild);
 	return removed;
 }
@@ -39,22 +43,57 @@ test('an interaction island edited while asleep hydrates from its server markup 
 	try {
 		bootDev(); // the region connects: keeps its server markup, arms the interaction
 		const removed = foreign_edit(region);
-		expect(removed, 'the fixture has whitespace text nodes to strip (else the test proves nothing)').toBeGreaterThan(0);
+		expect(
+			removed,
+			'the fixture has whitespace text nodes to strip (else the test proves nothing)'
+		).toBeGreaterThan(0);
 		expect(region.hasAttribute('data-hydrated')).toBe(false);
 
 		await userEvent.click(region.querySelector('button')!);
 		await expect.poll(() => region.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
 		expect(region.hasAttribute('data-og-healed'), 'hydrated from the server markup').toBe(true);
 		expect(region.hasAttribute('data-og-recovered'), 'NOT Svelte’s client re-render').toBe(false);
-		const stray = [...region.childNodes].some((n) => n.nodeType === 8 && (n as Comment).data === 'ab-tool');
+		const stray = [...region.childNodes].some(
+			(n) => n.nodeType === 8 && (n as Comment).data === 'ab-tool'
+		);
 		expect(stray, 'the stray comment is gone with the edit').toBe(false);
+		// The repair ran BEFORE Svelte's walk: no element carries attributes the server copy did not
+		// give it (on an edited sequence the walk writes attributes onto whatever node sits at its
+		// cursor before it fails — a customer's login trigger attributes landed on its dropdown).
+		const holder = document.createElement('template');
+		holder.innerHTML = decode('counter_ssr_b64');
+		const attrs = (root: ParentNode) =>
+			[...root.querySelectorAll('*')].map(
+				(e) =>
+					e.tagName +
+					'[' +
+					[...e.attributes]
+						.map((a) => a.name + '=' + a.value)
+						.sort()
+						.join(' ') +
+					']'
+			);
+		expect(attrs(region), 'every element keeps exactly its server attributes').toEqual(
+			attrs(holder.content.querySelector('ogygia-region')!)
+		);
 		// the waking click was replayed onto the LIVE button: 3 → 4
-		await expect.poll(() => region.querySelector('[data-testid="count"]')!.textContent, { timeout: 5_000 }).toBe('4');
+		await expect
+			.poll(() => region.querySelector('[data-testid="count"]')!.textContent, { timeout: 5_000 })
+			.toBe('4');
 		await userEvent.click(region.querySelector('button')!);
 		expect(region.querySelector('[data-testid="count"]')!.textContent).toBe('5');
-		expect(warns.some((w) => /edited while it slept/.test(w)), 'dev names the heal').toBe(true);
-		expect(warns.some((w) => /discarded its ENTIRE/.test(w)), 'no recovery warning').toBe(false);
-		expect(warns.some((w) => /^Failed to hydrate/.test(w)), 'Svelte’s own line from the speculative attempt is swallowed').toBe(false);
+		expect(
+			warns.some((w) => /edited while it slept/.test(w)),
+			'dev names the heal'
+		).toBe(true);
+		expect(
+			warns.some((w) => /discarded its ENTIRE/.test(w)),
+			'no recovery warning'
+		).toBe(false);
+		expect(
+			warns.some((w) => /^Failed to hydrate/.test(w)),
+			'Svelte’s own line from the speculative attempt is swallowed'
+		).toBe(false);
 	} finally {
 		console.warn = real_warn;
 	}

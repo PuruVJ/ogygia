@@ -105,6 +105,19 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   itself threw), does Svelte recover the way it always did (`data-og-recovered`, the existing
   warning). The foreign-hydrate contract gains `__og_hydrate(target, props, { recover })` for
   federated islands; an older entry ignores it. An island above 512K characters keeps no copy.
+  The repair runs BEFORE the first hydrate attempt, not after a failed one: the live node
+  sequence (types, tags, text and comment data — never attributes, an upgrading custom element
+  adds its own) is compared with the server copy and put back when it drifted, and only then does
+  Svelte walk it. Svelte's walk does not verify tags: on a shifted sequence it writes attributes
+  onto whatever node sits at its cursor — on the customer page the login trigger's `id`, `class`
+  and `text` landed on the dropdown's wrapper `<div>` (an unstyled dropdown) — and a repair made
+  after that failed walk put the text nodes back and left those attributes where they were. The
+  speculative first attempt and the retry are gone with it: one attempt with recovery off, then
+  Svelte's own recovery. The comparison sees what the walk sees: the island's lakes lifted, and
+  the copy's lakes emptied the same way — a live lake inside a stored page refreshes itself to the
+  visitor before its host wakes, and that content is never the walk's to put back.
+  `e2e/island-foreign-edit` and `test/browser/island-self-heal` assert every element keeps exactly
+  its server attributes after the heal; `e2e/freeze` S13 keeps the self-freshened lake.
   The copy is only the server's if the runtime looks before anyone else edits: module and
   deferred scripts run in document order once parsing ends, and an island page emitted its
   runtime bootstrap into Kit's head slot — AFTER the scripts an app template loads above it. On

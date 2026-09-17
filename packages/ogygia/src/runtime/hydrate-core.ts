@@ -47,13 +47,9 @@ export type IslandModule = {
 	__og_unmount?: (app: unknown) => void;
 };
 
-/** Svelte's hydrate with `recover: false` throws `hydration_failed` on a mismatch: in dev the
- *  message starts with the code, in production it is the bare `https://svelte.dev/e/<code>` URL. */
-const HYDRATION_FAILED_RE = /hydration_failed/;
-
 /** The hydration ENVELOPE: `hydrate()` anchors on a top-level `<!--[-->` comment and then expects
  *  the component's OWN region envelope — but embedded SSR (Region.svelte) emits only the inner
- *  layer. Idempotent: a repair from the server markup drops it, the next attempt puts it back. */
+ *  layer. Idempotent: the second attempt after a failed first one finds it in place. */
 function ensure_envelope(region: Element): void {
 	if (has_envelope(region)) return;
 	region.insertBefore(document.createComment('['), region.firstChild);
@@ -62,14 +58,6 @@ function ensure_envelope(region: Element): void {
 function has_envelope(region: Element): boolean {
 	const first = region.firstChild;
 	return !!first && first.nodeType === 8 && (first as Comment).data === '[';
-}
-/** Take the envelope off again — the server markup the element kept has none, so a comparison
- *  or a repair against it must see the island as the server sent it. */
-function strip_envelope(region: Element): void {
-	if (!has_envelope(region)) return;
-	region.firstChild!.remove();
-	const last = region.lastChild;
-	if (last && last.nodeType === 8 && (last as Comment).data === ']') last.remove();
 }
 
 /**
@@ -89,14 +77,59 @@ function strip_envelope(region: Element): void {
  * plain `innerHTML` swap where the runtime has no morph. Those paths may re-create an element, and
  * a re-created element may react once more; the second attempt tells.
  */
-function repair_markup(region: HTMLElement, ssr_html: string): void {
-	strip_envelope(region);
+function repair_markup(region: HTMLElement, want: Element): void {
+	if (align_to(region, want)) return;
+	const nodes = Array.from(want.childNodes);
+	const morph = slots.morph;
+	if (morph) morph(region, nodes);
+	else region.replaceChildren(...nodes);
+}
+
+/**
+ * Does the live node SEQUENCE differ from the server's? Exactly what Svelte's walk reads: node
+ * types, element tags, text and comment data, recursively — never attributes (a custom element
+ * upgrading adds `tabindex`, `aria-*`, ids; the walk does not care, and neither does this).
+ *
+ * Asked BEFORE the first hydrate attempt, not after a failed one: Svelte's walk does not verify
+ * tags, so on a shifted sequence it writes attributes onto whatever node sits at its cursor —
+ * measured on a customer deploy, the login trigger's `id`/`class`/`text` landed on the dropdown's
+ * wrapper `<div>` — and only throws further down. A repair that came after would put the text
+ * nodes back and leave those attributes on the wrong elements (an unstyled dropdown). Repairing
+ * first, the walk never runs on the edited sequence.
+ */
+function sequence_differs(live: Node, want: Node): boolean {
+	const a = live.childNodes;
+	const b = want.childNodes;
+	if (a.length !== b.length) return true;
+	for (let i = 0; i < a.length; i++) {
+		const x = a[i];
+		const y = b[i];
+		if (x.nodeType !== y.nodeType) return true;
+		if (x.nodeType === 1) {
+			if ((x as Element).tagName !== (y as Element).tagName) return true;
+			if (sequence_differs(x, y)) return true;
+		} else if (x.nodeValue !== y.nodeValue) return true;
+	}
+	return false;
+}
+
+/** Put the island's light DOM back to the server's node sequence when it drifted while the island
+ *  slept. `true` when a repair was made. Called with the island's lakes LIFTED (lakes.ts): a lake's
+ *  content is never part of the walk, and it may legitimately differ from the server copy by now
+ *  (a live lake refreshes itself to the visitor before its host wakes) — so the copy's direct
+ *  lakes are emptied the same way before the comparison, and the repair never touches them. */
+function repair_if_drifted(region: HTMLElement, ssr_html: string): boolean {
 	const holder = document.createElement('template');
 	holder.innerHTML = ssr_html; // inert: nothing upgrades in a template's content
-	if (align_to(region, holder.content)) return;
-	const morph = slots.morph;
-	if (morph) morph(region, Array.from(holder.content.childNodes));
-	else region.innerHTML = ssr_html;
+	// The copy under a region of its own — in the template's inert document, so the element never
+	// upgrades — lifted by the very routine that lifted the live island (what it leaves in a lake,
+	// it leaves in both).
+	const want = holder.content.ownerDocument.createElement('ogygia-region');
+	want.appendChild(holder.content);
+	slots.lakes.lift(want);
+	if (!sequence_differs(region, want)) return false;
+	repair_markup(region, want);
+	return true;
 }
 
 /** Make `live`'s child sequence the server's (`want`), keeping `live`'s elements. `false` when the
@@ -407,7 +440,18 @@ export function hydrate_island(
 		);
 	}
 
+	// THE HYDRATION SOURCE OF TRUTH is the island's server markup, not whatever the live DOM is
+	// now. An island can sleep for a long time (`visible`, `interaction`), and other scripts edit
+	// the page meanwhile — a design-system runtime stripping whitespace text nodes while it
+	// "hydrates" the header around it, an A/B tool, a translator. Svelte's walk then meets a
+	// different node sequence and, left to itself, throws the server DOM away and re-renders the
+	// island client-side: a flash, DSD/foreign content destroyed, and the tap that woke the
+	// island replayed onto a discarded node (a login dropdown needed two clicks). So, BEFORE the
+	// walk runs (see sequence_differs for why before), the live sequence is compared with the
+	// server's and put back when it drifted; the walk then sees the server's sequence. Measured
+	// on what the walk sees: the lakes lifted (repair_if_drifted empties the copy's the same way).
 	let lifted: LiftedLake[] | null = slots.lakes.lift(region);
+	const repaired = ssr_html !== null && region.isConnected && repair_if_drifted(region, ssr_html);
 	try {
 		if (!region.isConnected) return null;
 		// FOREIGN-MUTATION DETECTOR (arm): a successful hydration CLAIMS the server-rendered nodes —
@@ -416,7 +460,7 @@ export function hydrate_island(
 		// post-SSR transform injected into it — declarative shadow DOM, A/B edits) is destroyed.
 		// Remember the SSR element children (post-lake-lift) so the check below can tell a claim
 		// from a recovery. See internal/notes/foreign-dom.md.
-		let ssr_children = Array.from(region.children);
+		const ssr_children = Array.from(region.children);
 
 		// FOREIGN delegation (fragment federation): the entry came from another build/origin and
 		// exports its own `__og_hydrate` — envelope preparation belongs to the svelte that compiled
@@ -494,43 +538,17 @@ export function hydrate_island(
 			}
 		};
 
-		// THE HYDRATION SOURCE OF TRUTH is the island's server markup, not whatever the live DOM is
-		// now. An island can sleep for a long time (`visible`, `interaction`), and other scripts edit
-		// the page meanwhile — a design-system runtime stripping whitespace text nodes while it
-		// "hydrates" the header around it, an A/B tool, a translator. Svelte's walk then meets a
-		// different node sequence and, left to itself, throws the server DOM away and re-renders the
-		// island client-side: a flash, DSD/foreign content destroyed, and the tap that woke the
-		// island replayed onto a discarded node (a login dropdown needed two clicks). So:
-		//   1. hydrate with recovery OFF;
-		//   2. on a mismatch, if the live markup differs from the server markup the element kept at
-		//      connect, put the server markup back and hydrate THAT — it matches by construction;
-		//   3. only if that fails too (or nothing drifted: the component itself threw), let Svelte
-		//      recover the way it always did, and the detector below reports the discard.
+		// The sequence is the server's now (repaired above when it had drifted, see there). So:
+		//   1. hydrate with recovery OFF — it matches by construction, a repaired island is healed;
+		//   2. only if that fails (the component itself threw, or the server copy was not enough),
+		//      let Svelte recover the way it always did, and the detector below reports the discard.
 		let out: IslandHandle;
 		let healed = false;
 		try {
 			out = quietly(() => attempt(false));
-		} catch (first) {
-			const mismatch = first instanceof Error && HYDRATION_FAILED_RE.test(first.message);
-			// Drift is measured on the island as the server sent it — the failed attempt's envelope
-			// comments are not the server's, so they come off before the comparison.
-			if (mismatch && ssr_html !== null) strip_envelope(region);
-			const drifted = mismatch && ssr_html !== null && region.innerHTML !== ssr_html;
-			if (drifted) {
-				repair_markup(region, ssr_html!);
-				// The lakes inside came back with their server children: lift them again (the earlier
-				// lift holds nodes that are no longer in the tree) so the walk sees them as before.
-				lifted = slots.lakes.lift(region);
-				ssr_children = Array.from(region.children);
-				try {
-					out = quietly(() => attempt(false));
-					healed = true;
-				} catch {
-					out = attempt(true);
-				}
-			} else {
-				out = attempt(true);
-			}
+			healed = repaired;
+		} catch {
+			out = attempt(true);
 		}
 		if (healed) {
 			region.setAttribute('data-og-healed', '');

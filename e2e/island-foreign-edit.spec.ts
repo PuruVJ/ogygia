@@ -50,6 +50,22 @@ test('edited-while-asleep islands: first click counts, scroll wakes clean, nothi
 	// The repair goes through the morph: the foreign element inside kept its identity, so its connect
 	// reaction did NOT run again (a re-created node would strip the island a second time).
 	check('the foreign element connected exactly once (kept by the repair, not re-created)', (await tap.getAttribute('data-foreign-connects')) === '1', await tap.getAttribute('data-foreign-connects'));
+	// The repair ran BEFORE Svelte's walk, so no element carries another element's attributes: on
+	// the edited sequence the walk lands one sibling late and writes `data-sep` onto the <u> before
+	// it fails (a customer's login trigger attributes landed on its dropdown wrapper that way).
+	const html = (await res!.text()) ?? '';
+	const stray = await tap.evaluate((region, ssr) => {
+		const fp = region.getAttribute('data-og-fp') || '';
+		const m = new RegExp('<ogygia-region[^>]*data-og-fp="' + fp + '"[^>]*>([\\s\\S]*?)</ogygia-region>').exec(ssr);
+		const holder = document.createElement('template');
+		holder.innerHTML = m ? m[1] : '';
+		const attrs = (root: ParentNode) => [...root.querySelectorAll('*')].map((e) => e.tagName + '[' + [...e.attributes].map((a) => a.name + '=' + a.value).sort().join(' ') + ']');
+		const want = attrs(holder.content);
+		const live = attrs(region);
+		return live.length === want.length && live.every((x, i) => x === want[i]) ? '' : 'live: ' + live.join(' ') + ' | server: ' + want.join(' ');
+	}, html);
+	check('every element keeps exactly its server attributes (no attribute written on the wrong element)', stray === '', stray);
+	check('only the <i> carries data-sep', (await tap.locator('[data-sep]').count()) === 1 && (await tap.locator('i[data-sep=":"]').count()) === 1);
 	await btn.click();
 	check('still interactive (4 → 5)', (await btn.textContent())!.includes('count is 5'));
 
