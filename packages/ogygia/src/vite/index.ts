@@ -1139,6 +1139,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (is_dev && vite_server && compiler.server_manifest_stale()) {
 					invalidate_module_id(vite_server, RESOLVED(V_SERVER_MANIFEST));
 				}
+				// DEV: an island this transform registered (a file added while the server runs) pulled
+				// modules into the island world that the server may already hold transformed for a
+				// non-island importer — with Kit's real `$app/*`, which never boots on a csr=false page.
+				// Drop those transforms so the next load re-resolves them to the shim (driver:
+				// mark_island_closure).
+				if (is_dev && vite_server) {
+					for (const marked of compiler.drain_closure_marks()) invalidate_module_id(vite_server, marked);
+				}
 				if (result) return result as { code: string; map: Rolldown.SourceMapInput | null };
 				// The driver saw nothing to do, but the edge rewrite above must still ship.
 				return source === code ? null : { code: source, map: null };

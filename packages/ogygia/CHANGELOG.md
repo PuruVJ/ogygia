@@ -73,6 +73,23 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **A script module an island reaches through an app alias gets the island's page, not Kit's.**
+  One file, two worlds: a `.ts` helper reading `page.data` through `$app/state`, imported by a
+  csr=true page (Kit's real page) and by an island on a csr=false page (the seeded shim). The client
+  build compiles it once and resolves its `$app/state` once; island-world membership decides which.
+  Two gaps let it fall to bundler order: the eager island-closure walk (the split-brain fix) stopped
+  at app aliases (`kit.alias` / `resolve.alias` — `$lib_x/utils/boot` on a customer app), and the
+  transform-time `$app/*` → shim rewrite applied to `.svelte` files only — Vite's alias plugin
+  resolves `$app/state` before this plugin's resolver ever sees it, so a script module in the island
+  graph kept Kit's real client page, never booted under csr=false. On the customer's dev server the
+  account page (Kit) claimed the shared boot helper first, and every public-page island then read
+  `page.data.user` as empty (no name, no menu, no band). The walk now follows aliases, the rewrite
+  covers every module in the island graph, and in dev an island registered by a later transform (a
+  file added while the server runs) marks its closure and drops the cached transforms it reaches.
+  The shim reads Kit's real page on a Kit-booted document (the kit-page thread), so the Kit-page
+  copy is unchanged. `test/island-closure-alias` (prescan + client transform on a temp app),
+  playground `shared-page-module` + `$boot` alias, `e2e/shared-page-module` (build leg, and a dev
+  leg that loads the Kit page first).
 - **A forwarded snippet whose body opens with `{@const}` builds.** A `{#snippet}` handed into an
   island crosses as its own entry, and the compiler wrote the body at that entry's template root.
   `{@const}` is legal directly under `{#snippet}` and illegal at a template root, so a snippet

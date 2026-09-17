@@ -31,7 +31,12 @@ import {
 } from './kit.js';
 import { run_module_macros } from './macros/pipeline.js';
 import { generateRuntimeEntrySource, resolveFeatures } from './link/runtime-entry.js';
-import { resolveFoucImportSpec, FOUC_CSS_PREFIX, FOUC_SCOPED_PREFIX } from './fouc-css.js';
+import {
+	resolveFoucImportSpec,
+	FOUC_CSS_PREFIX,
+	FOUC_SCOPED_PREFIX,
+	type FoucAlias
+} from './fouc-css.js';
 import {
 	moduleHasTransportable,
 	svelteModuleHasTransportable,
@@ -151,6 +156,8 @@ const OG_PRESET_QUERY_RE = /[?&]og_preset=([\w-]+)/;
  *  regex — `walk_dep` resets `lastIndex` before each scan). */
 const IMPORT_SPEC_G =
 	/\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\bimport\s*\(\s*['"]([^'"\n]+)['"]/g;
+/** The extensions an extension-less island import may resolve to (bare, then index files). */
+const ISLAND_DEP_EXTS = ['', '.svelte', '.ts', '.js', '.svelte.ts', '.svelte.js', '.mjs'];
 
 // Import/export-from specifier extraction for the router-css closure (link/router-css.ts). A cheap
 // regex over raw source — a stray match in a comment/string just fails to resolve later, harmless.
@@ -544,61 +551,12 @@ export class Compiler {
 		// (This is the race the `?og-region` module-id fork tried to fix; that fork broke Svelte's
 		// scoped-CSS emission, so membership rides OUTSIDE the module id here — the walk only READS.)
 		//
-		// PERF: strictly O(reachable modules). A SINGLE shared `seen` set means each file is read and
-		// scanned exactly once and never re-descended — no per-root re-walk, no depth multiplier (cf.
-		// the depth-25 O(2^depth) usage-walk regression this deliberately avoids). A cheap regex lists
-		// specifiers (over-collection is harmless — an unresolvable one is skipped); package/alias
-		// specifiers stop the walk, where the lazy resolveId marking below stays as the backstop.
+		// PERF: strictly O(reachable modules) — see `mark_island_closure`: one shared `seen` set for
+		// the life of the program, so each file is read and scanned exactly once, never re-descended.
 		{
 			const __ws = P ? performance.now() : 0;
-			const seen_dep = new Set<string>();
-			const DEP_EXTS = ['', '.svelte', '.ts', '.js', '.svelte.ts', '.svelte.js', '.mjs'];
-			const resolve_dep = (spec: string, importerAbs: string): string | null => {
-				const base = resolveFoucImportSpec(spec, importerAbs, libDir);
-				if (!base) return null; // package / alias — the lazy resolveId marking is the backstop
-				for (const ext of DEP_EXTS) {
-					try {
-						if (fs.statSync(base + ext).isFile()) return base + ext;
-					} catch {
-						/* not this ext */
-					}
-				}
-				for (const ext of DEP_EXTS.slice(1)) {
-					const idx = path.join(base, 'index' + ext);
-					try {
-						if (fs.statSync(idx).isFile()) return idx;
-					} catch {
-						/* not an index */
-					}
-				}
-				return null;
-			};
-			const walk_dep = (abs: string) => {
-				const norm = strip_id(abs);
-				if (seen_dep.has(norm)) return;
-				seen_dep.add(norm);
-				island_graph.add(norm);
-				if (!SOURCE_EXT_RE.test(norm)) return;
-				const src = ctx.read_file(norm);
-				if (src == null) return;
-				IMPORT_SPEC_G.lastIndex = 0;
-				let m: RegExpExecArray | null;
-				while ((m = IMPORT_SPEC_G.exec(src))) {
-					const spec = m[1] || m[2] || m[3];
-					if (
-						!spec ||
-						spec[0] === '\0' ||
-						spec.startsWith('$app/') ||
-						spec.startsWith('$env/') ||
-						spec.startsWith('virtual:')
-					)
-						continue;
-					const dep = resolve_dep(spec, norm);
-					if (dep) walk_dep(dep);
-				}
-			};
 			for (const entry of registry.values()) {
-				if (entry.componentPath) walk_dep(strip_id(entry.componentPath));
+				if (entry.componentPath) this.mark_island_closure(entry.componentPath);
 			}
 			if (P) prof.prescanMs += performance.now() - __ws;
 		}
@@ -615,6 +573,104 @@ export class Compiler {
 			.update(resolveFeatures(runtime_marks).join(','))
 			.digest('hex')
 			.slice(0, 8);
+	}
+
+	/** Files the island-closure walk has already read (see `mark_island_closure`). Lives for the
+	 *  program, so a closure marked at prescan is never re-walked when a later island shares it. */
+	#island_closure_seen = new Set<string>();
+
+	/**
+	 * Mark `componentAbs` and EVERYTHING it imports (transitively) as island code, so the `$app/*`
+	 * shim decision for each of those modules is DETERMINISTIC — before the bundler resolves a single
+	 * one of them. A module shared between an island and a non-island route is otherwise marked lazily
+	 * during the bundler's own walk: if its `$app/*` resolves before the island path reaches it, it
+	 * keeps Kit's real client store — which under `csr = false` is never populated → `page.url`
+	 * undefined, `page.data` empty → the island crashes or reads nothing at hydrate. Shimming it is
+	 * right in both worlds: on a Kit-booted document the shim reads Kit's real page (the kit-page
+	 * thread). (The `?og-region` module-id fork was tried and reverted — it broke Svelte's scoped-CSS
+	 * emission; membership rides OUTSIDE the module id here, the walk only READS.)
+	 *
+	 * Follows relative, `$lib` AND the app's aliases (`kit.alias` / `resolve.alias` — a customer's
+	 * `$lib_x/utils/boot` import was where the walk used to stop, and its `$app/state` went to whichever
+	 * page loaded first). Bare package specifiers stop it; the lazy resolveId marking stays their
+	 * backstop. Called at prescan for every island, and again in dev for an island registered by a
+	 * later transform (a file added while the server runs). Returns the modules marked for the first
+	 * time by this call, so a dev caller can drop their cached transforms.
+	 */
+	/** DEV: modules `mark_island_closure` marked for the first time AFTER prescan — an island a later
+	 *  transform registered (a file added while the server runs). Each may already sit in the dev
+	 *  server's module graph, transformed with Kit's real `$app/*` for a non-island importer; the
+	 *  plugin drains this list and drops those cached transforms so the next load re-resolves them. */
+	#closure_added: string[] = [];
+
+	#mark_registered_closures(result: TransformResult): void {
+		if (!this.#ctx!.is_dev) return;
+		for (const isl of result.islands ?? []) {
+			if (isl.componentPath) this.#closure_added.push(...this.mark_island_closure(isl.componentPath));
+		}
+	}
+
+	/** DEV: take the modules newly marked as island code since the last drain (see above). */
+	drain_closure_marks(): string[] {
+		const out = this.#closure_added;
+		this.#closure_added = [];
+		return out;
+	}
+
+	mark_island_closure(componentAbs: string): string[] {
+		const ctx = this.#ctx!;
+		const { island_graph } = this.program;
+		const aliases = ctx.resolve_alias as readonly FoucAlias[];
+		const added: string[] = [];
+		const resolve_dep = (spec: string, importerAbs: string): string | null => {
+			const base = resolveFoucImportSpec(spec, importerAbs, ctx.libDir, aliases);
+			if (!base) return null; // a bare package specifier — the lazy resolveId marking is the backstop
+			for (const ext of ISLAND_DEP_EXTS) {
+				try {
+					if (fs.statSync(base + ext).isFile()) return base + ext;
+				} catch {
+					/* not this ext */
+				}
+			}
+			for (const ext of ISLAND_DEP_EXTS.slice(1)) {
+				const idx = path.join(base, 'index' + ext);
+				try {
+					if (fs.statSync(idx).isFile()) return idx;
+				} catch {
+					/* not an index */
+				}
+			}
+			return null;
+		};
+		const walk = (abs: string) => {
+			const norm = strip_id(abs);
+			if (this.#island_closure_seen.has(norm)) return;
+			this.#island_closure_seen.add(norm);
+			if (!island_graph.has(norm)) {
+				island_graph.add(norm);
+				added.push(norm);
+			}
+			if (!SOURCE_EXT_RE.test(norm)) return;
+			const src = ctx.read_file(norm);
+			if (src == null) return;
+			IMPORT_SPEC_G.lastIndex = 0;
+			let m: RegExpExecArray | null;
+			while ((m = IMPORT_SPEC_G.exec(src))) {
+				const spec = m[1] || m[2] || m[3];
+				if (
+					!spec ||
+					spec[0] === '\0' ||
+					spec.startsWith('$app/') ||
+					spec.startsWith('$env/') ||
+					spec.startsWith('virtual:')
+				)
+					continue;
+				const dep = resolve_dep(spec, norm);
+				if (dep) walk(dep);
+			}
+		};
+		walk(componentAbs);
+		return added;
 	}
 
 	/** The feature-selected runtime chunk name (immutable-cached). Needs prescan to have run for a
@@ -1305,6 +1361,7 @@ export class Compiler {
 			const result = this.transform(out, id_n, { ssr }) as TransformResult | null;
 			if (result) {
 				program.register(result, id_n);
+				this.#mark_registered_closures(result);
 				out = result.code;
 				map = result.map;
 				touched = true;
@@ -1396,6 +1453,7 @@ export class Compiler {
 			const result = this.ts_regions(out, id_n) as TransformResult | null;
 			if (result) {
 				program.register(result, id_n);
+				this.#mark_registered_closures(result);
 				out = result.code;
 				map = result.map;
 				touched = true;
@@ -1413,11 +1471,15 @@ export class Compiler {
 			}
 		}
 
-		// CLIENT: rewrite `$app/(state|stores|navigation)` inside island entry components
-		// (and any other island_graph .svelte) to absolute shim paths. Absolute paths bypass
-		// Kit's `$app/*` alias entirely — needed when an island's own component graph imports
-		// `$app/*` (csr=true hosts still pass virtual islands as `__component`).
-		if (!ssr && island_graph.has(id_n) && id_n.endsWith('.svelte')) {
+		// CLIENT: rewrite `$app/(state|stores|navigation)` inside island entry components — and
+		// every other module in the island graph, `.svelte` or script — to absolute shim paths.
+		// Absolute paths bypass Kit's `$app/*` alias entirely: Vite's alias plugin resolves `$app/*`
+		// BEFORE this plugin's resolveId can, so the specifier must already be the shim's when the
+		// module leaves the transform. Script modules used to be skipped here: a `.ts` helper in an
+		// island's closure kept Kit's real client page (never booted under csr=false), and a
+		// customer's shared boot helper read `page.data.user` as empty inside every public-page
+		// island. (csr=true hosts still pass virtual islands as `__component`.)
+		if (!ssr && island_graph.has(id_n) && (id_n.endsWith('.svelte') || SCRIPT_MODULE_RE.test(id_n))) {
 			const rewritten = out.replace(APP_SHIM_IMPORT, (_m: string, _q: string, name: string) =>
 				JSON.stringify(ctx.app_shims['$app/' + name])
 			);
