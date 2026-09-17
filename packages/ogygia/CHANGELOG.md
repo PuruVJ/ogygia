@@ -83,9 +83,16 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   (a login dropdown needed two clicks, on a cold page only). The hydration source of truth is now
   the island's server markup: the element keeps it from parse-time connect (a hydrating hole from
   its swap), hydration runs with Svelte's recovery OFF, and on a mismatch with drift the runtime
-  puts the server markup back and hydrates that — it matches by construction, and the replayed
-  click lands on the live button (`data-og-healed`, a devtools `region.hydrate.healed` event, one
-  dev warning naming the island). Only when that fails too, or nothing drifted (the component
+  repairs the island toward the server markup and hydrates that — it matches by construction, and
+  the replayed click lands on the live button (`data-og-healed`, a devtools
+  `region.hydrate.healed` event, one dev warning naming the island). The repair keeps every
+  element the island still has: live elements are matched to the server markup's one to one
+  (same count, same tags, recursively) and only the text and comment nodes between them are
+  rebuilt from the server copy, so no element is created and no upgraded design-system element
+  reacts — the one measured on a customer deploy re-strips the island on every connect, and a
+  repair that re-created it (an `innerHTML` swap, or the morph when a stray comment broke its
+  positional match) looped straight back into Svelte's recovery. Only an island whose element
+  skeleton itself changed falls to the morph, then to `innerHTML`. Only when that fails too, or nothing drifted (the component
   itself threw), does Svelte recover the way it always did (`data-og-recovered`, the existing
   warning). The foreign-hydrate contract gains `__og_hydrate(target, props, { recover })` for
   federated islands; an older entry ignores it. An island above 512K characters keeps no copy.

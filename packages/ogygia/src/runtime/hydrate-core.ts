@@ -53,12 +53,89 @@ const HYDRATION_FAILED_RE = /hydration_failed/;
 
 /** The hydration ENVELOPE: `hydrate()` anchors on a top-level `<!--[-->` comment and then expects
  *  the component's OWN region envelope — but embedded SSR (Region.svelte) emits only the inner
- *  layer. Idempotent: a restore from the server markup drops it, the next attempt puts it back. */
+ *  layer. Idempotent: a repair from the server markup drops it, the next attempt puts it back. */
 function ensure_envelope(region: Element): void {
-	const first = region.firstChild;
-	if (first && first.nodeType === 8 && (first as Comment).data === '[') return;
+	if (has_envelope(region)) return;
 	region.insertBefore(document.createComment('['), region.firstChild);
 	region.appendChild(document.createComment(']'));
+}
+function has_envelope(region: Element): boolean {
+	const first = region.firstChild;
+	return !!first && first.nodeType === 8 && (first as Comment).data === '[';
+}
+/** Take the envelope off again — the server markup the element kept has none, so a comparison
+ *  or a repair against it must see the island as the server sent it. */
+function strip_envelope(region: Element): void {
+	if (!has_envelope(region)) return;
+	region.firstChild!.remove();
+	const last = region.lastChild;
+	if (last && last.nodeType === 8 && (last as Comment).data === ']') last.remove();
+}
+
+/**
+ * REPAIR the island's light DOM toward its server markup, keeping every element it still has.
+ *
+ * Svelte's walk cares about the node SEQUENCE (elements, text, comments), never about attributes.
+ * The edits sleeping islands actually receive keep the element skeleton and touch what is between
+ * the elements: a design-system runtime strips the whitespace text nodes, an A/B tool leaves a
+ * comment. So: match the live elements to the server markup's elements one to one (same count,
+ * same tags, recursively), and rebuild only the text and comment nodes around them from the server
+ * copy. No element is created, so no upgraded custom element reacts — the design-system element
+ * that re-strips the island on every connect (measured on a customer deploy) is left exactly where
+ * it is, and the walk that follows sees the server's sequence.
+ *
+ * Only when the element skeleton itself differs (an element removed or added) does the repair fall
+ * to the morph (existing nodes still keep their identity where the morph can match them), or to a
+ * plain `innerHTML` swap where the runtime has no morph. Those paths may re-create an element, and
+ * a re-created element may react once more; the second attempt tells.
+ */
+function repair_markup(region: HTMLElement, ssr_html: string): void {
+	strip_envelope(region);
+	const holder = document.createElement('template');
+	holder.innerHTML = ssr_html; // inert: nothing upgrades in a template's content
+	if (align_to(region, holder.content)) return;
+	const morph = slots.morph;
+	if (morph) morph(region, Array.from(holder.content.childNodes));
+	else region.innerHTML = ssr_html;
+}
+
+/** Make `live`'s child sequence the server's (`want`), keeping `live`'s elements. `false` when the
+ *  element skeleton differs (no changes made at that level). */
+function align_to(live: Element, want: Element | DocumentFragment): boolean {
+	const live_elements = element_children(live);
+	const want_elements = element_children(want);
+	if (live_elements.length !== want_elements.length) return false;
+	for (let i = 0; i < live_elements.length; i++) {
+		if (live_elements[i].tagName !== want_elements[i].tagName) return false;
+	}
+	// Children first: a subtree the server sent differently in its elements is the morph's, and the
+	// morph must see that subtree untouched by this level's rebuild.
+	for (let i = 0; i < live_elements.length; i++) {
+		if (!align_to(live_elements[i], want_elements[i])) {
+			const morph = slots.morph;
+			if (morph) morph(live_elements[i], Array.from(want_elements[i].childNodes));
+			else live_elements[i].innerHTML = (want_elements[i] as Element).innerHTML;
+		}
+	}
+	// This level: drop every live text / comment node, then put the server's back around the
+	// (untouched) elements, in the server's order.
+	for (const node of Array.from(live.childNodes)) if (node.nodeType !== 1) node.remove();
+	let next = 0;
+	for (const node of Array.from(want.childNodes)) {
+		if (node.nodeType === 1) {
+			next++;
+			continue;
+		}
+		const before = live_elements[next] ?? null;
+		live.insertBefore(node.cloneNode(true), before);
+	}
+	return true;
+}
+
+function element_children(node: Node): Element[] {
+	const out: Element[] = [];
+	for (const child of node.childNodes) if (child.nodeType === 1) out.push(child as Element);
+	return out;
 }
 
 /** Svelte's own line from inside its hydrate catch, printed BEFORE it throws `hydration_failed`
@@ -435,9 +512,12 @@ export function hydrate_island(
 			out = quietly(() => attempt(false));
 		} catch (first) {
 			const mismatch = first instanceof Error && HYDRATION_FAILED_RE.test(first.message);
-			const drifted = ssr_html !== null && region.innerHTML !== ssr_html;
-			if (mismatch && drifted) {
-				region.innerHTML = ssr_html!;
+			// Drift is measured on the island as the server sent it — the failed attempt's envelope
+			// comments are not the server's, so they come off before the comparison.
+			if (mismatch && ssr_html !== null) strip_envelope(region);
+			const drifted = mismatch && ssr_html !== null && region.innerHTML !== ssr_html;
+			if (drifted) {
+				repair_markup(region, ssr_html!);
 				// The lakes inside came back with their server children: lift them again (the earlier
 				// lift holds nodes that are no longer in the tree) so the walk sees them as before.
 				lifted = slots.lakes.lift(region);

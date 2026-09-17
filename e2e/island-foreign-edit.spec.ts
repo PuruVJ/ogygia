@@ -34,6 +34,9 @@ test('edited-while-asleep islands: first click counts, scroll wakes clean, nothi
 	check('ONE click: woke AND counted (3 → 4)', (await btn.textContent())!.includes('count is 4'), await btn.textContent());
 	check('interaction island hydrated from its server markup (data-og-healed)', (await tap.getAttribute('data-og-healed')) !== null);
 	check('not Svelte’s client re-render (no data-og-recovered)', (await tap.getAttribute('data-og-recovered')) === null);
+	// The repair goes through the morph: the foreign element inside kept its identity, so its connect
+	// reaction did NOT run again (a re-created node would strip the island a second time).
+	check('the foreign element connected exactly once (kept by the repair, not re-created)', (await tap.getAttribute('data-foreign-connects')) === '1', await tap.getAttribute('data-foreign-connects'));
 	await btn.click();
 	check('still interactive (4 → 5)', (await btn.textContent())!.includes('count is 5'));
 
