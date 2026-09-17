@@ -2245,6 +2245,14 @@ class FileCompilation {
 				const prop_names = snip_params.length
 					? ['__ogArgs = []', ...captures, ...store_props]
 					: [...captures, ...store_props];
+				// The body is written at the entry's template root. A `{@const}` is legal directly under
+				// `{#snippet}` but not at a template root (`const_tag_invalid_placement`, a build error
+				// on a customer page), so a body that opens with one keeps its snippet around it — the
+				// same scope it was authored in, rendered once.
+				const wrapped = body.some((n: SvelteNode) => n.type === 'ConstTag');
+				const template = wrapped
+					? `{#snippet __og_body()}\n${markup}\n{/snippet}\n{@render __og_body()}`
+					: markup;
 				const synth =
 					`<script${lang}>\n` +
 					`\timport 'virtual:ogygia/transportables';\n` +
@@ -2256,7 +2264,7 @@ class FileCompilation {
 						? `\t// svelte-ignore state_referenced_locally\n\tconst [${params_src}] = __ogArgs;\n`
 						: '') +
 					`</script>\n` +
-					markup +
+					template +
 					'\n';
 				islands_by_id.set(iid, {
 					id: iid,

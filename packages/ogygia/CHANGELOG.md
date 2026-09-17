@@ -73,6 +73,15 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **A forwarded snippet whose body opens with `{@const}` builds.** A `{#snippet}` handed into an
+  island crosses as its own entry, and the compiler wrote the body at that entry's template root.
+  `{@const}` is legal directly under `{#snippet}` and illegal at a template root, so a snippet
+  opening with one (a customer's opened with a feature-flag const) failed the whole build with
+  `const_tag_invalid_placement`. Such a body now keeps its snippet around it in the entry
+  (`{#snippet __og_body()}…{/snippet}{@render __og_body()}`), the scope it was authored in,
+  rendered once; every other body is written as before. `test/portable-snippet-const-tag` (the
+  entry is compiled by Svelte in the test), playground `portable-snippet` + `e2e/portable-snippet`
+  (the forwarded snippet opens with a const whose value reaches the crossed copy).
 - **An island edited while it slept hydrates from its own server markup instead of re-rendering.**
   An island can sleep for a long time (`visible`, `interaction`), and other scripts edit the page
   meanwhile: a design-system runtime stripped every whitespace text node of a customer's header

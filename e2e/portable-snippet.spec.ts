@@ -4,6 +4,9 @@
 // rewrites the value into `og_portable(Entry, captures, url)`. The crossed copy must: render on SSR
 // inside the island (captured host value baked in), survive the csr=false hydrate, and come ALIVE —
 // the nested island inside the crossed snippet clicks 5 → 6.
+// The snippet OPENS with a `{@const}` — legal under `{#snippet}`, illegal at a template root, where
+// the crossed copy's body is written (a customer build died on `const_tag_invalid_placement`). The
+// build of this page is the regression; the const's value must reach the crossed copy too.
 // Usage: pnpm exec playwright test portable-snippet
 import { test, check } from './fixtures/index.ts';
 import { BUMPER_5_RE, PORTABLE_BAR_RE } from './fixtures/re.ts';
@@ -12,6 +15,7 @@ const OGYGIA_REF_RE = /\["OgygiaRef"/;
 const SNIPPET_KIND_RE = /"snippet"/;
 const OGYGIA_SNIPPET_RE = /ogygia-snippet/;
 const GH_ADA_RE = /GitHub · Ada/;
+const CONST_ENABLED_RE = /data-enabled="true"/;
 const MODULEPRELOAD_RE = /rel="modulepreload"[^>]*og-region/;
 
 test.describe('a snippet forwarded THROUGH a plain shell into an island crosses + comes alive', () => {
@@ -35,6 +39,7 @@ test.describe('a snippet forwarded THROUGH a plain shell into an island crosses 
 			bar.slice(0, 120)
 		);
 		check('SSR: nested island inside the crossed snippet seeded (5)', BUMPER_5_RE.test(bar));
+		check('SSR: the snippet’s opening {@const} evaluated inside the crossed copy', CONST_ENABLED_RE.test(bar), bar.slice(0, 160));
 		// No-waterfall: the portable entry is preloaded in <head>, fetched in parallel with the host island.
 		check('SSR: portable entry preloaded (no waterfall)', MODULEPRELOAD_RE.test(raw));
 	});
@@ -53,6 +58,7 @@ test.describe('a snippet forwarded THROUGH a plain shell into an island crosses 
 			'crossed snippet survives hydration (not wiped)',
 			(await barGh.innerText()) === 'GitHub · Ada'
 		);
+		check('the opening {@const} holds after hydration', (await barGh.getAttribute('data-enabled')) === 'true');
 
 		const barBumper = page.locator('[data-portable-bar] [data-bumper-n]');
 		check('nested island seed inside crossed snippet', (await barBumper.innerText()) === '5');
