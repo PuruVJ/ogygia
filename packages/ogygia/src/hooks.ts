@@ -92,7 +92,8 @@ import {
 	page_declares_runtime_script,
 	page_declares_dev_hmr_script,
 	page_declares_speculation_rules,
-	dedupe_head_links
+	dedupe_head_links,
+	runtime_first
 } from './server/head-presence.js';
 import { locate, assemble } from './server/document-assembly.js';
 import { error_route_is_csr_true, route_is_csr_true } from './context.js';
@@ -1006,7 +1007,10 @@ class OgygiaHandle {
 			// its own remotes — and a sidecar written without a seed carries its values whole.
 			const tail = spans.body_end !== -1 && bag ? bag.tail.render(null) : '';
 			if (head === null && !tail) return html;
-			return assemble(html, spans, null, head_inject, tail);
+			// The runtime an island inside a lake emitted goes first in `<head>` here too (see the
+			// csr=false path below): its regions keep their server markup from the first connect.
+			const ordered = head === null ? null : runtime_first(head, null);
+			return assemble(html, spans, ordered === head ? null : ordered, head_inject, tail);
 		}
 
 		// ── HEAD (the chunk carrying `</head>`) ──
@@ -1044,16 +1048,21 @@ class OgygiaHandle {
 			if (!router_enabled && mpa_speculation_rules && !page_declares_speculation_rules(probe)) {
 				head_inject += `<script type="speculationrules" data-ogygia-speculate>${mpa_speculation_rules}</script>`;
 			}
+			if (router_enabled && !page_declares_router_meta(probe)) {
+				head_inject += `<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`;
+			}
+			// The runtime bootstrap goes FIRST in `<head>` (head-presence.ts `runtime_first`): the one
+			// an island page emitted moves up from Kit's head slot, and an island-less page gets it
+			// injected there (router on). Base-resolved the same way Region does — `asset()` is the
+			// sole base/assets authority, and every ogygia URL (prod `/${appDir}/…`, dev `/@id/…`) is
+			// baked base-LESS — so an island-LESS page under a non-root `base` loads the runtime too.
+			const runtime_tag =
+				router_enabled && runtime_url && !page_declares_runtime_script(probe)
+					? `<script type="module" data-ogygia-runtime src="${asset(runtime_url)}"></script>`
+					: null;
+			const ordered = runtime_first(probe, runtime_tag);
+			if (ordered !== probe) head_out = ordered;
 			if (router_enabled) {
-				if (!page_declares_router_meta(probe)) {
-					head_inject += `<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`;
-				}
-				// Base-resolve the same way Region does — `asset()` is the sole base/assets authority,
-				// and every ogygia URL (prod `/${appDir}/…`, dev `/@id/…`) is baked base-LESS — so an
-				// island-LESS page under a non-root `base` loads the runtime too.
-				if (runtime_url && !page_declares_runtime_script(probe)) {
-					head_inject += `<script type="module" data-ogygia-runtime src="${asset(runtime_url)}"></script>`;
-				}
 				if (dev_hmr_url && !page_declares_dev_hmr_script(probe)) {
 					head_inject += `<script type="module" data-ogygia-dev-hmr src="${asset(dev_hmr_url)}"></script>`;
 					// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:

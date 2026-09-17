@@ -1,16 +1,25 @@
-// AN ISLAND HYDRATES AGAINST ITS OWN SERVER MARKUP. The page's inline script strips every
-// whitespace text node inside each sleeping island after load and leaves a stray comment — what a
-// customer's design-system runtime did to a whole header while the islands in it slept. Before:
-// Svelte's walk mismatched on wake, the server DOM was discarded and re-rendered client-side, and
-// the click that woke the interaction island was replayed onto a dead node (two clicks to open a
-// login dropdown). Now the runtime puts the server markup back and hydrates that: one click
-// counts, the visible island wakes clean, no recovery warning.
+// AN ISLAND HYDRATES AGAINST ITS OWN SERVER MARKUP. The page's foreign tool strips every
+// whitespace text node inside each sleeping island and leaves a stray comment — what a customer's
+// design-system runtime did to a whole header while the islands in it slept. Before: Svelte's walk
+// mismatched on wake, the server DOM was discarded and re-rendered client-side, and the click that
+// woke the interaction island was replayed onto a dead node (two clicks to open a login dropdown).
+// Now the runtime puts the server markup back and hydrates that: one click counts, the visible
+// island wakes clean, no recovery warning.
+//
+// The tool is a MODULE script in the page's head, ahead of Kit's head slot — where an app template
+// loads a design-system runtime. Module scripts run in document order, so the server copy is only
+// the server's if the ogygia runtime runs FIRST: the handle moves its bootstrap to the front of
+// `<head>`. This spec fails without that (the tool strips before the runtime looks, and the copy
+// is the edited DOM — what a customer deploy measured).
 //
 //   pnpm exec playwright test island-foreign-edit
 import { test, check, sleep } from './fixtures/index.ts';
 
 const DISCARDED_RE = /discarded its ENTIRE server-rendered DOM/;
 const FAILED_TO_HYDRATE_RE = /Failed to hydrate/;
+const HEAD_RE = /<head\b[^>]*>([\s\S]*?)<\/head>/i;
+const SCRIPT_TAG_RE = /<script\b[^>]*>/gi;
+const RUNTIME_RE = /data-ogygia-runtime/;
 
 test('edited-while-asleep islands: first click counts, scroll wakes clean, nothing re-rendered', async ({ page }) => {
 	const errs: string[] = [];
@@ -20,11 +29,15 @@ test('edited-while-asleep islands: first click counts, scroll wakes clean, nothi
 		if (m.type() === 'error') errs.push('console: ' + m.text());
 		if (m.type() === 'warning') warns.push(m.text());
 	});
-	await page.goto('/island-foreign-edit/', { waitUntil: 'networkidle' });
+	const res = await page.goto('/island-foreign-edit/', { waitUntil: 'networkidle' });
+	const head = HEAD_RE.exec((await res!.text()) ?? '')?.[1] ?? '';
+	const scripts = head.match(SCRIPT_TAG_RE) ?? [];
+	check('the runtime bootstrap is the FIRST script in <head> (the foreign tool comes after it)', scripts.length >= 2 && RUNTIME_RE.test(scripts[0]) && !RUNTIME_RE.test(scripts[1]), scripts.slice(0, 2).join(' '));
 	await sleep(400);
 	const tap = page.locator('[data-interaction-island] ogygia-region');
 	const scroll = page.locator('[data-visible-island] ogygia-region');
 	check('the foreign edit happened (whitespace nodes removed from the sleeping islands)', Number(await tap.getAttribute('data-foreign-edited')) > 0 && Number(await scroll.getAttribute('data-foreign-edited')) > 0);
+	check('the tool ran AFTER the runtime defined <ogygia-region> (the server copy predates the edit)', (await tap.getAttribute('data-foreign-before-runtime')) === 'false', await tap.getAttribute('data-foreign-before-runtime'));
 	check('interaction island still asleep', (await tap.getAttribute('data-hydrated')) === null);
 
 	const btn = page.locator('[data-interaction-island] [data-spaced-counter] button');

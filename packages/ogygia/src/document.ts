@@ -47,7 +47,8 @@ import {
 import {
 	page_declares_router_meta,
 	page_declares_runtime_script,
-	page_declares_dev_hmr_script
+	page_declares_dev_hmr_script,
+	runtime_first
 } from './server/head-presence.js';
 import type { RegionValue } from './region.js';
 
@@ -186,10 +187,12 @@ export async function document(
 		}
 	}
 
+	// The runtime bootstrap leads the head content, before any script the component's head carries
+	// — the same order the handle gives a Kit page (head-presence.ts `runtime_first`).
 	const html =
 		`<!doctype html>\n<html lang="${escape_text(options.lang ?? 'en')}">` +
 		`<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
-		head.join('') +
+		runtime_first(head.join(''), null) +
 		`</head><body>${r.body}</body></html>`;
 
 	const headers = new Headers({ 'content-type': 'text/html; charset=utf-8' });

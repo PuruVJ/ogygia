@@ -55,6 +55,19 @@ function snapshot_markup(region: Element): string | null {
 	return html.length > SSR_SNAPSHOT_MAX ? null : html;
 }
 
+/** The same copy for a hole's answer BEFORE it is put in the document: serialized through a
+ *  detached box (a fragment has no `innerHTML`; nothing connects, so no element reacts) and the
+ *  nodes handed back. Taken after the swap it would be the DOM as the custom elements inside the
+ *  answer left it — their connect reactions run at insertion, before any line after it. */
+function fragment_markup(frag: DocumentFragment): string | null {
+	if (!frag.firstChild) return null;
+	const box = document.createElement('div');
+	box.appendChild(frag);
+	const html = box.innerHTML;
+	frag.append(...Array.from(box.childNodes));
+	return html.length > SSR_SNAPSHOT_MAX ? null : html;
+}
+
 const HOLE_WITHOUT_ADDRESS_WARNING =
 	'[ogygia] deferred region %s was rendered in the browser with no server-minted address, and the ' +
 	'document records none for it (a client-side navigation mounted it, or its props differ from ' +
@@ -389,14 +402,17 @@ class OgygiaRegion extends HTMLElement {
 			}
 			return;
 		}
-		if (slots.lakes.wait_for_boundary(this, boundary)) return;
-		this.#scheduled = true;
 		// Two axes: `render="defer"` + `when` fetches HTML; `wake` wakes JS (possibly after swap).
 		const deferred = is_deferred(this);
-		const when = region_schedule(this);
-		// Keep the server markup a self-running island connected with (see #ssr_html). Parse-time
-		// connect is before any other script has run; a hole's copy is taken when its answer lands.
+		// Keep the server markup a self-running island connected with (see #ssr_html) — at the FIRST
+		// connect, before anything else about the schedule: an island inside a lake still waiting on
+		// its boundary reconnects later, and by then another script may have edited it. The runtime
+		// is the first script in `<head>` (server/head-presence.ts `runtime_first`), so this copy is
+		// the parsed document as the server sent it. A hole's copy is taken from its answer instead.
 		if (!deferred && this.#ssr_html === null) this.#ssr_html = snapshot_markup(this);
+		if (slots.lakes.wait_for_boundary(this, boundary)) return;
+		this.#scheduled = true;
+		const when = region_schedule(this);
 		if (DEVTOOLS) {
 			dt_emit({
 				domain: 'runtime',
@@ -610,10 +626,10 @@ class OgygiaRegion extends HTMLElement {
 		// them — survive; a plain swap would re-create a menu that is open right now. Every other
 		// hole replaces: its fallback is a placeholder with nothing worth keeping.
 		const morph = this.getAttribute('when') === 'interaction' ? slots.morph : undefined;
+		// A hydrating hole's server markup IS the answer (see #ssr_html) — copied before it goes in.
+		if (!this.#app && region_hydrate_schedule(this)) this.#ssr_html = fragment_markup(frag);
 		if (morph) morph(this, Array.from(frag.childNodes));
 		else this.replaceChildren(frag);
-		// A hydrating hole's server markup IS the answer just swapped in (see #ssr_html).
-		if (!this.#app && region_hydrate_schedule(this)) this.#ssr_html = snapshot_markup(this);
 		this.#done = true;
 		if (revalidate) this.setAttribute('data-revalidated', '');
 		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');

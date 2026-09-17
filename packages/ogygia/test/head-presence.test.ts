@@ -3,7 +3,8 @@ import {
 	page_declares_router_meta,
 	page_declares_runtime_script,
 	page_declares_dev_hmr_script,
-	page_declares_speculation_rules
+	page_declares_speculation_rules,
+	runtime_first
 } from '../src/server/head-presence.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,6 +88,81 @@ describe('page_declares_speculation_rules', () => {
 		expect(page_declares_speculation_rules('<code>type="speculationrules"</code>')).toBe(false);
 		expect(page_declares_speculation_rules('<script type="speculationrules">{}</script>')).toBe(
 			true
+		);
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The runtime bootstrap is the FIRST script in `<head>`. Module scripts run in document order
+// once parsing ends; a design-system runtime an app template loads ahead of Kit's head slot ran
+// before the ogygia runtime on a customer page and edited every sleeping island before the runtime
+// kept their server markup — so the "server copy" was the edited DOM and no island could heal.
+// ─────────────────────────────────────────────────────────────────────────────
+const runtime = '<script type="module" data-ogygia-runtime src="/_app/og-runtime.js"></script>';
+const design_system = '<script type="module" src="https://cdn.example/ds.js"></script>';
+const head_start =
+	'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="w">';
+
+describe('runtime_first', () => {
+	it('moves the tag an island page emitted ahead of the app template scripts, after the charset', () => {
+		const head =
+			head_start +
+			design_system +
+			'<title>x</title>' +
+			runtime +
+			'<link rel="stylesheet" href="/a.css">';
+		expect(runtime_first(head, null)).toBe(
+			'<!doctype html><html><head><meta charset="utf-8">' +
+				runtime +
+				'<meta name="viewport" content="w">' +
+				design_system +
+				'<title>x</title>' +
+				'<link rel="stylesheet" href="/a.css">'
+		);
+	});
+
+	it('injects the tag there when the page has none (island-less page, router on)', () => {
+		expect(runtime_first(head_start + design_system, runtime)).toBe(
+			'<!doctype html><html><head><meta charset="utf-8">' +
+				runtime +
+				'<meta name="viewport" content="w">' +
+				design_system
+		);
+	});
+
+	it('leads the head when no charset declaration opens it', () => {
+		expect(runtime_first('<html><head>' + design_system + runtime, null)).toBe(
+			'<html><head>' + runtime + design_system
+		);
+	});
+
+	it('leads inner head content that has no <head> tag (a routeless document)', () => {
+		expect(runtime_first('<title>t</title>' + design_system + runtime, null)).toBe(
+			runtime + '<title>t</title>' + design_system
+		);
+	});
+
+	it('returns the same string when the tag is already first, or there is nothing to place', () => {
+		const already = '<html><head><meta charset="utf-8">' + runtime + design_system;
+		expect(runtime_first(already, null)).toBe(already);
+		expect(runtime_first(already, runtime)).toBe(already);
+		const none = '<html><head>' + design_system;
+		expect(runtime_first(none, null)).toBe(none);
+	});
+
+	it('does not mistake a prose mention or an inline script body for the tag', () => {
+		const prose =
+			'<html><head>' +
+			design_system +
+			escaped_runtime +
+			'<script>document.querySelector("[data-ogygia-runtime]")</script>';
+		expect(runtime_first(prose, null)).toBe(prose);
+		expect(runtime_first(prose, runtime)).toBe(
+			'<html><head>' +
+				runtime +
+				design_system +
+				escaped_runtime +
+				'<script>document.querySelector("[data-ogygia-runtime]")</script>'
 		);
 	});
 });

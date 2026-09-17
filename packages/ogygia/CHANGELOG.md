@@ -96,8 +96,22 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   itself threw), does Svelte recover the way it always did (`data-og-recovered`, the existing
   warning). The foreign-hydrate contract gains `__og_hydrate(target, props, { recover })` for
   federated islands; an older entry ignores it. An island above 512K characters keeps no copy.
-  Playground `island-foreign-edit` (an inline script edits every sleeping island after load),
-  `e2e/island-foreign-edit`, `test/browser/island-self-heal`, `test/island-entry-recover`.
+  The copy is only the server's if the runtime looks before anyone else edits: module and
+  deferred scripts run in document order once parsing ends, and an island page emitted its
+  runtime bootstrap into Kit's head slot — AFTER the scripts an app template loads above it. On
+  the customer page the design-system runtime loaded that way ran first and stripped every
+  island in the header before the ogygia runtime existed, so the "server copy" was the edited
+  DOM and the login island still re-rendered on its first tap. The handle now puts the runtime
+  bootstrap FIRST in `<head>` (after a leading charset declaration) on every document it
+  transforms — moving the tag an island page emitted, injecting one there on an island-less
+  page — and a routeless `document()` does the same; a module script never blocks parsing, so
+  the page pays nothing. The element keeps its copy at its very first connect (an island inside
+  a lake used to wait for the lake's boundary first), and a hydrating hole copies its answer
+  before it goes in (the custom elements inside react at insertion). Playground
+  `island-foreign-edit` (the foreign tool is a module script ahead of the runtime's old
+  position), `e2e/island-foreign-edit` (fails without the reorder: the tool runs first, nothing
+  heals), `test/head-presence` (`runtime_first`), `test/browser/island-self-heal`,
+  `test/island-entry-recover`.
 - **The router keeps a destination page's inline `<style>` sheets across an SPA navigation.** The
   head merge appended a `<style>` the next document carried at the END of `<head>`, where an
   island's `<svelte:head>` hydration on the new page reclaims a trailing node range — so a sheet
