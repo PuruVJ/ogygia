@@ -85,12 +85,31 @@ export class PageState {
 // well-known symbol, and the shims prefer it whenever it exists. Kit's entry evaluates exactly when
 // Kit boots and never ships to csr=false pages — so on csr=false documents the symbol is never set
 // and the seeded shim path is untouched.
+/** Kit's real `$app/navigation`, as published by the thread — the `$app/navigation` shim (and
+ *  `ogygia/app`) delegate every call here on a Kit-booted document. Typed loosely on purpose: the
+ *  shim forwards arguments as given; Kit's own types apply at the call site. */
+export interface KitNavigation {
+	goto(url: string | URL, opts?: unknown): Promise<void>;
+	invalidate(resource?: unknown): Promise<void>;
+	invalidateAll(): Promise<void>;
+	preloadData(url: string | URL): Promise<unknown>;
+	preloadCode(url?: string): Promise<void>;
+	pushState(url: string | URL, state: unknown): void;
+	replaceState(url: string | URL, state: unknown): void;
+	disableScrollHandling(): void;
+	beforeNavigate(callback: (navigation: unknown) => void): void;
+	afterNavigate(callback: (navigation: unknown) => void): void;
+	onNavigate(callback: (navigation: unknown) => unknown): void;
+}
+
 export interface KitPageBridge {
 	page: PageSnapshot;
 	navigating: { current: unknown };
 	/** Kit's real `$page` store — `$app/stores` shim subscribers delegate here so they stay
 	 *  LIVE through Kit navigations (the state getters above are already live by delegation). */
 	page_store?: { subscribe(run: (value: PageSnapshot) => void): () => void };
+	/** Kit's real navigation module (see {@link KitNavigation}). Absent on an older thread. */
+	navigation?: KitNavigation;
 }
 const KIT_PAGE_KEY = Symbol.for('ogygia.kit-page');
 export function kit_bridge(): KitPageBridge | null {

@@ -8,6 +8,8 @@
  *
  * @packageDocumentation
  */
+// One body with the `$app/navigation` shim: the ogygia router on a document ogygia owns, Kit's real
+// navigation on a Kit-booted document (shims/app-navigation.ts).
 export {
 	goto,
 	invalidate,
@@ -15,11 +17,10 @@ export {
 	preloadData,
 	preloadCode,
 	disableScrollHandling,
-	bust_page_cache,
-	spa_html_cacheable
-} from './runtime/router.js';
-// Lifecycle-bound (unsubscribe on component destroy), like Kit's.
-export { beforeNavigate, afterNavigate } from './runtime/nav-hooks.js';
+	beforeNavigate,
+	afterNavigate
+} from './shims/app-navigation.js';
+export { bust_page_cache, spa_html_cacheable } from './runtime/router.js';
 
 export type {
 	NavTarget,

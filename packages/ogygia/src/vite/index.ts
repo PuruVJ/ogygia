@@ -118,11 +118,16 @@ const ROUTE_HOST_OR_OPTION_RE = /[\\/]\+(page|layout)(\.server)?\.(svelte|js|ts)
 // `kit.start()`'s synchronous hydrate flush, so a shared component's first `page.data` read
 // already sees Kit's truth (the bcms all-products crash read `{}` from the never-seeded island
 // store there).
+// `navigation` is Kit's REAL `$app/navigation` (goto, invalidate, preload, the hooks): an island on
+// this document navigates through Kit's router, never through the ogygia one — which, on a document
+// it does not own, could only fall back to a full load (a customer's green-band chips inside a live
+// island reloaded the whole account page on every click).
 const KIT_PAGE_THREAD =
 	`\nimport { page as __og_kit_page, navigating as __og_kit_nav } from '$app/state';\n` +
 	`import { page as __og_kit_page_store } from '$app/stores';\n` +
+	`import * as __og_kit_navigation from '$app/navigation';\n` +
 	`globalThis[Symbol.for('ogygia.kit-page')] = ` +
-	`{ page: __og_kit_page, navigating: __og_kit_nav, page_store: __og_kit_page_store };\n`;
+	`{ page: __og_kit_page, navigating: __og_kit_nav, page_store: __og_kit_page_store, navigation: __og_kit_navigation };\n`;
 import {
 	PKG_ROOT,
 	PROFILER_UI_DIR,

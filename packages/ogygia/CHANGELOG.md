@@ -73,6 +73,17 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **`goto()` from an island on a Kit-booted page navigates through Kit.** Inside an island,
+  `$app/navigation` is the ogygia shim, and every call went to the ogygia router — which does not
+  own a csr=true document and could only fall back to a full load. A customer's green-band chips,
+  `goto()` calls inside a live island on the account page, reloaded the whole page on every click
+  while the same calls from Kit-hydrated cards navigated client-side. The kit-page thread now
+  publishes Kit's real `$app/navigation` next to its page, and the shim (and `ogygia/app`) hand
+  `goto`, `invalidate`, `invalidateAll`, `preloadData`, `preloadCode`, `pushState`,
+  `replaceState`, `disableScrollHandling`, `beforeNavigate`, `afterNavigate` and `onNavigate` to
+  Kit whenever it exists — the same rule the page shims follow. On a document ogygia owns nothing
+  changes. `test/browser/app-navigation-shim`, playground `GotoProbe` on `/kit` and a csr=false
+  page, `e2e/kit-island-goto` (no reload on either).
 - **A script module an island reaches through an app alias gets the island's page, not Kit's.**
   One file, two worlds: a `.ts` helper reading `page.data` through `$app/state`, imported by a
   csr=true page (Kit's real page) and by an island on a csr=false page (the seeded shim). The client
