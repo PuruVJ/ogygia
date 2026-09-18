@@ -71,6 +71,25 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   `e2e/inline-css`, `test/region-css-inline`, `test/browser/region-css-inline`,
   `test/island-deps` (`collect_inline_css`).
 
+### Added
+
+- **`scanRegions(html)` from `ogygia/server` — a supported splitter for an app that runs a
+  third-party SSR/hydration pass over the final HTML** (a Stencil / web-component server-render, a
+  translation proxy, an A/B injector). Such a pass must never reshape the bytes inside an island —
+  an island hydrates against its exact server markup, and a reshaped node sequence makes the
+  hydration walk mismatch, discard the server DOM and re-render, so the first interaction lands on
+  the discarded tree (a dropdown that needs two clicks). Apps hand-rolled this with a regex
+  balance-count of `<ogygia-region>` opens vs closes, which a literal `<ogygia-region>` in a CSS
+  comment (or an HTML comment, or an attribute value) threw off — so the island skip silently
+  stopped applying in dev but not in prod, where the comment minifies away. `scanRegions` is a
+  generator, not a regex: it tracks real element nesting and skips comments, `<script>` / `<style>`
+  raw-text bodies and quoted attribute values, so tag-like text is never counted. It yields each
+  region with `{ kind: 'island' | 'lake' | 'hole', start, end, innerStart, innerEnd, attrs, depth }`,
+  an island's own span included (a login island nested in a header lake is protected) but its
+  subtree atomic. One allocation-free linear pass — a 3.6 MB page scans in ~0.1 ms.
+  `test/split-regions` (the comment / CSS / script / attribute-string traps, nested islands, and
+  malformed input).
+
 ### Fixed
 
 - **A dev dep re-optimization no longer strands every island on an open csr=false tab.** Under

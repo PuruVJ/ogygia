@@ -1,0 +1,243 @@
+/**
+ * REGIONS in the SSR HTML, for an app that runs a THIRD-PARTY SSR/hydration pass over the final
+ * document (a Stencil / web-component server-render, a translation proxy, an A/B injector). The one
+ * integration rule such a pass must honour: **never reshape the bytes inside an island.** An island
+ * hydrates against its exact server markup; a reshaped node sequence makes the hydration walk
+ * mismatch, so the island discards its server DOM and re-renders client-side, and the first
+ * interaction lands on the discarded tree (the classic tell: a dropdown that needs two clicks).
+ * Lakes and holes are NOT hydrated — their bytes are safe to touch.
+ *
+ * Apps that hand-rolled this with a regex balance-count (`<ogygia-region>` opens vs closes) get
+ * fooled by tag-like TEXT: a literal `<ogygia-region>` inside a CSS comment in an inlined `<style>`,
+ * or an HTML comment, or an attribute value, throws the count off, the island skip silently stops
+ * applying, and the pass reshapes island bytes — in dev but not in prod (where the comment minifies
+ * away), so it passes every local test and breaks on the deploy.
+ *
+ * `scanRegions(html)` is a generator, not a regex: it tracks REAL element nesting of `<ogygia-region>`
+ * and skips `<!-- … -->`, the raw-text bodies of `<script>` / `<style>`, and quoted attribute
+ * values, so tag-like text in any of those is never counted. Each region is yielded once, a region
+ * AFTER the regions nested inside it (post-order, by closing-tag position). An island's own span is
+ * yielded — including an island nested inside a lake or hole, the header-lake login island being
+ * exactly that case, so the caller can protect it — but the regions STRICTLY INSIDE an island are
+ * not, because a reshape anywhere in an island's subtree breaks the same hydration walk.
+ *
+ * The pattern this is built for, robust at any nesting depth: protect every island's bytes, edit
+ * everything else.
+ *
+ * ```ts
+ * import { scanRegions } from 'ogygia/server';
+ * const protect = [];
+ * for (const r of scanRegions(html)) {
+ *   if (r.kind === 'island') protect.push([r.start, r.end]); // its bytes stay verbatim
+ * }
+ * // reshape `html` everywhere EXCEPT the protected ranges …
+ * ```
+ *
+ * If you edit by offset instead, splice in reverse `start` order so earlier offsets stay valid:
+ * `[...scanRegions(html)].sort((a, b) => b.start - a.start)`.
+ */
+
+export type RegionKind = 'island' | 'lake' | 'hole';
+
+export interface RegionSpan {
+	/** `island` = a hydrated region (its bytes are off-limits to any post-SSR reshaping); `lake` = a
+	 *  frozen (`wake="none"`) subtree, server HTML the browser never re-creates; `hole` = a deferred
+	 *  region whose current markup is the page's fallback, not a hydration tree. */
+	kind: RegionKind;
+	/** Index of the `<` that opens `<ogygia-region …>`. */
+	start: number;
+	/** Index one past the `>` that closes `</ogygia-region>`. `[start, end)` is the whole element. */
+	end: number;
+	/** Index one past the `>` of the OPENING tag — the first byte of the region's inner HTML. */
+	innerStart: number;
+	/** Index of the `<` of the CLOSING tag — one past the last byte of the inner HTML.
+	 *  `[innerStart, innerEnd)` is the inner HTML a reshaping pass may edit for a lake / hole. */
+	innerEnd: number;
+	/** The opening tag's attributes (unquoted values). Read `wake` / `endpoint` / `entry` here. */
+	attrs: Readonly<Record<string, string>>;
+	/** Nesting depth — `0` for a top-level region, `1` for one directly inside a lake / hole, and so
+	 *  on. Island subtrees are never entered, so a region deeper than `0` is always inside a lake or
+	 *  hole (never inside another island). */
+	depth: number;
+}
+
+const REGION_TAG = 'ogygia-region';
+const RAW_TEXT_TAGS = ['script', 'style'] as const;
+
+/** ASCII whitespace that can follow a tag name. */
+function is_space(code: number): boolean {
+	return code === 32 || code === 9 || code === 10 || code === 12 || code === 13;
+}
+
+/** True when `tag`'s NAME sits at `name` as a real element name (followed by whitespace, `>`, or
+ *  `/`), case-insensitive — so `ogygia-region-foo` or `styles` don't match a shorter tag. Callers
+ *  pass the index of the tag name: for `<tag` that is `i + 1`, for `</tag` it is `i + 2`. */
+function name_at(html: string, name: number, tag: string): boolean {
+	if (html.slice(name, name + tag.length).toLowerCase() !== tag) return false;
+	const after = html.charCodeAt(name + tag.length);
+	return Number.isNaN(after) || is_space(after) || after === 62 /* > */ || after === 47; /* / */
+}
+
+/** True when an OPENING tag `<tag…` starts at `i`. */
+function open_tag_at(html: string, i: number, tag: string): boolean {
+	return html.charCodeAt(i) === 60 /* < */ && name_at(html, i + 1, tag);
+}
+
+/** True when a CLOSING tag `</tag…` starts at `i`. */
+function close_tag_at(html: string, i: number, tag: string): boolean {
+	return html.charCodeAt(i) === 60 && html.charCodeAt(i + 1) === 47 && name_at(html, i + 2, tag);
+}
+
+/** Index of the `>` that ends the tag whose `<` is at `open`, respecting `"…"` / `'…'` attribute
+ *  values (a `>` inside a value does not end the tag). `html.length` if the tag is unterminated. */
+function tag_end(html: string, open: number): number {
+	let quote = 0;
+	for (let i = open + 1; i < html.length; i++) {
+		const c = html.charCodeAt(i);
+		if (quote) {
+			if (c === quote) quote = 0;
+		} else if (c === 34 || c === 39) {
+			quote = c;
+		} else if (c === 62 /* > */) {
+			return i;
+		}
+	}
+	return html.length;
+}
+
+/** Index of the `<` of the closing `</style>` / `</script>` at or after `from`, or -1. Allocation
+ *  free: a native `indexOf('<')` scan (SIMD-fast in V8) plus a bounded tag check — never a substring
+ *  copy or a per-call RegExp (this runs once per raw-text element on every SSR response, some of
+ *  them megabytes). */
+function raw_text_end(html: string, from: number, tag: 'script' | 'style'): number {
+	let at = from;
+	for (;;) {
+		const lt = html.indexOf('<', at);
+		if (lt === -1) return -1;
+		if (close_tag_at(html, lt, tag)) return lt;
+		at = lt + 1;
+	}
+}
+
+const ATTR_RE = /([^\s/>=]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s/>]+))?/g;
+
+/** Parse the attributes out of an opening tag whose `<` is at `open` and `>` at `gt`. */
+function parse_attrs(html: string, open: number, gt: number): Record<string, string> {
+	const inner = html.slice(open + 1 + REGION_TAG.length, gt);
+	const attrs: Record<string, string> = {};
+	ATTR_RE.lastIndex = 0;
+	let m: RegExpExecArray | null;
+	while ((m = ATTR_RE.exec(inner))) {
+		let value = m[2] ?? '';
+		if (value && (value[0] === '"' || value[0] === "'")) value = value.slice(1, -1);
+		attrs[m[1].toLowerCase()] = value;
+	}
+	return attrs;
+}
+
+/** The classification the whole framework agrees on (runtime region-attrs, the compiled tag): a
+ *  region with an `endpoint` is a deferred HOLE; `wake="none"` is a frozen LAKE; anything else that
+ *  wakes is an ISLAND. Matches `region_hydrate_schedule` / `is_deferred` / `is_frozen`. */
+function classify(attrs: Record<string, string>): RegionKind {
+	if ('endpoint' in attrs) return 'hole';
+	if (attrs.wake === 'none') return 'lake';
+	return 'island';
+}
+
+interface OpenFrame {
+	node: RegionSpan;
+	/** Emit this region at its close? An island IS yielded (so a caller protects its bytes — the
+	 *  login island nested in a header lake is exactly this case); the regions STRICTLY INSIDE an
+	 *  island are not. */
+	emit: boolean;
+	/** Suppress the regions nested inside this one — true for an island and anything within it. Its
+	 *  matching `</ogygia-region>` still balances the scan, it just yields nothing. */
+	sealed: boolean;
+}
+
+/**
+ * Yield every `<ogygia-region>` in `html`, in document order, an island's subtree treated as atomic
+ * (its nested regions are not yielded). One linear pass, O(html length); allocates no copy of the
+ * document. See the module doc for why this exists and how to use it.
+ */
+export function* scanRegions(html: string): Generator<RegionSpan, void, undefined> {
+	const stack: OpenFrame[] = [];
+	const n = html.length;
+	let i = 0;
+
+	while (i < n) {
+		// Jump straight to the next `<` — `indexOf` is a native scan (SIMD-fast in V8), so the long
+		// text runs between tags on a big CMS page are skipped without a per-char JS loop.
+		const lt = html.indexOf('<', i);
+		if (lt === -1) break;
+		i = lt;
+		// `<!-- … -->`: tag-like text inside a comment is not markup.
+		if (html.startsWith('<!--', i)) {
+			const close = html.indexOf('-->', i + 4);
+			i = close === -1 ? n : close + 3;
+			continue;
+		}
+		// `<script>` / `<style>`: raw-text elements. Skip the whole element — a `<ogygia-region>` in a
+		// CSS comment (the reported bug) or a script string lives here and must not be counted.
+		let raw: (typeof RAW_TEXT_TAGS)[number] | null = null;
+		for (const t of RAW_TEXT_TAGS) if (open_tag_at(html, i, t)) raw = t;
+		if (raw) {
+			const gt = tag_end(html, i);
+			if (html.charCodeAt(gt - 1) === 47 /* /> self-closing */) {
+				i = gt + 1;
+				continue;
+			}
+			const close = raw_text_end(html, gt + 1, raw);
+			i = close === -1 ? n : tag_end(html, close) + 1;
+			continue;
+		}
+		// Closing `</ogygia-region>`.
+		if (close_tag_at(html, i, REGION_TAG)) {
+			const gt = tag_end(html, i);
+			const frame = stack.pop();
+			if (frame?.emit) {
+				frame.node.innerEnd = i;
+				frame.node.end = gt + 1;
+				yield frame.node;
+			}
+			i = gt + 1;
+			continue;
+		}
+		// Opening `<ogygia-region …>`.
+		if (open_tag_at(html, i, REGION_TAG)) {
+			const gt = tag_end(html, i);
+			const parent_sealed = stack.length > 0 && stack[stack.length - 1].sealed;
+			const attrs = parse_attrs(html, i, gt);
+			const kind = classify(attrs);
+			const self_closing = html.charCodeAt(gt - 1) === 47;
+			// Emit this region unless it is STRICTLY INSIDE an island (a nested login island in a
+			// header lake IS emitted — the caller must protect it). Its own subtree is sealed when it
+			// is an island, or when it already sits inside one.
+			const emit = !parent_sealed;
+			const sealed = parent_sealed || kind === 'island';
+			const node: RegionSpan = {
+				kind,
+				start: i,
+				end: gt + 1, // filled at the close; a self-closed / unterminated region keeps this
+				innerStart: gt + 1,
+				innerEnd: gt + 1,
+				attrs,
+				depth: stack.length
+			};
+			if (self_closing) {
+				if (emit) yield node; // no subtree to seal
+			} else {
+				stack.push({ node, emit, sealed });
+			}
+			i = gt + 1;
+			continue;
+		}
+		i++;
+	}
+	// Unterminated regions (malformed HTML) drain here without a close — surfaced with their
+	// parse-time `end`/`innerEnd` so a caller never loses a region silently.
+	while (stack.length) {
+		const frame = stack.pop()!;
+		if (frame.emit) yield frame.node;
+	}
+}
