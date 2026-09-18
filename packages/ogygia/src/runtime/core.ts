@@ -1085,18 +1085,28 @@ class OgygiaRegion extends HTMLElement {
 function apply_dev_head_region_css(): void {
 	if (!import.meta.env.DEV || typeof document === 'undefined') return;
 	void dom_ready().then(() => {
+		// A region that WILL wake imports its own entry on wake, which injects its CSS then. Importing it
+		// here too would only FRONT-LOAD its dep discovery: on a large app every island's lazy deps are
+		// discovered at once at boot, Vite re-optimizes, rotates its hash and full-reloads — the reload
+		// storm. So the rescue covers only what nothing else imports: a lake (`wake="none"`, frozen), a
+		// hole (`endpoint`, fallback markup), and a frozen snippet entry no element names at all.
+		const self_loading = new Set<string>();
+		for (const region of document.querySelectorAll('ogygia-region[entry]')) {
+			if (region.hasAttribute('endpoint') || region.getAttribute('wake') === 'none') continue;
+			self_loading.add(island_module_url(region.getAttribute('entry') || ''));
+		}
 		const seen = new Set<string>();
 		for (const link of document.querySelectorAll('link[data-ogygia-region-css]')) {
 			const href = link.getAttribute('href');
 			// A real `.css` asset is a valid stylesheet — leave it. Only a dev MODULE url (`islandCss`'s
 			// dev href) masquerading as a sheet loads empty and needs importing instead.
 			if (!href || CSS_ASSET_HREF_RE.test(href)) continue;
-			link.remove();
+			link.remove(); // inert either way (an empty sheet) — drop it so nothing dedupes against it
 			// The href is DOCUMENT-relative (`../../@id/…` on a nested route, base-aware by design). A bare
 			// `import()` would resolve it against THIS module's url (`/node_modules/…/og-runtime.js` in an
 			// app) and 404 on `/node_modules/@id/…` — the same trap island entries avoid via this resolver.
 			const url = island_module_url(href);
-			if (seen.has(url)) continue;
+			if (seen.has(url) || self_loading.has(url)) continue;
 			seen.add(url);
 			void import(/* @vite-ignore */ url).catch(() => {});
 		}

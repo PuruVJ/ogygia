@@ -12,6 +12,15 @@ import { island_module_url } from '../../src/runtime/region-endpoint-url.js';
 const FILENAME_TAIL_RE = /[^/]*$/;
 const MARKER_MODULE = '/test/browser/fixtures/dev-css-marker.ts';
 
+// An ES module evaluates ONCE per url, so a shared marker module cannot prove a SECOND import ran (a
+// cache hit re-runs no side effect). Each test that must observe "imported or not" mints its own
+// fresh module; the `tag` comment makes the url unique.
+const marker_module = (tag: string) =>
+	'data:text/javascript,' +
+	encodeURIComponent(
+		`/* ${tag} */ document.documentElement.setAttribute('data-og-dev-css-marker', '1');`
+	);
+
 const MODULE =
 	'data:text/javascript,' +
 	encodeURIComponent(
@@ -77,4 +86,50 @@ test('DEV: a document-relative region-css href resolves against the document, no
 		.poll(() => document.documentElement.getAttribute('data-og-dev-css-marker'), { timeout: 10_000 })
 		.toBe('1');
 	expect(document.head.querySelectorAll('link[data-ogygia-region-css]').length).toBe(0);
+});
+
+// The rescue must cover only what nothing else imports. A region that WILL wake imports its own entry
+// on wake (injecting its CSS then); importing it at boot too would only front-load its dep discovery —
+// on a large app every island's lazy deps at once, Vite re-optimizes, rotates its hash, full-reloads.
+test('DEV: a link for a region that will wake is dropped, not imported (no front-loaded discovery)', async () => {
+	document.head.querySelectorAll('link[data-ogygia-region-css]').forEach((n) => n.remove());
+	document.documentElement.removeAttribute('data-og-dev-css-marker');
+	// `interaction`: zero JS until a pointer/key lands INSIDE it — it will not import on its own here.
+	const mod = marker_module('skip-waking'); // fresh url: a wrong import WOULD run it and set the marker
+	const region = document.createElement('ogygia-region');
+	region.setAttribute('entry', mod);
+	region.setAttribute('wake', 'interaction');
+	document.body.appendChild(region);
+	css_link(mod);
+
+	bootDev();
+
+	// The inert link is removed …
+	await expect
+		.poll(() => document.head.querySelectorAll('link[data-ogygia-region-css]').length, { timeout: 10_000 })
+		.toBe(0);
+	// … but the module was NOT imported: the region owns that on wake.
+	await new Promise((r) => setTimeout(r, 300));
+	expect(document.documentElement.getAttribute('data-og-dev-css-marker')).toBeNull();
+	region.remove();
+});
+
+// A lake is frozen — nothing ever imports its entry — so its CSS reaches the page only through the rescue.
+test('DEV: a link for a lake (wake="none") is still imported — nothing else would deliver its CSS', async () => {
+	document.head.querySelectorAll('link[data-ogygia-region-css]').forEach((n) => n.remove());
+	document.documentElement.removeAttribute('data-og-dev-css-marker');
+	const mod = marker_module('keep-lake'); // fresh url: a first evaluation, so the side effect is observable
+	const lake = document.createElement('ogygia-region');
+	lake.setAttribute('entry', mod);
+	lake.setAttribute('wake', 'none');
+	document.body.appendChild(lake);
+	css_link(mod);
+
+	bootDev();
+
+	await expect
+		.poll(() => document.documentElement.getAttribute('data-og-dev-css-marker'), { timeout: 10_000 })
+		.toBe('1');
+	expect(document.head.querySelectorAll('link[data-ogygia-region-css]').length).toBe(0);
+	lake.remove();
 });

@@ -120,6 +120,15 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   document-relative resolver island entries have always loaded through, and dedupe on the resolved
   url. `test/browser/dev-region-css-import` (a relative href to a marker module imports only when
   resolved against the document).
+- **DEV: the region-css boot rescue imports only what nothing else will — no front-loaded dep
+  discovery.** The rescue imported EVERY region-css module at boot. A region that will wake imports
+  its own entry on wake (injecting its CSS then), so importing it at boot added nothing but pulled
+  its dep graph early — on a large app every island's lazy deps at once, so Vite re-optimized,
+  rotated its browserHash and full-reloaded: the reload storm a field report traced to the rescue.
+  It now skips a link whose module a waking region on the page already owns, and imports only what
+  is otherwise never loaded: a lake (`wake="none"`, frozen), a hole (`endpoint`, fallback markup),
+  and a frozen snippet entry no element names. `test/browser/dev-region-css-import` (a waking
+  region's link is dropped and NOT imported; a lake's link is still imported).
 - **DEV: a frozen snippet forwarded into an island now gets its scoped CSS on a csr=false page.** A
   `{#snippet}` handed to an island compiles to a live region-snippet entry that carries the host's
   `<style>`; when it renders FROZEN (a csr=false page never hydrates it), its module is never
