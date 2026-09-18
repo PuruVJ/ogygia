@@ -289,6 +289,21 @@ export function* scanRegions(html: string): Generator<RegionSpan, void, undefine
 
 const LIFT_TAG = 'og-lift';
 
+// The `<og-lift>` placeholder, matched LOOSELY: the foreign renderer annotates it, so anchor only on
+// the tag name and consume an optional close.
+const LIFT_PLACEHOLDER_RE = /<og-lift\b([^>]*)>(?:<\/og-lift>)?/gi;
+// Split an attribute value into whitespace-separated tokens (class lists).
+const WS_SPLIT_RE = /\s+/;
+// The region opening tag's own `class="…"` attribute, for a class-token union on restore.
+const CLASS_ATTR_RE = /(\sclass\s*=\s*)("[^"]*"|'[^']*'|[^\s/>]+)/i;
+// A trailing self-closing `/` (with surrounding space) at the end of an opening-tag head.
+const TRAILING_SELF_CLOSE_RE = /\s*\/\s*$/;
+// Trailing whitespace at the end of an opening-tag head.
+const TRAILING_WS_RE = /\s+$/;
+// Attribute-value escapes for re-emitting a transplanted mark.
+const AMP_RE = /&/g;
+const DQUOT_RE = /"/g;
+
 export interface LiftedRegion {
 	/** `island` bytes must be restored VERBATIM (reshaping them breaks hydration); a `lake` / `hole`
 	 *  MAY be reshaped first via {@link LiftedRegion.withInner}. */
@@ -368,17 +383,17 @@ export function liftRegions(html: string): LiftResult {
 
 /** Escape a value for re-emission inside a double-quoted attribute. */
 function escape_attr(value: string): string {
-	return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+	return value.replace(AMP_RE, '&amp;').replace(DQUOT_RE, '&quot;');
 }
 
 /** Merge the renderer's `class` marks into the region's opening-tag head, unioning tokens with any
  *  class the region already carries. Returns the head unchanged when nothing new is added. */
 function merge_class(head: string, existing: string | undefined, added: string): [string, boolean] {
-	const added_tokens = added.split(/\s+/).filter(Boolean);
+	const added_tokens = added.split(WS_SPLIT_RE).filter(Boolean);
 	if (added_tokens.length === 0) return [head, false];
 	if (existing === undefined) return [`${head} class="${escape_attr(added)}"`, true];
 
-	const have = new Set(existing.split(/\s+/).filter(Boolean));
+	const have = new Set(existing.split(WS_SPLIT_RE).filter(Boolean));
 	let changed = false;
 	for (const token of added_tokens)
 		if (!have.has(token)) {
@@ -389,7 +404,7 @@ function merge_class(head: string, existing: string | undefined, added: string):
 
 	const merged = [...have].join(' ');
 	const rewritten = head.replace(
-		/(\sclass\s*=\s*)("[^"]*"|'[^']*'|[^\s/>]+)/i,
+		CLASS_ATTR_RE,
 		(_m, prefix: string) => `${prefix}"${escape_attr(merged)}"`
 	);
 	return [rewritten, true];
@@ -401,7 +416,7 @@ function merge_marks(region: LiftedRegion, marks: Record<string, string>): strin
 	const gt = region.openTag.lastIndexOf('>');
 	if (gt === -1) return region.outerHtml; // defensive: not a well-formed opening tag
 
-	let head = region.openTag.slice(0, gt).replace(/\s*\/\s*$/, '').replace(/\s+$/, '');
+	let head = region.openTag.slice(0, gt).replace(TRAILING_SELF_CLOSE_RE, '').replace(TRAILING_WS_RE, '');
 	const additions: string[] = [];
 	let changed = false;
 
@@ -433,12 +448,10 @@ function merge_marks(region: LiftedRegion, marks: Record<string, string>): strin
 export function restoreRegions(shell: string, regions: readonly LiftedRegion[]): string {
 	if (regions.length === 0) return shell;
 	const by_index = new Map(regions.map((r) => [r.index, r]));
-	return shell.replace(
-		/<og-lift\b([^>]*)>(?:<\/og-lift>)?/gi,
-		(whole, raw: string) => {
-			const marks = parse_attr_string(raw);
-			const region = by_index.get(Number(marks['data-i']));
-			return region === undefined ? whole : merge_marks(region, marks);
-		}
-	);
+	LIFT_PLACEHOLDER_RE.lastIndex = 0;
+	return shell.replace(LIFT_PLACEHOLDER_RE, (whole, raw: string) => {
+		const marks = parse_attr_string(raw);
+		const region = by_index.get(Number(marks['data-i']));
+		return region === undefined ? whole : merge_marks(region, marks);
+	});
 }

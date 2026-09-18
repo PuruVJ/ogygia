@@ -2106,6 +2106,15 @@ class FileCompilation {
 		let portable_emitted = false;
 		const portable_imports: string[] = [];
 		const portable_seen = new Set<string>();
+		// The host's <style> travels into every portable-snippet synth. A snippet body is authored in
+		// the host and, in plain Svelte, wears the host's scope class so the host's scoped rules match
+		// it. Lifted into its own entry, the body would compile with no <style> and so NO scope class,
+		// and the CSS authored for it (`.width-100 { … }`) would match nothing — silently, in prod too.
+		// Copying the host <style> in makes the synth self-consistent: Svelte scopes the body and keeps
+		// exactly the rules the body uses (the rest prune away), under one hash the body carries. The
+		// synth is its own compilation unit, so its hash need not equal the host's — only the body and
+		// the rules that style it must share one, which co-locating them here guarantees.
+		const host_style_src = ast.css ? source.slice(ast.css.start, ast.css.end) : '';
 		for (const { comp, snip } of outer_candidates) {
 			const name = snip.expression.name;
 			const body = snip.body?.nodes ?? [];
@@ -2265,7 +2274,8 @@ class FileCompilation {
 						: '') +
 					`</script>\n` +
 					template +
-					'\n';
+					'\n' +
+					(host_style_src ? host_style_src + '\n' : '');
 				islands_by_id.set(iid, {
 					id: iid,
 					virtualPath: entryPath,

@@ -52,6 +52,10 @@ const SSR_SNAPSHOT_MAX = 1 << 19;
 const ENTRY_FETCH_FAILED_RE =
 	/failed to fetch dynamically imported module|error loading dynamically imported module/i;
 
+// A real `.css` asset href (vs a dev MODULE url masquerading as a region-css sheet) — see
+// apply_dev_head_region_css.
+const CSS_ASSET_HREF_RE = /\.css(\?|$)/;
+
 /** The island's server markup to hydrate against later (#ssr_html), or `null` when there is
  *  nothing worth keeping: no children, or more than SSR_SNAPSHOT_MAX characters. */
 function snapshot_markup(region: Element): string | null {
@@ -1063,8 +1067,38 @@ class OgygiaRegion extends HTMLElement {
  * passes each feature's `install` here, in {@link ../vite/runtime-entry.js FEATURE_ORDER}. Order is
  * load-bearing: `live` needs `morph` present first.
  */
+/**
+ * DEV ONLY: apply the region-CSS `<link data-ogygia-region-css>`s the SSR baked into the document.
+ * In dev there is no extracted `.css` asset — `islandCss` hands a region its dev MODULE url as the
+ * href, and a `<link rel="stylesheet">` to a JS module makes an EMPTY sheet (the server serves it as
+ * `text/javascript`), so CSS authored in any hole or region silently never applied on first load.
+ * Import each module instead — executing it injects the scoped `<style>` (Vite's dev CSS mechanism),
+ * the exact rescue {@link region_fragment} already runs for a FETCHED answer, here for the links that
+ * shipped on the page. Prod links a real `.css` asset, so `import.meta.env.DEV` DCEs this whole path.
+ * Deferred to {@link dom_ready}: the runtime bootstrap is the FIRST node in `<head>`, so the region
+ * links below it are not parsed yet at boot.
+ */
+function apply_dev_head_region_css(): void {
+	if (!import.meta.env.DEV || typeof document === 'undefined') return;
+	void dom_ready().then(() => {
+		const seen = new Set<string>();
+		for (const link of document.querySelectorAll('link[data-ogygia-region-css]')) {
+			const href = link.getAttribute('href');
+			// A real `.css` asset is a valid stylesheet — leave it. Only a dev MODULE url (`islandCss`'s
+			// dev href) masquerading as a sheet loads empty and needs importing instead.
+			if (!href || CSS_ASSET_HREF_RE.test(href)) continue;
+			link.remove();
+			if (seen.has(href)) continue;
+			seen.add(href);
+			void import(/* @vite-ignore */ href).catch(() => {});
+		}
+	});
+}
+
 export function boot(installers: Array<() => void> = []): void {
 	for (const install of installers) install();
+
+	if (import.meta.env.DEV) apply_dev_head_region_css();
 
 	if (DEVTOOLS) {
 		// Publish `window.__ogygia_devtools` so instruments + our own e2e can read the stream with no

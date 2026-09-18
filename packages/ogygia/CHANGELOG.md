@@ -109,6 +109,20 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **A portable snippet's markup now carries the host component's style scope, so CSS authored for it
+  applies.** A `{#snippet}` forwarded into a hydrate island is lifted into its own entry; that entry
+  had no `<style>`, so Svelte gave its markup NO scope class and any rule the host authored for it
+  (`.width-100 { … }`, scoped to the host's hash) matched nothing — silently, in prod too (a
+  deferred hole's panel shipped unstyled and content-sized). The host's `<style>` now travels into
+  the synth entry, so the body and the rules that style it share one scope class; Svelte prunes the
+  entry's CSS to exactly the rules the body uses. `test/portable-snippet-style-scope`.
+- **DEV: CSS authored in a hole or region now applies on first load.** In dev there is no extracted
+  `.css` asset, so `islandCss` hands a region its dev MODULE url as the region-css href — and a
+  `<link rel="stylesheet">` to a JS module makes an EMPTY sheet (the server serves it as
+  `text/javascript`), so region/hole CSS silently never reached the page. The runtime already
+  imported such a module for a FETCHED answer (executing it injects the scoped `<style>`); it now
+  does the same on boot for the region-css links the SSR baked onto the page (dev-only, DCE'd out of
+  the prod build, which links a real `.css` asset). `test/browser/dev-region-css-import`.
 - **A dev dep re-optimization no longer strands every island on an open csr=false tab.** Under
   `csr = false` Kit ships no client bootstrap, so nothing injected Vite's `@vite/client` — and the
   dev bridge that carries it was injected only when the SPA router was on. When Vite re-optimized
