@@ -165,15 +165,21 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   document-relative resolver island entries have always loaded through, and dedupe on the resolved
   url. `test/browser/dev-region-css-import` (a relative href to a marker module imports only when
   resolved against the document).
-- **DEV: the region-css boot rescue imports only what nothing else will — no front-loaded dep
-  discovery.** The rescue imported EVERY region-css module at boot. A region that will wake imports
-  its own entry on wake (injecting its CSS then), so importing it at boot added nothing but pulled
-  its dep graph early — on a large app every island's lazy deps at once, so Vite re-optimized,
-  rotated its browserHash and full-reloaded: the reload storm a field report traced to the rescue.
-  It now skips a link whose module a waking region on the page already owns, and imports only what
-  is otherwise never loaded: a lake (`wake="none"`, frozen), a hole (`endpoint`, fallback markup),
-  and a frozen snippet entry no element names. `test/browser/dev-region-css-import` (a waking
-  region's link is dropped and NOT imported; a lake's link is still imported).
+- **DEV: an island's scoped `<style>` is injected at boot, so its server-rendered markup is styled
+  BEFORE it wakes — matching prod.** An interim cut of the region-css boot rescue skipped the link of
+  any island that "will wake on its own", reasoning the island imports its entry at wake and injects
+  its CSS then. Wrong: a `visible` island below the fold, or an `interaction` island nobody clicks,
+  may not wake for a long time or ever, and until then its markup sat UNSTYLED — the element carried
+  its scope class (`hero-shell svelte-816jq6`) while no stylesheet on the page held a rule for it,
+  so a hero's `min-height: 536px` computed to 0 (the CLS the region-css link exists to prevent) and
+  dev could not be trusted for layout. Prod styles an unwoken island from load (its link is a real
+  `.css` asset); dev matches only by executing the module at boot. The skip's justification is
+  moot: it was added to avoid front-loading island dep discovery, but island deps are now
+  pre-bundled at server start through `optimizeDeps.entries`, so importing every island at boot
+  discovers nothing and re-optimizes nothing (and is what `warm_island_module` already does on
+  hover/prefetch). The rescue imports every region-css link again.
+  `test/browser/dev-region-css-import` (an `interaction` island nothing will wake has its module
+  imported at boot; a lake's still is).
 - **DEV: a frozen snippet forwarded into an island now gets its scoped CSS on a csr=false page.** A
   `{#snippet}` handed to an island compiles to a live region-snippet entry that carries the host's
   `<style>`; when it renders FROZEN (a csr=false page never hydrates it), its module is never

@@ -1085,16 +1085,16 @@ class OgygiaRegion extends HTMLElement {
 function apply_dev_head_region_css(): void {
 	if (!import.meta.env.DEV || typeof document === 'undefined') return;
 	void dom_ready().then(() => {
-		// A region that WILL wake imports its own entry on wake, which injects its CSS then. Importing it
-		// here too would only FRONT-LOAD its dep discovery: on a large app every island's lazy deps are
-		// discovered at once at boot, Vite re-optimizes, rotates its hash and full-reloads — the reload
-		// storm. So the rescue covers only what nothing else imports: a lake (`wake="none"`, frozen), a
-		// hole (`endpoint`, fallback markup), and a frozen snippet entry no element names at all.
-		const self_loading = new Set<string>();
-		for (const region of document.querySelectorAll('ogygia-region[entry]')) {
-			if (region.hasAttribute('endpoint') || region.getAttribute('wake') === 'none') continue;
-			self_loading.add(island_module_url(region.getAttribute('entry') || ''));
-		}
+		// EVERY region-css link is imported here — including one for an island that will wake on its
+		// own. The server-rendered markup must be styled BEFORE the island wakes: a `visible` island
+		// below the fold, or an `interaction` island nobody clicks, may not wake for a long time or ever,
+		// and until then its markup sits unstyled (a hero's `min-height` collapsing to 0 — the CLS the
+		// region-css link exists to prevent). Prod styles an unwoken island from load (its link is a
+		// real `.css` asset); dev matches only by executing the module now, so the scoped `<style>`
+		// injects now. (An earlier cut skipped waking islands to avoid front-loading their dep
+		// discovery — wrong trade, and moot: island deps are pre-bundled at server start through
+		// `optimizeDeps.entries`, so importing every island here discovers nothing and re-optimizes
+		// nothing. Importing early is also what `warm_island_module` already does on hover/prefetch.)
 		const seen = new Set<string>();
 		for (const link of document.querySelectorAll('link[data-ogygia-region-css]')) {
 			const href = link.getAttribute('href');
@@ -1106,7 +1106,7 @@ function apply_dev_head_region_css(): void {
 			// `import()` would resolve it against THIS module's url (`/node_modules/…/og-runtime.js` in an
 			// app) and 404 on `/node_modules/@id/…` — the same trap island entries avoid via this resolver.
 			const url = island_module_url(href);
-			if (seen.has(url) || self_loading.has(url)) continue;
+			if (seen.has(url)) continue;
 			seen.add(url);
 			void import(/* @vite-ignore */ url).catch(() => {});
 		}

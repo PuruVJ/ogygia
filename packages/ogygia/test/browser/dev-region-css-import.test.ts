@@ -88,14 +88,18 @@ test('DEV: a document-relative region-css href resolves against the document, no
 	expect(document.head.querySelectorAll('link[data-ogygia-region-css]').length).toBe(0);
 });
 
-// The rescue must cover only what nothing else imports. A region that WILL wake imports its own entry
-// on wake (injecting its CSS then); importing it at boot too would only front-load its dep discovery —
-// on a large app every island's lazy deps at once, Vite re-optimizes, rotates its hash, full-reloads.
-test('DEV: a link for a region that will wake is dropped, not imported (no front-loaded discovery)', async () => {
+// REGRESSION (field report: "scoped <style> never injected in dev"): the rescue must import the link
+// for an island that WILL wake on its own, too. An earlier cut skipped those, reasoning the island
+// imports its entry at wake — but a `visible` island below the fold, or an `interaction` island nobody
+// clicks, may not wake for a long time or ever, and its server-rendered markup sat UNSTYLED meanwhile
+// (a hero's min-height collapsing to 0). Prod styles an unwoken island from load; dev matches only by
+// executing the module at boot. Front-loaded discovery is moot: island deps are pre-bundled via entries.
+test('DEV: a link for an island that will wake is STILL imported at boot — its markup must be styled before wake', async () => {
 	document.head.querySelectorAll('link[data-ogygia-region-css]').forEach((n) => n.remove());
 	document.documentElement.removeAttribute('data-og-dev-css-marker');
-	// `interaction`: zero JS until a pointer/key lands INSIDE it — it will not import on its own here.
-	const mod = marker_module('skip-waking'); // fresh url: a wrong import WOULD run it and set the marker
+	// `interaction`: zero JS until a pointer/key lands INSIDE it — nothing here will ever wake it, so
+	// the boot import is the ONLY way its CSS reaches the page.
+	const mod = marker_module('style-before-wake'); // fresh url: only a boot import can run it
 	const region = document.createElement('ogygia-region');
 	region.setAttribute('entry', mod);
 	region.setAttribute('wake', 'interaction');
@@ -104,13 +108,11 @@ test('DEV: a link for a region that will wake is dropped, not imported (no front
 
 	bootDev();
 
-	// The inert link is removed …
+	// The module ran at boot — without any wake.
 	await expect
-		.poll(() => document.head.querySelectorAll('link[data-ogygia-region-css]').length, { timeout: 10_000 })
-		.toBe(0);
-	// … but the module was NOT imported: the region owns that on wake.
-	await new Promise((r) => setTimeout(r, 300));
-	expect(document.documentElement.getAttribute('data-og-dev-css-marker')).toBeNull();
+		.poll(() => document.documentElement.getAttribute('data-og-dev-css-marker'), { timeout: 10_000 })
+		.toBe('1');
+	expect(document.head.querySelectorAll('link[data-ogygia-region-css]').length).toBe(0);
 	region.remove();
 });
 
