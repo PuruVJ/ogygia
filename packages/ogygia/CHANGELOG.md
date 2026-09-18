@@ -109,6 +109,22 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **The runtime's hash module is no longer named `fingerprint.js`, which ad blockers were
+  blocking — in production, for every user with a content blocker.** uBlock / AdBlock
+  anti-fingerprinting filter lists match `fingerprint.js` by URL path. The module
+  (`runtime/fingerprint.ts` — the house FNV-1a hash and the region fingerprint helpers, imported
+  everywhere) was served under that name in dev, and a module imported from that many places can be
+  split by the bundler into its own shared chunk carrying the same name in a production build. When
+  the filter fired the request died with `ERR_BLOCKED_BY_CONTENT_BLOCKER`, the region runtime never
+  loaded, and every island failed to hydrate — while the same site worked in a private window, which
+  runs no filter-list extension. Renamed to `runtime/hash.ts`; nothing else about it changed (same
+  exports, same identifiers — filter lists match URL paths, never JS names, so `fingerprint_of` /
+  `data-og-fp` stay). Every importer updated, including two the usual sweep could not see:
+  `runtime/reconcile.ts` and `Region.svelte` both carry an embedded NUL byte (a literal sentinel in
+  a string), which makes `grep` treat them as binary and skip them silently — found by the build
+  and by a test, then confirmed with a binary-tolerant sweep. The built output is verified to
+  contain no filename on the common filter lists; the chunks production serves are `og-runtime.*`
+  and `og-region.*`, which match nothing.
 - **DEV: every island is a crawl root for Vite's own dep scanner — no mid-session
   re-optimization, no reload storm.** Under `csr = false` Kit ships no client entry and registers
   only `routes/**/+*` as scan entries, so Vite's scanner reaches an island only when a route file

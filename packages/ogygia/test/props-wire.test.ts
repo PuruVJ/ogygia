@@ -13,7 +13,7 @@ import {
 	WIRE_FORMAT_JSON
 } from '../src/server/props-wire.js';
 import { analyze, index_seed, SEED_REF_KEY, seed_ref_reviver } from '../src/seed-refs.js';
-import { fingerprint_of } from '../src/runtime/fingerprint.js';
+import { fingerprint_of } from '../src/runtime/hash.js';
 
 const LOREM = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor. ';
 const block = (id: string) => ({

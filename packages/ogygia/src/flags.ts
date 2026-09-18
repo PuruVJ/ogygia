@@ -15,7 +15,7 @@
  * it, `.pick()`, `.value()`, and one `decide()`.
  */
 import { DEV } from 'esm-env';
-import { fnv1a32 } from './runtime/fingerprint.js';
+import { fnv1a32 } from './runtime/hash.js';
 import type { StandardSchemaV1 } from './router/view.js';
 
 export type CtxLike = {

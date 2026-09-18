@@ -7,8 +7,8 @@
  * one side, no strings, typos are type errors.
  */
 import { record_source_read } from './capture.js';
-// The house hash — runtime/fingerprint.ts owns FNV-1a (region fps, flag buckets); never re-rolled.
-import { fnv1a } from '../runtime/fingerprint.js';
+// The house hash — runtime/hash.ts owns FNV-1a (region fps, flag buckets); never re-rolled.
+import { fnv1a } from '../runtime/hash.js';
 
 /** The identity stamp — read by `freeze.invalidate(fn, args)`. */
 export const SOURCE_ID = Symbol.for('ogygia.freeze.source-id');

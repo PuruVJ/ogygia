@@ -10,7 +10,7 @@
  * recomputes on its own; the linker's `unregister_host` deliberately does NOT clear it.
  */
 import { fs, path, createHash } from './host.js';
-import { fnv1a32 } from '../runtime/fingerprint.js';
+import { fnv1a32 } from '../runtime/hash.js';
 // `performance` is a global in both Node (≥16) and the browser — no import, so the driver graph loads
 // in the browser compiler (Observatory REPL) without pulling node:perf_hooks.
 const performance = globalThis.performance;
@@ -182,7 +182,7 @@ function extract_module_specs(src: string): string[] {
 	return specs;
 }
 
-// one shared FNV-1a-32 (runtime/fingerprint.ts is the pure, import-anywhere home)
+// one shared FNV-1a-32 (runtime/hash.ts is the pure, import-anywhere home)
 const fnv = fnv1a32;
 
 /** Once per module id: a dependency file carries ogygia marks but its package declares no

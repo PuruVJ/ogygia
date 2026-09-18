@@ -36,7 +36,7 @@
  * Universal module (no Node imports): the index + reducer run on the server, the resolver on the
  * client, and the unit tests exercise both ends against a real devalue round trip.
  */
-import { fnv1a } from './runtime/fingerprint.js';
+import { fnv1a } from './runtime/hash.js';
 
 /** The devalue type tag. */
 export const SEED_REF_KEY = 'OgygiaSeedRef';

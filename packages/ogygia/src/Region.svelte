@@ -26,7 +26,7 @@
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, preloadPolicy } from 'virtual:ogygia/island-deps';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps } from 'virtual:ogygia/region-endpoint';
-	import { fingerprint_of } from './runtime/fingerprint.js';
+	import { fingerprint_of } from './runtime/hash.js';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
@@ -533,7 +533,7 @@
 	const server_wire = $derived(nested || !__hydrate ? null : plan_props_wire(__props, __entry));
 	const server_props_script = $derived(server_wire ? props_sidecar('', server_wire.wire(null)) : '');
 	// The hole's IDENTITY — the fingerprint of its region id + canonical props, the same function on
-	// both legs (fingerprint.ts), so the client leg computes the SAME value the server emitted. The
+	// both legs (runtime/hash.ts), so the client leg computes the SAME value the server emitted. The
 	// runtime keys the server-minted facts (endpoint, props sidecar) on it: when Kit gives up
 	// hydrating a client-on document and mounts it fresh, the client leg renders this hole again
 	// with NO address (it cannot mint), and the runtime hands the SSR facts back by identity — never
