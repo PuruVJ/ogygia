@@ -3,7 +3,12 @@
 // fooled by tag-like text the way a regex balance-count is (a `<ogygia-region>` in a CSS comment
 // threw a customer's count off, so their island skip silently stopped applying in dev).
 import { describe, it, expect } from 'vitest';
-import { scanRegions, type RegionSpan } from '../src/server/split-regions.js';
+import {
+	scanRegions,
+	liftRegions,
+	restoreRegions,
+	type RegionSpan
+} from '../src/server/split-regions.js';
 
 const kinds = (html: string) => [...scanRegions(html)].map((r) => r.kind);
 const one = (html: string): RegionSpan => {
@@ -152,5 +157,102 @@ describe('robustness', () => {
 
 	it('does not match <ogygia-region-ish> (a longer tag name)', () => {
 		expect([...scanRegions('<ogygia-region-thing></ogygia-region-thing>')]).toEqual([]);
+	});
+});
+
+describe('liftRegions / restoreRegions — the round-trip for a third-party SSR pass', () => {
+	it('lifts top-level regions to element placeholders and restores byte-for-byte', () => {
+		const html = 'a<ogygia-region entry="/e.js" wake="load">x</ogygia-region>b';
+		const { shell, regions } = liftRegions(html);
+		expect(shell).toBe('a<og-lift data-i="0"></og-lift>b');
+		expect(regions).toHaveLength(1);
+		expect(regions[0].kind).toBe('island');
+		expect(regions[0].outerHtml).toBe('<ogygia-region entry="/e.js" wake="load">x</ogygia-region>');
+		expect(restoreRegions(shell, regions)).toBe(html);
+	});
+
+	it('transplants the renderer marks stamped on a placeholder onto the region opening tag', () => {
+		const html = '<ogygia-region entry="/e.js" wake="visible">inner</ogygia-region>';
+		const { shell, regions } = liftRegions(html);
+		// The scoped renderer annotates the placeholder (a ::slotted rule -> sc- class + c-id/s-sn).
+		const rendered = shell.replace(
+			'<og-lift data-i="0"></og-lift>',
+			'<og-lift data-i="0" class="sc-qds-web-nav" c-id="0.5795" s-sn=""></og-lift>'
+		);
+		const out = restoreRegions(rendered, regions);
+		expect(out).toContain('entry="/e.js"');
+		expect(out).toContain('class="sc-qds-web-nav"');
+		expect(out).toContain('c-id="0.5795"');
+		expect(out).toContain('s-sn=""');
+		expect(out).toContain('>inner</ogygia-region>');
+		expect(out).not.toContain('og-lift');
+	});
+
+	it('unions the renderer class with a class the region already carries', () => {
+		const html = '<ogygia-region class="mine" wake="none">x</ogygia-region>';
+		const { regions } = liftRegions(html);
+		const out = restoreRegions('<og-lift data-i="0" class="sc-x"></og-lift>', regions);
+		expect(out).toContain('class="mine sc-x"');
+	});
+
+	it('never clobbers an attribute the region already owns', () => {
+		const html = '<ogygia-region entry="/real.js" wake="load">x</ogygia-region>';
+		const { regions } = liftRegions(html);
+		const out = restoreRegions('<og-lift data-i="0" entry="/spoof.js" c-id="0.1"></og-lift>', regions);
+		expect(out).toContain('entry="/real.js"');
+		expect(out).not.toContain('/spoof.js');
+		expect(out).toContain('c-id="0.1"');
+	});
+
+	it('withInner reshapes a lake/hole inner while preserving the tags and index', () => {
+		const html = '<ogygia-region wake="none"><p>old</p></ogygia-region>';
+		const { regions } = liftRegions(html);
+		const reshaped = regions[0].withInner('<p>new</p>');
+		expect(reshaped.kind).toBe('lake');
+		expect(reshaped.index).toBe(0);
+		expect(reshaped.outerHtml).toBe('<ogygia-region wake="none"><p>new</p></ogygia-region>');
+		expect(restoreRegions('<og-lift data-i="0"></og-lift>', [reshaped])).toBe(reshaped.outerHtml);
+	});
+
+	it('keeps a nested region inside its parent outerHtml (only top level is lifted)', () => {
+		const html =
+			'<ogygia-region wake="none"><ogygia-region entry="/e.js" wake="load">i</ogygia-region></ogygia-region>';
+		const { shell, regions } = liftRegions(html);
+		expect(shell).toBe('<og-lift data-i="0"></og-lift>');
+		expect(regions).toHaveLength(1);
+		expect(regions[0].kind).toBe('lake');
+		expect(regions[0].innerHtml).toContain('<ogygia-region entry="/e.js"');
+	});
+
+	it('leaves an unknown placeholder in place rather than dropping it', () => {
+		const { regions } = liftRegions('<ogygia-region wake="load">x</ogygia-region>');
+		expect(restoreRegions('<og-lift data-i="9"></og-lift>', regions)).toBe(
+			'<og-lift data-i="9"></og-lift>'
+		);
+	});
+
+	it('the element placeholder survives a renderer that drops leading comments', () => {
+		const html = '<!--[--><ogygia-region entry="/e.js" wake="load">x</ogygia-region>';
+		const { shell, regions } = liftRegions(html);
+		// parse5 discards a leading comment run; the element placeholder is not a comment, so it stays.
+		const rendered = shell.replace('<!--[-->', '');
+		expect(restoreRegions(rendered, regions)).toBe(
+			'<ogygia-region entry="/e.js" wake="load">x</ogygia-region>'
+		);
+	});
+
+	it('restores even when the renderer emits the placeholder without a closing tag', () => {
+		const { regions } = liftRegions('<ogygia-region wake="load">x</ogygia-region>');
+		expect(restoreRegions('<og-lift data-i="0">', regions)).toBe(
+			'<ogygia-region wake="load">x</ogygia-region>'
+		);
+	});
+
+	it('returns the html untouched when there are no regions', () => {
+		const html = '<div><p>plain</p></div>';
+		const { shell, regions } = liftRegions(html);
+		expect(shell).toBe(html);
+		expect(regions).toEqual([]);
+		expect(restoreRegions(html, regions)).toBe(html);
 	});
 });

@@ -50,6 +50,23 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Added
 
+- **`ogygia/rewrite` — the region round-trip for an app that runs a third-party SSR pass over the
+  final HTML** (a web-component server render, a translation proxy, an A/B injector). Alongside the
+  existing `scanRegions`, the module now exports `liftRegions(html)` → `{ shell, regions }` (every
+  top-level `<ogygia-region>` becomes an `<og-lift data-i="N">` ELEMENT placeholder — an element,
+  not a comment, so a renderer that drops leading comments cannot drop it) and
+  `restoreRegions(shell, regions)` which splices them back and TRANSPLANTS the marks a scoped
+  renderer stamps on the placeholder (a `::slotted` rule compiles to a `sc-*` class plus
+  `c-id` / `s-sn`) onto the region's opening tag — matched loosely because the renderer annotates
+  it, `class` unioned, an owned attribute never clobbered, and only attributes touched, never the
+  region's light DOM (so it cannot shift the child-index an island — or an island nested in a lifted
+  lake — hydrates against). `LiftedRegion.kind` classifies island/lake/hole and `.withInner()`
+  reshapes a lake/hole. The whole module is a zero-import tokenizer, so it is exported Kit-free at
+  `ogygia/rewrite` (and stays on `ogygia/server`), usable from the non-SvelteKit half of a monorepo
+  where these SSR passes live. Field-tested migrating a customer's QDS/Stencil middleware from
+  per-tag DSD to a whole-document scoped render: 14 islands byte-identical pre/post, zero runtime
+  discards. `test/split-regions` (round-trip: mark transplant, class union, no-clobber, nested
+  region, unknown/closeless placeholder, leading-comment survival).
 - **Region CSS obeys Kit's `inlineStyleThreshold`: small region sheets ship inline, not as
   render-blocking links.** A region's CSS travels with the region — an island's, a held dual's, a
   content body's, a hole answer's sheets are linked per rendered region (`data-ogygia-region-css`)

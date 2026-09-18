@@ -100,6 +100,10 @@
 			"types": "./dist/hooks.d.ts",
 			"default": "./src/hooks.ts"
 		},
+		"./rewrite": {
+			"types": "./dist/server/split-regions.d.ts",
+			"default": "./src/server/split-regions.ts"
+		},
 		"./router": {
 			"types": "./dist/router/index.d.ts",
 			"default": "./src/router/index.ts"
@@ -319,6 +323,10 @@
 			"./server": {
 				"types": "./dist/hooks.d.ts",
 				"default": "./dist/hooks.js"
+			},
+			"./rewrite": {
+				"types": "./dist/server/split-regions.d.ts",
+				"default": "./dist/server/split-regions.js"
 			},
 			"./router": {
 				"types": "./dist/router/index.d.ts",

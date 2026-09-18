@@ -1766,9 +1766,19 @@ export interface OgygiaHandleOptions {
 export { ogygiaTransport as transport } from './transport.js';
 // `document()` — render a held region into a complete ogygia document (a `Response`). Server-only.
 export { document, type DocumentOptions } from './document.js';
-// `scanRegions()` — walk the `<ogygia-region>` subtrees of SSR HTML, for an app that runs a
-// third-party SSR/hydration pass over the document and must not reshape island bytes.
-export { scanRegions, type RegionSpan, type RegionKind } from './server/split-regions.js';
+// The region round-trip for an app that runs a third-party SSR/hydration pass over the document and
+// must not reshape island bytes: `scanRegions()` walks the `<ogygia-region>` subtrees;
+// `liftRegions()` / `restoreRegions()` take them out and splice them back (marks merged). Also on
+// the Kit-free `ogygia/rewrite` export, for the non-SvelteKit half of a monorepo.
+export {
+	scanRegions,
+	liftRegions,
+	restoreRegions,
+	type RegionSpan,
+	type RegionKind,
+	type LiftedRegion,
+	type LiftResult
+} from './server/split-regions.js';
 
 export function handle(options: OgygiaHandleOptions = {}): Handle {
 	const instance = new OgygiaHandle(options);
