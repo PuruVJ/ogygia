@@ -24,7 +24,7 @@
  */
 import { createRawSnippet, hydrate, unmount, type Component, type Snippet } from 'svelte';
 import { render as ssr_render } from 'svelte/server';
-import { BROWSER } from 'esm-env';
+import { BROWSER, DEV } from 'esm-env';
 import { register_kind, mint } from './ref.js';
 import { kit_render_context, kit_request_event } from './server/kit-context.js';
 import { DEFAULT_ISLANDS_ENDPOINT } from './server/endpoint.js';
@@ -104,6 +104,15 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 		const thread_head = (r: ServerRenderer, head: string | undefined) => {
 			if (head && typeof r.head === 'function') r.head((child) => child.push(head));
 		};
+		// DEV: the synth ENTRY's own scoped `<style>` (a snippet body carries the host's styles) reaches
+		// the client only by executing its module — but a FROZEN snippet on a csr=false page never imports
+		// it, so its CSS silently never applied (dev ≠ prod, which ships it via fouc-css). In dev `desc.e`
+		// is the entry's module url; emit its region-css link so the runtime imports it on boot (executing
+		// it injects the scoped `<style>`), the same channel islands use. In prod `desc.e` is a built JS
+		// asset, so this DEV branch DCEs out and the entry CSS ships through the build handoff.
+		const dev_css_link = DEV
+			? `<link rel="stylesheet" href="${desc.e}" data-ogygia-region-css>`
+			: '';
 		const server_snip = ((renderer: ServerRenderer, ...args: unknown[]) => {
 			// Server snippet args arrive as raw values; forward call-time params as `__ogArgs`.
 			const props = args.length ? { ...desc.p, __ogArgs: args } : desc.p;
@@ -112,14 +121,14 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 			if (can_async) {
 				renderer.child(async (r) => {
 					const out = await ssr_render(live_entry!, { props, context: kit_render_context() });
-					thread_head(r, out.head);
+					thread_head(r, (out.head || '') + dev_css_link);
 					r.push(WRAP_OPEN + out.body + WRAP_CLOSE);
 				});
 			} else {
 				const out = live_entry
 					? ssr_render(live_entry, { props, context: kit_render_context() })
 					: { head: '', body: '' };
-				thread_head(renderer, out.head);
+				thread_head(renderer, (out.head || '') + dev_css_link);
 				renderer.push(WRAP_OPEN + out.body + WRAP_CLOSE);
 			}
 		}) as unknown as RegionSnippet;

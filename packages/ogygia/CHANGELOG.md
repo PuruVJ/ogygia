@@ -109,6 +109,16 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **DEV: a frozen snippet forwarded into an island now gets its scoped CSS on a csr=false page.** A
+  `{#snippet}` handed to an island compiles to a live region-snippet entry that carries the host's
+  `<style>`; when it renders FROZEN (a csr=false page never hydrates it), its module is never
+  imported on the client, so its scoped `<style>` was never injected — the markup wore the scope
+  class but no rule matched it, silently, in dev only (a production build ships the entry CSS through
+  the build handoff, so this was a dev ≠ prod divergence that failed with no error). The live
+  snippet's SSR now threads a region-css `<link>` for its entry's dev module url into `<head>`, so
+  the boot rescue imports it and the scoped `<style>` injects — the same region-css channel islands
+  use, and scoped (a better match than the prod build's unscoped style-body fallback). DEV-only, DCE'd
+  from the prod bundle. `test/region-snippet-dev-css`.
 - **A portable snippet's markup now carries the host component's style scope, so CSS authored for it
   applies.** A `{#snippet}` forwarded into a hydrate island is lifted into its own entry; that entry
   had no `<style>`, so Svelte gave its markup NO scope class and any rule the host authored for it
