@@ -521,9 +521,20 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// Declared `ogygia.files` packages join both lists: SSR-external code never enters
 					// our compiler, and the dev prebundle would choke on `with { }` attributes (esbuild)
 					// before the transform ever saw them.
+					// DEV churn guard. Under `csr = false` Kit ships no client entry, so Vite's dep
+					// scanner finds nothing to crawl: island client deps are discovered LAZILY, one page
+					// render at a time, and each discovery re-optimizes and rotates the optimizer's
+					// browserHash. A tab loaded under the old hash then dynamic-imports island deps at a
+					// `?v=` that 404s and every island fails on wake (a "works for everyone but me"
+					// report after a `.vite` nuke). Pre-declaring the deps EVERY hydrated island imports
+					// forces one up-front optimize pass and removes the first-minutes cliff. Dev server
+					// only; a build has a real client graph. The app's own `include` is preserved by Vite
+					// (it merges plugin `include` arrays).
+					const dev_island_deps =
+						env.command === 'serve' ? ['svelte', 'svelte/internal/client', 'devalue'] : [];
 					return {
 						ssr: { noExternal: ['esm-env', 'ogygia', ...declared_pkg_names] },
-						optimizeDeps: { exclude: declared_pkg_names },
+						optimizeDeps: { exclude: declared_pkg_names, include: dev_island_deps },
 						// CONTINUITY config → compile-time constants the client runtime reads (typeof-guarded,
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
@@ -670,8 +681,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// build's client leg — remove it here, where the leg is certain (the environment), not in
 				// configResolved, which the client environment runs again AFTER the server leg wrote it.
 				{
-					const env = (this as unknown as { environment?: { name?: string; config?: { consumer?: string } } })
-						.environment;
+					const env = (
+						this as unknown as { environment?: { name?: string; config?: { consumer?: string } } }
+					).environment;
 					const server_leg = env ? env.name === 'ssr' || env.config?.consumer === 'server' : is_ssr;
 					if (is_build && server_leg)
 						fs.rmSync(ssr_hosts_handoff_path(kit_dirs(root).out_dir), { force: true });
@@ -714,15 +726,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// cms app shipped documents pointing at a runtime chunk that was never emitted).
 					const emit_runtime =
 						!standalone &&
-						(hasAnyCsrFalseRoute(kit_dirs(root).routes_dir) ||
-							compiler.has_hydrate_regions());
+						(hasAnyCsrFalseRoute(kit_dirs(root).routes_dir) || compiler.has_hydrate_regions());
 					// The runtime entry (feature-selected) + one deterministic chunk per deduped hydrate
 					// region — the driver owns the naming + dedup; `this.emitFile` is the injected primitive.
 					// Gated on the SERVER leg's real module graph (link/emit-gate.ts): an island whose host
 					// the server bundle never loaded gets no chunk. No handoff → every prescanned island.
 					let loaded: Set<string> | null = null;
 					try {
-						loaded = parse_ssr_hosts(fs.readFileSync(ssr_hosts_handoff_path(kit_dirs(root).out_dir), 'utf8'));
+						loaded = parse_ssr_hosts(
+							fs.readFileSync(ssr_hosts_handoff_path(kit_dirs(root).out_dir), 'utf8')
+						);
 					} catch {
 						/* no server-leg handoff (standalone / client-only build) */
 					}
@@ -899,8 +912,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// SERVER leg of a build: hand the real module graph to the client leg (emit gate). The
 				// leg is read off the ENVIRONMENT (Vite's environment API builds `ssr` then `client` in one
 				// app build; `config.build.ssr` is false for both there).
-				const env = (this as unknown as { environment?: { name?: string; config?: { consumer?: string } } })
-					.environment;
+				const env = (
+					this as unknown as { environment?: { name?: string; config?: { consumer?: string } } }
+				).environment;
 				const server_leg = env ? env.name === 'ssr' || env.config?.consumer === 'server' : is_ssr;
 				if (is_build && server_leg && !standalone) {
 					try {
@@ -909,7 +923,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						fs.writeFileSync(handoff, JSON.stringify(compiler.ssr_transformed_hosts()));
 					} catch (e) {
 						// best effort — without it the client leg emits every prescanned island
-						if (isMainThread) console.warn('[ogygia] could not write the server-leg island handoff:', e);
+						if (isMainThread)
+							console.warn('[ogygia] could not write the server-leg island handoff:', e);
 					}
 				}
 				if (__P) {
@@ -1150,7 +1165,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// Drop those transforms so the next load re-resolves them to the shim (driver:
 				// mark_island_closure).
 				if (is_dev && vite_server) {
-					for (const marked of compiler.drain_closure_marks()) invalidate_module_id(vite_server, marked);
+					for (const marked of compiler.drain_closure_marks())
+						invalidate_module_id(vite_server, marked);
 				}
 				if (result) return result as { code: string; map: Rolldown.SourceMapInput | null };
 				// The driver saw nothing to do, but the edge rewrite above must still ship.
@@ -1223,7 +1239,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// (Program.page_keys); the collector unions them over each island's closure.
 					(module_id) => program.page_keys.get(module_id) ?? null
 				);
-				report_seed_shaping(map, bundle as Record<string, { type: string; moduleIds?: string[]; imports?: string[] }>, program, root);
+				report_seed_shaping(
+					map,
+					bundle as Record<string, { type: string; moduleIds?: string[]; imports?: string[] }>,
+					program,
+					root
+				);
 				// SERVER-ROUTER CSS handoff: each root's whole component-tree CSS was compiled + emitted as
 				// ONE dedicated asset in buildStart (router_css_refs). Resolve each referenceId to its
 				// hashed URL under `rcss:<rel>`, the key `virtual:ogygia/router-css` reads via `islandCss()`
@@ -1271,7 +1292,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// (the app's svelte.config.js, read next to `kit_dirs`), keyed by href — the render emits
 				// those as `<style data-ogygia-region-css>` instead of blocking `<link>`s.
 				const css_inline = collect_inline_css(
-					bundle as Record<string, { type: string; fileName?: string; source?: string | Uint8Array }>,
+					bundle as Record<
+						string,
+						{ type: string; fileName?: string; source?: string | Uint8Array }
+					>,
 					[...Object.values(map.css).flat(), ...Object.values(content_css).flat()],
 					kit_inline_style_threshold(root)
 				);

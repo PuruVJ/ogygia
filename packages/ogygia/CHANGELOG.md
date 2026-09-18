@@ -73,6 +73,21 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **A dev dep re-optimization no longer strands every island on an open csr=false tab.** Under
+  `csr = false` Kit ships no client bootstrap, so nothing injected Vite's `@vite/client` — and the
+  dev bridge that carries it was injected only when the SPA router was on. When Vite re-optimized
+  dependencies (it does this lazily on a csr=false app, because there is no client entry for its
+  scanner to crawl, so island deps are discovered one render at a time) the optimizer's browserHash
+  rotated, and a tab loaded under the old hash dynamic-imported island deps at a `?v=` that now
+  404s: every island failed on wake with `Failed to fetch dynamically imported module`, and the tab
+  stayed dead until a manual reload because Vite's own full-reload signal could not reach it. The
+  dev bridge is now injected on every csr=false page regardless of the router, so Vite's recovery
+  works; the plugin pre-declares the deps every hydrated island imports (`svelte`,
+  `svelte/internal/client`, `devalue`) in `optimizeDeps.include` for the dev server, which forces
+  one up-front optimize pass and removes the first-minutes churn after a `.vite` nuke; and the
+  runtime now tells an entry-fetch failure from a hydrate throw, naming the re-optimize cause in dev
+  instead of reporting "hydration failed". `e2e/dev-hole-hmr` (the bridge and its `@vite/client`
+  import are present on a csr=false page).
 - **`goto()` from an island on a Kit-booted page navigates through Kit.** Inside an island,
   `$app/navigation` is the ogygia shim, and every call went to the ogygia router — which does not
   own a csr=true document and could only fall back to a full load. A customer's green-band chips,

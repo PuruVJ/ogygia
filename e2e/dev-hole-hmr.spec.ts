@@ -63,6 +63,13 @@ test.describe('dev: hole endpoint survives an HMR edit of its host', () => {
 		test.setTimeout(120_000);
 		const before = await hole_status();
 		check('page renders (dev)', before.page === 200, `status=${before.page}`);
+		// The DEV bridge (it imports `@vite/client`) must be on a csr=false page so Vite's own
+		// full-reload recovery reaches it after a dep re-optimization rotates the optimizer hash —
+		// Kit ships no client bootstrap under csr=false, so nothing else injects the Vite client.
+		const dev_html = await (await fetch(`${base}/lake-kit/`)).text();
+		check('csr=false page carries the dev bridge (@vite/client recovery)', /data-ogygia-dev-hmr/.test(dev_html));
+		const bridge = await (await fetch(`${base}/@id/virtual:ogygia/dev-hmr`)).text();
+		check('the dev bridge imports @vite/client', bridge.includes('@vite/client'), bridge.slice(0, 60));
 		check('a hole endpoint is in the page', before.endpoint !== '', before.endpoint);
 		check(
 			'hole answers before the edit (200 or 204)',

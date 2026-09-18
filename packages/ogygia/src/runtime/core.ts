@@ -47,6 +47,11 @@ const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS_
  *  Svelte's own recovery on a mismatch) — a bound on memory, not a behaviour anyone tunes. */
 const SSR_SNAPSHOT_MAX = 1 << 19;
 
+/** A dynamic-import failure of the island ENTRY (network/stale), not a hydration throw. The browser
+ *  message is `Failed to fetch dynamically imported module: <url>` across engines. */
+const ENTRY_FETCH_FAILED_RE =
+	/failed to fetch dynamically imported module|error loading dynamically imported module/i;
+
 /** The island's server markup to hydrate against later (#ssr_html), or `null` when there is
  *  nothing worth keeping: no children, or more than SSR_SNAPSHOT_MAX characters. */
 function snapshot_markup(region: Element): string | null {
@@ -227,8 +232,11 @@ function region_fragment(html: string): { frag: DocumentFragment; ready: Promise
 	const styles = frag.querySelectorAll('style[data-ogygia-region-css]');
 	if (styles.length) {
 		const present = new Set<string>();
-		for (const n of document.head.querySelectorAll('[data-ogygia-region-css], link[rel="stylesheet"]')) {
-			const id = n.tagName === 'STYLE' ? n.getAttribute('data-ogygia-region-css') : n.getAttribute('href');
+		for (const n of document.head.querySelectorAll(
+			'[data-ogygia-region-css], link[rel="stylesheet"]'
+		)) {
+			const id =
+				n.tagName === 'STYLE' ? n.getAttribute('data-ogygia-region-css') : n.getAttribute('href');
 			if (id) present.add(id);
 		}
 		for (const style of styles) {
@@ -351,7 +359,8 @@ class OgygiaRegion extends HTMLElement {
 				if (facts) {
 					this.#minted_endpoint = facts.endpoint;
 					this.setAttribute('endpoint', facts.endpoint);
-					if (facts.sidecar) restore_props_sidecar(this, facts.sidecar.cloneNode(true) as HTMLScriptElement);
+					if (facts.sidecar)
+						restore_props_sidecar(this, facts.sidecar.cloneNode(true) as HTMLScriptElement);
 				} else if (import.meta.env.DEV && identity) {
 					console.warn(HOLE_WITHOUT_ADDRESS_WARNING, this.getAttribute('entry') || identity);
 				}
@@ -855,7 +864,29 @@ class OgygiaRegion extends HTMLElement {
 					...dt_ids(this),
 					message: (err as { message?: string })?.message ?? String(err)
 				});
-			console.error('[ogygia] hydration failed for', this.getAttribute('entry'), err);
+			// Distinguish the ENTRY FETCH failing (the module never loaded) from the hydrate throwing
+			// (the module loaded, its code ran and failed). A `Failed to fetch dynamically imported
+			// module` on the island's own entry is not a hydration problem: in dev it almost always
+			// means Vite re-optimized deps and rotated the optimizer hash, so this already-loaded tab
+			// is importing dep URLs that no longer exist — a reload picks up the new graph (the dev
+			// bridge carries `@vite/client`, so Vite's own full-reload does this on the next signal).
+			const msg = (err as { message?: string })?.message ?? '';
+			const entry = this.getAttribute('entry');
+			if (ENTRY_FETCH_FAILED_RE.test(msg)) {
+				if (import.meta.env.DEV) {
+					console.error(
+						`[ogygia] island entry failed to load: ${entry}\n` +
+							`The module could not be FETCHED (not a hydration error). In dev this usually means ` +
+							`Vite re-optimized dependencies and rotated its optimizer hash while this tab was ` +
+							`open, so its dep imports 404 — reload the page. Original error:`,
+						err
+					);
+				} else {
+					console.error('[ogygia] island entry failed to load:', entry, err);
+				}
+			} else {
+				console.error('[ogygia] hydration failed for', entry, err);
+			}
 		} finally {
 			this.#hydrating = false;
 			hydrate_settled(this);

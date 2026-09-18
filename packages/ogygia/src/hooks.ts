@@ -117,10 +117,7 @@ import { stringify } from 'devalue';
 import { serialize_provided_context } from './context-bridge.js';
 import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
-import {
-	set_page_recorder,
-	type PageSnapshot
-} from './page-seed-registry.js';
+import { set_page_recorder, type PageSnapshot } from './page-seed-registry.js';
 import { collect_remote_seed } from './server/remote-seed-gate.js';
 import { DocumentTail, set_tail_reader } from './server/document-tail.js';
 import { region_css_tag } from './server/region-css.js';
@@ -1062,15 +1059,21 @@ class OgygiaHandle {
 					: null;
 			const ordered = runtime_first(probe, runtime_tag);
 			if (ordered !== probe) head_out = ordered;
-			if (router_enabled) {
-				if (dev_hmr_url && !page_declares_dev_hmr_script(probe)) {
-					head_inject += `<script type="module" data-ogygia-dev-hmr src="${asset(dev_hmr_url)}"></script>`;
-					// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:
-					// a changed stylesheet joins this page only when the plugin derives the same scope
-					// among its owners — two route-group sub-apps never paint each other in dev.
-					const scope = (event?.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
-					head_inject += `<meta name="ogygia-dev-scope" content="${scope.replace(DOUBLE_QUOTE_G, '')}">`;
-				}
+			// The DEV bridge is NOT gated on the router — it carries `@vite/client`, and Vite's own
+			// full-reload recovery must reach EVERY csr=false page. A dep re-optimization rotates the
+			// optimizer's browserHash, so a tab loaded under the old hash dynamic-imports island deps
+			// (`svelte.js?v=<old>`) that now 404, and every island fails on wake. Kit ships no client
+			// bootstrap under csr=false, so nothing else injects the Vite client; gated on the router,
+			// an app with `ogygia({ router: false })` (or any island page whose head the router branch
+			// skips) kept a poisoned tab after a re-optimize until a manual reload, reporting only
+			// "hydration failed". `dev_hmr_url` is empty outside `vite serve`, so this stays dev-only.
+			if (dev_hmr_url && !page_declares_dev_hmr_script(probe)) {
+				head_inject += `<script type="module" data-ogygia-dev-hmr src="${asset(dev_hmr_url)}"></script>`;
+				// The page's sub-app scope (its route id's first segment) for the dev CSS bridge:
+				// a changed stylesheet joins this page only when the plugin derives the same scope
+				// among its owners — two route-group sub-apps never paint each other in dev.
+				const scope = (event?.route.id ?? '').split('/').filter(Boolean)[0] ?? '';
+				head_inject += `<meta name="ogygia-dev-scope" content="${scope.replace(DOUBLE_QUOTE_G, '')}">`;
 			}
 		}
 
@@ -1189,7 +1192,10 @@ class OgygiaHandle {
 							error: page_snap.error
 						},
 						seed_stringify,
-						!has_pending && data_shape.json && form_shape.json && analyze(page_snap.error ?? null).json
+						!has_pending &&
+							data_shape.json &&
+							form_shape.json &&
+							analyze(page_snap.error ?? null).json
 					)
 				: null;
 		if (page_payload) {
@@ -1197,7 +1203,8 @@ class OgygiaHandle {
 				emit_ogygia_script(
 					'page',
 					page_payload.text,
-					'data-ogygia-page' + (page_payload.json ? ` ${WIRE_FORMAT_ATTR}="${WIRE_FORMAT_JSON}"` : '')
+					'data-ogygia-page' +
+						(page_payload.json ? ` ${WIRE_FORMAT_ATTR}="${WIRE_FORMAT_JSON}"` : '')
 				)
 			);
 			if (DEVTOOLS)
@@ -1416,7 +1423,7 @@ class OgygiaHandle {
 			Object.entries(transport).map(([name, codec]) => [name, codec.encode])
 		);
 		// devalue output is `<`-safe by itself (it writes `<`), so no second pass over the payload.
-	return emit_ogygia_script('remote', devalue.stringify(data, reducers));
+		return emit_ogygia_script('remote', devalue.stringify(data, reducers));
 	}
 
 	/**
@@ -1545,7 +1552,8 @@ class OgygiaHandle {
 				[REF_WIRE_KEY]: ref_reviver(false)
 			} as Parameters<typeof devalue.parse>[1]);
 		} catch (e) {
-			if (import.meta.env.DEV) console.warn('[ogygia] region endpoint 403: island module load / props decode failed', e);
+			if (import.meta.env.DEV)
+				console.warn('[ogygia] region endpoint 403: island module load / props decode failed', e);
 			return null;
 		}
 		if (props === null || typeof props !== 'object' || Array.isArray(props)) return null;
@@ -1650,7 +1658,8 @@ class OgygiaHandle {
 		if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) {
 			// Server-side only (the response stays an opaque 403 — SEC-01): a dev seeing every hole
 			// fail deserves the reason in the terminal.
-			if (import.meta.env.DEV) console.warn(`[ogygia] region endpoint 403: bad signature for id "${id}"`);
+			if (import.meta.env.DEV)
+				console.warn(`[ogygia] region endpoint 403: bad signature for id "${id}"`);
 			return region_response('Forbidden', { status: 403 });
 		}
 
