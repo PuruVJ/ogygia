@@ -109,33 +109,35 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
-- **DEV: the whole island dep graph is pre-bundled at server start — no mid-session
-  re-optimization, no reload storm.** Under `csr = false` Kit ships no client entry, so Vite's dep
-  scanner sees an EMPTY client graph and island deps are discovered LAZILY, one wake at a time
-  (`visible` / `idle` / `interaction` each pull new lazy deps Vite never pre-bundled). Every
+- **DEV: every island is a crawl root for Vite's own dep scanner — no mid-session
+  re-optimization, no reload storm.** Under `csr = false` Kit ships no client entry and registers
+  only `routes/**/+*` as scan entries, so Vite's scanner reaches an island only when a route file
+  imports it statically. An island behind a block registry, an `import.meta.og.regions()` glob or a
+  `.remote.ts` mint is never crawled: its client deps are discovered LAZILY on its first wake
+  (`visible` / `idle` / `interaction` each pull new lazy deps Vite never pre-bundled), every
   discovery re-optimizes, rotates the optimizer's browserHash and full-reloads — and the reload
   wakes more islands, which discover more deps: on a large app (~15 islands, many lazy dynamic
   imports) a loop that never settles, reported as "island entries 404 and the page reload-loops
-  every few seconds". The plugin already pre-declared the deps EVERY island shares (`svelte`,
-  `svelte/internal/client`, `devalue`); it now declares the app's OWN island deps too. The islands
-  ARE the client graph and this plugin is the only thing that knows it, so `configResolved` (dev
-  only) runs the once-per-session prescan early, walks every hydrate island's closure — relative,
-  `$lib` and app-alias imports through `.svelte` / `.ts` / `.js`, the same walk the island graph
-  uses — and feeds every BARE package specifier it reaches into `optimizeDeps.include`: static,
-  side-effect and `import('x')` alike (the lazy dynamic imports were exactly the driver). A `defer`
-  island renders on the server and a lake ships no client JS, so neither is walked; `$app/*`,
-  `virtual:*`, `node:` builtins, `ogygia` itself and any package declaring an ogygia compile
-  surface (already `optimizeDeps.exclude`d) are skipped. One optimize pass at startup covers it all;
-  a `pnpm install` or config edit still re-optimizes ONCE, as in any Vite app, but nothing is left
-  to discover after that single reload. `Compiler.island_bare_deps()`;
-  `test/island-bare-deps`.
-  **Follow-up (same version):** the walk never seeds a plugin-resolved QUERY import (`?client` /
-  `?server` from vite-plugin-iso-import, `?raw`, `?url`, `?worker`) or a package subpath import
-  (`#internal`). Seeding `…/controller?client` verbatim made rolldown try to open
-  `controller.js?client` from disk → `UNLOADABLE_DEPENDENCY`, a dead dev server on the first pin.
-  Those are plugin / package territory, not files the optimizer can load; they resolve through the
-  normal plugin pipeline as they always did, and the walk does not go through them. The module that
-  carried one is still walked, so its sibling bare deps are unaffected.
+  every few seconds". `configResolved` (dev only) now runs the once-per-session prescan early and
+  appends every hydrate island's component FILE and host FILE — real, absolute source paths — to
+  `optimizeDeps.entries`, so Vite's OWN scanner crawls them at startup through the full plugin
+  pipeline: its resolver, every plugin's `resolveId` (a `?client` import resolves through
+  vite-plugin-iso-import), a linked workspace package followed as SOURCE and never pre-bundled, the
+  app's `exclude` honoured. Paths are glob-escaped (Vite globs `entries` as patterns, so a route
+  group `(pes)` or a `[slug]` dir would otherwise read as glob syntax) and absolute, so an island in
+  a monorepo package outside the app root is reached. A `defer` island renders on the server and a
+  lake ships no client JS, so neither is an entry; the host file covers a portable-snippet synth.
+  One optimize pass at startup covers it all; a `pnpm install` or config edit still re-optimizes
+  ONCE, as in any Vite app, but nothing is left to discover after that single reload.
+  `Compiler.island_scan_entries()`; `test/island-scan-entries`.
+  **Why entries and never a self-computed `include`** (the two pins this replaced, `c4161c2` and
+  `351d7eb`, both killed the dev server): the first cut walked island closures with the plugin's own
+  regex resolver and forced every bare specifier it found into `optimizeDeps.include`. Any
+  resolver that is not Vite's mis-classifies something Vite knows, and a wrong `include` hands
+  rolldown an id it cannot load — `UNLOADABLE_DEPENDENCY`. First a `?client` plugin query seeded
+  verbatim; then, with queries skipped, a linked workspace package seeded whole, whose internals
+  carried that same `?client` where no plugin resolver runs in the pre-bundle. An entry can only ever
+  ADD a crawl root; what the crawl finds is Vite's call.
 - **DEV: the region-css rescue resolves a document-relative href against the document, not the
   runtime module.** The SSR emits region-css hrefs document-relative (`../../@id/…` on a nested route
   — base-aware by design). The dev rescue that imports such a link's module (executing it injects the

@@ -71,6 +71,11 @@ import {
 	isFoucCssId,
 	isFoucScopedId
 } from '../compiler/fouc-css.js';
+
+// Glob metacharacters in a file path handed to `optimizeDeps.entries` (Vite globs entries as
+// PATTERNS): a route group `(pes)`, a param dir `[slug]`, `{a,b}`, `*`, `?`, `!`. Escaped, or the
+// scanner would read the directory name as glob syntax and never match the file.
+const GLOB_META_RE = /[()[\]{}*?!]/g;
 import { preprocess_component_for_css } from './style-preprocess.js';
 import {
 	needs_csr_false_full_reload,
@@ -675,26 +680,35 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					})
 				);
 
-				// DEV: pre-seed the WHOLE island dep graph into the optimizer. Under `csr = false` Kit
-				// ships no client entry, so Vite's dep scanner sees an empty client graph and island deps
-				// are discovered LAZILY, one wake at a time — each discovery re-optimizes, rotates the
-				// browserHash and full-reloads (a reload storm on a large app; see island_bare_deps).
-				// The islands ARE the client graph and this plugin is the only thing that knows it, so
-				// declare it here. `optimizeDeps.include` is exactly Vite's channel for deps its scanner
-				// can't find. The fixed list in the `config` hook covers what every island shares; this
-				// adds the app's OWN island deps — static, side-effect and dynamic imports alike. Vite
-				// reads `include` only when the optimizer starts (after every configResolved), so pushing
-				// into the resolved config here is honoured. `prescan()` is once-per-session, so running
-				// it now just moves buildStart's call earlier. Dev server only; a build has a real graph.
+				// DEV: hand Vite's dep scanner every island as a crawl ROOT. Under `csr = false` Kit ships
+				// no client entry and registers only `routes/**/+*` as scan entries, so an island reached
+				// through a block registry / a regions() glob / a `.remote.ts` mint is never crawled — its
+				// client deps are discovered LAZILY on first wake, each discovery re-optimizing, rotating
+				// the browserHash and full-reloading (a reload storm on a large app). Appending the island
+				// component + host FILES to `optimizeDeps.entries` lets Vite's OWN scanner crawl them at
+				// startup through the full plugin pipeline (every plugin's resolveId, linked packages
+				// followed as source, the app's `exclude` honoured) — see Compiler.island_scan_entries for
+				// why this is entries and never a self-computed `include`. Vite globs `entries` with
+				// `absolute: true`, so an absolute path outside the app root (a monorepo package) works —
+				// but as a glob PATTERN, so a route group like `(pes)` or a `[slug]` dir must be escaped.
+				// Vite reads `entries` only when the optimizer starts (after every configResolved), so
+				// pushing into the resolved config here is honoured. `prescan()` is once-per-session, so
+				// running it now just moves buildStart's call earlier. Dev server only.
 				if (is_dev) {
 					compiler.prescan();
-					const opt = config.optimizeDeps as { include?: string[] };
-					const include = (opt.include ??= []);
-					const have = new Set(include);
-					for (const dep of compiler.island_bare_deps()) {
-						if (!have.has(dep)) {
-							have.add(dep);
-							include.push(dep);
+					const opt = config.optimizeDeps as { entries?: string | string[] };
+					const entries = Array.isArray(opt.entries)
+						? opt.entries
+						: opt.entries
+							? [opt.entries]
+							: [];
+					opt.entries = entries;
+					const have = new Set(entries);
+					for (const abs of compiler.island_scan_entries()) {
+						const pattern = abs.split(path.sep).join('/').replace(GLOB_META_RE, '\\$&');
+						if (!have.has(pattern)) {
+							have.add(pattern);
+							entries.push(pattern);
 						}
 					}
 				}

@@ -674,111 +674,47 @@ export class Compiler {
 	}
 
 	/**
-	 * Every BARE package specifier the app's hydrate islands can reach — the client dep graph Vite's
-	 * own scanner cannot see. Under `csr = false` Kit ships no client entry, so the dep optimizer
-	 * finds nothing to crawl at startup: island deps are discovered LAZILY, one wake at a time
-	 * (visible / idle / interaction each pull new ones), and every discovery re-optimizes, rotates
-	 * the optimizer's browserHash and full-reloads — on a large app a reload storm that never
-	 * settles. The adapter feeds this into `optimizeDeps.include` in dev so ONE optimize pass at
-	 * server start covers the whole island graph and nothing is left to discover mid-session.
+	 * Scan ENTRIES for Vite's dep optimizer: every hydrate island's component file and the host file
+	 * that places it — real, absolute, on-disk source paths. Under `csr = false` Kit ships no client
+	 * entry and registers only `routes/**\/+*` as scan entries, so Vite's scanner reaches an island
+	 * only when a route file imports it statically. An island behind a block registry, an
+	 * `import.meta.og.regions()` glob or a `.remote.ts` mint is never crawled: its client deps are
+	 * discovered LAZILY on its first wake, and every discovery re-optimizes, rotates the optimizer's
+	 * browserHash and full-reloads — on a large app a reload storm that never settles. The adapter
+	 * appends these to `optimizeDeps.entries` (dev) so Vite's OWN scanner crawls them at startup with
+	 * the full plugin pipeline: its resolver, every plugin's `resolveId` (a `?client` import resolves
+	 * through vite-plugin-iso-import), a linked workspace package followed as SOURCE and never
+	 * pre-bundled, the app's `exclude` honoured.
 	 *
-	 * Walk roots: every hydrate island's component (a `defer` island renders on the SERVER — its
-	 * closure is not client code; a lake is frozen HTML with no client JS). A portable-snippet synth
-	 * has no component file — its inline source is walked against its host. The walk itself is the
-	 * closure walk `mark_island_closure` uses (relative / `$lib` / alias imports through source
-	 * files); the ONE difference is what happens at a bare specifier: there it stops, here it is the
-	 * result. Static, side-effect AND dynamic `import('x')` all count — the lazy dynamic imports are
-	 * exactly what drives mid-session discovery.
-	 *
-	 * Skipped: `$app/*` / `$env/*` (Kit virtuals), `virtual:*` / `\0` ids, `node:` builtins,
-	 * `ogygia` itself (served through this plugin's own virtuals, never prebundled), and any package
-	 * that declared an ogygia compile surface (the adapter `optimizeDeps.exclude`s those — an
-	 * `include` would contradict it). Needs `prescan()` to have run; sorted for a stable config.
+	 * Deliberately NOT a self-computed `optimizeDeps.include` list. A resolver that is not Vite's
+	 * mis-classifies something Vite knows — a plugin query, a workspace link, an `exports` map — and
+	 * a wrong `include` hands rolldown an id it cannot load: `UNLOADABLE_DEPENDENCY`, a dead dev
+	 * server (two field-reported regressions). An entry can only ever ADD a crawl root; what the
+	 * crawl finds is Vite's call. A `defer` island renders on the server (its closure is not client
+	 * code) and a lake ships no client JS, so neither is an entry; the host file covers a
+	 * portable-snippet synth, which has no component file of its own. Needs `prescan()`; deduped,
+	 * sorted, existing source files only.
 	 */
-	island_bare_deps(): string[] {
-		const ctx = this.#ctx!;
+	island_scan_entries(): string[] {
 		const { registry, region_kinds } = this.program;
-		const aliases = ctx.resolve_alias as readonly FoucAlias[];
-		const declared = new Set(ctx.pkg_scan.map((p) => p.name));
-		const bare = new Set<string>();
-		const seen = new Set<string>();
-
-		const resolve_dep = (spec: string, importerAbs: string): string | null => {
-			const base = resolveFoucImportSpec(spec, importerAbs, ctx.libDir, aliases);
-			if (!base) return null;
-			for (const ext of ISLAND_DEP_EXTS) {
-				try {
-					if (fs.statSync(base + ext).isFile()) return base + ext;
-				} catch {
-					/* not this ext */
-				}
-			}
-			for (const ext of ISLAND_DEP_EXTS.slice(1)) {
-				const idx = path.join(base, 'index' + ext);
-				try {
-					if (fs.statSync(idx).isFile()) return idx;
-				} catch {
-					/* not an index */
-				}
-			}
-			return null;
-		};
-		const package_of = (spec: string): string => {
-			const parts = spec.split('/');
-			return spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
-		};
-		const collect = (src: string, importerAbs: string) => {
-			IMPORT_SPEC_G.lastIndex = 0;
-			let m: RegExpExecArray | null;
-			while ((m = IMPORT_SPEC_G.exec(src))) {
-				const spec = m[1] || m[2] || m[3];
-				if (
-					!spec ||
-					spec[0] === '\0' ||
-					spec.startsWith('$app/') ||
-					spec.startsWith('$env/') ||
-					spec.startsWith('virtual:') ||
-					spec.startsWith('node:') ||
-					// A plugin-resolved QUERY (`?client` / `?server` from vite-plugin-iso-import, `?raw`,
-					// `?url`, `?worker`) or a package subpath import (`#internal`) is plugin / package
-					// territory, not a file the dep optimizer can open: seeding `…/controller?client`
-					// made rolldown try to load `controller.js?client` from disk → UNLOADABLE_DEPENDENCY,
-					// a dead dev server. Leave those to the normal plugin pipeline (they resolve there as
-					// they always did) and do not walk through them.
-					spec.includes('?') ||
-					spec.startsWith('#')
-				)
-					continue;
-				const base = resolveFoucImportSpec(spec, importerAbs, ctx.libDir, aliases);
-				if (base === null) {
-					// A bare package specifier — the thing this walk exists to find.
-					const pkg = package_of(spec);
-					if (pkg === 'ogygia' || declared.has(pkg)) continue;
-					bare.add(spec);
-					continue;
-				}
-				const dep = resolve_dep(spec, importerAbs);
-				if (dep) walk(dep);
+		const out = new Set<string>();
+		const add = (p: string | null | undefined) => {
+			if (!p) return;
+			const abs = strip_id(p);
+			if (!SOURCE_EXT_RE.test(abs)) return; // only what the scanner can parse
+			try {
+				if (fs.statSync(abs).isFile()) out.add(abs);
+			} catch {
+				/* a virtual id or a vanished file — not a crawl root */
 			}
 		};
-		const walk = (abs: string) => {
-			const norm = strip_id(abs);
-			if (seen.has(norm)) return;
-			seen.add(norm);
-			if (!SOURCE_EXT_RE.test(norm)) return;
-			const src = ctx.read_file(norm);
-			if (src == null) return;
-			collect(src, norm);
-		};
-
 		for (const entry of registry.values()) {
 			if (entry.role !== 'entry' || entry.server) continue;
 			if (region_kinds.get(entry.id) !== 'hydrate') continue;
-			if (entry.componentPath) walk(entry.componentPath);
-			else if (entry.portable && entry.source && entry.hostPath)
-				collect(entry.source, entry.hostPath);
+			add(entry.componentPath);
+			add(entry.hostPath);
 		}
-		return [...bare].sort();
+		return [...out].sort();
 	}
 
 	/** The feature-selected runtime chunk name (immutable-cached). Needs prescan to have run for a
