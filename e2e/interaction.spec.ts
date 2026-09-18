@@ -168,11 +168,18 @@ test.describe("wake:'interaction' — cold until used, click replay, typing surv
 			'failure: island stays unhydrated (no crash)',
 			(await page.locator('ogygia-region[wake="interaction"][data-hydrated]').count()) === 0
 		);
-		// #hydrate catches internally ("hydration failed for") and resolves → the wake path disarms
-		// on the fulfilled branch; the rejection branch ("failed to hydrate") is defense-in-depth.
+		// The chunk was aborted, so this is an ENTRY-FETCH failure, not a hydrate throw — the runtime
+		// distinguishes them (dev names the Vite re-optimize cause; here it's a real abort). #hydrate
+		// catches it, logs, and the wake path disarms on the fulfilled branch.
 		check(
 			'failure: error logged, region left static',
-			consoleErrs.some((t) => t.includes('hydration failed') || t.includes('failed to hydrate'))
+			consoleErrs.some(
+				(t) =>
+					t.includes('island entry failed to load') ||
+					t.includes('hydration failed') ||
+					t.includes('failed to hydrate')
+			),
+			consoleErrs.slice(0, 3).join(' | ')
 		);
 		// The page survives — the eager island is still live.
 		await page.locator('[data-counter] button').click();
