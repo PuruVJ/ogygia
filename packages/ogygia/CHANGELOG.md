@@ -105,8 +105,12 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   `svelte/internal/client`, `devalue`) in `optimizeDeps.include` for the dev server, which forces
   one up-front optimize pass and removes the first-minutes churn after a `.vite` nuke; and the
   runtime now tells an entry-fetch failure from a hydrate throw, naming the re-optimize cause in dev
-  instead of reporting "hydration failed". `e2e/dev-hole-hmr` (the bridge and its `@vite/client`
-  import are present on a csr=false page).
+  instead of reporting "hydration failed"; and a dev-only watchdog recovers a stranded tab directly
+  — on an entry-fetch failure it re-fetches the entry, and if the server still serves it (staleness,
+  not a real 404) reloads the tab once, bounded to one reload per few seconds by a `sessionStorage`
+  timestamp so a genuinely-broken entry never loops. `e2e/dev-hole-hmr` (the bridge and its
+  `@vite/client` import on a csr=false page), `e2e/dev-stale-dep-reload` (the watchdog reloads once,
+  then stops).
 - **`goto()` from an island on a Kit-booted page navigates through Kit.** Inside an island,
   `$app/navigation` is the ogygia shim, and every call went to the ogygia router — which does not
   own a csr=true document and could only fall back to a full load. A customer's green-band chips,
