@@ -72,6 +72,29 @@ describe('cannot be fooled by tag-like text', () => {
 		expect(r.attrs['data-x']).toBe('a>b');
 		expect(html.slice(r.innerStart, r.innerEnd)).toBe('<i>ok</i>');
 	});
+
+	it('ignores <ogygia-region> inside ANOTHER element’s attribute value (double-quoted)', () => {
+		const html = `<div data-note="<ogygia-region>">x</div><ogygia-region wake="load">real</ogygia-region>`;
+		const r = one(html);
+		expect(r.kind).toBe('island');
+		expect(html.slice(r.start, r.end)).toBe('<ogygia-region wake="load">real</ogygia-region>');
+	});
+
+	it('ignores a stray </ogygia-region> inside a single-quoted attribute value', () => {
+		const html = `<a title='</ogygia-region>'><ogygia-region wake="none">L</ogygia-region>`;
+		expect(kinds(html)).toEqual(['lake']);
+	});
+
+	it('a region’s OWN tag can carry a `<ogygia-region>` in an attribute without spawning a phantom', () => {
+		const html = `<ogygia-region wake="load" data-x="<ogygia-region>"><b>ok</b></ogygia-region>`;
+		const r = one(html);
+		expect(r.attrs['data-x']).toBe('<ogygia-region>');
+		expect(html.slice(r.innerStart, r.innerEnd)).toBe('<b>ok</b>');
+	});
+
+	it('a stray `<` in text (a < b) is not a tag', () => {
+		expect(kinds('a < b <ogygia-region wake="load">real</ogygia-region>')).toEqual(['island']);
+	});
 });
 
 describe('nesting', () => {
@@ -112,10 +135,15 @@ describe('robustness', () => {
 		expect(kinds('<ogygia-region wake="load" />after')).toEqual(['island']);
 	});
 
-	it('an unterminated region is surfaced, not swallowed', () => {
-		const r = one('<ogygia-region wake="load">oops no close');
+	it('an unterminated region is surfaced (span is just its opening tag)', () => {
+		const html = '<ogygia-region id="a">';
+		const r = one(html);
 		expect(r.kind).toBe('island');
 		expect(r.start).toBe(0);
+		// documented: no close → innerStart === innerEnd, end at the `>` of the opening tag
+		expect(r.innerStart).toBe(r.innerEnd);
+		expect(r.end).toBe(html.length);
+		expect(html.slice(r.innerStart, r.innerEnd)).toBe('');
 	});
 
 	it('a document with no regions yields nothing', () => {

@@ -35,6 +35,11 @@
  *
  * If you edit by offset instead, splice in reverse `start` order so earlier offsets stay valid:
  * `[...scanRegions(html)].sort((a, b) => b.start - a.start)`.
+ *
+ * Malformed input never throws and never loses a region: an unterminated `<ogygia-region>` (no
+ * matching close) is still yielded, with `innerStart === innerEnd` and `end` at the `>` of its
+ * opening tag — i.e. its span is just the opening tag. A caller reshaping `[innerStart, innerEnd)`
+ * of such a region edits nothing, which is the safe outcome.
  */
 
 export type RegionKind = 'island' | 'lake' | 'hole';
@@ -67,6 +72,12 @@ const RAW_TEXT_TAGS = ['script', 'style'] as const;
 /** ASCII whitespace that can follow a tag name. */
 function is_space(code: number): boolean {
 	return code === 32 || code === 9 || code === 10 || code === 12 || code === 13;
+}
+
+/** ASCII letter — what a real tag name begins with (`<a…` / `</a…`). A `<` followed by anything
+ *  else (space, digit, `=`) is text, not a tag, per the HTML tokenizer. */
+function is_ascii_alpha(code: number): boolean {
+	return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
 /** True when `tag`'s NAME sits at `name` as a real element name (followed by whitespace, `>`, or
@@ -232,7 +243,14 @@ export function* scanRegions(html: string): Generator<RegionSpan, void, undefine
 			i = gt + 1;
 			continue;
 		}
-		i++;
+		// Any OTHER real tag (`<div …>`, `</p>`, a `<qds-*>` block): skip past its whole tag with
+		// `tag_end`, which respects quoted attribute values — so a literal `<ogygia-region>` sitting
+		// INSIDE another element's attribute (`<div data-note="<ogygia-region>">`) is never scanned
+		// as content. A `<` that does not begin a tag (a stray `<` in text, e.g. `a < b`) advances one.
+		const c1 = html.charCodeAt(i + 1);
+		const starts_tag =
+			is_ascii_alpha(c1) || (c1 === 47 /* / */ && is_ascii_alpha(html.charCodeAt(i + 2)));
+		i = starts_tag ? tag_end(html, i) + 1 : i + 1;
 	}
 	// Unterminated regions (malformed HTML) drain here without a close — surfaced with their
 	// parse-time `end`/`innerEnd` so a caller never loses a region silently.
