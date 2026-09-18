@@ -6,6 +6,11 @@
 // the links the SSR baked onto the page. Simulated with a data: module that appends a known style.
 import { expect, test } from 'vitest';
 import { bootDev } from '../../src/runtime/full.js';
+import { island_module_url } from '../../src/runtime/region-endpoint-url.js';
+
+// Strips the document's filename so what is left is its directory (for a relative href).
+const FILENAME_TAIL_RE = /[^/]*$/;
+const MARKER_MODULE = '/test/browser/fixtures/dev-css-marker.ts';
 
 const MODULE =
 	'data:text/javascript,' +
@@ -45,4 +50,31 @@ test('DEV: a region-css link to a JS module is imported (not linked), injecting 
 	expect(document.head.querySelectorAll('style[data-og-dev-probe]').length).toBe(1);
 
 	probe.remove();
+});
+
+// REGRESSION (field report #5): the SSR emits region-css hrefs DOCUMENT-relative (`../../@id/…` on a
+// nested route — base-aware by design). The rescue used to `import()` that raw href, which resolves
+// against the RUNTIME MODULE's url (`/node_modules/…/og-runtime.js` in an app) and 404'd on
+// `/node_modules/@id/…`. It must resolve against the document, via island_module_url, like island
+// entries do. A relative href to a marker module only imports if resolved against the document.
+test('DEV: a document-relative region-css href resolves against the document, not the runtime module', async () => {
+	document.head.querySelectorAll('link[data-ogygia-region-css]').forEach((n) => n.remove());
+	document.documentElement.removeAttribute('data-og-dev-css-marker');
+
+	// Climb from the document's directory to the root, then down to the marker module.
+	const dir = location.pathname.replace(FILENAME_TAIL_RE, '');
+	const depth = dir.split('/').filter(Boolean).length;
+	const relative = '../'.repeat(depth) + MARKER_MODULE.slice(1);
+
+	// The resolver pins the semantics: against the document, the relative href is the root path.
+	expect(island_module_url(relative)).toBe(MARKER_MODULE);
+
+	css_link(relative);
+	bootDev();
+
+	// The module ran — only possible if the import resolved against the document.
+	await expect
+		.poll(() => document.documentElement.getAttribute('data-og-dev-css-marker'), { timeout: 10_000 })
+		.toBe('1');
+	expect(document.head.querySelectorAll('link[data-ogygia-region-css]').length).toBe(0);
 });

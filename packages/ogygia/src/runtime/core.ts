@@ -211,10 +211,14 @@ function region_fragment(html: string): { frag: DocumentFragment; ready: Promise
 		for (const link of links) {
 			const href = link.getAttribute('href');
 			link.remove();
-			if (!href || seen.has(href)) continue;
-			seen.add(href);
+			if (!href) continue;
+			// Document-relative href → resolve against the document, never this module (see
+			// island_module_url: a bare import() of `../../@id/…` lands on `/node_modules/@id/…`).
+			const url = island_module_url(href);
+			if (seen.has(url)) continue;
+			seen.add(url);
 			pending.push(
-				import(/* @vite-ignore */ href).then(
+				import(/* @vite-ignore */ url).then(
 					() => undefined,
 					() => undefined
 				)
@@ -1088,9 +1092,13 @@ function apply_dev_head_region_css(): void {
 			// dev href) masquerading as a sheet loads empty and needs importing instead.
 			if (!href || CSS_ASSET_HREF_RE.test(href)) continue;
 			link.remove();
-			if (seen.has(href)) continue;
-			seen.add(href);
-			void import(/* @vite-ignore */ href).catch(() => {});
+			// The href is DOCUMENT-relative (`../../@id/…` on a nested route, base-aware by design). A bare
+			// `import()` would resolve it against THIS module's url (`/node_modules/…/og-runtime.js` in an
+			// app) and 404 on `/node_modules/@id/…` — the same trap island entries avoid via this resolver.
+			const url = island_module_url(href);
+			if (seen.has(url)) continue;
+			seen.add(url);
+			void import(/* @vite-ignore */ url).catch(() => {});
 		}
 	});
 }

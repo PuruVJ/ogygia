@@ -109,6 +109,17 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **DEV: the region-css rescue resolves a document-relative href against the document, not the
+  runtime module.** The SSR emits region-css hrefs document-relative (`../../@id/…` on a nested route
+  — base-aware by design). The dev rescue that imports such a link's module (executing it injects the
+  scoped `<style>`) handed that raw href to `import()`, which resolves relative to the RUNTIME
+  MODULE's url — `/node_modules/…/og-runtime.js` in an app — so the request landed on
+  `/node_modules/@id/virtual:ogygia/island/<id>.js` and 404'd, the CSS never applied, and the
+  failed fetch fed a dev reload storm. Both dev-import sites (the boot rescue for links baked onto the
+  page, and `region_fragment` for a fetched answer) now resolve through `island_module_url`, the same
+  document-relative resolver island entries have always loaded through, and dedupe on the resolved
+  url. `test/browser/dev-region-css-import` (a relative href to a marker module imports only when
+  resolved against the document).
 - **DEV: a frozen snippet forwarded into an island now gets its scoped CSS on a csr=false page.** A
   `{#snippet}` handed to an island compiles to a live region-snippet entry that carries the host's
   `<style>`; when it renders FROZEN (a csr=false page never hydrates it), its module is never
