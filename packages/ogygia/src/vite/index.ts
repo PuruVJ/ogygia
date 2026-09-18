@@ -674,6 +674,30 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						devtools: devtools_effective
 					})
 				);
+
+				// DEV: pre-seed the WHOLE island dep graph into the optimizer. Under `csr = false` Kit
+				// ships no client entry, so Vite's dep scanner sees an empty client graph and island deps
+				// are discovered LAZILY, one wake at a time — each discovery re-optimizes, rotates the
+				// browserHash and full-reloads (a reload storm on a large app; see island_bare_deps).
+				// The islands ARE the client graph and this plugin is the only thing that knows it, so
+				// declare it here. `optimizeDeps.include` is exactly Vite's channel for deps its scanner
+				// can't find. The fixed list in the `config` hook covers what every island shares; this
+				// adds the app's OWN island deps — static, side-effect and dynamic imports alike. Vite
+				// reads `include` only when the optimizer starts (after every configResolved), so pushing
+				// into the resolved config here is honoured. `prescan()` is once-per-session, so running
+				// it now just moves buildStart's call earlier. Dev server only; a build has a real graph.
+				if (is_dev) {
+					compiler.prescan();
+					const opt = config.optimizeDeps as { include?: string[] };
+					const include = (opt.include ??= []);
+					const have = new Set(include);
+					for (const dep of compiler.island_bare_deps()) {
+						if (!have.has(dep)) {
+							have.add(dep);
+							include.push(dep);
+						}
+					}
+				}
 			},
 
 			async buildStart() {

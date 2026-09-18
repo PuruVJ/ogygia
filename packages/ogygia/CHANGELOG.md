@@ -109,6 +109,26 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **DEV: the whole island dep graph is pre-bundled at server start — no mid-session
+  re-optimization, no reload storm.** Under `csr = false` Kit ships no client entry, so Vite's dep
+  scanner sees an EMPTY client graph and island deps are discovered LAZILY, one wake at a time
+  (`visible` / `idle` / `interaction` each pull new lazy deps Vite never pre-bundled). Every
+  discovery re-optimizes, rotates the optimizer's browserHash and full-reloads — and the reload
+  wakes more islands, which discover more deps: on a large app (~15 islands, many lazy dynamic
+  imports) a loop that never settles, reported as "island entries 404 and the page reload-loops
+  every few seconds". The plugin already pre-declared the deps EVERY island shares (`svelte`,
+  `svelte/internal/client`, `devalue`); it now declares the app's OWN island deps too. The islands
+  ARE the client graph and this plugin is the only thing that knows it, so `configResolved` (dev
+  only) runs the once-per-session prescan early, walks every hydrate island's closure — relative,
+  `$lib` and app-alias imports through `.svelte` / `.ts` / `.js`, the same walk the island graph
+  uses — and feeds every BARE package specifier it reaches into `optimizeDeps.include`: static,
+  side-effect and `import('x')` alike (the lazy dynamic imports were exactly the driver). A `defer`
+  island renders on the server and a lake ships no client JS, so neither is walked; `$app/*`,
+  `virtual:*`, `node:` builtins, `ogygia` itself and any package declaring an ogygia compile
+  surface (already `optimizeDeps.exclude`d) are skipped. One optimize pass at startup covers it all;
+  a `pnpm install` or config edit still re-optimizes ONCE, as in any Vite app, but nothing is left
+  to discover after that single reload. `Compiler.island_bare_deps()`;
+  `test/island-bare-deps`.
 - **DEV: the region-css rescue resolves a document-relative href against the document, not the
   runtime module.** The SSR emits region-css hrefs document-relative (`../../@id/…` on a nested route
   — base-aware by design). The dev rescue that imports such a link's module (executing it injects the
