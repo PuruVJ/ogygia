@@ -26,9 +26,17 @@ const files: Record<string, string> = {
 		`\timport { track } from 'analytics-sdk';\n` +
 		`\timport { fmt } from './fmt';\n` +
 		`\timport { boot } from '$boot/boot';\n` +
+		`\timport { iso } from './iso';\n` +
 		`\timport { page } from '$app/state';\n` +
 		`\timport 'virtual:ogygia/transportables';\n` +
-		`</script>\n<p>{fmt(track(page.data.x))}{boot()}</p>\n`,
+		`</script>\n<p>{fmt(track(page.data.x))}{boot()}{iso()}</p>\n`,
+	// plugin-resolved QUERY imports (vite-plugin-iso-import's `?client`, Vite's `?raw`) and a package
+	// subpath import (`#internal`) — plugin / package territory the dep optimizer cannot open as a file
+	'src/lib/iso.ts':
+		`import Ctl from '@pes-ui/components/dist/controller?client';\n` +
+		`import txt from 'some-pkg/readme.md?raw';\n` +
+		`import { z } from '#internal';\n` +
+		`export const iso = () => Ctl + txt + z;\n`,
 	// a helper with a side-effect import AND a deep import of a scoped package
 	'src/lib/fmt.ts': `import 'polyfill-lib';\nimport { f } from '@scope/utils/deep';\nexport const fmt = (v) => f(v);\n`,
 	// reached only through the alias; carries a LAZY dynamic import — the discovery driver
@@ -111,6 +119,21 @@ describe('island_bare_deps — the client dep graph Vite cannot see', () => {
 		expect(deps).not.toContain('server-only-db'); // a defer island renders on the server
 		expect(deps.some((d) => d.startsWith('$app/'))).toBe(false); // Kit virtual
 		expect(deps.some((d) => d.startsWith('virtual:'))).toBe(false); // plugin virtual
+	});
+
+	// REGRESSION (field report #5, follow-up): seeding a bare specifier WITH its plugin query
+	// (`…/controller?client`) made rolldown try to open `controller.js?client` from disk →
+	// UNLOADABLE_DEPENDENCY, a dead dev server. Query and subpath imports are plugin territory.
+	test('never seeds a plugin-query or package-subpath import — those resolve through the plugin pipeline', () => {
+		const { compiler } = make_compiler();
+		compiler.prescan();
+		const deps = compiler.island_bare_deps();
+		expect(deps.some((d) => d.includes('?'))).toBe(false); // no `?client` / `?raw` ever
+		expect(deps).not.toContain('@pes-ui/components/dist/controller'); // nor the query stripped off
+		expect(deps).not.toContain('some-pkg/readme.md');
+		expect(deps.some((d) => d.startsWith('#'))).toBe(false); // no `#internal`
+		// the module that carried them was still walked — its sibling bare deps are unaffected
+		expect(deps).toContain('analytics-sdk');
 	});
 
 	test('is sorted and free of duplicates, so the optimizer config is stable run to run', () => {

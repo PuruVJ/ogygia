@@ -738,7 +738,15 @@ export class Compiler {
 					spec.startsWith('$app/') ||
 					spec.startsWith('$env/') ||
 					spec.startsWith('virtual:') ||
-					spec.startsWith('node:')
+					spec.startsWith('node:') ||
+					// A plugin-resolved QUERY (`?client` / `?server` from vite-plugin-iso-import, `?raw`,
+					// `?url`, `?worker`) or a package subpath import (`#internal`) is plugin / package
+					// territory, not a file the dep optimizer can open: seeding `…/controller?client`
+					// made rolldown try to load `controller.js?client` from disk → UNLOADABLE_DEPENDENCY,
+					// a dead dev server. Leave those to the normal plugin pipeline (they resolve there as
+					// they always did) and do not walk through them.
+					spec.includes('?') ||
+					spec.startsWith('#')
 				)
 					continue;
 				const base = resolveFoucImportSpec(spec, importerAbs, ctx.libDir, aliases);

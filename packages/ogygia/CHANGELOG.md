@@ -129,6 +129,13 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   a `pnpm install` or config edit still re-optimizes ONCE, as in any Vite app, but nothing is left
   to discover after that single reload. `Compiler.island_bare_deps()`;
   `test/island-bare-deps`.
+  **Follow-up (same version):** the walk never seeds a plugin-resolved QUERY import (`?client` /
+  `?server` from vite-plugin-iso-import, `?raw`, `?url`, `?worker`) or a package subpath import
+  (`#internal`). Seeding `…/controller?client` verbatim made rolldown try to open
+  `controller.js?client` from disk → `UNLOADABLE_DEPENDENCY`, a dead dev server on the first pin.
+  Those are plugin / package territory, not files the optimizer can load; they resolve through the
+  normal plugin pipeline as they always did, and the walk does not go through them. The module that
+  carried one is still walked, so its sibling bare deps are unaffected.
 - **DEV: the region-css rescue resolves a document-relative href against the document, not the
   runtime module.** The SSR emits region-css hrefs document-relative (`../../@id/…` on a nested route
   — base-aware by design). The dev rescue that imports such a link's module (executing it injects the
