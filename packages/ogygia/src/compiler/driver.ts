@@ -973,10 +973,13 @@ export class Compiler {
 					`export function makeRegionEndpoint(_entry, _props) { return ''; }\n` +
 					`export function mintServerIsland(_entry, _props, _ttl) { return ''; }\n` +
 					// The known-fingerprints set is a server-only nav signal; the client always sees empty.
-					`export function known_region_fps() { return new Set(); }`
+					`export function known_region_fps() { return new Set(); }\n` +
+					// An island's `data-og-fp` is minted on the server only (a native digest); the
+					// client reads the attribute and never computes one.
+					`export function islandFingerprint(_entry, _canonical) { return ''; }`
 				);
 			}
-			return `export { makeRegionEndpoint, mintServerIsland, known_region_fps } from ${JSON.stringify(ctx.region_endpoint_module)};`;
+			return `export { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from ${JSON.stringify(ctx.region_endpoint_module)};`;
 		}
 		if (id === RESOLVED(V_RATE_LIMIT)) {
 			return rate_limit_module(ssr, ctx.rate_limit);

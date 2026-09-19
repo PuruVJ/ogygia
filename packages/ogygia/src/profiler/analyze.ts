@@ -45,10 +45,26 @@ export type FrameCategory =
 	| 'profiler' // this profiler's own frames
 	| 'unknown';
 
+/** One call path into a function: the nearest callers first, and how much of the function's time
+ *  (inclusive — the subtree reached through this exact path) came this way. */
+export interface CallStack {
+	ms: number;
+	/** nearest caller first; `n` = display name, `f` = `file:line` ('' for native), `c` = category
+	 *  (the UI dims framework/runtime frames so your own code stands out) */
+	frames: { n: string; f: string; c: FrameCategory }[];
+}
+
 export interface FrameStat {
+	/** the aggregation identity (`C:<name>` for a component, `<name> <url>` otherwise) */
+	key: string;
 	name: string;
+	/** short display path (last segments, or the node_modules-relative path) */
 	url: string;
+	/** the full path as V8 (or the sourcemap) reported it — absolute in dev, so it can be opened */
+	path: string;
 	line: number;
+	/** 1-based column; 0 when unknown */
+	col: number;
 	category: FrameCategory;
 	/** package name when category is 'dependency' */
 	pkg?: string;
@@ -58,6 +74,8 @@ export interface FrameStat {
 	total_ms: number;
 	/** exact invocation count from V8 precise coverage, when available (this frame's own count) */
 	calls?: number;
+	/** the heaviest call paths into this function (filled for the hot functions and every component) */
+	stacks?: CallStack[];
 }
 
 export interface GroupStat {
@@ -105,10 +123,23 @@ export interface Analysis {
 // ---------------------------------------------------------------------------
 // categorization
 
-const component_name_re = /^[A-Z][A-Za-z0-9_]*$/;
+const component_name_re = /^[A-Z][A-Za-z0-9_$]*$/;
 const ROUTE_FILE_FN_RE = /^_(page|layout|error)$/;
 const SVELTE_BASENAME_RE = /([^/\\]+)\.svelte$/;
-const SVELTE_MODULE_EXT_RE = /\.svelte\.[jt]s$/;
+/** A rune module SOURCE (`state.svelte.ts`) compiles no component. Only the `.ts` spelling is
+ *  excluded outright: Kit names a route's BUILT entry chunk `_page.svelte.js`, and that is the
+ *  bundled component — a `.svelte.js` rune module's class stays a candidate and falls to app
+ *  code through the structural confirmation (nothing under it calls Svelte's server internals). */
+const SVELTE_MODULE_EXT_RE = /\.svelte\.ts$/;
+/** A bundler's collision suffix (`Header$1`, `Header$2`): two components with one basename in
+ *  one chunk. Stripped for naming and matching — the frame is still the `Header` component. */
+const BUNDLER_SUFFIX_RE = /\$\d+$/;
+const NON_IDENT_G = /[^a-zA-Z0-9_$]/g;
+
+/** A frame name with the bundler's `$N` collision suffix removed. */
+export function strip_bundler_suffix(name: string): string {
+	return name.replace(BUNDLER_SUFFIX_RE, '');
+}
 
 /** SvelteKit endpoint/handler exports — capitalized, but not components. */
 const handler_names = new Set([
@@ -124,14 +155,20 @@ const handler_names = new Set([
 
 /** Svelte derives the SSR function name from the filename: Header.svelte →
  * Header, +page.svelte → _page. Helper closures inside a component keep the
- * file's url but not a component-shaped name. */
+ * file's url but not a component-shaped name. A component-SHAPED name is only
+ * a candidate: `analyze` confirms it structurally (see `confirm_components`). */
 const is_component_name = (name: string): boolean =>
-	!handler_names.has(name) && (component_name_re.test(name) || ROUTE_FILE_FN_RE.test(name));
+	!handler_names.has(name) &&
+	(component_name_re.test(strip_bundler_suffix(name)) || ROUTE_FILE_FN_RE.test(name));
 
-/** The component name a `.svelte` source file compiles to — used to name the
- * anonymous inline-code frame that V8 samples inside a component. Returns
- * undefined for non-component files. */
-function component_name_from_file(url: string): string | undefined {
+/** The component name a `.svelte` source file compiles to — Svelte's own rule
+ * (`get_name` in the compiler): the basename with every non-identifier char
+ * replaced by `_`, capitalised; a leading digit gets a `_`; the route files
+ * become `_page` / `_layout` / `_error`. Used to name the anonymous inline-code
+ * frame that V8 samples inside a component, and to tell the file's OWN function
+ * (the component) from a same-cased helper class defined in it. Undefined for
+ * a non-component file. */
+export function component_name_from_file(url: string): string | undefined {
 	const m = SVELTE_BASENAME_RE.exec(url);
 	if (!m) return undefined;
 	const base = m[1];
@@ -139,7 +176,9 @@ function component_name_from_file(url: string): string | undefined {
 		const kind = base.slice(1);
 		return kind === 'page' || kind === 'layout' || kind === 'error' ? `_${kind}` : undefined;
 	}
-	return component_name_re.test(base) ? base : undefined;
+	let name = base.replace(NON_IDENT_G, '_');
+	if (/^\d/.test(name)) name = '_' + name;
+	return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 function clean_url(url: string): string {
@@ -151,6 +190,35 @@ function clean_url(url: string): string {
 		}
 	}
 	return url;
+}
+
+const SCHEME_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+const WIN_ABS_RE = /^[A-Za-z]:[\\/]/;
+
+/**
+ * A sourcemap's `sources` are relative to the MAP FILE (`../../src/lib/Foo.svelte` from
+ * `.svelte-kit/output/server/chunks/x.js.map`). Joined onto the chunk's own directory they become
+ * the real path — absolute when V8 reported the chunk absolutely (a `vite preview`, adapter-node),
+ * which is what lets a row open in an editor. Pure string work (no `node:path`): this module runs
+ * anywhere. An absolute source, a URL, or a chunk with no directory passes through unchanged.
+ */
+export function join_source(chunk: string, source: string): string {
+	if (!source || source.startsWith('/') || WIN_ABS_RE.test(source) || SCHEME_RE.test(source)) {
+		return source;
+	}
+	const dir = clean_url(chunk).replace(/\\/g, '/');
+	const slash = dir.lastIndexOf('/');
+	if (slash === -1) return source;
+	const out = dir.slice(0, slash).split('/');
+	for (const seg of source.split('/')) {
+		if (seg === '' || seg === '.') continue;
+		if (seg === '..') {
+			if (out.length > 1 || (out.length === 1 && out[0] !== '')) out.pop();
+			continue;
+		}
+		out.push(seg);
+	}
+	return out.join('/');
 }
 
 function package_of(url: string): string | undefined {
@@ -186,16 +254,24 @@ export function categorize(frame: CallFrame): { category: FrameCategory; pkg?: s
 	if (pkg === 'svelte') return { category: 'svelte', pkg };
 	if (pkg) return { category: 'dependency', pkg };
 
-	if (url.endsWith('.svelte') || SVELTE_MODULE_EXT_RE.test(url)) {
-		// only the file's root render function is "the component" — inner
-		// closures share the url but land in app code
-		return { category: is_component_name(name) ? 'component' : 'app' };
+	if (url.endsWith('.svelte')) {
+		// only the file's OWN render function is "the component": Svelte names it after the file, so
+		// a same-cased helper (`class Observer` in Header.svelte) and every inner closure land in
+		// app code. `.svelte.ts` modules compile no component at all — plain app code below.
+		const own = component_name_from_file(url);
+		const stripped = strip_bundler_suffix(name);
+		return {
+			category:
+				own !== undefined && (stripped === own || ROUTE_FILE_FN_RE.test(stripped)) ? 'component' : 'app'
+		};
 	}
 	if (url) {
-		// bundled server output: URLs point at chunks, but Svelte names the SSR
-		// function after the component file, so a component-shaped name is our
-		// best signal for "this is a component"
-		if (is_component_name(name)) return { category: 'component' };
+		// bundled server output: URLs point at chunks, but Svelte names the SSR function after the
+		// component file, so a component-shaped name is the CANDIDATE signal. It is only a candidate —
+		// `IntersectionObserver`, an `Error` subclass, any class constructor in app code looks the
+		// same — and `analyze` keeps it a component only when its subtree reaches Svelte's server
+		// internals (a component that renders anything calls `push`/`escape`); the rest become app.
+		if (!SVELTE_MODULE_EXT_RE.test(url) && is_component_name(name)) return { category: 'component' };
 		return { category: 'app' };
 	}
 	// no url + a real (non-"(…)") name = a native runtime builtin — writev,
@@ -217,8 +293,8 @@ interface SourceMapLike {
 }
 
 interface MappedLine {
-	/** generated column -> [column, source index, original line, name index (-1 = none)] */
-	cols: [number, number, number, number][];
+	/** generated column -> [column, source index, original line, name index (-1 = none), original column] */
+	cols: [number, number, number, number, number][];
 }
 
 const b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -274,9 +350,9 @@ export function decode_mappings(mappings: string): MappedLine[] {
 			src_col += seg[3];
 			if (seg.length >= 5) {
 				name_idx += seg[4];
-				cur.cols.push([col, src, src_line, name_idx]);
+				cur.cols.push([col, src, src_line, name_idx, src_col]);
 			} else {
-				cur.cols.push([col, src, src_line, -1]);
+				cur.cols.push([col, src, src_line, -1, src_col]);
 			}
 		}
 	}
@@ -301,14 +377,14 @@ export class SourceMapResolver {
 		this.#read = read;
 	}
 
-	/** map a generated (url, line0, col0) to the original file/line, plus the
+	/** map a generated (url, line0, col0) to the original file/line/column (1-based), plus the
 	 * original identifier at that position when the map carries `names` — that's
 	 * what turns a bundled `(anonymous)` back into a real name */
 	resolve(
 		url: string,
 		line: number,
 		column: number
-	): { source: string; line: number; name?: string } | undefined {
+	): { source: string; line: number; column: number; name?: string } | undefined {
 		const path = clean_url(url);
 		if (!path.endsWith('.js') && !path.endsWith('.mjs') && !path.endsWith('.cjs')) {
 			return undefined;
@@ -352,7 +428,12 @@ export class SourceMapResolver {
 		const source = entry.sources[m[1]];
 		if (!source) return undefined;
 		this.hit = true;
-		return { source, line: m[2] + 1, name: m[3] >= 0 ? entry.names[m[3]] : undefined };
+		return {
+			source: join_source(path, source),
+			line: m[2] + 1,
+			column: (m[4] ?? 0) + 1,
+			name: m[3] >= 0 ? entry.names[m[3]] : undefined
+		};
 	}
 }
 
@@ -419,14 +500,18 @@ export function analyze(
 		name: string;
 		url: string;
 		line: number;
+		col: number;
 		category: FrameCategory;
 		pkg?: string;
+		/** a component-shaped name in a chunk (no `.svelte` url to vouch for it): confirmed below */
+		candidate: boolean;
 	}
 	const resolved = new Map<number, Resolved>();
 	for (const n of profile.nodes) {
 		const f = n.callFrame;
 		let url = f.url;
 		let line = f.lineNumber + 1;
+		let col = f.columnNumber + 1;
 		let name = display_name(f);
 		let cat = categorize(f);
 		if (resolver && (cat.category === 'app' || cat.category === 'component')) {
@@ -434,6 +519,7 @@ export function analyze(
 			if (mapped) {
 				url = mapped.source;
 				line = mapped.line;
+				col = mapped.column;
 				// a bundled anonymous frame often has a real name in the source —
 				// the map's `names` entry at the function position recovers it
 				if (!f.functionName && mapped.name) name = mapped.name;
@@ -457,35 +543,76 @@ export function analyze(
 				cat = { category: 'component' };
 			}
 		}
+		// The bundler's `$1` on a component is a chunk collision, not a different component.
+		if (cat.category === 'component') name = strip_bundler_suffix(name);
+		resolved.set(n.id, {
+			key: '',
+			name,
+			url,
+			line,
+			col,
+			category: cat.category,
+			pkg: cat.pkg,
+			candidate: cat.category === 'component' && !clean_url(url).endsWith('.svelte')
+		});
+	}
+
+	// --- roots + parents ---------------------------------------------------
+	const parent_of = new Map<number, number>();
+	for (const n of profile.nodes) for (const c of n.children ?? []) parent_of.set(c, n.id);
+	const roots = profile.nodes.filter((n) => !parent_of.has(n.id));
+
+	// --- confirm components (structural) -----------------------------------
+	// A component-shaped name in a bundled chunk is only a candidate: `IntersectionObserver`, an
+	// `Error` subclass, a `class Foo` in app code all wear the same case. A Svelte SSR component
+	// that renders anything calls Svelte's server internals (`push`, `escape_html`, `attr`…), so
+	// the candidate is a component iff ONE of its occurrences has a `svelte` frame somewhere below
+	// it — or the same name is vouched for by a `.svelte` url elsewhere in the profile (a
+	// sourcemapped inline region of the same component). Everything else is app code. The route
+	// functions (`_page`/`_layout`/`_error`) are always components: nothing else is named that way.
+	const svelte_below = new Map<number, boolean>();
+	const has_svelte_below = (node: ProfileNode): boolean => {
+		const cached = svelte_below.get(node.id);
+		if (cached !== undefined) return cached;
+		let below = false;
+		for (const c of node.children ?? []) {
+			const child = by_id.get(c);
+			if (!child) continue;
+			const r = resolved.get(child.id)!;
+			if (r.category === 'svelte' || has_svelte_below(child)) below = true;
+		}
+		svelte_below.set(node.id, below);
+		return below;
+	};
+	const confirmed = new Set<string>();
+	for (const n of profile.nodes) {
+		const r = resolved.get(n.id)!;
+		if (r.category !== 'component') continue;
+		if (!r.candidate || ROUTE_FILE_FN_RE.test(r.name) || has_svelte_below(n)) confirmed.add(r.name);
+	}
+	for (const n of profile.nodes) {
+		const r = resolved.get(n.id)!;
+		if (r.candidate && !confirmed.has(r.name)) r.category = 'app';
 		// Components are keyed by name alone: Svelte bundles every component in a
 		// route into one chunk, so the wrapper frame's url (…/_page.svelte.js) and
 		// the sourcemapped inline frame's url (…/Foo.svelte) differ for the SAME
 		// component. Name-keying merges them; other frames keep name+url.
-		const key = cat.category === 'component' ? `C:${name}` : `${name} ${url}`;
-		resolved.set(n.id, {
-			key,
-			name,
-			url,
-			line,
-			category: cat.category,
-			pkg: cat.pkg
-		});
+		r.key = r.category === 'component' ? `C:${r.name}` : `${r.name} ${r.url}`;
 		// Join this frame's invocation count from coverage, on the RAW identity (pre-sourcemap name+url).
 		// A component key merges several raw frames (the named wrapper + anonymous inline regions) — only
 		// the wrapper, whose raw name IS the component name, carries the render count; the inline loop's
 		// own count would misreport it. Set once per key (the same function has one true count).
-		if (call_counts && !calls_by_key.has(key)) {
+		if (call_counts && !calls_by_key.has(r.key)) {
+			const f = n.callFrame;
 			const c = call_counts[(f.functionName || '') + '\0' + f.url];
-			if (c && (cat.category !== 'component' || f.functionName === name)) {
-				calls_by_key.set(key, c);
+			if (
+				c &&
+				(r.category !== 'component' || strip_bundler_suffix(f.functionName) === r.name)
+			) {
+				calls_by_key.set(r.key, c);
 			}
 		}
 	}
-
-	// --- roots -------------------------------------------------------------
-	const has_parent = new Set<number>();
-	for (const n of profile.nodes) for (const c of n.children ?? []) has_parent.add(c);
-	const roots = profile.nodes.filter((n) => !has_parent.has(n.id));
 
 	// --- aggregate: self + (recursion-safe) total per function key ---------
 	const agg = new Map<string, FrameStat>();
@@ -496,19 +623,35 @@ export function analyze(
 	let busy_us = 0;
 
 	const path = new Map<string, number>(); // key -> occurrences on current stack
+	/** inclusive µs per profile NODE (one node = one distinct call path) — what ranks the stacks */
+	const node_total_us = new Map<number, number>();
+	/** every node of a key, for the stacks below */
+	const nodes_by_key = new Map<string, number[]>();
 
-	const visit = (node: ProfileNode) => {
+	const visit = (node: ProfileNode): number => {
 		const r = resolved.get(node.id)!;
 		const s = self_us.get(node.id) ?? 0;
 
+		// A node whose key is already on the stack is a NESTED occurrence — a recursive call, or a
+		// component's sourcemapped inner frame under its own bundled wrapper — and its time is inside
+		// the outer one's: only the outermost occurrence stands for this call path in the stacks.
+		const nested = (path.get(r.key) ?? 0) > 0;
 		path.set(r.key, (path.get(r.key) ?? 0) + 1);
+		if (!nested) {
+			const list = nodes_by_key.get(r.key);
+			if (list) list.push(node.id);
+			else nodes_by_key.set(r.key, [node.id]);
+		}
 
 		let stat = agg.get(r.key);
 		if (!stat) {
 			stat = {
+				key: r.key,
 				name: r.name,
 				url: short_path(r.url),
+				path: clean_url(r.url),
 				line: r.line,
+				col: r.col,
 				category: r.category,
 				pkg: r.pkg,
 				self_ms: 0,
@@ -519,7 +662,9 @@ export function analyze(
 		} else if (r.url.endsWith('.svelte') && !stat.url.endsWith('.svelte')) {
 			// a merged component: prefer the real source file over the chunk path
 			stat.url = short_path(r.url);
+			stat.path = clean_url(r.url);
 			stat.line = r.line;
+			stat.col = r.col;
 		}
 		if (s > 0) {
 			stat.self_ms += s / 1000;
@@ -564,18 +709,65 @@ export function analyze(
 			buckets.set(bk, bg);
 		}
 
+		let total = s;
 		for (const c of node.children ?? []) {
 			const child = by_id.get(c);
-			if (child) visit(child);
+			if (child) total += visit(child);
 		}
+		node_total_us.set(node.id, total);
 
 		const left = path.get(r.key)! - 1;
 		if (left === 0) path.delete(r.key);
 		else path.set(r.key, left);
+		return total;
 	};
 	// iterative safety: profiles can nest deeply, but V8 stacks max out well
 	// below JS recursion limits, so plain recursion holds
 	for (const root of roots) visit(root);
+
+	// --- call stacks: the heaviest paths into a function -------------------
+	// A profile node IS one distinct call path, so a function's stacks are its nodes ranked by the
+	// inclusive time that flowed through each; the frames are the parents walked up from there,
+	// nearest caller first, capped so a deep Kit/Svelte chain stays readable. V8's pseudo frames
+	// ((root), (program)) never show. Only the tables' rows get them (below), keeping reports small.
+	const STACKS_PER_FN = 3;
+	const STACK_DEPTH = 14;
+	const frames_above = (id: number): CallStack['frames'] => {
+		const frames: CallStack['frames'] = [];
+		let cur = parent_of.get(id);
+		while (cur !== undefined && frames.length < STACK_DEPTH) {
+			const r = resolved.get(cur)!;
+			if (!r.name.startsWith('(')) {
+				frames.push({
+					n: r.name,
+					f: r.url ? `${short_path(r.url)}:${r.line}` : '',
+					c: r.category
+				});
+			}
+			cur = parent_of.get(cur);
+		}
+		return frames;
+	};
+	const stacks_of = (key: string): CallStack[] => {
+		const ids = nodes_by_key.get(key);
+		if (!ids) return [];
+		// V8 keeps one node per CALL POSITION, so the same readable path (the same functions, called
+		// from two lines of one component) arrives as several nodes: merge by the path's text.
+		const by_path = new Map<string, CallStack>();
+		for (const id of ids) {
+			const us = node_total_us.get(id) ?? 0;
+			if (us <= 0) continue;
+			const frames = frames_above(id);
+			const sig = frames.map((f) => f.n + '\0' + f.f).join('\n');
+			const seen = by_path.get(sig);
+			if (seen) seen.ms += us;
+			else by_path.set(sig, { ms: us, frames });
+		}
+		return [...by_path.values()]
+			.sort((a, b) => b.ms - a.ms)
+			.slice(0, STACKS_PER_FN)
+			.map((s) => ({ ms: round2(s.ms / 1000), frames: s.frames }));
+	};
 
 	// --- flamegraph tree (merged call tree with totals) --------------------
 	const to_flame = (node: ProfileNode): FlameNode | null => {
@@ -651,15 +843,22 @@ export function analyze(
 				f.category !== 'profiler'
 		)
 		.sort((a, b) => b.self_ms - a.self_ms);
-	for (const f of functions) {
+	for (const [i, f] of functions.entries()) {
 		f.self_ms = round2(f.self_ms);
 		f.total_ms = round2(f.total_ms);
+		// the rows a report shows (80) plus headroom for a re-sort by total
+		if (i < 120) f.stacks = stacks_of(f.key);
 	}
 
 	const components = [...agg.values()]
 		.filter((f) => f.category === 'component' && f.total_ms >= 0.01)
 		.sort((a, b) => b.total_ms - a.total_ms)
-		.map((f) => ({ ...f, self_ms: round2(f.self_ms), total_ms: round2(f.total_ms) }));
+		.map((f) => ({
+			...f,
+			self_ms: round2(f.self_ms),
+			total_ms: round2(f.total_ms),
+			stacks: f.stacks ?? stacks_of(f.key)
+		}));
 
 	const file_list = [...files.values()].sort((a, b) => b.self_ms - a.self_ms);
 	for (const f of file_list) f.self_ms = round2(f.self_ms);

@@ -14,6 +14,19 @@ import {
 } from '../src/server/props-wire.js';
 import { analyze, index_seed, SEED_REF_KEY, seed_ref_reviver } from '../src/seed-refs.js';
 import { fingerprint_of } from '../src/runtime/hash.js';
+import { island_fingerprint } from '../src/server/fingerprint.js';
+
+describe('island_fingerprint · the server-minted data-og-fp', () => {
+	it('is 16 hex chars, deterministic, and moves with either input', () => {
+		const fp = island_fingerprint('/_app/immutable/x.js', '{"a":1}');
+		expect(fp).toMatch(/^[0-9a-f]{16}$/);
+		expect(island_fingerprint('/_app/immutable/x.js', '{"a":1}')).toBe(fp);
+		expect(island_fingerprint('/_app/immutable/y.js', '{"a":1}')).not.toBe(fp);
+		expect(island_fingerprint('/_app/immutable/x.js', '{"a":2}')).not.toBe(fp);
+		// entry and text are separate fields: shifting a char across the boundary changes the hash
+		expect(island_fingerprint('/x', 'a{"a":1}')).not.toBe(island_fingerprint('/xa', '{"a":1}'));
+	});
+});
 
 const LOREM = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor. ';
 const block = (id: string) => ({

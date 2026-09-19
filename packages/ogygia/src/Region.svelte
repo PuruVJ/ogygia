@@ -25,13 +25,13 @@
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, preloadPolicy } from 'virtual:ogygia/island-deps';
-	import { makeRegionEndpoint, mintServerIsland, known_region_fps } from 'virtual:ogygia/region-endpoint';
+	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of } from './runtime/hash.js';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';
-	import { document_tail } from './server/document-tail.js';
+	import { document_tail, modulepreload_tag } from './server/document-tail.js';
 	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
 	import { region_css_tag } from './server/region-css.js';
 	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
@@ -413,11 +413,12 @@
 	const island_wire = $derived(
 		nested || !is_island || island_inline ? null : plan_props_wire(island_props_wire, island_entry)
 	);
-	// SERVER-DELTA parity: the island's fingerprint, IDENTICAL to the client reconciler's
-	// region_props_fp (entry attr + '' endpoint + props text). Emitted as data-og-fp so the client
-	// can send it back on nav and the server can skip re-rendering an unchanged island. A function
-	// of the props alone: the same props give the same fingerprint with or without the seed.
-	const island_fp = $derived(island_wire ? fingerprint_of(island_module_url, '', island_wire.canonical) : '');
+	// THE ISLAND'S FINGERPRINT (server/fingerprint.ts, through the client-stubbed virtual): its
+	// module URL + canonical props text, a native digest. Emitted as data-og-fp; the client only ever
+	// READS it (the reconciler's key, the sidecar id, the `x-ogygia-known` set it sends back on nav
+	// so the server can skip re-rendering an unchanged island). A function of the props alone: the
+	// same props give the same fingerprint with or without the seed.
+	const island_fp = $derived(island_wire ? islandFingerprint(island_module_url, island_wire.canonical) : '');
 	// SERVER-DELTA (D3): SKIP rendering a NON-cached island the client already has live (its fp is
 	// in the SPA nav's x-ogygia-known set). Emit the region's identifying attrs + props script but NO
 	// component content — the reconciler keeps the live node (same data-key). Safe: known_region_fps()
@@ -465,14 +466,15 @@
 	// `visible` island fetches when it intersects (its margin is the lead time), `interaction` on
 	// the hover/focus/touch warm-up, so no bytes move before there is a reason to. 'all' restores
 	// the background hints for every island; 'none' hints nothing (a load island fetches on import).
-	const island_preload = $derived.by(() => {
+	// The hrefs to hint, in order; the tail takes them as they are, the head gets them as tags.
+	const island_preload_hrefs = $derived.by(() => {
 		// Inline on a csr=true document too: the client wrapper imports the entry lazily there (Kit's
 		// static graph no longer reaches it), so the hint is what keeps the wake off the critical path.
-		if (nested || !is_island || !island_module_url) return '';
-		if (preloadPolicy === 'none') return '';
+		if (nested || !is_island || !island_module_url) return [];
+		if (preloadPolicy === 'none') return [];
 		if (hydrate_attr !== 'load' && hydrate_attr !== 'visible' && hydrate_attr !== 'interaction')
-			return '';
-		if (preloadPolicy !== 'all' && hydrate_attr !== 'load') return '';
+			return [];
+		if (preloadPolicy !== 'all' && hydrate_attr !== 'load') return [];
 		// EVERY hint is `fetchpriority="low"`, the `load` island's included. A hint's job is discovery
 		// (no parse-then-import waterfall), not priority: nothing an island downloads is needed for
 		// first paint — the server painted the content — so island code must never outrank the CSS
@@ -496,20 +498,20 @@
 		// old static-scan emission preloaded every portable candidate in the host, rendered or not).
 		// The wire plan found each descriptor's public entry URL in the payload (props-wire.ts).
 		for (const m of island_wire?.live_entries ?? []) add_with_deps(m, m);
-		let html = '';
-		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '" fetchpriority="low"' + GT;
-		return html;
+		return hrefs;
 	});
 	// Hints ride the document tail on a Kit page (see `tail` above); in the head everywhere else.
 	const island_preload_tail =
 		!!tail &&
 		untrack(() => {
-			const html = island_preload;
-			if (!html) return false;
-			tail.hint(html);
+			const hrefs = island_preload_hrefs;
+			if (!hrefs.length) return false;
+			tail.hints(hrefs);
 			return true;
 		});
-	const island_preload_head = $derived(island_preload_tail ? '' : island_preload);
+	const island_preload_head = $derived(
+		island_preload_tail ? '' : island_preload_hrefs.map(modulepreload_tag).join('')
+	);
 
 	// ─────────────────────────────────────────────────────────── server branch ──
 	const server_endpoint = $derived.by(() => {
@@ -560,24 +562,22 @@
 				__hydrate === 'visible' ||
 				__hydrate === 'interaction')
 	);
-	const server_modulepreload = $derived.by(() => {
-		if (nested || !server_wants_modulepreload || !server_region_entry) return '';
-		if (preloadPolicy === 'none') return '';
-		// Same low-priority background hints as `island_preload` for a phase-2 `visible`/`interaction`
-		// hydrate — and the same `regions.preload` policy: under 'load' only a phase-2 that wakes as
-		// soon as the HTML lands (`load`, or matching the fetch schedule) is hinted.
+	const server_modulepreload_hrefs = $derived.by(() => {
+		if (nested || !server_wants_modulepreload || !server_region_entry) return [];
+		if (preloadPolicy === 'none') return [];
+		// Same low-priority background hints as `island_preload_hrefs` for a phase-2 `visible`/
+		// `interaction` hydrate — and the same `regions.preload` policy: under 'load' only a phase-2
+		// that wakes as soon as the HTML lands (`load`, or matching the fetch schedule) is hinted.
 		const background =
 			(__hydrate === 'visible' || __hydrate === 'interaction') && __hydrate !== __defer;
-		if (background && preloadPolicy !== 'all') return '';
-		// Low for every hint — see `island_preload`.
+		if (background && preloadPolicy !== 'all') return [];
+		// Low for every hint — see `island_preload_hrefs`.
 		const hrefs = [server_region_entry];
 		for (const dep of islandDeps(__module)) {
 			const href = asset(dep);
 			if (href && !hrefs.includes(href)) hrefs.push(href);
 		}
-		let html = '';
-		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '" fetchpriority="low"' + GT;
-		return html;
+		return hrefs;
 	});
 	const server_fetch_preload = $derived.by(() => {
 		// Only `defer: 'load'`: start the endpoint fetch during HTML parse (warms the per-hole load).
@@ -590,13 +590,14 @@
 	const server_modulepreload_tail =
 		!!tail &&
 		untrack(() => {
-			const html = server_modulepreload;
-			if (!html) return false;
-			tail.hint(html);
+			const hrefs = server_modulepreload_hrefs;
+			if (!hrefs.length) return false;
+			tail.hints(hrefs);
 			return true;
 		});
 	const server_preload = $derived(
-		server_fetch_preload + (server_modulepreload_tail ? '' : server_modulepreload)
+		server_fetch_preload +
+			(server_modulepreload_tail ? '' : server_modulepreload_hrefs.map(modulepreload_tag).join(''))
 	);
 
 	// ───────────────────────────────────────────────────────────── lake branch ──

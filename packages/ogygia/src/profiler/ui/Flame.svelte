@@ -16,6 +16,36 @@
 	let resizeTick = $state(0);
 	let tip = $state<{ node: FlameNode; x: number; y: number } | null>(null);
 	let rects: { x: number; y: number; w: number; h: number; node: FlameNode }[] = [];
+	// SEARCH: bars whose name or file contains the query stay lit, everything else dims; the count
+	// and the summed time tell how much of the graph the match covers; Enter zooms to the heaviest hit.
+	let query = $state('');
+	const q = $derived(query.trim().toLowerCase());
+	const matches = $derived.by(() => {
+		if (!q) return { count: 0, ms: 0, best: null as FlameNode | null };
+		let count = 0,
+			ms = 0,
+			best: FlameNode | null = null;
+		const walk = (n: FlameNode, inside: boolean) => {
+			const hit = n.n.toLowerCase().includes(q) || n.f.toLowerCase().includes(q);
+			if (hit) {
+				count++;
+				if (!best || n.t > best.t) best = n;
+			}
+			// time counts once per matching subtree (a match inside a match is already covered)
+			if (hit && !inside) ms += n.t;
+			for (const c of n.ch ?? []) walk(c, inside || hit);
+		};
+		walk(flame, false);
+		return { count, ms, best };
+	});
+	const is_match = (n: FlameNode) =>
+		!!q && (n.n.toLowerCase().includes(q) || n.f.toLowerCase().includes(q));
+	function zoom_to_match() {
+		const best = matches.best;
+		if (!best || best === zoom) return;
+		zstack.push(zoom);
+		zoom = best;
+	}
 
 	function depth(n: FlameNode): number {
 		let d = 1;
@@ -39,6 +69,7 @@
 			if (width < 0.5) return;
 			const y = d * ROW;
 			ctx.fillStyle = CATEGORY_COLOR[node.c] || '#6b7280';
+			ctx.globalAlpha = q ? (is_match(node) ? 1 : 0.22) : 1;
 			ctx.beginPath();
 			if (ctx.roundRect) ctx.roundRect(x + 0.5, y + 1, Math.max(width - 1, 1), ROW - 2, 2);
 			else ctx.rect(x + 0.5, y + 1, Math.max(width - 1, 1), ROW - 2);
@@ -53,6 +84,7 @@
 				ctx.fillText(node.n + ' (' + node.t.toFixed(1) + 'ms)', x + 5, y + 14);
 				ctx.restore();
 			}
+			ctx.globalAlpha = 1;
 			rects.push({ x, y, w: width, h: ROW, node });
 			let cx = x;
 			const scale = node.t > 0 ? width / node.t : 0;
@@ -68,6 +100,7 @@
 	$effect(() => {
 		zoom;
 		resizeTick;
+		q;
 		layout();
 	});
 	$effect(() => {
@@ -101,8 +134,25 @@
 	}
 </script>
 
-<div class="crumb">
-	{#if zoom !== flame}zoomed: {zoom.n} — click the top bar to go back{/if}
+<div class="tools">
+	<input
+		type="search"
+		placeholder="find a function or file in the graph…"
+		bind:value={query}
+		onkeydown={(e) => e.key === 'Enter' && zoom_to_match()}
+		aria-label="search the flame graph"
+	/>
+	{#if q}
+		<span class="hint">
+			{#if matches.count}
+				{matches.count} bar{matches.count === 1 ? '' : 's'} · {matches.ms.toFixed(1)} ms · Enter zooms to
+				the heaviest
+			{:else}no match{/if}
+		</span>
+	{/if}
+	<span class="crumb">
+		{#if zoom !== flame}zoomed: {zoom.n} — click the top bar to go back{/if}
+	</span>
 </div>
 <canvas
 	class="flame"
@@ -119,6 +169,28 @@
 {/if}
 
 <style>
+	.tools {
+		display: flex;
+		gap: 12px;
+		align-items: center;
+		flex-wrap: wrap;
+		margin: 6px 0 8px;
+	}
+	.tools input {
+		font: inherit;
+		font-size: 13px;
+		background: #12161c;
+		color: #d8dee6;
+		border: 1px solid #2b3340;
+		border-radius: 6px;
+		padding: 5px 10px;
+		min-width: 280px;
+	}
+	.tools .hint,
+	.tools .crumb {
+		color: #7d8590;
+		font-size: 12px;
+	}
 	.flame {
 		width: 100%;
 		height: 460px;

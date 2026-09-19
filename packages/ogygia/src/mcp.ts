@@ -765,6 +765,7 @@ type ProfileReport = {
 		category?: string;
 		self_ms?: number;
 		per_call_ms?: number;
+		stacks?: Array<{ ms?: number; frames?: string[] }>;
 	}>;
 	components?: Array<{
 		name?: string;
@@ -825,10 +826,18 @@ function render_profile(origin: string, r: ProfileReport): string {
 		.filter((h) => h.category !== 'profiler')
 		.sort((a, b) => (b.self_ms ?? 0) - (a.self_ms ?? 0))
 		.slice(0, 8)
-		.map(
-			(h, i) =>
-				`${i + 1}. ${h.name} — ${h.self_ms}ms self${h.category ? ` [${h.category}]` : ''}${h.file ? ` · ${base(h.file)}${h.line ? `:${h.line}` : ''}` : ''}`
-		)
+		.map((h, i) => {
+			// the heaviest call path into it, nearest caller first — enough to place it without the flame
+			const top = h.stacks?.[0];
+			const via =
+				top?.frames?.length
+					? `\n   ← ${top.frames
+							.slice(0, 5)
+							.map((f) => f.replace(/ \(.*\)$/, ''))
+							.join(' ← ')}${top.frames.length > 5 ? ' ← …' : ''}`
+					: '';
+			return `${i + 1}. ${h.name} — ${h.self_ms}ms self${h.category ? ` [${h.category}]` : ''}${h.file ? ` · ${base(h.file)}${h.line ? `:${h.line}` : ''}` : ''}${via}`;
+		})
 		.join('\n');
 
 	const comps = (r.components ?? [])

@@ -14,11 +14,14 @@ import { render } from 'svelte/server';
 import type { Component } from 'svelte';
 import {
 	SEED_REF_KEY,
+	analyze,
 	deep_equal_plain,
 	index_seed,
 	resolve_seed_ref,
 	plan_seed_refs,
-	seed_ref_reviver
+	seed_ref_reviver,
+	set_measure_memo_reader,
+	type MeasureMemo
 } from '../src/seed-refs.js';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
@@ -149,6 +152,48 @@ describe('plan_seed_refs', () => {
 		});
 		expect(revived).toEqual({ plain: [1, 2] });
 		expect(reads).toBe(0);
+	});
+});
+
+// ONE WALK PER NODE PER REQUEST: with the request memo installed (hooks.ts does), a props object
+// that is a seed node is a lookup — the memo does not grow by the block's subtree again — and the
+// index prunes below the threshold: no path array exists until a reference is planned.
+describe('the shared request memo', () => {
+	afterEach(() => set_measure_memo_reader(null));
+
+	it('a block island whose props are a seed node adds one entry (its wrapper), not a subtree', () => {
+		const memo: MeasureMemo = new Map();
+		set_measure_memo_reader(() => memo);
+		const data = { catalog: { blocks: Array.from({ length: 20 }, (_, i) => big(`b${i}`)) } };
+		const idx = index_seed(data);
+		const after_seed = memo.size;
+		expect(after_seed).toBeGreaterThan(20 * 3); // blocks, metas, link objects…
+		for (const block of data.catalog.blocks) {
+			const props = { block };
+			expect(analyze(props).json).toBe(true);
+			expect(plan_seed_refs(idx, props).count).toBe(1);
+		}
+		expect(memo.size).toBe(after_seed + 20); // exactly the twenty `{ block }` wrappers
+		// a shaped copy of the seed (new root, same children) is a handful of lookups too
+		const shaped = { catalog: data.catalog };
+		expect(analyze(shaped).bytes).toBe(analyze(data).bytes);
+		expect(memo.size).toBe(after_seed + 21);
+	});
+
+	it('without a reader every root measures on its own (a hole endpoint, a test)', () => {
+		const data = { x: big('x') };
+		expect(analyze({ x: data.x }).ref).toBe(true);
+		expect(index_seed(data).by_identity.get(data.x)).toEqual(['x']);
+	});
+
+	it('a cycle met through the shared memo is opaque, and the walk still terminates', () => {
+		const memo: MeasureMemo = new Map();
+		set_measure_memo_reader(() => memo);
+		const cyc: Record<string, unknown> = { body: 'x'.repeat(200) };
+		cyc.self = cyc;
+		expect(analyze({ cyc })).toMatchObject({ ref: false, json: false });
+		expect(analyze({ again: cyc })).toMatchObject({ ref: false, json: false });
+		expect(index_seed({ cyc }).by_identity.has(cyc)).toBe(false);
 	});
 });
 

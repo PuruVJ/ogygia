@@ -101,7 +101,7 @@ import { merge_seed_ask, shape_page_data } from './server/seed-shape.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
-import { analyze, index_seed } from './seed-refs.js';
+import { analyze, index_seed, set_measure_memo_reader, type MeasureMemo } from './seed-refs.js';
 import { WIRE_FORMAT_ATTR, WIRE_FORMAT_JSON } from './server/props-wire.js';
 import {
 	stage_deferred,
@@ -166,6 +166,10 @@ type RequestBag = {
 	/** THE DOCUMENT TAIL (server/document-tail.ts): the module-preload hints and props sidecars the
 	 *  regions of this Kit page render defer to the end of the body. Emitted once, before the seeds. */
 	tail: DocumentTail;
+	/** ONE WALK PER NODE PER REQUEST (seed-refs.ts): every tree measured during this request — the
+	 *  page seed, each island's props, the shaped seed — shares this memo, so a block island whose
+	 *  props ARE a seed node costs a lookup, not a second walk of the block. */
+	measure_memo: MeasureMemo;
 	deferred: Deferred[] | null;
 	/** Next free defer id after data+form staging — re-staging (nested promises) continues from here. */
 	defer_next_id: number;
@@ -227,6 +231,9 @@ set_page_recorder((snapshot, seed, remotes) => {
 // request has a bag, so a hole endpoint, a remote-function render or a router document keeps its
 // hints in the head and its sidecars adjacent.
 set_tail_reader(() => bag_of()?.tail ?? null);
+// The request's shared measure memo (seed-refs.ts): a hole endpoint, a remote-function render or a
+// router document has no bag, so each of its roots is measured on its own — as before.
+set_measure_memo_reader(() => bag_of()?.measure_memo ?? null);
 // Kit's `__request__` context for every server render root ogygia starts (document root, inline
 // island, deferred endpoint, snippet body): rebuilt from the recorded page snapshot, with the live
 // event filling url/params/route when the snapshot has none (a Kit page: Kit's own values; a
@@ -789,6 +796,7 @@ class OgygiaHandle {
 				seed_keys: null,
 				remotes_wanted: new Set(),
 				tail: new DocumentTail(),
+				measure_memo: new Map(),
 				deferred: null,
 				defer_next_id: 0,
 				late: null,
@@ -1100,18 +1108,26 @@ class OgygiaHandle {
 		// Region.svelte records during SSR from Kit's REAL page — the only place the resolved load data
 		// is reachable (Kit merges it locally in render.js, never on RequestState). PAGE-SEED-EVENT.
 		const page_snap = bag!.page!;
+		// SEED ONLY WHEN READ (the rule is spelled out at the seed payload below): no reader → no
+		// seed → the sidecars serialize self-contained, and nothing below stages or settles.
+		const seed_wanted = bag!.seed_wanted;
+		// THE DOCUMENT TAIL (server/document-tail.ts): the regions' module-preload hints, then their
+		// props sidecars — after the content, before the seeds. Rendered ONCE, now that the request
+		// knows whether the seed ships: only then does a sidecar serialize relative to it (seed-refs.ts)
+		// — every island's, whichever rendered first. The index is over the FULL `page.data`, whatever
+		// shaping keeps below: a reference path is structural (a top-level key, then keys and indices
+		// down), shaping keeps top-level keys whole, and staging / settling keep the shape too — so a
+		// path into the full tree resolves identically against the shipped seed, provided its key
+		// ships. The plan records the keys it referenced (`touched`) for exactly that.
+		const tail_html = bag!.tail.render(seed_wanted ? index_seed(page_snap.data) : null);
 		// SEED SHAPING: the slice of `page.data` the page's islands read (server/seed-shape.ts) — every
-		// step below (streaming, settling, the seed index, the payload) sees the shaped tree, so a
-		// props sidecar referencing `page.data` nodes and the shipped seed agree. The freeze verdict
-		// above read the whole snapshot (a streamed promise anywhere keeps the page per-request).
+		// step below (streaming, settling, the payload) sees the shaped tree. A key no island's code
+		// reads but whose node an island's props point into ships too: a reference must have something
+		// to point at. The freeze verdict above read the whole snapshot (a streamed promise anywhere
+		// keeps the page per-request).
 		let seed_keys = bag!.seed_keys;
-		if (bag!.seed_wanted && seed_keys !== 'all' && seed_keys !== null && !bag!.tail.empty) {
-			// A props sidecar may POINT INTO the seed (seed-refs.ts) at a node under a key no island's
-			// code reads. Plan the sidecars once against the full index — the plan records the keys it
-			// referenced — and ship those keys too; the real render below runs against the shaped seed.
-			const full = index_seed(page_snap.data);
-			bag!.tail.render(full);
-			for (const k of full.touched) seed_keys.add(k);
+		if (seed_wanted && seed_keys !== 'all' && seed_keys !== null) {
+			for (const k of index_seed(page_snap.data).touched) seed_keys.add(k);
 		}
 		const shaped_data = shape_page_data(page_snap.data, seed_keys);
 		let seed_data = shaped_data;
@@ -1124,9 +1140,10 @@ class OgygiaHandle {
 		);
 		const seed_reducers = { ...transport_encoders, ...page_seed_reducers };
 		const seed_stringify = ((v: unknown) => stringify(v, seed_reducers)) as typeof stringify;
-		// ONE walk of the seed tree (seed-refs.ts `analyze`, memoised per `page.data` for the request)
-		// answers every question below: a streamed promise inside (stage or settle), JSON-exact (the
-		// native lane), and — through the same memo — the seed index the props sidecars reference.
+		// ONE walk of the seed tree (seed-refs.ts `analyze`, against the request's shared memo — the
+		// tail's index above already measured every node; a shaped root is a few lookups) answers
+		// every question below: a streamed promise inside (stage or settle), JSON-exact (the native
+		// lane).
 		const data_shape = analyze(shaped_data);
 		const form_shape = analyze(page_snap.form ?? null);
 		// A load may return promises at any level (Kit streaming). csr=false can't hydrate the PAGE, so
@@ -1147,7 +1164,6 @@ class OgygiaHandle {
 		const can_stream = event?.request.headers.get('sec-fetch-mode') === 'navigate';
 		// No reader → no seed → nothing to stage or settle (the freeze verdict above still saw the
 		// promise: that page stays per-request).
-		const seed_wanted = bag!.seed_wanted;
 		if (has_pending && can_stream && seed_wanted) {
 			const staged_data = stage_deferred(shaped_data, 0);
 			const staged_form = stage_deferred(page_snap.form, staged_data.next_id);
@@ -1162,13 +1178,7 @@ class OgygiaHandle {
 			seed_form = await settle_deferred(page_snap.form);
 		}
 
-		// THE DOCUMENT TAIL (server/document-tail.ts): the regions' module-preload hints, then their
-		// props sidecars — after the content, before the seeds. Rendered NOW, once the seed decision is
-		// made: a sidecar serializes relative to the seed (seed-refs.ts) only when the seed ships —
-		// every island's, whichever rendered first. The index is a pruned second look at the one
-		// walk above; the paths it hands out are structural, so they resolve against the shipped
-		// (staged or settled) seed as well as against the original tree.
-		const tail_html = bag!.tail.render(seed_wanted ? index_seed(shaped_data) : null);
+		// The tail (rendered above, before shaping) goes out after the defer bootstrap, before the seeds.
 		if (tail_html) scripts.push(tail_html);
 
 		// SEED ONLY WHEN READ: the seed exists so islands can read `$page` through the shim. A region

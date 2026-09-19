@@ -20,6 +20,9 @@ declare module 'virtual:ogygia/region-endpoint' {
 		props: Record<string, unknown>,
 		ttl?: number
 	): string;
+	/** The island `data-og-fp` over its module URL + canonical props text (server/fingerprint.ts);
+	 *  `''` on the client, which only ever reads the attribute. */
+	export function islandFingerprint(entry: string, canonical: string): string;
 }
 declare module 'virtual:ogygia/server-manifest' {
 	export const islands: Record<string, () => Promise<{ default: unknown }>>;

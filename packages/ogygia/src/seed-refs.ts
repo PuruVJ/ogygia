@@ -29,9 +29,14 @@
  * baked ticket, a foreign fragment) never references: its props must be self-contained wherever
  * the HTML is spliced.
  *
- * ONE WALK: `analyze` measures a tree once — byte estimate, referenceability, JSON-exactness, a
- * streamed promise inside — and memoises per node. The seed index, the props plan and the handle's
- * lane/streaming decisions all read that one walk (three separate walks of a 690 KB tree before).
+ * ONE WALK PER NODE PER REQUEST: `measure` visits a node once and remembers what it learned —
+ * byte estimate, referenceability, JSON-exactness, a streamed promise inside — as ONE NUMBER in a
+ * memo shared by every root measured in the same request (`set_measure_memo_reader`; the handle
+ * hands out its request's memo). The seed's `page.data` is walked once; the twenty block islands
+ * whose props ARE seed nodes cost a lookup each, not a walk each; the shaped seed, the props plans
+ * and the handle's lane / streaming decisions all read the same memo. Nothing is allocated per
+ * node beyond the memo entry: no measure object, no cycle stack (the memo's in-progress mark is
+ * the cycle detector), no path array until a node is actually referenced.
  *
  * Universal module (no Node imports): the index + reducer run on the server, the resolver on the
  * client, and the unit tests exercise both ends against a real devalue round trip.
@@ -43,33 +48,32 @@ export const SEED_REF_KEY = 'OgygiaSeedRef';
 
 export type SeedPath = (string | number)[];
 
-interface SeedNode {
-	node: object;
-	path: SeedPath;
-}
-
 export interface SeedIndex {
-	/** node → its path (identity matches: the app passed the seed's own object). */
-	readonly by_identity: WeakMap<object, SeedPath>;
-	/** node → its byte estimate (the threshold check, without hashing). */
-	readonly bytes: WeakMap<object, number>;
+	/** node → its path from `page.data` (identity matches: the app passed the seed's own object).
+	 *  The path is materialised on the first ask — an indexed node that no island references
+	 *  never allocates one. */
+	readonly by_identity: {
+		get(node: object): SeedPath | undefined;
+		has(node: object): boolean;
+	};
 	/**
 	 * The seed nodes with exactly this byte estimate — the only ones a props node of that size can
 	 * be a clone of. Structure matching hashes just those few candidates (memoised per seed node)
 	 * instead of the whole seed, so an app that passes the seed's own objects never hashes a seed
-	 * node at all, and a cloning app hashes only what it has to.
+	 * node at all, and a cloning app hashes only what it has to. The buckets are built on the first
+	 * ask — a page whose islands only pass seed objects by identity never builds them.
 	 */
-	candidates(bytes: number): readonly SeedNode[];
-	/** Structural hash of a seed node, memoised for the request. */
-	hash_of(node: SeedNode): string | null;
+	candidates(bytes: number): readonly object[];
+	/** Structural hash of an indexed seed node, memoised for the request. */
+	hash_of(node: object): string | null;
 	/** nodes indexed (for tests / devtools). */
 	readonly size: number;
 	/**
 	 * SEED SHAPING: the top-level `page.data` keys under which a props node was matched
 	 * (`plan_seed_refs` records the first path segment of every reference it plans). The handle
-	 * dry-runs the tail against the FULL index before shaping, so a key no island's code reads but
-	 * whose node an island's props point into still ships — a reference must have something to
-	 * point at.
+	 * renders the tail against the FULL index, then ships every touched key — a key no island's
+	 * code reads but whose node an island's props point into still ships, so a reference always
+	 * has something to point at.
 	 */
 	readonly touched: Set<string>;
 }
@@ -195,74 +199,104 @@ export interface Measure {
 	readonly thenable: boolean;
 }
 
-// Shared leaf measures — one object per leaf class, never one per leaf (a CMS tree is mostly
-// leaves; strings are sized inline by the walk).
-const M_NULLISH_JSON: Measure = { bytes: 4, ref: true, json: true, thenable: false };
-const M_UNDEFINED: Measure = { bytes: 4, ref: true, json: false, thenable: false };
-const M_NUMBER: Measure = { bytes: 8, ref: true, json: true, thenable: false };
-const M_NUMBER_NOJSON: Measure = { bytes: 8, ref: true, json: false, thenable: false };
-const M_BIGINT: Measure = { bytes: 8, ref: true, json: false, thenable: false };
-const M_DATE: Measure = { bytes: 24, ref: true, json: false, thenable: false };
-const M_OPAQUE: Measure = { bytes: 0, ref: false, json: false, thenable: false };
-const M_THENABLE: Measure = { bytes: 0, ref: false, json: false, thenable: true };
-const M_CYCLE: Measure = M_OPAQUE;
+// THE PACKED MEASURE: one number per node — `bytes * 8 + flags`. A CMS tree is thousands of
+// nodes; a measure object per node was a third of the walk's allocation and a GC line of its own.
+// The number is exact up to 2^50 bytes, which no seed reaches.
+const F_REF = 1;
+const F_JSON = 2;
+const F_THENABLE = 4;
+const P_OPAQUE = 0; // function, symbol, class instance, Map/Set, a cycle: 0 bytes, no lane
+const P_THENABLE = F_THENABLE;
+const P_NULLISH_JSON = 4 * 8 + F_REF + F_JSON; // null, boolean
+const P_UNDEFINED = 4 * 8 + F_REF;
+const P_NUMBER = 8 * 8 + F_REF + F_JSON;
+const P_NUMBER_NOJSON = 8 * 8 + F_REF; // NaN, ±Infinity, -0
+const P_BIGINT = 8 * 8 + F_REF;
+const P_DATE = 24 * 8 + F_REF;
+/** The memo mark of a node whose walk has not finished: meeting it again is a cycle. */
+const IN_PROGRESS = -1;
+
+const bytes_of = (p: number): number => (p - (p & 7)) / 8;
+
+function unpack(p: number): Measure {
+	return {
+		bytes: bytes_of(p),
+		ref: (p & F_REF) !== 0,
+		json: (p & F_JSON) !== 0,
+		thenable: (p & F_THENABLE) !== 0
+	};
+}
+
+/** Per-node measures: plain object / array → packed measure. Shared across every root measured in
+ *  one request (the handle installs a reader); a fresh one per root outside a request. */
+export type MeasureMemo = Map<object, number>;
 
 /**
  * The one walk: measure a value (post-order, memoised per plain node in `memo`). Every child is
  * measured even after one disqualifies the parent: a clean sibling deeper in the tree must still
- * get its own entry (the index walk reads the memo). Strings never allocate a measure.
+ * get its own entry (the index walk reads the memo). Strings never enter the memo. A node already
+ * in the memo — from this root or from any other root measured with the same memo — is a lookup.
  */
-function measure(v: unknown, memo: Map<object, Measure>, on_stack: Set<object>): Measure {
+function measure(v: unknown, memo: MeasureMemo): number {
 	switch (typeof v) {
 		case 'string':
-			return { bytes: v.length + 2, ref: true, json: true, thenable: false };
+			return (v.length + 2) * 8 + F_REF + F_JSON;
 		case 'number':
-			return Number.isFinite(v) && !Object.is(v, -0) ? M_NUMBER : M_NUMBER_NOJSON;
+			return Number.isFinite(v) && !Object.is(v, -0) ? P_NUMBER : P_NUMBER_NOJSON;
 		case 'boolean':
-			return M_NULLISH_JSON;
+			return P_NULLISH_JSON;
 		case 'undefined':
-			return M_UNDEFINED;
+			return P_UNDEFINED;
 		case 'bigint':
-			return M_BIGINT;
+			return P_BIGINT;
 		case 'object':
 			break;
 		default:
-			return M_OPAQUE; // function, symbol
+			return P_OPAQUE; // function, symbol
 	}
-	if (v === null) return M_NULLISH_JSON;
-	if (v instanceof Date) return M_DATE;
-	if (!is_plain(v)) return is_thenable(v) ? M_THENABLE : M_OPAQUE;
+	if (v === null) return P_NULLISH_JSON;
+	if (v instanceof Date) return P_DATE;
+	if (!is_plain(v)) return is_thenable(v) ? P_THENABLE : P_OPAQUE;
 	const cached = memo.get(v);
-	if (cached !== undefined) return cached;
+	// An ancestor still being walked: a cycle — opaque to the parent (never a lane, never a ref).
+	if (cached !== undefined) return cached === IN_PROGRESS ? P_OPAQUE : cached;
 	// A plain-looking object carrying a SYMBOL key is a branded value (a held region, an og.$ fn
 	// descriptor, a hub brand) that a devalue reducer claims: JSON would drop the brand and a seed
 	// reference would copy it without one. Opaque, like a class instance.
 	if (!Array.isArray(v) && Object.getOwnPropertySymbols(v).length > 0) {
-		memo.set(v, M_OPAQUE);
-		return M_OPAQUE;
+		memo.set(v, P_OPAQUE);
+		return P_OPAQUE;
 	}
-	if (on_stack.has(v)) return M_CYCLE;
-	on_stack.add(v);
 	let bytes = 0;
-	let ref = true;
-	let json = true;
-	let thenable = false;
-	const add = (c: unknown, key_len: number) => {
-		if (typeof c === 'string') {
-			bytes += c.length + 2 + key_len;
-			return;
-		}
-		const m = measure(c, memo, on_stack);
-		bytes += m.bytes + key_len;
-		ref &&= m.ref;
-		json &&= m.json;
-		thenable ||= m.thenable;
-	};
+	let lanes = F_REF | F_JSON; // and-accumulated: one disqualified child clears the lane
+	let thenable = 0; // or-accumulated
+	// The in-progress mark (the cycle detector) is written only when a child is an object that could
+	// lead back here — a leaf-only node (most of a CMS tree: a row, a link, a tag list) writes the
+	// memo once, not twice.
+	let marked = false;
 	if (Array.isArray(v)) {
-		for (const item of v) add(item, 1);
+		for (let i = 0; i < v.length; i++) {
+			const c = v[i];
+			if (typeof c === 'string') {
+				bytes += c.length + 3;
+				continue;
+			}
+			if (!marked && typeof c === 'object' && c !== null) {
+				memo.set(v, IN_PROGRESS);
+				marked = true;
+			}
+			const p = measure(c, memo);
+			bytes += bytes_of(p) + 1;
+			lanes &= p;
+			thenable |= p & F_THENABLE;
+		}
 	} else {
 		for (const key in v) {
 			const c = (v as Record<string, unknown>)[key];
+			if (typeof c === 'string') {
+				bytes += c.length + key.length + 5;
+				continue;
+			}
 			// An `undefined` PROPERTY keeps the JSON lane: `JSON.stringify` drops the key, and reading
 			// it back gives `undefined` either way (only `key in obj` would tell — nothing on the wire
 			// relies on that). One such leaf in a 690 KB CMS tree was pushing the whole seed onto the
@@ -271,30 +305,50 @@ function measure(v: unknown, memo: Map<object, Measure>, on_stack: Set<object>):
 				bytes += key.length + 4;
 				continue;
 			}
-			add(c, key.length + 3);
+			if (!marked && typeof c === 'object' && c !== null) {
+				memo.set(v, IN_PROGRESS);
+				marked = true;
+			}
+			const p = measure(c, memo);
+			bytes += bytes_of(p) + key.length + 3;
+			lanes &= p;
+			thenable |= p & F_THENABLE;
 		}
 	}
-	on_stack.delete(v);
-	const result: Measure = { bytes, ref, json, thenable };
+	const result = bytes * 8 + (lanes & (F_REF | F_JSON)) + thenable;
 	memo.set(v, result);
 	return result;
 }
 
 interface Analysis {
 	root: Measure;
-	memo: Map<object, Measure>;
+	memo: MeasureMemo;
+}
+
+type MemoReader = () => MeasureMemo | null;
+let memo_reader: MemoReader | null = null;
+
+/** Server (`hooks.ts`) installs a request-scoped reader: every root measured during one request
+ *  shares one memo, so a subtree reached from two roots (the seed and an island's props) is walked
+ *  once. `null` uninstalls; off-request (a hole endpoint, a test) each root gets its own memo. */
+export function set_measure_memo_reader(fn: MemoReader | null): void {
+	memo_reader = fn;
 }
 
 const analysis_cache = new WeakMap<object, Analysis>();
 
 /** The walk, cached per plain root object: the seed's `page.data` is measured once per request
- *  however many islands, lanes and decisions ask; a props object once per island. */
+ *  however many islands, lanes and decisions ask; a props object once per island — and against
+ *  the request's shared memo, so a props object that is a seed node costs a lookup. */
 function analysis(value: unknown): Analysis {
-	if (!is_plain(value)) return { root: measure(value, new Map(), new Set()), memo: new Map() };
+	if (!is_plain(value)) {
+		const memo: MeasureMemo = new Map();
+		return { root: unpack(measure(value, memo)), memo };
+	}
 	const hit = analysis_cache.get(value);
 	if (hit) return hit;
-	const memo = new Map<object, Measure>();
-	const a = { root: measure(value, memo, new Set()), memo };
+	const memo = memo_reader?.() ?? new Map<object, number>();
+	const a: Analysis = { root: unpack(measure(value, memo)), memo };
 	analysis_cache.set(value, a);
 	return a;
 }
@@ -304,6 +358,30 @@ export function analyze(value: unknown): Measure {
 	return analysis(value).root;
 }
 
+/** Where an indexed seed node sits: its parent's node and the key under it. The path array is
+ *  materialised only when a reference is actually planned to this node. */
+interface PathNode {
+	parent: PathNode | null;
+	key: string | number;
+	path: SeedPath | null;
+}
+
+function path_of(at: PathNode): SeedPath {
+	if (at.path !== null) return at.path;
+	const path = at.parent === null ? [] : [...path_of(at.parent), at.key];
+	at.path = path;
+	return path;
+}
+
+const EMPTY_NODES: readonly object[] = [];
+const EMPTY_INDEX: SeedIndex = {
+	by_identity: { get: () => undefined, has: () => false },
+	candidates: () => EMPTY_NODES,
+	hash_of: () => null,
+	size: 0,
+	touched: new Set()
+};
+
 const index_cache = new WeakMap<object, SeedIndex>();
 
 /**
@@ -311,70 +389,70 @@ const index_cache = new WeakMap<object, SeedIndex>();
  * identity now and by structural hash on demand (first occurrence wins — the shortest path is not
  * guaranteed, the first in key order is, which is deterministic). Cached per `data` object: one
  * index per request, however many islands ask. It reads the one measuring walk (`analyze`) and
- * prunes: a small clean node cannot hold a large child, so its subtree is skipped BEFORE its path
- * is materialised — on a CMS tree that is most of the nodes.
+ * prunes: a node below `min_bytes` cannot hold a child at or above it (a child is never larger
+ * than its parent), so its subtree is skipped BEFORE anything is materialised — on a CMS tree that
+ * is most of the nodes.
  */
 export function index_seed(data: unknown, min_bytes = 96): SeedIndex {
-	if (!is_plain(data))
-		return {
-			by_identity: new WeakMap(),
-			bytes: new WeakMap(),
-			touched: new Set(),
-			candidates: () => [],
-			hash_of: () => null,
-			size: 0
-		};
+	if (!is_plain(data)) return { ...EMPTY_INDEX, touched: new Set() };
 	const hit = index_cache.get(data);
 	if (hit) return hit;
-	const by_identity = new WeakMap<object, SeedPath>();
-	const bytes = new WeakMap<object, number>();
-	const measured = analysis(data).memo;
-	const nodes: SeedNode[] = [];
+	const memo = analysis(data).memo;
+	const at = new WeakMap<object, PathNode>();
+	const nodes: object[] = [];
 	const seen = new Set<object>();
-	// A node that is NOT referenceable (a class instance / Map / cycle inside) may still hold
-	// clean children: descend. A small clean node cannot hold a large child: prune (no path).
-	const prunable = (v: unknown): v is object => {
-		if (!is_plain(v) || seen.has(v)) return true;
-		const m = measured.get(v);
-		return m === undefined || (m.ref && m.bytes < min_bytes);
+	// Enter a child when it is plain, unseen, measured, and big enough to hold a referenceable node.
+	const enter = (c: unknown): c is Record<string, unknown> | unknown[] => {
+		if (!is_plain(c) || seen.has(c)) return false;
+		const p = memo.get(c);
+		return p !== undefined && bytes_of(p) >= min_bytes;
 	};
-	const visit = (v: Record<string, unknown> | unknown[], path: SeedPath) => {
+	const visit = (v: Record<string, unknown> | unknown[], here: PathNode) => {
 		seen.add(v);
-		const m = measured.get(v)!;
-		if (m.ref) {
-			by_identity.set(v, path);
-			bytes.set(v, m.bytes);
-			nodes.push({ node: v, path });
+		if (memo.get(v)! & F_REF) {
+			at.set(v, here);
+			nodes.push(v);
 		}
 		if (Array.isArray(v)) {
 			for (let i = 0; i < v.length; i++) {
 				const c = v[i];
-				if (!prunable(c)) visit(c as Record<string, unknown> | unknown[], [...path, i]);
+				if (enter(c)) visit(c, { parent: here, key: i, path: null });
 			}
 		} else {
 			for (const key in v) {
 				const c = v[key];
-				if (!prunable(c)) visit(c as Record<string, unknown> | unknown[], [...path, key]);
+				if (enter(c)) visit(c, { parent: here, key, path: null });
 			}
 		}
 	};
-	if (!prunable(data)) visit(data, []);
-	// Size buckets for structure matching; hashes memoised per seed node, computed on first ask.
-	const by_bytes = new Map<number, SeedNode[]>();
-	for (const n of nodes) {
-		const b = bytes.get(n.node)!;
-		const bucket = by_bytes.get(b);
-		if (bucket) bucket.push(n);
-		else by_bytes.set(b, [n]);
-	}
+	if (enter(data)) visit(data, { parent: null, key: '', path: [] });
+	// Size buckets for structure matching, built on the first ask; hashes memoised per seed node.
+	let by_bytes: Map<number, object[]> | null = null;
+	const buckets = () => {
+		if (by_bytes === null) {
+			by_bytes = new Map();
+			for (const n of nodes) {
+				const b = bytes_of(memo.get(n)!);
+				const bucket = by_bytes.get(b);
+				if (bucket) bucket.push(n);
+				else by_bytes.set(b, [n]);
+			}
+		}
+		return by_bytes;
+	};
 	const hash_memo = new Map<object, { hash: string; bytes: number } | null>();
 	const index: SeedIndex = {
-		by_identity,
-		bytes,
-		touched: new Set(),
-		candidates: (b) => by_bytes.get(b) ?? [],
-		hash_of: (n) => hash_subtree(n.node, hash_memo, new Set())?.hash ?? null,
-		size: nodes.length
+		by_identity: {
+			get: (node) => {
+				const here = at.get(node);
+				return here === undefined ? undefined : path_of(here);
+			},
+			has: (node) => at.has(node)
+		},
+		candidates: (b) => buckets().get(b) ?? EMPTY_NODES,
+		hash_of: (node) => hash_subtree(node, hash_memo, new Set())?.hash ?? null,
+		size: nodes.length,
+		touched: new Set()
 	};
 	index_cache.set(data, index);
 	return index;
@@ -392,38 +470,36 @@ export interface SeedRefPlan {
  * identity first (a pointer lookup per node, no hashing), then structure (hash + exact comparison,
  * only for a large plain node the seed does not own, and only against the seed nodes of exactly the
  * same byte size — usually none, or one). Nodes under a matched ancestor are never visited (they
- * ride inside the reference). The props' own measure memo is reused, so the plan adds no walk of
- * its own beyond the pointer lookups.
+ * ride inside the reference), and neither is anything under a node below `min_bytes` (no child
+ * of it can be referenced). The props' own measures come from the request memo, so the plan adds
+ * no walk of its own beyond the pointer lookups.
  */
 export function plan_seed_refs(index: SeedIndex, props: unknown, min_bytes = 96): SeedRefPlan {
 	const matched = new WeakMap<object, SeedPath>();
 	let count = 0;
 	if (index.size > 0) {
-		const measured = analysis(props).memo;
+		const memo = analysis(props).memo;
 		const hashed = new Map<object, { hash: string; bytes: number } | null>();
 		const seen = new Set<object>();
+		const hit = (v: object, path: SeedPath) => {
+			matched.set(v, path);
+			index.touched.add(String(path[0]));
+			count++;
+		};
 		const visit = (v: unknown) => {
 			if (!is_plain(v) || seen.has(v)) return;
 			seen.add(v);
 			const by_id = index.by_identity.get(v);
-			if (by_id) {
-				matched.set(v, by_id);
-				index.touched.add(String(by_id[0]));
-				count++;
-				return;
-			}
-			const m = measure(v, measured, new Set());
-			if (m.ref && m.bytes >= min_bytes) {
-				const cands = index.candidates(m.bytes);
+			if (by_id) return hit(v, by_id);
+			const p = memo.get(v) ?? measure(v, memo);
+			const bytes = bytes_of(p);
+			if (bytes < min_bytes) return; // nothing below can be referenced either
+			if (p & F_REF) {
+				const cands = index.candidates(bytes);
 				if (cands.length) {
 					const h = hash_subtree(v, hashed, new Set())?.hash ?? null;
 					const cand = h ? cands.find((c) => index.hash_of(c) === h) : undefined;
-					if (cand && deep_equal_plain(cand.node, v)) {
-						matched.set(v, cand.path);
-						index.touched.add(String(cand.path[0]));
-						count++;
-						return;
-					}
+					if (cand && deep_equal_plain(cand, v)) return hit(v, index.by_identity.get(cand)!);
 				}
 			}
 			if (Array.isArray(v)) for (const item of v) visit(item);

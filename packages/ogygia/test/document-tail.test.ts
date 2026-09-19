@@ -46,8 +46,8 @@ describe('DocumentTail', () => {
 	it('hints dedupe per href (first wins), props dedupe per fingerprint, render is hints then props', () => {
 		const t = new DocumentTail();
 		expect(t.empty).toBe(true);
-		t.hint('<link rel="modulepreload" href="/a.js" fetchpriority="low"><link rel="modulepreload" href="/b.js" fetchpriority="low">');
-		t.hint('<link rel="modulepreload" href="/b.js" fetchpriority="low"><link rel="modulepreload" href="/c.js" fetchpriority="low">');
+		t.hints(['/a.js', '/b.js']);
+		t.hints(['/b.js', '/c.js']);
 		t.props('f1', () => '<script data-ogygia-props="f1">1</script>');
 		t.props('f1', () => '<script data-ogygia-props="f1">DUPLICATE</script>');
 		t.props('f2', () => '<script data-ogygia-props="f2">2</script>');
@@ -62,11 +62,13 @@ describe('DocumentTail', () => {
 		);
 	});
 
-	it('ignores tags that are not modulepreload links and links without href', () => {
+	it('an empty hint list adds nothing; the tag is built once at render, never parsed from markup', () => {
 		const t = new DocumentTail();
-		t.hint('<link rel="stylesheet" href="/x.css"><link rel="modulepreload"><link rel="preload" as="fetch" href="/h">');
+		t.hints([]);
 		expect(t.size.hints).toBe(0);
 		expect(t.render()).toBe('');
+		t.hints(['/only.js']);
+		expect(t.render()).toBe('<link rel="modulepreload" href="/only.js" fetchpriority="low">');
 	});
 
 	// THE HOLES RECORD: a Kit-hydrated document's deferred holes, by identity, so a hole Kit renders

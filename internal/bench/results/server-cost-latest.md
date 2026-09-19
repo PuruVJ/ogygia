@@ -1,4 +1,4 @@
-# server-cost — ogygia's per-request overhead (2026-09-10)
+# server-cost — ogygia's per-request overhead (2026-09-10, round 2 2026-09-19)
 
 `node internal/bench/server-cost.mjs 300 4` — the playground's `/bench-cms` (21 islands: a header
 island with a ~300 KB config prop outside `page.data`, one `$page` reader, twenty block islands fed
@@ -8,8 +8,8 @@ slices of a ~250 KB `page.data` tree) against `/bench-cms/plain` (the same compo
 | | plain | islands (before) | islands (after) |
 | --- | --- | --- | --- |
 | HTML | 194 KB | 683 KB | 627 KB |
-| p50 | 15–18 ms | 46 ms (**+28**) | 28–32 ms (**+12 to +17**, three runs) |
-| p95 | 20–24 ms | 65 ms (+41) | 42–52 ms (+21 to +30) |
+| p50 | 15–18 ms | 46 ms (**+28**) | 28–32 ms (**+12 to +17**, three runs) · round 2: 25 ms (**+11.2 to +11.6**) |
+| p95 | 20–24 ms | 65 ms (+41) | 42–52 ms (+21 to +30) · round 2: 42 ms (+23.6) |
 | RSS over 1,200 requests | flat | flat | flat |
 
 Non-idle CPU over the 1,200 requests: ~10.1 s before, ~6.7 s after. devalue's `stringify` (2.8 s

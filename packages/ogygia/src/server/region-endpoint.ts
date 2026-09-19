@@ -154,3 +154,6 @@ export function makeRegionEndpoint(entry: string, props: Record<string, unknown>
 }
 
 export { encode_region_props } from './region-props.js';
+/** The island `data-og-fp` (server/fingerprint.ts) — Region.svelte reaches it through this
+ *  client-stubbed virtual, so the native digest never enters the client graph. */
+export { island_fingerprint as islandFingerprint } from './fingerprint.js';

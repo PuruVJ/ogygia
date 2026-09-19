@@ -71,10 +71,12 @@ export function stringify_props(
 ): string {
 	register_prop_kinds();
 	try {
-		const reducers: Record<string, (v: unknown) => unknown> = {
-			[REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES)
-		};
+		// The seed reference goes FIRST: a node the seed owns is plain data — never a wired class, a
+		// store, a snippet or an og.$ fn — so the families' mint (five kind matches per object) need
+		// not run on it, and devalue never descends into it.
+		const reducers: Record<string, (v: unknown) => unknown> = {};
 		if (seed_refs) reducers[SEED_REF_KEY] = seed_refs;
+		reducers[REF_WIRE_KEY] = ref_reducer(PROP_FAMILIES);
 		return stringify(value, reducers);
 	} catch (e) {
 		const detail = e instanceof Error ? e.message : String(e);
@@ -109,6 +111,8 @@ export interface PropsWire {
 /**
  * Plan an island's sidecar: lane, canonical text, live snippet entries — and a `wire(seed)` that
  * produces the final text once the request knows about the seed (the document tail's render).
+ * The wire text is produced once per seed: identical islands share one plan, and a tail rendered
+ * twice against the same index (a test, a re-render) plans and serializes once.
  */
 export function plan_props_wire(value: unknown, entry: string): PropsWire {
 	const shape = analyze(value);
@@ -117,6 +121,13 @@ export function plan_props_wire(value: unknown, entry: string): PropsWire {
 		const plan = plan_seed_refs(seed, value);
 		return plan.count > 0 ? { text: stringify_props(value, entry, plan.reducer), json: false } : null;
 	};
+	let last_seed: SeedIndex | null | undefined;
+	let last_text: WireText;
+	const once = (seed: SeedIndex | null, plain: () => WireText): WireText => {
+		if (seed === last_seed) return last_text;
+		last_seed = seed;
+		return (last_text = referenced(seed) ?? plain());
+	};
 	if (shape.json) {
 		const canonical = JSON.stringify(value);
 		let escaped: WireText | null = null;
@@ -124,7 +135,7 @@ export function plan_props_wire(value: unknown, entry: string): PropsWire {
 			canonical,
 			json: true,
 			live_entries: [],
-			wire: (seed) => referenced(seed) ?? (escaped ??= { text: escape_script_text(canonical), json: true })
+			wire: (seed) => once(seed, () => (escaped ??= { text: escape_script_text(canonical), json: true }))
 		};
 	}
 	const canonical = stringify_props(value, entry, null);
@@ -133,7 +144,7 @@ export function plan_props_wire(value: unknown, entry: string): PropsWire {
 		canonical,
 		json: false,
 		live_entries: live_entries_in(canonical),
-		wire: (seed) => referenced(seed) ?? plain
+		wire: (seed) => once(seed, () => plain)
 	};
 }
 

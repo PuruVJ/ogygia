@@ -35,8 +35,17 @@ import type { SeedIndex } from '../seed-refs.js';
 import { escape_script_text } from '../escape.js';
 import { HOLES_SCRIPT_TYPE } from '../holes-record.js';
 
-const MODULEPRELOAD_TAG_G = /<link\b[^>]*\brel=["']modulepreload["'][^>]*>/g;
-const LINK_HREF_RE = /\bhref=["']([^"']*)["']/;
+/**
+ * THE module-preload hint for one island chunk. EVERY hint is `fetchpriority="low"`: a hint's job
+ * is discovery (no parse-then-import waterfall), not priority — nothing an island downloads is
+ * needed for first paint, the server painted the content — so island code must never outrank the
+ * CSS and the LCP image (Region.svelte has the measured story). Regions hand the tail hrefs, not
+ * tags: one string per hint, built once here, never parsed back out of markup.
+ */
+export function modulepreload_tag(href: string): string {
+	return '<link rel="modulepreload" href="' + href + '" fetchpriority="low">';
+}
+
 /** The holes record (`hole()`), read by runtime/hole-facts.ts. */
 const HOLES_SCRIPT_OPEN = `<script type="${HOLES_SCRIPT_TYPE}" data-ogygia-holes>`;
 const HOLES_SCRIPT_CLOSE = '</script>';
@@ -54,16 +63,13 @@ export type HoleRecord = {
 };
 
 export class DocumentTail {
-	readonly #hints = new Map<string, string>();
+	readonly #hints = new Set<string>();
 	readonly #props = new Map<string, SidecarRender>();
 	readonly #holes = new Map<string, HoleRecord>();
 
-	/** Add a region's `<link rel="modulepreload">` block; each href is kept once (first wins). */
-	hint(html: string): void {
-		for (const m of html.matchAll(MODULEPRELOAD_TAG_G)) {
-			const href = LINK_HREF_RE.exec(m[0])?.[1];
-			if (href !== undefined && !this.#hints.has(href)) this.#hints.set(href, m[0]);
-		}
+	/** Add a region's module-preload hrefs; each href is hinted once (first wins). */
+	hints(hrefs: readonly string[]): void {
+		for (const href of hrefs) this.#hints.add(href);
 	}
 
 	/** Register an island's props sidecar under its fingerprint; identical islands share one. */
@@ -97,7 +103,7 @@ export class DocumentTail {
 	 *  record (one script, JSON, `<`-escaped). Empty string when nothing was recorded. */
 	render(seed: SeedIndex | null = null): string {
 		let out = '';
-		for (const tag of this.#hints.values()) out += tag;
+		for (const href of this.#hints) out += modulepreload_tag(href);
 		for (const render of this.#props.values()) out += render(seed);
 		if (this.#holes.size) {
 			const record: Record<string, HoleRecord> = {};

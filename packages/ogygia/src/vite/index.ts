@@ -696,7 +696,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// running it now just moves buildStart's call earlier. Dev server only.
 				if (is_dev) {
 					compiler.prescan();
-					const opt = config.optimizeDeps as { entries?: string | string[] };
+					// Vite's resolved config always carries `optimizeDeps`; a hand-built config (the resolve
+					// unit tests) may not.
+					const opt = ((config as { optimizeDeps?: object }).optimizeDeps ??= {}) as {
+						entries?: string | string[];
+					};
 					const entries = Array.isArray(opt.entries)
 						? opt.entries
 						: opt.entries

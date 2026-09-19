@@ -272,6 +272,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
  * already analyzed — self/total per component, network attribution, memory, GC,
  * and the same findings the human report shows.
  */
+/** One stack frame as agents read it: `name (file:line)`. */
+const frame_text = (fr: { n: string; f: string }): string => (fr.f ? `${fr.n} (${fr.f})` : fr.n);
+
 export function report_json(a: Analysis, meta: ReportMeta, base: string, extras: ReportExtras) {
 	const dur = a.duration_ms || 1;
 	const busy = a.busy_ms || 1;
@@ -347,13 +350,17 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 						name: c.name,
 						instances: n,
 						file: c.url,
+						path: c.path ?? null,
 						line: c.line,
+						column: c.col || null,
 						self_ms: c.self_ms,
 						total_ms: c.total_ms,
 						// cost of a single render: total ÷ renders (n falls back to 1)
 						per_call_ms: round1(c.total_ms / (n ?? 1)),
 						pct_busy: round1((c.total_ms / busy) * 100),
-						alloc_bytes: alloc_by_name.get(c.name) ?? null
+						alloc_bytes: alloc_by_name.get(c.name) ?? null,
+						// the heaviest call paths that rendered it, nearest caller first
+						stacks: (c.stacks ?? []).map((s) => ({ ms: s.ms, frames: s.frames.map(frame_text) }))
 					};
 				});
 		})(),
@@ -364,11 +371,16 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 					name: f.name,
 					instances: n,
 					file: f.url,
+					path: f.path ?? null,
 					line: f.line,
+					column: f.col || null,
 					category: f.category,
+					package: f.pkg ?? null,
 					self_ms: f.self_ms,
 					total_ms: f.total_ms,
-					per_call_ms: round1(f.total_ms / (n ?? 1))
+					per_call_ms: round1(f.total_ms / (n ?? 1)),
+					// the heaviest call paths into it, nearest caller first
+					stacks: (f.stacks ?? []).map((s) => ({ ms: s.ms, frames: s.frames.map(frame_text) }))
 				};
 			});
 		})(),

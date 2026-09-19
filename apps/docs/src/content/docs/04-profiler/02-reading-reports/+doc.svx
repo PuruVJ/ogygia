@@ -40,6 +40,10 @@ So:
 
 The inline bar on each row shows self (bright) inside total (dim). Thus you see at a glance whether a component is slow itself, or slow because of what it renders.
 
+**Click a row** to open it: the full path with line and column (an **open in editor** link when the path is on your machine, a **copy** button otherwise), and the heaviest **call stacks** that rendered it, nearest caller first, each with the time that flowed through that path. That is the answer to "where is this, and who renders it" without the flame graph. The filter box above the table narrows the rows by name or file.
+
+What counts as a component: the function Svelte compiles a `.svelte` file into, named after the file. A capitalised name alone is not enough. A class in your code (`IntersectionObserver`, an `Error` subclass, a `Store`) wears the same case and used to land here; now a name from a bundled chunk is a component only when its subtree reaches Svelte's server internals, which is what rendering anything does. Everything else is **app code**.
+
 ## Renders and per call
 
 The cost of a component is frequently *repetition*, not one heavy render. A **`×N`** tag next to a name means that it ran N times during the window. `HeavyRow ×800` is eight hundred cheap renders, not one slow component. No tag means that it ran one time.
@@ -48,7 +52,9 @@ The **per call** column makes that explicit: it is `total ÷ N`, the cost of a s
 
 ## Hot functions
 
-Each function on the server, sortable by self, total, or **per call**. This is where the CPU went, below the component level: a formatter constructed per row, a regex pass, a serializer. The file and line point you directly at it. The same `×N` tag flags a hot loop (`escape_html ×7800`), not one slow call.
+Each function on the server, sortable by self, total, or **per call**. This is where the CPU went, below the component level: a formatter constructed per row, a regex pass, a serializer. The file, line and column point you directly at it. The same `×N` tag flags a hot loop (`escape_html ×7800`), not one slow call.
+
+A row from a dependency names the package in its chip (`devalue`, `@sveltejs/kit`), so a hot third-party function is placed at a glance. **Click a row** for the full path (openable in your editor when it is a local file) and its **call stacks**: the three paths that account for the most time in it, nearest caller first. `escape_html` is hot in every profile; the stack tells you *which* component's loop calls it. The filter box narrows the table by function, file or package.
 
 Native runtime built-ins (Node and V8 internals like `existsSync` or the UTF-8 codecs) carry no source file. Thus their row is labelled **node core**, with a `native` location. That is the runtime that does low-level work, not your code.
 
@@ -83,6 +89,10 @@ Top allocators (who makes the objects, and thus the garbage), RSS over the windo
 ## Flame graph and raw profile
 
 A flame graph of the merged call tree for the full window, and a **download** of the raw `.cpuprofile`. Open that file in Chrome DevTools → Performance, or at speedscope.app, when you want their tools on the same data.
+
+Type in the search box above the graph to find a function or file: matching bars stay lit, everything else dims, and the count and summed time show how much of the graph the match covers. Enter zooms to the heaviest match.
+
+The JSON report (`/report/<id>.json`) carries the same locations and call stacks (`path`, `column`, `stacks` on every hot function and component), so an agent reading it can place a function without the UI.
 
 ## What the common slow patterns look like
 

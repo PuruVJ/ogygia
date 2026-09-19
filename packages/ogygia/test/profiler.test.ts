@@ -4,6 +4,7 @@ import {
 	analyze_heap,
 	categorize,
 	decode_mappings,
+	join_source,
 	sourcemap_resolver,
 	type CpuProfile,
 	type HeapNode
@@ -506,6 +507,12 @@ describe('categorize', () => {
 		// closures inside a component file are app code, not the component itself
 		expect(categorize(frame('', '/app/src/lib/Header.svelte')).category).toBe('app');
 		expect(categorize(frame('each_item', '/app/src/lib/Header.svelte')).category).toBe('app');
+		// a same-cased helper CLASS in the component file is not the file's component either
+		expect(categorize(frame('Observer', '/app/src/lib/Header.svelte')).category).toBe('app');
+		// the bundler's collision suffix is still the file's component
+		expect(categorize(frame('Header$1', '/app/src/lib/Header.svelte')).category).toBe('component');
+		// a `.svelte.ts` module compiles no component — its classes are app code whatever their case
+		expect(categorize(frame('Store', '/app/src/lib/state.svelte.ts')).category).toBe('app');
 		expect(categorize(frame('_page', '/out/entries/pages/_page.svelte.js')).category).toBe(
 			'component'
 		);
@@ -521,6 +528,150 @@ describe('categorize', () => {
 		// first sample as node:inspector `post` — must not read as app time
 		expect(categorize(frame('post', 'node:inspector')).category).toBe('profiler');
 		expect(categorize(frame('(idle)')).category).toBe('idle');
+	});
+});
+
+describe('component confirmation (structural)', () => {
+	// A component-shaped name in a bundled chunk is only a CANDIDATE: a Svelte SSR component calls
+	// Svelte's server internals, a class constructor does not. `IntersectionObserver` (a polyfill in
+	// app code), an `Error` subclass, any PascalCase helper used to read as a component.
+	const profile: CpuProfile = {
+		startTime: 0,
+		endTime: 6000,
+		nodes: [
+			{ id: 1, callFrame: frame('(root)'), children: [2] },
+			{ id: 2, callFrame: frame('_page', '/out/server/chunks/_page.svelte.js', 3), children: [3, 5] },
+			// a real component: its subtree reaches svelte's `push`
+			{ id: 3, callFrame: frame('Header$1', '/out/server/chunks/_page.svelte.js', 40), children: [4] },
+			{ id: 4, callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1) },
+			// a class constructor called by the page: PascalCase, app url, no svelte below
+			{
+				id: 5,
+				callFrame: frame('IntersectionObserver', '/out/server/chunks/observe.js', 9),
+				children: [6]
+			},
+			{ id: 6, callFrame: frame('observe', '/out/server/chunks/observe.js', 20) }
+		],
+		samples: [4, 3, 6, 5, 2, 4],
+		timeDeltas: [1000, 1000, 1000, 1000, 1000, 1000]
+	};
+
+	it('keeps a candidate that reaches svelte internals, drops one that does not', () => {
+		const a = analyze(profile);
+		expect(a.components.map((c) => c.name).sort()).toEqual(['Header', '_page']);
+		const io = a.functions.find((f) => f.name === 'IntersectionObserver')!;
+		expect(io.category).toBe('app');
+		// the `$1` collision suffix is gone from the component's row and its key
+		expect(a.components.find((c) => c.name === 'Header')!.key).toBe('C:Header');
+	});
+
+	it('names an anonymous inline frame after its .svelte file the way Svelte does (kebab-case too)', () => {
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 2000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2] },
+				{ id: 2, callFrame: frame('', '/app/src/lib/site-header.svelte', 0) }
+			],
+			samples: [2, 2],
+			timeDeltas: [1000, 1000]
+		};
+		expect(analyze(p).components.map((c) => c.name)).toEqual(['Site_header']);
+	});
+});
+
+describe('call stacks + locations', () => {
+	const profile: CpuProfile = {
+		startTime: 0,
+		endTime: 5000,
+		nodes: [
+			{ id: 1, callFrame: frame('(root)'), children: [2, 6] },
+			{ id: 2, callFrame: frame('handle', '/app/src/hooks.server.ts', 9), children: [3] },
+			{ id: 3, callFrame: frame('_page', '/app/src/routes/+page.svelte', 0), children: [4] },
+			{ id: 4, callFrame: frame('Row', '/app/src/lib/Row.svelte', 2), children: [5] },
+			{ id: 5, callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/escaping.js', 3) },
+			// the same escape reached another way (lighter)
+			{ id: 6, callFrame: frame('other', '/app/src/other.ts', 1), children: [7] },
+			{ id: 7, callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/escaping.js', 3) }
+		],
+		samples: [5, 5, 5, 7, 4],
+		timeDeltas: [1000, 1000, 1000, 1000, 1000]
+	};
+
+	it('ranks a function’s call paths by the time that flowed through each, nearest caller first', () => {
+		const a = analyze(profile);
+		const esc = a.functions.find((f) => f.name === 'escape')!;
+		expect(esc.stacks).toHaveLength(2);
+		expect(esc.stacks![0].ms).toBe(3);
+		expect(esc.stacks![0].frames.map((f) => f.n)).toEqual(['Row', '_page', 'handle']);
+		expect(esc.stacks![0].frames[0].f).toBe('app/src/lib/Row.svelte:3');
+		expect(esc.stacks![1].ms).toBe(1);
+		expect(esc.stacks![1].frames.map((f) => f.n)).toEqual(['other']);
+		// components carry stacks too; the page's parent is the handle, (root) never shows
+		const page = a.components.find((c) => c.name === '_page')!;
+		expect(page.stacks![0].frames.map((f) => f.n)).toEqual(['handle']);
+	});
+
+	it('a nested occurrence (recursion, or a component’s inner frame under its own wrapper) is one stack, never its own caller', () => {
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 3000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2] },
+				{ id: 2, callFrame: frame('main', '/app/src/main.ts', 0), children: [3] },
+				// the bundled wrapper, then svelte's `component`, then the sourcemapped inner frame
+				{ id: 3, callFrame: frame('Card', '/out/chunks/_page.svelte.js', 4), children: [4] },
+				{ id: 4, callFrame: frame('component', '/app/node_modules/svelte/src/internal/server/renderer.js', 9), children: [5] },
+				{ id: 5, callFrame: frame('', '/app/src/lib/Card.svelte', 0) }
+			],
+			samples: [5, 5, 5],
+			timeDeltas: [1000, 1000, 1000]
+		};
+		const card = analyze(p).components.find((c) => c.name === 'Card')!;
+		expect(card.stacks).toHaveLength(1);
+		expect(card.stacks![0].frames.map((f) => f.n)).toEqual(['main']);
+		expect(card.stacks![0].ms).toBe(3);
+	});
+
+	it('joins a sourcemap’s relative sources onto the chunk directory (an openable path)', () => {
+		expect(join_source('/app/.svelte-kit/output/server/chunks/x.js', '../../../../src/lib/Foo.svelte')).toBe(
+			'/app/src/lib/Foo.svelte'
+		);
+		expect(join_source('file:///app/out/chunks/x.js', '../../src/a.ts')).toBe('/app/src/a.ts');
+		expect(join_source('./chunks/x.js', '../src/a.ts')).toBe('./src/a.ts');
+		expect(join_source('/app/out/x.js', '/abs/b.ts')).toBe('/abs/b.ts');
+		expect(join_source('/app/out/x.js', 'webpack://y.ts')).toBe('webpack://y.ts');
+		expect(join_source('x.js', '../a.ts')).toBe('../a.ts');
+	});
+
+	it('keeps the full path + column so a row can be opened in an editor', () => {
+		const a = analyze(profile);
+		const row = a.components.find((c) => c.name === 'Row')!;
+		expect(row.path).toBe('/app/src/lib/Row.svelte');
+		expect(row.line).toBe(3);
+		expect(row.col).toBe(1);
+		expect(row.key).toBe('C:Row');
+	});
+
+	it('ships stacks + locations in the JSON report', () => {
+		const a = analyze(profile);
+		const meta = {
+			id: 'x',
+			created: 0,
+			trigger: 'window' as const,
+			duration_ms: 5,
+			node: 'v',
+			requests: []
+		};
+		const j = report_json(a, meta as never, '/__profiler', { net: [], mem: [] } as never);
+		const esc = j.hot_functions.find((f) => f.name === 'escape')!;
+		expect(esc.stacks[0].frames).toEqual([
+			'Row (app/src/lib/Row.svelte:3)',
+			'_page (app/src/routes/+page.svelte:1)',
+			'handle (/app/src/hooks.server.ts:10)'
+		]);
+		expect(esc.package).toBe('svelte');
+		expect(j.components.find((c) => c.name === 'Row')!.path).toBe('/app/src/lib/Row.svelte');
 	});
 });
 
@@ -543,13 +694,15 @@ describe('sourcemaps', () => {
 		// generated line 0, col 0 → source 0, original line 10
 		const mappings = vlq(0) + vlq(0) + vlq(10) + vlq(0);
 		const lines = decode_mappings(mappings);
-		expect(lines[0].cols).toEqual([[0, 0, 10, -1]]);
+		expect(lines[0].cols).toEqual([[0, 0, 10, -1, 0]]);
 
 		const map = JSON.stringify({ sources: ['src/lib/Slow.svelte'], mappings });
 		const resolver = sourcemap_resolver((p) => (p === '/out/chunk.js.map' ? map : undefined));
+		// the map's relative source is joined onto the chunk's directory
 		expect(resolver.resolve('/out/chunk.js', 0, 5)).toEqual({
-			source: 'src/lib/Slow.svelte',
+			source: '/out/src/lib/Slow.svelte',
 			line: 11,
+			column: 1,
 			name: undefined
 		});
 		expect(resolver.hit).toBe(true);
@@ -566,8 +719,9 @@ describe('sourcemaps', () => {
 		});
 		const resolver = sourcemap_resolver((p) => (p === '/out/c.js.map' ? map : undefined));
 		expect(resolver.resolve('/out/c.js', 0, 3)).toEqual({
-			source: 'src/lib/data.ts',
+			source: '/out/src/lib/data.ts',
 			line: 5,
+			column: 1,
 			name: 'load_products'
 		});
 	});

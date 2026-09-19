@@ -118,3 +118,44 @@ reducers into one tagged reducer (would change the client revivers; the reducer 
   islands; viewport-first order), `test/browser/seed-single-parse.test.ts` (parse count = 1; stale-ref
   regression across a reconcile nav), `e2e/long-task-budget.spec.ts` on the bench page.
 - `e2e/bundle-size.ts` hard-fails above the snapshot + 2 %.
+
+## Server, round 2 — 2026-09-19
+
+Same bench, re-profiled on the (6) checkout. The seed/props path had grown five tree walks per
+request: the full `page.data` (for the seed index), the SHAPED copy (a new root → its own memo →
+a full re-walk), each block island's props (`{ block }` is a new root, so the block subtree it
+holds was walked again — 20 blocks = the whole seed a third time), and the tail's sidecars were
+PLANNED AND SERIALIZED TWICE whenever seed shaping was active (a dry run against the full index to
+learn `touched`, then the real render against the shaped index). Plus `fnv1a` over ~420 KB of
+canonical props text per request in a JS char loop.
+
+| # | finding | replacement (delete → add) |
+| --- | --- | --- |
+| S13 | `measure` memo per ROOT: a props object that IS a seed node re-walks its subtree; the shaped seed re-walks everything. | ONE memo per request (`set_measure_memo_reader`, hooks.ts hands out `bag.measure_memo`): every root measured in the request shares it — a block's props cost one lookup, the shaped root a handful. Off-request (hole endpoint, tests) each root keeps its own memo. |
+| S14 | A `Measure` object + a cycle `Set` add/delete per node (7 K nodes per request here). | Packed measure: one NUMBER per node (`bytes*8 + flags`) in the memo; the memo's own in-progress mark is the cycle detector, written only when a child is an object (a leaf-only row writes the memo once). `analyze()` unpacks the root. |
+| S15 | `index_seed` allocated a path ARRAY (`[...path, key]`) + two WeakMap entries + a `SeedNode` per indexed node, and built the byte buckets eagerly. | Parent-pointer `PathNode` per indexed node; the path array materialises on the first `by_identity.get` (only referenced nodes — ~20 a page). Bytes read from the memo. Buckets built on the first structure ask. Prune on `bytes < min_bytes` alone (a child is never larger than its parent). |
+| S16 | The dry-run tail render for seed shaping (plan + `stringify` every sidecar twice). | The tail renders ONCE against the FULL `page.data` index; the plan's `touched` keys join `seed_keys`; then the seed is shaped. Paths are structural and shaping keeps top-level keys whole, so a full-tree path resolves identically against the shipped seed. `wire(seed)` also memoises per index. |
+| S17 | `plan_seed_refs` descended into every plain node, and `stringify_props` ran the five prop-family `mint` matches on a seed node before the seed-ref reducer saw it. | Prune below `min_bytes`; the seed-ref reducer registered FIRST (a seed node is plain data, never a wired class / store / snippet / fn). |
+| S18 | `fnv1a` (JS, 2 lanes × charCodeAt) over the canonical props text: 0.19 ms per 131 KB. The client never recomputes an island's fingerprint (it reads `data-og-fp`; `region_props_fp` computes only for regions that carry none). | `server/fingerprint.ts`: native SHA-1 → 16 hex, 0.043 ms per 131 KB, reached from Region.svelte through the client-stubbed `virtual:ogygia/region-endpoint` (`islandFingerprint`). Hole identity (`data-og-hole`) stays on the universal `fingerprint_of` — the client leg recomputes that one. |
+| S19 | Region built the modulepreload `<link>` markup, the tail regex-parsed the hrefs back out of it. | Regions hand the tail hrefs (`DocumentTail.hints(hrefs)`); `modulepreload_tag(href)` is built once at render. `hint(html)` deleted. |
+
+| | before (this checkout) | after |
+| --- | --- | --- |
+| ogygia p50 overhead per request | +17.3 ms | **+11.2 to +11.6 ms** (two runs) |
+| ogygia p95 overhead | +34.5 ms | +23.6 ms |
+| `Region.js` self time / 1,200 requests | 1,592 ms (`measure` 428, `fnv1a` 409, index+plan visits 339) | 717 ms (`measure` 262, native digest 94, visits 127, `fnv1a` gone) |
+| GC | 533 ms | 462–486 ms |
+| HTML / RSS | 629 KB / flat | unchanged |
+
+Micro (`analyze` + `index_seed` + 20 block plans, no shared memo): 1.51 → 1.17 ms; with the
+request memo the block plans are lookups. What is left of ogygia's own CPU per request (~2.5 ms at
+4× concurrency ≈ the +11 ms): `measure` 0.43 ms (40 % of it `Object.getOwnPropertySymbols` — the
+brand check; a known-brands `in` probe measured no cheaper), `plan_props_wire` 0.26 ms (native
+`JSON.stringify` of the canonical texts), the `locate` flatten 0.2 ms, `inject_client_seeds` 0.13
+ms, the two visits 0.2 ms, the digest 0.16 ms — and Kit's ETag `hash()` + encode scaling with the
++435 KB, ~0.6 ms. K1 (Kit's dead csr=false `uneval`, 2.0 s / 1,200 requests, both routes) is
+still the largest single line on the profile and still upstream.
+
+Guards: `test/seed-refs.test.ts` "the shared request memo" (a block's props add ONE memo entry,
+a shaped root one more, a cycle through the memo stays opaque); `test/props-wire.test.ts`
+`island_fingerprint` (16 hex, deterministic, field-separated).
