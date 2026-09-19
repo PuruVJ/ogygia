@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
 	collectIslandDepModulepreloads,
 	collect_inline_css,
+	interactivity_facts,
 	islandDepsHandoffPath,
 	island_deps_module,
 	kit_remote_hash,
@@ -88,7 +89,63 @@ describe('collectIslandDepModulepreloads', () => {
 					imports: ['_app/immutable/x.js']
 				}
 			})
-		).toEqual({ js: {}, css: {}, page: {}, page_keys: {}, remotes: {} });
+		).toEqual({ js: {}, css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {} });
+	});
+
+	// INTERACTIVITY FACTS (the profiler's wake advisor): counted over the island's OWN components
+	// in its closure, each file once, dependencies and ogygia's own wrappers skipped; without a
+	// source reader the map stays empty (the handoff is byte-stable for builds that never ask).
+	describe('interactivity', () => {
+		const SRC: Record<string, string> = {
+			'/app/src/lib/Card.svelte':
+				'<script>let n = $state(0); let el; $effect(() => {});</script>' +
+				'<button onclick={() => n++} bind:this={el} use:tip>{n}</button><input on:input={f}>',
+			'/app/src/lib/Static.svelte': '<h1>{title}</h1>',
+			'/app/node_modules/lib/Widget.svelte': '<button onclick={x}>dep</button>'
+		};
+		const bundle = {
+			[FACADE.slice(1)]: {
+				type: 'chunk',
+				fileName: FACADE.slice(1),
+				imports: ['_app/immutable/chunk-a.js'],
+				moduleIds: ['/app/src/lib/Card.svelte', '/app/src/lib/Card.svelte?og-region=x']
+			},
+			'_app/immutable/chunk-a.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/chunk-a.js',
+				imports: [],
+				moduleIds: ['/app/src/lib/Static.svelte', '/app/node_modules/lib/Widget.svelte', '/app/src/lib/util.js']
+			}
+		};
+		const read = (id: string) => SRC[id] ?? null;
+
+		test('counts handlers / state / effects / binds / actions across the closure, one file once', () => {
+			expect(interactivity_facts(SRC['/app/src/lib/Card.svelte'])).toEqual({
+				handlers: 2,
+				state: 1,
+				effects: 1,
+				binds: 1,
+				actions: 1,
+				files: 1
+			});
+			const { interactivity } = collectIslandDepModulepreloads(bundle, undefined, undefined, undefined, read);
+			expect(interactivity[FACADE]).toEqual({ handlers: 2, state: 1, effects: 1, binds: 1, actions: 1, files: 2 });
+		});
+
+		test('no reader → no facts; a pure-markup island reads as zero everywhere', () => {
+			expect(collectIslandDepModulepreloads(bundle).interactivity).toEqual({});
+			const only_static = {
+				[FACADE.slice(1)]: { type: 'chunk', fileName: FACADE.slice(1), imports: [], moduleIds: ['/app/src/lib/Static.svelte'] }
+			};
+			expect(collectIslandDepModulepreloads(only_static, undefined, undefined, undefined, read).interactivity[FACADE]).toEqual({
+				handlers: 0,
+				state: 0,
+				effects: 0,
+				binds: 0,
+				actions: 0,
+				files: 1
+			});
+		});
 	});
 
 	// `page[entry]` — does the island's chunk closure bundle a page-reading shim? Decides whether the

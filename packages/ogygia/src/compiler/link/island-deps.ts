@@ -88,19 +88,44 @@ export function collectIslandDepModulepreloads(
 	 * keys the handle ships — or `null` (ship all) when any module said `'all'`, or when the closure
 	 * reads the page through a module the transform never saw. Absent → every reader `null`.
 	 */
-	page_keys_of: ((module_id: string) => PageKeys | null) | null = null
+	page_keys_of: ((module_id: string) => PageKeys | null) | null = null,
+	/**
+	 * WAKE ADVISOR: reads a bundled `.svelte` source by id so the collector can count what the
+	 * island's components do (handlers, `$state`, `bind:`…). Per entry, `interactivity[entryUrl]`
+	 * is the union over its closure's own components (dependencies and ogygia's wrappers skipped).
+	 * Absent → no facts (the profiler shows none).
+	 */
+	read_source: ((id: string) => string | null) | null = null
 ): {
 	js: Record<string, string[]>;
 	css: Record<string, string[]>;
 	page: Record<string, boolean>;
 	page_keys: Record<string, string[] | null>;
 	remotes: Record<string, string[]>;
+	interactivity: Record<string, IslandInteractivityFacts>;
 } {
 	const js: Record<string, string[]> = {};
 	const css: Record<string, string[]> = {};
 	const page: Record<string, boolean> = {};
 	const page_keys: Record<string, string[] | null> = {};
 	const remotes: Record<string, string[]> = {};
+	const interactivity: Record<string, IslandInteractivityFacts> = {};
+	// WAKE ADVISOR FACTS: what the island's own `.svelte` sources do — handlers, `$state`,
+	// `$effect`, `bind:`, `use:` — counted once per file, unioned over the closure. A regex count
+	// on purpose: it needs no parse, it survives every syntax the transform accepts, and an island
+	// with zero of everything is the one fact that matters (a lake wearing an island's wake).
+	const facts_cache = new Map<string, IslandInteractivityFacts | null>();
+	const facts_of = (id: string): IslandInteractivityFacts | null => {
+		if (!read_source) return null;
+		const clean = norm(id.split('?')[0]);
+		if (!clean.endsWith('.svelte') || OWN_OR_DEP_RE.test(clean)) return null;
+		const hit = facts_cache.get(clean);
+		if (hit !== undefined) return hit;
+		const src = read_source(clean);
+		const f = src === null ? null : interactivity_facts(src);
+		facts_cache.set(clean, f);
+		return f;
+	};
 	const norm = (p: string) => p.split('\\').join('/');
 	const readers = new Set(page_reader_files.map(norm));
 	// The keys every module of a chunk reads, unioned; `undefined` = no module in it reads the page.
@@ -221,8 +246,65 @@ export function collectIslandDepModulepreloads(
 		const found = new Set<string>();
 		for (const s of closure_all(fileName)) remotes_in(s, found);
 		remotes[entryUrl] = [...found].sort();
+		// the island's own components, over the same closure
+		if (read_source) {
+			let acc: IslandInteractivityFacts | undefined;
+			const seen_files = new Set<string>();
+			for (const s of closure_all(fileName)) {
+				for (const id of bundle[s]?.moduleIds ?? []) {
+					const clean = norm(id.split('?')[0]);
+					if (seen_files.has(clean)) continue;
+					seen_files.add(clean);
+					const f = facts_of(id);
+					if (f) acc = merge_facts(acc, f);
+				}
+			}
+			if (acc) interactivity[entryUrl] = acc;
+		}
 	}
-	return { js, css, page, page_keys, remotes };
+	return { js, css, page, page_keys, remotes, interactivity };
+}
+
+/** What an island's components do (the wake advisor's evidence) — see `interactivity_facts`. */
+export interface IslandInteractivityFacts {
+	handlers: number;
+	state: number;
+	effects: number;
+	binds: number;
+	actions: number;
+	files: number;
+}
+
+const OWN_OR_DEP_RE = /\/node_modules\/|\/ogygia\/(?:src|dist)\//;
+const HANDLER_RE = /\son[a-z]+\s*=\s*\{|\son:[a-z]+/g;
+const STATE_RE = /\$state(?:\.raw)?\s*\(/g;
+const EFFECT_RE = /\$effect(?:\.pre)?\s*\(/g;
+const BIND_RE = /\sbind:[a-zA-Z]/g;
+const ACTION_RE = /\suse:[a-zA-Z]/g;
+const count = (src: string, re: RegExp) => (src.match(re) ?? []).length;
+
+/** Count a component source's interactivity markers. */
+export function interactivity_facts(src: string): IslandInteractivityFacts {
+	return {
+		handlers: count(src, HANDLER_RE),
+		state: count(src, STATE_RE),
+		effects: count(src, EFFECT_RE),
+		binds: count(src, BIND_RE),
+		actions: count(src, ACTION_RE),
+		files: 1
+	};
+}
+
+function merge_facts(a: IslandInteractivityFacts | undefined, b: IslandInteractivityFacts): IslandInteractivityFacts {
+	if (!a) return { ...b };
+	return {
+		handlers: a.handlers + b.handlers,
+		state: a.state + b.state,
+		effects: a.effects + b.effects,
+		binds: a.binds + b.binds,
+		actions: a.actions + b.actions,
+		files: a.files + b.files
+	};
 }
 
 /** Stable handoff path under Kit's `outDir`: client `generateBundle` writes; SSR reads at render
@@ -293,7 +375,7 @@ export function island_deps_module(
 	// 'none' hints nothing.
 	const policy = `export const preloadPolicy = ${JSON.stringify(preload_policy)};\n`;
 	if (!ssr)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -303,7 +385,7 @@ export function island_deps_module(
 	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
 	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function fnManifest() { return null; }`;
 	return (
 		policy +
 		`import fs from 'node:fs';\n` +
@@ -401,6 +483,15 @@ export function island_deps_module(
 		`  if (!map || !entry) return null;\n` +
 		`  const v = map[entry];\n` +
 		`  return Array.isArray(v) ? v : null;\n` +
+		`}\n` +
+		// WAKE ADVISOR facts per entry (handlers / $state / bind: counts over the island's own
+		// components), for the profiler's Islands table. `null` = the handoff has none.
+		`export function islandInteractivity(entry) {\n` +
+		`  const all = load();\n` +
+		`  const map = all && typeof all.interactivity === 'object' && all.interactivity ? all.interactivity : null;\n` +
+		`  if (!map || !entry) return null;\n` +
+		`  const v = map[entry];\n` +
+		`  return v && typeof v === 'object' ? v : null;\n` +
 		`}\n` +
 		// og.$ factories for the page-inline registration script (CSP-clean prod path):
 		// written by the CLIENT build's writeBundle, read here at SSR render time — the

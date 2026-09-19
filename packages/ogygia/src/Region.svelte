@@ -24,7 +24,7 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
-	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, preloadPolicy } from 'virtual:ogygia/island-deps';
+	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity, preloadPolicy } from 'virtual:ogygia/island-deps';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of } from './runtime/hash.js';
 	import { asset } from '$app/paths';
@@ -319,7 +319,8 @@
 				record_page(
 					{ data: page.data, form: page.form, error: page.error, status: page.status },
 					seed,
-					remotes
+					remotes,
+					entry === '?' ? '' : entry
 				);
 			} catch {
 				/* isolated render without a live page — the recorder is unset there anyway */
@@ -443,7 +444,16 @@
 			if (!wire || !fp) return false;
 			// The sidecar is KEYED by the fingerprint (`data-ogygia-props` + `id`), so the runtime
 			// finds it wherever it sits — adjacent, or at the end of the body (runtime/sidecar.ts).
-			tail.props(fp, (seed) => props_sidecar(fp, wire.wire(seed)));
+			// The meta rides along for the profiler's Islands table (entry, wake, what the build saw).
+			tail.props(fp, wire, {
+				entry: island_entry,
+				// Svelte names the SSR function after the file (ProductCard.svelte → ProductCard) and
+				// the name survives a production bundle — the same name the profiler's CPU samples carry
+				name: island_component?.name ?? '',
+				module_url: island_module_url,
+				wake: hydrate_attr,
+				interactivity: islandInteractivity(island_entry)
+			});
 			return true;
 		});
 	// Adjacent sidecar (no tail: a hole response, a baked ticket, a router document, a test render):
@@ -506,7 +516,7 @@
 		untrack(() => {
 			const hrefs = island_preload_hrefs;
 			if (!hrefs.length) return false;
-			tail.hints(hrefs);
+			tail.hints(hrefs, island_fp);
 			return true;
 		});
 	const island_preload_head = $derived(
@@ -553,6 +563,8 @@
 			if (endpoint) tail.hole(server_identity, endpoint, server_props_script);
 		});
 	}
+	// Every document: note the hole's schedule + cache policy for the profiler's hole economics.
+	if (tail && is_server && !nested) tail.note_hole(__entry, __defer, __hydrate || null, __cacheTtl || 0);
 
 	const server_wants_modulepreload = $derived(
 		!!__module &&

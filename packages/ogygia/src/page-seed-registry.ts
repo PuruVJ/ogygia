@@ -46,7 +46,13 @@ export type PageSnapshot = {
  */
 export type SeedAsk = import('./server/seed-shape.js').SeedAsk;
 
-type Recorder = (snapshot: PageSnapshot, seed: SeedAsk, remotes: readonly string[] | null) => void;
+type Recorder = (
+	snapshot: PageSnapshot,
+	seed: SeedAsk,
+	remotes: readonly string[] | null,
+	/** the region's entry (`''` for a region with no client entry) — the seed explainer's "who" */
+	entry: string
+) => void;
 
 let recorder: Recorder | null = null;
 
@@ -61,7 +67,8 @@ export function set_page_recorder(fn: Recorder | null): void {
 export function record_page(
 	snapshot: PageSnapshot,
 	seed: SeedAsk = 'all',
-	remotes: readonly string[] | null = null
+	remotes: readonly string[] | null = null,
+	entry = ''
 ): void {
-	recorder?.(snapshot, seed, remotes);
+	recorder?.(snapshot, seed, remotes, entry);
 }

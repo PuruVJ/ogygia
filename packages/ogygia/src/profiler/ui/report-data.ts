@@ -7,9 +7,153 @@
 import type { Analysis, FrameCategory, GroupStat } from '../analyze.js';
 import type { NetCall } from '../net.js';
 import type { IoOp } from '../async-io.js';
-import type { MemSample } from '../report.js';
+import type { ClientIslandStat, MemSample, ReportExtras, ReportMeta, RequestEntry } from '../report.js';
+import { group_islands, hole_economics, island_js_bytes, island_name, island_rows_of } from '../report.js';
+import type { HoleStat, IslandStat, SeedKeyStat } from '../../server/request-stats.js';
 import { io_kind } from '../async-io.js';
 import { CATEGORY_LABEL, CATEGORY_COLOR, fmt_bytes } from './format.js';
+
+// ── the ogygia side of a page: islands, the seed, the holes ─────────────────────────────────
+
+export interface IslandRow {
+	name: string;
+	entry: string;
+	fp: string;
+	/** distinct fingerprints merged into this row (different props per copy) */
+	variants: number;
+	copies: number;
+	wake: string;
+	/** the component's SSR time per render (joined from the components table by name), or null */
+	ssr_ms: number | null;
+	props_bytes: number;
+	canonical_bytes: number;
+	json: boolean;
+	culprit: string | null;
+	refs: number;
+	ref_keys: string[];
+	/** unique bytes of module + preload hints (null when unweighed: dev, or an unreachable asset) */
+	js_bytes: number | null;
+	/** each module with its bytes, heaviest first */
+	modules: { url: string; bytes: number | null }[];
+	interactivity: IslandStat['interactivity'];
+	/** the sum of every interactivity marker; -1 when the build did not scan it */
+	marks: number;
+	client: ClientIslandStat | null;
+	/** what to do about this island, when the numbers say something */
+	advice: string | null;
+	// sort keys (the sortable helper reads numbers)
+	client_ms: number;
+	js_sort: number;
+}
+
+/** One row per island fingerprint, joined with the server (components), the build (weights,
+ *  interactivity) and the browser (beacon). */
+export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras): IslandRow[] {
+	const runs = meta.trigger === 'page' ? Math.max(meta.runs?.length ?? 1, 1) : 1;
+	const by_name = new Map(a.components.map((c) => [c.name, c]));
+	const client = new Map((extras.client ?? []).map((c) => [c.entry, c]));
+	return group_islands(island_rows_of(meta)).map((r) => {
+		const name = island_name(r);
+		const comp = by_name.get(name);
+		const cl = client.get(r.entry) ?? null;
+		const modules = [...new Set([r.module_url, ...r.hints].filter(Boolean))]
+			.map((url) => ({ url, bytes: extras.weights?.[url] ?? null }))
+			.sort((x, y) => (y.bytes ?? -1) - (x.bytes ?? -1));
+		const js_bytes = island_js_bytes(r, extras.weights);
+		const i = r.interactivity;
+		const marks = i ? i.handlers + i.state + i.effects + i.binds + i.actions : -1;
+		let advice: string | null = null;
+		if (marks === 0 && r.wake !== 'none') advice = "No handlers, state, effects, binds or actions in its components: ship it as a lake (wake: 'none') and the JS never loads.";
+		else if (r.count >= 10 && (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible'))
+			advice = `${r.count} copies each wake on ${r.wake}${(r.variants ?? 1) > 1 ? ` with ${r.variants} different props sidecars` : ''}: one island around the list hydrates once, or wake: 'interaction' pays only when touched.`;
+		else if (!r.json && r.culprit) advice = `Its props use devalue because of ${r.culprit}: a string or number there puts them on the JSON lane.`;
+		else if (js_bytes !== null && js_bytes >= 150 * 1024) advice = `${fmt_bytes(js_bytes)} of JS for one island: the heaviest module below is the import to move server-side or behind a dynamic import.`;
+		else if (cl && cl.load_p50_ms >= cl.p50_ms * 0.6 && cl.p50_ms >= 50) advice = `In the browser most of its ${cl.p50_ms.toFixed(0)} ms is module load: an earlier preload or a smaller closure helps more than faster code.`;
+		return {
+			name,
+			entry: r.entry,
+			fp: r.fp,
+			variants: r.variants ?? 1,
+			copies: r.count,
+			wake: r.wake,
+			ssr_ms: comp ? comp.total_ms / runs : null,
+			props_bytes: r.props_bytes,
+			canonical_bytes: r.canonical_bytes,
+			json: r.json,
+			culprit: r.culprit,
+			refs: r.refs,
+			ref_keys: r.ref_keys,
+			js_bytes,
+			modules,
+			interactivity: i,
+			marks,
+			client: cl,
+			advice,
+			client_ms: cl?.p50_ms ?? 0,
+			js_sort: js_bytes ?? 0
+		};
+	});
+}
+
+export interface SeedRow extends SeedKeyStat {
+	readers_names: string[];
+	referenced_names: string[];
+	pct: number;
+}
+
+/** The seed explainer's rows: every top-level page.data key, biggest first, with why it ships. */
+export function seed_rows(meta: ReportMeta): { rows: SeedRow[]; whole_by: string[]; total: number } | null {
+	const og = meta.requests.find((r) => r.og?.seed)?.og;
+	if (!og?.seed) return null;
+	const total = og.seed.keys.reduce((s, k) => s + k.bytes, 0) || 1;
+	return {
+		// the explainer names islands already (hooks.ts explain_seed)
+		rows: og.seed.keys.map((k) => ({
+			...k,
+			readers_names: k.readers,
+			referenced_names: k.referenced_by,
+			pct: (k.bytes / total) * 100
+		})),
+		whole_by: og.seed.whole_by,
+		total
+	};
+}
+
+export interface HoleRow extends HoleStat {
+	hit: number;
+	miss: number;
+	none: number;
+	requests: number;
+	avg_ms: number | null;
+	verdict: string;
+}
+
+/** The holes the page rendered, with what their endpoint did during the window. */
+export function hole_rows(meta: ReportMeta): HoleRow[] {
+	const og = meta.requests.find((r) => r.og?.hole_rows?.length)?.og;
+	const econ = hole_economics(meta);
+	return (og?.hole_rows ?? []).map((h) => {
+		const e = econ.get(h.id);
+		const requests = e ? e.hit + e.miss + e.none : 0;
+		const verdict =
+			h.ttl > 0 && requests >= 2 && e!.hit === 0
+				? 'maxAge set, cache never hit'
+				: h.ttl > 0 && e && e.hit > 0
+					? `${Math.round((e.hit / requests) * 100)}% from cache`
+					: h.ttl > 0
+						? 'cached (no requests in the window)'
+						: 'renders fresh on every visit';
+		return {
+			...h,
+			hit: e?.hit ?? 0,
+			miss: e?.miss ?? 0,
+			none: e?.none ?? 0,
+			requests,
+			avg_ms: e && requests ? e.ms / requests : null,
+			verdict
+		};
+	});
+}
 
 /** The size to show for a call: the DECODED body when we measured it (robust — a cloned-stream count),
  *  else the wire size from content-length, else undefined. */
@@ -274,6 +418,83 @@ export function waterfall_rows(net: NetCall[]): WfRow[] {
 			}
 		};
 	});
+}
+
+export interface RequestRow {
+	method: string;
+	path: string;
+	route: string | null;
+	status: number;
+	internal: boolean;
+	tags: string;
+	/** how many identical requests the window saw (page mode: one per run) */
+	count: number;
+	inflight: number;
+	net_count: number;
+	net_ms: number;
+	cpu_ms: number;
+	wait_ms: number;
+	ms: number;
+	max_ms: number;
+}
+
+const med = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0);
+
+/**
+ * The "requests during the window" rows. Page mode renders the same page N times, so the log
+ * holds N copies of the page request and N copies of every call it makes: fold identical
+ * requests (method, path, route, status, tags) into one row with the count and the MEDIAN of each
+ * number, biggest first. A window recording keeps every request as it happened.
+ */
+export function request_rows(requests: RequestEntry[], fold: boolean): RequestRow[] {
+	const tags_of = (e: RequestEntry) =>
+		e.tags ? Object.entries(e.tags).map(([k, v]) => `${k}=${v}`).join(' ') : '';
+	if (!fold) {
+		return requests.map((e) => ({
+			method: e.method,
+			path: e.path,
+			route: e.route,
+			status: e.status,
+			internal: !!e.internal,
+			tags: tags_of(e),
+			count: 1,
+			inflight: e.inflight,
+			net_count: e.net_count,
+			net_ms: e.net_ms,
+			cpu_ms: e.cpu_ms,
+			wait_ms: Math.max(0, e.ms - e.cpu_ms),
+			ms: e.ms,
+			max_ms: e.ms
+		}));
+	}
+	const groups = new Map<string, RequestEntry[]>();
+	for (const e of requests) {
+		const key = [e.method, e.path, e.route ?? '', e.status, tags_of(e)].join('\0');
+		const g = groups.get(key);
+		if (g) g.push(e);
+		else groups.set(key, [e]);
+	}
+	return [...groups.values()]
+		.map((list) => {
+			const e = list[0];
+			return {
+				method: e.method,
+				path: e.path,
+				route: e.route,
+				status: e.status,
+				internal: list.some((x) => x.internal),
+				tags: tags_of(e),
+				count: list.length,
+				inflight: med(list.map((x) => x.inflight)),
+				net_count: med(list.map((x) => x.net_count)),
+				net_ms: med(list.map((x) => x.net_ms)),
+				cpu_ms: med(list.map((x) => x.cpu_ms)),
+				wait_ms: med(list.map((x) => Math.max(0, x.ms - x.cpu_ms))),
+				ms: med(list.map((x) => x.ms)),
+				max_ms: Math.max(...list.map((x) => x.ms))
+			};
+		})
+		.sort((a, b) => b.ms - a.ms);
 }
 
 export interface Spark {

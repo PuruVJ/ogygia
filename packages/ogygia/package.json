@@ -100,6 +100,10 @@
 			"types": "./dist/hooks.d.ts",
 			"default": "./src/hooks.ts"
 		},
+		"./profiler": {
+			"types": "./dist/profiler/span.d.ts",
+			"default": "./src/profiler/span.ts"
+		},
 		"./rewrite": {
 			"types": "./dist/server/split-regions.d.ts",
 			"default": "./src/server/split-regions.ts"
@@ -323,6 +327,10 @@
 			"./server": {
 				"types": "./dist/hooks.d.ts",
 				"default": "./dist/hooks.js"
+			},
+			"./profiler": {
+				"types": "./dist/profiler/span.d.ts",
+				"default": "./dist/profiler/span.js"
 			},
 			"./rewrite": {
 				"types": "./dist/server/split-regions.d.ts",

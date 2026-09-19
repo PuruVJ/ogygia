@@ -161,6 +161,17 @@ describe('plan_props_wire · seed references at wire time', () => {
 		expect(parse(out.text, { [SEED_REF_KEY]: seed_ref_reviver(() => data) })).toEqual(props);
 	});
 
+	it('the profiler reads the wire: how many references, into which seed keys, and the devalue culprit', () => {
+		const w = plan_props_wire({ block: data.catalog.blocks[0], g: data.greeting, n: 1 }, '/islands/x.js');
+		expect(w.refs).toEqual({ count: 0, keys: [] });
+		expect(w.culprit()).toBeNull(); // JSON lane: nothing to blame
+		w.wire(index_seed(data));
+		expect(w.refs).toEqual({ count: 1, keys: ['catalog'] }); // a primitive is never a seed node
+		const d = plan_props_wire({ block: data.catalog.blocks[0], at: new Date(5) }, '/islands/x.js');
+		expect(d.culprit()).toBe('at (Date)');
+		expect(d.culprit()).toBe('at (Date)'); // memoised
+	});
+
 	it('the same plan can be wired twice (identical islands share a sidecar render)', () => {
 		const w = plan_props_wire({ block: data.catalog.blocks[0] }, '/islands/x.js');
 		const idx = index_seed(data);

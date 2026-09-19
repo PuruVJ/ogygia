@@ -51,6 +51,16 @@ import {
 	type RouteAgg
 } from './report.js';
 import { ogp_encode, ogp_decode, is_ogp, recover_ogp_bytes } from './crypto.js';
+import { derive_findings, island_rows_of, type ClientIslandStat } from './report.js';
+import { compare_reports, page_history } from './compare.js';
+import { label_call, phase_of_frame } from './timeline.js';
+import { io_kind } from './async-io.js';
+import { hole_stats_of, request_stats_of, set_request_stats_detail } from '../server/request-stats.js';
+import { set_span_recorder, type SpanRecord, type SpanRecorder } from './span.js';
+import { register_profiler_file } from './frames.js';
+
+// The span recorder's `begin` lives in this file: skip its frame when finding a span's caller.
+register_profiler_file();
 import { error, type Router, type Ctx as RouteCtx } from '../router/index.js';
 import { is_http_error, is_redirect } from '../router/respond.js';
 import { build_profiler_router } from './profiler-router.js';
@@ -108,6 +118,7 @@ export interface StoredReport {
 	analysis: Analysis;
 	heap: HeapAllocator[] | null;
 	net: NetCall[];
+	spans?: SpanRecord[];
 	mem: MemSample[];
 	measures: UserTiming[];
 	gc: GcSummary | null;
@@ -116,7 +127,71 @@ export interface StoredReport {
 	/** the raw .cpuprofile, gzipped — a 10s profile is multiple MB of JSON, so
 	 * we keep it compressed (~10×) and inflate only on download */
 	raw: Buffer | string;
+	/** bytes per island module / preload href (page mode on a built app) */
+	weights?: Record<string, number>;
+	/** browser hydration timings carried by an uploaded dump (a live report joins the ring instead) */
+	client?: ClientIslandStat[];
 }
+
+/** One island fingerprint's browser-side samples (the runtime's hydration beacon). */
+interface BeaconAgg {
+	entry: string;
+	/** wake → data-hydrated, ms */
+	ms: number[];
+	/** the module-load part, ms */
+	load: number[];
+	last: number;
+}
+const MAX_BEACON_FPS = 2000;
+const MAX_BEACON_SAMPLES = 64;
+const MAX_BEACON_BODY = 64 * 1024;
+const MAX_BEACON_ISLANDS = 400;
+/** the tag the runtime looks for: its content is the beacon endpoint */
+const BEACON_META = 'ogygia-profiler-beacon';
+const HEAD_CLOSE_RE = /<\/head>/i;
+
+/** GET each URL through the app's own fetch and count its bytes — the JS weight of an island's
+ *  closure. Cached per process (immutable hashed assets), a handful at a time, capped in time so
+ *  a slow static host can never hold a report hostage. */
+async function weigh_urls(
+	urls: Iterable<string>,
+	fetch_url: (url: string) => Promise<Response>,
+	cache: Map<string, number | null>,
+	budget_ms = 4000
+): Promise<Record<string, number>> {
+	const todo = [...new Set(urls)].filter((u) => u && !cache.has(u));
+	const deadline = Date.now() + budget_ms;
+	let i = 0;
+	const worker = async () => {
+		while (i < todo.length && Date.now() < deadline) {
+			const u = todo[i++];
+			try {
+				const res = await with_timeout(fetch_url(u), Math.max(200, deadline - Date.now()), 'weigh');
+				if (!res.ok) {
+					cache.set(u, null);
+					continue;
+				}
+				const len = Number(res.headers.get('content-length'));
+				// content-length is the wire size; the body's own length is the decoded size — the
+				// bytes the browser parses. Read it when it is not already known to be identity.
+				const enc = res.headers.get('content-encoding');
+				const bytes = !enc && Number.isFinite(len) && len > 0 ? len : (await res.arrayBuffer()).byteLength;
+				cache.set(u, bytes);
+			} catch {
+				cache.set(u, null);
+			}
+		}
+	};
+	await Promise.all(Array.from({ length: Math.min(6, todo.length) }, worker));
+	const out: Record<string, number> = {};
+	for (const u of new Set(urls)) {
+		const b = cache.get(u);
+		if (typeof b === 'number') out[u] = b;
+	}
+	return out;
+}
+
+const percentile = (sorted: number[], p: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0;
 
 function summarize_measures(entries: { name: string; ms: number }[]): UserTiming[] {
 	const by_name = new Map<string, UserTiming>();
@@ -136,13 +211,23 @@ function summarize_measures(entries: { name: string; ms: number }[]): UserTiming
 interface Ctx extends NetContext {
 	entry: RequestEntry;
 	net: NetCall[];
+	/** this request's spans (`span()` from ogygia/profiler), capped like `net` */
+	spans: SpanRecord[];
+	/** the span the current code runs inside (a child store per `span.within`), for nesting */
+	span?: number;
 }
+
+const MAX_SPANS_PER_REQUEST = 2000;
+const MAX_WINDOW_SPANS = 20_000;
+const MAX_TAGS = 16;
 
 interface WindowCapture {
 	profile: CpuProfile;
 	heap: HeapNode | null;
 	mem: MemSample[];
 	net: NetCall[];
+	/** every span recorded during the window (`span()`), any request */
+	spans: SpanRecord[];
 	gc_pauses: number[];
 	io_ops: IoOp[];
 	call_counts: Record<string, number>;
@@ -153,6 +238,11 @@ interface WindowCapture {
 	t0: number;
 	t1: number;
 	duration_ms: number;
+	/** performance.now() right after `Profiler.start` — puts the samples on the net/io clock */
+	perf_start: number;
+	/** the ONE request the report's timeline explains (page mode: the representative run; request
+	 *  mode: the request), performance.now() ms; absent for a plain window */
+	window?: { start: number; end: number };
 }
 
 const MAX_NET_PER_REQUEST = 100;
@@ -189,6 +279,14 @@ const SRC_RELATIVE_RE = /(?:^|[/\\])src[/\\](.*)$/;
 const BACKSLASH_G = /\\/g;
 const PATH_SEP_RE = /[/\\]/;
 const TRAILING_SLASH_RE = /\/$/;
+/** a WebAssembly script "file" as V8 names it: `/wasm/00034eea`, `wasm://wasm/…` */
+const WASM_FRAME_RE = /^(?:wasm:\/\/|\/wasm\/)|[/\\]wasm\/[0-9a-f]+$/;
+/** a Kit endpoint file in a resolved caller string (`+server.ts`, or its built `_server.ts.js`) */
+const SERVER_ROUTE_FILE_RE = /[/\\](?:\+server\.[jt]s|_server\.[jt]s\.js):\d+/;
+/** the file inside a resolved caller string: `name (file:line)` or `file:line` */
+const CALLER_FILE_RE = /(?:\(|^)([^()]+):\d+\)?$/;
+/** what the dev source peek may read */
+const SOURCE_EXT_RE = /\.(?:svelte|ts|js|mjs|cjs|tsx|jsx|svx|md|json)$/;
 
 // Serverless page-profile budget. On a managed host the whole `/page` request must return before the
 // platform's gateway kills it, so we cap all profiling work (warm-up + CPU runs + coverage pass) and
@@ -232,8 +330,8 @@ type HashFn = (algo: string) => { update(s: string): { digest(enc: 'hex'): strin
 function scope_net_to_one_run(
 	cap: { net: NetCall[]; io_ops: IoOp[] },
 	windows: Array<{ start: number; end: number }>
-): void {
-	if (windows.length <= 1) return;
+): { start: number; end: number } | null {
+	if (windows.length <= 1) return windows[0] ?? null;
 	const within = (t: number, w: { start: number; end: number }) => t >= w.start && t <= w.end;
 	let best = windows[0];
 	let best_n = -1;
@@ -246,6 +344,7 @@ function scope_net_to_one_run(
 	}
 	cap.net = cap.net.filter((c) => within(c.start, best));
 	cap.io_ops = cap.io_ops.filter((o) => within(o.start, best));
+	return best;
 }
 
 /**
@@ -269,6 +368,10 @@ class Profiler {
 	// ---- state ------------------------------------------------------------
 	readonly #ring: RequestEntry[] = [];
 	readonly #reports = new Map<string, StoredReport>();
+	/** the browser's hydration timings, by island fingerprint (`/beacon`) — joined into reports at view time */
+	readonly #beacons = new Map<string, BeaconAgg>();
+	/** bytes per asset URL, measured once per process */
+	readonly #weights = new Map<string, number | null>();
 	readonly #background_net: NetCall[] = [];
 	#window_net: NetCall[] | null = null;
 	#inflight = 0;
@@ -425,6 +528,53 @@ class Profiler {
 		// the window (off otherwise — it costs a stack per call)
 		const netmod = await import('./net.js').catch(() => null);
 		netmod?.set_stack_capture(true);
+		// SPANS (`span()` / `tag()` from ogygia/profiler): recorded only while this window runs.
+		// A span rides the same async context as the fetch patch — the request it belongs to, and
+		// for nesting a child store carrying the span's id (only during a recording, so the per-hop
+		// cost of a second store never reaches an un-profiled request).
+		const spans: SpanRecord[] = [];
+		let span_seq = 0;
+		const als = this.#als;
+		const span_recorder: SpanRecorder = {
+			begin: (name, attrs) => {
+				const ctx = als?.getStore();
+				const rec: SpanRecord = {
+					id: ++span_seq,
+					name: String(name).slice(0, 120),
+					start: perf_hooks.performance.now(),
+					ms: -1,
+					...(attrs ? { attrs: { ...attrs } } : {}),
+					...(ctx?.span !== undefined ? { parent: ctx.span } : {}),
+					caller_site: netmod?.nearest_app_site(),
+					route: ctx?.route ?? null,
+					path: ctx?.path ?? null
+				};
+				if (spans.length < MAX_WINDOW_SPANS) spans.push(rec);
+				if (ctx && ctx.spans.length < MAX_SPANS_PER_REQUEST) ctx.spans.push(rec);
+				return rec;
+			},
+			within: (s, fn) => {
+				const ctx = als?.getStore();
+				return ctx && als ? als.run({ ...ctx, span: s.id }, fn) : fn();
+			},
+			end: (s, attrs, error) => {
+				s.ms = round2(perf_hooks.performance.now() - s.start);
+				if (attrs) s.attrs = { ...s.attrs, ...attrs };
+				if (error !== undefined) {
+					s.error = error instanceof Error ? error.message : String(error);
+				}
+			},
+			tag: (key, value) => {
+				const ctx = als?.getStore();
+				if (!ctx) return;
+				const tags = (ctx.entry.tags ??= {});
+				if (key in tags || Object.keys(tags).length < MAX_TAGS) tags[key] = value;
+			}
+		};
+		set_span_recorder(span_recorder);
+		// DETAIL from ogygia's handle (per-island rows, the seed explainer, hole notes) costs a little
+		// per region — asked for only while this window records (server/request-stats.ts).
+		set_request_stats_detail(true);
 		const iomod = await import('./async-io.js').catch(() => null);
 		let io_rec = iomod ? await iomod.record_async_io() : null;
 
@@ -440,6 +590,11 @@ class Profiler {
 					// heap sampling unsupported — carry on
 				}
 			}
+			// The samples' clock: V8 stamps the profile's `startTime` when the profile is created, at
+			// the START of this call — then scans every compiled function before the call returns
+			// (tens of ms on a big heap). Taking the mark BEFORE the post keeps the samples on the
+			// net/io clock; taken after, every CPU sample landed that scan-time late on the timeline.
+			const perf_start = perf_hooks.performance.now();
 			await session.post('Profiler.start');
 
 			await work();
@@ -468,11 +623,15 @@ class Profiler {
 			const duration_ms = t1 - t0;
 			const net = this.#window_net ?? [];
 
+			// a span never ended before the window closed stays `open` (a hung driver call, a
+			// handle the app forgot) — reported as such, never timed as if it had finished
+			for (const s of spans) if (s.ms < 0) s.open = true;
 			return {
 				profile: profile as CpuProfile,
 				heap: heap_head,
 				mem,
 				net,
+				spans,
 				gc_pauses,
 				io_ops: io_rec ? io_rec.stop() : [],
 				call_counts: {},
@@ -489,11 +648,14 @@ class Profiler {
 				elu_percent: round2(elu.utilization * 100),
 				t0,
 				t1,
-				duration_ms
+				duration_ms,
+				perf_start
 			};
 		} finally {
 			clearInterval(mem_timer);
 			histogram.disable();
+			set_span_recorder(null);
+			set_request_stats_detail(false);
 			netmod?.set_stack_capture(false);
 			io_rec?.stop();
 			try {
@@ -600,10 +762,11 @@ class Profiler {
 			| 'run_status'
 			| 'run_bytes'
 			| 'budget_note'
-		>
+		>,
+		/** page mode on a built app: the app's own fetch, to weigh the islands' JS closures */
+		fetch_url?: (url: string) => Promise<Response>
 	): Promise<string> {
 		const resolver = await this.#make_resolver();
-		const analysis = analyze(cap.profile, resolver, cap.call_counts);
 		const heap = cap.heap ? analyze_heap(cap.heap) : null;
 		// resolve each I/O caller's bundled location back to source, using the same
 		// sourcemap resolver the CPU frames use — turns `_page.server.ts.js:8` into
@@ -634,6 +797,10 @@ class Profiler {
 			// a caller that maps back into the profiler is our own I/O (the mem
 			// sampler's timer) — drop it, it is not the app's wait
 			if (file.startsWith('profiler/') || file.includes('/profiler/')) return undefined;
+			// a WebAssembly frame is a library's internals — undici's HTTP parser (llhttp) is the
+			// usual one: the zlib stream inflating a gzip response, a socket timer — never the app's
+			// own wait. Unattributed, like the runtime's own resources.
+			if (WASM_FRAME_RE.test(file)) return undefined;
 			return name ? `${name} (${file}:${line})` : `${file}:${line}`;
 		};
 		for (const c of cap.net) {
@@ -644,6 +811,15 @@ class Profiler {
 			o.caller = resolve_caller(o.caller_site);
 			delete o.caller_site;
 		}
+		for (const s of cap.spans) {
+			s.caller = resolve_caller(s.caller_site);
+			delete s.caller_site;
+		}
+		// THE TIMELINE INPUT: the one request's window + every call it waited on (net + the I/O
+		// primitives the hooks timed, minus the ones still open) — analyze puts the CPU samples on
+		// the same clock and walks the critical path (timeline.ts).
+		const timeline_input = cap.window ? this.#timeline_input(cap) : undefined;
+		const analysis = analyze(cap.profile, resolver, cap.call_counts, timeline_input);
 		const id = Math.random().toString(36).slice(2, 10);
 		const requests = this.#ring.filter((e) => e.ts + e.ms >= cap.t0 && e.ts <= cap.t1);
 		const meta: ReportMeta = {
@@ -675,17 +851,27 @@ class Profiler {
 		} catch {
 			// no zlib (unlikely) — keep the string
 		}
+		// THE ISLANDS' JS WEIGHT: every module / preload href the page's islands pull, fetched once
+		// through the app (a built app's hashed assets; dev URLs are unbundled and say nothing).
+		let weights: Record<string, number> | undefined;
+		if (fetch_url && !this.dev) {
+			const urls: string[] = [];
+			for (const r of island_rows_of(meta)) urls.push(r.module_url, ...r.hints);
+			if (urls.length) weights = await weigh_urls(urls, fetch_url, this.#weights);
+		}
 		this.#reports.set(id, {
 			meta,
 			analysis,
 			heap,
 			net: cap.net,
+			spans: cap.spans,
 			mem: cap.mem,
 			measures: cap.measures,
 			gc,
 			io: cap.io_ops,
 			call_counts: cap.call_counts,
-			raw
+			raw,
+			...(weights ? { weights } : {})
 		});
 		while (this.#reports.size > this.max_reports) {
 			const oldest = this.#reports.keys().next().value;
@@ -724,6 +910,15 @@ class Profiler {
 		return `og_profiler=${token}; Path=${this.base}; HttpOnly; SameSite=Strict${secure}${clear}`;
 	}
 
+	/** The BEACON FLAG: a second cookie, site-wide, carrying no secret — it only tells the handle
+	 *  "this browser is the profiler's user, put the beacon tag in its documents". The session
+	 *  cookie stays scoped to the profiler's own path (the `/beacon` POST is under it, so the
+	 *  runtime's post still carries the real session). Set with the session, cleared with it. */
+	#beacon_cookie(on: boolean, event: RequestEvent): string {
+		const secure = event.url.protocol === 'https:' ? '; Secure' : '';
+		return `og_profiler_beacon=${on ? '1' : ''}; Path=/; HttpOnly; SameSite=Lax${secure}${on ? '' : '; Max-Age=0'}`;
+	}
+
 	/**
 	 * Validate + set up a session. The unlock page POSTs the key here; a match sets the session cookie
 	 * and returns to `next`. No HTTP Basic dialog — a plain form + cookie, so the `Authorization` header
@@ -743,6 +938,7 @@ class Profiler {
 			'set-cookie',
 			this.#session_cookie(this.#cookie_token(createHash), ctx.event!)
 		);
+		res.headers.append('set-cookie', this.#beacon_cookie(true, ctx.event!));
 		return res;
 	}
 
@@ -803,7 +999,8 @@ class Profiler {
 			base: this.base,
 			auth_guard: (c) => this.#auth_guard(c),
 			authed: (c) => this.#authed((c as { event?: RequestEvent }).event!),
-			dashboard: () => this.#dashboard(),
+			beacon: (c) => this.#beacon(c),
+			dashboard: (c) => this.#dashboard(c.url.searchParams.get('by')),
 			run_page: (c) => this.#run_page(c),
 			record_page: (c) => this.#record_page(c),
 			reset: (c) => this.#reset(c),
@@ -815,11 +1012,173 @@ class Profiler {
 			logout: (c) => this.#logout(c),
 			upload: (c) => this.#upload(c),
 			report_stored: (id) => this.#reports.get(id ?? ''),
+			login_url: (c) =>
+				this.ui_enabled && this.secret && !this.dev
+					? `${this.base}/login?next=${encodeURIComponent(c.url.pathname)}`
+					: null,
 			report_view: (stored) => this.#report_view(stored),
 			report_json: (stored) => this.#report_json(stored),
 			report_dump_json: (stored) => this.#report_dump_json(stored),
-			report_raw: (stored) => this.#report_raw(stored)
+			report_html: (stored, c) => this.#report_html(stored, c),
+			report_raw: (stored) => this.#report_raw(stored),
+			compare: (a, b) => this.#compare(a, b),
+			source: (c) => this.#source(c)
 		}) as Router);
+	}
+
+	/**
+	 * THE TIMELINE INPUT: the one request's window + every call it waited on. Net calls as they
+	 * are. I/O primitives only when they are the app's own wait — the same rule as the "Waiting by
+	 * function" table: the op must have a resolved app caller (an unattributed one is undici's
+	 * socket timer, a response compressor's zlib stream, the recorder's own timer; a WASM caller
+	 * is a library's internals) — and an op that sits inside a net call's span is the other end of
+	 * that same call (an in-process API's timer on a self-fetch); the net call already says it.
+	 * Each call carries the phase of the code that started it, from the caller's file.
+	 */
+	#timeline_input(cap: WindowCapture) {
+		const w = cap.window!;
+		const phase_of = (caller?: string) => {
+			const m = caller ? CALLER_FILE_RE.exec(caller) : null;
+			return m ? (phase_of_frame({ name: '', url: m[1], line: 0, category: 'app' }) ?? undefined) : undefined;
+		};
+		const net = cap.net
+			.filter((c) => c.ms >= 0)
+			.map((c) => ({ start: c.start, end: c.start + c.ms + (c.body_ms ?? 0), c }));
+		const inside_a_call = (s: number, e: number) =>
+			net.some((n) => s >= n.start - 2 && e <= n.end + 2);
+		const overlaps_a_call = (s: number, e: number) => net.some((n) => s < n.end && e > n.start);
+		// an op started by a `+server` route handler while one of our calls was in flight is the
+		// server side of a self-fetch (the playground's in-process APIs): the net call already says it
+		const is_handler_side = (o: IoOp) =>
+			!!o.caller && SERVER_ROUTE_FILE_RE.test(o.caller) && overlaps_a_call(o.start, o.start + o.ms);
+		return {
+			perf_start: cap.perf_start,
+			window: w,
+			calls: [
+				// spans first: the timeline draws them as the overlay a call or a gap sits inside
+				...cap.spans
+					.filter((s) => !s.open && s.ms >= 0)
+					.map((s) => ({
+						start: s.start,
+						ms: s.ms,
+						label: s.name,
+						kind: 'span',
+						caller: s.caller,
+						phase: phase_of(s.caller)
+					})),
+				...cap.net.map((c) => ({
+					start: c.start,
+					ms: c.ms < 0 ? -1 : c.ms + (c.body_ms ?? 0),
+					label: label_call(c.method, c.url),
+					kind: 'net',
+					caller: c.caller,
+					phase: phase_of(c.caller)
+				})),
+				...cap.io_ops
+					.filter(
+						(o) =>
+							!o.open &&
+							o.ms >= 0.5 &&
+							o.type !== 'Immediate' &&
+							!!o.caller &&
+							!o.caller.startsWith('/wasm/') &&
+							!o.caller.includes('(/wasm/') &&
+							!inside_a_call(o.start, o.start + o.ms) &&
+							!is_handler_side(o)
+					)
+					.map((o) => ({
+						start: o.start,
+						ms: o.ms,
+						label: `${io_kind(o.type)}${o.caller ? ` · ${o.caller}` : ''}`,
+						kind: io_kind(o.type),
+						caller: o.caller,
+						phase: phase_of(o.caller)
+					}))
+			]
+		};
+	}
+
+	/**
+	 * The report as ONE self-contained HTML file (profiler/standalone.ts): the page is rendered
+	 * through this very server (a self-request, marked internal so it is not logged as traffic),
+	 * then every stylesheet, the runtime and every island chunk it reaches are fetched the same way
+	 * and inlined. Needs a BUILT app: a dev server's module graph is Vite's, hundreds of unbundled
+	 * files with transforms — not a thing one file can carry.
+	 */
+	async #report_html(stored: StoredReport, ctx: RouteCtx): Promise<Response> {
+		if (this.dev) {
+			return new Response(
+				'The standalone HTML export needs a built app (vite build + preview, or your production ' +
+					'deploy): on the dev server the page’s code is hundreds of unbundled modules. Export the ' +
+					'.ogp here and open it on a built server, or run the export there.',
+				{ status: 400, headers: { 'content-type': 'text/plain; charset=utf-8' } }
+			);
+		}
+		const origin = ctx.url.origin;
+		const page_url = `${origin}${this.base}/report/${stored.meta.id}`;
+		const headers: Record<string, string> = { 'x-og-profiler-internal': '1' };
+		if (this.secret) headers['x-profiler-key'] = this.secret;
+		const load = async (url: string): Promise<string | null> => {
+			try {
+				const res = await fetch(url, { headers });
+				return res.ok ? await res.text() : null;
+			} catch {
+				return null;
+			}
+		};
+		const html = await load(page_url);
+		if (html === null) return new Response('Could not render the report page.', { status: 502 });
+		const { build_standalone } = await import('./standalone.js');
+		try {
+			const out = await build_standalone(html, { page_url, load });
+			return new Response(out, {
+				headers: {
+					'content-type': 'text/html; charset=utf-8',
+					'content-disposition': `attachment; filename="ogygia-profile-${stored.meta.id}.html"`,
+					'cache-control': 'no-store'
+				}
+			});
+		} catch (e) {
+			return new Response(e instanceof Error ? e.message : 'standalone export failed', { status: 500 });
+		}
+	}
+
+	/** Two stored reports side by side (compare.ts); a 404 when either has expired. */
+	#compare(a: string | undefined, b: string | undefined) {
+		const A = this.#reports.get(a ?? '');
+		const B = this.#reports.get(b ?? '');
+		if (!A || !B) error(404, 'One of those reports has expired.');
+		const pack = (s: StoredReport) => ({
+			meta: s.meta,
+			analysis: s.analysis,
+			findings: derive_findings(s.analysis, s.meta, this.#report_extras(s)).map(
+				(f) => `${f.code}: ${f.message}`
+			)
+		});
+		return { base: this.base, cmp: compare_reports(pack(A), pack(B)) };
+	}
+
+	/** DEV ONLY: nine lines of a local source file around `l` — the source peek an expanded row
+	 *  shows. Behind the login like every route; the path must resolve inside the project (the
+	 *  process cwd, symlinks followed) and be a source file. Anything else is a 404. */
+	async #source(ctx: RouteCtx): Promise<Response> {
+		if (!this.dev) return new Response('Not found', { status: 404 });
+		const p = ctx.url.searchParams.get('p') ?? '';
+		const line = Math.max(1, Number(ctx.url.searchParams.get('l')) || 1);
+		try {
+			const fs = await import('node:fs');
+			const path = await import('node:path');
+			const real = fs.realpathSync(p);
+			const root = fs.realpathSync(process.cwd());
+			if (!real.startsWith(root + path.sep)) return new Response('Not found', { status: 404 });
+			if (!SOURCE_EXT_RE.test(real)) return new Response('Not found', { status: 404 });
+			const lines = fs.readFileSync(real, 'utf8').split('\n');
+			const start = Math.max(1, line - 4);
+			const end = Math.min(lines.length, line + 4);
+			return ctx.json({ path: real, start, line, lines: lines.slice(start - 1, end) });
+		} catch {
+			return new Response('Not found', { status: 404 });
+		}
 	}
 
 	/** No open redirect — a `next` only bounces back into the profiler. */
@@ -832,19 +1191,25 @@ class Profiler {
 	#logout(ctx: RouteCtx): Response {
 		const res = ctx.redirect(this.base);
 		res.headers.append('set-cookie', this.#session_cookie('', ctx.event!));
+		res.headers.append('set-cookie', this.#beacon_cookie(false, ctx.event!));
 		return res;
 	}
 
-	#dashboard() {
+	#dashboard(by: string | null) {
+		const tag_keys = new Set<string>();
+		for (const e of this.#ring) for (const k of Object.keys(e.tags ?? {})) tag_keys.add(k);
 		return {
 			base: this.base,
 			recent: this.#ring,
-			routes: route_aggregates(this.#ring),
+			routes: route_aggregates(this.#ring, by && tag_keys.has(by) ? by : null),
+			by: by && tag_keys.has(by) ? by : null,
+			tag_keys: [...tag_keys].sort(),
 			reports: [...this.#reports.values()].map((r) => r.meta).reverse(),
 			recording: this.#recorder_busy || this.#recording_active(),
 			dev: this.dev,
 			rss_mb: Math.round(process.memoryUsage().rss / 1048576),
-			inflight: this.#inflight
+			inflight: this.#inflight,
+			history: page_history([...this.#reports.values()].map((r) => r.meta))
 		};
 	}
 
@@ -1037,7 +1402,7 @@ class Profiler {
 			}
 			// N identical renders → N copies of the same outbound calls. Keep one render's worth so
 			// the waterfall shows one request + its leaf calls, not the same handful ×N.
-			scope_net_to_one_run(cap, run_windows);
+			cap.window = scope_net_to_one_run(cap, run_windows) ?? undefined;
 			// call counts come from ONE extra render under precise coverage — a
 			// SEPARATE pass, because coverage stops V8 inlining and would otherwise
 			// inflate the CPU profile (svelte's hot `child`/`push` would dominate).
@@ -1045,16 +1410,30 @@ class Profiler {
 			cap.call_counts = await this.#count_calls(async () => {
 				await fetch_render(target).then((r) => r.text());
 			});
-			const id = await this.#finish_report(cap, {
-				trigger: 'page',
-				page: target,
-				redirected_from,
-				warmup_ms,
-				run_status,
-				run_bytes,
-				budget_note,
-				runs: run_ms
-			});
+			const id = await this.#finish_report(
+				cap,
+				{
+					trigger: 'page',
+					page: target,
+					redirected_from,
+					warmup_ms,
+					run_status,
+					run_bytes,
+					budget_note,
+					runs: run_ms
+				},
+				// the app's own fetch answers a hashed asset on adapter-node (it reads the file); a
+				// preview / static host serves it over the wire instead, so fall back to the origin
+				async (u) => {
+					try {
+						const r = await event.fetch(u, { headers: { 'x-og-profiler-internal': '1' } });
+						if (r.ok) return r;
+					} catch {
+						// not answered internally
+					}
+					return fetch(new URL(u, event.url.origin), { headers: { 'x-og-profiler-internal': '1' } });
+				}
+			);
 			const s = this.#reports.get(id)!;
 			// serverless (Amplify/Vercel/Netlify) can't keep the report in memory across invocations
 			// AND a fresh instance may serve the follow-up render — so `?format=ogp` streams the whole
@@ -1190,7 +1569,17 @@ class Profiler {
 		} catch {
 			ogpB64 = undefined;
 		}
-		return { a, meta, base: this.base, extras, ogpB64 };
+		// this page's other page-mode reports (oldest first) and the one just before this one — the
+		// history line + the "compare with previous" link
+		const history =
+			meta.trigger === 'page' && meta.page
+				? (page_history([...this.#reports.values()].map((r) => r.meta)).find(
+						(h) => h.page === meta.page
+					) ?? null)
+				: null;
+		const i = history ? history.points.findIndex((p) => p.id === meta.id) : -1;
+		const prev = i > 0 ? history!.points[i - 1].id : null;
+		return { a, meta, base: this.base, extras, ogpB64, history, prev, dev: this.dev };
 	}
 
 	/** Store an uploaded dump as a report so it renders (+ hydrates) at its own /report/<id> URL — an
@@ -1209,7 +1598,9 @@ class Profiler {
 			gc: e.gc ?? null,
 			io: e.io ?? [],
 			call_counts: e.call_counts ?? {},
-			raw: ''
+			raw: '',
+			...(e.weights ? { weights: e.weights } : {}),
+			...(e.client ? { client: e.client } : {})
 		});
 		while (this.#reports.size > this.max_reports) {
 			const oldest = this.#reports.keys().next().value;
@@ -1235,15 +1626,106 @@ class Profiler {
 	}
 
 	#report_extras(stored: StoredReport): ReportExtras {
+		const client = stored.client ?? this.#client_for(stored);
 		return {
 			net: stored.net,
+			spans: stored.spans ?? [],
 			heap: stored.heap,
 			mem: stored.mem,
 			measures: stored.measures,
 			gc: stored.gc,
 			io: stored.io,
-			call_counts: stored.call_counts
+			call_counts: stored.call_counts,
+			...(stored.weights ? { weights: stored.weights } : {}),
+			...(client.length ? { client } : {})
 		};
+	}
+
+	/** The browser's hydration timings for THIS report's islands: the beacon ring joined by
+	 *  fingerprint (the same props → the same fingerprint, so a visit after the recording matches),
+	 *  then merged per island — a list of 48 cards is 48 fingerprints and one row. */
+	#client_for(stored: StoredReport): ClientIslandStat[] {
+		const per_entry = new Map<string, { fp: string; name: string; ms: number[]; load: number[] }>();
+		for (const r of island_rows_of(stored.meta)) {
+			const b = this.#beacons.get(r.fp);
+			if (!b || !b.ms.length) continue;
+			let e = per_entry.get(r.entry);
+			if (!e) per_entry.set(r.entry, (e = { fp: r.fp, name: r.name, ms: [], load: [] }));
+			e.ms.push(...b.ms);
+			e.load.push(...b.load);
+		}
+		const out: ClientIslandStat[] = [];
+		for (const [entry, e] of per_entry) {
+			const ms = e.ms.sort((x, y) => x - y);
+			const load = e.load.sort((x, y) => x - y);
+			out.push({
+				fp: e.fp,
+				entry,
+				name: e.name,
+				n: ms.length,
+				p50_ms: round2(percentile(ms, 0.5)),
+				max_ms: round2(ms[ms.length - 1]),
+				load_p50_ms: round2(percentile(load, 0.5))
+			});
+		}
+		return out;
+	}
+
+	/** `/beacon` (POST, authed): the runtime's hydration timings — `{ islands: [{ fp, entry, ms, load }] }`.
+	 *  Bounded every way (body, islands per post, fingerprints kept, samples per fingerprint). */
+	async #beacon(ctx: RouteCtx): Promise<Response> {
+		let body: unknown;
+		try {
+			const text = await ctx.request.text();
+			if (text.length > MAX_BEACON_BODY) return new Response(null, { status: 413 });
+			body = JSON.parse(text);
+		} catch {
+			return new Response(null, { status: 400 });
+		}
+		const islands = (body as { islands?: unknown })?.islands;
+		if (!Array.isArray(islands)) return new Response(null, { status: 400 });
+		const now = Date.now();
+		for (const it of islands.slice(0, MAX_BEACON_ISLANDS)) {
+			const fp = typeof it?.fp === 'string' ? it.fp : '';
+			const ms = Number(it?.ms);
+			const load = Number(it?.load);
+			if (!/^[0-9a-f]{8,32}$/.test(fp) || !Number.isFinite(ms) || ms < 0 || ms > 600_000) continue;
+			let agg = this.#beacons.get(fp);
+			if (!agg) {
+				if (this.#beacons.size >= MAX_BEACON_FPS) {
+					// drop the stalest fingerprint
+					let oldest: string | undefined;
+					let t = Infinity;
+					for (const [k, v] of this.#beacons) if (v.last < t) (t = v.last), (oldest = k);
+					if (oldest !== undefined) this.#beacons.delete(oldest);
+				}
+				this.#beacons.set(fp, (agg = { entry: typeof it?.entry === 'string' ? it.entry.slice(0, 300) : '', ms: [], load: [], last: now }));
+			}
+			agg.last = now;
+			agg.ms.push(round2(ms));
+			agg.load.push(Number.isFinite(load) && load >= 0 ? round2(Math.min(load, ms)) : 0);
+			if (agg.ms.length > MAX_BEACON_SAMPLES) {
+				agg.ms.shift();
+				agg.load.shift();
+			}
+		}
+		return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+	}
+
+	/** The page the profiler's own user is about to view gets the beacon tag: the runtime posts its
+	 *  hydration timings to `/beacon` when it sees it, and does nothing otherwise. The flag cookie
+	 *  (set at login, site-wide, no secret) or the key header says it is that user; dev is open. The
+	 *  tag goes at the end of `<head>` so the runtime bootstrap stays the first script. A visitor
+	 *  never sees it; a stray flag with no session posts to a guarded route and gets nothing. */
+	async #beacon_tag(event: RequestEvent): Promise<string | null> {
+		if (!this.ui_enabled) return null;
+		const dest = event.request.headers.get('sec-fetch-dest');
+		if (dest ? dest !== 'document' : !(event.request.headers.get('accept') ?? '').includes('text/html')) return null;
+		if (!this.dev) {
+			const key = event.request.headers.get('x-profiler-key');
+			if (key ? !(await this.#key_matches(key)) : event.cookies.get('og_profiler_beacon') !== '1') return null;
+		}
+		return `<meta name="${BEACON_META}" content="${this.base}/beacon">`;
 	}
 
 	// ---- the handle -------------------------------------------------------
@@ -1309,6 +1791,7 @@ class Profiler {
 			? {
 					entry,
 					net: [],
+					spans: [],
 					route: entry.route,
 					path: entry.path,
 					on_net(call) {
@@ -1322,9 +1805,16 @@ class Profiler {
 		const cpu0 = process.cpuUsage();
 		this.#inflight++;
 
+		const beacon_tag = await this.#beacon_tag(event);
+		const resolve_page = () =>
+			beacon_tag
+				? resolve(event, {
+						transformPageChunk: ({ html }) => (HEAD_CLOSE_RE.test(html) ? html.replace(HEAD_CLOSE_RE, beacon_tag + '</head>') : html)
+					})
+				: resolve(event);
 		const run = async (): Promise<Response> => {
 			const res =
-				ctx && this.#als ? await this.#als.run(ctx, () => resolve(event)) : await resolve(event);
+				ctx && this.#als ? await this.#als.run(ctx, resolve_page) : await resolve_page();
 			entry.status = res.status;
 			if (this.want_server_timing) {
 				try {
@@ -1359,7 +1849,8 @@ class Profiler {
 				const cap = await this.#capture_window(100, async () => {
 					res = await run();
 				});
-				this.#finalize(entry, start, cpu0, ctx);
+				this.#finalize(entry, start, cpu0, ctx, event.request);
+				cap.window = { start, end: start + entry.ms };
 				const id = await this.#finish_report(cap, {
 					trigger: 'request',
 					request: { method: entry.method, path: entry.path, route: entry.route, ms: entry.ms }
@@ -1381,18 +1872,37 @@ class Profiler {
 		try {
 			return await run();
 		} finally {
-			this.#finalize(entry, start, cpu0, ctx);
+			this.#finalize(entry, start, cpu0, ctx, event.request);
 		}
 	};
 
-	#finalize(entry: RequestEntry, start: number, cpu0: NodeJS.CpuUsage, ctx: Ctx | null): void {
+	#finalize(
+		entry: RequestEntry,
+		start: number,
+		cpu0: NodeJS.CpuUsage,
+		ctx: Ctx | null,
+		request?: Request
+	): void {
 		this.#inflight--;
 		entry.ms = round2(performance.now() - start);
 		const c = process.cpuUsage(cpu0);
 		entry.cpu_ms = round2((c.user + c.system) / 1000);
+		// what ogygia's handle added to this page (seed / props bytes, transform ms) — recorded by
+		// hooks.ts on the request, read back here so the log and the report can show ogygia's own cost
+		const og = request ? request_stats_of(request) : undefined;
+		if (og) entry.og = og;
+		const hole = request ? hole_stats_of(request) : undefined;
+		if (hole) entry.hole = hole;
 		if (ctx) {
 			entry.net_count = ctx.net.length;
 			entry.net_ms = round2(ctx.net.reduce((a, c) => a + Math.max(c.ms, 0) + (c.body_ms ?? 0), 0));
+			if (ctx.spans.length) {
+				entry.span_count = ctx.spans.length;
+				// top-level spans only: a nested span's time is inside its parent's
+				entry.span_ms = round2(
+					ctx.spans.filter((s) => s.parent === undefined && s.ms >= 0).reduce((a, s) => a + s.ms, 0)
+				);
+			}
 		}
 		this.#ring.push(entry);
 		if (this.#ring.length > this.ring_size) this.#ring.shift();
@@ -1415,11 +1925,12 @@ export function profiler(options: ProfilerOptions = {}): Handle {
 
 // ---------------------------------------------------------------------------
 
-function route_aggregates(ring: RequestEntry[]): RouteAgg[] {
+function route_aggregates(ring: RequestEntry[], by: string | null = null): RouteAgg[] {
 	const by_route = new Map<string, RequestEntry[]>();
 	for (const e of ring) {
 		if (e.internal) continue;
-		const key = e.route ?? '(no route)';
+		// split by a request tag (`tag('tenant', …)`): one row per route × value
+		const key = (e.route ?? '(no route)') + (by ? ` · ${by}=${e.tags?.[by] ?? '—'}` : '');
 		let list = by_route.get(key);
 		if (!list) by_route.set(key, (list = []));
 		list.push(e);

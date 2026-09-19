@@ -15,7 +15,17 @@
 	// ── regexes
 	const LEADING_HASH_RE = /^#/;
 
-	let { base }: { base: string } = $props();
+	let {
+		base,
+		login = null,
+		exists = false
+	}: {
+		base: string;
+		/** the login page (with `next` back here) when the UI is secret-gated and the visitor is not in */
+		login?: string | null;
+		/** this server holds the report — the visitor just is not logged in */
+		exists?: boolean;
+	} = $props();
 
 	const blob = typeof location !== 'undefined' ? location.hash.replace(LEADING_HASH_RE, '') : '';
 	let password = $state('');
@@ -48,11 +58,19 @@
 {:else}
 	<Shell>
 		<div class="share-unlock">
-			{#if !blob}
+			{#if !blob && exists && login}
+				<h1>Log in to view this report</h1>
+				<p class="hint">
+					This report is on this server; you are not logged in on this browser. Log in with the
+					profiler secret and you land right back here.
+				</p>
+				<a class="btn" href={login}>Log in with the secret</a>
+			{:else if !blob}
 				<h1>No shared report here</h1>
 				<p class="hint">
-					This link carries no report. Open a share link (it ends in <code>#…</code>), or log in to
-					view your own reports.
+					This link carries no report. Open a share link (it ends in <code>#…</code>){#if login},
+						or <a href={login}>log in with the profiler secret</a> to view your own reports{:else},
+						or log in to view your own reports{/if}.
 				</p>
 				<a class="btn" href={base}>← dashboard</a>
 			{:else}

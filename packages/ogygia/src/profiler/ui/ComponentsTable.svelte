@@ -6,14 +6,18 @@
 	import { fmt_ms, fmt_pct, fmt_bytes, CATEGORY_COLOR } from './format.js';
 	import { sortable } from './sort.svelte.js';
 	import FrameDetails from './FrameDetails.svelte';
+	import { row_id, follow_hash } from './row-anchor.svelte.js';
 
 	type Row = FrameStat & { per: number; count: number; alloc: number | null };
 	let {
 		rows,
 		busy,
 		hasAlloc,
-		maxTotal
-	}: { rows: Row[]; busy: number; hasAlloc: boolean; maxTotal: number } = $props();
+		maxTotal,
+		base = '',
+		dev = false
+	}: { rows: Row[]; busy: number; hasAlloc: boolean; maxTotal: number; base?: string; dev?: boolean } =
+		$props();
 
 	let query = $state('');
 	const filtered = $derived.by(() => {
@@ -28,7 +32,21 @@
 	});
 	const s = sortable(() => filtered, 'self_ms');
 	let open = $state<string | null>(null);
-	const cols = $derived(hasAlloc ? 8 : 7);
+	const hasSplit = rows.some((r) => (r.markup_ms ?? 0) + (r.logic_ms ?? 0) > 0);
+	const hasParent = rows.some((r) => !!r.parent);
+	const cols = $derived(7 + (hasAlloc ? 1 : 0) + (hasSplit ? 1 : 0) + (hasParent ? 1 : 0));
+	const own = (r: Row) => (r.markup_ms ?? 0) + (r.logic_ms ?? 0);
+	// a finding's `#comp=<name>` link opens + scrolls to its row
+	$effect(() =>
+		follow_hash(
+			'comp',
+			() => rows.map((r) => r.name),
+			(k) => {
+				query = '';
+				open = k;
+			}
+		)
+	);
 </script>
 
 <div class="tools">
@@ -54,6 +72,10 @@
 				onclick={() => s.click('per')}>per call<span class="arr">{s.arrow('per')}</span></th
 			>
 			<th class="num">% of busy</th>
+			{#if hasSplit}
+				<th class="sort" class:active={s.key === 'markup_ms'} title="its own time split: Svelte writing the template (markup) vs its script and what it calls (logic); nested components in neither" onclick={() => s.click('markup_ms')}>markup / logic<span class="arr">{s.arrow('markup_ms')}</span></th>
+			{/if}
+			{#if hasParent}<th title="the component that rendered most of it — the {'{#each}'} owner of a row">under</th>{/if}
 			{#if hasAlloc}
 				<th class="num sort" class:active={s.key === 'alloc'} onclick={() => s.click('alloc')}
 					>alloc<span class="arr">{s.arrow('alloc')}</span></th
@@ -63,7 +85,12 @@
 	</thead>
 	<tbody>
 		{#each s.sorted as f (f.name)}
-			<tr class="row" class:open={open === f.name} onclick={() => (open = open === f.name ? null : f.name)}>
+			<tr
+				class="row"
+				id={row_id('comp', f.name)}
+				class:open={open === f.name}
+				onclick={() => (open = open === f.name ? null : f.name)}
+			>
 				<td class="fn">
 					<span class="caret">{open === f.name ? '▾' : '▸'}</span>
 					<b>{f.name}</b>
@@ -95,10 +122,22 @@
 				<td class="num">{fmt_ms(f.total_ms)}</td>
 				<td class="num">{fmt_ms(f.per)}</td>
 				<td class="num">{fmt_pct(f.total_ms, busy)}</td>
+				{#if hasSplit}
+					<td class="split2">
+						{#if own(f) > 0}
+							<div class="ml" title="markup {fmt_ms(f.markup_ms ?? 0)} ms · logic {fmt_ms(f.logic_ms ?? 0)} ms">
+								<div class="m" style="width:{((f.markup_ms ?? 0) / own(f)) * 100}%"></div>
+								<div class="l" style="width:{((f.logic_ms ?? 0) / own(f)) * 100}%"></div>
+							</div>
+							<span class="hint">{Math.round(((f.markup_ms ?? 0) / own(f)) * 100)}% markup</span>
+						{:else}—{/if}
+					</td>
+				{/if}
+				{#if hasParent}<td class="file">{f.parent ?? '—'}</td>{/if}
 				{#if hasAlloc}<td class="num">{f.alloc ? fmt_bytes(f.alloc) : '—'}</td>{/if}
 			</tr>
 			{#if open === f.name}
-				<FrameDetails {f} colspan={cols} />
+				<FrameDetails {f} colspan={cols} {base} {dev} />
 			{/if}
 		{/each}
 	</tbody>
@@ -139,5 +178,25 @@
 		color: #7d8590;
 		font-size: 10px;
 		margin-right: 4px;
+	}
+	.split2 {
+		min-width: 120px;
+	}
+	.ml {
+		display: flex;
+		height: 8px;
+		background: #1a212b;
+		border-radius: 3px;
+		overflow: hidden;
+	}
+	.ml .m {
+		background: #b48ead;
+	}
+	.ml .l {
+		background: #4a9d6e;
+	}
+	.split2 .hint {
+		color: #7d8590;
+		font-size: 11px;
 	}
 </style>

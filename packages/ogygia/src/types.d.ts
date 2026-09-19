@@ -40,6 +40,16 @@ declare module 'virtual:ogygia/runtime-entry' {
 declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of hashed dependency chunks for a hydrate island entry (`/_app/immutable/…`). */
 	export function islandDeps(entry: string): string[];
+	/** WAKE ADVISOR: what the island's own components do (handlers, `$state`, `$effect`, `bind:`,
+	 *  `use:` counts over its closure), from the build; `null` when the handoff has no facts. */
+	export function islandInteractivity(entry: string): {
+		handlers: number;
+		state: number;
+		effects: number;
+		binds: number;
+		actions: number;
+		files: number;
+	} | null;
 	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
 	 *  region response so a server-picked component styles a page that never imported it. */
 	export function islandCss(entry: string): string[];

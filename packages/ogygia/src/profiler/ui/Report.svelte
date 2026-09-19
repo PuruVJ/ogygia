@@ -21,7 +21,10 @@
 		base={data.report.base}
 		extras={data.report.extras}
 		ogpB64={data.report.ogpB64}
+		history={data.report.history}
+		prev={data.report.prev}
+		dev={data.report.dev}
 	/>
 {:else}
-	<PermalinkGate base={data.base} />
+	<PermalinkGate base={data.base} login={data.login} exists={data.exists} />
 {/if}

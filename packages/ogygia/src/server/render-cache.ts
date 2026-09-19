@@ -62,15 +62,21 @@ export function render_cache_stats(): { entries: number; bytes: number } {
 export async function cached_render(
 	render_body: () => string | null | Promise<string | null>,
 	cache: { key: string; ttl: number } | undefined,
-	now: number
+	now: number,
+	/** told what happened (`hit` served from the memo, `miss` rendered + stored, `none` uncached) */
+	report?: (outcome: 'hit' | 'miss' | 'none') => void
 ): Promise<string | null> {
 	if (cache !== undefined && cache.ttl > 0) {
 		const hit = render_cache_get(cache.key, now);
-		if (hit !== null) return hit;
+		if (hit !== null) {
+			report?.('hit');
+			return hit;
+		}
 	}
 	const body = await render_body();
 	if (cache !== undefined && cache.ttl > 0 && body !== null) {
 		render_cache_set(cache.key, body, cache.ttl, now);
-	}
+		report?.('miss');
+	} else report?.('none');
 	return body;
 }

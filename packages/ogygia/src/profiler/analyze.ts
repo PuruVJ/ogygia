@@ -7,6 +7,8 @@
  * report.ts/index.ts can be dropped into any SvelteKit project.
  */
 
+import { build_timeline, type Timeline, type TimelineInput } from './timeline.js';
+
 export interface CallFrame {
 	functionName: string;
 	scriptId?: string;
@@ -76,6 +78,14 @@ export interface FrameStat {
 	calls?: number;
 	/** the heaviest call paths into this function (filled for the hot functions and every component) */
 	stacks?: CallStack[];
+	/** components: ms spent BUILDING MARKUP — Svelte's server internals (escape, attr, push…) run
+	 *  under this component with no nearer component — versus RUNNING LOGIC — its own script and
+	 *  the app / dependency / node code it calls. Nested components are in neither. */
+	markup_ms?: number;
+	logic_ms?: number;
+	/** components: the component whose render contained most of this one's time — the parent of a
+	 *  `{#each}` list's rows */
+	parent?: string;
 }
 
 export interface GroupStat {
@@ -118,6 +128,8 @@ export interface Analysis {
 	flame: FlameNode;
 	/** true when at least one bundled frame was mapped back through a sourcemap */
 	sourcemapped: boolean;
+	/** ONE request's critical path + phases (page / request mode; absent for a plain window) */
+	timeline?: Timeline;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,6 +146,23 @@ const SVELTE_MODULE_EXT_RE = /\.svelte\.ts$/;
 /** A bundler's collision suffix (`Header$1`, `Header$2`): two components with one basename in
  *  one chunk. Stripped for naming and matching — the frame is still the `Header` component. */
 const BUNDLER_SUFFIX_RE = /\$\d+$/;
+const OGYGIA_OWN_RE = /\/ogygia\/(?:src|dist)\//;
+/** ogygia's own wrapper components. The app's Vite compiles them into the app's chunks (a
+ *  `.svelte` from a dependency is compiled by the consumer), so in a production profile they sit
+ *  at a chunk URL with the component's name and no `.svelte` path to vouch for them — and every
+ *  island page renders `Region` once per island, so it would top the Components table. */
+const OGYGIA_WRAPPERS = new Set([
+	'Region',
+	'SlotBoundary',
+	'LakeBoundary',
+	'OgygiaBoundary',
+	'NestedProvider',
+	'LiveHost',
+	'Blocks',
+	'RawHtml',
+	'Provide',
+	'ClientBindingStub'
+]);
 const NON_IDENT_G = /[^a-zA-Z0-9_$]/g;
 
 /** A frame name with the bundler's `$N` collision suffix removed. */
@@ -246,6 +275,8 @@ export function categorize(frame: CallFrame): { category: FrameCategory; pkg?: s
 	// heap), which lands on the window's first sample
 	if (url.startsWith('node:inspector')) return { category: 'profiler' };
 	if (url.startsWith('node:')) return { category: 'node' };
+	// a WebAssembly module's frames (`wasm://wasm/…`): undici's llhttp parser in practice — runtime
+	if (url.startsWith('wasm://')) return { category: 'node' };
 	if (url.includes('/ogygia/src/profiler/') || url.includes('/ogygia/dist/profiler/')) {
 		return { category: 'profiler' };
 	}
@@ -253,6 +284,10 @@ export function categorize(frame: CallFrame): { category: FrameCategory; pkg?: s
 	const pkg = package_of(url);
 	if (pkg === 'svelte') return { category: 'svelte', pkg };
 	if (pkg) return { category: 'dependency', pkg };
+	// ogygia's own runtime reached through a workspace link or a sourcemap (`packages/ogygia/src/…`,
+	// no node_modules segment): its wrappers (Region.svelte, the boundaries) are the library, not
+	// the app's components — they would otherwise top the Components table on every island page.
+	if (OGYGIA_OWN_RE.test(url)) return { category: 'dependency', pkg: 'ogygia' };
 
 	if (url.endsWith('.svelte')) {
 		// only the file's OWN render function is "the component": Svelte names it after the file, so
@@ -271,7 +306,11 @@ export function categorize(frame: CallFrame): { category: FrameCategory; pkg?: s
 		// `IntersectionObserver`, an `Error` subclass, any class constructor in app code looks the
 		// same — and `analyze` keeps it a component only when its subtree reaches Svelte's server
 		// internals (a component that renders anything calls `push`/`escape`); the rest become app.
-		if (!SVELTE_MODULE_EXT_RE.test(url) && is_component_name(name)) return { category: 'component' };
+		if (!SVELTE_MODULE_EXT_RE.test(url) && is_component_name(name)) {
+			return OGYGIA_WRAPPERS.has(strip_bundler_suffix(name))
+				? { category: 'dependency', pkg: 'ogygia' }
+				: { category: 'component' };
+		}
 		return { category: 'app' };
 	}
 	// no url + a real (non-"(…)") name = a native runtime builtin — writev,
@@ -465,7 +504,9 @@ function short_path(url: string): string {
 export function analyze(
 	profile: CpuProfile,
 	resolver?: SourceMapResolver,
-	call_counts?: Record<string, number>
+	call_counts?: Record<string, number>,
+	/** the profiled request's window + its outbound calls → the timeline (timeline.ts) */
+	timeline_input?: TimelineInput
 ): Analysis {
 	// Invocation count per FRAME KEY, joined from coverage by the raw `<functionName>\0<url>` identity
 	// (the same key #count_calls emits). Filled during the resolve loop, read when a FrameStat is created.
@@ -536,7 +577,7 @@ export function analyze(
 		// the component's own source file. Give it the component's name and
 		// category, so the heavy work reads as the component instead of a stray
 		// "(anonymous)", and merges into the component's self time.
-		if (!f.functionName || f.functionName === '(anonymous)') {
+		if ((!f.functionName || f.functionName === '(anonymous)') && cat.category !== 'dependency') {
 			const derived = component_name_from_file(clean_url(url));
 			if (derived) {
 				name = derived;
@@ -627,6 +668,15 @@ export function analyze(
 	const node_total_us = new Map<number, number>();
 	/** every node of a key, for the stacks below */
 	const nodes_by_key = new Map<string, number[]>();
+	// MARKUP vs LOGIC per component, and who rendered whom: the nearest component above a sample is
+	// the one charged. Svelte's server internals under it are its markup; its own frames and the
+	// app / dependency / node code it calls are its logic; a nested component is neither (that one
+	// is charged instead). A component's outermost occurrence credits its total to the component it
+	// sits under — the parent that renders it (a `{#each}` list's owner).
+	const comp_stack: string[] = [];
+	const markup_us = new Map<string, number>();
+	const logic_us = new Map<string, number>();
+	const parent_us = new Map<string, Map<string, number>>();
 
 	const visit = (node: ProfileNode): number => {
 		const r = resolved.get(node.id)!;
@@ -642,6 +692,9 @@ export function analyze(
 			if (list) list.push(node.id);
 			else nodes_by_key.set(r.key, [node.id]);
 		}
+		const is_comp = r.category === 'component';
+		const parent_comp = comp_stack[comp_stack.length - 1];
+		if (is_comp) comp_stack.push(r.key);
 
 		let stat = agg.get(r.key);
 		if (!stat) {
@@ -675,6 +728,17 @@ export function analyze(
 			else {
 				busy_us += s;
 				if (r.category === 'gc') gc_us += s;
+			}
+			const near = comp_stack[comp_stack.length - 1];
+			if (near !== undefined) {
+				if (r.category === 'svelte') markup_us.set(near, (markup_us.get(near) ?? 0) + s);
+				else if (
+					r.category === 'component' ||
+					r.category === 'app' ||
+					r.category === 'dependency' ||
+					r.category === 'node'
+				)
+					logic_us.set(near, (logic_us.get(near) ?? 0) + s);
 			}
 			// group by file
 			if (r.url) {
@@ -715,6 +779,14 @@ export function analyze(
 			if (child) total += visit(child);
 		}
 		node_total_us.set(node.id, total);
+		if (is_comp) {
+			comp_stack.pop();
+			if (!nested && parent_comp !== undefined && parent_comp !== r.key) {
+				let m = parent_us.get(r.key);
+				if (!m) parent_us.set(r.key, (m = new Map()));
+				m.set(parent_comp, (m.get(parent_comp) ?? 0) + total);
+			}
+		}
 
 		const left = path.get(r.key)! - 1;
 		if (left === 0) path.delete(r.key);
@@ -853,18 +925,44 @@ export function analyze(
 	const components = [...agg.values()]
 		.filter((f) => f.category === 'component' && f.total_ms >= 0.01)
 		.sort((a, b) => b.total_ms - a.total_ms)
-		.map((f) => ({
-			...f,
-			self_ms: round2(f.self_ms),
-			total_ms: round2(f.total_ms),
-			stacks: f.stacks ?? stacks_of(f.key)
-		}));
+		.map((f) => {
+			let parent: string | undefined;
+			let best = 0;
+			for (const [p, us] of parent_us.get(f.key) ?? []) {
+				if (us > best) {
+					best = us;
+					parent = agg.get(p)?.name;
+				}
+			}
+			return {
+				...f,
+				self_ms: round2(f.self_ms),
+				total_ms: round2(f.total_ms),
+				stacks: f.stacks ?? stacks_of(f.key),
+				markup_ms: round2((markup_us.get(f.key) ?? 0) / 1000),
+				logic_ms: round2((logic_us.get(f.key) ?? 0) / 1000),
+				...(parent ? { parent } : {})
+			};
+		});
 
 	const file_list = [...files.values()].sort((a, b) => b.self_ms - a.self_ms);
 	for (const f of file_list) f.self_ms = round2(f.self_ms);
 
 	const bucket_list = [...buckets.values()].sort((a, b) => b.self_ms - a.self_ms);
 	for (const b of bucket_list) b.self_ms = round2(b.self_ms);
+
+	// --- the request timeline (critical path + phases), from the same frame table ---------
+	const timeline = timeline_input
+		? build_timeline(
+				profile,
+				(id) => {
+					const r = resolved.get(id)!;
+					return { name: r.name, url: r.url, line: r.line, category: r.category, pkg: r.pkg };
+				},
+				(id) => parent_of.get(id),
+				timeline_input
+			)
+		: undefined;
 
 	return {
 		duration_ms: round2((profile.endTime - profile.startTime) / 1000),
@@ -877,7 +975,8 @@ export function analyze(
 		files: file_list,
 		buckets: bucket_list,
 		flame,
-		sourcemapped: resolver?.hit ?? false
+		sourcemapped: resolver?.hit ?? false,
+		...(timeline ? { timeline } : {})
 	};
 }
 
@@ -931,7 +1030,10 @@ export function analyze_heap(head: HeapNode, limit = 25): HeapAllocator[] {
 	};
 	visit(head);
 	return [...agg.values()]
-		.filter((a) => a.self_bytes > 0 && a.category !== 'v8' && a.category !== 'gc')
+		.filter(
+			(a) =>
+				a.self_bytes > 0 && a.category !== 'v8' && a.category !== 'gc' && a.category !== 'profiler'
+		)
 		.sort((a, b) => b.self_bytes - a.self_bytes)
 		.slice(0, limit);
 }

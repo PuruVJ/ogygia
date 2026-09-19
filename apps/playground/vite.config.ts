@@ -42,7 +42,10 @@ export default defineConfig({
 					frozenSwr: { render: 'live', wake: 'load' },
 					// a deferred hole that opts INTO a browser cache (default is no-store): 1h max-age,
 					// signed into the endpoint. Exercised by verify/server-islands.ts.
-					cachedGreeting: { render: 'deferred', maxAge: '1h' }
+					cachedGreeting: { render: 'deferred', maxAge: '1h' },
+					// the hell page's second recommendations hole: a render cache the profiler's hole
+					// economics can watch (hits vs misses)
+					cachedRecs: { render: 'deferred', maxAge: '5m' }
 				}
 			}
 		}),

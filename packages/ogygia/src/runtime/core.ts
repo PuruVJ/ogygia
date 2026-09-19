@@ -31,6 +31,7 @@ import { once_visible } from './observe.js';
 import { connected_regions } from './connected.js';
 import { restore_props_sidecar } from './sidecar.js';
 import { hole_facts_of } from './hole-facts.js';
+import { beacon_hydrated } from './beacon.js';
 import type { IslandHandle, IslandModule } from './hydrate-core.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 import {
@@ -863,7 +864,9 @@ class OgygiaRegion extends HTMLElement {
 	async #hydrate() {
 		if (this.#app || this.#hydrating) return;
 		this.#hydrating = true;
-		const dt_t0 = DEVTOOLS ? now_ms() : 0;
+		const t0 = now_ms();
+		const dt_t0 = DEVTOOLS ? t0 : 0;
+		let t_loaded = t0;
 		if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.hydrate.start', ...dt_ids(this) });
 		try {
 			// wait for full parse so the end-of-body props sidecars (and the seed) are in the DOM. On an
@@ -877,6 +880,7 @@ class OgygiaRegion extends HTMLElement {
 			if (!entry) return;
 			hydrate_started(this); // a viewport island in flight holds ready islands below the fold
 			const [core, mod] = await Promise.all([hydrate_core(), load_island(entry)]);
+			t_loaded = now_ms();
 			if (!this.isConnected) return;
 			await hydrate_turn(this);
 			if (!this.isConnected || this.#app) return;
@@ -885,6 +889,7 @@ class OgygiaRegion extends HTMLElement {
 			this.#ssr_html = null; // awake (or not ours): the server copy has done its job
 			if (!this.#app) return; // not ours (Kit-hydrated page) or torn out mid-hydrate
 			this.setAttribute('data-hydrated', '');
+			beacon_hydrated(this, t0, t_loaded, now_ms()); // the profiler's browser half (no-op without its tag)
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',

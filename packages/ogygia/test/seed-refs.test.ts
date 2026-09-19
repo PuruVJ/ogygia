@@ -17,6 +17,7 @@ import {
 	analyze,
 	deep_equal_plain,
 	index_seed,
+	json_culprit,
 	resolve_seed_ref,
 	plan_seed_refs,
 	seed_ref_reviver,
@@ -194,6 +195,33 @@ describe('the shared request memo', () => {
 		expect(analyze({ cyc })).toMatchObject({ ref: false, json: false });
 		expect(analyze({ again: cyc })).toMatchObject({ ref: false, json: false });
 		expect(index_seed({ cyc }).by_identity.has(cyc)).toBe(false);
+	});
+});
+
+describe('json_culprit (why a tree left the JSON lane)', () => {
+	it('names the first disqualifying leaf with its path and kind', () => {
+		expect(json_culprit({ a: 1, b: [{ c: 'x' }] })).toBeNull();
+		expect(json_culprit({ config: { updated: new Date(0) } })).toBe('config.updated (Date)');
+		expect(json_culprit({ rows: [1, NaN] })).toBe('rows[1] (NaN)');
+		expect(json_culprit({ rows: [1, undefined] })).toBe('rows[1] (undefined in array)');
+		expect(json_culprit({ gone: undefined, ok: 1 })).toBeNull(); // an undefined PROPERTY is fine
+		expect(json_culprit({ facets: new Map() })).toBe('facets (Map)');
+		expect(json_culprit({ n: 1n })).toBe('n (bigint)');
+		class Foo {}
+		expect(json_culprit({ meta: new Foo() })).toBe('meta (class Foo)');
+		expect(json_culprit({ x: { [Symbol.for('ogygia.brand')]: true } })).toBe('x (symbol-branded)');
+		const cyc: Record<string, unknown> = {};
+		cyc.self = cyc;
+		expect(json_culprit({ cyc })).toBe('cyc.self (cycle)');
+		expect(json_culprit(new Date(0))).toBe('(root) (Date)');
+	});
+
+	it('the plan reports which top-level keys its references point into', () => {
+		const data = { catalog: { blocks: [big('one')] }, other: big('two') };
+		const idx = index_seed(data);
+		const plan = plan_seed_refs(idx, { a: data.catalog.blocks[0], b: data.other, c: 1 });
+		expect(plan.count).toBe(2);
+		expect([...plan.keys].sort()).toEqual(['catalog', 'other']);
 	});
 });
 

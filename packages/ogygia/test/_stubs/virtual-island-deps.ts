@@ -45,3 +45,9 @@ export const islandRemotes = (_entry: string): string[] | null => island_remotes
 export function set_island_remotes(v: string[] | null) {
 	island_remotes = v;
 }
+// `islandInteractivity(entry)` — the build's per-entry component facts (handlers, $state…) for the
+// profiler's wake advisor; null when the handoff has none.
+export const islandInteractivity = (
+	_entry: string
+): { handlers: number; state: number; effects: number; binds: number; actions: number; files: number } | null =>
+	null;

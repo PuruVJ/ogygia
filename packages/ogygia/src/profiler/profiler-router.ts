@@ -32,13 +32,21 @@ import Run from './ui/Run.svelte';
 import Login from './ui/Login.svelte';
 import Upload from './ui/Upload.svelte';
 import Message from './ui/Message.svelte';
+import Compare from './ui/Compare.svelte';
+import type { Comparison } from './compare.js';
 
 /** Prop-erased component refs — see the file header. Referenced as `V.Dashboard` in the table so
  *  `$infer` never resolves a component's own (self-referential) props. Real types survive on `data`. */
-const V = { Dashboard, Report, Run, Login, Upload, Message } as unknown as Record<
+const V = { Dashboard, Report, Run, Login, Upload, Message, Compare } as unknown as Record<
 	string,
 	AnyComponent
 >;
+
+/** One page's profile history: every page-mode report of it, oldest first, by median run. */
+export interface PageHistory {
+	page: string;
+	points: { id: string; created: number; median: number }[];
+}
 
 /** What the router calls into the host for. Return types here ARE the components' `data` types. */
 export interface ProfilerDeps {
@@ -46,19 +54,31 @@ export interface ProfilerDeps {
 	/** Table-wide guard: a deny Response short-circuits every route (v2 load-returns-Response), else
 	 *  `undefined` = allow. The load below turns allow into the seeded `{ base }`. */
 	auth_guard(c: Ctx): Promise<Response | undefined>;
+	/** The runtime's hydration beacon (POST, authed): browser-side island timings, joined by fingerprint. */
+	beacon(c: Ctx): Promise<Response>;
 	/** Is this request logged in? The public bare report page gates its SERVER data on this (a share
 	 *  `#fragment` renders without it). */
 	authed(c: Ctx): Promise<boolean>;
-	dashboard(): {
+	dashboard(c: Ctx): {
 		base: string;
 		recent: RequestEntry[];
 		routes: RouteAgg[];
+		/** the request tag the slowest-routes table is split by (`?by=tenant`), when any */
+		by: string | null;
+		/** every tag key seen in the log (`tag()`), for the split-by control */
+		tag_keys: string[];
 		reports: ReportMeta[];
 		recording: boolean;
 		dev: boolean;
 		rss_mb: number;
 		inflight: number;
+		/** page-mode reports grouped by page (the history sparklines + compare pairs) */
+		history: PageHistory[];
 	};
+	/** Two stored reports side by side (404 when either expired). */
+	compare(a: string | undefined, b: string | undefined): { base: string; cmp: Comparison };
+	/** DEV ONLY: a few lines of a local source file around a line (the row's source peek). */
+	source(c: Ctx): Promise<Response>;
 	run_page(c: Ctx): Response | { base: string; path: string; runs: number; format: string };
 	record_page(c: Ctx): Promise<Response>;
 	reset(c: Ctx): Response;
@@ -67,15 +87,26 @@ export interface ProfilerDeps {
 	logout(c: Ctx): Response;
 	upload(c: Ctx): Promise<Response>;
 	report_stored(id: string | undefined): StoredReport | undefined;
+	/** The login page for THIS url (`?next=` back here) when the UI is secret-gated; null when a
+	 *  login makes no sense (dev is open; no secret = no UI). */
+	login_url(c: Ctx): string | null;
 	report_view(stored: StoredReport): Promise<{
 		a: Analysis;
 		meta: ReportMeta;
 		base: string;
 		extras: ReportExtras;
 		ogpB64?: string;
+		/** this page's other page-mode reports (page mode only) and the one just before this */
+		history: PageHistory | null;
+		prev: string | null;
+		/** recorded on a dev server — the source peek is available */
+		dev: boolean;
 	}>;
 	report_json(stored: StoredReport): Response;
 	report_dump_json(stored: StoredReport): Response;
+	/** ONE self-contained HTML file of the report (styles, runtime and island chunks inlined) —
+	 *  opens from disk with the islands live. A built app only; dev answers 400. */
+	report_html(stored: StoredReport, c: Ctx): Promise<Response>;
 	report_raw(stored: StoredReport): Promise<Response>;
 }
 
@@ -94,10 +125,12 @@ function report_or_404<R>(d: ProfilerDeps, id: string | undefined, fn: (s: Store
 export function build_profiler_router(d: ProfilerDeps) {
 	return routes(
 		{
-			'/': page(V.Dashboard, { load: () => d.dashboard() }),
+			'/': page(V.Dashboard, { load: (c) => d.dashboard(c) }),
 			'/run': page(V.Run, { load: (c) => d.run_page(c) }),
 			'/page': { GET: (c) => d.record_page(c) },
 			'/reset': { GET: (c) => d.reset(c) },
+			// the browser's hydration timings (runtime/beacon.ts) — behind the guard like everything else
+			'/beacon': { POST: (c) => d.beacon(c) },
 			'/login': page(V.Login, {
 				load: (c) => d.login_props(c),
 				actions: { default: (c) => d.login(c) }
@@ -112,20 +145,30 @@ export function build_profiler_router(d: ProfilerDeps) {
 			'/report/[id]': page(V.Report, {
 				load: async (c) => {
 					const stored = d.report_stored(c.params.id);
-					return stored && (await d.authed(c))
-						? { report: await d.report_view(stored), base: d.base }
-						: { report: null, base: d.base };
+					if (stored && (await d.authed(c)))
+						return { report: await d.report_view(stored), base: d.base, login: null, exists: true };
+					// Not logged in (or no such report): the page renders the share-link gate. When this
+					// server HAS the report, say so and offer the login — the visitor is most likely its
+					// owner on a fresh browser, not a share-link recipient.
+					return { report: null, base: d.base, login: d.login_url(c), exists: !!stored };
 				}
 			}),
 			'/report/[id].json': {
 				GET: (c) => report_or_404(d, c.params.id, d.report_json)
+			},
+			'/report/[id].html': {
+				GET: (c) => report_or_404(d, c.params.id, (s) => d.report_html(s, c))
 			},
 			'/report/[id].dump': {
 				GET: (c) => report_or_404(d, c.params.id, d.report_dump_json)
 			},
 			'/report/[id]/raw': {
 				GET: (c) => report_or_404(d, c.params.id, d.report_raw)
-			}
+			},
+			// Before/after: two stored reports, deltas signed so a regression reads positive.
+			'/compare/[a]/[b]': page(V.Compare, { load: (c) => d.compare(c.params.a, c.params.b) }),
+			// The source peek behind an expanded row (dev only; 404 elsewhere).
+			'/source': { GET: (c) => d.source(c) }
 		},
 		{
 			base: d.base,

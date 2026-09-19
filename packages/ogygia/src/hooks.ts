@@ -122,6 +122,14 @@ import { collect_remote_seed } from './server/remote-seed-gate.js';
 import { DocumentTail, set_tail_reader } from './server/document-tail.js';
 import { region_css_tag } from './server/region-css.js';
 import { set_late_recorder, set_late_taker, type LateRegion } from './late-region-registry.js';
+import {
+	record_request_stats,
+	record_hole_stats,
+	request_stats_detailed,
+	type SeedKeyStat
+} from './server/request-stats.js';
+import { json_culprit } from './seed-refs.js';
+import type { SeedAsk } from './server/seed-shape.js';
 import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
 import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './devtools/schema.js';
 
@@ -158,6 +166,8 @@ type RequestBag = {
 	/** SEED SHAPING: the union of the regions' asks — the `page.data` keys to ship, or `'all'`
 	 *  (some region's reads could not be pinned). `null` until a region asks (then `seed_wanted`). */
 	seed_keys: import('./server/seed-shape.js').SeedKeys | null;
+	/** each region's own ask, by entry — the seed explainer's "who reads what" (detail only) */
+	seed_asks: Map<string, SeedAsk> | null;
 	/** The remote modules (Kit id-hashes) some region's client code on this page can call — the
 	 *  union of every `record_page` (Region.svelte × `islandRemotes`). Gates the
 	 *  `application/ogygia-remote` seed: an SSR-resolved remote outside the set ships no seed.
@@ -209,7 +219,7 @@ set_ctx_recorder((key, value) => {
 	const bag = bag_of();
 	if (bag) bag.ctx.set(key, value);
 });
-set_page_recorder((snapshot, seed, remotes) => {
+set_page_recorder((snapshot, seed, remotes, entry) => {
 	const bag = bag_of();
 	if (!bag) return;
 	// MERGE: the routeless document root records url/params/route from the router's seed first;
@@ -221,6 +231,8 @@ set_page_recorder((snapshot, seed, remotes) => {
 		bag.seed_wanted = true;
 		bag.seed_keys = merge_seed_ask(bag.seed_keys, seed);
 	}
+	// the profiler's seed explainer: who asked for what (detail only — a Map write per region)
+	if (bag.seed_asks && entry && seed !== false) bag.seed_asks.set(entry, seed);
 	// REMOTE SEED ONLY WHEN REACHABLE: union the remotes this region's client can call; one
 	// fail-open record (`null`) opens the whole set for the request.
 	if (remotes === null) bag.remotes_wanted = null;
@@ -402,6 +414,30 @@ function region_response(
  * Decode a request pathname without throwing on malformed percent-encoding (SEC-05).
  * @returns decoded path, or null if the encoding is invalid
  */
+type ResolveOpts = NonNullable<Parameters<Parameters<Handle>[0]['resolve']>[1]>;
+
+/** Two `resolve()` option sets as one: the inner transform (the core's document injection) runs
+ *  first, the outer (the profiler's) sees the finished chunk; the other options merge, outer last. */
+function compose_resolve_opts(inner?: ResolveOpts, outer?: ResolveOpts): ResolveOpts | undefined {
+	if (!inner) return outer;
+	if (!outer) return inner;
+	const a = inner.transformPageChunk;
+	const b = outer.transformPageChunk;
+	return {
+		...inner,
+		...outer,
+		transformPageChunk: !a
+			? b
+			: !b
+				? a
+				: async (input) => {
+						const first = await a(input);
+						if (first === undefined) return first;
+						return b({ ...input, html: first });
+					}
+	};
+}
+
 function decode_pathname(pathname: string): string | null {
 	try {
 		return decodeURIComponent(pathname);
@@ -704,7 +740,18 @@ class OgygiaHandle {
 	// so it times the SSR render and serves its UI — with zero hooks wiring. Otherwise it's the core.
 	handle: Handle = async ({ event, resolve }) => {
 		const prof = await this.#ensure_profiler();
-		if (prof) return prof({ event, resolve: (e) => this.#core({ event: e, resolve }) });
+		if (prof) {
+			// The profiler's `resolve` options (its beacon tag's transformPageChunk) compose with the
+			// core's own transform: the core's runs first (the document is complete), then the profiler's.
+			return prof({
+				event,
+				resolve: (e, outer) =>
+					this.#core({
+						event: e,
+						resolve: (ev, inner) => resolve(ev, compose_resolve_opts(inner, outer))
+					})
+			});
+		}
 		return this.#core({ event, resolve });
 	};
 
@@ -794,6 +841,7 @@ class OgygiaHandle {
 				page: null,
 				seed_wanted: false,
 				seed_keys: null,
+				seed_asks: request_stats_detailed() ? new Map() : null,
 				remotes_wanted: new Set(),
 				tail: new DocumentTail(),
 				measure_memo: new Map(),
@@ -973,6 +1021,7 @@ class OgygiaHandle {
 		// Kit hands one chunk at a time (ONE chunk for a non-streamed page). Two facts about a chunk
 		// decide everything below, each found with one bounded scan (server/document-assembly.ts):
 		// `</head>` from the front, `</body>` from the back. The chunk is assembled ONCE at the end.
+		const t_start = performance.now();
 		const spans = locate(html);
 		const head = spans.head_end === -1 ? null : html.slice(0, spans.head_end);
 
@@ -1119,7 +1168,8 @@ class OgygiaHandle {
 		// down), shaping keeps top-level keys whole, and staging / settling keep the shape too — so a
 		// path into the full tree resolves identically against the shipped seed, provided its key
 		// ships. The plan records the keys it referenced (`touched`) for exactly that.
-		const tail_html = bag!.tail.render(seed_wanted ? index_seed(page_snap.data) : null);
+		const detail = request_stats_detailed();
+		const tail_html = bag!.tail.render(seed_wanted ? index_seed(page_snap.data) : null, detail);
 		// SEED SHAPING: the slice of `page.data` the page's islands read (server/seed-shape.ts) — every
 		// step below (streaming, settling, the payload) sees the shaped tree. A key no island's code
 		// reads but whose node an island's props point into ships too: a reference must have something
@@ -1189,6 +1239,9 @@ class OgygiaHandle {
 		// measured page) and stops serializing it on the server.
 		// THE LANE: a JSON-exact slice (the common CMS tree, no promise staged into it) goes out as
 		// native `JSON.stringify` output; anything devalue exists for keeps devalue.
+		let remote_seed_bytes = 0;
+		let fnm_bytes = 0;
+		let ctx_bytes = 0;
 		const page_payload =
 			event && seed_wanted
 				? PageSeed.serialize(
@@ -1230,6 +1283,7 @@ class OgygiaHandle {
 			const remote_script = await this.build_remote_seed_script(state, bag!.remotes_wanted);
 			if (remote_script) {
 				scripts.push(remote_script);
+				remote_seed_bytes = remote_script.length;
 				if (DEVTOOLS)
 					record_server_event({
 						domain: 'server',
@@ -1249,9 +1303,9 @@ class OgygiaHandle {
 			const entries = Object.entries(fnm)
 				.map(([tag, src]) => `${JSON.stringify(tag)}:(${src})`)
 				.join(',');
-			scripts.push(
-				`<script data-ogygia-fnm>globalThis.__OG_FNM=Object.assign(globalThis.__OG_FNM||{},{${entries}});</script>`
-			);
+			const fnm_script = `<script data-ogygia-fnm>globalThis.__OG_FNM=Object.assign(globalThis.__OG_FNM||{},{${entries}});</script>`;
+			scripts.push(fnm_script);
+			fnm_bytes = fnm_script.length;
 		}
 
 		// Drop-in `setContext` page root — emitted here (final chunk) so every `setContext` has run.
@@ -1261,13 +1315,89 @@ class OgygiaHandle {
 			const payload = serialize_provided_context(provided);
 			if (payload) {
 				scripts.push(emit_ogygia_script('ctx', payload, PAGE_CTX_MARKER));
+				ctx_bytes = payload.length;
 			}
 		}
 
 		this.append_devtools_seed(scripts, bag);
 		// ONE assembly from slices — no `replace` (whose `$$` escape would also corrupt an og.$ factory
 		// source carrying a literal `$`), no intermediate copies of the body.
-		return assemble(html, spans, head_out, head_inject, scripts.join(''));
+		const out = assemble(html, spans, head_out, head_inject, scripts.join(''));
+		// OGYGIA'S OWN COST, for the profiler's request log (server/request-stats.ts): what this
+		// transform took and what it added. One WeakMap write; nothing when no profiler reads it.
+		if (event) {
+			const size = bag!.tail.size;
+			record_request_stats(event.request, {
+				transform_ms: Math.round((performance.now() - t_start) * 100) / 100,
+				islands: size.props,
+				hints: size.hints,
+				holes: size.holes,
+				seed_bytes: page_payload ? page_payload.text.length : 0,
+				remote_seed_bytes,
+				tail_bytes: tail_html.length,
+				fnm_bytes,
+				ctx_bytes,
+				seed_json: page_payload?.json ?? false,
+				// DETAIL (the profiler is recording): the per-island rows, the seed explainer, the
+				// holes. The seed explainer reads the request's shared measure memo — a lookup per key.
+				...(detail
+					? {
+							seed_culprit:
+								page_payload && !page_payload.json ? json_culprit(seed_data) : null,
+							island_rows: bag!.tail.island_rows() ?? [],
+							seed: this.explain_seed(page_snap.data, seed_keys, bag!),
+							hole_rows: bag!.tail.hole_rows()
+						}
+					: {})
+			});
+		}
+		return out;
+	}
+
+	/**
+	 * THE SEED EXPLAINER: per top-level `page.data` key, its size and why it ships — an island's
+	 * client code reads it (the build's per-entry keys), a sidecar points into it (seed refs), or
+	 * some island reads the page whole and everything ships. Profiler detail only.
+	 */
+	explain_seed(
+		data: unknown,
+		seed_keys: import('./server/seed-shape.js').SeedKeys | null,
+		bag: RequestBag
+	): { keys: SeedKeyStat[]; whole_by: string[] } {
+		// islands by their component name (the tail's rows carry it); an entry no row names keeps
+		// its entry (a dev module URL / a built facade) — each named once
+		const rows = bag.tail.island_rows() ?? [];
+		const names = new Map<string, string>();
+		for (const row of rows) if (row.name && !names.has(row.entry)) names.set(row.entry, row.name);
+		const name_of = (entry: string) => names.get(entry) ?? entry;
+		const add = (m: Map<string, Set<string>>, k: string, v: string) => (m.get(k) ?? m.set(k, new Set()).get(k)!).add(v);
+		const whole = new Set<string>();
+		const readers = new Map<string, Set<string>>();
+		for (const [entry, ask] of bag.seed_asks ?? []) {
+			if (ask === 'all') whole.add(name_of(entry));
+			else if (ask !== false) for (const k of ask) add(readers, k, name_of(entry));
+		}
+		const referenced = new Map<string, Set<string>>();
+		for (const row of rows) for (const k of row.ref_keys) add(referenced, k, name_of(row.entry));
+		const whole_by = [...whole];
+		const keys: SeedKeyStat[] = [];
+		if (data && typeof data === 'object' && !Array.isArray(data)) {
+			for (const key of Object.keys(data as Record<string, unknown>)) {
+				const shipped = seed_keys === 'all' || (seed_keys !== null && seed_keys.has(key));
+				const read = [...(readers.get(key) ?? [])];
+				const refd = [...(referenced.get(key) ?? [])];
+				keys.push({
+					key,
+					bytes: analyze((data as Record<string, unknown>)[key]).bytes,
+					readers: read,
+					referenced_by: refd,
+					shipped,
+					reason: !shipped ? null : read.length ? 'read' : refd.length ? 'referenced' : whole_by.length ? 'whole' : 'read'
+				});
+			}
+		}
+		keys.sort((a, b) => b.bytes - a.bytes);
+		return { keys, whole_by };
 	}
 
 	/** DEVTOOLS: drain this request's server-realm events (region renders, capability mints, seeds)
@@ -1444,7 +1574,9 @@ class OgygiaHandle {
 	async #render_component(
 		load: () => Promise<{ default: unknown }>,
 		props: Record<string, unknown>,
-		cache?: { key: string; ttl: number }
+		cache?: { key: string; ttl: number },
+		/** the profiler's hole economics: what the cache did for this request */
+		report?: (outcome: 'hit' | 'miss' | 'none') => void
 	): Promise<string | null> {
 		// R6/G2: the ONE cache-fronted render seam. `cached_render` serves a memo when the hole opted
 		// into a positive `maxAge` (key carries the session seal — a per-user render never crosses
@@ -1467,7 +1599,8 @@ class OgygiaHandle {
 						]);
 					}),
 				cache,
-				Date.now()
+				Date.now(),
+				report
 			);
 		} catch (e) {
 			// `keepFallback()` ends a render on purpose: the page's fallback is right for this
@@ -1705,7 +1838,9 @@ class OgygiaHandle {
 			ttl > 0
 				? { key: render_cache_key(id, payload, this.#region_session(event)), ttl }
 				: undefined;
-		const body = await this.#render_component(load, props, cache);
+		const body = await this.#render_component(load, props, cache, (outcome) =>
+			record_hole_stats(event.request, { kind: 'hole', id, cache: outcome, ttl })
+		);
 		if (body === null) {
 			return region_response('Region render failed', { status: 500 });
 		}

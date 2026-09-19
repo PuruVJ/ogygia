@@ -1279,7 +1279,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					remote_hash,
 					// SEED SHAPING: the transform recorded, per module, the `page.data` keys it reads
 					// (Program.page_keys); the collector unions them over each island's closure.
-					(module_id) => program.page_keys.get(module_id) ?? null
+					(module_id) => program.page_keys.get(module_id) ?? null,
+					// WAKE ADVISOR: the collector counts what each island's own components do
+					(id) => {
+						try {
+							return fs.readFileSync(id, 'utf8');
+						} catch {
+							return null;
+						}
+					}
 				);
 				report_seed_shaping(
 					map,

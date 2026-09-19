@@ -5,9 +5,15 @@
 	import { fmt_ms, fmt_bytes, CATEGORY_COLOR, CATEGORY_LABEL } from './format.js';
 	import { sortable } from './sort.svelte.js';
 	import FrameDetails from './FrameDetails.svelte';
+	import { row_id, follow_hash } from './row-anchor.svelte.js';
 
 	type Row = FrameStat & { per: number; count: number; alloc: number | null };
-	let { rows, hasAlloc }: { rows: Row[]; hasAlloc: boolean } = $props();
+	let {
+		rows,
+		hasAlloc,
+		base = '',
+		dev = false
+	}: { rows: Row[]; hasAlloc: boolean; base?: string; dev?: boolean } = $props();
 
 	let query = $state('');
 	const filtered = $derived.by(() => {
@@ -25,6 +31,17 @@
 	const row_key = (f: Row) => f.key ?? f.name + ' ' + f.url;
 	let open = $state<string | null>(null);
 	const cols = $derived(hasAlloc ? 7 : 6);
+	// a finding's `#fn=<key>` link opens + scrolls to its row
+	$effect(() =>
+		follow_hash(
+			'fn',
+			() => rows.map(row_key),
+			(k) => {
+				query = '';
+				open = k;
+			}
+		)
+	);
 </script>
 
 <div class="tools">
@@ -65,6 +82,7 @@
 		{#each s.sorted as f (row_key(f))}
 			<tr
 				class="row"
+				id={row_id('fn', row_key(f))}
 				class:open={open === row_key(f)}
 				onclick={() => (open = open === row_key(f) ? null : row_key(f))}
 			>
@@ -96,7 +114,7 @@
 				{#if hasAlloc}<td class="num">{f.alloc ? fmt_bytes(f.alloc) : '—'}</td>{/if}
 			</tr>
 			{#if open === row_key(f)}
-				<FrameDetails {f} colspan={cols} />
+				<FrameDetails {f} colspan={cols} {base} {dev} />
 			{/if}
 		{/each}
 	</tbody>

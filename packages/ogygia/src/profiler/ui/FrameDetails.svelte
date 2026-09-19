@@ -1,20 +1,27 @@
 <script lang="ts">
 	/**
 	 * The expanded row under a function / component: WHERE it is (the full path, with line and
-	 * column, openable in the editor when the path is absolute) and HOW it was reached (its
-	 * heaviest call stacks, nearest caller first). Rendered inside the table islands; plain markup.
+	 * column, openable in the editor when the path is absolute; on a dev server the source lines
+	 * themselves) and HOW it was reached (its heaviest call stacks, nearest caller first).
+	 * Rendered inside the table islands; plain markup.
 	 */
 	import type { FrameStat } from '../analyze.js';
 	import { fmt_ms, CATEGORY_LABEL } from './format.js';
 
-	let { f, colspan }: { f: FrameStat; colspan: number } = $props();
+	let {
+		f,
+		colspan,
+		base = '',
+		dev = false
+	}: { f: FrameStat; colspan: number; base?: string; dev?: boolean } = $props();
 
+	const is_abs = (p: string) => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
 	const location = $derived(
 		f.path ? f.path + (f.line > 0 ? ':' + f.line + (f.col > 0 ? ':' + f.col : '') : '') : ''
 	);
 	// An absolute path (a dev server, a sourcemapped build on the same machine) opens in the editor.
 	const editor_href = $derived(
-		f.path && (f.path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(f.path))
+		f.path && is_abs(f.path)
 			? 'vscode://file/' + f.path + (f.line > 0 ? ':' + f.line + (f.col > 0 ? ':' + f.col : '') : '')
 			: ''
 	);
@@ -29,6 +36,22 @@
 			/* no clipboard (insecure context) — the text is selectable */
 		}
 	}
+	// SOURCE PEEK (dev server only): the lines around the position, from `<base>/source`.
+	let peek = $state<{ start: number; line: number; lines: string[] } | null>(null);
+	$effect(() => {
+		if (!dev || !base || !f.path || !is_abs(f.path) || f.line <= 0) return;
+		const url = `${base}/source?p=${encodeURIComponent(f.path)}&l=${f.line}`;
+		let live = true;
+		fetch(url, { headers: { accept: 'application/json' } })
+			.then((r) => (r.ok ? r.json() : null))
+			.then((j) => {
+				if (live && j && Array.isArray(j.lines)) peek = j;
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	});
 </script>
 
 <tr class="details">
@@ -45,6 +68,10 @@
 			<span class="k">kind</span>
 			<span>{f.pkg ? `${CATEGORY_LABEL[f.category]} · ${f.pkg}` : CATEGORY_LABEL[f.category]}</span>
 		</div>
+		{#if peek}
+			<pre class="peek">{#each peek.lines as ln, i (i)}<span class="ln" class:hot={peek.start + i === peek.line}><span class="no">{peek.start + i}</span>{ln}
+</span>{/each}</pre>
+		{/if}
 		{#if stacks.length}
 			<div class="stacks">
 				{#each stacks as st, i (i)}
@@ -109,6 +136,30 @@
 	}
 	.mini:hover {
 		background: #232b37;
+	}
+	.peek {
+		margin: 0 0 10px;
+		padding: 6px 0;
+		background: #0c0f13;
+		border: 1px solid #1e232b;
+		border-radius: 6px;
+		font-size: 11.5px;
+		line-height: 1.5;
+		overflow-x: auto;
+	}
+	.peek .ln {
+		display: block;
+		padding: 0 10px;
+		white-space: pre;
+	}
+	.peek .ln.hot {
+		background: #2b2418;
+	}
+	.peek .no {
+		display: inline-block;
+		width: 3.5em;
+		color: #7d8590;
+		user-select: none;
 	}
 	.stacks {
 		display: grid;

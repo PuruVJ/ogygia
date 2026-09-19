@@ -36,7 +36,7 @@ import { register_wire_kind } from '../live-transport.js';
 import { register_store_kind, register_derived_kind } from '../store-transport.js';
 import { register_snippet_kind } from '../region-snippet.js';
 import { register_fn_kind } from '../fn-transport.js';
-import { analyze, plan_seed_refs, SEED_REF_KEY, type SeedIndex } from '../seed-refs.js';
+import { analyze, json_culprit, plan_seed_refs, SEED_REF_KEY, type SeedIndex } from '../seed-refs.js';
 
 /** The sidecar attribute naming a non-devalue payload format; absent = devalue. */
 export const WIRE_FORMAT_ATTR = 'data-og-format';
@@ -106,6 +106,11 @@ export interface PropsWire {
 	/** The sidecar text for the wire. `seed` is the page seed's index when the seed ships (then a
 	 *  props subtree that is a seed node crosses as a reference), `null` when it does not. */
 	wire(seed: SeedIndex | null): WireText;
+	/** The references the LAST `wire()` wrote: how many, into which top-level `page.data` keys. */
+	readonly refs: { count: number; keys: readonly string[] };
+	/** Why the canonical text is not JSON (the first disqualifying leaf); `null` on the JSON lane.
+	 *  A separate walk, run on demand — the profiler's explainer, never the render path. */
+	culprit(): string | null;
 }
 
 /**
@@ -116,10 +121,16 @@ export interface PropsWire {
  */
 export function plan_props_wire(value: unknown, entry: string): PropsWire {
 	const shape = analyze(value);
+	const refs = { count: 0, keys: [] as string[] };
 	const referenced = (seed: SeedIndex | null): WireText | null => {
+		refs.count = 0;
+		refs.keys = [];
 		if (seed === null || seed.size === 0) return null;
 		const plan = plan_seed_refs(seed, value);
-		return plan.count > 0 ? { text: stringify_props(value, entry, plan.reducer), json: false } : null;
+		if (plan.count === 0) return null;
+		refs.count = plan.count;
+		refs.keys = [...plan.keys].sort();
+		return { text: stringify_props(value, entry, plan.reducer), json: false };
 	};
 	let last_seed: SeedIndex | null | undefined;
 	let last_text: WireText;
@@ -135,16 +146,21 @@ export function plan_props_wire(value: unknown, entry: string): PropsWire {
 			canonical,
 			json: true,
 			live_entries: [],
-			wire: (seed) => once(seed, () => (escaped ??= { text: escape_script_text(canonical), json: true }))
+			wire: (seed) => once(seed, () => (escaped ??= { text: escape_script_text(canonical), json: true })),
+			refs,
+			culprit: () => null
 		};
 	}
 	const canonical = stringify_props(value, entry, null);
 	const plain: WireText = { text: canonical, json: false };
+	let culprit: string | null | undefined;
 	return {
 		canonical,
 		json: false,
 		live_entries: live_entries_in(canonical),
-		wire: (seed) => once(seed, () => plain)
+		wire: (seed) => once(seed, () => plain),
+		refs,
+		culprit: () => (culprit === undefined ? (culprit = json_culprit(value)) : culprit)
 	};
 }
 

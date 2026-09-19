@@ -358,6 +358,69 @@ export function analyze(value: unknown): Measure {
 	return analysis(value).root;
 }
 
+/**
+ * WHY a tree is not JSON-exact: the path of the first leaf that disqualifies it, with what it
+ * is — `config.updated (Date)`, `rows[3].price (NaN)`, `facets (Map)`, `meta (class Foo)`. A
+ * separate walk on purpose (the measuring walk carries no paths); the handle runs it only for a
+ * tree that left the JSON lane and only while the profiler records. `null` for a JSON tree.
+ */
+export function json_culprit(value: unknown, max_depth = 64): string | null {
+	const seen = new Set<object>();
+	const why = (v: unknown): string | null => {
+		switch (typeof v) {
+			case 'string':
+			case 'boolean':
+				return null;
+			case 'number':
+				return Number.isFinite(v) ? (Object.is(v, -0) ? '-0' : null) : Number.isNaN(v) ? 'NaN' : 'Infinity';
+			case 'undefined':
+				return 'undefined';
+			case 'bigint':
+				return 'bigint';
+			case 'function':
+				return 'function';
+			case 'symbol':
+				return 'symbol';
+			default:
+				return null; // object: decided by the walk
+		}
+	};
+	const walk = (v: unknown, path: string, depth: number): string | null => {
+		const leaf = why(v);
+		if (leaf) return `${path || '(root)'} (${leaf})`;
+		if (v === null || typeof v !== 'object') return null;
+		if (v instanceof Date) return `${path || '(root)'} (Date)`;
+		if (v instanceof Map) return `${path || '(root)'} (Map)`;
+		if (v instanceof Set) return `${path || '(root)'} (Set)`;
+		if (typeof (v as { then?: unknown }).then === 'function') return `${path || '(root)'} (Promise)`;
+		if (!is_plain(v)) {
+			const name = (Object.getPrototypeOf(v) as { constructor?: { name?: string } } | null)?.constructor?.name;
+			return `${path || '(root)'} (class ${name || 'instance'})`;
+		}
+		if (seen.has(v)) return `${path || '(root)'} (cycle)`;
+		if (depth > max_depth) return null;
+		seen.add(v);
+		if (Array.isArray(v)) {
+			for (let i = 0; i < v.length; i++) {
+				if (v[i] === undefined) return `${path}[${i}] (undefined in array)`;
+				const r = walk(v[i], `${path}[${i}]`, depth + 1);
+				if (r) return r;
+			}
+		} else {
+			if (Object.getOwnPropertySymbols(v).length > 0) return `${path || '(root)'} (symbol-branded)`;
+			for (const key in v) {
+				const c = (v as Record<string, unknown>)[key];
+				if (c === undefined) continue; // an undefined PROPERTY keeps the JSON lane
+				const r = walk(c, path ? `${path}.${key}` : key, depth + 1);
+				if (r) return r;
+			}
+		}
+		seen.delete(v);
+		return null;
+	};
+	return walk(value, '', 0);
+}
+
 /** Where an indexed seed node sits: its parent's node and the key under it. The path array is
  *  materialised only when a reference is actually planned to this node. */
 interface PathNode {
@@ -463,6 +526,8 @@ export interface SeedRefPlan {
 	reducer: (value: unknown) => SeedPath | undefined;
 	/** How many props nodes will cross as references (0 = serialize the canonical text instead). */
 	count: number;
+	/** The top-level `page.data` keys the references point into (this island's share of `touched`). */
+	keys: Set<string>;
 }
 
 /**
@@ -476,6 +541,7 @@ export interface SeedRefPlan {
  */
 export function plan_seed_refs(index: SeedIndex, props: unknown, min_bytes = 96): SeedRefPlan {
 	const matched = new WeakMap<object, SeedPath>();
+	const keys = new Set<string>();
 	let count = 0;
 	if (index.size > 0) {
 		const memo = analysis(props).memo;
@@ -484,6 +550,7 @@ export function plan_seed_refs(index: SeedIndex, props: unknown, min_bytes = 96)
 		const hit = (v: object, path: SeedPath) => {
 			matched.set(v, path);
 			index.touched.add(String(path[0]));
+			keys.add(String(path[0]));
 			count++;
 		};
 		const visit = (v: unknown) => {
@@ -510,7 +577,8 @@ export function plan_seed_refs(index: SeedIndex, props: unknown, min_bytes = 96)
 	return {
 		reducer: (value) =>
 			value === null || typeof value !== 'object' ? undefined : matched.get(value),
-		count
+		count,
+		keys
 	};
 }
 

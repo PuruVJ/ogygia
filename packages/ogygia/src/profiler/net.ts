@@ -62,36 +62,10 @@ export function set_stack_capture(on: boolean): void {
 	capture_stacks = on;
 }
 
-// The profiler's own module files, registered at load. Bundlers rename our
-// source (net.ts → chunks/net2.js), so a path substring like '/profiler/' won't
-// match at runtime. Each profiler module calls register_profiler_file() at load;
-// it reads the CALLER's file from a stack trace — same format as the runtime
-// stacks we later match against — so those frames get skipped whatever the
-// bundler named them.
-const profiler_files = new Set<string>();
-
-// Grab the structured call-sites WITHOUT triggering Node's stack-string
-// formatter (`defaultPrepareStackTrace`). Reading `new Error().stack` on every
-// I/O call formatted the whole stack and showed up as node-core CPU in the
-// profile — the profiler measuring itself. This costs a fraction of that.
-function call_sites(below: (...a: never[]) => unknown): NodeJS.CallSite[] {
-	const orig = Error.prepareStackTrace;
-	Error.prepareStackTrace = (_e, sites) => sites;
-	const holder: { stack?: unknown } = {};
-	Error.captureStackTrace(holder, below);
-	// `.stack` is lazy: read it WHILE our override is installed, then restore —
-	// otherwise the default (or source-map-support) formatter runs and returns a string
-	const sites = holder.stack;
-	Error.prepareStackTrace = orig;
-	return Array.isArray(sites) ? (sites as NodeJS.CallSite[]) : [];
-}
-
-export function register_profiler_file(): void {
-	// getFileName() of the caller (the module invoking this) — same format
-	// nearest_app_frame later compares against, so the registry always matches.
-	const f = call_sites(register_profiler_file)[0]?.getFileName();
-	if (f) profiler_files.add(f);
-}
+// The profiler's own module files (frames.ts): registered at load so a caller lookup skips them
+// whatever the bundler named them. Re-exported for the other profiler modules.
+import { call_sites, register_profiler_file, is_profiler_file } from './frames.js';
+export { register_profiler_file };
 register_profiler_file();
 
 /** A caller location as the bundler sees it — resolved to source later, at
@@ -113,12 +87,7 @@ export function nearest_app_site(): CallerSite | undefined {
 	for (const site of call_sites(nearest_app_site)) {
 		const file = site.getFileName();
 		if (!file) continue;
-		if (
-			profiler_files.has(file) ||
-			file.includes('/profiler/') ||
-			file.startsWith('node:') ||
-			INTERNAL_OR_NODE_MODULES_RE.test(file)
-		) {
+		if (is_profiler_file(file) || file.startsWith('node:') || INTERNAL_OR_NODE_MODULES_RE.test(file)) {
 			continue;
 		}
 		return {

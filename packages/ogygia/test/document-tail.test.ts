@@ -48,18 +48,28 @@ describe('DocumentTail', () => {
 		expect(t.empty).toBe(true);
 		t.hints(['/a.js', '/b.js']);
 		t.hints(['/b.js', '/c.js']);
-		t.props('f1', () => '<script data-ogygia-props="f1">1</script>');
-		t.props('f1', () => '<script data-ogygia-props="f1">DUPLICATE</script>');
-		t.props('f2', () => '<script data-ogygia-props="f2">2</script>');
-		expect(t.size).toEqual({ hints: 3, props: 2, holes: 0 });
+		const wire = (text: string) => ({ wire: () => ({ text, json: false }) });
+		t.props('f1', wire('1'), { entry: '/islands/one.js', name: 'One', module_url: '/one.js', wake: 'load' });
+		t.props('f1', wire('DUPLICATE'));
+		t.props('f2', wire('2'));
+		t.hints(['/one.js'], 'f1');
+		expect(t.size).toEqual({ hints: 4, props: 2, holes: 0 });
 		expect(t.empty).toBe(false);
 		expect(t.render()).toBe(
 			'<link rel="modulepreload" href="/a.js" fetchpriority="low">' +
 				'<link rel="modulepreload" href="/b.js" fetchpriority="low">' +
 				'<link rel="modulepreload" href="/c.js" fetchpriority="low">' +
-				'<script data-ogygia-props="f1">1</script>' +
-				'<script data-ogygia-props="f2">2</script>'
+				'<link rel="modulepreload" href="/one.js" fetchpriority="low">' +
+				'<script type="application/ogygia-props" data-ogygia-props="f1" id="og-props-f1">1</script>' +
+				'<script type="application/ogygia-props" data-ogygia-props="f2" id="og-props-f2">2</script>'
 		);
+		// no detail asked: no rows; with detail, one row per fingerprint with the count + the meta
+		expect(t.island_rows()).toBeNull();
+		t.render(null, true);
+		expect(t.island_rows()).toMatchObject([
+			{ fp: 'f1', entry: '/islands/one.js', name: 'One', wake: 'load', count: 2, props_bytes: 1, json: false, hints: ['/one.js'] },
+			{ fp: 'f2', entry: '', name: '', count: 1 }
+		]);
 	});
 
 	it('an empty hint list adds nothing; the tag is built once at render, never parsed from markup', () => {
@@ -80,7 +90,15 @@ describe('DocumentTail', () => {
 		t.hole('bbbbbbbbbbbbbbbb', '/__ogygia__?id=b&props=W3t9XQ&exp=1&sig=s', '<script type="application/ogygia-props" data-ogygia-props>[{"n":1},1]</script>');
 		t.hole('', '/__ogygia__?id=no-identity', ''); // no identity → nothing to key on
 		t.hole('cccccccccccccccc', '', ''); // no address → nothing worth recording
-		t.props('f1', () => '<script data-ogygia-props="f1">1</script>');
+		t.props('f1', { wire: () => ({ text: '1', json: false }) });
+		// the profiler's hole notes: every document, keyed by schedule + policy, counted
+		t.note_hole('cafebabe0101', 'load', null, 0);
+		t.note_hole('cafebabe0101', 'load', null, 0);
+		t.note_hole('cafebabe0102', 'visible', 'load', 60);
+		expect(t.hole_rows()).toEqual([
+			{ id: 'cafebabe0101', when: 'load', hydrate: null, ttl: 0, count: 2 },
+			{ id: 'cafebabe0102', when: 'visible', hydrate: 'load', ttl: 60, count: 1 }
+		]);
 		expect(t.size).toEqual({ hints: 0, props: 1, holes: 2 });
 		expect(t.empty).toBe(false);
 		const html = t.render();

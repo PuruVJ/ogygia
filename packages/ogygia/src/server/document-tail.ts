@@ -34,6 +34,27 @@
 import type { SeedIndex } from '../seed-refs.js';
 import { escape_script_text } from '../escape.js';
 import { HOLES_SCRIPT_TYPE } from '../holes-record.js';
+import { props_sidecar, type WireText } from './props-wire.js';
+import type { HoleStat, IslandInteractivity, IslandStat } from './request-stats.js';
+
+/** What the tail needs of a props plan (server/props-wire.ts `PropsWire`, or a test's stand-in). */
+export interface SidecarWire {
+	wire(seed: SeedIndex | null): WireText;
+	readonly json?: boolean;
+	readonly canonical?: string;
+	readonly refs?: { count: number; keys: readonly string[] };
+	culprit?(): string | null;
+}
+
+/** The island facts a region hands over with its plan, for the profiler's Islands table. */
+export interface IslandMeta {
+	entry: string;
+	/** the component's SSR function name (Svelte names it after the file); '' when unknown */
+	name?: string;
+	module_url: string;
+	wake: string;
+	interactivity?: IslandInteractivity | null;
+}
 
 /**
  * THE module-preload hint for one island chunk. EVERY hint is `fetchpriority="low"`: a hint's job
@@ -50,9 +71,13 @@ export function modulepreload_tag(href: string): string {
 const HOLES_SCRIPT_OPEN = `<script type="${HOLES_SCRIPT_TYPE}" data-ogygia-holes>`;
 const HOLES_SCRIPT_CLOSE = '</script>';
 
-/** Produces one sidecar's `<script>` given the page seed's index when the seed ships (`null` when
- *  it does not). */
-export type SidecarRender = (seed: SeedIndex | null) => string;
+/** A sidecar as the tail keeps it: the plan, and the facts the profiler reads after the render. */
+interface Sidecar {
+	wire: SidecarWire;
+	meta: IslandMeta | null;
+	count: number;
+	hints: string[];
+}
 
 /** What the server minted for one deferred hole on a Kit-hydrated document (see `hole()`). */
 export type HoleRecord = {
@@ -64,17 +89,47 @@ export type HoleRecord = {
 
 export class DocumentTail {
 	readonly #hints = new Set<string>();
-	readonly #props = new Map<string, SidecarRender>();
+	readonly #props = new Map<string, Sidecar>();
 	readonly #holes = new Map<string, HoleRecord>();
+	readonly #hole_notes = new Map<string, HoleStat>();
+	/** per-fingerprint facts of the last `render()` (the profiler's Islands table) */
+	#island_rows: IslandStat[] | null = null;
 
-	/** Add a region's module-preload hrefs; each href is hinted once (first wins). */
-	hints(hrefs: readonly string[]): void {
+	/** Add a region's module-preload hrefs; each href is hinted once (first wins). With `fp`, the
+	 *  hrefs are also remembered as that island's JS closure. */
+	hints(hrefs: readonly string[], fp?: string): void {
 		for (const href of hrefs) this.#hints.add(href);
+		if (fp) {
+			const s = this.#props.get(fp);
+			if (s && s.hints.length === 0) s.hints = [...hrefs];
+		}
 	}
 
-	/** Register an island's props sidecar under its fingerprint; identical islands share one. */
-	props(fp: string, render: SidecarRender): void {
-		if (!this.#props.has(fp)) this.#props.set(fp, render);
+	/** Register an island's props sidecar under its fingerprint; identical islands share one (the
+	 *  count still says how many). `meta` is what the profiler's Islands table shows. */
+	props(fp: string, wire: SidecarWire, meta: IslandMeta | null = null): void {
+		const have = this.#props.get(fp);
+		if (have) have.count++;
+		else this.#props.set(fp, { wire, meta, count: 1, hints: [] });
+	}
+
+	/** Note a deferred hole the page rendered (every document, not only Kit-hydrated ones): its
+	 *  schedule and cache policy, for the profiler's hole economics. */
+	note_hole(id: string, when: string, hydrate: string | null, ttl: number): void {
+		const key = `${id}\0${when}\0${hydrate ?? ''}\0${ttl}`;
+		const have = this.#hole_notes.get(key);
+		if (have) have.count++;
+		else this.#hole_notes.set(key, { id, when, hydrate, ttl, count: 1 });
+	}
+
+	/** The holes noted on this page. */
+	hole_rows(): HoleStat[] {
+		return [...this.#hole_notes.values()];
+	}
+
+	/** The per-island facts of the last `render()` — `null` before it ran. */
+	island_rows(): IslandStat[] | null {
+		return this.#island_rows;
 	}
 
 	/**
@@ -100,11 +155,36 @@ export class DocumentTail {
 	}
 
 	/** The tail's HTML: hints, then props (each rendered now, against `seed`), then the holes
-	 *  record (one script, JSON, `<`-escaped). Empty string when nothing was recorded. */
-	render(seed: SeedIndex | null = null): string {
+	 *  record (one script, JSON, `<`-escaped). Empty string when nothing was recorded. With
+	 *  `detail`, the per-island rows (bytes, lane, references, the devalue culprit) are kept for
+	 *  the profiler — a little extra work, only while it records. */
+	render(seed: SeedIndex | null = null, detail = false): string {
 		let out = '';
 		for (const href of this.#hints) out += modulepreload_tag(href);
-		for (const render of this.#props.values()) out += render(seed);
+		const rows: IslandStat[] | null = detail ? [] : null;
+		for (const [fp, s] of this.#props) {
+			const w = s.wire.wire(seed);
+			out += props_sidecar(fp, w);
+			if (rows) {
+				rows.push({
+					fp,
+					entry: s.meta?.entry ?? '',
+					name: s.meta?.name ?? '',
+					module_url: s.meta?.module_url ?? '',
+					wake: s.meta?.wake ?? '',
+					props_bytes: w.text.length,
+					canonical_bytes: s.wire.canonical?.length ?? w.text.length,
+					json: w.json,
+					culprit: w.json ? null : (s.wire.culprit?.() ?? null),
+					refs: s.wire.refs?.count ?? 0,
+					ref_keys: [...(s.wire.refs?.keys ?? [])],
+					hints: s.hints,
+					interactivity: s.meta?.interactivity ?? null,
+					count: s.count
+				});
+			}
+		}
+		this.#island_rows = rows;
 		if (this.#holes.size) {
 			const record: Record<string, HoleRecord> = {};
 			for (const [identity, facts] of this.#holes) record[identity] = facts;

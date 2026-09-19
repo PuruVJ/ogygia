@@ -18,6 +18,82 @@ One bar for the full window, split by what the CPU did. Read this first.
 
 This one split, compute against waiting, is the full reason that a plain CPU profiler misses "5 second" pages. Those pages usually wait.
 
+## Why this render took N ms: the critical path
+
+A page or request profile opens with one render walked from its first millisecond to its last. Every stretch of that window is one of three things: the CPU **running** something (coloured by the component or function that owned it), the server **waiting** on outbound calls or I/O primitives (blue for HTTP, amber for timers, files and sockets; several bars at once is a parallel group), or a **gap** nothing recorded (a database driver on its own socket pool, a worker, a promise chain). The numbered steps under the bar are the critical path in order, biggest first is the one to fix.
+
+Two things ride on the same walk:
+
+- **Phases** split the render into where in the request the time sat: hooks, load functions, component render, ogygia's transform, Kit's routing and response. A wait is charged to the phase whose code was running just before it, so "load: 2 ms CPU + 210 ms waiting" says at once that the page is data-bound, not render-bound.
+- **Awaits in a row**: two or more calls that ran one after another with nothing between them are flagged with what starting them together would save (the sum minus the longest). The profiler cannot know they are independent; you can.
+
+## Name what the profiler cannot see: `span` and `tag`
+
+Two waits never show on their own: a database driver on its own socket pool, and a promise chain (a queue, a cache client, a worker). They are the grey "nothing recorded" on the timeline. Name them in the code:
+
+```ts
+import { span, tag } from 'ogygia/profiler';
+
+export const load = async ({ params, locals }) => {
+	tag('tenant', locals.tenant);
+	const user = await span('db.user', () => db.users.find(params.id));
+	const orders = await span('db.orders', () => db.orders.byUser(user.id), (rows) => ({ rows: rows.length }));
+	return { user, orders };
+};
+```
+
+`span(name, fn, attrs?)` runs `fn` and records it like an outbound call: start and end on the profiler's clock, the request it ran in, the caller's file and line, its parent span. Sync in, sync out; a promise in, a promise out. A throw is recorded and rethrown. `attrs` is a record, or a function of the result for what is only known afterwards. The keys the report reads: `cache` (`'hit'` or `'miss'`), `rows`, `bytes`, `key`. For a stream or an event you cannot wrap, `span.start(name)` returns a handle with `set`, `end` and `fail`.
+
+Where it lands: on the timeline a gap inside the span reads "in db.user" and a call inside it names the span; the **Spans** table gives count, time per render, p50, max, cache hits and misses, errors, and the caller; the awaits-in-a-row detector sees spans as calls; and four findings read them: a span repeated once per item (the N+1 shape), a span that is a fifth of the render, a cache that misses on every render, a span that failed or never ended.
+
+`tag(key, value)` stamps the request's log entry. The dashboard's slowest-routes table can then be split by any tag ("slow for everyone, or for tenant X"), and the request rows in a report show them.
+
+Both are no-ops on the client, in a universal `load` in the browser, and on a server with no recording running. Nothing is recorded outside a recording, and nothing is sampled: a span records or the profiler is idle.
+
+## Take the report with you: the standalone HTML
+
+**Download .html** on a report writes one file with everything inlined: the styles, the runtime, and every island chunk the page reaches, as an import map of `data:` URLs. It opens from disk or an email attachment with the tables sortable, the flame graph and the timeline live. It needs a built app (`vite build` and `preview`, or the deployed server): on the dev server the page's code is hundreds of unbundled modules, so use the `.ogp` export there instead.
+
+## Findings that name the fix
+
+Each finding now says what to do and where. A warning about a repeated component ("`HeavyRow` rendered 800 times") carries the fix (render fewer, or move it into a deferred hole), the file, and a **show the row** link that opens that component's row with its call stacks. The same for a hot function, an N+1 chain (the same endpoint hit once per item, folded to `/products/:id`), a serialization-heavy render, and an oversized page seed.
+
+## Load functions and the `parent()` chain
+
+Under the timeline bar, a page profile draws one lane per Kit load function that ran: `+layout.server.ts`, `+page.server.ts`, a universal `+page.ts`, each from its first moment on the CPU or waiting to its last, on the same clock as the render. The chip says **server** or **universal**, and **await parent()** when Kit's `parent()` ran under that load.
+
+Kit runs a page's load and its layouts' loads together. When the page lane starts only where the layout lane ends, they ran one after the other, and the report says so with the most that overlapping them would save: the usual cause is `await parent()` before the page's own fetches. Start the fetches first, await `parent()` after, and the two overlap.
+
+A universal load with waits gets a note too: on a page with the client router that code runs again in the browser on every navigation, and its data has to be serializable. If it only needs the server, make it `+page.server.ts`.
+
+Kit's own costs that scale with the document are named as well: the ETag hash of the whole HTML, and `devalue.uneval` of the load data for the client router. The second one is zero on a `csr = false` page, where islands take their data from props and the seed.
+
+## ogygia's own cost
+
+A page profile shows what the handle added: the transform's wall time, the islands and holes it emitted, and the bytes of every side-channel (page seed, island props, remote seed, fn manifest, context bridge). A seed over 100 KB gets a finding: some island reads `$page` whole, so that much of `page.data` ships on every render.
+
+## Islands: the server, the build and the browser on one row
+
+The **Islands** table has one row per island fingerprint (identical copies share a row, with `×N`), and joins three sources:
+
+- The server: **SSR ms** is the component's render time per page render; **props** is what the sidecar ships and which lane it took (json parses on the fast lane; **devalue** names the one leaf that forced it, a `Date` or a `Map`); **seed refs** are props that point into `page.data` instead of shipping twice.
+- The build: **JS** is the unique weight of the island's module and its preloads (a built app); **interactivity** is what the build found in the island's components: event handlers, `$state`, `$effect`, `bind:`, `use:`. An island with none of them reads **inert**: it loads JS for markup that never changes, and the advice is `wake: 'none'`.
+- The browser: **hydrate ms** is what your own browser reported. When you open the page while logged in to the profiler, the runtime posts each island's wake-to-hydrated time (and the module-load part of it) back to the profiler, keyed by fingerprint. No visitor ever pays this; the tag that turns it on rides only your own documents.
+
+A row with advice carries a mark; open it for the modules with their bytes, the seed keys it references, the devalue culprit, and the one line the numbers support. Findings link here: an inert island that wakes, a component with dozens of copies each waking on its own, a page whose islands load hundreds of KB of JS, the slowest hydration in the browser.
+
+## The seed, explained
+
+Every top-level `page.data` key, sized, with **why it ships**: read by an island's client code (the build's answer, from seed shaping), referenced by an island's props (a seed reference), or **whole** because some island reads `page.data` without naming keys, in which case everything ships and the report names the island. Keys that seed shaping left out show greyed, so the trimming is visible. Click a key for who asks for it. The devalue culprit of the seed itself, when it left the JSON lane, is in the heading.
+
+## Holes
+
+Each deferred hole the page rendered: its fetch schedule, whether it wakes afterwards, its `maxAge`, and, when hole requests landed in the window, what the render cache did: hits, misses, or uncached renders, and the average time. A hole with a `maxAge` whose cache never hits is a finding: its cache key carries the props and the session seal, so per-visitor props make every key unique.
+
+## Compare two reports, and history
+
+Every page-mode report of the same page joins that page's history: the dashboard draws the medians over time and marks a jump; a report links to **compare with the previous run**. The compare page puts two reports side by side (any two): summary deltas, phases, every component and function by the size of its change, and the findings that appeared or went away. A positive delta reads red: the second report is slower.
+
 ## CPU by self time
 
 An interactive treemap. Each box is real work, sized by time. The largest box is the bottleneck. Click a box to zoom in. Use the breadcrumb to zoom out.
@@ -40,7 +116,9 @@ So:
 
 The inline bar on each row shows self (bright) inside total (dim). Thus you see at a glance whether a component is slow itself, or slow because of what it renders.
 
-**Click a row** to open it: the full path with line and column (an **open in editor** link when the path is on your machine, a **copy** button otherwise), and the heaviest **call stacks** that rendered it, nearest caller first, each with the time that flowed through that path. That is the answer to "where is this, and who renders it" without the flame graph. The filter box above the table narrows the rows by name or file.
+Two more columns answer the next two questions. **markup / logic** splits the component's own time into Svelte writing its template (escaping, attributes, pushing markup) and its script plus the code it calls; nested components are in neither. A row that is mostly markup has a big template, and the fix is fewer elements per instance, not a faster script. **under** names the component that rendered most of it: the `{#each}` owner of a row. "`ProductCard ×48` under `_page`" says where the list lives, and the finding for a hot list points at the parent.
+
+**Click a row** to open it: the full path with line and column (an **open in editor** link when the path is on your machine, a **copy** button otherwise; on the dev server the source lines themselves, with the hot line marked), and the heaviest **call stacks** that rendered it, nearest caller first, each with the time that flowed through that path. That is the answer to "where is this, and who renders it" without the flame graph. The filter box above the table narrows the rows by name or file.
 
 What counts as a component: the function Svelte compiles a `.svelte` file into, named after the file. A capitalised name alone is not enough. A class in your code (`IntersectionObserver`, an `Error` subclass, a `Store`) wears the same case and used to land here; now a name from a bundled chunk is a component only when its subtree reaches Svelte's server internals, which is what rendering anything does. Everything else is **app code**.
 
