@@ -12,6 +12,7 @@ import type { ByteStrip } from './byte-strip.js';
 import type { River } from './river.js';
 import type { GcAttribution } from './gc.js';
 import { sync_io, memo_candidates, span_values, type Retained } from './insights.js';
+import { page_score, type ScoreInputs, type PageScore } from './score.js';
 import type { AllocTimeline } from './alloc.js';
 import type { Contention } from './contention.js';
 import type { Lineage } from './lineage.js';
@@ -1499,6 +1500,52 @@ function accuracy_findings(a: Analysis, meta: ReportMeta, extras: ReportExtras, 
 /** One stack frame as agents read it: `name (file:line)`. */
 const frame_text = (fr: { n: string; f: string }): string => (fr.f ? `${fr.n} (${fr.f})` : fr.n);
 
+/** Gather the ogygia signals a page score reads — the same numbers the findings above compute, so
+ *  the score and the findings never disagree. All safe when a signal is absent (no visits, no server
+ *  timing). See {@link page_score}. */
+export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore {
+	const islands = group_islands(island_rows_of(meta));
+
+	// Total island JS the page downloads, deduped by module (two islands sharing a chunk pay once) —
+	// the same walk the "islands load N of JS in all" finding does.
+	const seen_mod = new Set<string>();
+	let islandJsBytes = 0;
+	for (const r of islands)
+		for (const url of [r.module_url, ...r.hints].filter(Boolean)) {
+			if (seen_mod.has(url)) continue;
+			seen_mod.add(url);
+			islandJsBytes += extras.weights?.[url] ?? 0;
+		}
+
+	const og = [...meta.requests]
+		.filter((r) => r.og)
+		.sort((x, y) => y.og!.seed_bytes + y.og!.tail_bytes - (x.og!.seed_bytes + x.og!.tail_bytes))[0]?.og;
+
+	const client = extras.client ?? [];
+	const seen_entry = new Set(client.map((c) => c.entry));
+
+	const server_ms = meta.runs?.length
+		? [...meta.runs].sort((x, y) => x - y)[Math.floor(meta.runs.length / 2)]
+		: (meta.request?.ms ?? null);
+
+	const v = extras.vitals;
+	const inputs: ScoreInputs = {
+		islandJsBytes,
+		recovered: client.reduce((s, c) => s + c.recovered, 0),
+		// only meaningful once the beacon has reported at all — no visits, no "never woke"
+		neverWoke: client.length
+			? islands.filter(
+					(r) =>
+						(r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible') && !seen_entry.has(r.entry)
+				).length
+			: 0,
+		seedBytes: og?.seed_bytes ?? 0,
+		serverMs: server_ms,
+		vitals: v ? { lcp: v.lcp, cls: v.cls, inp: v.inp } : null
+	};
+	return page_score(inputs);
+}
+
 export function report_json(a: Analysis, meta: ReportMeta, base: string, extras: ReportExtras) {
 	const dur = a.duration_ms || 1;
 	const busy = a.busy_ms || 1;
@@ -1572,6 +1619,9 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 			loop_delay_ms: meta.loop_delay ?? null,
 			rss_mb: meta.rss_mb ?? null
 		},
+		// ONE number for the page, ogygia's own — scored on least JS, clean hydration, small seed +
+		// server render, stable layout (see score.ts). Sub-scores + the "fix this first" pick ride along.
+		score: page_score_of(meta, extras),
 		findings: derive_findings(a, meta, extras),
 		budget,
 		// ONE request's critical path: the ordered steps that set its wall time, the phases, and the

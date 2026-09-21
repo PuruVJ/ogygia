@@ -9,7 +9,7 @@
 	 * network), then the raw tables everything above is an aggregate of. Nothing is left out; the
 	 * raw numbers come last.
 	 */
-	import { derive_findings, span_rows, cold_rows } from '../report.js';
+	import { derive_findings, span_rows, cold_rows, page_score_of } from '../report.js';
 	import { fmt_ms, fmt_pct, fmt_bytes, label_of, CATEGORY_COLOR, CATEGORY_LABEL } from './format.js';
 	import {
 		build_treemap,
@@ -30,6 +30,7 @@
 	import SeedExplainer from './SeedExplainer.svelte' with { wake: 'load' };
 	import Shell from './Shell.svelte';
 	import ExportButton from './ExportButton.svelte' with { wake: 'load' };
+	import ScoreCard from './ScoreCard.svelte';
 	import Treemap from './Treemap.svelte' with { wake: 'load' };
 	import Flame from './Flame.svelte' with { wake: 'load' };
 	import ComponentsTable from './ComponentsTable.svelte' with { wake: 'load' };
@@ -79,6 +80,9 @@
 		dev?: boolean;
 	} = $props();
 	const fmt_kb = (b: number) => `${Math.round(b / 1024)} KB`;
+	// The ogygia page score — derived here from the same meta+extras the findings read, so the card
+	// and the findings never disagree (report.ts serializes the same value for agents).
+	const score = page_score_of(meta, extras);
 	// ogygia's own cost on the profiled page: the request with the largest side-channels
 	const og =
 		[...meta.requests]
@@ -263,6 +267,8 @@
 		(DevTools / speedscope) · Export is an
 		encrypted <code>.ogp</code> — re-open it with Import (needs this profiler's key)
 	</p>
+
+	<ScoreCard {score} />
 
 	<div class="summary">
 		{#each stats as st}<div class="stat"><b>{st.value}</b><span>{st.label}</span></div>{/each}

@@ -50,6 +50,17 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Added
 
+- **The ogygia page score — one 0–100 number for a page, scored on what ogygia is for.** Like a
+  Lighthouse score, but the categories are the framework's own levers, not generic web vitals: JS
+  shipped (30), hydration integrity (25), page seed (15), server render (15), layout & paint (15).
+  Each is a 0–100 sub-score the report shows on its own bar with the measured value, so a developer
+  reads WHERE the points went; the card also names the single biggest win to take first. Hydration
+  integrity is a correctness score — a recovered island (a flash + double render) or one that never
+  woke costs steeply. A category with no data (no visits → no vitals, no server timing in this
+  report) drops out and the weights renormalize, so a missing measurement never costs points.
+  Computed by `page_score` (pure, `profiler/score.ts`) from signals the report already gathers,
+  surfaced as a ring + bars at the top of the report (`ScoreCard`) and serialized into the report
+  JSON (`score`) for agents. `test/page-score`.
 - **A recovered / healed island now says WHY, not just that it happened.** When an island's light
   DOM is reshaped between SSR and wake, the runtime either repairs it (healed) or Svelte discards the
   server DOM and re-renders (recovered) — both were reported as the bare fact. The runtime now names
