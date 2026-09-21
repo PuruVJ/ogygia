@@ -60,6 +60,55 @@ function has_envelope(region: Element): boolean {
 	return !!first && first.nodeType === 8 && (first as Comment).data === '[';
 }
 
+/** Set the first time {@link neutralize_head_hydration_markers} runs on this document (once per page). */
+let head_markers_neutralized = false;
+
+/**
+ * MAKE `<svelte:head>` HYDRATION SAFE on a csr=false document, before any island's head effect runs.
+ * The caller runs this once per document (see the `head_markers_neutralized` guard at its call site).
+ *
+ * Svelte renders a component's `<svelte:head>` into `document.head`, not into the component's own
+ * DOM, and delimits each block there as `<!--HASH-->` …content… `<!---->` (svelte/internal/server
+ * `head()`). Its CLIENT `head(HASH, …)` hydrates by scanning document.head for the comment whose data
+ * is HASH, then walking the nodes right after it as that block's content. That contract holds for a
+ * whole-page hydrate (csr=true — Kit owns it, and this function never runs), but an ogygia island
+ * hydrates in ISOLATION while that scan still reads the ONE shared document.head. By island-wake time
+ * a third party has usually mutated the head (a design-system/monitoring inject, a hoisted sheet); a
+ * foreign node landing in a block's range desyncs the walk into `set_attribute()` on a non-element,
+ * which throws and discards the ENTIRE island (it never wakes). Note ogygia already keeps its OWN
+ * head writes off this range by inserting region sheets at the head TOP (core.ts) — this closes the
+ * same hole for head writes ogygia does not control.
+ *
+ * The fix is Svelte's own documented fallback: when `head()` finds no matching HASH marker it flips
+ * out of hydration mode and RE-RENDERS the block fresh (svelte-head.js, `head_anchor === null`).
+ * Removing the open markers up front takes every island's head down that safe path instead of the
+ * fragile walk. The SSR-rendered head ELEMENTS stay (correct, already applied — sheets loaded, title
+ * set); a waking island re-renders an idempotent copy of its own head content (a preload / meta /
+ * resource hint — the browser dedupes it, and the first SPA head-merge replaces the head wholesale).
+ *
+ * Markers are paired STRUCTURALLY over head's direct children so nothing else is disturbed: an empty
+ * comment `<!---->` closes the nearest preceding unmatched non-empty comment — Svelte's own pairing —
+ * and only those paired opening comments are removed. A lone head comment (someone else's) is never
+ * matched, page/layout head blocks keep all their rendered elements (only inert hydration comments
+ * go), and element children are never descended into.
+ */
+export function neutralize_head_hydration_markers(): void {
+	const head = typeof document !== 'undefined' ? document.head : null;
+	if (!head) return;
+	const open_stack: Comment[] = [];
+	const paired_opens: Comment[] = [];
+	for (let n = head.firstChild; n; n = n.nextSibling) {
+		if (n.nodeType !== 8) continue; // COMMENT_NODE
+		if ((n as Comment).data === '') {
+			const open = open_stack.pop();
+			if (open) paired_opens.push(open);
+		} else {
+			open_stack.push(n as Comment);
+		}
+	}
+	for (const m of paired_opens) m.remove();
+}
+
 /**
  * REPAIR the island's light DOM toward its server markup, keeping every element it still has.
  *
@@ -508,6 +557,17 @@ export function hydrate_island(
 			);
 		}
 		return null;
+	}
+
+	// csr=false document: this island (and every one after it) hydrates in isolation against the ONE
+	// shared document.head, so make its `<svelte:head>` hydration safe before any head effect runs.
+	// Guarded to a non-Kit document — a csr=true page's head is Kit's to hydrate, untouched. See
+	// neutralize_head_hydration_markers. (`ours_on_kit_document` islands on a csr=true page reach here
+	// too, but Kit has long finished its head pass by the time a fetched hole/lake wakes; still, we
+	// only run this where Kit does NOT own the page.)
+	if (!kit_hydrates_page() && !head_markers_neutralized) {
+		head_markers_neutralized = true;
+		neutralize_head_hydration_markers();
 	}
 
 	// INVALID-NESTING GUARD: the browser parser hoists a BLOCK island rendered inline inside a
