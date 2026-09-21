@@ -333,6 +333,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	let kit_remote_index: string | null = null;
 	/** absolute path to the app's universal hooks (for `transport`), if present */
 	let universal_hooks: string | null = null;
+	/** absolute path to the app's client hooks (src/hooks.client.*), if present — its `init` runs on
+	 *  boot for csr=false pages (Kit never runs it there). */
+	let client_hooks: string | null = null;
 	/** the content-hashed runtime URL, once known (standalone build only; same plugin instance) */
 	let hashed_runtime_url: string | null = null;
 	/** true once the process-exit cleanup for the injected keep-client route is registered */
@@ -638,7 +641,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 				// Kit's internal wire-protocol + client remote-functions modules (deep-imported) and the
 				// app's universal hooks — resolved off the app root (see resolve_kit_paths).
-				({ kit_wire_path, kit_remote_index, universal_hooks } = resolve_kit_paths(root));
+				({ kit_wire_path, kit_remote_index, universal_hooks, client_hooks } = resolve_kit_paths(root));
 
 				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
 				// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
@@ -667,6 +670,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						region_ttl,
 						router_enabled,
 						router_view_transitions,
+						client_hooks,
 						runtime_dir: RUNTIME_DIR,
 						runtime_hash: RUNTIME_HASH,
 						hmac_module: HMAC_MODULE,

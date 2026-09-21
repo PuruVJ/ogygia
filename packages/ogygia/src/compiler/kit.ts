@@ -10,6 +10,10 @@ export interface KitPaths {
 	kit_remote_index: string | null;
 	/** The app's universal hooks (`src/hooks.{ts,js}`) for `transport`, or null when absent. */
 	universal_hooks: string | null;
+	/** The app's CLIENT hooks (`src/hooks.client.{ts,js}`), or null. Kit runs this file only when its
+	 *  client app boots — which a csr=false page never does — so ogygia runs its `init` on boot there
+	 *  (client-side monitoring, third-party bootstraps otherwise silently never load). */
+	client_hooks: string | null;
 }
 
 /**
@@ -47,7 +51,16 @@ export function resolve_kit_paths(root: string): KitPaths {
 			break;
 		}
 	}
-	return { kit_wire_path, kit_remote_index, universal_hooks };
+	// the app's CLIENT hooks (src/hooks.client.{ts,js}) — run its `init` on boot for csr=false pages.
+	let client_hooks: string | null = null;
+	for (const f of ['hooks.client.ts', 'hooks.client.js']) {
+		const abs = path.join(root, 'src', f);
+		if (fs.existsSync(abs)) {
+			client_hooks = abs;
+			break;
+		}
+	}
+	return { kit_wire_path, kit_remote_index, universal_hooks, client_hooks };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

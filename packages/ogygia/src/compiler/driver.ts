@@ -199,6 +199,18 @@ function warn_undeclared_pkg_marks(id: string): void {
 	);
 }
 
+/** The client-hooks boot snippet for a generated runtime entry: an import of the runtime runner and
+ *  a call that dynamic-imports the app's `hooks.client.*` — empty when the app has none. Runs the
+ *  file's `init` on boot for csr=false pages (the runner skips a csr=true document). */
+function client_hooks_boot(ctx: CompileCtx): { imports: string; call: string } {
+	if (!ctx.client_hooks) return { imports: '', call: '' };
+	const runner = `${ctx.runtime_dir}/client-hooks.js`.replace(BACKSLASH_G, '/');
+	return {
+		imports: `import { run_app_client_hooks as __og_run_client_hooks } from ${JSON.stringify(runner)};\n`,
+		call: `__og_run_client_hooks(() => import(${JSON.stringify(ctx.client_hooks)}));\n`
+	};
+}
+
 export class Compiler {
 	readonly program: Program;
 	readonly transform_cache = new Map<string, { code: string; result: unknown }>();
@@ -879,13 +891,17 @@ export class Compiler {
 			this.prescan();
 			const { code } = generateRuntimeEntrySource(program.runtime_marks, ctx.runtime_dir);
 			// og.$ factories register before any island hydrates (sync fn-ref resolution)
-			return `import ${JSON.stringify(V_FN_MANIFEST)};\n` + code;
+			const ch = client_hooks_boot(ctx);
+			return `import ${JSON.stringify(V_FN_MANIFEST)};\n` + ch.imports + code + ch.call;
 		}
 		if (id === RESOLVED(V_RUNTIME)) {
 			// Dev sticky: kitchen-sink package entry. Build uses the hashed emitFile chunk. An EXPLICIT
 			// `bootDev()` call (not a bare side-effect import) so Vite's dep prebundler can't tree-shake
 			// the boot away — the bug that left `sideEffects:false` apps with a runtime that never woke.
-			return `import { bootDev } from 'ogygia/runtime'; bootDev();`;
+			{
+				const ch = client_hooks_boot(ctx);
+				return `import { bootDev } from 'ogygia/runtime';\n${ch.imports}bootDev();\n${ch.call}`;
+			}
 		}
 		if (id === RESOLVED(V_DEV_HMR)) {
 			// Dev-only soft HMR bridge under csr=false (no Kit client entry):

@@ -87,6 +87,9 @@ export interface CompileCtxInit {
 	router_enabled: boolean;
 	/** View Transitions on for SPA navs. */
 	router_view_transitions: boolean;
+	/** The app's `src/hooks.client.{ts,js}` absolute path, or null — its `init` runs on boot for
+	 *  csr=false pages (see runtime/client-hooks.ts). */
+	client_hooks?: string | null;
 	/** Package-internal absolute paths the emit inlines into generated virtual sources. */
 	runtime_dir: string;
 	runtime_hash: string;
@@ -127,6 +130,7 @@ export class CompileCtx {
 	readonly region_ttl: number;
 	readonly router_enabled: boolean;
 	readonly router_view_transitions: boolean;
+	readonly client_hooks: string | null;
 	readonly runtime_dir: string;
 	readonly runtime_hash: string;
 	readonly hmac_module: string;
@@ -168,6 +172,7 @@ export class CompileCtx {
 		this.region_ttl = init.region_ttl;
 		this.router_enabled = init.router_enabled;
 		this.router_view_transitions = init.router_view_transitions;
+		this.client_hooks = init.client_hooks ?? null;
 		this.runtime_dir = init.runtime_dir;
 		this.runtime_hash = init.runtime_hash;
 		this.hmac_module = init.hmac_module;
@@ -223,7 +228,11 @@ export class CompileCtx {
 	 *  hash until prescan runs. `program_feature_hash` is `Program.runtime_feature_hash`, threaded in by
 	 *  the caller so this stays a pure naming function. */
 	runtime_chunk_filename(program_feature_hash: string): string {
-		return `${this.app_dir}/immutable/og-runtime.${this.runtime_hash}${program_feature_hash ? '-' + program_feature_hash : ''}.js`;
+		// A trailing `h` busts the immutable name when the app adds/removes `hooks.client.ts`: the
+		// runtime entry then does/doesn't dynamic-import it, so the chunk's bytes change and a CDN must
+		// not serve the old one. Computed here (not the caller) so both build legs name it identically.
+		const feat = `${program_feature_hash}${this.client_hooks ? 'h' : ''}`;
+		return `${this.app_dir}/immutable/og-runtime.${this.runtime_hash}${feat ? '-' + feat : ''}.js`;
 	}
 
 	/** App-internal URL of the runtime chunk (leading slash + appDir; NO base). SSR bakes it as the

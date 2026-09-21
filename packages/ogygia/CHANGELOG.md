@@ -50,6 +50,16 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Added
 
+- **The app's `hooks.client.ts` `init` now runs on `csr = false` pages.** SvelteKit runs
+  `hooks.client.ts` only when its own client app boots — which a `csr = false` page never does — so
+  anything that file starts (a monitoring / RUM agent, a third-party component bootstrap) silently
+  never loaded, and the page behaved differently with ogygia than without. ogygia IS the client
+  bootstrap on those pages, so it now runs the hook itself: it resolves `src/hooks.client.{ts,js}`
+  and, on boot, dynamic-imports it and calls `init()`. A Kit (`csr = true`) document is skipped —
+  Kit runs the file there, so it never double-fires — read off `<meta name="ogygia-csr">`. Fire-and-
+  forget after paint: a throwing `init` warns but never blocks island hydration, and the dynamic
+  import means the file (and its deps) load only where Kit didn't, never bundled into the shared
+  runtime. Adding or removing `hooks.client.ts` busts the runtime chunk's immutable name. `run_app_client_hooks`; `test/browser/client-hooks`.
 - **The ogygia page score — one 0–100 number for a page, scored on what ogygia is for.** Like a
   Lighthouse score, but the categories are the framework's own levers, not generic web vitals: JS
   shipped (30), hydration integrity (25), page seed (15), server render (15), layout & paint (15).
