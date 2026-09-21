@@ -50,6 +50,18 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Added
 
+- **A recovered / healed island now says WHY, not just that it happened.** When an island's light
+  DOM is reshaped between SSR and wake, the runtime either repairs it (healed) or Svelte discards the
+  server DOM and re-renders (recovered) — both were reported as the bare fact. The runtime now names
+  the FIRST divergence between the server markup and the mutated live DOM, computed at the pre-hydrate
+  drift check where both still exist: what changed (a node inserted or removed, a tag or text
+  mismatch, whitespace stripped) and a guess at the cause read off the node's shape — an injected
+  `<style>`, a declarative-shadow-DOM template, scoped web-component hydration marks (`sc-*`, `s-id`),
+  a `hydrated` class, a text rewrite. The reason rides the `data-og-healed` / `data-og-recovered`
+  attribute (so DOM inspection shows it), the `region.hydrate.recovered` / `.healed` devtools events,
+  the DEV console line, and the profiler (the Islands table's recovered island shows the specific
+  cause, and its advice appends the why). Named by observable evidence only, never a specific tool.
+  DEV / devtools only — a prod build with devtools off DCEs the diagnosis. `test/browser/island-self-heal`.
 - **`ogygia/rewrite` — the region round-trip for an app that runs a third-party SSR pass over the
   final HTML** (a web-component server render, a translation proxy, an A/B injector). Alongside the
   existing `scanRegions`, the module now exports `liftRegions(html)` → `{ shell, regions }` (every

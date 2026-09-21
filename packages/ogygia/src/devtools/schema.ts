@@ -227,6 +227,11 @@ export type RuntimeEventInput =
 			name: 'region.hydrate.recovered';
 			entry?: string;
 			fp?: string;
+			/** The specific first divergence between the server markup and the mutated live DOM (e.g.
+			 *  "an injected <style>", "scoped web-component hydration marks", "whitespace stripped") —
+			 *  the WHY, when the runtime could name it. Absent when the recovery had no sequence drift
+			 *  the walk sees. */
+			reason?: string;
 	  }
 	| {
 			domain: 'runtime';
@@ -236,6 +241,8 @@ export type RuntimeEventInput =
 			name: 'region.hydrate.healed';
 			entry?: string;
 			fp?: string;
+			/** The first divergence the runtime repaired — same "why" as the recovered event. */
+			reason?: string;
 	  }
 	| {
 			domain: 'runtime';

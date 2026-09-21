@@ -67,7 +67,9 @@ export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 		if (beacon_seen && !cl && (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible'))
 			advice = `Never reported hydrating in your visits while other islands did. A '${r.wake}' island that ${r.wake === 'visible' ? 'never intersects the viewport (can the page scroll? is it hidden?)' : 'throws on wake (the browser console has it)'} never wakes.`;
 		else if (cl && cl.recovered > 0)
-			advice = `${cl.recovered} of ${cl.n} hydrations threw the server DOM away and re-rendered: the markup the browser found was not what the server sent (a post-SSR pass, a script that edits it before the wake). It paid for the render twice and flashed.`;
+			advice =
+				`${cl.recovered} of ${cl.n} hydrations threw the server DOM away and re-rendered: the markup the browser found was not what the server sent (a post-SSR pass, a script that edits it before the wake). It paid for the render twice and flashed.` +
+				(cl.reason ? ` Why: ${cl.reason}.` : '');
 		else if (marks === 0 && r.wake !== 'none') advice = "No handlers, state, effects, binds or actions in its components: ship it as a lake (wake: 'none') and the JS never loads.";
 		else if (r.count >= 10 && (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible'))
 			advice = `${r.count} copies each wake on ${r.wake}${(r.variants ?? 1) > 1 ? ` with ${r.variants} different props sidecars` : ''}: one island around the list hydrates once, or wake: 'interaction' pays only when touched.`;

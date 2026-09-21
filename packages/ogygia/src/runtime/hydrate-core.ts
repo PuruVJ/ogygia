@@ -113,12 +113,96 @@ function sequence_differs(live: Node, want: Node): boolean {
 	return false;
 }
 
+/** Any non-whitespace char? A char-code scan, not `/\S/` — this walks on every drift check. */
+function has_non_ws(s: string | null): boolean {
+	if (!s) return false;
+	for (let i = 0; i < s.length; i++) {
+		const c = s.charCodeAt(i);
+		if (c !== 32 && c !== 9 && c !== 10 && c !== 12 && c !== 13) return true;
+	}
+	return false;
+}
+
+/** A short label for a node in a divergence message: the tag for an element, else its kind. */
+function node_label(n: Node): string {
+	if (n.nodeType === 1) return `<${(n as Element).tagName.toLowerCase()}>`;
+	if (n.nodeType === 3) return has_non_ws(n.nodeValue) ? 'a text node' : 'whitespace';
+	if (n.nodeType === 8) return 'a comment';
+	return 'a node';
+}
+
+/** A guess at WHAT left a foreign node in the region's light DOM, read off the node's shape — the
+ *  tell-tales of the passes that reshape a region between SSR and wake: a scoped-CSS or web-component
+ *  runtime, a declarative-shadow-DOM injector, a whitespace normalizer. Names the observable evidence
+ *  (a tag, an attribute pattern), never a specific tool. The "why" a recovery is otherwise silent
+ *  about; empty when nothing recognizable. */
+function culprit_hint(n: Node): string {
+	if (n.nodeType !== 1) return '';
+	const el = n as Element;
+	const tag = el.tagName.toLowerCase();
+	if (tag === 'style') return ' — an injected <style> (scoped CSS from a component/design-system runtime)';
+	if (tag === 'template' && el.hasAttribute('shadowrootmode'))
+		return ' — a declarative shadow-DOM template injected after SSR';
+	for (const a of el.attributes)
+		if (a.name.startsWith('sc-') || a.name === 's-id' || a.name === 'c-id' || a.name === 's-sn')
+			return ' — scoped web-component hydration marks (sc-*, s-id, c-id) a component runtime stamped over the island';
+	if (el.classList.contains('hydrated'))
+		return ' — a web-component runtime marked it `hydrated`';
+	return '';
+}
+
+/** Describe the FIRST place the live light DOM diverges from `want` (the server copy) — the specific
+ *  reason an island drifted, for the DEV console + devtools (never a bare "it was recovered"). Mirrors
+ *  {@link sequence_differs}' walk exactly, so it names the divergence that trips the repair. `null`
+ *  when the sequences match. DEV / devtools only — prod DCEs the call site, so this never runs there. */
+function describe_divergence(live: Node, want: Node, where = 'the island'): string | null {
+	const a = live.childNodes;
+	const b = want.childNodes;
+	if (a.length !== b.length) {
+		// Find the FIRST position the two sequences diverge (an insertion/removal can be anywhere, not
+		// just the tail): the node there in the longer list is what was added / dropped.
+		const longer = a.length > b.length ? a : b;
+		const shorter = a.length > b.length ? b : a;
+		let i = 0;
+		while (
+			i < shorter.length &&
+			longer[i].nodeType === shorter[i].nodeType &&
+			(longer[i].nodeType !== 1 ||
+				(longer[i] as Element).tagName === (shorter[i] as Element).tagName)
+		)
+			i++;
+		const node = longer[i] ?? longer[longer.length - 1];
+		if (a.length > b.length)
+			return `${a.length - b.length} node(s) were inserted into ${where} — e.g. ${node_label(node)}${culprit_hint(node)}`;
+		const ws = node.nodeType === 3 && !has_non_ws(node.nodeValue);
+		return `${b.length - a.length} node(s) the server sent were removed from ${where} — e.g. ${node_label(node)}${ws ? ' (whitespace stripped by a DOM-normalizing pass)' : ''}`;
+	}
+	for (let i = 0; i < a.length; i++) {
+		const x = a[i];
+		const y = b[i];
+		if (x.nodeType !== y.nodeType || (x.nodeType === 1 && (x as Element).tagName !== (y as Element).tagName))
+			return `${where}: the server sent ${node_label(y)} but the browser had ${node_label(x)}${culprit_hint(x)}`;
+		if (x.nodeType === 1) {
+			const deeper = describe_divergence(x, y, node_label(x));
+			if (deeper) return deeper;
+		} else if (x.nodeValue !== y.nodeValue) {
+			return `${where}: the text of ${node_label(y)} changed (a translator or text rewrite)`;
+		}
+	}
+	return null;
+}
+
 /** Put the island's light DOM back to the server's node sequence when it drifted while the island
- *  slept. `true` when a repair was made. Called with the island's lakes LIFTED (lakes.ts): a lake's
- *  content is never part of the walk, and it may legitimately differ from the server copy by now
- *  (a live lake refreshes itself to the visitor before its host wakes) — so the copy's direct
- *  lakes are emptied the same way before the comparison, and the repair never touches them. */
-function repair_if_drifted(region: HTMLElement, ssr_html: string): boolean {
+ *  slept. Returns whether a repair was made and, in DEV / devtools, WHY it drifted (the first
+ *  divergence, named before the repair rewrites the sequence). Called with the island's lakes LIFTED
+ *  (lakes.ts): a lake's content is never part of the walk, and it may legitimately differ from the
+ *  server copy by now (a live lake refreshes itself to the visitor before its host wakes) — so the
+ *  copy's direct lakes are emptied the same way before the comparison, and the repair never touches
+ *  them. */
+function repair_if_drifted(
+	region: HTMLElement,
+	ssr_html: string
+): { repaired: boolean; reason: string | null } {
 	const holder = document.createElement('template');
 	holder.innerHTML = ssr_html; // inert: nothing upgrades in a template's content
 	// The copy under a region of its own — in the template's inert document, so the element never
@@ -127,9 +211,12 @@ function repair_if_drifted(region: HTMLElement, ssr_html: string): boolean {
 	const want = holder.content.ownerDocument.createElement('ogygia-region');
 	want.appendChild(holder.content);
 	slots.lakes.lift(want);
-	if (!sequence_differs(region, want)) return false;
+	if (!sequence_differs(region, want)) return { repaired: false, reason: null };
+	// Name the drift BEFORE repairing (repair rewrites the live sequence). The string is read only by
+	// the DEV console + devtools, so a prod-without-devtools build skips building it (the walk DCEs).
+	const reason = import.meta.env.DEV || DEVTOOLS ? describe_divergence(region, want) : null;
 	repair_markup(region, want);
-	return true;
+	return { repaired: true, reason };
 }
 
 /** Make `live`'s child sequence the server's (`want`), keeping `live`'s elements. `false` when the
@@ -451,7 +538,11 @@ export function hydrate_island(
 	// server's and put back when it drifted; the walk then sees the server's sequence. Measured
 	// on what the walk sees: the lakes lifted (repair_if_drifted empties the copy's the same way).
 	let lifted: LiftedLake[] | null = slots.lakes.lift(region);
-	const repaired = ssr_html !== null && region.isConnected && repair_if_drifted(region, ssr_html);
+	const drift =
+		ssr_html !== null && region.isConnected
+			? repair_if_drifted(region, ssr_html)
+			: { repaired: false, reason: null };
+	const repaired = drift.repaired;
 	try {
 		if (!region.isConnected) return null;
 		// FOREIGN-MUTATION DETECTOR (arm): a successful hydration CLAIMS the server-rendered nodes —
@@ -551,15 +642,19 @@ export function hydrate_island(
 			out = attempt(true);
 		}
 		if (healed) {
-			region.setAttribute('data-og-healed', '');
+			// The reason is the "why" — recorded on the element so DOM inspection shows it, carried on
+			// the devtools event, and appended to the console line. Empty string when unknown.
+			region.setAttribute('data-og-healed', drift.reason || '');
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
 					name: 'region.hydrate.healed',
 					entry,
-					fp: region.getAttribute('data-og-fp') || undefined
+					fp: region.getAttribute('data-og-fp') || undefined,
+					reason: drift.reason || undefined
 				});
-			if (import.meta.env.DEV) console.warn(HEALED_WARNING, entry);
+			if (import.meta.env.DEV)
+				console.warn(HEALED_WARNING + (drift.reason ? `\nWhat drifted: ${drift.reason}` : ''), entry);
 		}
 
 		// Restore each frozen region's SSR DOM AFTER hydrate. An inner waking region whose
@@ -582,13 +677,18 @@ export function hydrate_island(
 		// edge rewriter. A legitimate claim keeps the nodes (a browser-only `{#if}` may drop SOME, so
 		// only zero survivors trips this).
 		if (ssr_children.length > 0 && !ssr_children.some((el) => region.contains(el))) {
-			region.setAttribute('data-og-recovered', '');
+			// `drift.reason` is the specific first divergence captured at the pre-hydrate check (the DOM
+			// there was still the mutated one). Null when the sequences matched yet Svelte recovered
+			// anyway — a mismatch our walk does not see (an attribute, a Svelte-internal anchor) — then
+			// the general guidance below stands on its own.
+			region.setAttribute('data-og-recovered', drift.reason || '');
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
 					name: 'region.hydrate.recovered',
 					entry,
-					fp: region.getAttribute('data-og-fp') || undefined
+					fp: region.getAttribute('data-og-fp') || undefined,
+					reason: drift.reason || undefined
 				});
 			console.warn(
 				`[ogygia] island "${entry}" discarded its ENTIRE server-rendered DOM during hydration ` +
@@ -596,9 +696,11 @@ export function hydrate_island(
 					`region's HTML between SSR and wake — a post-SSR transform (transformPageChunk / an ` +
 					`HTML-rewriting middleware), an A/B-testing snippet, or an edge rewriter. Whatever that ` +
 					`step injected (e.g. declarative shadow DOM) was just destroyed, and the swap is ` +
-					`timing-dependent, so symptoms look erratic. Fix: make the mutation invisible to hydration ` +
-					`(mutate only <head>, attributes, or shadow templates — never the region's light DOM), or ` +
-					`freeze the foreign-owned subtree with a wake:'none' (lake) boundary.`
+					`timing-dependent, so symptoms look erratic.` +
+					(drift.reason ? `\nWhat changed: ${drift.reason}` : '') +
+					`\nFix: make the mutation invisible to hydration (mutate only <head>, attributes, or ` +
+					`shadow templates — never the region's light DOM), or freeze the foreign-owned subtree ` +
+					`with a wake:'none' (lake) boundary.`
 			);
 		}
 		return out;

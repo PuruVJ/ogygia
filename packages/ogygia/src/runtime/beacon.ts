@@ -26,6 +26,8 @@ interface Sample {
 	/** the island discarded its server DOM and re-rendered (a hydration mismatch — something
 	 *  between the server and the browser changed its markup) */
 	recovered?: boolean;
+	/** the named first divergence — the "why" a recovery happened (see hydrate-core). */
+	reason?: string;
 }
 
 let target: string | null | undefined;
@@ -471,12 +473,16 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 	const fp = el.getAttribute('data-og-fp');
 	if (!fp) return;
 	const recovered = el.hasAttribute('data-og-recovered');
+	// The attribute's VALUE is the named first divergence (hydrate-core's describe_divergence) — the
+	// "why". Carried to the profiler so a recovered island shows the specific cause, not just a count.
+	const reason = (el.getAttribute('data-og-recovered') || '').slice(0, 300) || undefined;
 	queue.push({
 		fp,
 		entry: el.getAttribute('entry') ?? '',
 		ms: Math.max(0, r2(t_done - t0)),
 		load: Math.max(0, r2(t_loaded - t0)),
-		...(recovered ? { recovered: true } : {})
+		...(recovered ? { recovered: true } : {}),
+		...(reason ? { reason } : {})
 	});
 	let changed: boolean | undefined;
 	if (typeof ssr_html === 'string' && visit_islands.length < 400) {

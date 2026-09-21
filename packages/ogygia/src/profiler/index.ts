@@ -298,6 +298,8 @@ interface BeaconAgg {
 	load: number[];
 	/** hydrations that discarded the server DOM and re-rendered (a mismatch) */
 	recovered: number;
+	/** the named first divergence from the most recent recovery — the "why" (see hydrate-core) */
+	reason?: string;
 	last: number;
 }
 const MAX_BEACON_FPS = 2000;
@@ -2855,7 +2857,7 @@ class Profiler {
 	 *  fingerprint (the same props → the same fingerprint, so a visit after the recording matches),
 	 *  then merged per island — a list of 48 cards is 48 fingerprints and one row. */
 	#client_for(stored: StoredReport): ClientIslandStat[] {
-		const per_entry = new Map<string, { fp: string; name: string; ms: number[]; load: number[]; recovered: number }>();
+		const per_entry = new Map<string, { fp: string; name: string; ms: number[]; load: number[]; recovered: number; reason?: string }>();
 		for (const r of island_rows_of(stored.meta)) {
 			const b = this.#beacons.get(r.fp);
 			if (!b || !b.ms.length) continue;
@@ -2864,6 +2866,7 @@ class Profiler {
 			e.ms.push(...b.ms);
 			e.load.push(...b.load);
 			e.recovered += b.recovered;
+			if (b.reason) e.reason = b.reason;
 		}
 		const out: ClientIslandStat[] = [];
 		for (const [entry, e] of per_entry) {
@@ -2877,7 +2880,8 @@ class Profiler {
 				p50_ms: round2(percentile(ms, 0.5)),
 				max_ms: round2(ms[ms.length - 1]),
 				load_p50_ms: round2(percentile(load, 0.5)),
-				recovered: e.recovered
+				recovered: e.recovered,
+				...(e.reason ? { reason: e.reason } : {})
 			});
 		}
 		return out;
@@ -3066,6 +3070,7 @@ class Profiler {
 			}
 			agg.last = now;
 			if (it?.recovered === true) agg.recovered++;
+			if (typeof it?.reason === 'string' && it.reason) agg.reason = it.reason.slice(0, 300);
 			agg.ms.push(round2(ms));
 			agg.load.push(Number.isFinite(load) && load >= 0 ? round2(Math.min(load, ms)) : 0);
 			if (agg.ms.length > MAX_BEACON_SAMPLES) {

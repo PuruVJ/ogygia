@@ -108,3 +108,34 @@ test('an untouched island hydrates in place exactly as before (no heal, the SSR 
 	expect(region.hasAttribute('data-og-healed')).toBe(false);
 	expect(region.querySelector('button')).toBe(ssr_button);
 });
+
+test('the recovery/heal REASON names the specific divergence (an injected <style>), for devtools + the console', async () => {
+	// A scoped-CSS / web-component runtime injects a <style> into the island's light DOM while it
+	// sleeps. The runtime must not just say "it drifted" — it must name WHY, so a developer can find
+	// the culprit. Here the drift is repaired (healed); the reason rides the data-og-healed
+	// attribute, the devtools event, and the console line.
+	document.body.innerHTML = decode('counter_ssr_b64').replace('wake="load"', 'wake="interaction"');
+	const region = document.querySelector('ogygia-region')!;
+	const warns: string[] = [];
+	const real_warn = console.warn;
+	console.warn = (...a: unknown[]) => warns.push(a.map(String).join(' '));
+	try {
+		bootDev();
+		// a foreign runtime inserts its <style> as the region's first child (scoped CSS)
+		const style = document.createElement('style');
+		style.textContent = '.x{color:red}';
+		region.insertBefore(style, region.firstChild);
+
+		await userEvent.click(region.querySelector('button')!);
+		await expect.poll(() => region.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
+		expect(region.hasAttribute('data-og-healed'), 'repaired from server markup').toBe(true);
+
+		// The WHY: the attribute value, and the console line, name the injected <style>.
+		const reason = region.getAttribute('data-og-healed') || '';
+		expect(reason.length, 'the reason is recorded on the element').toBeGreaterThan(0);
+		expect(reason).toContain('<style>');
+		expect(warns.some((w) => w.includes('What drifted') && w.includes('<style>'))).toBe(true);
+	} finally {
+		console.warn = real_warn;
+	}
+});

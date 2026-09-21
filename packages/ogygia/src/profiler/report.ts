@@ -240,6 +240,9 @@ export interface ClientIslandStat {
 	/** hydrations that discarded the server DOM and re-rendered: the markup the browser found was
 	 *  not the markup the server sent (a post-SSR pass, a script that edited it before wake) */
 	recovered: number;
+	/** the named first divergence — the WHY of the recovery (e.g. "an injected <style>", "scoped
+	 *  web-component hydration marks", "whitespace stripped"). Absent when unnameable. */
+	reason?: string;
 }
 
 export interface MemSample {
@@ -1664,7 +1667,7 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 						js_bytes: island_js_bytes(r, extras.weights),
 						modules: [r.module_url, ...r.hints].filter(Boolean),
 						interactivity: r.interactivity,
-						client: cl ? { hydrations: cl.n, p50_ms: cl.p50_ms, max_ms: cl.max_ms, load_p50_ms: cl.load_p50_ms, recovered: cl.recovered } : null
+						client: cl ? { hydrations: cl.n, p50_ms: cl.p50_ms, max_ms: cl.max_ms, load_p50_ms: cl.load_p50_ms, recovered: cl.recovered, ...(cl.reason ? { reason: cl.reason } : {}) } : null
 					};
 				}),
 				// the seed explainer names islands already (hooks.ts explain_seed)

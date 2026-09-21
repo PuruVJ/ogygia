@@ -111,6 +111,7 @@
 								{#if r.client}
 									<div class="k">in the browser</div>
 									<div>{r.client.n} hydration{r.client.n === 1 ? '' : 's'} seen · p50 {fmt_ms(r.client.p50_ms)} ms, max {fmt_ms(r.client.max_ms)} ms · module load p50 {fmt_ms(r.client.load_p50_ms)} ms{#if r.client.recovered} · <span class="warn">{r.client.recovered} re-rendered after a hydration mismatch</span>{/if}</div>
+										{#if r.client.recovered && r.client.reason}<div class="k">why it was recovered</div><div class="warn">{r.client.reason}</div>{/if}
 								{/if}
 							</div>
 							<div>
