@@ -77,7 +77,7 @@
 {#if report}
 	<ReportBody a={report.a} meta={report.meta} {base} extras={report.extras} ogpB64={undefined} history={report.history ?? null} prev={report.prev ?? null} />
 {:else}
-	<Shell {base}>
+	<Shell {base} bare>
 		<div class="share-unlock">
 			{#if looking}
 				<h1>Looking in this browser…</h1>

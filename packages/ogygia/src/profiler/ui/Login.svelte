@@ -7,7 +7,7 @@
 	const { base, next } = $derived(data);
 </script>
 
-<Shell {base}>
+<Shell {base} bare>
 	<h1>ogygia profiler <small>locked</small></h1>
 	<LoginForm {base} {next} />
 </Shell>

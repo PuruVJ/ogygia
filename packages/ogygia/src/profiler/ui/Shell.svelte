@@ -32,8 +32,9 @@
 		base = '',
 		current = null,
 		toc = false,
+		bare = false,
 		children
-	}: { base?: string; current?: string | null; toc?: boolean; children: Snippet } = $props();
+	}: { base?: string; current?: string | null; toc?: boolean; bare?: boolean; children: Snippet } = $props();
 </script>
 
 <svelte:head>
@@ -41,17 +42,24 @@
 	<meta name="ogygia-devtools" content="off" />
 </svelte:head>
 
-<div class="app">
-	<Sidebar {base} {current} />
-	<main class="app-main" class:has-toc={toc}>
+{#if bare}
+	<!-- pre-auth / message pages: no rail, no polling islands, just the content centred -->
+	<main class="app-main app-bare">
 		{@render children()}
-		<div class="footer">
-			ogygia/profiler — samples the whole Node process during SSR. <b>Self</b> = time (or memory) inside
-			the function itself. <b>Total</b> = self plus everything it called. <b>Per call</b> = total ÷ how many
-			times it ran (a ×N tag means it ran N times; no tag means once).
-		</div>
 	</main>
-</div>
+{:else}
+	<div class="app">
+		<Sidebar {base} {current} />
+		<main class="app-main" class:has-toc={toc}>
+			{@render children()}
+			<div class="footer">
+				ogygia/profiler — samples the whole Node process during SSR. <b>Self</b> = time (or memory) inside
+				the function itself. <b>Total</b> = self plus everything it called. <b>Per call</b> = total ÷ how many
+				times it ran (a ×N tag means it ran N times; no tag means once).
+			</div>
+		</main>
+	</div>
+{/if}
 
 <style>
 	/* The shell's own chrome (scoped). The shared vocabulary lives in ./profiler.css. */

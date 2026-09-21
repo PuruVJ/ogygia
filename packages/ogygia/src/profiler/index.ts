@@ -1634,7 +1634,12 @@ class Profiler {
 	#session_cookie(token: string, event: RequestEvent): string {
 		const secure = event.url.protocol === 'https:' ? '; Secure' : '';
 		const clear = token === '' ? '; Max-Age=0' : '';
-		return `og_profiler=${token}; Path=${this.base}; HttpOnly; SameSite=Strict${secure}${clear}`;
+		// SameSite=Lax (not Strict): the login POST is a fetch and the follow-up to the profiler is a
+		// navigation; behind a proxy/CDN (Amplify) a Strict cookie can be dropped on that hop, which
+		// looked like "the password does nothing". Lax still isn't sent cross-site, and it's HttpOnly.
+		// A one-year Max-Age so the session survives (it was a session cookie, lost on some setups).
+		const age = token === '' ? '' : '; Max-Age=31536000';
+		return `og_profiler=${token}; Path=${this.base}; HttpOnly; SameSite=Lax${secure}${clear}${age}`;
 	}
 
 	/** The BEACON FLAG: a second cookie, site-wide, carrying no secret — it only tells the handle
@@ -1661,6 +1666,9 @@ class Profiler {
 		if (!(await this.#key_matches(key))) return ctx.json({ ok: false }, { status: 401 });
 		const { createHash } = await import('node:crypto');
 		const res = ctx.json({ ok: true, next });
+		// never let a CDN/edge cache this response — a cached login strips Set-Cookie and the session
+		// silently never seats (a classic serverless/Amplify symptom: 200 ok, but you loop on login)
+		res.headers.set('cache-control', 'no-store, private');
 		res.headers.append(
 			'set-cookie',
 			this.#session_cookie(this.#cookie_token(createHash), ctx.event!)

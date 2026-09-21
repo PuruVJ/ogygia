@@ -136,6 +136,12 @@ body {
 	margin-left: 236px;
 	padding: 22px clamp(18px, 2.4vw, 40px) 80px;
 }
+.app-main.app-bare {
+	margin-left: 0;
+	max-width: 640px;
+	margin-inline: auto;
+	padding-top: 48px;
+}
 @media (max-width: 860px) {
 	.app-main {
 		margin-left: 0;
