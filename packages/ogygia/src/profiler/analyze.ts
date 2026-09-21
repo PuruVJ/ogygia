@@ -22,6 +22,22 @@ export interface ProfileNode {
 	callFrame: CallFrame;
 	hitCount?: number;
 	children?: number[];
+	/** V8's per-LINE sample counts inside this function (1-based lines of the script) */
+	positionTicks?: { line: number; ticks: number }[];
+	/** why V8 threw this function out of optimized code, when it did (`wrong map`, `not a Smi`…) */
+	deoptReason?: string;
+}
+
+/** a function V8 deoptimized during the window, with the reasons it gave */
+export interface DeoptRow {
+	key: string;
+	name: string;
+	url: string;
+	line: number;
+	category: FrameCategory;
+	reasons: Record<string, number>;
+	count: number;
+	self_ms: number;
 }
 
 export interface CpuProfile {
@@ -86,6 +102,11 @@ export interface FrameStat {
 	/** components: the component whose render contained most of this one's time — the parent of a
 	 *  `{#each}` list's rows */
 	parent?: string;
+	/** THE HOT LINES: where inside this function the self time landed (V8's per-line ticks, mapped
+	 *  through the sourcemap when one resolved), heaviest first */
+	lines?: { line: number; ms: number }[];
+	/** components, page mode: inclusive ms in EACH run — the spread says cache miss vs slow code */
+	runs_ms?: number[];
 }
 
 export interface GroupStat {
@@ -108,13 +129,96 @@ export interface FlameNode {
 	ch?: FlameNode[];
 }
 
+/**
+ * ONE PATH, SEVERAL HOT FUNCTIONS: a caller in your code under which two or more of the hot
+ * functions burn their time. Fixing the caller once (cache its result, call it less, move it out
+ * of the render) addresses all of them, where the table would have you chase each on its own.
+ */
+export interface PathGroup {
+	/** the caller to fix: a component or an app function */
+	owner: { key: string; name: string; url: string; line: number; category: FrameCategory; total_ms: number; calls?: number };
+	/** the hot functions under it, with the self time they burned on this path, heaviest first */
+	fns: { key: string; name: string; url: string; line: number; category: FrameCategory; pkg?: string; ms: number }[];
+	/** their summed self time under the owner */
+	ms: number;
+	/** how much of the owner's inclusive time that is */
+	share: number;
+	/** the call tree from the owner down to the hot functions — only the branches that reach one */
+	tree: PathNode;
+}
+
+/** One node of a path tree: a frame between the owner and a hot function, or one of them. */
+export interface PathNode {
+	key: string;
+	name: string;
+	category: FrameCategory;
+	/** `file:line`, '' when none */
+	file: string;
+	/** ms of hot-function self time that flowed through this node on the path */
+	ms: number;
+	/** a hot function itself (a leaf of the path, or a hot caller of another hot function) */
+	hot: boolean;
+	/** how many times it was called across the window (from coverage), when known */
+	calls?: number | null;
+	children: PathNode[];
+}
+
+/** One resolved frame of the stack index: what a sample's stack is made of. */
+export interface StackFrameRef {
+	/** the frame's display name (sourcemapped, renamed like every other row) */
+	n: string;
+	/** `file:line`, when known */
+	f?: string;
+	c: FrameCategory;
+	/** the index of the parent frame in `frames`, -1 at a root */
+	p: number;
+}
+
+/**
+ * THE SAMPLES THEMSELVES, on the render's clock: every CPU sample inside the one window the
+ * report explains, as `(time, length, leaf frame)` with the frame table the leaves hang from.
+ * Every other table is an aggregate of this; this is the substrate they came from, so any range
+ * of the render can be asked "what ran here" and any instant "what was the stack" — without
+ * the raw profile (megabytes) and without re-resolving anything. Consecutive samples of one
+ * leaf are folded (one entry with the summed length); beyond `MAX_INDEX_SAMPLES` the folded
+ * entries are stride-sampled, the lengths kept so the sum still is the CPU time.
+ */
+export interface StackIndex {
+	frames: StackFrameRef[];
+	/** ms from the window's start, per sample */
+	t: number[];
+	/** ms each sample stands for */
+	d: number[];
+	/** the leaf frame per sample (an index into `frames`), -1 for an idle sample */
+	leaf: number[];
+	/** how many raw samples were folded into `t` */
+	raw: number;
+	window_ms: number;
+}
+
+const MAX_INDEX_SAMPLES = 20_000;
+
 export interface Analysis {
 	/** wall-clock length of the recording window in ms */
 	duration_ms: number;
-	/** ms the CPU was running JS/GC (everything except idle) */
+	/** ms the CPU was running the APP's JS/GC: everything except idle and the profiler's own frames */
 	busy_ms: number;
 	idle_ms: number;
 	gc_ms: number;
+	/** ms the CPU spent in the profiler's own code (its I/O tracker, its heap reads, its stack
+	 *  captures): measured, reported, and kept OUT of every other number */
+	overhead_ms: number;
+	/** the profiler's own frames by self time (what the overhead was), a few */
+	overhead_functions: { name: string; url: string; line: number; self_ms: number }[];
+	/** page mode: the profiler's own CPU inside each run's window (what each run's wall time
+	 *  carries that the app would not have paid); the rest of `overhead_ms` sits between runs
+	 *  or before the first — the profiler's start-up scan of compiled code, its final reads */
+	overhead_by_run_ms?: number[];
+	/** the CPU segments over the WHOLE capture (every run), on the capture's clock — what was
+	 *  running at any moment (the GC attribution names what ran when each pause fell) */
+	capture_cpu?: { t0: number; t1: number; label: string; category: FrameCategory; file?: string }[];
+	/** functions V8 deoptimized during the window, by self time */
+	deopts: DeoptRow[];
 	sample_count: number;
 	/** every frame aggregated across the profile, sorted by self time desc */
 	functions: FrameStat[];
@@ -130,7 +234,95 @@ export interface Analysis {
 	sourcemapped: boolean;
 	/** ONE request's critical path + phases (page / request mode; absent for a plain window) */
 	timeline?: Timeline;
+	/** the samples inside that one window, with their stacks (the substrate every table came from) */
+	stacks?: StackIndex;
+	/** hot functions grouped by the one caller they share — the paths to fix, biggest first */
+	paths: PathGroup[];
 }
+
+/**
+ * The stack index of one window (see `StackIndex`). `frame_of` gives a node's resolved frame,
+ * `parent_of` its parent node; only nodes on a sampled stack inside the window enter the table.
+ */
+export function build_stack_index(
+	profile: CpuProfile,
+	frame_of: (id: number) => { name: string; url: string; line: number; category: FrameCategory },
+	parent_of: (id: number) => number | undefined,
+	perf_start: number,
+	window: { start: number; end: number }
+): StackIndex | undefined {
+	const samples = profile.samples ?? [];
+	const deltas = profile.timeDeltas ?? [];
+	if (!samples.length || !deltas.length) return undefined;
+	const frames: StackFrameRef[] = [];
+	const index_of = new Map<number, number>();
+	const ref = (id: number): number => {
+		const hit = index_of.get(id);
+		if (hit !== undefined) return hit;
+		const f = frame_of(id);
+		const name = f.name;
+		// an idle sample has no frame; (root) and (program) are V8's own bookkeeping, not a frame
+		// on any stack the app would recognise — the stack starts below them
+		if (f.category === 'idle' || name === '(root)' || name === '(program)') {
+			index_of.set(id, -1);
+			return -1;
+		}
+		const pid = parent_of(id);
+		// the parent first, so a frame's index is always above its own (a stack reads bottom-up by walking p)
+		const p = pid === undefined ? -1 : ref(pid);
+		const i = frames.length;
+		const url = short_path(f.url);
+		frames.push({ n: name, ...(url ? { f: f.line > 0 ? `${url}:${f.line}` : url } : {}), c: f.category, p });
+		index_of.set(id, i);
+		return i;
+	};
+	const t: number[] = [];
+	const d: number[] = [];
+	const leaf: number[] = [];
+	let raw = 0;
+	let t_us = profile.startTime;
+	const w0 = window.start;
+	const w1 = window.end;
+	let last_leaf = Number.NaN;
+	for (let i = 0; i < samples.length; i++) {
+		const delta = deltas[i] ?? 0;
+		t_us += delta;
+		if (delta <= 0) continue;
+		const at = perf_start + (t_us - profile.startTime) / 1000;
+		if (at < w0) continue;
+		if (at > w1) break;
+		raw++;
+		const l = ref(samples[i]);
+		const ms = delta / 1000;
+		if (l === last_leaf && t.length) {
+			d[d.length - 1] += ms;
+			continue;
+		}
+		last_leaf = l;
+		t.push(Math.max(0, at - w0 - ms));
+		d.push(ms);
+		leaf.push(l);
+	}
+	if (!t.length) return undefined;
+	// past the cap: keep every k-th folded sample, its length grown to cover the ones dropped
+	if (t.length > MAX_INDEX_SAMPLES) {
+		const k = Math.ceil(t.length / MAX_INDEX_SAMPLES);
+		const t2: number[] = [];
+		const d2: number[] = [];
+		const l2: number[] = [];
+		for (let i = 0; i < t.length; i += k) {
+			let sum = 0;
+			for (let j = i; j < Math.min(i + k, t.length); j++) sum += d[j];
+			t2.push(t[i]);
+			d2.push(sum);
+			l2.push(leaf[i]);
+		}
+		return { frames, t: t2.map(round2), d: d2.map(round3), leaf: l2, raw, window_ms: round2(w1 - w0) };
+	}
+	return { frames, t: t.map(round2), d: d.map(round3), leaf, raw, window_ms: round2(w1 - w0) };
+}
+
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 // ---------------------------------------------------------------------------
 // categorization
@@ -210,7 +402,7 @@ export function component_name_from_file(url: string): string | undefined {
 	return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-function clean_url(url: string): string {
+export function clean_url(url: string): string {
 	if (url.startsWith('file://')) {
 		try {
 			return decodeURIComponent(url.slice('file://'.length));
@@ -274,6 +466,9 @@ export function categorize(frame: CallFrame): { category: FrameCategory; pkg?: s
 	// Profiler.start's one-time scan of all compiled code (~100ms on a big dev
 	// heap), which lands on the window's first sample
 	if (url.startsWith('node:inspector')) return { category: 'profiler' };
+	// the promise hooks (`promiseInitHookWithDestroyTracking`, `registerDestroyHook`) run only while
+	// an async_hooks tracker is installed — the profiler's own I/O tracker during a recording
+	if (url.startsWith('node:internal/async_hooks')) return { category: 'profiler' };
 	if (url.startsWith('node:')) return { category: 'node' };
 	// a WebAssembly module's frames (`wasm://wasm/…`): undici's llhttp parser in practice — runtime
 	if (url.startsWith('wasm://')) return { category: 'node' };
@@ -403,6 +598,9 @@ export function decode_mappings(mappings: string): MappedLine[] {
  * the chunks. `read` abstracts fs so this module stays platform-free. Holds a
  * cache and a `hit` flag, so it is a class rather than a closure.
  */
+/** words that sit where a name would but are not one (`if (`, `return (`, `= function`, `=> {`) */
+const RESERVED_NAME_RE = /^(?:if|for|while|switch|return|catch|await|typeof|function|new|else|do|in|of|throw|yield|void|delete|case|with|async)$/;
+
 export class SourceMapResolver {
 	/** whether any lookup succeeded */
 	hit = false;
@@ -412,8 +610,56 @@ export class SourceMapResolver {
 		{ lines: MappedLine[]; sources: string[]; names: string[] } | null
 	>();
 
+	readonly #src_cache = new Map<string, string[] | null>();
+
 	constructor(read: (path: string) => string | undefined) {
 		this.#read = read;
+	}
+
+	/** The original source LINE at a mapped position, trimmed and cut: what an anonymous callback
+	 *  IS (`tags.map(async (tag) => {`), for a label a name cannot give. Undefined when the source
+	 *  is not on this machine. */
+	line_at_source(source: string, line: number, max = 56): string | undefined {
+		let lines = this.#src_cache.get(source);
+		if (lines === undefined) {
+			const text = this.#read(source);
+			lines = text === undefined ? null : text.split('\n');
+			this.#src_cache.set(source, lines);
+		}
+		const row = lines?.[line - 1]?.trim();
+		if (!row) return undefined;
+		return row.length > max ? row.slice(0, max - 1) + '…' : row;
+	}
+
+	/** The function name written in the ORIGINAL source at a mapped position (1-based line and
+	 *  column), for a frame whose map carries no name there: `function foo(`, a method `foo(` /
+	 *  `#foo(` / `async foo(`, or an arrow assigned to `foo` (`const foo = () =>`, `foo: () =>`).
+	 *  Undefined for a true anonymous callback. Reads the source through the same `read`. */
+	name_at_source(source: string, line: number, column: number): string | undefined {
+		let lines = this.#src_cache.get(source);
+		if (lines === undefined) {
+			const text = this.#read(source);
+			lines = text === undefined ? null : text.split('\n');
+			this.#src_cache.set(source, lines);
+		}
+		const row = lines?.[line - 1];
+		if (row === undefined) return undefined;
+		const col = Math.max(0, Math.min(column - 1, row.length));
+		const after = row.slice(col);
+		const before = row.slice(0, col);
+		const tries: [RegExp, string][] = [
+			[/^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/, after],
+			[/^(?:static\s+)?(?:async\s+)?(?:(?:get|set)\s+)?(#?[A-Za-z_$][\w$]*)\s*\(/, after],
+			[/(?:const|let|var|,)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?$/, before],
+			[/(#?[A-Za-z_$][\w$]*)\s*[:=]\s*(?:async\s*)?$/, before],
+			[/(?:static\s+)?(?:async\s+)?(#?[A-Za-z_$][\w$]*)\s*\(\s*$/, before]
+		];
+		for (const [re, text] of tries) {
+			const name = re.exec(text)?.[1];
+			// a keyword where a name would be (`async () =>`, `if (`) is not this function's name: keep looking
+			if (name && !RESERVED_NAME_RE.test(name)) return name;
+		}
+		return undefined;
 	}
 
 	/** map a generated (url, line0, col0) to the original file/line/column (1-based), plus the
@@ -423,7 +669,7 @@ export class SourceMapResolver {
 		url: string,
 		line: number,
 		column: number
-	): { source: string; line: number; column: number; name?: string } | undefined {
+	): { source: string; line: number; column: number; name?: string; near_name?: string } | undefined {
 		const path = clean_url(url);
 		if (!path.endsWith('.js') && !path.endsWith('.mjs') && !path.endsWith('.cjs')) {
 			return undefined;
@@ -467,11 +713,26 @@ export class SourceMapResolver {
 		const source = entry.sources[m[1]];
 		if (!source) return undefined;
 		this.hit = true;
+		// the nearest NAMED mapping from the same source LINE just after this position: a minifier
+		// maps a function's start (`function B(`, `B(){`) a few columns before the identifier that
+		// carries the name, so the exact segment is often nameless while the next one is not
+		let near_name: string | undefined;
+		if (m[3] < 0 && best !== -1) {
+			for (let d = 1; d <= 4 && !near_name; d++) {
+				for (const i of [best + d, best - d]) {
+					const s = cols[i];
+					if (!s || s[1] !== m[1] || s[2] !== m[2] || s[3] < 0 || Math.abs(s[0] - column) > 32) continue;
+					near_name = entry.names[s[3]];
+					break;
+				}
+			}
+		}
 		return {
 			source: join_source(path, source),
 			line: m[2] + 1,
 			column: (m[4] ?? 0) + 1,
-			name: m[3] >= 0 ? entry.names[m[3]] : undefined
+			name: m[3] >= 0 ? entry.names[m[3]] : undefined,
+			...(near_name ? { near_name } : {})
 		};
 	}
 }
@@ -506,13 +767,22 @@ export function analyze(
 	resolver?: SourceMapResolver,
 	call_counts?: Record<string, number>,
 	/** the profiled request's window + its outbound calls → the timeline (timeline.ts) */
-	timeline_input?: TimelineInput
+	timeline_input?: TimelineInput,
+	/** a display name for a frame the profile names badly — the island host wrappers Svelte names
+	 *  after their hashed virtual file (`_b95bfb97fab` → `ProductCard (island host)`) */
+	rename?: (name: string, url: string, stage: 'frame' | 'confirmed') => string | undefined,
+	/** a category for a frame by its URL when the URL alone cannot say (a client chunk that the
+	 *  build knows holds only the Svelte runtime); the frame's own categorisation runs first */
+	url_category?: (url: string, name: string) => FrameCategory | { category: FrameCategory; pkg?: string } | undefined
 ): Analysis {
 	// Invocation count per FRAME KEY, joined from coverage by the raw `<functionName>\0<url>` identity
 	// (the same key #count_calls emits). Filled during the resolve loop, read when a FrameStat is created.
 	const calls_by_key = new Map<string, number>();
 	const by_id = new Map<number, ProfileNode>();
 	for (const n of profile.nodes) by_id.set(n.id, n);
+	/** µs per tick: V8's line ticks are sample counts, the profile's mean delta turns them into time */
+	const samples_n = profile.samples?.length ?? 0;
+	const us_per_tick = samples_n > 0 ? (profile.endTime - profile.startTime) / samples_n : 0;
 
 	// --- self time per node ------------------------------------------------
 	const self_us = new Map<number, number>();
@@ -548,6 +818,10 @@ export function analyze(
 		candidate: boolean;
 	}
 	const resolved = new Map<number, Resolved>();
+	/** per function key: source line → µs (the hot lines), filled from every node's positionTicks */
+	const line_us = new Map<string, Map<number, number>>();
+	/** a node's line ticks, mapped to source lines when the frame was */
+	const line_ticks_of = new Map<number, { line: number; us: number }[]>();
 	for (const n of profile.nodes) {
 		const f = n.callFrame;
 		let url = f.url;
@@ -555,21 +829,51 @@ export function analyze(
 		let col = f.columnNumber + 1;
 		let name = display_name(f);
 		let cat = categorize(f);
-		if (resolver && (cat.category === 'app' || cat.category === 'component')) {
-			const mapped = resolver.resolve(f.url, f.lineNumber, f.columnNumber);
+		let hinted = false;
+		if (url_category && f.url && (cat.category === 'app' || cat.category === 'component')) {
+			const h = url_category(f.url, f.functionName);
+			if (typeof h === 'string') cat = { category: h, ...(h === 'dependency' ? { pkg: 'ogygia' } : {}) };
+			else if (h) cat = { category: h.category, ...(h.pkg ? { pkg: h.pkg } : {}) };
+			hinted = !!h;
+		}
+		// a frame the URL hint filed as a dependency still gets its map (a browser chunk of the
+		// runtime, minified): the real name and file are worth having in a dependency row too
+		const mapping = resolver && (cat.category === 'app' || cat.category === 'component' || hinted);
+		if (n.positionTicks?.length && us_per_tick > 0) {
+			const ticks: { line: number; us: number }[] = [];
+			for (const p of n.positionTicks) {
+				// the tick's line is in the SCRIPT; map it to the source line like the frame itself
+				const m = mapping ? resolver!.resolve(f.url, p.line - 1, 0) : undefined;
+				ticks.push({ line: m ? m.line : p.line, us: p.ticks * us_per_tick });
+			}
+			line_ticks_of.set(n.id, ticks);
+		}
+		if (mapping) {
+			const mapped = resolver!.resolve(f.url, f.lineNumber, f.columnNumber);
 			if (mapped) {
 				url = mapped.source;
 				line = mapped.line;
 				col = mapped.column;
-				// a bundled anonymous frame often has a real name in the source —
-				// the map's `names` entry at the function position recovers it
+				// a bundled anonymous frame often has a real name in the source — the map's `names`
+				// entry at the function position recovers it; so does a MINIFIED one (`Y`, `Gr`: a
+				// production client chunk), whose real name is the only useful one
 				if (!f.functionName && mapped.name) name = mapped.name;
-				// re-categorize with the true file and the recovered name
-				cat = categorize({
+				else if (f.functionName && MINIFIED_NAME_RE.test(f.functionName)) {
+					// exact map name, else the name written in the source at that spot, else a named
+					// neighbour on the same source line
+					const from_source = mapped.name ? undefined : resolver!.name_at_source(mapped.source, mapped.line, mapped.column);
+					const better = mapped.name ?? from_source ?? mapped.near_name;
+					if (better) name = better;
+				}
+				// re-categorize with the true file and the recovered name — unless the URL hint knew
+				// better (a workspace-linked runtime maps to a path with no node_modules in it and
+				// would read as app code): the hint's category and package stay
+				const recat = categorize({
 					...f,
-					functionName: f.functionName || mapped.name || '',
+					functionName: name === '(anonymous)' ? '' : name,
 					url: mapped.source
 				});
+				if (!(hinted && recat.category === 'app')) cat = recat;
 			}
 		}
 		// Inline component code (a tight loop, an IIFE) is compiled to its own
@@ -586,6 +890,13 @@ export function analyze(
 		}
 		// The bundler's `$1` on a component is a chunk collision, not a different component.
 		if (cat.category === 'component') name = strip_bundler_suffix(name);
+		if (rename) {
+			const better = rename(name, url, 'frame');
+			if (better) {
+				name = better;
+				cat = { category: 'component' };
+			}
+		}
 		resolved.set(n.id, {
 			key: '',
 			name,
@@ -634,6 +945,12 @@ export function analyze(
 	for (const n of profile.nodes) {
 		const r = resolved.get(n.id)!;
 		if (r.candidate && !confirmed.has(r.name)) r.category = 'app';
+		// a CONFIRMED candidate may still wear a minified name (a client chunk has no source map):
+		// the renamer's second stage names it from what the build put in that chunk
+		else if (r.candidate && rename) {
+			const better = rename(r.name, r.url, 'confirmed');
+			if (better) r.name = better;
+		}
 		// Components are keyed by name alone: Svelte bundles every component in a
 		// route into one chunk, so the wrapper frame's url (…/_page.svelte.js) and
 		// the sourcemapped inline frame's url (…/Foo.svelte) differ for the SAME
@@ -662,6 +979,7 @@ export function analyze(
 	let idle_us = 0;
 	let gc_us = 0;
 	let busy_us = 0;
+	let overhead_us = 0;
 
 	const path = new Map<string, number>(); // key -> occurrences on current stack
 	/** inclusive µs per profile NODE (one node = one distinct call path) — what ranks the stacks */
@@ -696,6 +1014,12 @@ export function analyze(
 		const parent_comp = comp_stack[comp_stack.length - 1];
 		if (is_comp) comp_stack.push(r.key);
 
+		const ticks = line_ticks_of.get(node.id);
+		if (ticks) {
+			let m = line_us.get(r.key);
+			if (!m) line_us.set(r.key, (m = new Map()));
+			for (const t of ticks) m.set(t.line, (m.get(t.line) ?? 0) + t.us);
+		}
 		let stat = agg.get(r.key);
 		if (!stat) {
 			stat = {
@@ -725,6 +1049,7 @@ export function analyze(
 				if (count > 0) agg.get(k)!.total_ms += s / 1000;
 			}
 			if (r.category === 'idle') idle_us += s;
+			else if (r.category === 'profiler') overhead_us += s; // the profiler's own work: not the app's busy time
 			else {
 				busy_us += s;
 				if (r.category === 'gc') gc_us += s;
@@ -804,17 +1129,35 @@ export function analyze(
 	// ((root), (program)) never show. Only the tables' rows get them (below), keeping reports small.
 	const STACKS_PER_FN = 3;
 	const STACK_DEPTH = 14;
+	// A component is SEVERAL frames on a real stack: its sourcemapped body (`Card.svelte:1`) inside
+	// the bundled wrapper the route chunk exports (`_page.svelte.js:317`), an inline closure of its
+	// template (`Card.svelte:40`, renamed to the component above) inside its body — with the
+	// renderer's `child` / `component` / `each` calls between them. One component, one frame: runs
+	// of the same component separated only by svelte internals fold into one, keeping the `.svelte`
+	// location (the body's, the lowest line). A component reached again through OTHER code (a
+	// nested island's Region, a load) stays a second frame.
 	const frames_above = (id: number): CallStack['frames'] => {
 		const frames: CallStack['frames'] = [];
 		let cur = parent_of.get(id);
 		while (cur !== undefined && frames.length < STACK_DEPTH) {
 			const r = resolved.get(cur)!;
 			if (!r.name.startsWith('(')) {
-				frames.push({
-					n: r.name,
-					f: r.url ? `${short_path(r.url)}:${r.line}` : '',
-					c: r.category
-				});
+				const f = { n: r.name, f: r.url ? `${short_path(r.url)}:${r.line}` : '', c: r.category };
+				if (r.category === 'component') {
+					// walk back over trailing svelte frames to the last component pushed
+					let i = frames.length - 1;
+					while (i >= 0 && frames[i].c === 'svelte') i--;
+					const prev = i >= 0 && frames[i].c === 'component' && frames[i].n === r.name ? frames[i] : null;
+					if (prev) {
+						frames.length = i + 1; // drop the svelte frames between
+						const is_body = (x: { f: string }) => x.f.includes('.svelte:');
+						// keep the `.svelte` location; between two, the lower line (the body over a closure)
+						if (is_body(f) && (!is_body(prev) || r.line < Number(prev.f.split(':').pop()))) frames[i] = f;
+						cur = parent_of.get(cur);
+						continue;
+					}
+				}
+				frames.push(f);
 			}
 			cur = parent_of.get(cur);
 		}
@@ -902,7 +1245,28 @@ export function analyze(
 		ch: flame_roots
 	};
 
+	// --- deoptimizations: the reasons V8 wrote into the profile, per function --------------
+	const deopt_by_key = new Map<string, DeoptRow>();
+	for (const n of profile.nodes) {
+		if (!n.deoptReason) continue;
+		const r = resolved.get(n.id);
+		if (!r || r.category === 'idle' || r.category === 'gc' || r.category === 'v8' || r.category === 'profiler') continue;
+		let row = deopt_by_key.get(r.key);
+		if (!row) deopt_by_key.set(r.key, (row = { key: r.key, name: r.name, url: short_path(r.url), line: r.line, category: r.category, reasons: {}, count: 0, self_ms: 0 }));
+		row.reasons[n.deoptReason] = (row.reasons[n.deoptReason] ?? 0) + 1;
+		row.count++;
+	}
+	for (const row of deopt_by_key.values()) row.self_ms = round2(agg.get(row.key)?.self_ms ?? 0);
+	const deopts = [...deopt_by_key.values()].sort((x, y) => y.self_ms - x.self_ms || y.count - x.count).slice(0, 40);
+
 	// --- final tables ------------------------------------------------------
+	// the profiler's own frames, kept apart: what its overhead WAS (the report shows the top few
+	// next to the number it took out)
+	const overhead_functions = [...agg.values()]
+		.filter((f) => f.category === 'profiler' && f.self_ms >= 0.01)
+		.sort((x, y) => y.self_ms - x.self_ms)
+		.slice(0, 10)
+		.map((f) => ({ name: f.name, url: f.url, line: f.line, self_ms: round2(f.self_ms) }));
 	const functions = [...agg.values()]
 		.filter(
 			(f) =>
@@ -915,11 +1279,67 @@ export function analyze(
 				f.category !== 'profiler'
 		)
 		.sort((a, b) => b.self_ms - a.self_ms);
+	const LINES_PER_FN = 8;
+	const lines_of = (key: string): { line: number; ms: number }[] | undefined => {
+		const m = line_us.get(key);
+		if (!m) return undefined;
+		const list = [...m]
+			.map(([line, us]) => ({ line, ms: round2(us / 1000) }))
+			.filter((l) => l.ms > 0)
+			.sort((a, b) => b.ms - a.ms)
+			.slice(0, LINES_PER_FN);
+		return list.length ? list : undefined;
+	};
 	for (const [i, f] of functions.entries()) {
 		f.self_ms = round2(f.self_ms);
 		f.total_ms = round2(f.total_ms);
 		// the rows a report shows (80) plus headroom for a re-sort by total
-		if (i < 120) f.stacks = stacks_of(f.key);
+		if (i < 120) {
+			f.stacks = stacks_of(f.key);
+			f.lines = lines_of(f.key);
+		}
+	}
+
+	// --- per-run component time (page mode) --------------------------------
+	// Each run is a window on the perf clock; every sample inside one credits its delta to every
+	// component on its stack (once each), so a component's `runs_ms` is its inclusive time per run.
+	const run_us = new Map<string, number[]>();
+	const runs = timeline_input?.runs;
+	// the profiler's own CPU INSIDE each run (its wrappers, its reads): what a run's wall time
+	// carries that the app would not have paid — the report takes exactly this out, per run
+	const overhead_run_us: number[] = runs ? new Array(runs.length).fill(0) : [];
+	if (runs?.length && samples.length && deltas.length) {
+		let t_us = profile.startTime;
+		let ri = 0;
+		const comps_on_stack = new Map<number, string[]>();
+		const comps_of = (id: number): string[] => {
+			const hit = comps_on_stack.get(id);
+			if (hit) return hit;
+			const out: string[] = [];
+			let cur: number | undefined = id;
+			while (cur !== undefined) {
+				const rr = resolved.get(cur)!;
+				if (rr.category === 'component' && !out.includes(rr.key)) out.push(rr.key);
+				cur = parent_of.get(cur);
+			}
+			comps_on_stack.set(id, out);
+			return out;
+		};
+		for (let i = 0; i < samples.length; i++) {
+			const d = deltas[i] ?? 0;
+			t_us += d;
+			if (d <= 0) continue;
+			const t = timeline_input!.perf_start + (t_us - profile.startTime) / 1000;
+			while (ri < runs.length && t > runs[ri].end) ri++;
+			if (ri >= runs.length) break;
+			if (t < runs[ri].start) continue;
+			if (resolved.get(samples[i])?.category === 'profiler') overhead_run_us[ri] += d;
+			for (const key of comps_of(samples[i])) {
+				let arr = run_us.get(key);
+				if (!arr) run_us.set(key, (arr = new Array(runs.length).fill(0)));
+				arr[ri] += d;
+			}
+		}
 	}
 
 	const components = [...agg.values()]
@@ -934,14 +1354,17 @@ export function analyze(
 					parent = agg.get(p)?.name;
 				}
 			}
+			const per_run = run_us.get(f.key);
 			return {
 				...f,
 				self_ms: round2(f.self_ms),
 				total_ms: round2(f.total_ms),
 				stacks: f.stacks ?? stacks_of(f.key),
+				lines: f.lines ?? lines_of(f.key),
 				markup_ms: round2((markup_us.get(f.key) ?? 0) / 1000),
 				logic_ms: round2((logic_us.get(f.key) ?? 0) / 1000),
-				...(parent ? { parent } : {})
+				...(parent ? { parent } : {}),
+				...(per_run ? { runs_ms: per_run.map((us) => round2(us / 1000)) } : {})
 			};
 		});
 
@@ -950,6 +1373,184 @@ export function analyze(
 
 	const bucket_list = [...buckets.values()].sort((a, b) => b.self_ms - a.self_ms);
 	for (const b of bucket_list) b.self_ms = round2(b.self_ms);
+
+	// --- PATHS: the hot functions grouped by the caller they share -----------------------------
+	// For every node of a hot function walk up to the root and credit that node's self time to each
+	// ancestor of yours (a component or an app function; never a route root, which trivially
+	// contains everything). A caller that covers two or more hot functions is a path; greedy: the
+	// caller covering the most time wins, the deepest of the near-equal ones (the most specific
+	// place to fix), its functions are taken, repeat.
+	const HOT_FOR_PATHS = 40;
+	const ROOT_NAME_RE = /^(?:_(?:page|layout|error)|Root|children|handle|respond|render_response|render_page)$/;
+	// an app frame that only exists in a built chunk (no sourcemap reached it) is framework glue as
+	// far as "a place to fix" goes: Kit's `children`, an adapter's `respond`
+	const BUILT_CHUNK_RE = /\/(?:chunks|output|\.svelte-kit)\//;
+	// Svelte's renderer glue is never a hot function worth a path of its own
+	const SVELTE_GLUE_RE = /^(?:child|component|each|push|pop|head|slot|snippet|render)$/;
+	/** the profiler's own wrapper frames, by name, for a build that bundled span.ts into the app chunk */
+	const PROFILER_WRAPPER_RE = /^(?:span|within|wrapped|wrap_call)$/;
+	// the hot set: the hottest functions overall, AND the hottest of the app's own — a dependency
+	// with a hundred hot internals (a design system's renderer) must not crowd the app's functions
+	// out of the paths, which are about the app's code to fix
+	const not_glue = functions.filter((f) => !(f.category === 'svelte' && SVELTE_GLUE_RE.test(f.name)));
+	const hot_keys = new Set([...not_glue.slice(0, HOT_FOR_PATHS).map((f) => f.key), ...not_glue.filter((f) => f.category === 'app' || f.category === 'component').slice(0, HOT_FOR_PATHS).map((f) => f.key)]);
+	// an owner is a NAMED place to fix: never an anonymous arrow (its named parent owns instead)
+	const can_own = (a: Resolved) =>
+		!ROOT_NAME_RE.test(a.name) &&
+		!a.name.startsWith('(') &&
+		!a.name.endsWith('(island host)') &&
+		(a.category === 'component' || (a.category === 'app' && !BUILT_CHUNK_RE.test(a.url)));
+	const cover = new Map<string, Map<string, number>>(); // ancestor key → hot key → µs
+	/** the hot nodes (every node of a hot key with self time), for the trees below */
+	const hot_nodes: { id: number; key: string; us: number }[] = [];
+	for (const n of profile.nodes) {
+		const r = resolved.get(n.id)!;
+		if (!hot_keys.has(r.key)) continue;
+		const s = self_us.get(n.id) ?? 0;
+		if (s <= 0) continue;
+		hot_nodes.push({ id: n.id, key: r.key, us: s });
+		const seen = new Set<string>([r.key]);
+		let cur = parent_of.get(n.id);
+		while (cur !== undefined) {
+			const a = resolved.get(cur)!;
+			// (an island host wrapper is ogygia's glue, not a place to fix: its island is)
+			if (can_own(a) && !seen.has(a.key)) {
+				seen.add(a.key);
+				let m = cover.get(a.key);
+				if (!m) cover.set(a.key, (m = new Map()));
+				m.set(r.key, (m.get(r.key) ?? 0) + s);
+			}
+			cur = parent_of.get(cur);
+		}
+	}
+	/** THE PATH TREE of one owner: for every hot node under an owner node, the chain of frames
+	 *  from the owner down to it (pseudo frames dropped, a run of the same key folded), merged into
+	 *  one tree with the hot self time accumulated along it. Wide fan-outs are capped per node. */
+	const TREE_DEPTH = 10;
+	const TREE_FANOUT = 6;
+	/** an anonymous function reads by where it is (`fn @ ds-ssr.ts:46`), everything else by name */
+	// an anonymous function (an arrow, a callback) has no name to show: the label is its file and
+	// line, and the source line itself when the source is on this machine — `fn @ ds-ssr.ts:42 ·
+	// tags.map(async (tag) => {` says what it is
+	const path_label = (name: string, url: string, line: number, path?: string) => {
+		if (!name.startsWith('(') || !url) return name;
+		const file = url.split('/').pop()?.split('?')[0] ?? url;
+		const snippet = resolver?.line_at_source(path ?? clean_url(url), line);
+		return snippet ? `fn @ ${file}:${line} · ${snippet}` : `fn @ ${file}:${line}`;
+	};
+	const build_tree = (owner_key: string, fn_keys: Set<string>): PathNode => {
+		const o = agg.get(owner_key)!;
+		const root: PathNode = { key: o.key, name: o.name, category: o.category, file: o.url ? `${o.url}:${o.line}` : '', ms: 0, hot: hot_keys.has(o.key), calls: o.calls ?? null, children: [] };
+		const node_of = (parent: PathNode, r: Resolved): PathNode => {
+			let c = parent.children.find((x) => x.key === r.key);
+			if (!c) {
+				c = { key: r.key, name: path_label(r.name, r.url, r.line), category: r.category, file: r.url ? `${short_path(r.url)}:${r.line}` : '', ms: 0, hot: hot_keys.has(r.key), calls: agg.get(r.key)?.calls ?? null, children: [] };
+				parent.children.push(c);
+			}
+			return c;
+		};
+		for (const h of hot_nodes) {
+			if (!fn_keys.has(h.key)) continue;
+			// the chain up to the nearest owner node
+			const chain: Resolved[] = [];
+			let cur: number | undefined = h.id;
+			let found = false;
+			while (cur !== undefined && chain.length < 64) {
+				const r = resolved.get(cur)!;
+				if (r.key === owner_key && cur !== h.id) {
+					found = true;
+					break;
+				}
+				// the chain keeps your frames and the hot ones: Svelte's own glue between them (`child`,
+				// `component`, `each`) and pseudo frames are dropped, so a component's wrapper + body
+				// (see frames_above) fall together and fold into one
+				// (the profiler's own wrappers — `span`, `within`, an `instrument`ed call — are glue too;
+				// an anonymous frame stays only when it is itself hot: it is then named by its location)
+				const glue =
+					r.category === 'profiler' ||
+					((r.name.startsWith('(') || r.category === 'svelte' || r.name === 'Region' || PROFILER_WRAPPER_RE.test(r.name)) && !hot_keys.has(r.key));
+				if (!glue && (chain.length === 0 || chain[chain.length - 1].key !== r.key)) chain.push(r);
+				cur = parent_of.get(cur);
+			}
+			if (!found) continue;
+			chain.reverse(); // owner's child first
+			const us = h.us;
+			root.ms += us;
+			let at = root;
+			for (const r of chain.slice(-TREE_DEPTH)) {
+				at = node_of(at, r);
+				at.ms += us;
+			}
+		}
+		const finish = (n: PathNode) => {
+			n.ms = round2(n.ms / 1000);
+			n.children.sort((x, y) => y.ms - x.ms);
+			if (n.children.length > TREE_FANOUT) {
+				const rest = n.children.slice(TREE_FANOUT);
+				n.children = n.children.slice(0, TREE_FANOUT);
+				n.children.push({ key: '', name: `(${rest.length} more)`, category: 'unknown', file: '', ms: round2(rest.reduce((t, c) => t + c.ms, 0) / 1000), hot: false, children: [] });
+			}
+			for (const c of n.children) if (c.key) finish(c);
+		};
+		finish(root);
+		return root;
+	};
+	const paths: PathGroup[] = [];
+	const taken = new Set<string>();
+	// a group is worth a path from 1% of busy (a page whose busy is mostly one dependency still
+	// gets its own code's paths)
+	const min_path_us = Math.max(2000, busy_us * 0.01);
+	for (let round = 0; round < 5; round++) {
+		let best: { key: string; us: number; fns: [string, number][] } | null = null;
+		const scored: { key: string; us: number; fns: [string, number][] }[] = [];
+		for (const [ak, m] of cover) {
+			if (taken.has(ak)) continue;
+			const fns = [...m].filter(([hk]) => !taken.has(hk));
+			if (fns.length < 2) continue;
+			const us = fns.reduce((t, [, v]) => t + v, 0);
+			if (us < min_path_us) continue;
+			scored.push({ key: ak, us, fns });
+		}
+		if (!scored.length) break;
+		scored.sort((x, y) => y.us - x.us);
+		// THE MOST SPECIFIC PLACE: the top candidate is often a frame near the root (the layout's
+		// `children`, the page) that holds everything. Walk its path tree DOWN while one branch
+		// keeps most of the time (≥ 75%), through the roots and the island hosts, and stop at the
+		// deepest frame that is itself a candidate (a component or app function with two or more
+		// hot functions under it). That is the caller to fix.
+		best = scored[0];
+		const by_key = new Map(scored.map((c) => [c.key, c]));
+		let node = build_tree(best.key, new Set(best.fns.map(([hk]) => hk)));
+		for (let depth = 0; depth < 12; depth++) {
+			const c = node.children[0];
+			// descend only while one branch holds nearly everything (≥ 90%): a component whose hot
+			// functions split across two helpers stays the owner, with the whole tree under it
+			if (!c || !c.key || c.ms < node.ms * 0.9) break;
+			// an anonymous frame (an arrow inside a named function) is not a place to fix: the
+			// descent stops at its named parent, the owner the report can point at
+			if (c.name.startsWith('(')) break;
+			node = c;
+			const cand = by_key.get(c.key);
+			if (cand) best = cand;
+		}
+		const owner = agg.get(best.key);
+		if (!owner) break;
+		taken.add(best.key);
+		for (const [hk] of best.fns) taken.add(hk);
+		const fns = best.fns
+			.map(([hk, us]) => {
+				const f = agg.get(hk)!;
+				return { key: hk, name: path_label(f.name, f.url, f.line, f.path), url: f.url, line: f.line, category: f.category, pkg: f.pkg, ms: round2(us / 1000) };
+			})
+			.sort((x, y) => y.ms - x.ms);
+		paths.push({
+			owner: { key: owner.key, name: owner.name, url: owner.url, line: owner.line, category: owner.category, total_ms: round2(owner.total_ms), calls: owner.calls },
+			fns,
+			ms: round2(best.us / 1000),
+			share: owner.total_ms > 0 ? round2(Math.min(1, best.us / 1000 / owner.total_ms)) : 0,
+			tree: build_tree(best.key, new Set(best.fns.map(([hk]) => hk)))
+		});
+	}
 
 	// --- the request timeline (critical path + phases), from the same frame table ---------
 	const timeline = timeline_input
@@ -963,12 +1564,46 @@ export function analyze(
 				timeline_input
 			)
 		: undefined;
+	// the CPU over the WHOLE capture (every run), on the capture's clock — one more cheap pass of
+	// the same builder with a window that is the entire profile; only its segments are kept
+	const capture_cpu = timeline_input?.runs?.length
+		? build_timeline(
+				profile,
+				(id) => {
+					const r = resolved.get(id)!;
+					return { name: r.name, url: r.url, line: r.line, category: r.category, pkg: r.pkg };
+				},
+				(id) => parent_of.get(id),
+				{ perf_start: timeline_input.perf_start, window: { start: timeline_input.perf_start, end: timeline_input.perf_start + (profile.endTime - profile.startTime) / 1000 }, calls: [] }
+			)
+				.segments.filter((s) => s.kind === 'cpu')
+				.map((s) => ({ t0: s.t0, t1: s.t1, label: s.label, category: s.category, ...(s.file ? { file: s.file } : {}) }))
+		: undefined;
+	// the samples of the one window, with their stacks: the substrate (queried by the scrubber,
+	// the render stepper, and anything that asks "what ran between t and t'")
+	const stacks = timeline_input
+		? build_stack_index(
+				profile,
+				(id) => {
+					const r = resolved.get(id)!;
+					return { name: r.name, url: r.url, line: r.line, category: r.category };
+				},
+				(id) => parent_of.get(id),
+				timeline_input.perf_start,
+				timeline_input.window
+			)
+		: undefined;
 
 	return {
 		duration_ms: round2((profile.endTime - profile.startTime) / 1000),
 		busy_ms: round2(busy_us / 1000),
 		idle_ms: round2(idle_us / 1000),
 		gc_ms: round2(gc_us / 1000),
+		overhead_ms: round2(overhead_us / 1000),
+		overhead_functions,
+		...(runs?.length ? { overhead_by_run_ms: overhead_run_us.map((us) => round2(us / 1000)) } : {}),
+		...(capture_cpu ? { capture_cpu } : {}),
+		deopts,
 		sample_count: samples.length,
 		functions,
 		components,
@@ -976,7 +1611,9 @@ export function analyze(
 		buckets: bucket_list,
 		flame,
 		sourcemapped: resolver?.hit ?? false,
-		...(timeline ? { timeline } : {})
+		...(timeline ? { timeline } : {}),
+		...(stacks ? { stacks } : {}),
+		paths
 	};
 }
 
@@ -1003,6 +1640,63 @@ export interface HeapAllocator {
 }
 
 /** Aggregate a sampled heap profile into "who allocates the most" rows. */
+/** BYTES PER COMPONENT: every sampled allocation credited to the nearest component above it in
+ *  the heap tree (the same rule as markup/logic: nested components take their own). */
+/** A minified identifier: what a production client chunk calls its functions (`Y`, `Gr`, `_a`, `#u`). */
+const MINIFIED_NAME_RE = /^#?[A-Za-z_$][A-Za-z0-9_$]?$/;
+
+/**
+ * The renamer for a BROWSER profile: a component confirmed in a minified client chunk (Svelte's
+ * runtime is below it, so it is one, but its name is `Y`) is named after the `.svelte` files the
+ * build put in that chunk — `ProductCard`, or `ProductCard (+2 in chunk)` when the chunk holds
+ * several. `contents` is the build handoff's chunk summary by path (`chunkContents`). Only the
+ * confirmed stage renames: an unconfirmed `Pt` is a helper and stays app code.
+ */
+export function chunk_component_renamer(contents: (path: string) => readonly string[] | null | undefined): (name: string, url: string, stage: 'frame' | 'confirmed') => string | undefined {
+	const cache = new Map<string, string | undefined>();
+	return (name, url, stage) => {
+		if (stage !== 'confirmed' || !MINIFIED_NAME_RE.test(name)) return undefined;
+		let path: string;
+		try {
+			path = new URL(url, 'http://x').pathname;
+		} catch {
+			return undefined;
+		}
+		if (!cache.has(path)) {
+			const comps = (contents(path) ?? []).filter((s) => s.endsWith('.svelte')).map((s) => component_name_from_file(s) ?? s.split('/').pop()!.replace(/\.svelte$/, ''));
+			cache.set(path, comps.length ? (comps.length === 1 ? comps[0] : `${comps[0]} (+${comps.length - 1} in chunk)`) : undefined);
+		}
+		return cache.get(path);
+	};
+}
+
+export function heap_by_component(head: HeapNode, limit = 60): { name: string; bytes: number }[] {
+	const by = new Map<string, number>();
+	const stack: string[] = [];
+	const visit = (node: HeapNode): void => {
+		const f = node.callFrame;
+		const c = categorize(f);
+		let name = f.functionName;
+		if (c.category === 'component') name = strip_bundler_suffix(name);
+		else if ((!f.functionName || f.functionName === '(anonymous)') && c.category !== 'dependency') {
+			// an inline region of a component's own file: its component
+			const derived = component_name_from_file(clean_url(f.url));
+			if (derived) name = derived;
+		}
+		const is_comp = c.category === 'component' || (name !== f.functionName && !!name);
+		if (is_comp) stack.push(name);
+		const near = stack[stack.length - 1];
+		if (near !== undefined && node.selfSize > 0) by.set(near, (by.get(near) ?? 0) + node.selfSize);
+		for (const ch of node.children ?? []) visit(ch);
+		if (is_comp) stack.pop();
+	};
+	visit(head);
+	return [...by.entries()]
+		.map(([name, bytes]) => ({ name, bytes }))
+		.sort((a, b) => b.bytes - a.bytes)
+		.slice(0, limit);
+}
+
 export function analyze_heap(head: HeapNode, limit = 25): HeapAllocator[] {
 	const agg = new Map<string, HeapAllocator>();
 	const visit = (node: HeapNode): number => {

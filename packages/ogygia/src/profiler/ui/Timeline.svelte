@@ -9,7 +9,15 @@
 	import { chain_steps, coalesce, PHASE_LABEL, type Timeline, type ViewSegment } from '../timeline.js';
 	import { fmt_ms, CATEGORY_COLOR, CATEGORY_LABEL } from './format.js';
 
-	let { t }: { t: Timeline } = $props();
+	let {
+		t,
+		gc = []
+	}: {
+		t: Timeline;
+		/** the GC pauses inside this window, on the window's clock, with what caused each */
+		gc?: { t: number; ms: number; kind: string; why: string; top: string }[];
+	} = $props();
+	const gc_in = $derived(gc.filter((p) => p.t >= 0 && p.t <= t.window_ms));
 
 	const WAIT = '#5b8fd6';
 	const IO = '#d9a03d';
@@ -75,6 +83,14 @@
 		</div>
 	{/each}
 </div>
+{#if gc_in.length}
+	<div class="gc-row" role="img" aria-label="GC pauses in this render">
+		{#each gc_in as p, i (i)}
+			<i class="gc-tick {p.kind}" style="left:{(p.t / t.window_ms) * 100}%;width:{Math.max((p.ms / t.window_ms) * 100, 0.25)}%" title="GC {p.kind} · {fmt_ms(p.ms)} ms at {fmt_ms(p.t)} ms — {p.why}{p.top ? `. Mostly: ${p.top}` : ''}"></i>
+		{/each}
+		<span class="gc-label hint">GC pauses ({gc_in.length}) — hover one for what filled the heap before it</span>
+	</div>
+{/if}
 <div class="axis">
 	<span>0 ms</span><span>{fmt_ms(t.window_ms / 2)} ms</span><span>{fmt_ms(t.window_ms)} ms</span>
 </div>
@@ -94,9 +110,19 @@
 			<div>waiting on {s.calls && s.calls.length > 1 ? `${s.calls.length} calls at once` : 'one call'} · {PHASE_LABEL[s.phase]}</div>
 			{#each (s.calls ?? []).slice(0, 8) as c (c.label)}
 				<div class="mono">{c.label} <span class="dim">{fmt_ms(c.ms)} ms{c.caller ? ` · from ${c.caller}` : ''}</span></div>
+				{#if c.callers && c.callers.length > 1}
+					<div class="mono dim">  call path: {c.callers.join(' ← ')}</div>
+				{/if}
+				{#if c.timings?.length}
+					<div class="mono dim">  their side: {c.timings.map((t) => `${t.desc ?? t.name} ${fmt_ms(t.ms)} ms`).join(' · ')}</div>
+				{/if}
 			{/each}
 		{:else}
 			<div>nothing recorded — a promise chain, a driver on its own socket, a worker</div>
+			{#if s.pending?.length}
+				<div class="dim">pending across it:</div>
+				{#each s.pending as p (p)}<div class="mono dim">{p}</div>{/each}
+			{/if}
 		{/if}
 		{#if s.inside && s.inside.length > 1}
 			<div class="dim" style="margin-top:4px">{s.parts} small pieces folded in:</div>
@@ -170,7 +196,14 @@
 				{#if s.seg.calls && s.seg.calls.length > 1}
 					<span class="hint">— {s.seg.calls.map((c) => `${c.label} ${fmt_ms(c.ms)} ms`).join(', ')}</span>
 				{:else if s.seg.calls?.[0]?.caller}
-					<span class="hint">— from {s.seg.calls[0].caller}</span>
+					<span class="hint">— from {s.seg.calls[0].callers && s.seg.calls[0].callers.length > 1 ? s.seg.calls[0].callers.join(' ← ') : s.seg.calls[0].caller}</span>
+				{/if}
+				{#if s.seg.calls?.length === 1 && s.seg.calls[0].timings?.length}
+					{@const tm = s.seg.calls[0].timings}
+					{@const theirs = tm.reduce((a, t) => a + t.ms, 0)}
+					<div class="inside">
+						their Server-Timing: {tm.map((t) => `${t.desc ?? t.name} ${fmt_ms(t.ms)} ms`).join(' · ')}{#if theirs > 0} — <b>{fmt_ms(theirs)} ms on their side</b>, {fmt_ms(Math.max(0, s.ms - theirs))} ms network + framework{/if}
+					</div>
 				{/if}
 			{:else}
 				<span class="what">nothing recorded</span>
@@ -207,7 +240,7 @@
 		gap: 4px 14px;
 		margin: 6px 0 4px;
 		font-size: 11.5px;
-		color: #aeb6c2;
+		color: var(--text-dim);
 	}
 	.legend span {
 		display: inline-flex;
@@ -221,20 +254,20 @@
 		display: inline-block;
 	}
 	.legend i.stripe {
-		background: repeating-linear-gradient(135deg, var(--c) 0 3px, #0d1014 3px 5px);
+		background: repeating-linear-gradient(135deg, var(--c) 0 3px, var(--bg-sunken) 3px 5px);
 	}
 	.legend .hint {
 		flex-basis: 100%;
-		color: #7d8590;
+		color: var(--text-faint);
 	}
 	.bar {
 		display: flex;
 		height: 34px;
 		border-radius: 7px;
 		overflow: hidden;
-		border: 1px solid #232a35;
+		border: 1px solid var(--line);
 		margin: 4px 0 0;
-		background: #0c0f13;
+		background: var(--bg-sunken);
 	}
 	.seg {
 		min-width: 0;
@@ -245,41 +278,41 @@
 		display: flex;
 		align-items: center;
 		padding: 0 4px;
-		border-right: 1px solid #0d101499;
+		border-right: 1px solid var(--bg-sunken)99;
 		cursor: pointer;
-		color: #0d1014;
+		color: var(--bg-sunken);
 	}
 	.seg span {
 		text-overflow: ellipsis;
 		overflow: hidden;
 	}
 	.seg.wait span {
-		color: #e6edf3;
-		background: #0d1014aa;
+		color: var(--text);
+		background: var(--bg-sunken)aa;
 		padding: 0 4px;
 		border-radius: 3px;
 	}
 	.seg.gap {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-weight: 400;
 	}
 	.seg:hover,
 	.seg.picked {
-		outline: 2px solid #e6edf3;
+		outline: 2px solid var(--text);
 		outline-offset: -2px;
 	}
 	.axis {
 		display: flex;
 		justify-content: space-between;
 		font-size: 10.5px;
-		color: #7d8590;
+		color: var(--text-faint);
 		margin: 2px 2px 0;
 	}
 	.tip {
 		position: fixed;
 		pointer-events: none;
-		background: #1c232d;
-		border: 1px solid #2b3340;
+		background: var(--bg-hover);
+		border: 1px solid var(--line);
 		border-radius: 6px;
 		padding: 7px 10px;
 		font-size: 12px;
@@ -308,20 +341,20 @@
 		text-overflow: ellipsis;
 	}
 	.dim {
-		color: #7d8590;
+		color: var(--text-faint);
 	}
 	.totals {
 		margin: 8px 0 10px;
 	}
 	h3 {
 		font-size: 13px;
-		color: #d8dee6;
+		color: var(--text);
 		margin: 14px 0 4px;
 		font-weight: 600;
 	}
 	h3 .hint {
 		font-weight: 400;
-		color: #7d8590;
+		color: var(--text-faint);
 		margin-left: 6px;
 	}
 	.lanes {
@@ -336,7 +369,7 @@
 		font-size: 12.5px;
 	}
 	.lane.chained .lbar {
-		outline: 1px solid #d9a03d;
+		outline: 1px solid var(--warn);
 	}
 	.lname code {
 		font-size: 12px;
@@ -345,24 +378,24 @@
 		display: inline-block;
 		margin-left: 6px;
 		font-size: 10.5px;
-		color: #7d8590;
-		border: 1px solid #2b3340;
+		color: var(--text-faint);
+		border: 1px solid var(--line);
 		border-radius: 999px;
 		padding: 0 6px;
 		line-height: 15px;
 	}
 	.kind.universal {
-		color: #5b8fd6;
+		color: var(--c-blue);
 		border-color: #2a3a5a;
 	}
 	.kind.parent {
-		color: #d9a03d;
+		color: var(--warn);
 		border-color: #5a4a20;
 	}
 	.ltrack {
 		position: relative;
 		height: 12px;
-		background: #1a212b;
+		background: var(--bg-hover);
 		border-radius: 3px;
 		overflow: hidden;
 	}
@@ -370,7 +403,7 @@
 		position: absolute;
 		top: 0;
 		bottom: 0;
-		background: repeating-linear-gradient(135deg, #5b8fd6 0 4px, #0d1014 4px 6px);
+		background: repeating-linear-gradient(135deg, var(--c-blue) 0 4px, var(--bg-sunken) 4px 6px);
 		border-radius: 2px;
 	}
 	.lcpu {
@@ -379,7 +412,7 @@
 	}
 	.lane .num {
 		font-variant-numeric: tabular-nums;
-		color: #aeb6c2;
+		color: var(--text-dim);
 		white-space: nowrap;
 	}
 	.save.chain {
@@ -397,12 +430,12 @@
 		font-size: 12.5px;
 	}
 	.prow .name {
-		color: #d8dee6;
+		color: var(--text);
 	}
 	.track {
 		display: flex;
 		height: 12px;
-		background: #1a212b;
+		background: var(--bg-hover);
 		border-radius: 3px;
 		overflow: hidden;
 	}
@@ -410,11 +443,11 @@
 		background: #4a9d6e;
 	}
 	.track .wait {
-		background: repeating-linear-gradient(135deg, #5b8fd6 0 4px, #0d1014 4px 6px);
+		background: repeating-linear-gradient(135deg, var(--c-blue) 0 4px, var(--bg-sunken) 4px 6px);
 	}
 	.prow .num {
 		font-variant-numeric: tabular-nums;
-		color: #aeb6c2;
+		color: var(--text-dim);
 	}
 	.steps {
 		margin: 4px 0 0;
@@ -428,7 +461,7 @@
 		border-radius: 4px;
 	}
 	.steps li.picked {
-		background: #171c24;
+		background: var(--bg-raised);
 	}
 	.sw {
 		display: inline-block;
@@ -445,14 +478,14 @@
 	.steps .pct,
 	.steps .hint,
 	.steps .inside {
-		color: #7d8590;
+		color: var(--text-faint);
 	}
 	.steps .inside {
 		font-size: 12px;
 		margin-left: 14px;
 	}
 	.steps .file {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-family: ui-monospace, monospace;
 		font-size: 11.5px;
 		margin-left: 6px;
@@ -461,14 +494,14 @@
 		display: inline-block;
 		margin-left: 8px;
 		font-size: 11px;
-		color: #7d8590;
-		border: 1px solid #2b3340;
+		color: var(--text-faint);
+		border: 1px solid var(--line);
 		border-radius: 999px;
 		padding: 0 7px;
 		line-height: 16px;
 	}
 	.pchip.span {
-		color: #d9a03d;
+		color: var(--warn);
 		border-color: #5a4a20;
 	}
 	.save.orphan {
@@ -477,9 +510,38 @@
 	.save {
 		margin: 4px 0 6px;
 		padding: 6px 10px;
-		background: #171c24;
-		border-left: 3px solid #d9a03d;
+		background: var(--bg-raised);
+		border-left: 3px solid var(--warn);
 		border-radius: 4px;
 		font-size: 12.5px;
+	}
+	/* GC pauses under the bar: a red tick per pause, sized by its length, hover for its cause */
+	.gc-row {
+		position: relative;
+		height: 26px;
+		margin-top: 2px;
+	}
+	.gc-tick {
+		position: absolute;
+		top: 0;
+		height: 8px;
+		min-width: 2px;
+		background: var(--bad);
+		border-radius: 1px;
+		cursor: help;
+	}
+	.gc-tick.major {
+		background: #ff4d4d;
+		height: 12px;
+	}
+	.gc-tick.incremental,
+	.gc-tick.weak {
+		background: var(--warn);
+	}
+	.gc-label {
+		position: absolute;
+		left: 0;
+		top: 13px;
+		font-size: 10px;
 	}
 </style>

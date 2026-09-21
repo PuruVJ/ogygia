@@ -25,7 +25,7 @@ import type { AnyComponent } from '../router/define.js';
 import type { Analysis } from './analyze.js';
 import type { ReportExtras, ReportMeta, RequestEntry, RouteAgg } from './report.js';
 // Type-only (erased) — index.ts value-imports THIS module, so a value import back would cycle.
-import type { StoredReport } from './index.js';
+import type { StoredReport, SampledSummary, TrapStatus } from './index.js';
 import Dashboard from './ui/Dashboard.svelte';
 import Report from './ui/Report.svelte';
 import Run from './ui/Run.svelte';
@@ -33,11 +33,13 @@ import Login from './ui/Login.svelte';
 import Upload from './ui/Upload.svelte';
 import Message from './ui/Message.svelte';
 import Compare from './ui/Compare.svelte';
+import Site from './ui/Site.svelte';
 import type { Comparison } from './compare.js';
+import type { SinkRow } from './sink.js';
 
 /** Prop-erased component refs — see the file header. Referenced as `V.Dashboard` in the table so
  *  `$infer` never resolves a component's own (self-referential) props. Real types survive on `data`. */
-const V = { Dashboard, Report, Run, Login, Upload, Message, Compare } as unknown as Record<
+const V = { Dashboard, Report, Run, Login, Upload, Message, Compare, Site } as unknown as Record<
 	string,
 	AnyComponent
 >;
@@ -74,19 +76,41 @@ export interface ProfilerDeps {
 		inflight: number;
 		/** page-mode reports grouped by page (the history sparklines + compare pairs) */
 		history: PageHistory[];
+		/** the trap (catch the slow one), when configured */
+		trap: TrapStatus | null;
+		/** the always-on sampler's rolling hot-functions table, when configured */
+		sampled: SampledSummary | null;
+		/** why the background recorders are off (a serverless host), when they are */
+		background_note: string | null;
 	};
 	/** Two stored reports side by side (404 when either expired). */
-	compare(a: string | undefined, b: string | undefined): { base: string; cmp: Comparison };
+	/** `cmp` is null when this server no longer holds one of the reports: the page then compares
+	 *  from the browser's store (the ids come back so it can) */
+	compare(a: string | undefined, b: string | undefined): { base: string; cmp: Comparison | null; a: string; b: string };
+	/** the whole-site pictures: this instance's rows, the sink's status, a URL the browser reads rows from */
+	site(c: Ctx): { base: string; rows: SinkRow[]; sink: { url: string; last: { at: number; ok: boolean; rows: number; error?: string } | null; buffered: number } | null; from: string | null; ephemeral: boolean };
+	/** A caught request profiled again in full page mode with the inputs it was caught with. */
+	replay(id: string | undefined, c: Ctx): Promise<Response>;
 	/** DEV ONLY: a few lines of a local source file around a line (the row's source peek). */
 	source(c: Ctx): Promise<Response>;
 	run_page(c: Ctx): Response | { base: string; path: string; runs: number; format: string };
 	record_page(c: Ctx): Promise<Response>;
 	reset(c: Ctx): Response;
+	/** A tiny live-status poll for the sidebar (and, later, a hosted dashboard): is a recording
+	 *  running right now, how many requests are in flight, the instance's memory, how many reports
+	 *  this instance holds. Cheap and side-effect-free. */
+	status(c: Ctx): { recording: boolean; inflight: number; rss_mb: number; reports: number };
 	login_props(c: Ctx): { base: string; next: string };
 	login(c: Ctx): Promise<Response>;
 	logout(c: Ctx): Response;
 	upload(c: Ctx): Promise<Response>;
 	report_stored(id: string | undefined): StoredReport | undefined;
+	/** Like `report_stored`, but falls through to the configured storage backend (SQLite/Redis/
+	 *  Postgres) on a memory miss and reconstructs the report from its stored dump — so a report
+	 *  survives the instance that made it. Memory-only when no store is configured. */
+	report_load(id: string | undefined): Promise<StoredReport | undefined>;
+	/** The reports the backend holds (summaries), for the sidebar's shared list. Empty with no store. */
+	list_stored(limit?: number): Promise<{ id: string; label: string; page?: string; created: number }[]>;
 	/** The login page for THIS url (`?next=` back here) when the UI is secret-gated; null when a
 	 *  login makes no sense (dev is open; no secret = no UI). */
 	login_url(c: Ctx): string | null;
@@ -110,11 +134,12 @@ export interface ProfilerDeps {
 	report_raw(stored: StoredReport): Promise<Response>;
 }
 
-/** Shared lookup for the report representations: the stored report, or a thrown 404. */
-function report_or_404<R>(d: ProfilerDeps, id: string | undefined, fn: (s: StoredReport) => R): R {
-	const s = d.report_stored(id);
+/** Shared lookup for the report representations: the stored report (memory or the storage backend),
+ *  or a thrown 404. */
+async function report_or_404<R>(d: ProfilerDeps, id: string | undefined, fn: (s: StoredReport) => R): Promise<Awaited<R>> {
+	const s = await d.report_load(id);
 	if (!s) error(404, 'That report has expired.');
-	return fn(s);
+	return await fn(s);
 }
 
 /** Build the profiler router. Auth is the table-wide `load` (a redirect/deny short-circuits every
@@ -129,6 +154,7 @@ export function build_profiler_router(d: ProfilerDeps) {
 			'/run': page(V.Run, { load: (c) => d.run_page(c) }),
 			'/page': { GET: (c) => d.record_page(c) },
 			'/reset': { GET: (c) => d.reset(c) },
+			'/status.json': { GET: (c) => c.json(d.status(c)) },
 			// the browser's hydration timings (runtime/beacon.ts) — behind the guard like everything else
 			'/beacon': { POST: (c) => d.beacon(c) },
 			'/login': page(V.Login, {
@@ -142,9 +168,10 @@ export function build_profiler_router(d: ProfilerDeps) {
 			}),
 			// The bare report page renders from EITHER the server report (logged in only — else an unauth
 			// visitor could read reports by guessing the id) OR a share-link `#fragment` (client-side).
+			'/reports.json': { GET: async (c) => c.json(await d.list_stored()) },
 			'/report/[id]': page(V.Report, {
 				load: async (c) => {
-					const stored = d.report_stored(c.params.id);
+					const stored = (await d.authed(c)) ? await d.report_load(c.params.id) : d.report_stored(c.params.id);
 					if (stored && (await d.authed(c)))
 						return { report: await d.report_view(stored), base: d.base, login: null, exists: true };
 					// Not logged in (or no such report): the page renders the share-link gate. When this
@@ -167,6 +194,10 @@ export function build_profiler_router(d: ProfilerDeps) {
 			},
 			// Before/after: two stored reports, deltas signed so a regression reads positive.
 			'/compare/[a]/[b]': page(V.Compare, { load: (c) => d.compare(c.params.a, c.params.b) }),
+			// profile a caught request again, in full page mode, with the inputs it was caught with
+			'/replay/[id]': { GET: (c) => d.replay(c.params.id, c) },
+			// the whole site: the request cloud and the layer cake, from this instance or a sink
+			'/site': page(V.Site, { load: (c) => d.site(c) }),
 			// The source peek behind an expanded row (dev only; 404 elsewhere).
 			'/source': { GET: (c) => d.source(c) }
 		},

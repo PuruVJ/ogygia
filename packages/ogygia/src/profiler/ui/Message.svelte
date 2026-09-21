@@ -8,7 +8,7 @@
 	}: { status: number; error: { message: string }; data: { base: string } } = $props();
 </script>
 
-<Shell>
+<Shell base={data.base}>
 	<h1>Error {status}</h1>
 	<p>{error.message}</p>
 	<p><a href={data.base}>← dashboard</a></p>

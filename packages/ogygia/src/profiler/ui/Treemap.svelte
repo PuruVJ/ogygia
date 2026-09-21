@@ -240,17 +240,17 @@
 	.tree {
 		width: 100%;
 		height: 440px;
-		border: 1px solid #232a35;
+		border: 1px solid var(--line);
 		border-radius: 8px;
-		background: #0c0f13;
+		background: var(--bg-sunken);
 		display: block;
 		cursor: pointer;
 	}
 	.tree-tip {
 		position: fixed;
 		pointer-events: none;
-		background: #1c232d;
-		border: 1px solid #2b3340;
+		background: var(--bg-hover);
+		border: 1px solid var(--line);
 		border-radius: 6px;
 		padding: 6px 10px;
 		font-size: 12px;

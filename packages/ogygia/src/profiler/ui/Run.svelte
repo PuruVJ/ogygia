@@ -8,7 +8,7 @@
 	const { base, path, runs, format } = $derived(data);
 </script>
 
-<Shell>
+<Shell {base}>
 	<h1>Profiling <code>{path}</code></h1>
 	<p class="hint">
 		Rendering the page through your real server{format === 'ogp' ? ', then downloading the .ogp' : ''}.

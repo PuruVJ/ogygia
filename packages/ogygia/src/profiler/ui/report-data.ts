@@ -5,7 +5,7 @@
  * just renders what these return. Findings/sequential/io-kind are reused from their existing homes.
  */
 import type { Analysis, FrameCategory, GroupStat } from '../analyze.js';
-import type { NetCall } from '../net.js';
+import type { NetCall, UpstreamTrace } from '../net.js';
 import type { IoOp } from '../async-io.js';
 import type { ClientIslandStat, MemSample, ReportExtras, ReportMeta, RequestEntry } from '../report.js';
 import { group_islands, hole_economics, island_js_bytes, island_name, island_rows_of } from '../report.js';
@@ -33,8 +33,8 @@ export interface IslandRow {
 	ref_keys: string[];
 	/** unique bytes of module + preload hints (null when unweighed: dev, or an unreachable asset) */
 	js_bytes: number | null;
-	/** each module with its bytes, heaviest first */
-	modules: { url: string; bytes: number | null }[];
+	/** each module with its bytes, heaviest first, and what the build packed into it */
+	modules: { url: string; bytes: number | null; inside: string[] | null }[];
 	interactivity: IslandStat['interactivity'];
 	/** the sum of every interactivity marker; -1 when the build did not scan it */
 	marks: number;
@@ -52,18 +52,23 @@ export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 	const runs = meta.trigger === 'page' ? Math.max(meta.runs?.length ?? 1, 1) : 1;
 	const by_name = new Map(a.components.map((c) => [c.name, c]));
 	const client = new Map((extras.client ?? []).map((c) => [c.entry, c]));
+	const beacon_seen = client.size > 0;
 	return group_islands(island_rows_of(meta)).map((r) => {
 		const name = island_name(r);
 		const comp = by_name.get(name);
 		const cl = client.get(r.entry) ?? null;
 		const modules = [...new Set([r.module_url, ...r.hints].filter(Boolean))]
-			.map((url) => ({ url, bytes: extras.weights?.[url] ?? null }))
+			.map((url) => ({ url, bytes: extras.weights?.[url] ?? null, inside: extras.contents?.[url] ?? null }))
 			.sort((x, y) => (y.bytes ?? -1) - (x.bytes ?? -1));
 		const js_bytes = island_js_bytes(r, extras.weights);
 		const i = r.interactivity;
 		const marks = i ? i.handlers + i.state + i.effects + i.binds + i.actions : -1;
 		let advice: string | null = null;
-		if (marks === 0 && r.wake !== 'none') advice = "No handlers, state, effects, binds or actions in its components: ship it as a lake (wake: 'none') and the JS never loads.";
+		if (beacon_seen && !cl && (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible'))
+			advice = `Never reported hydrating in your visits while other islands did. A '${r.wake}' island that ${r.wake === 'visible' ? 'never intersects the viewport (can the page scroll? is it hidden?)' : 'throws on wake (the browser console has it)'} never wakes.`;
+		else if (cl && cl.recovered > 0)
+			advice = `${cl.recovered} of ${cl.n} hydrations threw the server DOM away and re-rendered: the markup the browser found was not what the server sent (a post-SSR pass, a script that edits it before the wake). It paid for the render twice and flashed.`;
+		else if (marks === 0 && r.wake !== 'none') advice = "No handlers, state, effects, binds or actions in its components: ship it as a lake (wake: 'none') and the JS never loads.";
 		else if (r.count >= 10 && (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible'))
 			advice = `${r.count} copies each wake on ${r.wake}${(r.variants ?? 1) > 1 ? ` with ${r.variants} different props sidecars` : ''}: one island around the list hydrates once, or wake: 'interaction' pays only when touched.`;
 		else if (!r.json && r.culprit) advice = `Its props use devalue because of ${r.culprit}: a string or number there puts them on the JSON lane.`;
@@ -358,6 +363,12 @@ export interface WfCall {
 	req_payload?: string;
 	route: string | null;
 	path: string | null;
+	/** the first-party call path above the caller, nearest first */
+	callers?: string[];
+	/** the upstream's own Server-Timing entries */
+	timings?: { name: string; ms: number; desc?: string }[];
+	/** the upstream profiler's own picture of this request (nested trace) */
+	trace?: UpstreamTrace;
 	caller?: string;
 	headers?: Record<string, string>;
 	error?: string;
@@ -413,6 +424,9 @@ export function waterfall_rows(net: NetCall[]): WfRow[] {
 				route: c.route,
 				path: c.path,
 				caller: c.caller,
+				callers: c.callers,
+				timings: c.timings,
+				trace: c.trace,
 				headers: c.headers,
 				error: c.error
 			}

@@ -15,6 +15,7 @@
 	 * open tag and reports "script left open". See test/profiler-ui-consumer-safe.
 	 */
 	import type { Snippet } from 'svelte';
+	import Sidebar from './Sidebar.svelte' with { wake: 'load' };
 	// The shared profiler vocabulary (reset, typography, tables, buttons, form controls…). Global by
 	// nature — every page composes with it — so it lives in a sibling stylesheet, not scoped here. It's
 	// collected onto every page's server-router CSS aggregate because Shell is a child of every page.
@@ -27,7 +28,12 @@
 	// pages (seen in the wild: every page squeezed to 1150px, profiler-dark). Kit's collector skips
 	// `?inline` css urls by rule, so this is leak-proof no matter how the crawl reaches us.
 	import './profiler.css?inline';
-	let { children }: { children: Snippet } = $props();
+	let {
+		base = '',
+		current = null,
+		toc = false,
+		children
+	}: { base?: string; current?: string | null; toc?: boolean; children: Snippet } = $props();
 </script>
 
 <svelte:head>
@@ -35,12 +41,16 @@
 	<meta name="ogygia-devtools" content="off" />
 </svelte:head>
 
-{@render children()}
-
-<div class="footer">
-	ogygia/profiler — samples the whole Node process during SSR. <b>Self</b> = time (or memory) inside the
-	function itself. <b>Total</b> = self plus everything it called. <b>Per call</b> = total ÷ how many times
-	it ran (a ×N tag means it ran N times; no tag means once).
+<div class="app">
+	<Sidebar {base} {current} />
+	<main class="app-main" class:has-toc={toc}>
+		{@render children()}
+		<div class="footer">
+			ogygia/profiler — samples the whole Node process during SSR. <b>Self</b> = time (or memory) inside
+			the function itself. <b>Total</b> = self plus everything it called. <b>Per call</b> = total ÷ how many
+			times it ran (a ×N tag means it ran N times; no tag means once).
+		</div>
+	</main>
 </div>
 
 <style>
@@ -48,8 +58,8 @@
 	.footer {
 		margin-top: 40px;
 		padding-top: 12px;
-		border-top: 1px solid #1e232b;
-		color: #7d8590;
+		border-top: 1px solid var(--line);
+		color: var(--text-faint);
 		font-size: 12px;
 	}
 </style>

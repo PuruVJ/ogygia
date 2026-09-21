@@ -106,9 +106,9 @@
 	.share-panel {
 		margin: 4px 0 14px;
 		padding: 12px 14px;
-		border: 1px solid #232a35;
+		border: 1px solid var(--line);
 		border-radius: 10px;
-		background: #0e131a;
+		background: var(--bg-sunken);
 		max-width: 640px;
 	}
 	.share-out {
@@ -121,24 +121,24 @@
 		min-width: 0;
 		padding: 8px 10px;
 		border-radius: 8px;
-		border: 1px solid #2b3340;
-		background: #0a0d11;
+		border: 1px solid var(--line);
+		background: var(--bg-sunken);
 		color: #9fb0c4;
 		font: 12px ui-monospace, monospace;
 	}
 	.share-out button {
 		padding: 8px 12px;
 		border-radius: 8px;
-		border: 1px solid #2b3340;
-		background: #1c2530;
-		color: #d8dee6;
+		border: 1px solid var(--line);
+		background: var(--bg-hover);
+		color: var(--text);
 		cursor: pointer;
 		font: inherit;
 		font-size: 12.5px;
 		white-space: nowrap;
 	}
 	.share-note {
-		color: #d9a03d;
+		color: var(--warn);
 		font-size: 12px;
 		margin: 8px 0 0;
 	}

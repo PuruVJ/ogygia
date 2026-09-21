@@ -8,6 +8,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import { fake_progress } from './fake-progress.svelte.js';
+	import { put_report } from './store.js';
 
 	// ── regexes
 	const NON_WORD_G = /\W+/g;
@@ -56,7 +57,9 @@
 
 	async function run() {
 		try {
-			const suffix = format === 'ogp' ? '&format=ogp' : '';
+			// `keep`: the answer carries the report's dump so THIS BROWSER keeps it (IndexedDB) before
+			// navigating — on an ephemeral host the instance that rendered it may be gone by then
+			const suffix = format === 'ogp' ? '&format=ogp' : '&format=keep';
 			const res = await fetch_page(`${base}/page?p=${encodeURIComponent(path)}&runs=${runs}${suffix}`);
 			if (!res.ok) throw new Error(String(res.status));
 			if (format === 'ogp') {
@@ -71,8 +74,18 @@
 				done_ogp = true;
 				phase = 'Downloaded the encrypted .ogp.';
 			} else {
-				// /page renders N times then 303s to /report/<id>; fetch follows it → res.url is the report
-				const url = res.url;
+				// /page renders N times and answers { id, url, dump }: keep the dump here, then open the report
+				let url = res.url;
+				try {
+					const keep = (await res.json()) as { id?: string; url?: string; dump?: { meta: { id: string; created: number; trigger: string } } };
+					if (keep.url) url = keep.url;
+					if (keep.dump) {
+						phase = 'Keeping the report in this browser…';
+						await put_report(keep.dump);
+					}
+				} catch {
+					// an older server 303s to the report instead: res.url is it
+				}
 				await p.finish();
 				phase = 'Opening the report…';
 				try {

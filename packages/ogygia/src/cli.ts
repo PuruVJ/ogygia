@@ -57,7 +57,9 @@ if (
 	command !== 'mcp' &&
 	command !== 'ai' &&
 	command !== 'keys' &&
-	command !== 'fragments'
+	command !== 'fragments' &&
+	command !== 'perf' &&
+	command !== 'bisect'
 ) {
 	const unknown = command && command !== 'help' && !command.startsWith('-');
 	stdout.write(
@@ -68,7 +70,14 @@ if (
 			`  ${accent('npx ogygia keys')} ${dim('[name] (mint an Ed25519 pair for fragment-federation signing)')}\n` +
 			`  ${accent('npx ogygia fragments')} ${dim('<origin> [--out <file>] [--check <file>] (typed widget-catalog stubs + CI drift check)')}\n` +
 			`  ${accent('npx ogygia ai')} ${dim('(install the Claude skill + register the MCP server)')}\n` +
-			`  ${accent('npx ogygia mcp')} ${dim('(stdio MCP server — hand ogygia components to an AI)')}\n\n` +
+			`  ${accent('npx ogygia mcp')} ${dim('(stdio MCP server — hand ogygia components to an AI)')}\n` +
+			`  ${accent('npx ogygia perf')} ${dim('--url <origin> --pages /a,/b [--baseline f.json] [--budget b.json] [--out f.json] [--md f.md]')}\n` +
+			`  ${accent('npx ogygia bisect')} ${dim('--good <sha> [--bad HEAD] --page /x --build "<cmd>" --start "<cmd>" --url <origin>')}\n\n` +
+			`${strong('perf')}  — renders pages under the SSR profiler on a running server, writes a snapshot, diffs it\n` +
+			`  against a baseline under a budget, prints the verdict (exit 1 on a failure) and a PR comment (--md).\n` +
+			`  ${dim('--runs 5 --key $OGYGIA_PROFILER_SECRET --label "$SHA" --no-fail --pages-file pages.json')}\n\n` +
+			`${strong('bisect')}  — finds the first commit that made a page slower: builds and profiles commits between\n` +
+			`  --good and --bad in a binary search (each in its own worktree) and names the culprit.\n\n` +
 			`${strong('init')}  — wires ogygia into the SvelteKit app in the current directory.\n` +
 			`  --markdown / --no-markdown   turn markdown content collections on/off (else you are asked)\n` +
 			`  -y, --yes                    accept defaults, no prompts\n` +
@@ -897,6 +906,12 @@ async function fragments_stub(): Promise<void> {
 // ── dispatch ─────────────────────────────────────────────────────────────────
 if (command === 'fragments') {
 	fragments_stub().catch((err) => die(err?.message ?? String(err)));
+} else if (command === 'perf' || command === 'bisect') {
+	// `./perf/cli.js` is a sibling in dist (library-built), loaded on demand like mcp
+	import(new URL('./perf/cli.js', import.meta.url).href)
+		.then((m) => (m as { runPerf: (a: string[]) => Promise<number>; runBisect: (a: string[]) => Promise<number> })[command === 'perf' ? 'runPerf' : 'runBisect'](argv.slice(1)))
+		.then((code) => process.exit(code))
+		.catch((err) => die(err?.message ?? String(err)));
 } else if (command === 'keys') {
 	keys_mint();
 } else if (command === 'mcp') {

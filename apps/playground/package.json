@@ -31,6 +31,7 @@
     "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.9",
+    "@ionic/core": "^9.0.4",
     "@lezer/highlight": "^1.2.3",
     "@replit/codemirror-lang-svelte": "^6.0.0",
     "@rolldown/browser": "1.2.2",

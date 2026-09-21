@@ -13,6 +13,7 @@
 	// the same hole with a render cache: the profiler's hole economics (hits vs misses)
 	import CachedRecommendations from '$lib/hell/Recommendations.svelte' with { preset: 'cachedRecs' };
 	import FooterLake from '$lib/hell/FooterLake.svelte' with { wake: 'none' };
+	import FacetBar from '$lib/hell/FacetBar.svelte';
 	import { header_config, countries, footer_columns } from '$lib/hell/data';
 	import { walkTree } from '$lib/hell/util';
 
@@ -22,6 +23,9 @@
 	const footer = footer_columns();
 	const suggestions = data.catalog.products.map((p) => p.name);
 	const tree = walkTree(data.catalog.taxonomy);
+	// "never hand the CMS objects to components": a shallow copy per product per render — which is
+	// exactly what defeats the view-model memo keyed by identity in mappers.ts
+	const products = data.catalog.products.map((p) => ({ ...p }));
 </script>
 
 <svelte:head>
@@ -40,9 +44,10 @@
 		db {data.db.rows} rows · manifest {data.manifest} chars · {data.greeting}
 	</p>
 	<PriceTicker />
+	<FacetBar {products} query="compact din breaker family 3" />
 
 	<section class="grid">
-		{#each data.catalog.products as p, i (p.id)}
+		{#each products as p, i (p.id)}
 			<ProductCard product={p} position={i} />
 		{/each}
 	</section>

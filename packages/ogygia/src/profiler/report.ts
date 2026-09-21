@@ -7,9 +7,18 @@
 
 import type { Analysis, HeapAllocator } from './analyze.js';
 import { sequential_ms, type NetCall } from './net.js';
+import type { Visit } from './visit.js';
+import type { ByteStrip } from './byte-strip.js';
+import type { River } from './river.js';
+import type { GcAttribution } from './gc.js';
+import { sync_io, memo_candidates, span_values, type Retained } from './insights.js';
+import type { AllocTimeline } from './alloc.js';
+import type { Contention } from './contention.js';
+import type { Lineage } from './lineage.js';
+import { render_steps } from './steps.js';
 import { io_kind, type IoOp } from './async-io.js';
 import { chain_steps, PHASE_LABEL } from './timeline.js';
-import type { HoleRequestStats, IslandStat, OgygiaRequestStats } from '../server/request-stats.js';
+import type { HoleRequestStats, HoleStat, IslandStat, OgygiaRequestStats } from '../server/request-stats.js';
 import type { SpanRecord } from './span.js';
 
 export type { OgygiaRequestStats, SpanRecord, HoleRequestStats, IslandStat };
@@ -19,6 +28,12 @@ export interface SpanRow {
 	name: string;
 	count: number;
 	total_ms: number;
+	/** the wall time the spans of this name covered, overlaps counted once — `total_ms` far above
+	 *  it means they ran together (a Promise.all), not one after another */
+	wall_ms: number;
+	/** SELF: the spans' time minus what their child spans covered — `ds.pass` 249 ms with
+	 *  `ds.render.all` 178 and `ds.splice` 69 inside it is 2 ms of its own */
+	self_ms: number;
 	p50_ms: number;
 	max_ms: number;
 	errors: number;
@@ -29,6 +44,27 @@ export interface SpanRow {
 	callers: string[];
 	/** other attribute keys seen (shown, not interpreted) */
 	attr_keys: string[];
+	/** THE BREAKDOWN by attribute value: for each string attribute with a handful of distinct
+	 *  values (`tag`, `key`, `table`…), what each value cost — `ds.render` by tag, `db.query` by
+	 *  table. `total_ms` is summed, `wall_ms` counts overlaps once. Values are capped; the rest
+	 *  fold into `(N more)`. */
+	by: Record<string, { value: string; count: number; total_ms: number; wall_ms: number; p50_ms: number; max_ms: number }[]>;
+}
+
+/** The union of intervals' length: what overlapping spans cost in wall time. */
+function wall_of(ivs: (readonly [number, number])[]): number {
+	const sorted = [...ivs].sort((a, b) => a[0] - b[0]);
+	let wall = 0;
+	let cur: [number, number] | null = null;
+	for (const [a, b] of sorted) {
+		if (cur && a <= cur[1]) cur[1] = Math.max(cur[1], b);
+		else {
+			if (cur) wall += cur[1] - cur[0];
+			cur = [a, b];
+		}
+	}
+	if (cur) wall += cur[1] - cur[0];
+	return wall;
 }
 
 /** Fold the recording's spans per name. */
@@ -42,6 +78,20 @@ export function span_rows(spans: readonly SpanRecord[] | undefined): SpanRow[] {
 		if (s.caller) g.callers.set(s.caller, (g.callers.get(s.caller) ?? 0) + 1);
 	}
 	const r2 = (n: number) => Math.round(n * 100) / 100;
+	// SELF per span: its duration minus the wall its child spans covered inside it
+	const children = new Map<number, SpanRecord[]>();
+	for (const s of spans) if (s.parent !== undefined) (children.get(s.parent) ?? children.set(s.parent, []).get(s.parent)!).push(s);
+	const self_of = (s: SpanRecord): number => {
+		if (s.open || s.ms < 0) return 0;
+		const kids = children.get(s.id);
+		if (!kids?.length) return s.ms;
+		const end = s.start + s.ms;
+		const inside = kids
+			.filter((k) => !k.open && k.ms >= 0)
+			.map((k) => [Math.max(k.start, s.start), Math.min(k.start + k.ms, end)] as const)
+			.filter(([a, b]) => b > a);
+		return Math.max(0, s.ms - wall_of(inside));
+	};
 	return [...by.entries()]
 		.map(([name, g]) => {
 			const done = g.list.filter((s) => !s.open && s.ms >= 0).map((s) => s.ms).sort((a, b) => a - b);
@@ -49,10 +99,64 @@ export function span_rows(spans: readonly SpanRecord[] | undefined): SpanRow[] {
 			const miss = g.list.filter((s) => s.attrs?.cache === 'miss');
 			const keys = new Set<string>();
 			for (const s of g.list) for (const k of Object.keys(s.attrs ?? {})) if (k !== 'cache') keys.add(k);
+			// the union of the intervals: what these spans cost in wall time
+			const finished = g.list.filter((s) => !s.open && s.ms >= 0);
+			const wall = wall_of(finished.map((s) => [s.start, s.start + s.ms] as const));
+			// by attribute value: a string attribute with 2..60 distinct values across the spans
+			const by: SpanRow['by'] = {};
+			for (const k of keys) {
+				const groups = new Map<string, SpanRecord[]>();
+				let usable = true;
+				for (const s of finished) {
+					const v = s.attrs?.[k];
+					if (v === undefined) continue;
+					if (typeof v !== 'string' && typeof v !== 'boolean') {
+						usable = false;
+						break;
+					}
+					const key = String(v);
+					(groups.get(key) ?? groups.set(key, []).get(key)!).push(s);
+					if (groups.size > 60) {
+						usable = false;
+						break;
+					}
+				}
+				// a breakdown says something only when values repeat: a key that is unique per span
+				// (`stock.lookup` by product id) is the span list again, not a split
+				if (!usable || groups.size < 2 || groups.size > g.list.length / 2) continue;
+				const rows = [...groups]
+					.map(([value, list]) => {
+						const sorted = list.map((s) => s.ms).sort((a, b) => a - b);
+						return {
+							value,
+							count: list.length,
+							total_ms: r2(sorted.reduce((a, c) => a + c, 0)),
+							wall_ms: r2(wall_of(list.map((s) => [s.start, s.start + s.ms] as const))),
+							p50_ms: sorted[Math.floor(sorted.length / 2)] ?? 0,
+							max_ms: sorted.at(-1) ?? 0
+						};
+					})
+					.sort((a, b) => b.wall_ms - a.wall_ms || b.total_ms - a.total_ms);
+				if (rows.length > 12) {
+					const rest = rows.splice(12);
+					rows.push({
+						value: `(${rest.length} more)`,
+						count: rest.reduce((a, r) => a + r.count, 0),
+						total_ms: r2(rest.reduce((a, r) => a + r.total_ms, 0)),
+						wall_ms: r2(rest.reduce((a, r) => a + r.wall_ms, 0)),
+						p50_ms: 0,
+						max_ms: Math.max(...rest.map((r) => r.max_ms))
+					});
+				}
+				by[k] = rows;
+			}
 			return {
 				name,
 				count: g.list.length,
 				total_ms: r2(done.reduce((a, c) => a + c, 0)),
+				wall_ms: r2(wall),
+				self_ms: r2(finished.reduce((a, s) => a + self_of(s), 0)),
+				by,
 				p50_ms: done[Math.floor(done.length / 2)] ?? 0,
 				max_ms: done.at(-1) ?? 0,
 				errors: g.list.filter((s) => s.error).length,
@@ -92,6 +196,31 @@ export interface RequestEntry {
 	span_ms?: number;
 	/** a deferred hole's endpoint request: what its render cache did */
 	hole?: HoleRequestStats;
+	/** performance.now() at the request's start (the trap matches a window's timeline on it) */
+	pt?: number;
+	/** the request's query string, kept so a caught request can be replayed */
+	search?: string;
+	/** the headers the trap config asked to keep for a replay */
+	replay_headers?: Record<string, string>;
+}
+
+/** The page's web vitals as the profiler user's browser reported them (p50 over the visits). */
+export interface PageVitals {
+	n: number;
+	ttfb: number | null;
+	fcp: number | null;
+	lcp: number | null;
+	cls: number | null;
+	inp: number | null;
+}
+
+/** The cold render (the warm-up) profiled on its own: what module load + compile cost per file. */
+export interface ColdStart {
+	/** wall ms of the cold render */
+	ms: number;
+	busy_ms: number;
+	/** self ms per file in the cold render, heaviest first */
+	files: { file: string; category: import('./analyze.js').FrameCategory; ms: number }[];
 }
 
 /** What the browser reported for one island fingerprint (the runtime's hydration beacon). */
@@ -108,6 +237,9 @@ export interface ClientIslandStat {
 	max_ms: number;
 	/** the module-load part of it (hydrate core + the island's chunk closure), p50 */
 	load_p50_ms: number;
+	/** hydrations that discarded the server DOM and re-rendered: the markup the browser found was
+	 *  not the markup the server sent (a post-SSR pass, a script that edited it before wake) */
+	recovered: number;
 }
 
 export interface MemSample {
@@ -120,7 +252,12 @@ export interface MemSample {
 export interface ReportMeta {
 	id: string;
 	created: number;
-	trigger: 'window' | 'page' | 'request';
+	/** `trap`: a slow request the background trap caught (its `request` is the one) */
+	trigger: 'window' | 'page' | 'request' | 'trap';
+	/** trap mode: the threshold the request crossed */
+	trap_over?: number;
+	/** page mode: the cold (warm-up) render profiled on its own */
+	cold?: ColdStart;
 	/** page mode: the path that was rendered */
 	page?: string;
 	/** page mode: the originally-requested path, when it redirected to `page` (trailing slash, i18n, …) */
@@ -133,8 +270,12 @@ export interface ReportMeta {
 	run_bytes?: number;
 	/** page mode: a plain note when the run plan was trimmed to fit the serverless budget */
 	budget_note?: string;
-	/** page mode: wall ms of each render run */
+	/** page mode: each render run, ms, AS THE APP WOULD HAVE PAID IT — the profiler's own share (its
+	 *  CPU frames, its part of the GC pauses) taken out; `runs_measured` is what the clock said */
 	runs?: number[];
+	runs_measured?: number[];
+	/** the profiler's own cost inside the window, measured once and kept out of every other number */
+	overhead?: { cpu_ms: number; gc_ms: number; per_run_ms: number; per_run?: number[]; note: string };
 	/** request mode: the profiled request */
 	request?: { method: string; path: string; route: string | null; ms: number };
 	duration_ms: number;
@@ -168,6 +309,8 @@ export interface ReportExtras {
 	/** the app's own spans (`span()` from ogygia/profiler) recorded during the window */
 	spans?: SpanRecord[];
 	heap: HeapAllocator[] | null;
+	/** bytes per component (the nearest component above each sampled allocation) */
+	heap_components?: { name: string; bytes: number }[] | null;
 	mem: MemSample[];
 	/** performance.measure() spans emitted by the app/libraries during the window */
 	measures?: UserTiming[];
@@ -179,8 +322,47 @@ export interface ReportExtras {
 	call_counts?: Record<string, number>;
 	/** bytes of each island module / preload href (a built app; measured after the recording) */
 	weights?: Record<string, number>;
+	/** what is inside each hashed chunk: a readable source list from the build's handoff */
+	contents?: Record<string, string[]>;
 	/** browser-side hydration timings joined by fingerprint (the runtime's beacon) */
 	client?: ClientIslandStat[];
+	/** the page's web vitals from the same beacon */
+	vitals?: PageVitals;
+	/** the app's own browser marks (`mark()` from ogygia/profiler/client) for the page, per name */
+	client_marks?: ClientMarkStat[];
+	/** the browser's CPU profile of the page's hydration (the profiler user's latest visit) */
+	client_cpu?: { analysis: Analysis; at: number; sample_ms: number };
+	/** a caught request's inputs (path + query, the kept headers): the "profile it again" button */
+	replay?: { path: string; headers: Record<string, string> };
+	/** the browser's picture of a visit to this page (the beacon) — the one-clock timeline joins it */
+	visit?: Visit;
+	/** the rendered document as a byte strip */
+	strip?: ByteStrip;
+	/** calls → loads → page.data keys → islands */
+	river?: River;
+	/** who caused the GC: each pause joined to the allocations before it */
+	gc_attr?: GcAttribution;
+	/** promises created in the window (count, sampled creators) */
+	promises?: { count: number; top: { caller: string; share: number }[] };
+	/** what one more render left alive after a full collection, by allocation site */
+	retained?: Retained;
+	/** when the heap grew and what ran then */
+	alloc?: AllocTimeline;
+	/** the other requests the instance answered while the render ran */
+	contention?: Contention;
+	/** which component reads which page.data key, from the sources */
+	lineage?: Lineage;
+}
+
+/** One `mark()` name as the profiler user's browser reported it for the page. */
+export interface ClientMarkStat {
+	name: string;
+	n: number;
+	p50_ms: number;
+	max_ms: number;
+	errors: number;
+	/** the attribute keys seen on it */
+	attr_keys: string[];
 }
 
 export interface RouteAgg {
@@ -519,14 +701,33 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		if (s.open) {
 			warn('span-open', `${s.name} never ended ${s.open} time${s.open === 1 ? '' : 's'}${site} — a hung call, or a span.start() without end().`);
 		}
-		if (per_render >= 5 && ms_per_render >= Math.max(5, window_ms * 0.05)) {
-			warn(
-				'span-repeat',
-				`${s.name} ran ${Math.round(per_render)} times in one render${site}, ${fmt_ms(ms_per_render)} ms together, ${fmt_ms(s.p50_ms)} ms each.`,
-				{
-					fix: 'Once per item is the N+1 shape: batch it (one call for all the ids), or fetch the parent with its children included.'
-				}
-			);
+		const wall_per_render = s.wall_ms / runs;
+		if (per_render >= 5 && wall_per_render >= Math.max(5, window_ms * 0.05)) {
+			// the breakdown's biggest value, when the spans carry one (`ds.render` by tag)
+			const bk = Object.keys(s.by)[0];
+			const top = bk ? s.by[bk][0] : undefined;
+			const by_top =
+				top && bk && !top.value.startsWith('(')
+					? ` Most of it is ${bk} ${top.value}: ${Math.round(top.count / runs)} of them, ${fmt_ms(top.wall_ms / runs)} ms of wall${top.wall_ms < top.total_ms * 0.6 ? ` (${fmt_ms(top.total_ms / runs)} ms summed)` : ''}.`
+					: '';
+			// ran together (a Promise.all: the summed time is far above the wall) or one after another?
+			if (s.wall_ms < s.total_ms * 0.6) {
+				warn(
+					'span-repeat',
+					`${s.name} ran ${Math.round(per_render)} times in one render${site}, together: ${fmt_ms(wall_per_render)} ms of wall for ${fmt_ms(ms_per_render)} ms of summed work, ${fmt_ms(s.p50_ms)} ms each.${by_top}`,
+					{
+						fix: 'They already overlap, so batching gains little: the cost is each one (make it cheaper, or cache it) and how many there are (render fewer).'
+					}
+				);
+			} else {
+				warn(
+					'span-repeat',
+					`${s.name} ran ${Math.round(per_render)} times in one render${site}, ${fmt_ms(ms_per_render)} ms together, ${fmt_ms(s.p50_ms)} ms each.${by_top}`,
+					{
+						fix: 'Once per item is the N+1 shape: batch it (one call for all the ids), or fetch the parent with its children included.'
+					}
+				);
+			}
 		} else if (ms_per_render >= Math.max(10, window_ms * 0.2)) {
 			warn(
 				'span-slow',
@@ -594,12 +795,157 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		ogygia_findings(og, meta, extras, info, warn);
 	}
 	kit_findings(a, meta, info, warn);
+	accuracy_findings(a, meta, extras, info, warn);
+	// PATHS: several hot functions under one caller — the one place to fix (the graph is below)
+	for (const g of (a.paths ?? []).slice(0, 3)) {
+		const say = g.ms >= a.busy_ms * 0.15 ? warn : info;
+		say(
+			'path-group',
+			`${g.fns.length} hot functions sit on one path under ${g.owner.name}: ${g.fns.slice(0, 4).map((f) => f.name).join(', ')}${g.fns.length > 4 ? ` and ${g.fns.length - 4} more` : ''} — ${fmt_ms(g.ms)} ms together (${fmt_pct(g.ms, a.busy_ms)} of busy).`,
+			{
+				anchor: g.owner.category === 'component' ? `comp:${g.owner.name}` : `fn:${g.owner.key}`,
+				file: g.owner.url,
+				line: g.owner.line,
+				fix: `Fix ${g.owner.name} once — call it less, cache what it computes, or move it out of the render — rather than each function on its own; the graph under "Paths to fix" shows the chain.`
+			}
+		);
+	}
 
 	if (a.gc_ms > a.busy_ms * 0.15 && a.gc_ms > 5) {
 		warn(
 			'gc-heavy',
 			`Garbage collection took ${fmt_pct(a.gc_ms, a.busy_ms)} of busy time — see the allocators for who creates the garbage.`
 		);
+	}
+	// WHAT A RENDER LEAVES BEHIND: the heap kept after one more render and a full collection
+	if (extras.retained && extras.retained.total_bytes >= 5 * 1048576) {
+		const r = extras.retained;
+		const top = r.sites.slice(0, 3).map((s) => `${s.name}${s.caller ? ` via ${s.caller}` : ''}${s.component ? ` in ${s.component}` : ''} (${Math.round((s.bytes / 1048576) * 10) / 10} MB)`).join(', ');
+		warn('retained-per-render', `One render leaves ${Math.round((r.total_bytes / 1048576) * 10) / 10} MB alive after a full collection: ${top}. Every render adds that much; the instance grows until it restarts.`, {
+			fix: 'Whatever holds these (a module-level cache, a registry, a closure kept by a long-lived object) must release them or be bounded. The sites named are where the kept objects were made; what keeps them is their owner.',
+			...(r.sites[0]?.url ? { file: r.sites[0].url, line: r.sites[0].line } : {})
+		});
+	}
+	// DEOPTIMIZATIONS: a hot function V8 keeps throwing out of optimized code
+	for (const d of a.deopts.slice(0, 3)) {
+		if (d.self_ms < Math.max(2, a.busy_ms * 0.01) || d.count < 2) continue;
+		const why = Object.entries(d.reasons).sort((x, y) => y[1] - x[1]).map(([r, n]) => `${r} ×${n}`).join(', ');
+		warn('deopt', `${d.name} was deoptimized ${d.count} times in the window (${why}) and cost ${fmt_ms(d.self_ms)} ms of CPU: it runs in slow code most of the time.`, {
+			fix: 'A deopt reason names the assumption that broke: "wrong map" is objects of different shapes at one site (keep the same properties in the same order), "not a Smi" is a number that became a float or a string, a megamorphic call site is many types through one call. Give the function one shape and it stays optimized.',
+			anchor: `fn:${d.key}`,
+			file: d.url,
+			line: d.line
+		});
+	}
+	// SYNC I/O inside the render: blocks every other request on the instance
+	const sync = sync_io(a);
+	const sync_ms = sync.reduce((s, r) => s + r.total_ms, 0);
+	if (sync_ms >= 2) {
+		const top = sync[0];
+		warn('sync-io', `${fmt_ms(sync_ms)} ms of synchronous I/O on the CPU during the window: ${sync.slice(0, 3).map((s) => `${s.name} ${fmt_ms(s.total_ms)} ms${s.callers[0] ? ` from ${s.callers[0]}` : ''}`).join(', ')}. While it runs no other request on this instance moves.`, {
+			fix: 'Use the async form (fs.promises, zlib promises, execFile with a callback), or do it once at start-up and keep the result.',
+			anchor: `fn:${top.key}`
+		});
+	}
+	// PROMISE STORM: tens of thousands of promises per render is a cost no function shows
+	if (extras.promises) {
+		const per = meta.runs?.length ? extras.promises.count / meta.runs.length : extras.promises.count;
+		if (per >= 10_000) {
+			const top = extras.promises.top.slice(0, 3).map((t) => `${t.caller} ${Math.round(t.share * 100)}%`).join(', ');
+			warn('promise-storm', `${Math.round(per).toLocaleString()} promises per render. Each is an allocation and a microtask; at this volume they are a cost no single function shows.${top ? ` Mostly from: ${top}.` : ''}`, {
+				fix: 'Find the loop that awaits per item (a render per tag, a fetch per row) and do the work in one call, or on a plain array without async at all.'
+			});
+		}
+	}
+	// MEMOIZATION CANDIDATES: the same computation many times per render
+	for (const m of memo_candidates(a, extras.gc_attr?.makers ?? []).slice(0, 2)) {
+		info('memo-candidate', `${m.name} runs ${m.calls} times per render at ${m.per_call_ms} ms each (${fmt_ms(m.total_ms)} ms)${m.alloc_per_call ? `, allocating ${Math.round(m.alloc_per_call / 1024)} KB per call` : ''}${m.parent ? `, mostly under ${m.parent}` : ''}. If its result depends only on its argument, a cache keyed on it runs it once per distinct value.`, {
+			anchor: `fn:${m.key}`,
+			file: m.url,
+			line: m.line
+		});
+	}
+	// WHO CAUSED THE GC: the allocator carrying the most pause time, when it is worth naming
+	const g = extras.gc_attr;
+	if (g && g.summary.total_ms >= 5 && g.makers.length) {
+		const m = g.makers[0];
+		if (m.gc_ms >= 3 && m.share >= 0.15) {
+			const where = m.component && m.component !== m.name ? ` inside ${m.component}` : '';
+			const via = m.caller && m.caller !== m.name ? ` (called from ${m.caller})` : '';
+			warn(
+				'gc-cause',
+				`${fmt_ms(m.gc_ms)} ms of the ${fmt_ms(g.summary.total_ms)} ms of GC is the garbage ${m.name}${via} makes${where}: ${Math.round((m.allocated / 1048576) * 10) / 10} MB of the ${g.summary.allocated_mb} MB allocated in the window (${Math.round(m.share * 100)}%)${m.pauses ? `, on the causing side of ${m.pauses} pause${m.pauses === 1 ? '' : 's'}` : `, across the window's ${g.summary.count} pause${g.summary.count === 1 ? '' : 's'}`}.`,
+				{
+					fix: `Allocate less there: reuse the object between calls, avoid a clone or a JSON round trip of a large value, build strings once instead of in a loop. ${g.summary.retained_mb !== undefined && g.summary.retained_mb > 20 ? `The heap also grew ${g.summary.retained_mb} MB over the window: something keeps what it allocates.` : 'Most of it is churn: the heap did not grow with it.'}`,
+					...(m.url ? { file: m.url, line: m.line } : {})
+				}
+			);
+		}
+	}
+	// WHEN THE HEAP GREW: one burst that is most of the growth, and what ran then
+	const al = extras.alloc;
+	if (al && al.bursts.length && al.grown_mb >= 20) {
+		const b = al.bursts[0];
+		if (b.mb >= al.grown_mb * 0.3) {
+			const who = b.running[0];
+			info('alloc-burst', `${b.mb} MB of the ${al.grown_mb} MB the heap grew came in one ${fmt_ms(b.t1 - b.t0)} ms stretch (${b.rate} MB/s)${who ? `, while ${who.label} ran` : ''}${b.gc ? ' — and a collection fell inside it, so the allocation was more than the growth shows' : ''}.`, {
+				fix: 'Look at the allocators table for that stretch: the makers with a caller there are the ones filling the heap that fast.',
+				...(who?.file ? { file: who.file } : {})
+			});
+		}
+	}
+	// THE INSTANCE WAS NOT ALONE
+	const ct = extras.contention;
+	if (ct && ct.requests.length) {
+		const others = ct.requests.filter((r) => r.kind === 'other');
+		const holes = ct.requests.length - others.length;
+		const win = meta.trigger === 'page' ? Math.max(meta.runs?.length ?? 1, 1) : 1;
+		if (others.length && ct.busy_share >= 0.1) {
+			const top = others.slice(0, 3).map((r) => `${r.method} ${r.path}`).join(', ');
+			warn('busy-instance', `${others.length} other request${others.length === 1 ? '' : 's'} ran on this instance during the profiled render${win > 1 ? 's' : ''} (${top}${others.length > 3 ? ', …' : ''}), in flight for ${Math.round(ct.busy_share * 100)}% of the window: up to ${fmt_ms(ct.cpu_max_ms)} ms of its wall time was the event loop serving them, and the render's own numbers carry that wait.`, {
+				fix: 'Record again on a quiet instance, or read the CPU numbers (they exclude the others) rather than the wall time. Sustained, this is what horizontal scaling or a worker pool is for.'
+			});
+		}
+		const selfs = ct.requests.filter((r) => r.kind === 'self');
+		if (selfs.length) {
+			const paths = [...new Set(selfs.map((r) => r.path))];
+			const per = Math.round(selfs.length / win);
+			const self_ms = selfs.reduce((s, r) => s + r.ms, 0) / win;
+			info('self-fetch', `The render called its own server ${per} time${per === 1 ? '' : 's'} (${paths.slice(0, 3).join(', ')}${paths.length > 3 ? ', …' : ''}), ${fmt_ms(self_ms)} ms of requests answered by the same event loop that was rendering: the page waited on itself, and every one of those calls paid a full HTTP round trip to reach code in the same process.`, {
+				fix: 'Call the function behind the endpoint directly from the load (import it), or use a remote function; keep fetch for servers that are not this one.'
+			});
+		}
+		if (holes && !others.length && !selfs.length) {
+			info('holes-in-flight', `${holes} of the page's own hole request${holes === 1 ? '' : 's'} ${holes === 1 ? 'was' : 'were'} answered while it rendered: the deferred islands cost the instance CPU on the page's own clock.`);
+		}
+	}
+	// DATA LINEAGE: keys fetched for nobody, keys shipped for the server alone
+	const ln = extras.lineage;
+	if (ln) {
+		const unread = ln.unread.filter((k) => k.from);
+		if (unread.length) {
+			const with_wait = unread.filter((k) => (k.load_wait_ms ?? 0) > 0);
+			const names = unread.slice(0, 4).map((k) => `${k.key} (${k.from})`).join(', ');
+			const wait = with_wait.reduce((s, k) => s + (k.load_wait_ms ?? 0), 0);
+			warn('key-unread', `${unread.length} page.data key${unread.length === 1 ? '' : 's'} no component reads: ${names}${unread.length > 4 ? ', …' : ''}.${wait > 0 ? ` The load${with_wait.length > 1 ? 's' : ''} behind ${with_wait.length > 1 ? 'them' : 'it'} waited ${fmt_ms(wait)} ms on upstream calls per render.` : ''}`, {
+				fix: 'Drop the key from the load, or the call that produces it — nothing on the page uses it. A key read through a spread or a whole-object pass-through would show as unknown, not unread.',
+				file: unread[0].from!
+			});
+		}
+		const so = ln.server_only.filter((k) => k.shipped_bytes >= 2048);
+		if (so.length) {
+			const bytes = so.reduce((s, k) => s + k.shipped_bytes, 0);
+			info('seed-server-only', `${fmt_kb(bytes)} of the seed is ${so.length} key${so.length === 1 ? '' : 's'} only the server renders (${so.slice(0, 4).map((k) => k.key).join(', ')}${so.length > 4 ? ', …' : ''}): shipped to the browser, read by no island.`, {
+				fix: 'The seed ships the keys islands read; a key here is read by a server component through a name the shaping could not see. Check the island’s closure.'
+			});
+		}
+	}
+	// VALUES: a span whose time follows one of its numbers
+	for (const v of span_values(extras.spans)) {
+		if (v.r !== undefined && v.r >= 0.8 && v.n >= 5 && v.ms_per_unit !== undefined && v.ms_per_unit > 0) {
+			info('value-driven', `${v.span} scales with ${v.attr}: about ${v.ms_per_unit >= 0.01 ? v.ms_per_unit : v.ms_per_unit.toExponential(1)} ms per unit over ${v.n} spans (${v.attr} ${v.min}–${v.max}, fit r=${v.r}). Halving the ${v.attr} halves the span.`);
+			break;
+		}
 	}
 	if (extras.gc && extras.gc.max_ms > 20) {
 		warn(
@@ -638,6 +984,40 @@ type Say = (code: string, message: string, extra?: Pick<Finding, 'fix' | 'anchor
  *  while the profiler records, so the internal render carries them). */
 export function island_rows_of(meta: ReportMeta): IslandStat[] {
 	return meta.requests.find((r) => r.og?.island_rows?.length)?.og?.island_rows ?? [];
+}
+
+const HOST_FN_RE = /^_[0-9a-f]{11}$/;
+const ISLAND_ID_RE = /([0-9a-f]{12})/;
+/**
+ * THE ISLAND HOST WRAPPERS by name. The compiler wraps every island in a virtual
+ * `wrapper/<id>.svelte`, and Svelte names that function after the file: `_b95bfb97fab` (the id
+ * minus its first character, made an identifier). The island rows know the id (in the entry URL)
+ * and the component: this returns the `rename` hook `analyze()` takes, so the wrapper reads
+ * `ProductCard (island host)` in every table, stack and flame. Rows come from every request in
+ * the window (a page profile's own render, a trapped page, a header-profiled request).
+ */
+export function island_host_renamer(requests: readonly RequestEntry[]): ((name: string, url: string) => string | undefined) | undefined {
+	const by_suffix = new Map<string, string>();
+	for (const r of requests) {
+		for (const row of r.og?.island_rows ?? []) {
+			const id = ISLAND_ID_RE.exec(row.entry)?.[1];
+			if (!id) continue;
+			const name = island_name(row);
+			if (name && name !== row.entry) by_suffix.set(id.slice(1), name);
+		}
+	}
+	if (!by_suffix.size) return undefined;
+	return (name) => {
+		if (!HOST_FN_RE.test(name)) return undefined;
+		const island = by_suffix.get(name.slice(1));
+		return island ? `${island} (island host)` : undefined;
+	};
+}
+
+/** What to call a hole: its component and props (`Recommendations {"forProduct":"P1"}`), else its id. */
+export function hole_label(h: Pick<HoleStat, 'id' | 'name' | 'props'>): string {
+	if (!h.name) return h.id;
+	return h.props ? `${h.name} ${h.props}` : h.name;
 }
 
 /** The hole endpoint requests in the window, per hole id: hits / misses / uncached renders. */
@@ -819,16 +1199,22 @@ function ogygia_findings(og: OgygiaRequestStats, meta: ReportMeta, extras: Repor
 	// HOLE ECONOMICS: a hole with a maxAge whose cache never serves, and holes with no cache at all.
 	const econ = hole_economics(meta);
 	const rows = og.hole_rows ?? [];
+	// the endpoint only knows the id; the page's rows know the component and its props
+	const by_id = new Map(rows.map((h) => [h.id, h]));
+	const label = (id: string) => {
+		const h = by_id.get(id);
+		return h ? hole_label(h) : id;
+	};
 	for (const e of econ.values()) {
 		const total = e.hit + e.miss + e.none;
 		if (e.ttl > 0 && total >= 2 && e.hit === 0) {
 			warn(
 				'hole-cache-cold',
-				`Hole ${e.id} has maxAge ${e.ttl}s but its cache never hit in ${total} requests (${fmt_ms(e.ms / total)} ms each).`,
+				`The hole ${label(e.id)} has maxAge ${e.ttl}s but its cache never hit in ${total} requests (${fmt_ms(e.ms / total)} ms each).`,
 				{ fix: 'The cache key carries the props and the session seal: per-visitor props (a user id, a timestamp) make every key unique. Pass only what the hole renders from.' }
 			);
 		} else if (e.ttl > 0 && e.hit > 0) {
-			info('hole-cache', `Hole ${e.id}: ${e.hit} of ${total} requests served from the render cache (maxAge ${e.ttl}s).`);
+			info('hole-cache', `The hole ${label(e.id)}: ${e.hit} of ${total} requests served from the render cache (maxAge ${e.ttl}s).`);
 		}
 	}
 	const uncached = rows.filter((h) => h.ttl === 0);
@@ -837,13 +1223,41 @@ function ogygia_findings(og: OgygiaRequestStats, meta: ReportMeta, extras: Repor
 		if (slow.length) {
 			info(
 				'hole-uncached',
-				`${slow.length} hole${slow.length === 1 ? '' : 's'} render${slow.length === 1 ? 's' : ''} fresh on every visit (${names(slow.map((e) => `${e.id} ${fmt_ms(e.ms / Math.max(e.hit + e.miss + e.none, 1))} ms`))}).`,
-				{ fix: 'Content that is the same for every visitor for a while can take a maxAge: the endpoint then serves the memo.' }
+				`${slow.length} hole${slow.length === 1 ? '' : 's'} render${slow.length === 1 ? 's' : ''} fresh on every visit: ${names(slow.map((e) => `${label(e.id)} at ${fmt_ms(e.ms / Math.max(e.hit + e.miss + e.none, 1))} ms`))}.`,
+				{ fix: "Content that is the same for every visitor for a while can take a maxAge (a preset: { render: 'deferred', maxAge: '5m' }): the endpoint then serves the memo." }
 			);
 		}
 	}
 	// THE BROWSER'S SIDE: hydration timings the runtime beaconed, joined by fingerprint.
 	const client = extras.client ?? [];
+	// NEVER WOKE: the beacon works (other islands reported) but an island that should wake never
+	// did — nothing scrolled it into view, its wake threw, or something on the page stopped it
+	if (client.length) {
+		const seen = new Set(client.map((c) => c.entry));
+		const silent = islands.filter((r) => (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible') && !seen.has(r.entry));
+		if (silent.length) {
+			warn(
+				'never-hydrated',
+				`${names(silent.map((r) => `${island_name(r)} (${r.count > 1 ? `${r.count} copies, ` : ''}wake: ${r.wake})`))} never reported hydrating in your visits, while ${client.length} other island${client.length === 1 ? '' : 's'} did.`,
+				{
+					fix: "A 'visible' island that never intersects the viewport never wakes: check the page can scroll (a design system's stylesheet can pin the body) and that the island is not hidden. A 'load' island that stays silent threw on wake: the browser console has it."
+				}
+			);
+		}
+	}
+	// HYDRATION MISMATCH: an island that threw its server DOM away and re-rendered paid twice and
+	// flashed — the markup changed between the server and the browser
+	const broken = client.filter((c) => c.recovered > 0);
+	if (broken.length) {
+		const total = broken.reduce((s, c) => s + c.recovered, 0);
+		warn(
+			'hydration-mismatch',
+			`${names(broken.map(island_name))} discarded ${broken.length === 1 ? 'its' : 'their'} server-rendered DOM and re-rendered in the browser (${total} time${total === 1 ? '' : 's'} seen): the markup the browser found was not what the server sent.`,
+			{
+				fix: 'Something edits the HTML between the render and the wake — a post-SSR pass (a design-system renderer, a DSD injector), a script that runs before the runtime, a comment-stripping proxy. Keep it out of ogygia-region subtrees, or run it before ogygia’s render.'
+			}
+		);
+	}
 	if (client.length) {
 		const slow = [...client].sort((x, y) => y.p50_ms - x.p50_ms)[0];
 		const total = client.reduce((s, c) => s + c.p50_ms, 0);
@@ -936,6 +1350,143 @@ function kit_findings(a: Analysis, meta: ReportMeta, info: Say, warn: Say): void
 	}
 }
 
+/** Cold vs warm per file: what the first render paid over a warm one (module load + compile). */
+export function cold_rows(a: Analysis, meta: ReportMeta): { file: string; category: import('./analyze.js').FrameCategory; cold_ms: number; warm_ms: number; extra_ms: number }[] {
+	if (!meta.cold) return [];
+	const runs = runs_of(meta);
+	const warm = new Map(a.files.map((f) => [f.key, f.self_ms / runs]));
+	return meta.cold.files
+		.map((f) => {
+			const w = warm.get(f.file) ?? 0;
+			return { file: f.file, category: f.category, cold_ms: f.ms, warm_ms: round1(w), extra_ms: round1(f.ms - w) };
+		})
+		.filter((r) => r.extra_ms >= 0.5)
+		.sort((x, y) => y.extra_ms - x.extra_ms);
+}
+
+/** The spread of a component across runs: median of the rest against the max, and the cold first run. */
+export function run_spread(runs_ms: number[]): { min: number; median: number; max: number; max_run: number; after: number; cold: boolean } | null {
+	if (runs_ms.length < 2) return null;
+	const sorted = [...runs_ms].sort((x, y) => x - y);
+	const median = sorted[Math.floor(sorted.length / 2)];
+	const max = sorted[sorted.length - 1];
+	const rest = runs_ms.slice(1);
+	const rest_median = [...rest].sort((x, y) => x - y)[Math.floor(rest.length / 2)];
+	return {
+		min: sorted[0],
+		median,
+		max,
+		max_run: runs_ms.indexOf(max) + 1,
+		/** the median of every run after the first: what "warm" costs */
+		after: rest_median,
+		// the first run alone is the outlier: a cache that was cold, a lazy import
+		cold: runs_ms[0] >= 5 && runs_ms[0] >= rest_median * 2.5 && max === runs_ms[0]
+	};
+}
+
+/** Findings from the accuracy round: the upstream's own split of a wait, the cold render, a
+ *  component whose runs disagree, and the browser's vitals against the server's render. */
+function accuracy_findings(a: Analysis, meta: ReportMeta, extras: ReportExtras, info: Say, warn: Say): void {
+	const runs = runs_of(meta);
+	// UPSTREAM SPLIT: the slowest call that told us, through Server-Timing, where ITS time went.
+	const told = extras.net
+		.filter((c) => c.ms >= 0 && c.timings?.length)
+		.sort((x, y) => y.ms + (y.body_ms ?? 0) - (x.ms + (x.body_ms ?? 0)))[0];
+	if (told && told.ms >= 20) {
+		const theirs = told.timings!.reduce((s, t) => s + t.ms, 0);
+		const parts = told.timings!
+			.filter((t) => t.ms > 0)
+			.sort((x, y) => y.ms - x.ms)
+			.slice(0, 4)
+			.map((t) => `${t.desc ?? t.name} ${fmt_ms(t.ms)} ms`)
+			.join(', ');
+		const { host, tpl } = path_template(told.url);
+		info(
+			'upstream-split',
+			`${told.method} ${host}${tpl} waited ${fmt_ms(told.ms)} ms; its own Server-Timing says ${parts || 'nothing measurable'}` +
+				(theirs > 0 ? ` — ${fmt_ms(theirs)} ms of the wait is on their side, ${fmt_ms(Math.max(0, told.ms - theirs))} ms is the network and their framework.` : '.'),
+			{
+				fix:
+					theirs >= told.ms * 0.6
+						? 'The wait is theirs: take the biggest entry to whoever owns that service, or cache the response.'
+						: 'Most of the wait is outside their measured work: the network path, TLS, or a queue in front of them.'
+			}
+		);
+	}
+	// COLD START: the first render against the warm ones, and which files paid for it.
+	if (meta.cold && meta.runs?.length) {
+		const warm = [...meta.runs].sort((x, y) => x - y)[Math.floor(meta.runs.length / 2)];
+		const rows = cold_rows(a, meta);
+		const extra = rows.reduce((s, r) => s + r.extra_ms, 0);
+		if (meta.cold.ms >= warm * 1.5 && meta.cold.ms - warm >= 50) {
+			warn(
+				'cold-start',
+				`The first render took ${fmt_ms(meta.cold.ms)} ms against ${fmt_ms(warm)} ms warm: ${fmt_ms(meta.cold.ms - warm)} ms of module load and compile` +
+					(rows[0] ? `, most of it ${rows[0].file} (${fmt_ms(rows[0].extra_ms)} ms)` : '') +
+					'. On a serverless host every cold instance pays this.',
+				{
+					fix: 'Fewer and smaller server modules on the page’s path: lazy-import what the render rarely needs, keep heavy libraries out of hooks and layouts, and prefer a warm instance (provisioned concurrency) where the platform offers one.'
+				}
+			);
+		} else if (rows.length && extra >= 20) {
+			info('cold-start', `The first render paid ${fmt_ms(extra)} ms of module load and compile over a warm one, most of it ${rows[0].file} (${fmt_ms(rows[0].extra_ms)} ms).`);
+		}
+	}
+	// RUN VARIANCE: a component whose runs disagree is a cache, not a slow render.
+	if (runs > 1) {
+		const spread = a.components
+			.map((c) => ({ c, s: c.runs_ms ? run_spread(c.runs_ms) : null }))
+			.filter((x): x is { c: (typeof a.components)[number]; s: NonNullable<ReturnType<typeof run_spread>> } => !!x.s && x.s.max >= 5)
+			.sort((x, y) => y.s.max - y.s.median - (x.s.max - x.s.median))[0];
+		if (spread && spread.s.cold) {
+			info(
+				'component-cold-run',
+				`${spread.c.name} took ${fmt_ms(spread.s.max)} ms in the first render and ${fmt_ms(spread.s.after)} ms after: a cache that was cold, or a lazy import — not a slow component.`,
+				{ anchor: `comp:${spread.c.name}`, fix: 'Warm it at startup, or accept it: only the first request after a deploy pays this.' }
+			);
+		} else if (spread && spread.s.max >= spread.s.median * 3 && spread.s.max - spread.s.median >= 10) {
+			warn(
+				'component-variance',
+				`${spread.c.name} is ${fmt_ms(spread.s.median)} ms in most renders but ${fmt_ms(spread.s.max)} ms in run ${spread.s.max_run}: something it waits on or caches is not steady.`,
+				{ anchor: `comp:${spread.c.name}`, fix: 'Open the row: the per-run column shows the spread; a cache with a short TTL, a GC pause, or a shared upstream are the usual causes.' }
+			);
+		}
+	}
+	// THE APP'S OWN BROWSER MARKS: the slowest one, next to the server's render.
+	const marks = extras.client_marks ?? [];
+	if (marks.length) {
+		const slow = [...marks].sort((x, y) => y.p50_ms - x.p50_ms)[0];
+		const failed = marks.filter((m) => m.errors > 0);
+		info(
+			'client-mark',
+			`In the browser the app marked ${marks.length} thing${marks.length === 1 ? '' : 's'}: the slowest is ${slow.name} at ${fmt_ms(slow.p50_ms)} ms (p50 of ${slow.n})` +
+				(failed.length ? `; ${failed.map((m) => m.name).join(', ')} failed.` : '.'),
+			{ fix: slow.p50_ms >= 300 ? `${slow.name} is a wait the visitor feels after the HTML arrived: it is not the server render, take it to whatever ${slow.name} times.` : undefined }
+		);
+	}
+	// THE BROWSER: vitals against the server's render — where the user's time really went.
+	const v = extras.vitals;
+	if (v && v.lcp !== null) {
+		const server = meta.runs?.length ? [...meta.runs].sort((x, y) => x - y)[Math.floor(meta.runs.length / 2)] : meta.request?.ms ?? 0;
+		const ttfb = v.ttfb ?? 0;
+		if (v.lcp - ttfb >= Math.max(500, ttfb) && server > 0) {
+			warn(
+				'lcp-gap',
+				`In the browser LCP is ${fmt_ms(v.lcp)} ms while the server answered in ${fmt_ms(ttfb)} ms (TTFB; the render itself ${fmt_ms(server)} ms): ${fmt_ms(v.lcp - ttfb)} ms of the user's wait is after the HTML arrived — assets, fonts, hydration.`,
+				{ fix: 'Make the hero markup static (a lake), preload its image and font, and keep the islands above the fold small: the server is not the bottleneck here.' }
+			);
+		} else if (ttfb > 0 && ttfb >= server * 2 && ttfb - server >= 200) {
+			warn(
+				'ttfb-gap',
+				`TTFB in the browser is ${fmt_ms(ttfb)} ms but this server rendered the page in ${fmt_ms(server)} ms: ${fmt_ms(ttfb - server)} ms sits between the two — a cold instance, a proxy, or the network.`,
+				{ fix: 'Look at the cold-start section and at what fronts the server (a CDN, an auth proxy): the render is not where that time goes.' }
+			);
+		} else {
+			info('browser-vitals', `The browser measured TTFB ${v.ttfb === null ? '—' : fmt_ms(v.ttfb) + ' ms'}, LCP ${fmt_ms(v.lcp)} ms${v.cls !== null ? `, CLS ${v.cls}` : ''}${v.inp !== null ? `, INP ${fmt_ms(v.inp)} ms` : ''} over ${v.n} visit${v.n === 1 ? '' : 's'}.`);
+		}
+	}
+}
+
 /**
  * The whole profile as one curated JSON object — the agent-facing view. Served
  * at `<base>/report/<id>.json`. Not the raw V8 profile (that is `/raw`): this is
@@ -968,9 +1519,11 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 		});
 	budget.sort((x, y) => y.ms - x.ms);
 
+	// a component's bytes: everything allocated under it (heap_components), else the function join
 	const alloc_by_name = new Map<string, number>();
 	for (const h of extras.heap ?? [])
 		alloc_by_name.set(h.name, (alloc_by_name.get(h.name) ?? 0) + h.self_bytes);
+	for (const c of extras.heap_components ?? []) alloc_by_name.set(c.name, c.bytes);
 
 	const verdict =
 		a.idle_ms > dur * 0.5 ? 'waiting' : (a.busy_ms / dur) * 100 > 60 ? 'compute-bound' : 'mixed';
@@ -994,14 +1547,21 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 			run_status: meta.run_status ?? null,
 			run_bytes: meta.run_bytes ?? null,
 			budget_note: meta.budget_note ?? null,
+			// what the clock said per run, before the profiler's own share was taken out of `runs`
+			runs_measured: meta.runs_measured ?? null,
 			request: meta.request ?? null
 		},
 		summary: {
 			window_ms: meta.duration_ms,
 			busy_ms: a.busy_ms,
+			// the profiler's own cost, measured and kept out of every other number here, and what it was
+			overhead: meta.overhead ? { ...meta.overhead, top: a.overhead_functions ?? [] } : null,
 			busy_pct: round1((a.busy_ms / dur) * 100),
 			idle_ms: a.idle_ms,
-			gc_ms: a.gc_ms,
+			// the observer's pauses with the profiler's share taken out when the attribution ran, else
+			// the sampler's GC frames
+			gc_ms: extras.gc_attr ? extras.gc_attr.summary.total_ms : a.gc_ms,
+			gc_sampled_ms: a.gc_ms,
 			verdict,
 			sample_count: a.sample_count,
 			cpu_percent: meta.cpu_percent ?? null,
@@ -1054,11 +1614,22 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 						wait_ms: l.wait_ms,
 						awaited_parent: l.awaited_parent
 					})),
-					chain: a.timeline.chain ?? null
+					chain: a.timeline.chain ?? null,
+					// which call waited for which: the serialized starts with their await sites
+					awaits: a.timeline.awaits?.edges ?? []
 				}
 			: null,
 		// the app's own spans (`span()`), per name: count, total, p50, max, errors, cache tallies, callers
 		spans: span_rows(extras.spans),
+		// hot functions that share one caller: the paths to fix, each with its call tree
+		paths: (a.paths ?? []).map((g) => ({
+			owner: { name: g.owner.name, file: g.owner.url, line: g.owner.line, category: g.owner.category, total_ms: g.owner.total_ms, calls: g.owner.calls ?? null },
+			ms: g.ms,
+			pct_busy: round1((g.ms / busy) * 100),
+			share_of_owner: g.share,
+			functions: g.fns.map((f) => ({ name: f.name, file: f.url, line: f.line, category: f.category, package: f.pkg ?? null, ms: f.ms })),
+			tree: g.tree
+		})),
 		ogygia: (() => {
 			const og =
 				[...meta.requests]
@@ -1093,7 +1664,7 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 						js_bytes: island_js_bytes(r, extras.weights),
 						modules: [r.module_url, ...r.hints].filter(Boolean),
 						interactivity: r.interactivity,
-						client: cl ? { hydrations: cl.n, p50_ms: cl.p50_ms, max_ms: cl.max_ms, load_p50_ms: cl.load_p50_ms } : null
+						client: cl ? { hydrations: cl.n, p50_ms: cl.p50_ms, max_ms: cl.max_ms, load_p50_ms: cl.load_p50_ms, recovered: cl.recovered } : null
 					};
 				}),
 				// the seed explainer names islands already (hooks.ts explain_seed)
@@ -1102,6 +1673,9 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 					const e = hole_economics(meta).get(h.id);
 					return {
 						id: h.id,
+						// the component and its props: what to look for in the code
+						component: h.name || null,
+						props: h.props || null,
 						when: h.when,
 						hydrate: h.hydrate,
 						max_age_s: h.ttl,
@@ -1139,6 +1713,10 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 						logic_ms: c.logic_ms ?? null,
 						// the component that rendered most of it (the {#each} owner of a row)
 						parent: c.parent ?? null,
+						// page mode: its inclusive ms in each run (the spread says cache miss vs slow code)
+						runs_ms: c.runs_ms ?? null,
+						// where inside it the self time landed
+						hot_lines: c.lines ?? null,
 						// the heaviest call paths that rendered it, nearest caller first
 						stacks: (c.stacks ?? []).map((s) => ({ ms: s.ms, frames: s.frames.map(frame_text) }))
 					};
@@ -1160,7 +1738,9 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 					total_ms: f.total_ms,
 					per_call_ms: round1(f.total_ms / (n ?? 1)),
 					// the heaviest call paths into it, nearest caller first
-					stacks: (f.stacks ?? []).map((s) => ({ ms: s.ms, frames: s.frames.map(frame_text) }))
+					stacks: (f.stacks ?? []).map((s) => ({ ms: s.ms, frames: s.frames.map(frame_text) })),
+					// the hot lines inside it (source lines when a sourcemap resolved)
+					hot_lines: f.lines ?? null
 				};
 			});
 		})(),
@@ -1204,15 +1784,77 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 					req_payload: c.req_payload ?? null,
 					route: c.route ?? c.path ?? null,
 					caller: c.caller ?? null,
+					// the first-party call path above the caller, nearest first
+					callers: c.callers ?? null,
+					// what the upstream's own Server-Timing said the wait was spent on
+					server_timing: c.timings ?? null,
+					trace: c.trace ?? null,
 					headers: c.headers ?? null,
 					error: c.error ?? null
 				}))
 		},
+		// the cold (warm-up) render against the warm ones, per file
+		cold: meta.cold
+			? { ms: meta.cold.ms, busy_ms: meta.cold.busy_ms, files: cold_rows(a, meta) }
+			: null,
+		// the page's web vitals from the profiler user's own browser, the app's own marks there, and
+		// the browser's CPU profile of hydration (components + functions, compact)
+		browser:
+			extras.vitals || extras.client_marks || extras.client_cpu || extras.visit
+				? {
+						...(extras.vitals ?? {}),
+						...(extras.client_marks ? { marks: extras.client_marks } : {}),
+						// the latest visit the beacon saw: navigation + paints + counts (the full lanes live in the report page)
+						...(extras.visit
+							? {
+									visit: {
+										at: extras.visit.at,
+										nav: extras.visit.nav,
+										paints: extras.visit.paints,
+										resources: extras.visit.resources.length,
+										resource_bytes: extras.visit.resources.reduce((s, r) => s + (r.transfer ?? 0), 0),
+										longtasks: extras.visit.longtasks.length,
+										islands: extras.visit.islands.map((i) => ({ fp: i.fp, t0: i.t0, loaded: i.loaded, done: i.done, ...(i.changed ? { changed: true } : {}) })),
+										firsts: extras.visit.firsts,
+										shifts: extras.visit.shifts.length,
+										cls_by_island: Object.fromEntries(extras.visit.shifts.reduce((m, s) => m.set(s.fp ?? '(outside islands)', (m.get(s.fp ?? '(outside islands)') ?? 0) + s.value), new Map<string, number>()))
+									}
+								}
+							: {}),
+						...(extras.client_cpu
+							? {
+									cpu: {
+										at: extras.client_cpu.at,
+										sampled_ms: extras.client_cpu.analysis.duration_ms,
+										busy_ms: extras.client_cpu.analysis.busy_ms,
+										components: extras.client_cpu.analysis.components.slice(0, 30).map((c) => ({ name: c.name, file: c.url, self_ms: c.self_ms, total_ms: c.total_ms, instances: c.calls ?? null })),
+										hot_functions: extras.client_cpu.analysis.functions.slice(0, 30).map((f) => ({ name: f.name, file: f.url, line: f.line, category: f.category, package: f.pkg ?? null, self_ms: f.self_ms, total_ms: f.total_ms }))
+									}
+								}
+							: {})
+					}
+				: null,
+		// a caught request's replay: the link and the inputs it carries
+		replay: meta.request ? { url: `${base}/replay/${meta.id}`, path: extras.replay?.path ?? meta.request.path, headers: Object.keys(extras.replay?.headers ?? {}) } : null,
+		// the document as a byte strip (page mode): bytes per kind, the segments in order
+		strip: extras.strip ? { total: extras.strip.total, by_kind: extras.strip.by_kind, shadow_count: extras.strip.shadow_count, segments: extras.strip.segments } : null,
+		// the data river (page mode): calls → loads → page.data keys → islands, plus the keys nothing reads
+		river: extras.river ?? null,
 		memory: {
 			rss_start_mb: extras.mem[0]?.rss ?? null,
 			rss_end_mb: extras.mem.at(-1)?.rss ?? null,
 			growth_mb: extras.mem.length >= 2 ? extras.mem.at(-1)!.rss - extras.mem[0].rss : 0,
 			gc: extras.gc ?? null,
+			// who caused the GC: each pause with the allocations that filled the heap before it, and
+			// the allocators with the pause time they are responsible for
+			gc_attribution: extras.gc_attr
+				? {
+						...extras.gc_attr.summary,
+						pauses: extras.gc_attr.pauses.map((p) => ({ t_ms: p.t, ms: p.ms, ms_measured: p.ms_measured, kind: p.kind, forced: p.forced, since_ms: p.since_ms, allocated_bytes: p.allocated, estimated: p.estimated ?? false, why: p.why, running: p.running ?? null, top: p.top.map((x) => ({ name: x.name, component: x.component, bytes: x.bytes, share: x.share })) })),
+						makers: extras.gc_attr.makers.slice(0, 40).map((m) => ({ name: m.name, file: m.url, line: m.line, category: m.category, component: m.component, via: m.caller ?? null, allocated_bytes: m.allocated, share: m.share, gc_ms: m.gc_ms, pauses: m.pauses })),
+						components: extras.gc_attr.components.slice(0, 40)
+					}
+				: null,
 			allocators: (extras.heap ?? []).map((h) => ({
 				name: h.name,
 				file: h.url,
@@ -1221,8 +1863,33 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 				self_bytes: h.self_bytes,
 				total_bytes: h.total_bytes
 			})),
+			// bytes charged to the nearest component on the allocating stack (a page, a layout, an island)
+			by_component: (extras.heap_components ?? []).map((c) => ({ name: c.name, bytes: c.bytes })),
 			samples: extras.mem.map((m) => ({ t_ms: m.t, rss_mb: m.rss, heap_used_mb: m.heap_used }))
 		},
+		// V8's deoptimizations during the window: which functions, why, how hot
+		deopts: a.deopts.map((d) => ({ name: d.name, file: d.url, line: d.line, category: d.category, self_ms: d.self_ms, count: d.count, reasons: d.reasons })),
+		// synchronous I/O on the CPU inside the window: each one blocked every request on the instance
+		sync_io: sync_io(a).map((s) => ({ name: s.name, module: s.module, self_ms: s.self_ms, total_ms: s.total_ms, calls: s.calls, callers: s.callers })),
+		// functions called many times per render at a steady cost each: a cache keyed on the argument removes them
+		memo_candidates: memo_candidates(a, extras.gc_attr?.makers ?? []),
+		// promises created in the window, per render, and who created them (sampled)
+		promises: extras.promises ? { count: extras.promises.count, per_render: meta.runs?.length ? Math.round(extras.promises.count / meta.runs.length) : extras.promises.count, top: extras.promises.top } : null,
+		// what one more render left alive after a full collection, by allocation site
+		retained: extras.retained ? { total_bytes: extras.retained.total_bytes, render_ms: extras.retained.render_ms, sites: extras.retained.sites.map((s) => ({ name: s.name, file: s.url, line: s.line, via: s.caller ?? null, component: s.component, bytes: s.bytes, share: s.share })) } : null,
+		// THE RENDER STEP BY STEP: the window's segments in order with running totals and the stack at each
+		steps: a.timeline ? (render_steps(a.timeline, a.stacks) ?? null) : null,
+		// THE SAMPLES THEMSELVES: every CPU sample of the window with its stack (frames + parent
+		// links), the substrate every table above is an aggregate of — query any range or instant
+		stacks: a.stacks ? { window_ms: a.stacks.window_ms, raw_samples: a.stacks.raw, frames: a.stacks.frames.map((f) => ({ name: f.n, file: f.f ?? null, category: f.c, parent: f.p })), t_ms: a.stacks.t, d_ms: a.stacks.d, leaf: a.stacks.leaf } : null,
+		// WHEN THE HEAP GREW and what ran then: the fine series and its bursts
+		alloc: extras.alloc ? { grown_mb: extras.alloc.grown_mb, period_ms: extras.alloc.period_ms, longest_gap_ms: extras.alloc.longest_gap_ms, window: extras.alloc.window ?? null, bursts: extras.alloc.bursts.map((b) => ({ t0_ms: b.t0, t1_ms: b.t1, mb: b.mb, mb_per_s: b.rate, gc_inside: b.gc, running: b.running })), samples: extras.alloc.samples.map((s) => ({ t_ms: s.t, heap_mb: s.mb })) } : null,
+		// THE INSTANCE WAS NOT ALONE: the other requests that overlapped the profiled render(s)
+		contention: extras.contention ? { overlap_ms: extras.contention.overlap_ms, cpu_max_ms: extras.contention.cpu_max_ms, busy_share: extras.contention.busy_share, inflight_at_start: extras.contention.inflight_at_start, per_window: extras.contention.per_window, requests: extras.contention.requests, note: 'cpu_max_ms is an upper bound: a request’s CPU is a process-wide delta over its lifetime, so overlapping requests carry some of each other’s' } : null,
+		// DATA LINEAGE FROM THE CODE: each page.data key with who produced it, who reads it, and a verdict
+		lineage: extras.lineage ? { keys: extras.lineage.keys.map((k) => ({ key: k.key, from: k.from, shipped_bytes: k.shipped_bytes, load_wait_ms: k.load_wait_ms, verdict: k.verdict, readers: k.readers })), components: extras.lineage.components, unread: extras.lineage.unread.map((k) => k.key), server_only: extras.lineage.server_only.map((k) => k.key), notes: extras.lineage.notes } : null,
+		// VALUES, NOT JUST FUNCTIONS: the numbers the spans carried, and how the time moved with them
+		span_values: span_values(extras.spans),
 		waiting: (() => {
 			const m = new Map<string, { caller: string; kind: string; count: number; wait_ms: number }>();
 			const add = (caller: string, kind: string, ms: number) => {

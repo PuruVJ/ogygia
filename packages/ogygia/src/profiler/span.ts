@@ -174,3 +174,73 @@ export function tag(key: string, value: string | number | boolean): void {
 	if (r === null || !key) return;
 	r.tag(String(key).slice(0, 64), String(value).slice(0, 64));
 }
+
+/**
+ * INSTRUMENT a function once, so every call is a `span` — for a renderer or a client you call
+ * from many places and cannot wrap at each site: a design system's `renderToString`, a database
+ * client's `query`, an SDK method.
+ *
+ * Two forms:
+ *   • `instrument(fn, name, attrs?)` returns a wrapped function (an ESM import is read-only, so
+ *     bind the result: `const renderToString = instrument(renderToStringCore, 'ds.render')`).
+ *   • `instrument(obj, 'method', name, attrs?)` patches the method in place (a client instance,
+ *     a prototype) and returns a function that restores it.
+ *
+ * `attrs` gets the result AND the call's arguments, so a span can carry the tag it rendered or
+ * the bytes it produced: `(html, tag) => ({ tag, bytes: html.length })`. Sync in, sync out; a
+ * promise in, a promise out; `this` preserved. Outside a recording the wrapper is one `if`.
+ *
+ * ```ts
+ * import { instrument } from 'ogygia/profiler';
+ * import { renderToString as core } from '@acme/design-system/hydrate';
+ * const renderToString = instrument(core, 'ds.render', (r, tag) => ({ tag, bytes: r.html.length }));
+ * ```
+ */
+/** The attrs callback of `instrument`: the result, then the call's arguments. Declared method-style
+ *  so a callback naming fewer arguments than the function takes (`(r, tag) => …` for a two-argument
+ *  renderer) is accepted, and so it never narrows the wrapped signature. */
+export type InstrumentAttrs<A extends unknown[], R> = {
+	bivariant(result: Awaited<R>, ...args: NoInfer<A>): SpanAttrs | undefined;
+}['bivariant'];
+export function instrument<A extends unknown[], R>(
+	fn: (...args: A) => R,
+	name: string,
+	attrs?: InstrumentAttrs<A, R>
+): (...args: A) => R;
+export function instrument<T extends object, K extends keyof T>(
+	target: T,
+	method: K,
+	name: string,
+	attrs?: T[K] extends (...args: infer A) => infer R ? InstrumentAttrs<A, R> : never
+): () => void;
+export function instrument(...args: unknown[]): unknown {
+	if (typeof args[0] === 'function') {
+		const [fn, name, attrs] = args as [(...a: unknown[]) => unknown, string, ((result: unknown, ...a: unknown[]) => SpanAttrs | undefined) | undefined];
+		return wrap_call(fn, name, attrs);
+	}
+	const [target, method, name, attrs] = args as [Record<PropertyKey, unknown>, PropertyKey, string, ((result: unknown, ...a: unknown[]) => SpanAttrs | undefined) | undefined];
+	const original = target[method];
+	if (typeof original !== 'function') throw new Error(`instrument: ${String(method)} is not a function`);
+	target[method] = wrap_call(original as (...a: unknown[]) => unknown, name, attrs);
+	return () => {
+		target[method] = original;
+	};
+}
+
+function wrap_call(
+	fn: (...a: unknown[]) => unknown,
+	name: string,
+	attrs: ((result: unknown, ...a: unknown[]) => SpanAttrs | undefined) | undefined
+): (...a: unknown[]) => unknown {
+	const wrapped = function (this: unknown, ...a: unknown[]) {
+		if (recorder === null) return fn.apply(this, a);
+		return span(name, () => fn.apply(this, a), attrs ? (result) => attrs(result, ...a) : undefined);
+	};
+	try {
+		Object.defineProperty(wrapped, 'name', { value: fn.name || name });
+		Object.defineProperty(wrapped, 'length', { value: fn.length });
+	} catch {
+		/* frozen — the wrapper still works */
+	}
+	return wrapped;
+}

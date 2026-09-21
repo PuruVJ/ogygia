@@ -885,11 +885,12 @@ class OgygiaRegion extends HTMLElement {
 			await hydrate_turn(this);
 			if (!this.isConnected || this.#app) return;
 			// ── the turn: everything below is one synchronous step ──
-			this.#app = core.hydrate_island(this, entry, mod, this.#ssr_html);
+			const ssr_html = this.#ssr_html;
+			this.#app = core.hydrate_island(this, entry, mod, ssr_html);
 			this.#ssr_html = null; // awake (or not ours): the server copy has done its job
 			if (!this.#app) return; // not ours (Kit-hydrated page) or torn out mid-hydrate
 			this.setAttribute('data-hydrated', '');
-			beacon_hydrated(this, t0, t_loaded, now_ms()); // the profiler's browser half (no-op without its tag)
+			beacon_hydrated(this, t0, t_loaded, now_ms(), ssr_html); // the profiler's browser half (no-op without its tag)
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',

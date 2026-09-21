@@ -60,6 +60,10 @@ export interface TimelineCall {
 	/** the phase of the code that started it (from the caller's file); else the wait takes the
 	 *  phase of whatever ran just before it */
 	phase?: Phase;
+	/** the first-party call path above the caller, resolved (`fetchStock (…)` ← `load (…)`) */
+	callers?: string[];
+	/** the upstream's own Server-Timing: what their side spent the wait on */
+	timings?: { name: string; ms: number; desc?: string }[];
 }
 
 export interface TimelineInput {
@@ -68,6 +72,34 @@ export interface TimelineInput {
 	/** the request's window, performance.now() ms */
 	window: { start: number; end: number };
 	calls: TimelineCall[];
+	/** page mode: every run's window (for the per-run component split) */
+	runs?: { start: number; end: number }[];
+	/** every async resource the hooks saw (waits or not): a gap is named after what was pending */
+	pending?: { start: number; end: number; label: string; kind: string }[];
+}
+
+/** Which call started only once another finished: the await that serialized them. */
+export interface AwaitEdge {
+	/** the call that had to finish first */
+	from: string;
+	/** the call that started right after it */
+	to: string;
+	/** ms between the one's end and the other's start (CPU, or nothing) */
+	gap_ms: number;
+	/** where `to` was started from — the await site to look at */
+	at?: string;
+	/** the file:line chain above it, when captured */
+	callers?: string[];
+}
+
+/** One call as the causality graph draws it: a box on the render's clock, in a lane. */
+export interface AwaitNode {
+	label: string;
+	t0: number;
+	t1: number;
+	lane: number;
+	kind: string;
+	caller?: string;
 }
 
 export interface Segment {
@@ -84,9 +116,11 @@ export interface Segment {
 	category: FrameCategory;
 	phase: Phase;
 	/** wait: every call in flight during the segment */
-	calls?: { label: string; ms: number; caller?: string }[];
+	calls?: { label: string; ms: number; caller?: string; callers?: string[]; timings?: TimelineCall['timings'] }[];
 	/** the innermost `span()` this segment sits inside, when any */
 	within?: string;
+	/** gap: the async resources that were pending across it — what the wait most likely was */
+	pending?: string[];
 }
 
 export interface PhaseRow {
@@ -135,15 +169,20 @@ export interface LoadChain {
 
 export interface Timeline {
 	window_ms: number;
+	/** the app's CPU inside the window (the profiler's own frames are in `overhead_ms`, not here) */
 	cpu_ms: number;
 	wait_ms: number;
 	gap_ms: number;
+	overhead_ms: number;
 	segments: Segment[];
 	phases: PhaseRow[];
 	parallelizable: ParallelGroup[];
 	/** Kit's load functions, one lane each (absent when none ran in the window) */
 	lanes?: LoadLane[];
 	chain?: LoadChain;
+	/** THE CAUSALITY GRAPH of the waits: every call as a box in a lane, and an edge wherever a
+	 *  call started only once another had finished (the await that serialized them) */
+	awaits?: { nodes: AwaitNode[]; edges: AwaitEdge[] };
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -322,7 +361,7 @@ export function build_timeline(
 			const row = lane_row(info.lane);
 			row.t0 = Math.min(row.t0, s0);
 			row.t1 = Math.max(row.t1, s1);
-			row.cpu_ms += s1 - s0;
+			if (info.owner.category !== 'profiler') row.cpu_ms += s1 - s0;
 			if (info.in_parent) row.awaited_parent = true;
 		}
 		const last = cpu[cpu.length - 1];
@@ -350,8 +389,9 @@ export function build_timeline(
 		const b = Math.min(c.start + c.ms, w1) - w0;
 		if (b - a < 0.05) continue;
 		waits.push({ t0: a, t1: b, call: c });
-		// a call started from a load file extends that load's lane (spans are the overlay, not a wait)
-		if (c.kind !== 'span' && c.caller) {
+		// a call started from a load file extends that load's lane — a span too: a load that waits
+		// inside `span('db.x', …)` on a driver the hooks cannot see is still waiting
+		if (c.caller) {
 			const l = load_lane_of(c.caller);
 			if (l) {
 				const row = lane_row(l);
@@ -371,6 +411,13 @@ export function build_timeline(
 	for (const w of waits) {
 		bounds.add(w.t0);
 		bounds.add(w.t1);
+	}
+	// a pending resource's edges split a gap too, so "pending: X" names exactly the stretch X covered
+	for (const p of input.pending ?? []) {
+		const a = p.start - w0;
+		const b = p.end - w0;
+		if (a > 0 && a < window_ms) bounds.add(a);
+		if (b > 0 && b < window_ms) bounds.add(b);
 	}
 	const ticks = [...bounds].sort((a, b) => a - b);
 	const segments: Segment[] = [];
@@ -407,7 +454,13 @@ export function build_timeline(
 		} else {
 			const active = all_active.filter((w) => w.call.kind !== 'span');
 			if (active.length) {
-				const calls = active.map((w) => ({ label: w.call.label, ms: round2(w.call.ms), caller: w.call.caller }));
+				const calls = active.map((w) => ({
+					label: w.call.label,
+					ms: round2(w.call.ms),
+					caller: w.call.caller,
+					...(w.call.callers && w.call.callers.length > 1 ? { callers: w.call.callers } : {}),
+					...(w.call.timings ? { timings: w.call.timings } : {})
+				}));
 				// the phase of the code that started the (longest) call wins over "what ran before"
 				const owner = active.reduce((m, w) => (w.call.ms > m.call.ms ? w : m), active[0]);
 				seg = {
@@ -433,7 +486,21 @@ export function build_timeline(
 					within: inner.call.label
 				};
 			} else {
-				seg = { t0: a, t1: b, kind: 'gap', label: 'nothing recorded', category: 'unknown', phase: last_phase };
+				// name the gap after what was pending across it (the resources the hooks saw but
+				// the sweep does not count as waits: a tick, an immediate, an open socket)
+				const pend = (input.pending ?? [])
+					.filter((p) => p.start - w0 <= mid && p.end - w0 >= mid)
+					.map((p) => p.label);
+				const uniq = [...new Set(pend)];
+				seg = {
+					t0: a,
+					t1: b,
+					kind: 'gap',
+					label: uniq.length ? `nothing recorded — pending: ${uniq[0]}${uniq.length > 1 ? ` (+${uniq.length - 1})` : ''}` : 'nothing recorded',
+					category: 'unknown',
+					phase: last_phase,
+					...(uniq.length ? { pending: uniq.slice(0, 6) } : {})
+				};
 			}
 		}
 		const prev = segments[segments.length - 1];
@@ -443,7 +510,8 @@ export function build_timeline(
 			prev.label === seg.label &&
 			prev.phase === seg.phase &&
 			prev.detail === seg.detail &&
-			prev.within === seg.within
+			prev.within === seg.within &&
+			(prev.pending?.join() ?? '') === (seg.pending?.join() ?? '')
 		) {
 			prev.t1 = b;
 		} else segments.push(seg);
@@ -463,9 +531,13 @@ export function build_timeline(
 		if (!r) phase_map.set(p, (r = { phase: p, cpu_ms: 0, wait_ms: 0 }));
 		return r;
 	};
+	let overhead_ms = 0;
 	for (const s of segments) {
 		const len = s.t1 - s.t0;
-		if (s.kind === 'cpu') {
+		if (s.kind === 'cpu' && s.category === 'profiler') {
+			// the profiler's own CPU: drawn (so the bar is honest) but not the app's time
+			overhead_ms += len;
+		} else if (s.kind === 'cpu') {
 			cpu_ms += len;
 			phase_row(s.phase).cpu_ms += len;
 		} else if (s.kind === 'wait') {
@@ -482,11 +554,13 @@ export function build_timeline(
 		cpu_ms: round2(cpu_ms),
 		wait_ms: round2(wait_ms),
 		gap_ms: round2(gap_ms),
+		overhead_ms: round2(overhead_ms),
 		segments,
 		phases,
 		parallelizable: []
 	};
 	timeline.parallelizable = find_parallelizable(timeline);
+	timeline.awaits = await_graph(input, w0, w1);
 
 	// ── Kit's load lanes + the parent() chain ──
 	for (const [file, list] of lane_waits) {
@@ -512,9 +586,11 @@ export function build_timeline(
 		timeline.lanes = lane_list;
 		// the LAST layout lane to finish against the page lane: the page's load started only once
 		// the layout's was done, while the layout's was real time (a wait, or ≥ 2 ms of work)
+		// a server page load's `parent()` waits for the server layout loads; a universal one for the
+		// universal ones — so only lanes of the page's own kind can be the chain's other end
 		const page = lane_list.find((l) => l.level === 'page');
 		const layout = lane_list
-			.filter((l) => l.level === 'layout' && l.t1 - l.t0 >= 2 && (l.wait_ms > 0 || l.cpu_ms >= 2))
+			.filter((l) => l.level === 'layout' && l.kind === page?.kind && l.t1 - l.t0 >= 2 && (l.wait_ms > 0 || l.cpu_ms >= 2))
 			.sort((x, y) => y.t1 - x.t1)[0];
 		if (page && layout && (page.awaited_parent || page.t0 >= layout.t1 - 0.25)) {
 			timeline.chain = {
@@ -526,6 +602,51 @@ export function build_timeline(
 		}
 	}
 	return timeline;
+}
+
+/**
+ * THE CAUSALITY GRAPH: every call (net + I/O primitives, not spans) as a box on the render's
+ * clock, laid into lanes so overlapping calls sit on different rows, and an edge from a call to
+ * the one that started right after it finished while nothing else was in flight — that start
+ * waited for that end, and `at` is the line that did the waiting. Edges are what the
+ * "awaits in a row" callouts are made of; the graph shows them with the exact await site.
+ */
+export function await_graph(input: TimelineInput, w0: number, w1: number): { nodes: AwaitNode[]; edges: AwaitEdge[] } {
+	const calls = input.calls
+		.filter((c) => c.kind !== 'span' && c.ms >= 0 && c.start <= w1 && c.start + c.ms >= w0)
+		.map((c) => ({ c, t0: round2(Math.max(c.start, w0) - w0), t1: round2(Math.min(c.start + c.ms, w1) - w0) }))
+		.sort((x, y) => x.t0 - y.t0 || x.t1 - y.t1)
+		.slice(0, 200);
+	// lanes: first free row whose last call ended before this one starts
+	const lane_end: number[] = [];
+	const nodes: AwaitNode[] = calls.map(({ c, t0, t1 }) => {
+		let lane = lane_end.findIndex((e) => e <= t0);
+		if (lane === -1) lane = lane_end.push(0) - 1;
+		lane_end[lane] = t1;
+		return { label: c.label, t0, t1, lane, kind: c.kind, ...(c.caller ? { caller: c.caller } : {}) };
+	});
+	const edges: AwaitEdge[] = [];
+	for (let i = 0; i < calls.length; i++) {
+		const cur = calls[i];
+		// the latest call that ended before this one started, within 5 ms
+		let prev: (typeof calls)[number] | null = null;
+		for (let j = 0; j < i; j++) {
+			const p = calls[j];
+			if (p.t1 <= cur.t0 + 0.05 && cur.t0 - p.t1 <= 5 && (!prev || p.t1 > prev.t1)) prev = p;
+		}
+		if (!prev) continue;
+		// serialized only if nothing else was still in flight when this one started
+		const in_flight = calls.some((o, j) => j !== i && o !== prev && o.t0 < cur.t0 - 0.05 && o.t1 > cur.t0 + 0.05);
+		if (in_flight) continue;
+		edges.push({
+			from: prev.c.label,
+			to: cur.c.label,
+			gap_ms: round2(Math.max(0, cur.t0 - prev.t1)),
+			...(cur.c.caller ? { at: cur.c.caller } : {}),
+			...(cur.c.callers && cur.c.callers.length > 1 ? { callers: cur.c.callers } : {})
+		});
+	}
+	return { nodes, edges };
 }
 
 /**

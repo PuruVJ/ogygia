@@ -26,6 +26,12 @@
 			: ''
 	);
 	const stacks = $derived(f.stacks ?? []);
+	// THE HOT LINES: where inside the function the self time landed (V8's per-line ticks)
+	const lines = $derived(f.lines ?? []);
+	const lines_max = $derived(Math.max(...lines.map((l) => l.ms), 0.01));
+	const heat = $derived(new Map(lines.map((l) => [l.line, l.ms / lines_max])));
+	const last_hot = $derived(lines.length ? Math.max(...lines.map((l) => l.line)) : 0);
+	const ms_at = (n: number) => lines.find((l) => l.line === n)?.ms ?? 0;
 	let copied = $state(false);
 	async function copy() {
 		try {
@@ -40,7 +46,9 @@
 	let peek = $state<{ start: number; line: number; lines: string[] } | null>(null);
 	$effect(() => {
 		if (!dev || !base || !f.path || !is_abs(f.path) || f.line <= 0) return;
-		const url = `${base}/source?p=${encodeURIComponent(f.path)}&l=${f.line}`;
+		// widen the peek to the hot lines when they sit below the function's first line
+		const to = last_hot > f.line ? `&to=${Math.min(last_hot, f.line + 60)}` : '';
+		const url = `${base}/source?p=${encodeURIComponent(f.path)}&l=${f.line}${to}`;
 		let live = true;
 		fetch(url, { headers: { accept: 'application/json' } })
 			.then((r) => (r.ok ? r.json() : null))
@@ -68,8 +76,19 @@
 			<span class="k">kind</span>
 			<span>{f.pkg ? `${CATEGORY_LABEL[f.category]} · ${f.pkg}` : CATEGORY_LABEL[f.category]}</span>
 		</div>
+		{#if lines.length}
+			<div class="hotlines">
+				<span class="k">hot lines</span>
+				{#each lines as l (l.line)}
+					<span class="hl" title="{fmt_ms(l.ms)} ms of self time on line {l.line}">
+						<i style="width:{Math.max(4, (l.ms / lines_max) * 60)}px"></i>
+						<code>:{l.line}</code> <span class="dim">{fmt_ms(l.ms)} ms</span>
+					</span>
+				{/each}
+			</div>
+		{/if}
 		{#if peek}
-			<pre class="peek">{#each peek.lines as ln, i (i)}<span class="ln" class:hot={peek.start + i === peek.line}><span class="no">{peek.start + i}</span>{ln}
+			<pre class="peek">{#each peek.lines as ln, i (i)}<span class="ln" class:hot={peek.start + i === peek.line} style={heat.has(peek.start + i) ? `background:rgba(232,115,74,${(0.12 + 0.5 * (heat.get(peek.start + i) ?? 0)).toFixed(2)})` : ''}><span class="no">{peek.start + i}</span><span class="lms">{heat.has(peek.start + i) ? fmt_ms(ms_at(peek.start + i)) : ''}</span>{ln}
 </span>{/each}</pre>
 		{/if}
 		{#if stacks.length}
@@ -98,9 +117,9 @@
 
 <style>
 	tr.details td {
-		background: #12161c;
+		background: var(--bg-raised);
 		padding: 10px 14px 12px;
-		border-bottom: 1px solid #232a35;
+		border-bottom: 1px solid var(--line);
 	}
 	.where {
 		display: flex;
@@ -111,7 +130,7 @@
 		margin-bottom: 8px;
 	}
 	.k {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 11px;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -119,29 +138,29 @@
 	.loc {
 		font-family: ui-monospace, monospace;
 		font-size: 12px;
-		color: #d8dee6;
+		color: var(--text);
 		user-select: all;
 		word-break: break-all;
 	}
 	.mini {
 		font: inherit;
 		font-size: 11px;
-		color: #6cb2ff;
-		background: #1a212b;
-		border: 1px solid #2b3340;
+		color: var(--c-blue);
+		background: var(--bg-hover);
+		border: 1px solid var(--line);
 		border-radius: 4px;
 		padding: 1px 7px;
 		cursor: pointer;
 		text-decoration: none;
 	}
 	.mini:hover {
-		background: #232b37;
+		background: var(--bg-hover);
 	}
 	.peek {
 		margin: 0 0 10px;
 		padding: 6px 0;
-		background: #0c0f13;
-		border: 1px solid #1e232b;
+		background: var(--bg-sunken);
+		border: 1px solid var(--line);
 		border-radius: 6px;
 		font-size: 11.5px;
 		line-height: 1.5;
@@ -153,13 +172,42 @@
 		white-space: pre;
 	}
 	.peek .ln.hot {
-		background: #2b2418;
+		background: var(--warn-deep);
 	}
 	.peek .no {
 		display: inline-block;
 		width: 3.5em;
-		color: #7d8590;
+		color: var(--text-faint);
 		user-select: none;
+	}
+	.peek .lms {
+		display: inline-block;
+		width: 5em;
+		color: var(--c-orange);
+		font-size: 10.5px;
+		user-select: none;
+	}
+	.hotlines {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 14px;
+		align-items: center;
+		margin: 0 0 8px;
+		font-size: 12px;
+	}
+	.hl {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+	}
+	.hl i {
+		display: inline-block;
+		height: 8px;
+		background: var(--c-orange);
+		border-radius: 2px;
+	}
+	.dim {
+		color: var(--text-faint);
 	}
 	.stacks {
 		display: grid;
@@ -167,15 +215,15 @@
 		gap: 10px;
 	}
 	.stack {
-		background: #0f1318;
-		border: 1px solid #1e232b;
+		background: var(--bg-sunken);
+		border: 1px solid var(--line);
 		border-radius: 6px;
 		padding: 8px 10px;
 		min-width: 0;
 	}
 	.stack-h {
 		font-size: 12px;
-		color: #aeb6c2;
+		color: var(--text-dim);
 		margin-bottom: 4px;
 	}
 	ol {
@@ -191,18 +239,18 @@
 		text-overflow: ellipsis;
 	}
 	.n {
-		color: #d8dee6;
+		color: var(--text);
 	}
 	/* framework / runtime frames between your own: kept (they are the truth of the path), dimmed */
 	li.dim .n {
-		color: #7d8590;
+		color: var(--text-faint);
 	}
 	.f {
-		color: #7d8590;
+		color: var(--text-faint);
 		margin-left: 8px;
 	}
 	.hint {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 12px;
 	}
 </style>

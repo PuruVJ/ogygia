@@ -19,7 +19,11 @@ export default defineConfig({
 			barrels: true,
 			// The SSR profiler — configured ONLY here. Builds its UI islands + auto-mounts in
 			// ogygia.handle() (no profiler() hook). Secret from OGYGIA_PROFILER_SECRET env at runtime.
-			profiler: true,
+			// (+ the background recorders, exercised by the hell page: a trap for any request over 400 ms,
+			// and a 1 s coarse sample every 20 s folded into the dashboard's always-on table)
+			// serverTiming on in the built preview too: the hell page's own API routes then answer the
+			// profiler's nested-trace ask, so the waterfall shows "inside the upstream"
+			profiler: { trap: { over: 400, keep: 3 }, sample: { every: 20, window: 1000 }, serverTiming: true },
 			// Markdown content pipeline (stock defaults) so the `.svx` fixture behind e2e/content-css
 			// compiles — that check guards content-body scoped CSS shipping to a csr=false page.
 			content: { markdown: {} },

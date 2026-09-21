@@ -131,28 +131,28 @@
 	.tools input {
 		font: inherit;
 		font-size: 13px;
-		background: #12161c;
-		color: #d8dee6;
-		border: 1px solid #2b3340;
+		background: var(--bg-raised);
+		color: var(--text);
+		border: 1px solid var(--line);
 		border-radius: 6px;
 		padding: 5px 10px;
 		min-width: 280px;
 	}
 	.tools .hint {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 12px;
 	}
 	tr.row {
 		cursor: pointer;
 	}
 	tr.row:hover td {
-		background: #12161c;
+		background: var(--bg-raised);
 	}
 	tr.row.open td {
 		border-bottom-color: transparent;
 	}
 	.caret {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 10px;
 		margin-right: 4px;
 	}

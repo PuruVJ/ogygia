@@ -70,5 +70,6 @@ export function kind_color(kind: string): string {
 export function label_of(r: ReportMeta): string {
 	if (r.trigger === 'page') return `page ${r.page} ×${r.runs?.length ?? 0}`;
 	if (r.trigger === 'request') return `request ${r.request?.path ?? ''}`;
+	if (r.trigger === 'trap') return `caught ${r.request?.path ?? ''} (${Math.round(r.request?.ms ?? 0)} ms)`;
 	return `${Math.round(r.duration_ms / 1000)}s window`;
 }

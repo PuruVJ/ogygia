@@ -36,12 +36,14 @@ const cache = new Map<string, unknown>();
 
 export const prerender = false;
 
-export const load: PageServerLoad = async ({ url, params }) => {
+export const load: PageServerLoad = async ({ url, params, parent }) => {
 	const origin = url.origin;
 	tag('tenant', 'acme');
 	tag('locale', (params as { lang?: string }).lang ?? 'en-US');
+	// the layout's data first "because pricing depends on the session" — every call below waits
+	// for the layout's calls to finish before it starts
+	const { session } = await parent();
 	// sequential — each waits for the previous although none needs it
-	const session = await span('svc.session', () => callService(origin, 'session', 45));
 	const pricing = await span('svc.pricing', () => callService(origin, 'pricing', 40));
 	const inventory = await span('svc.inventory', () => callService(origin, 'inventory', 35));
 	// a database round trip on its own socket (a timer here)

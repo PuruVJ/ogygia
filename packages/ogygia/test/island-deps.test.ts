@@ -3,6 +3,7 @@ import {
 	collectIslandDepModulepreloads,
 	collect_inline_css,
 	interactivity_facts,
+	summarize_chunk_contents,
 	islandDepsHandoffPath,
 	island_deps_module,
 	kit_remote_hash,
@@ -89,7 +90,7 @@ describe('collectIslandDepModulepreloads', () => {
 					imports: ['_app/immutable/x.js']
 				}
 			})
-		).toEqual({ js: {}, css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {} });
+		).toEqual({ js: {}, css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {}, contents: {} });
 	});
 
 	// INTERACTIVITY FACTS (the profiler's wake advisor): counted over the island's OWN components
@@ -130,6 +131,41 @@ describe('collectIslandDepModulepreloads', () => {
 			});
 			const { interactivity } = collectIslandDepModulepreloads(bundle, undefined, undefined, undefined, read);
 			expect(interactivity[FACADE]).toEqual({ handlers: 2, state: 1, effects: 1, binds: 1, actions: 1, files: 2 });
+		});
+
+		test('what is inside each chunk: app files first, packages named, the runtimes plainly, capped', () => {
+			const { contents } = collectIslandDepModulepreloads(bundle);
+			expect(contents[FACADE]).toEqual(['src/lib/Card.svelte']);
+			expect(contents['/_app/immutable/chunk-a.js']).toEqual(['src/lib/Static.svelte', 'src/lib/util.js', 'lib']);
+			expect(
+				summarize_chunk_contents([
+					'\0virtual:x',
+					'/app/node_modules/svelte/src/internal/client/index.js',
+					'/app/node_modules/svelte/src/internal/client/dom.js',
+					'/app/node_modules/ogygia/dist/runtime/core.js',
+					'/app/node_modules/@sveltejs/kit/src/runtime/client/x.js',
+					'/app/node_modules/@scope/pkg/dist/i.js',
+					'/app/node_modules/date-fns/index.js',
+					'/app/node_modules/.pnpm/esm-env@1.0.0/node_modules/esm-env/index.js',
+					'/app/node_modules/.pnpm/svelte@5.0.0/node_modules/svelte/src/internal/client/x.js',
+					'C:\\app\\src\\lib\\a.ts?og-region=1',
+					...Array.from({ length: 8 }, (_, i) => `/app/src/lib/f${i}.ts`)
+				])
+			).toEqual(['src/lib/a.ts', 'src/lib/f0.ts', 'src/lib/f1.ts', 'src/lib/f2.ts', 'src/lib/f3.ts', 'src/lib/f4.ts', 'svelte runtime', 'ogygia runtime', '@sveltejs/kit', '@scope/pkg', 'date-fns', '+4 more']);
+		});
+
+		test('every chunk the build emitted is summarized, not only the ones islands pull', () => {
+			const { contents } = collectIslandDepModulepreloads({
+				...bundle,
+				'_app/immutable/chunks/hydrate-core.js': { type: 'chunk', fileName: '_app/immutable/chunks/hydrate-core.js', imports: [], moduleIds: ['/app/node_modules/ogygia/dist/runtime/hydrate-core.js'] },
+				'_app/immutable/entry/start.js': { type: 'chunk', fileName: '_app/immutable/entry/start.js', imports: [], moduleIds: ['/app/node_modules/@sveltejs/kit/src/runtime/client/entry.js', '/app/node_modules/svelte/src/internal/client/index.js'] },
+				'_app/immutable/assets/x.css': { type: 'asset', fileName: '_app/immutable/assets/x.css' }
+			} as Parameters<typeof collectIslandDepModulepreloads>[0]);
+			expect(contents['/_app/immutable/chunks/hydrate-core.js']).toEqual(['ogygia runtime']);
+			expect(contents['/_app/immutable/entry/start.js']).toEqual(['@sveltejs/kit', 'svelte runtime']);
+			expect(contents['/_app/immutable/assets/x.css']).toBeUndefined();
+			// the island's own entries are unchanged
+			expect(contents[FACADE]).toEqual(['src/lib/Card.svelte']);
 		});
 
 		test('no reader → no facts; a pure-markup island reads as zero everywhere', () => {

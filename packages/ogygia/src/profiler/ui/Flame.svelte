@@ -179,31 +179,31 @@
 	.tools input {
 		font: inherit;
 		font-size: 13px;
-		background: #12161c;
-		color: #d8dee6;
-		border: 1px solid #2b3340;
+		background: var(--bg-raised);
+		color: var(--text);
+		border: 1px solid var(--line);
 		border-radius: 6px;
 		padding: 5px 10px;
 		min-width: 280px;
 	}
 	.tools .hint,
 	.tools .crumb {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 12px;
 	}
 	.flame {
 		width: 100%;
 		height: 460px;
-		border: 1px solid #232a35;
+		border: 1px solid var(--line);
 		border-radius: 8px;
-		background: #0c0f13;
+		background: var(--bg-sunken);
 		cursor: pointer;
 	}
 	.flame-tip {
 		position: fixed;
 		pointer-events: none;
-		background: #1c232d;
-		border: 1px solid #2b3340;
+		background: var(--bg-hover);
+		border: 1px solid var(--line);
 		border-radius: 6px;
 		padding: 6px 10px;
 		font-size: 12px;

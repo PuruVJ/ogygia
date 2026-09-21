@@ -79,6 +79,32 @@
 						<dd class="brk">{c.route ?? c.path}</dd>{/if}
 					{#if c.caller}<dt>Caller</dt>
 						<dd class="brk">{c.caller}</dd>{/if}
+					{#if c.callers && c.callers.length > 1}<dt>Call path</dt>
+						<dd class="brk">{#each c.callers as k, i (i)}{#if i > 0}<span class="dim"> ← </span>{/if}{k}{/each}</dd>{/if}
+					{#if c.timings?.length}
+						{@const theirs = c.timings.reduce((a, t) => a + t.ms, 0)}
+						<dt>Their side</dt>
+						<dd>
+							{#each c.timings as t (t.name)}<span class="st"><b>{t.desc ?? t.name}</b> {fmt_ms(t.ms)} ms</span>{/each}
+							{#if theirs > 0}<span class="dim">— {fmt_ms(theirs)} ms measured on their side, {fmt_ms(Math.max(0, c.ms - theirs))} ms network + framework (from their Server-Timing)</span>{/if}
+						</dd>
+					{/if}
+					{#if c.trace}
+						{@const t = c.trace}
+						{@const rest = Math.max(0, t.ms - t.cpu_ms - t.wait_ms)}
+						<dt>Inside the upstream</dt>
+						<dd>
+							<span class="st"><b>{fmt_ms(t.ms)} ms</b> on their profiler's clock{#if t.route} · route <code>{t.route}</code>{/if}</span>
+							<span class="trace-bar" title="{fmt_ms(t.cpu_ms)} ms CPU · {fmt_ms(t.wait_ms)} ms waiting on {t.calls} call{t.calls === 1 ? '' : 's'} · {fmt_ms(rest)} ms other">
+								<i class="tb-cpu" style="width:{(t.cpu_ms / Math.max(t.ms, 0.01)) * 100}%"></i><i class="tb-wait" style="width:{(t.wait_ms / Math.max(t.ms, 0.01)) * 100}%"></i><i class="tb-rest" style="width:{(rest / Math.max(t.ms, 0.01)) * 100}%"></i>
+							</span>
+							<span class="dim">{fmt_ms(t.cpu_ms)} ms CPU · {fmt_ms(t.wait_ms)} ms waiting on {t.calls} call{t.calls === 1 ? '' : 's'} · {fmt_ms(rest)} ms other · {fmt_ms(Math.max(0, c.ms - t.ms))} ms network between us</span>
+							{#if t.top?.length}
+								<span class="dim">their own calls: {#each t.top as u, i (i)}{#if i > 0}, {/if}{u.url.replace(/^https?:\/\/[^/]+/, '')} {fmt_ms(u.ms)} ms{/each}</span>
+							{/if}
+							{#if t.profiler}<span class="dim">their profiler: <code>{t.profiler}</code></span>{/if}
+						</dd>
+					{/if}
 				</dl>
 
 				<h4>URL</h4>
@@ -101,8 +127,8 @@
 	/* The shell scrolls; the track keeps a usable minimum width so a narrow viewport (or the open
 	   drawer) pans the timeline instead of crushing the % -positioned bars into unreadability. */
 	.wf {
-		background: #0c0f13;
-		border: 1px solid #232a35;
+		background: var(--bg-sunken);
+		border: 1px solid var(--line);
 		border-radius: 8px;
 		margin: 8px 0;
 		overflow-x: auto;
@@ -123,7 +149,7 @@
 		border: 0;
 		padding: 0;
 		border-radius: 3px;
-		background: #5b8fd6;
+		background: var(--c-blue);
 		min-width: 2px;
 		cursor: pointer;
 		overflow: hidden;
@@ -135,11 +161,11 @@
 	}
 	.wf-bar.sel {
 		box-shadow:
-			0 0 0 2px #6cb2ff,
-			0 0 0 4px #0c0f13;
+			0 0 0 2px var(--c-blue),
+			0 0 0 4px var(--bg-sunken);
 	}
 	.wf-bar.err {
-		background: #c1544f;
+		background: var(--bad);
 	}
 	.wf-bar .body {
 		position: absolute;
@@ -156,7 +182,7 @@
 		display: flex;
 		align-items: center;
 		font: 10px ui-monospace, monospace;
-		color: #eaf1fb;
+		color: var(--text);
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 		pointer-events: none;
@@ -165,10 +191,14 @@
 	.wf-label {
 		position: absolute;
 		font: 11px ui-monospace, monospace;
-		color: #aeb6c2;
+		color: var(--text-dim);
 		top: 4px;
 		white-space: nowrap;
 		pointer-events: none;
+	}
+	.st {
+		display: inline-block;
+		margin-right: 10px;
 	}
 	.dim {
 		color: #5c636e;
@@ -181,8 +211,8 @@
 		bottom: 0;
 		z-index: 40;
 		width: min(460px, 92vw);
-		background: #0e1219;
-		border-left: 1px solid #232a35;
+		background: var(--bg-sunken);
+		border-left: 1px solid var(--line);
 		box-shadow: -12px 0 32px rgba(0, 0, 0, 0.4);
 		display: flex;
 		flex-direction: column;
@@ -196,12 +226,12 @@
 	}
 	.wf-drawer-head .rm {
 		font-family: ui-monospace, monospace;
-		color: #aeb6c2;
+		color: var(--text-dim);
 		font-weight: 600;
 	}
 	.wf-drawer-head .ru {
 		font-family: ui-monospace, monospace;
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 12px;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -218,7 +248,7 @@
 		margin-left: auto;
 		border: 0;
 		background: transparent;
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 15px;
 		cursor: pointer;
 		padding: 2px 7px;
@@ -226,8 +256,8 @@
 		line-height: 1;
 	}
 	.wf-close:hover {
-		background: #1a1f28;
-		color: #d8dee6;
+		background: var(--bg-hover);
+		color: var(--text);
 	}
 	.wf-drawer-body {
 		padding: 12px 14px 20px;
@@ -235,7 +265,7 @@
 	}
 	.wf-drawer-body h4 {
 		font-size: 11px;
-		color: #7d8590;
+		color: var(--text-faint);
 		margin: 16px 0 5px;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -255,10 +285,10 @@
 		gap: 3px 12px;
 	}
 	.wf-drawer-body dt {
-		color: #7d8590;
+		color: var(--text-faint);
 	}
 	.wf-drawer-body dd {
-		color: #d8dee6;
+		color: var(--text);
 		margin: 0;
 		min-width: 0;
 	}
@@ -270,12 +300,36 @@
 	.wf-url {
 		margin: 4px 0 0;
 		padding: 8px 10px;
-		background: #0a0d11;
+		background: var(--bg-sunken);
 		border: 1px solid #1c222c;
 		border-radius: 6px;
 		font: 12px ui-monospace, monospace;
-		color: #cdd6e0;
+		color: var(--text-dim);
 		word-break: break-all;
 		white-space: pre-wrap;
+	}
+	/* the nested trace: the upstream's own request as a three-part bar */
+	.trace-bar {
+		display: flex;
+		height: 10px;
+		width: 100%;
+		max-width: 420px;
+		background: var(--bg-sunken);
+		border-radius: 3px;
+		overflow: hidden;
+		margin: 4px 0;
+	}
+	.trace-bar i {
+		display: block;
+		height: 100%;
+	}
+	.tb-cpu {
+		background: var(--c-orange);
+	}
+	.tb-wait {
+		background: var(--c-blue);
+	}
+	.tb-rest {
+		background: #374151;
 	}
 </style>

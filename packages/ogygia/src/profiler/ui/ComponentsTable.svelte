@@ -34,8 +34,18 @@
 	let open = $state<string | null>(null);
 	const hasSplit = rows.some((r) => (r.markup_ms ?? 0) + (r.logic_ms ?? 0) > 0);
 	const hasParent = rows.some((r) => !!r.parent);
-	const cols = $derived(7 + (hasAlloc ? 1 : 0) + (hasSplit ? 1 : 0) + (hasParent ? 1 : 0));
+	// page mode: the spread across runs (min / median / max), a cold first run marked
+	const hasRuns = rows.some((r) => (r.runs_ms?.length ?? 0) > 1);
+	const cols = $derived(7 + (hasAlloc ? 1 : 0) + (hasSplit ? 1 : 0) + (hasParent ? 1 : 0) + (hasRuns ? 1 : 0));
 	const own = (r: Row) => (r.markup_ms ?? 0) + (r.logic_ms ?? 0);
+	const spread = (r: Row) => {
+		const xs = r.runs_ms ?? [];
+		if (xs.length < 2) return null;
+		const s = [...xs].sort((a, b) => a - b);
+		const rest = xs.slice(1);
+		const rest_med = [...rest].sort((a, b) => a - b)[Math.floor(rest.length / 2)];
+		return { min: s[0], med: s[Math.floor(s.length / 2)], max: s[s.length - 1], cold: xs[0] >= 5 && xs[0] >= rest_med * 2.5 && xs[0] === s[s.length - 1], flaky: s[s.length - 1] >= s[Math.floor(s.length / 2)] * 3 && s[s.length - 1] - s[Math.floor(s.length / 2)] >= 10 };
+	};
 	// a finding's `#comp=<name>` link opens + scrolls to its row
 	$effect(() =>
 		follow_hash(
@@ -76,6 +86,7 @@
 				<th class="sort" class:active={s.key === 'markup_ms'} title="its own time split: Svelte writing the template (markup) vs its script and what it calls (logic); nested components in neither" onclick={() => s.click('markup_ms')}>markup / logic<span class="arr">{s.arrow('markup_ms')}</span></th>
 			{/if}
 			{#if hasParent}<th title="the component that rendered most of it — the {'{#each}'} owner of a row">under</th>{/if}
+			{#if hasRuns}<th title="its time in each render, min · median · max — a cold first run or a flaky one is marked">per run</th>{/if}
 			{#if hasAlloc}
 				<th class="num sort" class:active={s.key === 'alloc'} onclick={() => s.click('alloc')}
 					>alloc<span class="arr">{s.arrow('alloc')}</span></th
@@ -134,6 +145,15 @@
 					</td>
 				{/if}
 				{#if hasParent}<td class="file">{f.parent ?? '—'}</td>{/if}
+				{#if hasRuns}
+					{@const sp = spread(f)}
+					<td class="num runs" title={(f.runs_ms ?? []).map((x, i) => `run ${i + 1}: ${fmt_ms(x)} ms`).join('\n')}>
+						{#if sp}
+							{fmt_ms(sp.min)} · <b>{fmt_ms(sp.med)}</b> · {fmt_ms(sp.max)}
+							{#if sp.cold}<span class="tag cold">cold 1st</span>{:else if sp.flaky}<span class="tag flaky">varies</span>{/if}
+						{:else}—{/if}
+					</td>
+				{/if}
 				{#if hasAlloc}<td class="num">{f.alloc ? fmt_bytes(f.alloc) : '—'}</td>{/if}
 			</tr>
 			{#if open === f.name}
@@ -154,28 +174,28 @@
 	.tools input {
 		font: inherit;
 		font-size: 13px;
-		background: #12161c;
-		color: #d8dee6;
-		border: 1px solid #2b3340;
+		background: var(--bg-raised);
+		color: var(--text);
+		border: 1px solid var(--line);
 		border-radius: 6px;
 		padding: 5px 10px;
 		min-width: 280px;
 	}
 	.tools .hint {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 12px;
 	}
 	tr.row {
 		cursor: pointer;
 	}
 	tr.row:hover td {
-		background: #12161c;
+		background: var(--bg-raised);
 	}
 	tr.row.open td {
 		border-bottom-color: transparent;
 	}
 	.caret {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 10px;
 		margin-right: 4px;
 	}
@@ -185,7 +205,7 @@
 	.ml {
 		display: flex;
 		height: 8px;
-		background: #1a212b;
+		background: var(--bg-hover);
 		border-radius: 3px;
 		overflow: hidden;
 	}
@@ -196,7 +216,27 @@
 		background: #4a9d6e;
 	}
 	.split2 .hint {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 11px;
+	}
+	.runs {
+		white-space: nowrap;
+		font-size: 12px;
+	}
+	.tag {
+		display: inline-block;
+		margin-left: 6px;
+		font-size: 10.5px;
+		border-radius: 999px;
+		padding: 0 6px;
+		line-height: 15px;
+	}
+	.tag.cold {
+		color: var(--c-blue);
+		border: 1px solid #2a3a5a;
+	}
+	.tag.flaky {
+		color: var(--warn);
+		border: 1px solid #5a4a20;
 	}
 </style>

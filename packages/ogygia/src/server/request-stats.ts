@@ -74,6 +74,10 @@ export interface SeedKeyStat {
 export interface HoleStat {
 	/** region id (the server manifest key) */
 	id: string;
+	/** the component's name (`Recommendations`); '' when unknown */
+	name: string;
+	/** a short preview of the props (`{"forProduct":"P1"}`), what tells two holes of one component apart */
+	props: string;
 	/** fetch schedule (`load` | `visible` | …) */
 	when: string;
 	/** phase-2 wake, when it hydrates */

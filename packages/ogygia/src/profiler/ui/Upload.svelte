@@ -8,7 +8,7 @@
 	const { base } = $derived(data);
 </script>
 
-<Shell>
+<Shell {base}>
 	<h1>Open a saved profile</h1>
 	<p class="hint">
 		Recorded on a serverless host (Amplify, Vercel, Netlify) where the report can't be kept in memory?

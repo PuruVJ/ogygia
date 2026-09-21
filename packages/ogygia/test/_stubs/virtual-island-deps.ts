@@ -51,3 +51,10 @@ export const islandInteractivity = (
 	_entry: string
 ): { handlers: number; state: number; effects: number; binds: number; actions: number; files: number } | null =>
 	null;
+// `chunkContents(href)` — the readable source list of a hashed client chunk; null when unknown.
+// A test sets the map with `set_chunk_contents(...)`.
+let chunk_contents: Record<string, string[]> = {};
+export const chunkContents = (href: string): string[] | null => chunk_contents[href] ?? null;
+export function set_chunk_contents(map: Record<string, string[]>) {
+	chunk_contents = map;
+}

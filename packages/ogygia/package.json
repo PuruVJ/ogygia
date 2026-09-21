@@ -104,6 +104,26 @@
 			"types": "./dist/profiler/span.d.ts",
 			"default": "./src/profiler/span.ts"
 		},
+		"./profiler/client": {
+			"types": "./dist/profiler/client.d.ts",
+			"default": "./src/profiler/client.ts"
+		},
+		"./profiler/storage": {
+			"types": "./dist/profiler/storage/index.d.ts",
+			"default": "./src/profiler/storage/index.ts"
+		},
+		"./profiler/storage/sqlite": {
+			"types": "./dist/profiler/storage/sqlite.d.ts",
+			"default": "./src/profiler/storage/sqlite.ts"
+		},
+		"./profiler/storage/redis": {
+			"types": "./dist/profiler/storage/redis.d.ts",
+			"default": "./src/profiler/storage/redis.ts"
+		},
+		"./profiler/storage/postgres": {
+			"types": "./dist/profiler/storage/postgres.d.ts",
+			"default": "./src/profiler/storage/postgres.ts"
+		},
 		"./rewrite": {
 			"types": "./dist/server/split-regions.d.ts",
 			"default": "./src/server/split-regions.ts"
@@ -331,6 +351,26 @@
 			"./profiler": {
 				"types": "./dist/profiler/span.d.ts",
 				"default": "./dist/profiler/span.js"
+			},
+			"./profiler/client": {
+				"types": "./dist/profiler/client.d.ts",
+				"default": "./dist/profiler/client.js"
+			},
+			"./profiler/storage": {
+				"types": "./dist/profiler/storage/index.d.ts",
+				"default": "./dist/profiler/storage/index.js"
+			},
+			"./profiler/storage/sqlite": {
+				"types": "./dist/profiler/storage/sqlite.d.ts",
+				"default": "./dist/profiler/storage/sqlite.js"
+			},
+			"./profiler/storage/redis": {
+				"types": "./dist/profiler/storage/redis.d.ts",
+				"default": "./dist/profiler/storage/redis.js"
+			},
+			"./profiler/storage/postgres": {
+				"types": "./dist/profiler/storage/postgres.d.ts",
+				"default": "./dist/profiler/storage/postgres.js"
 			},
 			"./rewrite": {
 				"types": "./dist/server/split-regions.d.ts",

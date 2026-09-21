@@ -103,6 +103,8 @@ export function collectIslandDepModulepreloads(
 	page_keys: Record<string, string[] | null>;
 	remotes: Record<string, string[]>;
 	interactivity: Record<string, IslandInteractivityFacts>;
+	/** what is inside each chunk an island pulls: a readable source list per public href */
+	contents: Record<string, string[]>;
 } {
 	const js: Record<string, string[]> = {};
 	const css: Record<string, string[]> = {};
@@ -262,7 +264,64 @@ export function collectIslandDepModulepreloads(
 			if (acc) interactivity[entryUrl] = acc;
 		}
 	}
-	return { js, css, page, page_keys, remotes, interactivity };
+	// WHAT IS INSIDE each chunk an island pulls (the profiler's Islands table): the bundler names
+	// shared chunks by hash, so the handoff keeps a readable summary of each one's source modules.
+	const contents: Record<string, string[]> = {};
+	const summarize = (s: string) => {
+		const url = s.startsWith('/') ? s : '/' + s;
+		if (contents[url]) return;
+		const ids = bundle[s]?.moduleIds ?? [];
+		if (ids.length) contents[url] = summarize_chunk_contents(ids);
+	};
+	for (const [key, chunk] of Object.entries(bundle)) {
+		if (chunk.type !== 'chunk') continue;
+		const fileName = chunk.fileName || key;
+		if (!ISLAND_FACADE_RE.test(fileName)) continue;
+		for (const s of closure_all(fileName)) summarize(s);
+	}
+	// …and every other chunk the build emitted (Kit's entries, ogygia's own dynamic runtime
+	// chunks): the browser CPU profile sees them all, and a chunk it cannot name reads as app code
+	for (const [key, chunk] of Object.entries(bundle)) {
+		if (chunk.type === 'chunk') summarize(chunk.fileName || key);
+	}
+	return { js, css, page, page_keys, remotes, interactivity, contents };
+}
+
+const PKG_IN_PATH_RE = /\/node_modules\/((?:@[^/]+\/)?[^/]+)/;
+const SRC_IN_PATH_RE = /\/src\/(.+)$/;
+/**
+ * A chunk's source modules as a short readable list: the app's own files first (relative to
+ * `src/`), then the packages, the framework runtimes named plainly. Capped; the tail is "+N more".
+ * @internal exported for the tests
+ */
+export function summarize_chunk_contents(module_ids: readonly string[], max_files = 6, max_pkgs = 5): string[] {
+	const files: string[] = [];
+	const pkgs: string[] = [];
+	const add = (list: string[], v: string) => {
+		if (!list.includes(v)) list.push(v);
+	};
+	for (const raw of module_ids) {
+		if (!raw || raw.startsWith('\0') || raw.startsWith('virtual:')) continue;
+		const id = raw.split('\\').join('/').split('?')[0];
+		// the package is named by the LAST node_modules segment (pnpm nests: .pnpm/x@1/node_modules/x)
+		const nm = id.lastIndexOf('/node_modules/');
+		if (nm !== -1) {
+			const pkg = PKG_IN_PATH_RE.exec(id.slice(nm))?.[1];
+			if (pkg === 'svelte') add(pkgs, 'svelte runtime');
+			else if (pkg === 'ogygia') add(pkgs, 'ogygia runtime');
+			else if (pkg) add(pkgs, pkg);
+			continue;
+		}
+		if (/\/ogygia\/(?:src|dist)\//.test(id)) add(pkgs, 'ogygia runtime');
+		else {
+			const rel = SRC_IN_PATH_RE.exec(id);
+			add(files, rel ? 'src/' + rel[1] : id.split('/').slice(-2).join('/'));
+		}
+	}
+	const out = [...files.slice(0, max_files), ...pkgs.slice(0, max_pkgs)];
+	const more = files.length - Math.min(files.length, max_files) + (pkgs.length - Math.min(pkgs.length, max_pkgs));
+	if (more > 0) out.push(`+${more} more`);
+	return out;
 }
 
 /** What an island's components do (the wake advisor's evidence) — see `interactivity_facts`. */
@@ -375,7 +434,7 @@ export function island_deps_module(
 	// 'none' hints nothing.
 	const policy = `export const preloadPolicy = ${JSON.stringify(preload_policy)};\n`;
 	if (!ssr)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -385,7 +444,7 @@ export function island_deps_module(
 	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
 	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function fnManifest() { return null; }`;
+		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
 	return (
 		policy +
 		`import fs from 'node:fs';\n` +
@@ -492,6 +551,15 @@ export function island_deps_module(
 		`  if (!map || !entry) return null;\n` +
 		`  const v = map[entry];\n` +
 		`  return v && typeof v === 'object' ? v : null;\n` +
+		`}\n` +
+		// WHAT IS INSIDE a chunk (readable source list) — the profiler names hashed chunks with it
+		`export function chunkContents(href) {\n` +
+		`  const all = load();\n` +
+		`  const map = all && typeof all.contents === 'object' && all.contents ? all.contents : null;\n` +
+		`  if (!map || !href) return null;\n` +
+		`  const key = href.startsWith('/') ? href : '/' + href.replace(/^\\.\\//, '');\n` +
+		`  const v = map[key] ?? map[href];\n` +
+		`  return Array.isArray(v) ? v : null;\n` +
 		`}\n` +
 		// og.$ factories for the page-inline registration script (CSP-clean prod path):
 		// written by the CLIENT build's writeBundle, read here at SSR render time — the

@@ -729,7 +729,11 @@ class OgygiaHandle {
 		if (!profilerConfig) return (this.#profiler = null);
 		try {
 			const { profiler } = await import('./profiler/index.js');
-			this.#profiler = profiler(profilerConfig as Parameters<typeof profiler>[0]);
+			// a runtime store (set via `setProfilerStore` in hooks.server.ts) — a live DB object the
+			// build-time config could not carry; merged over the serializable config here
+			const { getProfilerStore } = await import('./profiler/storage/index.js').catch(() => ({ getProfilerStore: () => undefined }));
+			const store = getProfilerStore();
+			this.#profiler = profiler({ ...(profilerConfig as Parameters<typeof profiler>[0]), ...(store ? { store } : {}) });
 		} catch {
 			this.#profiler = null; // profiler unavailable (edge without node:inspector, etc.)
 		}

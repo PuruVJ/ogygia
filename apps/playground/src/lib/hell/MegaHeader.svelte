@@ -4,15 +4,20 @@
 	// crosses as a full props payload). Dates inside force the devalue lane. On the server it also
 	// builds a slug per link and a JSON-LD block per menu, the way a CMS header component does.
 	import type { HeaderConfig } from './data';
-	import { Slugger, jsonLd } from './util';
+	import { Slugger, jsonLd, buildMenus } from './util';
+	import { t } from './i18n';
+	import { track } from './track';
+	import Badge from './ds/Badge.svelte';
 	let { config }: { config: HeaderConfig } = $props();
 	let open = $state<number | null>(null);
 	const slugger = new Slugger();
-	const menus = config.menus.map((m) => ({
+	// buildMenus → localizeLink → interpolate → escapeText, 560 links deep; a JSON-LD per menu; a
+	// tracking call per menu; the promo title through i18n
+	const menus = buildMenus(config.menus, config.locale, (s) => slugger.slug(s)).map((m) => ({
 		...m,
-		slug: slugger.slug(m.title),
-		columns: m.columns.map((c) => ({ ...c, links: c.links.map((l) => ({ ...l, slug: slugger.slug(l.label) })) })),
-		ld: jsonLd({ id: m.slug ?? m.title, name: m.title, price: 0, currency: 'EUR', specs: m.columns })
+		promoTitle: t('menu.promo', { title: m.promo.title }),
+		ld: jsonLd({ id: m.slug ?? m.title, name: m.title, price: 0, currency: 'EUR', specs: m.columns }),
+		track: track('menu.render', { title: m.title, columns: m.columns.length })
 	}));
 </script>
 
@@ -33,12 +38,12 @@
 					<h4>{col.title}</h4>
 					<ul>
 						{#each col.links as l (l.href)}
-							<li><a href={l.href} data-slug={l.slug}>{l.label}</a>{#if l.badge}<em>{l.badge}</em>{/if}<small>{l.description}</small></li>
+							<li><a href={l.href} data-slug={l.slug} title={l.text}>{l.label}</a>{#if l.badge}<Badge label={l.badge} tone="new" />{/if}<small>{l.description}</small></li>
 						{/each}
 					</ul>
 				</div>
 			{/each}
-			<aside><h5>{m.promo.title}</h5><p>{m.promo.body}</p></aside>
+			<aside data-track={m.track}><h5>{m.promoTitle}</h5><p>{m.promo.body}</p></aside>
 		</div>
 	{/each}
 </header>

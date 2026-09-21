@@ -105,7 +105,7 @@ The report header shows **sourcemapped** when it operated. Keep it off for norma
 
 ## Cost and safety
 
-- **Idle cost is almost nothing.** The CPU is sampled only during a recording (about 1–3% then). Between recordings, there is no sampling.
+- **Idle cost is almost nothing.** The CPU is sampled only during a recording (about 1–3% then). Between recordings, there is no sampling, unless you turn on the trap or always-on sampling below. Per request the profiler reads two CPU counters and a clock and pushes one entry into a ring buffer: microseconds. A cold start pays one import of the profiler's chunk (about 30 ms).
 - **Always-on work** per request: wall timing, a capped in-memory request log, and — unless you set network capture off — one `AsyncLocalStorage` wrap plus a `fetch`/`http` patch, to attribute outbound calls. Pass `{ network: false }` for the leanest path.
 - **`Server-Timing` headers** show internal timings to each client. Thus they are **on in dev, off in production** by default. Pass `{ serverTiming: true }` to force them on.
 - Recorded profiles stay in memory only (the last few, gzipped). They are never written to disk.
@@ -126,9 +126,24 @@ ogygia({
     serverTiming: undefined,                    // default: on in dev, off in production
     heap: true,                                 // sample heap allocations while recording
     enabled: true,                              // master switch
+    trap: { over: 800 },                        // catch the slow one (off by default; see below)
+    sample: { every: 60, window: 2000 },        // always-on sampling (off by default; see below)
+    clientCpu: true,                            // the beacon records the browser's main-thread CPU (Chromium)
   },
 });
 ```
+
+`trap.replay` names the request headers the trap keeps with a caught request so a replay carries the same inputs (`['accept-language', 'x-tenant']`). None by default, and never cookies unless you name them.
+
+## Catch the slow one
+
+A page you can profile is a page you already suspect. The p99 request you cannot reproduce needs the profiler to be watching when it happens. With `trap: { over: 800 }` a coarse sampler runs in rolling windows (5 s each, 10 ms sampling interval) and keeps the window only when a request in it took longer than `over` ms. The report is labelled **caught** on the dashboard, its timeline is that request's, and the finding that names the step still works.
+
+Built to stay cheap: the coarse interval, no per-request context (the request is matched to the window by time, so no `AsyncLocalStorage` runs), no stack capture on calls, no heap sampling. Expect about 1 to 3 percent CPU while it watches. It stops after `keep` reports (default 3) and never runs on a serverless host, where an instance lives for one request anyway. Options: `over` (ms, required), `interval` (ms, default 10), `window` (ms, default 5000), `keep` (default 3).
+
+## Always-on sampling
+
+`sample: { every: 60, window: 2000 }` takes one 2 s coarse sample every minute and folds it into a rolling **hot functions** table on the dashboard, over the last hour of windows. Accuracy from volume: a function that is hot across sixty windows is hot in real traffic, whatever a single recording of a single page shows. Same cost profile as the trap (they share the recorder and take turns). Off on serverless.
 
 **Serverless hosts (Amplify, Lambda).** Those hosts hand console variables to the *build* only.
 The running function does not see them. So pass the secret through the vite config, as above,
@@ -138,3 +153,69 @@ to your own routing, typically an i18n redirect to the home page, which looks li
 profiler. A configured profiler with an empty secret answers `/__profiler` with a plain
 "installed but disabled" 404 instead, and the build prints a warning, so the two are easy to
 tell apart.
+
+## In CI: budgets and the first bad commit
+
+`ogygia perf` renders a list of pages under the profiler on a running server (a local preview in the workflow, or a deployed preview), writes a snapshot, and judges it against a baseline under a budget. It exits 1 when the budget fails and writes the PR comment as markdown.
+
+```sh
+# the baseline: the same command on main, its snapshot kept as an artifact or committed
+npx ogygia perf --url http://127.0.0.1:4173 --pages /,/products,/account --runs 5 \
+  --key "$OGYGIA_PROFILER_SECRET" --out perf-baseline.json
+
+# the PR: measure, diff, comment, fail
+npx ogygia perf --url http://127.0.0.1:4173 --pages /,/products,/account --runs 5 \
+  --key "$OGYGIA_PROFILER_SECRET" --baseline perf-baseline.json --budget perf-budget.json \
+  --out perf-snapshot.json --md perf-comment.md --label "$GITHUB_SHA"
+```
+
+The snapshot keeps per page: the median render and every run, CPU busy, waiting, the cold render's extra, the seed and island props in KB, the islands' JS in KB (unique modules counted once), the top components by self time, the hot functions, the paths to fix, and the finding codes at warn level. The comment shows one table per page (base, PR, delta, budget), the three biggest movers with their file, and the findings that appeared or went away.
+
+The budget is a JSON file, every key optional, with per-page overrides:
+
+```json
+{
+  "render_pct": 8, "render_floor_ms": 5,
+  "busy_pct": 15, "component_pct": 25,
+  "seed_kb": 20, "seed_max_kb": 300,
+  "props_kb": 30, "islands_js_kb": 30, "islands_js_max_kb": 250,
+  "cold_extra_ms": 100,
+  "fail_on": ["seed-whole", "never-hydrated"],
+  "pages": { "/": { "render_max_ms": 120 } }
+}
+```
+
+Relative budgets have a floor (a 2 ms page cannot fail on 1 ms of noise); the `_max_` keys are absolute caps, so a page that was always over one fails even with no growth, and a page that has no baseline yet is judged by the caps alone. `fail_on` fails the build when a named finding appears. Run the profiler with `runs: 5` or more in CI: the median of five renders on a shared runner is stable to a few percent, one render is not.
+
+**The first bad commit.** When a page got slower somewhere in the last N commits, `ogygia bisect` builds and profiles commits between a good one and a bad one in a binary search, each in its own git worktree, and names the culprit:
+
+```sh
+npx ogygia bisect --good v1.4.0 --bad HEAD --page /products \
+  --build "pnpm install --frozen-lockfile && pnpm build" --start "node build" \
+  --url http://127.0.0.1:3000 --key "$OGYGIA_PROFILER_SECRET" --runs 3
+```
+
+It measures the two ends first and sets the bar halfway between them (`--margin 0.5`), so noise under the bar does not mislead the search. A commit that fails to build is skipped and the search steps around it. Ten commits is four builds; a hundred is seven.
+
+## Ephemeral hosts: the browser keeps the report
+
+A serverless instance lives for seconds and forgets everything it measured. The profiler is built for that: the server captures inside one request and hands the result over, and **the browser is the database**.
+
+- **Profile a page** answers the run page with the report's dump, and the browser stores it (IndexedDB, on the app's origin) before opening the report. A report page the server no longer holds renders from the browser's store. The dashboard lists what this browser kept, and two kept reports of the same page compare in the browser.
+- **The beacon** writes each visit (navigation timing, resources, paints, islands, shifts, the islands' markup before and after hydration) into the same store, so the one-clock timeline, the heatmap and DOM time travel work whether or not the instance that rendered the report still exists.
+- **Every report page** stores itself on idle when it was opened any other way (a header profile's link, a trap catch), so a restart of a long-lived server loses nothing you have looked at.
+
+Nothing is shared between browsers: a report is kept by the browser that recorded or opened it. Export the `.ogp` or a share link to move one.
+
+## The sink: the whole site from ephemeral instances
+
+The request cloud and the layer cake need rows from many instances over a long time. Give each instance a place to post them:
+
+```ts
+profiler: {
+  sink: { url: 'https://…/profiler-rows', key: process.env.PROFILER_SINK_KEY, every: 10_000 },
+  serverTiming: true // also lets an upstream running this profiler answer nested traces
+}
+```
+
+Each instance posts NDJSON rows: one small row per request (path, route, ms, CPU, waiting, status), one summary per always-on sampler window (the hot functions), and a caught request's dump. `key` goes as a bearer token (default: the profiler secret). A long-lived host posts every `every` ms; a serverless one posts after each request, best effort. Serve the collected rows from any URL the browser can read (a bucket, an endpoint) and paste it into `/__profiler/site`.

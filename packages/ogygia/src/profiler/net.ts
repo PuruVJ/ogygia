@@ -11,9 +11,24 @@
 import type { AsyncLocalStorage } from 'node:async_hooks';
 
 // ── regexes
-const INTERNAL_OR_NODE_MODULES_RE = /node:internal|[/\\]node_modules[/\\]/;
-const DIR_PREFIX_RE = /^.*[/\\]/;
-const QUERY_SUFFIX_RE = /\?.*$/;
+// (Kit's server runtime is bundled into the app's output chunks, outside node_modules — its
+// `load_data.js` / `respond.js` frames are still the framework, never the app's caller)
+// no regex on the per-call path: a stack frame's file is tested with string searches
+const is_internal_or_dep = (file: string): boolean =>
+	file.includes('node:internal') ||
+	file.includes('/node_modules/') ||
+	file.includes('\\node_modules\\') ||
+	file.includes('/runtime/server/') ||
+	file.includes('/runtime/app/') ||
+	file.includes('\\runtime\\server\\') ||
+	file.includes('\\runtime\\app\\');
+/** the file's base name without its query (`/a/b/c.ts?x` → `c.ts`) */
+const base_name = (file: string): string => {
+	const q = file.indexOf('?');
+	const s = q === -1 ? file : file.slice(0, q);
+	const cut = Math.max(s.lastIndexOf('/'), s.lastIndexOf('\\'));
+	return cut === -1 ? s : s.slice(cut + 1);
+};
 
 export interface NetCall {
 	/** performance.now() at call start */
@@ -53,7 +68,65 @@ export interface NetCall {
 	caller?: string;
 	/** raw caller location (bundled), resolved to source at report time */
 	caller_site?: CallerSite;
+	/** the first-party call path above the caller (nearest first), raw; resolved into `callers` */
+	caller_chain?: CallerSite[];
+	/** the resolved call path: `fetchStock (lib/stock.ts:9)` ← `load (routes/+page.server.ts:44)` */
+	callers?: string[];
+	/** the upstream's own `Server-Timing` entries: what THEIR side spent the wait on */
+	timings?: ServerTiming[];
+	/** the upstream's own profiler's picture of this request (nested trace), when it answered */
+	trace?: UpstreamTrace;
 	error?: string;
+}
+
+/** One `Server-Timing` entry from an upstream response (`db;dur=180;desc="postgres"`). */
+export interface ServerTiming {
+	name: string;
+	/** `dur`, ms; 0 when the entry carries none */
+	ms: number;
+	desc?: string;
+}
+
+const MAX_TIMINGS = 12;
+/**
+ * Parse a `Server-Timing` header (RFC-ish: comma-separated metrics, `;`-separated params, `dur` in
+ * ms, `desc` quoted or bare). Tolerant: a malformed entry is skipped, never thrown on. Exported for
+ * the tests.
+ */
+/** an HTTP token (RFC 7230 tchar), checked char by char — this runs per response header */
+function is_token(s: string): boolean {
+	if (!s.length) return false;
+	for (let i = 0; i < s.length; i++) {
+		const c = s.charCodeAt(i);
+		const ok = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 33 || (c >= 35 && c <= 39) || c === 42 || c === 43 || c === 45 || c === 46 || c === 94 || c === 95 || c === 96 || c === 124 || c === 126;
+		if (!ok) return false;
+	}
+	return true;
+}
+
+export function parse_server_timing(header: string | null | undefined): ServerTiming[] | undefined {
+	if (!header) return undefined;
+	const out: ServerTiming[] = [];
+	for (const raw of header.split(',')) {
+		if (out.length >= MAX_TIMINGS) break;
+		const parts = raw.split(';').map((p) => p.trim());
+		const name = parts.shift();
+		if (!name || !is_token(name)) continue;
+		let ms = 0;
+		let desc: string | undefined;
+		for (const p of parts) {
+			const eq = p.indexOf('=');
+			const k = (eq === -1 ? p : p.slice(0, eq)).trim().toLowerCase();
+			let v = eq === -1 ? '' : p.slice(eq + 1).trim();
+			if (v.startsWith('"') && v.endsWith('"') && v.length >= 2) v = v.slice(1, -1);
+			if (k === 'dur') {
+				const n = Number(v);
+				if (Number.isFinite(n) && n >= 0) ms = Math.round(n * 100) / 100;
+			} else if (k === 'desc' && v) desc = v.slice(0, 80);
+		}
+		out.push(desc ? { name: name.slice(0, 40), ms, desc } : { name: name.slice(0, 40), ms });
+	}
+	return out.length ? out : undefined;
 }
 
 // Capturing a stack on every call has a cost, so only do it while recording.
@@ -87,7 +160,7 @@ export function nearest_app_site(): CallerSite | undefined {
 	for (const site of call_sites(nearest_app_site)) {
 		const file = site.getFileName();
 		if (!file) continue;
-		if (is_profiler_file(file) || file.startsWith('node:') || INTERNAL_OR_NODE_MODULES_RE.test(file)) {
+		if (is_profiler_file(file) || file.startsWith('node:') || is_internal_or_dep(file)) {
 			continue;
 		}
 		return {
@@ -100,12 +173,31 @@ export function nearest_app_site(): CallerSite | undefined {
 	return undefined;
 }
 
+/** The first-party CALL PATH above an I/O call — the nearest app frame and the ones that called it
+ *  (`fetchStock` ← `load`), skipping the same internals as `nearest_app_site`. Read off the one
+ *  stack that call already captured, so it costs nothing extra beyond a few more frames. */
+export function app_call_chain(limit = 5): CallerSite[] {
+	const out: CallerSite[] = [];
+	for (const site of call_sites(app_call_chain)) {
+		const file = site.getFileName();
+		if (!file) continue;
+		if (is_profiler_file(file) || file.startsWith('node:') || is_internal_or_dep(file)) continue;
+		out.push({
+			fn: site.getFunctionName() || '(anonymous)',
+			file,
+			line: site.getLineNumber() ?? 0,
+			column: site.getColumnNumber() ?? 0
+		});
+		if (out.length >= limit) break;
+	}
+	return out;
+}
+
 /** Best-effort caller string with no sourcemap (fallback before resolution). */
 export function nearest_app_frame(): string | undefined {
 	const s = nearest_app_site();
 	if (!s) return undefined;
-	const base = s.file.replace(DIR_PREFIX_RE, '').replace(QUERY_SUFFIX_RE, '');
-	return `${s.fn} (${base}:${s.line})`;
+	return `${s.fn} (${base_name(s.file)}:${s.line})`;
 }
 
 export interface NetContext {
@@ -196,7 +288,73 @@ function patch_fetch(emit: Emit): void {
 		| undefined;
 	if (typeof orig !== 'function') return;
 	if (orig[OG_FETCH_PATCH]) return; // the live fetch is already our wrapper — don't wrap it again
+	globalThis.fetch = wrap_fetch(orig, emit);
+}
 
+/**
+ * KIT'S OWN `event.fetch` never reaches the global one for a same-origin call: it dispatches the
+ * request to the app's `respond()` in-process. A load that calls its own API through it is
+ * invisible to the global patch — so the profiler wraps `event.fetch` per attributed request with
+ * the same recorder. Idempotent (the brand), nothing when capture is not installed.
+ */
+export function wrap_event_fetch<F extends typeof globalThis.fetch>(f: F): F {
+	if (!net_emit || typeof f !== 'function' || (f as F & { [OG_FETCH_PATCH]?: boolean })[OG_FETCH_PATCH]) return f;
+	return wrap_fetch(f, net_emit) as F;
+}
+
+// ── nested traces ────────────────────────────────────────────────────────────────────────────
+// A profiled request asks each upstream call for the upstream's own picture of that request; an
+// ogygia profiler on the other side (with Server-Timing exposure on) answers in one response
+// header: what it spent on CPU, waiting on its own calls, and the route it ran. The waterfall
+// opens the call bar to show it. Base64 JSON, capped so it never blows a header limit.
+
+/** the request header that asks, and the response header that answers */
+export const TRACE_HEADER = 'x-og-trace';
+const MAX_TRACE_CHARS = 4000;
+
+export interface UpstreamTrace {
+	/** the upstream's wall time for the request, ms */
+	ms: number;
+	cpu_ms: number;
+	/** waiting on its own outbound calls, ms, and how many */
+	wait_ms: number;
+	calls: number;
+	route?: string | null;
+	/** its own upstream calls, biggest first (a few) */
+	top?: { url: string; ms: number }[];
+	/** the profiler's own base on that host, so a report there can be opened */
+	profiler?: string;
+}
+
+export function encode_trace(t: UpstreamTrace): string {
+	let top = t.top ?? [];
+	let s = '';
+	for (;;) {
+		s = Buffer.from(JSON.stringify({ ...t, ...(top.length ? { top } : {}) }), 'utf8').toString('base64');
+		if (s.length <= MAX_TRACE_CHARS || !top.length) break;
+		top = top.slice(0, -1);
+	}
+	return s;
+}
+
+export function decode_trace(h: string | null | undefined): UpstreamTrace | undefined {
+	if (!h || h.length > MAX_TRACE_CHARS * 2) return undefined;
+	try {
+		const t = JSON.parse(Buffer.from(h, 'base64').toString('utf8')) as Partial<UpstreamTrace>;
+		if (typeof t?.ms !== 'number' || !Number.isFinite(t.ms)) return undefined;
+		const out: UpstreamTrace = { ms: t.ms, cpu_ms: Number(t.cpu_ms) || 0, wait_ms: Number(t.wait_ms) || 0, calls: Number(t.calls) || 0 };
+		if (typeof t.route === 'string' || t.route === null) out.route = t.route;
+		if (Array.isArray(t.top)) out.top = t.top.filter((x) => x && typeof x.url === 'string' && typeof x.ms === 'number').slice(0, 8).map((x) => ({ url: x.url.slice(0, 200), ms: x.ms }));
+		if (typeof t.profiler === 'string') out.profiler = t.profiler.slice(0, 200);
+		return out;
+	} catch {
+		return undefined;
+	}
+}
+
+/** The recording wrapper around a fetch-shaped function: one NetCall per call, timed to headers
+ *  and body, the caller captured while a recording runs. */
+function wrap_fetch(orig: typeof globalThis.fetch, emit: Emit): typeof globalThis.fetch {
 	const patched = async function fetch(
 		input: RequestInfo | URL,
 		init?: RequestInit
@@ -220,13 +378,30 @@ function patch_fetch(emit: Emit): void {
 			status: 0,
 			kind: 'fetch',
 			route: null,
-			path: null,
-			caller_site: capture_stacks ? nearest_app_site() : undefined
+			path: null
 		};
+		if (capture_stacks) {
+			const chain = app_call_chain();
+			call.caller_site = chain[0];
+			if (chain.length > 1) call.caller_chain = chain;
+		}
 		capture_req_payload(init, call);
 		emit(call);
 		try {
-			const res = await orig(input as RequestInfo, init);
+			// NESTED TRACES: while a recording runs, ask the upstream for its own timeline of this
+			// call (an ogygia profiler there answers with `x-og-trace`); a header on a copy of init,
+			// the caller's object untouched
+			let init2 = init;
+			if (capture_stacks) {
+				try {
+					const h = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+					h.set(TRACE_HEADER, '1');
+					init2 = { ...init, headers: h };
+				} catch {
+					init2 = init;
+				}
+			}
+			const res = await orig(input as RequestInfo, init2);
 			call.ms = round2(performance.now() - call.start);
 			call.status = res.status;
 			call.type = short_ct(res.headers.get('content-type'));
@@ -234,6 +409,9 @@ function patch_fetch(emit: Emit): void {
 			const len = res.headers.get('content-length');
 			if (len) call.transfer_bytes = Number(len) || undefined;
 			call.headers = headers_of(res.headers);
+			call.timings = parse_server_timing(res.headers.get('server-timing'));
+			const trace = decode_trace(res.headers.get(TRACE_HEADER));
+			if (trace) call.trace = trace;
 			// Robust DECODED size: count a cloned body stream. Works however the app reads the original
 			// (json/text/stream) and with no content-length (chunked / dev servers) — no more dashes.
 			count_decoded(res, call);
@@ -246,7 +424,7 @@ function patch_fetch(emit: Emit): void {
 		}
 	};
 	(patched as typeof patched & { [OG_FETCH_PATCH]?: boolean })[OG_FETCH_PATCH] = true;
-	globalThis.fetch = patched as typeof globalThis.fetch;
+	return patched as typeof globalThis.fetch;
 }
 
 /** time json()/text()/arrayBuffer() so "slow API" vs "slow body download" is visible */
@@ -433,9 +611,13 @@ function instrument_client_request(
 		status: 0,
 		kind: 'http',
 		route: null,
-		path: null,
-		caller_site: capture_stacks ? nearest_app_site() : undefined
+		path: null
 	};
+	if (capture_stacks) {
+		const chain = app_call_chain();
+		call.caller_site = chain[0];
+		if (chain.length > 1) call.caller_chain = chain;
+	}
 	emit(call);
 
 	r.on('response', (res) => {
@@ -452,6 +634,7 @@ function instrument_client_request(
 		if (len) call.transfer_bytes = Number(len) || undefined;
 		call.encoding = str_h(h['content-encoding']) || undefined;
 		call.type = short_ct(str_h(h['content-type']) ?? null);
+		call.timings = parse_server_timing(str_h(h['server-timing']));
 		// no cloned-stream count here: adding a 'data' listener would flip a paused stream to flowing and
 		// could steal chunks from the app — content-length is the safe size on the raw-http path.
 		rr.on?.('end', () => {

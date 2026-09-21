@@ -90,7 +90,7 @@
 				{/if}
 				<td class="marks" class:inert={r.marks === 0}>{marks_text(r)}</td>
 				{#if hasClient}
-					<td class="num">{#if r.client}{fmt_ms(r.client.p50_ms)}<span class="hint"> ({r.client.n})</span>{:else}—{/if}</td>
+					<td class="num">{#if r.client}{fmt_ms(r.client.p50_ms)}<span class="hint"> ({r.client.n})</span>{#if r.client.recovered}<span class="lane dev" title="hydrations that discarded the server DOM and re-rendered"> re-rendered ×{r.client.recovered}</span>{/if}{:else}—{/if}</td>
 				{/if}
 				<td class="flagcell">{#if r.advice}<span class="dotflag" title={r.advice}>!</span>{/if}</td>
 			</tr>
@@ -110,17 +110,26 @@
 								{#if r.ref_keys.length}<div class="k">points into page.data</div><div>{r.ref_keys.join(', ')}</div>{/if}
 								{#if r.client}
 									<div class="k">in the browser</div>
-									<div>{r.client.n} hydration{r.client.n === 1 ? '' : 's'} seen · p50 {fmt_ms(r.client.p50_ms)} ms, max {fmt_ms(r.client.max_ms)} ms · module load p50 {fmt_ms(r.client.load_p50_ms)} ms</div>
+									<div>{r.client.n} hydration{r.client.n === 1 ? '' : 's'} seen · p50 {fmt_ms(r.client.p50_ms)} ms, max {fmt_ms(r.client.max_ms)} ms · module load p50 {fmt_ms(r.client.load_p50_ms)} ms{#if r.client.recovered} · <span class="warn">{r.client.recovered} re-rendered after a hydration mismatch</span>{/if}</div>
 								{/if}
 							</div>
 							<div>
-								<div class="k">modules{#if r.js_bytes !== null} · {fmt_bytes(r.js_bytes)}{/if}</div>
+								<div class="k">what the browser downloads to wake it{#if r.js_bytes !== null} · {fmt_bytes(r.js_bytes)} in all{/if}</div>
+								<p class="explain">
+									Every JavaScript file this island needs before it can run: its own code (marked <b>this island</b>) plus the
+									shared files it imports — the Svelte runtime, ogygia's hydrate core, shared components, libraries. The
+									bundler names shared files by hash. The total is what one visitor pays in JS for this island; the biggest
+									file is where to look when that is too much.
+								</p>
 								{#each r.modules as m (m.url)}
 									<div class="mod">
 										{#if m.bytes !== null}<div class="bar js" style="width:{Math.max(1, (m.bytes / Math.max(r.modules[0].bytes ?? 1, 1)) * 100)}%"></div>{/if}
-										<span class="mono">{m.url.replace(/^.*\/_app\/immutable\//, '')}</span>
+										<span class="mono">{m.url.replace(/^.*\/_app\/immutable\//, '')}{#if m.url === r.entry || m.url.replace(/^\.?\//, '') === r.entry.replace(/^\.?\//, '')} <span class="own">this island</span>{/if}</span>
 										<span class="num">{m.bytes === null ? '' : fmt_bytes(m.bytes)}</span>
 									</div>
+									{#if m.inside?.length}
+										<div class="inside">{m.inside.join(' · ')}</div>
+									{/if}
 								{/each}
 							</div>
 						</div>
@@ -142,36 +151,36 @@
 	.tools input {
 		font: inherit;
 		font-size: 13px;
-		background: #12161c;
-		color: #d8dee6;
-		border: 1px solid #2b3340;
+		background: var(--bg-raised);
+		color: var(--text);
+		border: 1px solid var(--line);
 		border-radius: 6px;
 		padding: 5px 10px;
 		min-width: 240px;
 	}
 	.tools .hint,
 	.hint {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 12px;
 	}
 	tr.row {
 		cursor: pointer;
 	}
 	tr.row:hover td {
-		background: #12161c;
+		background: var(--bg-raised);
 	}
 	tr.row.open td {
 		border-bottom-color: transparent;
 	}
 	.caret {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 10px;
 		margin-right: 4px;
 	}
 	.chip {
 		display: inline-block;
 		font-size: 11px;
-		color: #0d1014;
+		color: var(--bg-sunken);
 		font-weight: 600;
 		border-radius: 999px;
 		padding: 0 8px;
@@ -183,11 +192,11 @@
 		padding: 1px 6px;
 	}
 	.lane.json {
-		color: #7ee787;
+		color: var(--good);
 		border: 1px solid #2a4a33;
 	}
 	.lane.dev {
-		color: #d9a03d;
+		color: var(--warn);
 		border: 1px solid #5a4a20;
 	}
 	.bar-cell {
@@ -201,19 +210,19 @@
 		bottom: 3px;
 		height: 3px;
 		max-width: calc(100% - 8px);
-		background: #e8734a;
+		background: var(--c-orange);
 		border-radius: 2px;
 		opacity: 0.7;
 	}
 	.bar.js {
-		background: #5b8fd6;
+		background: var(--c-blue);
 	}
 	.marks {
 		font-size: 12px;
-		color: #aeb6c2;
+		color: var(--text-dim);
 	}
 	.marks.inert {
-		color: #d9a03d;
+		color: var(--warn);
 	}
 	.flagcell {
 		width: 20px;
@@ -225,21 +234,21 @@
 		line-height: 16px;
 		text-align: center;
 		border-radius: 50%;
-		background: #d9a03d;
-		color: #0d1014;
+		background: var(--warn);
+		color: var(--bg-sunken);
 		font-weight: 700;
 		font-size: 11px;
 	}
 	tr.details td {
-		background: #12161c;
+		background: var(--bg-raised);
 		padding: 10px 14px 12px;
-		border-bottom: 1px solid #232a35;
+		border-bottom: 1px solid var(--line);
 	}
 	.advice {
 		margin: 0 0 8px;
 		padding: 6px 10px;
-		background: #171c24;
-		border-left: 3px solid #d9a03d;
+		background: var(--bg-raised);
+		border-left: 3px solid var(--warn);
 		border-radius: 4px;
 		font-size: 12.5px;
 	}
@@ -250,7 +259,7 @@
 		font-size: 12.5px;
 	}
 	.k {
-		color: #7d8590;
+		color: var(--text-faint);
 		font-size: 11px;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -262,7 +271,27 @@
 		word-break: break-all;
 	}
 	.mono.warn {
-		color: #d9a03d;
+		color: var(--warn);
+	}
+	.explain {
+		margin: 2px 0 6px;
+		color: var(--text-dim);
+		font-size: 12px;
+		line-height: 1.45;
+	}
+	.own {
+		font-size: 10.5px;
+		color: var(--c-orange);
+		border: 1px solid #5a3a2a;
+		border-radius: 999px;
+		padding: 0 6px;
+		margin-left: 6px;
+	}
+	.inside {
+		margin: -1px 0 4px 8px;
+		color: var(--text-faint);
+		font-size: 11px;
+		word-break: break-all;
 	}
 	.mod {
 		position: relative;
@@ -280,7 +309,7 @@
 		opacity: 0.6;
 	}
 	.mod .num {
-		color: #aeb6c2;
+		color: var(--text-dim);
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 	}

@@ -9,8 +9,11 @@
 	import Shell from './Shell.svelte';
 	import ReportBody from './ReportBody.svelte';
 	import { decode_permalink } from './permalink.js';
+	import { get_report, list_reports } from './store.js';
+	import { page_history } from '../compare.js';
 	import type { Analysis } from '../analyze.js';
 	import type { ReportMeta, ReportExtras } from '../report.js';
+	import type { PageHistory } from '../profiler-router.js';
 
 	// ── regexes
 	const LEADING_HASH_RE = /^#/;
@@ -31,7 +34,25 @@
 	let password = $state('');
 	let busy = $state(false);
 	let error = $state('');
-	let report = $state<{ a: Analysis; meta: ReportMeta; extras: ReportExtras } | null>(null);
+	let report = $state<{ a: Analysis; meta: ReportMeta; extras: ReportExtras; history?: PageHistory | null; prev?: string | null } | null>(null);
+	/** THE BROWSER STORE: no fragment → this may be a report this browser kept (an ephemeral host
+	 *  no longer has it, or the server restarted). Looked up once, by the id in the URL. */
+	let looking = $state(!blob && typeof location !== 'undefined');
+	if (looking) {
+		const id = location.pathname.split('/').filter(Boolean).pop() ?? '';
+		void get_report(id)
+			.then(async (rec) => {
+				const dump = rec?.dump as { analysis: Analysis; meta: ReportMeta; extras: ReportExtras } | null | undefined;
+				if (!dump?.analysis || !dump.meta) return;
+				// this page's history from the other reports this browser kept
+				const kept = await list_reports();
+				const metas = [dump.meta, ...(await Promise.all(kept.filter((k) => k.id !== dump.meta.id && k.page === dump.meta.page).map((k) => get_report(k.id)))).map((r) => (r?.dump as { meta: ReportMeta } | undefined)?.meta).filter((m): m is ReportMeta => !!m)];
+				const history = page_history(metas).find((h) => h.page === dump.meta.page) ?? null;
+				const i = history ? history.points.findIndex((p) => p.id === dump.meta.id) : -1;
+				report = { a: dump.analysis, meta: dump.meta, extras: dump.extras, history, prev: i > 0 ? history!.points[i - 1].id : null };
+			})
+			.finally(() => (looking = false));
+	}
 
 	async function unlock(e: Event) {
 		e.preventDefault();
@@ -54,11 +75,14 @@
 </script>
 
 {#if report}
-	<ReportBody a={report.a} meta={report.meta} {base} extras={report.extras} ogpB64={undefined} />
+	<ReportBody a={report.a} meta={report.meta} {base} extras={report.extras} ogpB64={undefined} history={report.history ?? null} prev={report.prev ?? null} />
 {:else}
-	<Shell>
+	<Shell {base}>
 		<div class="share-unlock">
-			{#if !blob && exists && login}
+			{#if looking}
+				<h1>Looking in this browser…</h1>
+				<p class="hint">The server does not hold this report; checking whether this browser kept it.</p>
+			{:else if !blob && exists && login}
 				<h1>Log in to view this report</h1>
 				<p class="hint">
 					This report is on this server; you are not logged in on this browser. Log in with the
@@ -66,9 +90,10 @@
 				</p>
 				<a class="btn" href={login}>Log in with the secret</a>
 			{:else if !blob}
-				<h1>No shared report here</h1>
+				<h1>No report here</h1>
 				<p class="hint">
-					This link carries no report. Open a share link (it ends in <code>#…</code>){#if login},
+					This server does not hold it and this browser did not keep it (an ephemeral host keeps a
+					report only in the browser that recorded it). Open a share link (it ends in <code>#…</code>){#if login},
 						or <a href={login}>log in with the profiler secret</a> to view your own reports{:else},
 						or log in to view your own reports{/if}.
 				</p>

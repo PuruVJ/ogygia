@@ -6,6 +6,7 @@
  */
 import type { Analysis } from './analyze.js';
 import type { ReportMeta } from './report.js';
+import type { GcAttribution } from './gc.js';
 import { PHASE_LABEL, type Phase } from './timeline.js';
 
 export interface DeltaRow {
@@ -30,7 +31,21 @@ export interface SummaryRow {
 	a: number;
 	b: number;
 	d: number;
-	unit: 'ms' | 'n' | '%' | 'KB';
+	unit: 'ms' | 'n' | '%' | 'KB' | 'MB';
+}
+
+/** one allocation line before and after: what it allocated and the pause time it caused */
+export interface GcMakerDelta {
+	name: string;
+	caller: string | null;
+	component: string | null;
+	a_mb: number;
+	b_mb: number;
+	d_mb: number;
+	a_gc_ms: number;
+	b_gc_ms: number;
+	d_gc_ms: number;
+	only?: 'a' | 'b';
 }
 
 export interface Comparison {
@@ -41,6 +56,22 @@ export interface Comparison {
 	components: DeltaRow[];
 	functions: DeltaRow[];
 	findings: { added: string[]; gone: string[] };
+	/** the paths to fix, matched by their owner: what each path cost before and after */
+	paths: PathDelta[];
+	/** the garbage makers, matched by line: what each allocated and the GC it caused, before and after */
+	gc_makers: GcMakerDelta[];
+}
+
+export interface PathDelta {
+	owner: string;
+	file: string;
+	line: number;
+	a_ms: number;
+	b_ms: number;
+	d_ms: number;
+	a_fns: string[];
+	b_fns: string[];
+	only?: 'a' | 'b';
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -49,6 +80,7 @@ const median = (xs: number[]) => (xs.length ? [...xs].sort((x, y) => x - y)[Math
 function label_of(m: ReportMeta): string {
 	if (m.trigger === 'page') return `page ${m.page} ×${m.runs?.length ?? 0}`;
 	if (m.trigger === 'request') return `request ${m.request?.path ?? ''}`;
+	if (m.trigger === 'trap') return `caught ${m.request?.path ?? ''}`;
 	return `${Math.round(m.duration_ms / 1000)}s window`;
 }
 
@@ -106,11 +138,26 @@ function delta_rows(
 }
 
 export function compare_reports(
-	a: { meta: ReportMeta; analysis: Analysis; findings: string[] },
-	b: { meta: ReportMeta; analysis: Analysis; findings: string[] }
+	a: { meta: ReportMeta; analysis: Analysis; findings: string[]; gc?: GcAttribution },
+	b: { meta: ReportMeta; analysis: Analysis; findings: string[]; gc?: GcAttribution }
 ): Comparison {
 	const A = a.analysis;
 	const B = b.analysis;
+	// the garbage makers, matched by line (name + the app caller): allocated and GC caused, both sides
+	const gc_makers = new Map<string, GcMakerDelta>();
+	const mb = (n: number) => round2(n / 1048576);
+	for (const m of a.gc?.makers ?? []) gc_makers.set(`${m.name}|${m.caller ?? ''}`, { name: m.name, caller: m.caller ?? null, component: m.component, a_mb: mb(m.allocated), b_mb: 0, d_mb: -mb(m.allocated), a_gc_ms: m.gc_ms, b_gc_ms: 0, d_gc_ms: -m.gc_ms, only: 'a' });
+	for (const m of b.gc?.makers ?? []) {
+		const k = `${m.name}|${m.caller ?? ''}`;
+		const r = gc_makers.get(k);
+		if (r) {
+			r.b_mb = mb(m.allocated);
+			r.d_mb = round2(r.b_mb - r.a_mb);
+			r.b_gc_ms = m.gc_ms;
+			r.d_gc_ms = round2(m.gc_ms - r.a_gc_ms);
+			delete r.only;
+		} else gc_makers.set(k, { name: m.name, caller: m.caller ?? null, component: m.component, a_mb: 0, b_mb: mb(m.allocated), d_mb: mb(m.allocated), a_gc_ms: 0, b_gc_ms: m.gc_ms, d_gc_ms: m.gc_ms, only: 'b' });
+	}
 	const row = (label: string, x: number, y: number, unit: SummaryRow['unit']): SummaryRow => ({
 		label,
 		a: round2(x),
@@ -125,7 +172,10 @@ export function compare_reports(
 		summary.push(row('request', a.meta.request?.ms ?? 0, b.meta.request?.ms ?? 0, 'ms'));
 	}
 	summary.push(row('CPU busy', A.busy_ms, B.busy_ms, 'ms'));
-	summary.push(row('garbage collection', A.gc_ms, B.gc_ms, 'ms'));
+	// GC: the observer's pauses with the profiler's share taken out when the attribution ran (the
+	// precise number), else the sampler's GC frames — one number, the same one the report shows
+	summary.push(row('garbage collection', a.gc?.summary.total_ms ?? A.gc_ms, b.gc?.summary.total_ms ?? B.gc_ms, 'ms'));
+	if (a.gc || b.gc) summary.push(row('allocated in the window', a.gc?.summary.allocated_mb ?? 0, b.gc?.summary.allocated_mb ?? 0, 'MB'));
 	if (A.timeline && B.timeline) {
 		summary.push(row('waiting (I/O)', A.timeline.wait_ms, B.timeline.wait_ms, 'ms'));
 	}
@@ -162,6 +212,20 @@ export function compare_reports(
 
 	const a_set = new Set(a.findings);
 	const b_set = new Set(b.findings);
+	// paths by owner name
+	const paths = new Map<string, PathDelta>();
+	for (const g of A.paths ?? []) paths.set(g.owner.name, { owner: g.owner.name, file: g.owner.url, line: g.owner.line, a_ms: g.ms, b_ms: 0, d_ms: -g.ms, a_fns: g.fns.map((f) => f.name), b_fns: [], only: 'a' });
+	for (const g of B.paths ?? []) {
+		const row = paths.get(g.owner.name);
+		if (row) {
+			row.b_ms = g.ms;
+			row.d_ms = round2(g.ms - row.a_ms);
+			row.b_fns = g.fns.map((f) => f.name);
+			row.file = g.owner.url;
+			row.line = g.owner.line;
+			delete row.only;
+		} else paths.set(g.owner.name, { owner: g.owner.name, file: g.owner.url, line: g.owner.line, a_ms: 0, b_ms: g.ms, d_ms: g.ms, a_fns: [], b_fns: g.fns.map((f) => f.name), only: 'b' });
+	}
 	return {
 		a: { id: a.meta.id, label: label_of(a.meta), created: a.meta.created },
 		b: { id: b.meta.id, label: label_of(b.meta), created: b.meta.created },
@@ -172,7 +236,9 @@ export function compare_reports(
 		findings: {
 			added: b.findings.filter((f) => !a_set.has(f)),
 			gone: a.findings.filter((f) => !b_set.has(f))
-		}
+		},
+		paths: [...paths.values()].sort((x, y) => Math.abs(y.d_ms) - Math.abs(x.d_ms)),
+		gc_makers: [...gc_makers.values()].filter((m) => Math.abs(m.d_mb) >= 0.5 || Math.abs(m.d_gc_ms) >= 0.5).sort((x, y) => Math.abs(y.d_gc_ms) - Math.abs(x.d_gc_ms) || Math.abs(y.d_mb) - Math.abs(x.d_mb))
 	};
 }
 

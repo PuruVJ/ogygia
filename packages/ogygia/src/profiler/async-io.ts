@@ -14,6 +14,7 @@
  * lifetimes here anyway.
  */
 import { nearest_app_site, register_profiler_file, type CallerSite } from './net.js';
+import { call_sites, is_profiler_file } from './frames.js';
 
 // so this module's own frames (the AsyncHook.init callback) are skipped when we
 // blame a caller, regardless of how the bundler renamed this file
@@ -39,6 +40,9 @@ export interface IoOp {
 const TRACK = new Set([
 	'Timeout',
 	'Immediate',
+	// not a wait (a tick is CPU scheduling), but a resource PENDING across a gap the timeline
+	// cannot otherwise name — `process.nextTick` chains, a queue drained one tick at a time
+	'TickObject',
 	'FSREQCALLBACK',
 	'FSREQPROMISE',
 	'STATWATCHER',
@@ -58,6 +62,27 @@ const MAX = 20_000;
 
 export interface IoRecorder {
 	stop(): IoOp[];
+	/** promises created while the recorder ran, and who created them (one stack per
+	 *  PROMISE_SAMPLE_EVERY promises — a counter otherwise) */
+	promises(): { count: number; top: { caller: string; share: number }[] };
+}
+
+/** a promise storm is counted, not stacked: one stack capture per this many promises */
+const PROMISE_SAMPLE_EVERY = 256;
+
+/** the nearest frame that belongs to the app OR a dependency (not Node, not the profiler),
+ *  as `fn (dir/file:line)` — no regex, this runs once per sampled promise */
+function nearest_own_or_dep_site(): string | undefined {
+	for (const site of call_sites(nearest_own_or_dep_site)) {
+		const file = site.getFileName();
+		if (!file || file.startsWith('node:') || file.includes('node:internal') || is_profiler_file(file)) continue;
+		const q = file.indexOf('?');
+		const clean = q === -1 ? file : file.slice(0, q);
+		const parts = clean.split('/');
+		const short = parts.slice(-2).join('/');
+		return `${site.getFunctionName() || '(anonymous)'} (${short}:${site.getLineNumber() ?? 0})`;
+	}
+	return undefined;
 }
 
 /** Start timing I/O resources. Call `stop()` at the end of the window. */
@@ -72,8 +97,21 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 	const open = new Map<number, { t: number; type: string; site?: CallerSite }>();
 	const ops: IoOp[] = [];
 
+	let promise_count = 0;
+	const promise_sites = new Map<string, number>();
 	const hook = async_hooks.createHook({
 		init(asyncId, type) {
+			if (type === 'PROMISE') {
+				// a counter on every promise (cheap), a stack on one in PROMISE_SAMPLE_EVERY — the
+				// nearest frame that is not Node's own or the profiler's: the app's, or the
+				// dependency's (a design system's renderer makes promises of its own, and that is
+				// the answer)
+				if (++promise_count % PROMISE_SAMPLE_EVERY === 0 && promise_sites.size < 200) {
+					const k = nearest_own_or_dep_site() ?? '(no frame outside node)';
+					promise_sites.set(k, (promise_sites.get(k) ?? 0) + 1);
+				}
+				return;
+			}
 			if (open.size >= MAX || !TRACK.has(type)) return;
 			open.set(asyncId, { t: performance.now(), type, site: nearest_app_site() });
 		},
@@ -94,6 +132,16 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 	hook.enable();
 
 	return {
+		promises() {
+			const sampled = [...promise_sites.values()].reduce((a, b) => a + b, 0) || 1;
+			return {
+				count: promise_count,
+				top: [...promise_sites.entries()]
+					.sort((a, b) => b[1] - a[1])
+					.slice(0, 8)
+					.map(([caller, n]) => ({ caller, share: Math.round((n / sampled) * 100) / 100 }))
+			};
+		},
 		stop() {
 			hook.disable();
 			// resources still open at window end (a socket kept alive, a watcher) —

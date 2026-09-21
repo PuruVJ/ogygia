@@ -564,7 +564,8 @@
 		});
 	}
 	// Every document: note the hole's schedule + cache policy for the profiler's hole economics.
-	if (tail && is_server && !nested) tail.note_hole(__entry, __defer, __hydrate || null, __cacheTtl || 0);
+	if (tail && is_server && !nested)
+		tail.note_hole(__entry, __defer, __hydrate || null, __cacheTtl || 0, island_component?.name ?? '', __props);
 
 	const server_wants_modulepreload = $derived(
 		!!__module &&

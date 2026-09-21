@@ -2,7 +2,15 @@ import { sequence } from '@sveltejs/kit/hooks';
 import { redirect, type Handle } from '@sveltejs/kit';
 import { handle as ogygiaHandle, document } from 'ogygia/server';
 import { region } from 'ogygia';
+import { setProfilerStore } from 'ogygia/profiler/storage';
+import { sqliteStore } from 'ogygia/profiler/storage/sqlite';
 import DocTest from '$lib/doctest/DocTest.svelte';
+import { ds_ssr } from '$lib/hell/ds-ssr';
+
+// DEMO: give the profiler a durable SQLite store so reports survive a restart and the sidebar's
+// shared list fills. Swap for redisStore(...) / postgresStore(process.env.DATABASE_URL) in a real
+// deployment; this is the one line an app writes to make the profiler DB-backed.
+setProfilerStore(sqliteStore('.ogygia/profiles.db'));
 
 // A trivial second handle to prove `ogygia.handle()` composes with `sequence()`.
 const passthrough: Handle = async ({ event, resolve }) => resolve(event);
@@ -61,6 +69,9 @@ const auth_wall: Handle = async ({ event, resolve }) => {
 // and ogygia.handle() dynamically imports + mounts it internally. UI at /__profiler (dev = open;
 // prod needs ?key=<OGYGIA_PROFILER_SECRET>).
 export const handle = sequence(
+	// the hell page's design-system SSR pass (a Stencil renderer over the finished document): first
+	// in the sequence so its page transform runs LAST, on ogygia's output (Kit applies them in reverse)
+	ds_ssr,
 	doc_test,
 	auth_wall,
 	ogygiaHandle(),

@@ -124,6 +124,22 @@ export function spa_html_cacheable(cacheControl: string, setCookie: boolean): bo
 	return !CC_UNCACHEABLE.test(cacheControl || '') && !setCookie;
 }
 
+/** Does the page hold an element the fragment points at? `#top` and an empty `#` mean "the top",
+ *  which the browser handles. A fragment that matches nothing is an app-managed one (a table row
+ *  keyed by the hash): the browser would scroll to the top for it, so the router takes it over. */
+function hash_target_exists(hash: string): boolean {
+	if (!hash || hash === '#') return true;
+	const raw = hash.slice(1);
+	let dec = raw;
+	try {
+		dec = decodeURIComponent(raw);
+	} catch {
+		/* keep raw */
+	}
+	if (raw === 'top' || dec === 'top') return true;
+	return !!(document.getElementById(dec) || document.getElementById(raw) || document.getElementsByName(dec).length);
+}
+
 /** Same document = pathname + search. Hash is not part of document identity. */
 export function same_document(a: URL, b: URL) {
 	return a.pathname === b.pathname && a.search === b.search;
@@ -363,7 +379,21 @@ export class SpaRouter {
 			// click on the current page, which refreshes in place).
 			if (same_document(url, new URL(location.href))) {
 				const kind = same_document_link(url, new URL(location.href), this.nav_target);
-				if (kind === 'hash') return;
+				if (kind === 'hash') {
+					// A fragment link. If it names a real element, the browser scrolls there — leave it
+					// (native is direct and correct). If it does NOT (an app-managed fragment, e.g. a
+					// table that opens a row keyed by the hash), the browser would scroll to the TOP of
+					// the page for the unmatched fragment — so take it over: update the URL and fire
+					// hashchange for the app's listeners, without the top jump.
+					if (!hash_target_exists(url.hash)) {
+						event.preventDefault();
+						if (location.hash !== url.hash) {
+							push_state(history.state || {}, url.href);
+							window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: location.href, newURL: url.href }));
+						}
+					}
+					return;
+				}
 				event.preventDefault();
 				if (kind === 'refresh') this.navigate(url, { push: false, replace: true });
 				return;

@@ -10,7 +10,7 @@ import type { Component } from 'svelte';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 import KitPagePass from './_fixtures/KitPagePass.svelte';
-import { DocumentTail, set_tail_reader, document_tail } from '../src/server/document-tail.js';
+import { DocumentTail, set_tail_reader, document_tail, props_preview } from '../src/server/document-tail.js';
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 const kit_pass = KitPagePass as unknown as Component<Record<string, unknown>>;
@@ -92,13 +92,20 @@ describe('DocumentTail', () => {
 		t.hole('cccccccccccccccc', '', ''); // no address → nothing worth recording
 		t.props('f1', { wire: () => ({ text: '1', json: false }) });
 		// the profiler's hole notes: every document, keyed by schedule + policy, counted
-		t.note_hole('cafebabe0101', 'load', null, 0);
-		t.note_hole('cafebabe0101', 'load', null, 0);
+		t.note_hole('cafebabe0101', 'load', null, 0, 'Recs', { forProduct: 'P0' });
+		t.note_hole('cafebabe0101', 'load', null, 0, 'Recs', { forProduct: 'P0' });
 		t.note_hole('cafebabe0102', 'visible', 'load', 60);
 		expect(t.hole_rows()).toEqual([
-			{ id: 'cafebabe0101', when: 'load', hydrate: null, ttl: 0, count: 2 },
-			{ id: 'cafebabe0102', when: 'visible', hydrate: 'load', ttl: 60, count: 1 }
+			{ id: 'cafebabe0101', name: 'Recs', props: '{"forProduct":"P0"}', when: 'load', hydrate: null, ttl: 0, count: 2 },
+			{ id: 'cafebabe0102', name: '', props: '', when: 'visible', hydrate: 'load', ttl: 60, count: 1 }
 		]);
+		// the preview: empty for nothing, safe on a cycle, truncated past 80 chars
+		expect(props_preview({})).toBe('');
+		expect(props_preview(null)).toBe('');
+		const cyc: Record<string, unknown> = {};
+		cyc.self = cyc;
+		expect(props_preview(cyc)).toBe('');
+		expect(props_preview({ s: 'x'.repeat(200) })).toHaveLength(80);
 		expect(t.size).toEqual({ hints: 0, props: 1, holes: 2 });
 		expect(t.empty).toBe(false);
 		const html = t.render();

@@ -47,6 +47,19 @@ export interface SidecarWire {
 }
 
 /** The island facts a region hands over with its plan, for the profiler's Islands table. */
+/** A short, safe preview of a hole's props for the profiler (`{"forProduct":"P1"}`), so two holes
+ *  of one component read apart; empty for no props, truncated past 80 chars. */
+export function props_preview(props: unknown, max = 80): string {
+	if (!props || typeof props !== 'object') return '';
+	try {
+		const s = JSON.stringify(props, (_k, v) => (typeof v === 'bigint' ? String(v) : v));
+		if (!s || s === '{}' || s === '[]') return '';
+		return s.length > max ? s.slice(0, max - 1) + '…' : s;
+	} catch {
+		return '';
+	}
+}
+
 export interface IslandMeta {
 	entry: string;
 	/** the component's SSR function name (Svelte names it after the file); '' when unknown */
@@ -115,11 +128,11 @@ export class DocumentTail {
 
 	/** Note a deferred hole the page rendered (every document, not only Kit-hydrated ones): its
 	 *  schedule and cache policy, for the profiler's hole economics. */
-	note_hole(id: string, when: string, hydrate: string | null, ttl: number): void {
+	note_hole(id: string, when: string, hydrate: string | null, ttl: number, name = '', props: unknown = undefined): void {
 		const key = `${id}\0${when}\0${hydrate ?? ''}\0${ttl}`;
 		const have = this.#hole_notes.get(key);
 		if (have) have.count++;
-		else this.#hole_notes.set(key, { id, when, hydrate, ttl, count: 1 });
+		else this.#hole_notes.set(key, { id, name, props: props_preview(props), when, hydrate, ttl, count: 1 });
 	}
 
 	/** The holes noted on this page. */
