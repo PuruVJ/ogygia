@@ -47,22 +47,22 @@
 	</div>
 
 	<div class="cats">
+		<!-- inline (not a {#snippet}): `c` is typed by score.categories, so no template type annotation
+		     is needed — which keeps the markup TS-free AND satisfies svelte-check's noImplicitAny. -->
 		{#each score.categories as c (c.key)}
-			{@render bar(c)}
+			<div class="cat" title={c.note}>
+				<div class="cat-head">
+					<span class="cat-label">{c.label}</span>
+					<span class="cat-value">{c.value}</span>
+					<span class="cat-score" style="color:{tone(c.score)}">{c.score}</span>
+				</div>
+				<div class="track">
+					<div class="meter" style="width:{c.score}%;background:{tone(c.score)}"></div>
+				</div>
+			</div>
 		{/each}
 	</div>
 </section>
-
-{#snippet bar(c)}
-	<div class="cat" title={c.note}>
-		<div class="cat-head">
-			<span class="cat-label">{c.label}</span>
-			<span class="cat-value">{c.value}</span>
-			<span class="cat-score" style="color:{tone(c.score)}">{c.score}</span>
-		</div>
-		<div class="track"><div class="meter" style="width:{c.score}%;background:{tone(c.score)}"></div></div>
-	</div>
-{/snippet}
 
 <style>
 	.scorecard {
