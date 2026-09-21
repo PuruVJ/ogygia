@@ -47,6 +47,21 @@ describe('page_score', () => {
 		expect(Math.abs(noExtras.score - withData)).toBeLessThanOrEqual(5);
 	});
 
+	test('unmeasured island JS (null) drops the JS category — never a false 0 B / 100', () => {
+		const s = page_score({ ...clean, islandJsBytes: null });
+		expect(s.categories.some((c) => c.key === 'js')).toBe(false);
+		// with the dominant category gone, the rest renormalize; a clean page is still high
+		expect(s.categories.map((c) => c.key).sort()).toEqual(['hydration', 'layout', 'seed', 'server']);
+		expect(s.score).toBeGreaterThanOrEqual(95);
+	});
+
+	test('a page with genuinely zero islands scores JS 0 B at 100 (a real measurement)', () => {
+		const s = page_score({ ...clean, islandJsBytes: 0 });
+		const js = s.categories.find((c) => c.key === 'js')!;
+		expect(js.score).toBe(100);
+		expect(js.value).toBe('0 B');
+	});
+
 	test('vitals present but partial (only CLS) still scores layout, over what exists', () => {
 		const s = page_score({ ...clean, vitals: { lcp: null, cls: 0.3, inp: null } });
 		const layout = s.categories.find((c) => c.key === 'layout')!;

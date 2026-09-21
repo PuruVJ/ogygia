@@ -39,8 +39,11 @@ export interface PageScore {
 }
 
 export interface ScoreInputs {
-	/** total island JS the page downloads to wake, bytes (0 for a page that ships none) */
-	islandJsBytes: number;
+	/** total island JS the page downloads to wake, bytes. `0` only when the page genuinely has no
+	 *  islands; `null` when the page HAS islands but their chunk sizes were not measured (a dev
+	 *  profile, or a build with no weight data) — then the JS category drops out rather than reading a
+	 *  false perfect 100. */
+	islandJsBytes: number | null;
 	/** hydrations that discarded the server DOM and re-rendered (a mismatch) — a correctness fault */
 	recovered: number;
 	/** load/idle/visible islands that never reported hydrating while others did (mis-scheduled/broken) */
@@ -82,19 +85,22 @@ export function page_score(inp: ScoreInputs): PageScore {
 	const cats: ScoreCategory[] = [];
 
 	// JS shipped — the core promise. A load-only island app is ~8 KB of runtime; a page that ships
-	// almost none scores top, and it falls off past a couple hundred KB of island code.
-	const js = ramp(inp.islandJsBytes, 20 * KB, 400 * KB);
-	cats.push({
-		key: 'js',
-		label: 'JS shipped',
-		score: js,
-		weight: 30,
-		value: fmt_kb(inp.islandJsBytes),
-		note:
-			js === 100
-				? 'The page ships almost no island JS — the whole point.'
-				: `${fmt_kb(inp.islandJsBytes)} of island JS loads to wake the page. Move the heaviest import server-side, make a static subtree a lake, or wake on interaction.`
-	});
+	// almost none scores top, and it falls off past a couple hundred KB of island code. Dropped when
+	// the island chunk sizes were not measured (`null`) — an unmeasured category never scores 100.
+	if (inp.islandJsBytes !== null) {
+		const js = ramp(inp.islandJsBytes, 20 * KB, 400 * KB);
+		cats.push({
+			key: 'js',
+			label: 'JS shipped',
+			score: js,
+			weight: 30,
+			value: fmt_kb(inp.islandJsBytes),
+			note:
+				js === 100
+					? 'The page ships almost no island JS — the whole point.'
+					: `${fmt_kb(inp.islandJsBytes)} of island JS loads to wake the page. Move the heaviest import server-side, make a static subtree a lake, or wake on interaction.`
+		});
+	}
 
 	// Hydration integrity — a correctness score, not a speed one. A recovered island flashed and
 	// rendered twice; an island that never woke is dead interactivity. Either is a real fault, so the

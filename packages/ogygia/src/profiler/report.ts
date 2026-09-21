@@ -1507,15 +1507,24 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 	const islands = group_islands(island_rows_of(meta));
 
 	// Total island JS the page downloads, deduped by module (two islands sharing a chunk pay once) —
-	// the same walk the "islands load N of JS in all" finding does.
+	// the same walk the "islands load N of JS in all" finding does. A module with no measured weight
+	// contributes nothing AND is remembered: if NONE of the island modules were weighed (a dev
+	// profile, a build with no chunk sizes), the total is `null` — unmeasured, so the JS category
+	// drops out instead of reading a false 0 B / 100. A page with no islands at all is a real 0.
 	const seen_mod = new Set<string>();
-	let islandJsBytes = 0;
+	let jsSum = 0;
+	let anyWeighed = false;
 	for (const r of islands)
 		for (const url of [r.module_url, ...r.hints].filter(Boolean)) {
 			if (seen_mod.has(url)) continue;
 			seen_mod.add(url);
-			islandJsBytes += extras.weights?.[url] ?? 0;
+			const w = extras.weights?.[url];
+			if (typeof w === 'number') {
+				jsSum += w;
+				anyWeighed = true;
+			}
 		}
+	const islandJsBytes = islands.length === 0 ? 0 : anyWeighed ? jsSum : null;
 
 	const og = [...meta.requests]
 		.filter((r) => r.og)
