@@ -7,7 +7,10 @@
 // of the fragile walk — while leaving every rendered head ELEMENT (and any comment that is not a paired
 // Svelte marker) exactly where it was.
 import { beforeEach, expect, test } from 'vitest';
-import { neutralize_head_hydration_markers } from '../../src/runtime/hydrate-core.js';
+import {
+	dedupe_head_titles,
+	neutralize_head_hydration_markers
+} from '../../src/runtime/hydrate-core.js';
 
 const HASH = 'svelte-1abc23';
 
@@ -70,6 +73,24 @@ test('a block whose content carries its own Svelte anchors still loses its outer
 	neutralize_head_hydration_markers();
 	expect(head_comments().some((c) => c.data === HASH)).toBe(false);
 	expect(document.head.querySelector('meta[name="description"]')).not.toBeNull();
+});
+
+test('an island that re-rendered its own <title> wins: the earlier SSR title is dropped', () => {
+	// The page SSR'd a title; a waking island re-rendered its own <title> after it (what the
+	// neutralize re-render path produces). The browser honours the FIRST — so the island's must survive.
+	document.head.innerHTML =
+		'<title>SSR page title</title><meta charset="utf-8"><title>Island title (reactive)</title>';
+	dedupe_head_titles();
+	const titles = document.head.querySelectorAll('title');
+	expect(titles.length).toBe(1);
+	expect(titles[0].textContent).toBe('Island title (reactive)');
+});
+
+test('a normal single-title page is untouched by the dedupe', () => {
+	document.head.innerHTML = '<title>Only title</title><meta charset="utf-8">';
+	dedupe_head_titles();
+	expect(document.head.querySelectorAll('title').length).toBe(1);
+	expect(document.head.querySelector('title')?.textContent).toBe('Only title');
 });
 
 test('safe to run on a head with no markers, and idempotent', () => {

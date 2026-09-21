@@ -110,6 +110,21 @@ export function neutralize_head_hydration_markers(): void {
 }
 
 /**
+ * Keep only the LAST `<title>` in document.head. When a csr=false island's `<svelte:head>` re-renders
+ * (see {@link neutralize_head_hydration_markers}) it appends its own `<title>` after the page's SSR
+ * one; the browser honours the FIRST `<title>`, so without this the island's — usually reactive —
+ * title would never take effect. Dropping the earlier duplicate(s) lets it win, and Svelte then mutates
+ * that surviving element's text in place on later updates. A no-op on the normal single-title page, so
+ * it is safe to call after every island hydrate; guarded (like the neutralize) to a non-Kit document.
+ */
+export function dedupe_head_titles(): void {
+	const head = typeof document !== 'undefined' ? document.head : null;
+	if (!head) return;
+	const titles = head.querySelectorAll('title');
+	for (let i = 0; i < titles.length - 1; i++) titles[i].remove();
+}
+
+/**
  * REPAIR the island's light DOM toward its server markup, keeping every element it still has.
  *
  * Svelte's walk cares about the node SEQUENCE (elements, text, comments), never about attributes.
@@ -763,6 +778,13 @@ export function hydrate_island(
 					`with a wake:'none' (lake) boundary.`
 			);
 		}
+
+		// If this island's `<svelte:head>` re-rendered its own <title> (the re-render path opened by
+		// neutralize_head_hydration_markers), it landed AFTER the SSR title, and the browser honours the
+		// FIRST — so drop the earlier duplicate(s) and let the island's title win and update live. A
+		// no-op on the normal one-title page. Only where that re-render path ran — a non-Kit document; a
+		// csr=true page's head is Kit's, and any second title there is the app's, not ours to remove.
+		if (!kit_hydrates_page()) dedupe_head_titles();
 		return out;
 	} finally {
 		// If hydrate threw after lift, put lake DOM back so the page isn't permanently blank.
