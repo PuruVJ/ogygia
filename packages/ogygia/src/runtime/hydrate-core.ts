@@ -86,27 +86,48 @@ let head_markers_neutralized = false;
  * set); a waking island re-renders an idempotent copy of its own head content (a preload / meta /
  * resource hint — the browser dedupes it, and the first SPA head-merge replaces the head wholesale).
  *
- * Markers are paired STRUCTURALLY over head's direct children so nothing else is disturbed: an empty
- * comment `<!---->` closes the nearest preceding unmatched non-empty comment — Svelte's own pairing —
- * and only those paired opening comments are removed. A lone head comment (someone else's) is never
- * matched, page/layout head blocks keep all their rendered elements (only inert hydration comments
- * go), and element children are never descended into.
+ * A head block is `<!--HASH-->` …content… `<!---->` — the HASH open and the empty close both sit at
+ * the head's TOP LEVEL, while the content in between may carry Svelte's own block anchors when the head
+ * is looped or branched: `{#if}`/`{#each}`/`{:else}` emit `<!--[-->` / `<!--[!-->` / `<!--[?-->` opens
+ * and `<!--]-->` closes (svelte constants HYDRATION_START… and HYDRATION_END). So the open markers are found
+ * by walking head's DIRECT children while tracking bracket depth: a comment whose data starts with `[`
+ * is a block open (depth+1), `]` is a block close (depth−1), and at depth 0 a non-bracket, non-empty
+ * comment is a head-block HASH open — confirmed when a depth-0 empty `<!---->` later closes its block.
+ * That confirmation is what tells a real head marker from a lone third-party head comment (which has no
+ * depth-0 empty close), so only genuine markers are removed; page/layout head blocks keep every rendered
+ * element (their inert markers go), and element children are never descended into.
  */
 export function neutralize_head_hydration_markers(): void {
 	const head = typeof document !== 'undefined' ? document.head : null;
 	if (!head) return;
-	const open_stack: Comment[] = [];
-	const paired_opens: Comment[] = [];
+	let depth = 0;
+	let pending_open: Comment | null = null;
+	const to_remove: Comment[] = [];
 	for (let n = head.firstChild; n; n = n.nextSibling) {
 		if (n.nodeType !== 8) continue; // COMMENT_NODE
-		if ((n as Comment).data === '') {
-			const open = open_stack.pop();
-			if (open) paired_opens.push(open);
+		const data = (n as Comment).data;
+		if (data[0] === '[') {
+			depth++; // block open: `[`, `[!`, `[?`
+			continue;
+		}
+		if (data === ']') {
+			if (depth > 0) depth--; // block close
+			continue;
+		}
+		if (depth !== 0) continue; // an anchor inside a block — head-block CONTENT, never a marker
+		if (data === '') {
+			// A top-level empty comment closes the current head block, confirming its HASH open.
+			if (pending_open) {
+				to_remove.push(pending_open);
+				pending_open = null;
+			}
 		} else {
-			open_stack.push(n as Comment);
+			// A top-level non-bracket, non-empty comment is a head-block HASH open (svelte/internal/server
+			// head() emits `<!--HASH-->`). Held until its block's empty close confirms it.
+			pending_open = n as Comment;
 		}
 	}
-	for (const m of paired_opens) m.remove();
+	for (const m of to_remove) m.remove();
 }
 
 /**
