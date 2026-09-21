@@ -188,7 +188,7 @@ export function mentions_page_store(code: string): boolean {
 
 // ── parsing ────────────────────────────────────────────────────────────────────────────────────
 
-function parse_roots(code: string, id: string, kind: 'svelte' | 'script'): Node[] | null {
+export function parse_roots(code: string, id: string, kind: 'svelte' | 'script'): Node[] | null {
 	if (kind === 'script') {
 		const r = parse_module(code, id);
 		return r.ok && r.program ? [r.program] : null;

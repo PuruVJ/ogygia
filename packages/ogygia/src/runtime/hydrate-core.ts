@@ -788,15 +788,18 @@ export function hydrate_island(
 				});
 			console.warn(
 				`[ogygia] island "${entry}" discarded its ENTIRE server-rendered DOM during hydration ` +
-					`and re-rendered client-side (Svelte hydration-mismatch recovery). Something changed this ` +
-					`region's HTML between SSR and wake — a post-SSR transform (transformPageChunk / an ` +
-					`HTML-rewriting middleware), an A/B-testing snippet, or an edge rewriter. Whatever that ` +
-					`step injected (e.g. declarative shadow DOM) was just destroyed, and the swap is ` +
-					`timing-dependent, so symptoms look erratic.` +
+					`and re-rendered client-side (Svelte hydration-mismatch recovery). Two things cause this. ` +
+					`(1) Something changed this region's HTML between SSR and wake — a post-SSR transform ` +
+					`(transformPageChunk / an HTML-rewriting middleware), an A/B-testing snippet, or an edge ` +
+					`rewriter; whatever it injected (e.g. declarative shadow DOM) was just destroyed, and the ` +
+					`swap is timing-dependent, so symptoms look erratic. (2) A component in this island reads a ` +
+					`page/layout CONTEXT via plain Svelte setContext — on csr=false that runs only on the server, ` +
+					`so getContext returns undefined on the client and the island renders a different tree.` +
 					(drift.reason ? `\nWhat changed: ${drift.reason}` : '') +
-					`\nFix: make the mutation invisible to hydration (mutate only <head>, attributes, or ` +
-					`shadow templates — never the region's light DOM), or freeze the foreign-owned subtree ` +
-					`with a wake:'none' (lake) boundary.`
+					`\nFix: for (1) make the mutation invisible to hydration (mutate only <head>, attributes, or ` +
+					`shadow templates — never the region's light DOM), or freeze the foreign-owned subtree with a ` +
+					`wake:'none' (lake) boundary; for (2) provide the value with setContext / <Provide> / ` +
+					`createContext imported from 'ogygia', read it with the same getContext(key).`
 			);
 		}
 

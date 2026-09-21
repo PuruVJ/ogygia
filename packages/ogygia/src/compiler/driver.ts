@@ -48,7 +48,7 @@ import { rewrite_regions } from './content/regions.js';
 import { materialize } from './content/git.js';
 import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT } from './region/emit.js';
 import { island_deps_module } from './link/island-deps.js';
-import { source_uses_ogygia_context } from './link/context-detect.js';
+import { context_string_keys, source_uses_ogygia_context } from './link/context-detect.js';
 import { collect_flag_sites } from './flags.js';
 import { router_css_roots, router_css_module } from './link/router-css.js';
 import {
@@ -571,6 +571,46 @@ export class Compiler {
 				if (entry.componentPath) this.mark_island_closure(entry.componentPath);
 			}
 			if (P) prof.prescanMs += performance.now() - __ws;
+		}
+
+		// CONTEXT-BOUNDARY diagnostic: an island (or a component inside it — the whole island closure) that
+		// READS a string-keyed `getContext(…)` for a key nothing in the island's own code SETS, while this
+		// app registers NO ogygia context provider. On a csr=false page the page/layout `<script>` never
+		// runs on the client, so a value set with Svelte's own `setContext` in a page/layout is gone by the
+		// time the island hydrates in isolation — the island reads `undefined`, renders a different tree,
+		// and Svelte silently discards its server DOM on hydration (`data-og-recovered`). Naming it here
+		// turns that silent discard into a build-time pointer at the fix.
+		//
+		// Precision: gated to "no ogygia bridge at all" (`!runtime_marks.context`) so it never false-warns
+		// an app that DOES bridge (there a matching provided key resolves); and a key the island's OWN code
+		// both sets and reads (a component library using context WITHIN one hydration root) is subtracted
+		// out, since that needs no bridge. The runtime recovery diagnostic covers the partial-bridge case.
+		// Reads are cache hits — the closure walk already read these files.
+		if (!runtime_marks.context) {
+			const reads: { file: string; keys: string[] }[] = [];
+			const island_set = new Set<string>();
+			for (const file of island_graph) {
+				if (!file.endsWith('.svelte') && !SCRIPT_MODULE_RE.test(file)) continue;
+				const src = ctx.read_file(file);
+				if (src == null) continue;
+				const { reads: r, sets } = context_string_keys(src, file.endsWith('.svelte') ? 'svelte' : 'script');
+				for (const k of sets) island_set.add(k);
+				if (r.length) reads.push({ file, keys: r });
+			}
+			for (const { file, keys } of reads) {
+				for (const key of keys) {
+					if (island_set.has(key)) continue; // the island provides it itself, within one root
+					console.warn(
+						`[ogygia] island code ${path.relative(root, file)} reads getContext('${key}'), but this app ` +
+							`registers no ogygia context provider and no island code sets '${key}'. On a csr=false page a ` +
+							`value set with Svelte's setContext in a page/layout does NOT cross the island boundary — the ` +
+							`island reads undefined on the client, re-renders a different tree, and Svelte discards its ` +
+							`server-rendered DOM on hydration (a silent full re-render). Fix: provide '${key}' with ` +
+							`setContext / <Provide> / createContext imported from 'ogygia' (in a csr=false layout); the ` +
+							`read stays getContext('${key}').`
+					);
+				}
+			}
 		}
 
 		// A transportable class (`static wire = import.meta.og.wire(…)`) means island props can carry a
