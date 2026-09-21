@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A server island with tiny scoped CSS: its hole answer carries the sheet INLINE, and the runtime
-	// hoists that `<style data-ogygia-region-css>` into <head> before the swap — e2e/inline-css.spec.ts.
+	// hoists that `style[data-ogygia-region-css]` tag into the head before the swap — e2e/inline-css.spec.ts.
 	import type { Snippet } from 'svelte';
 	let { ogygiaFallback }: { ogygiaFallback?: Snippet } = $props();
 </script>

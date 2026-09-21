@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A tiny island whose scoped CSS is under the playground's `kit.inlineStyleThreshold`, so its
-	// sheet ships INLINE (`<style data-ogygia-region-css="…">`) instead of as a blocking `<link>` —
+	// sheet ships INLINE (a `style[data-ogygia-region-css]` tag) instead of as a blocking link —
 	// e2e/inline-css.spec.ts.
 	let n = $state(0);
 </script>
