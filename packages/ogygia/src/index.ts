@@ -100,6 +100,11 @@ export { getContext } from 'svelte';
 // is not a trusted gesture — components can adapt). Call during setup, like getContext.
 export { hydratedBy } from './hydration-info.js';
 
+// Is this an ogygia page (csr=false) rather than a csr=true page Kit hydrates whole? Answers on both
+// server and client, so shared code (a store, a helper) can branch on which world it runs in without
+// touching requestEvent itself.
+export { isOgygiaPage } from './context.js';
+
 // EXPERIMENTAL — cross-fragment shared state (contract packages import this): `.current` like
 // MediaQuery, reactive via createSubscriber, all builds meet at one Symbol.for page store.
 // Server-seedable via a printed JSON script tag; vanilla door at globalThis.ogygia.shared().

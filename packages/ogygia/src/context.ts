@@ -103,6 +103,18 @@ export function documentIsCsrTrue(error_render = false): boolean {
 	}
 }
 
+/**
+ * PUBLIC: is the current page an ogygia page (csr=false), as opposed to a csr=true page Kit hydrates
+ * whole? The inverse of {@link documentIsCsrTrue}, so it answers on BOTH legs with no requestEvent
+ * handling on the caller's side — server reads the request's route against the build-time csr set,
+ * client reads Kit's bootstrap. Meant for shared code (a store, a helper) that must branch on which
+ * world it runs in. Off-request on the server (a module init, a prerender helper with no page) there
+ * is no document to speak of, so it returns `false`.
+ */
+export function isOgygiaPage(): boolean {
+	return !documentIsCsrTrue();
+}
+
 /** The same fact from a route id in hand (the handle has the event): is this route's leaf page
  *  csr=true? A build-time answer — never a scan of the rendered document. */
 export function route_is_csr_true(id: string | null | undefined): boolean {
