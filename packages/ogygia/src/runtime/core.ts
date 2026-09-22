@@ -200,8 +200,55 @@ function dom_ready() {
  * ships the links and the runtime lifts them to the head — where they load once and stick. (A link
  * left in the body would also fail to load inside a `<template>` batch parcel.)
  */
+/**
+ * Parse a region/hole HTML string into a fragment WITH its declarative shadow roots attached.
+ *
+ * `<template shadowrootmode>` (declarative shadow DOM — a web STANDARD, nothing library-specific) turns
+ * into a real shadow root ONLY when a DSD-aware parser reads it. `Element.setHTMLUnsafe()` is that
+ * parser — the very algorithm the document uses on first load — so a server-painted region body arrives
+ * with its shadow roots live, exactly as the initial page paints. `createContextualFragment` /
+ * `innerHTML` / `DOMParser` are all DSD-UNAWARE by spec: they leave the `<template>` inert, so any host
+ * that renders its box from inside its shadow paints at 0 height until its own runtime upgrades it (the
+ * swap-then-blank-then-paint flicker). "Unsafe" means only "no sanitizer"; a hole body is our own
+ * signed, same-origin SSR (HOLE-TRUST), so it is exactly as trusted as the page itself.
+ *
+ * A browser that renders DSD on first parse but predates `setHTMLUnsafe` runs the spec's own
+ * attach-a-shadow-root step by hand — recursively, since nested DSD sits inside a shadow root that
+ * `querySelectorAll` does not cross into.
+ */
+export function parse_region_html(html: string): DocumentFragment {
+	const tpl = document.createElement('template');
+	const set_html_unsafe = (tpl as { setHTMLUnsafe?: (h: string) => void }).setHTMLUnsafe;
+	if (typeof set_html_unsafe === 'function') {
+		set_html_unsafe.call(tpl, html);
+	} else {
+		tpl.innerHTML = html;
+		attach_declarative_shadows(tpl.content);
+	}
+	return tpl.content;
+}
+
+/** The spec's declarative-shadow-DOM attach step, for engines without `setHTMLUnsafe`. Recurse into each
+ *  shadow we attach: `querySelectorAll` stops at shadow boundaries, and a `<template shadowrootmode>` can
+ *  nest inside another. First template per host wins (a host already carrying a shadow root is left). */
+function attach_declarative_shadows(root: DocumentFragment | ShadowRoot): void {
+	for (const node of Array.from(root.querySelectorAll('template[shadowrootmode]'))) {
+		const tpl = node as HTMLTemplateElement;
+		const host = tpl.parentElement;
+		tpl.remove();
+		if (!host || host.shadowRoot) continue;
+		const mode = tpl.getAttribute('shadowrootmode') === 'closed' ? 'closed' : 'open';
+		const shadow = host.attachShadow({
+			mode,
+			delegatesFocus: tpl.hasAttribute('shadowrootdelegatesfocus')
+		});
+		shadow.append(tpl.content);
+		attach_declarative_shadows(shadow);
+	}
+}
+
 function region_fragment(html: string): { frag: DocumentFragment; ready: Promise<void> } {
-	const frag = document.createRange().createContextualFragment(html);
+	const frag = parse_region_html(html);
 	const links = frag.querySelectorAll('link[data-ogygia-region-css]');
 	const pending: Array<Promise<void>> = [];
 	if (links.length && import.meta.env.DEV) {
