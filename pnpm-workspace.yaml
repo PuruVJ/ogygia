@@ -11,6 +11,10 @@ packages:
   # Runnable demos (the MFE federation trio + contracts) — consume the live packages/ogygia.
   - 'examples/mfe/*'
 allowBuilds:
+  # A transitive dep of sass-embedded (a devDependency, for compiling `<style lang="scss">` in tests).
+  # Its native watcher build is not needed — sass compileString works without it — and CI's
+  # `--frozen-lockfile` errors on an unlisted build script, so deny it explicitly.
+  '@parcel/watcher': false
   '@swc/core': true
   esbuild: true
 minimumReleaseAgeExclude:
