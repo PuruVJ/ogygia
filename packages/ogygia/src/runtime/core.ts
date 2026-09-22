@@ -50,6 +50,12 @@ const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS_
  *  Svelte's own recovery on a mismatch) — a bound on memory, not a behaviour anyone tunes. */
 const SSR_SNAPSHOT_MAX = 1 << 19;
 
+/** Per-node stash of a nested island's PRISTINE server markup, captured from a fetched fragment WHILE it
+ *  is still disconnected — nothing has upgraded it — so the island repairs against its true server bytes
+ *  instead of a DOM a swapped-in foreign runtime may have already mutated. See region_fragment. */
+const PRISTINE_SSR = Symbol('ogygia.pristine-ssr');
+type PristineHost = { [PRISTINE_SSR]?: string };
+
 /** A dynamic-import failure of the island ENTRY (network/stale), not a hydration throw. The browser
  *  message is `Failed to fetch dynamically imported module: <url>` across engines. */
 const ENTRY_FETCH_FAILED_RE =
@@ -201,7 +207,7 @@ function dom_ready() {
  * ships the links and the runtime lifts them to the head — where they load once and stick. (A link
  * left in the body would also fail to load inside a `<template>` batch parcel.)
  */
-function region_fragment(html: string): { frag: DocumentFragment; ready: Promise<void> } {
+export function region_fragment(html: string): { frag: DocumentFragment; ready: Promise<void> } {
 	const frag = parse_region_html(html);
 	const links = frag.querySelectorAll('link[data-ogygia-region-css]');
 	const pending: Array<Promise<void>> = [];
@@ -302,7 +308,26 @@ function region_fragment(html: string): { frag: DocumentFragment; ready: Promise
 				new Promise<void>((r) => setTimeout(r, 5000))
 			])
 		: Promise.resolve();
+	// Pre-capture each nested self-hydrating island's PRISTINE markup while the fragment is still
+	// disconnected. Once inserted, a swapped-in foreign runtime (a web-component upgrade) can reach a raw
+	// custom element inside the island — attaching a shadow, its normalization dropping neighbouring
+	// whitespace text nodes — BEFORE ogygia hydrates the island. The island would then snapshot that
+	// already-mutated DOM at connect, its own drift-check would see a mismatch it did not cause, and it
+	// would discard + re-render (invisible but noisy). Captured here, it repairs against the server's
+	// real bytes. The hole ITSELF already does this (fragment_markup, see #apply); this extends the same
+	// guarantee to the islands nested inside it.
+	for (const el of frag.querySelectorAll('ogygia-region')) {
+		if (el.getAttribute('entry') && !is_deferred(el) && !is_frozen(el)) {
+			(el as unknown as PristineHost)[PRISTINE_SSR] = el.innerHTML;
+		}
+	}
+
 	return { frag, ready };
+}
+
+/** TEST: the pristine server markup {@link region_fragment} stashed on a nested island, if any. */
+export function pristine_ssr_of(el: Element): string | undefined {
+	return (el as unknown as PristineHost)[PRISTINE_SSR];
 }
 
 class OgygiaRegion extends HTMLElement {
@@ -458,7 +483,12 @@ class OgygiaRegion extends HTMLElement {
 		// its boundary reconnects later, and by then another script may have edited it. The runtime
 		// is the first script in `<head>` (server/head-presence.ts `runtime_first`), so this copy is
 		// the parsed document as the server sent it. A hole's copy is taken from its answer instead.
-		if (!deferred && this.#ssr_html === null) this.#ssr_html = snapshot_markup(this);
+		// Prefer the PRISTINE markup captured from the fetched fragment (region_fragment) over a live
+		// snapshot: inside a just-swapped hole a foreign runtime may already have upgraded a custom element
+		// here, so the live DOM is no longer the server's bytes. A top-level island (no stash) snapshots
+		// live as before — there the runtime connected before anything else could touch it.
+		if (!deferred && this.#ssr_html === null)
+			this.#ssr_html = (this as unknown as PristineHost)[PRISTINE_SSR] ?? snapshot_markup(this);
 		if (slots.lakes.wait_for_boundary(this, boundary)) return;
 		this.#scheduled = true;
 		const when = region_schedule(this);
