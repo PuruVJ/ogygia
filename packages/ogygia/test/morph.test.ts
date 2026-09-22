@@ -330,6 +330,49 @@ describe('form DOM properties', () => {
 	});
 });
 
+describe('aria-hidden is never stamped onto a focused subtree (WAI-ARIA / dropdown open)', () => {
+	test('BUG REPRO: the incoming closed-state aria-hidden="true" is skipped when the subtree holds focus', () => {
+		// An on-demand dropdown: the user clicked (focusing the button), then the wake morphs in the
+		// region's fetched CLOSED render, which carries aria-hidden="true" on the container. Applying it
+		// would hide the focused button (browser blocks it, panel never opens).
+		const parent = el('<div><div class="qds-container"><button class="qds-button">Lang</button></div></div>');
+		const container = parent.firstElementChild as DomElement;
+		const button = container.firstElementChild as DomElement;
+		button.focus();
+		expect(document.activeElement).toBe(button);
+
+		morph_children(
+			parent,
+			frag('<div class="qds-container" aria-hidden="true"><button class="qds-button">Lang</button></div>')
+		);
+
+		expect(container.hasAttribute('aria-hidden')).toBe(false); // NOT hidden — the panel can open
+		expect(document.activeElement).toBe(button); // focus kept (node identity preserved)
+	});
+
+	test('aria-hidden="true" IS applied when the subtree does NOT hold focus', () => {
+		const parent = el('<div><div class="qds-container"><button class="qds-button">Lang</button></div></div>');
+		const container = parent.firstElementChild as DomElement;
+		// nothing focused
+		morph_children(
+			parent,
+			frag('<div class="qds-container" aria-hidden="true"><button class="qds-button">Lang</button></div>')
+		);
+		expect(container.getAttribute('aria-hidden')).toBe('true'); // normal case unaffected
+	});
+
+	test('aria-hidden="false" is applied even under focus (only "true" hides)', () => {
+		const parent = el('<div><div class="qds-container"><button class="qds-button">Lang</button></div></div>');
+		const container = parent.firstElementChild as DomElement;
+		(container.firstElementChild as DomElement).focus();
+		morph_children(
+			parent,
+			frag('<div class="qds-container" aria-hidden="false"><button class="qds-button">Lang</button></div>')
+		);
+		expect(container.getAttribute('aria-hidden')).toBe('false');
+	});
+});
+
 describe('id-set wrapper matching', () => {
 	test('a banner inserted above a key-less wrapper keeps the keyed node inside it', () => {
 		// The nav bug: an unkeyed layout wrapper holds a keyed region (an island). A new page inserts

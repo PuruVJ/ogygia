@@ -62,6 +62,11 @@ class DomNode {
 	get parentNode(): DomNode | null {
 		return this._parent;
 	}
+	/** DOM `contains`: self-inclusive ancestor test (walks the `_parent` chain). */
+	contains(other: DomNode | null): boolean {
+		for (let n: DomNode | null = other; n; n = n._parent) if (n === this) return true;
+		return false;
+	}
 	get firstChild(): DomNode | null {
 		return this._first;
 	}

@@ -482,7 +482,15 @@ export function sync_attributes(from: Element, to: Element, keep_extra = false):
 	// `to`'s (every `to` name is now present on `from`).
 	for (let i = 0; i < to_len; i++) {
 		const attr = to_attrs[i];
-		if (from.getAttribute(attr.name) !== attr.value) from.setAttribute(attr.name, attr.value);
+		if (from.getAttribute(attr.name) === attr.value) continue;
+		// WAI-ARIA: `aria-hidden="true"` must not sit on an ancestor of the focused element — the
+		// browser blocks it and the interaction dies. The morph fetched this region's closed/default
+		// state (an on-demand dropdown's SSR render), so stamping its aria-hidden over a subtree the
+		// user just focused open would hide the panel they're opening. Skip it; the live, focused branch
+		// stays authoritative (like the focused form control does in sync_form_props) until it blurs
+		// and a later tick re-applies. Cheap: the focus probe runs only for this one attribute.
+		if (attr.name === 'aria-hidden' && attr.value === 'true' && subtree_has_focus(from)) continue;
+		from.setAttribute(attr.name, attr.value);
 	}
 	// `from` can only carry a stale attribute if it has MORE attributes than `to` — otherwise the
 	// superset above is an exact match and the whole removal scan (+ its hasAttribute probes) is
@@ -544,4 +552,13 @@ function clone(node: Node): Node {
 /** The owning document, falling back to the ambient `document` for detached nodes. */
 function owner_document(node: Node): Document {
 	return node.ownerDocument ?? document;
+}
+
+/** True when the currently focused element lives inside `el` — so putting `aria-hidden="true"` on `el`
+ *  would hide the focused subtree (a WAI-ARIA violation the browser blocks). `activeElement` is `<body>`
+ *  when nothing has focus, which no morphed subtree contains, so that reads as false. */
+function subtree_has_focus(el: Element): boolean {
+	const doc = owner_document(el);
+	const active = doc.activeElement;
+	return active != null && active !== doc.body && el.contains(active);
 }
