@@ -213,7 +213,20 @@ function reserved_for_later(
 	return false;
 }
 
-function reconcile_children(parent: Element, new_nodes: ArrayLike<Node>, sets: IdSets): void {
+/**
+ * @param keep_children the parent is a self-owned element (an upgraded custom element / dialog / details,
+ * {@link is_self_owned}) — so its children are partly ITS OWN doing (a QDS `<qds-dropdown>` slots and
+ * rewrites its light DOM on upgrade). ADD + UPDATE what the render brings, but NEVER REMOVE a child the
+ * element gave itself — the same rule {@link sync_attributes} already applies to a self-owned element's
+ * attributes. Re-inserting/re-upgrading a foreign custom element is what makes a country-selector trigger
+ * flicker when a hole morphs its byte-identical chrome; keeping its nodes leaves the upgrade untouched.
+ */
+function reconcile_children(
+	parent: Element,
+	new_nodes: ArrayLike<Node>,
+	sets: IdSets,
+	keep_children = false
+): void {
 	const count = new_nodes.length;
 	let cursor: ChildNode | null = parent.firstChild;
 	let idx = 0;
@@ -246,11 +259,14 @@ function reconcile_children(parent: Element, new_nodes: ArrayLike<Node>, sets: I
 	}
 
 	// Aligned all the way: drop any old tail the new shape dropped, and we're done — no map built.
+	// A self-owned parent keeps its own trailing children (they are not the render's to remove).
 	if (idx >= count) {
-		while (cursor) {
-			const gone = cursor;
-			cursor = cursor.nextSibling;
-			parent.removeChild(gone);
+		if (!keep_children) {
+			while (cursor) {
+				const gone = cursor;
+				cursor = cursor.nextSibling;
+				parent.removeChild(gone);
+			}
 		}
 		return;
 	}
@@ -369,17 +385,20 @@ function reconcile_children(parent: Element, new_nodes: ArrayLike<Node>, sets: I
 		}
 	}
 
-	// Remove everything the new shape did not claim.
-	// Trailing key-less/unmatched nodes from the cursor onward:
-	while (cursor) {
-		const gone = cursor;
-		cursor = cursor.nextSibling;
-		parent.removeChild(gone);
-	}
-	// Keyed nodes whose key vanished but that sit BEFORE the cursor (positionally skipped):
-	if (old_keys) {
-		for (const node of old_keys.values()) {
-			if (node.parentNode === parent) parent.removeChild(node);
+	// Remove everything the new shape did not claim — UNLESS the parent is self-owned, whose extra
+	// children are its own (a foreign custom element's slotted / upgraded light DOM). See keep_children.
+	if (!keep_children) {
+		// Trailing key-less/unmatched nodes from the cursor onward:
+		while (cursor) {
+			const gone = cursor;
+			cursor = cursor.nextSibling;
+			parent.removeChild(gone);
+		}
+		// Keyed nodes whose key vanished but that sit BEFORE the cursor (positionally skipped):
+		if (old_keys) {
+			for (const node of old_keys.values()) {
+				if (node.parentNode === parent) parent.removeChild(node);
+			}
 		}
 	}
 }
@@ -468,11 +487,12 @@ function morph_node(from: Node, to: Node, sets: IdSets): void {
 	if (is_preserved(ef)) return;
 	// Form props BEFORE attributes: the rule compares the previous render's attribute to the incoming
 	// one, so it must read `ef`'s attributes while they are still the previous render's.
+	const self_owned = is_self_owned(ef);
 	sync_form_props(ef, et);
-	sync_attributes(ef, et, is_self_owned(ef));
+	sync_attributes(ef, et, self_owned);
 	// `et` is never mutated by the recursion (misses clone, keyed moves come from the OLD tree), so
 	// its live `childNodes` is handed straight down — no per-level snapshot array.
-	reconcile_children(ef, et.childNodes, sets);
+	reconcile_children(ef, et.childNodes, sets, self_owned);
 }
 
 /**
@@ -490,9 +510,10 @@ function morph_same(from: Node, to: Node, sets: IdSets): void {
 	const ef = from as Element;
 	if (is_preserved(ef)) return;
 	const et = to as Element;
+	const self_owned = is_self_owned(ef);
 	sync_form_props(ef, et); // before attributes — see morph_node
-	sync_attributes(ef, et, is_self_owned(ef));
-	reconcile_children(ef, et.childNodes, sets);
+	sync_attributes(ef, et, self_owned);
+	reconcile_children(ef, et.childNodes, sets, self_owned);
 }
 
 /** Add + update + remove attributes so `from` matches `to` exactly. Boolean attrs are attr presence.

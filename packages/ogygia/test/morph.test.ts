@@ -609,4 +609,44 @@ describe('self-owned attributes (upgraded custom elements, dialog/details)', () 
 		expect(details.hasAttribute('open')).toBe(true);
 		expect((parent.lastChild as DomElement).hasAttribute('data-stale')).toBe(false);
 	});
+
+	// The morph already keeps an upgraded element's ATTRIBUTES (above). Its CHILDREN are its own doing
+	// too: a QDS `<qds-button>`/`<qds-dropdown>` slots and rewrites its own light DOM on upgrade. A hole
+	// morph toward pristine fetched content (which carries none of that) must ADD what the render brings
+	// but never REMOVE the children the element gave itself — re-inserting/re-upgrading a QDS element is
+	// what makes the country-selector trigger flicker and vanish on ~half of reloads.
+	test('an upgraded custom element KEEPS the light children it gave itself when the new HTML has none', () => {
+		// The `<i>` is QDS's own light child, added on upgrade (the shim has no innerHTML setter, so it
+		// is built via markup, then the element is marked upgraded).
+		const parent = el('<div><qds-button id="b"><i data-qds-icon>person</i></qds-button></div>');
+		const btn = parent.firstChild as DomElement & { shadowRoot?: object };
+		btn.shadowRoot = {}; // upgraded
+		const icon = btn.firstChild;
+
+		morph_children(parent, frag('<qds-button id="b"></qds-button>')); // fetched: pristine, no children
+
+		expect(parent.firstChild).toBe(btn); // same node, never re-inserted
+		expect(btn.firstChild).toBe(icon); // QDS's child kept — the element is never re-upgraded
+	});
+
+	test('an upgraded custom element still ADDS the children the new HTML brings, keeping its own', () => {
+		const parent = el('<div><qds-dropdown id="d"><span data-qds-slot>internal</span></qds-dropdown></div>');
+		const dd = parent.firstChild as DomElement & { shadowRoot?: object };
+		dd.shadowRoot = {};
+		const slot = dd.firstChild;
+
+		// The woken hole brings the expensive panel INTO the dropdown.
+		morph_children(parent, frag('<qds-dropdown id="d"><section data-panel>Content</section></qds-dropdown>'));
+
+		expect(parent.firstChild).toBe(dd);
+		expect(dd.contains(slot)).toBe(true); // QDS's own child kept
+		expect(dd.innerHTML).toContain('data-panel'); // the hole panel morphed in
+	});
+
+	test('a NON-upgraded (plain) custom element still reconciles children exactly (removes extras)', () => {
+		const parent = el('<div><x-plain><i data-old>x</i></x-plain></div>');
+		// no shadowRoot, not defined → not self-owned
+		morph_children(parent, frag('<x-plain></x-plain>'));
+		expect((parent.firstChild as DomElement).firstChild).toBeNull(); // extra child removed, as before
+	});
 });
