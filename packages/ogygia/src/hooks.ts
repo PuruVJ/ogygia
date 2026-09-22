@@ -699,10 +699,13 @@ async function capture_freeze(
 
 class OgygiaHandle {
 	readonly #endpoint: string;
+	/** Optional post-render transform for a server-rendered region answer — see OgygiaHandleOptions. */
+	readonly #transform_hole: OgygiaHandleOptions['transformHole'];
 	readonly render_rate: RateLimiter;
 	readonly probe_rate: RateLimiter;
 
 	constructor(options: OgygiaHandleOptions = {}) {
+		this.#transform_hole = options.transformHole;
 		// Stored WITHOUT a base prefix. Getting the app's absolute base path inside a hook has no
 		// public, forward-compatible API — `base` from `$app/paths` is deprecated (removed in Kit 3)
 		// and `resolve()` is page-relative here — so instead of prefixing the base we match the request
@@ -1873,7 +1876,14 @@ class OgygiaHandle {
 		// Ship the component's stylesheet links ahead of its HTML (the client hoists them to <head>).
 		// Root-absolute URLs inside: the hole's HTML is spliced into a page at any depth — by the
 		// runtime, or by a CDN (ESI) — where a `./_app/…` entry would 404 (server/hole-urls.ts).
-		const html = absolutize_hole_html(region_css_links(id) + body, event.url);
+		let html = absolutize_hole_html(region_css_links(id) + body, event.url);
+
+		// The region analog of Kit's `transformPageChunk`: a consumer post-processes the fully assembled
+		// answer (e.g. a web-component server-render so it ships declarative shadow DOM). Runs on the
+		// final body, so HEAD's `content-length` below and the GET body agree. See OgygiaHandleOptions.
+		if (this.#transform_hole) {
+			html = await this.#transform_hole(html, { id, event });
+		}
 
 		if (method === 'HEAD') {
 			return region_response(null, {
@@ -1909,6 +1919,21 @@ export interface OgygiaHandleOptions {
 	 * Default is the clash-safe island-emoji route (`/__ogygia__`). Must start with `/`.
 	 */
 	endpoint?: string;
+	/**
+	 * Post-process a server-rendered REGION answer's HTML before it is sent — the region analog of Kit's
+	 * `transformPageChunk`. A region answer (a deferred hole, a lake remount) is rendered on this signed
+	 * endpoint, OUTSIDE Kit's page pipeline, so `transformPageChunk` can never reach it; this is the seam
+	 * that can. Runs once per answer, on the fully assembled body (region CSS links + component HTML,
+	 * already root-absolutized), and its return value is what ships (and sets `content-length` on a HEAD).
+	 * `html` in, `html` out — vendor-neutral; a consumer runs here the same HTML transform it applies to
+	 * the page (e.g. a web-component server-render, so the answer ships declarative shadow DOM). Keep it
+	 * pure and fast: it is on the hole's response path. `id` is the region's signed identity; `event` is
+	 * the Kit request. May be async.
+	 */
+	transformHole?: (
+		html: string,
+		ctx: { id: string; event: RequestEvent }
+	) => string | Promise<string>;
 }
 
 /**
