@@ -261,6 +261,7 @@
 		"mdsvex": "^0.12.8",
 		"oxlint": "^1.77.0",
 		"rolldown": ">=1.0.0",
+		"sass-embedded": "^1.104.1",
 		"shiki": "^4.4.1",
 		"svelte-check": "^4.7.4",
 		"svelte2tsx": "^0.7.60",

@@ -808,7 +808,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							if (e.kind === 'scoped') {
 								const src = readFile(e.abs);
 								if (src == null) continue;
-								const css = compileFoucScopedCss(e.abs, src);
+								// Preprocess + keep the script (same as the hole/lake legs): a raw
+								// `svelte.compile` throws on scss / a script-referencing template and falls back
+								// to UNSCOPED bodies, leaking a router page's component CSS across the document.
+								const css = compileFoucScopedCss(
+									e.abs,
+									await preprocess_component_for_css(src, e.abs, root),
+									{ keepScript: true }
+								);
 								if (css) parts.push(css);
 							} else if (CSS_EXT_RE.test(e.abs)) {
 								// Plain `.css` import — ship verbatim. Preprocessor dialects (.scss/…) can't be
@@ -1103,7 +1110,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				});
 			},
 
-			load(id, options) {
+			async load(id, options) {
 				// Per-request only. `config.build.ssr` stays set for Kit apps and must NOT decide
 				// client vs server virtuals — that leaked `$app/server` into the browser guard.
 				const ssr = options?.ssr === true;
@@ -1139,7 +1146,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					} catch {
 						return { code: '', moduleType: 'css' };
 					}
-					return { code: compileFoucScopedCss(abs, source), moduleType: 'css' };
+					// Preprocess (scss/sass → css, TS stripped) and KEEP the script before compiling — the
+					// same path the hole-CSS leg uses. `svelte.compile` reads neither dialect, and a
+					// script-stripped template that references a script name throws; BOTH make
+					// compileFoucScopedCss fall back to UNSCOPED style bodies. This module is a LAKE's (and
+					// island's) scoped CSS, so an unscoped fallback ships the component's rules global —
+					// `.x { … }` instead of `.x.svelte-<hash>` — and they then match any element anywhere on
+					// the page that reuses the class name (a header lake restyling an unrelated breadcrumb).
+					const code = compileFoucScopedCss(
+						abs,
+						await preprocess_component_for_css(source, abs, root),
+						{ keepScript: true }
+					);
+					return { code, moduleType: 'css' };
 				}
 
 				// Every other ogygia virtual is a pure `id → source` emit the driver owns. The two Vite build
