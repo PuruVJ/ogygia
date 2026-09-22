@@ -62,6 +62,11 @@ class DomNode {
 	get parentNode(): DomNode | null {
 		return this._parent;
 	}
+	/** The parent when it is an element (not the document / a fragment), else null — DOM `parentElement`. */
+	get parentElement(): DomNode | null {
+		const p = this._parent;
+		return p && p.nodeType === 1 ? p : null;
+	}
 	/** DOM `contains`: self-inclusive ancestor test (walks the `_parent` chain). */
 	contains(other: DomNode | null): boolean {
 		for (let n: DomNode | null = other; n; n = n._parent) if (n === this) return true;

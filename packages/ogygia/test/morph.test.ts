@@ -371,6 +371,40 @@ describe('aria-hidden is never stamped onto a focused subtree (WAI-ARIA / dropdo
 		);
 		expect(container.getAttribute('aria-hidden')).toBe('false');
 	});
+
+	test('SWEEP: a retained aria-hidden="true" over the focused element is stripped after the morph', () => {
+		// The real failure: aria-hidden reaches the focused container via a cloned/inserted subtree
+		// (importNode copies attributes wholesale), which sync_attributes never sees. Simulate the
+		// residue: the live container already carries aria-hidden="true" AND the incoming node carries it
+		// too, so sync_attributes leaves it untouched (values equal). The post-morph sweep must remove it,
+		// because the focused button is inside — otherwise the browser blocks the open.
+		const parent = el(
+			'<div><div class="qds-container" aria-hidden="true"><button class="qds-button">Lang</button></div></div>'
+		);
+		const container = parent.firstElementChild as DomElement;
+		const button = container.firstElementChild as DomElement;
+		button.focus();
+		morph_children(
+			parent,
+			frag('<div class="qds-container" aria-hidden="true"><button class="qds-button">Lang</button></div>')
+		);
+		expect(container.hasAttribute('aria-hidden')).toBe(false); // swept off the focused ancestor
+		expect(document.activeElement).toBe(button);
+	});
+
+	test('SWEEP: aria-hidden="true" on a NON-focused sibling subtree is left alone', () => {
+		const parent = el(
+			'<div><div class="a" aria-hidden="true"><span>x</span></div><button id="b">Y</button></div>'
+		);
+		const button = parent.children[1] as DomElement;
+		button.focus();
+		morph_children(
+			parent,
+			frag('<div class="a" aria-hidden="true"><span>x</span></div><button id="b">Y</button>')
+		);
+		// focus is in the button, NOT in .a — .a keeps its aria-hidden
+		expect((parent.children[0] as DomElement).getAttribute('aria-hidden')).toBe('true');
+	});
 });
 
 describe('id-set wrapper matching', () => {

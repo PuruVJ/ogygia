@@ -93,6 +93,29 @@ export function install(): void {
  */
 export function morph_children(parent: Element, new_nodes: ArrayLike<Node>): void {
 	reconcile_children(parent, new_nodes, build_id_sets(parent, new_nodes));
+	clear_aria_hidden_over_focus(parent);
+}
+
+/**
+ * WAI-ARIA safety net, run once after a morph settles: `aria-hidden="true"` must never sit on an
+ * ancestor of the focused element — the browser blocks it and the interaction dies (an on-demand
+ * dropdown, focused by the waking click, never opens because the morph stamped the region's fetched
+ * closed state onto its container). aria-hidden reaches the focused subtree two ways: an in-place
+ * attribute sync (guarded in {@link sync_attributes}) OR a freshly cloned/inserted subtree — importNode
+ * copies attributes wholesale, with no guard, which is the path a REPLACED container takes. So the guard
+ * alone was not enough. This sweep strips `aria-hidden="true"` from the focused element's ancestor chain
+ * up to (and including) the morph root, covering both paths. A no-op unless focus lives inside `parent`.
+ */
+function clear_aria_hidden_over_focus(parent: Element): void {
+	const doc = owner_document(parent);
+	const active = doc.activeElement;
+	if (active == null || active === doc.body || !parent.contains(active)) return;
+	let n: Element | null = active;
+	while (n) {
+		if (n.getAttribute('aria-hidden') === 'true') n.removeAttribute('aria-hidden');
+		if (n === parent) break;
+		n = n.parentElement;
+	}
 }
 
 /**
