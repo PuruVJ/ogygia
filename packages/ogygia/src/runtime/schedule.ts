@@ -65,6 +65,31 @@ export function yield_task(): Promise<void> {
 }
 
 /**
+ * Start a `load` island's hydrate WITHOUT competing with the browser's critical work. A `load` island's
+ * `import()` (and Svelte's client runtime) otherwise fetches the moment the runtime boots — around
+ * DOMContentLoaded, while the LCP image is still downloading — so island JS races the page's first
+ * paint on the network. `scheduler.postTask` at 'background' yields to rendering AND to user-visible
+ * work, so the browser paints (and fetches the LCP resource) first and the island's import starts in
+ * the gap after. Cooperative, not gated on a fixed moment: if the main thread is already free, it runs
+ * now; while the browser is busy painting, it waits on its own. Falls back to a macrotask where
+ * postTask is absent (Safari/Firefox-older) — still off the synchronous boot task, so the browser can
+ * paint before it. This is what makes `load` mean "as soon as the browser is free," not "at boot."
+ */
+export function background_start(fn: () => void): void {
+	const s = (globalThis as { scheduler?: { postTask?: (cb: () => void, o?: { priority?: string }) => unknown } })
+		.scheduler;
+	if (s && typeof s.postTask === 'function') {
+		try {
+			s.postTask(fn, { priority: 'background' });
+			return;
+		} catch {
+			/* an invalid-priority throw (older postTask) → fall back */
+		}
+	}
+	setTimeout(fn, 0);
+}
+
+/**
  * Register a region with the scheduler at connect: stamp its order, start its viewport snapshot.
  * Cheap on purpose (a stamp and an `observe`) — connect runs for every region in one task.
  */

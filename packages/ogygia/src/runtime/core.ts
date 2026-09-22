@@ -21,6 +21,7 @@ import {
 import { slots } from './slots.js';
 import { KEEP_FALLBACK_HTML } from '../keep-fallback.js';
 import {
+	background_start,
 	hydrate_settled,
 	hydrate_started,
 	hydrate_turn,
@@ -565,7 +566,10 @@ class OgygiaRegion extends HTMLElement {
 		}
 		if (when === 'idle') this.#on_idle(fire);
 		else if (when === 'visible') this.#on_visible(fire, visible_margin);
-		else if (when === 'load') fire();
+		// `load` = "as soon as the browser is free", NOT "synchronously at boot". Starting the hydrate
+		// (its import + Svelte runtime) through background priority lets the LCP paint and its image win
+		// the main thread and the network first; the island fills in the gap after. See background_start.
+		else if (when === 'load') background_start(fire);
 		else if (when === 'interaction') {
 			if (is_deferred(this)) arm_on_demand(this, fire);
 			else this.#on_interaction(fire);
