@@ -22,6 +22,7 @@ import { SEED_REF_KEY, seed_ref_reviver } from '../seed-refs.js';
 import { parse_sidecar_text, seed_data_of, seed_page_once, seed_remote_once } from './seeds.js';
 import { is_deferred, ours_on_kit_document, region_ssr_truncated } from './region-attrs.js';
 import { slots, type LiftedLake } from './slots.js';
+import { parse_region_html } from './parse-html.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
@@ -330,13 +331,19 @@ function repair_if_drifted(
 	region: HTMLElement,
 	ssr_html: string
 ): { repaired: boolean; reason: string | null } {
-	const holder = document.createElement('template');
-	holder.innerHTML = ssr_html; // inert: nothing upgrades in a template's content
-	// The copy under a region of its own — in the template's inert document, so the element never
-	// upgrades — lifted by the very routine that lifted the live island (what it leaves in a lake,
-	// it leaves in both).
-	const want = holder.content.ownerDocument.createElement('ogygia-region');
-	want.appendChild(holder.content);
+	// Parse through the ONE DSD-aware parser (parse-html.ts): the content stays inert (a template's
+	// content never upgrades — attaching a declarative shadow root is a parse step, not an upgrade), but
+	// a `<template shadowrootmode>` in the copy is consumed into a shadow root instead of lingering as an
+	// inert light-DOM child. That keeps `want`'s light-DOM sequence consistent with a live region whose
+	// hosts already carry shadow roots, so a server copy that happens to carry DSD can't trip
+	// sequence_differs. Today ssr_html is the region's own live innerHTML (never serialises a shadow), so
+	// this is belt-and-braces — but it means there is no second, DSD-unaware parse to drift.
+	const content = parse_region_html(ssr_html);
+	// The copy under a region of its own — in the parse fragment's inert document, so the element never
+	// upgrades — lifted by the very routine that lifted the live island (what it leaves in a lake, it
+	// leaves in both).
+	const want = content.ownerDocument.createElement('ogygia-region');
+	want.appendChild(content);
 	slots.lakes.lift(want);
 	if (!sequence_differs(region, want)) return { repaired: false, reason: null };
 	// Name the drift BEFORE repairing (repair rewrites the live sequence). The string is read only by

@@ -5,7 +5,7 @@
 // from inside its shadow swapped in at 0 height and flickered until its runtime re-upgraded it. This is
 // Repro A from the bug report: the region-parse path must attach the shadow root, like the document does.
 import { expect, test } from 'vitest';
-import { parse_region_html } from '../../src/runtime/core.js';
+import { parse_region_html } from '../../src/runtime/parse-html.js';
 
 const HTML =
 	'<x-host><template shadowrootmode="open"><style>:host{display:block}</style><div>painted</div></template>light</x-host>';
