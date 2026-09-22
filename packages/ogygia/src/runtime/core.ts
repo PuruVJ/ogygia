@@ -564,16 +564,21 @@ class OgygiaRegion extends HTMLElement {
 				return raw();
 			};
 		}
+		// NON-user-initiated wakes hydrate at BACKGROUND priority so they never race the LCP paint: `load`
+		// fires at boot, and a `visible`/`media` island above the fold (or a media query that matches at
+		// load) fires right then too — same competition. `background_start` yields to rendering, so the
+		// paint and its image win the main thread and network first and the island fills in the gap after;
+		// a below-the-fold `visible` island fires on scroll (post-LCP) where "when free" is still instant.
+		// `idle` is skipped — it already waits for requestIdleCallback, so wrapping it would double-defer.
+		// `interaction` is skipped — the user clicked and is waiting for THIS island to wake and replay the
+		// click, so it must hydrate immediately (and it ships no JS until the click, so it never competes).
 		if (when === 'idle') this.#on_idle(fire);
-		else if (when === 'visible') this.#on_visible(fire, visible_margin);
-		// `load` = "as soon as the browser is free", NOT "synchronously at boot". Starting the hydrate
-		// (its import + Svelte runtime) through background priority lets the LCP paint and its image win
-		// the main thread and the network first; the island fills in the gap after. See background_start.
+		else if (when === 'visible') this.#on_visible(() => background_start(fire), visible_margin);
 		else if (when === 'load') background_start(fire);
 		else if (when === 'interaction') {
 			if (is_deferred(this)) arm_on_demand(this, fire);
 			else this.#on_interaction(fire);
-		} else this.#on_media(when, fire); // a media query string
+		} else this.#on_media(when, () => background_start(fire)); // a media query string
 	}
 
 	/**
