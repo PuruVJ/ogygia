@@ -136,6 +136,17 @@ export interface ProfilerOptions {
 	/** Master switch. Default true. */
 	enabled?: boolean;
 	/**
+	 * DEMAND-ONLY. The profiler module (node:inspector, crypto, its UI-rendering path) is not imported,
+	 * parsed or initialised until a request actually hits the profiler path — so until you open the
+	 * dashboard the app pays EXACTLY what an app with no profiler pays: no cold-start import, no
+	 * always-on request log, no per-request wrap. The trade is no history: the profiler starts
+	 * collecting from the first visit onward, not before. Recommended on serverless (Amplify / Lambda),
+	 * where every cold start would otherwise pay the profiler's import on its TTFB. Default false (the
+	 * profiler mounts on the first request and its always-on log collects from boot). Off by default so
+	 * nothing changes for existing setups.
+	 */
+	onDemand?: boolean;
+	/**
 	 * CATCH THE SLOW ONE. Keep a coarse sampler running in rolling windows and keep a report only
 	 * when a request in the window took longer than `over` ms — the p99 request you cannot
 	 * reproduce. Built to stay cheap: a 10 ms sampling interval, no per-request context, no stack

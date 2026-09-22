@@ -37,6 +37,11 @@ import {
 	speculationRules as mpa_speculation_rules
 } from 'virtual:ogygia/router-config';
 import { profilerConfig } from 'virtual:ogygia/profiler-config';
+/** DEMAND-ONLY profiler: gate the profiler import behind a request to its path. Both read off the plain
+ *  config object — no profiler code loaded to decide. `path` mirrors ProfilerOptions.path (default). */
+const PROFILER_ON_DEMAND = !!(profilerConfig as { onDemand?: boolean } | null)?.onDemand;
+const PROFILER_UI_PATH = (profilerConfig as { path?: string } | null)?.path || '/__profiler';
+import { profiler_demand_skip } from './profiler/on-demand.js';
 import { freezeConfig } from 'virtual:ogygia/freeze-config';
 import { freeze_routes, freeze_pages } from 'virtual:ogygia/freeze-routes';
 import { router_freeze_verdict } from './freeze/routers.js';
@@ -743,6 +748,16 @@ class OgygiaHandle {
 	// The public handle: when the profiler is configured (vite plugin only) it wraps the core handle,
 	// so it times the SSR render and serves its UI — with zero hooks wiring. Otherwise it's the core.
 	handle: Handle = async ({ event, resolve }) => {
+		// DEMAND-ONLY (`profiler: { onDemand: true }`): do not import / parse / initialise the profiler
+		// (its node:inspector + UI weight — the serverless cold-start cost) until a request actually asks
+		// for it by hitting the profiler path. Until then, and only until the first such request mounts it
+		// (`#profiler` stays `undefined`), this app pays exactly what a profiler-less app pays. Once
+		// mounted, later requests fall through and are instrumented. See profiler_demand_skip.
+		if (
+			profiler_demand_skip(PROFILER_ON_DEMAND, this.#profiler !== undefined, event.url.pathname, PROFILER_UI_PATH)
+		) {
+			return this.#core({ event, resolve });
+		}
 		const prof = await this.#ensure_profiler();
 		if (prof) {
 			// The profiler's `resolve` options (its beacon tag's transformPageChunk) compose with the
