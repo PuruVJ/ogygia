@@ -1,12 +1,12 @@
 // A DEFERRED hole's answer swaps over a fallback that a foreign runtime has already made interactive.
-// The mega-menu's L3/L4 is a `render:'deferred' wake:'idle'` hole; its fallback (L1/L2) is on screen
-// and its `<qds-web-nav-item>` upgrades ~1 s after DCL — a visitor can OPEN a tab (Stencil sets state
-// on the item's shadow root) before the idle answer lands seconds later. #apply used to
-// `replaceChildren` for every non-`interaction` hole, destroying the opened item and re-inserting a
-// fresh closed one: the open menu vanished and the just-arrived L3/L4 was never shown (field, 5/5).
-// #apply now MORPHS every hole — morph keys on `id`, the fallback and answer share the shell id, so
-// the opened element keeps its identity (shadow root + open state) and the answer's L3/L4 graft under
-// it. This pins that, and that the plain-fallback (nothing-to-keep) hole still fills.
+// A menu's deeper links are a `render:'deferred' wake:'idle'` hole; its top-level fallback is on screen
+// and its `<x-menu-item>` (a web component) upgrades ~1 s after DCL — a visitor can OPEN it (the
+// runtime sets state on the item's shadow root) before the idle answer lands seconds later. #apply
+// used to `replaceChildren` for every non-`interaction` hole, destroying the opened item and
+// re-inserting a fresh closed one: the open menu vanished and the just-arrived deeper links were never
+// shown (field, 5/5). #apply now MORPHS every hole — morph keys on `id`, the fallback and answer share
+// the shell id, so the opened element keeps its identity (shadow root + open state) and the answer's
+// deeper links graft under it. This pins that, and that the plain-fallback (nothing-to-keep) hole fills.
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { bootDev } from '../../src/runtime/full.js';
 
@@ -14,10 +14,10 @@ const ENDPOINT = '/__ogygia__?id=deadbeef1234&props=W3t9XQ&exp=9999999999&sig=st
 // A distinct id: the runtime keys a hole's fetch/frame by the endpoint id, so a second hole reusing
 // the first's id would ride the cached frame and never fetch.
 const ENDPOINT2 = '/__ogygia__?id=deadbeef5678&props=W3t9XQ&exp=9999999999&sig=stub';
-// The answer renders the SAME L1 shell id as the fallback, plus the L3/L4 the fallback never had.
+// The answer renders the SAME top-level shell id as the fallback, plus the deeper links it never had.
 const ANSWER =
-	'<qds-web-nav-item id="mm-l1-0"><span data-l1>Products</span>' +
-	'<a id="mm-l3-a" data-l3 href="#">Breakers</a><a id="mm-l4-a" data-l4 href="#">MCB</a></qds-web-nav-item>';
+	'<x-menu-item id="mm-top-0"><span data-top>Top</span>' +
+	'<a id="mm-deep-a" data-deep href="#">Deep A</a><a id="mm-deep-b" data-deep href="#">Deep B</a></x-menu-item>';
 
 let real_fetch: typeof fetch;
 let fetched: string[];
@@ -43,10 +43,10 @@ afterEach(() => {
 	document.body.innerHTML = '';
 });
 
-test('a hole answer morphs over an already-upgraded, already-open fallback: identity + open state survive, L3/L4 graft in', async () => {
+test('a hole answer morphs over an already-upgraded, already-open fallback: identity + open state survive, deeper links graft in', async () => {
 	document.body.innerHTML =
 		`<ogygia-region render="defer" when="load" endpoint="${ENDPOINT}" data-og-hole="mm">` +
-		'<qds-web-nav-item id="mm-l1-0"><span data-l1>Products</span></qds-web-nav-item>' +
+		'<x-menu-item id="mm-top-0"><span data-top>Top</span></x-menu-item>' +
 		'</ogygia-region>';
 	const region = document.querySelector('ogygia-region') as HTMLElement;
 
@@ -54,25 +54,25 @@ test('a hole answer morphs over an already-upgraded, already-open fallback: iden
 	await expect.poll(() => fetched.length, { timeout: 10_000 }).toBe(1);
 
 	// The foreign runtime upgrades the fallback item and the visitor opens it — BEFORE the answer.
-	const item = region.querySelector('#mm-l1-0') as HTMLElement;
+	const item = region.querySelector('#mm-top-0') as HTMLElement;
 	item.attachShadow({ mode: 'open' }); // upgraded → self-owned
-	item.setAttribute('data-open', 'true'); // the state Stencil set when the tab opened
+	item.setAttribute('data-open', 'true'); // the state the component set when it opened
 	(item as unknown as { __live: symbol }).__live = Symbol('same-instance'); // identity witness
 
 	release_answer();
 
-	// The L3/L4 the answer brought is grafted in…
-	await expect.poll(() => region.querySelector('#mm-l3-a') != null, { timeout: 10_000 }).toBe(true);
+	// The deeper links the answer brought are grafted in…
+	await expect.poll(() => region.querySelector('#mm-deep-a') != null, { timeout: 10_000 }).toBe(true);
 	// …WITHOUT replacing the opened item: same element instance, its shadow root and open state intact.
-	const after = region.querySelector('#mm-l1-0') as HTMLElement;
+	const after = region.querySelector('#mm-top-0') as HTMLElement;
 	expect(after, 'same element instance — not re-created').toBe(item);
 	expect((after as unknown as { __live?: symbol }).__live, 'identity witness survived').toBe(
 		(item as unknown as { __live: symbol }).__live
 	);
 	expect(after.shadowRoot, 'the upgrade (shadow root) survived').not.toBeNull();
 	expect(after.getAttribute('data-open'), 'the open state survived the swap').toBe('true');
-	expect(region.querySelector('#mm-l4-a'), 'L4 grafted too').not.toBeNull();
-	expect(after.querySelector('[data-l1]')?.textContent, 'the L1 label is intact').toBe('Products');
+	expect(region.querySelector('#mm-deep-b'), 'the second deeper link grafted too').not.toBeNull();
+	expect(after.querySelector('[data-top]')?.textContent, 'the top-level label is intact').toBe('Top');
 });
 
 test('a plain placeholder fallback (nothing to keep) still fills from the answer', async () => {
@@ -86,7 +86,7 @@ test('a plain placeholder fallback (nothing to keep) still fills from the answer
 	await expect.poll(() => fetched.length, { timeout: 10_000 }).toBe(1);
 	release_answer();
 
-	await expect.poll(() => region.querySelector('#mm-l1-0') != null, { timeout: 10_000 }).toBe(true);
+	await expect.poll(() => region.querySelector('#mm-top-0') != null, { timeout: 10_000 }).toBe(true);
 	expect(region.querySelector('[data-fallback]'), 'the placeholder is gone').toBeNull();
-	expect(region.querySelector('#mm-l3-a'), 'the answer content is in').not.toBeNull();
+	expect(region.querySelector('#mm-deep-a'), 'the answer content is in').not.toBeNull();
 });

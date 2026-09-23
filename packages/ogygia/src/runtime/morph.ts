@@ -237,10 +237,9 @@ function reserved_for_later(
 
 /**
  * @param keep_children the parent is a self-owned element (an upgraded custom element / dialog / details,
- * {@link is_self_owned}) — so its children are partly ITS OWN doing (a QDS `<qds-dropdown>` slots and
+ * {@link is_self_owned}) — so its children are partly ITS OWN doing (a web component slots and
  * rewrites its light DOM on upgrade). ADD + UPDATE what the render brings, but NEVER REMOVE a child the
- * element gave itself — the same rule {@link sync_attributes} already applies to a self-owned element's
- * attributes. Re-inserting/re-upgrading a foreign custom element is what makes a country-selector trigger
+ * element gave itself. Re-inserting/re-upgrading a live custom element is what makes an upgraded trigger
  * flicker when a hole morphs its byte-identical chrome; keeping its nodes leaves the upgrade untouched.
  * @param preserve the {@link MorphOptions.preserve_self_owned} contract, threaded unchanged down the
  * recursion — it decides whether a self-owned DESCENDANT gets `keep_children` at all.
@@ -469,20 +468,41 @@ function is_preserved(el: Element): boolean {
 }
 
 /**
- * An element whose attributes are partly ITS OWN doing, not the render's: an upgraded custom element
- * (a web component writes `popover`, `role`, `aria-*`, its `hydrated` class onto its own host at
- * upgrade — QDS's dropdown opens through `popover="manual"` + `showPopover()`, the top layer), or a
- * `<dialog>` / `<details>` whose `open` the browser flips. A morph toward server HTML that never
- * carried those attributes must ADD and UPDATE on such an element, never REMOVE: a hole that morphed
- * in around a live QDS dropdown deleted its `popover` and dropped it out of the top layer, under
- * the header's search bar (the country selector). Upgraded = a shadow root, or a defined name.
+ * An UPGRADED CUSTOM ELEMENT: a live web component whose own runtime owns its host. On upgrade a
+ * component framework writes framework-internal attributes onto its own host element — a scope class,
+ * hydration ids, `popover` / `role` / `aria-*`, a `hydrated` flag — none of which came from the
+ * server render and none of which are the render's to assert. This is generic: any web-component
+ * framework (or a hand-written element) that adopts declarative shadow DOM or upgrades in place does
+ * it. Detected STRUCTURALLY — a hyphenated name with a shadow root or a registered definition — never
+ * by a library-specific attribute or class name.
+ *
+ * Two consequences for a morph toward a fresh server render (which carries the PRE-upgrade markup):
+ *  - the host's CHILDREN are partly its own (slotted / rewritten light DOM) → add + update, never
+ *    remove ({@link is_self_owned} → keep_children);
+ *  - the host's own ATTRIBUTES are the runtime's → do not sync them at all. Re-asserting a fresh
+ *    render's stale markers over a live host makes it lose its hydrated shadow and re-render — a live
+ *    host duplicated its content when a hole answer's per-render id / scope class overwrote the ones
+ *    its runtime had written. So {@link morph_node} / {@link morph_same} SKIP {@link sync_attributes}
+ *    for an upgraded custom element (its children still reconcile).
  */
-function is_self_owned(el: Element): boolean {
+function is_upgraded_ce(el: Element): boolean {
 	const name = el.localName;
-	if (name === 'dialog' || name === 'details') return true;
 	if (!name.includes('-')) return false;
 	if (el.shadowRoot) return true;
 	return typeof customElements !== 'undefined' && customElements.get(name) !== undefined;
+}
+
+/**
+ * An element whose CHILDREN are partly its own doing, not the render's: an upgraded custom element
+ * (slots / rewrites its light DOM — {@link is_upgraded_ce}), or a `<dialog>` / `<details>` whose
+ * `open` the browser flips. A morph toward server HTML must never REMOVE such children (keep_children)
+ * — re-inserting a live web component's chrome is what made an upgraded trigger flicker.
+ * Unlike an upgraded custom element, a dialog/details carries NO runtime-written markers, so its
+ * attributes still sync normally (add + update, `open` kept by keep_extra).
+ */
+function is_self_owned(el: Element): boolean {
+	const name = el.localName;
+	return name === 'dialog' || name === 'details' || is_upgraded_ce(el);
 }
 
 /**
@@ -514,7 +534,9 @@ function morph_node(from: Node, to: Node, sets: IdSets, preserve: boolean): void
 	// one, so it must read `ef`'s attributes while they are still the previous render's.
 	const self_owned = is_self_owned(ef);
 	sync_form_props(ef, et);
-	sync_attributes(ef, et, self_owned);
+	// An upgraded custom element's host attributes are the runtime's, not the render's — skip them
+	// entirely (see is_upgraded_ce). Everything else (incl. a self-owned dialog/details) syncs.
+	if (!is_upgraded_ce(ef)) sync_attributes(ef, et, self_owned);
 	// `et` is never mutated by the recursion (misses clone, keyed moves come from the OLD tree), so
 	// its live `childNodes` is handed straight down — no per-level snapshot array.
 	reconcile_children(ef, et.childNodes, sets, preserve && self_owned, preserve);
@@ -537,7 +559,7 @@ function morph_same(from: Node, to: Node, sets: IdSets, preserve: boolean): void
 	const et = to as Element;
 	const self_owned = is_self_owned(ef);
 	sync_form_props(ef, et); // before attributes — see morph_node
-	sync_attributes(ef, et, self_owned);
+	if (!is_upgraded_ce(ef)) sync_attributes(ef, et, self_owned); // upgraded host attrs are the runtime's — skip
 	reconcile_children(ef, et.childNodes, sets, preserve && self_owned, preserve);
 }
 

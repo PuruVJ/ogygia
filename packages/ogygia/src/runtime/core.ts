@@ -711,12 +711,12 @@ class OgygiaRegion extends HTMLElement {
 		slots.lakes.mark_frozen_settled(this);
 		// A hole's answer swaps over its fallback — which may already be LIVE, on ANY schedule, not just
 		// `interaction`: a foreign runtime (a web component) upgraded the fallback, or the visitor
-		// opened a menu in it, before the answer landed (an idle answer arrives seconds after a
-		// Stencil `<qds-web-nav-item>` became interactive). MORPH so those nodes and their state
-		// survive and the answer's new children graft under them; a plain `replaceChildren` re-creates
-		// the fallback's elements and destroys a menu that is open right now — its open tab closes and
-		// the L3/L4 the answer just brought is never shown. Morph keys on `id`, and a hole's fallback
-		// and answer render the same shell ids, so the open element keeps its identity. `replaceChildren`
+		// opened a menu in it, before the answer landed (an idle answer arrives seconds after an
+		// upgraded menu item became interactive). MORPH so those nodes and their state survive and the
+		// answer's new children graft under them; a plain `replaceChildren` re-creates the fallback's
+		// elements and destroys a menu that is open right now — its open branch closes and the deeper
+		// links the answer just brought are never shown. Morph keys on `id`, and a hole's fallback and
+		// answer render the same shell ids, so the open element keeps its identity. `replaceChildren`
 		// is the floor for a build without morph (a defer-less app never reaches #apply; the `morph`
 		// feature is now selected whenever the app has deferred holes — see link/runtime-entry.ts).
 		const morph = slots.morph;

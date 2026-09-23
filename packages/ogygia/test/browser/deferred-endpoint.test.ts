@@ -218,20 +218,22 @@ test('a hole answering 204 keeps the page fallback and marks the region done', a
 	}
 });
 
-// SELF-OWNED ATTRIBUTES through a hole morph: a web component writes `popover="manual"` onto its
-// own host at upgrade and opens through `showPopover()` (the top layer). The fetched HTML never
-// carried `popover`; the morph must not take it away — the country selector's dropdown fell out of
-// the top layer this way. Real custom element, real popover API, real on-demand hole.
+// SELF-OWNED ATTRIBUTES through a hole morph: an upgraded web component owns its host attributes. It
+// writes `popover="manual"` onto its own host at upgrade and opens through `showPopover()` (the top
+// layer); it also carries per-render markers. A morph toward a fresh server render must LEAVE THE
+// HOST ALONE — not remove `popover` (a live dropdown fell out of the top layer this way), and not
+// re-assert the render's own attributes over the runtime's (overwriting a live host's markers made it
+// re-render a duplicate). It still brings the host's CHILDREN. Real custom element, real popover API.
 // its own id: the frame store keeps a fetched frame per address, and 0003 above is a stored 204.
 const POPOVER_ENDPOINT = '/__ogygia__?id=cafebabe0004&props=W3t9XQ&exp=9999999999&sig=stub';
 
-test('a hole morph keeps the attributes a web component gave itself (popover stays open)', async () => {
+test('a hole morph leaves an upgraded host’s attributes alone (keeps its popover, ignores the render’s), and brings its children', async () => {
 	if (!customElements.get('x-pop')) {
 		customElements.define(
 			'x-pop',
 			class extends HTMLElement {
 				connectedCallback() {
-					this.setAttribute('popover', 'manual'); // what QDS's dropdown does at upgrade
+					this.setAttribute('popover', 'manual'); // what a web component does to its host at upgrade
 				}
 			}
 		);
@@ -241,7 +243,7 @@ test('a hole morph keeps the attributes a web component gave itself (popover sta
 	window.fetch = async (input) => {
 		calls.push(String(input));
 		const res = new Response(
-			'<div><button id="t">France</button><x-pop id="p" class="qds-related" data-x="1"><ul id="list"><li>Albania</li></ul></x-pop></div>',
+			'<div><button id="t">Trigger</button><x-pop id="p" class="x-scope" data-x="1"><ul id="list"><li>Item</li></ul></x-pop></div>',
 			{ status: 200, headers: { 'content-type': 'text/html' } }
 		);
 		Object.defineProperty(res, 'url', { value: location.origin + POPOVER_ENDPOINT });
@@ -249,7 +251,7 @@ test('a hole morph keeps the attributes a web component gave itself (popover sta
 	};
 	document.body.innerHTML =
 		`<ogygia-region render="defer" when="interaction" endpoint="${POPOVER_ENDPOINT}">` +
-		`<div><button id="t">France</button><x-pop id="p" class="qds-related"></x-pop></div></ogygia-region>`;
+		`<div><button id="t">Trigger</button><x-pop id="p" class="x-scope"></x-pop></div></ogygia-region>`;
 	const region = document.querySelector('ogygia-region')!;
 	const pop = document.getElementById('p') as HTMLElement;
 	try {
@@ -261,10 +263,12 @@ test('a hole morph keeps the attributes a web component gave itself (popover sta
 		await expect.poll(() => region.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
 		expect(calls).toHaveLength(1);
 		expect(document.getElementById('p')).toBe(pop); // morphed in place
-		expect(pop.getAttribute('popover'), 'the morph took the attribute the element gave itself').toBe('manual');
+		expect(pop.getAttribute('popover'), 'the morph kept the attribute the element gave itself').toBe('manual');
 		expect(pop.matches(':popover-open'), 'the popover fell out of the top layer').toBe(true);
-		expect(pop.getAttribute('data-x')).toBe('1'); // the render's attributes still land
-		expect(document.getElementById('list')).not.toBeNull(); // and its content
+		// The render's OWN host attributes are NOT re-asserted onto an upgraded element (they are the
+		// runtime's now — re-asserting stale markers is what duplicated a live host).
+		expect(pop.hasAttribute('data-x'), 'the render does not add host attributes to an upgraded element').toBe(false);
+		expect(document.getElementById('list'), 'but its children still morph in').not.toBeNull();
 	} finally {
 		try { pop.hidePopover(); } catch { /* already hidden */ }
 		window.fetch = real_fetch;
@@ -273,7 +277,7 @@ test('a hole morph keeps the attributes a web component gave itself (popover sta
 
 // PREFETCH: `prefetch="idle"` on an on-demand hole warms its HTML at idle — one request, NOTHING
 // applied (the fallback stands, no `data-hydrated`) — and the first hover then swaps from the store
-// without a second request. The country selector's "5 s hover": the bytes are already there.
+// without a second request. An eyebrow dropdown's "5 s hover": the bytes are already there.
 const PREFETCH_ENDPOINT = '/__ogygia__?id=cafebabe0005&props=W3t9XQ&exp=9999999999&sig=stub';
 
 test('an on-demand hole with prefetch="idle" warms at idle, keeps its fallback, and swaps on hover with no second request', async () => {

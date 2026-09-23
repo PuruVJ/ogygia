@@ -335,7 +335,7 @@ describe('aria-hidden is never stamped onto a focused subtree (WAI-ARIA / dropdo
 		// An on-demand dropdown: the user clicked (focusing the button), then the wake morphs in the
 		// region's fetched CLOSED render, which carries aria-hidden="true" on the container. Applying it
 		// would hide the focused button (browser blocks it, panel never opens).
-		const parent = el('<div><div class="qds-container"><button class="qds-button">Lang</button></div></div>');
+		const parent = el('<div><div class="x-panel"><button class="x-btn">Menu</button></div></div>');
 		const container = parent.firstElementChild as DomElement;
 		const button = container.firstElementChild as DomElement;
 		button.focus();
@@ -343,7 +343,7 @@ describe('aria-hidden is never stamped onto a focused subtree (WAI-ARIA / dropdo
 
 		morph_children(
 			parent,
-			frag('<div class="qds-container" aria-hidden="true"><button class="qds-button">Lang</button></div>')
+			frag('<div class="x-panel" aria-hidden="true"><button class="x-btn">Menu</button></div>')
 		);
 
 		expect(container.hasAttribute('aria-hidden')).toBe(false); // NOT hidden — the panel can open
@@ -351,23 +351,23 @@ describe('aria-hidden is never stamped onto a focused subtree (WAI-ARIA / dropdo
 	});
 
 	test('aria-hidden="true" IS applied when the subtree does NOT hold focus', () => {
-		const parent = el('<div><div class="qds-container"><button class="qds-button">Lang</button></div></div>');
+		const parent = el('<div><div class="x-panel"><button class="x-btn">Menu</button></div></div>');
 		const container = parent.firstElementChild as DomElement;
 		// nothing focused
 		morph_children(
 			parent,
-			frag('<div class="qds-container" aria-hidden="true"><button class="qds-button">Lang</button></div>')
+			frag('<div class="x-panel" aria-hidden="true"><button class="x-btn">Menu</button></div>')
 		);
 		expect(container.getAttribute('aria-hidden')).toBe('true'); // normal case unaffected
 	});
 
 	test('aria-hidden="false" is applied even under focus (only "true" hides)', () => {
-		const parent = el('<div><div class="qds-container"><button class="qds-button">Lang</button></div></div>');
+		const parent = el('<div><div class="x-panel"><button class="x-btn">Menu</button></div></div>');
 		const container = parent.firstElementChild as DomElement;
 		(container.firstElementChild as DomElement).focus();
 		morph_children(
 			parent,
-			frag('<div class="qds-container" aria-hidden="false"><button class="qds-button">Lang</button></div>')
+			frag('<div class="x-panel" aria-hidden="false"><button class="x-btn">Menu</button></div>')
 		);
 		expect(container.getAttribute('aria-hidden')).toBe('false');
 	});
@@ -379,14 +379,14 @@ describe('aria-hidden is never stamped onto a focused subtree (WAI-ARIA / dropdo
 		// too, so sync_attributes leaves it untouched (values equal). The post-morph sweep must remove it,
 		// because the focused button is inside — otherwise the browser blocks the open.
 		const parent = el(
-			'<div><div class="qds-container" aria-hidden="true"><button class="qds-button">Lang</button></div></div>'
+			'<div><div class="x-panel" aria-hidden="true"><button class="x-btn">Menu</button></div></div>'
 		);
 		const container = parent.firstElementChild as DomElement;
 		const button = container.firstElementChild as DomElement;
 		button.focus();
 		morph_children(
 			parent,
-			frag('<div class="qds-container" aria-hidden="true"><button class="qds-button">Lang</button></div>')
+			frag('<div class="x-panel" aria-hidden="true"><button class="x-btn">Menu</button></div>')
 		);
 		expect(container.hasAttribute('aria-hidden')).toBe(false); // swept off the focused ancestor
 		expect(document.activeElement).toBe(button);
@@ -562,10 +562,14 @@ describe('swap_body (outerSync fallback)', () => {
 	});
 });
 
-// SELF-OWNED ELEMENTS — an upgraded custom element (a shadow root / a defined name) and a
-// <dialog>/<details> write attributes onto themselves (`popover`, `open`, their `hydrated` class).
-// A morph toward server HTML that never carried them adds + updates, never removes. A plain element
-// still matches the incoming HTML exactly (the tests above).
+// SELF-OWNED ELEMENTS.
+// An UPGRADED custom element's HOST attributes are the runtime's — a component framework writes its
+// own scope class, hydration ids, `popover` etc. onto the host at upgrade. A morph toward a fresh
+// server render (which carries the PRE-upgrade markup) must NOT touch them: re-asserting stale
+// framework markers over a live host makes it lose its hydrated shadow and re-render (a live host
+// rendered its content twice). Its light CHILDREN still reconcile (add / update / keep its own). A <dialog>/
+// <details> has no such markers — the browser only flips `open` — so its attributes DO sync (add +
+// update, `open` kept). A plain element matches the incoming HTML exactly (the tests above).
 describe('self-owned attributes (upgraded custom elements, dialog/details)', () => {
 	const upgraded = (parent: DomElement) => {
 		const x = parent.firstChild as DomElement & { shadowRoot?: object };
@@ -573,15 +577,32 @@ describe('self-owned attributes (upgraded custom elements, dialog/details)', () 
 		return x;
 	};
 
-	test('an upgraded custom element keeps the attribute it gave itself when the new HTML lacks it', () => {
+	test('an upgraded custom element is left untouched: its host attributes are the runtime’s, not the render’s', () => {
 		const parent = el('<div><x-pop id="p" popover="manual" class="hydrated"></x-pop></div>');
 		const x = upgraded(parent);
 		morph_children(parent, frag('<x-pop id="p" class="a" data-x="1"><span>content</span></x-pop>'));
 		expect(parent.firstChild).toBe(x); // morphed in place
-		expect(x.getAttribute('popover')).toBe('manual'); // kept: not the render's to remove
-		expect(x.getAttribute('class')).toBe('a'); // updated: the render's value wins where it has one
-		expect(x.getAttribute('data-x')).toBe('1'); // added
-		expect(x.innerHTML).toContain('content');
+		expect(x.getAttribute('popover')).toBe('manual'); // its own — kept
+		expect(x.getAttribute('class')).toBe('hydrated'); // NOT overwritten — the render's scope class would corrupt a live framework host
+		expect(x.hasAttribute('data-x')).toBe(false); // the render adds no host attribute to an upgraded element
+		expect(x.innerHTML).toContain('content'); // …but its light children still reconcile in
+	});
+
+	test('a fresh render’s runtime markers never overwrite the live upgraded host', () => {
+		// A web component hydrated from declarative shadow DOM carries the runtime's own markers — a
+		// per-render id and a generated scope class. A later hole answer is a FRESH server render with
+		// DIFFERENT marker values. Writing them over the live host made its runtime lose its hydrated
+		// shadow and render its content twice. The morph must leave every host attribute as the runtime
+		// left it (its children still reconcile).
+		const parent = el(
+			'<div><x-widget id="c" data-rt-id="5860" class="rt-scope-a1 hydrated" aria-label="Region"></x-widget></div>'
+		);
+		const host = parent.firstChild as DomElement & { shadowRoot?: object };
+		host.shadowRoot = {}; // upgraded (DSD-hydrated)
+		morph_children(parent, frag('<x-widget id="c" data-rt-id="5938" class="rt-scope-a1" aria-label="Region"></x-widget>'));
+		expect(parent.firstChild).toBe(host); // same live host
+		expect(host.getAttribute('data-rt-id')).toBe('5860'); // the runtime's id — NOT overwritten by the render's 5938
+		expect(host.getAttribute('class')).toBe('rt-scope-a1 hydrated'); // scope class + hydrated flag intact
 	});
 
 	test('a custom element that is NOT upgraded (no shadow root, no definition) still matches exactly', () => {
@@ -610,36 +631,36 @@ describe('self-owned attributes (upgraded custom elements, dialog/details)', () 
 		expect((parent.lastChild as DomElement).hasAttribute('data-stale')).toBe(false);
 	});
 
-	// The morph already keeps an upgraded element's ATTRIBUTES (above). Its CHILDREN are its own doing
-	// too: a QDS `<qds-button>`/`<qds-dropdown>` slots and rewrites its own light DOM on upgrade. A hole
-	// morph toward pristine fetched content (which carries none of that) must ADD what the render brings
-	// but never REMOVE the children the element gave itself — re-inserting/re-upgrading a QDS element is
-	// what makes the country-selector trigger flicker and vanish on ~half of reloads.
+	// The morph leaves an upgraded element's ATTRIBUTES alone (above). Its CHILDREN are its own doing
+	// too: a web component slots and rewrites its own light DOM on upgrade. A hole morph toward pristine
+	// fetched content (which carries none of that) must ADD what the render brings but never REMOVE the
+	// children the element gave itself — re-inserting/re-upgrading a live element is what makes an
+	// upgraded trigger flicker and vanish on ~half of reloads.
 	test('an upgraded custom element KEEPS the light children it gave itself when the new HTML has none', () => {
-		// The `<i>` is QDS's own light child, added on upgrade (the shim has no innerHTML setter, so it
-		// is built via markup, then the element is marked upgraded).
-		const parent = el('<div><qds-button id="b"><i data-qds-icon>person</i></qds-button></div>');
+		// The `<i>` is the element's own light child, added on upgrade (the shim has no innerHTML setter,
+		// so it is built via markup, then the element is marked upgraded).
+		const parent = el('<div><x-btn id="b"><i data-icon>person</i></x-btn></div>');
 		const btn = parent.firstChild as DomElement & { shadowRoot?: object };
 		btn.shadowRoot = {}; // upgraded
 		const icon = btn.firstChild;
 
-		morph_children(parent, frag('<qds-button id="b"></qds-button>')); // fetched: pristine, no children
+		morph_children(parent, frag('<x-btn id="b"></x-btn>')); // fetched: pristine, no children
 
 		expect(parent.firstChild).toBe(btn); // same node, never re-inserted
-		expect(btn.firstChild).toBe(icon); // QDS's child kept — the element is never re-upgraded
+		expect(btn.firstChild).toBe(icon); // the element's own child kept — never re-upgraded
 	});
 
 	test('an upgraded custom element still ADDS the children the new HTML brings, keeping its own', () => {
-		const parent = el('<div><qds-dropdown id="d"><span data-qds-slot>internal</span></qds-dropdown></div>');
+		const parent = el('<div><x-dropdown id="d"><span data-slot>internal</span></x-dropdown></div>');
 		const dd = parent.firstChild as DomElement & { shadowRoot?: object };
 		dd.shadowRoot = {};
 		const slot = dd.firstChild;
 
 		// The woken hole brings the expensive panel INTO the dropdown.
-		morph_children(parent, frag('<qds-dropdown id="d"><section data-panel>Content</section></qds-dropdown>'));
+		morph_children(parent, frag('<x-dropdown id="d"><section data-panel>Content</section></x-dropdown>'));
 
 		expect(parent.firstChild).toBe(dd);
-		expect(dd.contains(slot)).toBe(true); // QDS's own child kept
+		expect(dd.contains(slot)).toBe(true); // the element's own child kept
 		expect(dd.innerHTML).toContain('data-panel'); // the hole panel morphed in
 	});
 
