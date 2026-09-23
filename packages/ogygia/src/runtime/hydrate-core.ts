@@ -225,7 +225,7 @@ function repair_markup(region: HTMLElement, want: Element): void {
  * nodes back and leave those attributes on the wrong elements (an unstyled dropdown). Repairing
  * first, the walk never runs on the edited sequence.
  */
-function sequence_differs(live: Node, want: Node): boolean {
+export function sequence_differs(live: Node, want: Node): boolean {
 	const a = live.childNodes;
 	const b = want.childNodes;
 	if (a.length !== b.length) return true;
@@ -327,7 +327,7 @@ function describe_divergence(live: Node, want: Node, where = 'the island'): stri
  *  server copy by now (a live lake refreshes itself to the visitor before its host wakes) — so the
  *  copy's direct lakes are emptied the same way before the comparison, and the repair never touches
  *  them. */
-function repair_if_drifted(
+export function repair_if_drifted(
 	region: HTMLElement,
 	ssr_html: string
 ): { repaired: boolean; reason: string | null } {
