@@ -20,7 +20,7 @@ export interface CloudflareConfig {
 	zoneId: string;
 	/** An API token with `Zone.Cache Purge` permission (`authorization: Bearer <token>`). */
 	apiToken: string;
-	/** The public site origin purged URLs are absolute against, e.g. `https://www.se.com`. */
+	/** The public site origin purged URLs are absolute against, e.g. `https://www.example.com`. */
 	site: string;
 	/** Harness override: send API calls here instead of `https://api.cloudflare.com`. */
 	baseUrl?: string;

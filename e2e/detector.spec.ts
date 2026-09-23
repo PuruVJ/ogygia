@@ -1,12 +1,12 @@
-// FOREIGN-MUTATION DETECTOR (internal/notes/foreign-dom.md, from the se.com/QDS incident):
+// FOREIGN-MUTATION DETECTOR (internal/notes/foreign-dom.md, from a field incident):
 // when something rewrites a region's HTML between SSR and wake (a post-SSR transformPageChunk,
 // a DSD-injecting middleware, an A/B tool), Svelte's hydration silently discards the server DOM
 // and re-renders — destroying whatever the rewriter injected, while ogygia used to report plain
 // success. The runtime now flags exactly that: `data-og-recovered` + an attributing console.warn.
 //
 // Fixture: /detector renders two wake:'load' islands; the playground hooks corrupt ONLY the
-// first one's region HTML (strip its `<!--[-->` anchors — what Stencil's renderToString did on
-// se.com). Asserts: the corrupted island is flagged AND still interactive (recovery re-rendered
+// first one's region HTML (strip its `<!--[-->` anchors — what a web component's renderToString did
+// in the field). Asserts: the corrupted island is flagged AND still interactive (recovery re-rendered
 // it); the healthy sibling is NOT flagged; a normal page has no flags at all.
 //
 // Usage: pnpm exec playwright test detector

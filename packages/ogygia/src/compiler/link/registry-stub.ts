@@ -5,7 +5,7 @@
  * Builder / CMS block-factory shape) is a plain module to Kit. A csr=false route host that imports
  * it pulls every marked component's WRAPPER — and through it the real component, its scoped CSS and
  * its chunk closure — into that page node's client graph. Kit then links `node.stylesheets` for the
- * whole registry on every page the host serves: one Schneider landing page linked 163 stylesheets
+ * whole registry on every page the host serves: one large landing page linked 163 stylesheets
  * (337 registry marks) for 21 rendered islands, all render-blocking. The client never runs any of it
  * — a csr=false document ships no Kit client at all; the node's JS exists only so Kit can link CSS.
  *

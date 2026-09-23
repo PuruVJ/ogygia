@@ -1,6 +1,6 @@
 // HEAD BUDGET — what a csr=false page links is decided by what it RENDERS, not by its module graph.
 //
-// REGRESSION (Schneider landing page, 2026-09-09): a `.ts` block registry with 337 `wake:'visible'`
+// REGRESSION (a field landing page, 2026-09-09): a `.ts` block registry with 337 `wake:'visible'`
 // marks was imported by a csr=false page. Every mark's wrapper rode Kit's client graph for that page
 // node, so Kit linked 163 render-blocking stylesheets (and their chunks) for 21 rendered islands —
 // FCP/LCP roughly doubled. No test counted head links; every CSS test asserted presence only.

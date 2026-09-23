@@ -21,7 +21,7 @@ export interface AkamaiConfig {
 	clientToken: string;
 	clientSecret: string;
 	accessToken: string;
-	/** The public site origin purged URLs are absolute against, e.g. `https://www.se.com`. */
+	/** The public site origin purged URLs are absolute against, e.g. `https://www.example.com`. */
 	site: string;
 	/** Fast Purge network (default `production`). */
 	network?: 'production' | 'staging';

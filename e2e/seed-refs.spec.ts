@@ -1,6 +1,6 @@
 // SEED REFERENCES — island props that point into the page seed instead of copying it.
 //
-// REPRODUCTION (Schneider brand page, 2026-09-09): a CMS load returns one content tree; every block
+// REPRODUCTION (a field brand page, 2026-09-09): a CMS load returns one content tree; every block
 // island gets its slice of that tree as props; one island reads `$page`, so the seed ships. The
 // same JSON crossed twice — 674 KB of seed + 481 KB of props, 94% of them verbatim seed subtrees —
 // and was serialized twice on the server (the larger part of the page's TTFB gap to plain Kit).

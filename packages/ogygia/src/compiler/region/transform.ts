@@ -957,7 +957,7 @@ class FileCompilation {
 	 *  binding with NO static placement) is a dynamically-used island: a registry value, an each/
 	 *  `{@const}`/`svelte:component` use, a prop hand-off. Its call sites are compile-invisible, so
 	 *  children CAN cross at runtime and the app must carry the wire revivers (see program.register —
-	 *  the Schneider regression: a factory-placed carousel's slot pointers hydrated against a runtime
+	 *  a field regression: a registry-placed carousel's slot pointers hydrated against a runtime
 	 *  without the hub → "Unknown type OgygiaRef", every island dead). */
 	#static_placed!: Set<string>;
 	#has_island_hint!: boolean;

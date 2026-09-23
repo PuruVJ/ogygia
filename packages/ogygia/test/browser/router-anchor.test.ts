@@ -1,7 +1,7 @@
 // The router's anchor lookup, in a real browser: a click that starts INSIDE a web component's
 // shadow root is retargeted to the host by the time it reaches `document`, so `closest('a')` on
 // `event.target` finds nothing — the SPA router then let the browser navigate natively (a full
-// reload) for every design-system link (`<qds-standalone-link>`, `<qds-button href>`, breadcrumb
+// reload) for every web-component link (`<x-link>`, `<x-button href>`, breadcrumb
 // items). `anchor_of` reads the composed path instead. Regression: the PES product page's "show
 // all" back link and breadcrumb reloaded the document on ogygia while Kit swapped in place.
 import { expect, test } from 'vitest';

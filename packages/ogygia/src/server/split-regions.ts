@@ -1,6 +1,6 @@
 /**
  * REGIONS in the SSR HTML, for an app that runs a THIRD-PARTY SSR/hydration pass over the final
- * document (a Stencil / web-component server-render, a translation proxy, an A/B injector). The one
+ * document (a web-component server-render, a translation proxy, an A/B injector). The one
  * integration rule such a pass must honour: **never reshape the bytes inside an island.** An island
  * hydrates against its exact server markup; a reshaped node sequence makes the hydration walk
  * mismatch, so the island discards its server DOM and re-renders client-side, and the first
@@ -254,7 +254,7 @@ export function* scanRegions(html: string): Generator<RegionSpan, void, undefine
 			i = gt + 1;
 			continue;
 		}
-		// Any OTHER real tag (`<div …>`, `</p>`, a `<qds-*>` block): skip past its whole tag with
+		// Any OTHER real tag (`<div …>`, `</p>`, a custom-element block): skip past its whole tag with
 		// `tag_end`, which respects quoted attribute values — so a literal `<ogygia-region>` sitting
 		// INSIDE another element's attribute (`<div data-note="<ogygia-region>">`) is never scanned
 		// as content. A `<` that does not begin a tag (a stray `<` in text, e.g. `a < b`) advances one.

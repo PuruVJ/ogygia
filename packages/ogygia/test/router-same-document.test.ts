@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { same_document_link } from '../src/runtime/router.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// A click on a link to the CURRENT document. Regression: a design-system link (`<qds-standalone-link>`)
+// A click on a link to the CURRENT document. Regression: a web-component link (`<x-link>`)
 // handles the click itself and re-dispatches one on its inner anchor; the router had already pushed
 // the URL for the first click, so the second arrived as "a link to the current page" and was left to
 // the browser — which RELOADED the document while the SPA swap was in flight (PES product page → range).

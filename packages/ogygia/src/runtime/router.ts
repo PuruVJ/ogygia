@@ -19,7 +19,7 @@ const WS = /\s+/;
 
 /**
  * The `<a>` a pointer event is about — through SHADOW ROOTS. A click inside a web component's
- * shadow tree (a design-system `<qds-standalone-link>`, `<qds-button href>`, a breadcrumb item)
+ * shadow tree (a web component such as `<x-link>`, `<x-button href>`, a breadcrumb item)
  * reaches the document with `event.target` retargeted to the host, so `target.closest('a')` finds
  * nothing and the browser navigates natively — a full reload instead of a body swap. The composed
  * path still holds the real anchor; Kit's own router reads it the same way.
@@ -161,8 +161,8 @@ export function reload_opt_out(anchor: Element): boolean {
 
 /**
  * What a click on a link to the CURRENT document means. `hash`: a fragment jump — the browser's.
- * `swallow`: the navigation to this exact address is already in flight — a design-system link
- * (`<qds-standalone-link>`, `<qds-button href>`) handles the click itself and re-dispatches one on
+ * `swallow`: the navigation to this exact address is already in flight — a web-component link
+ * (`<x-link>`, `<x-button href>`) handles the click itself and re-dispatches one on
  * its inner anchor; the router pushed the URL for the first click, so the second one looks like a
  * link to the current page — left to the browser it would RELOAD the document mid-swap. `refresh`:
  * a real click on a link to the page one is on — re-render in place (Kit re-runs the navigation

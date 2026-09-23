@@ -177,11 +177,11 @@ describe('liftRegions / restoreRegions — the round-trip for a third-party SSR 
 		// The scoped renderer annotates the placeholder (a ::slotted rule -> sc- class + c-id/s-sn).
 		const rendered = shell.replace(
 			'<og-lift data-i="0"></og-lift>',
-			'<og-lift data-i="0" class="sc-qds-web-nav" c-id="0.5795" s-sn=""></og-lift>'
+			'<og-lift data-i="0" class="sc-x-nav" c-id="0.5795" s-sn=""></og-lift>'
 		);
 		const out = restoreRegions(rendered, regions);
 		expect(out).toContain('entry="/e.js"');
-		expect(out).toContain('class="sc-qds-web-nav"');
+		expect(out).toContain('class="sc-x-nav"');
 		expect(out).toContain('c-id="0.5795"');
 		expect(out).toContain('s-sn=""');
 		expect(out).toContain('>inner</ogygia-region>');
