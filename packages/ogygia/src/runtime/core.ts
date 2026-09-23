@@ -1,5 +1,6 @@
 import { frameAddress } from '../frame.js';
 import { kit_hydrates_page } from './kit-boot.js';
+import { kit_page_thread } from './kit-page-thread.js';
 import { parse_region_html } from './parse-html.js';
 import { runtime_session } from './session.js';
 import {
@@ -922,6 +923,10 @@ class OgygiaRegion extends HTMLElement {
 			const [core, mod] = await Promise.all([hydrate_core(), load_island(entry)]);
 			t_loaded = now_ms();
 			if (!this.isConnected) return;
+			// An island of OURS on a Kit-hydrated document reads Kit's page through the bridge Kit's
+			// client entry publishes; it must not hydrate before that entry has run (kit-page-thread.ts).
+			await this.#kit_page_ready();
+			if (!this.isConnected) return;
 			await hydrate_turn(this);
 			if (!this.isConnected || this.#app) return;
 			// ── the turn: everything below is one synchronous step ──
@@ -1051,6 +1056,15 @@ class OgygiaRegion extends HTMLElement {
 		}
 	}
 
+	/**
+	 * On a Kit-hydrated document, a region of ours (a lake's inside, a hole's answer) waits for Kit's
+	 * page thread before it hydrates — `null` (no await) once the bridge exists. See kit-page-thread.ts.
+	 */
+	#kit_page_ready(): Promise<void> | null {
+		if (!kit_hydrates_page() || !ours_on_kit_document(this)) return null;
+		return kit_page_thread();
+	}
+
 	/** Hydrate a live region's swapped-in HTML through the hydrate core's LiveHost path. */
 	async #live_hydrate(props: Record<string, unknown>) {
 		await dom_ready();
@@ -1058,6 +1072,8 @@ class OgygiaRegion extends HTMLElement {
 		const entry = this.getAttribute('entry');
 		if (!entry) return;
 		const [core, mod] = await Promise.all([hydrate_core(), load_island(entry)]);
+		if (!this.isConnected) return;
+		await this.#kit_page_ready();
 		if (!this.isConnected) return;
 		this.#live_app = core.hydrate_live(this, entry, mod, props);
 		if (!this.#live_app) return;

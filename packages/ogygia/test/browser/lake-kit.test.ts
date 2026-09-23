@@ -5,11 +5,17 @@
 // inside the lake must wake on the ogygia runtime, since Kit never hydrates a lake's inside. The
 // bug this pins: the lake rendered as a normal template → hydration_mismatch → Kit re-rendered the
 // page client-side and the whole lake vanished (a site header on a csr=true page).
-import { expect, inject, test } from 'vitest';
+import { afterEach, beforeEach, expect, inject, test } from 'vitest';
 import { page } from 'vitest/browser';
 import { hydrate, unmount } from 'svelte';
 import { bootDev } from '../../src/runtime/full.js';
 import LakeKitHost from './fixtures/LakeKitHost.svelte';
+import { publish_kit_page, unpublish_kit_page } from './_kit-thread.js';
+
+// Kit's client entry publishes its page thread BEFORE Kit hydrates; an island of ours on a Kit
+// document waits for that thread (kit-page-thread.ts), so a faithful Kit document carries it.
+beforeEach(() => publish_kit_page());
+afterEach(() => unpublish_kit_page());
 
 const LAKE = 'ogygia-region[wake="none"]';
 const ISLAND_HYDRATED = 'ogygia-region[wake="load"][data-hydrated]';

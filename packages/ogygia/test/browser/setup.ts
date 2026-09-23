@@ -15,6 +15,8 @@ import { stringify } from 'devalue';
 import Counter from './fixtures/Counter.svelte';
 import Heavy from './fixtures/Heavy.svelte';
 import LakeKitHost from './fixtures/LakeKitHost.svelte';
+import LakePageReaderHost from './fixtures/LakePageReaderHost.svelte';
+import { set_page, reset_page } from '../../src/shims/page-store.svelte.js';
 import { set_request_event_stub } from '../_stubs/virtual-request-event.js';
 import { csr_true_routes } from '../_stubs/virtual-route-csr.js';
 
@@ -126,6 +128,9 @@ declare module 'vitest' {
 		counter_json_lane_ssr_b64: string;
 		/** LakeKitHost SSR'd on a csr=true document (a lake wrapping a Counter island) — base64. */
 		lake_kit_ssr_b64: string;
+		/** LakePageReaderHost SSR'd on a csr=true document with `page.data.searchBarMarkup` set: a lake
+		 *  wrapping a `wake:'idle'` island whose markup branches on `page.data` — base64. */
+		lake_page_reader_ssr_b64: string;
 		/** HYDRATION SCHEDULE: 21 expensive `wake:'load'` islands, 18 below the fold FIRST in document
 		 *  order, then 3 in the viewport — base64. */
 		heavy_schedule_ssr_b64: string;
@@ -198,6 +203,18 @@ export default function setup(project: TestProject) {
 	// The real wrapper (Region.svelte) renders the lake + the island's shell here — the browser test
 	// hydrates the same component over it, so both legs are the library's own code.
 	project.provide('lake_kit_ssr_b64', b64(render_on_kit_page(LakeKitHost as unknown as Component)));
+	// The page-reading island inside a lake: the server saw a full `page.data` (Kit's load ran), so
+	// its SSR took the `{:else if markup}` branch. The island's shim is seeded here the way the SSR
+	// pass sees Kit's page; the browser test then asks what the client does before Kit's thread exists.
+	set_page({ data: { searchBarMarkup: '<i data-testid="search">search</i>' } });
+	try {
+		project.provide(
+			'lake_page_reader_ssr_b64',
+			b64(render_on_kit_page(LakePageReaderHost as unknown as Component))
+		);
+	} finally {
+		reset_page();
+	}
 
 	// 21 heavy islands: 18 out of the viewport come FIRST in document order (absolutely positioned
 	// far below), the 3 in-viewport ones LAST — so viewport-first and document-first disagree.
