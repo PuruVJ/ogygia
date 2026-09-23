@@ -709,11 +709,17 @@ class OgygiaRegion extends HTMLElement {
 		if (!this.isConnected) return;
 		slots.lakes.settle_in(frag);
 		slots.lakes.mark_frozen_settled(this);
-		// An ON-DEMAND hole (`when="interaction"`) swaps under the visitor's pointer: MORPH the HTML
-		// in, so the nodes its static fallback rendered — and whatever the visitor already opened in
-		// them — survive; a plain swap would re-create a menu that is open right now. Every other
-		// hole replaces: its fallback is a placeholder with nothing worth keeping.
-		const morph = this.getAttribute('when') === 'interaction' ? slots.morph : undefined;
+		// A hole's answer swaps over its fallback — which may already be LIVE, on ANY schedule, not just
+		// `interaction`: a foreign runtime (a web component) upgraded the fallback, or the visitor
+		// opened a menu in it, before the answer landed (an idle answer arrives seconds after a
+		// Stencil `<qds-web-nav-item>` became interactive). MORPH so those nodes and their state
+		// survive and the answer's new children graft under them; a plain `replaceChildren` re-creates
+		// the fallback's elements and destroys a menu that is open right now — its open tab closes and
+		// the L3/L4 the answer just brought is never shown. Morph keys on `id`, and a hole's fallback
+		// and answer render the same shell ids, so the open element keeps its identity. `replaceChildren`
+		// is the floor for a build without morph (a defer-less app never reaches #apply; the `morph`
+		// feature is now selected whenever the app has deferred holes — see link/runtime-entry.ts).
+		const morph = slots.morph;
 		// A hydrating hole's server markup IS the answer (see #ssr_html) — copied before it goes in.
 		if (!this.#app && region_hydrate_schedule(this)) this.#ssr_html = fragment_markup(frag);
 		if (morph) morph(this, Array.from(frag.childNodes));

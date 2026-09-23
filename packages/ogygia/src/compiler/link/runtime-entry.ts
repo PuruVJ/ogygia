@@ -69,7 +69,11 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 	morph: {
 		module: 'morph.js',
 		deps: [],
-		detect: (m) => m.live === true || m.morph === true || m.router === true
+		// Also any DEFERRED hole: its answer swaps over a fallback that may have become interactive
+		// before it landed — a foreign web component upgraded it, or the fallback itself hydrated — and
+		// #apply must MORPH that live node, not replace it (a plain swap re-creates a menu open right
+		// now; core.ts #apply). The frames feature already tracks `defer` for the same streamed HTML.
+		detect: (m) => m.live === true || m.morph === true || m.router === true || (m.defer || []).length > 0
 	},
 	live: {
 		module: 'live.js',
