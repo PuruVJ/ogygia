@@ -225,16 +225,31 @@ export function collectIslandDepModulepreloads(
 		}
 		js[entryUrl] = uniq;
 		css[entryUrl] = [...new Set(css_acc)];
-		// The facade + every chunk in its closure: does any of them bundle a page-reading shim?
-		let reads = reads_page(fileName);
-		if (!reads) for (const s of seen) if (s !== fileName && reads_page(s)) reads = true;
+		// The FULL closure — static AND dynamic imports. A `page.data` read (or a remote call) behind
+		// an `await import('./Widget.svelte')` inside island markup runs in the island's own client,
+		// against the island's page shim, so it is the island's read — the same reasoning the remotes
+		// scan (below) already applies. The static preload walk (`seen`, for `js`/`css`) deliberately
+		// stops at dynamic edges — a modulepreload for a conditional chunk is waste — but PAGE READING
+		// and SEEDING must not: a key the dynamic branch reads yet the seed omitted is `undefined` on
+		// the client, the branch renders a different tree, and the island discards its server DOM
+		// (a header search bar that `await import`s a signed-in widget vanished for logged-in users —
+		// the widget read `page.data.locale`, which a static-only walk never pinned into the seed).
+		const full = closure_all(fileName);
+		// Does any chunk in the full closure bundle a page-reading shim?
+		let reads = false;
+		for (const s of full) {
+			if (reads_page(s)) {
+				reads = true;
+				break;
+			}
+		}
 		page[entryUrl] = reads;
-		// SEED SHAPING: which `page.data` keys the closure reads. A reader whose keys no module
+		// SEED SHAPING: which `page.data` keys the full closure reads. A reader whose keys no module
 		// recorded (the page reached through a module the transform never saw) ships all.
 		if (reads) {
 			let acc: PageKeys | null = null;
 			let saw_reader = false;
-			for (const s of seen) {
+			for (const s of full) {
 				const k = keys_in(s);
 				if (k === undefined) continue;
 				saw_reader = true;
@@ -246,13 +261,13 @@ export function collectIslandDepModulepreloads(
 		// The remotes this island's client code can call: every remote module bundled anywhere in
 		// its closure (static + dynamic). Sorted so the handoff is byte-stable across builds.
 		const found = new Set<string>();
-		for (const s of closure_all(fileName)) remotes_in(s, found);
+		for (const s of full) remotes_in(s, found);
 		remotes[entryUrl] = [...found].sort();
 		// the island's own components, over the same closure
 		if (read_source) {
 			let acc: IslandInteractivityFacts | undefined;
 			const seen_files = new Set<string>();
-			for (const s of closure_all(fileName)) {
+			for (const s of full) {
 				for (const id of bundle[s]?.moduleIds ?? []) {
 					const clean = norm(id.split('?')[0]);
 					if (seen_files.has(clean)) continue;

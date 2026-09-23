@@ -275,6 +275,47 @@ describe('collectIslandDepModulepreloads', () => {
 			expect(r.page[ENTRY]).toBe(false);
 			expect(ENTRY in r.page_keys).toBe(false);
 		});
+
+		// DYNAMIC-IMPORT SEED COMPLETENESS. A component `await import`ed inside island markup mounts in
+		// the island's own client and reads the island's page shim — so its `page.data` keys belong in
+		// the island's seed, exactly like remotes it calls. The static preload walk stops at the dynamic
+		// edge; the seed walk must not, or the dynamic branch reads an unseeded key as `undefined` and
+		// the island discards (da1f: a search bar `await import`ing a logged-in widget that read
+		// `page.data.locale`).
+		const dyn_bundle = (facade_ids: string[], dyn_ids: string[]) => ({
+			'_app/immutable/og-region.aaaaaaaaaaaa.js': { type: 'chunk', fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js', imports: [], dynamicImports: ['_app/immutable/chunks/dyn.js'], moduleIds: facade_ids },
+			'_app/immutable/chunks/dyn.js': { type: 'chunk', fileName: '_app/immutable/chunks/dyn.js', imports: [], dynamicImports: [], moduleIds: dyn_ids }
+		});
+		test('a dynamically-imported page reader contributes its keys to the parent seed', () => {
+			const r = collectIslandDepModulepreloads(
+				dyn_bundle([SHIM, '/app/src/lib/SearchBar.svelte'], [SHIM, '/app/src/lib/GuidedSearch.svelte']),
+				[SHIM],
+				null,
+				keys_of({ '/app/src/lib/SearchBar.svelte': new Set(['searchBarMarkup']), '/app/src/lib/GuidedSearch.svelte': new Set(['locale']) })
+			);
+			expect(r.page[ENTRY]).toBe(true);
+			expect(r.page_keys[ENTRY]).toEqual(['locale', 'searchBarMarkup']);
+		});
+		test('an island that reads the page ONLY through a dynamic import still asks for the seed', () => {
+			const r = collectIslandDepModulepreloads(
+				dyn_bundle(['/app/src/lib/Host.svelte'], [SHIM, '/app/src/lib/GuidedSearch.svelte']),
+				[SHIM],
+				null,
+				keys_of({ '/app/src/lib/GuidedSearch.svelte': new Set(['locale']) })
+			);
+			expect(r.page[ENTRY]).toBe(true);
+			expect(r.page_keys[ENTRY]).toEqual(['locale']);
+		});
+		test('an unpinned dynamically-imported reader ships all (fail-open, like a static one)', () => {
+			const r = collectIslandDepModulepreloads(
+				dyn_bundle([SHIM, '/app/src/lib/SearchBar.svelte'], [SHIM, '/app/src/lib/GuidedSearch.svelte']),
+				[SHIM],
+				null,
+				keys_of({ '/app/src/lib/SearchBar.svelte': new Set(['searchBarMarkup']), '/app/src/lib/GuidedSearch.svelte': 'all' })
+			);
+			expect(r.page[ENTRY]).toBe(true);
+			expect(r.page_keys[ENTRY]).toBeNull();
+		});
 	});
 
 	test('collects CSS from the facade + dep chunks (viteMetadata.importedCss)', () => {
