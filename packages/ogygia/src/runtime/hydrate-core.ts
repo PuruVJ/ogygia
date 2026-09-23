@@ -790,10 +790,15 @@ export function hydrate_island(
 		//      let Svelte recover the way it always did, and the detector below reports the discard.
 		let out: IslandHandle;
 		let healed = false;
+		// What Svelte threw on the STRICT attempt. `quietly` hides Svelte's own "Failed to hydrate" log for
+		// that attempt by design, so without this the recovery warning below could never say WHY the
+		// walk failed — only that the pre-hydrate check saw drift, which repair may well have fixed.
+		let strict_error: unknown = null;
 		try {
 			out = quietly(() => attempt(false));
 			healed = repaired;
-		} catch {
+		} catch (err) {
+			strict_error = err;
 			out = attempt(true);
 		}
 		if (healed) {
@@ -855,6 +860,11 @@ export function hydrate_island(
 					`page/layout CONTEXT via plain Svelte setContext — on csr=false that runs only on the server, ` +
 					`so getContext returns undefined on the client and the island renders a different tree.` +
 					(drift.reason ? `\nWhat changed: ${drift.reason}` : '') +
+					// The walk's own verdict, after any repair — the one line that separates "repair left a
+					// residue" from "the sequence was fine and Svelte failed for a reason this walk can't see".
+					(strict_error
+						? `\nSvelte threw on the strict attempt (after repair): ${strict_error instanceof Error ? strict_error.message : String(strict_error)}`
+						: '') +
 					`\nFix: for (1) make the mutation invisible to hydration (mutate only <head>, attributes, or ` +
 					`shadow templates — never the region's light DOM), or freeze the foreign-owned subtree with a ` +
 					`wake:'none' (lake) boundary; for (2) provide the value with setContext / <Provide> / ` +
