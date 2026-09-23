@@ -58,7 +58,12 @@ export type FormOps = {
 /** Wake a cold island when interaction lands inside it; returns a disarm fn. */
 export type ArmFn = (el: HTMLElement, fire: () => void) => void | (() => void);
 
-export type MorphFn = (parent: Element, nodes: ArrayLike<Node>) => void;
+/** `preserve_self_owned: false` = hydration repair (exact server sequence); default = live morph. */
+export type MorphFn = (
+	parent: Element,
+	nodes: ArrayLike<Node>,
+	options?: { preserve_self_owned?: boolean }
+) => void;
 
 export type WireOps = {
 	/** THE hub key (`OgygiaRef`) — every transportable kind crosses under it. */

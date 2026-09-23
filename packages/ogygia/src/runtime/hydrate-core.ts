@@ -28,6 +28,9 @@ import { emit as dt_emit } from '../devtools/bus.js';
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
+/** The morph contract for hydration repair: the exact server sequence — see `repair_markup`. */
+const REPAIR_MORPH = { preserve_self_owned: false } as const;
+
 /** A hydrated island as the element holds it: how to tear it down, and (keep / live hosts) how to
  *  push the next page's props into it. */
 export type IslandHandle = {
@@ -204,12 +207,18 @@ export function hold_region_box(region: HTMLElement): void {
  * to the morph (existing nodes still keep their identity where the morph can match them), or to a
  * plain `innerHTML` swap where the runtime has no morph. Those paths may re-create an element, and
  * a re-created element may react once more; the second attempt tells.
+ *
+ * The morph runs in its STRICT contract here ({@link REPAIR_MORPH}): the target is the server's node
+ * sequence, exactly. The live morph's "a self-owned element keeps the children it gave itself" rule is
+ * right for a hole re-answer, but in a repair it is the residue that breaks the walk — a node a
+ * web-component runtime added inside a nested custom element is exactly what Svelte's cursor then
+ * lands on (`getAttribute is not a function`), and the island discards.
  */
 function repair_markup(region: HTMLElement, want: Element): void {
 	if (align_to(region, want)) return;
 	const nodes = Array.from(want.childNodes);
 	const morph = slots.morph;
-	if (morph) morph(region, nodes);
+	if (morph) morph(region, nodes, REPAIR_MORPH);
 	else region.replaceChildren(...nodes);
 }
 
@@ -367,7 +376,7 @@ function align_to(live: Element, want: Element | DocumentFragment): boolean {
 	for (let i = 0; i < live_elements.length; i++) {
 		if (!align_to(live_elements[i], want_elements[i])) {
 			const morph = slots.morph;
-			if (morph) morph(live_elements[i], Array.from(want_elements[i].childNodes));
+			if (morph) morph(live_elements[i], Array.from(want_elements[i].childNodes), REPAIR_MORPH);
 			else live_elements[i].innerHTML = (want_elements[i] as Element).innerHTML;
 		}
 	}
@@ -852,23 +861,34 @@ export function hydrate_island(
 				});
 			console.warn(
 				`[ogygia] island "${entry}" discarded its ENTIRE server-rendered DOM during hydration ` +
-					`and re-rendered client-side (Svelte hydration-mismatch recovery). Two things cause this. ` +
+					`and re-rendered client-side (Svelte hydration-mismatch recovery). Three things cause this. ` +
 					`(1) Something changed this region's HTML between SSR and wake — a post-SSR transform ` +
 					`(transformPageChunk / an HTML-rewriting middleware), an A/B-testing snippet, or an edge ` +
 					`rewriter; whatever it injected (e.g. declarative shadow DOM) was just destroyed, and the ` +
 					`swap is timing-dependent, so symptoms look erratic. (2) A component in this island reads a ` +
 					`page/layout CONTEXT via plain Svelte setContext — on csr=false that runs only on the server, ` +
-					`so getContext returns undefined on the client and the island renders a different tree.` +
+					`so getContext returns undefined on the client and the island renders a different tree. ` +
+					`(3) A block in this island ({#if} / {:else if} / {#each} / {#await}) took a DIFFERENT branch ` +
+					`on the client than on the server — its condition reads something that differs between the ` +
+					`two (a browser global, a store's client default, url/page state, a Date). Svelte recovers a ` +
+					`branch mismatch SILENTLY (no throw); the walk is then off and the rest of the tree follows.` +
 					(drift.reason ? `\nWhat changed: ${drift.reason}` : '') +
 					// The walk's own verdict, after any repair — the one line that separates "repair left a
-					// residue" from "the sequence was fine and Svelte failed for a reason this walk can't see".
+					// residue" (1) from "the sequence was fine and Svelte failed for a reason this walk can't see"
+					// (2/3). No drift AND no throw is the signature of (3): nothing touched this region's DOM.
 					(strict_error
 						? `\nSvelte threw on the strict attempt (after repair): ${strict_error instanceof Error ? strict_error.message : String(strict_error)}`
-						: '') +
+						: drift.reason
+							? `\nSvelte did not throw after the repair — the mismatch is one this walk does not model.`
+							: `\nThe server node sequence was INTACT and Svelte did not throw: nothing mutated this ` +
+								`region's DOM, so this is (3) (or (2)). Find the block whose branch differs: in the ` +
+								`server markup its anchor reads <!--[N--> where N is the branch the SERVER chose.`) +
 					`\nFix: for (1) make the mutation invisible to hydration (mutate only <head>, attributes, or ` +
 					`shadow templates — never the region's light DOM), or freeze the foreign-owned subtree with a ` +
 					`wake:'none' (lake) boundary; for (2) provide the value with setContext / <Provide> / ` +
-					`createContext imported from 'ogygia', read it with the same getContext(key).`
+					`createContext imported from 'ogygia', read it with the same getContext(key); for (3) make ` +
+					`the condition read the same value on both sides (a prop / page.data), or move the ` +
+					`browser-only branch behind an $effect / hydratedBy().`
 			);
 		}
 

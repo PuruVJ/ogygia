@@ -91,9 +91,31 @@ export function install(): void {
  *     tail. The key map indexes just the remaining old children, so a change late in a long list still
  *     skips indexing the aligned prefix.
  */
-export function morph_children(parent: Element, new_nodes: ArrayLike<Node>): void {
-	reconcile_children(parent, new_nodes, build_id_sets(parent, new_nodes));
+export function morph_children(
+	parent: Element,
+	new_nodes: ArrayLike<Node>,
+	options?: MorphOptions
+): void {
+	const preserve = options?.preserve_self_owned !== false;
+	reconcile_children(parent, new_nodes, build_id_sets(parent, new_nodes), false, preserve);
 	clear_aria_hidden_over_focus(parent);
+}
+
+/**
+ * Two callers, two contracts.
+ *
+ * - **Live morph** (a hole re-answer, a router body swap, a live region tick) — `preserve_self_owned`
+ *   on (the default): a self-owned element ({@link is_self_owned}) keeps the children it gave itself.
+ *   The DOM stays live afterwards and a web component must not lose its own upgrade work.
+ * - **Hydration repair** (an island restoring the server's node sequence before Svelte's walk) —
+ *   `preserve_self_owned: false`: the target IS the server sequence, exactly. A child a runtime added
+ *   inside a self-owned element is precisely the node Svelte's cursor trips on (`getAttribute is not
+ *   a function` on a nested web component's own residue), so repair must be allowed to remove it.
+ *   Self-owned ATTRIBUTES are still kept — the walk never reads them, and a `popover` the element gave
+ *   itself is not what breaks hydration.
+ */
+export interface MorphOptions {
+	preserve_self_owned?: boolean;
 }
 
 /**
@@ -220,12 +242,15 @@ function reserved_for_later(
  * element gave itself — the same rule {@link sync_attributes} already applies to a self-owned element's
  * attributes. Re-inserting/re-upgrading a foreign custom element is what makes a country-selector trigger
  * flicker when a hole morphs its byte-identical chrome; keeping its nodes leaves the upgrade untouched.
+ * @param preserve the {@link MorphOptions.preserve_self_owned} contract, threaded unchanged down the
+ * recursion — it decides whether a self-owned DESCENDANT gets `keep_children` at all.
  */
 function reconcile_children(
 	parent: Element,
 	new_nodes: ArrayLike<Node>,
 	sets: IdSets,
-	keep_children = false
+	keep_children = false,
+	preserve = true
 ): void {
 	const count = new_nodes.length;
 	let cursor: ChildNode | null = parent.firstChild;
@@ -248,12 +273,12 @@ function reconcile_children(
 			if (sets !== null && !id_sets_agree(sets, cursor, next)) break;
 			const here = cursor;
 			cursor = cursor.nextSibling;
-			morph_same(here, next, sets);
+			morph_same(here, next, sets, preserve);
 		} else {
 			// Same non-null key: morph regardless of tag (morph_node replaces on a tag mismatch).
 			const here = cursor;
 			cursor = cursor.nextSibling;
-			morph_node(here, next, sets);
+			morph_node(here, next, sets, preserve);
 		}
 		idx++;
 	}
@@ -315,7 +340,7 @@ function reconcile_children(
 			if (cursor && key_of(next) === null && same_node(cursor, next)) {
 				const here = cursor;
 				cursor = cursor.nextSibling;
-				morph_same(here, next, sets);
+				morph_same(here, next, sets, preserve);
 			} else {
 				parent.insertBefore(clone(next), cursor);
 			}
@@ -335,7 +360,7 @@ function reconcile_children(
 					} else {
 						parent.insertBefore(matched, cursor); // moves `matched` (already lives in `parent`)
 					}
-					morph_node(matched, next, sets);
+					morph_node(matched, next, sets, preserve);
 					continue;
 				}
 			} else if (old_inner !== null && next.nodeType === ELEMENT) {
@@ -350,7 +375,7 @@ function reconcile_children(
 					} else {
 						parent.insertBefore(holder, cursor);
 					}
-					morph_same(holder, next, sets);
+					morph_same(holder, next, sets, preserve);
 					continue;
 				}
 			}
@@ -376,7 +401,7 @@ function reconcile_children(
 				const here = cursor;
 				cursor = cursor.nextSibling;
 				if (old_inner !== null) release_holder(old_inner, sets!, here as Element);
-				morph_same(here, next, sets);
+				morph_same(here, next, sets, preserve);
 				continue;
 			}
 
@@ -466,7 +491,7 @@ function is_self_owned(el: Element): boolean {
  * replace check lives here). Positional/lockstep callers have already proven compatibility via
  * {@link same_node} and go through {@link morph_same}, skipping that recheck.
  */
-function morph_node(from: Node, to: Node, sets: IdSets): void {
+function morph_node(from: Node, to: Node, sets: IdSets, preserve: boolean): void {
 	const kind = from.nodeType;
 	// Text / comment: cheapest possible update.
 	if (kind === TEXT || kind === COMMENT) {
@@ -492,7 +517,7 @@ function morph_node(from: Node, to: Node, sets: IdSets): void {
 	sync_attributes(ef, et, self_owned);
 	// `et` is never mutated by the recursion (misses clone, keyed moves come from the OLD tree), so
 	// its live `childNodes` is handed straight down — no per-level snapshot array.
-	reconcile_children(ef, et.childNodes, sets, self_owned);
+	reconcile_children(ef, et.childNodes, sets, preserve && self_owned, preserve);
 }
 
 /**
@@ -500,7 +525,7 @@ function morph_node(from: Node, to: Node, sets: IdSets): void {
  * positional/lockstep path. Skips the morph-vs-replace decision {@link morph_node} makes; the element
  * body is inlined (not shared via a helper) to keep this leaf call one frame deep on the hot path.
  */
-function morph_same(from: Node, to: Node, sets: IdSets): void {
+function morph_same(from: Node, to: Node, sets: IdSets, preserve: boolean): void {
 	const kind = from.nodeType;
 	if (kind === TEXT || kind === COMMENT) {
 		if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue;
@@ -513,7 +538,7 @@ function morph_same(from: Node, to: Node, sets: IdSets): void {
 	const self_owned = is_self_owned(ef);
 	sync_form_props(ef, et); // before attributes — see morph_node
 	sync_attributes(ef, et, self_owned);
-	reconcile_children(ef, et.childNodes, sets, self_owned);
+	reconcile_children(ef, et.childNodes, sets, preserve && self_owned, preserve);
 }
 
 /** Add + update + remove attributes so `from` matches `to` exactly. Boolean attrs are attr presence.

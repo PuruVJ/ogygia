@@ -7,6 +7,10 @@
 import { expect, test, afterEach } from 'vitest';
 import { repair_if_drifted, sequence_differs } from '../../src/runtime/hydrate-core.js';
 import { parse_region_html } from '../../src/runtime/parse-html.js';
+import { install as install_morph } from '../../src/runtime/morph.js';
+// The REAL repair path: with the morph installed, align_to falls to the morph on a skeleton mismatch
+// (not the innerHTML swap it uses when no morph feature shipped).
+install_morph();
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -61,5 +65,28 @@ test('(b) a NESTED upgraded custom element also had a child added by the runtime
 	expect(out.repaired).toBe(true);
 	// The runtime-added <i> must be GONE: repair restores the server DOM so hydration can claim it.
 	expect(region.querySelector('x-btn i')).toBeNull();
+	expect(sequence_differs(region, want_of(pristine))).toBe(false);
+});
+
+test('(c) residue INSIDE a nested upgraded element, with the outer skeleton also changed → must still repair to pristine', () => {
+	// The LoginDropdown shape: the outer host's element skeleton differs (its runtime added a sibling),
+	// so align_to falls to the morph with the OUTER as entry — and a nested upgraded element inside it
+	// also had a light child appended by ITS runtime. If the morph treats that nested host's children
+	// as "its own" (keep, never remove), the added node survives repair, and Svelte's walk lands on it:
+	// `set_custom_element_data(e)` → `e.getAttribute is not a function`, then hydration_failed.
+	const pristine = '<x-wrap><x-btn><span>go</span></x-btn> <p>after</p></x-wrap>';
+	const region = region_from(pristine, (r) => {
+		const wrap = r.querySelector('x-wrap')!;
+		wrap.attachShadow({ mode: 'open' });
+		wrap.appendChild(Object.assign(document.createElement('div'), { textContent: 'rt-outer' })); // skeleton differs
+		const btn = r.querySelector('x-btn')!;
+		btn.attachShadow({ mode: 'open' });
+		btn.appendChild(Object.assign(document.createElement('i'), { textContent: 'rt' })); // nested residue
+		drop_ws(r);
+	});
+	expect(sequence_differs(region, want_of(pristine))).toBe(true);
+	const out = repair_if_drifted(region, pristine);
+	expect(out.repaired).toBe(true);
+	expect(region.querySelector('x-btn i')).toBeNull(); // the residue Svelte would trip on
 	expect(sequence_differs(region, want_of(pristine))).toBe(false);
 });
