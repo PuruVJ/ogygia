@@ -1,6 +1,6 @@
 import { frameAddress } from '../frame.js';
 import { kit_hydrates_page } from './kit-boot.js';
-import { kit_page_thread } from './kit-page-thread.js';
+import { kit_page_thread } from './kit-page-thread.svelte.js';
 import { parse_region_html } from './parse-html.js';
 import { runtime_session } from './session.js';
 import {

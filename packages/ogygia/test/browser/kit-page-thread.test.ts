@@ -8,7 +8,7 @@
 // hydrate such an island before Kit's page thread exists; its server HTML stays on screen meanwhile.
 import { afterEach, expect, inject, test } from 'vitest';
 import { bootDev } from '../../src/runtime/full.js';
-import { publish_kit_page, unpublish_kit_page } from './_kit-thread.js';
+import { publish_kit_page, publish_kit_page_deferred, unpublish_kit_page } from './_kit-thread.svelte.js';
 
 const ISLAND = 'ogygia-region[wake="idle"]';
 const inject_html = (key: 'lake_page_reader_ssr_b64') => decodeURIComponent(escape(atob(inject(key))));
@@ -46,6 +46,46 @@ test('a page-reading island inside a lake on a Kit document waits for Kit’s pa
 		await expect.poll(() => island.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
 		// Same branch as the server → the server DOM was claimed, not discarded.
 		expect(island.hasAttribute('data-og-recovered'), 'no discard').toBe(false);
+		expect(island.querySelector('[data-testid="search"]'), 'the SSR node was adopted').toBe(server_branch);
+		expect(island.querySelector('[data-testid="branch"]')?.textContent).toBe('search');
+		expect(warns.filter((w) => w.includes('discarded its ENTIRE'))).toEqual([]);
+	} finally {
+		console.warn = real_warn;
+	}
+});
+
+// THE SECOND WINDOW (field, prod, 2/12 loads on a74d14d): the bridge is a LIVE reference assigned when
+// Kit's entry EVALUATES, but the page it points at is still Kit's pre-start object (`status = -1`,
+// `data = {}`) until `start()`'s `initialize()` applies the server page ~150–350 ms later. A wait that
+// resolved on the bridge appearing let the island hydrate against `{}` in that gap — same discard,
+// one step later. The island must wait for Kit to APPLY its page, not for the object to exist.
+test('the bridge is published but Kit has not applied its page (status -1): the island keeps waiting, and hydrates once initialize() lands it', async () => {
+	const warns: string[] = [];
+	const real_warn = console.warn;
+	console.warn = (...args: unknown[]) => warns.push(args.map(String).join(' '));
+	try {
+		// Kit's entry has evaluated (bridge=Y) — but start() has not applied the page (status -1, data {}).
+		const kit = publish_kit_page_deferred();
+		document.body.innerHTML =
+			'<script>__sveltekit_lab = {};</script>' + '<div data-mount>' + inject_html('lake_page_reader_ssr_b64') + '</div>';
+		const island = document.querySelector(ISLAND) as HTMLElement;
+		const server_branch = island.querySelector('[data-testid="search"]');
+		expect(server_branch?.textContent).toBe('search');
+
+		bootDev();
+
+		// bridge=Y, data={} — exactly the moment the field capture shows the island collapsing. It must HOLD.
+		await new Promise((r) => setTimeout(r, 400));
+		expect(island.hasAttribute('data-hydrated'), 'held: bridge up but data not applied').toBe(false);
+		expect(island.hasAttribute('data-og-recovered'), 'no discard against the empty data').toBe(false);
+		expect(island.querySelector('[data-testid="search"]'), 'the server node is untouched').toBe(server_branch);
+		expect(warns.filter((w) => w.includes('discarded its ENTIRE'))).toEqual([]);
+
+		// start() lands the server blob: page.data is populated — the same data the server rendered from.
+		kit.settle({ searchBarMarkup: '<i data-testid="search">search</i>' });
+
+		await expect.poll(() => island.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
+		expect(island.hasAttribute('data-og-recovered'), 'same branch as the server → claimed, not discarded').toBe(false);
 		expect(island.querySelector('[data-testid="search"]'), 'the SSR node was adopted').toBe(server_branch);
 		expect(island.querySelector('[data-testid="branch"]')?.textContent).toBe('search');
 		expect(warns.filter((w) => w.includes('discarded its ENTIRE'))).toEqual([]);
