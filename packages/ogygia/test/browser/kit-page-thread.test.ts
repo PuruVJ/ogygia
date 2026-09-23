@@ -6,8 +6,9 @@
 // downloading, read `page.data` as `{}`, its `{#if page.data.loggedIn}{:else if markup}` took the
 // empty branch, and Svelte discarded the server DOM — the search bar vanished. The runtime must not
 // hydrate such an island before Kit's page thread exists; its server HTML stays on screen meanwhile.
-import { afterEach, expect, inject, test } from 'vitest';
+import { afterEach, expect, inject, test, vi } from 'vitest';
 import { bootDev } from '../../src/runtime/full.js';
+import { kit_page_thread } from '../../src/runtime/kit-page-thread.svelte.js';
 import { publish_kit_page, publish_kit_page_deferred, unpublish_kit_page } from './_kit-thread.svelte.js';
 
 const ISLAND = 'ogygia-region[wake="idle"]';
@@ -90,6 +91,40 @@ test('the bridge is published but Kit has not applied its page (status -1): the 
 		expect(island.querySelector('[data-testid="branch"]')?.textContent).toBe('search');
 		expect(warns.filter((w) => w.includes('discarded its ENTIRE'))).toEqual([]);
 	} finally {
+		console.warn = real_warn;
+	}
+});
+
+// No timeout on the wait by design — but a Kit boot that never happens must not be SILENT in dev.
+test('DEV: a wait that runs long warns once (diagnosable), still resolves the moment Kit applies its page', async () => {
+	const warns: string[] = [];
+	const real_warn = console.warn;
+	console.warn = (...args: unknown[]) => warns.push(args.map(String).join(' '));
+	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+	try {
+		const kit = publish_kit_page_deferred(); // bridge up, status -1: Kit's start() never comes…
+		let resolved = false;
+		const wait = kit_page_thread();
+		expect(wait, 'status -1 → a real wait').not.toBeNull();
+		void wait!.then(() => (resolved = true));
+
+		await vi.advanceTimersByTimeAsync(4_900);
+		expect(warns.filter((w) => w.includes('waited')), 'quiet before the threshold').toEqual([]);
+		await vi.advanceTimersByTimeAsync(200);
+		const slow = warns.filter((w) => w.includes('waited'));
+		expect(slow).toHaveLength(1);
+		expect(slow[0]).toContain('start() has not applied the page');
+		expect(resolved, 'the warning is diagnostic only — nothing resolved or discarded').toBe(false);
+
+		// …until it does: the effect on `status` fires, the wait resolves, no second warning.
+		kit.settle({ any: 1 });
+		await vi.advanceTimersByTimeAsync(0);
+		await Promise.resolve();
+		expect(resolved).toBe(true);
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(warns.filter((w) => w.includes('waited'))).toHaveLength(1);
+	} finally {
+		vi.useRealTimers();
 		console.warn = real_warn;
 	}
 });

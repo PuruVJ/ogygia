@@ -58,10 +58,33 @@ function page_applied(bridge: Bridge): boolean {
 	}
 }
 
+/**
+ * DEV ONLY: after this long still waiting, say so once. The wait itself has no timeout by design (an
+ * island of ours has no page truth to hydrate against until Kit applies its page, and its server HTML
+ * is the honest state meanwhile) — but a Kit boot that never happens must be diagnosable, not silent.
+ * Dead code in a production build.
+ */
+const DEV_STILL_WAITING_MS = 5000;
+
 export function kit_page_thread(): Promise<void> | null {
 	if (page_applied(bridge_of())) return null;
 	return (pending ??= new Promise<void>((resolve) => {
+		let slow: ReturnType<typeof setTimeout> | null = null;
+		if (import.meta.env.DEV) {
+			slow = setTimeout(() => {
+				const bridge = bridge_of();
+				console.warn(
+					`[ogygia] islands inside a lake / hole answer on this Kit (csr=true) page have waited ${DEV_STILL_WAITING_MS / 1000}s ` +
+						`for Kit to apply its page and are still holding their server HTML. ` +
+						(bridge == null
+							? `Kit's client entry has not evaluated (no page bridge yet) — Kit's boot script may be blocked, failing, or missing.`
+							: `Kit's client entry evaluated but start() has not applied the page (status is still -1) — Kit's start() may have thrown; check the console above.`) +
+						` They hydrate the moment Kit does; nothing is discarded meanwhile.`
+				);
+			}, DEV_STILL_WAITING_MS);
+		}
 		const done = () => {
+			if (slow !== null) clearTimeout(slow);
 			pending = null;
 			resolve();
 		};
