@@ -7,6 +7,8 @@
  * `createContext` imported from `'ogygia'` (see the driver's `source_uses_ogygia_context`). A plain
  * app that never bridges context tree-shakes the ~4.7 kB bridge away; core reads the slot with
  * optional chaining, so its absence is just "no provider above" — the common, already-handled case.
+ *
+ * A HYDRATE-phase feature (link/runtime-entry.ts): installed by the hydrate core, never the boot.
  */
 import { collect_provided_context } from '../context-bridge.js';
 import { slots } from './slots.js';

@@ -33,9 +33,8 @@ declare module 'virtual:ogygia/runtime-url' {
 	const url: string;
 	export default url;
 }
-declare module 'virtual:ogygia/runtime-entry' {
-	export const __features: string[];
-}
+/** The generated runtime entry — side effects only (it boots); it exports nothing. */
+declare module 'virtual:ogygia/runtime-entry' {}
 
 declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of hashed dependency chunks for a hydrate island entry (`/_app/immutable/…`). */
@@ -192,6 +191,10 @@ declare module 'virtual:ogygia/transport' {
 		string,
 		{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
 	>;
+}
+/** The hydrate-phase features the app's marks selected (compiler/link/runtime-entry.ts). */
+declare module 'virtual:ogygia/hydrate-features' {
+	export function install(): void;
 }
 declare module 'virtual:ogygia/kit-wire' {
 	export function stringify_remote_arg(value: unknown, transport: unknown): string;

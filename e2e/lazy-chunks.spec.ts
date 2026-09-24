@@ -1,20 +1,23 @@
 // LAZY RUNTIME CHUNKS: the built runtime is three lazily loaded pieces around a small boot —
-// `hydrate-core` (Svelte's `hydrate`, the provider, the props parse) on the first island that
-// wakes, `router-nav` (fetch + cache, head merge, reconcile) on the first prefetch or click,
-// `interaction-replay` on the first arm. Proven on the network against the built playground: every
-// script fetched at boot is read, and none may carry a string that lives only in `hydrate-core`
-// (`data-og-recovered`, the mismatch-recovery mark) or only in `router-nav` (`x-ogygia-spa`, the
-// navigation fetch header); the first wake fetches the former, the first prefetch the latter.
+// `hydrate-core` (Svelte's `hydrate`, the provider, the props parse, and the HYDRATE-phase features)
+// on the first island that wakes, `router-nav` (fetch + cache, head merge, reconcile) on the first
+// prefetch or click, `interaction-replay` on the first arm. Proven on the network against the built
+// playground: every script fetched at boot is read, and none may carry a string that lives only in
+// `hydrate-core` (the discard warning's text) or only in `router-nav` (`x-ogygia-spa`, the navigation
+// fetch header); the first wake fetches the former, the first prefetch the latter.
 //
-// Note: the playground boots the `live`, `wire` and `context` features, whose modules (LiveHost,
-// the snippet codec, the context bridge) import Svelte statically — so on THIS app Svelte's client
-// runtime is in the boot graph regardless of the hydrate split. An app without those features
-// (the "Static content" / "Interactive" profiles of e2e/bundle-size.ts) has no Svelte in its boot.
+// AND NO SVELTE AT BOOT. The playground uses `live`, `wire`, `context` and remote seeds — every
+// feature whose module reaches Svelte — and they are HYDRATE-phase features (link/runtime-entry.ts),
+// so Svelte's client runtime (one ~200 KB chunk in a real app) must not be among the boot's scripts:
+// it arrives with the first wake, when `hydrate()` needs it anyway.
 // Usage: pnpm exec playwright test lazy-chunks
 import { test, check } from './fixtures/index.ts';
 
-/** A string only the hydrate core carries (the foreign-mutation detector's mark). */
-const HYDRATE_CORE_MARKER = 'data-og-recovered';
+/** A string only the hydrate core carries: the foreign-mutation detector's warning text. (The
+ *  `data-og-recovered` MARK it sets is not unique — the boot's hydration beacon reads it.) */
+const HYDRATE_CORE_MARKER = 'discarded its ENTIRE server-rendered DOM';
+/** A string only Svelte's client runtime carries: its error-code URLs, kept in production builds. */
+const SVELTE_RUNTIME_MARKER = 'svelte.dev/e/';
 /** A string only the navigation chunk carries (the SPA fetch header). */
 const ROUTER_NAV_MARKER = 'x-ogygia-spa';
 const RUNTIME_RE = /\/og-runtime\.[^/]+\.js$/;
@@ -52,6 +55,11 @@ test.describe('lazy runtime chunks: hydrate core on first wake, navigation on fi
 			carrying(boot, ROUTER_NAV_MARKER).length === 0,
 			carrying(boot, ROUTER_NAV_MARKER).join('\n')
 		);
+		check(
+			'boot: no fetched script is Svelte’s client runtime (it waits for the first wake)',
+			carrying(boot, SVELTE_RUNTIME_MARKER).length === 0,
+			carrying(boot, SVELTE_RUNTIME_MARKER).join('\n')
+		);
 
 		// The first wake: click the interaction island → the hydrate core + the island's chunk.
 		await page.locator('[data-i-btn]').click();
@@ -61,6 +69,11 @@ test.describe('lazy runtime chunks: hydrate core on first wake, navigation on fi
 		check(
 			'wake: the first wake fetched the hydrate core',
 			carrying(after_wake, HYDRATE_CORE_MARKER).length === 1,
+			after_wake.map((b) => b.u).join('\n')
+		);
+		check(
+			'wake: Svelte’s client runtime arrived with the first wake',
+			carrying(after_wake, SVELTE_RUNTIME_MARKER).length > 0,
 			after_wake.map((b) => b.u).join('\n')
 		);
 		check('wake: still no navigation chunk', carrying(after_wake, ROUTER_NAV_MARKER).length === 0);

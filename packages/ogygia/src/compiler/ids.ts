@@ -9,6 +9,8 @@ export const V_MANIFEST = 'virtual:ogygia/manifest';
 export const V_RUNTIME = 'virtual:ogygia-runtime';
 /** Generated sticky entry — static-imports only the features selected from build marks. */
 export const V_RUNTIME_ENTRY = 'virtual:ogygia/runtime-entry';
+/** Generated hydrate-phase feature module — imported statically by the hydrate core (link/runtime-entry.ts). */
+export const V_HYDRATE_FEATURES = 'virtual:ogygia/hydrate-features';
 export const V_DEV_HMR = 'virtual:ogygia/dev-hmr';
 export const V_DEV_HMR_URL = 'virtual:ogygia/dev-hmr-url';
 // The standalone devtools dock boot for csr=true (Kit-owned) pages — the ogygia runtime never boots

@@ -124,6 +124,8 @@ function runtime_content_hash(): string {
 	const inputs = [
 		fileURLToPath(new URL('../compiler/link/runtime-entry.js', import.meta.url)),
 		fileURLToPath(new URL('../live-transport.js', import.meta.url)),
+		fileURLToPath(new URL('../context-bridge.js', import.meta.url)),
+		fileURLToPath(new URL('../keep-fallback-marker.js', import.meta.url)),
 		fileURLToPath(new URL('../shims/page-store.svelte.js', import.meta.url)),
 		fileURLToPath(new URL('../shims/kit-remote/client-stub.js', import.meta.url)),
 		fileURLToPath(new URL('../NestedProvider.svelte', import.meta.url)),

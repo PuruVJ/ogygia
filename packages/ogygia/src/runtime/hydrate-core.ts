@@ -23,6 +23,15 @@ import { parse_sidecar_text, seed_data_of, seed_page_once, seed_remote_once } fr
 import { is_deferred, ours_on_kit_document, region_ssr_truncated } from './region-attrs.js';
 import { slots, type LiftedLake } from './slots.js';
 import { parse_region_html } from './parse-html.js';
+import { install as install_hydrate_features } from 'virtual:ogygia/hydrate-features';
+// Re-exported for core's wake paths: observing Kit's reactive page needs Svelte, so it lives in this
+// lazy chunk, never in the boot's static graph (see core.ts `hydrate_core`).
+export { kit_page_thread } from './kit-page-thread.svelte.js';
+
+// The HYDRATE-phase features (context, live, wire, remote-seeds — as the app's marks select them;
+// link/runtime-entry.ts) install as this chunk evaluates: before any island below can hydrate, and
+// without ever joining the boot. They ride this chunk's one `import()`, sized by the same marks.
+install_hydrate_features();
 import { emit as dt_emit } from '../devtools/bus.js';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.

@@ -19,8 +19,7 @@ export const KEEP_FALLBACK_INLINE_MESSAGE =
 	'and its fallback never shows. Move the island out of the enclosing island (into the page, a layout, or a lake), ' +
 	'or drop keepFallback() from a component that can render inline.';
 
-/** The parcel/store stand-in for "keep the fallback" — never applied to the DOM. */
-export const KEEP_FALLBACK_HTML = '<!--ogygia:keep-fallback-->';
+export { KEEP_FALLBACK_HTML } from './keep-fallback-marker.js';
 
 export class KeepFallbackSignal extends Error {
 	constructor() {

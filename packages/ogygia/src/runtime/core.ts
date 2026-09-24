@@ -1,6 +1,5 @@
 import { frameAddress } from '../frame.js';
 import { kit_hydrates_page } from './kit-boot.js';
-import { kit_page_thread } from './kit-page-thread.svelte.js';
 import { parse_region_html } from './parse-html.js';
 import { runtime_session } from './session.js';
 import {
@@ -21,7 +20,7 @@ import {
 	region_schedule
 } from './region-attrs.js';
 import { slots } from './slots.js';
-import { KEEP_FALLBACK_HTML } from '../keep-fallback.js';
+import { KEEP_FALLBACK_HTML } from '../keep-fallback-marker.js';
 import {
 	background_start,
 	hydrate_settled,
@@ -107,8 +106,13 @@ function now_ms(): number {
 
 /**
  * THE HYDRATE CORE, loaded once, lazily (./hydrate-core.ts): Svelte's `hydrate`, the provider
- * host, the props parse, the page seed. Nothing in this always-on module imports Svelte — a page
- * whose islands all wake on `visible` / `interaction` boots without fetching its client runtime.
+ * host, the props parse, the page seed, and the HYDRATE-phase features (link/runtime-entry.ts), which
+ * it installs as it evaluates. Nothing in this always-on module — nor in any boot-phase feature —
+ * imports Svelte: in a real app Svelte's client runtime is ONE shared chunk (~200 KB), and anything in
+ * the boot's static graph downloads first in `<head>`, ahead of the page's own LCP image, before a
+ * single island needs it. It arrives with this one import instead, when the first island hydrates. A
+ * page whose islands all wake on `visible` / `interaction` boots without fetching it at all.
+ * `test/runtime-boot-svelte-free.test.ts` pins the invariant over the whole boot graph.
  * `loaded_core` is the synchronous view once it has arrived (a kept island's props absorb runs
  * inside the reconciler, synchronously, and only ever for an island that already hydrated).
  */
@@ -930,8 +934,8 @@ class OgygiaRegion extends HTMLElement {
 			t_loaded = now_ms();
 			if (!this.isConnected) return;
 			// An island of OURS on a Kit-hydrated document reads Kit's page through the bridge Kit's
-			// client entry publishes; it must not hydrate before that entry has run (kit-page-thread.ts).
-			await this.#kit_page_ready();
+			// client entry publishes; it must not hydrate before Kit applied it (kit-page-thread.svelte.ts).
+			await this.#kit_page_ready(core);
 			if (!this.isConnected) return;
 			await hydrate_turn(this);
 			if (!this.isConnected || this.#app) return;
@@ -1063,12 +1067,13 @@ class OgygiaRegion extends HTMLElement {
 	}
 
 	/**
-	 * On a Kit-hydrated document, a region of ours (a lake's inside, a hole's answer) waits for Kit's
-	 * page thread before it hydrates — `null` (no await) once the bridge exists. See kit-page-thread.ts.
+	 * On a Kit-hydrated document, a region of ours (a lake's inside, a hole's answer) waits for Kit to
+	 * apply its page before it hydrates — `null` (no await) once applied. The wait lives in the lazy
+	 * hydrate core (it observes Kit's reactive page, i.e. it needs Svelte), so it never reaches the boot.
 	 */
-	#kit_page_ready(): Promise<void> | null {
+	#kit_page_ready(core: HydrateCore): Promise<void> | null {
 		if (!kit_hydrates_page() || !ours_on_kit_document(this)) return null;
-		return kit_page_thread();
+		return core.kit_page_thread();
 	}
 
 	/** Hydrate a live region's swapped-in HTML through the hydrate core's LiveHost path. */
@@ -1079,7 +1084,7 @@ class OgygiaRegion extends HTMLElement {
 		if (!entry) return;
 		const [core, mod] = await Promise.all([hydrate_core(), load_island(entry)]);
 		if (!this.isConnected) return;
-		await this.#kit_page_ready();
+		await this.#kit_page_ready(core);
 		if (!this.isConnected) return;
 		this.#live_app = core.hydrate_live(this, entry, mod, props);
 		if (!this.#live_app) return;
@@ -1201,9 +1206,8 @@ export function boot(installers: Array<() => void> = []): void {
 		const features: string[] = [];
 		if (slots.interaction) features.push('interaction');
 		if (slots.morph) features.push('morph');
-		if (slots.live) features.push('live');
-		if (slots.wire) features.push('wire');
-		if (slots.remoteSeeds) features.push('remoteSeeds');
+		// Hydrate-phase features (live / wire / remoteSeeds / context) install with the hydrate core,
+		// after this boot report — they are listed once an island has hydrated.
 		if (slots.frames) features.push('frames');
 		if (slots.nav) features.push('router');
 		if (slots.forms.enabled) features.push('forms');

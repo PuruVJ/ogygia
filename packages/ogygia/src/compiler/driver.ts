@@ -30,7 +30,11 @@ import {
 	kit_dirs
 } from './kit.js';
 import { run_module_macros } from './macros/pipeline.js';
-import { generateRuntimeEntrySource, resolveFeatures } from './link/runtime-entry.js';
+import {
+	generateHydrateFeaturesSource,
+	generateRuntimeEntrySource,
+	resolveFeatures
+} from './link/runtime-entry.js';
 import {
 	resolveFoucImportSpec,
 	FOUC_CSS_PREFIX,
@@ -79,6 +83,7 @@ import {
 	V_RUNTIME,
 	V_FN_MANIFEST,
 	V_RUNTIME_ENTRY,
+	V_HYDRATE_FEATURES,
 	V_DEV_HMR,
 	V_DEV_HMR_URL,
 	V_DEVTOOLS_BOOT,
@@ -934,6 +939,13 @@ export class Compiler {
 			const ch = client_hooks_boot(ctx);
 			return `import ${JSON.stringify(V_FN_MANIFEST)};\n` + ch.imports + code + ch.call;
 		}
+		if (id === RESOLVED(V_HYDRATE_FEATURES)) {
+			// The hydrate core's feature phase, from the same marks as the boot entry. Dev runs the
+			// kitchen-sink boot (`bootDev`), so it gets every hydrate-phase feature to match.
+			if (!ctx.is_build) return generateHydrateFeaturesSource({}, ctx.runtime_dir, true).code;
+			this.prescan();
+			return generateHydrateFeaturesSource(program.runtime_marks, ctx.runtime_dir).code;
+		}
 		if (id === RESOLVED(V_RUNTIME)) {
 			// Dev sticky: kitchen-sink package entry. Build uses the hashed emitFile chunk. An EXPLICIT
 			// `bootDev()` call (not a bare side-effect import) so Vite's dep prebundler can't tree-shake
@@ -1145,6 +1157,7 @@ export class Compiler {
 		if (source === V_MANIFEST) return RESOLVED(V_MANIFEST);
 		if (source === V_RUNTIME) return RESOLVED(V_RUNTIME);
 		if (source === V_RUNTIME_ENTRY) return RESOLVED(V_RUNTIME_ENTRY);
+		if (source === V_HYDRATE_FEATURES) return RESOLVED(V_HYDRATE_FEATURES);
 		if (source === V_DEV_HMR) return RESOLVED(V_DEV_HMR);
 		if (source === V_DEV_HMR_URL) return RESOLVED(V_DEV_HMR_URL);
 		if (source === V_DEVTOOLS_BOOT) return RESOLVED(V_DEVTOOLS_BOOT);
