@@ -137,6 +137,19 @@ describe('runtime_first — before all of the page’s JavaScript, not first in 
 		);
 	});
 
+	it('moves the runtime’s own modulepreload hints WITH it, as one unit', () => {
+		const deps =
+			'<link rel="modulepreload" href="/c/a.js" data-ogygia-runtime-dep>' +
+			'<link rel="modulepreload" href="/c/b.js" data-ogygia-runtime-dep>';
+		const css = '<link rel="stylesheet" href="/a.css">';
+		expect(runtime_first(head_start + css + design_system + '<title>x</title>' + runtime + deps, null)).toBe(
+			head_start + css + runtime + deps + design_system + '<title>x</title>'
+		);
+		// already in place with its hints: untouched
+		const placed = head_start + css + runtime + deps + design_system;
+		expect(runtime_first(placed, null)).toBe(placed);
+	});
+
 	it('with no JavaScript in the head, it goes last in the head', () => {
 		const head = '<html><head><meta charset="utf-8"><title>t</title></head><body>';
 		expect(runtime_first(head, runtime)).toBe(

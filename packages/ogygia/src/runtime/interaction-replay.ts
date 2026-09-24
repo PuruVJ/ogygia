@@ -4,8 +4,13 @@
  * element's ADDRESS (hydration may have replaced the nodes). Loaded when the first interaction
  * island arms; never part of the boot.
  */
-import { resolve_address, type FieldSnapshot, type QueuedClick } from './interaction.js';
+import type { FieldSnapshot, QueuedClick } from './interaction.js';
+import { interaction_link } from './slots.js';
 import { emit as dt_emit } from '../devtools/bus.js';
+
+// Interaction's resolver, handed over through the registry — this lazy chunk never imports a boot
+// module (./slots.ts `BootLink`).
+const resolve_address = (region: Element, addr: number[]) => interaction_link().resolve_address(region, addr);
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;

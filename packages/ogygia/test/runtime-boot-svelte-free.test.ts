@@ -212,4 +212,26 @@ describe('island-side modules reach the runtime only through its handles', () =>
 		expect(boot.has(path.join(RUNTIME, 'router.ts'))).toBe(true);
 		expect(boot.has(path.join(RUNTIME, 'slots.ts'))).toBe(true);
 	});
+
+	// THE RUNTIME'S OWN LAZY CHUNKS never import a boot module either — except the few Kit's client
+	// transport already shares (the app's `hooks.ts` transport decodes regions on csr=true pages, so
+	// those modules are a shared chunk regardless). Kit builds the client with
+	// `preserveEntrySignatures: 'strict'`: the runtime chunk may not export a module to a lazy chunk,
+	// so every boot module a lazy chunk imports is split into a file of its own — the boot arrived as
+	// nine. Lazy chunks reach boot helpers through the registry (runtime/slots.ts `BootLink`).
+	const kit_transport_shared = new Set(static_files(path.join(SRC, 'transport.ts')).keys());
+	for (const lazy of ['hydrate-core.ts', 'router-nav.ts', 'interaction-replay.ts']) {
+		it(`lazy chunk ${lazy} imports no boot module beyond what Kit's transport shares`, () => {
+			const reached = static_files(path.join(RUNTIME, lazy));
+			const into_boot = [...reached]
+				.filter(([f]) => boot.has(f) && !kit_transport_shared.has(f))
+				.map(([, chain]) => chain.join(' > '));
+			expect(into_boot).toEqual([]);
+		});
+	}
+
+	it('Kit’s transport really does share the registry (so it is the allowed exception, not a loophole)', () => {
+		expect(kit_transport_shared.has(path.join(RUNTIME, 'slots.ts'))).toBe(true);
+		expect(kit_transport_shared.has(path.join(RUNTIME, 'router.ts'))).toBe(false);
+	});
 });

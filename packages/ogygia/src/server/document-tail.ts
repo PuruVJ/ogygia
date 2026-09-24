@@ -80,6 +80,21 @@ export function modulepreload_tag(href: string): string {
 	return '<link rel="modulepreload" href="' + href + '" fetchpriority="low">';
 }
 
+/**
+ * The runtime bootstrap: its module script, then a `modulepreload` for each of its static imports
+ * (the build's handoff — the few chunks the runtime shares with the rest of the app, e.g. Vite's
+ * preload helper and the modules Kit's client transport also uses). The browser only discovers a
+ * module's imports after downloading and parsing it; hinted here, they download ALONGSIDE the
+ * runtime instead of one round trip after it. Normal priority — the runtime cannot run without
+ * them. `data-ogygia-runtime-dep` keeps them attached to the script when the handle moves it
+ * (head-presence.ts `runtime_first`).
+ */
+export function runtime_bootstrap_tags(src: string, deps: readonly string[]): string {
+	let html = '<script type="module" data-ogygia-runtime src="' + src + '"></script>';
+	for (const dep of deps) html += '<link rel="modulepreload" href="' + dep + '" data-ogygia-runtime-dep>';
+	return html;
+}
+
 /** The holes record (`hole()`), read by runtime/hole-facts.ts. */
 const HOLES_SCRIPT_OPEN = `<script type="${HOLES_SCRIPT_TYPE}" data-ogygia-holes>`;
 const HOLES_SCRIPT_CLOSE = '</script>';

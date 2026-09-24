@@ -55,6 +55,36 @@ describe('collectIslandDepModulepreloads', () => {
 		expect(js['/_app/immutable/unrelated-entry.js']).toBeUndefined();
 	});
 
+	// THE RUNTIME's static imports ride the same handoff, keyed by its URL: SSR hints them beside the
+	// runtime script so they download with it (document-tail.ts `runtime_bootstrap_tags`). Only STATIC
+	// imports — its lazy chunks (the hydrate core) load on the first wake, never at boot.
+	test('records the runtime chunk’s static imports (not its lazy chunks) under its URL', () => {
+		const rt = '_app/immutable/og-runtime.9693b425f558-4b029c13.js';
+		const bundle = {
+			[rt]: {
+				type: 'chunk',
+				fileName: rt,
+				imports: ['_app/immutable/chunks/helper.js', '_app/immutable/chunks/shared.js'],
+				dynamicImports: ['_app/immutable/chunks/hydrate-core.js']
+			},
+			'_app/immutable/chunks/helper.js': { type: 'chunk', fileName: '_app/immutable/chunks/helper.js', imports: [] },
+			'_app/immutable/chunks/shared.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/chunks/shared.js',
+				imports: ['_app/immutable/chunks/helper.js']
+			},
+			'_app/immutable/chunks/hydrate-core.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/chunks/hydrate-core.js',
+				imports: ['_app/immutable/chunks/shared.js']
+			}
+		};
+		expect(collectIslandDepModulepreloads(bundle).js['/' + rt]).toEqual([
+			'/_app/immutable/chunks/helper.js',
+			'/_app/immutable/chunks/shared.js'
+		]);
+	});
+
 	test('dedupes cycles and skips the facade itself', () => {
 		const facade = '_app/immutable/og-region.ffffffffffff.js';
 		const bundle = {
@@ -80,17 +110,25 @@ describe('collectIslandDepModulepreloads', () => {
 		]);
 	});
 
-	test('ignores assets and non-island chunks', () => {
+	test('ignores assets; the runtime chunk gets only its js deps (a phantom import is skipped)', () => {
 		expect(
 			collectIslandDepModulepreloads({
 				'_app/immutable/foo.css': { type: 'asset', fileName: '_app/immutable/foo.css' },
 				'_app/immutable/og-runtime.abcdef123456.js': {
 					type: 'chunk',
 					fileName: '_app/immutable/og-runtime.abcdef123456.js',
-					imports: ['_app/immutable/x.js']
+					imports: ['_app/immutable/x.js'] // not an emitted chunk — never hinted
 				}
 			})
-		).toEqual({ js: {}, css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {}, contents: {} });
+		).toEqual({
+			js: { '/_app/immutable/og-runtime.abcdef123456.js': [] },
+			css: {},
+			page: {},
+			page_keys: {},
+			remotes: {},
+			interactivity: {},
+			contents: {}
+		});
 	});
 
 	// INTERACTIVITY FACTS (the profiler's wake advisor): counted over the island's OWN components

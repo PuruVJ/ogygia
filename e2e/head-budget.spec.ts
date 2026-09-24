@@ -79,6 +79,14 @@ test.describe('HEAD BUDGET: a csr=false page links only what it renders', () => 
 		check('direct island styled', (await outline('[data-hb-direct]')) === 'rgb(9, 176, 84)');
 		check('chosen registry block styled', (await outline('[data-hb-block="a"]')) === 'rgb(9, 176, 84)');
 		check('only block a rendered from the registry', (await page.locator('[data-hb-block]').count()) === 1);
+		// A `wake: 'load'` island does not replay a click made before it hydrates (only `interaction`
+		// islands capture one), and the server-rendered button is clickable at once — so wait for the
+		// wake, or the click races it (this failed ~2 in 5 on a fast machine, before any change).
+		const woke = await page
+			.waitForSelector('ogygia-region[data-hydrated] [data-hb-direct]', { timeout: 8000 })
+			.then(() => true)
+			.catch(() => false);
+		check('direct island hydrated', woke);
 		await page.locator('[data-hb-direct] button').click();
 		await page.waitForTimeout(200);
 		check(

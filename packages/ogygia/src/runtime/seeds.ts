@@ -31,9 +31,11 @@ import { parse_wire_text, wire_is_json } from './wire-format.js';
 import { page_state, set_page, reset_page, type PageSnapshot } from '../shims/page-store.svelte.js';
 import { install_page_defer, page_defer_revivers } from './page-defer.js';
 import { transport_decoders } from './app-transport.js';
-import { runtime_session } from './session.js';
-import { slots } from './slots.js';
-import { invalidate_hint_set } from './region-endpoint-url.js';
+import { boot_link, slots } from './slots.js';
+
+// The boot's session and hint-set reset, handed over through the registry — this lazy module (the
+// hydrate core's and the navigation's) never imports a boot module (./slots.ts `BootLink`).
+const session = () => boot_link().runtime_session;
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
@@ -129,8 +131,8 @@ function apply_remote_seed_text(text: string | null | undefined): void {
 // (emitted by `ogygiaHandle` on csr=false pages) exactly ONCE per document, before any island's
 // reused `Query` constructor reads `query_responses`. Cleared on SPA body swap.
 export function seed_remote_once(): void {
-	if (runtime_session.remote_seeded) return;
-	runtime_session.mark_remote_seeded();
+	if (session().remote_seeded) return;
+	session().mark_remote_seeded();
 	if (typeof document === 'undefined') return;
 	const el = document.querySelector(REMOTE_SEED_SELECTOR);
 	apply_remote_seed_text(el?.textContent);
@@ -138,8 +140,8 @@ export function seed_remote_once(): void {
 
 /** Document-level page seed (one script from ogygiaHandle) — once per document. */
 export function seed_page_once(): void {
-	if (runtime_session.page_seeded) return;
-	runtime_session.mark_page_seeded();
+	if (session().page_seeded) return;
+	session().mark_page_seeded();
 	if (typeof document === 'undefined') return;
 	const el = document.querySelector(PAGE_SEED_SELECTOR);
 	if (el) apply_page_seed(parse_page_seed(el));
@@ -159,10 +161,10 @@ export function apply_soft_invalidate_doc(doc: Document): void {
 	// Seed bag only — never clear_remote_instances() here (live Query/LiveQuery stay mounted).
 	slots.remoteSeeds?.clear_remote_seeds();
 	apply_remote_seed_text(doc.querySelector(REMOTE_SEED_SELECTOR)?.textContent);
-	runtime_session.mark_remote_seeded();
+	session().mark_remote_seeded();
 	// The incoming page seed: parsed once for this document (already, when the router preflighted).
 	apply_page_seed(page_seed_of(doc));
-	runtime_session.mark_page_seeded();
+	session().mark_page_seeded();
 }
 
 /**
@@ -173,9 +175,9 @@ export function apply_soft_invalidate_doc(doc: Document): void {
  * {@link finish_spa_document} after the swap.
  */
 export function prepare_spa_document(): void {
-	runtime_session.reset();
+	session().reset();
 	slots.remoteSeeds?.clear_remote_seeds();
-	invalidate_hint_set();
+	boot_link().invalidate_hint_set();
 	reset_page();
 }
 

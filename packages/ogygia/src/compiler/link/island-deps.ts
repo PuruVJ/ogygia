@@ -9,6 +9,8 @@ import { merge_page_keys, type PageKeys } from './page-keys.js';
 
 /** Deterministic island facade filename (content-hashed Vite deps are separate). */
 const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;
+/** The feature-selected runtime entry chunk (compiler `runtime_chunk_filename`). */
+const RUNTIME_CHUNK_RE = /(?:^|\/)og-runtime\.[0-9a-f-]+\.js$/;
 /** A Kit remote-function module (`*.remote.js` / `.ts`, Kit's `moduleExtensions` defaults), once
  *  its `?query` is stripped. In the CLIENT graph Kit swaps its body for fetching stubs, but the
  *  module keeps its file id — which is how an island's chunk closure names the remotes it can call. */
@@ -278,6 +280,17 @@ export function collectIslandDepModulepreloads(
 			}
 			if (acc) interactivity[entryUrl] = acc;
 		}
+	}
+	// THE RUNTIME's own static imports, keyed by its URL like an island's: the few chunks it shares
+	// with the rest of the app (Vite's preload helper, the modules Kit's client transport also uses).
+	// SSR hints them beside the runtime script (document-tail.ts `runtime_bootstrap_tags`) so they
+	// download with it, not one round trip after it is parsed.
+	for (const [key, chunk] of Object.entries(bundle)) {
+		if (chunk.type !== 'chunk') continue;
+		const fileName = chunk.fileName || key;
+		if (!RUNTIME_CHUNK_RE.test(fileName)) continue;
+		const entryUrl = fileName.startsWith('/') ? fileName : '/' + fileName;
+		js[entryUrl] = [...new Set(walk(fileName, new Set([fileName]), []))];
 	}
 	// WHAT IS INSIDE each chunk an island pulls (the profiler's Islands table): the bundler names
 	// shared chunks by hash, so the handoff keeps a readable summary of each one's source modules.

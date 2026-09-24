@@ -25,7 +25,7 @@ import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import type { RequestState } from '@sveltejs/kit/internal/server';
 import * as devalue from 'devalue';
 import { islands as island_modules, island_url } from 'virtual:ogygia/server-manifest';
-import { islandCss, fnManifest } from 'virtual:ogygia/island-deps';
+import { islandCss, islandDeps, fnManifest } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { REGION_BRAND } from './region-brand.js';
 import { secret } from 'virtual:ogygia/secret';
@@ -124,7 +124,7 @@ import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
 import { set_page_recorder, type PageSnapshot } from './page-seed-registry.js';
 import { collect_remote_seed } from './server/remote-seed-gate.js';
-import { DocumentTail, set_tail_reader } from './server/document-tail.js';
+import { DocumentTail, runtime_bootstrap_tags, set_tail_reader } from './server/document-tail.js';
 import { region_css_tag } from './server/region-css.js';
 import { set_late_recorder, set_late_taker, type LateRegion } from './late-region-registry.js';
 import {
@@ -1134,7 +1134,7 @@ class OgygiaHandle {
 			// baked base-LESS — so an island-LESS page under a non-root `base` loads the runtime too.
 			const runtime_tag =
 				router_enabled && runtime_url && !page_declares_runtime_script(probe)
-					? `<script type="module" data-ogygia-runtime src="${asset(runtime_url)}"></script>`
+					? runtime_bootstrap_tags(asset(runtime_url), islandDeps(runtime_url).map((d) => asset(d)))
 					: null;
 			const ordered = runtime_first(probe, runtime_tag);
 			if (ordered !== probe) head_out = ordered;

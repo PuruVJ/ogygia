@@ -11,6 +11,11 @@ import { KitBoot, kit_hydrates_page } from '../../src/runtime/kit-boot.js';
 import { observe, observer_count, once_visible } from '../../src/runtime/observe.js';
 import { page_state } from '../../src/shims/page-store.svelte.js';
 import { runtime_session } from '../../src/runtime/session.js';
+import { link_boot } from '../../src/runtime/boot-link.js';
+
+// Some checks below drive the seeds module before (or without) a boot: link the boot helpers it
+// reaches through the registry (runtime/slots.ts `BootLink`), as the boot would.
+link_boot();
 
 const HYDRATED = 'ogygia-region[data-hydrated]';
 const decode = (

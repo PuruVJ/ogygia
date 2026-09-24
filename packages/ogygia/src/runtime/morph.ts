@@ -72,6 +72,8 @@ const COMMENT = 8; // Node.COMMENT_NODE
 /** Feature entry: fill the `morph` slot (live static-region ticks morph in place). */
 export function install(): void {
 	slots.morph = morph_children;
+	// The navigation's body reconcile (./reconcile.ts) syncs attributes the same way, via the registry.
+	slots.sync_attributes = sync_attributes;
 }
 
 /**

@@ -16,6 +16,11 @@ import {
 import { reconcile_body, stamp_region_keys } from '../../src/runtime/reconcile.js';
 import { morph_children } from '../../src/runtime/morph.js';
 import { page_state } from '../../src/shims/page-store.svelte.js';
+import { link_boot } from '../../src/runtime/boot-link.js';
+
+// Some checks below drive the seeds / reconcile modules before (or without) a boot: link the boot
+// helpers they reach through the registry (runtime/slots.ts `BootLink`), as the boot would.
+link_boot();
 
 const HYDRATED = 'ogygia-region[data-hydrated]';
 const decode = (key: 'counter_seedref_ssr_b64' | 'seed_nav_a_html_b64' | 'seed_nav_b_html_b64') =>

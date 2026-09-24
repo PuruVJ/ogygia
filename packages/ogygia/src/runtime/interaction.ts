@@ -129,6 +129,9 @@ let installed = false;
 type Replay = typeof import('./interaction-replay.js');
 let replay_promise: Promise<Replay> | null = null;
 function replay(): Promise<Replay> {
+	// Link what the replay chunk uses from this module right where the chunk is loaded, so whoever
+	// loads it (the feature's arm, or a direct `arm_interaction`) has linked it (./slots.ts `BootLink`).
+	slots.interaction_link ??= { resolve_address };
 	return (replay_promise ??= import('./interaction-replay.js'));
 }
 

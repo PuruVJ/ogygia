@@ -21,6 +21,11 @@ const SVELTE_RUNTIME_MARKER = 'svelte.dev/e/';
 /** A string only the navigation chunk carries (the SPA fetch header). */
 const ROUTER_NAV_MARKER = 'x-ogygia-spa';
 const RUNTIME_RE = /\/og-runtime\.[^/]+\.js$/;
+/** A STATIC import in a built chunk: `import{…}from"./x.js"` / `import"./x.js"` (not `import(`). */
+const STATIC_IMPORT_RE = /(?:^|[;}\n])\s*import\s*(?:[\w*{}\s,$]+from\s*)?["']([^"']+)["']/g;
+/** The floor under Kit's `strict` entry signatures: the runtime + Vite's shared preload helper + the
+ *  modules Kit's client transport also uses (runtime/slots.ts `BootLink`). */
+const BOOT_FILE_BUDGET = 4;
 
 test.describe('lazy runtime chunks: hydrate core on first wake, navigation on first prefetch', () => {
 	test('boot fetches neither; the first wake fetches the hydrate core, the first hover the navigation', async ({
@@ -59,6 +64,27 @@ test.describe('lazy runtime chunks: hydrate core on first wake, navigation on fi
 			'boot: no fetched script is Svelte’s client runtime (it waits for the first wake)',
 			carrying(boot, SVELTE_RUNTIME_MARKER).length === 0,
 			carrying(boot, SVELTE_RUNTIME_MARKER).join('\n')
+		);
+
+		// THE BOOT IS AT THE FLOOR, AND ONE ROUND TRIP: the runtime chunk statically imports only the
+		// few chunks the rest of the app shares, and every one is modulepreloaded right beside the
+		// runtime script — so they download alongside it, not one round trip after it is parsed.
+		const runtime_src = await page.locator('script[data-ogygia-runtime]').getAttribute('src');
+		const runtime_url = new URL(runtime_src!, page.url()).href;
+		const runtime_code = await (await fetch(runtime_url)).text();
+		const static_imports = [...runtime_code.matchAll(STATIC_IMPORT_RE)].map((m) => new URL(m[1], runtime_url).href);
+		const hinted = await page
+			.locator('link[rel="modulepreload"][data-ogygia-runtime-dep]')
+			.evaluateAll((links) => links.map((l) => (l as HTMLLinkElement).href));
+		check(
+			`boot: the runtime + its static imports stay within ${BOOT_FILE_BUDGET} files`,
+			1 + static_imports.length <= BOOT_FILE_BUDGET,
+			static_imports.join('\n')
+		);
+		check(
+			'boot: every static import of the runtime is modulepreloaded beside it',
+			static_imports.every((u) => hinted.includes(u)),
+			`imports:\n${static_imports.join('\n')}\nhinted:\n${hinted.join('\n')}`
 		);
 
 		// The first wake: click the interaction island → the hydrate core + the island's chunk.

@@ -31,7 +31,7 @@
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';
-	import { document_tail, modulepreload_tag } from './server/document-tail.js';
+	import { document_tail, modulepreload_tag, runtime_bootstrap_tags } from './server/document-tail.js';
 	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
 	import { region_css_tag } from './server/region-css.js';
 	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
@@ -671,16 +671,14 @@
 	// (lakes render inside an island; held regions rely on an existing runtime). With the router on,
 	// the handle injects the same script on island-less pages — this is the with-islands path, and it
 	// keeps islands hydrating even when the router is off (`ogygia({ router: false })`).
+	// The runtime's own static imports (the chunks it shares with the rest of the app) ride along as
+	// modulepreload hints, so they download with it rather than after it (document-tail.ts).
 	const runtime_script =
 		!nested && ((is_island && !is_csr) || is_server) && claimRuntimeEmit()
-			? LT +
-				'script type="module" data-ogygia-runtime src="' +
-				asset(runtimeUrl) +
-				'"' +
-				GT +
-				LT +
-				'/script' +
-				GT +
+			? runtime_bootstrap_tags(
+					asset(runtimeUrl),
+					islandDeps(runtimeUrl).map((d) => asset(d))
+				) +
 				(hmrUrl
 					? LT +
 						'script type="module" data-ogygia-dev-hmr src="' +

@@ -14,16 +14,13 @@ import { hydrate, unmount, type Component } from 'svelte';
 import { set_current_region, set_foreign_hydrate } from '../current-region.js';
 import { capture_region_ids } from './region-ids.js';
 import NestedProvider from '../NestedProvider.svelte';
-import { kit_hydrates_page } from './kit-boot.js';
-import { ABSOLUTE_URL_SCHEME } from './region-endpoint-url.js';
 import { foreign_region_prop_revivers } from './foreign-props.js';
-import { props_sidecar_of } from './sidecar.js';
 import { SEED_REF_KEY, seed_ref_reviver } from '../seed-refs.js';
 import { parse_sidecar_text, seed_data_of, seed_page_once, seed_remote_once } from './seeds.js';
 import { is_deferred, ours_on_kit_document, region_ssr_truncated } from './region-attrs.js';
-import { slots, type LiftedLake } from './slots.js';
-import { parse_region_html } from './parse-html.js';
+import { boot_link, slots, type LiftedLake } from './slots.js';
 import { install as install_hydrate_features } from 'virtual:ogygia/hydrate-features';
+import { emit as dt_emit } from '../devtools/bus.js';
 // Re-exported for core's wake paths: observing Kit's reactive page needs Svelte, so it lives in this
 // lazy chunk, never in the boot's static graph (see core.ts `hydrate_core`).
 export { kit_page_thread } from './kit-page-thread.svelte.js';
@@ -32,7 +29,12 @@ export { kit_page_thread } from './kit-page-thread.svelte.js';
 // link/runtime-entry.ts) install as this chunk evaluates: before any island below can hydrate, and
 // without ever joining the boot. They ride this chunk's one `import()`, sized by the same marks.
 install_hydrate_features();
-import { emit as dt_emit } from '../devtools/bus.js';
+
+// The boot helpers this chunk uses, handed over through the registry — it never imports a boot
+// module (./slots.ts `BootLink`: a module both import is split out of the runtime chunk).
+const kit_hydrates_page = () => boot_link().kit_hydrates_page();
+const props_sidecar_of = (region: Element) => boot_link().props_sidecar_of(region);
+const parse_region_html = (html: string) => boot_link().parse_region_html(html);
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
@@ -394,7 +396,7 @@ const HEALED_WARNING =
 
 /** Is this entry another build's (fragment federation): absolute, different origin. */
 export function is_foreign_entry(entry: string): boolean {
-	return ABSOLUTE_URL_SCHEME.test(entry) && new URL(entry).origin !== location.origin;
+	return boot_link().ABSOLUTE_URL_SCHEME.test(entry) && new URL(entry).origin !== location.origin;
 }
 
 // The devalue revivers only depend on `slots.wire`, which is set once at boot and never changes.

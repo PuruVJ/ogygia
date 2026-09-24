@@ -88,7 +88,10 @@ export function dedupe_head_links(head: string): string {
 // of JavaScript the head carries (a `<script>`, or a `<link rel="modulepreload">` that fetches one),
 // and the `</head>` close. Same law as the predicates above: a literal `<script` / `<head` / `<link`,
 // one bounded `[^>]*` each, linear.
-const RUNTIME_SCRIPT_ELEMENT_RE = /<script\b[^>]*\bdata-ogygia-runtime\b[^>]*><\/script>/i;
+// …together with the modulepreload hints for its imports that follow it (document-tail.ts
+// `runtime_bootstrap_tags`): they move as one unit.
+const RUNTIME_SCRIPT_ELEMENT_RE =
+	/<script\b[^>]*\bdata-ogygia-runtime\b[^>]*><\/script>(?:<link\b[^>]*\bdata-ogygia-runtime-dep\b[^>]*>)*/i;
 const HEAD_OPEN_RE = /<head\b[^>]*>/i;
 const FIRST_JS_RE = /<script\b|<link\b[^>]*\brel=["']?modulepreload\b/i;
 const HEAD_CLOSE_RE = /<\/head\s*>/i;

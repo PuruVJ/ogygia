@@ -11,9 +11,8 @@
  * two `'*'` walks and a seed parse inside `startViewTransition`, on the frame the transition
  * captures.
  */
-import { KitBoot } from './kit-boot.js';
 import { PageCache } from './page-cache.js';
-import { slots } from './slots.js';
+import { boot_link, router_link, slots } from './slots.js';
 import { dispose_scope } from '../ref.js';
 import {
 	NO_RECONCILE_SELECTOR,
@@ -21,25 +20,30 @@ import {
 	stamp_region_keys,
 	swap_body
 } from './reconcile.js';
-import { regions_in_shadow } from './connected.js';
 import {
 	apply_soft_invalidate_doc,
 	finish_spa_document,
 	page_seed_of,
 	prepare_spa_document
 } from './seeds.js';
-import { runtime_session } from './session.js';
-import { is_warmed_module, warm_island_module } from './region-endpoint-url.js';
-import { yield_task } from './schedule.js';
-import {
-	document_key,
-	jump_to_hash,
-	push_state,
-	replace_state,
-	type SpaRouter
-} from './router.js';
+import type { SpaRouter } from './router.js';
 import { spa_html_cacheable } from './spa-cacheable.js';
 import { emit as dt_emit } from '../devtools/bus.js';
+
+// What this lazy chunk uses from the boot and from the router, handed over through the registry — it
+// never imports a boot module (./slots.ts `BootLink`: a module both import is split out of the runtime
+// chunk). The router's helpers exist only with the router feature; the MPA `invalidateAll` path (no
+// router) touches none of them.
+const KitBoot = { document_has: (doc: ParentNode) => boot_link().KitBoot.document_has(doc) };
+const regions_in_shadow = () => boot_link().regions_in_shadow();
+const session = () => boot_link().runtime_session;
+const is_warmed_module = (entry: string, base?: string) => boot_link().is_warmed_module(entry, base);
+const warm_island_module = (entry: string, base?: string) => boot_link().warm_island_module(entry, base);
+const yield_task = () => boot_link().yield_task();
+const document_key = (url: URL) => router_link().document_key(url);
+const jump_to_hash = (hash: string) => router_link().jump_to_hash(hash);
+const push_state = (state: unknown, url: string) => router_link().push_state(state, url);
+const replace_state = (state: unknown, url?: string) => router_link().replace_state(state, url);
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
@@ -642,7 +646,7 @@ export async function navigate(
 			reconcile_body(document.body, doc.body, slots.morph!);
 			dt_reconciled = true;
 			document.title = doc.title;
-			runtime_session.settle_lakes_in(document.body);
+			session().settle_lakes_in(document.body);
 		} else {
 			// FALLBACK (reconcile off, or a region nested in an open shadow root morph can't pierce):
 			// an outerSync body swap — keep the live <body> node (and everything attached to it),
@@ -656,7 +660,7 @@ export async function navigate(
 				});
 			swap_body(document.body, doc.body);
 			document.title = doc.title;
-			runtime_session.settle_lakes_in(document.body);
+			session().settle_lakes_in(document.body);
 			dispose_scope('page');
 		}
 		// STREAMED pages fetched over SPA nav arrive COMPLETE (fetch buffers the stream), so any
