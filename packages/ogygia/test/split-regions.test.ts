@@ -34,6 +34,18 @@ describe('classification', () => {
 	});
 });
 
+describe('tag names are case-insensitive, and whole names only', () => {
+	it('an upper-case region is a region; an upper-case raw-text element is skipped', () => {
+		expect(one('<OGYGIA-REGION entry="/e.js" wake="load"><p>x</p></Ogygia-Region>').kind).toBe('island');
+		expect(kinds('<SCRIPT>"<ogygia-region wake=load>"</SCRIPT><Style>/*<ogygia-region>*/</STYLE>')).toEqual([]);
+	});
+
+	it('a longer name that starts with a known one is not that tag', () => {
+		expect(kinds('<ogygia-regionx wake="load"></ogygia-regionx>')).toEqual([]);
+		expect(kinds('<scripts><ogygia-region entry="/e.js" wake="load"></ogygia-region></scripts>')).toEqual(['island']);
+	});
+});
+
 describe('spans', () => {
 	it('start / innerStart / innerEnd / end bracket the element and its inner HTML', () => {
 		const html = `<div><ogygia-region entry="/e.js" wake="load"><p>hi</p></ogygia-region></div>`;

@@ -151,11 +151,16 @@ export class DocumentTail {
 		}
 	}
 
+	/** The list already recorded for an entry, if any — a second instance of an island reuses it. */
+	graph_of(entry: string): readonly string[] | undefined {
+		return this.#graph.get(entry);
+	}
+
 	/** Record the chunks an island entry's code needs (the island graph — data, not hints: the
 	 *  runtime preloads them when the island wakes). One list per entry (first wins). With `fp`, the
 	 *  list is also remembered as that island's JS closure for the profiler. */
 	graph(entry: string, hrefs: readonly string[], fp?: string): void {
-		if (!this.#graph.has(entry)) this.#graph.set(entry, [...hrefs]);
+		if (!this.#graph.has(entry)) this.#graph.set(entry, hrefs);
 		if (fp) {
 			const s = this.#props.get(fp);
 			if (s && s.hints.length === 0) s.hints = [entry, ...hrefs];

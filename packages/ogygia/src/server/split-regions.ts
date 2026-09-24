@@ -90,7 +90,12 @@ function is_ascii_alpha(code: number): boolean {
  *  `/`), case-insensitive — so `ogygia-region-foo` or `styles` don't match a shorter tag. Callers
  *  pass the index of the tag name: for `<tag` that is `i + 1`, for `</tag` it is `i + 2`. */
 function name_at(html: string, name: number, tag: string): boolean {
-	if (html.slice(name, name + tag.length).toLowerCase() !== tag) return false;
+	// Char codes, case-folded by hand: this runs for tags all over a megabyte page, and a
+	// `slice().toLowerCase()` per check was a fresh string each time. `tag` is lower-case ASCII.
+	for (let k = 0; k < tag.length; k++) {
+		const c = html.charCodeAt(name + k);
+		if ((c >= 65 && c <= 90 ? c + 32 : c) !== tag.charCodeAt(k)) return false;
+	}
 	const after = html.charCodeAt(name + tag.length);
 	return Number.isNaN(after) || is_space(after) || after === 62 /* > */ || after === 47; /* / */
 }

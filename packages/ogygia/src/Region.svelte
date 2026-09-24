@@ -469,25 +469,45 @@
 	// hint in the HTML could promise none of that: it fetches when the parser meets it. Every wake
 	// gets its graph (the runtime knows at wake time what the server could only guess: a media query,
 	// a scroll). Only SSR knows the closure: the client knows just the entry URL.
-	const island_graph_hrefs = $derived.by(() => {
-		if (nested || !is_island || !island_module_url) return [];
+	/**
+	 * An island entry's graph: its chunks, as public URLs. Portable region-snippets riding the island's
+	 * props come alive via `import(desc.e)` at hydrate — their entries (+ deps) join the graph.
+	 * RENDER-GATED by construction: listed iff the island that carries the snippet rendered. The wire
+	 * plan found each descriptor's public entry URL in the payload (props-wire.ts).
+	 * @param {string} entry
+	 * @param {string} self_url
+	 * @param {readonly string[] | null | undefined} live_entries
+	 * @returns {string[]}
+	 */
+	function graph_hrefs(entry, self_url, live_entries) {
+		const deps = islandDeps(entry);
+		if (!live_entries?.length) return deps.map((dep) => asset(dep));
+		const seen = new Set([self_url]);
 		/** @type {string[]} */
 		const hrefs = [];
 		/** @param {string} href */
 		const add = (href) => {
-			if (href && href !== island_module_url && !hrefs.includes(href)) hrefs.push(href);
+			if (href && !seen.has(href)) {
+				seen.add(href);
+				hrefs.push(href);
+			}
 		};
-		for (const dep of islandDeps(island_entry)) add(asset(dep));
-		// Portable region-snippets riding THIS island's props come alive via `import(desc.e)` at
-		// hydrate — their entries (+ deps) join the graph. RENDER-GATED by construction: listed iff
-		// the island that carries the snippet actually rendered. The wire plan found each
-		// descriptor's public entry URL in the payload (props-wire.ts).
-		for (const m of island_wire?.live_entries ?? []) {
+		for (const dep of deps) add(asset(dep));
+		for (const m of live_entries) {
 			add(asset(m));
 			for (const dep of islandDeps(m)) add(asset(dep));
 		}
 		return hrefs;
-	});
+	}
+	// Per render it is ONE pass over the build's list: that list is already unique and never holds the
+	// entry itself (island-deps.ts), so only portable snippets (which may share chunks) need a dedupe,
+	// and that one is a Set. A big app's island lists a few hundred chunks; a quadratic dedupe here
+	// was the hottest ogygia frame in a 21-island page's server profile.
+	const island_graph_hrefs = $derived.by(() =>
+		nested || !is_island || !island_module_url
+			? []
+			: graph_hrefs(island_entry, island_module_url, island_wire?.live_entries)
+	);
 	// A csr=true document's island is woken by KIT, not the runtime: its client wrapper imports the
 	// entry lazily (Kit's static graph no longer reaches it), so there the HTML hint stays — a `load`
 	// island only, at `fetchpriority="low"` (document-tail.ts `modulepreload_tag`): nothing it
@@ -501,8 +521,12 @@
 		!!tail &&
 		untrack(() => {
 			if (island_kit_hint_hrefs.length) tail.hints(island_kit_hint_hrefs, island_fp);
-			else if (!is_csr && island_graph_hrefs.length)
-				tail.graph(island_module_url, island_graph_hrefs, island_fp);
+			else if (!is_csr && island_module_url) {
+				// The page lists an entry once: a second instance of the same island reuses the list the
+				// first one recorded instead of building it again.
+				const hrefs = tail.graph_of(island_module_url) ?? island_graph_hrefs;
+				if (hrefs.length) tail.graph(island_module_url, hrefs, island_fp);
+			}
 			return true;
 		});
 	const island_preload_head = $derived(
@@ -562,16 +586,9 @@
 	// A hydrating hole's island graph — the same data as `island_graph_hrefs`: the runtime preloads it
 	// when the hole's island wakes (phase 2, after its HTML landed). Every document: the runtime, not
 	// Kit, wakes a hole's island even on a csr=true page.
-	const server_graph_hrefs = $derived.by(() => {
-		if (nested || !__module || !__hydrate || !server_region_entry) return [];
-		/** @type {string[]} */
-		const hrefs = [];
-		for (const dep of islandDeps(__module)) {
-			const href = asset(dep);
-			if (href && href !== server_region_entry && !hrefs.includes(href)) hrefs.push(href);
-		}
-		return hrefs;
-	});
+	const server_graph_hrefs = $derived.by(() =>
+		nested || !__module || !__hydrate || !server_region_entry ? [] : graph_hrefs(__module, server_region_entry, null)
+	);
 	const server_fetch_preload = $derived.by(() => {
 		// Only `defer: 'load'`: start the endpoint fetch during HTML parse (warms the per-hole load).
 		if (nested || building || __defer !== 'load' || !server_endpoint) return '';
