@@ -77,6 +77,22 @@ function scan(file: string): { specs: string[]; runes: boolean } {
 	return { specs, runes };
 }
 
+/** Every source file in `entry`'s static graph (devtools excluded, like the walker below). */
+function static_files(entry: string): Map<string, string[]> {
+	const seen = new Map<string, string[]>();
+	const walk = (file: string, chain: string[]): void => {
+		if (seen.has(file)) return;
+		seen.set(file, chain);
+		for (const spec of scan(file).specs) {
+			if (!spec.startsWith('.') || spec.endsWith('.svelte')) continue;
+			const next = resolve(file, spec);
+			if (next && !next.startsWith(DEVTOOLS)) walk(next, [...chain, path.relative(SRC, next)]);
+		}
+	};
+	walk(entry, [path.relative(SRC, entry)]);
+	return seen;
+}
+
 /** Every chain from `entry` that ends in Svelte. */
 function svelte_chains(entry: string): string[] {
 	const seen = new Set<string>();
@@ -159,5 +175,41 @@ describe('the compiler splits features into two static phases', () => {
 		const plain = generateHydrateFeaturesSource({ complete: true, hydrate: ['load'], remoteSeeds: false }, '/rt');
 		expect(plain.features).toEqual([]); // a plain app ships none of them
 		expect(plain.code).toContain('export function install()');
+	});
+});
+
+// ISLAND-SIDE CODE NEVER IMPORTS A BOOT MODULE. Island code is bundled apart from the runtime (an
+// island chunk can load on a csr=true page where the runtime never boots), so a runtime module that
+// island code imports is SHARED between the two graphs: the bundler must keep it — and everything
+// the runtime's lazy chunks need from it — out of the runtime chunk. One `import … from
+// '../runtime/router.js'` in the navigation shim split the boot into a dozen files. Island-side code
+// reaches the running runtime through the navigation handle (runtime/nav-handle.ts) instead.
+describe('island-side modules reach the runtime only through its handles', () => {
+	const boot = new Map<string, string[]>();
+	for (const f of static_files(path.join(RUNTIME, 'core.ts'))) boot.set(...f);
+	for (const [, def] of Object.entries(FEATURES)) {
+		if ((def.phase ?? 'boot') !== 'boot') continue;
+		for (const f of static_files(resolve(path.join(RUNTIME, 'x.ts'), `./${def.module}`)!)) boot.set(...f);
+	}
+	// The modules island code is aliased to or imports directly (vite/paths.ts APP_SHIMS + the
+	// kit-remote client stub, and the public `ogygia/app`).
+	const ISLAND_SIDE = [
+		'shims/app-navigation.ts',
+		'shims/app-state.svelte.ts',
+		'shims/app-stores.ts',
+		'shims/kit-remote/client-stub.ts',
+		'app.ts'
+	];
+	for (const rel of ISLAND_SIDE) {
+		it(`${rel} imports no boot module`, () => {
+			const reached = static_files(path.join(SRC, rel));
+			const into_boot = [...reached].filter(([f]) => boot.has(f)).map(([, chain]) => chain.join(' > '));
+			expect(into_boot).toEqual([]);
+		});
+	}
+
+	it('the check is not vacuous: the boot set holds the router and the slots registry', () => {
+		expect(boot.has(path.join(RUNTIME, 'router.ts'))).toBe(true);
+		expect(boot.has(path.join(RUNTIME, 'slots.ts'))).toBe(true);
 	});
 });

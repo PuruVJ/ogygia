@@ -21,6 +21,7 @@ import {
 } from './region-attrs.js';
 import { slots } from './slots.js';
 import { KEEP_FALLBACK_HTML } from '../keep-fallback-marker.js';
+import { NAV_HANDLE_KEY, mpa_nav, publish_nav } from './nav-handle.js';
 import {
 	background_start,
 	hydrate_settled,
@@ -1187,6 +1188,9 @@ function apply_dev_head_region_css(): void {
 }
 
 export function boot(installers: Array<() => void> = []): void {
+	// The navigation handle island code reaches the runtime through (./nav-handle.ts): the MPA one
+	// first, which the router feature's install replaces with the SPA router's when it is present.
+	if (typeof document !== 'undefined' && !(NAV_HANDLE_KEY in globalThis)) publish_nav(mpa_nav());
 	for (const install of installers) install();
 
 	if (import.meta.env.DEV) apply_dev_head_region_css();

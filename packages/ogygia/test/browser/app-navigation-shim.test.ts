@@ -55,8 +55,46 @@ test('on a Kit-booted document, goto / invalidate / preload / the hooks go to Ki
 	expect(navigation.onNavigate).toHaveBeenCalledWith(on);
 });
 
-test('without the thread (a document ogygia owns) the ogygia router answers: same-origin only', () => {
-	// The ogygia router's own contract: a cross-origin goto without `external` throws — proof the
-	// call reached the router, not a Kit module.
+// On a document ogygia owns, every call goes to the RUNNING RUNTIME's navigation handle — never to a
+// router module the shim imports (island code importing the router split the runtime's boot into a
+// dozen files; runtime/nav-handle.ts).
+const NAV = Symbol.for('ogygia.nav');
+
+test('without the Kit thread, calls go to the runtime’s navigation handle', async () => {
+	const handle = {
+		goto: vi.fn(async () => {}),
+		invalidate: vi.fn(async () => {}),
+		invalidateAll: vi.fn(async () => {}),
+		preloadData: vi.fn(async () => ({ type: 'loaded' })),
+		preloadCode: vi.fn(async () => {}),
+		disableScrollHandling: vi.fn(),
+		pushState: vi.fn(),
+		replaceState: vi.fn(),
+		beforeNavigate: vi.fn(() => () => {}),
+		afterNavigate: vi.fn(() => () => {}),
+		bust_page_cache: vi.fn()
+	};
+	scope[NAV] = handle;
+	try {
+		await shim.goto('/somewhere', { replaceState: true });
+		expect(handle.goto).toHaveBeenCalledWith('/somewhere', { replaceState: true });
+		await shim.invalidateAll();
+		expect(handle.invalidateAll).toHaveBeenCalled();
+		await shim.preloadData('/next');
+		expect(handle.preloadData).toHaveBeenCalledWith('/next');
+		const before = () => {};
+		const off = shim.beforeNavigate(before);
+		expect(handle.beforeNavigate).toHaveBeenCalledWith(before);
+		expect(typeof off).toBe('function');
+		shim.bust_page_cache();
+		expect(handle.bust_page_cache).toHaveBeenCalled();
+	} finally {
+		delete scope[NAV];
+	}
+});
+
+test('with no runtime at all, the browser fallback keeps goto’s contract: same-origin only', () => {
+	delete scope[NAV];
+	// A cross-origin goto without `external` throws — the same contract the router's goto has.
 	expect(() => shim.goto('https://elsewhere.example/x')).toThrow(/same-origin/);
 });

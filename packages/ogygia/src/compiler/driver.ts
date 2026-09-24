@@ -935,16 +935,21 @@ export class Compiler {
 			// Ensure every host was walked (marks complete) before selecting features.
 			this.prescan();
 			const { code } = generateRuntimeEntrySource(program.runtime_marks, ctx.runtime_dir);
-			// og.$ factories register before any island hydrates (sync fn-ref resolution)
 			const ch = client_hooks_boot(ctx);
-			return `import ${JSON.stringify(V_FN_MANIFEST)};\n` + ch.imports + code + ch.call;
+			return ch.imports + code + ch.call;
 		}
 		if (id === RESOLVED(V_HYDRATE_FEATURES)) {
 			// The hydrate core's feature phase, from the same marks as the boot entry. Dev runs the
 			// kitchen-sink boot (`bootDev`), so it gets every hydrate-phase feature to match.
 			if (!ctx.is_build) return generateHydrateFeaturesSource({}, ctx.runtime_dir, true).code;
 			this.prescan();
-			return generateHydrateFeaturesSource(program.runtime_marks, ctx.runtime_dir).code;
+			// og.$ factories register before any island's props are revived (sync fn-ref resolution),
+			// i.e. with the hydrate core — not in the boot: the manifest reaches `ogygia/internal`, which
+			// island code imports too, and a module the boot shares with island code splits the boot.
+			return (
+				`import ${JSON.stringify(V_FN_MANIFEST)};\n` +
+				generateHydrateFeaturesSource(program.runtime_marks, ctx.runtime_dir).code
+			);
 		}
 		if (id === RESOLVED(V_RUNTIME)) {
 			// Dev sticky: kitchen-sink package entry. Build uses the hashed emitFile chunk. An EXPLICIT

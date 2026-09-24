@@ -283,8 +283,8 @@ describe('audit fixes — head_node_key', () => {
 
 describe('audit fixes — spa cache policy', () => {
 	it('refuses private/no-store/no-cache and Set-Cookie', async () => {
-		const { spa_html_cacheable, bust_page_cache, _page_cache_size } =
-			await import('../dist/runtime/router.js');
+		const { spa_html_cacheable } = await import('../dist/runtime/spa-cacheable.js');
+		const { bust_page_cache, _page_cache_size } = await import('../dist/runtime/router.js');
 		expect(spa_html_cacheable('public, max-age=60', false)).toBe(true);
 		expect(spa_html_cacheable('private, max-age=60', false)).toBe(false);
 		expect(spa_html_cacheable('no-store', false)).toBe(false);

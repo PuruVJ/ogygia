@@ -13,7 +13,7 @@
  */
 import { kit_hydrates_page } from './kit-boot.js';
 import { slots } from './slots.js';
-import { speculate_url } from './speculate-hint.js';
+import { publish_nav } from './nav-handle.js';
 
 const WS = /\s+/;
 
@@ -92,8 +92,6 @@ export type BeforeNavigateCallback = (nav: BeforeNavigation) => void;
 /** Callback registered with {@link afterNavigate}. */
 export type AfterNavigateCallback = (nav: AfterNavigation) => void;
 
-/** Responses that must never warm the SPA HTML cache (personalized / must revalidate). */
-const CC_UNCACHEABLE = /(?:^|,)\s*(?:private|no-store|no-cache)\b/i;
 
 // In this router a page's "code" is delivered by the HTML body swap (+ island chunks fetched on
 // connect), so BOTH `data-sveltekit-preload-data` and `-code` warm the SAME page-HTML cache. We
@@ -114,15 +112,6 @@ const PRELOAD_MARKED_ANCHORS =
 	'[data-sveltekit-preload-data] a[href], [data-sveltekit-preload-code] a[href], ' +
 	'a[href][data-sveltekit-preload-data], a[href][data-sveltekit-preload-code]';
 
-/**
- * Whether a fetch response may warm the SPA page-HTML cache.
- * @param cacheControl - Response `Cache-Control` header value.
- * @param setCookie - True if the response included `Set-Cookie`.
- * @returns False when the response is private / no-store / no-cache or set a cookie.
- */
-export function spa_html_cacheable(cacheControl: string, setCookie: boolean): boolean {
-	return !CC_UNCACHEABLE.test(cacheControl || '') && !setCookie;
-}
 
 /** Does the page hold an element the fragment points at? `#top` and an empty `#` mean "the top",
  *  which the browser handles. A fragment that matches nothing is an app-managed one (a table row
@@ -625,30 +614,18 @@ export function invalidate() {
 }
 
 /**
- * Warm the next page. Router ON (SPA): fetch the page into the swap-readable HTML cache (+ its
- * island modules) — this is what makes the eventual click instant, and no browser cache can feed a
- * body swap. Router OFF (MPA, this module reached via the `$app/navigation` shim / `ogygia/app`):
- * the browser owns navigation, so hint a native Speculation Rules PRERENDER for the URL — Chromium
- * activates it on the real navigation; unsupporting browsers silently ignore it.
+ * Warm the next page: fetch it into the swap-readable HTML cache (+ its island modules) — this is
+ * what makes the eventual click instant, and no browser cache can feed a body swap. (Router OFF —
+ * the browser owns navigation — is the MPA navigation handle's Speculation Rules hint, not this
+ * module: ./nav-handle.ts. This module only loads with the router feature.)
  */
 export function preloadData(url: string | URL) {
-	if (!slots.nav) {
-		speculate_url(url, 'prerender');
-		return Promise.resolve({ type: 'loaded' as const, status: 200, data: {} });
-	}
 	return spa.preloadData(url);
 }
 
-/**
- * Router ON: no-op — page “code” arrives with the HTML body swap (+ island chunks on connect).
- * Router OFF: hint a native Speculation Rules PREFETCH for the URL (the code-only speculation leg —
- * Firefox supports it; a prerender-capable browser treats prefetch as prerender's first stage).
- */
-export function preloadCode(url?: string | URL) {
-	if (!slots.nav) {
-		if (url != null) speculate_url(url, 'prefetch');
-		return Promise.resolve();
-	}
+/** No-op with the router on: page “code” arrives with the HTML body swap (+ island chunks on
+ *  connect). Router OFF is the MPA navigation handle's prefetch hint (./nav-handle.ts). */
+export function preloadCode(_url?: string | URL) {
 	return spa.preloadCode();
 }
 
@@ -689,9 +666,23 @@ export function startRouter() {
  */
 export function install() {
 	if (typeof document === 'undefined') return;
-	// Expose SPA nav to the kit-remote client stub (remote commands that navigate/invalidate) without
-	// that stub statically importing this module. Only set when the router feature is loaded.
 	slots.nav = { goto, invalidateAll };
+	// The SPA router's API is the document's navigation handle: island code (the `$app/navigation`
+	// shim, `ogygia/app`, the remote-functions client stub, the lifecycle hooks) reaches it there,
+	// never by importing this module (./nav-handle.ts explains why that matters).
+	publish_nav({
+		goto,
+		invalidate,
+		invalidateAll,
+		preloadData,
+		preloadCode,
+		disableScrollHandling,
+		pushState,
+		replaceState,
+		beforeNavigate,
+		afterNavigate,
+		bust_page_cache
+	});
 	const start = () => {
 		if (!document.querySelector('meta[name="ogygia-router"]')) return;
 		if (kit_hydrates_page()) return;

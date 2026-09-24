@@ -36,9 +36,9 @@ import {
 	jump_to_hash,
 	push_state,
 	replace_state,
-	spa_html_cacheable,
 	type SpaRouter
 } from './router.js';
+import { spa_html_cacheable } from './spa-cacheable.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.

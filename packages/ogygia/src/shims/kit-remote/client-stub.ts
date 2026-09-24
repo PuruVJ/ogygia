@@ -2,7 +2,7 @@
 // Provides exactly what those modules read — WITHOUT pulling Kit's router graph.
 import { parse } from 'devalue';
 import { transport } from 'virtual:ogygia/transport';
-import { slots } from '../../runtime/slots.js';
+import type { NavHandle } from '../../runtime/nav-handle.js';
 import { query_responses, prerender_responses, query_map, live_query_map } from './remote-cache.js';
 
 export { query_responses, prerender_responses, query_map, live_query_map };
@@ -13,18 +13,23 @@ export const app = {
 	decoders: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, v.decode])),
 	encoders: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, v.encode]))
 };
-// Read the router's nav via the `slots` registry instead of statically importing `router.js` (~10 KB).
-// The router feature fills `slots.nav` when it loads; if no router is present (no `<Router/>`, no SPA
-// nav — like every app that just seeds a remote query), fall back to a full-page navigation. This is
-// what keeps router out of every app that doesn't route.
+// Reach the running runtime's navigation through its handle (runtime/nav-handle.ts) — never by
+// importing a runtime module: this stub is island-side code (Kit's remote-function modules import
+// it), and an import into the runtime would make that module shared between the two graphs and
+// split the runtime's boot. The handle is the SPA router's API, or the MPA one under
+// `router: false`; with no ogygia runtime on the document at all, the browser navigates.
+const nav = () =>
+	(globalThis as unknown as Record<symbol, NavHandle | undefined>)[Symbol.for('ogygia.nav')] ?? null;
 export function goto(url: string | URL) {
-	if (slots.nav) return slots.nav.goto(url);
+	const n = nav();
+	if (n) return n.goto(url);
 	location.href = String(url);
 	return Promise.resolve();
 }
 export const _goto = goto;
 export function invalidateAll() {
-	if (slots.nav) return slots.nav.invalidateAll();
+	const n = nav();
+	if (n) return n.invalidateAll();
 	location.reload();
 	return Promise.resolve();
 }
