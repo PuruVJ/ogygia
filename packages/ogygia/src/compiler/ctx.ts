@@ -63,8 +63,6 @@ export interface CompileCtxInit {
 	is_dev: boolean;
 	id_salt: string;
 	visibleMargin: string | undefined;
-	/** `ogygia({ regions: { preload } })` — which islands get modulepreload hints in the SSR HTML. */
-	preload_policy: 'all' | 'load' | 'none';
 	presets: Record<string, unknown>;
 	import_keys: ImportKeys;
 	/** Resolved Vite aliases (used by the `bake` macro to bundle the imports a baked fn touches). */
@@ -118,7 +116,6 @@ export class CompileCtx {
 	readonly is_dev: boolean;
 	readonly id_salt: string;
 	readonly visibleMargin: string | undefined;
-	readonly preload_policy: 'all' | 'load' | 'none';
 	readonly presets: Record<string, unknown>;
 	readonly import_keys: ImportKeys;
 	readonly resolve_alias: unknown[];
@@ -160,7 +157,6 @@ export class CompileCtx {
 		this.is_dev = init.is_dev;
 		this.id_salt = init.id_salt;
 		this.visibleMargin = init.visibleMargin;
-		this.preload_policy = init.preload_policy;
 		this.presets = init.presets;
 		this.import_keys = init.import_keys;
 		this.resolve_alias = init.resolve_alias;

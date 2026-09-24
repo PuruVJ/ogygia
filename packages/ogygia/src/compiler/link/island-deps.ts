@@ -461,15 +461,10 @@ export function collect_inline_css(
 export function island_deps_module(
 	ssr: boolean,
 	is_dev: boolean,
-	out_dir_rel = '.svelte-kit',
-	preload_policy: 'all' | 'load' | 'none' = 'load'
+	out_dir_rel = '.svelte-kit'
 ): string {
-	// `ogygia({ regions: { preload } })`, read by Region.svelte when it emits an island's hints:
-	// 'load' hints only load-woken islands; 'all' hints every island (the rest at low priority);
-	// 'none' hints nothing.
-	const policy = `export const preloadPolicy = ${JSON.stringify(preload_policy)};\n`;
 	if (!ssr)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -479,9 +474,8 @@ export function island_deps_module(
 	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
 	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `${policy}export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
 	return (
-		policy +
 		`import fs from 'node:fs';\n` +
 		`import path from 'node:path';\n` +
 		`import { fileURLToPath } from 'node:url';\n` +

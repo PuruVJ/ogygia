@@ -33,6 +33,7 @@ import {
 	unregister_region
 } from './schedule.js';
 import { once_visible } from './observe.js';
+import { preload_island_graph } from './island-graph-preload.js';
 import { connected_regions } from './connected.js';
 import { restore_props_sidecar } from './sidecar.js';
 import { hole_facts_of } from './hole-facts.js';
@@ -167,9 +168,11 @@ function arm_on_demand(region: Element, fire: () => void): void {
 		document.addEventListener(type, on_demand_event, { capture: true, passive: true });
 }
 
-/** Load a hydrate island module from `<ogygia-region entry>` (dev + prod). */
+/** Load a hydrate island module from `<ogygia-region entry>` (dev + prod), its whole chunk graph
+ *  preloaded in the same task so nothing waits on a discovery waterfall (island-graph-preload.ts). */
 const load_island = (entry: string) => {
 	const url = island_module_url(entry);
+	preload_island_graph(entry);
 	return import(/* @vite-ignore */ url) as Promise<IslandModule>;
 };
 
@@ -515,11 +518,10 @@ class OgygiaRegion extends HTMLElement {
 		// the queue knows where it stands (schedule.ts).
 		if (!deferred) register_region(this);
 		// A `visible` island fetches its code when it intersects — `visible.margin` is the lead time —
-		// and not before: the `'load'` preload policy promises "nothing downloads before there is a
-		// reason to", and an idle-time `import()` here broke that promise for every visible island on
-		// the page (a customer home page downloaded 1.1 MB of below-the-fold island code one second
-		// after load, for islands the visitor might never scroll to). A page that wants every island's
-		// bytes early says so: `regions.preload: 'all'` hints them from the HTML at low priority.
+		// and not before: nothing downloads before there is a reason to, and an idle-time `import()`
+		// here broke that for every visible island on the page (a customer home page downloaded 1.1 MB
+		// of below-the-fold island code one second after load, for islands the visitor might never
+		// scroll to). At the wake its whole graph downloads at once (island-graph-preload.ts).
 		if (deferred) this.#arm(when, this.#fire_server, false);
 		else this.#arm(when, this.#fire_hydrate, true);
 		// `prefetch="<schedule>"`: a deferred hole warms its HTML on a second, EARLIER schedule
@@ -616,7 +618,7 @@ class OgygiaRegion extends HTMLElement {
 		// starts no earlier than Kit would start hydrating: after DOMContentLoaded and one painted frame
 		// (schedule.ts `after_document_painted`) — every schedule but `interaction`. The runtime boots
 		// before DOMContentLoaded, and background priority does not hold back the network, so without
-		// this a `load`, `idle`, media or above-the-fold `visible` island's code downloads beside the
+		// this a `load`,  `idle`, media or above-the-fold `visible` island's code downloads beside the
 		// page's own first paint. A hole's HTML is not gated (it is page content, not code); neither is
 		// a Kit document, where Kit's own start already sets the pace.
 		const gated = loads_code && !kit_hydrates_page();

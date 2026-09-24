@@ -34,6 +34,7 @@
 import type { SeedIndex } from '../seed-refs.js';
 import { escape_script_text } from '../escape.js';
 import { HOLES_SCRIPT_TYPE } from '../holes-record.js';
+import { ISLAND_GRAPH_ATTR, encode_island_graph } from '../island-graph.js';
 import { props_sidecar, type WireText } from './props-wire.js';
 import type { HoleStat, IslandInteractivity, IslandStat } from './request-stats.js';
 
@@ -95,6 +96,22 @@ export function runtime_bootstrap_tags(src: string, deps: readonly string[]): st
 	return html;
 }
 
+/**
+ * The island graph (island-graph.ts) as one inert JSON script: entry → the chunks its code needs.
+ * The runtime turns an entry's list into modulepreload links when that island wakes. Empty map →
+ * no script.
+ */
+export function island_graph_script(graph: ReadonlyMap<string, readonly string[]>): string {
+	if (graph.size === 0) return '';
+	return (
+		'<script type="application/json" ' +
+		ISLAND_GRAPH_ATTR +
+		'>' +
+		escape_script_text(encode_island_graph(graph)) +
+		'</script>'
+	);
+}
+
 /** The holes record (`hole()`), read by runtime/hole-facts.ts. */
 const HOLES_SCRIPT_OPEN = `<script type="${HOLES_SCRIPT_TYPE}" data-ogygia-holes>`;
 const HOLES_SCRIPT_CLOSE = '</script>';
@@ -117,6 +134,7 @@ export type HoleRecord = {
 
 export class DocumentTail {
 	readonly #hints = new Set<string>();
+	readonly #graph = new Map<string, readonly string[]>();
 	readonly #props = new Map<string, Sidecar>();
 	readonly #holes = new Map<string, HoleRecord>();
 	readonly #hole_notes = new Map<string, HoleStat>();
@@ -130,6 +148,17 @@ export class DocumentTail {
 		if (fp) {
 			const s = this.#props.get(fp);
 			if (s && s.hints.length === 0) s.hints = [...hrefs];
+		}
+	}
+
+	/** Record the chunks an island entry's code needs (the island graph — data, not hints: the
+	 *  runtime preloads them when the island wakes). One list per entry (first wins). With `fp`, the
+	 *  list is also remembered as that island's JS closure for the profiler. */
+	graph(entry: string, hrefs: readonly string[], fp?: string): void {
+		if (!this.#graph.has(entry)) this.#graph.set(entry, [...hrefs]);
+		if (fp) {
+			const s = this.#props.get(fp);
+			if (s && s.hints.length === 0) s.hints = [entry, ...hrefs];
 		}
 	}
 
@@ -174,21 +203,24 @@ export class DocumentTail {
 	}
 
 	get empty(): boolean {
-		return this.#hints.size === 0 && this.#props.size === 0 && this.#holes.size === 0;
+		return (
+			this.#hints.size === 0 && this.#graph.size === 0 && this.#props.size === 0 && this.#holes.size === 0
+		);
 	}
 
-	/** Hint count + sidecar count + hole-record count, for tests and devtools. */
-	get size(): { hints: number; props: number; holes: number } {
-		return { hints: this.#hints.size, props: this.#props.size, holes: this.#holes.size };
+	/** Hint count + graph entry count + sidecar count + hole-record count, for tests and devtools. */
+	get size(): { hints: number; graph: number; props: number; holes: number } {
+		return { hints: this.#hints.size, graph: this.#graph.size, props: this.#props.size, holes: this.#holes.size };
 	}
 
-	/** The tail's HTML: hints, then props (each rendered now, against `seed`), then the holes
-	 *  record (one script, JSON, `<`-escaped). Empty string when nothing was recorded. With
+	/** The tail's HTML: hints, the island graph, then props (each rendered now, against `seed`), then
+	 *  the holes record (one script, JSON, `<`-escaped). Empty string when nothing was recorded. With
 	 *  `detail`, the per-island rows (bytes, lane, references, the devalue culprit) are kept for
 	 *  the profiler — a little extra work, only while it records. */
 	render(seed: SeedIndex | null = null, detail = false): string {
 		let out = '';
 		for (const href of this.#hints) out += modulepreload_tag(href);
+		out += island_graph_script(this.#graph);
 		const rows: IslandStat[] | null = detail ? [] : null;
 		for (const [fp, s] of this.#props) {
 			const w = s.wire.wire(seed);

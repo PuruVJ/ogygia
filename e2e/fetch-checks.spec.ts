@@ -1,5 +1,5 @@
 // Node fetch-based SSR assertions. Usage: pnpm exec playwright test fetch-checks
-import { test, check } from './fixtures/index.ts';
+import { test, check, island_graph } from './fixtures/index.ts';
 import { ISLAND_HINT_G_RE, KIT_MARKER_RE, REGION_OPEN_G_RE, RUNTIME_SCRIPT_TAG_G_RE } from './fixtures/re.ts';
 
 const COUNT_10_RE = /count is 10/;
@@ -71,18 +71,18 @@ test.describe('SSR island HTML, no Kit bootstrap', () => {
 			`${count(html, RUNTIME_BOOTSTRAP_G_RE)}`
 		);
 		{
-			// Hints ride the DOCUMENT TAIL on a Kit page (after the content, before the seeds), never
-			// the head — a head hint fires while the HTML streams and competes with the hero image.
-			const head = html.slice(0, html.indexOf('</head>'));
+			// No island code hint anywhere in the HTML: each island's chunk list rides the DOCUMENT TAIL
+			// as data (the island graph), and the runtime preloads it when the island wakes.
 			const body_end = html.lastIndexOf('</body>');
 			const last_region = html.lastIndexOf('</ogygia-region>');
-			const first_hint = html.search(MODULEPRELOAD_RE);
-			check('/ NO modulepreload hint in <head>', !MODULEPRELOAD_RE.test(head));
+			const graph_at = html.indexOf('data-ogygia-graph');
+			check('/ NO island modulepreload hint in the HTML', !MODULEPRELOAD_RE.test(html));
 			check(
-				'/ hydrate=load modulepreload(s) in the document tail (after the last island, before </body>)',
-				first_hint > last_region && first_hint < body_end,
-				`hint at ${first_hint}, last region at ${last_region}, body end at ${body_end}`
+				'/ the island graph sits in the document tail (after the last island, before </body>)',
+				graph_at > last_region && graph_at < body_end,
+				`graph at ${graph_at}, last region at ${last_region}, body end at ${body_end}`
 			);
+			check('/ the island graph lists the page’s islands', island_graph(html).size > 0);
 		}
 		check('/ NO Kit __sveltekit bootstrap', !KIT_MARKER_RE.test(html));
 		check('/ NO Kit entry/start script', !KIT_ENTRY_START_RE.test(html));

@@ -24,14 +24,14 @@
 	import { stringify } from 'devalue';
 	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
-	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity, preloadPolicy } from 'virtual:ogygia/island-deps';
+	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity } from 'virtual:ogygia/island-deps';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of } from './runtime/hash.js';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';
-	import { document_tail, modulepreload_tag, runtime_bootstrap_tags } from './server/document-tail.js';
+	import { document_tail, island_graph_script, modulepreload_tag, runtime_bootstrap_tags } from './server/document-tail.js';
 	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
 	import { region_css_tag } from './server/region-css.js';
 	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
@@ -462,65 +462,57 @@
 		island_props_tail || !island_wire ? '' : props_sidecar(island_fp, island_wire.wire(null))
 	);
 
-	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
-	// `wake: 'visible'` / `wake: 'interaction'` (under `preload: 'all'`) — the SAME hints. All of
-	// them ride at `fetchpriority="low"`: the bytes never contend with critical work, the module map
-	// is warm, and the later `import()` (visible's idle warm, interaction's hover warm, or the real
-	// wake) is a pure cache hit — modulepreload compiles into the module map with module CORS
-	// semantics, never a double fetch. Execution still waits for the schedule; only bytes move early.
-	// Only SSR can do this: the client knows just the facade URL; the dep closure lives in the
-	// islandDeps manifest. Browsers without fetchpriority ignore the attribute (normal priority).
-	// Media-query wakes stay unhinted — the server can't know the viewport, so downloading would be
-	// a blind bet.
-	// `ogygia({ regions: { preload } })` — 'load' (the default) hints only load-woken islands: a
-	// `visible` island fetches when it intersects (its margin is the lead time), `interaction` on
-	// the hover/focus/touch warm-up, so no bytes move before there is a reason to. 'all' restores
-	// the background hints for every island; 'none' hints nothing (a load island fetches on import).
-	// The hrefs to hint, in order; the tail takes them as they are, the head gets them as tags.
-	const island_preload_hrefs = $derived.by(() => {
-		// Inline on a csr=true document too: the client wrapper imports the entry lazily there (Kit's
-		// static graph no longer reaches it), so the hint is what keeps the wake off the critical path.
+	// THE ISLAND GRAPH (island-graph.ts): the chunks this island's code needs, as DATA. The runtime
+	// turns the list into modulepreload links when the island WAKES — after the wake gate, for exactly
+	// this island, beside its `import()` — so its whole graph downloads in parallel the moment it may
+	// start, nothing lands in the paint window, and an island that never wakes downloads nothing. A
+	// hint in the HTML could promise none of that: it fetches when the parser meets it. Every wake
+	// gets its graph (the runtime knows at wake time what the server could only guess: a media query,
+	// a scroll). Only SSR knows the closure: the client knows just the entry URL.
+	const island_graph_hrefs = $derived.by(() => {
 		if (nested || !is_island || !island_module_url) return [];
-		if (preloadPolicy === 'none') return [];
-		if (hydrate_attr !== 'load' && hydrate_attr !== 'visible' && hydrate_attr !== 'interaction')
-			return [];
-		if (preloadPolicy !== 'all' && hydrate_attr !== 'load') return [];
-		// EVERY hint is `fetchpriority="low"`, the `load` island's included. A hint's job is discovery
-		// (no parse-then-import waterfall), not priority: nothing an island downloads is needed for
-		// first paint — the server painted the content — so island code must never outrank the CSS
-		// and the LCP image. At normal priority a header island with a 1.7 MB closure pushed a 79 KB
-		// hero from 1 s to 5 s on a 1.6 Mbps line; at low the chunk still lands before the runtime
-		// (which waits for the document to parse) asks for it on any normal line. There is no other
-		// priority anywhere: the head dedupe and the runtime's hint lookup know only "hinted or not".
-		const hrefs = [island_module_url];
-		const add_with_deps = (entry, url) => {
-			const own = url ? asset(url) : '';
-			if (own && !hrefs.includes(own)) hrefs.push(own);
-			for (const dep of islandDeps(entry)) {
-				const href = asset(dep);
-				if (href && !hrefs.includes(href)) hrefs.push(href);
-			}
+		/** @type {string[]} */
+		const hrefs = [];
+		/** @param {string} href */
+		const add = (href) => {
+			if (href && href !== island_module_url && !hrefs.includes(href)) hrefs.push(href);
 		};
-		add_with_deps(island_entry, '');
+		for (const dep of islandDeps(island_entry)) add(asset(dep));
 		// Portable region-snippets riding THIS island's props come alive via `import(desc.e)` at
-		// hydrate — preload their entries (+ deps) in the same breath. RENDER-GATED by construction:
-		// the link exists iff the island that carries the snippet actually rendered (the compiler's
-		// old static-scan emission preloaded every portable candidate in the host, rendered or not).
-		// The wire plan found each descriptor's public entry URL in the payload (props-wire.ts).
-		for (const m of island_wire?.live_entries ?? []) add_with_deps(m, m);
+		// hydrate — their entries (+ deps) join the graph. RENDER-GATED by construction: listed iff
+		// the island that carries the snippet actually rendered. The wire plan found each
+		// descriptor's public entry URL in the payload (props-wire.ts).
+		for (const m of island_wire?.live_entries ?? []) {
+			add(asset(m));
+			for (const dep of islandDeps(m)) add(asset(dep));
+		}
 		return hrefs;
 	});
-	// Hints ride the document tail on a Kit page (see `tail` above); in the head everywhere else.
-	const island_preload_tail =
+	// A csr=true document's island is woken by KIT, not the runtime: its client wrapper imports the
+	// entry lazily (Kit's static graph no longer reaches it), so there the HTML hint stays — a `load`
+	// island only, at `fetchpriority="low"` (document-tail.ts `modulepreload_tag`): nothing it
+	// downloads is needed for first paint, so it must never outrank the CSS and the LCP image.
+	const island_kit_hint_hrefs = $derived(
+		is_csr && hydrate_attr === 'load' && island_module_url ? [island_module_url, ...island_graph_hrefs] : []
+	);
+	// Both ride the document tail on a Kit page (see `tail` above); the head everywhere else, so a
+	// self-contained render root carries its own.
+	const island_graph_tail =
 		!!tail &&
 		untrack(() => {
-			const hrefs = island_preload_hrefs;
-			if (!hrefs.length) return false;
-			tail.hints(hrefs, island_fp);
+			if (island_kit_hint_hrefs.length) tail.hints(island_kit_hint_hrefs, island_fp);
+			else if (!is_csr && island_graph_hrefs.length)
+				tail.graph(island_module_url, island_graph_hrefs, island_fp);
 			return true;
 		});
 	const island_preload_head = $derived(
-		island_preload_tail ? '' : island_preload_hrefs.map(modulepreload_tag).join('')
+		island_graph_tail
+			? ''
+			: island_kit_hint_hrefs.length
+				? island_kit_hint_hrefs.map(modulepreload_tag).join('')
+				: !is_csr && island_graph_hrefs.length
+					? island_graph_script(new Map([[island_module_url, island_graph_hrefs]]))
+					: ''
 	);
 
 	// ─────────────────────────────────────────────────────────── server branch ──
@@ -567,28 +559,16 @@
 	if (tail && is_server && !nested)
 		tail.note_hole(__entry, __defer, __hydrate || null, __cacheTtl || 0, island_component?.name ?? '', __props);
 
-	const server_wants_modulepreload = $derived(
-		!!__module &&
-			!!__hydrate &&
-			(__hydrate === 'load' ||
-				__hydrate === __defer ||
-				__hydrate === 'visible' ||
-				__hydrate === 'interaction')
-	);
-	const server_modulepreload_hrefs = $derived.by(() => {
-		if (nested || !server_wants_modulepreload || !server_region_entry) return [];
-		if (preloadPolicy === 'none') return [];
-		// Same low-priority background hints as `island_preload_hrefs` for a phase-2 `visible`/
-		// `interaction` hydrate — and the same `regions.preload` policy: under 'load' only a phase-2
-		// that wakes as soon as the HTML lands (`load`, or matching the fetch schedule) is hinted.
-		const background =
-			(__hydrate === 'visible' || __hydrate === 'interaction') && __hydrate !== __defer;
-		if (background && preloadPolicy !== 'all') return [];
-		// Low for every hint — see `island_preload_hrefs`.
-		const hrefs = [server_region_entry];
+	// A hydrating hole's island graph — the same data as `island_graph_hrefs`: the runtime preloads it
+	// when the hole's island wakes (phase 2, after its HTML landed). Every document: the runtime, not
+	// Kit, wakes a hole's island even on a csr=true page.
+	const server_graph_hrefs = $derived.by(() => {
+		if (nested || !__module || !__hydrate || !server_region_entry) return [];
+		/** @type {string[]} */
+		const hrefs = [];
 		for (const dep of islandDeps(__module)) {
 			const href = asset(dep);
-			if (href && !hrefs.includes(href)) hrefs.push(href);
+			if (href && href !== server_region_entry && !hrefs.includes(href)) hrefs.push(href);
 		}
 		return hrefs;
 	});
@@ -599,18 +579,18 @@
 		return LT + 'link rel="preload" as="fetch" crossorigin="anonymous" href="' + href_attr + '"' + GT;
 	});
 	// The fetch preload STAYS in the head: it starts the hole's content request during the HTML parse
-	// (content, not island code). Only the module hints ride the tail.
-	const server_modulepreload_tail =
+	// (content, not island code). The island graph rides the tail.
+	const server_graph_tail =
 		!!tail &&
 		untrack(() => {
-			const hrefs = server_modulepreload_hrefs;
-			if (!hrefs.length) return false;
-			tail.hints(hrefs);
+			if (server_graph_hrefs.length) tail.graph(server_region_entry, server_graph_hrefs);
 			return true;
 		});
 	const server_preload = $derived(
 		server_fetch_preload +
-			(server_modulepreload_tail ? '' : server_modulepreload_hrefs.map(modulepreload_tag).join(''))
+			(server_graph_tail || !server_graph_hrefs.length
+				? ''
+				: island_graph_script(new Map([[server_region_entry, server_graph_hrefs]])))
 	);
 
 	// ───────────────────────────────────────────────────────────── lake branch ──

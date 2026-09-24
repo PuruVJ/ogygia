@@ -37,14 +37,11 @@ test.describe("wake:'interaction' — cold until used, click replay, typing surv
 		await page.goto('/interaction', { waitUntil: 'networkidle' });
 		await page.waitForTimeout(300);
 		const entryFile = interaction_entry.split('/').pop() ?? '@@none@@';
-		// `regions.preload` defaults to 'load': an interaction island's bytes are NOT hinted at load
-		// (no `fetchpriority="low"` modulepreload, no background fetch) — the hover / focus / touch
-		// warm-up below fetches the chunk on intent, and the first click is still replayed. With
-		// `regions: { preload: 'all' }` the hint and the background fetch come back.
-		const hint = await page
-			.locator(`link[rel="modulepreload"][fetchpriority="low"][href*="${entryFile}"]`)
-			.count();
-		check('cold: no background modulepreload hint for the interaction chunk (preload: load)', hint === 0);
+		// An interaction island's bytes do not move before intent: no modulepreload for its chunk, no
+		// background fetch — the hover / focus / touch warm-up below fetches it (with its whole graph,
+		// island-graph-preload.ts), and the first click is still replayed.
+		const hint = await page.locator(`link[rel="modulepreload"][href*="${entryFile}"]`).count();
+		check('cold: no modulepreload for the interaction chunk', hint === 0);
 		check(
 			'cold: chunk NOT fetched before intent',
 			!fetched.some((u) => u.includes(entryFile)),

@@ -5,6 +5,7 @@
 // name and extra, and the test fails once at the end — so a migrated spec reads the same as the
 // script it replaced, with Playwright's report, traces, and fixtures around it.
 import { test as base, expect, type Page } from '@playwright/test';
+import { ISLAND_GRAPH_SCRIPT_G_RE } from './re.ts';
 
 export { expect };
 export const test = base;
@@ -15,6 +16,17 @@ export function check(name: string, cond: unknown, extra = ''): void {
 }
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Every island graph script in a page's HTML, merged: entry → the chunks its code needs
+ *  (src/island-graph.ts wire shape `{h:[href…], e:{entry:[index…]}}`). */
+export function island_graph(html: string): Map<string, string[]> {
+	const out = new Map<string, string[]>();
+	for (const m of html.matchAll(ISLAND_GRAPH_SCRIPT_G_RE)) {
+		const wire = JSON.parse(m[1]) as { h: string[]; e: Record<string, number[]> };
+		for (const [entry, ids] of Object.entries(wire.e)) if (!out.has(entry)) out.set(entry, ids.map((i) => wire.h[i]));
+	}
+	return out;
+}
 
 type StampWindow = Window & { __og_e2e_stamp?: number };
 

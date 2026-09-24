@@ -8,7 +8,7 @@
 // the crossed copy's body is written (a customer build died on `const_tag_invalid_placement`). The
 // build of this page is the regression; the const's value must reach the crossed copy too.
 // Usage: pnpm exec playwright test portable-snippet
-import { test, check } from './fixtures/index.ts';
+import { test, check, island_graph } from './fixtures/index.ts';
 import { BUMPER_5_RE, PORTABLE_BAR_RE } from './fixtures/re.ts';
 
 const OGYGIA_REF_RE = /\["OgygiaRef"/;
@@ -17,6 +17,7 @@ const OGYGIA_SNIPPET_RE = /ogygia-snippet/;
 const GH_ADA_RE = /GitHub · Ada/;
 const CONST_ENABLED_RE = /data-enabled="true"/;
 const MODULEPRELOAD_RE = /rel="modulepreload"[^>]*og-region/;
+const PORTABLE_ENTRY_RE = /og-region\.[^/]+\.js$/;
 
 test.describe('a snippet forwarded THROUGH a plain shell into an island crosses + comes alive', () => {
 	test('SSR', async ({ baseURL }) => {
@@ -40,8 +41,15 @@ test.describe('a snippet forwarded THROUGH a plain shell into an island crosses 
 		);
 		check('SSR: nested island inside the crossed snippet seeded (5)', BUMPER_5_RE.test(bar));
 		check('SSR: the snippet’s opening {@const} evaluated inside the crossed copy', CONST_ENABLED_RE.test(bar), bar.slice(0, 160));
-		// No-waterfall: the portable entry is preloaded in <head>, fetched in parallel with the host island.
-		check('SSR: portable entry preloaded (no waterfall)', MODULEPRELOAD_RE.test(raw));
+		// No-waterfall: the portable's entry is in its host island's graph, so it is preloaded with the
+		// host's chunks when the host wakes — and no island code is hinted from the HTML.
+		const graph_chunks = [...island_graph(raw).values()].flat();
+		check(
+			'SSR: portable entry listed in the host island’s graph (no waterfall)',
+			graph_chunks.some((h) => PORTABLE_ENTRY_RE.test(h)),
+			graph_chunks.join('\n')
+		);
+		check('SSR: no island modulepreload hint in the HTML', !MODULEPRELOAD_RE.test(raw));
 	});
 
 	test('Browser', async ({ page }) => {

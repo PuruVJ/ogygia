@@ -9,10 +9,11 @@
 // with a different tail keeps working — the kept island survives with fresh props, the new island
 // hydrates from the new tail, and back again.
 // Usage: pnpm exec playwright test props-tail
-import { test, check } from './fixtures/index.ts';
-import { ISLAND_HINT_G_RE, KIT_MARKER_RE } from './fixtures/re.ts';
+import { test, check, island_graph } from './fixtures/index.ts';
+import { ISLAND_GRAPH_SCRIPT_G_RE, ISLAND_HINT_G_RE, KIT_MARKER_RE } from './fixtures/re.ts';
 
 const REGION_OPEN_G = /<ogygia-region\b[^>]*>/g;
+const ENTRY_ATTR = /\bentry="([^"]+)"/;
 const REGION_CLOSE = '</ogygia-region>';
 // keyed sidecars also carry `id="og-props-<fp>"` and, on the JSON lane, `data-og-format="json"`
 const SIDECAR_G = /<script type="application\/ogygia-props" data-ogygia-props(?:="([0-9a-f]+)")?[^>]*>/g;
@@ -59,23 +60,20 @@ test.describe('PROPS TAIL: island props ride at the end of the body, keyed by fi
 		check('identical islands share one sidecar (3 sidecars for 4 regions)', sidecars.length === 3, String(sidecars.length));
 		check('no duplicate sidecar keys', new Set(keys).size === keys.length);
 
-		// (1d) the module-preload hints ride the tail too: none in the head, all after the content,
-		// BEFORE the first sidecar (they must fire before the parser chews through the props), one per
-		// href across the whole page, every one at low priority
-		const head = html.slice(0, html.indexOf('</head>'));
-		// (The runtime's own dep preloads sit in the head beside it by design; they are not island hints.)
-		const hints = [...html.matchAll(ISLAND_HINT_G_RE)];
-		check('no island modulepreload hint in the head', hints.every((h) => (h.index ?? 0) > head.length));
-		check('hints present in the document (load islands on the page)', hints.length > 0, String(hints.length));
-		check('hints come after the page content', hints.every((h) => (h.index ?? 0) > content_at));
+		// (1d) island code is never hinted from the HTML: the islands' chunk lists ride the tail as ONE
+		// island graph script, after the content, one list per distinct entry. (The runtime's own dep
+		// preloads sit in the head beside it by design; they are not island hints.)
+		check('no island modulepreload hint in the HTML', [...html.matchAll(ISLAND_HINT_G_RE)].length === 0);
+		const graph_scripts = [...html.matchAll(ISLAND_GRAPH_SCRIPT_G_RE)];
+		check('one island graph script', graph_scripts.length === 1, String(graph_scripts.length));
+		check('the graph comes after the page content', (graph_scripts[0]?.index ?? 0) > content_at);
+		const entries = new Set(regions.map((r) => r.match(ENTRY_ATTR)?.[1] ?? ''));
+		const graph = island_graph(html);
 		check(
-			'hints come before the first props sidecar',
-			hints.every((h) => (h.index ?? 0) < first_sidecar_at),
-			`last hint ${hints[hints.length - 1]?.index} vs first sidecar ${first_sidecar_at}`
+			'every island entry on the page has its graph',
+			[...entries].every((e) => graph.has(e)),
+			`entries ${[...entries]} graph ${[...graph.keys()]}`
 		);
-		const hint_hrefs = hints.map((h) => h[0].match(/href="([^"]+)"/)?.[1] ?? '');
-		check('hints deduped per href across islands', new Set(hint_hrefs).size === hint_hrefs.length);
-		check('every hint is fetchpriority="low"', hints.every((h) => /fetchpriority="low"/.test(h[0])));
 	});
 
 	test('browser: islands hydrate from the tail; SPA nav swaps tails; the kept island survives', async ({ page }) => {
@@ -88,20 +86,28 @@ test.describe('PROPS TAIL: island props ride at the end of the body, keyed by fi
 			(await page.locator('ogygia-region[data-hydrated]').count()) === 4,
 			String(await page.locator('ogygia-region[data-hydrated]').count())
 		);
-		// The tail hints actually preloaded the chunks: the island entry's resource entry was
-		// initiated by the hint (Chromium reports a modulepreload fetch as `other`; a `<link
-		// rel=preload>` as `link`), never by the runtime's `import()` (`script`) — no waterfall.
-		const initiators = await page.evaluate(() =>
-			performance
-				.getEntriesByType('resource')
-				.filter((e) => /og-region\.[0-9a-f]+\.js$/.test(e.name))
-				.map((e) => (e as PerformanceResourceTiming).initiatorType)
-		);
-		check(
-			'island entries were fetched by the tail hints, not by import()',
-			initiators.length > 0 && initiators.every((i) => i === 'other' || i === 'link'),
-			initiators.join(',')
-		);
+		// NO WATERFALL: at the wake the runtime preloaded each island's whole graph beside its
+		// `import()`, so every chunk an island needs started before its entry finished downloading —
+		// none waited to be discovered by parsing the entry.
+		const late = await page.evaluate(() => {
+			const graph_script = document.querySelector('script[data-ogygia-graph]');
+			const wire = JSON.parse(graph_script?.textContent || '{"h":[],"e":{}}') as { h: string[]; e: Record<string, number[]> };
+			const res = new Map(
+				performance.getEntriesByType('resource').map((r) => [r.name, r as PerformanceResourceTiming] as const)
+			);
+			const out: string[] = [];
+			for (const [entry, ids] of Object.entries(wire.e)) {
+				const e = res.get(new URL(entry, location.href).href);
+				if (!e) continue;
+				for (const i of ids) {
+					const c = res.get(new URL(wire.h[i], location.href).href);
+					if (c && c.startTime > e.responseEnd) out.push(`${wire.h[i]} after ${entry}`);
+				}
+			}
+			return { out, linked: document.querySelectorAll('link[data-ogygia-graph-preload]').length };
+		});
+		check('the runtime linked the woken islands’ graphs', late.linked > 0, String(late.linked));
+		check('no chunk waited for its island entry to download', late.out.length === 0, late.out.join('\n'));
 		const solo = page.locator('[data-tally="solo"] [data-tally-btn]');
 		check('props arrived: solo starts at 20', (await solo.innerText()).includes('20'), await solo.innerText());
 		await solo.click();

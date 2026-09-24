@@ -74,7 +74,6 @@ function build_ctx(ssr: boolean, route_csr = false) {
 		wrapperPathFor: (_host: string, iid: string) => wrapperVirtualId(iid),
 		devUrlFor: (virtual: string) => '/@id/' + virtual,
 		visibleMargin: undefined,
-		preload_policy: 'load',
 		presets: {},
 		importKeys: undefined,
 		idSalt: '',

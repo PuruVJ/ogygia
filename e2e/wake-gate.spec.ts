@@ -11,11 +11,12 @@
 //      while the script is held, and every such request starts after DOMContentLoaded AND after the
 //      first frame painted after it (resource timing, one clock);
 //   2. an interaction inside that window wakes its island at once and the click replays.
-// Code the HTML hints on purpose (`regions.preload` modulepreloads for `load` islands) is the
-// page's choice, not a wake — it is left out of (1).
+//   3. the HTML hints no island code; at the wake the runtime links exactly the woken islands'
+//      graphs (runtime/island-graph-preload.ts), never a sleeping island's own chunks.
 // Usage: pnpm exec playwright test wake-gate
 import type { Page, Route } from '@playwright/test';
 import { test, check } from './fixtures/index.ts';
+import { ISLAND_HINT_G_RE } from './fixtures/re.ts';
 
 const SLOW_SCRIPT_NAME = '/wake-gate-slow.js';
 const SLOW_SCRIPT = `**${SLOW_SCRIPT_NAME}`;
@@ -69,6 +70,13 @@ test.describe('wake gate: island wakes start after DOMContentLoaded and a painte
 		);
 		const gated = entries.filter((e) => (ISLAND_WAKES as readonly string[]).includes(e.wake!));
 		check('the page has a load, a visible and an idle island', gated.length === 3, JSON.stringify(entries));
+		// Island code is never hinted from the HTML (only the runtime's own deps are preloaded there),
+		// and the runtime links no island's graph before its wake. (Vite's preload helper may link the
+		// runtime's own lazy boot pieces — the app's client hooks — which is not island code.)
+		const served = await (await page.request.get('/wake-gate')).text();
+		check('the HTML hints no island code', ![...served.matchAll(ISLAND_HINT_G_RE)].length);
+		const graph_links = await page.evaluate(() => document.querySelectorAll('link[data-ogygia-graph-preload]').length);
+		check('held: the runtime linked no island graph', graph_links === 0, String(graph_links));
 		check(
 			'held: DOMContentLoaded has not fired',
 			await page.evaluate(() => performance.getEntriesByType('navigation')[0] &&
@@ -110,6 +118,23 @@ test.describe('wake gate: island wakes start after DOMContentLoaded and a painte
 			too_soon.length === 0,
 			JSON.stringify({ dcl: timing.dcl, frame: timing.frame, too_soon })
 		);
+		// The woken islands' graphs were linked; the sleeping interaction island's own chunks were not.
+		const linked = await page.evaluate(() =>
+			[...document.querySelectorAll('link[data-ogygia-graph-preload]')].map((l) => (l as HTMLLinkElement).href)
+		);
+		const graph = await page.evaluate(() => {
+			const s = document.querySelector('script[data-ogygia-graph]');
+			const wire = JSON.parse(s?.textContent || '{"h":[],"e":{}}') as { h: string[]; e: Record<string, number[]> };
+			const out: Record<string, string[]> = {};
+			for (const [entry, ids] of Object.entries(wire.e))
+				out[new URL(entry, location.href).href] = ids.map((i) => new URL(wire.h[i], location.href).href);
+			return out;
+		});
+		const woken_chunks = new Set(gated.flatMap((e) => graph[e.url] ?? []));
+		check('released: the woken islands’ graphs were linked', linked.length > 0 && linked.every((h) => woken_chunks.has(h)), linked.join('\n'));
+		const sleeper = entries.find((e) => e.wake === 'interaction');
+		const sleeper_only = (graph[sleeper?.url ?? ''] ?? []).filter((h) => !woken_chunks.has(h));
+		check('released: the sleeping interaction island downloaded nothing of its own', sleeper_only.every((h) => !linked.includes(h)));
 	});
 
 	test('an interaction before DOMContentLoaded wakes its island at once and replays', async ({ page }) => {

@@ -1,6 +1,11 @@
 // Test stub for `virtual:ogygia/island-deps` (real one is minted by the Vite plugin): the three
-// per-entry lookups Region.svelte reads while it emits preload/CSS hints — empty in unit tests.
-export const islandDeps = (_entry: string): string[] => [];
+// per-entry lookups Region.svelte reads while it emits its island graph and CSS — empty in unit tests.
+// `islandDeps(entry)` — the build's per-entry chunk closure. A test sets it with `set_island_deps(...)`.
+let island_deps: Record<string, string[]> = {};
+export const islandDeps = (entry: string): string[] => island_deps[entry] ?? [];
+export function set_island_deps(map: Record<string, string[]>) {
+	island_deps = map;
+}
 // `islandCss(entry)` — the build's per-entry CSS hrefs. A test sets them with `set_island_css(...)`.
 let island_css: Record<string, string[]> = {};
 export const islandCss = (entry: string): string[] => island_css[entry] ?? [];
@@ -15,13 +20,6 @@ export const islandCssInline = (href: string): string | null =>
 	typeof inline_css[href] === 'string' ? inline_css[href] : null;
 export function set_inline_css(map: Record<string, string>) {
 	inline_css = map;
-}
-// `ogygia({ regions: { preload } })` — the plugin default. A LIVE binding: a test flips it with
-// `set_preload_policy(...)` and Region.svelte (which imports this same aliased module) reads the
-// new value on its next render.
-export let preloadPolicy: 'all' | 'load' | 'none' = 'load';
-export function set_preload_policy(p: 'all' | 'load' | 'none') {
-	preloadPolicy = p;
 }
 // `islandReadsPage(entry)` — the build's per-entry "reads `$page`" flag (fail-open true). A test
 // flips it with `set_reads_page(...)` to check that Region records the page snapshot only for

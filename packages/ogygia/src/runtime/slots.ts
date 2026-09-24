@@ -127,7 +127,7 @@ export type BootLink = {
 	kit_hydrates_page: typeof import('./kit-boot.js').kit_hydrates_page;
 	KitBoot: typeof import('./kit-boot.js').KitBoot;
 	ABSOLUTE_URL_SCHEME: RegExp;
-	invalidate_hint_set: typeof import('./region-endpoint-url.js').invalidate_hint_set;
+	register_island_graph: typeof import('./island-graph-preload.js').register_island_graph;
 	is_warmed_module: typeof import('./region-endpoint-url.js').is_warmed_module;
 	warm_island_module: typeof import('./region-endpoint-url.js').warm_island_module;
 	props_sidecar_of: typeof import('./sidecar.js').props_sidecar_of;

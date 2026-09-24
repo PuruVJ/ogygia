@@ -1162,7 +1162,7 @@ class FileCompilation {
 		}
 		if (attrs.has('prefetch') && !attrs.has('defer')) {
 			throw fail(
-				`\`prefetch\` is only valid with \`${import_keys.render}: 'deferred'\` — it warms a hole's HTML ahead of its \`${import_keys.wake}\` schedule; an island's JS is warmed by the modulepreload hints (regions.preload), not by \`prefetch\`.`
+				`\`prefetch\` is only valid with \`${import_keys.render}: 'deferred'\` — it warms a hole's HTML ahead of its \`${import_keys.wake}\` schedule; an island's JS is preloaded by the runtime when it wakes, not by \`prefetch\`.`
 			);
 		}
 		if (from_preset && !attrs.has('hydrate') && !attrs.has('defer')) {

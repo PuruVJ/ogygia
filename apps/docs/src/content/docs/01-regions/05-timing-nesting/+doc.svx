@@ -89,22 +89,15 @@ ogygia({ regions: { visible: { margin: '0px' } } });
 
 ### How the bytes arrive
 
-The wake decides when JS *runs*. The *bytes* download in the background before that. Thus a wake never stops on a cold fetch. The server emits `<link rel="modulepreload">` for the full static dependency closure of each island: the facade, each chunk it imports (transitively), and their CSS. The priority matches the schedule:
+The wake decides when an island's code *downloads* as well as when it runs. Nothing to configure:
 
-- **`load`** islands preload at low priority (`fetchpriority="low"`). Their JS is needed soon after paint, never for the paint itself: the server already painted the content, so the hint must not outrank the CSS and the hero image. On a normal line the chunk is there before the runtime asks for it; on a slow one the island wakes a little later and the page paints seconds sooner.
-- **`visible`**, **`idle`** and **`interaction`** islands preload nothing by default. A `visible` island fetches its chunk when it intersects (`regions.visible.margin` is the lead time), an `idle` one in idle time, an `interaction` one on the first pointer-over, focus or touch inside it — the hover warm-up, with the waking click replayed. No bytes move before there is a reason to.
-- **media-query** wakes preload nothing. The server cannot know the viewport. A download would be a blind bet. The chunk fetches when the query matches.
+- **No island code moves before the page has painted.** Every wake except `interaction` starts no earlier than a SvelteKit page would start hydrating: after `DOMContentLoaded` and one painted frame. The page's CSS and hero image have the line to themselves.
+- **When an island wakes, its whole graph downloads at once.** The page carries each island's chunk list as data (one small JSON script, every chunk named once). At the wake the runtime adds a `<link rel="modulepreload">` for each chunk the island needs, beside the island's own `import()`. The browser fetches them in parallel, instead of finding each import only after the last file parsed.
+- **An island that never wakes downloads nothing.** A `visible` island fetches when it intersects (`regions.visible.margin` is the lead time), an `idle` one in idle time, a media-query one when the query matches, an `interaction` one on the first pointer-over, focus or touch inside it (the hover warm-up, with the waking click replayed). The router's hover prefetch warms the next page's islands the same way.
 
-That is `regions.preload: 'load'`, the default. Two other policies exist:
+On a `csr = true` page Kit wakes the islands, not the runtime, so there a `load` island keeps a `fetchpriority="low"` modulepreload hint at the end of the body.
 
-```ts title=vite.config.ts
-ogygia({ regions: { preload: 'all' } })  // every island's closure hinted at load, all at fetchpriority="low"
-ogygia({ regions: { preload: 'none' } }) // no code hints at all — a load island fetches on import (one extra round trip before it wakes)
-```
-
-`'all'` makes a far-below-the-fold wake instant at the cost of downloading every island's bytes on every page: a page with fifteen `visible` blocks hints several megabytes before anyone scrolls. Under `'all'`, a chunk shared by two islands takes the **highest** priority that one of them asked for, so a low-priority hint never demotes a chunk that a `load` island needs at first paint.
-
-**Hints, props and the page seed all come after the content.** On a Kit page the `<link rel="modulepreload">` hints are not in the head: they sit at the end of the body, one per chunk across the whole page, and fire once the content is parsed, after the CSS and the hero image are already requested. In the head they would start while the HTML is still streaming and share the line with the image. Each island's serialized props follow them in one `<script type="application/ogygia-props">` per distinct island, keyed by the region's fingerprint, never next to the island. The page seed (`page.data` for islands that read `$page`) comes last, and only when an island on the page actually reads it. Hydration is unchanged: the runtime waits for the document to finish parsing before it wakes anything, and by then the hints are in flight. A deferred hole's `<link rel="preload" as="fetch">` stays in the head: it fetches content, not code.
+**Props and the page seed come after the content.** Each island's serialized props sit at the end of the body in one `<script type="application/ogygia-props">` per distinct island, keyed by the region's fingerprint, never next to the island. The page seed (`page.data` for islands that read `$page`) comes last, and only when an island on the page actually reads it. A deferred hole's `<link rel="preload" as="fetch">` stays in the head: it fetches content, not code.
 
 **Props do not copy what the seed already carries.** When the seed ships, an island's props are written relative to it: a plain object or array that is also a node of `page.data`, whether the page passed the very same object or a clone of it, becomes a short path into the seed instead of a second copy. The island still receives its own copy of the data when it wakes; nothing it does to its props reaches the seed or another island. A CMS page that hands twelve blocks their slices of one content tree ships the tree once and twelve paths.
 

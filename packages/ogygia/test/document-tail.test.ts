@@ -1,23 +1,25 @@
 /**
  * THE DOCUMENT TAIL (server/document-tail.ts) — what a Kit page render defers to the end of the
- * body: every region's module-preload hints (deduped per href), then every island's props sidecar
+ * body: its island graph (one list per entry), then every island's props sidecar
  * (one per fingerprint). Region.svelte writes to it only inside Kit's page pass with a tail
  * installed; every other render root keeps hints in the head and the sidecar adjacent.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 import KitPagePass from './_fixtures/KitPagePass.svelte';
 import { DocumentTail, set_tail_reader, document_tail, props_preview } from '../src/server/document-tail.js';
+import { decode_island_graph } from '../src/island-graph.js';
+import { set_island_deps } from './_stubs/virtual-island-deps.js';
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 const kit_pass = KitPagePass as unknown as Component<Record<string, unknown>>;
 
 const SIDECAR_G = /<script type="application\/ogygia-props" data-ogygia-props="([0-9a-f]+)"[^>]*>([^<]*)<\/script>/g;
 const FP_ATTR_G = /data-og-fp="([0-9a-f]+)"/g;
-const HINT_G = /<link rel="modulepreload" href="([^"]+)" fetchpriority="low">/g;
+const GRAPH_SCRIPT_RE = /<script type="application\/json" data-ogygia-graph>([^<]*)<\/script>/;
 
 const island = (props: Record<string, unknown> = {}, entry = '/islands/tiny.js') => ({
 	__mode: 'island',
@@ -53,7 +55,7 @@ describe('DocumentTail', () => {
 		t.props('f1', wire('DUPLICATE'));
 		t.props('f2', wire('2'));
 		t.hints(['/one.js'], 'f1');
-		expect(t.size).toEqual({ hints: 4, props: 2, holes: 0 });
+		expect(t.size).toEqual({ hints: 4, graph: 0, props: 2, holes: 0 });
 		expect(t.empty).toBe(false);
 		expect(t.render()).toBe(
 			'<link rel="modulepreload" href="/a.js" fetchpriority="low">' +
@@ -106,7 +108,7 @@ describe('DocumentTail', () => {
 		cyc.self = cyc;
 		expect(props_preview(cyc)).toBe('');
 		expect(props_preview({ s: 'x'.repeat(200) })).toHaveLength(80);
-		expect(t.size).toEqual({ hints: 0, props: 1, holes: 2 });
+		expect(t.size).toEqual({ hints: 0, graph: 0, props: 1, holes: 2 });
 		expect(t.empty).toBe(false);
 		const html = t.render();
 		// after the props sidecars, one script, `<` escaped so the sidecar HTML inside cannot close it
@@ -139,9 +141,15 @@ describe('DocumentTail', () => {
 });
 
 describe('Region.svelte × the tail', () => {
-	it('no tail (a test / standalone render): hints in the head, sidecar adjacent and keyed', () => {
+	// The islands' chunk closures: a placed island's graph is data (island-graph.ts), never a hint.
+	beforeEach(() => set_island_deps({ '/islands/tiny.js': ['/chunks/svelte.js'], '/islands/hole.js': ['/chunks/svelte.js'] }));
+	afterEach(() => set_island_deps({}));
+	const graph_of = (html: string) => decode_island_graph(GRAPH_SCRIPT_RE.exec(html)?.[1] ?? '{}');
+
+	it('no tail (a test / standalone render): graph in the head, sidecar adjacent and keyed', () => {
 		const out = render(region, { props: island({ n: 1 }) });
-		expect([...out.head.matchAll(HINT_G)].map((m) => m[1])).toEqual(['/islands/tiny.js']);
+		expect(out.head).not.toContain('modulepreload');
+		expect(graph_of(out.head)).toEqual(new Map([['/islands/tiny.js', ['/chunks/svelte.js']]]));
 		const fps = [...out.body.matchAll(FP_ATTR_G)].map((m) => m[1]);
 		const sidecars = [...out.body.matchAll(SIDECAR_G)];
 		expect(fps).toHaveLength(1);
@@ -153,36 +161,40 @@ describe('Region.svelte × the tail', () => {
 	it('tail installed but NOT a Kit page pass (an ogygia render root): head + adjacent, tail untouched', () => {
 		install_tail();
 		const out = render(region, { props: island({ n: 1 }) });
-		expect([...out.head.matchAll(HINT_G)]).toHaveLength(1);
+		expect(graph_of(out.head).size).toBe(1);
 		expect([...out.body.matchAll(SIDECAR_G)]).toHaveLength(1);
 		expect(tail.empty).toBe(true);
 	});
 
-	it('Kit page pass + tail: hints and sidecar go to the tail, nothing in the head or inline', () => {
+	it('Kit page pass + tail: graph and sidecar go to the tail, nothing in the head or inline', () => {
 		install_tail();
 		const out = render_in_kit_pass([island({ n: 1 })]);
 		expect(out.head).not.toContain('modulepreload');
+		expect(out.head).not.toContain('data-ogygia-graph');
 		expect(out.body).not.toContain('data-ogygia-props');
 		const fps = [...out.body.matchAll(FP_ATTR_G)].map((m) => m[1]);
 		expect(fps).toHaveLength(1);
-		expect(tail.size).toEqual({ hints: 1, props: 1, holes: 0 });
+		expect(tail.size).toEqual({ hints: 0, graph: 1, props: 1, holes: 0 });
 		const html = tail.render();
-		expect(html.indexOf('modulepreload')).toBeLessThan(html.indexOf('data-ogygia-props'));
 		// keyed twice: `data-ogygia-props` for the reconciler, `id` for the runtime's O(1) lookup
 		expect(html).toContain(`<script type="application/ogygia-props" data-ogygia-props="${fps[0]}" id="og-props-${fps[0]}"`);
-		expect(html).toContain('<link rel="modulepreload" href="/islands/tiny.js" fetchpriority="low">');
+		expect(html).not.toContain('modulepreload');
+		expect(graph_of(html)).toEqual(new Map([['/islands/tiny.js', ['/chunks/svelte.js']]]));
+		// the profiler's closure for the island: its entry, then its chunks
+		tail.render(null, true);
+		expect(tail.island_rows()![0].hints).toEqual(['/islands/tiny.js', '/chunks/svelte.js']);
 	});
 
-	it('three islands: identical ones share a sidecar, the shared entry is hinted once', () => {
+	it('three islands: identical ones share a sidecar, the shared entry is listed once', () => {
 		install_tail();
 		const out = render_in_kit_pass([island({ n: 1 }), island({ n: 1 }), island({ n: 2 })]);
 		const fps = [...out.body.matchAll(FP_ATTR_G)].map((m) => m[1]);
 		expect(fps).toHaveLength(3);
 		expect(new Set(fps).size).toBe(2);
-		expect(tail.size).toEqual({ hints: 1, props: 2, holes: 0 });
+		expect(tail.size).toEqual({ hints: 0, graph: 1, props: 2, holes: 0 });
 	});
 
-	it('a server island that hydrates: its module hints ride the tail, its FETCH preload stays in the head', () => {
+	it('a server island that hydrates: its graph rides the tail, its FETCH preload stays in the head', () => {
 		install_tail();
 		const hole = {
 			__mode: 'server',
@@ -197,26 +209,27 @@ describe('Region.svelte × the tail', () => {
 		expect(out.head).not.toContain('modulepreload');
 		// (the fetch preload needs a minted endpoint — the unit stub mints none; e2e/server-islands
 		// asserts it stays in the head on a real page)
-		expect(tail.size.hints).toBe(1);
-		expect(tail.render()).toContain('<link rel="modulepreload" href="/islands/hole.js" fetchpriority="low">');
+		expect(tail.size.graph).toBe(1);
+		expect(graph_of(tail.render())).toEqual(new Map([['/islands/hole.js', ['/chunks/svelte.js']]]));
 		// a hole's props sidecar is small and stays adjacent (only ISLAND sidecars move)
 		expect(out.body).toContain('data-ogygia-props');
 		expect(tail.size.props).toBe(0);
 	});
 
-	it('outside the page pass the same server island keeps both hints in the head', () => {
+	it('outside the page pass the same server island keeps its graph in the head', () => {
 		install_tail();
 		const out = render(region, {
 			props: { __mode: 'server', __entry: 'hole-1', __component: Tiny, __props: {}, __defer: 'load', __hydrate: 'load', __module: '/islands/hole.js' }
 		});
-		expect(out.head).toContain('modulepreload');
+		expect(graph_of(out.head).size).toBe(1);
+		expect(out.head).not.toContain('modulepreload');
 		expect(tail.empty).toBe(true);
 	});
 
-	it('a visible island under the default policy: no hint at all, sidecar still in the tail', () => {
+	it('a visible island: its graph rides the tail like any wake (the runtime preloads it on wake)', () => {
 		install_tail();
 		const out = render_in_kit_pass([{ ...island({ n: 7 }), load: undefined, visible: true }]);
 		expect(out.head).not.toContain('modulepreload');
-		expect(tail.size).toEqual({ hints: 0, props: 1, holes: 0 });
+		expect(tail.size).toEqual({ hints: 0, graph: 1, props: 1, holes: 0 });
 	});
 });

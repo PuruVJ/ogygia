@@ -110,11 +110,7 @@ The islands subsystem: defaults + named island presets.
 ogygia({ regions: { visible: { margin: '200px' } } })
 ```
 
-**`regions.preload`** decides which islands get `<link rel="modulepreload">` hints for their code closure in the SSR HTML. `'load'` (default): only islands that wake at load; the others fetch on their own trigger (intersection, idle, the hover warm-up). `'all'`: every island, `load` ones at normal priority and the rest at `fetchpriority="low"`. `'none'`: no code hints, a load island fetches on import.
-
-```ts
-ogygia({ regions: { preload: 'all' } })
-```
+There is no preload setting. The page carries each island's chunk list as data, and the runtime preloads an island's whole graph when it wakes, after the page has painted ([how the bytes arrive](/docs/regions/timing-nesting)). The old `regions.preload` key is a build error.
 
 ### `router`
 
@@ -196,7 +192,7 @@ ogygia({ regions: { presets: { menu: { render: 'deferred', wake: 'interaction', 
 </script>
 ```
 
-`prefetch` rides inline or in a preset. It is `deferred`-only (an island's JS is warmed by the `regions.preload` hints, not by this). Never `'interaction'`: that is the swap, `wake`'s job. Never the hole's own `wake` schedule: it would add nothing. Without `prefetch`, an `interaction` hole keeps its default warm: the first hover fetches and swaps in one go.
+`prefetch` rides inline or in a preset. It is `deferred`-only (an island's JS is preloaded by the runtime when it wakes, not by this). Never `'interaction'`: that is the swap, `wake`'s job. Never the hole's own `wake` schedule: it would add nothing. Without `prefetch`, an `interaction` hole keeps its default warm: the first hover fetches and swaps in one go.
 
 #### `maxAge`: caching a `deferred` hole
 

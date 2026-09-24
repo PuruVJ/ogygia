@@ -39,6 +39,7 @@ const regions_in_shadow = () => boot_link().regions_in_shadow();
 const session = () => boot_link().runtime_session;
 const is_warmed_module = (entry: string, base?: string) => boot_link().is_warmed_module(entry, base);
 const warm_island_module = (entry: string, base?: string) => boot_link().warm_island_module(entry, base);
+const register_island_graph = (text: string, base: string) => boot_link().register_island_graph(text, base);
 const yield_task = () => boot_link().yield_task();
 const document_key = (url: URL) => router_link().document_key(url);
 const jump_to_hash = (hash: string) => router_link().jump_to_hash(hash);
@@ -154,6 +155,9 @@ const STYLESHEET_WAIT_MS = 2_000;
 const REMOTE_MUTATION_PATH = /\/remote(?:\/|$|\?)/;
 /** `entry="…"` on an `<ogygia-region>` open tag (shared `g` regex — reset `lastIndex` per scan). */
 const REGION_ENTRY_ATTR_G = /<ogygia-region\b[^>]*?\bentry="([^"]+)"/g;
+/** The island graph scripts in our own SSR output (island-graph.ts; the JSON is `<`-escaped, so
+ *  its text never holds a `<`). */
+const ISLAND_GRAPH_SCRIPT_G = /<script type="application\/json" data-ogygia-graph>([^<]*)<\/script>/g;
 
 /** Stable-ish head node identity without serializing full outerHTML when possible. */
 export function head_node_key(node: Element): string {
@@ -445,6 +449,10 @@ function warm_modules(href: string, html: string) {
 	// Match `entry="…"` on ogygia-region open tags in our own SSR output (module URLs never contain
 	// a double-quote), collecting the distinct client-island module specifiers. URL-level dedupe +
 	// failure-retry live in the shared warmer (one scheme for router/visible/interaction warms).
+	// The page's island graph first, so each warm below preloads its island's whole graph with it.
+	ISLAND_GRAPH_SCRIPT_G.lastIndex = 0;
+	let g: RegExpExecArray | null;
+	while ((g = ISLAND_GRAPH_SCRIPT_G.exec(html))) register_island_graph(g[1], new URL(href, location.href).href);
 	REGION_ENTRY_ATTR_G.lastIndex = 0; // shared `g` regex — start each scan at 0
 	let m: RegExpExecArray | null;
 	while ((m = REGION_ENTRY_ATTR_G.exec(html))) warm_island_module(m[1], href);

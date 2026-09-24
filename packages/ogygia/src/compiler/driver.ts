@@ -993,12 +993,7 @@ export class Compiler {
 			return `export default ${JSON.stringify('/@id/__x00__' + V_DEVTOOLS_BOOT)};`;
 		}
 		if (id === RESOLVED(V_ISLAND_DEPS)) {
-			return island_deps_module(
-				ssr,
-				is_dev,
-				path.relative(ctx.root, kit_dirs(ctx.root).out_dir),
-				ctx.preload_policy
-			);
+			return island_deps_module(ssr, is_dev, path.relative(ctx.root, kit_dirs(ctx.root).out_dir));
 		}
 		if (id === RESOLVED(V_TRANSPORT)) {
 			return transport_module(universalHooks);

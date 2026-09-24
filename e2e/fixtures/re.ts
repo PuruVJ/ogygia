@@ -34,6 +34,8 @@ export const WRAPPER_VIRTUAL_RE = /virtual:ogygia\/wrapper\//;
 export const RUNTIME_SCRIPT_RE = /data-ogygia-runtime/;
 /** Every runtime bootstrap SCRIPT (not its `data-ogygia-runtime-dep` preload links) — count them. */
 export const RUNTIME_SCRIPT_TAG_G_RE = /<script\b[^>]*\bdata-ogygia-runtime(?![-\w])/g;
+/** An island graph script (src/island-graph.ts): group 1 is its `<`-escaped JSON text. */
+export const ISLAND_GRAPH_SCRIPT_G_RE = /<script type="application\/json" data-ogygia-graph>([^<]*)<\/script>/g;
 /** An ISLAND code hint: a modulepreload link that is not one of the runtime's own deps (those sit
  *  beside the runtime script in the head by design — server/document-tail.ts). */
 export const ISLAND_HINT_G_RE = /<link\b(?![^>]*data-ogygia-runtime-dep)[^>]*rel="modulepreload"[^>]*>/g;

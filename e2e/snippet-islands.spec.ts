@@ -7,7 +7,7 @@
 //     (renderer.child), so a top-level `await` in the island body resolves INTO the SSR HTML
 //     instead of throwing `await_invalid` (the docs-home 500).
 // Usage: pnpm exec playwright test snippet-islands
-import { test, check } from './fixtures/index.ts';
+import { test, check, island_graph } from './fixtures/index.ts';
 import { REGION_TAG_G_RE } from './fixtures/re.ts';
 
 const SNIPPET_FRAME_RE = /<ogygia-snippet[\s\S]*?<\/ogygia-snippet>/;
@@ -37,16 +37,16 @@ test.describe('islands in a {#snippet} to a plain shell: marks survive + top-lev
 		check('SSR: awaited remote data baked in (name crossed)', IN_SNIPPET_RE.test(frame));
 		// The interactive island's seed is server-rendered too.
 		check('SSR: nested interactive island seeded (3)', BUMPER_SEED_RE.test(frame));
-		// Each snippet-nested island's entry chunk gets a <head> modulepreload — the portable's inline SSR
-		// threads its `<svelte:head>` into the document head, so islands forwarded through a PLAIN host are
-		// discovered early too (not only when a host ISLAND's props carry the descriptor).
-		const headStr = raw.split('</head>')[0];
+		// Each snippet-nested island carries its island graph — the portable's inline SSR threads its
+		// `<svelte:head>` into the document, so islands forwarded through a PLAIN host preload their
+		// whole graph at wake too (not only when a host ISLAND's props carry the descriptor).
+		const graph = island_graph(raw);
 		const entryHashes = [...frame.matchAll(ENTRY_HASH_RE)].map((m) => m[1]);
-		const hintedInHead = entryHashes.filter((h) => headStr.includes(`modulepreload" href="${h}"`));
+		const listed = entryHashes.filter((h) => graph.has(h));
 		check(
-			'SSR: snippet-nested island entries are modulepreloaded in <head>',
-			entryHashes.length > 0 && hintedInHead.length === entryHashes.length,
-			`${hintedInHead.length}/${entryHashes.length} hinted`
+			'SSR: snippet-nested island entries carry their island graph',
+			entryHashes.length > 0 && listed.length === entryHashes.length,
+			`${listed.length}/${entryHashes.length} listed; graph keys ${[...graph.keys()].join(', ')}`
 		);
 	});
 

@@ -177,7 +177,6 @@ export function apply_soft_invalidate_doc(doc: Document): void {
 export function prepare_spa_document(): void {
 	session().reset();
 	slots.remoteSeeds?.clear_remote_seeds();
-	boot_link().invalidate_hint_set();
 	reset_page();
 }
 
