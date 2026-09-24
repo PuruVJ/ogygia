@@ -187,8 +187,8 @@ export async function document(
 		}
 	}
 
-	// The runtime bootstrap leads the head content, before any script the component's head carries
-	// — the same order the handle gives a Kit page (head-presence.ts `runtime_first`).
+	// The runtime bootstrap goes before any script the component's head carries (after its non-JS
+	// head content) — the same order the handle gives a Kit page (head-presence.ts `runtime_first`).
 	const html =
 		`<!doctype html>\n<html lang="${escape_text(options.lang ?? 'en')}">` +
 		`<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +

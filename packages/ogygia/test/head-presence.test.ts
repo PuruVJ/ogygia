@@ -103,8 +103,8 @@ const design_system = '<script type="module" src="https://cdn.example/ds.js"></s
 const head_start =
 	'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="w">';
 
-describe('runtime_first', () => {
-	it('moves the tag an island page emitted ahead of the app template scripts, after the charset', () => {
+describe('runtime_first — before all of the page’s JavaScript, not first in the head', () => {
+	it('moves the tag an island page emitted to just before the app template’s first script', () => {
 		const head =
 			head_start +
 			design_system +
@@ -112,33 +112,49 @@ describe('runtime_first', () => {
 			runtime +
 			'<link rel="stylesheet" href="/a.css">';
 		expect(runtime_first(head, null)).toBe(
-			'<!doctype html><html><head><meta charset="utf-8">' +
-				runtime +
-				'<meta name="viewport" content="w">' +
-				design_system +
-				'<title>x</title>' +
-				'<link rel="stylesheet" href="/a.css">'
+			head_start + runtime + design_system + '<title>x</title>' + '<link rel="stylesheet" href="/a.css">'
 		);
 	});
 
 	it('injects the tag there when the page has none (island-less page, router on)', () => {
-		expect(runtime_first(head_start + design_system, runtime)).toBe(
-			'<!doctype html><html><head><meta charset="utf-8">' +
-				runtime +
-				'<meta name="viewport" content="w">' +
-				design_system
+		expect(runtime_first(head_start + design_system, runtime)).toBe(head_start + runtime + design_system);
+	});
+
+	it('keeps stylesheets and the LCP image preload AHEAD of it — only JavaScript comes after', () => {
+		const css = '<link rel="stylesheet" href="/a.css">';
+		const lcp = '<link rel="preload" as="image" href="/hero.avif" fetchpriority="high">';
+		const font = '<link rel="preload" as="font" href="/f.woff2" crossorigin>';
+		expect(runtime_first(head_start + css + lcp + font + design_system + runtime, null)).toBe(
+			head_start + css + lcp + font + runtime + design_system
 		);
 	});
 
-	it('leads the head when no charset declaration opens it', () => {
+	it('a modulepreload counts as JavaScript: the runtime goes before it too', () => {
+		const css = '<link rel="stylesheet" href="/a.css">';
+		const preload = '<link rel="modulepreload" href="/_app/start.js">';
+		expect(runtime_first(head_start + css + preload + design_system + runtime, null)).toBe(
+			head_start + css + runtime + preload + design_system
+		);
+	});
+
+	it('with no JavaScript in the head, it goes last in the head', () => {
+		const head = '<html><head><meta charset="utf-8"><title>t</title></head><body>';
+		expect(runtime_first(head, runtime)).toBe(
+			'<html><head><meta charset="utf-8"><title>t</title>' + runtime + '</head><body>'
+		);
+		// a head slice with no closing tag: at the end of the slice
+		expect(runtime_first('<title>t</title>', runtime)).toBe('<title>t</title>' + runtime);
+	});
+
+	it('leads the scripts when no charset declaration opens the head', () => {
 		expect(runtime_first('<html><head>' + design_system + runtime, null)).toBe(
 			'<html><head>' + runtime + design_system
 		);
 	});
 
-	it('leads inner head content that has no <head> tag (a routeless document)', () => {
+	it('inner head content with no <head> tag (a routeless document): before its first script', () => {
 		expect(runtime_first('<title>t</title>' + design_system + runtime, null)).toBe(
-			runtime + '<title>t</title>' + design_system
+			'<title>t</title>' + runtime + design_system
 		);
 	});
 

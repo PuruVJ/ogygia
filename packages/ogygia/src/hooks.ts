@@ -1083,8 +1083,8 @@ class OgygiaHandle {
 			// its own remotes — and a sidecar written without a seed carries its values whole.
 			const tail = spans.body_end !== -1 && bag ? bag.tail.render(null) : '';
 			if (head === null && !tail) return html;
-			// The runtime an island inside a lake emitted goes first in `<head>` here too (see the
-			// csr=false path below): its regions keep their server markup from the first connect.
+			// The runtime an island inside a lake emitted goes before the head's JavaScript here too
+			// (see the csr=false path below): its regions keep their server markup from the first connect.
 			const ordered = head === null ? null : runtime_first(head, null);
 			return assemble(html, spans, ordered === head ? null : ordered, head_inject, tail);
 		}

@@ -84,29 +84,37 @@ export function dedupe_head_links(head: string): string {
 	});
 }
 
-// The whole runtime bootstrap element (tag + empty body), the `<head …>` open tag, and a charset
-// declaration sitting first in the head. Same law as the predicates above: a literal `<script` /
-// `<head` / `<meta`, one bounded `[^>]*` each, linear.
+// The whole runtime bootstrap element (tag + empty body), the `<head …>` open tag, the first piece
+// of JavaScript the head carries (a `<script>`, or a `<link rel="modulepreload">` that fetches one),
+// and the `</head>` close. Same law as the predicates above: a literal `<script` / `<head` / `<link`,
+// one bounded `[^>]*` each, linear.
 const RUNTIME_SCRIPT_ELEMENT_RE = /<script\b[^>]*\bdata-ogygia-runtime\b[^>]*><\/script>/i;
 const HEAD_OPEN_RE = /<head\b[^>]*>/i;
-const LEADING_CHARSET_META_RE = /^\s*<meta\b[^>]*\bcharset\b[^>]*>/i;
+const FIRST_JS_RE = /<script\b|<link\b[^>]*\brel=["']?modulepreload\b/i;
+const HEAD_CLOSE_RE = /<\/head\s*>/i;
 
 /**
- * Put the runtime bootstrap FIRST in `<head>`: before every script the app's template and the
- * page carry. `runtime` is the tag to place when the head has none yet (`null` = only reorder what
+ * Put the runtime bootstrap BEFORE ALL OF THE PAGE'S JAVASCRIPT in `<head>` — immediately ahead of
+ * the first `<script>` or `<link rel="modulepreload">` the app's template and the page carry, and
+ * no earlier. `runtime` is the tag to place when the head has none yet (`null` = only reorder what
  * is there; the tag an island page emits sits wherever Kit's head slot is, after the app's own
- * scripts in `app.html`). Returns `head` itself when there is nothing to move.
+ * scripts in `app.html`). With no JavaScript in the head it goes last in it. Returns `head` itself
+ * when there is nothing to move.
  *
- * Why the position matters: module and deferred scripts run in document order once parsing ends,
- * and the runtime's custom-element definition is what makes every `<ogygia-region>` connect and
- * keep its server markup — the copy an island hydrates against when something edited it while it
- * slept (runtime/core.ts `#ssr_html`). A design-system runtime loaded from the app template ran
- * BEFORE the runtime on a customer page and stripped the whitespace nodes of every island in the
- * header before the runtime ever saw them, so the "server copy" was the edited DOM and the login
- * island still re-rendered client-side on its first tap. First in `<head>`, the runtime sees the
- * document as the server sent it, whatever the app loads after it. A module script never blocks
- * parsing, so moving it up costs the page nothing; a charset declaration that leads the head stays
- * first (it must sit within the document's first 1024 bytes).
+ * Why BEFORE THE JS: module and deferred scripts run in document order once parsing ends, and the
+ * runtime's custom-element definition is what makes every `<ogygia-region>` connect and keep its
+ * server markup — the copy an island hydrates against when something edited it while it slept
+ * (runtime/core.ts `#ssr_html`). A design-system runtime loaded from the app template ran BEFORE the
+ * runtime on a customer page and stripped the whitespace nodes of every island in the header before
+ * the runtime ever saw them, so the "server copy" was the edited DOM and the login island still
+ * re-rendered client-side on its first tap. Ahead of every script, the runtime sees the document as
+ * the server sent it, whatever the app loads after it.
+ *
+ * Why NOT FIRST IN THE HEAD: that ordering guarantee is about execution, and only needs "before the
+ * other scripts". Heading the whole `<head>` also made the runtime the page's FIRST REQUEST, ahead of
+ * its stylesheets and its LCP image preload. Everything that is not JavaScript — the charset and
+ * other `<meta>`, the `<title>`, stylesheets, preconnects, image/font preloads — keeps its place in
+ * front of it.
  */
 export function runtime_first(head: string, runtime: string | null): string {
 	const found = RUNTIME_SCRIPT_ELEMENT_RE.exec(head);
@@ -116,10 +124,15 @@ export function runtime_first(head: string, runtime: string | null): string {
 		? head.slice(0, found.index) + head.slice(found.index + found[0].length)
 		: head;
 	const open = HEAD_OPEN_RE.exec(rest);
-	// no `<head>` in this slice (a routeless document's inner head): the tag leads the content
-	let at = open ? open.index + open[0].length : 0;
-	const charset = LEADING_CHARSET_META_RE.exec(rest.slice(at));
-	if (charset) at += charset[0].length;
+	// no `<head>` in this slice (a routeless document's inner head): search the whole content
+	const from = open ? open.index + open[0].length : 0;
+	const js = FIRST_JS_RE.exec(rest.slice(from));
+	let at: number;
+	if (js) at = from + js.index;
+	else {
+		const close = HEAD_CLOSE_RE.exec(rest.slice(from));
+		at = close ? from + close.index : rest.length;
+	}
 	if (found && found.index === at) return head;
 	return rest.slice(0, at) + tag + rest.slice(at);
 }
