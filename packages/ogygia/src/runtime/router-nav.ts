@@ -80,6 +80,9 @@ const SERVER_DELTA =
  */
 export type NavPurpose = 'nav' | 'prefetch' | 'history';
 
+/** The `Accept` a browser sends for a top-level document navigation (Chromium's value). */
+export const DOCUMENT_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+
 /**
  * SERVER-DELTA NAV (D2): headers for a nav/prefetch fetch. Always `x-ogygia-spa`. When `purpose` is
  * not a plain nav, `x-ogygia-purpose` names it (see {@link NavPurpose}). Plus, when the current
@@ -90,7 +93,11 @@ export type NavPurpose = 'nav' | 'prefetch' | 'history';
  * the server may ignore, and its absence is always correct).
  */
 function nav_headers(purpose: NavPurpose = 'nav'): Record<string, string> {
-	const headers: Record<string, string> = { 'x-ogygia-spa': '1' };
+	// The page is fetched the way the browser fetches a DOCUMENT: `fetch` alone sends `Accept: */*`,
+	// and servers answer that differently from a navigation (an app on the field answered `*/*` with
+	// a 302 home and `text/html` with its 404 page) — error pages, page-vs-API routing, auth and CDN
+	// rules all key on it. The router must land where a real navigation would.
+	const headers: Record<string, string> = { accept: DOCUMENT_ACCEPT, 'x-ogygia-spa': '1' };
 	if (purpose !== 'nav') headers['x-ogygia-purpose'] = purpose;
 	if (!SERVER_DELTA || typeof document === 'undefined') return headers;
 	const seen = new Set<string>();
@@ -495,7 +502,12 @@ export async function navigate(
 		replace?: boolean;
 	} = {}
 ) {
-	if (!r.run_before(from, url, type)) return; // a beforeNavigate hook cancelled
+	if (!r.run_before(from, url, type)) {
+		// A beforeNavigate hook cancelled: this navigation never starts, so it must not keep claiming
+		// the address (SpaRouter.navigate set it) — a later click on the same link has to navigate.
+		if (r.nav_target === url.href) r.nav_target = null;
+		return;
+	}
 
 	const dt_t0 = DEVTOOLS ? dt_now() : 0;
 	let dt_reconciled = false;
@@ -550,26 +562,29 @@ export async function navigate(
 
 	// REDIRECT: the fetch may have landed on a different href (a Kit `redirect()` in load, a
 	// canonical trailing-slash bounce). `dest` is the address the content actually belongs to —
-	// used from here on for the address bar, doc key, current URL, and hash scroll. A cross-origin
-	// redirect can't be a body swap, so hand it to the browser. `dest` === `url` in the common case.
+	// used from here on for the address bar, doc key, current URL, and hash scroll, but only once
+	// the router knows it will render this response itself (below). `dest` === `url` in the common case.
 	let dest = url;
 	const landed = final_url.get(url.href);
 	final_url.delete(url.href); // one-shot, like the page cache
 	if (landed) {
-		let final: URL;
 		try {
-			final = new URL(landed, url);
+			dest = new URL(landed, url);
 		} catch {
-			final = url;
+			dest = url;
 		}
-		if (final.origin !== location.origin) {
-			location.href = final.href;
-			return;
-		}
-		dest = final;
-		// A redirect REPLACES the intermediate URL (browser semantics), so the back button skips it.
-		replace_state({ ...(history.state || {}), ogygia: true }, dest.href);
 	}
+
+	// HAND-OFFS: a response the router will not render goes back to the browser as a navigation to
+	// the address the visitor CLICKED — never to where our fetch was redirected. The browser then
+	// makes its own document request and follows its own redirects, so the visitor lands exactly
+	// where a navigation without the router would have; a redirect seen by a fetch is a fact about
+	// that fetch. (`url` is already the current history entry, so this replaces it: no extra entry.)
+	const hand_off = () => {
+		location.href = url.href;
+	};
+	// A cross-origin landing can't be a body swap.
+	if (dest.origin !== location.origin) return hand_off();
 
 	// ── TASK ONE: parse + facts + preflight — no live DOM change ──
 	const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -577,19 +592,17 @@ export async function navigate(
 	// csr=true Kit pages boot via inline/module scripts that cloneNode will NOT execute.
 	// Hand off to a full navigation instead of a half-broken SPA swap (BRK-HEAD). Read off the
 	// parsed document (the route meta, else its inline scripts) — never a regex over the string.
-	if (KitBoot.document_has(doc)) {
-		location.href = dest.href;
-		return;
-	}
+	if (KitBoot.document_has(doc)) return hand_off();
 
 	// Mixed sites: if the target page has no `ogygia-router` marker (the handle injects it on
 	// every ogygia page), it is not an ogygia page — hand over to a real document navigation
 	// (and stop SPA behaviour from here on).
 	const marker = doc.querySelector('meta[name="ogygia-router"]');
-	if (!marker) {
-		location.href = dest.href;
-		return;
-	}
+	if (!marker) return hand_off();
+
+	// Ours to render. A redirect REPLACES the intermediate URL (browser semantics), so the back
+	// button skips it.
+	if (dest !== url) replace_state({ ...(history.state || {}), ogygia: true }, dest.href);
 	// Same-document hash jumps already returned above (no VT). Cross-route swaps keep VT
 	// even when the target has a hash (A → B#C); scroll snaps after the transition.
 	const prefer_reduced_motion =

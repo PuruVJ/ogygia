@@ -210,7 +210,14 @@ function nav(): Promise<Nav> {
 	// Link what the navigation chunk uses from this module right where the chunk is loaded
 	// (./slots.ts `BootLink`: it never imports this module, or both would be split out of the runtime).
 	slots.router_link ??= { document_key, jump_to_hash, push_state, replace_state };
-	if (!nav_promise) nav_promise = import('./router-nav.js').then((m) => (loaded_nav = m));
+	if (!nav_promise)
+		nav_promise = import('./router-nav.js').then(
+			(m) => (loaded_nav = m),
+			(err) => {
+				nav_promise = null; // a failed load is retried by the next navigation, not cached
+				throw err;
+			}
+		);
 	return nav_promise;
 }
 
@@ -294,7 +301,22 @@ export class SpaRouter {
 			return;
 		}
 
-		const n = await nav();
+		// Claim the address NOW, before the navigation chunk loads: a web-component link re-dispatches
+		// the visitor's click on its inner `<a>` a few ms later, and that second click must see this
+		// navigation in flight (the click listener swallows it) instead of starting — and aborting
+		// this one with — a second fetch. router-nav clears the claim when the navigation applies,
+		// is aborted, or is cancelled by a beforeNavigate hook.
+		this.nav_target = url.href;
+		let n: Nav;
+		try {
+			n = await nav();
+		} catch {
+			// The navigation code could not load (offline, a deploy removed the chunk): the link must
+			// still work — let the browser navigate.
+			if (this.nav_target === url.href) this.nav_target = null;
+			location.href = url.href;
+			return;
+		}
 		return n.navigate(this, url, from, opts);
 	}
 
@@ -366,6 +388,12 @@ export class SpaRouter {
 			const anchor = anchor_of(event);
 			const url = this.#should_intercept(event, anchor);
 			if (!url) return;
+			// Already navigating there (a web-component link re-dispatching the visitor's click on its
+			// inner `<a>`, or a double click): one navigation, not a second that aborts the first.
+			if (this.nav_target === url.href) {
+				event.preventDefault();
+				return;
+			}
 			// Same document: a hash jump is the browser's; anything else must never reload —
 			// see `same_document_link` (the re-dispatched click of a design-system link, or a real
 			// click on the current page, which refreshes in place).
