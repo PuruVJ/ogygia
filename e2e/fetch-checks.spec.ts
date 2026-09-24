@@ -1,6 +1,6 @@
 // Node fetch-based SSR assertions. Usage: pnpm exec playwright test fetch-checks
 import { test, check } from './fixtures/index.ts';
-import { KIT_MARKER_RE, REGION_OPEN_G_RE } from './fixtures/re.ts';
+import { ISLAND_HINT_G_RE, KIT_MARKER_RE, REGION_OPEN_G_RE, RUNTIME_SCRIPT_TAG_G_RE } from './fixtures/re.ts';
 
 const COUNT_10_RE = /count is 10/;
 const COUNT_99_RE = /count is 99/;
@@ -20,8 +20,9 @@ const SET_OK_RE = /set instanceof Set: true/;
 const NESTED_OK_RE = /nested-ok/;
 const SNIPPET_Y_RE = /y = 42/;
 const RUNTIME_SRC_RE = /src="[^"]*og-runtime[^"]*"/;
-const RUNTIME_BOOTSTRAP_G_RE = /data-ogygia-runtime/g;
-const MODULEPRELOAD_RE = /rel="modulepreload"/i;
+const RUNTIME_BOOTSTRAP_G_RE = RUNTIME_SCRIPT_TAG_G_RE;
+/** An island code hint (the runtime's own dep preloads sit in the head beside it, by design). */
+const MODULEPRELOAD_RE = new RegExp(ISLAND_HINT_G_RE.source);
 const KIT_ENTRY_START_RE = /entry\/start/;
 const CLOCK_ISLAND_RE = /Clock island/;
 const HELLO_WORLD_RE = /Hello, world!/;

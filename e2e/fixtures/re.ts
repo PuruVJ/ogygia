@@ -32,6 +32,11 @@ export const WRAPPER_VIRTUAL_RE = /virtual:ogygia\/wrapper\//;
 // ── runtime / Kit bootstrap ──────────────────────────────────────────────────────────────
 /** The runtime bootstrap `<script data-ogygia-runtime>`. */
 export const RUNTIME_SCRIPT_RE = /data-ogygia-runtime/;
+/** Every runtime bootstrap SCRIPT (not its `data-ogygia-runtime-dep` preload links) — count them. */
+export const RUNTIME_SCRIPT_TAG_G_RE = /<script\b[^>]*\bdata-ogygia-runtime(?![-\w])/g;
+/** An ISLAND code hint: a modulepreload link that is not one of the runtime's own deps (those sit
+ *  beside the runtime script in the head by design — server/document-tail.ts). */
+export const ISLAND_HINT_G_RE = /<link\b(?![^>]*data-ogygia-runtime-dep)[^>]*rel="modulepreload"[^>]*>/g;
 /** Kit's client bootstrap assignment (`__sveltekit_<hash> = …`): a csr=true document. */
 export const KIT_BOOT_RE = /__sveltekit_\w+\s*=/;
 /** Any Kit bootstrap trace at all (looser than KIT_BOOT_RE). */

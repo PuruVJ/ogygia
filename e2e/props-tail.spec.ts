@@ -10,7 +10,7 @@
 // hydrates from the new tail, and back again.
 // Usage: pnpm exec playwright test props-tail
 import { test, check } from './fixtures/index.ts';
-import { KIT_MARKER_RE } from './fixtures/re.ts';
+import { ISLAND_HINT_G_RE, KIT_MARKER_RE } from './fixtures/re.ts';
 
 const REGION_OPEN_G = /<ogygia-region\b[^>]*>/g;
 const REGION_CLOSE = '</ogygia-region>';
@@ -63,8 +63,9 @@ test.describe('PROPS TAIL: island props ride at the end of the body, keyed by fi
 		// BEFORE the first sidecar (they must fire before the parser chews through the props), one per
 		// href across the whole page, every one at low priority
 		const head = html.slice(0, html.indexOf('</head>'));
-		check('no modulepreload hint in the head', !/rel="modulepreload"/.test(head));
-		const hints = [...html.matchAll(/<link\b[^>]*rel="modulepreload"[^>]*>/g)];
+		// (The runtime's own dep preloads sit in the head beside it by design; they are not island hints.)
+		const hints = [...html.matchAll(ISLAND_HINT_G_RE)];
+		check('no island modulepreload hint in the head', hints.every((h) => (h.index ?? 0) > head.length));
 		check('hints present in the document (load islands on the page)', hints.length > 0, String(hints.length));
 		check('hints come after the page content', hints.every((h) => (h.index ?? 0) > content_at));
 		check(
