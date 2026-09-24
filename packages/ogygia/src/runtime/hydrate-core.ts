@@ -159,48 +159,6 @@ export function dedupe_head_titles(): void {
 }
 
 /**
- * HOLD a region's laid-out box across its own hydrate, so Svelte's detach/re-attach of the region's
- * subtree cannot flash the page to 0 height. The height of a `render:'static'` island lives inside the
- * subtree Svelte claims; while that subtree is momentarily detached, a region with nothing else holding
- * a box collapses, and above the fold that is a visible CLS. ogygia already promises box-stability
- * through wake (the region-css hoist in core.ts exists for the same reason), so the swap it performs
- * must keep the promise: floor the region at its current rendered height for the swap window, release
- * on the next frame once the subtree is back (min-height is only a floor, so the restored content —
- * same height or taller — takes over cleanly, and holding a frame longer never hurts).
- *
- * Scope: only when the region's content is block-level and has real height. Pure-inline content has no
- * box worth holding, and forcing an inline-flowed region to `block` would itself break the line — so
- * that case is skipped. Reverts exactly the two properties it set, nothing else. Runs only on ogygia's
- * isolated hydrate (a csr=true document is Kit's to hydrate in place and never reaches here).
- */
-export function hold_region_box(region: HTMLElement): void {
-	if (typeof requestAnimationFrame === 'undefined' || typeof getComputedStyle === 'undefined') return;
-	let top = Infinity;
-	let bottom = -Infinity;
-	let has_block = false;
-	for (const child of region.children) {
-		const display = getComputedStyle(child).display;
-		if (display === 'none' || display === 'contents') continue;
-		if (display !== 'inline') has_block = true; // block, inline-block, flex, grid, table, …
-		const rect = child.getBoundingClientRect();
-		if (rect.height === 0) continue;
-		if (rect.top < top) top = rect.top;
-		if (rect.bottom > bottom) bottom = rect.bottom;
-	}
-	const height = bottom - top;
-	if (!has_block || !(height > 0)) return; // nothing block-level with a box to lose
-
-	// An inline custom element cannot take min-height — give it a box for the window only.
-	const set_display = getComputedStyle(region).display === 'inline';
-	if (set_display) region.style.display = 'block';
-	region.style.minHeight = `${height}px`;
-	requestAnimationFrame(() => {
-		region.style.minHeight = '';
-		if (set_display) region.style.display = '';
-	});
-}
-
-/**
  * REPAIR the island's light DOM toward its server markup, keeping every element it still has.
  *
  * Svelte's walk cares about the node SEQUENCE (elements, text, comments), never about attributes.
@@ -690,15 +648,14 @@ export function hydrate_island(
 		);
 	}
 
-	// BOX-STABILITY THROUGH WAKE: Svelte's hydrate of a dynamic root DETACHES the region's subtree for
-	// a frame before it re-attaches it (a claim/replace of the anchor-delimited children). When the box
-	// height lives only inside that subtree — an above-the-fold hero whose min-height sits on an inner
-	// element, with nothing between the region boundary and it holding a box — the region collapses to 0
-	// for that frame and the page shifts (CLS). ogygia already owns this promise (the region-css hoist
-	// exists to stop exactly this, core.ts) but its OWN hydrate breaks it here, so ogygia holds the box:
-	// floor the region at its measured pre-hydrate height across the swap, release next frame. Measured
-	// BEFORE the lift so a nested lake's height is included; a no-op for inline / empty content.
-	if (region.isConnected) hold_region_box(region);
+	// BOX-STABILITY THROUGH WAKE needs NOTHING here, and ogygia must not touch the region's box. This
+	// whole step — lake lift, repair, Svelte's claim (or its recovery re-render), lake restore — is ONE
+	// synchronous task: the browser cannot paint between the detach and the re-attach, so no frame ever
+	// shows the region empty (test/browser/region-hydrate-no-shift.test.ts samples every frame). A
+	// former "hold" set the region to `display:block` + a `min-height` for one painted frame to guard
+	// against that non-existent frame; the style flip itself re-laid-out the region under the page's
+	// CSS (an inline region is block-in-inline; block changes its children's containing block and
+	// anonymous boxes) and cost a customer hero a 0.69 layout shift, plus a forced layout per island.
 
 	// THE HYDRATION SOURCE OF TRUTH is the island's server markup, not whatever the live DOM is
 	// now. An island can sleep for a long time (`visible`, `interaction`), and other scripts edit
