@@ -1310,7 +1310,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						} catch {
 							return null;
 						}
-					}
+					},
+					// The runtime entry, by the exact name buildStart emitted it under: its static imports
+					// become the preload hints beside the runtime script.
+					compiler.runtime_chunk_filename()
 				);
 				report_seed_shaping(
 					map,

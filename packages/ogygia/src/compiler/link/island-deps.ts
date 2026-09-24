@@ -9,8 +9,7 @@ import { merge_page_keys, type PageKeys } from './page-keys.js';
 
 /** Deterministic island facade filename (content-hashed Vite deps are separate). */
 const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;
-/** The feature-selected runtime entry chunk (compiler `runtime_chunk_filename`). */
-const RUNTIME_CHUNK_RE = /(?:^|\/)og-runtime\.[0-9a-f-]+\.js$/;
+const LEADING_SLASH = /^\//;
 /** A Kit remote-function module (`*.remote.js` / `.ts`, Kit's `moduleExtensions` defaults), once
  *  its `?query` is stripped. In the CLIENT graph Kit swaps its body for fetching stubs, but the
  *  module keeps its file id — which is how an island's chunk closure names the remotes it can call. */
@@ -97,7 +96,15 @@ export function collectIslandDepModulepreloads(
 	 * is the union over its closure's own components (dependencies and ogygia's wrappers skipped).
 	 * Absent → no facts (the profiler shows none).
 	 */
-	read_source: ((id: string) => string | null) | null = null
+	read_source: ((id: string) => string | null) | null = null,
+	/**
+	 * The runtime entry chunk's exact file name (compiler `runtime_chunk_filename`). Its static
+	 * imports are recorded under its URL so SSR hints them beside the runtime script. Matched EXACTLY,
+	 * never by pattern: the name is ours, and a hand-written pattern drifts from it (the `h` suffix a
+	 * `hooks.client` app gets was missed, and such apps shipped the runtime with no preloads).
+	 * Absent (`null`) → no runtime entry.
+	 */
+	runtime_file: string | null = null
 ): {
 	js: Record<string, string[]>;
 	css: Record<string, string[]>;
@@ -285,12 +292,12 @@ export function collectIslandDepModulepreloads(
 	// with the rest of the app (Vite's preload helper, the modules Kit's client transport also uses).
 	// SSR hints them beside the runtime script (document-tail.ts `runtime_bootstrap_tags`) so they
 	// download with it, not one round trip after it is parsed.
-	for (const [key, chunk] of Object.entries(bundle)) {
-		if (chunk.type !== 'chunk') continue;
-		const fileName = chunk.fileName || key;
-		if (!RUNTIME_CHUNK_RE.test(fileName)) continue;
-		const entryUrl = fileName.startsWith('/') ? fileName : '/' + fileName;
-		js[entryUrl] = [...new Set(walk(fileName, new Set([fileName]), []))];
+	if (runtime_file) {
+		const runtime_key = norm(runtime_file).replace(LEADING_SLASH, '');
+		const chunk = bundle[runtime_key];
+		if (chunk && chunk.type === 'chunk') {
+			js['/' + runtime_key] = [...new Set(walk(runtime_key, new Set([runtime_key]), []))];
+		}
 	}
 	// WHAT IS INSIDE each chunk an island pulls (the profiler's Islands table): the bundler names
 	// shared chunks by hash, so the handoff keeps a readable summary of each one's source modules.

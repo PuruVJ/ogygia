@@ -59,7 +59,9 @@ describe('collectIslandDepModulepreloads', () => {
 	// runtime script so they download with it (document-tail.ts `runtime_bootstrap_tags`). Only STATIC
 	// imports — its lazy chunks (the hydrate core) load on the first wake, never at boot.
 	test('records the runtime chunk’s static imports (not its lazy chunks) under its URL', () => {
-		const rt = '_app/immutable/og-runtime.9693b425f558-4b029c13.js';
+		// The name an app WITH `hooks.client` gets (ctx.runtime_chunk_filename appends `h`): a pattern
+		// once missed it and those apps shipped the runtime with no preloads. Matched by exact name now.
+		const rt = '_app/immutable/og-runtime.7ad45d806655-d6559b01h.js';
 		const bundle = {
 			[rt]: {
 				type: 'chunk',
@@ -79,7 +81,7 @@ describe('collectIslandDepModulepreloads', () => {
 				imports: ['_app/immutable/chunks/shared.js']
 			}
 		};
-		expect(collectIslandDepModulepreloads(bundle).js['/' + rt]).toEqual([
+		expect(collectIslandDepModulepreloads(bundle, [], null, null, null, rt).js['/' + rt]).toEqual([
 			'/_app/immutable/chunks/helper.js',
 			'/_app/immutable/chunks/shared.js'
 		]);
@@ -110,25 +112,22 @@ describe('collectIslandDepModulepreloads', () => {
 		]);
 	});
 
-	test('ignores assets; the runtime chunk gets only its js deps (a phantom import is skipped)', () => {
+	test('ignores assets; the runtime is recorded only under its EXACT name (a phantom import skipped)', () => {
+		const bundle = {
+			'_app/immutable/foo.css': { type: 'asset', fileName: '_app/immutable/foo.css' },
+			'_app/immutable/og-runtime.abcdef123456.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/og-runtime.abcdef123456.js',
+				imports: ['_app/immutable/x.js'] // not an emitted chunk — never hinted
+			}
+		};
+		const empty = { css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {}, contents: {} };
+		// not told which chunk is the runtime → nothing is (no guessing from the name)
+		expect(collectIslandDepModulepreloads(bundle)).toEqual({ js: {}, ...empty });
+		// told → recorded, and a leading slash on the name is fine
 		expect(
-			collectIslandDepModulepreloads({
-				'_app/immutable/foo.css': { type: 'asset', fileName: '_app/immutable/foo.css' },
-				'_app/immutable/og-runtime.abcdef123456.js': {
-					type: 'chunk',
-					fileName: '_app/immutable/og-runtime.abcdef123456.js',
-					imports: ['_app/immutable/x.js'] // not an emitted chunk — never hinted
-				}
-			})
-		).toEqual({
-			js: { '/_app/immutable/og-runtime.abcdef123456.js': [] },
-			css: {},
-			page: {},
-			page_keys: {},
-			remotes: {},
-			interactivity: {},
-			contents: {}
-		});
+			collectIslandDepModulepreloads(bundle, [], null, null, null, '/_app/immutable/og-runtime.abcdef123456.js')
+		).toEqual({ js: { '/_app/immutable/og-runtime.abcdef123456.js': [] }, ...empty });
 	});
 
 	// INTERACTIVITY FACTS (the profiler's wake advisor): counted over the island's OWN components

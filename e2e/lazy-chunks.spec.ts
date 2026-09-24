@@ -26,6 +26,8 @@ const STATIC_IMPORT_RE = /(?:^|[;}\n])\s*import\s*(?:[\w*{}\s,$]+from\s*)?["']([
 /** The floor under Kit's `strict` entry signatures: the runtime + Vite's shared preload helper + the
  *  modules Kit's client transport also uses (runtime/slots.ts `BootLink`). */
 const BOOT_FILE_BUDGET = 4;
+/** The runtime chunk of an app WITH `hooks.client`: its feature hash carries a trailing `h`. */
+const CLIENT_HOOKS_RUNTIME_RE = /og-runtime\.[^/]*h\.js$/;
 
 test.describe('lazy runtime chunks: hydrate core on first wake, navigation on first prefetch', () => {
 	test('boot fetches neither; the first wake fetches the hydrate core, the first hover the navigation', async ({
@@ -86,6 +88,11 @@ test.describe('lazy runtime chunks: hydrate core on first wake, navigation on fi
 			static_imports.every((u) => hinted.includes(u)),
 			`imports:\n${static_imports.join('\n')}\nhinted:\n${hinted.join('\n')}`
 		);
+		// The playground has a `hooks.client` (apps/playground/src/hooks.client.ts), so this is the
+		// `h`-suffixed runtime name — the one that once went unrecognised and shipped with no preloads.
+		check('boot: the runtime is the client-hooks build (name ends in h)', CLIENT_HOOKS_RUNTIME_RE.test(runtime_url), runtime_url);
+		check('boot: the app’s client hooks ran (init)', await page.evaluate(() => (globalThis as Record<string, unknown>).__og_client_init === true));
+		check('boot: the runtime’s preloads are not empty', hinted.length > 0, runtime_url);
 
 		// The first wake: click the interaction island → the hydrate core + the island's chunk.
 		await page.locator('[data-i-btn]').click();
