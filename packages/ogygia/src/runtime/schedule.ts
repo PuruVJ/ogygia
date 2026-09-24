@@ -65,15 +65,11 @@ export function yield_task(): Promise<void> {
 }
 
 /**
- * Start a `load` island's hydrate WITHOUT competing with the browser's critical work. A `load` island's
- * `import()` (and Svelte's client runtime) otherwise fetches the moment the runtime boots — around
- * DOMContentLoaded, while the LCP image is still downloading — so island JS races the page's first
- * paint on the network. `scheduler.postTask` at 'background' yields to rendering AND to user-visible
- * work, so the browser paints (and fetches the LCP resource) first and the island's import starts in
- * the gap after. Cooperative, not gated on a fixed moment: if the main thread is already free, it runs
- * now; while the browser is busy painting, it waits on its own. Falls back to a macrotask where
- * postTask is absent (Safari/Firefox-older) — still off the synchronous boot task, so the browser can
- * paint before it. This is what makes `load` mean "as soon as the browser is free," not "at boot."
+ * Run `fn` at background priority, off the current task: `scheduler.postTask` at 'background' where
+ * it exists, else a macrotask. This orders MAIN-THREAD work only — it lets a pending render or input
+ * task go first. It does not hold back the network: while the page's resources download the main
+ * thread is idle, so a background task runs at once and an `import()` it starts competes with them.
+ * Holding island code back until the page has painted is `after_document_painted`'s job.
  */
 export function background_start(fn: () => void): void {
 	const s = (globalThis as { scheduler?: { postTask?: (cb: () => void, o?: { priority?: string }) => unknown } })
@@ -87,6 +83,57 @@ export function background_start(fn: () => void): void {
 		}
 	}
 	setTimeout(fn, 0);
+}
+
+let document_painted: Promise<void> | null = null;
+
+/**
+ * Resolves once the document is parsed AND painted: after `DOMContentLoaded`, then one rendered
+ * frame. This is the moment SvelteKit starts hydrating (its start runs from a deferred module
+ * script, so never before DOMContentLoaded), and an island's wake starts no earlier: the runtime
+ * boots from a module script that runs BEFORE DOMContentLoaded — the app's other deferred scripts
+ * may still be executing and the first paint (and its LCP image) not yet happened — and an island
+ * `import()` started there takes bandwidth from both.
+ *
+ * `readyState` cannot tell "DOMContentLoaded fired" from "about to fire" (it reads `interactive` for
+ * both), so the navigation timing entry decides; `load` backs up the listener where there is none.
+ * A hidden document paints no frame (`requestAnimationFrame` never fires there) — nothing to protect,
+ * so it waits one task instead. Once resolved it stays resolved: a late region (SPA swap, a hole's
+ * answer) passes straight through.
+ */
+export function after_document_painted(): Promise<void> {
+	return (document_painted ??= new Promise<void>((resolve) => {
+		if (typeof document === 'undefined') return resolve();
+		const painted = () => {
+			if (document.visibilityState === 'hidden' || typeof requestAnimationFrame !== 'function') setTimeout(resolve, 0);
+			else requestAnimationFrame(() => setTimeout(resolve, 0)); // the task after the frame
+		};
+		if (dom_content_loaded()) return painted();
+		let done = false;
+		const once = () => {
+			if (done) return;
+			done = true;
+			document.removeEventListener('DOMContentLoaded', once);
+			removeEventListener('load', once);
+			painted();
+		};
+		document.addEventListener('DOMContentLoaded', once);
+		addEventListener('load', once);
+	}));
+}
+
+function dom_content_loaded(): boolean {
+	if (document.readyState === 'complete') return true;
+	if (document.readyState === 'loading') return false;
+	const nav = (typeof performance !== 'undefined' && performance.getEntriesByType?.('navigation')[0]) as
+		| PerformanceNavigationTiming
+		| undefined;
+	return !!nav && nav.domContentLoadedEventEnd > 0;
+}
+
+/** Test seam: forget the resolved gate (a test that fakes a fresh document). */
+export function reset_document_painted(): void {
+	document_painted = null;
 }
 
 /**

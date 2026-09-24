@@ -24,6 +24,7 @@ import { KEEP_FALLBACK_HTML } from '../keep-fallback-marker.js';
 import { NAV_HANDLE_KEY, mpa_nav, publish_nav } from './nav-handle.js';
 import { link_boot } from './boot-link.js';
 import {
+	after_document_painted,
 	background_start,
 	hydrate_settled,
 	hydrate_started,
@@ -519,7 +520,8 @@ class OgygiaRegion extends HTMLElement {
 		// the page (a customer home page downloaded 1.1 MB of below-the-fold island code one second
 		// after load, for islands the visitor might never scroll to). A page that wants every island's
 		// bytes early says so: `regions.preload: 'all'` hints them from the HTML at low priority.
-		this.#arm(when, deferred ? this.#fire_server : this.#fire_hydrate);
+		if (deferred) this.#arm(when, this.#fire_server, false);
+		else this.#arm(when, this.#fire_hydrate, true);
 		// `prefetch="<schedule>"`: a deferred hole warms its HTML on a second, EARLIER schedule
 		// (load / idle / visible / media) while `when` still decides the swap — an on-demand menu
 		// whose bytes sit in the frame store before the first hover, so the gesture joins the warm
@@ -529,7 +531,7 @@ class OgygiaRegion extends HTMLElement {
 		// attribute harmless.
 		const prefetch = deferred ? this.getAttribute('prefetch') : null;
 		if (prefetch && prefetch !== when && prefetch !== 'interaction') {
-			this.#arm(prefetch, this.#fire_prefetch, this.getAttribute('margin') || undefined);
+			this.#arm(prefetch, this.#fire_prefetch, false, this.getAttribute('margin') || undefined);
 		}
 	}
 
@@ -592,7 +594,7 @@ class OgygiaRegion extends HTMLElement {
 	}
 
 	/** Arm idle / visible / load / interaction / media for a schedule callback. */
-	#arm(when: string, fire: () => unknown, visible_margin?: string) {
+	#arm(when: string, fire: () => unknown, loads_code: boolean, visible_margin?: string) {
 		if (DEVTOOLS) {
 			// Wrap so the schedule FIRING is observable (interaction/visible/idle "when did it actually
 			// wake, and why" is the story a timeline instrument tells). Off → `fire` is used directly.
@@ -602,21 +604,34 @@ class OgygiaRegion extends HTMLElement {
 				return raw();
 			};
 		}
-		// NON-user-initiated wakes hydrate at BACKGROUND priority so they never race the LCP paint: `load`
-		// fires at boot, and a `visible`/`media` island above the fold (or a media query that matches at
-		// load) fires right then too — same competition. `background_start` yields to rendering, so the
-		// paint and its image win the main thread and network first and the island fills in the gap after;
-		// a below-the-fold `visible` island fires on scroll (post-LCP) where "when free" is still instant.
+		// NON-user-initiated wakes start at BACKGROUND priority: `load` fires at boot, and a `visible`/`media`
+		// island above the fold (or a media query that matches at load) fires right then too.
+		// `background_start` lets a pending render or input task run first — main-thread order only; it
+		// does not hold back the network (the gate below does that).
 		// `idle` is skipped — it already waits for requestIdleCallback, so wrapping it would double-defer.
 		// `interaction` is skipped — the user clicked and is waiting for THIS island to wake and replay the
 		// click, so it must hydrate immediately (and it ships no JS until the click, so it never competes).
-		if (when === 'idle') this.#on_idle(fire);
-		else if (when === 'visible') this.#on_visible(() => background_start(fire), visible_margin);
-		else if (when === 'load') background_start(fire);
+		//
+		// And a wake that LOADS CODE (`loads_code`: an island's hydrate, a deferred island's phase 2)
+		// starts no earlier than Kit would start hydrating: after DOMContentLoaded and one painted frame
+		// (schedule.ts `after_document_painted`) — every schedule but `interaction`. The runtime boots
+		// before DOMContentLoaded, and background priority does not hold back the network, so without
+		// this a `load`, `idle`, media or above-the-fold `visible` island's code downloads beside the
+		// page's own first paint. A hole's HTML is not gated (it is page content, not code); neither is
+		// a Kit document, where Kit's own start already sets the pace.
+		const gated = loads_code && !kit_hydrates_page();
+		const start = gated
+			? () => void after_document_painted().then(() => background_start(fire))
+			: () => background_start(fire);
+		if (when === 'idle') {
+			if (gated) void after_document_painted().then(() => this.isConnected && this.#on_idle(fire));
+			else this.#on_idle(fire);
+		} else if (when === 'visible') this.#on_visible(start, visible_margin);
+		else if (when === 'load') start();
 		else if (when === 'interaction') {
 			if (is_deferred(this)) arm_on_demand(this, fire);
 			else this.#on_interaction(fire);
-		} else this.#on_media(when, () => background_start(fire)); // a media query string
+		} else this.#on_media(when, start); // a media query string
 	}
 
 	/**
@@ -684,7 +699,7 @@ class OgygiaRegion extends HTMLElement {
 				? this.getAttribute('hydrate-margin') || this.getAttribute('margin') || undefined
 				: undefined;
 		register_region(this);
-		this.#arm(phase2, this.#fire_hydrate, margin);
+		this.#arm(phase2, this.#fire_hydrate, true, margin);
 	}
 
 	/**
@@ -1080,7 +1095,9 @@ class OgygiaRegion extends HTMLElement {
 
 	/** Hydrate a live region's swapped-in HTML through the hydrate core's LiveHost path. */
 	async #live_hydrate(props: Record<string, unknown>) {
-		await dom_ready();
+		// A pushed tick is no user gesture either: its island code waits for the painted document like
+		// any scheduled wake (#arm) — on a Kit document, only for the parse.
+		await (kit_hydrates_page() ? dom_ready() : after_document_painted());
 		if (!this.isConnected) return;
 		const entry = this.getAttribute('entry');
 		if (!entry) return;
