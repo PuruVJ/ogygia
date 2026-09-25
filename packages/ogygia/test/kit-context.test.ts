@@ -20,6 +20,7 @@ import {
 } from '../src/server/kit-context.js';
 import PageProbe from './_fixtures/PageProbe.svelte';
 import EventProbe from './_fixtures/EventProbe.svelte';
+import KitPagePass from './_fixtures/KitPagePass.svelte';
 
 const probe = PageProbe as unknown as Component;
 const event_probe = EventProbe as unknown as Component;
@@ -114,6 +115,21 @@ describe('requestEvent() — the live RequestEvent for a server island (no $app/
 		const out = render(event_probe, { props: {}, context: kit_render_context(undefined, event) });
 		expect(out.body).toContain('ada|/docs/');
 		expect(render(event_probe, { props: {} }).body).toContain('NO EVENT');
+	});
+
+	// Kit's OWN page render sets `__request__` to `{ page }` only — no event. A layout, or anything a
+	// page renders outside an island or hole, used to get `null` there (field: a per-request id counter
+	// fell back to a process-wide one, SSR ids changed every request, a render cache never hit).
+	it('under Kit’s own page render (context without an event), reads the installed reader', () => {
+		const children = (renderer: unknown) => (event_probe as unknown as (r: unknown, p: unknown) => void)(renderer, {});
+		const kit_pass = KitPagePass as unknown as Component<Record<string, unknown>>;
+		expect(render(kit_pass, { props: { children } }).body).toContain('NO EVENT');
+		set_kit_event_reader(() => ({ locals: { user: 'ada' }, url: new URL('http://localhost/home/') }));
+		try {
+			expect(render(kit_pass, { props: { children } }).body).toContain('ada|/home/');
+		} finally {
+			set_kit_event_reader(null);
+		}
 	});
 
 	it('falls back to the installed event reader (hooks.ts) when no explicit event is passed', () => {

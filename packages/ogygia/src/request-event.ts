@@ -9,8 +9,11 @@
  * an app that has not adopted them has none.
  *
  * This is that channel, isomorphic by construction: on the server every render root ogygia starts
- * carries the live event in Kit's `__request__` context (server/kit-context.ts); on the client the
- * context has none and the call answers `null`. Read it during component init, like `getContext`.
+ * carries the live event in Kit's `__request__` context (server/kit-context.ts), and under KIT'S own
+ * page render — whose `__request__` holds only `{ page }` — the event comes from the reader the
+ * handle installs (hooks.ts, Kit's request store). So a layout, or anything a page renders outside an
+ * island or hole, gets the event too. On the client neither exists and the call answers `null`.
+ * Read it during component init, like `getContext`.
  *
  * ```svelte
  * <script lang="ts">
@@ -22,14 +25,15 @@
  * ```
  */
 import { getContext } from 'svelte';
-import { KIT_REQUEST_CONTEXT } from './server/kit-context.js';
+import { KIT_REQUEST_CONTEXT, kit_request_event } from './server/kit-context.js';
 
 export function requestEvent<E = unknown>(): E | null {
 	try {
 		const ctx = getContext(KIT_REQUEST_CONTEXT) as { event?: E | null } | undefined;
-		return ctx?.event ?? null;
+		return ctx?.event ?? (kit_request_event() as E | null);
 	} catch {
-		// outside component init (no context available) — same answer as the client leg
-		return null;
+		// outside component init (no context available): the request store still knows the request
+		// during a server render; on the client no reader is installed → null
+		return kit_request_event() as E | null;
 	}
 }
