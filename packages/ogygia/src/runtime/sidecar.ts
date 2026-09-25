@@ -12,11 +12,11 @@
  *    was a full light-DOM walk each (150 islands × 2,000 elements on a measured page).
  *  - ADJACENT, the next element sibling (skipping `<link>` CSS hints): every other render root —
  *    a hole response, a baked held region, a streamed late region, a router document, a foreign
- *    fragment — keeps the sidecar right after the region, so the HTML stays self-contained wherever
- *    it is spliced.
- * The keyed lookup runs first (a keyed sidecar may also sit adjacent, e.g. in dev or a fragment);
- * the sibling walk is the fallback. Server islands and held deferred regions carry no `data-og-fp`
- * and always ride adjacent.
+ *    fragment, a snippet crossing into an island — keeps the sidecar right after the region, so the
+ *    HTML stays self-contained wherever it is spliced. Keyed by attribute only, NEVER by id: its
+ *    fingerprint may repeat one the tail (or another root) carries, and an id must be unique.
+ * The tail's id lookup runs first, then the sibling walk; a whole-tree attribute query only on a
+ * miss. Server islands and held deferred regions carry no `data-og-fp` and always ride adjacent.
  *
  * A third source, checked first: a sidecar RESTORED onto a region that has none in the DOM — a
  * hydrating hole Kit rendered again in the browser after it gave up hydrating the document (the
@@ -34,21 +34,14 @@ export function props_sidecar_of(region: Element): HTMLScriptElement | null {
 	const restored = restored_sidecars.get(region);
 	if (restored) return restored;
 	const fp = region.getAttribute('data-og-fp');
-	if (fp) {
-		// The region's own tree: the live document, a foreign (fetched) document, or a shadow root.
-		const root = region.getRootNode() as Document | ShadowRoot | Element;
-		const keyed =
-			'getElementById' in root
-				? root.getElementById('og-props-' + fp)
-				: // A detached subtree (no id map): the attribute walk, on that subtree only.
-					root.querySelector(`script[data-ogygia-props="${fp}"]`);
+	// The region's own tree: the live document, a foreign (fetched) document, or a shadow root.
+	const root = region.getRootNode() as Document | ShadowRoot | Element;
+	if (fp && 'getElementById' in root) {
+		const keyed = root.getElementById('og-props-' + fp); // the TAIL's (the only one with an id)
 		if (keyed) return keyed as HTMLScriptElement;
-		// PRE-ID DOCUMENTS: a document rendered before the server stamped `id="og-props-<fp>"` on the
-		// keyed sidecar (a frozen copy, a fragment from an older build). One attribute query, only on
-		// that miss — delete this fallback once no such document can still be served.
-		const legacy = (root as Document).querySelector?.(`script[data-ogygia-props="${fp}"]`);
-		if (legacy) return legacy as HTMLScriptElement;
 	}
+	// ADJACENT: the region's own next sibling — keyed by attribute only (an adjacent sidecar never
+	// carries an id: its fingerprint may repeat elsewhere in the document) or unkeyed.
 	let sib = region.nextElementSibling;
 	while (sib) {
 		if (sib.tagName === 'SCRIPT' && sib.hasAttribute('data-ogygia-props'))
@@ -58,6 +51,13 @@ export function props_sidecar_of(region: Element): HTMLScriptElement | null {
 			continue;
 		}
 		break;
+	}
+	// A detached subtree (no id map), or a document rendered before the tail stamped ids (a frozen
+	// copy, a fragment from an older build): one attribute query, only on a miss. Same fingerprint,
+	// same props — any match is the right payload.
+	if (fp) {
+		const found = (root as ParentNode).querySelector?.(`script[data-ogygia-props="${fp}"]`);
+		if (found) return found as HTMLScriptElement;
 	}
 	return null;
 }

@@ -184,15 +184,22 @@ function live_entries_in(text: string): string[] {
 	return out;
 }
 
+/** Where a sidecar sits: the document tail (one per fingerprint for the page) or next to its region. */
+export type SidecarPlace = 'tail' | 'adjacent';
+
 /**
- * The sidecar `<script>` for one island: keyed by fingerprint (`data-ogygia-props` for the
- * reconciler, `id` for an O(1) `getElementById` lookup by the runtime) when it has one, adjacent
- * and unkeyed otherwise; the format attribute names the JSON lane.
+ * The sidecar `<script>` for one island: keyed by fingerprint when it has one (`data-ogygia-props`
+ * for the reconciler; in the TAIL also `id`, for an O(1) `getElementById` lookup by the runtime),
+ * unkeyed otherwise; the format attribute names the JSON lane.
  */
-export function props_sidecar(fp: string, w: WireText): string {
+export function props_sidecar(fp: string, w: WireText, place: SidecarPlace = 'adjacent'): string {
+	// An `id` must be unique in the document, and only the document TAIL can promise that: it emits
+	// one sidecar per fingerprint for the whole page. An ADJACENT sidecar (a hole's answer, a baked or
+	// crossing render root) may repeat a fingerprint the tail — or another root — already carries, so
+	// it is keyed by attribute only; the runtime finds it as the region's next sibling.
 	return (
 		'<script type="application/ogygia-props" data-ogygia-props' +
-		(fp ? `="${fp}" id="og-props-${fp}"` : '') +
+		(fp ? `="${fp}"` + (place === 'tail' ? ` id="og-props-${fp}"` : '') : '') +
 		(w.json ? ` ${WIRE_FORMAT_ATTR}="${WIRE_FORMAT_JSON}"` : '') +
 		'>' +
 		w.text +

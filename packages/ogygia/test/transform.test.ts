@@ -785,7 +785,7 @@ describe('portable snippets — a named snippet handed to a non-island component
 			)
 		)!;
 		// og_portable receives { who } and the entry destructures it.
-		expect(r.code).toMatch(/__og_portable\(\s*[^,]+,\s*\{ who \}/);
+		expect(r.code).toMatch(/__og_portable\(\s*[^,]+,\s*[^,]+,\s*\{ who \}/);
 		expect(portableIslands(r)[0].source).toMatch(/let \{ who \} = \$props\(\)/);
 	});
 
@@ -806,10 +806,37 @@ describe('portable snippets — a named snippet handed to a non-island component
 		);
 		const ssr = run(src, makeCtx({ ssr: true }))!;
 		expect(ssr.code).toMatch(/import __OgPS_[a-f0-9]+ from/);
-		expect(ssr.code).toMatch(/__og_portable\(__OgPS_/);
+		expect(ssr.code).toMatch(/__og_portable\(__og_native_actions_0, __OgPS_/);
 		const client = run(src, makeCtx({ ssr: false }))!;
 		expect(client.code).not.toMatch(/import __OgPS_/);
-		expect(client.code).toMatch(/__og_portable\(null,/);
+		expect(client.code).toMatch(/__og_portable\(__og_native_actions_0, null,/);
+	});
+
+	// IN PLACE: the snippet as written stays in the host (moved to the template root under a private
+	// name) and is what the component renders — the host's context and scoped CSS reach it. The
+	// component receives it branded; only a boundary swaps in the portable entry.
+	test('the snippet as written stays in the host, at the root, and is what the component gets', () => {
+		const r = run(
+			wrap(
+				`import Shell from './Shell.svelte';\nconst who = 'Ada';`,
+				`<Shell>{#snippet actions()}<a class="x">{who}</a>{/snippet}</Shell>`
+			),
+			makeCtx({ ssr: true })
+		)!;
+		expect(r.code).toMatch(/<Shell actions=\{__og_portable\(__og_native_actions_0,/);
+		expect(r.code).toMatch(/\{#snippet __og_native_actions_0\(\)\}<a class="x">\{who\}<\/a>\{\/snippet\}\s*$/);
+		expect(r.code).not.toMatch(/<Shell[^>]*>\s*\{#snippet/);
+	});
+
+	test('a body bound to an enclosing block ({#each} item, {@const}) stays a plain snippet', () => {
+		const r = run(
+			wrap(
+				`import Shell from './Shell.svelte';\nconst rows = [1, 2];`,
+				`{#each rows as row}<Shell>{#snippet actions()}<a>{row}</a>{/snippet}</Shell>{/each}`
+			)
+		);
+		expect(r?.code ?? '').not.toMatch(/og_portable/);
+		expect(r ? portableIslands(r).length : 0).toBe(0);
 	});
 
 	test('a parameterized snippet on a PLAIN component stays native (library-internal wiring)', () => {

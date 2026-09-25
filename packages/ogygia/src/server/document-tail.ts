@@ -229,7 +229,7 @@ export class DocumentTail {
 		const rows: IslandStat[] | null = detail ? [] : null;
 		for (const [fp, s] of this.#props) {
 			const w = s.wire.wire(seed);
-			out += props_sidecar(fp, w);
+			out += props_sidecar(fp, w, 'tail');
 			if (rows) {
 				rows.push({
 					fp,

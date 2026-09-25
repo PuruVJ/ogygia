@@ -203,9 +203,18 @@ describe('live snippet entries', () => {
 });
 
 describe('props_sidecar', () => {
-	it('keyed: data-ogygia-props + id; JSON lane: the format attribute', () => {
-		expect(props_sidecar('ab12', { text: '{"a":1}', json: true })).toBe(
+	it('keyed in the tail: data-ogygia-props + id; JSON lane: the format attribute', () => {
+		expect(props_sidecar('ab12', { text: '{"a":1}', json: true }, 'tail')).toBe(
 			`<script type="application/ogygia-props" data-ogygia-props="ab12" id="og-props-ab12" ${WIRE_FORMAT_ATTR}="${WIRE_FORMAT_JSON}">{"a":1}</script>`
+		);
+	});
+
+	// An id must be unique in the document; only the tail (one per fingerprint for the page) can
+	// promise that. An adjacent sidecar may repeat a fingerprint (a crossing snippet's island, rendered
+	// in its own root, beside the same island in the page) — field: duplicate `og-props-<fp>` ids.
+	it('keyed ADJACENT: the fingerprint attribute, never an id', () => {
+		expect(props_sidecar('ab12', { text: '[1]', json: false })).toBe(
+			'<script type="application/ogygia-props" data-ogygia-props="ab12">[1]</script>'
 		);
 	});
 

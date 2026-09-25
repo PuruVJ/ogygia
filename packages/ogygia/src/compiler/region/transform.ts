@@ -2103,9 +2103,44 @@ class FileCompilation {
 				)
 		);
 
+		// BLOCK-BOUND names: what a template block declares — `{#each}` items and indexes, `{:then}` /
+		// `{:catch}` values, `{@const}`, snippet parameters, and snippets declared below the root. A
+		// snippet body that reads one of these lives in that block's scope: it can neither move to the
+		// template root (below) nor cross (its entry would see an undefined name), so it stays native.
+		const block_bound = new Set<string>();
+		const bind_pattern = (n: SvelteNode) => {
+			if (!n || typeof n !== 'object') return;
+			if (Array.isArray(n)) return n.forEach(bind_pattern);
+			if (n.type === 'Identifier' && n.name) block_bound.add(n.name);
+			for (const k in n) {
+				if (k === 'type' || k === 'start' || k === 'end' || k === 'loc') continue;
+				const v = n[k];
+				if (v && typeof v === 'object') bind_pattern(v);
+			}
+		};
+		const walk_bound = (nodes: SvelteNode[], root: boolean) => {
+			for (const node of nodes ?? []) {
+				if (node.type === 'EachBlock') {
+					bind_pattern(node.context);
+					if (node.index) block_bound.add(node.index);
+				} else if (node.type === 'AwaitBlock') {
+					bind_pattern(node.value);
+					bind_pattern(node.error);
+				} else if (node.type === 'ConstTag') {
+					bind_pattern(node.declaration?.declarations?.map((d: SvelteNode) => d.id));
+				} else if (node.type === 'SnippetBlock') {
+					bind_pattern(node.parameters);
+					if (!root && node.expression?.name) block_bound.add(node.expression.name);
+				}
+				for (const k of CHILD_KEYS) if (node[k]?.nodes) walk_bound(node[k].nodes, false);
+			}
+		};
+		walk_bound(ast.fragment?.nodes ?? [], true);
+
 		let portable_emitted = false;
 		const portable_imports: string[] = [];
 		const portable_seen = new Set<string>();
+		let native_seq = 0;
 		// The host's <style> travels into every portable-snippet synth. A snippet body is authored in
 		// the host and, in plain Svelte, wears the host's scope class so the host's scoped rules match
 		// it. Lifted into its own entry, the body would compile with no <style> and so NO scope class,
@@ -2138,6 +2173,8 @@ class FileCompilation {
 			};
 			collect_param_names(snip_params);
 			const { free, mutated, stores } = collectCaptureInfo(body);
+			// A body bound to an enclosing block's names stays a plain snippet (see block_bound).
+			if ([...free].some((nm) => block_bound.has(nm) && !param_names.has(nm))) continue;
 			// Only a HOST-state write disqualifies branding (a captured snapshot can't write back). A snippet
 			// mutating its OWN parameter is fine — params ride `__ogArgs`, not a capture — so exclude them,
 			// exactly as the `free` loop below does. Otherwise a snippet that only reassigns its own param was
@@ -2309,11 +2346,21 @@ class FileCompilation {
 				// alongside its own facade, so only snippets that actually cross a rendered boundary
 				// cost a fetch.)
 			}
-			s.remove(snip.start, snip.end);
+			// The snippet AS WRITTEN stays: it moves to the template root under a private name (its body
+			// reads only host-level names — block-bound bodies were skipped above — so the root is the same
+			// scope) and keeps rendering IN PLACE wherever the component renders it: the host's context,
+			// its scoped CSS, an island inside it a plain page island. The component receives it branded
+			// (`og_portable`), carrying the descriptor and the portable entry that only a boundary swaps in
+			// (portable-form.ts). Moving (not copying) keeps every edit this pass already made inside the
+			// body. Root, not beside the component: a snippet declared inside ANOTHER component's children
+			// would become a prop of that component.
+			const native_name = `__og_native_${name}_${native_seq++}`;
+			s.move(snip.start, snip.end, source.length);
+			s.overwrite(snip.expression.start, snip.expression.end, native_name);
 			const insert_at = comp.start + 1 + String(comp.name).length;
 			s.appendLeft(
 				insert_at,
-				` ${name}={${OG_PORTABLE}(${entry_ref}, ${cap_obj}, ${JSON.stringify(url)})}`
+				` ${name}={${OG_PORTABLE}(${native_name}, ${entry_ref}, ${cap_obj}, ${JSON.stringify(url)})}`
 			);
 			portable_emitted = true;
 		}

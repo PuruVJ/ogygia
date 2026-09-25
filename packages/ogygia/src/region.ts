@@ -15,6 +15,7 @@
  */
 import type { Component } from 'svelte';
 import { region_snippet } from './region-snippet.js';
+import { with_portable_forms } from './portable-form.js';
 import RawHtml from './RawHtml.svelte';
 
 /** Brand so the transport can recognize a region without false-matching plain objects. */
@@ -297,7 +298,11 @@ function make_awaitable(dual: DualRegion): AwaitableRegion {
 				// `renderHtml` (generated per binding) already prefixes the component's stylesheet
 				// `<link>`s — the page never imported this server-picked component, so its CSS is on no
 				// page stylesheet; the client hoists those links to <head>.
-				const html = dual.renderHtml ? await dual.renderHtml(dual.props) : undefined;
+				// A branded snippet in the props crosses in its portable form (portable-form.ts) — the
+				// same shape the far side revives from the descriptor the wire carries.
+				const html = dual.renderHtml
+					? await dual.renderHtml(with_portable_forms(dual.props))
+					: undefined;
 				// Spread copies only enumerable own props → drops `then`, so the result is NOT a
 				// thenable and `await` settles here instead of chaining forever.
 				return { ...dual, ...(html != null ? { html } : {}) };

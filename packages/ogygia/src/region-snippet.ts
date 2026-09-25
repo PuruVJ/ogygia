@@ -28,6 +28,7 @@ import { BROWSER, DEV } from 'esm-env';
 import { register_kind, mint } from './ref.js';
 import { kit_render_context, kit_request_event } from './server/kit-context.js';
 import { DEFAULT_ISLANDS_ENDPOINT } from './server/endpoint.js';
+import { PORTABLE_FORM, with_portable_forms } from './portable-form.js';
 
 /**
  * A hand-written SERVER component that renders a bare snippet: svelte has no public API to
@@ -205,15 +206,33 @@ function capture_static(snippet: Snippet, label?: string): RegionSnippet {
 	return make({ m: 'static', h: body });
 }
 
-// ── live constructor: emitted by the compiler at a snippet's definition site (was `og_portable`) ──
-/** Definition-site factory (compiler-emitted). A live region snippet: renders `Entry` inline in the
- *  same graph AND carries the descriptor so it can cross a boundary alive. */
+// ── live constructor: emitted by the compiler at a snippet's definition site ──
+/**
+ * Definition-site factory (compiler-emitted). Brands the snippet AS WRITTEN (`native`) — it keeps
+ * rendering in place, in the host's tree: the host's context, its scoped CSS, a nested island as a plain
+ * page island — with the descriptor (`__ogRegion`, what crosses the wire) and its PORTABLE form: the
+ * body compiled to `Entry`, rendered in isolation on the server and hydrated alone on the client. Only a
+ * boundary swaps the portable form in (portable-form.ts, via {@link prepare_region_props}), so the server
+ * markup and the client's revived snippet agree. `Entry` is `null` in a client bundle (the far side
+ * imports it by url). The native function is branded in place (not wrapped), so its identity — what a
+ * `{@render}` keys on — is stable across re-evaluations of the prop.
+ */
 export function og_portable(
-	Entry: Component,
+	native: Snippet,
+	Entry: Component | null,
 	props: Record<string, unknown>,
 	url: string
 ): RegionSnippet {
-	return make({ m: 'live', e: url, p: props }, Entry);
+	const desc: RegionSnippetDescriptor = { m: 'live', e: url, p: props };
+	const snip = native as RegionSnippet;
+	snip.__ogRegion = desc;
+	let portable: RegionSnippet | null = null;
+	Object.defineProperty(snip, PORTABLE_FORM, {
+		configurable: true,
+		enumerable: false,
+		get: () => (portable ??= make(desc, Entry))
+	});
+	return snip;
 }
 
 // ── public API: `region.snippet()` — pure runtime, static by default, mirrors `createRawSnippet` ──
@@ -252,11 +271,14 @@ export function region_snippet(input: Snippet | RawRegionSnippet): RegionSnippet
  * Prepare an island's props for crossing: freeze each BARE snippet prop to a single-rooted static
  * region snippet, so the SAME value renders the island body AND serializes — the body HTML and the
  * revived client snippet then agree byte-for-byte, and hydration adopts cleanly. Server-only (uses SSR
- * capture). Already-branded (live) snippets and non-snippet values pass through untouched. Returns the
- * original object when nothing changed (no needless copy).
+ * capture). A branded (live) snippet, at any depth, is swapped for its PORTABLE form; non-snippet values
+ * pass through untouched. Returns the original object when nothing changed (no needless copy).
  */
-export function prepare_region_props(props: Record<string, unknown>): Record<string, unknown> {
-	if (BROWSER) return props; // freezing is an SSR capture; the client revives from the descriptor
+export function prepare_region_props(input: Record<string, unknown>): Record<string, unknown> {
+	if (BROWSER) return input; // freezing is an SSR capture; the client revives from the descriptor
+	// A branded snippet (at any depth) crosses in its PORTABLE form, so this island's server body
+	// renders the same shape its client revives (portable-form.ts).
+	const props = with_portable_forms(input);
 	let out: Record<string, unknown> | null = null;
 	for (const k in props) {
 		const v = props[k];
