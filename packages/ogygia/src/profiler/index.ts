@@ -58,6 +58,17 @@ import {
 	type RouteAgg
 } from './report.js';
 import { ogp_encode, ogp_decode, is_ogp, recover_ogp_bytes } from './crypto.js';
+import {
+	AFTER_LOGIN_PARAM,
+	SESSION_COOKIE,
+	describe_cookie_diagnosis,
+	raw_cookie_values,
+	session_cookie_values,
+	type CookieDiagnosis
+} from './session-cookie.js';
+
+/** Set on the login page's URL when a login just succeeded and the session still did not arrive. */
+const LOGIN_FAILED_PARAM = 'session';
 import { derive_findings, island_rows_of, island_host_renamer, island_name, type ClientIslandStat, type ClientMarkStat, type PageVitals } from './report.js';
 import { load_lane_of } from './timeline.js';
 import { parse_visit, merge_visits, type Visit } from './visit.js';
@@ -1652,7 +1663,7 @@ class Profiler {
 		// looked like "the password does nothing". Lax still isn't sent cross-site, and it's HttpOnly.
 		// A one-year Max-Age so the session survives (it was a session cookie, lost on some setups).
 		const age = token === '' ? '' : '; Max-Age=31536000';
-		return `og_profiler=${token}; Path=${this.base}; HttpOnly; SameSite=Lax${secure}${clear}${age}`;
+		return `${SESSION_COOKIE}=${token}; Path=${this.base}; HttpOnly; SameSite=Lax${secure}${clear}${age}`;
 	}
 
 	/** The BEACON FLAG: a second cookie, site-wide, carrying no secret — it only tells the handle
@@ -1678,7 +1689,9 @@ class Profiler {
 		const next = this.#safe_next(String(body?.next ?? this.base)); // no open redirect
 		if (!(await this.#key_matches(key))) return ctx.json({ ok: false }, { status: 401 });
 		const { createHash } = await import('node:crypto');
-		const res = ctx.json({ ok: true, next });
+		// `next` carries the after-login marker: if the navigation it drives still arrives without a
+		// session, the guard explains why instead of looping back here (#auth_guard).
+		const res = ctx.json({ ok: true, next: next + (next.includes('?') ? '&' : '?') + AFTER_LOGIN_PARAM + '=1' });
 		// never let a CDN/edge cache this response — a cached login strips Set-Cookie and the session
 		// silently never seats (a classic serverless/Amplify symptom: 200 ok, but you loop on login)
 		res.headers.set('cache-control', 'no-store, private');
@@ -1696,9 +1709,29 @@ class Profiler {
 		if (this.dev) return true;
 		// The session cookie (set by the login page) is the browser path; the `x-profiler-key` header is
 		// the programmatic path (CI / the MCP tools). No `?key=` — a secret in a URL gets logged & cached.
-		const provided =
-			event.cookies.get('og_profiler') ?? event.request.headers.get('x-profiler-key');
-		return this.#key_matches(provided);
+		// Every `og_profiler` value the browser sent, not only the one Kit's parser picked: a real
+		// browser session can carry a large cookie jar from the app it is logged into, and a parser
+		// that keeps the FIRST of two same-named cookies, or trips on a neighbour, must not lock the
+		// profiler's user out. Any value that matches is a session.
+		for (const value of session_cookie_values(event)) if (await this.#key_matches(value)) return true;
+		return this.#key_matches(event.request.headers.get('x-profiler-key'));
+	}
+
+	/**
+	 * What a request that failed auth carried, for a browser that loops on login — no cookie values,
+	 * only facts: did a Cookie header arrive, how big, how many `og_profiler` pairs were in it, and
+	 * did Kit's own parser find one. 0 pairs with a header = the cookie never reached the server
+	 * (dropped on the way, or the jar is past a proxy's limit); pairs but no parse = a parser problem;
+	 * more than one pair = duplicates, one of them stale.
+	 */
+	#cookie_diagnosis(event: RequestEvent): CookieDiagnosis {
+		const raw = event.request.headers.get('cookie');
+		return {
+			header: raw != null,
+			bytes: raw?.length ?? 0,
+			pairs: raw ? raw_cookie_values(raw, SESSION_COOKIE).length : 0,
+			parsed: event.cookies.get(SESSION_COOKIE) != null
+		};
 	}
 
 	// ---- profiler UI: an ogygia/router handler-mode dogfood ---------------
@@ -1728,8 +1761,19 @@ class Profiler {
 		if (rel === '/login' || rel === '/logout' || /^\/report\/[^/.]+$/.test(rel)) return;
 		if (await this.#authed(ctx.event!)) return; // allow
 		if (this.ui_enabled && this.secret && !this.dev) {
-			const next = encodeURIComponent(ctx.url.pathname + ctx.url.search);
-			return ctx.redirect(`${this.base}/login?next=${next}`);
+			const after_login = ctx.url.searchParams.has(AFTER_LOGIN_PARAM);
+			const diag = this.#cookie_diagnosis(ctx.event!);
+			// A browser that sent a session cookie, or that just logged in, and still is not authed: say
+			// why in the server log (facts only, never a cookie value) — the one line that tells a dropped
+			// cookie, a duplicate and a wrong secret apart.
+			if (after_login || diag.pairs > 0)
+				console.warn(`[ogygia profiler] session not accepted on ${ctx.url.pathname}: ${JSON.stringify(diag)} — ${describe_cookie_diagnosis(diag)}`);
+			const target = new URL(ctx.url);
+			target.searchParams.delete(AFTER_LOGIN_PARAM);
+			const next = encodeURIComponent(target.pathname + target.search);
+			// Right after a successful login: not the login page again (a loop), the login page WITH the
+			// diagnosis.
+			return ctx.redirect(`${this.base}/login?next=${next}${after_login ? `&${LOGIN_FAILED_PARAM}=1` : ''}`);
 		}
 		return new Response('Not found', { status: 404 });
 	}
@@ -1761,7 +1805,12 @@ class Profiler {
 			}),
 			login_props: (c) => ({
 				base: this.base,
-				next: this.#safe_next(c.url.searchParams.get('next'))
+				next: this.#safe_next(c.url.searchParams.get('next')),
+				// The login page's own request carries the same cookie jar (the session cookie's path
+				// covers it), so its diagnosis is the failed request's.
+				session_problem: c.url.searchParams.has(LOGIN_FAILED_PARAM)
+					? describe_cookie_diagnosis(this.#cookie_diagnosis((c as { event?: RequestEvent }).event!))
+					: null
 			}),
 			login: (c) => this.#login(c),
 			logout: (c) => this.#logout(c),

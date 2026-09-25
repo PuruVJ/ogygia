@@ -100,7 +100,8 @@ export interface ProfilerDeps {
 	 *  running right now, how many requests are in flight, the instance's memory, how many reports
 	 *  this instance holds. Cheap and side-effect-free. */
 	status(c: Ctx): { recording: boolean; inflight: number; rss_mb: number; reports: number };
-	login_props(c: Ctx): { base: string; next: string };
+	/** `session_problem`: why a login that just succeeded still has no session (null otherwise). */
+	login_props(c: Ctx): { base: string; next: string; session_problem: string | null };
 	login(c: Ctx): Promise<Response>;
 	logout(c: Ctx): Response;
 	upload(c: Ctx): Promise<Response>;
