@@ -14,6 +14,7 @@
  * (`register_island_graph`) before that page is in the DOM.
  */
 import { ISLAND_GRAPH_ATTR, decode_island_graph } from '../island-graph.js';
+import { runtime_session } from './session.js';
 
 const GRAPH_SELECTOR = `script[${ISLAND_GRAPH_ATTR}]`;
 const MODULEPRELOAD_SELECTOR = 'link[rel="modulepreload"]';
@@ -86,6 +87,7 @@ export function preload_island_graph(entry: string, base: string = location.href
 		link.rel = 'modulepreload';
 		link.href = href;
 		link.setAttribute(GRAPH_PRELOAD_ATTR, '');
+		runtime_session.claim_page_head(link); // the page's (session.ts); a navigation may drop it
 		document.head.appendChild(link);
 	}
 }

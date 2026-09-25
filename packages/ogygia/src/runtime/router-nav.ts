@@ -248,6 +248,7 @@ export function install_head_style(
 		el.setAttribute(attr.name, attr.value);
 	}
 	el.textContent = source.textContent || '';
+	session().claim_page_head(el); // every caller installs the page's sheet (runtime/session.ts)
 	head.insertBefore(el, before);
 	return el;
 }
@@ -684,6 +685,10 @@ export async function navigate(
 			session().settle_lakes_in(document.body);
 			dispose_scope('page');
 		}
+		// ONE COPY of island head content: an island KEPT across the swap still renders its head live,
+		// and the merge above put the next page's server copy of the same content in beside it — retire
+		// that copy now that the reconcile has settled which islands stayed (runtime/session.ts).
+		session().retire_page_head_copies();
 		// STREAMED pages fetched over SPA nav arrive COMPLETE (fetch buffers the stream), so any
 		// late templates still inert in the parsed doc apply now — the inline boot script that
 		// handles them on a full load never executes across a body swap.
@@ -863,9 +868,16 @@ function reset_focus(hash: string) {
 /** Merge <head>: keep nodes present in both, remove stale, add new. Keeps runtime scripts alive. */
 function merge_head(new_head: HTMLHeadElement) {
 	const current = document.head;
+	// Only the PAGE's nodes take part (runtime/session.ts — who owns each node in <head>). An island's
+	// live head content is its own: removing a node of it here is what let Svelte's teardown of that
+	// island walk past its block and delete the next page's tags; and an island node must not stand in
+	// for the next page's copy either (the island may be torn down in the reconcile that follows —
+	// the copy the page needs goes in, and the one-copy rule retires it again if the island stays).
+	// Nodes that are not ours at all (a third-party inject) stay, as under Kit's own router.
+	const owned = session().page_head;
 	const current_nodes = new Map<string, Element>();
 	for (const node of Array.from(current.children)) {
-		current_nodes.set(head_node_key(node), node);
+		if (owned.has(node)) current_nodes.set(head_node_key(node), node);
 	}
 	const next_keys = new Set<string>();
 	for (const node of Array.from(new_head.children)) {
@@ -902,7 +914,7 @@ function merge_head(new_head: HTMLHeadElement) {
 		if (node.tagName === 'STYLE') {
 			install_head_style(node, current, anchor);
 		} else {
-			current.appendChild(node.cloneNode(true));
+			session().claim_page_head(current.appendChild(node.cloneNode(true)));
 		}
 	}
 }
@@ -939,6 +951,7 @@ function preload_stylesheets(new_head: HTMLHeadElement): Promise<unknown> {
 		);
 		// Insert at the TOP of <head>, not the end: an island's `<svelte:head>` hydration removes a
 		// trailing node range, so a stylesheet appended after the island head blocks gets reclaimed.
+		session().claim_page_head(link); // the next page's own sheet (runtime/session.ts)
 		document.head.insertBefore(link, document.head.firstChild);
 	}
 	if (!pending.length) return Promise.resolve();

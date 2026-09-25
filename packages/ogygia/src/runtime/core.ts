@@ -279,6 +279,7 @@ export function region_fragment(html: string): { frag: DocumentFragment; ready: 
 			clone.setAttribute('data-ogygia-region-css', '');
 			pending.push(until_loaded(clone));
 			existing.set(href, clone);
+			runtime_session.claim_page_head(clone);
 			document.head.appendChild(clone);
 		}
 	}
@@ -307,6 +308,7 @@ export function region_fragment(html: string): { frag: DocumentFragment; ready: 
 			// At the TOP of <head>, like the router's SPA sheets (router-nav.ts): an island's
 			// `<svelte:head>` hydration reclaims a trailing head-node range, and a sheet appended at
 			// the end can go with it.
+			runtime_session.claim_page_head(el);
 			document.head.insertBefore(el, document.head.firstChild);
 		}
 	}
@@ -1211,6 +1213,9 @@ export function boot(installers: Array<() => void> = []): void {
 	// The navigation handle island code reaches the runtime through (./nav-handle.ts): the MPA one
 	// first, which the router feature's install replaces with the SPA router's when it is present.
 	if (typeof document !== 'undefined' && !(NAV_HANDLE_KEY in globalThis)) publish_nav(mpa_nav());
+	// The head the server sent is the page's (session.ts: who owns each node in <head>). No island
+	// has woken yet — the runtime boots before any wake — so nothing here is an island's.
+	runtime_session.adopt_document_head();
 	// What the lazy chunks use from the boot, handed over through the registry (./boot-link.ts).
 	link_boot();
 	for (const install of installers) install();

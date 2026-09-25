@@ -98,8 +98,8 @@ let head_markers_neutralized = false;
  * out of hydration mode and RE-RENDERS the block fresh (svelte-head.js, `head_anchor === null`).
  * Removing the open markers up front takes every island's head down that safe path instead of the
  * fragile walk. The SSR-rendered head ELEMENTS stay (correct, already applied — sheets loaded, title
- * set); a waking island re-renders an idempotent copy of its own head content (a preload / meta /
- * resource hint — the browser dedupes it, and the first SPA head-merge replaces the head wholesale).
+ * set) until the island's own live copy exists; then the island owns its head content and the
+ * page's copy is retired (runtime/session.ts — who owns each node in <head>, and the one-copy rule).
  *
  * A head block is `<!--HASH-->` …content… `<!---->` — the HASH open and the empty close both sit at
  * the head's TOP LEVEL, while the content in between may carry Svelte's own block anchors when the head
@@ -145,20 +145,6 @@ export function neutralize_head_hydration_markers(): void {
 	for (const m of to_remove) m.remove();
 }
 
-/**
- * Keep only the LAST `<title>` in document.head. When a csr=false island's `<svelte:head>` re-renders
- * (see {@link neutralize_head_hydration_markers}) it appends its own `<title>` after the page's SSR
- * one; the browser honours the FIRST `<title>`, so without this the island's — usually reactive —
- * title would never take effect. Dropping the earlier duplicate(s) lets it win, and Svelte then mutates
- * that surviving element's text in place on later updates. A no-op on the normal single-title page, so
- * it is safe to call after every island hydrate; guarded (like the neutralize) to a non-Kit document.
- */
-export function dedupe_head_titles(): void {
-	const head = typeof document !== 'undefined' ? document.head : null;
-	if (!head) return;
-	const titles = head.querySelectorAll('title');
-	for (let i = 0; i < titles.length - 1; i++) titles[i].remove();
-}
 
 /**
  * REPAIR the island's light DOM toward its server markup, keeping every element it still has.
@@ -669,6 +655,10 @@ export function hydrate_island(
 	// walk runs (see sequence_differs for why before), the live sequence is compared with the
 	// server's and put back when it drifted; the walk then sees the server's sequence. Measured
 	// on what the walk sees: the lakes lifted (repair_if_drifted empties the copy's the same way).
+	// The head as it stands before this island renders into it: whatever the hydrate adds is the
+	// island's own (runtime/session.ts — who owns each node in <head>). The step is synchronous, so
+	// nothing else writes the head in between.
+	const head_before: ReadonlySet<Node> = new Set(document.head.childNodes);
 	let lifted: LiftedLake[] | null = slots.lakes.lift(region);
 	const drift =
 		ssr_html !== null && region.isConnected
@@ -860,12 +850,13 @@ export function hydrate_island(
 			);
 		}
 
-		// If this island's `<svelte:head>` re-rendered its own <title> (the re-render path opened by
-		// neutralize_head_hydration_markers), it landed AFTER the SSR title, and the browser honours the
-		// FIRST — so drop the earlier duplicate(s) and let the island's title win and update live. A
-		// no-op on the normal one-title page. Only where that re-render path ran — a non-Kit document; a
-		// csr=true page's head is Kit's, and any second title there is the app's, not ours to remove.
-		if (!kit_hydrates_page()) dedupe_head_titles();
+		// This island's `<svelte:head>` re-rendered fresh (neutralize_head_hydration_markers) next to
+		// the server's copy of the same content. Record what it added as ISLAND-owned — so no page-level
+		// head write ever removes it out from under Svelte — and retire the page's duplicate copies (the
+		// server's JSON-LD / meta / inline style / preload, and the page title once the island renders
+		// its own, reactive one). Only where that re-render path ran: a non-Kit document; a csr=true
+		// page's head is Kit's.
+		if (!kit_hydrates_page()) boot_link().runtime_session.record_island_head(head_before);
 		return out;
 	} finally {
 		// If hydrate threw after lift, put lake DOM back so the page isn't permanently blank.
