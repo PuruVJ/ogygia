@@ -28,6 +28,30 @@ export function is_allowed_region_endpoint(
 	}
 }
 
+/** How far this browser's clock may run behind the server's and still see an expiry. */
+const CLOCK_SKEW_SEC = 300;
+
+/**
+ * Has this hole's capability (probably) EXPIRED — worth one retry with `&renew=1` after a 403? Its
+ * document outlived it in a cache (server/shared-cache.ts). Read from the signed `exp` in the URL,
+ * with {@link CLOCK_SKEW_SEC} of slack for a slow clock; a URL that has not expired never renews
+ * (the server refuses it), so a wrong guess costs one refused request.
+ */
+export function capability_expired(endpoint: string, now_ms = Date.now(), page_origin = location.origin): boolean {
+	try {
+		const exp = Number(new URL(endpoint, page_origin).searchParams.get('exp'));
+		return Number.isFinite(exp) && exp > 0 && exp <= now_ms / 1000 + CLOCK_SKEW_SEC;
+	} catch {
+		return false;
+	}
+}
+
+/** The renewal request for an expired capability `endpoint` (the handle re-signs it, anonymous
+ *  holes only, and answers the fresh capability in `x-ogygia-capability`). */
+export function renewal_url(endpoint: string): string {
+	return endpoint + (endpoint.includes('?') ? '&' : '?') + 'renew=1';
+}
+
 /** A whole HTML document starts with a doctype or `<html>`; a region answer never does. */
 const DOCUMENT_START_RE = /^\s*(?:<!doctype\b|<html\b)/i;
 

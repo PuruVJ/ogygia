@@ -4,7 +4,7 @@
  * region-endpoint and the `__og_source` runtime wrapper only ever call the getters.
  *
  * 1. capability grade: a render that MAY be stored must mint PRERENDER-GRADE region capabilities
- *    for its deferred/live holes (the stored HTML outlives `regionTtl`).
+ *    for its deferred/live holes (the stored HTML outlives `regions.ttl`).
  * 2. source receipts: every `import.meta.og.source()`-wrapped call during such a render reports
  *    its `(id, fingerprint)` tag — the REVERSE INDEX that lets `freeze.invalidate(fn, args)`
  *    evict exactly the pages whose receipts name the doc.
@@ -12,7 +12,7 @@
  * State rides ONE `globalThis` + `Symbol.for` slot — the PAGE-STATE-SINGLETON law: dist entries
  * (hooks.js, server/region-endpoint.js, freeze/source-runtime.js) can each carry their own
  * evaluation of this module, and a module-local `let` would split the seam (the installer writes
- * copy A while the mint reads copy B — regionTtl-grade holes in stored pages, silently).
+ * copy A while the mint reads copy B — regions.ttl-grade holes in stored pages, silently).
  */
 
 interface CaptureSlots {

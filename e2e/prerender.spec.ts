@@ -69,7 +69,7 @@ test.describe('prerendered page + server-island hole', () => {
 				COUNT_7_RE.test(file) && LOADING_PERSONALIZED_RE.test(file)
 			);
 
-			// ---- real PPR: the static file's holes must outlive regionTtl ----
+			// ---- real PPR: the static file's holes must outlive regions.ttl ----
 			// The baked capability is minted ~forever (a CDN file has no TTL); a 1h exp would strand
 			// every hole an hour after deploy. Assert exp is at least a year out.
 			// `&` rides as `&amp;` inside the HTML attribute.

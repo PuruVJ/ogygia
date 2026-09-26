@@ -153,7 +153,7 @@ declare module 'virtual:ogygia/router-config' {
 	export const speculationRules: string;
 }
 declare module 'virtual:ogygia/region-ttl' {
-	/** Capability URL TTL in seconds. From `ogygia({ regionTtl })` (default 3600). */
+	/** Capability URL TTL in seconds. From `ogygia({ regions: { ttl } })` (default 3600). */
 	export const regionTtl: number;
 }
 declare module 'virtual:ogygia/route-csr' {

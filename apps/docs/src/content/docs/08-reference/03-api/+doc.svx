@@ -246,9 +246,11 @@ Guard the signed island endpoint against abuse: requests per window per client.
 
 Name / options for the session cookie that ogygia uses to scope signed capabilities.
 
-### `regionTtl`
+### `regions.ttl`
 
-How long a signed region capability URL stays valid.
+How long a signed region capability URL stays valid, in seconds (default `3600`, clamped to 60–86400). Keep it short: a harvested URL ages out.
+
+Holes outlive it where they have to. Prerendered and frozen pages sign their holes for the life of the deploy. On a page whose load marks it shared-cacheable, for example `setHeaders({ 'cache-control': 'public, s-maxage=604800' })`, an anonymous hole is signed for the page's cache life. A hole on an older cached copy renews itself when it wakes: the endpoint re-signs a URL it minted, anonymous holes only. A `cache-control` header a handle sets after the render is invisible to the mint, so set it from a load.
 
 ### `OGYGIA_SECRET`
 

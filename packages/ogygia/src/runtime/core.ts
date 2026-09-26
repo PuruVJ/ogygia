@@ -3,6 +3,8 @@ import { kit_hydrates_page } from './kit-boot.js';
 import { parse_region_html } from './parse-html.js';
 import { runtime_session } from './session.js';
 import {
+	capability_expired,
+	renewal_url,
 	is_allowed_region_endpoint,
 	is_document_answer,
 	is_redirected_answer,
@@ -351,6 +353,9 @@ class OgygiaRegion extends HTMLElement {
 	 *  The fetch reads this copy and restores the attribute (lakes, devtools and the router's
 	 *  next-page warm all read the DOM). */
 	#minted_endpoint: string | null = null;
+	/** A fresh capability a renewal answered (#frame_fetcher), adopted once the fetch that got it is
+	 *  applied (#adopt_renewed) — moving addresses mid-fetch would orphan that answer. */
+	#renewed_endpoint: string | null = null;
 	/** THE HYDRATION SOURCE OF TRUTH: this island's server markup as it connected (or, for a
 	 *  hydrating hole, as its answer was swapped in). An island can sleep a long time and other
 	 *  scripts edit the page meanwhile; on wake, hydrate-core hydrates against THIS when the live
@@ -564,11 +569,23 @@ class OgygiaRegion extends HTMLElement {
 	#frame_fetcher(endpoint: string, revalidate: boolean) {
 		return (signal: AbortSignal) =>
 			runtime_session.server_gate.run(async () => {
-				const res = await fetch(endpoint, {
+				let res = await fetch(endpoint, {
 					credentials: 'same-origin',
 					cache: revalidate ? 'no-store' : 'default',
 					signal
 				});
+				// An EXPIRED capability (its document outlived it in a cache): renew once. The handle
+				// re-signs an anonymous hole it minted itself and answers with the hole AND the fresh
+				// capability, which this element adopts for its later fetches (#adopt_renewed).
+				if (res.status === 403 && capability_expired(endpoint)) {
+					res = await fetch(renewal_url(endpoint), {
+						credentials: 'same-origin',
+						cache: 'no-store',
+						signal
+					});
+					const fresh = res.ok ? res.headers.get('x-ogygia-capability') : null;
+					if (fresh && is_allowed_region_endpoint(fresh)) this.#renewed_endpoint = fresh;
+				}
 				if (!is_same_origin_response(res)) throw new Error('cross-origin redirect');
 				// THE ANSWER MUST BE THE REGION'S. ogygia's handle answers a region request in place —
 				// a fragment, a 204, an error status — and never redirects; a redirected response, or a
@@ -659,6 +676,26 @@ class OgygiaRegion extends HTMLElement {
 		}
 		const disarm = arm(this, fire);
 		this.#disarm_interaction = typeof disarm === 'function' ? disarm : null;
+	}
+
+	/**
+	 * Move this hole onto the fresh capability a renewal answered: the attribute (every DOM reader —
+	 * lakes, devtools, the router's warm — agrees), the minted copy, and the frame-store address its
+	 * later wakes and revalidates fetch and apply at. Called after the answer that carried it landed.
+	 */
+	#adopt_renewed() {
+		const fresh = this.#renewed_endpoint;
+		if (!fresh) return;
+		this.#renewed_endpoint = null;
+		this.#minted_endpoint = fresh;
+		this.setAttribute('endpoint', fresh);
+		if (this.#frame_unsub) {
+			this.#frame_unsub();
+			const address = (this.#frame_address = frameAddress(fresh));
+			this.#frame_unsub =
+				slots.frames?.subscribe(address, (f) => void (this.#applying = this.#apply(f.html))) ??
+				null;
+		}
 	}
 
 	/** The hole's endpoint: the attribute, or the server-minted copy when Kit's hydration wiped it
@@ -847,6 +884,7 @@ class OgygiaRegion extends HTMLElement {
 			// or a twin already applied before us, this is a no-op. `outer.aborted` / relevance is
 			// handled by #apply's isConnected guard; `html` is intentionally unused here.
 			void html;
+			this.#adopt_renewed();
 		} catch (err) {
 			if ((err as { name?: string })?.name === 'AbortError' || outer.aborted) return;
 			// A refused answer is deterministic (a redirect rule in front of the handle, not a flaky

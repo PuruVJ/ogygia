@@ -235,7 +235,7 @@ response (set-cookie/private/non-200/streamed) + observations (non-default read 
 (`freeze.tag()` + the flicker-fix query capture; `depends()` capture may need a shim —
 Kit builds load events itself). Store = R6's shape + inverted tag index + redirect entries.
 **Capability subtlety**: stored pages must mint PRERENDER-GRADE (effectively-forever)
-capabilities for their deferred/live holes — normal `regionTtl` mints would expire in-store;
+capabilities for their deferred/live holes — normal `regions.ttl` mints would expire in-store;
 the prerender leg already does exactly this (requires stable `OGYGIA_SECRET`). Page seed is the
 stored render's own snapshot — consistent by construction.
 

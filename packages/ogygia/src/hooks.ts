@@ -75,7 +75,9 @@ import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import { asset } from '$app/paths';
 import devtools_boot_url from 'virtual:ogygia/devtools-boot-url';
-import { verify, region_mac_message } from './server/hmac.js';
+import { sign, verify, region_mac_message } from './server/hmac.js';
+import { note_cache_control, renewable_expiry } from './server/shared-cache.js';
+import { regionTtl } from 'virtual:ogygia/region-ttl';
 import { render_cache_key, cached_render } from './server/render-cache.js';
 import { B64Url } from './server/payload.js';
 import { REF_WIRE_KEY, ref_reviver } from './ref.js';
@@ -89,7 +91,8 @@ import {
 	DEFAULT_ISLANDS_ENDPOINT,
 	MAX_REGION_PROPS_LEN,
 	REGION_ID_RE,
-	REGION_TTL_RE
+	REGION_TTL_RE,
+	capability_expiry
 } from './server/endpoint.js';
 import { build_parcel, done_parcel } from './server/stream-regions.js';
 import {
@@ -195,7 +198,7 @@ type RequestBag = {
 	/** devalue reducers for streamed resolve scripts (app transport encoders + defer marker). */
 	seed_reducers: Record<string, (v: unknown) => unknown> | null;
 	/** FREEZE: this render may be stored (capture in flight) — region capabilities minted
-	 *  during it go prerender-grade (the stored HTML outlives `regionTtl`). */
+	 *  during it go prerender-grade (the stored HTML outlives `regions.ttl`). */
 	freeze_capture: boolean;
 	/** FREEZE: the live personalization-read observation for the verdict (flag reads mark it
 	 *  through `set_flag_observer`); null when this render is not a capture candidate. */
@@ -883,6 +886,17 @@ class OgygiaHandle {
 			// streamed tail chunks (late regions, resolve scripts, after `resolve()` returned) all
 			// carry this same `Request` and find it.
 			bags.set(event.request, bag);
+			// HOLES OUTLIVE A CACHED DOCUMENT: note the `cache-control` a load sets, so a hole minted
+			// during this render is signed for as long as shared caches keep the page
+			// (server/shared-cache.ts). Loads receive `setHeaders` from THIS event (Kit spreads it into
+			// each load's event) and finish before the render mints. A header a handle sets on the
+			// Response after `resolve` is invisible here — the runtime's renewal covers that case.
+			const set_headers = event.setHeaders;
+			event.setHeaders = (headers) => {
+				set_headers(headers);
+				for (const key in headers)
+					if (key.toLowerCase() === 'cache-control') note_cache_control(event.request, headers[key]);
+			};
 			let response: Response;
 			try {
 				response = await resolve(event, {
@@ -1674,14 +1688,36 @@ class OgygiaHandle {
 
 	/** Charset/length/expiry gate — cheap, runs BEFORE any HMAC (P5-HMAC-CPU). */
 	#capability_gate_ok(id: string, payload: string, ttl_raw: string, exp_raw: string): boolean {
-		if (
-			!REGION_ID_RE.test(id) ||
-			payload.length > MAX_REGION_PROPS_LEN ||
-			!REGION_TTL_RE.test(ttl_raw)
-		)
-			return false;
+		if (!this.#capability_shape_ok(id, payload, ttl_raw)) return false;
 		const exp = Number(exp_raw);
 		return Number.isFinite(exp) && exp >= Math.floor(Date.now() / 1000);
+	}
+
+	/** The charset/length half of the gate (the renewal gate pairs it with its own expiry rule). */
+	#capability_shape_ok(id: string, payload: string, ttl_raw: string): boolean {
+		return REGION_ID_RE.test(id) && payload.length <= MAX_REGION_PROPS_LEN && REGION_TTL_RE.test(ttl_raw);
+	}
+
+	/**
+	 * RENEWAL (server/shared-cache.ts): re-sign an EXPIRED capability this app minted for an
+	 * anonymous hole — the rescue for a hole on a document a cache kept longer than the hole's
+	 * capability. Refused (null) unless the visitor carries no session and the MAC over the ORIGINAL
+	 * tuple verifies with an empty session: nothing session-bound is ever renewed, and only a URL the
+	 * app itself put in public HTML can be. The caller has already gated shape + the renew window
+	 * and charged the probe budget. Returns the fresh `exp` + `sig`.
+	 */
+	#renew_capability(
+		id: string,
+		payload: string,
+		exp_raw: string,
+		ttl_raw: string,
+		sig: string,
+		event: RequestEvent
+	): { exp: string; sig: string } | null {
+		if (this.#region_session(event) !== '') return null;
+		if (!verify(secret, region_mac_message(id, exp_raw, payload, '', ttl_raw), sig)) return null;
+		const exp = String(capability_expiry(Math.floor(Date.now() / 1000), regionTtl));
+		return { exp, sig: sign(secret, region_mac_message(id, exp, payload, '', ttl_raw)) };
 	}
 
 	/** THE auth check: session-bound region MAC verify. */
@@ -1776,6 +1812,8 @@ class OgygiaHandle {
 	 *
 	 * Ordering: length/exp → probe rate (pre-HMAC) → verify → render rate → render.
 	 * Probe stops forged CPU amplification; render budget is only charged after a valid MAC.
+	 * A renewal (`&renew=1`) swaps the first three for its own: shape + renew window → probe →
+	 * anonymous-only re-verify of the original tuple + re-sign; then the same render rate + render.
 	 */
 	async render_region(event: RequestEvent) {
 		const method = event.request.method.toUpperCase();
@@ -1802,35 +1840,62 @@ class OgygiaHandle {
 
 		const id = url.searchParams.get('id') ?? '';
 		const payload = url.searchParams.get('props') ?? '';
-		const exp_raw = url.searchParams.get('exp') ?? '';
+		let exp_raw = url.searchParams.get('exp') ?? '';
 		const ttl_raw = url.searchParams.get('ttl') ?? '';
-		const sig = url.searchParams.get('sig') ?? '';
+		let sig = url.searchParams.get('sig') ?? '';
+		// RENEWAL: the runtime retries a hole whose capability EXPIRED (its document outlived it in a
+		// cache) once with `&renew=1`. The answer carries the fresh capability in
+		// `x-ogygia-capability`; the runtime adopts it for the hole's later fetches.
+		let renewed: string | null = null;
 
-		// Length/charset/expiry gate BEFORE HMAC (P5-HMAC-CPU). Ids are always 12-hex from the transform;
-		// `ttl` (cache max-age seconds) is signed, but charset-gate it here so a forged value can't
-		// reach the response header before verify rejects it.
-		if (!this.#capability_gate_ok(id, payload, ttl_raw, exp_raw)) {
-			return region_response('Forbidden', { status: 403 });
-		}
+		if (url.searchParams.get('renew') === '1') {
+			// Shape + the renew window (expired, by at most RENEW_WINDOW_SEC) BEFORE HMAC; a URL that
+			// has not expired never renews (nothing to rescue — and no fresh URL for a live one).
+			if (
+				!this.#capability_shape_ok(id, payload, ttl_raw) ||
+				!renewable_expiry(exp_raw, Math.floor(Date.now() / 1000))
+			) {
+				return region_response('Forbidden', { status: 403 });
+			}
+			if (this.probe_rate.limited(ip)) {
+				return region_response('Too Many Requests', { status: 429 });
+			}
+			const fresh = this.#renew_capability(id, payload, exp_raw, ttl_raw, sig, event);
+			if (!fresh) return region_response('Forbidden', { status: 403 });
+			exp_raw = fresh.exp;
+			sig = fresh.sig;
+			renewed = `${url.pathname}?id=${encodeURIComponent(id)}&props=${payload}&exp=${exp_raw}${ttl_raw ? `&ttl=${ttl_raw}` : ''}&sig=${sig}`;
+		} else {
+			// Length/charset/expiry gate BEFORE HMAC (P5-HMAC-CPU). Ids are always 12-hex from the
+			// transform; `ttl` (cache max-age seconds) is signed, but charset-gate it here so a forged
+			// value can't reach the response header before verify rejects it.
+			if (!this.#capability_gate_ok(id, payload, ttl_raw, exp_raw)) {
+				return region_response('Forbidden', { status: 403 });
+			}
 
-		// Pre-HMAC probe — forged floods hit this, not render() (HMAC-CPU-DOS).
-		if (this.probe_rate.limited(ip)) {
-			return region_response('Too Many Requests', { status: 429 });
-		}
+			// Pre-HMAC probe — forged floods hit this, not render() (HMAC-CPU-DOS).
+			if (this.probe_rate.limited(ip)) {
+				return region_response('Too Many Requests', { status: 429 });
+			}
 
-		// Verify (session-bound) before consulting the manifest — bad MAC never distinguishes unknown
-		// vs known id.
-		if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) {
-			// Server-side only (the response stays an opaque 403 — SEC-01): a dev seeing every hole
-			// fail deserves the reason in the terminal.
-			if (import.meta.env.DEV)
-				console.warn(`[ogygia] region endpoint 403: bad signature for id "${id}"`);
-			return region_response('Forbidden', { status: 403 });
+			// Verify (session-bound) before consulting the manifest — bad MAC never distinguishes
+			// unknown vs known id.
+			if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) {
+				// Server-side only (the response stays an opaque 403 — SEC-01): a dev seeing every hole
+				// fail deserves the reason in the terminal.
+				if (import.meta.env.DEV)
+					console.warn(`[ogygia] region endpoint 403: bad signature for id "${id}"`);
+				return region_response('Forbidden', { status: 403 });
+			}
 		}
 
 		// Cache policy travels signed in the URL: a positive `ttl` opts this hole into a private browser
-		// cache; absent/0 keeps it dynamic (`no-store`). A hole is fresh-per-request by default.
-		const cache_control = ttl_raw ? `private, max-age=${Number(ttl_raw)}` : 'no-store';
+		// cache; absent/0 keeps it dynamic (`no-store`). A hole is fresh-per-request by default. A
+		// renewed answer is never cached under its ttl: the browser would keep serving it for the OLD
+		// (expired) address the runtime is moving off.
+		const cache_control = ttl_raw && !renewed ? `private, max-age=${Number(ttl_raw)}` : 'no-store';
+		/** The fresh capability rides every successful answer to a renewal (the 204 too). */
+		const renew_headers: Record<string, string> = renewed ? { 'x-ogygia-capability': renewed } : {};
 
 		// Valid capability — now charge the per-IP render budget.
 		if (this.render_rate.limited(ip)) {
@@ -1867,7 +1932,11 @@ class OgygiaHandle {
 			return region_response('Region render failed', { status: 500 });
 		}
 		// `keepFallback()`: no content — the runtime keeps the page's fallback and marks the hole done.
-		if (body === KEEP_FALLBACK_HTML) return region_response(null, { status: 204 });
+		if (body === KEEP_FALLBACK_HTML)
+			return region_response(null, {
+				status: 204,
+				headers: renewed ? { 'cache-control': 'no-store', ...renew_headers } : undefined
+			});
 
 		if (body.length > MAX_REGION_BODY) {
 			return region_response('Forbidden', { status: 403 });
@@ -1891,7 +1960,8 @@ class OgygiaHandle {
 				headers: {
 					'content-type': 'text/html; charset=utf-8',
 					'content-length': String(new TextEncoder().encode(html).byteLength),
-					'cache-control': cache_control
+					'cache-control': cache_control,
+					...renew_headers
 				}
 			});
 		}
@@ -1904,7 +1974,8 @@ class OgygiaHandle {
 				// (dynamic) unless it opts into caching via its preset's `maxAge`, which mints a positive
 				// `ttl` → `private, max-age=ttl`. `private` keeps shared/CDN caches out (responses are
 				// cookie-personalized) while still letting THIS browser reuse the response.
-				'cache-control': cache_control
+				'cache-control': cache_control,
+				...renew_headers
 			}
 		});
 	}

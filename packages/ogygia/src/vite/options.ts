@@ -87,6 +87,14 @@ export interface RegionsOptions {
 	 * `import Chart from '$lib/Chart.svelte' with { preset: 'chart' };`
 	 */
 	presets?: Record<string, OgygiaPreset>;
+	/**
+	 * How long a deferred/live hole's signed capability URL stays valid, in seconds (default `3600`).
+	 * Clamped to `[60, 86400]`. Keep short for harvested-URL risk. Holes outlive this automatically
+	 * where they must: on prerendered and frozen pages, and on a page a load marks shared-cacheable
+	 * (`setHeaders({ 'cache-control': 'public, s-maxage=…' })`), where an anonymous hole is signed for
+	 * the page's cache life; a hole on an older cached copy renews itself when it wakes.
+	 */
+	ttl?: number;
 }
 
 /**
@@ -112,9 +120,9 @@ export interface ContentPreset {
  *     ogygia({
  *       regions: {
  *         visible: { margin: '200px' },
- *         presets: { chart: { wake: 'visible', margin: '200px' } }
- *       },
- *       regionTtl: 3600
+ *         presets: { chart: { wake: 'visible', margin: '200px' } },
+ *         ttl: 3600
+ *       }
  *     }),
  *     sveltekit()
  *   ]
@@ -122,7 +130,8 @@ export interface ContentPreset {
  * ```
  */
 export interface OgygiaOptions {
-	/** The regions subsystem: island defaults (`visible.margin`) + named island presets. */
+	/** The regions subsystem: island defaults (`visible.margin`), named island presets, and the
+	 *  capability lifetime of deferred/live holes (`ttl`). */
 	regions?: RegionsOptions;
 
 	/**
@@ -195,12 +204,6 @@ export interface OgygiaOptions {
 	sessionCookie?: false | string;
 
 	/**
-	 * Capability URL lifetime in seconds (default `3600`). Clamped to `[60, 86400]`.
-	 * Keep short for harvested-URL risk; raise only if long-lived tabs must keep deferred holes valid.
-	 */
-	regionTtl?: number;
-
-	/**
 	 * The drop-in SSR profiler — configured ENTIRELY here, nowhere else. `true` (or an options object)
 	 * turns it on: the plugin builds its UI (real Svelte islands, marked inside ogygia's own source and
 	 * rendered only from its handle, so the client build can't otherwise see them) AND transports this
@@ -259,7 +262,8 @@ const LEGACY_OPTION_RENAMES: Record<string, string> = {
 	visible: '`visible` moved into the regions subsystem — write `regions: { visible: { … } }`.',
 	presets: '`presets` moved into the regions subsystem — write `regions: { presets: { … } }`.',
 	continuity:
-		'`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it.'
+		'`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it.',
+	regionTtl: '`regionTtl` moved into the regions subsystem — write `regions: { ttl: … }`.'
 };
 
 /** The v3 rename map: a legacy key errors with its new spelling, never silently no-ops. */
@@ -382,7 +386,7 @@ export function resolve_options(
 	// Capability URL TTL (seconds). Clamped to [60, 86400].
 	const region_ttl = Math.min(
 		86400,
-		Math.max(60, Math.floor(options.regionTtl ?? defaultRegionTtl))
+		Math.max(60, Math.floor(options.regions?.ttl ?? defaultRegionTtl))
 	);
 
 	// ROUTER config (app-wide, one place). On by default; View Transitions on unless disabled. `false`

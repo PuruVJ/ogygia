@@ -12,10 +12,10 @@ import { getRequestEvent } from 'virtual:ogygia/request-event';
 import {
 	DEFAULT_ISLANDS_ENDPOINT,
 	MAX_REGION_PROPS_LEN,
-	PRERENDER_REGION_TTL_SEC,
 	capability_expiry
 } from './endpoint.js';
 import { freeze_capture_active } from '../freeze/capture.js';
+import { document_shared_lifetime, mint_ttl_sec } from './shared-cache.js';
 import { encode_region_props } from './region-props.js';
 import { stringify } from 'devalue';
 import { record_server_event } from '../devtools/server-registry.js';
@@ -28,6 +28,15 @@ import { ensure_prop_kinds } from './region-props.js';
 
 /** Same families as encode_region_props — one seam law for island props. */
 const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
+
+/** The request being rendered (null off-request: prerender, a test). */
+function current_request(): Request | null {
+	try {
+		return getRequestEvent().request;
+	} catch {
+		return null;
+	}
+}
 
 /** Session sealed into the MAC when `ogygia({ sessionCookie })` is set; empty at prerender. */
 function region_session(): string {
@@ -101,13 +110,21 @@ function warn_unstable_secret(): void {
 export function mint_region_capability(entry: string, payload: string, ttl = 0): string {
 	const session = region_session();
 	// Prerendered (real PPR): the capability lives in a static file that outlives any TTL — mint it
-	// effectively-forever (props are public in the HTML; session sealed empty). Dynamic pages keep
-	// the short `regionTtl` window so harvested URLs age out. A FREEZE-eligible render is the
-	// prerender case at request time — the stored HTML outlives `regionTtl`, so its holes mint
-	// prerender-grade too (a warm freeze must never carry expired hole URLs).
+	// effectively-forever (props are public in the HTML; session sealed empty). A FREEZE-eligible
+	// render is the prerender case at request time — the stored HTML outlives `regions.ttl`, so its
+	// holes mint prerender-grade too (a warm freeze must never carry expired hole URLs). An anonymous
+	// hole on a document the app marked shared-cacheable (a load's `cache-control`) outlives that
+	// cache life (server/shared-cache.ts). Everything else keeps the short `regions.ttl` window so
+	// harvested URLs age out.
+	const stored = building || freeze_capture_active();
 	const exp = capability_expiry(
 		Math.floor(Date.now() / 1000),
-		building || freeze_capture_active() ? PRERENDER_REGION_TTL_SEC : regionTtl
+		mint_ttl_sec({
+			stored,
+			session,
+			shared: stored || session !== '' ? 0 : document_shared_lifetime(current_request()),
+			region_ttl: regionTtl
+		})
 	);
 	warn_unstable_secret();
 	// A hole is dynamic by default (`ttl` 0 → the handle answers `no-store`); a positive `ttl` opts

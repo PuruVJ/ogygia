@@ -144,7 +144,7 @@ The frame below is a real prerendered page (`/demo/ppr`). Its **shell** clock is
 
 ### The holes never age out
 
-A capability made at prerender is signed for a very long time. The props are already public in the static HTML. Thus a longer signature shows nothing new. The capabilities of a dynamic page keep the short `regionTtl` window. Only prerendered pages get the long-lived signature.
+A capability made at prerender is signed for a very long time. The props are already public in the static HTML. Thus a longer signature shows nothing new. The capabilities of a dynamic page keep the short `regions.ttl` window, unless a load marks the page shared-cacheable: then its anonymous holes are signed for the page's cache life (see [`regions.ttl`](/docs/reference/api)).
 
 ### Set OGYGIA_SECRET
 

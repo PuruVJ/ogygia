@@ -286,7 +286,7 @@ A dependency ships islands, marked components, or whole route tables by declarin
 - `devtools: boolean` — dev-server-only (coerced false on build with a warn); use `devtools: command === 'serve'`
 - `rateLimit: false | { max = 60, windowMs = 60_000 }` — per-IP budget on the signed island endpoint
 - `sessionCookie: false | '<name>'` — seals capability URLs to a cookie (not compatible with PPR holes)
-- `regionTtl: 3600` — capability-URL lifetime in seconds (clamped 60–86400)
+- `regions: { ttl: 3600 }` — capability-URL lifetime in seconds (clamped 60–86400); anonymous holes on a page a load marks shared-cacheable (`setHeaders({ 'cache-control': 'public, s-maxage=…' })`) are signed for the page's cache life, and a hole on an older cached copy renews itself (`&renew=1`) when it wakes. (`regionTtl` is gone — errors with the new spelling)
 - `importKeys` — rename the `with { }` attribute keys the transform claims
 - `barrels: true | { packages?, force?, keep?, importers?, followPackages?, report?, debug? }` — barrel imports → leaf imports at transform time (dev graph + build chunk graph hold only used leaves). `true` = every PURE project barrel (only imports/re-exports/types); dependencies opt-in via `packages` (dev pre-bundling would double a bypassed dep leaf); `force` rewrites an impure barrel and keeps `import 'barrel'`; marked imports (`with { wake }` …) are NEVER rewritten (use `asRegion` for a barrel binding). Same pass standalone: `debarrel()` from `'ogygia/vite'`. Build prints a report: 8 biggest barrels + count (`report: 'all'` = every barrel, `false` = silent)
 

@@ -30,7 +30,7 @@ Security and performance audits should read this before changing trust boundarie
 
 | Knob | Default | Why |
 | ---- | ------- | --- |
-| TTL (`regionTtl`) | **3600s** (1h) | Harvested URLs age out; long enough for typical tabs. Clamp `[60, 86400]`. |
+| TTL (`regions.ttl`) | **3600s** (1h) | Harvested URLs age out; long enough for typical tabs. Clamp `[60, 86400]`. |
 | `sessionCookie` | **off** | Prerender / shared CDN HTML cannot bind a request cookie. Opt in for personalized HTML. |
 
 **Do not:**

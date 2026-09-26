@@ -172,7 +172,7 @@ test.describe('FREEZE (render-on-write): store/serve/invalidate + prefix nuke + 
 		const exp = Number(REGION_ENDPOINT_URL_RE.exec(hole1_html)?.[1] ?? 0);
 		check('S6: shell stored', freeze_via(hole1) === 'stored');
 		check(
-			'S6: hole capability is PRERENDER-GRADE (outlives regionTtl)',
+			'S6: hole capability is PRERENDER-GRADE (outlives regions.ttl)',
 			exp > Date.now() / 1000 + 86400 * 30,
 			`exp=${exp}`
 		);
