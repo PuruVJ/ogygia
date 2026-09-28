@@ -283,14 +283,16 @@
 			<!-- the panel scrolls: focusable so a keyboard can scroll it, labelled by the open tab -->
 			<div class="body" id="og-dt-panel" role="tabpanel" tabindex="0" aria-label={TABS.find((t) => t.id === tab)?.label ?? 'devtools'}>
 				{#if csrTrue}
+					<!-- a Kit-hydrated page: no islands, but the browser's side of it still tells a lot -->
 					<div class="notice" data-og-csr-notice>
 						<p class="h">This page runs on <code>csr=true</code>.</p>
 						<p>
-							SvelteKit hydrates the whole page here, so ogygia's runtime never boots — there are no
-							islands, no wire, and no byte ledger to inspect.
+							SvelteKit hydrates the whole page here, so ogygia's runtime never boots: there are no islands,
+							no wire and no byte ledger. What the browser saw is below. Open a <code>csr=false</code> page
+							for the island tools.
 						</p>
-						<p>Open a <code>csr=false</code> page to see the instruments.</p>
 					</div>
+					<PageTab {tick} bind:focus bind:selected />
 				{:else if selected}
 					<IslandDetail el={selected} {tick} onclose={() => (selected = null)} />
 				{:else if tab === 'lens'}

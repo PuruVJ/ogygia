@@ -240,7 +240,10 @@
 			<p class="muted ok">Nothing the browser measured looks wrong on this visit.</p>
 		{/if}
 
-		<h3>Island wakes <span class="muted">{view.report.rows.length}{view.kept?.length ? ` · ${view.kept.length} kept` : ''}</span></h3>
+		<!-- (a page with no islands — a Kit-hydrated one — has no wakes to show: no empty heading) -->
+		{#if view.report.rows.length || view.kept?.length || view.regions.some((r) => r.kind === 'island')}
+			<h3>Island wakes <span class="muted">{view.report.rows.length}{view.kept?.length ? ` · ${view.kept.length} kept` : ''}</span></h3>
+		{/if}
 		{#if view.kept?.length}
 			<!-- the router reused them: the same island with the same props on both pages -->
 			<p class="kept" data-og-page-kept>

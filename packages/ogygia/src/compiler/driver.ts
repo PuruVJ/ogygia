@@ -1015,9 +1015,10 @@ export class Compiler {
 		}
 		if (id === RESOLVED(V_DEVTOOLS_BOOT)) {
 			// Standalone dock boot for csr=true (Kit-owned) pages: the ogygia runtime never boots
-			// there, so mount ONLY the dock — no router/region features (Kit owns navigation). The
-			// dock renders a "csr=true here — open a csr=false page" notice, since a Kit-hydrated page
-			// has no ogygia islands to inspect. Empty when devtools is off (never injected then).
+			// there, so mount ONLY the dock — no router/region features (Kit owns navigation). A
+			// Kit-hydrated page has no ogygia islands to inspect: the dock shows what the browser saw
+			// (the Page tab, fed by the beacon started here) and says why the island tools are absent.
+			// Empty when devtools is off (never injected then).
 			if (!ctx.devtools) return `export {}`;
 			const ui_path = `${ctx.runtime_dir}/../devtools/ui.js`.replace(BACKSLASH_G, '/');
 			return (
@@ -1026,6 +1027,11 @@ export class Compiler {
 				// (which loads it) comes later in the page, and the dock saw "off" — no dock at all
 				(is_dev ? `import '/@vite/env';\n` : '') +
 				`import { install_devtools_ui } from ${JSON.stringify(ui_path)};\n` +
+				// the beacon's observers from boot: vitals, resources, long tasks, the CPU sampler (the
+				// browser buffers most of it, but the sampler and interaction timing start here) — the
+				// dock's Page tab reads what the browser saw on a Kit-hydrated page too
+				`import { beacon_watch } from ${JSON.stringify(`${ctx.runtime_dir}/beacon.js`.replace(BACKSLASH_G, '/'))};\n` +
+				`beacon_watch();\n` +
 				`install_devtools_ui({ csr_true: true });\n`
 			);
 		}
