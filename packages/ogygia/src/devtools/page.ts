@@ -28,6 +28,11 @@ export interface PageView {
 	 *  the same props on both pages — still awake, no code, no hydrate). Without them, a page whose
 	 *  islands were all reused read as "nothing woke" */
 	kept?: { fp: string; name: string }[];
+	/** each hole's first answer since the page (or the navigation): its wait, split where the
+	 *  browser and the server timed it — the Page tab's hole waterfall */
+	holes?: HoleWait[];
+	/** holes whose answer never came (the waterfall's red rows) */
+	holes_failed?: HoleFailure[];
 }
 
 export function region_facts(): RegionFact[] {
@@ -125,6 +130,7 @@ export function hole_waits(since = last_nav()?.t ?? -Infinity, fcp = 0): HoleWai
 			name: (id && region_names()[id]) || (e.entry ? region_name(e.entry) : 'a hole'),
 			wait_ms: Math.max(0, Math.round(e.t - start)),
 			below_fold: !!rect && rect.top + scrollY > innerHeight,
+			...(e.endpoint ? { endpoint: e.endpoint } : {}),
 			shown_at: Math.round(start),
 			...(times ? { left_at: times.left, first_at: times.first, end_at: times.end } : {}),
 			...(times?.render !== undefined ? { server_ms: times.render } : {}),
@@ -273,7 +279,7 @@ export function read_page(): PageView | null {
 	// (after a navigation there is no new first paint: the navigation's start stands in for it)
 	const waits = hole_waits(nav?.t ?? -Infinity, nav ? 0 : (with_visit.visit?.paints?.fcp ?? 0));
 	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}) };
-	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
+	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before
 		const woke = new Set(input.islands.map((i) => i.fp));

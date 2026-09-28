@@ -283,6 +283,23 @@ async function holes_run(browser) {
 	const open = await read('/hole-wall');
 	// five holes of 0.9 s: the server renders four at a time, the fifth waits for a slot
 	const queue = await read('/dt-hole-queue');
+	// THE PAGE TAB'S HOLE WATERFALL: a bar per answer, split; a red row for the one that never came
+	const waterfall = async (path) => {
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		await page.goto(base + path, { waitUntil: 'load' });
+		await page.waitForTimeout(4500);
+		if (!(await page.locator('[data-og-tab]').count())) await page.click('[data-og-panel-toggle]').catch(() => {});
+		await page.waitForTimeout(800);
+		await page.click('[data-og-tab="page"]').catch(() => {});
+		await page.waitForTimeout(1200);
+		const out = await page.locator('[data-og-page-holes] .row').evaluateAll((rows) =>
+			rows.map((r) => ({ name: r.querySelector('.name')?.textContent ?? '', failed: r.hasAttribute('data-og-hole-failed'), segs: [...r.querySelectorAll('.seg')].map((s) => [...s.classList].find((c) => c.startsWith('h-'))) }))
+		);
+		await page.close();
+		return out;
+	};
+	const wf_queue = await waterfall('/dt-hole-queue');
+	const wf_lab = await waterfall('/dt-holes');
 	// the profiler's dashboard, across the server: the queue seen, and QueueHole holding the slots
 	const dash = await (await fetch(`${base}/__profiler`)).text().catch(() => '');
 	const slots = dash.slice(dash.indexOf('data-hole-slots'), dash.indexOf('Slowest routes'));
@@ -307,6 +324,12 @@ async function holes_run(browser) {
 			'the queued hole, its render slot',
 			queue.slow.length === 1 && queue.slow[0].includes('waiting for a render slot on the server') && queue.slow[0].split('QueueHole (').length - 1 <= 2
 		],
+		[
+			// (four slots: one waits; a cold server with a slot still busy can make it two)
+			'the waterfall: five answers, the last waited for a slot',
+			wf_queue.length === 5 && [1, 2].includes(wf_queue.filter((r) => r.segs.includes('h-slot')).length) && wf_queue.every((r) => r.segs.includes('h-render'))
+		],
+		['the waterfall: the broken hole in red', wf_lab.some((r) => r.failed && r.name === 'BrokenHole') && wf_lab.filter((r) => !r.failed).length === 2],
 		['the dashboard, who held the slots', slots.includes('waited for a render slot') && slots.includes('held mostly by QueueHole') && slots.includes('BrokenHole')],
 		['the quick hole never slow', !lab.slow.some((m) => m.includes('Greeting')) && open.slow.length === 0],
 		['the profiler report names it', !report_id || (in_report?.includes('BrokenHole') && in_report.includes('status 500'))],
@@ -314,7 +337,7 @@ async function holes_run(browser) {
 		['the report splits the slow wait', !report_id || (!!slow_in_report?.message.includes('SlowHole') && slow_in_report.message.includes('the server render') && slow_in_report.fix.startsWith('The server render is the wait'))]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
-	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, queue: queue.slow, slots: slots.slice(0, 600), walled, open, in_report, slow_in_report })}` : ''}`);
+	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, queue: queue.slow, wf_queue, wf_lab, slots: slots.slice(0, 600), walled, open, in_report, slow_in_report })}` : ''}`);
 	return bad.length ? 0 : 1;
 }
 

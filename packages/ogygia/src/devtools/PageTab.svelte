@@ -72,10 +72,41 @@
 		].filter((l) => typeof l.t === 'number' && l.t > 0);
 		let end = 1;
 		for (const r of report.rows) end = Math.max(end, r.done);
+		for (const h of view.holes ?? []) end = Math.max(end, (h.shown_at ?? 0) + h.wait_ms);
 		for (const l of lines) end = Math.max(end, l.t);
 		end *= 1.04;
 		const x = (/** @type {number} */ t) => Math.max(0, Math.min(trackW, (t / end) * trackW));
 		return { end, lines, x };
+	});
+
+	/**
+	 * A hole's bar, cut where the browser and the server timed it: before its request left (the page
+	 * busy, the runtime's queue), the server's wait for a render slot, the server render, then the
+	 * rest (network, the body, the swap). Without a timing, one segment: the wait.
+	 * @param {import('./page-insights.js').HoleWait} h
+	 */
+	function hole_segs(h) {
+		const shown = h.shown_at ?? 0;
+		const at = shown + h.wait_ms;
+		/** @type {{ k: string; a: number; b: number }[]} */
+		const out = [];
+		if (h.left_at === undefined) return [{ k: 'wait', a: shown, b: at }];
+		const left = h.left_at;
+		if (left > shown) out.push({ k: 'before', a: shown, b: left });
+		let t = left;
+		if (h.server_queue_ms) out.push({ k: 'slot', a: t, b: (t += h.server_queue_ms) });
+		if (h.server_ms !== undefined) out.push({ k: 'render', a: t, b: (t += h.server_ms) });
+		else if (h.first_at !== undefined) out.push({ k: 'server', a: t, b: (t = h.first_at) });
+		if (at > t) out.push({ k: 'rest', a: t, b: at });
+		return out;
+	}
+	const SEG_TITLE = /** @type {Record<string, string>} */ ({
+		wait: 'waiting for its answer',
+		before: 'before its request left',
+		slot: 'waiting for a render slot on the server',
+		render: 'the server render',
+		server: 'waiting on the server',
+		rest: 'network, the body and the swap'
 	});
 
 	const kb = (/** @type {number} */ n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB');
@@ -90,6 +121,10 @@
 	function open(/** @type {string} */ fp) {
 		const el = el_of(fp);
 		if (el) selected = el;
+	}
+	// a hole has no fingerprint: its endpoint finds it
+	function hole_el(/** @type {string | undefined} */ endpoint) {
+		return endpoint ? document.querySelector(`ogygia-region[endpoint="${CSS.escape(endpoint)}"]`) : null;
 	}
 	function vital_text(v) {
 		return v.key === 'cls' ? String(v.value) : ms(v.value);
@@ -293,6 +328,62 @@
 			</div>
 		{:else}
 			<p class="muted">No island has woken yet.</p>
+		{/if}
+
+		{#if axis && (view.holes?.length || view.holes_failed?.length)}
+			<!-- each hole's first answer: how long its fallback stood, and where that time went -->
+			<h3>Hole answers <span class="muted">{view.holes?.length ?? 0}{view.holes_failed?.length ? ` · ${view.holes_failed.length} never came` : ''}</span></h3>
+			<div class="legend">
+				<span><i class="sw h-before"></i>before its request left</span>
+				<span><i class="sw h-slot"></i>render slot</span>
+				<span><i class="sw h-render"></i>server render</span>
+				<span><i class="sw h-server"></i>waiting on the server</span>
+				<span><i class="sw h-rest"></i>network + swap</span>
+			</div>
+			<div class="wf" data-og-page-holes>
+				{#each view.holes_failed ?? [] as f, i (f.endpoint ?? i)}
+					<!-- no answer: the fallback still stands; the Findings say why and where to look -->
+					<div
+						class="row bad"
+						data-og-hole-failed
+						role="button"
+						tabindex="0"
+						onmouseenter={() => (focus = hole_el(f.endpoint))}
+						onmouseleave={() => (focus = null)}
+						onclick={() => (selected = hole_el(f.endpoint) ?? selected)}
+						onkeydown={(e) => e.key === 'Enter' && (selected = hole_el(f.endpoint) ?? selected)}
+					>
+						<span class="name" style:width="{LABEL_W}px" title={f.name}>{f.name}</span>
+						<span class="track" style:width="{trackW}px"><i class="seg h-failed" style:left="0px" style:width="{trackW}px"></i></span>
+						<span class="t">none</span>
+						<span class="tags"><b class="tag err">{f.reason === 'error' ? `failed ${f.attempts}×${f.message ? ` (${f.message})` : ''}` : f.reason === 'redirected' ? 'redirected' : 'answered with a page'}</b></span>
+					</div>
+				{/each}
+				{#each view.holes ?? [] as h, i (h.endpoint ?? i)}
+					{@const segs = hole_segs(h)}
+					<div
+						class="row"
+						class:bad={!h.below_fold && h.wait_ms >= 1000}
+						role="button"
+						tabindex="0"
+						onmouseenter={() => (focus = hole_el(h.endpoint))}
+						onmouseleave={() => (focus = null)}
+						onclick={() => (selected = hole_el(h.endpoint) ?? selected)}
+						onkeydown={(e) => e.key === 'Enter' && (selected = hole_el(h.endpoint) ?? selected)}
+					>
+						<span class="name" style:width="{LABEL_W}px" title={h.name}>{h.name}</span>
+						<span class="track" style:width="{trackW}px">
+							{#each axis.lines as l (l.k)}<i class="ln abs" style:left="{axis.x(l.t)}px" style:background={l.c}></i>{/each}
+							{#each segs as s (s.k)}<i class="seg h-{s.k}" title="{SEG_TITLE[s.k]}: {ms(s.b - s.a)}" style:left="{axis.x(s.a)}px" style:width="{Math.max(1, axis.x(s.b) - axis.x(s.a))}px"></i>{/each}
+						</span>
+						<span class="t" title="its fallback stood this long{h.below_fold ? ' (below the first screen)' : ''}">{ms(h.wait_ms)}</span>
+						<span class="tags">
+							{#if h.server_queue_ms && h.server_queue_ms >= 200}<b class="tag warn">{ms(h.server_queue_ms)} for a slot</b>{/if}
+							{#if h.below_fold}<b class="tag info">below the fold</b>{/if}
+						</span>
+					</div>
+				{/each}
+			</div>
 		{/if}
 
 		<h3>Main thread <span class="muted">{cpu ? `${ms(cpu.busy_ms)} busy in ${ms(cpu.window_ms)}` : ''}</span></h3>
@@ -616,6 +707,31 @@
 	.sw.hyd,
 	.seg.hyd {
 		background: #22c55e;
+	}
+	/* a hole's answer: before it left, the server's slot wait, its render, the rest */
+	.sw.h-before,
+	.seg.h-before,
+	.seg.h-wait {
+		background: repeating-linear-gradient(90deg, #475569 0 3px, transparent 3px 5px);
+	}
+	.sw.h-slot,
+	.seg.h-slot {
+		background: #f59e0b;
+	}
+	.sw.h-render,
+	.seg.h-render {
+		background: #a78bfa;
+	}
+	.sw.h-server,
+	.seg.h-server {
+		background: #c4b5fd;
+	}
+	.sw.h-rest,
+	.seg.h-rest {
+		background: #7dd3fc;
+	}
+	.seg.h-failed {
+		background: repeating-linear-gradient(90deg, rgba(248, 113, 113, 0.55) 0 4px, transparent 4px 8px);
 	}
 	.ln {
 		display: inline-block;

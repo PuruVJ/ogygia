@@ -73,6 +73,8 @@ export interface HoleWait {
 	server_ms?: number;
 	/** its wait on the server for a render slot, before the render (Server-Timing / the profiler) */
 	server_queue_ms?: number;
+	/** the hole's endpoint (the devtools find its element by it: a hole has no fingerprint) */
+	endpoint?: string;
 	/** page times: when the fallback began to count (the paint, or the hole's own start), and its
 	 *  request as the browser timed it — left, first byte back, last byte. They split the wait. */
 	shown_at?: number;
