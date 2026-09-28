@@ -59,3 +59,9 @@ export const chunkContents = (href: string): string[] | null => chunk_contents[h
 export function set_chunk_contents(map: Record<string, string[]>) {
 	chunk_contents = map;
 }
+// `chunkHeavy(href)` — a chunk's rendered total and heaviest named modules; null when unknown.
+let chunk_heavy: Record<string, { total: number; top: { name: string; bytes: number }[] }> = {};
+export const chunkHeavy = (href: string): { total: number; top: { name: string; bytes: number }[] } | null => chunk_heavy[href] ?? null;
+export function set_chunk_heavy(map: typeof chunk_heavy) {
+	chunk_heavy = map;
+}

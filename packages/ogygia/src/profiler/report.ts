@@ -465,6 +465,8 @@ export interface ReportExtras {
 	weights?: Record<string, number>;
 	/** what is inside each hashed chunk: a readable source list from the build's handoff */
 	contents?: Record<string, string[]>;
+	/** each island file's rendered total and heaviest named modules (the build's handoff) */
+	heavy?: Record<string, { total: number; top: { name: string; bytes: number }[] }>;
 	/** browser-side hydration timings joined by fingerprint (the runtime's beacon) */
 	client?: ClientIslandStat[];
 	/** the page's web vitals from the same beacon */
@@ -1957,6 +1959,43 @@ function ogygia_findings(
 				{
 					fix: 'Open the Islands table: a heavy closure is usually one import (a date or i18n library, a whole component kit) reachable from the island — move it server-side or behind a dynamic import.'
 				}
+			);
+		}
+	}
+	// ONE MODULE IS MOST OF AN ISLAND'S CODE (the build's rendered sizes): the one place to split,
+	// load later or keep on the server. The runtimes are left out of both sides: they load once per
+	// page and are not the island's to change.
+	if (extras.heavy && islands.length) {
+		// (devalue: the runtime's decoder for rich props — loaded once, when props need it; the
+		// `props-devalue` finding is where that is the island's to change)
+		const FRAMEWORK = new Set(['svelte runtime', 'ogygia runtime', '@sveltejs/kit', 'devalue', 'esm-env']);
+		const found = new Map<string, { row: IslandStat; bytes: number; of: number }>();
+		for (const r of islands) {
+			if (r.wake === 'none') continue;
+			let own = 0;
+			const by = new Map<string, number>();
+			for (const u of new Set([r.module_url, ...r.hints])) {
+				const h = u ? extras.heavy[u] : undefined;
+				if (!h) continue;
+				own += h.total;
+				for (const m of h.top) {
+					if (FRAMEWORK.has(m.name)) own -= m.bytes;
+					else by.set(m.name, (by.get(m.name) ?? 0) + m.bytes);
+				}
+			}
+			const top = [...by].sort((a, b) => b[1] - a[1])[0];
+			if (!top || own <= 0) continue;
+			const [name, bytes] = top;
+			if (bytes < 20 * 1024 || bytes < own * 0.4) continue;
+			const prev = found.get(name);
+			if (!prev || bytes / own > prev.bytes / prev.of) found.set(name, { row: r, bytes, of: own });
+		}
+		if (found.size) {
+			const list = [...found].sort((a, b) => b[1].bytes - a[1].bytes).slice(0, 3);
+			info(
+				'island-heavy-module',
+				list.map(([name, f]) => `${name.split('/').pop()} is ${Math.round((f.bytes / f.of) * 100)}% of ${island_name(f.row)}'s own code (${fmt_kb(f.bytes)} of ${fmt_kb(f.of)}, before minifying)`).join('; ') + '.',
+				{ fix: 'That one module is where the island’s weight is: split it (one module per piece: an icon, a locale), load it when it is needed, or render it on the server.' }
 			);
 		}
 	}

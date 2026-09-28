@@ -114,6 +114,10 @@ export function collectIslandDepModulepreloads(
 	interactivity: Record<string, IslandInteractivityFacts>;
 	/** what is inside each chunk an island pulls: a readable source list per public href */
 	contents: Record<string, string[]>;
+	/** each chunk's heaviest named modules with their rendered bytes (a package sums its modules):
+	 *  what the report names as most of an island's code. Apart from `contents`, which stays names
+	 *  only (a chunk's identity across builds) */
+	heavy: Record<string, ChunkHeavy>;
 } {
 	const js: Record<string, string[]> = {};
 	const css: Record<string, string[]> = {};
@@ -302,6 +306,7 @@ export function collectIslandDepModulepreloads(
 	// WHAT IS INSIDE each chunk an island pulls (the profiler's Islands table): the bundler names
 	// shared chunks by hash, so the handoff keeps a readable summary of each one's source modules.
 	const contents: Record<string, string[]> = {};
+	const heavy: Record<string, ChunkHeavy> = {};
 	const summarize = (s: string) => {
 		const url = s.startsWith('/') ? s : '/' + s;
 		if (contents[url]) return;
@@ -309,7 +314,12 @@ export function collectIslandDepModulepreloads(
 		const ids = chunk?.moduleIds ?? [];
 		// (the bundler's rendered length per module: the heaviest named first)
 		const mods = (chunk as { modules?: Record<string, { renderedLength?: number }> } | undefined)?.modules;
-		if (ids.length) contents[url] = summarize_chunk_contents(ids, 6, 5, mods ? (id) => mods[id]?.renderedLength ?? 0 : undefined);
+		const size_of = mods ? (id: string) => mods[id]?.renderedLength ?? 0 : undefined;
+		if (ids.length) contents[url] = summarize_chunk_contents(ids, 6, 5, size_of);
+		if (ids.length && size_of) {
+			const named = chunk_module_bytes(ids, size_of);
+			if (named.top.length) heavy[url] = named;
+		}
 	};
 	for (const [key, chunk] of Object.entries(bundle)) {
 		if (chunk.type !== 'chunk') continue;
@@ -322,7 +332,37 @@ export function collectIslandDepModulepreloads(
 	for (const [key, chunk] of Object.entries(bundle)) {
 		if (chunk.type === 'chunk') summarize(chunk.fileName || key);
 	}
-	return { js, css, page, page_keys, remotes, interactivity, contents };
+	return { js, css, page, page_keys, remotes, interactivity, contents, heavy };
+}
+
+/** A chunk's rendered size and its heaviest named modules. */
+export interface ChunkHeavy {
+	/** every module's rendered bytes in the chunk */
+	total: number;
+	/** the five heaviest, by the names `contents` uses (a package's modules summed) */
+	top: { name: string; bytes: number }[];
+}
+
+/** A chunk's modules as readable names (the same names `contents` uses) with their rendered bytes,
+ *  heaviest first, the five heaviest; a package's modules summed under its name.
+ *  @internal exported for the tests */
+export function chunk_module_bytes(module_ids: readonly string[], size_of: (id: string) => number): ChunkHeavy {
+	const by = new Map<string, number>();
+	let total = 0;
+	for (const raw of module_ids) {
+		if (!raw || raw.startsWith('\0') || raw.startsWith('virtual:')) continue;
+		const name = summarize_chunk_contents([raw], 1, 1)[0];
+		if (!name) continue;
+		const bytes = size_of(raw) || 0;
+		total += bytes;
+		by.set(name, (by.get(name) ?? 0) + bytes);
+	}
+	const top = [...by]
+		.filter(([, bytes]) => bytes > 0)
+		.sort((a, b) => b[1] - a[1])
+		.slice(0, 5)
+		.map(([name, bytes]) => ({ name, bytes }));
+	return { total, top };
 }
 
 const PKG_IN_PATH_RE = /\/node_modules\/((?:@[^/]+\/)?[^/]+)/;
@@ -474,7 +514,7 @@ export function island_deps_module(
 	out_dir_rel = '.svelte-kit'
 ): string {
 	if (!ssr)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -484,7 +524,7 @@ export function island_deps_module(
 	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
 	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function fnManifest() { return null; }`;
 	return (
 		`import fs from 'node:fs';\n` +
 		`import path from 'node:path';\n` +
@@ -608,6 +648,15 @@ export function island_deps_module(
 		`  const key = href.startsWith('/') ? href : '/' + href.replace(/^\\.\\//, '');\n` +
 		`  const v = map[key] ?? map[href];\n` +
 		`  return Array.isArray(v) ? v : null;\n` +
+		`}\n` +
+		// …and its heaviest modules with their rendered bytes (the report's heavy-module finding)
+		`export function chunkHeavy(href) {\n` +
+		`  const all = load();\n` +
+		`  const map = all && typeof all.heavy === 'object' && all.heavy ? all.heavy : null;\n` +
+		`  if (!map || !href) return null;\n` +
+		`  const key = href.startsWith('/') ? href : '/' + href.replace(/^\\.\\//, '');\n` +
+		`  const v = map[key] ?? map[href];\n` +
+		`  return v && typeof v === 'object' && Array.isArray(v.top) ? v : null;\n` +
 		`}\n` +
 		// og.$ factories for the page-inline registration script (CSP-clean prod path):
 		// written by the CLIENT build's writeBundle, read here at SSR render time — the

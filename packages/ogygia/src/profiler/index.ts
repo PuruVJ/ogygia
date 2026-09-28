@@ -205,7 +205,7 @@ import {
 	request_stats_of,
 	set_request_stats_detail
 } from '../server/request-stats.js';
-import { chunkContents, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
+import { chunkContents, chunkHeavy, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
 import { set_span_recorder, type SpanRecord, type SpanRecorder } from './span.js';
 import { register_profiler_file } from './frames.js';
 
@@ -404,6 +404,7 @@ export interface StoredReport {
 	weights?: Record<string, number>;
 	/** what is inside each of those chunks (the build's handoff), for the same hrefs */
 	contents?: Record<string, string[]>;
+	heavy?: Record<string, { total: number; top: { name: string; bytes: number }[] }>;
 	/** browser hydration timings carried by an uploaded dump (a live report joins the ring instead) */
 	client?: ClientIslandStat[];
 	/** the page's web vitals carried by an uploaded dump */
@@ -2100,14 +2101,18 @@ class Profiler {
 		// through the app (a built app's hashed assets; dev URLs are unbundled and say nothing).
 		let weights: Record<string, number> | undefined;
 		let contents: Record<string, string[]> | undefined;
+		let heavy: Record<string, { total: number; top: { name: string; bytes: number }[] }> | undefined;
 		if (fetch_url && !this.dev) {
 			const urls: string[] = [];
 			for (const r of island_rows_of(meta)) urls.push(r.module_url, ...r.hints);
 			if (urls.length) weights = await weigh_urls(urls, fetch_url, this.#weights);
-			// the readable source list behind each hashed chunk (the build's handoff)
+			// the readable source list behind each hashed chunk (the build's handoff), and its
+			// heaviest modules with their rendered bytes
 			for (const u of new Set(urls)) {
 				const inside = chunkContents(u);
 				if (inside?.length) (contents ??= {})[u] = inside;
+				const h = chunkHeavy(u);
+				if (h?.top.length) (heavy ??= {})[u] = h;
 			}
 		}
 		// WHEN THE HEAP GREW and what ran then: the fine series joined to the CPU over the capture
@@ -2193,6 +2198,7 @@ class Profiler {
 			raw,
 			...(weights ? { weights } : {}),
 			...(contents ? { contents } : {}),
+			...(heavy ? { heavy } : {}),
 			...(gc_attr ? { gc_attr } : {}),
 			...(alloc ? { alloc } : {}),
 			...(contended ? { contention: contended } : {})
@@ -4947,6 +4953,7 @@ class Profiler {
 			raw: '',
 			...(e.weights ? { weights: e.weights } : {}),
 			...(e.contents ? { contents: e.contents } : {}),
+			...(e.heavy ? { heavy: e.heavy } : {}),
 			...(e.client ? { client: e.client } : {}),
 			...(e.vitals ? { vitals: e.vitals } : {}),
 			...(e.client_marks ? { client_marks: e.client_marks } : {}),
@@ -5109,6 +5116,7 @@ class Profiler {
 			call_counts: stored.call_counts,
 			...(stored.weights ? { weights: stored.weights } : {}),
 			...(stored.contents ? { contents: stored.contents } : {}),
+			...(stored.heavy ? { heavy: stored.heavy } : {}),
 			...(client.length ? { client } : {}),
 			...(vitals ? { vitals } : {}),
 			...(client_marks?.length ? { client_marks } : {}),

@@ -1432,7 +1432,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// The per-chunk contents (what is inside each hashed chunk) serve the profiler's Islands
 				// table only: without a profiler in the config they never leave the build. Nothing here
 				// reaches the browser either way; the server parses the handoff once per process.
-				if (!profiler_config) map.contents = {};
+				if (!profiler_config) {
+					map.contents = {};
+					map.heavy = {};
+				}
 				const json = JSON.stringify({
 					...map,
 					// why an island ships all of page.data (the build's reasons, per entry): the profiler's

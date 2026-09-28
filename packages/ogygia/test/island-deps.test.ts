@@ -4,6 +4,7 @@ import {
 	collect_inline_css,
 	interactivity_facts,
 	summarize_chunk_contents,
+	chunk_module_bytes,
 	islandDepsHandoffPath,
 	island_deps_module,
 	kit_remote_hash,
@@ -121,7 +122,7 @@ describe('collectIslandDepModulepreloads', () => {
 				imports: ['_app/immutable/x.js'] // not an emitted chunk — never hinted
 			}
 		};
-		const empty = { css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {}, contents: {} };
+		const empty = { css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {}, contents: {}, heavy: {} };
 		// not told which chunk is the runtime → nothing is (no guessing from the name)
 		expect(collectIslandDepModulepreloads(bundle)).toEqual({ js: {}, ...empty });
 		// told → recorded, and a leading slash on the name is fine
@@ -200,6 +201,12 @@ describe('collectIslandDepModulepreloads', () => {
 			expect(out.at(-1)).toBe('+2 more');
 			// without sizes: the module order, as before
 			expect(summarize_chunk_contents(ids)[0]).toBe('src/lib/small0.ts');
+		});
+
+		test('a chunk’s heaviest named modules with their bytes, a package summed, and the chunk total', () => {
+			const ids = ['/app/src/lib/Icons.svelte', '/app/src/lib/Card.svelte', '/app/node_modules/pkg/a.js', '/app/node_modules/pkg/b.js', '\0virtual:x'];
+			const size = (id: string) => (id.includes('Icons') ? 68_000 : id.includes('Card') ? 2_000 : 1_500);
+			expect(chunk_module_bytes(ids, size)).toEqual({ total: 73_000, top: [{ name: 'src/lib/Icons.svelte', bytes: 68_000 }, { name: 'pkg', bytes: 3_000 }, { name: 'src/lib/Card.svelte', bytes: 2_000 }] });
 		});
 
 		test('every chunk the build emitted is summarized, not only the ones islands pull', () => {

@@ -1679,6 +1679,14 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			'The slowest, MegaHeader, took 120 ms from wake to hydrated at the median, mostly loading its 100 ms of modules'
 		);
 		expect(by['client-hydrate'].fix).toMatch(/Module load dominates/);
+		// one module most of an island's own code, from the build's rendered sizes; the runtimes (and
+		// devalue, the props decoder) never count as the island's
+		const heavy = {
+			'/_app/immutable/aaaaaaaaaaaaaaaa.js': { total: 60_000, top: [{ name: 'src/lib/Icons.svelte', bytes: 45_000 }, { name: 'svelte runtime', bytes: 8_000 }, { name: 'src/lib/MegaHeader.svelte', bytes: 5_000 }] },
+			'/_app/immutable/bbbbbbbbbbbbbbbb.js': { total: 40_000, top: [{ name: 'devalue', bytes: 35_000 }, { name: 'src/lib/CountryPanel.svelte', bytes: 5_000 }] }
+		};
+		const hv = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, heavy } as never).find((x) => x.code === 'island-heavy-module')!;
+		expect(hv.message).toBe("Icons.svelte is 87% of MegaHeader's own code (44 KB of 51 KB, before minifying).");
 		// with the report's own visit: where the time went, and the advice for a queue, not a slow step
 		const visit = { page: '/', at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [0, 1, 2].map((k) => ({ fp: 'aaaaaaaaaaaaaaaa', t0: 0, loaded: 10, turn: 10 + 90 + k, done: 110 + k })) };
 		const q = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, visit } as never).find((x) => x.code === 'client-hydrate')!;
