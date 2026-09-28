@@ -257,6 +257,36 @@ async function nav_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** HOLES WHOSE ANSWER NEVER CAME: /dt-holes plants a hole whose server render throws (500, every
+ *  retry); the auth-wall cookie on /hole-wall makes a handle in front of ogygia's redirect the hole's
+ *  request. Both must be named with their cause; the healthy holes (Greeting on /dt-holes, and on
+ *  /hole-wall without the cookie) never. */
+async function holes_run(browser) {
+	const read = async (path, wall) => {
+		const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+		if (wall) await ctx.addCookies([{ name: 'og-auth-wall', value: wall, url: base }]);
+		const page = await ctx.newPage();
+		await page.goto(base + path, { waitUntil: 'load' });
+		// (the broken hole retries twice, 0.5 s then 1 s apart, before it gives up)
+		await page.waitForTimeout(4500);
+		const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'hole-failed').map((x) => x.message));
+		await ctx.close();
+		return f;
+	};
+	const lab = await read('/dt-holes');
+	const walled = await read('/hole-wall', 'redirect');
+	const open = await read('/hole-wall');
+	const checks = [
+		['the broken hole, 3 tries', lab.length === 1 && lab[0].includes('BrokenHole') && lab[0].includes('failed 3 times (status 500)')],
+		['the healthy hole quiet', !lab.some((m) => m.includes('Greeting'))],
+		['the refused hole, redirected', walled.length === 1 && walled[0].includes('Greeting') && walled[0].includes('redirected to /hole-wall/account')],
+		['no wall, no finding', open.length === 0]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, walled, open })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 function grade(view) {
 	const name_of = new Map(view.regions.map((r) => [r.fp, r.name]));
 	const found = {};
@@ -375,6 +405,10 @@ try {
 	for (let i = 0; i < repeat; i++) nav_ok += await nav_run(browser);
 	if (nav_ok < repeat) failed = true;
 	console.log(`${nav_ok === repeat ? '✓' : '✗'} navigation (kept islands, styles, wakes): ${nav_ok}/${repeat}`);
+	let holes_ok = 0;
+	for (let i = 0; i < repeat; i++) holes_ok += await holes_run(browser);
+	if (holes_ok < repeat) failed = true;
+	console.log(`${holes_ok === repeat ? '✓' : '✗'} holes whose answer never came: ${holes_ok}/${repeat}`);
 	if (repeat - cpu_fail < need) {
 		failed = true;
 		console.log(`✗ CPU naming held in ${repeat - cpu_fail}/${repeat} runs`);

@@ -116,6 +116,27 @@ describe('analyze_page', () => {
 		expect(f?.fps).toEqual(['e']);
 	});
 
+	it('a hole whose answer never came is an error, with the cause and where to look', () => {
+		const r = analyze_page(
+			page({
+				hole_failures: [
+					{ name: 'Greeting', endpoint: './__ogygia__?id=a&sig=x', reason: 'redirected', final_url: 'http://x.test/account/', attempts: 1 },
+					{ name: 'BrokenHole', endpoint: './__ogygia__?id=b&sig=y', reason: 'error', message: 'status 500', attempts: 3 }
+				]
+			}),
+			[],
+			[],
+			2000
+		);
+		const f = r.findings.filter((x) => x.code === 'hole-failed');
+		expect(f.map((x) => x.severity)).toEqual(['error', 'error']);
+		expect(f[0].message).toContain('Greeting never got its answer: the request was redirected to /account/');
+		expect(f[0].fix).toContain('Let that path through untouched');
+		expect(f[1].message).toContain('BrokenHole never got its answer: the request failed 3 times (status 500)');
+		expect(f[1].fix).toContain('./__ogygia__?id=b&sig=y');
+		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('hole-failed');
+	});
+
 	it('held with nothing ahead: the scheduler’s own wait is named, and only that', () => {
 		// the round-46 shape: woken by a scroll long after load, code in hand, 70 ms with nothing ahead
 		const idle = analyze_page(page({ islands: [{ fp: 'v', t0: 1000, loaded: 1000, turn: 1070, done: 1071 }] }), [region('v', 'Scrolled', 'visible')], [], 2000);

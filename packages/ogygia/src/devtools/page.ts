@@ -6,8 +6,8 @@
  */
 import { beacon_page } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
-import { all_regions, region_name } from './regions.js';
-import { analyze_page, type Failure, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
+import { all_regions, region_name, region_names } from './regions.js';
+import { analyze_page, type Failure, type HoleFailure, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
 import { since_load, type LoadSnapshot, type SinceLoad } from './since-load.js';
@@ -77,6 +77,42 @@ export function failures(since = last_nav()?.t ?? -Infinity): Failure[] {
 			if (e.t < since && !(e.fp && document.querySelector(`ogygia-region[data-og-fp="${CSS.escape(e.fp)}"]:not([data-hydrated])`))) continue;
 			seen.add(key);
 			out.push({ fp: e.fp, message: e.message });
+		}
+	}
+	return out;
+}
+
+/** Holes whose answer never came: the last failure of each (no retry after it), unless an answer
+ *  arrived since. In a build the runtime says nothing and the page just keeps the fallback. */
+export function hole_failures(since = last_nav()?.t ?? -Infinity): HoleFailure[] {
+	const out: HoleFailure[] = [];
+	const answered = new Set<string>();
+	const seen = new Set<string>();
+	const ev = snapshot();
+	for (let i = ev.length - 1; i >= 0; i--) {
+		const e = ev[i];
+		if (e.name !== 'region.server.applied' && e.name !== 'region.server.failed') continue;
+		const key = e.endpoint ?? e.entry ?? '';
+		if (e.name === 'region.server.applied') answered.add(key);
+		else if (e.final && !answered.has(key) && !seen.has(key) && e.t >= since) {
+			seen.add(key);
+			// a hole has no entry: its endpoint names the component (`?id=<island id>`)
+			const el = e.endpoint ? document.querySelector(`ogygia-region[endpoint="${CSS.escape(e.endpoint)}"]`) : e.entry ? document.querySelector(`ogygia-region[entry="${CSS.escape(e.entry)}"]`) : null;
+			let id = '';
+			try {
+				id = e.endpoint ? (new URL(e.endpoint, location.href).searchParams.get('id') ?? '') : '';
+			} catch {
+				id = '';
+			}
+			out.push({
+				fp: el?.getAttribute('data-og-fp') ?? undefined,
+				name: (id && region_names()[id]) || (e.entry ? region_name(e.entry) : 'a hole'),
+				endpoint: e.endpoint,
+				reason: e.reason,
+				...(e.final_url ? { final_url: e.final_url } : {}),
+				...(e.message ? { message: e.message } : {}),
+				attempts: e.attempt
+			});
 		}
 	}
 	return out;
@@ -180,7 +216,8 @@ export function read_page(): PageView | null {
 	// third parties: every origin but this one (what the server's HTML named is not known here — the
 	// live page already holds the script elements other scripts added — so parse time decides)
 	const with_visit: PageInput = base.visit ? { ...base, visit: { ...base.visit, origin: location.origin } } : base;
-	const input: PageInput = { ...with_visit, empty_slots: empty_slots() };
+	const holes = hole_failures();
+	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before

@@ -902,6 +902,17 @@ class OgygiaRegion extends HTMLElement {
 				}
 			}
 			this.#fetch_attempts++;
+			if (DEVTOOLS)
+				dt_emit({
+					domain: 'runtime',
+					name: 'region.server.failed',
+					entry: this.getAttribute('entry') || undefined,
+					endpoint,
+					reason: refused ? err.reason : 'error',
+					...(refused ? { final_url: err.final_url } : { message: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) }),
+					attempt: this.#fetch_attempts,
+					final: refused || !this.isConnected || this.#fetch_attempts >= 3
+				});
 			// Allow connectedCallback / a delayed retry to schedule again.
 			this.#scheduled = false;
 			if (!refused && this.isConnected && this.#fetch_attempts < 3) {

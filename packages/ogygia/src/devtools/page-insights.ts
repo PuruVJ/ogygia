@@ -53,6 +53,18 @@ export interface PageInput {
 	snapshots?: { fp: string; ssr: string; hydrated: string; final?: string }[];
 	/** awake islands showing a children slot with nothing in it (read off the DOM; devtools only) */
 	empty_slots?: string[];
+	/** holes whose answer never came (the bus; devtools only) */
+	hole_failures?: HoleFailure[];
+}
+
+export interface HoleFailure {
+	fp?: string;
+	name: string;
+	endpoint?: string;
+	reason: 'redirected' | 'document' | 'error';
+	final_url?: string;
+	message?: string;
+	attempts: number;
 }
 
 /** A region on the page, as the tab read it off the DOM. `top` is document-relative (px). */
@@ -575,6 +587,30 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			fix: 'Render the children on the server and hide them (the hidden attribute, or CSS) instead of wrapping them in {#if}; or make the part that appears later its own island inside the component.',
 			fps: empty
 		});
+
+	// ── holes whose answer never came: the page keeps the fallback, and in a build nothing says why ──
+	for (const h of page.hole_failures ?? []) {
+		const path = (u?: string) => {
+			if (!u) return '';
+			try {
+				return new URL(u, 'http://x').pathname;
+			} catch {
+				return u;
+			}
+		};
+		const refused = h.reason !== 'error';
+		findings.push({
+			code: 'hole-failed',
+			severity: 'error',
+			message: refused
+				? `${h.name} never got its answer: the request ${h.reason === 'redirected' ? `was redirected to ${path(h.final_url)}` : `was answered with a whole page (${path(h.final_url)})`}. Something in front of ogygia's handle took it, and the fallback stands.`
+				: `${h.name} never got its answer: the request failed ${h.attempts} time${h.attempts === 1 ? '' : 's'} (${h.message ?? 'no reason given'}), and the fallback stands.`,
+			fix: refused
+				? `A handle that runs before ogygia's (an auth redirect, a locale bounce, a 404 page) answered the islands endpoint (${path(h.endpoint)}). Let that path through untouched there.`
+				: `Open ${h.endpoint ?? 'the hole’s endpoint'} (signed for this page) for the server's answer: the hole's server render threw, or the network dropped the request.`,
+			fps: h.fp ? [h.fp] : []
+		});
+	}
 
 	// ── third parties: other origins' bytes, blocking files, main-thread time, runtime-loaded scripts ──
 	const origin = page.visit?.origin;

@@ -268,6 +268,24 @@ export type RuntimeEventInput =
 			revalidate: boolean;
 	  }
 	| {
+			/** A hole's answer did not arrive. Without this the page keeps the fallback and nothing
+			 *  anywhere says why (in a build the runtime is silent). */
+			domain: 'runtime';
+			name: 'region.server.failed';
+			entry?: string;
+			endpoint?: string;
+			/** refused: redirected / a whole document answered; error: the request failed */
+			reason: 'redirected' | 'document' | 'error';
+			/** what answered instead (a refused answer) */
+			final_url?: string;
+			/** the error's first line (a failed request) */
+			message?: string;
+			/** this attempt (1-based) */
+			attempt: number;
+			/** no retry follows: the fallback stays */
+			final: boolean;
+	  }
+	| {
 			domain: 'runtime';
 			name: 'interaction.replay';
 			entry?: string;

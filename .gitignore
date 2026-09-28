@@ -52,6 +52,9 @@ test-results/
 .vitest-attachments/
 /playwright-report/
 **/__screenshots__/
+# one-off screenshots taken while checking the devtools / profiler UI
+/anchors.png
+**/hub.png
 
 # examples: generated signing keys + build freeze
 /examples/mfe/keys.env
