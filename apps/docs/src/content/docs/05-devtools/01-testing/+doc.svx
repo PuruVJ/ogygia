@@ -43,7 +43,7 @@ test('checkout stays fast', async ({ page, ogygia }) => {
 });
 ```
 
-The server under test needs `ogygia({ devtools: true })`: the dev server, or a preview build with devtools on (see [Devtools in a build](/docs/devtools/overview#in-a-build-a-preview-deploy)). The fixture sets the `og_devtools` cookie for your `baseURL`, so each page is measured from its first load. `profile()` needs `ogygia({ profiler: true })`. On a build, give it the profiler's key:
+The server under test needs `ogygia({ devtools: true })`: the dev server, or a preview build with devtools on (see [Devtools in a build](/docs/devtools/overview#enabling-in-a-build-a-preview-deploy)). The fixture sets the `og_devtools` cookie for your `baseURL`, so each page is measured from its first load. `profile()` needs `ogygia({ profiler: true })`. On a build, give it the profiler's key:
 
 ```ts title=playwright.config.ts
 export default defineConfig({
