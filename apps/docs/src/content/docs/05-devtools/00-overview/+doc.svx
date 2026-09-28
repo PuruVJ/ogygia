@@ -98,6 +98,8 @@ The findings it can name:
 
 On the dev server, modules load one by one. Thus load times run higher than in a build. The other findings hold in both.
 
+On a Kit-hydrated page (`csr = true`) ogygia's runtime never boots, so there are no islands, no wire and no byte ledger. The dock says so, and still shows the Page tab: the vitals, the findings about the page, the files, third parties and styles, from the beacon its boot starts.
+
 After an in-app navigation (ogygia's router swaps the page without a reload), the tab reports on the new page: its findings and island rows count from the navigation. An island on both pages with the same props is kept by the router, still awake, with no code to load and nothing to hydrate. The tab lists those as kept, so a page whose islands were all reused does not read as "nothing woke". The Styles section reads the new page's sheets. The vitals stay the first page's load, labelled as such, since a navigation paints nothing the browser reports. The load CPU trace is the first page's too; record the main thread again for this one.
 
 ::: tip Checked against planted problems

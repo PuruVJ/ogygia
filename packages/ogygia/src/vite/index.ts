@@ -90,7 +90,8 @@ import { island_subgraph_bytes } from '../compiler/dev/region-bytes.js';
 import {
 	collectIslandDepModulepreloads,
 	collect_inline_css,
-	remote_hash_of
+	remote_hash_of,
+	summarize_chunk_contents
 } from '../compiler/link/island-deps.js';
 import { report_seed_shaping } from '../compiler/link/build-output.js';
 import { follow_pending_page_calls } from '../compiler/link/page-keys.js';
@@ -1436,11 +1437,34 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					map.contents = {};
 					map.heavy = {};
 				}
+				// BARRELS a chunk still holds (the profiler's island-barrel note): a module with little
+				// code of its own and many modules behind it — a re-export index the barrel pass left
+				// (it has side effects, or the pass is off), so everything it re-exports ships with the
+				// island. The bundler's own module info decides; only with a profiler, like `contents`.
+				const barrels: Record<string, { name: string; fanout: number }[]> = {};
+				if (profiler_config) {
+					for (const [key, chunk] of Object.entries(bundle)) {
+						if (chunk.type !== 'chunk') continue;
+						const found: { name: string; fanout: number }[] = [];
+						for (const id of chunk.moduleIds ?? []) {
+							if (id.startsWith('\0')) continue;
+							const info = this.getModuleInfo(id);
+							if (!info) continue;
+							const fanout = info.importedIds.filter((d) => !d.startsWith('\0')).length;
+							const own = info.code?.length ?? Infinity;
+							if (fanout >= 6 && own <= fanout * 160) {
+								const name = summarize_chunk_contents([id], 1, 1)[0];
+								if (name) found.push({ name, fanout });
+							}
+						}
+						if (found.length) barrels['/' + (chunk.fileName || key)] = found.sort((a, b) => b.fanout - a.fanout).slice(0, 3);
+					}
+				}
 				const json = JSON.stringify({
 					...map,
 					// why an island ships all of page.data (the build's reasons, per entry): the profiler's
 					// seed finding points at that line; like `contents`, only with a profiler
-					...(profiler_config ? { page_why } : {}),
+					...(profiler_config ? { page_why, barrels } : {}),
 					content_css,
 					css_inline,
 					fn_manifest: Object.fromEntries(compiler.dollar_hoists)

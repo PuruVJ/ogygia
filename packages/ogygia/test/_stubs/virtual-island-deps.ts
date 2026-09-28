@@ -65,3 +65,9 @@ export const chunkHeavy = (href: string): { total: number; top: { name: string; 
 export function set_chunk_heavy(map: typeof chunk_heavy) {
 	chunk_heavy = map;
 }
+// `chunkBarrels(href)` — the re-export barrels a chunk still holds; null when unknown.
+let chunk_barrels: Record<string, { name: string; fanout: number }[]> = {};
+export const chunkBarrels = (href: string): { name: string; fanout: number }[] | null => chunk_barrels[href] ?? null;
+export function set_chunk_barrels(map: typeof chunk_barrels) {
+	chunk_barrels = map;
+}

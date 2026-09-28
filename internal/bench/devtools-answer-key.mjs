@@ -327,6 +327,32 @@ async function code_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** A KIT-HYDRATED PAGE (/score-lab-kit, csr=true): the ogygia runtime never boots there, yet the
+ *  dock shows what the browser saw — the csr=true note, the vitals, the files, the styles — and
+ *  no island tools. */
+async function csr_true_run(browser) {
+	const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+	await page.goto(base + '/score-lab-kit', { waitUntil: 'load' });
+	await page.waitForTimeout(2500);
+	if (!(await page.locator('[data-og-csr-notice]').count())) await page.click('[data-og-panel-toggle]').catch(() => {});
+	await page.waitForTimeout(1500);
+	const r = await page.evaluate(() => {
+		const v = window.__ogygia_page?.();
+		return v ? { vitals: v.report.vitals.map((x) => x.key), files: v.report.bytes.length, rows: v.report.rows.length } : null;
+	});
+	const ui = { notice: await page.locator('[data-og-csr-notice]').count(), vitals: await page.locator('[data-og-vitals] .vital').count(), styles: await page.locator('[data-og-page-styles]').count(), tabs: await page.locator('[data-og-tab]').count() };
+	await page.close();
+	const checks = [
+		['the csr=true note', ui.notice === 1 && ui.tabs === 0],
+		['vitals', !!r && r.vitals.includes('lcp') && ui.vitals >= 3],
+		['files and styles', !!r && r.files > 0 && ui.styles === 1],
+		['no island rows', !!r && r.rows === 0]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} csr=true page: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ r, ui })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 function grade(view) {
 	const name_of = new Map(view.regions.map((r) => [r.fp, r.name]));
 	const found = {};
@@ -453,6 +479,10 @@ try {
 	for (let i = 0; i < repeat; i++) code_ok += await code_run(browser);
 	if (code_ok < repeat) failed = true;
 	console.log(`${code_ok === repeat ? '✓' : '✗'} island code (barrel, heavy module): ${code_ok}/${repeat}`);
+	let csr_ok = 0;
+	for (let i = 0; i < repeat; i++) csr_ok += await csr_true_run(browser);
+	if (csr_ok < repeat) failed = true;
+	console.log(`${csr_ok === repeat ? '✓' : '✗'} a Kit-hydrated page shows what the browser saw: ${csr_ok}/${repeat}`);
 	if (repeat - cpu_fail < need) {
 		failed = true;
 		console.log(`✗ CPU naming held in ${repeat - cpu_fail}/${repeat} runs`);

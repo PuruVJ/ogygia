@@ -467,6 +467,8 @@ export interface ReportExtras {
 	contents?: Record<string, string[]>;
 	/** each island file's rendered total and heaviest named modules (the build's handoff) */
 	heavy?: Record<string, { total: number; top: { name: string; bytes: number }[] }>;
+	/** re-export barrels each island file still holds, with how many modules each brings */
+	barrels?: Record<string, { name: string; fanout: number }[]>;
 	/** browser-side hydration timings joined by fingerprint (the runtime's beacon) */
 	client?: ClientIslandStat[];
 	/** the page's web vitals from the same beacon */
@@ -1777,6 +1779,11 @@ export function group_islands(rows: readonly IslandStat[]): IslandStat[] {
 }
 
 /** Unique bytes of an island's JS closure (its module + preload hints), when the weights are known. */
+/** Code every page with islands loads once, never an island's own to change: the runtimes, Kit,
+ *  and devalue (the runtime's decoder for rich props — the `props-devalue` finding is where that is
+ *  the island's doing). The heavy-module and barrel notes leave these out. */
+const FRAMEWORK = new Set(['svelte runtime', 'ogygia runtime', '@sveltejs/kit', 'devalue', 'esm-env']);
+
 export function island_js_bytes(
 	row: IslandStat,
 	weights: Record<string, number> | undefined
@@ -1966,9 +1973,6 @@ function ogygia_findings(
 	// load later or keep on the server. The runtimes are left out of both sides: they load once per
 	// page and are not the island's to change.
 	if (extras.heavy && islands.length) {
-		// (devalue: the runtime's decoder for rich props — loaded once, when props need it; the
-		// `props-devalue` finding is where that is the island's to change)
-		const FRAMEWORK = new Set(['svelte runtime', 'ogygia runtime', '@sveltejs/kit', 'devalue', 'esm-env']);
 		const found = new Map<string, { row: IslandStat; bytes: number; of: number }>();
 		for (const r of islands) {
 			if (r.wake === 'none') continue;
@@ -1996,6 +2000,30 @@ function ogygia_findings(
 				'island-heavy-module',
 				list.map(([name, f]) => `${name.split('/').pop()} is ${Math.round((f.bytes / f.of) * 100)}% of ${island_name(f.row)}'s own code (${fmt_kb(f.bytes)} of ${fmt_kb(f.of)}, before minifying)`).join('; ') + '.',
 				{ fix: 'That one module is where the island’s weight is: split it (one module per piece: an icon, a locale), load it when it is needed, or render it on the server.' }
+			);
+		}
+	}
+	// A BARREL AN ISLAND STILL IMPORTS WHOLE (the build's module info): every module it re-exports
+	// ships with the island. The barrel pass left it (a side effect, or the pass is off).
+	if (extras.barrels && islands.length) {
+		const found = new Map<string, { row: IslandStat; fanout: number }>();
+		for (const r of islands) {
+			if (r.wake === 'none') continue;
+			for (const u of new Set([r.module_url, ...r.hints])) {
+				for (const b of (u ? extras.barrels[u] : undefined) ?? []) {
+					// (Svelte's and Kit's own indexes look like barrels: shared once per page, not the island's)
+					if (FRAMEWORK.has(b.name)) continue;
+					const prev = found.get(b.name);
+					if (!prev || b.fanout > prev.fanout) found.set(b.name, { row: r, fanout: b.fanout });
+				}
+			}
+		}
+		if (found.size) {
+			const list = [...found].sort((a, b) => b[1].fanout - a[1].fanout).slice(0, 3);
+			warn(
+				'island-barrel',
+				list.map(([name, f]) => `${island_name(f.row)} ships a barrel whole: ${name}, and the ${f.fanout} modules behind it`).join('; ') + '. A Svelte component is never side-effect free to the bundler, so what the island does not use ships anyway.',
+				{ fix: 'Import what the island uses from its own file, or turn on ogygia({ barrels }). If it is on, the barrel has side effects of its own (a statement besides its re-exports), or the build log says why it was skipped.' }
 			);
 		}
 	}

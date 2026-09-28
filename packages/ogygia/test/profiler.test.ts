@@ -1687,6 +1687,11 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		};
 		const hv = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, heavy } as never).find((x) => x.code === 'island-heavy-module')!;
 		expect(hv.message).toBe("Icons.svelte is 87% of MegaHeader's own code (44 KB of 51 KB, before minifying).");
+		// a barrel an island ships whole, from the build's module info; Svelte's own index never counts
+		const barrels = { '/_app/immutable/aaaaaaaaaaaaaaaa.js': [{ name: 'svelte runtime', fanout: 71 }, { name: 'src/lib/ui/index.ts', fanout: 8 }] };
+		const br = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, barrels } as never).find((x) => x.code === 'island-barrel')!;
+		expect(br.message).toContain('MegaHeader ships a barrel whole: src/lib/ui/index.ts, and the 8 modules behind it');
+		expect(br.message).not.toContain('svelte runtime');
 		// with the report's own visit: where the time went, and the advice for a queue, not a slow step
 		const visit = { page: '/', at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [0, 1, 2].map((k) => ({ fp: 'aaaaaaaaaaaaaaaa', t0: 0, loaded: 10, turn: 10 + 90 + k, done: 110 + k })) };
 		const q = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, visit } as never).find((x) => x.code === 'client-hydrate')!;

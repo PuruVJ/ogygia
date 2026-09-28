@@ -205,7 +205,7 @@ import {
 	request_stats_of,
 	set_request_stats_detail
 } from '../server/request-stats.js';
-import { chunkContents, chunkHeavy, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
+import { chunkBarrels, chunkContents, chunkHeavy, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
 import { set_span_recorder, type SpanRecord, type SpanRecorder } from './span.js';
 import { register_profiler_file } from './frames.js';
 
@@ -405,6 +405,7 @@ export interface StoredReport {
 	/** what is inside each of those chunks (the build's handoff), for the same hrefs */
 	contents?: Record<string, string[]>;
 	heavy?: Record<string, { total: number; top: { name: string; bytes: number }[] }>;
+	barrels?: Record<string, { name: string; fanout: number }[]>;
 	/** browser hydration timings carried by an uploaded dump (a live report joins the ring instead) */
 	client?: ClientIslandStat[];
 	/** the page's web vitals carried by an uploaded dump */
@@ -2102,6 +2103,7 @@ class Profiler {
 		let weights: Record<string, number> | undefined;
 		let contents: Record<string, string[]> | undefined;
 		let heavy: Record<string, { total: number; top: { name: string; bytes: number }[] }> | undefined;
+		let barrels: Record<string, { name: string; fanout: number }[]> | undefined;
 		if (fetch_url && !this.dev) {
 			const urls: string[] = [];
 			for (const r of island_rows_of(meta)) urls.push(r.module_url, ...r.hints);
@@ -2113,6 +2115,8 @@ class Profiler {
 				if (inside?.length) (contents ??= {})[u] = inside;
 				const h = chunkHeavy(u);
 				if (h?.top.length) (heavy ??= {})[u] = h;
+				const b = chunkBarrels(u);
+				if (b?.length) (barrels ??= {})[u] = b;
 			}
 		}
 		// WHEN THE HEAP GREW and what ran then: the fine series joined to the CPU over the capture
@@ -2199,6 +2203,7 @@ class Profiler {
 			...(weights ? { weights } : {}),
 			...(contents ? { contents } : {}),
 			...(heavy ? { heavy } : {}),
+			...(barrels ? { barrels } : {}),
 			...(gc_attr ? { gc_attr } : {}),
 			...(alloc ? { alloc } : {}),
 			...(contended ? { contention: contended } : {})
@@ -4954,6 +4959,7 @@ class Profiler {
 			...(e.weights ? { weights: e.weights } : {}),
 			...(e.contents ? { contents: e.contents } : {}),
 			...(e.heavy ? { heavy: e.heavy } : {}),
+			...(e.barrels ? { barrels: e.barrels } : {}),
 			...(e.client ? { client: e.client } : {}),
 			...(e.vitals ? { vitals: e.vitals } : {}),
 			...(e.client_marks ? { client_marks: e.client_marks } : {}),
@@ -5117,6 +5123,7 @@ class Profiler {
 			...(stored.weights ? { weights: stored.weights } : {}),
 			...(stored.contents ? { contents: stored.contents } : {}),
 			...(stored.heavy ? { heavy: stored.heavy } : {}),
+			...(stored.barrels ? { barrels: stored.barrels } : {}),
 			...(client.length ? { client } : {}),
 			...(vitals ? { vitals } : {}),
 			...(client_marks?.length ? { client_marks } : {}),
