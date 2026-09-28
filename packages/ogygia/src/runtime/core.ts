@@ -39,7 +39,7 @@ import { preload_island_graph } from './island-graph-preload.js';
 import { connected_regions } from './connected.js';
 import { restore_props_sidecar } from './sidecar.js';
 import { hole_facts_of } from './hole-facts.js';
-import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed } from './beacon.js';
+import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed, beacon_hole_answered } from './beacon.js';
 import { set_hydrating, tap_svelte_warnings, on_svelte_warning } from './svelte-warnings.js';
 import type { IslandHandle, IslandModule } from './hydrate-core.js';
 import { emit as dt_emit } from '../devtools/bus.js';
@@ -373,7 +373,7 @@ class OgygiaRegion extends HTMLElement {
 	#fetching = false;
 	/** Bounded automatic retries after a failed defer/SWR fetch. */
 	#fetch_attempts = 0;
-	/** when this hole's first fetch started (devtools: how long its fallback showed) */
+	/** when this hole's first fetch started (devtools + profiler: how long its fallback showed) */
 	#fetch_started = 0;
 	/** Frame-store address (endpoint call) this region is fetching, so disconnect can release it. */
 	#frame_address: string | null = null;
@@ -793,6 +793,7 @@ class OgygiaRegion extends HTMLElement {
 		if (revalidate) this.setAttribute('data-revalidated', '');
 		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
 		slots.lakes.after_html_swap(this, { revalidate });
+		if (!revalidate && this.#fetch_started) beacon_hole_answered(this, this.#fetch_started);
 		if (DEVTOOLS)
 			dt_emit({
 				domain: 'runtime',
@@ -860,7 +861,7 @@ class OgygiaRegion extends HTMLElement {
 			return;
 		}
 		this.#fetching = true;
-		if (DEVTOOLS && !this.#fetch_started) this.#fetch_started = performance.now();
+		if (!this.#fetch_started) this.#fetch_started = performance.now();
 		// Per-element relevance signal: aborting it (on disconnect / {#if}-toggle) skips the APPLY.
 		// The network fetch is owned by the frame store, keyed by `address`, shared across twins and
 		// aborted only when the last waiter abandons — so one element toggling off never kills a fetch

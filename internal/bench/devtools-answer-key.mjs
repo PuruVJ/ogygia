@@ -282,11 +282,13 @@ async function holes_run(browser) {
 	const walled = await read('/hole-wall', 'redirect');
 	const open = await read('/hole-wall');
 	let in_report = null;
+	let slow_in_report = null;
 	if (report_id)
-		for (let i = 0; i < 8 && !in_report; i++) {
+		for (let i = 0; i < 8 && !(in_report && slow_in_report); i++) {
 			await new Promise((ok) => setTimeout(ok, 1000));
 			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
 			in_report = j?.findings?.find((f) => f.code === 'hole-failed')?.message ?? null;
+			slow_in_report = j?.findings?.find((f) => f.code === 'hole-slow') ?? null;
 		}
 	const checks = [
 		['the broken hole, 3 tries', lab.length === 1 && lab[0].includes('BrokenHole') && lab[0].includes('failed 3 times (status 500)')],
@@ -296,10 +298,12 @@ async function holes_run(browser) {
 		// (SlowHole's server render waits 1.5 s: its fallback held the first screen that long)
 		['the slow hole, named', lab.slow.length === 1 && lab.slow[0].includes('SlowHole')],
 		['the quick hole never slow', !lab.slow.some((m) => m.includes('Greeting')) && open.slow.length === 0],
-		['the profiler report names it', !report_id || (in_report?.includes('BrokenHole') && in_report.includes('status 500'))]
+		['the profiler report names it', !report_id || (in_report?.includes('BrokenHole') && in_report.includes('status 500'))],
+		// the report joins the visit's hole requests from its log: the wait is the server render
+		['the report splits the slow wait', !report_id || (!!slow_in_report?.message.includes('SlowHole') && slow_in_report.message.includes('of it the server render') && slow_in_report.fix.startsWith('The server render is the wait'))]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
-	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, walled, open })}` : ''}`);
+	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, walled, open, in_report, slow_in_report })}` : ''}`);
 	return bad.length ? 0 : 1;
 }
 

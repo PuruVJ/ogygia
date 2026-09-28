@@ -2294,11 +2294,11 @@ class Profiler {
 		// never let a CDN/edge cache this response — a cached login strips Set-Cookie and the session
 		// silently never seats (a classic serverless/Amplify symptom: 200 ok, but you loop on login)
 		res.headers.set('cache-control', 'no-store, private');
-		res.headers.append(
-			'set-cookie',
-			this.#session_cookie(this.#cookie_token(createHash), ctx.event!)
-		);
-		res.headers.append('set-cookie', this.#beacon_cookie(true, ctx.event!));
+		// ONE Set-Cookie per response: some serverless hosts (a Lambda adapter turning the headers
+		// into a plain object) keep only the last of several, and with the beacon flag last, the
+		// session was the one lost ("logged in, but no og_profiler arrived"). The flag follows on the
+		// next response (#flag_cookie).
+		res.headers.append('set-cookie', this.#session_cookie(this.#cookie_token(createHash), ctx.event!));
 		return res;
 	}
 
@@ -2343,7 +2343,23 @@ class Profiler {
 		const res =
 			(await this.#router().fetch(event.request, event)) ??
 			new Response('Not found', { status: 404 });
-		return gzip_large(event.request, res);
+		return this.#flag_cookie(event, await gzip_large(event.request, res));
+	}
+
+	/** THE BEACON FLAG follows the session, one response later: set on the first response to a
+	 *  browser whose session cookie is good and that lacks the flag, cleared on one to a browser with
+	 *  the flag and no session. Never beside another Set-Cookie (the login's, the logout's): a host
+	 *  that keeps one per response must not lose the session for it. */
+	async #flag_cookie(event: RequestEvent, res: Response): Promise<Response> {
+		if (this.dev || !this.secret || res.headers.has('set-cookie')) return res;
+		const flag = event.cookies.get('og_profiler_beacon') === '1';
+		const values = session_cookie_values(event);
+		let session = false;
+		for (const v of values) if (await this.#key_matches(v)) session = true;
+		if (session === flag) return res;
+		const out = new Response(res.body, res);
+		out.headers.append('set-cookie', this.#beacon_cookie(session, event));
+		return out;
 	}
 
 	// Auth as a router guard (a pure pre-check): /login + /logout are always reachable (they manage the
@@ -3850,8 +3866,8 @@ class Profiler {
 	/** Clear the session cookie and bounce to the dashboard. */
 	#logout(ctx: RouteCtx): Response {
 		const res = ctx.redirect(this.base);
+		// (one Set-Cookie: the beacon flag is cleared on the next response, #flag_cookie)
 		res.headers.append('set-cookie', this.#session_cookie('', ctx.event!));
-		res.headers.append('set-cookie', this.#beacon_cookie(false, ctx.event!));
 		return res;
 	}
 
@@ -5094,8 +5110,16 @@ class Profiler {
 			return first ?? stored.visit ?? list.at(-1);
 		};
 		const visit = own_visit();
+		// THE VISIT'S HOLE REQUESTS: the recording ends with the page's render, so a hole's own
+		// request (made by the browser afterwards) is not in it. The request log still holds it: the
+		// visit's holes, requested within a minute of its start, give each hole's server time
+		const answered = new Set((visit?.holes_answered ?? []).map((h) => h.id));
+		const hole_requests = answered.size
+			? this.#ring.filter((e) => e.hole && answered.has(e.hole.id) && e.ts >= visit!.at - 1000 && e.ts <= visit!.at + 60_000).map((e) => ({ id: e.hole!.id, ms: e.ms }))
+			: [];
 		return {
 			...(visit ? { visit } : {}),
+			...(hole_requests.length ? { hole_requests } : {}),
 			...(stored.strip ? { strip: stored.strip } : {}),
 			...(stored.assets ? { assets: stored.assets } : {}),
 			...(stored.assets_missing ? { assets_missing: stored.assets_missing } : {}),

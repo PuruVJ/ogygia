@@ -67,6 +67,8 @@ export interface HoleWait {
 	wait_ms: number;
 	/** below the first screen (its fallback is not what the visitor looks at first) */
 	below_fold: boolean;
+	/** its server render, per request, when known (the profiler recorded the hole's requests) */
+	server_ms?: number;
 }
 
 export interface IslandCode {
@@ -641,11 +643,20 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	const slow_holes = (page.hole_waits ?? []).filter((h) => !h.below_fold && h.wait_ms >= SLOW_HOLE_MS).sort((a, b) => b.wait_ms - a.wait_ms);
 	if (slow_holes.length) {
 		const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+		// where the wait went, when the server's time is known: the render, or before and around it
+		const server = (h: HoleWait) => (h.server_ms === undefined ? '' : `, ${h.server_ms >= 1000 ? secs(h.server_ms) : `${Math.round(h.server_ms)} ms`} of it the server render`);
+		const known = slow_holes.filter((h) => h.server_ms !== undefined);
+		const render_bound = known.length > 0 && known.every((h) => h.server_ms! >= h.wait_ms * 0.6);
+		const elsewhere = known.length > 0 && known.every((h) => h.server_ms! < h.wait_ms * 0.4);
 		findings.push({
 			code: 'hole-slow',
 			severity: slow_holes[0].wait_ms >= SLOW_HOLE_MS * 1.5 ? 'warn' : 'info',
-			message: `${list(slow_holes.map((h) => `${h.name} (${secs(h.wait_ms)})`))} showed ${slow_holes.length === 1 ? 'its' : 'their'} fallback on the first screen that long before ${slow_holes.length === 1 ? 'its' : 'their'} answer came.`,
-			fix: 'The hole’s server render or its data is slow: give it a maxAge if its answer is the same for a while, start its data sooner, or render it with the page if it is the same for every visitor. The profiler’s Holes section has its server time.',
+			message: `${list(slow_holes.map((h) => `${h.name} (${secs(h.wait_ms)}${server(h)})`))} showed ${slow_holes.length === 1 ? 'its' : 'their'} fallback on the first screen that long before ${slow_holes.length === 1 ? 'its' : 'their'} answer came.`,
+			fix: render_bound
+				? 'The server render is the wait: give the hole a maxAge if its answer is the same for a while, start its data sooner (or in parallel), or render it with the page if it is the same for every visitor.'
+				: elsewhere
+					? 'The server answered quickly: the wait came before or around the request. Its request started late (the page was busy, or the hole woke late), or the network or something in front of the server held it. The report’s One clock section shows when it left.'
+					: 'The hole’s server render or its data is slow: give it a maxAge if its answer is the same for a while, start its data sooner, or render it with the page if it is the same for every visitor. The profiler’s Holes section has its server time.',
 			fps: []
 		});
 	}

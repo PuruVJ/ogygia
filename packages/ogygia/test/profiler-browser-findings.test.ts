@@ -136,3 +136,33 @@ test('a hole that kept its fallback reaches the report, named from the hole rows
 	expect(f[0].message).toContain('redirected to /account/');
 	expect(f[1].message).toContain('failed 3 times (status 500)');
 });
+
+test('a hole answered late: waited from the first paint, split by its server time', () => {
+	const v = parse_visit('/lab', {
+		...raw,
+		paints: { fcp: 400 },
+		holes_answered: [
+			// fetch started before the paint: the fallback showed from the paint (1900 − 400)
+			{ id: '8f81e0e4514e', start: 300, t: 1900, below_fold: false },
+			{ id: '7c4afc210dc0', start: 300, t: 700, below_fold: false },
+			{ id: 'aaaaaaaaaaaa', start: 3000, t: 6000, below_fold: true },
+			{ id: 'bad', start: 900, t: 100 }
+		]
+	})!;
+	expect(v.holes_answered?.map((h) => h.id)).toEqual(['8f81e0e4514e', '7c4afc210dc0', 'aaaaaaaaaaaa']);
+	expect(merge_visits(v, v).holes_answered).toHaveLength(3);
+	const names: Record<string, string> = { '8f81e0e4514e': 'SlowHole', '7c4afc210dc0': 'Greeting', aaaaaaaaaaaa: 'Footer' };
+	const slow = (server?: number) =>
+		browser_findings(browser_page_report(v, rows, undefined, undefined, (id) => names[id], () => server)).filter((x) => x.code === 'hole-slow');
+	const bound = slow(1400);
+	expect(bound).toHaveLength(1);
+	expect(bound[0].message).toContain('SlowHole (1.5 s, 1.4 s of it the server render)');
+	expect(bound[0].message).not.toContain('Greeting');
+	expect(bound[0].message).not.toContain('Footer');
+	expect(bound[0].fix).toMatch(/^The server render is the wait/);
+	// the server answered in 90 ms: the wait was before or around the request
+	expect(slow(90)[0].fix).toMatch(/^The server answered quickly/);
+	// unknown server time: the general advice
+	expect(slow(undefined)[0].message).toContain('SlowHole (1.5 s)');
+	expect(slow(undefined)[0].fix).toContain('Holes section');
+});

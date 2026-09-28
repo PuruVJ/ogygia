@@ -110,6 +110,8 @@ export interface Visit {
 	warnings?: { code: string; message: string; file?: string; fp?: string }[];
 	/** holes whose answer never came, by island id (the report's hole rows name them) */
 	holes_failed?: { id: string; reason: 'redirected' | 'document' | 'error'; final_path?: string; message?: string; attempts: number }[];
+	/** holes whose first answer came: fetch start and swap (page time), and whether below the fold */
+	holes_answered?: { id: string; start: number; t: number; below_fold: boolean }[];
 	viewport?: [number, number];
 	ua?: string;
 }
@@ -285,6 +287,15 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		holes_failed.push({ id, reason, ...(final_path ? { final_path } : {}), ...(message ? { message } : {}), attempts: num(h.attempts, 10) ?? 1 });
 	}
 	if (holes_failed.length) visit.holes_failed = holes_failed;
+	const holes_answered: NonNullable<Visit['holes_answered']> = [];
+	for (const h of (Array.isArray(v.holes_answered) ? v.holes_answered : []).slice(0, 30) as Record<string, unknown>[]) {
+		const id = str(h?.id, 40);
+		const start = num(h?.start);
+		const t = num(h?.t);
+		if (!id || start === undefined || t === undefined || t < start) continue;
+		holes_answered.push({ id, start, t, below_fold: h.below_fold === true });
+	}
+	if (holes_answered.length) visit.holes_answered = holes_answered;
 	const unsupported =(Array.isArray(v.unsupported) ? v.unsupported : []).filter((t): t is string => typeof t === 'string' && KNOWN_TYPES.has(t));
 	if (unsupported.length) visit.unsupported = unsupported;
 	const origin = str(v.origin, 200);
@@ -356,6 +367,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(b.unsupported ?? a.unsupported ? { unsupported: b.unsupported ?? a.unsupported } : {}),
 		...(b.warnings ?? a.warnings ? { warnings: b.warnings ?? a.warnings } : {}),
 		...(a.holes_failed || b.holes_failed ? { holes_failed: by(a.holes_failed ?? [], b.holes_failed ?? [], (h) => h.id) } : {}),
+		...(a.holes_answered || b.holes_answered ? { holes_answered: by(a.holes_answered ?? [], b.holes_answered ?? [], (h) => h.id) } : {}),
 		...(b.viewport ?? a.viewport ? { viewport: b.viewport ?? a.viewport } : {}),
 		...(b.ua ?? a.ua ? { ua: b.ua ?? a.ua } : {})
 	};

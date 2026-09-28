@@ -52,10 +52,12 @@ export function browser_page_report(
 	windows?: ClientWindows,
 	third?: { origin: string; named?: string[]; by_host: Map<string, number> | null },
 	/** a hole's name from its island id (the report's hole rows) */
-	hole_name?: (id: string) => string
+	hole_name?: (id: string) => string,
+	/** a hole's server render per request, from its recorded requests */
+	hole_server?: (id: string) => number | undefined
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
-	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length) return null;
+	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length) return null;
 	const by_fp = new Map(rows.map((r) => [r.fp, r.name]));
 	const by_entry = new Map(rows.map((r) => [r.entry, r.name]));
 	const name_of = (fp: string, entry?: string) => by_fp.get(fp) ?? (entry ? (by_entry.get(entry) ?? name_from_entry(entry)) : fp.slice(0, 8));
@@ -97,6 +99,21 @@ export function browser_page_report(
 						...(h.message ? { message: h.message } : {}),
 						attempts: h.attempts
 					}))
+				}
+			: {}),
+		// holes answered late: the fallback showed from the first paint (or the hole's own start,
+		// when later) to the swap — the same measure the devtools take from their bus
+		...(visit.holes_answered?.length
+			? {
+					hole_waits: visit.holes_answered.map((h) => {
+						const server_ms = hole_server?.(h.id);
+						return {
+							name: hole_name?.(h.id) ?? `the hole ${h.id}`,
+							wait_ms: Math.max(0, Math.round(h.t - Math.max(visit.paints?.fcp ?? 0, h.start))),
+							below_fold: h.below_fold,
+							...(server_ms !== undefined ? { server_ms } : {})
+						};
+					})
 				}
 			: {})
 	};

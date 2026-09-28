@@ -60,11 +60,12 @@ interface BeaconApi {
 	beacon_page: typeof beacon_page;
 	beacon_warning: typeof beacon_warning;
 	beacon_hole_failed: typeof beacon_hole_failed;
+	beacon_hole_answered?: typeof beacon_hole_answered;
 }
 let self_api: BeaconApi | undefined;
 /** the page's owning copy when it is not this one, else null */
 function owner(): BeaconApi | null {
-	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed };
+	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed, beacon_hole_answered };
 	const g = globalThis as Record<symbol, BeaconApi | undefined>;
 	const o = (g[BEACON_KEY] ??= self_api);
 	return o === self_api ? null : o;
@@ -154,6 +155,34 @@ export function beacon_hole_failed(h: HoleFailed): void {
 	if (o) return o.beacon_hole_failed(h);
 	if (!collecting() || visit_holes_failed.length >= 30 || visit_holes_failed.some((x) => x.id === h.id)) return;
 	visit_holes_failed.push(h);
+	if (early_visit_done) resend_soon();
+}
+export interface HoleAnswered {
+	/** the hole's island id (its endpoint's `?id=`) */
+	id: string;
+	/** when its fetch started, and when its answer replaced the fallback (page time, ms) */
+	start: number;
+	t: number;
+	/** below the first screen when it swapped: its fallback was not what the visitor looked at */
+	below_fold: boolean;
+}
+let visit_holes_answered: HoleAnswered[] = [];
+/** A hole's first answer landed: the profiler weighs how long its fallback held the first screen.
+ *  The element is read (id, place) only while measuring. */
+export function beacon_hole_answered(el: Element, start: number): void {
+	const o = owner();
+	// (an older owning copy has no such entry: stay quiet)
+	if (o) return o.beacon_hole_answered?.(el, start);
+	if (!collecting() || visit_holes_answered.length >= 30) return;
+	let id = '';
+	try {
+		id = new URL(el.getAttribute('endpoint') ?? '', location.href).searchParams.get('id') ?? '';
+	} catch {
+		id = '';
+	}
+	if (!id || visit_holes_answered.some((x) => x.id === id)) return;
+	const rect = el.getBoundingClientRect();
+	visit_holes_answered.push({ id, start: Math.round(start), t: Math.round(performance.now()), below_fold: rect.top + scrollY > innerHeight });
 	if (early_visit_done) resend_soon();
 }
 let visit_marks: { name: string; ms: number; t0?: number }[] = [];
@@ -424,6 +453,7 @@ function build_visit(): Record<string, unknown> | null {
 		regions: visit_regions(),
 		...(visit_warnings.length ? { warnings: visit_warnings.slice() } : {}),
 		...(visit_holes_failed.length ? { holes_failed: visit_holes_failed.slice() } : {}),
+		...(visit_holes_answered.length ? { holes_answered: visit_holes_answered.slice() } : {}),
 		...(visit_marks.length ? { marks: visit_marks } : {}),
 		// the vitals so far, in every visit message (the early one, the final one): a visit whose
 		// hide-time vitals message never left still reports them
@@ -931,6 +961,7 @@ export function _reset_beacon(): void {
 	visit_scripts = new Map();
 	visit_warnings = [];
 	visit_holes_failed = [];
+	visit_holes_answered = [];
 	visit_marks = [];
 	visit_paints = {};
 	snapshots = [];

@@ -56,6 +56,7 @@ import { span_rows, fair_shares } from '../src/profiler/report.js';
 import { build_standalone } from '../src/profiler/standalone.js';
 import { profiler, self_profile_to_cpuprofile } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
+import { raw_cookie_values } from '../src/profiler/session-cookie.js';
 import { report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.js';
 import { budget_segments, build_treemap, waiting_rows } from '../src/profiler/ui/report-data.js';
 import type { RequestEvent } from '@sveltejs/kit';
@@ -2160,20 +2161,34 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 				} as RequestEvent,
 				resolve: async () => new Response('no')
 			});
+			// ONE Set-Cookie per response (a host that keeps only the last lost the session): the login
+			// sets the session alone, the next response the flag; logout clears the session, the next
+			// response the flag
 			const set = login.headers.getSetCookie();
-			expect(set.some((c) => c.startsWith('og_profiler=') && c.includes('Path=/__profiler'))).toBe(
-				true
-			);
-			expect(set.some((c) => c.startsWith('og_profiler_beacon=1; Path=/;'))).toBe(true);
+			expect(set).toHaveLength(1);
+			expect(set[0].startsWith('og_profiler=') && set[0].includes('Path=/__profiler')).toBe(true);
+			const token = set[0].slice('og_profiler='.length, set[0].indexOf(';'));
+			const next = (cookie: string, path = '/__profiler') =>
+				handle({
+					event: {
+						...make_event(path, { cookie }),
+						cookies: { get: (k: string) => raw_cookie_values(cookie, k)[0] }
+					} as never,
+					resolve: async () => new Response('no')
+				}).then((r) => r.headers.getSetCookie());
+			expect(await next(`og_profiler=${token}`)).toEqual([expect.stringMatching(/^og_profiler_beacon=1; Path=\/;/)]);
+			// flag and session both there: nothing to set
+			expect(await next(`og_profiler=${token}; og_profiler_beacon=1`)).toEqual([]);
 			const logout = await handle({
 				event: make_event('/__profiler/logout', { 'x-profiler-key': 'prof-key' }),
 				resolve: async () => new Response('no')
 			});
-			expect(
-				logout.headers
-					.getSetCookie()
-					.some((c) => c.startsWith('og_profiler_beacon=;') && c.includes('Max-Age=0'))
-			).toBe(true);
+			const cleared = logout.headers.getSetCookie();
+			expect(cleared).toHaveLength(1);
+			expect(cleared[0].startsWith('og_profiler=;') && cleared[0].includes('Max-Age=0')).toBe(true);
+			const flag_off = await next('og_profiler_beacon=1', '/__profiler/login');
+			expect(flag_off).toHaveLength(1);
+			expect(flag_off[0].startsWith('og_profiler_beacon=;') && flag_off[0].includes('Max-Age=0')).toBe(true);
 		} finally {
 			dev_switch.dev = true;
 		}

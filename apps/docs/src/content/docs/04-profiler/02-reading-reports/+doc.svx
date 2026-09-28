@@ -314,6 +314,8 @@ The visit the beacon sends is read with the same analysis as the devtools [Page 
 - an eager island below the first screen
 - a first-screen island that woke long after the page looked done, or the largest paint repainting inside one
 - long tasks outside any hydration
+- a hole whose answer never came, and why (a redirect, a whole page, a failed request)
+- a first-screen hole that showed its fallback for a second or more. The report adds how much of that wait was the hole's server render. It finds the hole's own requests in the server's request log, since the browser makes them after the recording ends. When the render is most of the wait, the fix is on the server. When the server answered quickly, the request started late or was held on its way.
 
 A page with hundreds of islands sends a visit over 64 KB, more than a browser lets a page send as it closes. While the page is open, the beacon sends it as an ordinary request, which has no size limit. As the page closes, it sends a slim copy without the file list and the island rows the earlier messages already delivered.
 

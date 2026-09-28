@@ -469,6 +469,8 @@ export interface ReportExtras {
 	heavy?: Record<string, { total: number; top: { name: string; bytes: number }[] }>;
 	/** re-export barrels each island file still holds, with how many modules each brings */
 	barrels?: Record<string, { name: string; fanout: number }[]>;
+	/** the visit's own hole requests from the request log (made after the recording): server ms each */
+	hole_requests?: { id: string; ms: number }[];
 	/** browser-side hydration timings joined by fingerprint (the runtime's beacon) */
 	client?: ClientIslandStat[];
 	/** the page's web vitals from the same beacon */
@@ -1210,7 +1212,17 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			const h = hole_by_id.get(id);
 			return h ? hole_label(h) : `the hole ${id}`;
 		};
-		out.push(...browser_findings(browser_page_report(extras.visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name)));
+		// (the hole's server render beside its browser wait: the visit's own requests of it, else
+		// the ones the recording holds, per request)
+		const econ = hole_economics(meta);
+		const hole_server = (id: string) => {
+			const own = (extras.hole_requests ?? []).filter((r) => r.id === id);
+			if (own.length) return own.reduce((a, r) => a + r.ms, 0) / own.length;
+			const e = econ.get(id);
+			const n = e ? e.hit + e.miss + e.none : 0;
+			return e && n ? e.ms / n : undefined;
+		};
+		out.push(...browser_findings(browser_page_report(extras.visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name, hole_server)));
 		// what the visiting browser could not see: those findings cannot appear, whatever the page does
 		const WHAT: Record<string, string> = { 'layout-shift': 'layout shifts', longtask: 'long tasks', event: 'interaction timing', 'largest-contentful-paint': 'the largest paint', 'long-animation-frame': 'which script held a frame' };
 		const blind = (extras.visit.unsupported ?? []).map((t) => WHAT[t]).filter(Boolean);
