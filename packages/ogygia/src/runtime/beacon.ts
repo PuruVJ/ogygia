@@ -59,11 +59,12 @@ interface BeaconApi {
 	beacon_record_cpu: typeof beacon_record_cpu;
 	beacon_page: typeof beacon_page;
 	beacon_warning: typeof beacon_warning;
+	beacon_hole_failed: typeof beacon_hole_failed;
 }
 let self_api: BeaconApi | undefined;
 /** the page's owning copy when it is not this one, else null */
 function owner(): BeaconApi | null {
-	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning };
+	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed };
 	const g = globalThis as Record<symbol, BeaconApi | undefined>;
 	const o = (g[BEACON_KEY] ??= self_api);
 	return o === self_api ? null : o;
@@ -133,6 +134,26 @@ export function beacon_warning(w: { code: string; message: string; file?: string
 	if (o) return o.beacon_warning(w);
 	if (!collecting() || visit_warnings.length >= 50) return;
 	visit_warnings.push(w);
+	if (early_visit_done) resend_soon();
+}
+/** holes whose answer never came (no retry after): the profiler names them like the devtools do */
+export interface HoleFailed {
+	/** the hole's island id (its endpoint's `?id=`): the report's hole rows name it */
+	id: string;
+	reason: 'redirected' | 'document' | 'error';
+	/** what answered instead, as a path (a refused answer) */
+	final_path?: string;
+	/** the error's first line (a failed request) */
+	message?: string;
+	attempts: number;
+	t: number;
+}
+let visit_holes_failed: HoleFailed[] = [];
+export function beacon_hole_failed(h: HoleFailed): void {
+	const o = owner();
+	if (o) return o.beacon_hole_failed(h);
+	if (!collecting() || visit_holes_failed.length >= 30 || visit_holes_failed.some((x) => x.id === h.id)) return;
+	visit_holes_failed.push(h);
 	if (early_visit_done) resend_soon();
 }
 let visit_marks: { name: string; ms: number; t0?: number }[] = [];
@@ -402,6 +423,7 @@ function build_visit(): Record<string, unknown> | null {
 		...(visit_scripts.size ? { scripts: [...visit_scripts].map(([url, s]) => ({ url, ms: r2(s.ms), count: s.count })).sort((a, b) => b.ms - a.ms).slice(0, 50) } : {}),
 		regions: visit_regions(),
 		...(visit_warnings.length ? { warnings: visit_warnings.slice() } : {}),
+		...(visit_holes_failed.length ? { holes_failed: visit_holes_failed.slice() } : {}),
 		...(visit_marks.length ? { marks: visit_marks } : {}),
 		// the vitals so far, in every visit message (the early one, the final one): a visit whose
 		// hide-time vitals message never left still reports them
@@ -908,6 +930,7 @@ export function _reset_beacon(): void {
 	visit_longtasks = [];
 	visit_scripts = new Map();
 	visit_warnings = [];
+	visit_holes_failed = [];
 	visit_marks = [];
 	visit_paints = {};
 	snapshots = [];

@@ -117,3 +117,22 @@ test('bad region records are dropped', () => {
 	const v = parse_visit('/lab', { ...raw, regions: [{ fp: 'nope', top: 0, height: 1 }, { fp: 'aaaaaaaa11111111', top: 'x', height: 1 }, { fp: 'aaaaaaaa11111111', top: 5, height: 9, failed: 7 }] })!;
 	expect(v.regions).toEqual([{ fp: 'aaaaaaaa11111111', top: 5, height: 9 }]);
 });
+
+test('a hole that kept its fallback reaches the report, named from the hole rows', () => {
+	const v = parse_visit('/lab', {
+		...raw,
+		holes_failed: [
+			{ id: '7c4afc210dc0', reason: 'redirected', final_path: '/account/', attempts: 1, t: 900 },
+			{ id: 'c0d0e795dedc', reason: 'error', message: 'status 500', attempts: 3, t: 1900 },
+			{ id: 'bad', reason: 'nope' }
+		]
+	})!;
+	expect(v.holes_failed?.map((h) => h.id)).toEqual(['7c4afc210dc0', 'c0d0e795dedc']);
+	// the early visit and the hide-time one fold: each hole once
+	expect(merge_visits(v, v).holes_failed).toHaveLength(2);
+	const names: Record<string, string> = { '7c4afc210dc0': 'Greeting', c0d0e795dedc: 'BrokenHole' };
+	const f = browser_findings(browser_page_report(v, rows, undefined, undefined, (id) => names[id])).filter((x) => x.code === 'hole-failed');
+	expect(f.map((x) => x.message.split(' never')[0])).toEqual(['In the browser: Greeting', 'In the browser: BrokenHole']);
+	expect(f[0].message).toContain('redirected to /account/');
+	expect(f[1].message).toContain('failed 3 times (status 500)');
+});

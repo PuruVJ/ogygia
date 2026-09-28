@@ -1201,7 +1201,12 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		// unknown and parse time decides what a script loaded)
 		const origin = extras.visit.origin || page_origin(extras.assets);
 		const third = origin ? { origin, named: extras.assets?.assets.map((a) => a.url), by_host: cpu_by_host(extras) } : undefined;
-		out.push(...browser_findings(browser_page_report(extras.visit, island_rows_of(meta), extras.client_cpu?.windows, third)));
+		const hole_by_id = new Map((own_requests(meta).find((r) => r.og?.hole_rows?.length)?.og?.hole_rows ?? []).map((h) => [h.id, h]));
+		const hole_name = (id: string) => {
+			const h = hole_by_id.get(id);
+			return h ? hole_label(h) : `the hole ${id}`;
+		};
+		out.push(...browser_findings(browser_page_report(extras.visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name)));
 		// what the visiting browser could not see: those findings cannot appear, whatever the page does
 		const WHAT: Record<string, string> = { 'layout-shift': 'layout shifts', longtask: 'long tasks', event: 'interaction timing', 'largest-contentful-paint': 'the largest paint', 'long-animation-frame': 'which script held a frame' };
 		const blind = (extras.visit.unsupported ?? []).map((t) => WHAT[t]).filter(Boolean);

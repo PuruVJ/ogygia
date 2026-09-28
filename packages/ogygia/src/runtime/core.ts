@@ -39,7 +39,7 @@ import { preload_island_graph } from './island-graph-preload.js';
 import { connected_regions } from './connected.js';
 import { restore_props_sidecar } from './sidecar.js';
 import { hole_facts_of } from './hole-facts.js';
-import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning } from './beacon.js';
+import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed } from './beacon.js';
 import { set_hydrating, tap_svelte_warnings, on_svelte_warning } from './svelte-warnings.js';
 import type { IslandHandle, IslandModule } from './hydrate-core.js';
 import { emit as dt_emit } from '../devtools/bus.js';
@@ -902,6 +902,27 @@ class OgygiaRegion extends HTMLElement {
 				}
 			}
 			this.#fetch_attempts++;
+			const final = refused || !this.isConnected || this.#fetch_attempts >= 3;
+			// the profiler's browser half: the hole that kept its fallback, by its island id
+			if (final) {
+				let id = '';
+				let final_path: string | undefined;
+				try {
+					id = new URL(endpoint, location.href).searchParams.get('id') ?? '';
+					if (refused) final_path = new URL(err.final_url, location.href).pathname;
+				} catch {
+					/* an endpoint URL cannot fail to parse here; stay quiet if it does */
+				}
+				if (id)
+					beacon_hole_failed({
+						id,
+						reason: refused ? err.reason : 'error',
+						...(final_path ? { final_path } : {}),
+						...(refused ? {} : { message: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) }),
+						attempts: this.#fetch_attempts,
+						t: Math.round(performance.now())
+					});
+			}
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
@@ -911,7 +932,7 @@ class OgygiaRegion extends HTMLElement {
 					reason: refused ? err.reason : 'error',
 					...(refused ? { final_url: err.final_url } : { message: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) }),
 					attempt: this.#fetch_attempts,
-					final: refused || !this.isConnected || this.#fetch_attempts >= 3
+					final
 				});
 			// Allow connectedCallback / a delayed retry to schedule again.
 			this.#scheduled = false;

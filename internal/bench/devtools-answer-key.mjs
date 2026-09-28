@@ -273,14 +273,25 @@ async function holes_run(browser) {
 		await ctx.close();
 		return f;
 	};
+	// the profiler's report of the same broken visit names the hole too (the beacon carries it)
+	const rec = await fetch(`${base}/__profiler/page?p=/dt-holes&runs=1`, { redirect: 'manual' }).catch(() => null);
+	const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
 	const lab = await read('/dt-holes');
 	const walled = await read('/hole-wall', 'redirect');
 	const open = await read('/hole-wall');
+	let in_report = null;
+	if (report_id)
+		for (let i = 0; i < 8 && !in_report; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			in_report = j?.findings?.find((f) => f.code === 'hole-failed')?.message ?? null;
+		}
 	const checks = [
 		['the broken hole, 3 tries', lab.length === 1 && lab[0].includes('BrokenHole') && lab[0].includes('failed 3 times (status 500)')],
 		['the healthy hole quiet', !lab.some((m) => m.includes('Greeting'))],
 		['the refused hole, redirected', walled.length === 1 && walled[0].includes('Greeting') && walled[0].includes('redirected to /hole-wall/account')],
-		['no wall, no finding', open.length === 0]
+		['no wall, no finding', open.length === 0],
+		['the profiler report names it', !report_id || (in_report?.includes('BrokenHole') && in_report.includes('status 500'))]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
 	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, walled, open })}` : ''}`);

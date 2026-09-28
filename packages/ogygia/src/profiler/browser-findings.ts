@@ -50,9 +50,12 @@ export function browser_page_report(
 	visit: Visit,
 	rows: readonly { fp: string; entry: string; name: string }[],
 	windows?: ClientWindows,
-	third?: { origin: string; named?: string[]; by_host: Map<string, number> | null }
+	third?: { origin: string; named?: string[]; by_host: Map<string, number> | null },
+	/** a hole's name from its island id (the report's hole rows) */
+	hole_name?: (id: string) => string
 ): PageReport | null {
-	if (!visit.regions?.length && !visit.islands.length) return null;
+	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
+	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length) return null;
 	const by_fp = new Map(rows.map((r) => [r.fp, r.name]));
 	const by_entry = new Map(rows.map((r) => [r.entry, r.name]));
 	const name_of = (fp: string, entry?: string) => by_fp.get(fp) ?? (entry ? (by_entry.get(entry) ?? name_from_entry(entry)) : fp.slice(0, 8));
@@ -83,7 +86,19 @@ export function browser_page_report(
 		islands: visit.islands,
 		firsts: visit.firsts,
 		shifts: visit.shifts,
-		longtasks: visit.longtasks
+		longtasks: visit.longtasks,
+		// holes that kept their fallback: the same finding the devtools raise from their bus
+		...(visit.holes_failed?.length
+			? {
+					hole_failures: visit.holes_failed.map((h) => ({
+						name: hole_name?.(h.id) ?? `the hole ${h.id}`,
+						reason: h.reason,
+						...(h.final_path ? { final_url: h.final_path } : {}),
+						...(h.message ? { message: h.message } : {}),
+						attempts: h.attempts
+					}))
+				}
+			: {})
 	};
 	const cpu = windows ? cpu_summary(windows) : null;
 	const by_host = third?.by_host ? Object.fromEntries(third.by_host) : undefined;
