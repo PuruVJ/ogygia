@@ -13,8 +13,10 @@
  */
 
 export interface LedgerIsland {
-	/** absolute entry URL */
+	/** absolute entry URL (its identity: the graph's key) */
 	entry: string;
+	/** the file it loads, absolute (its content-hashed location); absent → the entry itself */
+	file?: string;
 	name: string;
 	kind: string;
 	wake: string;
@@ -67,7 +69,7 @@ export function byte_ledger(
 	const users = new Map<string, Set<string>>();
 	for (const i of islands) {
 		if (files_of.has(i.entry)) continue;
-		const list = [...new Set([i.entry, ...(graph.get(i.entry) ?? [])])].filter((u) => !runtime_set.has(u));
+		const list = [...new Set([i.file ?? i.entry, ...(graph.get(i.entry) ?? [])])].filter((u) => !runtime_set.has(u));
 		files_of.set(i.entry, list);
 		for (const u of list) (users.get(u) ?? users.set(u, new Set()).get(u)!).add(i.entry);
 	}

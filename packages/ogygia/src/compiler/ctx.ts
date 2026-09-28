@@ -219,15 +219,19 @@ export class CompileCtx {
 		return null;
 	}
 
-	/** The feature-selected runtime chunk name (`RUNTIME_HASH` ⊕ the prescan's feature hash). Immutable-
-	 *  cached, so it must bust when either ogygia's source OR the app's feature set changes. Empty feature
-	 *  hash until prescan runs. `program_feature_hash` is `Program.runtime_feature_hash`, threaded in by
-	 *  the caller so this stays a pure naming function. */
+	/** The runtime's feature set, as a name segment: the prescan's feature hash, and a trailing `h` when
+	 *  the app has `hooks.client.ts` (the runtime entry then dynamic-imports it). Empty until prescan
+	 *  runs. Both the stable name and the content-hashed file carry it, so a name says which runtime. */
+	runtime_features(program_feature_hash: string): string {
+		return `${program_feature_hash}${this.client_hooks ? 'h' : ''}`;
+	}
+
+	/** The runtime's STABLE name (`RUNTIME_HASH` ⊕ its features): its identity — the key the handoff
+	 *  maps to the content-hashed file the page loads — and the name of that file's shim. Computed here
+	 *  (not the caller) so both build legs name it identically. `program_feature_hash` is
+	 *  `Program.runtime_feature_hash`, threaded in by the caller so this stays a pure naming function. */
 	runtime_chunk_filename(program_feature_hash: string): string {
-		// A trailing `h` busts the immutable name when the app adds/removes `hooks.client.ts`: the
-		// runtime entry then does/doesn't dynamic-import it, so the chunk's bytes change and a CDN must
-		// not serve the old one. Computed here (not the caller) so both build legs name it identically.
-		const feat = `${program_feature_hash}${this.client_hooks ? 'h' : ''}`;
+		const feat = this.runtime_features(program_feature_hash);
 		return `${this.app_dir}/immutable/og-runtime.${this.runtime_hash}${feat ? '-' + feat : ''}.js`;
 	}
 

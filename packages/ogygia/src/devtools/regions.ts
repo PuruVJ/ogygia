@@ -24,7 +24,10 @@ export interface RegionInfo {
 	el: Element;
 	kind: RegionKind;
 	wake: string;
+	/** its identity (the stable URL every name and key uses) */
 	entry: string | null;
+	/** its location: the content-hashed file it loads (a build names one; else the entry) */
+	src: string | null;
 	fp: string | null;
 	hydrated: boolean;
 	/** a region inside an awake island: it does not wake itself, it rides the island's hydration
@@ -40,6 +43,7 @@ export function region_info(el: Element): RegionInfo {
 		kind,
 		wake: el.getAttribute('wake') || (kind === 'hole' ? 'fetch' : 'load'),
 		entry: el.getAttribute('entry'),
+		src: el.getAttribute('src'),
 		fp: el.getAttribute('data-og-fp'),
 		hydrated: el.hasAttribute('data-hydrated') || !!parent?.hasAttribute('data-hydrated'),
 		...(parent ? { rides: parent } : {})

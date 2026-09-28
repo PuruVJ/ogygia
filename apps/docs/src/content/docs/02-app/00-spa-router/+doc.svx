@@ -150,6 +150,22 @@ A capability made at prerender is signed for a very long time. The props are alr
 
 By default, each build signs with a fresh random key. A redeploy would then orphan the holes on static pages from past builds, and on pages that a CDN still holds. A stable `OGYGIA_SECRET` env var keeps the holes of each past build valid. The build warns if you prerender holes without one. See [`OGYGIA_SECRET` in the API reference](/docs/reference/api).
 
+### Island files after a deploy
+
+The files under `_app/immutable/` are cached for a year and never checked again. So every file ogygia serves there is named by its content: the runtime and each island's code. A deploy that changes an island gives it a new file name, and a browser that visited before fetches the new file. An island whose code did not change keeps its name, and its cached copy stays good.
+
+Each island still has a stable name, `og-region.<id>.js`. It is the island's identity: the `entry` attribute and every lookup use it. The file the browser loads is in the region's `src` attribute. The stable name is also written as a small file that points at the current build's file. A page cached before this scheme loads its islands through it.
+
+When a cache serves an older page after a deploy:
+
+- If that build's files are still on your server or CDN, the page runs its own build's code throughout.
+- If they are gone, each island loads its stable name fresh and wakes on the current build's code. The runtime file itself cannot recover this way, so keep the previous build's `_app/immutable/` files as long as your HTML stays cached. The same holds for SvelteKit's own files.
+
+Two settings make redeploys cheap:
+
+- A stable `OGYGIA_SECRET` (above) keeps cached pages' holes valid.
+- A fixed `kit.version.name`, such as your commit hash. By default SvelteKit puts the build time into its own client code, so every build renames every island that imports SvelteKit code, even with no change. With a fixed version, the same source builds the same file names.
+
 ### Constraints
 
 - `sessionCookie` sealing and prerendered holes do not mix. The capability is baked one time for all visitors. Thus it cannot bind to the session of one visitor. Personalize inside the island: read cookies in the component. See [`sessionCookie` in the API reference](/docs/reference/api).

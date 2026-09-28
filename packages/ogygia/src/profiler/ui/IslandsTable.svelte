@@ -133,7 +133,7 @@
 								{#each r.modules as m (m.url)}
 									<div class="mod">
 										{#if m.bytes !== null}<div class="bar js" style="width:{Math.max(1, (m.bytes / Math.max(r.modules[0].bytes ?? 1, 1)) * 100)}%"></div>{/if}
-										<span class="mono">{m.url.replace(/^.*\/_app\/immutable\//, '')}{#if m.url === r.entry || m.url.replace(/^\.?\//, '') === r.entry.replace(/^\.?\//, '')} <span class="own">this island</span>{/if}</span>
+										<span class="mono">{m.url.replace(/^.*\/_app\/immutable\//, '')}{#if m.own} <span class="own">this island</span>{/if}</span>
 										<span class="num">{m.bytes === null ? '' : fmt_bytes(m.bytes)}</span>
 									</div>
 									{#if m.inside?.length}

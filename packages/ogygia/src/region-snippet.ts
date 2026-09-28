@@ -29,6 +29,7 @@ import { register_kind, mint } from './ref.js';
 import { kit_render_context, kit_request_event } from './server/kit-context.js';
 import { DEFAULT_ISLANDS_ENDPOINT } from './server/endpoint.js';
 import { PORTABLE_FORM, with_portable_forms } from './portable-form.js';
+import { import_entry } from './runtime/entry-locations.js';
 
 /**
  * A hand-written SERVER component that renders a bare snippet: svelte has no public API to
@@ -166,9 +167,8 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 				};
 				if (live_entry) boot(live_entry);
 				else
-					import(/* @vite-ignore */ (desc as { e: string }).e).then((m) =>
-						boot((m as { default: Component }).default)
-					);
+					// its location (the page's island graph named it), not the stable name
+					import_entry<{ default: Component }>((desc as { e: string }).e).then((m) => boot(m.default));
 				return () => {
 					dead = true;
 					if (app) unmount(app as never);

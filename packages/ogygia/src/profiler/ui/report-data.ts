@@ -36,7 +36,8 @@ export interface IslandRow {
 	/** of `js_bytes`, what no other waking island uses (what dropping it would save) */
 	js_only: number | null;
 	/** each module with its bytes, heaviest first, and what the build packed into it */
-	modules: { url: string; bytes: number | null; inside: string[] | null }[];
+	/** its JS files; `own`: the island's own entry file (its location, not its identity) */
+	modules: { url: string; bytes: number | null; inside: string[] | null; own: boolean }[];
 	interactivity: IslandStat['interactivity'];
 	/** the sum of every interactivity marker; -1 when the build did not scan it */
 	marks: number;
@@ -62,7 +63,7 @@ export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 		const comp = by_name.get(name);
 		const cl = client.get(r.entry) ?? null;
 		const modules = [...new Set([r.module_url, ...r.hints].filter(Boolean))]
-			.map((url) => ({ url, bytes: extras.weights?.[url] ?? null, inside: extras.contents?.[url] ?? null }))
+			.map((url) => ({ url, bytes: extras.weights?.[url] ?? null, inside: extras.contents?.[url] ?? null, own: url === r.module_url }))
 			.sort((x, y) => (y.bytes ?? -1) - (x.bytes ?? -1));
 		const js_bytes = island_js_bytes(r, extras.weights);
 		const js_only = only?.get(r.entry) ?? null;

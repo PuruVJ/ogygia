@@ -7,6 +7,8 @@ import { test, check } from './fixtures/index.ts';
 
 const WAKE_INTERACTION_RE = /ogygia-region[^>]*wake="interaction"/;
 const INTERACTION_ENTRY_RE = /ogygia-region entry="([^"]+)"[^>]*wake="interaction"/;
+// the file the island actually loads: its content-hashed location (`src`, last on the tag)
+const INTERACTION_SRC_RE = /ogygia-region entry="[^"]+"[^>]*wake="interaction"[^>]*\ssrc="([^"]+)"/;
 const SHUT_RE = /shut/;
 const COUNT_IS_1_RE = /count is 1/;
 
@@ -15,9 +17,12 @@ test.describe("wake:'interaction' — cold until used, click replay, typing surv
 	// front; `baseURL` is test-scoped, so the hook reads it off the project options.
 	let raw = '';
 	let interaction_entry = '';
+	/** the island's file: its location in a build, its identity where it has none (dev) */
+	let interaction_file = '';
 	test.beforeAll(async ({}, testInfo) => {
 		raw = await (await fetch(testInfo.project.use.baseURL + '/interaction')).text();
 		interaction_entry = raw.match(INTERACTION_ENTRY_RE)?.[1] ?? '';
+		interaction_file = raw.match(INTERACTION_SRC_RE)?.[1] ?? interaction_entry;
 	});
 
 	// ---------- SSR ----------
@@ -36,7 +41,7 @@ test.describe("wake:'interaction' — cold until used, click replay, typing surv
 		page.on('request', (r) => fetched.push(r.url()));
 		await page.goto('/interaction', { waitUntil: 'networkidle' });
 		await page.waitForTimeout(300);
-		const entryFile = interaction_entry.split('/').pop() ?? '@@none@@';
+		const entryFile = interaction_file.split('/').pop() ?? '@@none@@';
 		// An interaction island's bytes do not move before intent: no modulepreload for its chunk, no
 		// background fetch — the hover / focus / touch warm-up below fetches it (with its whole graph,
 		// island-graph-preload.ts), and the first click is still replayed.
@@ -155,9 +160,12 @@ test.describe("wake:'interaction' — cold until used, click replay, typing surv
 		page.on('console', (m) => {
 			if (m.type() === 'error') consoleErrs.push(m.text());
 		});
-		// Block the island chunk → the wake's import fails.
-		const entryFile = interaction_entry.split('/').pop() ?? '@@none@@';
+		// Block the island's file AND its stable name (the fallback a lost location takes) → the
+		// wake's import truly fails.
+		const entryFile = interaction_file.split('/').pop() ?? '@@none@@';
+		const stableFile = interaction_entry.split('/').pop() ?? '@@none@@';
 		await page.route(`**/${entryFile}`, (r) => r.abort());
+		await page.route((url) => url.pathname.endsWith('/' + stableFile), (r) => r.abort());
 		await page.goto('/interaction', { waitUntil: 'networkidle' });
 		await page.locator('[data-i-btn]').click();
 		await page.waitForTimeout(400);

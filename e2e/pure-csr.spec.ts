@@ -22,8 +22,10 @@ const vite = path.join(app, 'node_modules/.bin/vite');
 const PORT = 3061;
 const BASE = `http://localhost:${PORT}`;
 
-const OG_RUNTIME_CHUNK_RE = /(?:^|\/)og-runtime\.[0-9a-f]+\.js$/;
-const OG_RUNTIME_URL_RE = /og-runtime\./;
+// any runtime file: its stable name (`og-runtime.<hash>[-<features>].js`) or its content-hashed
+// location (`og-runtime[-<features>].<hash>.js`)
+const OG_RUNTIME_CHUNK_RE = /(?:^|\/)og-runtime[.-][^/]*\.js$/;
+const OG_RUNTIME_URL_RE = /og-runtime[.-]/;
 
 let built: SpawnSyncReturns<string> | undefined;
 let server: SpawnedServer | undefined;
@@ -72,11 +74,23 @@ test.describe('pure csr=true app: direct interactive <Region> degrades to Kit, n
 				}
 			};
 			walk(clientImmutable);
+			// The emit gate is conservative (an interactive `<Region>` anywhere emits the runtime: a
+			// pure-router app once shipped documents pointing at a runtime never built), so a runtime FILE
+			// may exist. What must hold: nothing the app ships references it — no entry, node or chunk
+			// imports it, so no visitor downloads it (the browser probe below checks the pages too).
 			const runtimeChunks = files.filter((f) => OG_RUNTIME_CHUNK_RE.test(f));
+			// (an IMPORT is a relative specifier the bundler wrote — `./og-runtime…`, `../og-runtime…`; the
+			// runtime's stable URL as a plain string rides Region's shared code and loads nothing)
+			const runtime_names = runtimeChunks.map((f) => path.basename(f));
+			const imports_runtime = (code: string) =>
+				runtime_names.some((n) => ['"./', '"../', '`./', '`../', "'./", "'../"].some((q) => code.includes(q + n)));
+			const referencing = files.filter(
+				(f) => f.endsWith('.js') && !OG_RUNTIME_CHUNK_RE.test(f) && imports_runtime(fs.readFileSync(path.join(clientImmutable, f), 'utf8'))
+			);
 			check(
-				'build: NO ogygia runtime chunk emitted (pure csr=true → ogygia ships nothing)',
-				runtimeChunks.length === 0,
-				runtimeChunks.join(', ') || '(none)'
+				'build: nothing the app ships references an ogygia runtime (pure csr=true → ogygia ships nothing)',
+				referencing.length === 0,
+				referencing.join(', ') || `(${runtimeChunks.length} unreferenced runtime file(s))`
 			);
 		} else {
 			check('build: client output exists', false, clientImmutable);
@@ -92,7 +106,9 @@ test.describe('pure csr=true app: direct interactive <Region> degrades to Kit, n
 
 		const pageErrs: string[] = [];
 		const runtime404: string[] = [];
+		const runtime_requests: string[] = [];
 		page.on('pageerror', (e) => pageErrs.push(e.message));
+		page.on('request', (r) => OG_RUNTIME_URL_RE.test(r.url()) && runtime_requests.push(r.url()));
 		page.on('response', (r) => {
 			if (r.status() >= 400 && OG_RUNTIME_URL_RE.test(r.url()))
 				runtime404.push(`${r.status()} ${r.url()}`);
@@ -132,6 +148,7 @@ test.describe('pure csr=true app: direct interactive <Region> degrades to Kit, n
 			dom.runtimeScript === false,
 			`runtime=${dom.runtimeScript}`
 		);
+		check('run: the page requests no ogygia runtime file at all', runtime_requests.length === 0, runtime_requests[0] ?? '');
 		check(
 			'run: no runtime 404 (the pure-csr wart is gone)',
 			runtime404.length === 0,

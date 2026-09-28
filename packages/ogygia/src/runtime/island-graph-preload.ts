@@ -9,11 +9,13 @@
  *
  * The graph is read lazily from every `script[data-ogygia-graph]` in the document (the document
  * tail, a head copy a self-contained render emitted, the body a router swap brought in), each script
- * once. Entries and chunks are content-hashed URLs, so a list read on one page is never wrong on the
+ * once. Chunks are content-hashed URLs and entries are identities (their files, content-hashed too,
+ * resolve through runtime/entry-locations.ts), so a list read on one page is never wrong on the
  * next: nothing to invalidate. A router warm reads the NEXT page's graph out of its fetched HTML
  * (`register_island_graph`) before that page is in the DOM.
  */
-import { ISLAND_GRAPH_ATTR, decode_island_graph } from '../island-graph.js';
+import { ISLAND_GRAPH_ATTR, decode_island_graph, decode_island_locations } from '../island-graph.js';
+import { note_entry_location } from './entry-locations.js';
 import { runtime_session } from './session.js';
 
 const GRAPH_SELECTOR = `script[${ISLAND_GRAPH_ATTR}]`;
@@ -35,8 +37,10 @@ function absolute(href: string, base: string): string | null {
 	}
 }
 
-/** Merge one graph script's text; hrefs resolve against `base` (the document the text came from). */
+/** Merge one graph script's text; hrefs resolve against `base` (the document the text came from).
+ *  Its locations (`s`) go to the runtime's one identity → location map. */
 export function register_island_graph(text: string, base: string = location.href): void {
+	for (const [entry, src] of decode_island_locations(text)) note_entry_location(entry, src, base);
 	for (const [entry, hrefs] of decode_island_graph(text)) {
 		const key = absolute(entry, base);
 		if (!key || graph.has(key)) continue;

@@ -130,6 +130,7 @@ export type BootLink = {
 	register_island_graph: typeof import('./island-graph-preload.js').register_island_graph;
 	is_warmed_module: typeof import('./region-endpoint-url.js').is_warmed_module;
 	warm_island_module: typeof import('./region-endpoint-url.js').warm_island_module;
+	note_entry_location: typeof import('./entry-locations.js').note_entry_location;
 	props_sidecar_of: typeof import('./sidecar.js').props_sidecar_of;
 	parse_region_html: typeof import('./parse-html.js').parse_region_html;
 	runtime_session: typeof import('./session.js').runtime_session;

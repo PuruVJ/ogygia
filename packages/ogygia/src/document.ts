@@ -30,6 +30,7 @@ import { page_seed_reducers } from './server/page-stream.js';
 import { analyze } from './seed-refs.js';
 import { WIRE_FORMAT_ATTR, WIRE_FORMAT_JSON } from './server/props-wire.js';
 import runtime_url from 'virtual:ogygia/runtime-url';
+import { runtime_bootstrap } from './server/entry-location.js';
 import { freeze_capture_active } from './freeze/capture.js';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import { kit_render_context, type KitPage } from './server/kit-context.js';
@@ -160,7 +161,8 @@ export async function document(
 		head.push(`<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`);
 	}
 	if (runtime_url && !page_declares_runtime_script(head_so_far())) {
-		head.push(`<script type="module" data-ogygia-runtime src="${runtime_url}"></script>`);
+		// (its location, with its static imports' preloads — the same bootstrap a Kit page gets)
+		head.push(runtime_bootstrap());
 	}
 	if (dev_hmr_url && !page_declares_dev_hmr_script(head_so_far())) {
 		head.push(`<script type="module" data-ogygia-dev-hmr src="${dev_hmr_url}"></script>`);

@@ -24,6 +24,8 @@ declare module 'virtual:ogygia/island-deps' {
 	/** og.$ hoisted factories (tag → self-contained source) for the page-inline registration
 	 *  script — prod SSR only; null in dev/client (dev uses the fn-manifest virtual). */
 	export function fnManifest(): Record<string, string> | null;
+	/** An entry's identity (its stable URL) → the content-hashed file it is served from; `null`: none known. */
+	export function entryLocation(identity: string): string | null;
 }
 declare module 'virtual:ogygia/manifest' {
 	export const dev: boolean;

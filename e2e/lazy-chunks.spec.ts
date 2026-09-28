@@ -20,14 +20,16 @@ const HYDRATE_CORE_MARKER = 'discarded its ENTIRE server-rendered DOM';
 const SVELTE_RUNTIME_MARKER = 'svelte.dev/e/';
 /** A string only the navigation chunk carries (the SPA fetch header). */
 const ROUTER_NAV_MARKER = 'x-ogygia-spa';
-const RUNTIME_RE = /\/og-runtime\.[^/]+\.js$/;
+// the runtime the page loads: its content-hashed location, `og-runtime[-<features>].<hash>.js`
+const RUNTIME_RE = /\/og-runtime[.-][^/]+\.js$/;
 /** A STATIC import in a built chunk: `import{…}from"./x.js"` / `import"./x.js"` (not `import(`). */
 const STATIC_IMPORT_RE = /(?:^|[;}\n])\s*import\s*(?:[\w*{}\s,$]+from\s*)?["']([^"']+)["']/g;
 /** The floor under Kit's `strict` entry signatures: the runtime + Vite's shared preload helper + the
  *  modules Kit's client transport also uses (runtime/slots.ts `BootLink`). */
 const BOOT_FILE_BUDGET = 4;
-/** The runtime chunk of an app WITH `hooks.client`: its feature hash carries a trailing `h`. */
-const CLIENT_HOOKS_RUNTIME_RE = /og-runtime\.[^/]*h\.js$/;
+/** The runtime of an app WITH `hooks.client`: its features segment carries a trailing `h`
+ *  (`og-runtime-<features>h.<hash>.js`). */
+const CLIENT_HOOKS_RUNTIME_RE = /og-runtime-[^/.]*h\.[\w-]+\.js$/;
 
 test.describe('lazy runtime chunks: hydrate core on first wake, navigation on first prefetch', () => {
 	test('boot fetches neither; the first wake fetches the hydrate core, the first hover the navigation', async ({

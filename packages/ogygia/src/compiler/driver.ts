@@ -53,6 +53,7 @@ import { rewrite_regions } from './content/regions.js';
 import { materialize } from './content/git.js';
 import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT } from './region/emit.js';
 import { island_deps_module } from './link/island-deps.js';
+import { island_shim_source, runtime_shim_source } from './link/entry-shim.js';
 import { context_string_keys, source_uses_ogygia_context } from './link/context-detect.js';
 import { collect_flag_sites } from './flags.js';
 import { router_css_roots, router_css_module } from './link/router-css.js';
@@ -129,6 +130,13 @@ import type { CompileCtx } from './ctx.js';
 
 /** A file-local transform result: the Vite `{ code, map }` plus the descriptors the linker registers. */
 type TransformResult = RegisterResult & { code: string; map: unknown };
+/** The chunk names our content-hashed entries are emitted under (`entry_file_pattern` keys on them). */
+const ISLAND_ENTRY_NAME_PREFIX = 'og-region.';
+const RUNTIME_ENTRY_NAME = 'og-runtime';
+
+/** The bundler's `emitFile` for an entry chunk, by `name` (the output pattern content-hashes it).
+ *  Returns the reference id. */
+export type EmitChunk = (chunk: { type: 'chunk'; id: string; name: string }) => string;
 
 /** Shared OGYGIA_PROFILE instrument — the adapter owns the maps/counters; the driver writes into
  *  them so the transform-phase metrics (and the determinism digest source) live with the transform. */
@@ -821,9 +829,11 @@ export class Compiler {
 
 	/**
 	 * Client-build chunk emit (via the injected `emitFile`): the feature-selected runtime entry (when
-	 * `emitRuntime`), then one deterministic chunk per deduped HYDRATE region id — a stable filename so
-	 * SSR can bake `entry` without a client→server hash handoff; csr=false hosts omit wrapper imports so
-	 * this emit owns the module. N instances of a region → still one entry URL. Idempotent per id.
+	 * `emitRuntime`), then one chunk per deduped HYDRATE region id. IDENTITY vs LOCATION: SSR bakes the
+	 * stable name (`island_public_url`) as the region's identity; the file the browser loads is named
+	 * by its content (the bundler hashes it), and the bundle end hands the stable → hashed map to the
+	 * server (the handoff's `entries`). The stable name is emitted too, as a shim of the hashed file.
+	 * csr=false hosts omit wrapper imports so this emit owns the module. Idempotent per id.
 	 */
 	#router_css_roots_cache: string[] | null = null;
 	/** The server-router component roots (link/router-css.ts). Build: prescan is complete before any
@@ -888,12 +898,18 @@ export class Compiler {
 	 * client-only build) keeps every prescanned island, as before. Returns how many were skipped.
 	 */
 	emit_build_chunks(
-		emitFile: (chunk: { type: 'chunk'; id: string; fileName: string }) => void,
+		emitFile: EmitChunk,
 		{ emitRuntime, loaded = null }: { emitRuntime: boolean; loaded?: Set<string> | null }
 	): number {
+		this.island_entry_refs.clear();
+		this.runtime_entry_ref = null;
 		if (emitRuntime) {
-			// Unresolved virtual id — resolve_id/emit synthesize the feature-selected entry.
-			emitFile({ type: 'chunk', id: V_RUNTIME_ENTRY, fileName: this.runtime_chunk_filename() });
+			// Unresolved virtual id — resolve_id/emit synthesize the feature-selected entry. Named, not
+			// fixed: the bundler hashes its content into the file name (its imports included), and the
+			// server finds that name in the build handoff. The stable name is a shim (`entry_shims`).
+			// (named with its features: `og-runtime-<features>.<hash>.js` says which runtime it is)
+			const feat = this.#ctx!.runtime_features(this.program.runtime_feature_hash);
+			this.runtime_entry_ref = emitFile({ type: 'chunk', id: V_RUNTIME_ENTRY, name: RUNTIME_ENTRY_NAME + (feat ? '-' + feat : '') });
 		}
 		const { region_kinds, by_id, emitted_island_chunks, registry } = this.program;
 		let skipped = 0;
@@ -906,10 +922,88 @@ export class Compiler {
 				skipped++;
 				continue;
 			}
-			emitted_island_chunks.add(rid);
-			emitFile({ type: 'chunk', id: virtualPath, fileName: this.#ctx!.island_chunk_filename(rid) });
+			this.emit_island_entry(emitFile, rid, virtualPath);
 		}
 		return skipped;
+	}
+
+	/** Client-build refs of each emitted island entry (by island id) and of the runtime entry: the
+	 *  bundle end turns them into the hashed file names the handoff maps the stable names to. */
+	readonly island_entry_refs = new Map<string, string>();
+	runtime_entry_ref: string | null = null;
+
+	/**
+	 * At the bundle's end (the names are final): each entry's IDENTITY → its LOCATION. `islands` maps
+	 * an island entry's hashed file to its identity (the collector keys every map by identity);
+	 * `locations` is what the handoff carries to the server (`entries`): identity → served path.
+	 * `get_file_name` is the bundler's `this.getFileName`.
+	 */
+	entry_locations(get_file_name: (ref: string) => string): {
+		islands: Map<string, string>;
+		runtime: string | null;
+		runtime_file: string | null;
+		locations: Record<string, string>;
+	} {
+		const islands = new Map<string, string>();
+		const locations: Record<string, string> = {};
+		const served = (file: string) => (file.startsWith('/') ? file : '/' + file);
+		for (const [rid, ref] of this.island_entry_refs) {
+			const file = get_file_name(ref);
+			const identity = this.island_public_url(rid);
+			islands.set(file, identity);
+			locations[identity] = served(file);
+		}
+		let runtime: string | null = null;
+		let runtime_file: string | null = null;
+		if (this.runtime_entry_ref) {
+			runtime_file = get_file_name(this.runtime_entry_ref);
+			runtime = this.runtime_chunk_url();
+			locations[runtime] = served(runtime_file);
+		}
+		return { islands, runtime, runtime_file, locations };
+	}
+
+	/** One hydrate island's entry, content-hashed by the bundler (its stable-name shim is written at
+	 *  the bundle's end: `entry_shims`). */
+	emit_island_entry(emitFile: EmitChunk, rid: string, virtualPath: string): void {
+		this.program.emitted_island_chunks.add(rid);
+		this.island_entry_refs.set(rid, emitFile({ type: 'chunk', id: virtualPath, name: ISLAND_ENTRY_NAME_PREFIX + rid }));
+	}
+
+	/**
+	 * The output file pattern for one of OUR entries (by the chunk name `emit_island_entry` / the
+	 * runtime emit gave it), else null (the app's own naming applies). Readable and content-hashed:
+	 * `<appDir>/immutable/og-region.<iid>.<hash>.js`, `…/og-runtime-<features>.<hash>.js` — the hash is the
+	 * cache law, the name is for people (a network tab, a CDN rule, a profile). It never equals a
+	 * stable name, which has no hash segment.
+	 */
+	entry_file_pattern(chunk_name: string | undefined): string | null {
+		if (!chunk_name) return null;
+		const ours =
+			chunk_name.startsWith(ISLAND_ENTRY_NAME_PREFIX) ||
+			chunk_name === RUNTIME_ENTRY_NAME ||
+			chunk_name.startsWith(RUNTIME_ENTRY_NAME + '-');
+		if (!ours) return null;
+		return `${this.#ctx!.app_dir}/immutable/[name].[hash].js`;
+	}
+
+	/**
+	 * The stable-name shims (link/entry-shim.ts), for the bundle's end (the names are final): one per
+	 * island entry, plus the runtime's — each a plain file at the old stable name re-exporting the
+	 * hashed file. `get_file_name` is the bundler's `this.getFileName`.
+	 */
+	entry_shims(get_file_name: (ref: string) => string): { fileName: string; source: string }[] {
+		const ctx = this.#ctx!;
+		const out: { fileName: string; source: string }[] = [];
+		for (const [rid, ref] of this.island_entry_refs) {
+			const fileName = ctx.island_chunk_filename(rid);
+			out.push({ fileName, source: island_shim_source(fileName, get_file_name(ref)) });
+		}
+		if (this.runtime_entry_ref) {
+			const fileName = this.runtime_chunk_filename();
+			out.push({ fileName, source: runtime_shim_source(fileName, get_file_name(this.runtime_entry_ref)) });
+		}
+		return out;
 	}
 
 	/**
@@ -917,17 +1011,10 @@ export class Compiler {
 	 * / router / session / ttl / manifests / runtime entry+url / transport / dev-hmr / request-event /
 	 * region-endpoint), and the registered island/region sources (with the client leg's `$app/*`-shim +
 	 * lake-placeholder rewrites). Returns the source string, or `null` if `id` is not an ogygia virtual —
-	 * the adapter owns only the FOUC-css virtuals (they carry a Vite `moduleType`) and the two Vite build
-	 * values threaded in here (`hashedRuntimeUrl` from the client-leg handoff, `universalHooks` path).
+	 * the adapter owns only the FOUC-css virtuals (they carry a Vite `moduleType`) and the Vite build
+	 * value threaded in here (the `universalHooks` path).
 	 */
-	emit(
-		id: string,
-		{
-			ssr,
-			hashedRuntimeUrl,
-			universalHooks
-		}: { ssr: boolean; hashedRuntimeUrl: string | null; universalHooks: string | null }
-	): string | null {
+	emit(id: string, { ssr, universalHooks }: { ssr: boolean; universalHooks: string | null }): string | null {
 		const ctx = this.#ctx!;
 		const program = this.program;
 		const is_dev = ctx.is_dev;
@@ -937,15 +1024,13 @@ export class Compiler {
 		if (is_registry_stub_id(id)) return registry_stub_source(registry_stub_names(id));
 
 		if (id === RESOLVED(V_RUNTIME_URL)) {
-			// dev: the vite dev URL. build: the CONTENT-HASHED runtime URL — from this
-			// instance (standalone) or the handoff file the client build wrote (Kit-driven);
-			// fall back to the fixed name only if the handoff is somehow missing.
-			// Ensure prescan ran so `runtime_feature_hash` matches the client emit's filename (both
+			// The runtime's IDENTITY — dev: the vite dev URL; build: its stable URL. The server bundle
+			// is built before the client's, so the content-hashed file the page loads is looked up at
+			// render time through the build handoff (`entryLocation`, virtual:ogygia/island-deps).
+			// Ensure prescan ran so `runtime_feature_hash` matches the client emit's stable name (both
 			// legs prescan the same source → same feature set → same name).
 			if (!is_dev) this.prescan();
-			const url = is_dev
-				? '/@id/__x00__' + V_RUNTIME
-				: hashedRuntimeUrl || this.runtime_chunk_url();
+			const url = is_dev ? '/@id/__x00__' + V_RUNTIME : this.runtime_chunk_url();
 			return `export default ${JSON.stringify(url)};`;
 		}
 		if (id === RESOLVED(V_FN_MANIFEST)) {
@@ -1424,7 +1509,7 @@ export class Compiler {
 			emitFile
 		}: {
 			ssr: boolean;
-			emitFile: (chunk: { type: 'chunk'; id: string; fileName: string }) => void;
+			emitFile: EmitChunk;
 		}
 	): Promise<{ code: string; map: unknown } | null> {
 		const ctx = this.#ctx!;
@@ -1553,21 +1638,16 @@ export class Compiler {
 				map = result.map;
 				touched = true;
 
-				// Emit the deterministic island chunk for any hydrate island discovered HERE that the
-				// buildStart prescan couldn't see — i.e. declared inside a library component (host
-				// outside the app's `src`). Without this the client leg lets Rolldown content-hash the
-				// entry, diverging from the deterministic name SSR baked into `<ogygia-region entry>`.
+				// Emit the island entry (and its stable-name shim) for any hydrate island discovered HERE
+				// that the buildStart prescan couldn't see — i.e. declared inside a library component
+				// (host outside the app's `src`). Without this no entry carries its identity: the handoff
+				// would have no location for the stable name SSR bakes into `<ogygia-region entry>`.
 				if (ctx.is_build && !ssr) {
 					for (const isl of result.islands ?? []) {
 						const kind = isl.kind ?? (isl.server ? 'defer' : 'hydrate');
 						if (kind !== 'hydrate' || !isl.virtualPath || emitted_island_chunks.has(isl.id))
 							continue;
-						emitted_island_chunks.add(isl.id);
-						emitFile({
-							type: 'chunk',
-							id: isl.virtualPath,
-							fileName: ctx.island_chunk_filename(isl.id)
-						});
+						this.emit_island_entry(emitFile, isl.id, isl.virtualPath);
 					}
 				}
 			}

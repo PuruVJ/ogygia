@@ -12,6 +12,7 @@ import {
 	island_module_url,
 	RegionAnswerRefused
 } from './region-endpoint-url.js';
+import { island_entry_of, import_entry } from './entry-locations.js';
 import {
 	is_awake,
 	is_deferred,
@@ -174,9 +175,9 @@ function arm_on_demand(region: Element, fire: () => void): void {
 /** Load a hydrate island module from `<ogygia-region entry>` (dev + prod), its whole chunk graph
  *  preloaded in the same task so nothing waits on a discovery waterfall (island-graph-preload.ts). */
 const load_island = (entry: string) => {
-	const url = island_module_url(entry);
 	preload_island_graph(entry);
-	return import(/* @vite-ignore */ url) as Promise<IslandModule>;
+	// (its location, and the fresh identity if that fails: entry-locations.ts)
+	return import_entry<IslandModule>(entry, island_module_url(entry));
 };
 
 /**
@@ -1025,7 +1026,7 @@ class OgygiaRegion extends HTMLElement {
 			// SWR remount (and SPA swaps) can disconnect an island-in-lake while its module load is
 			// in flight — abort rather than hydrate into a detached tree (SWR-ORPHAN-HYDRATE).
 			if (!this.isConnected) return;
-			const entry = this.getAttribute('entry');
+			const entry = island_entry_of(this);
 			if (!entry) return;
 			hydrate_started(this); // a viewport island in flight holds ready islands below the fold
 			const [core, mod] = await Promise.all([hydrate_core(), load_island(entry)]);
@@ -1185,7 +1186,7 @@ class OgygiaRegion extends HTMLElement {
 		// any scheduled wake (#arm) — on a Kit document, only for the parse.
 		await (kit_hydrates_page() ? dom_ready() : after_document_painted());
 		if (!this.isConnected) return;
-		const entry = this.getAttribute('entry');
+		const entry = island_entry_of(this);
 		if (!entry) return;
 		const [core, mod] = await Promise.all([hydrate_core(), load_island(entry)]);
 		if (!this.isConnected) return;

@@ -31,13 +31,15 @@ export function page_ledger(): Ledger | null {
 		const wire = r.encodedBodySize || r.transferSize || r.decodedBodySize || 0;
 		sizes.set(r.name, { wire, raw: r.decodedBodySize || wire });
 	}
-	const islands = new Map<string, { entry: string; name: string; kind: string; wake: string; count: number }>();
+	const islands = new Map<string, { entry: string; file?: string; name: string; kind: string; wake: string; count: number }>();
 	for (const r of all_regions()) {
 		const entry = abs(r.entry);
 		if (!entry) continue;
 		const g = islands.get(entry);
+		// (its own file is its location, the one the browser loaded and sized)
+		const file = abs(r.src);
 		if (g) g.count++;
-		else islands.set(entry, { entry, name: region_name(r.entry), kind: r.kind, wake: r.wake, count: 1 });
+		else islands.set(entry, { entry, ...(file ? { file } : {}), name: region_name(r.entry), kind: r.kind, wake: r.wake, count: 1 });
 	}
 	const runtime = [
 		document.querySelector('script[data-ogygia-runtime]')?.getAttribute('src'),

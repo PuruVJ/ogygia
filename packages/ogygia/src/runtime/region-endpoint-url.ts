@@ -1,4 +1,5 @@
 import { preload_island_graph } from './island-graph-preload.js';
+import { entry_location } from './entry-locations.js';
 
 /** Hoisted (hot paths — connectedCallback/hydrate run per region); shared with core's
  *  foreign-origin checks. */
@@ -105,6 +106,9 @@ export function is_same_origin_response(res: Response, page_origin = location.or
  */
 export function island_module_url(entry: string, base?: string): string {
 	if (!entry) return entry;
+	// its LOCATION, once the server named one (entry-locations.ts); else the identity as written
+	const located = entry_location(entry, base);
+	if (located) return located;
 	if (entry.startsWith('/') || ABSOLUTE_URL_SCHEME.test(entry)) return entry;
 	const resolved = new URL(entry, base ?? location.href);
 	return resolved.pathname + resolved.search + resolved.hash;
@@ -118,19 +122,32 @@ export function island_module_url(entry: string, base?: string): string {
 // warm un-marks the URL so the real wake — or a later warm — retries; warming is never fatal.
 const warmed_modules = new Set<string>();
 
+/** The warmer's key: the resolved module as an absolute URL (a location arrives absolute, an href
+ *  off a page root-relative — the same file must be one key). */
+function warm_key(url: string): string {
+	try {
+		return new URL(url, location.href).href;
+	} catch {
+		return url;
+	}
+}
+
 /** Fire-and-forget `import()` of an island's module, deduped by resolved URL. */
 export function warm_island_module(entry: string, base?: string): void {
 	const url = island_module_url(entry, base);
-	if (!url || warmed_modules.has(url)) return;
-	warmed_modules.add(url);
+	if (!url) return;
+	const key = warm_key(url);
+	if (warmed_modules.has(key)) return;
+	warmed_modules.add(key);
 	preload_island_graph(entry, base); // the whole graph with the entry, not one import at a time
 	import(/* @vite-ignore */ url).catch(() => {
-		warmed_modules.delete(url);
+		warmed_modules.delete(key);
 	});
 }
 
 /** Has this island module already been warmed (or imported through the warmer)? `entry` resolves
  *  the way `warm_island_module` resolves it; `base` for an href read off a foreign document. */
 export function is_warmed_module(entry: string, base?: string): boolean {
-	return warmed_modules.has(island_module_url(entry, base));
+	const url = island_module_url(entry, base);
+	return !!url && warmed_modules.has(warm_key(url));
 }

@@ -85,6 +85,9 @@ const build = async (env) => {
 }
 
 if (!quick) {
+	// 1b · island files across deploys: three real builds, a browser that keeps its immutable cache
+	// (it builds and serves on its own; the steps below rebuild after it)
+	await key('island files across deploys (the cache check)', process.execPath, ['internal/bench/cache-bust-check.mjs']);
 	// 2 · devtools in a build
 	await build({ OGYGIA_DEVTOOLS: '1' });
 	{

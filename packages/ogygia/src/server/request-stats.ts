@@ -21,7 +21,8 @@ export interface IslandStat {
 	entry: string;
 	/** the component's name (Svelte's SSR function name, `ProductCard`); '' when unknown */
 	name: string;
-	/** the client module URL the region imports */
+	/** the client module URL the region imports: its LOCATION (the content-hashed file served), not
+	 *  its identity (`entry`) */
 	module_url: string;
 	/** `load` | `idle` | `visible` | `interaction` | a media query */
 	wake: string;

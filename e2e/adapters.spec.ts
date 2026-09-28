@@ -40,10 +40,10 @@ class WatchdogError extends Error {}
 const WORK_COPY_SKIP_RE = /node_modules|\.svelte-kit|(^|\/)build($|\/)|\.work/;
 const RUNTIME_CHUNK_RE = /^og-runtime\..*\.js$/;
 const SSR_TITLE_RE = /data-title/;
-// Hash charset is Vite/rolldown's: hex plus the `-`/`_` that the feature-set busting adds a second
-// segment with (e.g. `og-runtime.025962a09ea0-3d150168.js`). Keep it broad so a valid filename never
-// reads as "none".
-const RUNTIME_SRC_RE = /\/_app\/immutable\/og-runtime\.[\w-]+\.js/;
+// The runtime script the HTML loads: its LOCATION, the content-hashed file the bundler named (under
+// `immutable/` a stable name would be cached a year past its content) — never the stable-name shim.
+const RUNTIME_SCRIPT_RE = /<script type="module" data-ogygia-runtime src="([^"]+)"/;
+const RUNTIME_LOCATION_RE = /\/_app\/immutable\/og-runtime(-[^/.]+)?\.[\w-]{8}\.js$/;
 const HYDRATION_ERR_RE = /hydrat/i;
 const TRAILING_SLASH_RE = /\/$/;
 
@@ -301,10 +301,13 @@ async function drive(page: Page, base: string, errors: string[]) {
 	const html = await (await fetch(base + '/')).text();
 	check('page server-rendered (SSR HTML present)', SSR_TITLE_RE.test(html));
 
-	const rt = html.match(RUNTIME_SRC_RE)?.[0];
+	const src = html.match(RUNTIME_SCRIPT_RE)?.[1];
+	const rt = src ? new URL(src, base + '/').pathname : undefined;
 	check('runtime script referenced in HTML', !!rt, rt || 'none');
-	if (rt)
-		check('runtime script serves 200 (the 404 regression)', (await status(base + rt)) === 200, rt);
+	if (rt) {
+		check('runtime script is its content-hashed location, not the stable name', RUNTIME_LOCATION_RE.test(rt), rt);
+		check('runtime script serves 200 (the 404 regression)', (await status(new URL(src!, base + '/').href)) === 200, rt);
+	}
 
 	await page.goto(base + '/', { waitUntil: 'load', timeout: 15000 });
 	const counter = page.locator('[data-counter]').first();
@@ -393,8 +396,9 @@ test.describe('adapters: an all-csr=false islands app works end to end on every 
 			check('keepalive route cleaned up', !leftover);
 			// client build alive: runtime chunk emitted
 			const imm = join(APP, '.svelte-kit', 'output', 'client', '_app', 'immutable');
+			// (its stable name: the shim a page cached before content hashing still loads)
 			const has_runtime = existsSync(imm) && readdirSync(imm).some((f) => RUNTIME_CHUNK_RE.test(f));
-			check('ogygia runtime chunk emitted', has_runtime);
+			check('ogygia runtime stable-name shim emitted', has_runtime);
 
 			// build-verify only — no server output for this adapter
 			if (!a.boot) return;

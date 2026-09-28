@@ -71,11 +71,11 @@ const files = await page.evaluate(() => {
 	const set = new Set();
 	for (const s of document.querySelectorAll('script[data-ogygia-graph]')) {
 		const w = JSON.parse(s.textContent);
-		for (const [entry, ids] of Object.entries(w.e)) {
-			set.add(abs(entry));
-			for (const i of ids) set.add(abs(w.h[i]));
-		}
+		for (const ids of Object.values(w.e)) for (const i of ids) set.add(abs(w.h[i]));
 	}
+	// each island's own file: its location (`src`) — the graph keys islands by identity, a name the
+	// browser never loads
+	for (const r of document.querySelectorAll('ogygia-region[src]')) set.add(abs(r.getAttribute('src')));
 	const rt = document.querySelector('script[data-ogygia-runtime]')?.getAttribute('src');
 	if (rt) set.add(abs(rt));
 	for (const l of document.querySelectorAll('link[data-ogygia-runtime-dep]')) set.add(abs(l.getAttribute('href')));

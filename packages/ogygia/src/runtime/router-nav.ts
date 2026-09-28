@@ -39,6 +39,7 @@ const regions_in_shadow = () => boot_link().regions_in_shadow();
 const session = () => boot_link().runtime_session;
 const is_warmed_module = (entry: string, base?: string) => boot_link().is_warmed_module(entry, base);
 const warm_island_module = (entry: string, base?: string) => boot_link().warm_island_module(entry, base);
+const note_entry_location = (entry: string, src: string | null, base?: string) => boot_link().note_entry_location(entry, src, base);
 const register_island_graph = (text: string, base: string) => boot_link().register_island_graph(text, base);
 const yield_task = () => boot_link().yield_task();
 const document_key = (url: URL) => router_link().document_key(url);
@@ -160,8 +161,19 @@ const PAGE_CACHE_MAX_BYTES = 4_000_000; // ~4MB of UTF-16-ish HTML
 const STYLESHEET_WAIT_MS = 2_000;
 /** Kit remote-function POSTs live under `…/_app/remote/…` (or custom `appDir`). */
 const REMOTE_MUTATION_PATH = /\/remote(?:\/|$|\?)/;
-/** `entry="…"` on an `<ogygia-region>` open tag (shared `g` regex — reset `lastIndex` per scan). */
-const REGION_ENTRY_ATTR_G = /<ogygia-region\b[^>]*?\bentry="([^"]+)"/g;
+/** An `<ogygia-region>` open tag's attributes (shared `g` regex — reset `lastIndex` per scan). */
+const REGION_OPEN_TAG_G = /<ogygia-region\b([^>]*)>/g;
+
+/** One attribute's value in an open tag's attribute text (our own SSR: `name="value"`, no quotes
+ *  inside a value). Null when absent. @internal Exported for unit tests. */
+export function tag_attr(attrs: string, name: string): string | null {
+	const key = ' ' + name + '="';
+	const at = attrs.indexOf(key);
+	if (at === -1) return null;
+	const from = at + key.length;
+	const to = attrs.indexOf('"', from);
+	return to === -1 ? null : attrs.slice(from, to);
+}
 /** The island graph scripts in our own SSR output (island-graph.ts; the JSON is `<`-escaped, so
  *  its text never holds a `<`). */
 const ISLAND_GRAPH_SCRIPT_G = /<script type="application\/json" data-ogygia-graph>([^<]*)<\/script>/g;
@@ -461,9 +473,15 @@ function warm_modules(href: string, html: string) {
 	ISLAND_GRAPH_SCRIPT_G.lastIndex = 0;
 	let g: RegExpExecArray | null;
 	while ((g = ISLAND_GRAPH_SCRIPT_G.exec(html))) register_island_graph(g[1], new URL(href, location.href).href);
-	REGION_ENTRY_ATTR_G.lastIndex = 0; // shared `g` regex — start each scan at 0
+	// Each region's identity, and its location beside it (the file the warm then fetches)
+	REGION_OPEN_TAG_G.lastIndex = 0; // shared `g` regex — start each scan at 0
 	let m: RegExpExecArray | null;
-	while ((m = REGION_ENTRY_ATTR_G.exec(html))) warm_island_module(m[1], href);
+	while ((m = REGION_OPEN_TAG_G.exec(html))) {
+		const entry = tag_attr(m[1], 'entry');
+		if (!entry) continue;
+		note_entry_location(entry, tag_attr(m[1], 'src'), href);
+		warm_island_module(entry, href);
+	}
 }
 
 /**

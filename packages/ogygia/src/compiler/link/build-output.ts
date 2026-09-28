@@ -136,7 +136,10 @@ export function report_seed_shaping(
 	map: { page: Record<string, boolean>; page_keys: Record<string, string[] | null> },
 	bundle: Record<string, { type: string; moduleIds?: string[]; imports?: string[] }>,
 	program: { page_key_reasons: Map<string, { why: string; line: number | null }> },
-	root: string
+	root: string,
+	/** an entry's IDENTITY (the maps' key) → its emitted file (its location); absent → the key is
+	 *  the file (a bundle from before content hashing) */
+	file_of: (identity: string) => string = (identity) => identity
 ): Record<string, SeedWhy[]> {
 	/** per island entry that ships all: the modules in its closure whose reads could not be pinned */
 	const why_of: Record<string, SeedWhy[]> = {};
@@ -155,7 +158,7 @@ export function report_seed_shaping(
 		// The modules to blame: every recorded reason reachable from an unpinned island's closure.
 		const closure = (entry: string): Set<string> => {
 			const seen = new Set<string>();
-			const queue = [entry.replace(/^\//, '')];
+			const queue = [file_of(entry).replace(/^\//, '')];
 			while (queue.length) {
 				const f = queue.pop()!;
 				if (seen.has(f)) continue;

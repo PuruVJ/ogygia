@@ -101,13 +101,16 @@ export function runtime_bootstrap_tags(src: string, deps: readonly string[]): st
  * The runtime turns an entry's list into modulepreload links when that island wakes. Empty map →
  * no script.
  */
-export function island_graph_script(graph: ReadonlyMap<string, readonly string[]>): string {
-	if (graph.size === 0) return '';
+export function island_graph_script(
+	graph: ReadonlyMap<string, readonly string[]>,
+	locations?: ReadonlyMap<string, string> | null
+): string {
+	if (graph.size === 0 && !locations?.size) return '';
 	return (
 		'<script type="application/json" ' +
 		ISLAND_GRAPH_ATTR +
 		'>' +
-		escape_script_text(encode_island_graph(graph)) +
+		escape_script_text(encode_island_graph(graph, locations ?? undefined)) +
 		'</script>'
 	);
 }
@@ -135,6 +138,8 @@ export type HoleRecord = {
 export class DocumentTail {
 	readonly #hints = new Set<string>();
 	readonly #graph = new Map<string, readonly string[]>();
+	/** entry identity → location, for entries no element carries (a portable snippet's live entry) */
+	readonly #locations = new Map<string, string>();
 	readonly #props = new Map<string, Sidecar>();
 	readonly #holes = new Map<string, HoleRecord>();
 	readonly #hole_notes = new Map<string, HoleStat>();
@@ -157,14 +162,20 @@ export class DocumentTail {
 	}
 
 	/** Record the chunks an island entry's code needs (the island graph — data, not hints: the
-	 *  runtime preloads them when the island wakes). One list per entry (first wins). With `fp`, the
-	 *  list is also remembered as that island's JS closure for the profiler. */
-	graph(entry: string, hrefs: readonly string[], fp?: string): void {
+	 *  runtime preloads them when the island wakes). One list per entry — its identity — (first wins).
+	 *  With `fp`, the list is also remembered as that island's JS closure for the profiler, led by the
+	 *  file the island actually loads: `src`, its location (the identity when it has none). */
+	graph(entry: string, hrefs: readonly string[], fp?: string, src?: string): void {
 		if (!this.#graph.has(entry)) this.#graph.set(entry, hrefs);
 		if (fp) {
 			const s = this.#props.get(fp);
-			if (s && s.hints.length === 0) s.hints = [entry, ...hrefs];
+			if (s && s.hints.length === 0) s.hints = [src || entry, ...hrefs];
 		}
+	}
+
+	/** Record where an entry no element carries is served from (the graph script's `s`). */
+	locate(identity: string, src: string): void {
+		if (!this.#locations.has(identity)) this.#locations.set(identity, src);
 	}
 
 	/** Register an island's props sidecar under its fingerprint; identical islands share one (the
@@ -209,7 +220,11 @@ export class DocumentTail {
 
 	get empty(): boolean {
 		return (
-			this.#hints.size === 0 && this.#graph.size === 0 && this.#props.size === 0 && this.#holes.size === 0
+			this.#hints.size === 0 &&
+			this.#graph.size === 0 &&
+			this.#locations.size === 0 &&
+			this.#props.size === 0 &&
+			this.#holes.size === 0
 		);
 	}
 
@@ -225,7 +240,7 @@ export class DocumentTail {
 	render(seed: SeedIndex | null = null, detail = false): string {
 		let out = '';
 		for (const href of this.#hints) out += modulepreload_tag(href);
-		out += island_graph_script(this.#graph);
+		out += island_graph_script(this.#graph, this.#locations);
 		const rows: IslandStat[] | null = detail ? [] : null;
 		for (const [fp, s] of this.#props) {
 			const w = s.wire.wire(seed);

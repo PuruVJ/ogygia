@@ -340,8 +340,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	/** absolute path to the app's client hooks (src/hooks.client.*), if present — its `init` runs on
 	 *  boot for csr=false pages (Kit never runs it there). */
 	let client_hooks: string | null = null;
-	/** the content-hashed runtime URL, once known (standalone build only; same plugin instance) */
-	let hashed_runtime_url: string | null = null;
 	/** true once the process-exit cleanup for the injected keep-client route is registered */
 	let keep_client_cleanup_armed = false;
 
@@ -1183,14 +1181,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					return { code, moduleType: 'css' };
 				}
 
-				// Every other ogygia virtual is a pure `id → source` emit the driver owns. The two Vite build
-				// values it can't see are threaded in: the client-leg content-hashed runtime URL (handoff) and
-				// the app's universal-hooks path (discovered in configResolved).
-				return compiler.emit(id, {
-					ssr,
-					hashedRuntimeUrl: hashed_runtime_url,
-					universalHooks: universal_hooks
-				});
+				// Every other ogygia virtual is a pure `id → source` emit the driver owns. The Vite build
+				// value it can't see is threaded in: the app's universal-hooks path (configResolved).
+				return compiler.emit(id, { ssr, universalHooks: universal_hooks });
 			},
 
 			async transform(code, id, options) {
@@ -1232,13 +1225,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 				// The whole per-file pass — content-preset tag ▸ macros ▸ host-island transform ▸ ts-region
 				// mint ▸ $app shim — is the driver's; `this.emitFile` (the one Vite primitive it needs, for
-				// the transform-time deterministic island chunk) is threaded in. The driver's result is
+				// the transform-time island entry and its stable-name shim) is threaded in. The driver's result is
 				// bundler-neutral (`map: unknown`); cast it to Vite's transform shape at this boundary.
 				const result = await compiler.transform_module(source, id, {
 					ssr: options?.ssr === true,
-					emitFile: (chunk) => {
-						this.emitFile(chunk);
-					}
+					emitFile: (chunk) => this.emitFile(chunk)
 				});
 				// DEV: a host edit dropped its server islands from the manifest the handle already
 				// re-imported (empty of them); this transform just registered them again — invalidate the
@@ -1263,6 +1254,32 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			renderChunk(code) {
 				// Patch the fn-manifest placeholder (og.$ factory registrations) once every transform has run.
 				return compiler.patch_fn_manifest(code);
+			},
+
+			// THE STABLE NAMES (client build): each island entry and the runtime are content-hashed; their
+			// old stable names are written now — the hashed names are final, and files can still join the
+			// output — as plain files re-exporting the hashed ones (link/entry-shim.ts). A page cached
+			// before hashing, or a location that failed, still reaches the current build through them.
+			// OUR ENTRIES' FILE NAMES (client build): readable and content-hashed — the driver's pattern for
+			// an island entry or the runtime, the app's own naming for every other chunk. (The bundler
+			// files an emitted chunk under the chunk pattern, which carries no name.)
+			outputOptions(output) {
+				if (!is_build || is_ssr) return null;
+				type Info = { name?: string };
+				type Names = string | ((info: Info) => string) | undefined;
+				const ours = (fallback: Names, dflt: string) => (info: Info) =>
+					compiler.entry_file_pattern(info.name) ?? (typeof fallback === 'function' ? fallback(info) : (fallback ?? dflt));
+				return {
+					...output,
+					entryFileNames: ours(output.entryFileNames as Names, '[name].js'),
+					chunkFileNames: ours(output.chunkFileNames as Names, '[name]-[hash].js')
+				} as typeof output;
+			},
+
+			generateBundle() {
+				if (!is_build || is_ssr) return;
+				for (const shim of compiler.entry_shims((ref) => this.getFileName(ref)))
+					this.emitFile({ type: 'asset', fileName: shim.fileName, source: shim.source });
 			},
 
 			// THE PROFILER'S MAPS, FILLED: after every plugin's writeBundle (the chunks are final on disk)
@@ -1341,6 +1358,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				await follow_pending_page_calls(program, (s, importer) => this.resolve(s, importer));
 
 				const remote_hash = (id: string) => remote_hash_of(id, process.cwd());
+				// IDENTITY → LOCATION: the entries' final (content-hashed) names. Every map the collector
+				// builds is keyed by identity; the server resolves a location through `entries`.
+				const entries = compiler.entry_locations((ref) => this.getFileName(ref));
 				const map = collectIslandDepModulepreloads(
 					bundle as Record<
 						string,
@@ -1366,15 +1386,18 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							return null;
 						}
 					},
-					// The runtime entry, by the exact name buildStart emitted it under: its static imports
-					// become the preload hints beside the runtime script.
-					compiler.runtime_chunk_filename()
+					// The runtime entry, by the file the bundler named: its static imports become the
+					// preload hints beside the runtime script, keyed by the runtime's identity.
+					entries.runtime_file,
+					{ islands: entries.islands, runtime: entries.runtime }
 				);
 				const page_why = report_seed_shaping(
 					map,
 					bundle as Record<string, { type: string; moduleIds?: string[]; imports?: string[] }>,
 					program,
-					root
+					root,
+					// (the maps key identities; the walk starts at each one's emitted file)
+					(identity) => entries.locations[identity] ?? identity
 				);
 				// SERVER-ROUTER CSS handoff: each root's whole component-tree CSS was compiled + emitted as
 				// ONE dedicated asset in buildStart (router_css_refs). Resolve each referenceId to its
@@ -1467,7 +1490,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					...(profiler_config ? { page_why, barrels } : {}),
 					content_css,
 					css_inline,
-					fn_manifest: Object.fromEntries(compiler.dollar_hoists)
+					fn_manifest: Object.fromEntries(compiler.dollar_hoists),
+					// identity (the stable URL SSR bakes) → location (the content-hashed file to load)
+					entries: entries.locations
 				});
 				emit_island_deps_handoff(root, json, kit_dirs(root).out_dir);
 			}

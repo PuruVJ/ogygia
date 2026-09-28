@@ -40,12 +40,13 @@
 
 import { slots } from './slots.js';
 import { warm_island_module } from './region-endpoint-url.js';
+import { island_entry_of } from './entry-locations.js';
 
 /** Feature entry: fill the `interaction` slot — wake a cold island on first use, warm on hover. */
 export function install() {
 	slots.interaction = (el, fire) => {
 		const warm = () => {
-			const entry = el.getAttribute('entry');
+			const entry = island_entry_of(el);
 			if (entry) warm_island_module(entry);
 		};
 		return arm_interaction(el, warm, () => Promise.resolve(fire()));

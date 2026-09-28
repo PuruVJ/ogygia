@@ -131,11 +131,17 @@ test.describe('profiler on a serverless host', () => {
 		let visit_at = Date.now();
 		const res = await page.goto(`${ORIGIN}/hell`, { waitUntil: 'load' });
 		expect(res?.headers()['document-policy']).toBe('js-profiling');
+		// the islands' own files: each region's `src` (its content-hashed location — island code no
+		// longer sits in a file named after the island)
+		const island_files: string[] = await page.evaluate(() =>
+			[...document.querySelectorAll('ogygia-region[src]')].map((r) => new URL(r.getAttribute('src')!, location.href).pathname.replace(/^\//, ''))
+		);
+		expect(island_files.length).toBeGreaterThan(0);
 		await page.mouse.wheel(0, 3000);
 		await expect(async () => {
 			const j = await (await page.request.get(`${ORIGIN}/__profiler/report/${id}.json`)).json();
 			const comps: { name: string; file: string }[] = j.browser?.cpu?.components ?? [];
-			const islands = comps.filter((c) => c.file.includes('og-region.'));
+			const islands = comps.filter((c) => island_files.some((f) => c.file.endsWith(f)));
 			// the islands here hydrate in a few ms each and the browser samples every ~10 ms: one visit's
 			// trace can miss them by chance. A trace that came in for this visit and missed: visit again
 			// (each visit's trace replaces the last)

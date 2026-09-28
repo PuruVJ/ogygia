@@ -10,9 +10,11 @@ import { test, check, sleep } from './fixtures/index.ts';
 
 test('a visible island 4000px down fetches nothing until scrolled into view', async ({ page }) => {
 	const entries: string[] = [];
-	page.on('request', (r) => { if (/og-region\.[a-f0-9]+\.js/.test(r.url())) entries.push(r.url().replace(/^.*\//, '')); });
+	page.on('request', (r) => { if (/og-region\.[a-f0-9]+(\.[\w-]+)?\.js/.test(r.url())) entries.push(r.url().replace(/^.*\//, '')); });
 	await page.goto('/visible-below/', { waitUntil: 'networkidle' });
-	const entry = (await page.locator('[data-below] ogygia-region').getAttribute('entry'))!.replace(/^.*\//, '');
+	// the file the island loads: its location (`src`) in a build, its identity (`entry`) where it has none
+	const region = page.locator('[data-below] ogygia-region');
+	const entry = ((await region.getAttribute('src')) ?? (await region.getAttribute('entry')))!.replace(/^.*\//, '');
 	await sleep(3000); // well past any idle callback
 	check('island not hydrated before scroll', (await page.locator('[data-below] ogygia-region[data-hydrated]').count()) === 0);
 	check('island entry NOT requested before scroll', !entries.includes(entry), entries.join(', '));

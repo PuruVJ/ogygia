@@ -127,7 +127,8 @@ import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
 import { set_ask_scope_opener, set_page_recorder, set_seed_ask_reader, type PageSnapshot } from './page-seed-registry.js';
 import { collect_remote_seed } from './server/remote-seed-gate.js';
-import { DocumentTail, runtime_bootstrap_tags, set_tail_reader } from './server/document-tail.js';
+import { DocumentTail, set_tail_reader } from './server/document-tail.js';
+import { runtime_bootstrap } from './server/entry-location.js';
 import { region_css_tag } from './server/region-css.js';
 import { set_late_recorder, set_late_taker, type LateRegion } from './late-region-registry.js';
 import {
@@ -1192,9 +1193,7 @@ class OgygiaHandle {
 			// sole base/assets authority, and every ogygia URL (prod `/${appDir}/…`, dev `/@id/…`) is
 			// baked base-LESS — so an island-LESS page under a non-root `base` loads the runtime too.
 			const runtime_tag =
-				router_enabled && runtime_url && !page_declares_runtime_script(probe)
-					? runtime_bootstrap_tags(asset(runtime_url), islandDeps(runtime_url).map((d) => asset(d)))
-					: null;
+				router_enabled && runtime_url && !page_declares_runtime_script(probe) ? runtime_bootstrap(asset) : null;
 			const ordered = runtime_first(probe, runtime_tag);
 			if (ordered !== probe) head_out = ordered;
 			// The DEV bridge is NOT gated on the router — it carries `@vite/client`, and Vite's own

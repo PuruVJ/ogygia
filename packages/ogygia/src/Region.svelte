@@ -22,16 +22,16 @@
 	import { untrack, getContext, setContext, createRawSnippet } from 'svelte';
 	import { KIT_REQUEST_CONTEXT, kit_request_event } from './server/kit-context.js';
 	import { stringify } from 'devalue';
-	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
-	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity } from 'virtual:ogygia/island-deps';
+	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity, entryLocation } from 'virtual:ogygia/island-deps';
+	import { runtime_bootstrap } from './server/entry-location.js';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of } from './runtime/hash.js';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';
-	import { document_tail, island_graph_script, modulepreload_tag, runtime_bootstrap_tags } from './server/document-tail.js';
+	import { document_tail, island_graph_script, modulepreload_tag } from './server/document-tail.js';
 	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
 	import { region_css_tag } from './server/region-css.js';
 	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
@@ -55,7 +55,7 @@
 	 *   children?: import('svelte').Snippet;
 	 *   __mode?: 'island' | 'server' | 'lake';
 	 *   visible?: string | boolean; idle?: boolean; media?: string; load?: boolean; interaction?: boolean;
-	 *   __keep?: string; __entry?: string; __component?: import('svelte').Component; __css?: unknown;
+	 *   __keep?: string; __entry?: string; __src?: string; __component?: import('svelte').Component; __css?: unknown;
 	 *   __load?: () => Promise<import('svelte').Component>;
 	 *   __props?: Record<string, unknown>; __defer?: string; __margin?: string; __hydrate?: string;
 	 *   __hydrateMargin?: string; __module?: string; __cacheTtl?: number; __stitch?: string; __prefetch?: string;
@@ -80,8 +80,11 @@
 		load,
 		interaction,
 		__keep,
-		// island + server shared
+		// island + server shared. `__entry` is the island's IDENTITY (its stable URL); `__src` its
+		// LOCATION — the content-hashed file to load — which only the client build knows (its wrapper
+		// passes the bundler's own name for it). The server finds the location in the build handoff.
 		__entry = '',
+		__src = '',
 		__component,
 		__css,
 		// The client wrapper's on-demand component fetch (its lazy module answered `undefined`: a
@@ -405,6 +408,17 @@
 	// `/${appDir}/immutable/…`, dev `/@id/…`) and resolved here once. (Kit dev serves `/@id/…` under
 	// base, and `asset()` supplies that prefix — so we never special-case dev URLs.)
 	const island_module_url = $derived(nested || !island_entry ? '' : asset(island_entry));
+	// IDENTITY vs LOCATION (server/entry-location.ts): `island_module_url` is the island's identity
+	// (the `entry` attribute, the graph key, the fingerprint input); the file the runtime loads is its
+	// location — content-hashed, so an `immutable` cache never serves a stale one. The client build's
+	// wrapper passes it (`__src`); the server reads the build handoff. None → the identity is loaded.
+	const location_of = (/** @type {string} */ identity) => {
+		const found = identity ? entryLocation(identity) : null;
+		return found ? asset(found) : '';
+	};
+	const island_src = $derived(nested || !island_entry ? '' : __src || location_of(island_entry));
+	// (written LAST on the element: every attribute before it keeps the order it had before
+	// locations, so HTML rewriters and scans keyed on `entry="…" wake="…"` still match)
 
 	// THE WIRE PLAN (server/props-wire.ts): one walk of this island's props picks its lane (plain
 	// JSON, or devalue for anything devalue exists for) and yields the CANONICAL, seed-independent
@@ -450,7 +464,8 @@
 				// Svelte names the SSR function after the file (ProductCard.svelte → ProductCard) and
 				// the name survives a production bundle — the same name the profiler's CPU samples carry
 				name: island_component?.name ?? '',
-				module_url: island_module_url,
+				// the module as SERVED (its location): what the profiler weighs
+				module_url: island_src || island_module_url,
 				wake: hydrate_attr,
 				interactivity: islandInteractivity(island_entry)
 			});
@@ -494,11 +509,25 @@
 		};
 		for (const dep of deps) add(asset(dep));
 		for (const m of live_entries) {
-			add(asset(m));
+			// (the file the snippet's import fetches: its location, when the build named one)
+			add(location_of(m) || asset(m));
 			for (const dep of islandDeps(m)) add(asset(dep));
 		}
 		return hrefs;
 	}
+	// The live entries' LOCATIONS, keyed by the identity the snippet imports by (`desc.e`, as baked):
+	// no element carries them, so the island graph does (its `s` map, island-graph.ts).
+	const island_live_locations = $derived.by(() => {
+		const live = nested || !is_island ? null : island_wire?.live_entries;
+		if (!live?.length) return null;
+		/** @type {Map<string, string>} */
+		const out = new Map();
+		for (const m of live) {
+			const loc = location_of(m);
+			if (loc) out.set(m, loc);
+		}
+		return out.size ? out : null;
+	});
 	// Per render it is ONE pass over the build's list: that list is already unique and never holds the
 	// entry itself (island-deps.ts), so only portable snippets (which may share chunks) need a dedupe,
 	// and that one is a Set. A big app's island lists a few hundred chunks; a quadratic dedupe here
@@ -513,19 +542,21 @@
 	// island only, at `fetchpriority="low"` (document-tail.ts `modulepreload_tag`): nothing it
 	// downloads is needed for first paint, so it must never outrank the CSS and the LCP image.
 	const island_kit_hint_hrefs = $derived(
-		is_csr && hydrate_attr === 'load' && island_module_url ? [island_module_url, ...island_graph_hrefs] : []
+		// (the entry's LOCATION: the file its import fetches, not the stable name)
+		is_csr && hydrate_attr === 'load' && island_module_url ? [island_src || island_module_url, ...island_graph_hrefs] : []
 	);
 	// Both ride the document tail on a Kit page (see `tail` above); the head everywhere else, so a
 	// self-contained render root carries its own.
 	const island_graph_tail =
 		!!tail &&
 		untrack(() => {
+			if (island_live_locations) for (const [m, loc] of island_live_locations) tail.locate(m, loc);
 			if (island_kit_hint_hrefs.length) tail.hints(island_kit_hint_hrefs, island_fp);
 			else if (!is_csr && island_module_url) {
 				// The page lists an entry once: a second instance of the same island reuses the list the
 				// first one recorded instead of building it again.
 				const hrefs = tail.graph_of(island_module_url) ?? island_graph_hrefs;
-				if (hrefs.length) tail.graph(island_module_url, hrefs, island_fp);
+				if (hrefs.length) tail.graph(island_module_url, hrefs, island_fp, island_src);
 			}
 			return true;
 		});
@@ -534,8 +565,8 @@
 			? ''
 			: island_kit_hint_hrefs.length
 				? island_kit_hint_hrefs.map(modulepreload_tag).join('')
-				: !is_csr && island_graph_hrefs.length
-					? island_graph_script(new Map([[island_module_url, island_graph_hrefs]]))
+				: !is_csr && (island_graph_hrefs.length || island_live_locations)
+					? island_graph_script(new Map([[island_module_url, island_graph_hrefs]]), island_live_locations)
 					: ''
 	);
 
@@ -555,6 +586,8 @@
 	// scans `entry="…"` and `import()`s each as a module, so a bare id there fetches `/<id>` → 404 on
 	// nav. The endpoint (which fetches the hole's HTML) is minted from `__entry` above, independently.
 	const server_region_entry = $derived(!nested && __module ? asset(__module) : '');
+	// …and its location, the file that import fetches (as for an island)
+	const server_region_src = $derived(!nested && __module ? __src || location_of(__module) : '');
 
 	// A hydrating hole's props: ADJACENT and self-contained (the hole's HTML is spliced by the
 	// runtime), unkeyed, in whichever lane the props qualify for (props-wire.ts).
@@ -669,13 +702,11 @@
 	// the handle injects the same script on island-less pages — this is the with-islands path, and it
 	// keeps islands hydrating even when the router is off (`ogygia({ router: false })`).
 	// The runtime's own static imports (the chunks it shares with the rest of the app) ride along as
-	// modulepreload hints, so they download with it rather than after it (document-tail.ts).
+	// modulepreload hints, so they download with it rather than after it. Its location, not its
+	// stable name: the one bootstrap every document path shares (server/entry-location.ts).
 	const runtime_script =
 		!nested && ((is_island && !is_csr) || is_server) && claimRuntimeEmit()
-			? runtime_bootstrap_tags(
-					asset(runtimeUrl),
-					islandDeps(runtimeUrl).map((d) => asset(d))
-				) +
+			? runtime_bootstrap(asset) +
 				(hmrUrl
 					? LT +
 						'script type="module" data-ogygia-dev-hmr src="' +
@@ -842,12 +873,14 @@
 			data-ogygia-keep={__keep || undefined}
 			data-og-fp={island_fp || undefined}
 			data-og-skipped
+			src={island_src || undefined}
 		></ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html island_props_inline}{:else}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}
 			data-ogygia-keep={__keep || undefined}
 			data-og-fp={island_fp || undefined}
+			src={island_src || undefined}
 		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html island_props_inline}{/if}
 {:else if is_server}
 	{@const Component = __component}
@@ -862,6 +895,7 @@
 			hydrate-margin={__hydrateMargin || undefined}
 			endpoint={server_endpoint}
 			data-og-hole={server_identity || undefined}
+			src={server_region_src || undefined}
 		>{#if ogygiaFallback}<SlotBoundary>{@render ogygiaFallback()}</SlotBoundary>{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{/if}
 {:else if is_lake}
 	{#if is_csr}{@render lake_adopt()}{:else if lake_inside}
@@ -892,7 +926,7 @@
 {:else if resolved}
 	{@const d = /** @type {import('./region.js').DeferredRegion} */ (resolved)}
 	{#key identity(d)}
-		<ogygia-region entry={d.module || ''} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html held_props_script}
+		<ogygia-region entry={d.module || ''} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url} src={location_of(d.module || '') || undefined}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html held_props_script}
 	{/key}
 {:else if of}
 	<!-- Promise `of` still in flight (first resolution) — the region owns the whole wait. On a

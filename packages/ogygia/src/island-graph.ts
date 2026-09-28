@@ -10,9 +10,12 @@
  * its `import()`. Its whole graph downloads in parallel the moment it may start; nothing lands in
  * the paint window; an island that never wakes downloads nothing.
  *
- * Wire shape (one inert JSON script): `{"h":[href,…],"e":{"<entry>":[i,…]}}` — every chunk href
- * once, each entry (the region's `entry` attribute, as emitted) listing the indexes of the chunks
- * it needs. Twenty islands sharing Svelte's client runtime name its chunk once.
+ * Wire shape (one inert JSON script): `{"h":[href,…],"e":{"<entry>":[i,…]},"s":{"<entry>":src}}` —
+ * every chunk href once, each entry (the region's `entry` attribute, as emitted: its IDENTITY)
+ * listing the indexes of the chunks it needs. Twenty islands sharing Svelte's client runtime name
+ * its chunk once. `s` (optional): the LOCATION of an entry no element on the page carries — a
+ * portable snippet's live entry, imported by its identity — so the runtime loads the content-hashed
+ * file (runtime/region-endpoint-url.ts `note_entry_location`); an element carries its own (`src`).
  *
  * Universal leaf: the server encodes (server/document-tail.ts), the boot decodes.
  */
@@ -24,10 +27,15 @@ export const ISLAND_GRAPH_ATTR = 'data-ogygia-graph';
 export interface IslandGraphWire {
 	h: string[];
 	e: Record<string, number[]>;
+	s?: Record<string, string>;
 }
 
-/** Encode entry → chunk hrefs as the wire shape (JSON text, not yet script-escaped). */
-export function encode_island_graph(graph: ReadonlyMap<string, readonly string[]>): string {
+/** Encode entry → chunk hrefs (and identity → location, when any) as the wire shape (JSON text,
+ *  not yet script-escaped). */
+export function encode_island_graph(
+	graph: ReadonlyMap<string, readonly string[]>,
+	locations?: ReadonlyMap<string, string>
+): string {
 	const h: string[] = [];
 	const index = new Map<string, number>();
 	const e: Record<string, number[]> = {};
@@ -44,7 +52,22 @@ export function encode_island_graph(graph: ReadonlyMap<string, readonly string[]
 		}
 		e[entry] = ids;
 	}
-	return JSON.stringify({ h, e } satisfies IslandGraphWire);
+	if (!locations?.size) return JSON.stringify({ h, e } satisfies IslandGraphWire);
+	return JSON.stringify({ h, e, s: Object.fromEntries(locations) } satisfies IslandGraphWire);
+}
+
+/** Decode a graph script's `s`: entry identity → location, as written (unresolved). */
+export function decode_island_locations(text: string): Map<string, string> {
+	const out = new Map<string, string>();
+	let wire: IslandGraphWire;
+	try {
+		wire = JSON.parse(text) as IslandGraphWire;
+	} catch {
+		return out;
+	}
+	if (!wire || !wire.s || typeof wire.s !== 'object') return out;
+	for (const [entry, src] of Object.entries(wire.s)) if (typeof src === 'string') out.set(entry, src);
+	return out;
 }
 
 /** Decode a graph script's text: entry → chunk hrefs, as written (unresolved). Malformed → empty. */

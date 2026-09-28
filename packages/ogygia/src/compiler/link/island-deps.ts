@@ -104,7 +104,15 @@ export function collectIslandDepModulepreloads(
 	 * `hooks.client` app gets was missed, and such apps shipped the runtime with no preloads).
 	 * Absent (`null`) → no runtime entry.
 	 */
-	runtime_file: string | null = null
+	runtime_file: string | null = null,
+	/**
+	 * IDENTITY vs LOCATION: which emitted file is which entry. An island entry and the runtime are
+	 * content-hashed files; every map below is keyed by their IDENTITY (the stable public URL SSR bakes,
+	 * `island_public_url` / the runtime's stable URL), never by the hashed name. `islands`: hashed
+	 * file name → identity; `runtime`: the runtime's identity (its file is `runtime_file`). Absent →
+	 * a file under the stable name is its own identity (the shape before hashing, and the unit tests').
+	 */
+	entries: { islands: ReadonlyMap<string, string>; runtime: string | null } | null = null
 ): {
 	js: Record<string, string[]>;
 	css: Record<string, string[]>;
@@ -218,11 +226,14 @@ export function collectIslandDepModulepreloads(
 		return deps;
 	};
 
+	// each island entry's identity (the key of every map), by its emitted file
+	const identity_of = (fileName: string): string | null =>
+		entries ? (entries.islands.get(fileName) ?? null) : ISLAND_FACADE_RE.test(fileName) ? (fileName.startsWith('/') ? fileName : '/' + fileName) : null;
 	for (const [key, chunk] of Object.entries(bundle)) {
 		if (chunk.type !== 'chunk') continue;
 		const fileName = chunk.fileName || key;
-		if (!ISLAND_FACADE_RE.test(fileName)) continue;
-		const entryUrl = fileName.startsWith('/') ? fileName : '/' + fileName;
+		const entryUrl = identity_of(fileName);
+		if (!entryUrl) continue;
 		const seen = new Set<string>([fileName]);
 		// CSS: the facade's own styles + every dep chunk's — this is how a server-picked (held)
 		// component's scoped CSS reaches a page that never imported it (the page's stylesheet set
@@ -230,7 +241,7 @@ export function collectIslandDepModulepreloads(
 		const css_acc = css_of(fileName);
 		const raw = walk(fileName, seen, css_acc);
 		const uniq: string[] = [];
-		const have = new Set<string>([entryUrl]);
+		const have = new Set<string>([entryUrl, '/' + fileName.replace(LEADING_SLASH, '')]);
 		for (const d of raw) {
 			if (have.has(d)) continue;
 			have.add(d);
@@ -300,7 +311,8 @@ export function collectIslandDepModulepreloads(
 		const runtime_key = norm(runtime_file).replace(LEADING_SLASH, '');
 		const chunk = bundle[runtime_key];
 		if (chunk && chunk.type === 'chunk') {
-			js['/' + runtime_key] = [...new Set(walk(runtime_key, new Set([runtime_key]), []))];
+			// (keyed by the runtime's identity, like an island's)
+			js[entries?.runtime ?? '/' + runtime_key] = [...new Set(walk(runtime_key, new Set([runtime_key]), []))];
 		}
 	}
 	// WHAT IS INSIDE each chunk an island pulls (the profiler's Islands table): the bundler names
@@ -324,7 +336,7 @@ export function collectIslandDepModulepreloads(
 	for (const [key, chunk] of Object.entries(bundle)) {
 		if (chunk.type !== 'chunk') continue;
 		const fileName = chunk.fileName || key;
-		if (!ISLAND_FACADE_RE.test(fileName)) continue;
+		if (!identity_of(fileName)) continue;
 		for (const s of closure_all(fileName)) summarize(s);
 	}
 	// …and every other chunk the build emitted (Kit's entries, ogygia's own dynamic runtime
@@ -514,7 +526,7 @@ export function island_deps_module(
 	out_dir_rel = '.svelte-kit'
 ): string {
 	if (!ssr)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function fnManifest() { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function fnManifest() { return null; }\nexport function entryLocation(_identity) { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -524,7 +536,7 @@ export function island_deps_module(
 	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
 	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function fnManifest() { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function fnManifest() { return null; }\nexport function entryLocation(_identity) { return null; }`;
 	return (
 		`import fs from 'node:fs';\n` +
 		`import path from 'node:path';\n` +
@@ -673,6 +685,14 @@ export function island_deps_module(
 		`export function fnManifest() {\n` +
 		`  const m = load().fn_manifest;\n` +
 		`  return m && typeof m === 'object' && Object.keys(m).length ? m : null;\n` +
+		`}\n` +
+		// IDENTITY → LOCATION: the content-hashed file an entry (an island's stable URL, the runtime's)
+		// is served from. `null` = no location known (a handoff from before hashing, a foreign island):
+		// the identity itself is loaded — its stable-name shim, which reaches the current build.
+		`export function entryLocation(identity) {\n` +
+		`  const m = load().entries;\n` +
+		`  const v = m && typeof m === 'object' && identity ? m[identity] : null;\n` +
+		`  return typeof v === 'string' ? v : null;\n` +
 		`}\n`
 	);
 }

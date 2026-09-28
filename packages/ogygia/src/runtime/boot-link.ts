@@ -8,6 +8,7 @@
 import { slots } from './slots.js';
 import { KitBoot, kit_hydrates_page } from './kit-boot.js';
 import { ABSOLUTE_URL_SCHEME, is_warmed_module, warm_island_module } from './region-endpoint-url.js';
+import { note_entry_location } from './entry-locations.js';
 import { register_island_graph } from './island-graph-preload.js';
 import { props_sidecar_of } from './sidecar.js';
 import { parse_region_html } from './parse-html.js';
@@ -23,6 +24,7 @@ export function link_boot(): void {
 		register_island_graph,
 		is_warmed_module,
 		warm_island_module,
+		note_entry_location,
 		props_sidecar_of,
 		parse_region_html,
 		runtime_session,
